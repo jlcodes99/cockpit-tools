@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"018f0000-0000-7000-8000-000000000001"}
+{"type":"turn.started","thread_id":"018f0000-0000-7000-8000-000000000001","turn_id":"turn-success"}
+{"type":"error","thread_id":"018f0000-0000-7000-8000-000000000001","error":{"type":"usage_limit_reached","message":"Usage limit reached; wait for the terminal turn event."}}
+{"type":"turn.completed","thread_id":"018f0000-0000-7000-8000-000000000001","turn_id":"turn-success"}
+{"type":"turn.failed","thread_id":"018f0000-0000-7000-8000-000000000001","turn_id":"turn-quota","error":{"codexErrorInfo":"UsageLimitExceeded","message":"Quota exhausted."}}

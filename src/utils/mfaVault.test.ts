@@ -2,10 +2,40 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  MFA_STORAGE_KEY_SAVED,
+  loadSavedMfaRecords,
   parseGoogleAuthenticatorMigrationBatch,
   parseGoogleAuthenticatorMigrationInput,
   parseMfaCredentialInputs,
 } from './mfaVault.ts';
+
+class MemoryStorage implements Storage {
+  private readonly values = new Map<string, string>();
+
+  get length(): number {
+    return this.values.size;
+  }
+
+  clear(): void {
+    this.values.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
+}
 
 function toBase64Url(bytes: number[]): string {
   return Buffer.from(bytes).toString('base64url');
@@ -56,4 +86,51 @@ test('preserves migration batch metadata for out-of-order and duplicate QR handl
     batchSize: 3,
     credentials: [{ accountName: '', secret: 'JBCUYTCP' }],
   });
+});
+
+test('loads current and legacy MFA localStorage records without changing their schema', () => {
+  const previousDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const storage = new MemoryStorage();
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: storage,
+  });
+  try {
+    storage.setItem(MFA_STORAGE_KEY_SAVED, JSON.stringify([{
+      accountName: 'Current:current@example.com',
+      secret: 'JBSWY3DPEHPK3PXP',
+      remark: 'current',
+      time: 3,
+    }]));
+    storage.setItem('agtools.mfa.vault.v1', JSON.stringify([{
+      accountName: 'LegacyVault:legacy-vault@example.com',
+      secret: 'GEZDGNBVGY3TQOJQ',
+      remark: 'legacy-vault',
+      time: 2,
+    }]));
+    storage.setItem('agtools.two_factor_auth.saved.v2', JSON.stringify([{
+      accountName: 'Legacy2FA:legacy-2fa@example.com',
+      secret: 'MFRGGZDFMZTWQ2LK',
+      remark: 'legacy-2fa',
+      time: 1,
+    }]));
+
+    assert.deepEqual(
+      loadSavedMfaRecords().map((record) => record.accountName),
+      [
+        'Current:current@example.com',
+        'LegacyVault:legacy-vault@example.com',
+        'Legacy2FA:legacy-2fa@example.com',
+      ],
+    );
+    assert.equal(storage.getItem(MFA_STORAGE_KEY_SAVED)?.includes('current@example.com'), true);
+    assert.equal(storage.getItem('agtools.mfa.vault.v1')?.includes('legacy-vault@example.com'), true);
+    assert.equal(storage.getItem('agtools.two_factor_auth.saved.v2')?.includes('legacy-2fa@example.com'), true);
+  } finally {
+    if (previousDescriptor) {
+      Object.defineProperty(globalThis, 'localStorage', previousDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, 'localStorage');
+    }
+  }
 });

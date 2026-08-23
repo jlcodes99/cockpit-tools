@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#17251f">
+    <title>Cockpit 账号数据导出</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Cockpit 账号数据导出首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="M7 5.5h18a2.5 2.5 0 0 1 2.5 2.5v16a2.5 2.5 0 0 1-2.5 2.5H7A2.5 2.5 0 0 1 4.5 24V8A2.5 2.5 0 0 1 7 5.5Z"></path>
+              <path d="M10 12.5h12M10 17h8M10 21.5h5"></path>
+            </svg>
+          </span>
+          <span>
+            <strong>Cockpit Export</strong>
+            <small>账号数据导出器</small>
+          </span>
+        </a>
+        <div class="topbar-status" aria-label="服务安全状态">
+          <span class="status-pill"><i class="status-dot"></i>仅本机</span>
+          <span class="status-pill">离线只读</span>
+          <span class="version-pill" id="version-label">v—</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="page-title">
+          <div class="eyebrow">LOCAL ACCOUNT REPORTING</div>
+          <h1 id="page-title">选择需要的数据，生成一份可审计的本地导出。</h1>
+          <p>
+            页面只读取 Cockpit 已落盘的账号快照。完整邮箱、账号 ID、组织和 Workspace 信息可以导出，
+            Token、API Key、私钥、密码与两步验证密钥始终排除。
+          </p>
+          <div class="hero-facts" aria-label="运行边界">
+            <span><b>01</b> 不联网</span>
+            <span><b>02</b> 不刷新账号</span>
+            <span><b>03</b> 不读取 Sidecar 凭据</span>
+          </div>
+        </section>
+
+        <div class="workspace-grid">
+          <form class="control-panel" id="export-form">
+            <section class="panel-section" aria-labelledby="source-title">
+              <div class="section-heading">
+                <span class="section-index">01</span>
+                <div>
+                  <h2 id="source-title">数据来源</h2>
+                  <p>选择正式库或开发库，也可以指定另一个只读数据目录。</p>
+                </div>
+              </div>
+
+              <div class="field-grid two-columns">
+                <label class="field">
+                  <span class="field-label">Cockpit 配置</span>
+                  <select id="profile" name="profile">
+                    <option value="production">正式库（production）</option>
+                    <option value="development">开发库（development）</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field-label">账号套餐范围</span>
+                  <select id="plan-family" name="planFamily">
+                    <option value="team">Team / Business / Enterprise / EDU</option>
+                    <option value="pro">Pro</option>
+                    <option value="plus">Plus</option>
+                    <option value="free">Free</option>
+                    <option value="all">全部套餐</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="field path-field">
+                <span class="field-label-row">
+                  <label class="field-label" for="data-directory">数据目录</label>
+                  <button class="text-button" id="reset-data-directory" type="button">恢复配置默认值</button>
+                </span>
+                <input id="data-directory" name="dataDirectory" type="text" spellcheck="false" autocomplete="off">
+                <span class="field-help">只读取账号索引、加密详情、本地 API 池配置和用量统计。</span>
+              </div>
+            </section>
+
+            <section class="panel-section" aria-labelledby="datasets-title">
+              <div class="section-heading">
+                <span class="section-index">02</span>
+                <div>
+                  <h2 id="datasets-title">导出内容</h2>
+                  <p>至少选择一类。额度和用量文件会保留账号 ID、邮箱和套餐作为关联字段。</p>
+                </div>
+              </div>
+
+              <fieldset class="choice-grid" id="dataset-choices">
+                <legend class="sr-only">选择导出的数据集</legend>
+                <label class="choice-card">
+                  <input type="checkbox" name="datasets" value="accounts" checked>
+                  <span class="choice-check" aria-hidden="true"></span>
+                  <span class="choice-icon account-icon" aria-hidden="true">ID</span>
+                  <span class="choice-copy">
+                    <strong>账号身份与生命周期</strong>
+                    <small>邮箱、账号/组织/Workspace ID、套餐、授权状态与更新时间</small>
+                  </span>
+                </label>
+                <label class="choice-card">
+                  <input type="checkbox" name="datasets" value="quota" checked>
+                  <span class="choice-check" aria-hidden="true"></span>
+                  <span class="choice-icon quota-icon" aria-hidden="true">%</span>
+                  <span class="choice-copy">
+                    <strong>额度窗口与重置时间</strong>
+                    <small>主/次窗口、Code Review、附加限制、剩余比例与 UTC/本地时间</small>
+                  </span>
+                </label>
+                <label class="choice-card">
+                  <input type="checkbox" name="datasets" value="gateway" checked>
+                  <span class="choice-check" aria-hidden="true"></span>
+                  <span class="choice-icon gateway-icon" aria-hidden="true">API</span>
+                  <span class="choice-copy">
+                    <strong>本地 API 网关用量</strong>
+                    <small>每日、每周、每月请求成功率和 input/output/reasoning Token</small>
+                  </span>
+                </label>
+              </fieldset>
+            </section>
+
+            <section class="panel-section" aria-labelledby="output-title">
+              <div class="section-heading">
+                <span class="section-index">03</span>
+                <div>
+                  <h2 id="output-title">格式与输出</h2>
+                  <p>摘要始终生成；JSON 和 CSV 可以单独选择或同时生成。</p>
+                </div>
+              </div>
+
+              <div class="field-grid two-columns compact-grid">
+                <fieldset class="format-field">
+                  <legend class="field-label">输出格式</legend>
+                  <div class="segmented-choices">
+                    <label>
+                      <input type="checkbox" name="formats" value="json" checked>
+                      <span>JSON</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" name="formats" value="csv" checked>
+                      <span>CSV</span>
+                    </label>
+                  </div>
+                </fieldset>
+                <label class="field">
+                  <span class="field-label">快照陈旧阈值（分钟）</span>
+                  <input id="stale-after-minutes" name="staleAfterMinutes" type="number" min="1" max="10080" step="1" value="15">
+                </label>
+              </div>
+
+              <div class="field path-field">
+                <span class="field-label-row">
+                  <label class="field-label" for="output-root">输出根目录</label>
+                  <button class="text-button" id="reset-output-root" type="button">恢复默认值</button>
+                </span>
+                <input id="output-root" name="outputRoot" type="text" spellcheck="false" autocomplete="off">
+                <span class="field-help">每次导出创建新目录；已有目录不会被覆盖。Windows ACL 会在写入前收紧。</span>
+              </div>
+
+              <label class="toggle-row">
+                <span>
+                  <strong>允许跳过损坏账号</strong>
+                  <small>默认关闭。开启后可能得到部分结果，跳过项会写入摘要。</small>
+                </span>
+                <span class="switch">
+                  <input id="skip-invalid" name="skipInvalid" type="checkbox">
+                  <span aria-hidden="true"></span>
+                </span>
+              </label>
+            </section>
+
+            <div class="form-message" id="form-message" role="alert" aria-live="polite"></div>
+            <div class="action-bar">
+              <div class="action-note">
+                <span class="lock-icon" aria-hidden="true">⌁</span>
+                <span>“只验证”不会创建目录；“执行导出”会写入所选文件。</span>
+              </div>
+              <div class="action-buttons">
+                <button class="button secondary" id="validate-button" type="button">只验证</button>
+                <button class="button primary" id="export-button" type="submit">
+                  <span>执行导出</span>
+                  <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <aside class="result-panel" aria-labelledby="result-title">
+            <div class="result-header">
+              <div>
+                <span class="result-kicker">RESULT</span>
+                <h2 id="result-title">等待操作</h2>
+              </div>
+              <span class="result-state idle" id="result-state">就绪</span>
+            </div>
+
+            <div class="empty-result" id="empty-result">
+              <div class="empty-orbit" aria-hidden="true">
+                <span></span>
+                <i></i>
+              </div>
+              <p>先选择导出范围，然后运行只读验证。</p>
+              <small>页面不会显示账号正文，只展示汇总、文件名和校验值。</small>
+            </div>
+
+            <div class="result-content" id="result-content" hidden>
+              <div class="metric-grid" id="metric-grid"></div>
+
+              <div class="result-block">
+                <h3>本次选择</h3>
+                <div class="chip-row" id="selection-chips"></div>
+              </div>
+
+              <div class="result-block" id="output-directory-block" hidden>
+                <div class="block-heading">
+                  <h3>输出目录</h3>
+                  <button class="text-button" id="copy-output-path" type="button">复制路径</button>
+                </div>
+                <code class="path-output" id="output-directory"></code>
+              </div>
+
+              <div class="result-block" id="files-block" hidden>
+                <h3>生成文件</h3>
+                <ul class="file-list" id="file-list"></ul>
+              </div>
+
+              <details class="summary-details">
+                <summary>查看安全摘要 JSON</summary>
+                <pre id="summary-json"></pre>
+              </details>
+            </div>
+
+            <div class="service-footer">
+              <div>
+                <span class="status-dot"></span>
+                <span>本地页面服务正在运行</span>
+              </div>
+              <button class="shutdown-button" id="shutdown-button" type="button">关闭服务</button>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer class="page-footer">
+        <span>Cockpit Account Exporter</span>
+        <span>127.0.0.1 · no network refresh · credential-safe DTO</span>
+      </footer>
+    </div>
+  </body>
+</html>

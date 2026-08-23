@@ -815,11 +815,22 @@ mod tests {
 
     #[test]
     fn windows_system_terminal_keeps_powershell_compatibility_behavior() {
-        let plan = build_windows_codex_terminal_launch_plan("codex", "system");
+        let plan =
+            build_windows_codex_terminal_launch_plan_with_availability("codex", "system", false);
 
         assert_eq!(plan.program, "powershell");
         assert_eq!(plan.args, ["-NoExit", "-Command", "codex"]);
         assert_eq!(plan.terminal_name, "PowerShell");
+    }
+
+    #[test]
+    fn windows_system_terminal_prefers_windows_terminal_when_available() {
+        let plan =
+            build_windows_codex_terminal_launch_plan_with_availability("codex", "system", true);
+
+        assert_eq!(plan.program, "wt");
+        assert_eq!(plan.args, ["powershell", "-NoExit", "-Command", "codex"]);
+        assert_eq!(plan.terminal_name, "Windows Terminal");
     }
 
     #[test]
@@ -1193,12 +1204,25 @@ fn build_windows_codex_terminal_launch_plan(
     command: &str,
     terminal: &str,
 ) -> CodexTerminalLaunchPlan {
+    build_windows_codex_terminal_launch_plan_with_availability(
+        command,
+        terminal,
+        windows_terminal_available(),
+    )
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn build_windows_codex_terminal_launch_plan_with_availability(
+    command: &str,
+    terminal: &str,
+    windows_terminal_is_available: bool,
+) -> CodexTerminalLaunchPlan {
     let normalized = terminal.trim().to_ascii_lowercase();
     // `system` honors OS default: prefer Windows Terminal when installed, else PowerShell.
     // `windows_terminal_available()` is a no-op false on non-Windows so this helper stays
     // cross-platform for unit tests and CI.
     let use_windows_terminal =
-        (normalized == "system" && windows_terminal_available()) || normalized == "wt";
+        (normalized == "system" && windows_terminal_is_available) || normalized == "wt";
     let (program, args, terminal_name) = if normalized == "pwsh" {
         (
             "pwsh",

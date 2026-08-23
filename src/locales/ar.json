@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "المهام المُدارة",
+    "title": "مهام Codex المُدارة",
+    "subtitle": "يدير Cockpit عملية Codex واحدة فقط، ولا يستأنف المحادثة نفسها بحساب مؤهل آخر إلا بعد تأكيد انتهاء الحصة.",
+    "optIn": "إشراف يُفعّل باختيار صريح",
+    "cliReady": "واجهة Codex الطرفية جاهزة",
+    "cliUnavailable": "واجهة Codex الطرفية غير متاحة",
+    "createTitle": "إنشاء مهمة مُدارة",
+    "taskList": "قائمة انتظار المهام وسجلها",
+    "emptyTitle": "لا توجد مهام مُدارة بعد",
+    "status": {
+      "queued": "في قائمة الانتظار",
+      "preparing": "جارٍ التحضير",
+      "running": "قيد التشغيل",
+      "draining": "انتظار الحالة النهائية",
+      "switching": "تبديل الحساب",
+      "resuming": "استئناف المحادثة",
+      "completed": "مكتملة",
+      "failed": "فشلت",
+      "cancelled": "ملغاة",
+      "needs_attention": "تحتاج إلى تدخل"
+    }
+  },
   "common": {
     "confirm": "تأكيد",
     "cancel": "إلغاء",

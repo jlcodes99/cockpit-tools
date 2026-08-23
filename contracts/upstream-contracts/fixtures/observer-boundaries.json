@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "projects": {
+    "cc-switch": {
+      "evidenceSources": ["proxy", "rollout_jsonl"],
+      "maximumConfidence": "suspected",
+      "authoritativeTerminal": false,
+      "mayTriggerAutomaticSwitch": false
+    },
+    "cocoanetics-codex-monitor": {
+      "evidenceSources": ["rollout_jsonl"],
+      "maximumConfidence": "suspected",
+      "authoritativeTerminal": false,
+      "mayTriggerAutomaticSwitch": false
+    },
+    "dimillian-codex-monitor": {
+      "evidenceSources": ["rollout_jsonl"],
+      "maximumConfidence": "suspected",
+      "authoritativeTerminal": false,
+      "mayTriggerAutomaticSwitch": false
+    },
+    "codex-multi-auth": {
+      "evidenceSources": ["proxy"],
+      "maximumConfidence": "suspected",
+      "authoritativeTerminal": false,
+      "mayTriggerAutomaticSwitch": false
+    },
+    "codex-account-switch": {
+      "evidenceSources": ["proxy"],
+      "maximumConfidence": "suspected",
+      "authoritativeTerminal": false,
+      "mayTriggerAutomaticSwitch": false
+    }
+  },
+  "sampleEvents": [
+    {
+      "source": "proxy",
+      "payload": {"type":"response.failed","status":429,"error":{"type":"usage_limit_reached"}}
+    },
+    {
+      "source": "rollout_jsonl",
+      "payload": {"type":"event_msg","payload":{"type":"turn_aborted","message":"usage limit reached"}}
+    }
+  ]
+}

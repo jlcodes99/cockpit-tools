@@ -173,6 +173,7 @@ import {
 } from "../components/CodexOverviewTabsHeader";
 import { CodexInstancesContent } from "./CodexInstancesPage";
 import { CodexSessionManager } from "../components/codex/CodexSessionManager";
+import { CodexManagedTasks } from "../components/codex/CodexManagedTasks";
 import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import { useDeepSeekDirectModelPrompt } from "../components/codex/DeepSeekDirectModelModal";
 import {
@@ -14246,6 +14247,7 @@ export function CodexAccountsPage() {
         tabs={[
           "overview",
           "providers",
+          "managed-tasks",
           "wakeup",
           "instances",
           "sessions",
@@ -19757,6 +19759,10 @@ export function CodexAccountsPage() {
       )}
 
       {activeTab === "sessions" && <CodexSessionManager />}
+
+      {activeTab === "managed-tasks" && (
+        <CodexManagedTasks accounts={accounts} />
+      )}
 
 
       {activeTab === "providers" && (

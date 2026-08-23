@@ -3,6 +3,7 @@ members = [
     "src-tauri",
     "crates/cockpit-core",
     "crates/cockpit-cli",
+    "crates/codex-task-supervisor",
 ]
 resolver = "2"
 

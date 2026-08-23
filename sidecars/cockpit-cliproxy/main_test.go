@@ -2457,7 +2457,7 @@ func TestAuthHookEmitsRequestScopedResultDiagnostics(t *testing.T) {
 	if payload.Type != "auth_result" || payload.RequestID != "req-2" {
 		t.Fatalf("unexpected auth result diagnostic identity: %#v", payload)
 	}
-	if payload.Model != "gpt-5.5" || payload.AccountID != "account_1" || payload.APIKeyID != "key_1" {
+	if payload.Model != "upstream-model" || payload.AccountID != "account_1" || payload.APIKeyID != "key_1" {
 		t.Fatalf("unexpected auth result metadata: %#v", payload)
 	}
 	if payload.Success == nil || *payload.Success || payload.Retryable == nil || !*payload.Retryable {

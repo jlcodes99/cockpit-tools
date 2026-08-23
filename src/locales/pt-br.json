@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Tarefas gerenciadas",
+    "title": "Tarefas Codex gerenciadas",
+    "subtitle": "O Cockpit controla um processo Codex por vez e só retoma a mesma conversa com outra conta após confirmar o término por cota.",
+    "optIn": "Supervisão ativada explicitamente",
+    "cliReady": "CLI do Codex pronta",
+    "cliUnavailable": "CLI do Codex indisponível",
+    "createTitle": "Criar tarefa gerenciada",
+    "taskList": "Fila e histórico de tarefas",
+    "emptyTitle": "Nenhuma tarefa gerenciada ainda",
+    "status": {
+      "queued": "Na fila",
+      "preparing": "Preparando",
+      "running": "Em execução",
+      "draining": "Aguardando estado final",
+      "switching": "Trocando conta",
+      "resuming": "Retomando conversa",
+      "completed": "Concluída",
+      "failed": "Falhou",
+      "cancelled": "Cancelada",
+      "needs_attention": "Precisa de atenção"
+    }
+  },
   "common": {
     "confirm": "Confirmar",
     "cancel": "Cancelar",

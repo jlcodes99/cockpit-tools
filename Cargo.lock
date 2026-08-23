@@ -812,6 +812,7 @@ dependencies = [
  "base64 0.22.1",
  "cbc",
  "chrono",
+ "codex-task-supervisor",
  "crypto_box",
  "dirs 5.0.1",
  "ed25519-dalek",
@@ -872,6 +873,17 @@ dependencies = [
  "uuid",
  "windows 0.58.0",
  "zip",
+]
+
+[[package]]
+name = "codex-task-supervisor"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

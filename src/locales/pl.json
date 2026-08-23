@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Zadania nadzorowane",
+    "title": "Nadzorowane zadania Codex",
+    "subtitle": "Cockpit obsługuje jeden proces Codex naraz i wznawia ten sam wątek na kolejnym koncie dopiero po potwierdzeniu końca limitu.",
+    "optIn": "Nadzór włączany świadomie",
+    "cliReady": "CLI Codex jest gotowe",
+    "cliUnavailable": "CLI Codex jest niedostępne",
+    "createTitle": "Utwórz zadanie nadzorowane",
+    "taskList": "Kolejka i historia zadań",
+    "emptyTitle": "Brak zadań nadzorowanych",
+    "status": {
+      "queued": "W kolejce",
+      "preparing": "Przygotowanie",
+      "running": "Uruchomione",
+      "draining": "Oczekiwanie na stan końcowy",
+      "switching": "Zmiana konta",
+      "resuming": "Wznawianie wątku",
+      "completed": "Ukończone",
+      "failed": "Niepowodzenie",
+      "cancelled": "Anulowane",
+      "needs_attention": "Wymaga uwagi"
+    }
+  },
   "common": {
     "confirm": "Potwierdź",
     "cancel": "Anuluj",

@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "codex-task-supervisor",
+  "projectType": "library",
+  "sourceRoot": "crates/codex-task-supervisor/src",
+  "targets": {
+    "test": {
+      "command": "cargo test -p codex-task-supervisor --no-fail-fast",
+      "cache": true,
+      "inputs": ["rust"]
+    },
+    "check": {
+      "command": "cargo check -p codex-task-supervisor",
+      "cache": true,
+      "inputs": ["rust"]
+    }
+  }
+}

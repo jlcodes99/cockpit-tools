@@ -1,0 +1,13 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "upstream-contracts",
+  "projectType": "library",
+  "sourceRoot": "contracts/upstream-contracts",
+  "targets": {
+    "verify": {
+      "command": "node scripts/verify-upstream-contracts.mjs && cargo test -p codex-task-supervisor --test upstream_contracts --no-fail-fast",
+      "cache": true,
+      "inputs": ["upstreamContracts", "rust"]
+    }
+  }
+}

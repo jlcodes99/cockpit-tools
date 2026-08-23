@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "受管工作",
+    "title": "Codex 受管工作",
+    "subtitle": "Cockpit 同時僅持有一個 Codex 程序；確認額度終態後，以下一個合格帳號續接同一執行緒。",
+    "optIn": "明確選擇啟用的工作監督",
+    "cliReady": "Codex CLI 已就緒",
+    "cliUnavailable": "Codex CLI 無法使用",
+    "createTitle": "建立受管工作",
+    "taskList": "工作佇列與歷程",
+    "emptyTitle": "尚無受管工作",
+    "status": {
+      "queued": "佇列中",
+      "preparing": "準備中",
+      "running": "執行中",
+      "draining": "等待終態",
+      "switching": "切換帳號中",
+      "resuming": "續接執行緒中",
+      "completed": "已完成",
+      "failed": "已失敗",
+      "cancelled": "已取消",
+      "needs_attention": "需要處理"
+    }
+  },
   "common": {
     "confirm": "確認",
     "cancel": "取消",

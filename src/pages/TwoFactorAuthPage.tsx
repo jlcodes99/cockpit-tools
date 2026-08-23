@@ -2,6 +2,7 @@ import { Key } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import './TwoFactorAuthPage.css';
 import { MfaVaultManager } from '../components/MfaVaultManager';
+import { AccountConversionChallengePanel } from '../components/AccountConversionChallengePanel';
 
 export function TwoFactorAuthPage() {
   const { t } = useTranslation();
@@ -17,6 +18,7 @@ export function TwoFactorAuthPage() {
         </div>
       </div>
 
+      <AccountConversionChallengePanel />
       <MfaVaultManager />
     </main>
   );

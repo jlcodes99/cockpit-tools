@@ -1,6 +1,6 @@
 import { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
+import { Activity, Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
 import { CodexIcon } from '../icons/CodexIcon';
 import { ClaudeIcon } from '../icons/ClaudeIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
@@ -26,6 +26,7 @@ import { useRemoteConfigStore } from '../../stores/useRemoteConfigStore';
 
 export type PlatformOverviewTab =
   | 'overview'
+  | 'managed-tasks'
   | 'wakeup'
   | 'instances'
   | 'sessions'
@@ -203,6 +204,11 @@ export function PlatformOverviewTabsHeader({
           ? t('codex.wakeup.tab', '唤醒任务')
           : t('wakeup.title', '唤醒任务'),
       icon: <Clock3 className="tab-icon" />,
+    },
+    'managed-tasks': {
+      key: 'managed-tasks',
+      label: t('managedCodexTasks.tab', 'Managed tasks'),
+      icon: <Activity className="tab-icon" />,
     },
     instances: {
       key: 'instances',

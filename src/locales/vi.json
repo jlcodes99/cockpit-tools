@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Tác vụ được quản lý",
+    "title": "Tác vụ Codex được quản lý",
+    "subtitle": "Cockpit chỉ quản lý một tiến trình Codex và chỉ tiếp tục cùng luồng bằng tài khoản phù hợp kế tiếp sau khi xác nhận trạng thái hết hạn mức.",
+    "optIn": "Giám sát được bật chủ động",
+    "cliReady": "Codex CLI đã sẵn sàng",
+    "cliUnavailable": "Codex CLI không khả dụng",
+    "createTitle": "Tạo tác vụ được quản lý",
+    "taskList": "Hàng đợi và lịch sử tác vụ",
+    "emptyTitle": "Chưa có tác vụ được quản lý",
+    "status": {
+      "queued": "Đang xếp hàng",
+      "preparing": "Đang chuẩn bị",
+      "running": "Đang chạy",
+      "draining": "Đang chờ trạng thái cuối",
+      "switching": "Đang đổi tài khoản",
+      "resuming": "Đang tiếp tục luồng",
+      "completed": "Đã hoàn tất",
+      "failed": "Đã thất bại",
+      "cancelled": "Đã hủy",
+      "needs_attention": "Cần xử lý"
+    }
+  },
   "common": {
     "confirm": "Xác nhận",
     "cancel": "Hủy",

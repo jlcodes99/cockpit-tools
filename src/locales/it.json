@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Attività gestite",
+    "title": "Attività Codex gestite",
+    "subtitle": "Cockpit controlla un processo Codex alla volta e riprende lo stesso thread con un altro account solo dopo un termine quota confermato.",
+    "optIn": "Supervisione abilitata esplicitamente",
+    "cliReady": "CLI Codex pronta",
+    "cliUnavailable": "CLI Codex non disponibile",
+    "createTitle": "Crea un’attività gestita",
+    "taskList": "Coda e cronologia attività",
+    "emptyTitle": "Nessuna attività gestita",
+    "status": {
+      "queued": "In coda",
+      "preparing": "Preparazione",
+      "running": "In esecuzione",
+      "draining": "Attesa dello stato finale",
+      "switching": "Cambio account",
+      "resuming": "Ripresa del thread",
+      "completed": "Completata",
+      "failed": "Non riuscita",
+      "cancelled": "Annullata",
+      "needs_attention": "Richiede attenzione"
+    }
+  },
   "common": {
     "confirm": "Conferma",
     "cancel": "Annulla",

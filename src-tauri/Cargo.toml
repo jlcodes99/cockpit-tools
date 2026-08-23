@@ -10,11 +10,15 @@ edition = "2021"
 name = "antigravity_cockpit_tools_lib"
 crate-type = ["staticlib", "rlib"]
 
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 swift-rs = { version = "1.0.7", features = ["build"] }
 
 [dependencies]
+codex-task-supervisor = { path = "../crates/codex-task-supervisor" }
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"

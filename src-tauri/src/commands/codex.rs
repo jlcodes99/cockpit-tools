@@ -13,9 +13,9 @@ use crate::models::codex_local_access::{
     CodexLocalAccessTimeoutPreset, CodexLocalAccessTimeouts, CodexLocalAccessUsageEventPage,
 };
 use crate::modules::{
-    account, codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility,
-    codex_speed, codex_wakeup, codex_wakeup_scheduler, config, hermes_auth, logger, openclaw_auth,
-    opencode_auth, process,
+    account, codex_account, codex_local_access, codex_managed_task, codex_oauth, codex_quota,
+    codex_session_visibility, codex_speed, codex_wakeup, codex_wakeup_scheduler, config,
+    hermes_auth, logger, openclaw_auth, opencode_auth, process,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -2145,6 +2145,60 @@ pub fn close_codex_oauth_port() -> Result<u32, String> {
     let port = codex_oauth::get_callback_port();
     let killed = process::kill_port_processes(port)?;
     Ok(killed as u32)
+}
+
+#[tauri::command]
+pub async fn codex_managed_task_create(
+    app: AppHandle,
+    input: ::codex_task_supervisor::ManagedCodexTaskConfig,
+) -> Result<::codex_task_supervisor::ManagedCodexTask, String> {
+    codex_managed_task::create_task(&app, input).await
+}
+
+#[tauri::command]
+pub async fn codex_managed_task_list(
+    limit: Option<usize>,
+) -> Result<Vec<::codex_task_supervisor::ManagedCodexTask>, String> {
+    codex_managed_task::list_tasks(limit).await
+}
+
+#[tauri::command]
+pub async fn codex_managed_task_get(
+    task_id: String,
+) -> Result<::codex_task_supervisor::ManagedCodexTask, String> {
+    codex_managed_task::get_task(&task_id).await
+}
+
+#[tauri::command]
+pub async fn codex_managed_task_cancel(
+    app: AppHandle,
+    task_id: String,
+) -> Result<::codex_task_supervisor::ManagedCodexTask, String> {
+    codex_managed_task::cancel_task(&app, &task_id).await
+}
+
+#[tauri::command]
+pub async fn codex_managed_task_resume(
+    app: AppHandle,
+    task_id: String,
+    mode: codex_managed_task::ManagedCodexTaskResumeMode,
+) -> Result<::codex_task_supervisor::ManagedCodexTask, String> {
+    codex_managed_task::resume_task(&app, &task_id, mode).await
+}
+
+#[tauri::command]
+pub async fn codex_managed_task_list_evidence(
+    task_id: String,
+    cursor: Option<::codex_task_supervisor::EvidenceCursor>,
+    limit: Option<usize>,
+) -> Result<codex_managed_task::ManagedCodexTaskEvidencePage, String> {
+    codex_managed_task::list_evidence(&task_id, cursor, limit).await
+}
+
+#[tauri::command]
+pub async fn codex_managed_task_runtime_status(
+) -> Result<codex_managed_task::ManagedCodexTaskRuntimeStatus, String> {
+    codex_managed_task::runtime_status().await
 }
 
 #[tauri::command]

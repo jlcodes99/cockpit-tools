@@ -1,0 +1,9 @@
+{
+  "build": {
+    "beforeBuildCommand": "",
+    "frontendDist": "../outputs/account-conversion-release/frontend-dist"
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false
+  }
+}

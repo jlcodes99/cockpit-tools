@@ -1,4 +1,27 @@
 {
+  "managedCodexTasks": {
+    "tab": "Managed tasks",
+    "title": "Managed Codex tasks",
+    "subtitle": "Cockpit owns one Codex process at a time, waits for an authoritative quota terminal state, and resumes the same thread with the next eligible account.",
+    "optIn": "Explicit opt-in supervision",
+    "cliReady": "Codex CLI ready",
+    "cliUnavailable": "Codex CLI unavailable",
+    "createTitle": "Create a managed task",
+    "taskList": "Task queue and history",
+    "emptyTitle": "No managed tasks yet",
+    "status": {
+      "queued": "Queued",
+      "preparing": "Preparing",
+      "running": "Running",
+      "draining": "Waiting for terminal state",
+      "switching": "Switching account",
+      "resuming": "Resuming thread",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "needs_attention": "Needs attention"
+    }
+  },
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",

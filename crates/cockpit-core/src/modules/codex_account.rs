@@ -3663,14 +3663,16 @@ mod tests {
         fn new(prefix: &str) -> Self {
             let home_dir = make_temp_dir(prefix);
             let codex_home = home_dir.join(".codex");
+            let test_data_dir = home_dir.join(".antigravity_cockpit");
             fs::create_dir_all(&codex_home).expect("create codex home");
+            fs::create_dir_all(&test_data_dir).expect("create test data dir");
 
             let previous_home = std::env::var_os("HOME");
             let previous_codex_home = std::env::var_os("CODEX_HOME");
             let previous_data_dir = std::env::var_os("COCKPIT_TOOLS_DATA_DIR");
             std::env::set_var("HOME", &home_dir);
             std::env::set_var("CODEX_HOME", &codex_home);
-            std::env::set_var("COCKPIT_TOOLS_DATA_DIR", &home_dir);
+            std::env::set_var("COCKPIT_TOOLS_DATA_DIR", &test_data_dir);
 
             Self {
                 home_dir,
@@ -3682,6 +3684,10 @@ mod tests {
 
         fn codex_home(&self) -> std::path::PathBuf {
             self.home_dir.join(".codex")
+        }
+
+        fn data_dir(&self) -> std::path::PathBuf {
+            self.home_dir.join(".antigravity_cockpit")
         }
     }
 
@@ -3704,25 +3710,37 @@ mod tests {
     }
 
     #[test]
+    fn test_env_guard_redirects_codex_account_storage() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-core-account-storage-isolation-test");
+
+        let storage_path = get_accounts_storage_path();
+
+        assert_eq!(
+            storage_path,
+            env.data_dir().join("codex_accounts.json"),
+            "Codex account storage should stay inside the isolated Cockpit data directory"
+        );
+    }
+
+    #[test]
     fn test_env_guard_isolates_and_restores_cockpit_data_dir() {
         let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let previous_data_dir = std::env::var_os("COCKPIT_TOOLS_DATA_DIR");
-        let isolated_data_dir = {
+        let isolated_home_dir = {
             let env = TestEnvGuard::new("codex-core-data-dir-guard-test");
-            let legacy_data_dir = env.home_dir.join("legacy-codex-data");
+            let data_dir = env.data_dir();
+            let legacy_data_dir = data_dir.join("legacy-codex-data");
             fs::create_dir_all(&legacy_data_dir).expect("create isolated legacy data dir");
             let legacy_index = legacy_data_dir.join("codex_accounts.json");
             fs::write(&legacy_index, "legacy sentinel").expect("write legacy sentinel");
 
             assert_eq!(
                 crate::modules::config::get_data_dir().expect("resolve isolated data dir"),
-                env.home_dir
+                data_dir
             );
             let accounts_storage_path = get_accounts_storage_path();
-            assert_eq!(
-                accounts_storage_path,
-                env.home_dir.join("codex_accounts.json")
-            );
+            assert_eq!(accounts_storage_path, data_dir.join("codex_accounts.json"));
             assert!(legacy_index.exists());
             assert!(!accounts_storage_path.exists());
             env.home_dir.clone()
@@ -3732,7 +3750,7 @@ mod tests {
             std::env::var_os("COCKPIT_TOOLS_DATA_DIR"),
             previous_data_dir
         );
-        assert!(!isolated_data_dir.exists());
+        assert!(!isolated_home_dir.exists());
     }
 
     fn make_jwt(payload: serde_json::Value) -> String {

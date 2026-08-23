@@ -292,6 +292,15 @@ pub fn run() {
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
 
+            if let Err(err) =
+                modules::account_conversion_bridge::ensure_started(app.handle().clone())
+            {
+                logger::log_warn(&format!(
+                    "[AccountConversionBridge] Startup failed: {}",
+                    err
+                ));
+            }
+
             if let Err(err) = modules::app_lifecycle::install_system_shutdown_listener() {
                 logger::log_warn(&format!("[Lifecycle] 安装系统关机监听失败: {}", err));
             }
@@ -403,6 +412,7 @@ pub fn run() {
                     modules::wakeup_scheduler::restore_state_from_disk();
                     modules::wakeup_scheduler::ensure_started(app_handle.clone());
                     modules::codex_wakeup_scheduler::ensure_started(app_handle.clone());
+                    modules::codex_managed_task::ensure_started(app_handle.clone());
                     modules::codex_wakeup_scheduler::trigger_startup_tasks_if_needed(app_handle);
                 });
             }
@@ -606,6 +616,12 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            modules::account_conversion_bridge::account_conversion_bridge_status,
+            modules::account_conversion_bridge::account_conversion_list_challenges,
+            modules::account_conversion_bridge::account_conversion_present_challenge,
+            modules::account_conversion_bridge::account_conversion_confirm_challenge,
+            modules::account_conversion_bridge::account_conversion_cancel_challenge,
+            modules::account_conversion_bridge::account_conversion_focus_chrome,
             // Account Commands
             commands::account::list_accounts,
             commands::account::add_account,
@@ -877,6 +893,13 @@ pub fn run() {
             commands::codex::update_codex_account_instance_access,
             commands::codex::create_pending_codex_oauth_account,
             commands::codex::fetch_codex_account_note_mail_url,
+            commands::codex::codex_managed_task_create,
+            commands::codex::codex_managed_task_list,
+            commands::codex::codex_managed_task_get,
+            commands::codex::codex_managed_task_cancel,
+            commands::codex::codex_managed_task_resume,
+            commands::codex::codex_managed_task_list_evidence,
+            commands::codex::codex_managed_task_runtime_status,
             commands::codex::codex_wakeup_get_cli_status,
             commands::codex::codex_wakeup_update_runtime_config,
             commands::codex::codex_wakeup_get_overview,
@@ -1354,18 +1377,27 @@ pub fn run() {
                 {
                     api.prevent_exit();
                     modules::logger::log_info("[Window] 主窗口已销毁，应用继续在托盘运行");
-                } else {
-                    modules::app_lifecycle::begin_shutdown();
+                } else if modules::app_lifecycle::begin_shutdown() {
+                    api.prevent_exit();
+                    modules::account_conversion_bridge::shutdown();
                     modules::codex_app_injection::stop_all();
-                    tauri::async_runtime::spawn(async {
+                    modules::codex_managed_task::shutdown();
+                    let exit_app = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        modules::codex_managed_task::shutdown_and_wait(&exit_app).await;
                         modules::codex_local_access::shutdown_local_access_gateway_for_app_exit()
                             .await;
+                        exit_app.exit(0);
                     });
+                } else {
+                    modules::codex_managed_task::shutdown();
                 }
             }
             RunEvent::Exit => {
                 modules::app_lifecycle::begin_shutdown();
+                modules::account_conversion_bridge::shutdown();
                 modules::codex_app_injection::stop_all();
+                modules::codex_managed_task::shutdown();
                 tauri::async_runtime::spawn(async {
                     modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await;
                 });
