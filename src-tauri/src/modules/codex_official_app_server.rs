@@ -21,55 +21,68 @@ const APP_SERVER_DAEMON_STOP_POLL_INTERVAL: Duration = Duration::from_millis(50)
 /// 停止指定 CODEX_HOME 的官方 app-server daemon。
 /// 切号必须在覆盖 auth 存储前调用，避免旧 AuthManager 用旧账号内存态校验新账号凭证。
 pub fn stop_daemon(codex_home: &Path, timeout: Duration) -> Result<(), String> {
-    let executable = official_app_server_executable()?;
-    let mut child = build_daemon_stop_command(&executable, codex_home)
-        .spawn()
-        .map_err(|error| {
-            format!(
-                "启动官方 Codex app-server daemon stop 失败 ({} / CODEX_HOME={}): {}",
-                executable.display(),
-                codex_home.display(),
-                error
-            )
-        })?;
-    let started = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) if status.success() => {
-                crate::modules::logger::log_info(&format!(
-                    "[Codex Official AppServer] daemon stopped: codex_home={}, elapsed_ms={}",
-                    codex_home.display(),
-                    started.elapsed().as_millis()
-                ));
-                return Ok(());
-            }
-            Ok(Some(status)) => {
-                return Err(format!(
-                    "官方 Codex app-server daemon stop 失败: status={}, CODEX_HOME={}",
-                    status,
-                    codex_home.display()
-                ));
-            }
-            Ok(None) if started.elapsed() < timeout => {
-                std::thread::sleep(APP_SERVER_DAEMON_STOP_POLL_INTERVAL);
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!(
-                    "官方 Codex app-server daemon stop 超时: timeout_ms={}, CODEX_HOME={}",
-                    timeout.as_millis(),
-                    codex_home.display()
-                ));
-            }
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!(
-                    "等待官方 Codex app-server daemon stop 失败: CODEX_HOME={}, error={}",
+    #[cfg(windows)]
+    {
+        let _ = timeout;
+        crate::modules::logger::log_info(&format!(
+            "[Codex Official AppServer] Windows 跳过 daemon stop: 官方 daemon 生命周期尚不支持 Windows，CODEX_HOME={}",
+            codex_home.display()
+        ));
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+        let executable = official_app_server_executable()?;
+        let mut child = build_daemon_stop_command(&executable, codex_home)
+            .spawn()
+            .map_err(|error| {
+                format!(
+                    "启动官方 Codex app-server daemon stop 失败 ({} / CODEX_HOME={}): {}",
+                    executable.display(),
                     codex_home.display(),
                     error
-                ));
+                )
+            })?;
+        let started = Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) if status.success() => {
+                    crate::modules::logger::log_info(&format!(
+                        "[Codex Official AppServer] daemon stopped: codex_home={}, elapsed_ms={}",
+                        codex_home.display(),
+                        started.elapsed().as_millis()
+                    ));
+                    return Ok(());
+                }
+                Ok(Some(status)) => {
+                    return Err(format!(
+                        "官方 Codex app-server daemon stop 失败: status={}, CODEX_HOME={}",
+                        status,
+                        codex_home.display()
+                    ));
+                }
+                Ok(None) if started.elapsed() < timeout => {
+                    std::thread::sleep(APP_SERVER_DAEMON_STOP_POLL_INTERVAL);
+                }
+                Ok(None) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "官方 Codex app-server daemon stop 超时: timeout_ms={}, CODEX_HOME={}",
+                        timeout.as_millis(),
+                        codex_home.display()
+                    ));
+                }
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "等待官方 Codex app-server daemon stop 失败: CODEX_HOME={}, error={}",
+                        codex_home.display(),
+                        error
+                    ));
+                }
             }
         }
     }
@@ -552,5 +565,15 @@ mod tests {
         assert!(command
             .get_envs()
             .any(|(key, value)| { key == "CODEX_HOME" && value == Some(codex_home.as_os_str()) }));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn daemon_stop_is_skipped_on_windows() {
+        assert!(stop_daemon(
+            Path::new(r"C:\Users\test\.codex"),
+            Duration::from_secs(1),
+        )
+        .is_ok());
     }
 }
