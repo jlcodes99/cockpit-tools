@@ -105,7 +105,9 @@ function UsageBreakdownTable({
   const columnCount = 6 + (showEstimatedCost ? 1 : 0);
   return (
     <div className="codex-session-usage-table-wrap">
-      <table className="codex-session-usage-table">
+      <table
+        className={`codex-session-usage-table${showEstimatedCost ? ' codex-session-usage-table--daily' : ''}`}
+      >
         <thead>
           <tr>
             <th>{keyLabel}</th>
@@ -441,7 +443,7 @@ export function CodexSessionUsagePanel({
             onChange={(value) => setRange(value as UsageRange)}
             ariaLabel={t('codex.sessionUsage.range.label', '时间范围')}
             menuWidth={140}
-            menuMaxHeight={220}
+            menuMaxHeight={260}
           />
         </label>
         <label className="codex-session-usage__field">
