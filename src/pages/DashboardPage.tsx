@@ -2663,6 +2663,7 @@ export function DashboardPage({
     antigravity_ide: stats.antigravity,
     codex: stats.codex,
     codex_api_service: 0,
+    opencode_go: 0,
     claude_manager: stats.claude,
     zed: stats.zed,
     'github-copilot': stats.githubCopilot,

@@ -4,6 +4,7 @@ export type Page =
   | 'api-relay'
   | 'overview'
   | 'codex'
+  | 'opencode-go'
   | 'claude'
   | 'claude-cli'
   | 'codex-api-service'
@@ -37,6 +38,7 @@ export const MAIN_WINDOW_NAVIGABLE_PAGES: readonly Page[] = [
   'api-relay',
   'overview',
   'codex',
+  'opencode-go',
   'claude',
   'claude-cli',
   'codex-api-service',

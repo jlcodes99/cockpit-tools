@@ -1245,7 +1245,15 @@ function loadPersistedState(): NormalizedLayoutStateData {
     const antigravityGroupFirstMigrated = parsed.antigravityGroupFirstMigrated === true;
     const traeSuiteDefaultGroupRestored = parsed.traeSuiteDefaultGroupRestored === true;
     const codexApiServiceSuiteMigrated = parsed.codexApiServiceSuiteMigrated === true;
-    const orderedPlatformIds = normalizeOrder(parsed.orderedPlatformIds ?? defaultPlatformOrder());
+    const openCodeGoPlatformMissing = !sanitizePlatformIds(
+      parsed.orderedPlatformIds ?? [],
+    ).includes('opencode_go');
+    let orderedPlatformIds = normalizeOrder(parsed.orderedPlatformIds ?? defaultPlatformOrder());
+    if (openCodeGoPlatformMissing) {
+      orderedPlatformIds = orderedPlatformIds.filter((id) => id !== 'opencode_go');
+      const codexIndex = orderedPlatformIds.indexOf('codex_api_service');
+      orderedPlatformIds.splice(codexIndex + 1, 0, 'opencode_go');
+    }
     const hiddenPlatformIds = normalizeHidden(parsed.hiddenPlatformIds ?? []);
     const sidebarPlatformIds = normalizeSidebar(
       parsed.sidebarPlatformIds ?? defaultSidebarPlatformIds(),
@@ -1261,20 +1269,34 @@ function loadPersistedState(): NormalizedLayoutStateData {
       },
     ).map((group) => sortGroupPlatformsByOrder(group, orderedPlatformIds));
 
-    const orderedEntryIds = normalizeEntryOrder(parsed.orderedEntryIds, platformGroups, orderedPlatformIds);
+    let orderedEntryIds = normalizeEntryOrder(parsed.orderedEntryIds, platformGroups, orderedPlatformIds);
+    const openCodeGoEntryId = resolveEntryIdForPlatform('opencode_go', platformGroups);
+    if (openCodeGoPlatformMissing) {
+      const codexEntryId = resolveEntryIdForPlatform('codex', platformGroups);
+      orderedEntryIds = orderedEntryIds.filter((id) => id !== openCodeGoEntryId);
+      const codexIndex = orderedEntryIds.indexOf(codexEntryId);
+      orderedEntryIds.splice(codexIndex + 1, 0, openCodeGoEntryId);
+    }
     const hiddenEntryIds = normalizeHiddenEntryIds(
       parsed.hiddenEntryIds,
       orderedEntryIds,
       platformGroups,
       hiddenPlatformIds,
     );
-    const sidebarEntryIds = normalizeSidebarEntryIds(
+    let sidebarEntryIds = normalizeSidebarEntryIds(
       parsed.sidebarEntryIds,
       orderedEntryIds,
       hiddenEntryIds,
       platformGroups,
       sidebarPlatformIds,
     );
+    if (
+      openCodeGoPlatformMissing
+      && !hiddenEntryIds.includes(openCodeGoEntryId)
+      && !sidebarEntryIds.includes(openCodeGoEntryId)
+    ) {
+      sidebarEntryIds = [...sidebarEntryIds, openCodeGoEntryId];
+    }
 
     const normalized = normalizeStateData({
       orderedPlatformIds,
@@ -1303,6 +1325,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       !antigravityGroupFirstMigrated
       || !traeSuiteDefaultGroupRestored
       || !codexApiServiceSuiteMigrated
+      || openCodeGoPlatformMissing
     ) {
       persist(normalized);
     }

@@ -5,6 +5,7 @@ import { PlatformId } from '../types/platform';
 import { AntigravityIcon } from '../components/icons/AntigravityIcon';
 import { AntigravityIdeIcon } from '../components/icons/AntigravityIdeIcon';
 import { CodexIcon } from '../components/icons/CodexIcon';
+import { OpenCodeIcon } from '../components/icons/OpenCodeIcon';
 import { ClaudeIcon } from '../components/icons/ClaudeIcon';
 import { WindsurfIcon } from '../components/icons/WindsurfIcon';
 import { KiroIcon } from '../components/icons/KiroIcon';
@@ -26,6 +27,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return 'Codex';
     case 'codex_api_service':
       return _t('codex.apiService.navTitle', 'Codex API Service');
+    case 'opencode_go':
+      return 'OpenCode Go';
     case 'claude_manager':
       return 'Claude';
     case 'zed':
@@ -73,6 +76,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <CodexIcon size={size} />;
     case 'codex_api_service':
       return <CodexIcon size={size} />;
+    case 'opencode_go':
+      return <OpenCodeIcon size={size} />;
     case 'claude_manager':
       return <ClaudeIcon size={size} />;
     case 'zed':

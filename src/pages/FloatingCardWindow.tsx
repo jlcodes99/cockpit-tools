@@ -197,6 +197,7 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
     case 'codex':
       return useCodexInstanceStore.getState();
     case 'codex_api_service':
+    case 'opencode_go':
       return null;
     case 'claude_manager':
       return useClaudeInstanceStore.getState();
@@ -483,6 +484,7 @@ export function FloatingCardWindow() {
           ]);
           break;
         case 'codex_api_service':
+        case 'opencode_go':
           break;
         case 'claude_manager':
           await Promise.allSettled([

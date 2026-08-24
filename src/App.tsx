@@ -113,6 +113,11 @@ const CodexAccountsPage = lazy(() =>
 const CodexApiServicePage = lazy(() =>
   import('./pages/CodexApiServicePage').then((module) => ({ default: module.CodexApiServicePage })),
 );
+const OpenCodeGoAccountsPage = lazy(() =>
+  import('./pages/OpenCodeGoAccountsPage').then((module) => ({
+    default: module.OpenCodeGoAccountsPage,
+  })),
+);
 const ClaudeAccountsPage = lazy(() =>
   import('./pages/ClaudeAccountsPage').then((module) => ({ default: module.ClaudeAccountsPage })),
 );
@@ -204,6 +209,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'api-relay',
   'overview',
   'codex',
+  'opencode-go',
   'claude',
   'claude-cli',
   'codex-api-service',
@@ -238,6 +244,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   wakeup: ['antigravity', 'antigravity-ide'],
   verification: ['antigravity', 'antigravity-ide'],
   codex: ['codex'],
+  'opencode-go': ['opencode-go'],
   'codex-api-service': ['codex_api_service', 'codex'],
   'codex-instances': ['codex'],
   claude: ['claude', 'claude-manager'],
@@ -3988,6 +3995,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'overview'}>
             <AccountsPage onNavigate={setPage} />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'opencode-go'}>
+            <OpenCodeGoAccountsPage />
           </VisibleBootPage>
           {/* Codex suite: keep both pages mounted after first visit to avoid empty flash when switching. */}
           {shouldMountCodexSuite && (
