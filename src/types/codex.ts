@@ -442,6 +442,7 @@ export interface CodexSessionUsageBreakdownRow {
   outputTokens: number;
   totalTokens: number;
   requestCount: number;
+  estimatedCostUsd?: number;
 }
 
 export interface CodexSessionUsageInstanceOption {

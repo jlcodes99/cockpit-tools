@@ -3117,6 +3117,7 @@
       "hint": "La quota ufficiale è il tetto del piano. I log del servizio API coprono solo il gateway locale. Qui si sommano i delta JSONL per richiesta.",
       "range": {
         "label": "Periodo",
+        "today": "Oggi",
         "7d": "7 giorni",
         "30d": "30 giorni",
         "month": "Questo mese",

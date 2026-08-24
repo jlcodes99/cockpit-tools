@@ -65,6 +65,8 @@ pub struct CodexSessionUsageBreakdownRow {
     pub output_tokens: u64,
     pub total_tokens: u64,
     pub request_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_cost_usd: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1521,6 +1523,7 @@ fn query_breakdown(
                 output_tokens: output,
                 total_tokens: input.saturating_add(output),
                 request_count: requests,
+                estimated_cost_usd: None,
             })
         })
         .map_err(|error| format!("遍历会话用量分组失败: {error}"))?;
@@ -1528,13 +1531,30 @@ fn query_breakdown(
         .map_err(|error| format!("解析会话用量分组失败: {error}"))
 }
 
+/// 将一条会话用量累加到指定汇总项。
+fn accumulate_usage_totals(
+    totals: &mut CodexSessionUsageTotals,
+    input: u64,
+    cached: u64,
+    output: u64,
+) {
+    totals.input_tokens = totals.input_tokens.saturating_add(input);
+    totals.cached_input_tokens = totals.cached_input_tokens.saturating_add(cached);
+    totals.output_tokens = totals.output_tokens.saturating_add(output);
+    totals.total_tokens = totals
+        .total_tokens
+        .saturating_add(input.saturating_add(output));
+    totals.request_count = totals.request_count.saturating_add(1);
+}
+
+/// 按本机日期汇总会话用量，并按每天的模型用量累计估算费用。
 fn query_day_breakdown(
     conn: &Connection,
     where_sql: &str,
     params: &[rusqlite::types::Value],
 ) -> Result<Vec<CodexSessionUsageBreakdownRow>, String> {
     let sql = format!(
-        "SELECT timestamp, input_tokens, cached_input_tokens, output_tokens
+        "SELECT timestamp, model, input_tokens, cached_input_tokens, output_tokens
          FROM session_usage_events {where_sql}"
     );
     let mut statement = conn
@@ -1544,38 +1564,65 @@ fn query_day_breakdown(
         .query_map(rusqlite::params_from_iter(params.iter()), |row| {
             Ok((
                 row.get::<_, i64>(0)?,
-                row.get::<_, i64>(1)?.max(0) as u64,
+                row.get::<_, String>(1)?,
                 row.get::<_, i64>(2)?.max(0) as u64,
                 row.get::<_, i64>(3)?.max(0) as u64,
+                row.get::<_, i64>(4)?.max(0) as u64,
             ))
         })
         .map_err(|error| format!("遍历会话用量日期失败: {error}"))?;
 
     let mut grouped: HashMap<String, CodexSessionUsageTotals> = HashMap::new();
+    let mut daily_models: HashMap<String, HashMap<String, CodexSessionUsageTotals>> =
+        HashMap::new();
     for row in rows {
-        let (timestamp, input, cached, output) =
+        let (timestamp, model, input, cached, output) =
             row.map_err(|error| format!("解析会话用量日期失败: {error}"))?;
         let key = local_day_key(timestamp);
-        let entry = grouped.entry(key).or_default();
-        entry.input_tokens = entry.input_tokens.saturating_add(input);
-        entry.cached_input_tokens = entry.cached_input_tokens.saturating_add(cached);
-        entry.output_tokens = entry.output_tokens.saturating_add(output);
-        entry.total_tokens = entry
-            .total_tokens
-            .saturating_add(input.saturating_add(output));
-        entry.request_count = entry.request_count.saturating_add(1);
+        accumulate_usage_totals(
+            grouped.entry(key.clone()).or_default(),
+            input,
+            cached,
+            output,
+        );
+        accumulate_usage_totals(
+            daily_models
+                .entry(key)
+                .or_default()
+                .entry(model)
+                .or_default(),
+            input,
+            cached,
+            output,
+        );
     }
 
     Ok(grouped
         .into_iter()
-        .map(|(key, totals)| CodexSessionUsageBreakdownRow {
-            label: key.clone(),
-            key,
-            input_tokens: totals.input_tokens,
-            cached_input_tokens: totals.cached_input_tokens,
-            output_tokens: totals.output_tokens,
-            total_tokens: totals.total_tokens,
-            request_count: totals.request_count,
+        .map(|(key, totals)| {
+            let estimated_cost_usd = daily_models
+                .remove(&key)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(model, model_totals)| {
+                    crate::modules::codex_local_access::estimate_model_token_cost_usd(
+                        &model,
+                        model_totals.input_tokens,
+                        model_totals.cached_input_tokens,
+                        model_totals.output_tokens,
+                    )
+                })
+                .sum();
+            CodexSessionUsageBreakdownRow {
+                label: key.clone(),
+                key,
+                input_tokens: totals.input_tokens,
+                cached_input_tokens: totals.cached_input_tokens,
+                output_tokens: totals.output_tokens,
+                total_tokens: totals.total_tokens,
+                request_count: totals.request_count,
+                estimated_cost_usd: Some(estimated_cost_usd),
+            }
         })
         .collect())
 }
@@ -1886,6 +1933,78 @@ mod tests {
         assert_eq!(report.totals.request_count, 2);
         assert_eq!(report.by_model.len(), 1);
         assert_eq!(report.by_model[0].key, "gpt-5.4");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 验证按日期统计会根据每天实际使用的模型分别计算估算费用。
+    #[test]
+    fn daily_breakdown_includes_model_based_estimated_cost() {
+        let dir = make_temp_dir("codex-usage-daily-cost");
+        let store = SessionUsageStore::open_path(dir.join("usage.sqlite"));
+        let conn = store.open_conn().unwrap();
+        let first_day = Local
+            .with_ymd_and_hms(2026, 7, 10, 12, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        let second_day = Local
+            .with_ymd_and_hms(2026, 7, 11, 12, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        let samples = [
+            (
+                "request-1",
+                "session-1",
+                "gpt-5.4",
+                first_day,
+                1_000_000,
+                200_000,
+                100_000,
+            ),
+            (
+                "request-2",
+                "session-2",
+                "gpt-5.4-mini",
+                second_day,
+                2_000_000,
+                500_000,
+                200_000,
+            ),
+        ];
+        for (request_id, session_id, model, timestamp, input, cached, output) in samples {
+            conn.execute(
+                "INSERT INTO session_usage_events (
+                    request_id, instance_id, instance_name, session_id, model, timestamp,
+                    input_tokens, cached_input_tokens, output_tokens, file_path
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                rusqlite::params![
+                    request_id,
+                    DEFAULT_INSTANCE_ID,
+                    DEFAULT_INSTANCE_NAME,
+                    session_id,
+                    model,
+                    timestamp,
+                    input,
+                    cached,
+                    output,
+                    format!("{session_id}.jsonl"),
+                ],
+            )
+            .unwrap();
+        }
+
+        let report = store.query(&CodexSessionUsageQuery::default()).unwrap();
+        assert_eq!(report.by_day.len(), 2);
+        for row in &report.by_day {
+            assert!(row.estimated_cost_usd.unwrap_or_default() > 0.0);
+        }
+        let daily_cost_sum = report
+            .by_day
+            .iter()
+            .map(|row| row.estimated_cost_usd.unwrap_or_default())
+            .sum::<f64>();
+        assert!((daily_cost_sum - report.totals.estimated_cost_usd).abs() < 0.000_000_001);
         fs::remove_dir_all(&dir).ok();
     }
 
