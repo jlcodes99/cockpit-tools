@@ -3209,7 +3209,8 @@
         "fetchCredentialsRequired": "먼저 API Key와 Base URL을 입력하세요.",
         "fetchEmpty": "공급자가 모델을 반환하지 않았습니다. 현재 목록을 유지했습니다.",
         "fetchFailed": "공급자 모델을 가져오지 못했습니다: {{error}}",
-        "syncRequiresModels": "Codex에 동기화하기 전에 모델을 하나 이상 가져오거나 입력하세요."
+        "syncRequiresModels": "Codex에 동기화하기 전에 모델을 하나 이상 가져오거나 입력하세요.",
+        "restartHint": "공급자 설정이 업데이트되었습니다. Codex 또는 API 서비스가 실행 중이면 다시 시작하세요."
       },
       "actions": {
         "addAndSwitch": "추가 후 전환"
@@ -3541,9 +3542,9 @@
       },
       "vision": {
         "providerDefault": "이 공급자는 기본적으로 이미지 입력을 지원합니다",
-        "providerDefaultHint": "끄면 아래에 적은 모델만 이미지를 받을 수 있고, 나머지는 로컬 게이트웨이에서 거부됩니다.",
+        "providerDefaultHint": "끄면 아래에 적은 모델만 이미지를 받고, 나머지는 이미지를 생략한 채 텍스트 처리를 계속합니다.",
         "modelsHint": "한 줄에 모델 하나씩 입력하세요. 공급자 안 일부 모델만 붙여넣은 이미지를 지원할 때 사용합니다.",
-        "routingModelHint": "현재 모델이 이미지를 읽지 못하면 요청은 이 모델을 사용합니다. 비워 두면 유일한 비전 모델을 자동 사용합니다.",
+        "routingModelHint": "현재 모델이 이미지를 읽지 못하면 요청은 이 모델을 사용합니다. 비워 두면 유일한 비전 모델을 자동 사용하고, 그렇지 않으면 이미지를 생략한 채 텍스트 처리를 계속합니다.",
         "allModels": "이미지",
         "partialModels": "일부 이미지",
         "textOnly": "텍스트만"

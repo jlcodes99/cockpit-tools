@@ -3209,7 +3209,8 @@
         "fetchCredentialsRequired": "Önce API Key ve Base URL girin.",
         "fetchEmpty": "Sağlayıcı model döndürmedi. Mevcut liste korundu.",
         "fetchFailed": "Sağlayıcı modelleri alınamadı: {{error}}",
-        "syncRequiresModels": "Codex ile eşitlemeden önce en az bir model alın veya girin."
+        "syncRequiresModels": "Codex ile eşitlemeden önce en az bir model alın veya girin.",
+        "restartHint": "Sağlayıcı ayarları güncellendi. Codex veya API hizmeti çalışıyorsa yeniden başlatın."
       },
       "actions": {
         "addAndSwitch": "Ekle ve geçiş yap"
@@ -3541,9 +3542,9 @@
       },
       "vision": {
         "providerDefault": "Bu sağlayıcı varsayılan olarak görsel girişini destekler",
-        "providerDefaultHint": "Kapalıyken yalnızca aşağıdaki modeller görsel alır; diğerleri yerel ağ geçidi tarafından reddedilir.",
+        "providerDefaultHint": "Kapalıyken yalnızca aşağıdaki modeller görsel alır; diğerleri görselleri atlayıp metni işlemeye devam eder.",
         "modelsHint": "Her satıra bir model yazın. Sağlayıcıdaki yalnızca bazı modeller yapıştırılan görselleri destekliyorsa kullanın.",
-        "routingModelHint": "Geçerli model görsel okuyamıyorsa istek bu modeli kullanır; boşsa tek görsel model otomatik kullanılır.",
+        "routingModelHint": "Geçerli model görsel okuyamıyorsa istek bu modeli kullanır; boşsa tek görsel model otomatik kullanılır, aksi halde görseller atlanır ve metin işlenmeye devam eder.",
         "allModels": "Görsel",
         "partialModels": "Bazı görseller",
         "textOnly": "Yalnızca metin"

@@ -3209,7 +3209,8 @@
         "fetchCredentialsRequired": "Zuerst API Key und Base URL eingeben.",
         "fetchEmpty": "Der Anbieter hat keine Modelle zurückgegeben. Die aktuelle Liste wurde beibehalten.",
         "fetchFailed": "Anbietermodelle konnten nicht abgerufen werden: {{error}}",
-        "syncRequiresModels": "Vor der Synchronisierung mit Codex mindestens ein Modell abrufen oder eingeben."
+        "syncRequiresModels": "Vor der Synchronisierung mit Codex mindestens ein Modell abrufen oder eingeben.",
+        "restartHint": "Die Anbietereinstellungen wurden aktualisiert. Starten Sie Codex oder den API-Dienst neu, falls er ausgeführt wird."
       },
       "actions": {
         "addAndSwitch": "Hinzufügen und wechseln"
@@ -3541,9 +3542,9 @@
       },
       "vision": {
         "providerDefault": "Dieser Anbieter unterstützt Bildeingaben standardmäßig",
-        "providerDefaultHint": "Wenn deaktiviert, dürfen nur die unten gelisteten Modelle Bilder erhalten; andere weist das lokale Gateway ab.",
+        "providerDefaultHint": "Wenn deaktiviert, erhalten nur die unten gelisteten Modelle Bilder; andere lassen Bilder aus und verarbeiten den Text weiter.",
         "modelsHint": "Ein Modell pro Zeile. Nützlich, wenn nur einige Modelle dieses Anbieters eingefügte Bilder unterstützen.",
-        "routingModelHint": "Wenn das aktuelle Modell keine Bilder liest, nutzt die Anfrage dieses Modell; leer nutzt automatisch das einzige Vision-Modell.",
+        "routingModelHint": "Wenn das aktuelle Modell keine Bilder liest, nutzt die Anfrage dieses Modell; leer nutzt automatisch das einzige Vision-Modell, andernfalls werden Bilder ausgelassen und Text weiterverarbeitet.",
         "allModels": "Bilder",
         "partialModels": "Teilweise Bilder",
         "textOnly": "Nur Text"

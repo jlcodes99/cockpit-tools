@@ -3209,7 +3209,8 @@
         "fetchCredentialsRequired": "Informe primeiro a API Key e a Base URL.",
         "fetchEmpty": "O provedor não retornou modelos. A lista atual foi mantida.",
         "fetchFailed": "Não foi possível buscar os modelos do provedor: {{error}}",
-        "syncRequiresModels": "Busque ou informe pelo menos um modelo antes de sincronizar com o Codex."
+        "syncRequiresModels": "Busque ou informe pelo menos um modelo antes de sincronizar com o Codex.",
+        "restartHint": "As configurações do provedor foram atualizadas. Reinicie o Codex ou o serviço de API se estiver em execução."
       },
       "actions": {
         "addAndSwitch": "Adicionar e alternar"
@@ -3541,9 +3542,9 @@
       },
       "vision": {
         "providerDefault": "Este provedor aceita imagens por padrão",
-        "providerDefaultHint": "Quando desativado, só os modelos listados abaixo recebem imagens; os demais são barrados pelo gateway local.",
+        "providerDefaultHint": "Quando desativado, só os modelos listados abaixo recebem imagens; os demais omitem as imagens e continuam com o texto.",
         "modelsHint": "Um modelo por linha. Use quando apenas alguns modelos do provedor aceitam imagens coladas.",
-        "routingModelHint": "Quando o modelo atual não lê imagens, a solicitação usa este modelo; em branco usa automaticamente o único modelo visual.",
+        "routingModelHint": "Quando o modelo atual não lê imagens, a solicitação usa este modelo; em branco usa automaticamente o único modelo visual, caso contrário as imagens são omitidas e o texto continua.",
         "allModels": "Imagens",
         "partialModels": "Algumas imagens",
         "textOnly": "Só texto"

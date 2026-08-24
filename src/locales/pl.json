@@ -3209,7 +3209,8 @@
         "fetchCredentialsRequired": "Najpierw wpisz API Key i Base URL.",
         "fetchEmpty": "Dostawca nie zwrócił żadnych modeli. Zachowano bieżącą listę.",
         "fetchFailed": "Nie udało się pobrać modeli dostawcy: {{error}}",
-        "syncRequiresModels": "Przed synchronizacją z Codex pobierz lub wpisz co najmniej jeden model."
+        "syncRequiresModels": "Przed synchronizacją z Codex pobierz lub wpisz co najmniej jeden model.",
+        "restartHint": "Ustawienia dostawcy zostały zaktualizowane. Uruchom ponownie Codex lub usługę API, jeśli działa."
       },
       "actions": {
         "addAndSwitch": "Dodaj i przełącz"
@@ -3541,9 +3542,9 @@
       },
       "vision": {
         "providerDefault": "Ten dostawca domyślnie obsługuje obrazy",
-        "providerDefaultHint": "Po wyłączeniu tylko modele z listy poniżej przyjmą obrazy; pozostałe odrzuci lokalna brama.",
+        "providerDefaultHint": "Po wyłączeniu tylko modele z listy poniżej przyjmą obrazy; pozostałe pominą obrazy i będą dalej przetwarzać tekst.",
         "modelsHint": "Jeden model w wierszu. Użyj, gdy tylko część modeli dostawcy obsługuje wklejone obrazy.",
-        "routingModelHint": "Gdy bieżący model nie czyta obrazów, żądanie użyje tego modelu; puste pole automatycznie użyje jedynego modelu wizyjnego.",
+        "routingModelHint": "Gdy bieżący model nie czyta obrazów, żądanie użyje tego modelu; puste pole automatycznie użyje jedynego modelu wizyjnego, w przeciwnym razie obrazy zostaną pominięte, a tekst będzie dalej przetwarzany.",
         "allModels": "Obrazy",
         "partialModels": "Część obrazów",
         "textOnly": "Tylko tekst"

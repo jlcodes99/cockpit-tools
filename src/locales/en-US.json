@@ -2900,7 +2900,8 @@
         "fetchCredentialsRequired": "Enter the API Key and Base URL first.",
         "fetchEmpty": "The provider returned no models. The current list was kept.",
         "fetchFailed": "Failed to fetch provider models: {{error}}",
-        "syncRequiresModels": "Fetch or enter at least one model before syncing to Codex."
+        "syncRequiresModels": "Fetch or enter at least one model before syncing to Codex.",
+        "restartHint": "Provider settings updated. Restart Codex or the API service if it is running."
       },
       "actions": {
         "addAndSwitch": "Add and Switch"
@@ -3252,9 +3253,9 @@
       },
       "vision": {
         "providerDefault": "This provider supports image input by default",
-        "providerDefaultHint": "When off, only the models listed below can receive image input; other models are rejected by the local gateway.",
+        "providerDefaultHint": "When off, only the models listed below receive image input; other models omit images and continue with text.",
         "modelsHint": "One model per line. Use this when only some models in the provider support pasted images.",
-        "routingModelHint": "When the current model cannot read images, image requests use this model; blank uses the only vision model automatically.",
+        "routingModelHint": "When the current model cannot read images, image requests use this model; blank uses the only vision model automatically, otherwise images are omitted and text continues.",
         "allModels": "Images",
         "partialModels": "Some Images",
         "textOnly": "Text Only"

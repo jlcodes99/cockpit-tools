@@ -11,7 +11,10 @@ import {
   findCodexApiProviderPresetByBaseUrl,
   findCodexApiProviderPresetById,
 } from "./codexProviderPresets.ts";
-import { resolveCodexProviderCapabilityProfile } from "./codexProviderGateway.ts";
+import {
+  canConfigureCodexProviderVision,
+  resolveCodexProviderCapabilityProfile,
+} from "./codexProviderGateway.ts";
 
 test("OpenRouter preset includes the current Luna Pro model id", () => {
   const preset = findCodexApiProviderPresetByBaseUrl(
@@ -46,6 +49,44 @@ test("DeepSeek keeps its native Responses default", () => {
   });
 
   assert.equal(profile.wireApi, "responses");
+});
+
+test("vision settings stay editable only where provider capability snapshots apply", () => {
+  assert.equal(
+    canConfigureCodexProviderVision({
+      presetId: "custom",
+      wireApi: "responses",
+    }),
+    true,
+  );
+  assert.equal(
+    canConfigureCodexProviderVision({
+      presetId: "packycode",
+      wireApi: "responses",
+    }),
+    true,
+  );
+  assert.equal(
+    canConfigureCodexProviderVision({
+      presetId: "openai_official",
+      wireApi: "responses",
+    }),
+    false,
+  );
+  assert.equal(
+    canConfigureCodexProviderVision({
+      presetId: "deepseek",
+      wireApi: "responses",
+    }),
+    false,
+  );
+  assert.equal(
+    canConfigureCodexProviderVision({
+      presetId: "deepseek",
+      wireApi: "chat_completions",
+    }),
+    true,
+  );
 });
 
 test("both MiniMax presets declare image input only for the vision-capable model", () => {
