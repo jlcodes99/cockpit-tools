@@ -457,7 +457,7 @@ Every bit of support helps sustain open-source development. Thank you!
 - Codex Agent Identity import, dynamic signing, task recovery, OAuth device-fingerprint convergence, Responses namespace routing, encrypted-content recovery, tool-output protocol conversion, model compatibility, and official-account window usage display (req / tokens / A$) reference: [sub2api](https://github.com/Wei-Shaw/sub2api)
 - Codex Agent Identity runtime registration protocol and Ed25519 key format reference the official implementation: [openai/codex](https://github.com/openai/codex) (Apache-2.0)
 - Codex, Claude CLI, and Claude Desktop Gateway third-party provider presets, model mapping, and session JSONL usage aggregation direction reference: [CC Switch](https://github.com/farion1231/cc-switch)
-- Codex model catalog and frontend model display ideas reference: [CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)
+- Codex model catalog, frontend model display, loopback CDP diagnostics, and official live-auth preservation strategy reference: [CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)
 - Codex managed-catalog experimental model display direction references: [gptsolwm](https://github.com/yynxxxxx/gptsolwm)
 - Claude optional sign-in helper runtime is based on: [Electron](https://github.com/electron/electron)
 - Thanks [@longwQaQ](https://github.com/longwQaQ) for contributing per-provider Codex Responses WebSocket configuration ([#1512](https://github.com/jlcodes99/cockpit-tools/pull/1512)).

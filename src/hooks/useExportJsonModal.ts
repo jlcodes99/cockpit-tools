@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { invoke } from '@tauri-apps/api/core';
+import { presentWindowsOperationError } from '../utils/windowsOperationDialog';
 
 interface UseExportJsonModalOptions {
   exportFilePrefix: string;
@@ -107,7 +108,28 @@ export function useExportJsonModal(options: UseExportJsonModalOptions): UseExpor
         filters: [{ name: 'JSON', extensions: ['json'] }],
       });
       if (!filePath) return null;
-      await invoke('save_text_file', { path: filePath, content: json });
+      const writeFile = async () => {
+        await invoke('save_text_file', { path: filePath, content: json });
+      };
+      try {
+        await writeFile();
+      } catch (error) {
+        if (
+          presentWindowsOperationError({
+            error,
+            operation: 'write_file',
+            target: filePath,
+            retry: writeFile,
+            onResolved: () => {
+              setSavedPath(filePath);
+              setPathCopied(false);
+            },
+          })
+        ) {
+          return null;
+        }
+        throw error;
+      }
       return filePath;
     },
     [resolveDefaultExportPath],

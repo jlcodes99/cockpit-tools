@@ -10,14 +10,15 @@ use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::net::TcpListener;
+use std::net::{IpAddr, TcpListener};
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
-use std::time::Instant;
+use std::time::{Instant, UNIX_EPOCH};
 #[cfg(not(target_os = "macos"))]
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::AppHandle;
@@ -31,6 +32,9 @@ use toml_edit::Document;
 const CDP_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const INJECTION_INTERVAL: Duration = Duration::from_secs(2);
 const QUOTA_REFRESH_INTERVAL: Duration = Duration::from_secs(15);
+const AUTH_DIAGNOSTIC_INTERVAL: Duration = Duration::from_secs(5);
+const AUTH_NETWORK_CAPTURE_WINDOW: Duration = Duration::from_secs(4);
+const AUTH_NETWORK_BODY_PREVIEW_LIMIT: usize = 4096;
 
 #[derive(Debug, Clone)]
 pub struct CodexAppInjectionLaunch {
@@ -42,8 +46,25 @@ struct InjectionRuntime {
     task: tauri::async_runtime::JoinHandle<()>,
 }
 
+struct AuthDiagnosticRuntime {
+    task: tauri::async_runtime::JoinHandle<()>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AppServerDiagnosticObservation {
+    pids: Vec<u32>,
+    sockets: String,
+    stdio: String,
+    auth_file: String,
+}
+
 fn runtimes() -> &'static Mutex<HashMap<String, InjectionRuntime>> {
     static RUNTIMES: OnceLock<Mutex<HashMap<String, InjectionRuntime>>> = OnceLock::new();
+    RUNTIMES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn auth_diagnostic_runtimes() -> &'static Mutex<HashMap<String, AuthDiagnosticRuntime>> {
+    static RUNTIMES: OnceLock<Mutex<HashMap<String, AuthDiagnosticRuntime>>> = OnceLock::new();
     RUNTIMES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -57,6 +78,11 @@ fn new_document_scripts() -> &'static Mutex<HashSet<String>> {
     INSTALLED.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
+fn login_guard_new_document_script_ids() -> &'static Mutex<HashMap<String, String>> {
+    static SCRIPT_IDS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    SCRIPT_IDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 fn should_install_new_document_script(websocket_url: &str) -> bool {
     let Ok(installed) = new_document_scripts().lock() else {
         return true;
@@ -67,6 +93,32 @@ fn should_install_new_document_script(websocket_url: &str) -> bool {
 fn mark_new_document_script_installed(websocket_url: &str) {
     if let Ok(mut installed) = new_document_scripts().lock() {
         installed.insert(websocket_url.to_string());
+    }
+}
+
+fn should_install_login_guard_new_document_script(websocket_url: &str) -> bool {
+    let Ok(script_ids) = login_guard_new_document_script_ids().lock() else {
+        return true;
+    };
+    !script_ids.contains_key(websocket_url)
+}
+
+fn remember_login_guard_new_document_script_id(websocket_url: &str, script_id: &str) {
+    if let Ok(mut script_ids) = login_guard_new_document_script_ids().lock() {
+        script_ids.insert(websocket_url.to_string(), script_id.to_string());
+    }
+}
+
+fn login_guard_new_document_script_id(websocket_url: &str) -> Option<String> {
+    login_guard_new_document_script_ids()
+        .lock()
+        .ok()
+        .and_then(|script_ids| script_ids.get(websocket_url).cloned())
+}
+
+fn forget_login_guard_new_document_script_id(websocket_url: &str) {
+    if let Ok(mut script_ids) = login_guard_new_document_script_ids().lock() {
+        script_ids.remove(websocket_url);
     }
 }
 
@@ -132,6 +184,16 @@ pub fn enabled_for_app() -> bool {
     config::get_user_config().codex_app_ui_injection_enabled
 }
 
+pub fn login_page_guard_enabled() -> bool {
+    // CDP 登录页守卫验证后仍无法可靠覆盖官方 renderer 的完整认证状态机。
+    // 暂时保留实现便于后续定位，但所有运行入口强制关闭。
+    false
+}
+
+fn should_enable_login_page_guard(bind_account_id: Option<&str>) -> bool {
+    login_page_guard_enabled() && bind_account_id.is_some_and(|value| !value.trim().is_empty())
+}
+
 pub fn supports_bind_account(bind_account_id: Option<&str>) -> bool {
     bind_account_id.is_some_and(crate::modules::codex_instance::is_api_service_bind_account_id)
 }
@@ -156,6 +218,11 @@ pub fn bind_uses_deepseek_cdp_injection(bind_account_id: Option<&str>) -> bool {
 pub fn should_enable_injection(bind_account_id: Option<&str>) -> bool {
     (enabled_for_app() && supports_bind_account(bind_account_id))
         || bind_uses_deepseek_cdp_injection(bind_account_id)
+}
+
+/// 额度注入、登录页守卫和 DeepSeek 模型适配都依赖实例自己的 loopback CDP。
+pub fn should_enable_cdp(bind_account_id: Option<&str>) -> bool {
+    should_enable_injection(bind_account_id) || should_enable_login_page_guard(bind_account_id)
 }
 
 fn bind_account_id_value(bind_account_id: Option<&str>) -> Option<String> {
@@ -231,7 +298,7 @@ pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
     let mut candidates = Vec::new();
 
     if store.default_settings.launch_mode == crate::models::InstanceLaunchMode::App
-        && should_enable_injection(store.default_settings.bind_account_id.as_deref())
+        && should_enable_cdp(store.default_settings.bind_account_id.as_deref())
     {
         if let Some(pid) = crate::modules::process::resolve_codex_pid_from_entries(
             store.default_settings.last_pid,
@@ -249,7 +316,7 @@ pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
 
     for instance in store.instances {
         if instance.launch_mode != crate::models::InstanceLaunchMode::App
-            || !should_enable_injection(instance.bind_account_id.as_deref())
+            || !should_enable_cdp(instance.bind_account_id.as_deref())
         {
             continue;
         }
@@ -271,23 +338,31 @@ pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
     let mut restored = 0;
     for (instance_id, profile_dir, pid, bind_account_id) in candidates {
         let Some(port) = remote_debugging_port_for_pid(pid) else {
-            logger::log_warn(&format!(
-                "[Codex App Injection] 跳过恢复，运行中的实例缺少 CDP 端口: instance_id={}, pid={}",
-                instance_id, pid
-            ));
+            if should_enable_cdp(bind_account_id.as_deref()) {
+                logger::log_warn(&format!(
+                    "[Codex App Injection] 跳过恢复，运行中的实例缺少 CDP 端口: instance_id={}, pid={}",
+                    instance_id, pid
+                ));
+            }
             continue;
         };
+        let injection_enabled = should_enable_injection(bind_account_id.as_deref());
+        let login_guard_enabled = should_enable_login_page_guard(bind_account_id.as_deref());
         start_for_profile(
             app.clone(),
             instance_id.clone(),
             profile_dir,
             Some(port),
-            bind_account_id,
+            bind_account_id.clone(),
         );
         restored += 1;
         logger::log_info(&format!(
-            "[Codex App Injection] 已恢复运行中实例: instance_id={}, pid={}, port={}",
-            instance_id, pid, port
+            "[Codex CDP] 已恢复运行中实例: instance_id={}, pid={}, port={}, injection_enabled={}, login_guard_enabled={}",
+            instance_id,
+            pid,
+            port,
+            injection_enabled,
+            login_guard_enabled,
         ));
     }
 
@@ -295,8 +370,22 @@ pub fn restore_running_profiles(app: AppHandle) -> Result<usize, String> {
 }
 
 pub fn stop_for_profile(profile_dir: &Path) {
+    stop_auth_diagnostics_for_profile(profile_dir);
+    stop_injection_for_profile(profile_dir);
+}
+
+fn stop_injection_for_profile(profile_dir: &Path) {
     let key = profile_key(profile_dir);
     if let Ok(mut items) = runtimes().lock() {
+        if let Some(runtime) = items.remove(&key) {
+            runtime.task.abort();
+        }
+    }
+}
+
+fn stop_auth_diagnostics_for_profile(profile_dir: &Path) {
+    let key = profile_key(profile_dir);
+    if let Ok(mut items) = auth_diagnostic_runtimes().lock() {
         if let Some(runtime) = items.remove(&key) {
             runtime.task.abort();
         }
@@ -309,6 +398,38 @@ pub fn stop_all() {
             runtime.task.abort();
         }
     }
+    if let Ok(mut items) = auth_diagnostic_runtimes().lock() {
+        for (_, runtime) in items.drain() {
+            runtime.task.abort();
+        }
+    }
+}
+
+fn start_auth_diagnostics_for_profile(
+    instance_id: &str,
+    profile_dir: &Path,
+    port: u16,
+    bind_account_id: Option<&str>,
+) {
+    stop_auth_diagnostics_for_profile(profile_dir);
+    let key = profile_key(profile_dir);
+    let instance_id = instance_id.to_string();
+    let profile_key_for_task = key.clone();
+    let profile_dir_for_task = profile_dir.to_path_buf();
+    let bind_account_id = bind_account_id.map(str::to_string);
+    let task = tauri::async_runtime::spawn(async move {
+        run_auth_diagnostic_loop(
+            instance_id,
+            profile_key_for_task,
+            profile_dir_for_task,
+            port,
+            bind_account_id,
+        )
+        .await;
+    });
+    if let Ok(mut items) = auth_diagnostic_runtimes().lock() {
+        items.insert(key, AuthDiagnosticRuntime { task });
+    }
 }
 
 pub fn start_for_profile(
@@ -319,10 +440,12 @@ pub fn start_for_profile(
     bind_account_id: Option<String>,
 ) {
     let Some(port) = port else { return };
+    // 登录页守卫与认证抓包暂时下线；额度/模型注入仍使用独立的 CDP loop。
+    stop_auth_diagnostics_for_profile(&profile_dir);
     if !should_enable_injection(bind_account_id.as_deref()) {
         return;
     }
-    stop_for_profile(&profile_dir);
+    stop_injection_for_profile(&profile_dir);
     let key = profile_key(&profile_dir);
     let task_profile = profile_dir.clone();
     let task_bind = bind_account_id.clone();
@@ -468,13 +591,365 @@ async fn fetch_quota(
         .map(QuotaResponse::normalize_empty_pool)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct CdpTarget {
+    #[serde(rename = "id", default)]
+    target_id: String,
     #[serde(rename = "type")]
     target_type: String,
+    #[serde(default)]
+    url: String,
     #[serde(rename = "webSocketDebuggerUrl")]
     websocket_url: Option<String>,
 }
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct AuthPageSnapshot {
+    #[serde(default)]
+    route: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    ready_state: String,
+    #[serde(default)]
+    login_route: bool,
+    #[serde(default)]
+    login_text: bool,
+    #[serde(default)]
+    auth_error_text: bool,
+    #[serde(default)]
+    login_guard_installed: bool,
+    #[serde(default)]
+    login_guard_enabled: bool,
+    #[serde(default)]
+    login_guard_blocked_count: u64,
+    #[serde(default)]
+    login_guard_last_blocked_type: String,
+    #[serde(default)]
+    account_info_override_count: u64,
+    #[serde(default)]
+    last_account_info_override_at: u64,
+}
+
+impl AuthPageSnapshot {
+    fn login_signal(&self) -> bool {
+        self.login_route || self.login_text
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AuthDiagnosticObservation {
+    cdp_available: bool,
+    target_count: usize,
+    route: String,
+    title: String,
+    ready_state: String,
+    login_route: bool,
+    login_text: bool,
+    auth_error_text: bool,
+    login_guard_installed: bool,
+    login_guard_enabled: bool,
+    login_guard_blocked_count: u64,
+    login_guard_last_blocked_type: String,
+    account_info_override_count: u64,
+    last_account_info_override_at: u64,
+}
+
+impl AuthDiagnosticObservation {
+    fn unavailable() -> Self {
+        Self {
+            cdp_available: false,
+            target_count: 0,
+            route: String::new(),
+            title: String::new(),
+            ready_state: String::new(),
+            login_route: false,
+            login_text: false,
+            auth_error_text: false,
+            login_guard_installed: false,
+            login_guard_enabled: false,
+            login_guard_blocked_count: 0,
+            login_guard_last_blocked_type: String::new(),
+            account_info_override_count: 0,
+            last_account_info_override_at: 0,
+        }
+    }
+
+    fn login_signal(&self) -> bool {
+        self.login_route || self.login_text
+    }
+}
+
+const AUTH_DIAGNOSTIC_SCRIPT: &str = r#"
+(() => {
+  const href = String(location.href || "");
+  const path = String(location.pathname || "");
+  const hash = String(location.hash || "").split(/[?#]/, 1)[0].slice(0, 160);
+  const route = (hash || path).slice(0, 160);
+  const text = String(document.body?.innerText || "").slice(0, 12000).toLowerCase();
+  const routeText = `${path} ${hash}`.toLowerCase();
+  return {
+    route,
+    title: String(document.title || "").slice(0, 160),
+    readyState: String(document.readyState || ""),
+    loginRoute: /(^|[\/#])(login|signin|auth)([/?#]|$)/i.test(routeText),
+    loginText: /\b(log[ -]?in|sign[ -]?in|login required)\b|登录|重新登录/i.test(text),
+    authErrorText: /cloud[ _-]?(requirements|config[ _-]?bundle)|relogin|auth[ _-]?error/i.test(text),
+    loginGuardInstalled: Boolean(window.__cockpitCodexLoginGuard?.installed),
+    loginGuardEnabled: Boolean(window.__cockpitCodexLoginGuard?.enabled),
+    loginGuardBlockedCount: Number(window.__cockpitCodexLoginGuard?.blockedCount || 0),
+    loginGuardLastBlockedType: String(window.__cockpitCodexLoginGuard?.lastBlockedType || "").slice(0, 120),
+    accountInfoOverrideCount: Number(window.__cockpitCodexLoginGuard?.accountInfoOverrideCount || 0),
+    lastAccountInfoOverrideAt: Number(window.__cockpitCodexLoginGuard?.lastAccountInfoOverrideAt || 0),
+    pageKind: href.startsWith("app://-/") ? "codex-app" : "other",
+  };
+})()
+"#;
+
+const LOGIN_PAGE_GUARD_SCRIPT: &str = r#"
+(() => {
+  const key = "__cockpitCodexLoginGuard";
+  const existing = window[key];
+  if (existing?.installed && typeof existing.setEnabled === "function") {
+    existing.setEnabled(true);
+    existing.installTransportGuard?.();
+    return {
+      installed: true,
+      enabled: Boolean(existing.enabled),
+      blockedCount: Number(existing.blockedCount || 0),
+      lastBlockedType: String(existing.lastBlockedType || ""),
+      accountInfoOverrideCount: Number(existing.accountInfoOverrideCount || 0),
+      lastAccountInfoOverrideAt: Number(existing.lastAccountInfoOverrideAt || 0),
+    };
+  }
+
+  const state = {
+    installed: true,
+    enabled: true,
+    blockedCount: 0,
+    lastBlockedAt: 0,
+    lastBlockedType: "",
+    accountInfoOverrideCount: 0,
+    lastAccountInfoOverrideAt: 0,
+    transportGuardInstalled: false,
+    setEnabled(enabled) {
+      this.enabled = Boolean(enabled);
+    },
+    patchAccountInfoPayload(data) {
+      if (!this.enabled || typeof data !== "string" || !data.includes("hasChatGptToken")) {
+        return data;
+      }
+
+      let patched = data;
+      let changed = false;
+      const patchValue = (value) => {
+        if (Array.isArray(value)) {
+          value.forEach((item, index) => {
+            const next = patchValue(item);
+            if (next !== item) value[index] = next;
+          });
+          return value;
+        }
+        if (!value || typeof value !== "object") return value;
+        Object.keys(value).forEach((name) => {
+          if (name === "hasChatGptToken" && value[name] === false) {
+            value[name] = true;
+            changed = true;
+            return;
+          }
+          const next = patchValue(value[name]);
+          if (next !== value[name]) value[name] = next;
+        });
+        return value;
+      };
+
+      // Cap'n Web currently transports JSON-shaped RPC frames. Handle both a
+      // direct frame and a JSON string nested in a frame, without touching
+      // tokens or any other account fields.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const parsed = JSON.parse(patched);
+          patchValue(parsed);
+          const serialized = JSON.stringify(parsed);
+          if (serialized !== patched) {
+            patched = serialized;
+          }
+        } catch {
+          break;
+        }
+      }
+      if (!changed) {
+        patched = patched.replace(
+          /(hasChatGptToken[^:]{0,32}:\s*)false\b/g,
+          "$1true",
+        );
+        changed = patched !== data;
+      }
+      if (changed) {
+        this.accountInfoOverrideCount += 1;
+        this.lastAccountInfoOverrideAt = Date.now();
+      }
+      return patched;
+    },
+    patchHostFetchResponse(data) {
+      if (
+        !this.enabled ||
+        data?.type !== "fetch-response" ||
+        typeof data?.bodyJsonString !== "string"
+      ) {
+        return false;
+      }
+      const patched = this.patchAccountInfoPayload(data.bodyJsonString);
+      if (patched === data.bodyJsonString) return false;
+      // Electron's structured-cloned host message is a mutable plain object.
+      // Mutate only the account-info response body before the renderer's
+      // window message listener receives it.
+      data.bodyJsonString = patched;
+      return true;
+    },
+    wrapPort(port) {
+      if (!port || port.__cockpitCodexLoginGuardWrapped) return;
+      const nativeAddEventListener = port.addEventListener.bind(port);
+      let onmessageListener = null;
+      let onmessageOwner = port;
+      let nativeOnmessage = null;
+      while (onmessageOwner && nativeOnmessage == null) {
+        nativeOnmessage = Object.getOwnPropertyDescriptor(onmessageOwner, "onmessage") || null;
+        onmessageOwner = Object.getPrototypeOf(onmessageOwner);
+      }
+      const patchMessageEvent = (event) => {
+        const patchedData = state.patchAccountInfoPayload(event?.data);
+        if (patchedData === event?.data) return event;
+        return new Proxy(event, {
+          get(target, property) {
+            if (property === "data") return patchedData;
+            return Reflect.get(target, property, target);
+          },
+        });
+      };
+      Object.defineProperty(port, "__cockpitCodexLoginGuardWrapped", {
+        configurable: false,
+        enumerable: false,
+        value: true,
+      });
+      Object.defineProperty(port, "addEventListener", {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value: (type, listener, options) => {
+          if (type !== "message" || typeof listener !== "function") {
+            return nativeAddEventListener(type, listener, options);
+          }
+          return nativeAddEventListener(
+            type,
+            (event) => {
+              return listener.call(port, patchMessageEvent(event));
+            },
+            options,
+          );
+        },
+      });
+      // The current Cap'n Web renderer bridge assigns MessagePort.onmessage
+      // directly. Wrapping addEventListener alone misses account-info replies.
+      Object.defineProperty(port, "onmessage", {
+        configurable: true,
+        enumerable: true,
+        get: () => onmessageListener,
+        set: (listener) => {
+          onmessageListener = typeof listener === "function" ? listener : null;
+          const wrapped = onmessageListener == null
+            ? null
+            : (event) => onmessageListener?.call(port, patchMessageEvent(event));
+          if (typeof nativeOnmessage?.set === "function") {
+            nativeOnmessage.set.call(port, wrapped);
+          }
+        },
+      });
+    },
+    installTransportGuard() {
+      if (this.transportGuardInstalled || typeof window.MessageChannel !== "function") return;
+      const NativeMessageChannel = window.MessageChannel;
+      const WrappedMessageChannel = function (...args) {
+        const channel = new NativeMessageChannel(...args);
+        state.wrapPort(channel.port1);
+        state.wrapPort(channel.port2);
+        return channel;
+      };
+      WrappedMessageChannel.prototype = NativeMessageChannel.prototype;
+      try {
+        Object.setPrototypeOf(WrappedMessageChannel, NativeMessageChannel);
+        Object.defineProperty(window, "MessageChannel", {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: WrappedMessageChannel,
+        });
+        this.transportGuardInstalled = true;
+      } catch {
+        this.transportGuardInstalled = false;
+      }
+    },
+  };
+
+  state.installTransportGuard();
+
+  const isLoginRequiredConnection = (data) =>
+    data?.type === "codex-app-server-connection-changed" &&
+    (data?.hostId == null || data.hostId === "local") &&
+    data?.state === "error" &&
+    data?.error?.code === "login-required";
+
+  const isLogoutAccountUpdate = (data) =>
+    data?.type === "mcp-notification" &&
+    data?.method === "account/updated" &&
+    (data?.hostId == null || data.hostId === "local") &&
+    data?.params &&
+    data?.params?.authMode == null;
+
+  const shouldBlock = (data) =>
+    isLogoutAccountUpdate(data) ||
+    isLoginRequiredConnection(data) ||
+    data?.type === "chatgpt-auth-token-unavailable";
+
+  window.addEventListener(
+    "message",
+    (event) => {
+      state.patchHostFetchResponse(event.data);
+      if (!state.enabled || !shouldBlock(event.data)) return;
+      state.blockedCount += 1;
+      state.lastBlockedAt = Date.now();
+      state.lastBlockedType =
+        event.data?.type === "mcp-notification"
+          ? `${event.data.type}:${event.data.method || "unknown"}`
+          : String(event.data?.type || "unknown");
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    },
+    true,
+  );
+
+  window[key] = state;
+  return {
+    installed: true,
+    enabled: true,
+    blockedCount: 0,
+    lastBlockedType: "",
+    accountInfoOverrideCount: 0,
+    lastAccountInfoOverrideAt: 0,
+  };
+})()
+"#;
+
+const LOGIN_PAGE_GUARD_DISABLE_SCRIPT: &str = r#"
+(() => {
+  const guard = window.__cockpitCodexLoginGuard;
+  if (guard?.installed && typeof guard.setEnabled === "function") {
+    guard.setEnabled(false);
+  }
+  return Boolean(guard?.installed);
+})()
+"#;
 
 fn deepseek_model_injection_script(
     _locale: &str,
@@ -1125,7 +1600,869 @@ async fn query_targets(client: &Client, port: u16) -> Vec<CdpTarget> {
     let Some(response) = response else {
         return Vec::new();
     };
-    response.json::<Vec<CdpTarget>>().await.unwrap_or_default()
+    let mut targets = response.json::<Vec<CdpTarget>>().await.unwrap_or_default();
+    for target in &mut targets {
+        if target
+            .websocket_url
+            .as_deref()
+            .is_some_and(|url| !is_safe_cdp_websocket_url(url, port))
+        {
+            target.websocket_url = None;
+        }
+    }
+    targets
+}
+
+#[cfg(target_os = "macos")]
+fn app_server_socket_endpoints(pid: u32) -> Vec<String> {
+    let output = Command::new("lsof")
+        .args(["-nP", "-a", "-p", &pid.to_string(), "-i"])
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    let mut endpoints = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            if !(line.contains(" TCP ") || line.contains(" UDP ")) {
+                return None;
+            }
+            let value = line
+                .split("->")
+                .nth(1)
+                .and_then(|part| part.split_whitespace().next())
+                .or_else(|| line.split_whitespace().last())?
+                .trim_matches(['(', ')'])
+                .to_string();
+            (!value.is_empty()).then_some(value)
+        })
+        .collect::<Vec<_>>();
+    endpoints.sort();
+    endpoints.dedup();
+    endpoints
+}
+
+#[cfg(not(target_os = "macos"))]
+fn app_server_socket_endpoints(_pid: u32) -> Vec<String> {
+    Vec::new()
+}
+
+fn app_server_auth_file_snapshot(profile_dir: &Path) -> String {
+    let auth_path = profile_dir.join("auth.json");
+    let Ok(bytes) = fs::read(&auth_path) else {
+        return "exists=false".to_string();
+    };
+    let modified = fs::metadata(&auth_path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let digest = Sha256::digest(&bytes);
+    format!(
+        "exists=true,size={},mtime={},sha256={:x}",
+        bytes.len(),
+        modified,
+        digest
+    )
+}
+
+fn collect_app_server_diagnostic_observation(profile_dir: &Path) -> AppServerDiagnosticObservation {
+    let mut pids = crate::modules::process::collect_codex_app_server_pids_for_profile(profile_dir);
+    pids.sort_unstable();
+    pids.dedup();
+    let mut sockets = pids
+        .iter()
+        .flat_map(|pid| {
+            app_server_socket_endpoints(*pid)
+                .into_iter()
+                .map(move |endpoint| format!("pid={}:{}", pid, endpoint))
+        })
+        .collect::<Vec<_>>();
+    sockets.sort();
+    sockets.dedup();
+    AppServerDiagnosticObservation {
+        pids,
+        sockets: sockets.join("|"),
+        // 官方桌面端持有 app-server 的 stdio，Cockpit 只能通过进程树、socket 和
+        // 认证存储快照诊断，不能从外部安全接管它的 stdin/stdout。
+        stdio: "owned_by_official_electron".to_string(),
+        auth_file: app_server_auth_file_snapshot(profile_dir),
+    }
+}
+
+async fn app_server_diagnostic_observation(
+    profile_dir: PathBuf,
+) -> Option<AppServerDiagnosticObservation> {
+    timeout(
+        Duration::from_secs(2),
+        tokio::task::spawn_blocking(move || {
+            collect_app_server_diagnostic_observation(&profile_dir)
+        }),
+    )
+    .await
+    .ok()?
+    .ok()
+}
+
+fn is_sensitive_cdp_key(key: &str) -> bool {
+    let key = key.to_ascii_lowercase();
+    [
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "token",
+        "api_key",
+        "apikey",
+        "x-api-key",
+        "x-openai-api-key",
+        "openai-api-key",
+        "client_secret",
+        "password",
+        "private_key",
+        "secret",
+    ]
+    .iter()
+    .any(|part| key == *part || key.contains(part))
+}
+
+fn sanitize_cdp_json(value: &Value, depth: usize) -> Value {
+    if depth > 8 {
+        return Value::String("<nested-value-redacted>".to_string());
+    }
+    match value {
+        Value::Object(object) => {
+            let mut sanitized = serde_json::Map::new();
+            for (key, value) in object {
+                if is_sensitive_cdp_key(key) {
+                    sanitized.insert(key.clone(), Value::String("<redacted>".to_string()));
+                } else {
+                    sanitized.insert(key.clone(), sanitize_cdp_json(value, depth + 1));
+                }
+            }
+            Value::Object(sanitized)
+        }
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| sanitize_cdp_json(item, depth + 1))
+                .collect(),
+        ),
+        Value::String(text) => {
+            let lower = text.to_ascii_lowercase();
+            if lower.starts_with("bearer ") || lower.starts_with("rt.") || lower.starts_with("eyj")
+            {
+                Value::String("<redacted>".to_string())
+            } else {
+                Value::String(text.chars().take(AUTH_NETWORK_BODY_PREVIEW_LIMIT).collect())
+            }
+        }
+        _ => value.clone(),
+    }
+}
+
+fn sanitize_cdp_headers(value: Option<&Value>) -> Value {
+    value
+        .map(|value| sanitize_cdp_json(value, 0))
+        .unwrap_or_else(|| json!({}))
+}
+
+fn sanitize_cdp_text(raw: &str) -> String {
+    sanitize_cdp_json(&Value::String(raw.to_string()), 0)
+        .as_str()
+        .unwrap_or("")
+        .to_string()
+}
+
+fn sanitize_cdp_url(raw: &str) -> String {
+    let Ok(parsed) = url::Url::parse(raw) else {
+        return raw.chars().take(512).collect();
+    };
+    let mut result = format!(
+        "{}://{}{}",
+        parsed.scheme(),
+        parsed.host_str().unwrap_or(""),
+        parsed.path()
+    );
+    if parsed.query().is_some() {
+        result.push_str("?<redacted-query>");
+    }
+    result.chars().take(768).collect()
+}
+
+fn is_auth_diagnostic_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    [
+        "cloudrequirements",
+        "cloud-requirements",
+        "cloudconfigbundle",
+        "cloud-config-bundle",
+        "oauth",
+        "/auth",
+        "login",
+        "relogin",
+    ]
+    .iter()
+    .any(|part| lower.contains(part))
+}
+
+fn should_capture_cdp_response_body(url: &str, status: u64) -> bool {
+    is_auth_diagnostic_url(url) || status == 401 || status == 403
+}
+
+fn cdp_body_preview(value: &Value) -> Option<String> {
+    let body = value.pointer("/result/body")?.as_str()?;
+    let body_len = body.len();
+    let preview = serde_json::from_str::<Value>(body)
+        .map(|json| sanitize_cdp_json(&json, 0))
+        .ok()
+        .and_then(|json| serde_json::to_string(&json).ok())
+        .unwrap_or_else(|| "<non-json-body-redacted>".to_string());
+    Some(format!("body_len={}, body_preview={}", body_len, preview))
+}
+
+async fn monitor_cdp_target(
+    instance_id: &str,
+    profile_key: &str,
+    target: &CdpTarget,
+    login_page_guard_enabled: bool,
+) -> Option<AuthPageSnapshot> {
+    let websocket_url = target.websocket_url.as_deref()?;
+    let Ok(Ok((mut socket, _))) = timeout(CDP_CONNECT_TIMEOUT, connect_async(websocket_url)).await
+    else {
+        return None;
+    };
+
+    let mut next_command_id = 100i64;
+    let mut pending_body_requests: HashMap<i64, (String, String)> = HashMap::new();
+    let mut body_candidates: HashMap<String, (String, u64)> = HashMap::new();
+    let mut request_started: HashMap<String, Instant> = HashMap::new();
+    let target_label = if target.target_id.is_empty() {
+        "unknown"
+    } else {
+        target.target_id.as_str()
+    };
+    logger::log_info(&format!(
+        "[Codex Auth Network] target_attached: instance_id={}, profile={}, target_id={}, target_type={}, target_url={}",
+        instance_id,
+        profile_key,
+        target_label,
+        target.target_type,
+        sanitize_cdp_url(&target.url),
+    ));
+
+    let _ = socket
+        .send(Message::Text(
+            json!({
+                "id": 1,
+                "method": "Network.enable",
+                "params": {
+                    "maxTotalBufferSize": 4 * 1024 * 1024,
+                    "maxResourceBufferSize": 512 * 1024,
+                    "maxPostDataSize": 0
+                }
+            })
+            .to_string()
+            .into(),
+        ))
+        .await;
+
+    for (id, method) in [(2, "Runtime.enable"), (3, "Log.enable")] {
+        let _ = socket
+            .send(Message::Text(
+                json!({"id": id, "method": method, "params": {}})
+                    .to_string()
+                    .into(),
+            ))
+            .await;
+    }
+
+    if target.target_type == "page" || target.target_type == "webview" {
+        let _ = socket
+            .send(Message::Text(
+                json!({
+                    "id": 4,
+                    "method": "Page.enable",
+                    "params": {}
+                })
+                .to_string()
+                .into(),
+            ))
+            .await;
+        let _ = socket
+            .send(Message::Text(
+                json!({
+                    "id": 5,
+                    "method": "Page.setLifecycleEventsEnabled",
+                    "params": {"enabled": true}
+                })
+                .to_string()
+                .into(),
+            ))
+            .await;
+        if login_page_guard_enabled && should_install_login_guard_new_document_script(websocket_url)
+        {
+            let _ = socket
+                .send(Message::Text(
+                    json!({
+                        "id": 6,
+                        "method": "Page.addScriptToEvaluateOnNewDocument",
+                        "params": {"source": LOGIN_PAGE_GUARD_SCRIPT}
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .await;
+        } else if !login_page_guard_enabled {
+            if let Some(identifier) = login_guard_new_document_script_id(websocket_url) {
+                let removed = socket
+                    .send(Message::Text(
+                        json!({
+                            "id": 6,
+                            "method": "Page.removeScriptToEvaluateOnNewDocument",
+                            "params": {"identifier": identifier}
+                        })
+                        .to_string()
+                        .into(),
+                    ))
+                    .await
+                    .is_ok();
+                if removed {
+                    forget_login_guard_new_document_script_id(websocket_url);
+                }
+            }
+        }
+        let guard_script = if login_page_guard_enabled {
+            LOGIN_PAGE_GUARD_SCRIPT
+        } else {
+            LOGIN_PAGE_GUARD_DISABLE_SCRIPT
+        };
+        let _ = socket
+            .send(Message::Text(
+                json!({
+                    "id": 7,
+                    "method": "Runtime.evaluate",
+                    "params": {
+                        "expression": guard_script,
+                        "returnByValue": true,
+                        "awaitPromise": false
+                    }
+                })
+                .to_string()
+                .into(),
+            ))
+            .await;
+        let _ = socket
+            .send(Message::Text(
+                json!({
+                    "id": 8,
+                    "method": "Runtime.evaluate",
+                    "params": {
+                        "expression": AUTH_DIAGNOSTIC_SCRIPT,
+                        "returnByValue": true,
+                        "awaitPromise": false
+                    }
+                })
+                .to_string()
+                .into(),
+            ))
+            .await;
+    }
+
+    let mut snapshot = None;
+    let capture_until = Instant::now() + AUTH_NETWORK_CAPTURE_WINDOW;
+    loop {
+        let remaining = capture_until.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        let message = match timeout(remaining, socket.next()).await {
+            Ok(Some(Ok(message))) => message,
+            _ => break,
+        };
+        let Message::Text(text) = message else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+
+        if let Some(command_id) = value.get("id").and_then(Value::as_i64) {
+            if command_id == 8 {
+                snapshot = value
+                    .pointer("/result/result/value")
+                    .cloned()
+                    .and_then(|result| serde_json::from_value::<AuthPageSnapshot>(result).ok());
+            } else if command_id == 6 && login_page_guard_enabled {
+                if let Some(identifier) =
+                    value.pointer("/result/identifier").and_then(Value::as_str)
+                {
+                    remember_login_guard_new_document_script_id(websocket_url, identifier);
+                    // The current document may already have created the official
+                    // MessageChannel before CDP attached. Reload once after the
+                    // document-start hook is installed so the transport guard
+                    // can wrap the channel before account-info is queried.
+                    let _ = socket
+                        .send(Message::Text(
+                            json!({
+                                "id": 9,
+                                "method": "Page.reload",
+                                "params": {"ignoreCache": false}
+                            })
+                            .to_string()
+                            .into(),
+                        ))
+                        .await;
+                }
+            } else if let Some((request_id, url)) = pending_body_requests.remove(&command_id) {
+                let body =
+                    cdp_body_preview(&value).unwrap_or_else(|| "body_unavailable=true".to_string());
+                logger::log_info(&format!(
+                    "[Codex Auth Network] response_body: instance_id={}, profile={}, target_id={}, request_id={}, url={}, {}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    request_id,
+                    sanitize_cdp_url(&url),
+                    body,
+                ));
+            }
+            continue;
+        }
+
+        let Some(method) = value.get("method").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(params) = value.get("params") else {
+            continue;
+        };
+        match method {
+            "Network.requestWillBeSent" => {
+                let request_id = params
+                    .get("requestId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let request = params.get("request").cloned().unwrap_or_else(|| json!({}));
+                let url = request.get("url").and_then(Value::as_str).unwrap_or("");
+                request_started.insert(request_id.clone(), Instant::now());
+                logger::log_info(&format!(
+                    "[Codex Auth Network] request: instance_id={}, profile={}, target_id={}, request_id={}, type={}, method={}, url={}, has_post_data={}, headers={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    request_id,
+                    params.get("type").and_then(Value::as_str).unwrap_or(""),
+                    request.get("method").and_then(Value::as_str).unwrap_or(""),
+                    sanitize_cdp_url(url),
+                    request.get("hasPostData").and_then(Value::as_bool).unwrap_or(false),
+                    sanitize_cdp_headers(request.get("headers")),
+                ));
+            }
+            "Network.requestWillBeSentExtraInfo" | "Network.responseReceivedExtraInfo" => {
+                logger::log_info(&format!(
+                    "[Codex Auth Network] {}: instance_id={}, profile={}, target_id={}, request_id={}, headers={}",
+                    method,
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    params.get("requestId").and_then(Value::as_str).unwrap_or(""),
+                    sanitize_cdp_headers(params.get("headers")),
+                ));
+            }
+            "Network.responseReceived" => {
+                let request_id = params
+                    .get("requestId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let response = params.get("response").cloned().unwrap_or_else(|| json!({}));
+                let url = response.get("url").and_then(Value::as_str).unwrap_or("");
+                let status = response.get("status").and_then(Value::as_u64).unwrap_or(0);
+                let duration_ms = request_started
+                    .get(&request_id)
+                    .map(|started| started.elapsed().as_millis());
+                logger::log_info(&format!(
+                    "[Codex Auth Network] response: instance_id={}, profile={}, target_id={}, request_id={}, status={}, duration_ms={:?}, url={}, mime_type={}, headers={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    request_id,
+                    status,
+                    duration_ms,
+                    sanitize_cdp_url(url),
+                    response.get("mimeType").and_then(Value::as_str).unwrap_or(""),
+                    sanitize_cdp_headers(response.get("headers")),
+                ));
+                if !request_id.is_empty() && should_capture_cdp_response_body(url, status) {
+                    // Auth endpoints can return HTTP 200 with {errorCode: "Auth", action:
+                    // "relogin"}; defer getResponseBody until loadingFinished so this case is
+                    // captured as reliably as a 401/403 response.
+                    body_candidates.insert(request_id, (url.to_string(), status));
+                }
+            }
+            "Network.loadingFinished" => {
+                let request_id = params
+                    .get("requestId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let Some((url, status)) = body_candidates.remove(request_id) else {
+                    continue;
+                };
+                let command_id = next_command_id;
+                next_command_id += 1;
+                pending_body_requests.insert(command_id, (request_id.to_string(), url.clone()));
+                logger::log_info(&format!(
+                    "[Codex Auth Network] body_capture: instance_id={}, profile={}, target_id={}, request_id={}, status={}, url={}, encoded_data_length={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    request_id,
+                    status,
+                    sanitize_cdp_url(&url),
+                    params
+                        .get("encodedDataLength")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                ));
+                let _ = socket
+                    .send(Message::Text(
+                        json!({
+                            "id": command_id,
+                            "method": "Network.getResponseBody",
+                            "params": {"requestId": request_id}
+                        })
+                        .to_string()
+                        .into(),
+                    ))
+                    .await;
+            }
+            "Network.loadingFailed" => {
+                let request_id = params
+                    .get("requestId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                body_candidates.remove(request_id);
+                let duration_ms = request_started
+                    .get(request_id)
+                    .map(|started| started.elapsed().as_millis());
+                logger::log_warn(&format!(
+                    "[Codex Auth Network] loading_failed: instance_id={}, profile={}, target_id={}, request_id={}, duration_ms={:?}, error_text={}, canceled={}, blocked_reason={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    request_id,
+                    duration_ms,
+                    sanitize_cdp_text(
+                        params.get("errorText").and_then(Value::as_str).unwrap_or(""),
+                    ),
+                    params.get("canceled").and_then(Value::as_bool).unwrap_or(false),
+                    params.get("blockedReason").and_then(Value::as_str).unwrap_or(""),
+                ));
+            }
+            "Network.webSocketCreated"
+            | "Network.webSocketWillSendHandshakeRequest"
+            | "Network.webSocketHandshakeResponseReceived"
+            | "Network.webSocketClosed"
+            | "Network.webSocketFrameError" => {
+                let response = params.get("response").unwrap_or(&Value::Null);
+                let url = params
+                    .get("url")
+                    .and_then(Value::as_str)
+                    .or_else(|| response.get("url").and_then(Value::as_str))
+                    .unwrap_or("");
+                logger::log_info(&format!(
+                    "[Codex Auth Network] {}: instance_id={}, profile={}, target_id={}, request_id={}, url={}, status={}, error={}",
+                    method,
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    params
+                        .get("requestId")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
+                    sanitize_cdp_url(url),
+                    response.get("status").and_then(Value::as_u64).unwrap_or(0),
+                    sanitize_cdp_text(
+                        params
+                            .get("errorMessage")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                    ),
+                ));
+            }
+            "Network.webSocketFrameSent" | "Network.webSocketFrameReceived" => {
+                let response = params.get("response").unwrap_or(&Value::Null);
+                logger::log_info(&format!(
+                    "[Codex Auth Network] {}: instance_id={}, profile={}, target_id={}, request_id={}, opcode={}, payload_bytes={}",
+                    method,
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    params
+                        .get("requestId")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
+                    response.get("opcode").and_then(Value::as_u64).unwrap_or(0),
+                    response
+                        .get("payloadData")
+                        .and_then(Value::as_str)
+                        .map(str::len)
+                        .unwrap_or(0),
+                ));
+            }
+            "Page.frameNavigated" => {
+                let frame = params.get("frame").unwrap_or(&Value::Null);
+                logger::log_info(&format!(
+                    "[Codex Auth CDP] frame_navigated: instance_id={}, profile={}, target_id={}, frame_id={}, url={}, name={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    frame.get("id").and_then(Value::as_str).unwrap_or(""),
+                    sanitize_cdp_url(frame.get("url").and_then(Value::as_str).unwrap_or("")),
+                    sanitize_cdp_text(frame.get("name").and_then(Value::as_str).unwrap_or("")),
+                ));
+            }
+            "Page.lifecycleEvent" => {
+                logger::log_info(&format!(
+                    "[Codex Auth CDP] lifecycle: instance_id={}, profile={}, target_id={}, frame_id={}, loader_id={}, name={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    params.get("frameId").and_then(Value::as_str).unwrap_or(""),
+                    params.get("loaderId").and_then(Value::as_str).unwrap_or(""),
+                    params.get("name").and_then(Value::as_str).unwrap_or(""),
+                ));
+            }
+            "Runtime.consoleAPICalled" => {
+                logger::log_info(&format!(
+                    "[Codex Auth CDP] console: instance_id={}, profile={}, target_id={}, type={}, execution_context_id={}, arg_count={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    params.get("type").and_then(Value::as_str).unwrap_or(""),
+                    params
+                        .get("executionContextId")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                    params
+                        .get("args")
+                        .and_then(Value::as_array)
+                        .map(Vec::len)
+                        .unwrap_or(0),
+                ));
+            }
+            "Runtime.exceptionThrown" => {
+                let details = params.get("exceptionDetails").unwrap_or(&Value::Null);
+                logger::log_warn(&format!(
+                    "[Codex Auth CDP] exception: instance_id={}, profile={}, target_id={}, text={}, url={}, line={}, column={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    sanitize_cdp_text(details.get("text").and_then(Value::as_str).unwrap_or("")),
+                    sanitize_cdp_url(details.get("url").and_then(Value::as_str).unwrap_or("")),
+                    details.get("lineNumber").and_then(Value::as_i64).unwrap_or(-1),
+                    details
+                        .get("columnNumber")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(-1),
+                ));
+            }
+            "Log.entryAdded" => {
+                let entry = params.get("entry").unwrap_or(&Value::Null);
+                logger::log_warn(&format!(
+                    "[Codex Auth CDP] log_entry: instance_id={}, profile={}, target_id={}, level={}, source={}, text={}, url={}",
+                    instance_id,
+                    profile_key,
+                    target_label,
+                    entry.get("level").and_then(Value::as_str).unwrap_or(""),
+                    entry.get("source").and_then(Value::as_str).unwrap_or(""),
+                    sanitize_cdp_text(entry.get("text").and_then(Value::as_str).unwrap_or("")),
+                    sanitize_cdp_url(entry.get("url").and_then(Value::as_str).unwrap_or("")),
+                ));
+            }
+            _ => {}
+        }
+    }
+    snapshot
+}
+
+fn is_safe_cdp_websocket_url(raw: &str, expected_port: u16) -> bool {
+    let Ok(parsed) = url::Url::parse(raw) else {
+        return false;
+    };
+    if !matches!(parsed.scheme(), "ws" | "wss") {
+        return false;
+    }
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+    let Ok(address) = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .parse::<IpAddr>()
+    else {
+        return false;
+    };
+    address.is_loopback() && parsed.port() == Some(expected_port)
+}
+
+fn auth_diagnostic_observation(
+    targets: &[CdpTarget],
+    snapshot: Option<AuthPageSnapshot>,
+) -> AuthDiagnosticObservation {
+    let Some(snapshot) = snapshot else {
+        return AuthDiagnosticObservation::unavailable();
+    };
+    AuthDiagnosticObservation {
+        cdp_available: true,
+        target_count: targets.len(),
+        route: snapshot.route,
+        title: snapshot.title,
+        ready_state: snapshot.ready_state,
+        login_route: snapshot.login_route,
+        login_text: snapshot.login_text,
+        auth_error_text: snapshot.auth_error_text,
+        login_guard_installed: snapshot.login_guard_installed,
+        login_guard_enabled: snapshot.login_guard_enabled,
+        login_guard_blocked_count: snapshot.login_guard_blocked_count,
+        login_guard_last_blocked_type: snapshot.login_guard_last_blocked_type,
+        account_info_override_count: snapshot.account_info_override_count,
+        last_account_info_override_at: snapshot.last_account_info_override_at,
+    }
+}
+
+async fn run_auth_diagnostic_loop(
+    instance_id: String,
+    profile_key: String,
+    profile_dir: PathBuf,
+    port: u16,
+    bind_account_id: Option<String>,
+) {
+    let client = Client::new();
+    let mut previous: Option<AuthDiagnosticObservation> = None;
+    let mut previous_app_server: Option<AppServerDiagnosticObservation> = None;
+    loop {
+        if app_lifecycle::is_shutdown_started() {
+            return;
+        }
+
+        let targets = query_targets(&client, port).await;
+        let login_page_guard_enabled = should_enable_login_page_guard(bind_account_id.as_deref());
+        let mut network_tasks = JoinSet::new();
+        for target in targets.iter().cloned() {
+            let instance_id = instance_id.clone();
+            let profile_key = profile_key.clone();
+            network_tasks.spawn(async move {
+                monitor_cdp_target(
+                    &instance_id,
+                    &profile_key,
+                    &target,
+                    login_page_guard_enabled,
+                )
+                .await
+            });
+        }
+        let mut selected_snapshot = None;
+        while let Some(result) = network_tasks.join_next().await {
+            let Ok(Some(snapshot)) = result else {
+                continue;
+            };
+            if selected_snapshot.is_none() || snapshot.login_signal() {
+                selected_snapshot = Some(snapshot);
+            }
+            if selected_snapshot
+                .as_ref()
+                .is_some_and(AuthPageSnapshot::login_signal)
+            {
+                // 不能提前取消其它 target：它们可能仍在记录当前实例的网络请求。
+            }
+        }
+        if let Some(app_server) = app_server_diagnostic_observation(profile_dir.clone()).await {
+            if previous_app_server.as_ref() != Some(&app_server) {
+                logger::log_info(&format!(
+                    "[Codex AppServer Diagnostic] state: instance_id={}, profile={}, bind_account_id={}, app_server_pids={:?}, sockets={}, stdio={}, auth_file={}",
+                    instance_id,
+                    profile_key,
+                    bind_account_id.as_deref().unwrap_or(""),
+                    app_server.pids,
+                    app_server.sockets,
+                    app_server.stdio,
+                    app_server.auth_file,
+                ));
+                previous_app_server = Some(app_server);
+            }
+        }
+        let observation = auth_diagnostic_observation(&targets, selected_snapshot);
+        let previous_guard_blocked_count = previous
+            .as_ref()
+            .map(|value| value.login_guard_blocked_count)
+            .unwrap_or(0);
+        let previous_account_info_override_count = previous
+            .as_ref()
+            .map(|value| value.account_info_override_count)
+            .unwrap_or(0);
+        let changed = previous.as_ref() != Some(&observation);
+        if changed {
+            logger::log_info(&format!(
+                "[Codex Auth CDP] 页面认证状态变化: instance_id={}, profile={}, bind_account_id={}, cdp_available={}, target_count={}, route={}, title={}, ready_state={}, login_route={}, login_text={}, auth_error_text={}, login_guard_installed={}, login_guard_enabled={}, login_guard_blocked_count={}, login_guard_last_blocked_type={}, account_info_override_count={}, last_account_info_override_at={}",
+                instance_id,
+                profile_key,
+                bind_account_id.as_deref().unwrap_or(""),
+                observation.cdp_available,
+                observation.target_count,
+                observation.route,
+                observation.title,
+                observation.ready_state,
+                observation.login_route,
+                observation.login_text,
+                observation.auth_error_text,
+                observation.login_guard_installed,
+                observation.login_guard_enabled,
+                observation.login_guard_blocked_count,
+                observation.login_guard_last_blocked_type,
+                observation.account_info_override_count,
+                observation.last_account_info_override_at,
+            ));
+            if observation.login_guard_blocked_count > previous_guard_blocked_count {
+                logger::log_warn(&format!(
+                    "[Codex Login Guard] 已拦截登录页状态切换: instance_id={}, profile={}, blocked_count={}, event_type={}",
+                    instance_id,
+                    profile_key,
+                    observation.login_guard_blocked_count,
+                    observation.login_guard_last_blocked_type,
+                ));
+            }
+            if observation.account_info_override_count > previous_account_info_override_count {
+                logger::log_warn(&format!(
+                    "[Codex Login Guard] 已覆盖 account-info 登录门禁: instance_id={}, profile={}, override_count={}, last_override_at={}",
+                    instance_id,
+                    profile_key,
+                    observation.account_info_override_count,
+                    observation.last_account_info_override_at,
+                ));
+            }
+            if observation.login_signal() || observation.auth_error_text {
+                logger::log_warn(&format!(
+                    "[Codex Auth CDP] 检测到登录/认证异常页面: instance_id={}, route={}, login_signal={}, auth_error_text={}",
+                    instance_id,
+                    observation.route,
+                    observation.login_signal(),
+                    observation.auth_error_text,
+                ));
+            }
+            previous = Some(observation);
+        }
+
+        tokio::time::sleep(AUTH_DIAGNOSTIC_INTERVAL).await;
+    }
 }
 
 async fn api_service_quota_refresh_targets() -> Result<(usize, Vec<String>), String> {
@@ -1346,9 +2683,13 @@ async fn run_injection_loop(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_launch_args, deepseek_model_injection_script, injection_script,
-        refresh_request_token_from_cdp_response, remote_debugging_port_from_command_line,
-        selected_model_from_cdp_response, supports_bind_account, QuotaPlanSummary, QuotaResponse,
+        app_server_auth_file_snapshot, auth_diagnostic_observation, build_launch_args,
+        cdp_body_preview, deepseek_model_injection_script, injection_script,
+        is_auth_diagnostic_url, is_safe_cdp_websocket_url, refresh_request_token_from_cdp_response,
+        remote_debugging_port_from_command_line, sanitize_cdp_headers,
+        selected_model_from_cdp_response, should_capture_cdp_response_body, supports_bind_account,
+        AuthPageSnapshot, CdpTarget, QuotaPlanSummary, QuotaResponse,
+        LOGIN_PAGE_GUARD_DISABLE_SCRIPT, LOGIN_PAGE_GUARD_SCRIPT,
     };
     use serde_json::json;
 
@@ -1581,5 +2922,160 @@ mod tests {
             Some("request-123")
         );
         assert!(refresh_request_token_from_cdp_response(&json!({"id": 1})).is_none());
+    }
+
+    #[test]
+    fn auth_diagnostic_cdp_websocket_must_be_loopback_and_same_port() {
+        assert!(is_safe_cdp_websocket_url(
+            "ws://127.0.0.1:9333/devtools/page/1",
+            9333
+        ));
+        assert!(is_safe_cdp_websocket_url(
+            "ws://[::1]:9333/devtools/page/1",
+            9333
+        ));
+        assert!(!is_safe_cdp_websocket_url(
+            "ws://192.168.1.2:9333/devtools/page/1",
+            9333
+        ));
+        assert!(!is_safe_cdp_websocket_url(
+            "ws://127.0.0.1:9444/devtools/page/1",
+            9333
+        ));
+    }
+
+    #[test]
+    fn auth_diagnostic_observation_only_reports_safe_page_state() {
+        let target = CdpTarget {
+            target_id: "page-1".to_string(),
+            target_type: "page".to_string(),
+            url: "app://-/index.html".to_string(),
+            websocket_url: Some("ws://127.0.0.1:9333/devtools/page/1".to_string()),
+        };
+        let snapshot = AuthPageSnapshot {
+            route: "/login".to_string(),
+            title: "ChatGPT".to_string(),
+            ready_state: "complete".to_string(),
+            login_route: true,
+            login_text: false,
+            auth_error_text: false,
+            ..AuthPageSnapshot::default()
+        };
+        let observed = auth_diagnostic_observation(&[target], Some(snapshot));
+
+        assert!(observed.cdp_available);
+        assert_eq!(observed.target_count, 1);
+        assert_eq!(observed.route, "/login");
+        assert!(observed.login_signal());
+        assert!(!observed.auth_error_text);
+    }
+
+    #[test]
+    fn login_page_guard_only_blocks_renderer_login_state_events() {
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("account/updated"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("authMode == null"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("login-required"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("chatgpt-auth-token-unavailable"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("stopImmediatePropagation"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("addEventListener"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("MessageChannel"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("onmessage"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("hasChatGptToken"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("accountInfoOverrideCount"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("patchAccountInfoPayload"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("fetch-response"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("bodyJsonString"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("patchHostFetchResponse(event.data)"));
+        assert!(LOGIN_PAGE_GUARD_SCRIPT.contains("true,"));
+        assert!(!LOGIN_PAGE_GUARD_SCRIPT.contains("access_token"));
+        assert!(!LOGIN_PAGE_GUARD_SCRIPT.contains("id_token"));
+        assert!(!LOGIN_PAGE_GUARD_SCRIPT.contains("refresh_token"));
+        assert!(LOGIN_PAGE_GUARD_DISABLE_SCRIPT.contains("setEnabled(false)"));
+    }
+
+    #[test]
+    fn auth_network_diagnostics_redact_credentials_and_queries() {
+        assert_eq!(
+            super::sanitize_cdp_url(
+                "https://auth.openai.com/oauth/token?client_secret=secret&code=oauth-code"
+            ),
+            "https://auth.openai.com/oauth/token?<redacted-query>"
+        );
+        let headers = sanitize_cdp_headers(Some(&json!({
+            "authorization": "Bearer secret",
+            "cookie": "session=secret",
+            "x-api-key": "secret-api-key",
+            "session_token": "secret-session-token",
+            "x-request-id": "request-1"
+        })));
+        assert_eq!(headers["authorization"], "<redacted>");
+        assert_eq!(headers["cookie"], "<redacted>");
+        assert_eq!(headers["x-api-key"], "<redacted>");
+        assert_eq!(headers["session_token"], "<redacted>");
+        assert_eq!(headers["x-request-id"], "request-1");
+    }
+
+    #[test]
+    fn auth_network_diagnostics_extract_redacted_json_error_body() {
+        let body = json!({
+            "error": "refresh_token_reused",
+            "access_token": "eyJsecret",
+            "message": "reauth required"
+        });
+        let response = json!({
+            "result": {"body": serde_json::to_string(&body).expect("body")}
+        });
+        let preview = cdp_body_preview(&response).expect("preview");
+        assert!(preview.contains("refresh_token_reused"));
+        assert!(preview.contains("<redacted>"));
+        assert!(!preview.contains("eyJsecret"));
+    }
+
+    #[test]
+    fn auth_network_diagnostics_marks_relevant_endpoints() {
+        assert!(is_auth_diagnostic_url(
+            "https://chatgpt.com/backend-api/cloudRequirements"
+        ));
+        assert!(is_auth_diagnostic_url(
+            "https://auth.openai.com/oauth/token"
+        ));
+        assert!(!is_auth_diagnostic_url("https://example.com/assets/app.js"));
+    }
+
+    #[test]
+    fn auth_network_diagnostics_captures_auth_body_even_for_success_status() {
+        assert!(should_capture_cdp_response_body(
+            "https://chatgpt.com/backend-api/cloudRequirements",
+            200
+        ));
+        assert!(should_capture_cdp_response_body(
+            "https://chatgpt.com/backend-api/conversations",
+            401
+        ));
+        assert!(!should_capture_cdp_response_body(
+            "https://chatgpt.com/backend-api/conversations",
+            200
+        ));
+    }
+
+    #[test]
+    fn app_server_auth_snapshot_never_contains_auth_contents() {
+        let directory = std::env::temp_dir().join(format!(
+            "cockpit-codex-app-server-diagnostic-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).expect("create diagnostic directory");
+        std::fs::write(
+            directory.join("auth.json"),
+            r#"{"access_token":"secret-access","refresh_token":"secret-refresh"}"#,
+        )
+        .expect("write diagnostic auth");
+
+        let snapshot = app_server_auth_file_snapshot(&directory);
+        assert!(snapshot.starts_with("exists=true,size="));
+        assert!(snapshot.contains("sha256="));
+        assert!(!snapshot.contains("secret-access"));
+        assert!(!snapshot.contains("secret-refresh"));
+        let _ = std::fs::remove_dir_all(directory);
     }
 }

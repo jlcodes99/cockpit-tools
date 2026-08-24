@@ -45,6 +45,12 @@ pub struct CodexExperimentalModelDefinition {
     /// None 表示跟随官方推理强度；Some 表示用户自定义可选推理强度集合。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_efforts: Option<Vec<String>>,
+    /// None 表示跟随模型目录元数据；Some 表示用户为该模型指定上下文窗口。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<i64>,
+    /// None 表示跟随模型目录元数据；Some 表示用户为该模型指定自动压缩阈值。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_compact_token_limit: Option<i64>,
 }
 
 /// Codex config.toml 快捷配置

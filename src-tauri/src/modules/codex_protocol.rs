@@ -97,6 +97,45 @@ pub fn build_codex_client_models_response_with_model_definitions_and_reasoning(
     json!({ "models": models })
 }
 
+pub fn apply_model_context_overrides(
+    catalog: &mut Value,
+    definitions: &[(String, Option<i64>, Option<i64>)],
+) {
+    let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for model in models {
+        let Some(slug) = model
+            .get("slug")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        let Some((_, context_window, auto_compact_token_limit)) = definitions
+            .iter()
+            .find(|(model_id, _, _)| model_id.trim().eq_ignore_ascii_case(slug))
+        else {
+            continue;
+        };
+        let Some(object) = model.as_object_mut() else {
+            continue;
+        };
+        if let Some(context_window) = context_window.filter(|value| *value > 0) {
+            object.insert("context_window".to_string(), json!(context_window));
+            object.insert("max_context_window".to_string(), json!(context_window));
+        }
+        if let Some(auto_compact_token_limit) = auto_compact_token_limit.filter(|value| *value > 0)
+        {
+            object.insert(
+                "auto_compact_token_limit".to_string(),
+                json!(auto_compact_token_limit),
+            );
+        }
+    }
+}
+
 fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[String]) {
     let canonical_model = codex_client_model_template("gpt-5.6-sol").0;
     let Some(levels) = canonical_model

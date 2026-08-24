@@ -54,6 +54,7 @@ import {
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 import { normalizeTimestamp } from '../utils/dataExtract';
+import { presentWindowsOperationError } from '../utils/windowsOperationDialog';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1318,6 +1319,39 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
           }
         }
       } catch (e: unknown) {
+        const retrySwitch = async () => {
+          await injectFn(accountId);
+          let resolvedCurrentAccountId: string | null = accountId;
+          if (platformKey === 'grok' && storeFetchCurrentAccountId) {
+            resolvedCurrentAccountId = await storeFetchCurrentAccountId();
+          } else {
+            setCurrentAccountId(accountId);
+          }
+          if (platformId) {
+            await emitCurrentAccountChanged({
+              platformId,
+              accountId: resolvedCurrentAccountId,
+              reason: 'switch',
+            });
+          }
+          setMessage({ text: t('messages.switched', { email: maskAccountText(displayEmail) }) });
+          await Promise.resolve(config.onInjectSuccess?.({
+            accountId,
+            account,
+            displayEmail,
+          }));
+        };
+        if (
+          presentWindowsOperationError({
+            error: e,
+            operation: 'launch_app',
+            retry: retrySwitch,
+            manualContinue: retrySwitch,
+          })
+        ) {
+          setInjecting(null);
+          return;
+        }
         setMessage({
           text: t('messages.switchFailed', {
             error: String(e) || t('common.failed', 'Failed'),

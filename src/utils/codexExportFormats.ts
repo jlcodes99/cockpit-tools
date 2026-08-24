@@ -1,6 +1,6 @@
 import type { CodexAccount } from '../types/codex';
 
-export type CodexExportFormat = 'cockpit_tools' | 'sub2api' | 'cpa';
+export type CodexExportFormat = 'cockpit_tools' | 'auth_json' | 'sub2api' | 'cpa';
 
 type JsonRecord = Record<string, unknown>;
 const INVALID_FILE_CHARS_REGEX = /[<>:"/\\|?*\x00-\x1F]/g;
@@ -509,6 +509,65 @@ function toPortableApiKeyStorage(
   return payload;
 }
 
+function isPersonalAccessTokenAccount(account: CodexAccount): boolean {
+  const accessToken = account.tokens?.access_token?.trim() || '';
+  const idToken = account.tokens?.id_token?.trim() || '';
+  const refreshToken = account.tokens?.refresh_token?.trim() || '';
+  return (
+    Boolean(accessToken) &&
+    !idToken &&
+    !refreshToken &&
+    !hasAgentIdentity(account) &&
+    !isCodexApiKeyAccount(account)
+  );
+}
+
+function toOfficialAuthJson(account: CodexAccount): JsonRecord {
+  if (hasAgentIdentity(account)) {
+    return {
+      auth_mode: 'agentIdentity',
+      agent_identity: buildAgentIdentityCredentials(account),
+      type: 'codex',
+    };
+  }
+
+  if (isCodexApiKeyAccount(account)) {
+    const apiKey = account.openai_api_key?.trim();
+    if (!apiKey) {
+      throw new Error('Official auth.json requires OPENAI_API_KEY for API Key accounts');
+    }
+    return {
+      auth_mode: 'apikey',
+      OPENAI_API_KEY: apiKey,
+    };
+  }
+
+  const accessToken = account.tokens?.access_token?.trim() || '';
+  if (!accessToken) {
+    throw new Error('Official auth.json requires access_token');
+  }
+
+  if (isPersonalAccessTokenAccount(account)) {
+    return {
+      OPENAI_API_KEY: null,
+      personal_access_token: accessToken,
+      type: 'codex',
+    };
+  }
+
+  return {
+    OPENAI_API_KEY: null,
+    tokens: {
+      id_token: account.tokens?.id_token || '',
+      access_token: accessToken,
+      refresh_token: account.tokens?.refresh_token?.trim() || '',
+      account_id: resolveAccountId(account) || '',
+    },
+    last_refresh: resolveLastRefresh(account),
+    type: 'codex',
+  };
+}
+
 function toCockpitToolsPortableStorage(
   account: CodexAccount,
   options: CodexExportBuildOptions = {},
@@ -564,6 +623,12 @@ export function transformCodexExportJson(
     );
   }
 
+  if (format === 'auth_json') {
+    const payload = accounts.map(toOfficialAuthJson);
+    const normalizedPayload = payload.length === 1 ? payload[0] : payload;
+    return JSON.stringify(normalizedPayload, null, 2);
+  }
+
   if (format === 'sub2api') {
     const payload: Sub2apiBatchCreatePayload = {
       exported_at: formatSub2apiExportedAt(),
@@ -590,6 +655,9 @@ export function buildCodexExportFileNameBase(
 ): string {
   if (format === 'cockpit_tools') {
     return baseName;
+  }
+  if (format === 'auth_json') {
+    return `${baseName}_auth`;
   }
   return `${baseName}_${format}`;
 }
@@ -627,12 +695,26 @@ export function buildCodexExportContent(
 ): CodexExportContent {
   const fileNameBase = buildCodexExportFileNameBase(baseName, format);
   const accounts = parseCockpitToolsCodexExport(rawJson);
+  const splitPerAccount = format === 'cpa' || format === 'auth_json';
 
-  if (format !== 'cpa' || accounts.length <= 1) {
+  if (!splitPerAccount || accounts.length <= 1) {
     return {
       type: 'single',
       fileNameBase,
       jsonContent: transformCodexExportJson(rawJson, format, options),
+    };
+  }
+
+  if (format === 'auth_json') {
+    return {
+      type: 'multiple',
+      fileNameBase,
+      documents: accounts.map((account, index) => ({
+        id: `${account.id || resolveAccountId(account) || 'auth_account'}_${index}`,
+        label: resolveCpaDocumentLabel(account, index),
+        fileNameBase: buildCpaDocumentFileNameBase(fileNameBase, account, index),
+        jsonContent: JSON.stringify(toOfficialAuthJson(account), null, 2),
+      })),
     };
   }
 

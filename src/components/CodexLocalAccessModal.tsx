@@ -66,7 +66,7 @@ import {
   isCodexLocalAccessEligibleAccount,
   resolveCodexLocalAccessInitialAccountIds,
 } from "../utils/codexLocalAccessAccounts";
-import { isBlockingCodexQuotaError } from "../utils/codexQuotaError";
+import { isBlockingCodexAccountQuotaError } from "../utils/codexQuotaError";
 import { AccountTagFilterDropdown } from "./AccountTagFilterDropdown";
 import { CodexAccountPoolHealthModal } from "./CodexAccountPoolHealthModal";
 import {
@@ -151,6 +151,7 @@ interface CodexLocalAccessModalProps {
   ) => Promise<unknown> | unknown;
   onUpdateDebugLogs: (debugLogs: boolean) => Promise<unknown> | unknown;
   onRotateApiKey: () => Promise<unknown> | unknown;
+  onRestartSidecar: () => Promise<unknown> | unknown;
   onKillPort: () => Promise<unknown> | unknown;
   onToggleEnabled: () => Promise<unknown> | unknown;
   onRecoverAccounts: (accountIds: string[]) => Promise<void>;
@@ -164,6 +165,7 @@ interface CodexLocalAccessModalProps {
   testing: boolean;
   starting: boolean;
   portCleanupBusy: boolean;
+  sidecarRestarting: boolean;
 }
 
 type CopyableField = "apiPortUrl" | "baseUrl" | "apiKey" | "modelId";
@@ -377,6 +379,7 @@ export function CodexLocalAccessModal({
   onUpdateUpstreamProxyConfig,
   onUpdateDebugLogs,
   onRotateApiKey,
+  onRestartSidecar,
   onKillPort,
   onToggleEnabled,
   onRecoverAccounts,
@@ -386,6 +389,7 @@ export function CodexLocalAccessModal({
   testing,
   starting,
   portCleanupBusy,
+  sidecarRestarting,
 }: CodexLocalAccessModalProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -618,7 +622,7 @@ export function CodexLocalAccessModal({
         summary.cooldown += 1;
         return;
       }
-      if (isBlockingCodexQuotaError(account.quota_error)) {
+      if (isBlockingCodexAccountQuotaError(account)) {
         summary.quotaLimited += 1;
         return;
       }
@@ -839,12 +843,12 @@ export function CodexLocalAccessModal({
   const tierCounts = useMemo(() => {
     const counts = createCodexPlanFilterCounts(localAccessAccounts.length);
     localAccessAccounts.forEach((account) => {
-      if (!isBlockingCodexQuotaError(account.quota_error)) {
+      if (!isBlockingCodexAccountQuotaError(account)) {
         counts.VALID += 1;
       }
       const tier = getCodexPlanFilterKey(account);
       incrementCodexPlanFilterCount(counts, tier);
-      if (isBlockingCodexQuotaError(account.quota_error)) {
+      if (isBlockingCodexAccountQuotaError(account)) {
         counts.ERROR += 1;
       }
     });
@@ -962,7 +966,7 @@ export function CodexLocalAccessModal({
 
       if (
         requireValidAccounts &&
-        isBlockingCodexQuotaError(account.quota_error)
+        isBlockingCodexAccountQuotaError(account)
       ) {
         return false;
       }
@@ -971,7 +975,7 @@ export function CodexLocalAccessModal({
         const planKey = getCodexPlanFilterKey(account);
         const matchesType = Array.from(selectedTypes).some((type) => {
           if (type === "ERROR") {
-            return isBlockingCodexQuotaError(account.quota_error);
+            return isBlockingCodexAccountQuotaError(account);
           }
           return type === planKey;
         });
@@ -1344,12 +1348,12 @@ export function CodexLocalAccessModal({
   const customRoutingTierCounts = useMemo(() => {
     const counts = createCodexPlanFilterCounts(customRoutingAccounts.length);
     customRoutingAccounts.forEach((account) => {
-      if (!isBlockingCodexQuotaError(account.quota_error)) {
+      if (!isBlockingCodexAccountQuotaError(account)) {
         counts.VALID += 1;
       }
       const tier = getCodexPlanFilterKey(account);
       incrementCodexPlanFilterCount(counts, tier);
-      if (isBlockingCodexQuotaError(account.quota_error)) {
+      if (isBlockingCodexAccountQuotaError(account)) {
         counts.ERROR += 1;
       }
     });
@@ -1429,7 +1433,7 @@ export function CodexLocalAccessModal({
 
       if (
         requireValidAccounts &&
-        isBlockingCodexQuotaError(account.quota_error)
+        isBlockingCodexAccountQuotaError(account)
       ) {
         return false;
       }
@@ -1438,7 +1442,7 @@ export function CodexLocalAccessModal({
         const planKey = getCodexPlanFilterKey(account);
         const matchesType = Array.from(selectedTypes).some((type) => {
           if (type === "ERROR") {
-            return isBlockingCodexQuotaError(account.quota_error);
+            return isBlockingCodexAccountQuotaError(account);
           }
           return type === planKey;
         });
@@ -1975,6 +1979,28 @@ export function CodexLocalAccessModal({
     );
   };
 
+  const handleRestartSidecar = async () => {
+    const confirmed = await confirmDialog(
+      t(
+        "codex.localAccess.restartConfirmMessage",
+        "将仅重启 API 服务 Sidecar，不修改账号、Token、API Key 或账号池配置。正在进行中的请求可能中断，确认继续吗？",
+      ),
+      {
+        title: t("codex.localAccess.restartTitle", "重启 API 服务"),
+        kind: "warning",
+        okLabel: t("codex.localAccess.restartAction", "重启 Sidecar"),
+        cancelLabel: t("common.cancel", "取消"),
+      },
+    );
+    if (!confirmed) return;
+    await runAction(
+      async () => {
+        await onRestartSidecar();
+      },
+      t("codex.localAccess.restartSuccess", "API 服务 Sidecar 已重启"),
+    );
+  };
+
   const handleRefreshStats = async () => {
     setError("");
     setNotice("");
@@ -2371,19 +2397,33 @@ export function CodexLocalAccessModal({
                 <CircleAlert size={14} />
                 <span>{state.lastError}</span>
                 {collection && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm codex-local-access-inline-action"
-                    onClick={() => void handleKillPort()}
-                    disabled={actionBusy}
-                  >
-                    {portCleanupBusy ? (
-                      <RefreshCw size={14} className="loading-spinner" />
-                    ) : (
-                      <Wrench size={14} />
-                    )}
-                    {t("codex.localAccess.killPortAction", "清理端口")}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm codex-local-access-inline-action"
+                      onClick={() => void handleRestartSidecar()}
+                      disabled={actionBusy || sidecarRestarting}
+                    >
+                      <RefreshCw
+                        size={14}
+                        className={sidecarRestarting ? "loading-spinner" : ""}
+                      />
+                      {t("codex.localAccess.restartAction", "重启 Sidecar")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm codex-local-access-inline-action"
+                      onClick={() => void handleKillPort()}
+                      disabled={actionBusy}
+                    >
+                      {portCleanupBusy ? (
+                        <RefreshCw size={14} className="loading-spinner" />
+                      ) : (
+                        <Wrench size={14} />
+                      )}
+                      {t("codex.localAccess.killPortAction", "清理端口")}
+                    </button>
+                  </>
                 )}
               </div>
             )}

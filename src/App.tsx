@@ -19,6 +19,9 @@ import { FileText, FolderOpen, RefreshCw, X } from 'lucide-react';
 import { SideNav } from './components/layout/SideNav';
 import { BootReadyMarker, VisibleBootPage } from './components/BootReadyMarker';
 import { GlobalModal } from './components/GlobalModal';
+import { WindowsOperationDialog } from './components/WindowsOperationDialog';
+import { CodexSwitchProgressModal } from './components/CodexSwitchProgressModal';
+import { CodexInstanceLaunchProgressModal } from './components/CodexInstanceLaunchProgressModal';
 import { AnnouncementHost } from './components/AnnouncementCenter';
 import { TopCenterPromoBanner } from './components/TopCenterPromoBanner';
 import type { QuickSettingsType } from './components/QuickSettingsPopover';
@@ -83,6 +86,7 @@ import {
 } from './services/workbuddyAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
+import { isCodexInstanceAccountConflict } from './utils/codexInstanceLaunchConflict';
 import {
   applyWebviewUiScale,
   isUiScaleResetKey,
@@ -849,8 +853,6 @@ function MainApp() {
   const [appLaunchCandidates, setAppLaunchCandidates] = useState<AppLaunchCandidate[]>([]);
   const [appPathActionError, setAppPathActionError] = useState('');
   const [appPathScanError, setAppPathScanError] = useState('');
-  const [appPathCodexLaunchOnSwitch, setAppPathCodexLaunchOnSwitch] = useState(true);
-  const [appPathCodexLaunchSetting, setAppPathCodexLaunchSetting] = useState(false);
   const [versionJumpInfo, setVersionJumpInfo] = useState<{
     previous_version: string;
     current_version: string;
@@ -3215,8 +3217,6 @@ function MainApp() {
       setAppPathDetecting(false);
       setAppPathActionError('');
       setAppPathScanError('');
-      setAppPathCodexLaunchOnSwitch(true);
-      setAppPathCodexLaunchSetting(false);
       return () => {
         active = false;
       };
@@ -3260,7 +3260,9 @@ function MainApp() {
             appPathMissing.retry?.kind === 'instance' &&
             isClaudeWindowsAppLaunchTarget(normalizedPath);
           setAppPathDraft(shouldClearClaudeDefaultTarget ? '' : normalizedPath);
-          setAppPathCodexLaunchOnSwitch(config.codex_launch_on_switch ?? true);
+          if (appPathMissing.app === 'codex' && config.codex_launch_on_switch === false) {
+            setAppPathMissing(null);
+          }
         }
       } catch (error) {
         console.error('Failed to load app path config:', error);
@@ -3395,6 +3397,11 @@ function MainApp() {
       setAppPathMissing(null);
       setAppPathSetting(false);
     } catch (error) {
+      if (isCodexInstanceAccountConflict(error)) {
+        setAppPathMissing(null);
+        setAppPathSetting(false);
+        return;
+      }
       console.error('设置应用路径失败:', error);
       setAppPathActionError(String(error));
       setAppPathSetting(false);
@@ -3462,26 +3469,6 @@ function MainApp() {
       console.error('自动探测应用路径失败:', error);
     } finally {
       setAppPathDetecting(false);
-    }
-  };
-
-  const handleToggleCodexLaunchInMissingPath = async (enabled: boolean) => {
-    if (!appPathMissing || appPathMissing.app !== 'codex') return;
-    if (appPathSetting || appPathDetecting || appPathCodexLaunchSetting) return;
-    setAppPathCodexLaunchSetting(true);
-    setAppPathActionError('');
-    setAppPathScanError('');
-    try {
-      await invoke('set_codex_launch_on_switch', { enabled });
-      setAppPathCodexLaunchOnSwitch(enabled);
-      if (!enabled) {
-        setAppPathMissing(null);
-      }
-    } catch (error) {
-      console.error('更新 Codex 自动启动配置失败:', error);
-      setAppPathActionError(String(error));
-    } finally {
-      setAppPathCodexLaunchSetting(false);
     }
   };
 
@@ -3678,7 +3665,7 @@ function MainApp() {
                 ? t('quickSettings.trae.appPath', 'Trae 路径')
               : t('quickSettings.antigravity.appPath', '启动路径')
     : t('quickSettings.antigravity.appPath', '启动路径');
-  const appPathMissingBusy = appPathSetting || appPathDetecting || appPathCodexLaunchSetting;
+  const appPathMissingBusy = appPathSetting || appPathDetecting;
   const claudeMultiInstanceNeedsExe =
     appPathMissing?.app === 'claude' && appPathMissing.retry?.kind === 'instance';
   const shouldRenderUpdateNotification = showUpdateNotification
@@ -3727,6 +3714,9 @@ function MainApp() {
         </Suspense>
       )}
       <GlobalModal />
+      <CodexSwitchProgressModal />
+      <CodexInstanceLaunchProgressModal />
+      <WindowsOperationDialog />
 
       {/* 关闭确认对话框 */}
       {showCloseDialog && (
@@ -3775,32 +3765,15 @@ function MainApp() {
                     )}
                   </p>
                 ) : null}
-              </div>
-
-              {appPathMissing.app === 'codex' ? (
-                <div className="qs-section">
-                  <div className="qs-row">
-                    <div className="qs-row-label">
-                      {t('settings.general.codexLaunchOnSwitch', '切换 Codex 时自动启动 Codex App')}
-                    </div>
-                    <label className="qs-switch">
-                      <input
-                        type="checkbox"
-                        checked={appPathCodexLaunchOnSwitch}
-                        disabled={appPathMissingBusy}
-                        onChange={(e) => handleToggleCodexLaunchInMissingPath(e.target.checked)}
-                      />
-                      <span className="qs-switch-slider" />
-                    </label>
-                  </div>
+                {appPathMissing.app === 'codex' ? (
                   <p className="app-path-missing-hint">
                     {t(
                       'appPath.missing.codexLaunchHint',
-                      '关闭后仅执行切号与登录覆盖，不再尝试启动 Codex App，也不会再次要求设置启动路径。'
+                      '切号已完成。启动应用请先设置路径；若切号后不需要启动，请到设置中关闭「切换 Codex 时自动启动 Codex App」。',
                     )}
                   </p>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
 
               <div className="qs-section">
                 <div className="qs-section-header">

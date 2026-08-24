@@ -11,6 +11,10 @@ export interface CodexExperimentalModelDefinition {
   display_name: string;
   /** undefined follows the official model reasoning levels; otherwise custom multi-select. */
   reasoning_efforts?: CodexReasoningEffort[];
+  /** undefined follows the model catalog metadata. */
+  context_window?: number;
+  /** undefined follows the model catalog metadata. */
+  auto_compact_token_limit?: number;
 }
 
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';

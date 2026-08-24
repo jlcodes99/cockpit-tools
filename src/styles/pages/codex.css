@@ -4177,6 +4177,31 @@
   word-break: break-word;
 }
 
+.codex-quota-error-detail-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
+  background: color-mix(in srgb, var(--primary) 6%, var(--bg-secondary));
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.codex-quota-error-detail-summary svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: color-mix(in srgb, var(--primary) 72%, var(--text-secondary));
+}
+
+.codex-quota-error-detail-summary span {
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 .codex-quota-error-detail-text {
   margin: 0;
   padding: 12px;
@@ -7977,8 +8002,8 @@
 }
 
 .codex-quick-config-modal {
-  width: min(780px, calc(100vw - 32px));
-  max-width: min(780px, calc(100vw - 32px));
+  width: min(860px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
 }
 
 .codex-quick-config-modal .modal-body {

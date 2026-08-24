@@ -7,6 +7,7 @@ export type AutoBackupMode = 'full' | 'accounts' | 'config';
 export type AutoBackupTrigger = 'auto' | 'manual';
 
 export const AUTO_BACKUP_STATE_CHANGED_EVENT = 'auto-backup-state-changed';
+export const BACKUP_DIRECTORY_MIGRATION_PROGRESS_EVENT = 'backup-directory-migration-progress';
 
 const AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -17,6 +18,72 @@ export interface AutoBackupSettings {
   retention_days: number;
   last_backup_at: string | null;
   directory_path: string;
+}
+
+export interface BackupUsageEntry {
+  source: string;
+  file_count: number;
+  size_bytes: number;
+  path: string;
+}
+
+export interface BackupUsageSummary {
+  total_file_count: number;
+  total_size_bytes: number;
+  entries: BackupUsageEntry[];
+}
+
+export interface BackupDirectoryChangeResult {
+  old_directory: string;
+  new_directory: string;
+  migrated: boolean;
+  migrated_file_count: number;
+  migrated_size_bytes: number;
+  removed_file_count: number;
+  removed_size_bytes: number;
+  remaining_paths: string[];
+}
+
+export interface BackupMigrationSourceSummary {
+  source: string;
+  file_count: number;
+  size_bytes: number;
+}
+
+export interface BackupDirectoryMigrationPreview {
+  old_directory: string;
+  new_directory: string;
+  file_count: number;
+  size_bytes: number;
+  sources: BackupMigrationSourceSummary[];
+}
+
+export type BackupDirectoryMigrationPhase =
+  | 'scanning'
+  | 'copying'
+  | 'verifying'
+  | 'switching'
+  | 'cleaning'
+  | 'completed'
+  | 'cancelled';
+
+export interface BackupDirectoryMigrationProgress {
+  migration_id: string;
+  phase: BackupDirectoryMigrationPhase;
+  total_file_count: number;
+  processed_file_count: number;
+  total_size_bytes: number;
+  processed_size_bytes: number;
+  current_source: string | null;
+  current_path: string | null;
+  cancellable: boolean;
+}
+
+export interface BackupCleanupResult {
+  deleted_file_count: number;
+  deleted_directory_count: number;
+  deleted_size_bytes: number;
+  sources: string[];
 }
 
 export interface AutoBackupFileEntry {
@@ -127,6 +194,42 @@ async function cleanupAutoBackupFilesInternal(retentionDays: number): Promise<st
 
 export async function getAutoBackupSettings(): Promise<AutoBackupSettings> {
   return invoke<AutoBackupSettings>('get_auto_backup_settings');
+}
+
+export async function getBackupUsage(): Promise<BackupUsageSummary> {
+  return invoke<BackupUsageSummary>('get_backup_usage');
+}
+
+export async function previewBackupDirectoryChange(
+  directory: string,
+): Promise<BackupDirectoryMigrationPreview> {
+  return invoke<BackupDirectoryMigrationPreview>('preview_backup_directory_change', {
+    directory,
+  });
+}
+
+export async function changeBackupDirectory(
+  directory: string,
+  migrateExisting: boolean,
+  migrationId: string,
+): Promise<BackupDirectoryChangeResult> {
+  const result = await invoke<BackupDirectoryChangeResult>('change_backup_directory', {
+    directory,
+    migrateExisting,
+    migrationId,
+  });
+  dispatchAutoBackupStateChanged();
+  return result;
+}
+
+export async function cancelBackupDirectoryChange(migrationId: string): Promise<boolean> {
+  return invoke<boolean>('cancel_backup_directory_change', { migrationId });
+}
+
+export async function cleanupBehaviorBackups(): Promise<BackupCleanupResult> {
+  const result = await invoke<BackupCleanupResult>('cleanup_behavior_backups');
+  dispatchAutoBackupStateChanged();
+  return result;
 }
 
 export async function saveAutoBackupSettings(params: {

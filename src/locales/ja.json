@@ -27,6 +27,26 @@
     "editable": "編集可",
     "preview": "プレビュー",
     "advancedSettings": "詳細設定",
+    "windowsOperation": {
+      "title": "Windows 操作が完了していません",
+      "accessDeniedDescription": "Windows により操作が拒否されました。対象が高い権限で実行中か、保護された場所にある可能性があります。",
+      "fileInUseDescription": "対象ファイルは別のプログラムで使用中です。そのプログラムを閉じて再試行してください。",
+      "programNotFoundDescription": "操作に必要なプログラムが見つかりません。インストール状態または設定パスを確認してください。",
+      "portDeniedDescription": "Windows がポートへのアクセスをブロックしました。システムポリシーまたは別のプログラムが使用している可能性があります。",
+      "genericDescription": "システム操作が完了しませんでした。再試行するか、元の原因を解決してから続行してください。",
+      "originalReason": "元の原因",
+      "copyError": "エラーをコピー",
+      "openTarget": "場所を開く",
+      "viewDetails": "詳細を表示",
+      "hideDetails": "詳細を閉じる",
+      "operationLabel": "操作",
+      "targetLabel": "対象",
+      "attemptedRecoveries": "試行済み",
+      "manualContinue": "対処済み、続行",
+      "retry": "再試行",
+      "authorizeContinue": "許可して続行",
+      "authorizationCancelled": "Windows の許可がキャンセルされたため、操作は続行されませんでした。"
+    },
     "codexFingerprint": {
       "modeLabel": "デバイス識別モード",
       "modeHint": "OAuth のみ。既定はセッション。アカウントごとにインストール／セッションを分離し、ワークスペースを書き換えて同一端末の複数アカウントの紐付けを防ぎます。",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store ではインスタンスディレクトリを確実に引き継げないため、既定アカウントが開かれないよう起動を中止しました。このインスタンスの起動方式を CLI に変更して、もう一度お試しください。詳細: {{detail}}",
       "speedUpdated": "速度を更新しました"
     },
+    "accountLease": {
+      "title": "Codex インスタンスを起動中",
+      "progress": "起動の進行状況",
+      "conflictTitle": "アカウントは使用中です",
+      "completedTitle": "インスタンスを起動しました",
+      "failedTitle": "インスタンスの起動に失敗しました",
+      "conflictAccount": "アカウント：{{account}}",
+      "conflictDescription": "このアカウントは {{owners}} で実行中です。公式インスタンス間で refresh_token が競合しないよう、1 つの OAuth アカウントは 1 つのインスタンスでのみ実行できます。",
+      "locate": "インスタンスを表示",
+      "selectOther": "別のアカウント",
+      "transfer": "停止して移行",
+      "steps": {
+        "checkInstance": "対象インスタンスを確認",
+        "checkAccount": "連携アカウントを確認",
+        "checkOccupancy": "アカウントの使用状況を確認",
+        "stopPrevious": "元のインスタンスを停止",
+        "prepareCredentials": "認証情報を準備",
+        "writeProfile": "インスタンス設定を書き込み",
+        "startClient": "Codex クライアントを起動"
+      },
+      "detail": {
+        "checkingInstance": "インスタンス設定を読み込んでいます...",
+        "checkingAccount": "OAuth アカウントとトークンを確認しています...",
+        "noOAuthAccount": "OAuth アカウントが連携されていないため、使用状況の確認は不要です",
+        "accountInUse": "この OAuth アカウントは実行中のインスタンスで使用されています",
+        "accountAvailable": "このアカウントを使用中の他のインスタンスはありません",
+        "transferSkipped": "アカウントの移行は不要です",
+        "stoppingOwners": "安全に停止中：{{owners}}",
+        "stoppingPrevious": "元のインスタンスを安全に停止し、最新の認証情報を回収しています...",
+        "preparingCredentials": "トークンを確認し、必要に応じて認証情報一式を更新しています...",
+        "profileReady": "インスタンスの auth.json / キーチェーンを安全に更新しました",
+        "cliPrepared": "CLI 起動コマンドの準備ができました",
+        "startingClient": "Codex クライアントプロセスを起動して確認しています..."
+      }
+    },
     "runningDialog": {
       "title": "インスタンスは既に実行中です",
       "desc": "このインスタンスは既に実行されています。ウィンドウへ移動するか、現在の戦略で再起動できます。",
@@ -682,6 +737,9 @@
       "codexAppUiInjectionPoolLabel": "アカウント",
       "codexAppUiInjectionWeeklyLabel": "週",
       "codexAppUiInjectionFiveHourLabel": "5時間",
+      "codexAppUiInjectionBalanceLabel": "残高",
+      "codexLoginPageGuard": "ログインページ保護",
+      "codexLoginPageGuardDesc": "管理対象の Codex インスタンスを再起動すると、CDP が利用可能な会話ページを維持し、シェルの OAuth 状態によるログイン画面への切り替えを防ぎます。ページ切り替えだけを防止し、期限切れの OAuth 認証情報は修復しません。",
       "codexWslConfigDir": "WSL Codex ディレクトリ",
       "codexWslConfigDirDesc": "WSL 内の .codex ディレクトリを入力します。\\\\wsl.localhost\\ のパスに対応しています。",
       "codexWslConfigDirPlaceholder": "例: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -766,6 +824,11 @@
       "openclawAuthOverwriteDesc": "オフの場合は Codex のみ切り替え、OpenClaw は現在のログイン状態を維持します",
       "ghcpOpencodeAuthOverwrite": "GitHub Copilot 切り替え時に OpenCode のログインを上書きする",
       "ghcpOpencodeRestart": "GitHub Copilot 切替時に OpenCode を自動再起動",
+      "grokOpencodeAuthOverwrite": "Grok 切り替え時に OpenCode のログインを上書きする",
+      "grokOpencodeAuthOverwriteDesc": "オフの場合は Grok のみ切り替え、OpenCode は現在のログイン状態を維持します",
+      "grokOpencodeRestart": "Grok 切替時に OpenCode を自動再起動",
+      "grokOpencodeRestartDesc": "OpenCode のログイン情報を上書きしたあと、すぐに反映するよう再起動します",
+      "grokOpencodeRestartRequiresOverwrite": "先に「Grok 切り替え時に OpenCode のログインを上書きする」を有効にしてください",
       "ghcpLaunchOnSwitch": "GitHub Copilot 切替時に GitHub Copilot App を自動起動",
       "zedAutoRefresh": "Zed クォータの自動更新",
       "zedAutoRefreshDesc": "バックグラウンド更新頻度",
@@ -997,6 +1060,13 @@
         "retentionUnit": "日",
         "directoryTitle": "バックアップフォルダー",
         "directoryDesc": "バックアップは常にプロジェクトの backups フォルダーに保存されます。",
+        "changeDirectory": "フォルダーを変更", "migrating": "移行中...", "migrationConfirm": "既存のバックアップを {{oldPath}} から {{newPath}} に移行しますか？\n\nキャンセルすると古いファイルを移行せずにフォルダーだけ変更します。", "usageTitle": "バックアップ使用量", "usageDesc": "定期バックアップとプラットフォーム動作スナップショットの使用量を表示します。", "usageEmpty": "ローカルバックアップはありません。", "cleanupBehavior": "動作バックアップを整理", "behaviorCleanupConfirm": "古い動作バックアップを整理しますか？プラットフォームとインスタンスごとに最新のみ残し、定期 JSON/ZIP は削除しません。", "sources": {"scheduled": "定期 JSON/ZIP", "behavior": "動作スナップショット", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "その他"},
+        "migrationConfirmTitle": "バックアップ先を変更",
+        "migrationConfirmDesc": "既存のバックアップを確認しました。移行して旧フォルダーの容量を解放するか、今後の保存先だけを変更できます。",
+        "migrationOldPath": "旧フォルダー", "migrationNewPath": "新フォルダー", "migrationTotalSize": "移行する容量", "migrationTotalFiles": "移行するファイル",
+        "migrationSafetyNote": "一時領域へコピーして検証した後に保存先を切り替え、旧バックアップを削除します。",
+        "switchOnly": "保存先のみ変更", "migrateAndSwitch": "移行して変更",
+        "migrationProgress": {"title": "バックアップ先を移行", "filesUnit": "ファイル", "currentSource": "現在の対象", "completedSummary": "{{count}} ファイル（{{size}}）を移行し、新しい保存先へ切り替えました。", "switchOnlyCompleted": "今後のバックアップは {{path}} に保存されます。既存のバックアップは移動していません。", "cleanupPartial": "新しい保存先は有効ですが、次の旧フォルダーを削除できませんでした。後で手動で削除してください：", "cancelledDesc": "移行をキャンセルしました。元の保存先は変更されず、一時ファイルは削除されました。", "cancelling": "キャンセル中...", "cancelAction": "移行をキャンセル", "finishing": "完了処理中...", "phases": {"scanning": "バックアップを確認中...", "copying": "バックアップをコピー中...", "verifying": "コピー結果を検証中...", "switching": "保存先を切り替え中...", "cleaning": "旧バックアップを削除中...", "completed": "移行が完了しました", "cancelled": "移行をキャンセルしました"}},
         "openFolder": "フォルダーを開く",
         "listTitle": "バックアップ一覧",
         "listDesc": "バックアップを直接インポートするか、古いファイルを削除できます。",
@@ -1024,6 +1094,8 @@
           "openFolderFailed": "バックアップフォルダーを開けませんでした: {{error}}",
           "downloadSuccess": "バックアップを {{path}} にダウンロードしました",
           "downloadFailed": "バックアップのダウンロードに失敗しました: {{error}}"
+          ,"migrating": "バックアップフォルダーを移行中...", "migrationDone": "{{count}} 個のファイルを {{path}} に移行しました", "directoryChanged": "バックアップフォルダーを {{path}} に変更しました", "directoryChangeFailed": "バックアップフォルダーを変更できません: {{error}}", "behaviorCleaning": "古い動作バックアップを整理中...", "behaviorCleanupDone": "{{count}} 個を整理し {{size}} 解放しました", "behaviorCleanupFailed": "動作バックアップを整理できません: {{error}}"
+          ,"scanningMigration": "移行するバックアップを確認中..."
         },
         "errors": {
           "invalidRetention": "保持日数は 1 日から 365 日の間で指定してください"
@@ -1151,7 +1223,7 @@
       "title": "アプリのパスが見つかりません",
       "desc": "{{app}} のアプリパスが見つかりません。続行するには今すぐ設定してください。",
       "action": "今すぐ設定",
-      "codexLaunchHint": "オフにすると、アカウント切替とログイン上書きは引き続き実行されますが、Codex アプリは起動されず、この起動パスの案内も再表示されません。",
+      "codexLaunchHint": "アカウント切替は完了しています。起動するにはパスを設定してください。切替後に起動しない場合は、設定で「Codex 切替時に Codex App を自動起動」をオフにしてください。",
       "claudeMultiInstanceRequiresExe": "Claude の複数インスタンスには実際の Claude.exe パスが必要です。Microsoft Store ターゲットは既定のデスクトップ用のみです。",
       "scanApps": "アプリをスキャン",
       "scanRoots": "Sukyan hani",
@@ -1868,7 +1940,7 @@
     "title": "Codex アカウント管理",
     "experimentalModelCatalog": {
       "title": "表示モデル",
-      "description": "利用可能な公式モデルとカスタム項目から Cockpit 管理カタログを生成し、ユーザーのカタログは上書きしません。",
+      "description": "表示モデル、推論強度、コンテキストウィンドウ、圧縮しきい値を一元管理します。",
       "enabledHint": "現在の表示モデル一覧を使用します。Codex を再起動してください。",
       "models": {
         "title": "モデル一覧",
@@ -1890,8 +1962,18 @@
           "displayName": "100 文字以内の表示名を入力してください。",
           "duplicate": "モデル ID は重複できません。",
           "reasoningEffort": "推論強度の選択が無効です。",
-          "reserved": "このモデル ID は公式モデルと重複しています。別の ID を使用してください。"
-        }
+          "reserved": "このモデル ID は公式モデルと重複しています。別の ID を使用してください。",
+          "contextPair": "コンテキストと圧縮しきい値は両方入力してください。",
+          "contextWindow": "コンテキストは 0 より大きい整数にしてください。",
+          "autoCompact": "圧縮しきい値は 0 より大きい整数にしてください。",
+          "autoCompactRange": "圧縮しきい値はコンテキストより小さくしてください。"
+        },
+        "contextConfig": "コンテキストと圧縮",
+        "contextDefault": "モデルに従う",
+        "contextDefaultShort": "既定",
+        "contextCustomShort": "カスタム",
+        "contextWindow": "コンテキスト",
+        "autoCompactLimit": "圧縮しきい値"
       },
       "unavailable": {
         "cacheMissing": "models_cache.json が見つかりません。",
@@ -1965,6 +2047,24 @@
       "staleAccount": "このアカウントはローカルのアカウント保存先に存在しません。アカウント一覧を更新しました。この Codex アカウントを再インポートするか、再度サインインしてください。",
       "unsupportedCountryRegion": "現在のネットワーク地域では Codex 認証を更新できません。OpenAI 認証サービスがこのネットワーク出口を拒否しました。対応地域に切り替えてから再試行してください。"
     },
+    "switchAuth": {
+      "apiOnlyTitle": "クライアントのログインが必要",
+      "reauthorizeTitle": "Codex の認証期限切れ",
+      "apiOnlyDescription": "現在の access_token は API サービスで一時的に利用できますが、クライアントのログイン情報を更新できなかったため、公式 Codex/ChatGPT クライアントには切り替えていません。",
+      "reauthorizeDescription": "ログイン情報を更新できず、access_token も API サービスで利用できません。続行するには再認証してください。",
+      "idTokenUnavailable": "クライアント ID 情報の期限が切れ、自動更新でも有効な id_token を取得できませんでした。",
+      "reasonLabel": "理由",
+      "accessTokenExpiry": "API の一時利用期限：{{time}}",
+      "apiServiceAddFailed": "API サービスへのアカウント追加に失敗しました：{{error}}",
+      "switchingAfterReauth": "認証が更新されました。アカウント切替を続行しています...",
+      "switchAfterReauthFailed": "認証は更新されましたが、アカウント切替に失敗しました：{{error}}",
+      "reauthGenerationMissing": "今回の認証情報のバージョンを確認できませんでした。もう一度アカウントを切り替えてください。",
+      "reauthorizedAndSwitched": "再認証して切替完了",
+      "startingInstanceAfterReauth": "認証情報を更新しました。インスタンスを再起動しています...",
+      "startInstanceAfterReauthFailed": "認証情報は更新されましたが、インスタンスを起動できませんでした：{{error}}",
+      "reauthorizedAndStartedInstance": "再認証してインスタンスを起動しました",
+      "apiOnlyBadge": "再認証必要"
+    },
     "current": "現在",
     "empty": {
       "description": "「アカウントを追加」から Codex アカウントを管理できます"
@@ -2021,6 +2121,7 @@
     "exportFormat": {
       "label": "エクスポート形式",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "公式 auth.json",
       "sub2api": "sub2api 形式",
       "cpa": "cpa 形式",
       "agentIdentityCpaUnsupported": "Agent Identity アカウントは cpa 形式ではエクスポートできません。Cockpit Tools または sub2api を使用してください。",
@@ -2172,6 +2273,10 @@
       "killPortSuccess": "ポートをクリアしました（{{count}} 個のプロセスを終了）",
       "killPortSuccessNone": "ポートを確認しました。外部プロセスは使用していません。",
       "killPortSuccessUnknown": "API サービスのポートをクリアしました",
+      "restartAction": "Sidecar を再起動",
+      "restartTitle": "API サービスを再起動",
+      "restartConfirmMessage": "API サービスの Sidecar だけを再起動します。アカウント、Token、API Key、アカウントプール設定は変更されません。実行中のリクエストは中断される場合があります。続行しますか？",
+      "restartSuccess": "API サービスの Sidecar を再起動しました",
       "refreshStats": "統計を更新",
       "refreshStatsSuccess": "API サービスの統計を更新しました",
       "routingStrategy": {
@@ -2223,6 +2328,7 @@
         "title": "クォータプール",
         "hourlyShort": "5h​",
         "weeklyShort": "週",
+        "balance": "残高",
         "viewFull": "完全な統計を表示",
         "modalTitle": "APIサービスのクォータプール",
         "empty": "クォータ統計はまだありません"
@@ -2432,6 +2538,7 @@
     "quotaError": {
       "badge": "クォータエラー",
       "refreshFailedBadge": "更新失敗",
+      "authRefreshDeferred": "refresh_token は無効です。現在の access_token は API サービスで引き続き利用できますが、公式クライアントへの切り替えはできません。再認証してから切り替えてください。",
       "generic": "クォータの更新に失敗しました。後でもう一度お試しください",
       "deactivatedWorkspace": "ワークスペースが無効です。アカウントを切り替えるか再認証してください",
       "requestFailedManualRetry": "ネットワークを確認してください。最新のクォータを取得できませんでした。更新して再試行できます。",
@@ -3037,6 +3144,7 @@
         "custom": "カスタム",
         "endpoint": "プロバイダーエンドポイント",
         "hint": "互換性のある Base URL を自動入力しました。必要なら手動で編集できます。",
+        "cockpitToolsHint": "Base URL を Cockpit Tools ホストの LAN アドレス（例: http://HOST_IP:PORT/v1）に置き換えてください。アカウントカードは /cockpit/quota を自動的に照会します。",
         "website": "ウェブサイト",
         "apiKeyPage": "API キーページ",
         "getApiKey": "キーを取得"
@@ -3101,6 +3209,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools LAN サービス"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3278,7 +3389,8 @@
         "contextWindow": "コンテキストウィンドウ",
         "contextWindowHint": "model_context_window を書き込みます。カスタムモードでのみ編集可能です。",
         "partialDetected": "現在設定されている管理フィールドは、model_context_window={{context}}、model_auto_compact_token_limit={{compact}} の 1 つだけです。保存すると、現在のスキームを使用して両方のフィールドが書き換えられます。",
-        "notSet": "未設定"
+        "notSet": "未設定",
+        "modelCatalogDesc": "表示モデルとモデル別コンテキスト設定を、現在の Codex の Cockpit 管理モデルカタログへ統合して書き込みます。"
       },
       "testing": "テスト中...",
       "testSuccess": "プロバイダー接続は正常です：{{protocol}}、{{model}}、{{latency}}。",
@@ -3388,6 +3500,14 @@
         "rawFields": "サービスデータ",
         "fields": {
           "status": "状態",
+          "fiveHourRemainingPercent": "5時間の残り",
+          "weeklyRemainingPercent": "週間残り",
+          "accountCount": "アカウントプール",
+          "availableAccountCount": "利用可能なアカウント",
+          "abnormalAccountCount": "異常なアカウント",
+          "cooldownAccountCount": "クールダウン中のアカウント",
+          "stale": "古いデータ",
+          "apiKeyBalance": "API_KEY 残高",
           "planName": "プラン",
           "remaining": "残高",
           "balance": "残高",
@@ -3478,6 +3598,56 @@
       "filterMissing": "不明 ({{count}})",
       "accessTokenOnlyUsable": "Token 利用可",
       "accessTokenOnlyUsableDetail": "サブスクリプション情報の取得は制限されていますが、クォータと Codex の利用は正常です"
+    },
+    "switchProgress": {
+      "completed": "切替完了",
+      "needsAttention": "対応が必要",
+      "steps": {
+        "credentials": "アカウント認証情報を読み込み",
+        "accessToken": "access_token を確認",
+        "idToken": "id_token を確認",
+        "stopRuntime": "以前の実行状態を停止",
+        "refreshTokens": "ログイン情報を更新",
+        "writeCredentials": "クライアント認証情報を書き込み",
+        "syncSettings": "アカウント設定を同期",
+        "startClient": "Codex クライアントを起動"
+      },
+      "status": {
+        "pending": "待機中",
+        "running": "処理中",
+        "completed": "完了",
+        "warning": "更新が必要",
+        "skipped": "スキップ",
+        "error": "失敗"
+      },
+      "detail": {
+        "missing": "認証情報が見つかりません",
+        "opaqueToken": "不透明な Token のため、有効期限はサービス側で確認します",
+        "expiryUnknown": "有効期限を取得できません",
+        "expiresAt": "有効期限：{{time}}（{{relative}}）",
+        "readingCredentials": "ローカルアカウントと Token 情報を読み込んでいます...",
+        "nonOAuthAccount": "OAuth アカウントではないためログイン Token の確認は不要です",
+        "credentialsFound": "読み込み済み：{{tokens}}",
+        "notApplicable": "この確認は現在のアカウントには不要です",
+        "refreshNeeded": "期限切れまたは安全更新期間内のため更新が必要です",
+        "tokenValid": "現在有効で、更新は不要です",
+        "stoppingRuntime": "ChatGPT/Codex と app-server を安全に停止しています...",
+        "runtimeStopped": "以前のクライアント実行状態を安全に停止しました",
+        "waiting": "前の手順の完了を待っています",
+        "refreshingTokens": "新しい access_token、id_token、refresh_token を取得して保存しています...",
+        "refreshSkipped": "AT と ID Token は有効なため refresh_token は使用していません",
+        "refreshFailed": "完全な Token セットを自動更新できませんでした",
+        "refreshResultReused": "別の更新元が保存した最新 Token を使用しました",
+        "refreshCompleted": "完全な Token セットを更新して安全に保存しました",
+        "credentialsWritten": "公式ルールに従って auth.json / keychain を更新しました",
+        "writingCredentials": "対象アカウントのログイン情報を書き込んでいます...",
+        "settingsSynced": "アカウント連携、速度、関連設定を同期しました",
+        "syncingSettings": "アカウント連携と関連設定を同期しています...",
+        "launchDisabled": "切替後の自動起動は無効です。後で手動起動できます",
+        "clientStartWarning": "認証情報は切り替わりましたが起動に失敗しました。後で再試行してください",
+        "clientStarted": "Codex クライアントを起動しました",
+        "startingClient": "Codex クライアントを起動しています..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Codex セッションが表示されません",

@@ -1286,7 +1286,8 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		AuthValue: authValue,
 	})
 
-	httpClient := newCodexAuthenticatedHTTPClient(ctx, e.cfg, auth)
+	httpReq.Close = true
+	httpClient := newCodexStreamingHTTPClient(ctx, e.cfg, auth)
 	httpClient = reporter.TrackHTTPClient(httpClient)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
@@ -1407,6 +1408,9 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 					return
 				}
 			}
+			if isCodexStreamTerminalEvent(eventType) {
+				return
+			}
 		}
 		if errScan := scanner.Err(); errScan != nil {
 			helps.RecordAPIResponseError(ctx, e.cfg, errScan)
@@ -1423,6 +1427,15 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 func isCodexStreamBootstrapMetadataEvent(eventType string) bool {
 	switch strings.TrimSpace(eventType) {
 	case "response.created", "response.queued", "response.in_progress":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCodexStreamTerminalEvent(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "response.completed", "response.done", "response.failed", "response.incomplete":
 		return true
 	default:
 		return false
@@ -1589,6 +1602,13 @@ func countCodexInputTokens(enc tokenizer.Codec, body []byte) (int64, error) {
 
 func (e *CodexExecutor) Refresh(ctx context.Context, auth *cliproxyauth.Auth) (*cliproxyauth.Auth, error) {
 	log.Debugf("codex executor: refresh called")
+	if auth != nil && auth.Metadata != nil {
+		if owner, _ := auth.Metadata["refresh_owner"].(string); owner == "cockpit_token_authority" {
+			// Cockpit centrally coordinates rotating Codex credentials with the official app.
+			// This consumer must never call the OAuth token endpoint itself.
+			return auth, nil
+		}
+	}
 	if refreshed, handled, err := helps.RefreshAuthViaHome(ctx, e.cfg, auth); handled {
 		return refreshed, err
 	}
@@ -1630,22 +1650,22 @@ func (e *CodexExecutor) Refresh(ctx context.Context, auth *cliproxyauth.Auth) (*
 }
 
 type codexIdentityConfuseState struct {
-	enabled                bool
-	authID                 string
-	originalPromptCacheKey string
-	promptCacheKey         string
-	turnIDs                []codexIdentityReplacement
-	fingerprintMode        string
-	originalInstallationID string
-	installationID         string
-	originalSessionID      string
-	sessionID              string
-	originalThreadID       string
-	threadID               string
-	originalWindowID       string
-	windowID               string
-	originalParentThreadID string
-	parentThreadID         string
+	enabled                 bool
+	authID                  string
+	originalPromptCacheKey  string
+	promptCacheKey          string
+	turnIDs                 []codexIdentityReplacement
+	fingerprintMode         string
+	originalInstallationID  string
+	installationID          string
+	originalSessionID       string
+	sessionID               string
+	originalThreadID        string
+	threadID                string
+	originalWindowID        string
+	windowID                string
+	originalParentThreadID  string
+	parentThreadID          string
 	fingerprintReplacements []codexIdentityReplacement
 }
 

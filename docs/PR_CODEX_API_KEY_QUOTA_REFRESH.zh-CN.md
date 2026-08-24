@@ -109,7 +109,7 @@ Cockpit Tools 通过局域网提供 Codex API 服务时，远程客户端只能�
 
 ### 多语言文案
 
-- 中文、英文和 en-US 同步增加 API 服务余额、Cockpit Tools LAN 名称和配置提示。
+- 全部 18 种语言（阿拉伯语、捷克语、德语、英语、en-US、西班牙语、法语、印尼语、意大利语、日语、韩语、波兰语、巴西葡萄牙语、俄语、土耳其语、越南语、简体中文和繁体中文）同步增加 API 服务余额、Cockpit Tools LAN 名称和配置提示。
 - Codex 注入说明更新为包含账号数、可用账号、5h、周和 API_KEY 余额。
 - 供应商用量字段增加 5h/周、账号池、可用/异常/冷却、stale 和 API Key 余额标签。
 
@@ -201,12 +201,16 @@ Cockpit Tools 通过局域网提供 Codex API 服务时，远程客户端只能�
 
 ### 国际化
 
-- `src/locales/zh-CN.json`
-  - 新增中文余额、Cockpit Tools LAN 提示、账号健康和用量字段文案，并更新注入功能说明。
-- `src/locales/en.json`
-  - 同步英文文案。
-- `src/locales/en-US.json`
-  - 同步 en-US 文案。
+- `src/locales/ar.json`、`src/locales/cs.json`、`src/locales/de.json`
+  - 同步阿拉伯语、捷克语和德语的余额、Cockpit Tools LAN 提示、账号健康及用量字段文案。
+- `src/locales/en.json`、`src/locales/en-US.json`、`src/locales/es.json`、`src/locales/fr.json`
+  - 同步英语、en-US、西班牙语和法语文案，并更新 Codex 注入功能说明。
+- `src/locales/id.json`、`src/locales/it.json`、`src/locales/ja.json`、`src/locales/ko.json`
+  - 同步印尼语、意大利语、日语和韩语文案。
+- `src/locales/pl.json`、`src/locales/pt-br.json`、`src/locales/ru.json`
+  - 同步波兰语、巴西葡萄牙语和俄语文案。
+- `src/locales/tr.json`、`src/locales/vi.json`、`src/locales/zh-CN.json`、`src/locales/zh-tw.json`
+  - 同步土耳其语、越南语、简体中文和繁体中文文案；简体中文文案同时明确人民币余额语义。
 
 ## 接口示例
 
@@ -235,6 +239,7 @@ Cockpit Tools 通过局域网提供 Codex API 服务时，远程客户端只能�
 ## 验证
 
 - `npm run typecheck`：通过。
+- `node scripts/check_locales.cjs`：通过；18 份 locale JSON 均可解析、键集合一致，且每份均为 5675 个 key。
 - `node --test src/services/modelProviderUsageService.test.ts`：9/9 通过。
 - `codexQuotaPool.test.ts` 经 Vite SSR 运行：7/7 通过。
 - `cargo check --manifest-path src-tauri/Cargo.toml`：通过。

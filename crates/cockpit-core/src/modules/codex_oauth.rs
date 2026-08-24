@@ -16,15 +16,13 @@ const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTH_ENDPOINT: &str = "https://auth.openai.com/oauth/authorize";
 const TOKEN_ENDPOINT: &str = "https://auth.openai.com/oauth/token";
 const SCOPES: &str = "openid profile email offline_access";
-const ORIGINATOR: &str = "codex_vscode";
-/// Credential-face User-Agent must share the first segment with ORIGINATOR.
-/// auth.openai.com only sees originator + User-Agent; do not send a version header.
-const AUTH_USER_AGENT: &str = "codex_vscode/0.146.0";
+const ORIGINATOR: &str = "Codex Desktop";
 const OAUTH_CALLBACK_PORT: u16 = 1455;
 const OAUTH_PORT_IN_USE_CODE: &str = "CODEX_OAUTH_PORT_IN_USE";
 const OAUTH_STATE_FILE: &str = "codex_oauth_pending.json";
 const OAUTH_TIMEOUT_SECONDS: i64 = 300;
 const TOKEN_REFRESH_SKEW_SECONDS: i64 = 300;
+pub const ID_TOKEN_REFRESH_LEAD_SECONDS: i64 = 15 * 60;
 
 pub fn get_callback_port() -> u16 {
     OAUTH_CALLBACK_PORT
@@ -32,7 +30,16 @@ pub fn get_callback_port() -> u16 {
 
 fn apply_codex_auth_identity_headers(request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
     request
-        .header("User-Agent", AUTH_USER_AGENT)
+        .header(
+            "User-Agent",
+            format!(
+                "{}/{} ({}; {})",
+                ORIGINATOR,
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            ),
+        )
         .header("originator", ORIGINATOR)
 }
 
@@ -599,7 +606,9 @@ async fn exchange_code_for_token_internal(
 
     logger::log_info("Codex OAuth 开始交换 Token");
 
-    let response = apply_codex_auth_identity_headers(client.post(TOKEN_ENDPOINT))
+    // 官方 authorization-code exchange 使用 raw auth client，不附加运行时 originator headers。
+    let response = client
+        .post(TOKEN_ENDPOINT)
         .form(&params)
         .send()
         .await
@@ -813,39 +822,71 @@ pub fn restore_pending_oauth_listener(app_handle: AppHandle) {
     }
 }
 
-pub fn is_token_expired(access_token: &str) -> bool {
-    let parts: Vec<&str> = access_token.split('.').collect();
-    if parts.len() != 3 {
+fn is_jwt_token_expired(token: &str) -> bool {
+    let Some(exp) = jwt_token_expiration_timestamp(token) else {
         return true;
+    };
+
+    exp < chrono::Utc::now().timestamp() + TOKEN_REFRESH_SKEW_SECONDS
+}
+
+fn jwt_token_expiration_timestamp(token: &str) -> Option<i64> {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return None;
     }
 
-    let payload_base64 = parts[1];
-    let payload_bytes = match URL_SAFE_NO_PAD.decode(payload_base64) {
-        Ok(bytes) => bytes,
-        Err(_) => return true,
+    let payload_bytes = URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
+    let payload_str = String::from_utf8(payload_bytes).ok()?;
+    let payload: serde_json::Value = serde_json::from_str(&payload_str).ok()?;
+    payload.get("exp").and_then(|value| value.as_i64())
+}
+
+pub fn is_id_token_expired(id_token: &str) -> bool {
+    is_jwt_token_expired(id_token.trim())
+}
+
+pub fn is_id_token_refresh_due(id_token: &str) -> bool {
+    let Some(exp) = jwt_token_expiration_timestamp(id_token.trim()) else {
+        return true;
     };
 
-    let payload_str = match String::from_utf8(payload_bytes) {
-        Ok(s) => s,
-        Err(_) => return true,
-    };
+    exp <= chrono::Utc::now().timestamp() + ID_TOKEN_REFRESH_LEAD_SECONDS
+}
 
-    let payload: serde_json::Value = match serde_json::from_str(&payload_str) {
-        Ok(v) => v,
-        Err(_) => return true,
-    };
-
-    let exp = match payload.get("exp").and_then(|e| e.as_i64()) {
-        Some(e) => e,
-        None => return true,
-    };
-
-    let now = chrono::Utc::now().timestamp();
-    exp < now + TOKEN_REFRESH_SKEW_SECONDS
+pub fn is_token_expired(access_token: &str) -> bool {
+    is_jwt_token_expired(access_token)
 }
 
 pub async fn refresh_access_token(refresh_token: &str) -> Result<CodexTokens, String> {
     refresh_access_token_with_fallback(refresh_token, None).await
+}
+
+fn resolve_refreshed_id_token(
+    token_response: &serde_json::Value,
+    current_id_token: Option<&str>,
+) -> Result<String, String> {
+    if let Some(id_token) = token_response
+        .get("id_token")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if is_id_token_expired(id_token) {
+            return Err("Token 刷新响应中的 id_token 已过期或无效".to_string());
+        }
+        return Ok(id_token.to_string());
+    }
+
+    if let Some(id_token) = current_id_token
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .filter(|value| !is_id_token_expired(value))
+    {
+        return Ok(id_token.to_string());
+    }
+
+    Err("响应中缺少 id_token，且本地 id_token 已过期或无效".to_string())
 }
 
 pub async fn refresh_access_token_with_fallback(
@@ -854,16 +895,14 @@ pub async fn refresh_access_token_with_fallback(
 ) -> Result<CodexTokens, String> {
     let client = reqwest::Client::new();
 
-    let params = [
-        ("grant_type", "refresh_token"),
-        ("refresh_token", refresh_token),
-        ("client_id", CLIENT_ID),
-    ];
-
     logger::log_info("Codex Token 刷新中...");
 
     let response = apply_codex_auth_identity_headers(client.post(TOKEN_ENDPOINT))
-        .form(&params)
+        .json(&serde_json::json!({
+            "client_id": CLIENT_ID,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        }))
         .send()
         .await
         .map_err(|e| format!("Token 刷新请求失败: {}", e))?;
@@ -895,17 +934,7 @@ pub async fn refresh_access_token_with_fallback(
     let token_response: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| format!("解析 Token 响应失败: {}", e))?;
 
-    let id_token = token_response
-        .get("id_token")
-        .and_then(|v| v.as_str())
-        .map(|value| value.to_string())
-        .or_else(|| {
-            current_id_token
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(|value| value.to_string())
-        })
-        .ok_or("响应中缺少 id_token，且本地没有可复用的旧值")?;
+    let id_token = resolve_refreshed_id_token(&token_response, current_id_token)?;
 
     let access_token = token_response
         .get("access_token")
@@ -928,16 +957,69 @@ pub async fn refresh_access_token_with_fallback(
 
 #[cfg(test)]
 mod tests {
-    use super::{AUTH_USER_AGENT, ORIGINATOR};
+    use super::{
+        is_id_token_refresh_due, resolve_refreshed_id_token, ID_TOKEN_REFRESH_LEAD_SECONDS,
+        ORIGINATOR, TOKEN_REFRESH_SKEW_SECONDS,
+    };
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+    fn make_jwt(exp: i64) -> String {
+        let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"none","typ":"JWT"}"#);
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::json!({ "exp": exp }).to_string());
+        format!("{}.{}.sig", header, payload)
+    }
 
     #[test]
-    fn credential_face_user_agent_pairs_with_originator() {
-        assert_eq!(ORIGINATOR, "codex_vscode");
+    fn oauth_originator_matches_current_desktop_client() {
+        assert_eq!(ORIGINATOR, "Codex Desktop");
+    }
+
+    #[test]
+    fn id_token_is_due_within_refresh_lead_time() {
+        let due = chrono::Utc::now().timestamp() + ID_TOKEN_REFRESH_LEAD_SECONDS - 30;
+        assert!(is_id_token_refresh_due(&make_jwt(due)));
+    }
+
+    #[test]
+    fn id_token_is_not_due_beyond_refresh_lead_time() {
+        let fresh = chrono::Utc::now().timestamp() + ID_TOKEN_REFRESH_LEAD_SECONDS + 3600;
+        assert!(!is_id_token_refresh_due(&make_jwt(fresh)));
+    }
+
+    #[test]
+    fn refreshed_id_token_replaces_expired_current_value() {
+        let fresh = make_jwt(chrono::Utc::now().timestamp() + TOKEN_REFRESH_SKEW_SECONDS + 3600);
+        let expired = make_jwt(chrono::Utc::now().timestamp() - 3600);
+        let response = serde_json::json!({ "id_token": fresh });
+
         assert_eq!(
-            AUTH_USER_AGENT.split('/').next(),
-            Some(ORIGINATOR),
-            "auth.openai.com 要求 User-Agent 首段与 originator 配套"
+            resolve_refreshed_id_token(&response, Some(&expired))
+                .expect("replace expired id_token"),
+            response["id_token"].as_str().unwrap()
         );
-        assert_eq!(AUTH_USER_AGENT, "codex_vscode/0.146.0");
+    }
+
+    #[test]
+    fn refreshed_id_token_reuses_only_fresh_current_value() {
+        let fresh = make_jwt(chrono::Utc::now().timestamp() + TOKEN_REFRESH_SKEW_SECONDS + 3600);
+        assert_eq!(
+            resolve_refreshed_id_token(&serde_json::json!({}), Some(&fresh))
+                .expect("reuse fresh id_token"),
+            fresh
+        );
+    }
+
+    #[test]
+    fn refreshed_id_token_rejects_missing_value_when_current_is_expired() {
+        let expired = make_jwt(chrono::Utc::now().timestamp() - 3600);
+        assert!(resolve_refreshed_id_token(&serde_json::json!({}), Some(&expired)).is_err());
+    }
+
+    #[test]
+    fn refreshed_id_token_rejects_expired_response_value() {
+        let expired = make_jwt(chrono::Utc::now().timestamp() - 3600);
+        assert!(
+            resolve_refreshed_id_token(&serde_json::json!({ "id_token": expired }), None).is_err()
+        );
     }
 }

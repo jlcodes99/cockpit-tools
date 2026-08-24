@@ -756,6 +756,28 @@ input:checked + .slider:before {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
+.settings-backup-usage-total {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.settings-backup-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-backup-usage-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 .settings-backup-list-wrap {
   width: 100%;
   display: flex;
@@ -1020,6 +1042,165 @@ input:checked + .slider:before {
   gap: 8px;
 }
 
+.settings-backup-migration-modal {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.settings-backup-migration-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-backup-migration-paths > div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-backup-migration-paths code,
+.settings-backup-migration-warning code {
+  color: var(--text-primary);
+  word-break: break-all;
+  white-space: normal;
+}
+
+.settings-backup-migration-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-backup-migration-summary > div {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-backup-migration-summary strong {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-backup-migration-summary span,
+.settings-backup-migration-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-backup-migration-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.settings-backup-migration-sources > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-backup-migration-phase {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-backup-migration-progress-track {
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+}
+
+.settings-backup-migration-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, var(--primary));
+  transition: width 160ms ease;
+}
+
+.settings-backup-migration-progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-backup-migration-progress-meta strong {
+  color: var(--text-primary);
+}
+
+.settings-backup-migration-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.settings-backup-migration-current strong {
+  color: var(--text-primary);
+}
+
+.settings-backup-migration-current-path {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: break-all;
+  max-height: 74px;
+  overflow: auto;
+}
+
+.settings-backup-migration-result,
+.settings-backup-migration-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-backup-migration-result {
+  color: var(--text-primary);
+}
+
+.settings-backup-migration-warning {
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text-secondary);
+}
+
+.settings-backup-migration-error {
+  margin: 0;
+}
+
 .settings-transfer-progress-wrap {
   margin-top: 6px;
   padding: 12px;
@@ -1153,6 +1334,18 @@ input:checked + .slider:before {
 
   .settings-transfer-modal-actions .btn {
     flex: 1;
+  }
+
+  .settings-backup-migration-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-backup-migration-actions {
+    flex-direction: column-reverse;
+  }
+
+  .settings-backup-migration-actions .btn {
+    width: 100%;
   }
 }
 

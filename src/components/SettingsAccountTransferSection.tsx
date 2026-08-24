@@ -12,7 +12,8 @@ import {
 import { Archive, ChevronLeft, Download, FolderOpen, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import { save } from '@tauri-apps/plugin-dialog';
+import { listen } from '@tauri-apps/api/event';
+import { open, save } from '@tauri-apps/plugin-dialog';
 import { ExportJsonModal } from './ExportJsonModal';
 import { useExportJsonModal } from '../hooks/useExportJsonModal';
 import { useEscClose } from '../hooks/useEscClose';
@@ -29,26 +30,37 @@ import {
 } from '../services/dataTransferService';
 import {
   AUTO_BACKUP_STATE_CHANGED_EVENT,
+  BACKUP_DIRECTORY_MIGRATION_PROGRESS_EVENT,
+  BackupDirectoryChangeResult,
+  BackupDirectoryMigrationPreview,
+  BackupDirectoryMigrationProgress,
+  BackupUsageSummary,
   AutoBackupFileEntry,
   AutoBackupMode,
   AutoBackupSettings,
   autoBackupModeToSelection,
+  cancelBackupDirectoryChange,
   cleanupAutoBackupFiles,
+  cleanupBehaviorBackups,
+  changeBackupDirectory,
   copyAutoBackupFile,
   createManagedBackup,
   deleteAutoBackupFile,
   extractAutoBackupPlatformJson,
   getAutoBackupSettings,
+  getBackupUsage,
   getSelectionFromAutoBackupSettings,
   listAutoBackupFiles,
   normalizeAutoBackupPlatforms,
   openAutoBackupDir,
+  previewBackupDirectoryChange,
   readAutoBackupFile,
   saveAutoBackupSettings,
   selectionToAutoBackupMode,
 } from '../services/scheduledBackupService';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import { getPlatformLabel } from '../utils/platformMeta';
+import { presentWindowsOperationError } from '../utils/windowsOperationDialog';
 
 type TransferFeedbackTone = 'loading' | 'success' | 'error';
 type FeedbackSetter = Dispatch<SetStateAction<TransferFeedback | null>>;
@@ -65,6 +77,15 @@ const DEFAULT_TRANSFER_SELECTION: DataTransferSelection = {
 
 const BACKUP_FILE_NAME_REGEX =
   /^cockpit_(auto|manual)_backup_(full|accounts|config)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.(json|zip)$/i;
+
+const BACKUP_USAGE_SOURCE_ORDER = [
+  'scheduled',
+  'claude',
+  'codex',
+  'workbuddy',
+  'codebuddy',
+  'trae',
+] as const;
 
 function normalizeError(error: unknown): string {
   return String(error).replace(/^Error:\s*/, '');
@@ -132,7 +153,10 @@ function parseManagedBackupMeta(fileName: string): {
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes >= 10 * 1024 ? 0 : 1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function stripBackupExtension(fileName: string): string {
@@ -147,11 +171,38 @@ function buildPlatformBackupFileName(fileName: string, platform: PlatformId): st
   return `${stripBackupExtension(fileName)}_${platform}.json`;
 }
 
-export function SettingsAccountTransferSection() {
+function createBackupMigrationId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `backup-migration-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function backupMigrationPercent(progress: BackupDirectoryMigrationProgress | null): number {
+  if (!progress) return 0;
+  if (progress.phase === 'completed') return 100;
+  if (progress.phase === 'cleaning') return 97;
+  if (progress.phase === 'switching') return 94;
+  if (progress.phase === 'verifying') return 90;
+  if (progress.phase === 'scanning') return 2;
+  if (progress.total_size_bytes <= 0) return progress.phase === 'copying' ? 85 : 0;
+  return Math.min(85, Math.max(5, 5 + Math.round(
+    (progress.processed_size_bytes / progress.total_size_bytes) * 80,
+  )));
+}
+
+interface SettingsAccountTransferSectionProps {
+  directoryEntryOnly?: boolean;
+}
+
+export function SettingsAccountTransferSection({
+  directoryEntryOnly = false,
+}: SettingsAccountTransferSectionProps = {}) {
   const { t } = useTranslation();
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const progressListRef = useRef<HTMLDivElement | null>(null);
+  const backupMigrationIdRef = useRef<string | null>(null);
 
   const [showExportOptionsModal, setShowExportOptionsModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -169,6 +220,7 @@ export function SettingsAccountTransferSection() {
   });
   const [backupSettings, setBackupSettings] = useState<AutoBackupSettings | null>(null);
   const [backupFiles, setBackupFiles] = useState<AutoBackupFileEntry[]>([]);
+  const [backupUsage, setBackupUsage] = useState<BackupUsageSummary | null>(null);
   const [backupLoading, setBackupLoading] = useState(true);
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
@@ -178,6 +230,18 @@ export function SettingsAccountTransferSection() {
   const [backupDownloadingPlatform, setBackupDownloadingPlatform] = useState<string | null>(null);
   const [backupPlatformFilter, setBackupPlatformFilter] = useState<PlatformId | 'all'>('all');
   const [backupRetentionInput, setBackupRetentionInput] = useState('15');
+  const [backupDirectorySaving, setBackupDirectorySaving] = useState(false);
+  const [backupCleanupRunning, setBackupCleanupRunning] = useState(false);
+  const [backupMigrationPreview, setBackupMigrationPreview] =
+    useState<BackupDirectoryMigrationPreview | null>(null);
+  const [backupMigrationProgress, setBackupMigrationProgress] =
+    useState<BackupDirectoryMigrationProgress | null>(null);
+  const [backupMigrationResult, setBackupMigrationResult] =
+    useState<BackupDirectoryChangeResult | null>(null);
+  const [backupMigrationError, setBackupMigrationError] = useState<string | null>(null);
+  const [backupMigrationCanceling, setBackupMigrationCanceling] = useState(false);
+  const [showBackupMigrationConfirm, setShowBackupMigrationConfirm] = useState(false);
+  const [showBackupMigrationProgress, setShowBackupMigrationProgress] = useState(false);
 
   const setExportFailed = useCallback(
     (error: unknown) => {
@@ -243,9 +307,21 @@ export function SettingsAccountTransferSection() {
   }, [importing]);
 
   const closeBackupManagerModal = useCallback(() => {
-    if (backupSaving || backupRunning || backupImportingFile || backupDeletingFile) return;
+    if (
+      backupSaving ||
+      backupRunning ||
+      backupImportingFile ||
+      backupDeletingFile ||
+      backupDirectorySaving
+    ) return;
     setShowBackupManagerModal(false);
-  }, [backupDeletingFile, backupImportingFile, backupRunning, backupSaving]);
+  }, [
+    backupDeletingFile,
+    backupDirectorySaving,
+    backupImportingFile,
+    backupRunning,
+    backupSaving,
+  ]);
 
   useEscClose(showExportOptionsModal, closeExportOptionsModal);
   useEscClose(showImportModal, closeImportModal);
@@ -524,9 +600,14 @@ export function SettingsAccountTransferSection() {
         setBackupLoading(true);
       }
       try {
-        const [settings, files] = await Promise.all([getAutoBackupSettings(), listAutoBackupFiles()]);
+        const [settings, files, usage] = await Promise.all([
+          getAutoBackupSettings(),
+          listAutoBackupFiles(),
+          getBackupUsage(),
+        ]);
         setBackupSettings(settings);
         setBackupFiles(files);
+        setBackupUsage(usage);
         setBackupRetentionInput(String(settings.retention_days));
       } catch (error) {
         setBackupFeedback({
@@ -557,6 +638,28 @@ export function SettingsAccountTransferSection() {
       window.removeEventListener(AUTO_BACKUP_STATE_CHANGED_EVENT, handleStateChanged);
     };
   }, [loadAutoBackupState]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<BackupDirectoryMigrationProgress>(
+      BACKUP_DIRECTORY_MIGRATION_PROGRESS_EVENT,
+      (event) => {
+        if (event.payload.migration_id !== backupMigrationIdRef.current) return;
+        setBackupMigrationProgress(event.payload);
+      },
+    ).then((cleanup) => {
+      if (disposed) {
+        cleanup();
+      } else {
+        unlisten = cleanup;
+      }
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   const openBackupManagerModal = useCallback(() => {
     setBackupFeedback(null);
@@ -667,7 +770,7 @@ export function SettingsAccountTransferSection() {
       tone: 'loading',
       text: t('settings.transfer.backup.feedback.running'),
     });
-    try {
+    const runBackup = async () => {
       const result = await createManagedBackup({
         trigger: 'manual',
         selection,
@@ -686,7 +789,20 @@ export function SettingsAccountTransferSection() {
           count: result.deleted_files.length,
         }),
       });
+    };
+    try {
+      await runBackup();
     } catch (error) {
+      if (
+        presentWindowsOperationError({
+          error,
+          operation: 'backup',
+          retry: runBackup,
+        })
+      ) {
+        setBackupFeedback(null);
+        return;
+      }
       setBackupFeedback({
         tone: 'error',
         text: t('settings.transfer.backup.feedback.runFailed', {
@@ -715,6 +831,19 @@ export function SettingsAccountTransferSection() {
           text: t('settings.transfer.backup.feedback.deleteSuccess'),
         });
       } catch (error) {
+        if (
+          presentWindowsOperationError({
+            error,
+            operation: 'delete_file',
+            retry: async () => {
+              await deleteAutoBackupFile(fileName);
+              await loadAutoBackupState(true);
+            },
+          })
+        ) {
+          setBackupFeedback(null);
+          return;
+        }
         setBackupFeedback({
           tone: 'error',
           text: t('settings.transfer.backup.feedback.deleteFailed', {
@@ -846,6 +975,16 @@ export function SettingsAccountTransferSection() {
     try {
       await openAutoBackupDir();
     } catch (error) {
+      if (
+        presentWindowsOperationError({
+          error,
+          operation: 'open_path',
+          retry: openAutoBackupDir,
+        })
+      ) {
+        setBackupFeedback(null);
+        return;
+      }
       setBackupFeedback({
         tone: 'error',
         text: t('settings.transfer.backup.feedback.openFolderFailed', {
@@ -854,6 +993,179 @@ export function SettingsAccountTransferSection() {
       });
     }
   }, [t]);
+
+  const handleChangeBackupDirectory = useCallback(async () => {
+    if (!backupSettings || backupDirectorySaving) return;
+    let selectedPath: string | null = null;
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: backupSettings.directory_path || undefined,
+      });
+      if (!selected || typeof selected !== 'string') return;
+      selectedPath = selected;
+      if (selected.trim() === backupSettings.directory_path.trim()) return;
+      setBackupDirectorySaving(true);
+      setBackupFeedback({
+        tone: 'loading',
+        text: t('settings.transfer.backup.feedback.scanningMigration'),
+      });
+      const preview = await previewBackupDirectoryChange(selected);
+      setBackupMigrationPreview(preview);
+      setBackupMigrationError(null);
+      setBackupMigrationResult(null);
+      setShowBackupMigrationConfirm(true);
+      setBackupFeedback(null);
+    } catch (error) {
+      if (
+        presentWindowsOperationError({
+          error,
+          operation: 'backup',
+          retry: selectedPath
+            ? async () => {
+                const preview = await previewBackupDirectoryChange(selectedPath as string);
+                setBackupMigrationPreview(preview);
+                setBackupMigrationError(null);
+                setBackupMigrationResult(null);
+                setShowBackupMigrationConfirm(true);
+                setBackupFeedback(null);
+              }
+            : undefined,
+        })
+      ) {
+        setBackupFeedback(null);
+        return;
+      }
+      setBackupFeedback({
+        tone: 'error',
+        text: t('settings.transfer.backup.feedback.directoryChangeFailed', {
+          error: normalizeError(error),
+        }),
+      });
+    } finally {
+      setBackupDirectorySaving(false);
+    }
+  }, [backupDirectorySaving, backupSettings, loadAutoBackupState, t]);
+
+  const startBackupDirectoryChange = useCallback(
+    async (migrateExisting: boolean) => {
+      if (!backupMigrationPreview || backupDirectorySaving) return;
+      const migrationId = createBackupMigrationId();
+      backupMigrationIdRef.current = migrationId;
+      setShowBackupMigrationConfirm(false);
+      setShowBackupMigrationProgress(true);
+      setBackupMigrationResult(null);
+      setBackupMigrationError(null);
+      setBackupMigrationCanceling(false);
+      setBackupDirectorySaving(true);
+      setBackupMigrationProgress({
+        migration_id: migrationId,
+        phase: 'scanning',
+        total_file_count: backupMigrationPreview.file_count,
+        processed_file_count: 0,
+        total_size_bytes: backupMigrationPreview.size_bytes,
+        processed_size_bytes: 0,
+        current_source: null,
+        current_path: null,
+        cancellable: migrateExisting,
+      });
+      try {
+        const result = await changeBackupDirectory(
+          backupMigrationPreview.new_directory,
+          migrateExisting,
+          migrationId,
+        );
+        setBackupMigrationResult(result);
+        setBackupMigrationProgress((current) => ({
+          migration_id: migrationId,
+          phase: 'completed',
+          total_file_count: current?.total_file_count ?? result.migrated_file_count,
+          processed_file_count: result.migrated_file_count,
+          total_size_bytes: current?.total_size_bytes ?? result.migrated_size_bytes,
+          processed_size_bytes: result.migrated_size_bytes,
+          current_source: null,
+          current_path: null,
+          cancellable: false,
+        }));
+        await loadAutoBackupState(true);
+      } catch (error) {
+        const message = normalizeError(error);
+        if (message === 'backup_migration_cancelled') {
+          setBackupMigrationProgress((current) => ({
+            migration_id: migrationId,
+            phase: 'cancelled',
+            total_file_count: current?.total_file_count ?? backupMigrationPreview.file_count,
+            processed_file_count: current?.processed_file_count ?? 0,
+            total_size_bytes: current?.total_size_bytes ?? backupMigrationPreview.size_bytes,
+            processed_size_bytes: current?.processed_size_bytes ?? 0,
+            current_source: current?.current_source ?? null,
+            current_path: current?.current_path ?? null,
+            cancellable: false,
+          }));
+        } else {
+          setBackupMigrationError(message);
+        }
+      } finally {
+        backupMigrationIdRef.current = null;
+        setBackupMigrationCanceling(false);
+        setBackupDirectorySaving(false);
+      }
+    },
+    [backupDirectorySaving, backupMigrationPreview, loadAutoBackupState],
+  );
+
+  const handleCancelBackupMigration = useCallback(async () => {
+    const migrationId = backupMigrationIdRef.current;
+    if (!migrationId || !backupMigrationProgress?.cancellable || backupMigrationCanceling) return;
+    setBackupMigrationCanceling(true);
+    try {
+      await cancelBackupDirectoryChange(migrationId);
+    } catch (error) {
+      setBackupMigrationError(normalizeError(error));
+      setBackupMigrationCanceling(false);
+    }
+  }, [backupMigrationCanceling, backupMigrationProgress?.cancellable]);
+
+  const closeBackupMigrationProgress = useCallback(() => {
+    if (backupDirectorySaving) return;
+    setShowBackupMigrationProgress(false);
+    setBackupMigrationProgress(null);
+    setBackupMigrationResult(null);
+    setBackupMigrationError(null);
+    setBackupMigrationPreview(null);
+  }, [backupDirectorySaving]);
+
+  const handleCleanupBehaviorBackups = useCallback(async () => {
+    if (backupCleanupRunning) return;
+    const confirmed = window.confirm(t('settings.transfer.backup.behaviorCleanupConfirm'));
+    if (!confirmed) return;
+    setBackupCleanupRunning(true);
+    setBackupFeedback({
+      tone: 'loading',
+      text: t('settings.transfer.backup.feedback.behaviorCleaning'),
+    });
+    try {
+      const result = await cleanupBehaviorBackups();
+      await loadAutoBackupState(true);
+      setBackupFeedback({
+        tone: 'success',
+        text: t('settings.transfer.backup.feedback.behaviorCleanupDone', {
+          count: result.deleted_directory_count,
+          size: formatFileSize(result.deleted_size_bytes),
+        }),
+      });
+    } catch (error) {
+      setBackupFeedback({
+        tone: 'error',
+        text: t('settings.transfer.backup.feedback.behaviorCleanupFailed', {
+          error: normalizeError(error),
+        }),
+      });
+    } finally {
+      setBackupCleanupRunning(false);
+    }
+  }, [backupCleanupRunning, loadAutoBackupState, t]);
 
   const backupSelection = backupSettings
     ? getSelectionFromAutoBackupSettings(backupSettings)
@@ -865,7 +1177,9 @@ export function SettingsAccountTransferSection() {
     backupImportingFile !== null ||
     backupDeletingFile !== null ||
     backupDownloadingFile !== null ||
-    backupDownloadingPlatform !== null;
+    backupDownloadingPlatform !== null ||
+    backupDirectorySaving ||
+    backupCleanupRunning;
   const backupPlatformOptions = useMemo(() => {
     const present = new Set<PlatformId>();
     for (const file of backupFiles) {
@@ -885,6 +1199,28 @@ export function SettingsAccountTransferSection() {
       ),
     );
   }, [backupFiles, backupPlatformFilter]);
+  const backupUsageEntries = useMemo(() => {
+    if (!backupUsage) return [];
+    const entriesBySource = new Map(backupUsage.entries.map((entry) => [entry.source, entry]));
+    const knownEntries = BACKUP_USAGE_SOURCE_ORDER.map(
+      (source): BackupUsageSummary['entries'][number] =>
+        entriesBySource.get(source) ?? {
+          source,
+          file_count: 0,
+          size_bytes: 0,
+          path: '',
+        },
+    );
+    const knownSources = new Set<string>(BACKUP_USAGE_SOURCE_ORDER);
+    return [
+      ...knownEntries,
+      ...backupUsage.entries.filter((entry) => !knownSources.has(entry.source)),
+    ];
+  }, [backupUsage]);
+  const migrationPercent = backupMigrationPercent(backupMigrationProgress);
+  const migrationPhaseLabel = backupMigrationProgress
+    ? t(`settings.transfer.backup.migrationProgress.phases.${backupMigrationProgress.phase}`)
+    : t('settings.transfer.backup.migrationProgress.phases.scanning');
 
   useEffect(() => {
     if (backupPlatformFilter === 'all') return;
@@ -967,14 +1303,28 @@ export function SettingsAccountTransferSection() {
 
   return (
     <>
-      <div className="group-title">{t('settings.general.accountManagement')}</div>
+      <div className="group-title">
+        {directoryEntryOnly
+          ? t('settings.transfer.backup.directoryTitle')
+          : t('settings.general.accountManagement')}
+      </div>
       <div className="settings-group">
         <div className="settings-row settings-row--align-start">
           <div className="row-label">
-            <div className="row-title">{t('settings.transfer.backup.title')}</div>
-            <div className="row-desc">{t('settings.transfer.backup.desc')}</div>
+            <div className="row-title">
+              {directoryEntryOnly
+                ? t('settings.transfer.backup.directoryTitle')
+                : t('settings.transfer.backup.title')}
+            </div>
+            <div className="row-desc">
+              {directoryEntryOnly
+                ? t('settings.transfer.backup.directoryDesc')
+                : t('settings.transfer.backup.desc')}
+            </div>
             <div className="settings-backup-inline-meta">
-              {backupLoading && !backupSettings
+              {directoryEntryOnly
+                ? backupSettings?.directory_path ?? t('common.loading')
+                : backupLoading && !backupSettings
                 ? t('common.loading')
                 : `${backupSettings?.enabled
                     ? t('settings.transfer.backup.statusEnabled')
@@ -989,11 +1339,29 @@ export function SettingsAccountTransferSection() {
           <div className="row-control">
             <button
               className="btn btn-secondary"
-              onClick={openBackupManagerModal}
-              disabled={backupRunning || backupSaving || backupImportingFile !== null || backupDeletingFile !== null}
+              onClick={() => {
+                if (directoryEntryOnly) {
+                  void handleChangeBackupDirectory();
+                } else {
+                  openBackupManagerModal();
+                }
+              }}
+              disabled={
+                backupDirectorySaving ||
+                backupRunning ||
+                backupSaving ||
+                backupImportingFile !== null ||
+                backupDeletingFile !== null
+              }
             >
-              {backupLoading ? <RefreshCw size={16} className="loading-spinner" /> : <FolderOpen size={16} />}
-              {t('common.open')}
+              {backupLoading || backupDirectorySaving ? (
+                <RefreshCw size={16} className="loading-spinner" />
+              ) : (
+                <FolderOpen size={16} />
+              )}
+              {directoryEntryOnly
+                ? t('settings.transfer.backup.changeDirectory')
+                : t('common.open')}
             </button>
           </div>
         </div>
@@ -1002,47 +1370,275 @@ export function SettingsAccountTransferSection() {
           <div className="settings-transfer-feedback-wrap">{backupFeedbackNode}</div>
         )}
 
-        <div className="settings-row">
-          <div className="row-label">
-            <div className="row-title">{t('settings.transfer.exportTitle')}</div>
-            <div className="row-desc">{t('settings.transfer.exportDesc')}</div>
-          </div>
-          <div className="row-control">
-            <button
-              className="btn btn-secondary"
-              onClick={handleExport}
-              disabled={exportModal.preparing}
-            >
-              {exportModal.preparing ? <RefreshCw size={16} className="loading-spinner" /> : <Download size={16} />}
-              {t('common.shared.export.title')}
-            </button>
-          </div>
-        </div>
+        {!directoryEntryOnly && (
+          <>
+            <div className="settings-row">
+              <div className="row-label">
+                <div className="row-title">{t('settings.transfer.exportTitle')}</div>
+                <div className="row-desc">{t('settings.transfer.exportDesc')}</div>
+              </div>
+              <div className="row-control">
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleExport}
+                  disabled={exportModal.preparing}
+                >
+                  {exportModal.preparing ? <RefreshCw size={16} className="loading-spinner" /> : <Download size={16} />}
+                  {t('common.shared.export.title')}
+                </button>
+              </div>
+            </div>
 
-        <div className="settings-row">
-          <div className="row-label">
-            <div className="row-title">{t('settings.transfer.importTitle')}</div>
-            <div className="row-desc">{t('settings.transfer.importDesc')}</div>
-          </div>
-          <div className="row-control">
-            <button
-              className="btn btn-secondary"
-              onClick={() => {
-                setFeedback(null);
-                setShowImportModal(true);
-              }}
-              disabled={importing}
-            >
-              {importing ? <RefreshCw size={16} className="loading-spinner" /> : <FolderOpen size={16} />}
-              {t('common.shared.import.label')}
-            </button>
-          </div>
-        </div>
+            <div className="settings-row">
+              <div className="row-label">
+                <div className="row-title">{t('settings.transfer.importTitle')}</div>
+                <div className="row-desc">{t('settings.transfer.importDesc')}</div>
+              </div>
+              <div className="row-control">
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setFeedback(null);
+                    setShowImportModal(true);
+                  }}
+                  disabled={importing}
+                >
+                  {importing ? <RefreshCw size={16} className="loading-spinner" /> : <FolderOpen size={16} />}
+                  {t('common.shared.import.label')}
+                </button>
+              </div>
+            </div>
 
-        {!showImportModal && !showExportOptionsModal && feedbackNode && (
-          <div className="settings-transfer-feedback-wrap">{feedbackNode}</div>
+            {!showImportModal && !showExportOptionsModal && feedbackNode && (
+              <div className="settings-transfer-feedback-wrap">{feedbackNode}</div>
+            )}
+          </>
         )}
       </div>
+
+      {showBackupMigrationConfirm && backupMigrationPreview &&
+        renderToBody(
+          <div className="modal-overlay">
+            <div
+              className="modal settings-transfer-modal settings-backup-migration-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="backup-migration-confirm-title"
+            >
+              <div className="modal-header">
+                <h2 id="backup-migration-confirm-title">
+                  {t('settings.transfer.backup.migrationConfirmTitle')}
+                </h2>
+                <button
+                  className="modal-close"
+                  onClick={() => {
+                    setShowBackupMigrationConfirm(false);
+                    setBackupMigrationPreview(null);
+                  }}
+                  aria-label={t('common.close')}
+                >
+                  <X />
+                </button>
+              </div>
+              <div className="modal-body settings-transfer-modal-body">
+                <p className="settings-transfer-modal-desc">
+                  {t('settings.transfer.backup.migrationConfirmDesc')}
+                </p>
+                <div className="settings-backup-migration-paths">
+                  <div>
+                    <span>{t('settings.transfer.backup.migrationOldPath')}</span>
+                    <code>{backupMigrationPreview.old_directory}</code>
+                  </div>
+                  <div>
+                    <span>{t('settings.transfer.backup.migrationNewPath')}</span>
+                    <code>{backupMigrationPreview.new_directory}</code>
+                  </div>
+                </div>
+                <div className="settings-backup-migration-summary">
+                  <div>
+                    <strong>{formatFileSize(backupMigrationPreview.size_bytes)}</strong>
+                    <span>{t('settings.transfer.backup.migrationTotalSize')}</span>
+                  </div>
+                  <div>
+                    <strong>{backupMigrationPreview.file_count}</strong>
+                    <span>{t('settings.transfer.backup.migrationTotalFiles')}</span>
+                  </div>
+                </div>
+                {backupMigrationPreview.sources.length > 0 && (
+                  <div className="settings-backup-migration-sources">
+                    {backupMigrationPreview.sources.map((source) => (
+                      <div key={source.source}>
+                        <span>
+                          {t(`settings.transfer.backup.sources.${source.source}`, {
+                            defaultValue: source.source,
+                          })}
+                        </span>
+                        <span>{formatFileSize(source.size_bytes)} · {source.file_count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="settings-backup-migration-note">
+                  {t('settings.transfer.backup.migrationSafetyNote')}
+                </div>
+                <div className="settings-transfer-modal-actions settings-backup-migration-actions">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setShowBackupMigrationConfirm(false);
+                      setBackupMigrationPreview(null);
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => void startBackupDirectoryChange(false)}
+                  >
+                    {t('settings.transfer.backup.switchOnly')}
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => void startBackupDirectoryChange(true)}
+                  >
+                    {t('settings.transfer.backup.migrateAndSwitch')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+        )}
+
+      {showBackupMigrationProgress && backupMigrationProgress &&
+        renderToBody(
+          <div className="modal-overlay">
+            <div
+              className="modal settings-transfer-modal settings-backup-migration-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="backup-migration-progress-title"
+            >
+              <div className="modal-header">
+                <h2 id="backup-migration-progress-title">
+                  {t('settings.transfer.backup.migrationProgress.title')}
+                </h2>
+                {!backupDirectorySaving && (
+                  <button
+                    className="modal-close"
+                    onClick={closeBackupMigrationProgress}
+                    aria-label={t('common.close')}
+                  >
+                    <X />
+                  </button>
+                )}
+              </div>
+              <div className="modal-body settings-transfer-modal-body">
+                <div className="settings-backup-migration-phase">{migrationPhaseLabel}</div>
+                <div
+                  className="settings-backup-migration-progress-track"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={migrationPercent}
+                >
+                  <div
+                    className="settings-backup-migration-progress-fill"
+                    style={{ width: `${migrationPercent}%` }}
+                  />
+                </div>
+                <div className="settings-backup-migration-progress-meta">
+                  <strong>{migrationPercent}%</strong>
+                  <span>
+                    {formatFileSize(backupMigrationProgress.processed_size_bytes)} /{' '}
+                    {formatFileSize(backupMigrationProgress.total_size_bytes)}
+                  </span>
+                  <span>
+                    {backupMigrationProgress.processed_file_count} /{' '}
+                    {backupMigrationProgress.total_file_count}{' '}
+                    {t('settings.transfer.backup.migrationProgress.filesUnit')}
+                  </span>
+                </div>
+                {backupMigrationProgress.current_source && (
+                  <div className="settings-backup-migration-current">
+                    <span>{t('settings.transfer.backup.migrationProgress.currentSource')}</span>
+                    <strong>
+                      {t(
+                        `settings.transfer.backup.sources.${backupMigrationProgress.current_source}`,
+                        { defaultValue: backupMigrationProgress.current_source },
+                      )}
+                    </strong>
+                  </div>
+                )}
+                {backupMigrationProgress.current_path && (
+                  <div className="settings-backup-migration-current-path">
+                    {backupMigrationProgress.current_path}
+                  </div>
+                )}
+                {backupMigrationError && (
+                  <div className="form-error settings-backup-migration-error" role="alert">
+                    {t('settings.transfer.backup.feedback.directoryChangeFailed', {
+                      error: backupMigrationError,
+                    })}
+                  </div>
+                )}
+                {backupMigrationResult && (
+                  <div className="settings-backup-migration-result">
+                    <div>
+                      {backupMigrationResult.migrated
+                        ? t('settings.transfer.backup.migrationProgress.completedSummary', {
+                            size: formatFileSize(backupMigrationResult.migrated_size_bytes),
+                            count: backupMigrationResult.migrated_file_count,
+                          })
+                        : t('settings.transfer.backup.migrationProgress.switchOnlyCompleted', {
+                            path: backupMigrationResult.new_directory,
+                          })}
+                    </div>
+                    {backupMigrationResult.remaining_paths.length > 0 && (
+                      <div className="settings-backup-migration-warning">
+                        <strong>
+                          {t('settings.transfer.backup.migrationProgress.cleanupPartial')}
+                        </strong>
+                        {backupMigrationResult.remaining_paths.map((path) => (
+                          <code key={path}>{path}</code>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {backupMigrationProgress.phase === 'cancelled' && (
+                  <div className="settings-backup-migration-result">
+                    {t('settings.transfer.backup.migrationProgress.cancelledDesc')}
+                  </div>
+                )}
+                <div className="settings-transfer-modal-actions">
+                  {backupDirectorySaving && backupMigrationProgress.cancellable ? (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => void handleCancelBackupMigration()}
+                      disabled={backupMigrationCanceling}
+                    >
+                      {backupMigrationCanceling && (
+                        <RefreshCw size={14} className="loading-spinner" />
+                      )}
+                      {backupMigrationCanceling
+                        ? t('settings.transfer.backup.migrationProgress.cancelling')
+                        : t('settings.transfer.backup.migrationProgress.cancelAction')}
+                    </button>
+                  ) : backupDirectorySaving ? (
+                    <button className="btn btn-secondary" disabled>
+                      <RefreshCw size={14} className="loading-spinner" />
+                      {t('settings.transfer.backup.migrationProgress.finishing')}
+                    </button>
+                  ) : (
+                    <button className="btn btn-primary" onClick={closeBackupMigrationProgress}>
+                      {t('common.close')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>,
+        )}
 
       {showExportOptionsModal &&
         renderToBody(
@@ -1373,6 +1969,18 @@ export function SettingsAccountTransferSection() {
                     <button
                       className="btn btn-secondary"
                       onClick={() => {
+                        void handleChangeBackupDirectory();
+                      }}
+                      disabled={backupControlsDisabled}
+                    >
+                      <FolderOpen size={16} />
+                      {backupDirectorySaving
+                        ? t('settings.transfer.backup.migrating')
+                        : t('settings.transfer.backup.changeDirectory')}
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
                         void handleOpenBackupDir();
                       }}
                       disabled={backupControlsDisabled}
@@ -1382,6 +1990,56 @@ export function SettingsAccountTransferSection() {
                     </button>
                   </div>
                   <div className="settings-backup-path">{backupSettings?.directory_path ?? '-'}</div>
+                </div>
+
+                <div className="settings-backup-manager-card">
+                  <div className="settings-backup-manager-head">
+                    <div className="settings-backup-manager-copy">
+                      <div className="settings-backup-manager-title">
+                        {t('settings.transfer.backup.usageTitle')}
+                      </div>
+                      <div className="settings-backup-manager-desc">
+                        {t('settings.transfer.backup.usageDesc')}
+                      </div>
+                    </div>
+                    <div className="settings-backup-usage-total">
+                      {backupUsage
+                        ? `${formatFileSize(backupUsage.total_size_bytes)} · ${backupUsage.total_file_count}`
+                        : t('common.loading')}
+                    </div>
+                  </div>
+                  {backupUsage && backupUsage.total_file_count > 0 ? (
+                    <div className="settings-backup-usage-list">
+                      {backupUsageEntries.map((entry) => (
+                        <div className="settings-backup-usage-row" key={`${entry.source}:${entry.path}`}>
+                          <span>{t(`settings.transfer.backup.sources.${entry.source}`, {
+                            defaultValue: entry.source,
+                          })}</span>
+                          <span>{formatFileSize(entry.size_bytes)} · {entry.file_count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="settings-backup-empty-desc">
+                      {t('settings.transfer.backup.usageEmpty')}
+                    </div>
+                  )}
+                  <div className="settings-backup-item-actions">
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        void handleCleanupBehaviorBackups();
+                      }}
+                      disabled={backupControlsDisabled}
+                    >
+                      {backupCleanupRunning ? (
+                        <RefreshCw size={14} className="loading-spinner" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                      {t('settings.transfer.backup.cleanupBehavior')}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="settings-backup-manager-card">

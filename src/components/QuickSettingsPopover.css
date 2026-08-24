@@ -40,7 +40,8 @@
 }
 
 .qs-modal--codex {
-  width: 676px;
+  width: min(860px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
 }
 
 @keyframes qsModalIn {

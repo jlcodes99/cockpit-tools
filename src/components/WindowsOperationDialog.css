@@ -1,0 +1,116 @@
+.windows-operation-overlay {
+  z-index: 14000;
+}
+
+.windows-operation-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
+}
+
+.windows-operation-header {
+  align-items: flex-start;
+}
+
+.windows-operation-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.windows-operation-title-wrap h2,
+.windows-operation-title-wrap p {
+  margin: 0;
+}
+
+.windows-operation-title-wrap p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.windows-operation-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 50%;
+  color: var(--danger, #ef4444);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.windows-operation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.windows-operation-description {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.windows-operation-reason,
+.windows-operation-action-error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 10px;
+  color: var(--danger, #ef4444);
+  background: rgba(239, 68, 68, 0.08);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.windows-operation-inline-actions,
+.windows-operation-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.windows-operation-inline-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.windows-operation-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+
+.windows-operation-details > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 140px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.windows-operation-details span {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 620px) {
+  .windows-operation-details > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .windows-operation-footer .btn {
+    flex: 1 1 140px;
+  }
+}

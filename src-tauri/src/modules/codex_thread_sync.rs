@@ -622,6 +622,10 @@ fn sync_thread_plan_to_instance(
         metadata_rebuild_failed = !try_rebuild_thread_metadata(target);
     }
     update_global_state_thread_workspaces(&target.data_dir, workspace_snapshots)?;
+    let _ = modules::backup_storage::prune_behavior_backups(
+        "codex",
+        &modules::backup_storage::scope_for_path(&target.data_dir),
+    );
     Ok(ThreadSyncWriteResult {
         backup_dir,
         metadata_rebuild_failed,
@@ -927,10 +931,15 @@ fn rollout_file_metadata(path: &Path) -> (i128, u64) {
 }
 
 fn backup_instance_files(data_dir: &Path) -> Result<PathBuf, String> {
-    let backup_dir = data_dir.join(format!(
-        "backup-{}-instance-thread-sync",
-        Utc::now().format("%Y%m%d-%H%M%S")
-    ));
+    let scope = modules::backup_storage::scope_for_path(data_dir);
+    let backup_dir = modules::backup_storage::behavior_backup_dir(
+        "codex",
+        &scope,
+        &format!(
+            "{}-instance-thread-sync",
+            Utc::now().format("%Y%m%d-%H%M%S")
+        ),
+    )?;
     fs::create_dir_all(&backup_dir)
         .map_err(|error| format!("创建备份目录失败 ({}): {}", data_dir.display(), error))?;
 

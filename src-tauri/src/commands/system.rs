@@ -6,7 +6,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt as _;
 use url::Url;
 
@@ -20,7 +20,6 @@ use crate::modules::websocket;
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-const AUTO_BACKUP_DIR_NAME: &str = "backups";
 
 static GENERAL_CONFIG_SAVE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -88,6 +87,8 @@ pub struct GeneralConfig {
     pub codex_sync_wsl: bool,
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     pub codex_app_ui_injection_enabled: bool,
+    /// 是否启用 Codex CDP 登录页守卫
+    pub codex_login_page_guard_enabled: bool,
     /// 是否全局允许 Codex app-server 第三方客户端（账户级开关仍可单独放行）
     pub codex_cli_only_allow_app_server_clients: bool,
     /// Codex WSL 配置目录 (Windows Only)
@@ -106,6 +107,10 @@ pub struct GeneralConfig {
     pub grok_auto_refresh_minutes: i32,
     /// 默认实例切号时是否同步写入官方 ~/.grok/auth.json
     pub grok_sync_official_auth_on_switch: bool,
+    /// 切换 Grok 时是否自动重启 OpenCode
+    pub grok_opencode_sync_on_switch: bool,
+    /// 切换 Grok 时是否覆盖 OpenCode 登录信息
+    pub grok_opencode_auth_overwrite_on_switch: bool,
     /// Claude 自动刷新间隔（分钟），-1 表示禁用
     pub claude_auto_refresh_minutes: i32,
     /// CodeBuddy 自动刷新间隔（分钟），-1 表示禁用
@@ -1127,6 +1132,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codex_auto_refresh_minutes"
             | "codex_sync_wsl"
             | "codex_app_ui_injection_enabled"
+            | "codex_login_page_guard_enabled"
             | "codex_cli_only_allow_app_server_clients"
             | "codex_wsl_config_dir"
             | "zed_auto_refresh_minutes"
@@ -1136,6 +1142,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "cursor_auto_refresh_minutes"
             | "grok_auto_refresh_minutes"
             | "grok_sync_official_auth_on_switch"
+            | "grok_opencode_sync_on_switch"
+            | "grok_opencode_auth_overwrite_on_switch"
             | "claude_auto_refresh_minutes"
             | "codebuddy_auto_refresh_minutes"
             | "codebuddy_cn_auto_refresh_minutes"
@@ -1409,6 +1417,12 @@ fn apply_general_config_updates(
         next.ghcp_opencode_sync_on_switch =
             next.ghcp_opencode_auth_overwrite_on_switch && next.ghcp_opencode_sync_on_switch;
     }
+    if updates.contains_key("grok_opencode_sync_on_switch")
+        || updates.contains_key("grok_opencode_auth_overwrite_on_switch")
+    {
+        next.grok_opencode_sync_on_switch =
+            next.grok_opencode_auth_overwrite_on_switch && next.grok_opencode_sync_on_switch;
+    }
 
     let codex_threshold = json_i32(updates, "codex_quota_alert_threshold")?;
     let codex_primary = json_i32(updates, "codex_quota_alert_primary_threshold")?;
@@ -1464,7 +1478,7 @@ fn resolve_downloads_dir() -> Result<PathBuf, String> {
 }
 
 fn get_auto_backup_dir_path() -> Result<PathBuf, String> {
-    Ok(modules::account::get_data_dir()?.join(AUTO_BACKUP_DIR_NAME))
+    modules::backup_storage::get_backup_root_dir()
 }
 
 fn ensure_auto_backup_dir_path() -> Result<PathBuf, String> {
@@ -1932,10 +1946,19 @@ pub fn open_local_path(path: String) -> Result<(), String> {
     open_path_in_system(p.as_path())
 }
 
+#[tauri::command]
+pub async fn windows_elevated_close_processes(pids: Vec<u32>) -> Result<u32, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::windows_operation::elevated_close_supported_processes(&pids)
+    })
+    .await
+    .map_err(|error| format!("WINDOWS_ELEVATION_TASK_FAILED: {}", error))?
+}
+
 /// 保存文本文件
 #[tauri::command]
 pub async fn save_text_file(path: String, content: String) -> Result<(), String> {
-    std::fs::write(&path, content).map_err(|e| format!("写入文件失败: {}", e))
+    modules::atomic_write::write_string_atomic(std::path::Path::new(&path), &content)
 }
 
 /// 获取下载目录
@@ -1991,6 +2014,7 @@ pub fn update_auto_backup_last_run(
 
 #[tauri::command]
 pub fn write_auto_backup_file(file_name: String, content: String) -> Result<String, String> {
+    modules::backup_storage::ensure_backup_write_available()?;
     let safe_name = sanitize_auto_backup_file_name(&file_name)?;
     if !safe_name.ends_with(".json") {
         return Err("自动备份主文件必须为 JSON".to_string());
@@ -2196,6 +2220,58 @@ pub fn cleanup_auto_backup_files(retention_days: i32) -> Result<Vec<String>, Str
 pub fn open_auto_backup_dir() -> Result<(), String> {
     let path = ensure_auto_backup_dir_path()?;
     open_path_in_system(path.as_path())
+}
+
+/// 获取定时备份与行为备份的空间占用明细。
+#[tauri::command]
+pub fn get_backup_usage() -> Result<modules::backup_storage::BackupUsageSummary, String> {
+    modules::backup_storage::get_backup_usage()
+}
+
+/// 修改本地备份根目录；迁移选项由前端在确认后传入。
+#[tauri::command]
+pub async fn preview_backup_directory_change(
+    directory: String,
+) -> Result<modules::backup_storage::BackupDirectoryMigrationPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::backup_storage::preview_backup_root_dir_change(&directory)
+    })
+    .await
+    .map_err(|error| format!("扫描待迁移备份失败: {}", error))?
+}
+
+/// 修改本地备份根目录，并通过事件上报迁移进度。
+#[tauri::command]
+pub async fn change_backup_directory(
+    app: tauri::AppHandle,
+    directory: String,
+    migrate_existing: bool,
+    migration_id: String,
+) -> Result<modules::backup_storage::BackupDirectoryChangeResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::backup_storage::change_backup_root_dir_with_progress(
+            &directory,
+            migrate_existing,
+            &migration_id,
+            |progress| {
+                let _ = app.emit("backup-directory-migration-progress", progress);
+            },
+        )
+    })
+    .await
+    .map_err(|error| format!("备份目录迁移任务失败: {}", error))?
+}
+
+/// 请求取消仍处于扫描或复制阶段的备份目录迁移。
+#[tauri::command]
+pub fn cancel_backup_directory_change(migration_id: String) -> Result<bool, String> {
+    modules::backup_storage::cancel_backup_root_dir_change(&migration_id)
+}
+
+/// 清理行为快照，只保留每个来源/实例/类型的最新一份。
+#[tauri::command]
+pub fn cleanup_behavior_backups() -> Result<modules::backup_storage::BackupCleanupResult, String> {
+    modules::backup_storage::cleanup_behavior_backups()
 }
 
 #[tauri::command]
@@ -2616,6 +2692,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
         codex_sync_wsl: user_config.codex_sync_wsl,
         codex_app_ui_injection_enabled: user_config.codex_app_ui_injection_enabled,
+        codex_login_page_guard_enabled: user_config.codex_login_page_guard_enabled,
         codex_cli_only_allow_app_server_clients: user_config
             .codex_cli_only_allow_app_server_clients,
         codex_wsl_config_dir: user_config.codex_wsl_config_dir,
@@ -2626,6 +2703,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         cursor_auto_refresh_minutes: user_config.cursor_auto_refresh_minutes,
         grok_auto_refresh_minutes: user_config.grok_auto_refresh_minutes,
         grok_sync_official_auth_on_switch: user_config.grok_sync_official_auth_on_switch,
+        grok_opencode_sync_on_switch: user_config.grok_opencode_sync_on_switch,
+        grok_opencode_auth_overwrite_on_switch: user_config
+            .grok_opencode_auth_overwrite_on_switch,
         claude_auto_refresh_minutes: user_config.claude_auto_refresh_minutes,
         codebuddy_auto_refresh_minutes: user_config.codebuddy_auto_refresh_minutes,
         codebuddy_cn_auto_refresh_minutes: user_config.codebuddy_cn_auto_refresh_minutes,
@@ -2857,8 +2937,8 @@ pub fn patch_general_config(
     }
 
     let mut language_changed = false;
-    let codex_client_policy_changed = updates
-        .contains_key("codex_cli_only_allow_app_server_clients");
+    let codex_client_policy_changed =
+        updates.contains_key("codex_cli_only_allow_app_server_clients");
     let mut token_keeper_enabled_changed = false;
     let mut auto_import_from_local_enabled_changed = false;
     let mut floating_always_on_top_changed = false;
@@ -3063,6 +3143,8 @@ pub fn save_general_config(
     cursor_auto_refresh_minutes: Option<i32>,
     grok_auto_refresh_minutes: Option<i32>,
     grok_sync_official_auth_on_switch: Option<bool>,
+    grok_opencode_sync_on_switch: Option<bool>,
+    grok_opencode_auth_overwrite_on_switch: Option<bool>,
     claude_auto_refresh_minutes: Option<i32>,
     codebuddy_auto_refresh_minutes: Option<i32>,
     codebuddy_cn_auto_refresh_minutes: Option<i32>,
@@ -3306,6 +3388,15 @@ pub fn save_general_config(
         if let Some(value) = grok_sync_official_auth_on_switch {
             current.grok_sync_official_auth_on_switch = value;
         }
+        let next_grok_opencode_auth_overwrite_on_switch = grok_opencode_auth_overwrite_on_switch
+            .unwrap_or(current.grok_opencode_auth_overwrite_on_switch);
+        current.grok_opencode_auth_overwrite_on_switch =
+            next_grok_opencode_auth_overwrite_on_switch;
+        current.grok_opencode_sync_on_switch = if next_grok_opencode_auth_overwrite_on_switch {
+            grok_opencode_sync_on_switch.unwrap_or(current.grok_opencode_sync_on_switch)
+        } else {
+            false
+        };
         if let Some(value) = claude_auto_refresh_minutes {
             current.claude_auto_refresh_minutes = value;
         }

@@ -1121,6 +1121,12 @@ fn account_has_refresh_token(account: &CodexAccount) -> bool {
         .is_some()
 }
 
+fn managed_account_tokens_need_refresh(account: &CodexAccount) -> bool {
+    codex_oauth::is_token_expired(&account.tokens.access_token)
+        || (account_has_refresh_token(account)
+            && codex_oauth::is_id_token_refresh_due(&account.tokens.id_token))
+}
+
 fn clear_stale_missing_refresh_token_reauth(account: &mut CodexAccount) -> Result<(), String> {
     let is_missing_refresh_token_reauth = account
         .reauth_reason
@@ -2382,6 +2388,10 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
         return Err("OAuth 账号缺少 access_token，无法写入 auth.json".to_string());
     }
 
+    let last_refresh = account
+        .token_updated_at
+        .and_then(|timestamp| chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0))
+        .map(|value| serde_json::Value::String(value.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()));
     let mut value = serde_json::to_value(CodexAuthFile {
         auth_mode: None,
         openai_api_key: Some(serde_json::Value::Null),
@@ -2393,11 +2403,7 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
             account_id: account.account_id.clone(),
         }),
         agent_identity: None,
-        last_refresh: Some(serde_json::Value::String(
-            chrono::Utc::now()
-                .format("%Y-%m-%dT%H:%M:%S%.6fZ")
-                .to_string(),
-        )),
+        last_refresh,
     })
     .map_err(|e| format!("auth.json 序列化失败: {}", e))?;
     mark_codex_auth_type(&mut value);
@@ -2763,7 +2769,7 @@ async fn refresh_managed_account_locked(
             .clone()
             .unwrap_or_else(|| "账号需要重新登录".to_string()));
     }
-    if !force && !codex_oauth::is_token_expired(&account.tokens.access_token) {
+    if !force && !managed_account_tokens_need_refresh(&account) {
         return Ok(account);
     }
 
@@ -3851,6 +3857,37 @@ mod tests {
         assert_eq!(
             auth_file.get("type").and_then(serde_json::Value::as_str),
             Some("codex")
+        );
+    }
+
+    #[test]
+    fn build_auth_file_value_uses_real_token_update_time() {
+        let mut account = CodexAccount::new(
+            "codex-last-refresh".to_string(),
+            "last-refresh@example.com".to_string(),
+            CodexTokens {
+                id_token: "id.jwt.token".to_string(),
+                access_token: "access.jwt.token".to_string(),
+                refresh_token: Some("rt_123".to_string()),
+            },
+        );
+        account.account_id = Some("acc-last-refresh".to_string());
+        account.token_updated_at = Some(1_700_000_000);
+
+        let auth_file = build_auth_file_value(&account).expect("build auth file");
+        assert_eq!(
+            auth_file
+                .get("last_refresh")
+                .and_then(serde_json::Value::as_str),
+            Some("2023-11-14T22:13:20.000000Z")
+        );
+
+        account.token_updated_at = None;
+        let auth_file_without_refresh =
+            build_auth_file_value(&account).expect("build auth file without refresh time");
+        assert_eq!(
+            auth_file_without_refresh.get("last_refresh"),
+            Some(&serde_json::Value::Null)
         );
     }
 

@@ -7,6 +7,59 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [1.3.28] - 2026-08-23
+
+### 修复
+
+- **修复 Linux/Ubuntu 官方 ChatGPT/Codex 桌面端切号失败并补齐实例管理**：支持自动识别官方 `chatgpt` 安装，默认实例和多开实例会使用与 macOS/Windows 一致的凭据检查与刷新、占用保护、桌面运行态关闭、profile 服务停止、凭据写入和重新启动事务；多开通过独立的 `CODEX_HOME` 与 Electron user-data 目录隔离，并可按实例识别和关闭，在系统提供窗口控制工具时也可定位窗口。
+- **Codex CLI 模式不再误关闭官方桌面客户端**：用户明确选择 CLI 模式时，切号、启动、停止和关闭全部实例只管理对应 profile 服务与配置；macOS、Windows 和 Linux 的 App 模式继续管理各自的官方桌面客户端运行态。
+- **修复 Trae Work CN / Trae Solo CN 账号被旧本地会话覆盖或错误归类**：运行中会话只在平台一致时同步 Token，并保留 OAuth 生成的平台、Host、scope、设备密钥和 ExchangeToken 上下文；非运行态旧 `storage.json` 只有确实晚于已保存凭据时才会参与同步，避免账号被错误归入 Trae CN 或丢失新版刷新能力。
+- **修复 Trae Work CN 账号刷新后被错误归入 Trae CN**：OAuth 完成后的运行时快照只会在账号身份、平台和凭据新旧关系匹配时同步 Token，不再用旧 `storage.json` 覆盖 `platformId`、回调信息、设备密钥和 Exchange 上下文；不同 Trae 平台的快照会被明确拒绝，避免账号分类变化或新版认证失效。
+
+### 新增
+
+- **Windows 系统操作增加统一恢复弹框**：切号、实例启停、API Service Sidecar、端口清理、备份和导出遇到“拒绝访问”、`os error 5`、文件占用或程序缺失时，会在最外层弹框显示原始原因和脱敏详情，并提供重试、手动处理后继续、打开位置和复制错误；安全范围内的受支持客户端进程可通过一次性 Windows 授权继续，后台非关键探测不会打扰用户。
+
+### 变更
+
+- **正式发布构建改为更充分的并行流程**：macOS Universal 与各平台包同时构建，校验和与 Homebrew 收尾并行执行，并修复 Cask PR 已可合并时自动合并失败的问题，缩短后续版本的发布等待时间。
+
+## [1.3.27] - 2026-08-23
+
+### 修复
+
+- **修复 Windows Codex 切号被系统权限阻断的问题**：恢复稳定的官方客户端关闭与启动方式，不再直接调用 WindowsApps 内部的 `codex.exe app-server daemon stop`，避免“拒绝访问（os error 5）”或 PowerShell 不可用导致切号失败。
+
+## [1.3.26] - 2026-08-23
+
+### 修复
+
+- **修复 Windows 新版 Codex 切号失败问题**：修复启动官方 `Codex app-server daemon stop` 时，因 WindowsApps 中的 `codex.exe` 返回“拒绝访问（os error 5）”而无法继续切换账号的问题。
+
+## [1.3.25] - 2026-08-23
+
+### 变更
+
+- **Codex 切号与重新授权更加可靠**：解决部分账号切换后需要重新登录、重新授权后账号状态或新登录信息未生效的问题；授权完成后可继续切号或启动原实例。
+- **Codex 客户端授权与 API Service 可用性分开判断**：客户端需要重新授权但 API Token 仍可用时，账号继续提供 API Service，也不会被计为无效账号。
+- **Codex 多开实例增加账号占用保护**：同一 OAuth 账号不会同时用于多个官方实例；发生占用时可定位当前实例、改选其他账号或转移账号使用权。
+- **Codex API Service 端口冲突时可自动恢复**：原端口不可用时会自动更换本地端口并恢复服务，账号、API Key 和账号池设置保持不变。
+- **行为备份改为有界保留**：Claude、Codex、WorkBuddy、CodeBuddy 及相关会话和配置修复备份按来源与实例保留最新一份，避免长期占用磁盘空间。
+
+### 修复
+
+- **修复 Codex API Service 流式对话卡住和不同对话身份互相影响的问题**：流式响应结束后会正常完成请求，不同对话保持独立会话身份。
+- **修复 Codex 账号重新添加后 API Service 统计归零的问题**：统计按官方 Codex 账号 ID 归属；删除后重新授权或导入同一官方账号，原有请求数、Token 用量和账号计费会继续保留。
+- **修复 Codex 默认实例识别和启停异常**：默认实例及其后台进程可以被正确识别、启动和关闭。
+- **修复已关闭 WebSocket 的 Codex 实例仍反复尝试连接的问题**：API Service 会保持实例当前的 WebSocket 设置。
+
+### 新增
+
+- **Grok 切号可同步 OpenCode 登录信息**：可选择在切换 Grok 账号时同步 OpenCode，并自动重启 OpenCode 使新账号立即生效；第三方自定义地址账号不会覆盖现有登录。感谢 @FB208（[#2002](https://github.com/jlcodes99/cockpit-tools/pull/2002)）。
+- **备份存储目录支持迁移到其他磁盘**：macOS 和 Windows 可在设置中选择新的本地备份目录；迁移完成后继续使用原有备份，并可按来源查看与清理占用空间。
+- **Codex 账号支持导出为官方 `auth.json` 文件**：OAuth、API Key 和 Agent Identity 账号会按对应格式导出，多个账号会生成独立文件。
+- **Codex 模型目录支持按模型配置上下文窗口与压缩阈值**：每个模型可使用默认值或自定义配置，并同步用于 Codex 客户端和 API Service。
+
 ## [1.3.24] - 2026-08-20
 
 ### 修复

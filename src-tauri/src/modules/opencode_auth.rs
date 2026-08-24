@@ -1,5 +1,6 @@
 use crate::models::codex::CodexAccount;
 use crate::models::github_copilot::GitHubCopilotAccount;
+use crate::models::grok::GrokAccount;
 use crate::modules::{codex_account, codex_oauth, logger};
 use serde_json::json;
 use std::fs;
@@ -109,6 +110,56 @@ fn decode_token_exp_ms(access_token: &str) -> Option<i64> {
     payload.exp.map(|exp| exp * 1000)
 }
 
+fn grok_expires_ms(account: &GrokAccount) -> i64 {
+    if let Some(expires_at) = account.expires_at {
+        if expires_at > 10_000_000_000 {
+            return expires_at;
+        }
+        return expires_at.saturating_mul(1000);
+    }
+    decode_token_exp_ms(&account.access_token).unwrap_or(0)
+}
+
+fn build_xai_payload_from_grok(account: &GrokAccount) -> Result<serde_json::Value, String> {
+    if account.is_api_key_auth() {
+        if account
+            .api_base_url
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+        {
+            return Err(
+                "Grok 第三方 API Key 账号不能写入 OpenCode 的 xai 条目".to_string(),
+            );
+        }
+        let key = account
+            .resolved_api_key()
+            .ok_or_else(|| "Grok API Key 缺失，无法同步到 OpenCode".to_string())?;
+        return Ok(json!({
+            "type": "api",
+            "key": key,
+        }));
+    }
+
+    let access = account.access_token.trim();
+    if access.is_empty() {
+        return Err("Grok access_token 缺失，无法同步到 OpenCode".to_string());
+    }
+    let refresh = account
+        .refresh_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Grok refresh_token 缺失，无法同步到 OpenCode".to_string())?;
+
+    Ok(json!({
+        "type": "oauth",
+        "access": access,
+        "refresh": refresh,
+        "expires": grok_expires_ms(account),
+    }))
+}
+
 fn replace_provider_entry(provider_key: &str, payload: serde_json::Value) -> Result<(), String> {
     let auth_paths = get_opencode_auth_json_path_candidates()?;
     let target_auth_path = get_opencode_auth_json_path()?;
@@ -194,4 +245,112 @@ pub fn replace_github_copilot_entry_from_account(
 ) -> Result<(), String> {
     let payload = build_github_copilot_payload(account)?;
     replace_provider_entry("github-copilot", payload)
+}
+
+/// 使用 Grok 账号凭据替换 OpenCode auth.json 中的 xai 记录
+pub fn replace_xai_entry_from_grok(account: &GrokAccount) -> Result<(), String> {
+    let payload = build_xai_payload_from_grok(account)?;
+    replace_provider_entry("xai", payload)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_xai_payload_from_grok;
+    use crate::models::grok::{GrokAccount, GrokAuthMode};
+
+    fn sample_oauth_account() -> GrokAccount {
+        GrokAccount {
+            id: "account-1".to_string(),
+            email: "person@example.com".to_string(),
+            auth_mode: GrokAuthMode::Oauth,
+            tags: None,
+            first_name: None,
+            last_name: None,
+            user_id: None,
+            principal_id: None,
+            principal_type: None,
+            team_id: None,
+            profile_image_asset_id: None,
+            coding_data_retention_opt_out: None,
+            access_token: "secret-access".to_string(),
+            api_key: None,
+            api_base_url: None,
+            api_model: None,
+            refresh_token: Some("secret-refresh".to_string()),
+            id_token: None,
+            token_type: Some("Bearer".to_string()),
+            expires_at: Some(1_900_000_000),
+            expires_at_raw: None,
+            oidc_issuer: None,
+            oidc_client_id: None,
+            token_endpoint: None,
+            plan_type: None,
+            quota: None,
+            auth_raw: None,
+            billing_raw: None,
+            subscription_raw: None,
+            user_raw: None,
+            task_usage_raw: None,
+            has_grok_code_access: None,
+            status: None,
+            status_reason: None,
+            quota_query_last_error: None,
+            quota_query_last_error_at: None,
+            usage_updated_at: None,
+            working_dir: None,
+            created_at: 1,
+            last_used: 1,
+        }
+    }
+
+    #[test]
+    fn grok_oauth_payload_uses_xai_oauth_shape() {
+        let payload = build_xai_payload_from_grok(&sample_oauth_account()).expect("oauth payload");
+        assert_eq!(payload["type"], "oauth");
+        assert_eq!(payload["access"], "secret-access");
+        assert_eq!(payload["refresh"], "secret-refresh");
+        assert_eq!(payload["expires"], 1_900_000_000_000i64);
+    }
+
+    #[test]
+    fn grok_oauth_payload_falls_back_to_jwt_exp() {
+        let mut account = sample_oauth_account();
+        account.expires_at = None;
+        account.access_token = "eyJhbGciOiJub25lIn0.eyJleHAiOjE5MDAwMDAwMDB9.sig".to_string();
+        let payload = build_xai_payload_from_grok(&account).expect("jwt payload");
+        assert_eq!(payload["expires"], 1_900_000_000_000i64);
+    }
+
+    #[test]
+    fn grok_oauth_payload_requires_refresh_token() {
+        let mut account = sample_oauth_account();
+        account.refresh_token = None;
+        let error = build_xai_payload_from_grok(&account).expect_err("missing refresh");
+        assert!(error.contains("refresh_token"));
+    }
+
+    #[test]
+    fn grok_official_api_key_payload_uses_api_shape() {
+        let mut account = sample_oauth_account();
+        account.auth_mode = GrokAuthMode::ApiKey;
+        account.access_token.clear();
+        account.refresh_token = None;
+        account.api_key = Some("xai-test-key".to_string());
+        let payload = build_xai_payload_from_grok(&account).expect("api payload");
+        assert_eq!(payload["type"], "api");
+        assert_eq!(payload["key"], "xai-test-key");
+    }
+
+    #[test]
+    fn grok_third_party_api_key_is_rejected() {
+        let mut account = sample_oauth_account();
+        account.auth_mode = GrokAuthMode::ApiKey;
+        account.access_token.clear();
+        account.refresh_token = None;
+        account.api_key = Some("proxy-key".to_string());
+        account.api_base_url = Some("https://example.com/v1".to_string());
+        account.api_model = Some("custom-model".to_string());
+        let error = build_xai_payload_from_grok(&account).expect_err("third-party");
+        assert!(error.contains("第三方"));
+    }
 }

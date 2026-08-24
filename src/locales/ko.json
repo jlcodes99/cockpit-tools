@@ -27,6 +27,26 @@
     "editable": "편집 가능",
     "preview": "미리보기",
     "advancedSettings": "고급 설정",
+    "windowsOperation": {
+      "title": "Windows 작업이 완료되지 않음",
+      "accessDeniedDescription": "Windows가 작업을 거부했습니다. 대상이 더 높은 권한으로 실행 중이거나 보호된 위치에 있을 수 있습니다.",
+      "fileInUseDescription": "대상 파일을 다른 프로그램에서 사용 중입니다. 해당 프로그램을 닫고 다시 시도하세요.",
+      "programNotFoundDescription": "작업에 필요한 프로그램을 찾을 수 없습니다. 설치 상태나 설정된 경로를 확인하세요.",
+      "portDeniedDescription": "Windows가 포트 접근을 차단했습니다. 시스템 정책이나 다른 프로그램에서 사용 중일 수 있습니다.",
+      "genericDescription": "시스템 작업이 완료되지 않았습니다. 다시 시도하거나 원인을 해결한 후 계속하세요.",
+      "originalReason": "원래 원인",
+      "copyError": "오류 복사",
+      "openTarget": "위치 열기",
+      "viewDetails": "세부 정보 보기",
+      "hideDetails": "세부 정보 접기",
+      "operationLabel": "작업",
+      "targetLabel": "대상",
+      "attemptedRecoveries": "시도한 방법",
+      "manualContinue": "처리 완료, 계속",
+      "retry": "다시 시도",
+      "authorizeContinue": "권한을 허용하고 계속",
+      "authorizationCancelled": "Windows 권한 요청이 취소되어 작업을 계속하지 않았습니다."
+    },
     "codexFingerprint": {
       "modeLabel": "기기 지문 모드",
       "modeHint": "OAuth만 해당. 기본값은 세션. 계정별로 설치/세션을 분리하고 작업 영역을 바꿔 한 기기의 다중 계정 연결을 줄입니다.",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store에서 인스턴스 디렉터리를 안정적으로 전달할 수 없어 기본 계정 열기를 차단했습니다. 이 인스턴스의 실행 방식을 CLI로 변경한 후 다시 시도하세요. 세부 정보: {{detail}}",
       "speedUpdated": "속도가 업데이트되었습니다"
     },
+    "accountLease": {
+      "title": "Codex 인스턴스 시작 중",
+      "progress": "시작 진행률",
+      "conflictTitle": "계정이 사용 중입니다",
+      "completedTitle": "인스턴스가 시작됨",
+      "failedTitle": "인스턴스 시작 실패",
+      "conflictAccount": "계정: {{account}}",
+      "conflictDescription": "이 계정은 {{owners}}에서 실행 중입니다. 공식 인스턴스 간 refresh_token 충돌을 막기 위해 OAuth 계정 하나는 인스턴스 하나에서만 실행할 수 있습니다.",
+      "locate": "인스턴스 찾기",
+      "selectOther": "다른 계정 선택",
+      "transfer": "중지 후 이전",
+      "steps": {
+        "checkInstance": "대상 인스턴스 확인",
+        "checkAccount": "연결 계정 확인",
+        "checkOccupancy": "계정 사용 확인",
+        "stopPrevious": "이전 인스턴스 중지",
+        "prepareCredentials": "로그인 정보 준비",
+        "writeProfile": "인스턴스 설정 쓰기",
+        "startClient": "Codex 클라이언트 시작"
+      },
+      "detail": {
+        "checkingInstance": "인스턴스 설정을 읽는 중...",
+        "checkingAccount": "OAuth 계정과 토큰을 확인하는 중...",
+        "noOAuthAccount": "연결된 OAuth 계정이 없어 사용 확인이 필요하지 않습니다",
+        "accountInUse": "이 OAuth 계정은 실행 중인 인스턴스에서 이미 사용 중입니다",
+        "accountAvailable": "이 계정을 사용하는 다른 실행 인스턴스가 없습니다",
+        "transferSkipped": "계정 실행 권한을 이전할 필요가 없습니다",
+        "stoppingOwners": "안전하게 중지 중: {{owners}}",
+        "stoppingPrevious": "이전 인스턴스를 안전하게 중지하고 최신 로그인 정보를 회수하는 중...",
+        "preparingCredentials": "토큰을 확인하고 필요 시 전체 로그인 정보를 갱신하는 중...",
+        "profileReady": "인스턴스 auth.json / 키체인이 안전하게 갱신되었습니다",
+        "cliPrepared": "CLI 시작 명령이 준비되었습니다",
+        "startingClient": "Codex 클라이언트 프로세스를 시작하고 확인하는 중..."
+      }
+    },
     "runningDialog": {
       "title": "인스턴스가 이미 실행 중입니다",
       "desc": "이 인스턴스는 이미 실행 중입니다. 창으로 이동하거나 현재 전략으로 재시작할 수 있습니다.",
@@ -682,6 +737,9 @@
       "codexAppUiInjectionPoolLabel": "계정",
       "codexAppUiInjectionWeeklyLabel": "주",
       "codexAppUiInjectionFiveHourLabel": "5시간",
+      "codexAppUiInjectionBalanceLabel": "잔액",
+      "codexLoginPageGuard": "로그인 페이지 보호",
+      "codexLoginPageGuardDesc": "관리되는 Codex 인스턴스를 다시 시작하면 CDP가 사용 가능한 대화 페이지를 유지하고 셸 OAuth 상태가 로그인 화면으로 전환하지 못하게 합니다. 페이지 전환만 차단하며 만료된 OAuth 자격 증명은 복구하지 않습니다.",
       "codexWslConfigDir": "WSL Codex 디렉터리",
       "codexWslConfigDirDesc": "WSL 안의 .codex 디렉터리를 입력하세요. \\\\wsl.localhost\\ 경로를 지원합니다.",
       "codexWslConfigDirPlaceholder": "예: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -766,6 +824,11 @@
       "openclawAuthOverwriteDesc": "끄면 Codex만 전환되고 OpenClaw는 현재 로그인 상태를 유지합니다",
       "ghcpOpencodeAuthOverwrite": "GitHub Copilot 전환 시 OpenCode 로그인 덮어쓰기",
       "ghcpOpencodeRestart": "GitHub Copilot 전환 시 OpenCode 재시작",
+      "grokOpencodeAuthOverwrite": "Grok 전환 시 OpenCode 로그인 덮어쓰기",
+      "grokOpencodeAuthOverwriteDesc": "끄면 Grok만 전환되고 OpenCode는 현재 로그인 상태를 유지합니다",
+      "grokOpencodeRestart": "Grok 전환 시 OpenCode 재시작",
+      "grokOpencodeRestartDesc": "OpenCode 로그인 정보를 덮어쓴 뒤 즉시 적용하려면 재시작합니다",
+      "grokOpencodeRestartRequiresOverwrite": "먼저 \"Grok 전환 시 OpenCode 로그인 덮어쓰기\"를 켜세요",
       "ghcpLaunchOnSwitch": "GitHub Copilot 전환 시 GitHub Copilot App 자동 실행",
       "zedAutoRefresh": "Zed 할당량 자동 새로고침",
       "zedAutoRefreshDesc": "백그라운드 업데이트 주기",
@@ -997,6 +1060,13 @@
         "retentionUnit": "일",
         "directoryTitle": "백업 폴더",
         "directoryDesc": "백업은 항상 프로젝트의 backups 폴더에 저장됩니다.",
+        "changeDirectory": "폴더 변경", "migrating": "이동 중...", "migrationConfirm": "기존 백업을 {{oldPath}}에서 {{newPath}}로 이동할까요?\n\n취소하면 이전 파일을 이동하지 않고 폴더만 변경합니다.", "usageTitle": "백업 디스크 사용량", "usageDesc": "예약 백업과 플랫폼 동작 스냅샷의 로컬 사용량을 표시합니다.", "usageEmpty": "로컬 백업 파일이 없습니다.", "cleanupBehavior": "오래된 동작 백업 정리", "behaviorCleanupConfirm": "오래된 동작 백업을 정리할까요? 플랫폼과 인스턴스별 최신 백업만 유지하며 예약 JSON/ZIP은 삭제하지 않습니다.", "sources": {"scheduled": "예약 JSON/ZIP", "behavior": "동작 스냅샷", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "기타"},
+        "migrationConfirmTitle": "백업 폴더 변경",
+        "migrationConfirmDesc": "기존 백업을 확인했습니다. 이전 폴더의 공간을 확보하도록 이전하거나 앞으로의 백업 위치만 변경할 수 있습니다.",
+        "migrationOldPath": "이전 폴더", "migrationNewPath": "새 폴더", "migrationTotalSize": "이전할 용량", "migrationTotalFiles": "이전할 파일",
+        "migrationSafetyNote": "임시 영역에 복사하고 검증한 뒤 폴더를 전환하고 이전 백업을 삭제합니다.",
+        "switchOnly": "위치만 변경", "migrateAndSwitch": "이전 후 변경",
+        "migrationProgress": {"title": "백업 폴더 이전", "filesUnit": "개 파일", "currentSource": "현재 원본", "completedSummary": "{{count}}개 파일({{size}})을 이전하고 새 폴더로 전환했습니다.", "switchOnlyCompleted": "앞으로 백업은 {{path}}에 저장됩니다. 기존 백업은 이동하지 않았습니다.", "cleanupPartial": "새 폴더는 적용되었지만 다음 이전 폴더를 삭제하지 못했습니다. 나중에 직접 삭제하세요:", "cancelledDesc": "이전을 취소했습니다. 원래 백업 폴더는 변경되지 않았고 임시 파일은 삭제되었습니다.", "cancelling": "취소 중...", "cancelAction": "이전 취소", "finishing": "마무리 중...", "phases": {"scanning": "백업 파일 확인 중...", "copying": "백업 파일 복사 중...", "verifying": "복사 결과 검증 중...", "switching": "백업 폴더 전환 중...", "cleaning": "이전 백업 삭제 중...", "completed": "이전 완료", "cancelled": "이전 취소됨"}},
         "openFolder": "폴더 열기",
         "listTitle": "백업 목록",
         "listDesc": "백업을 바로 가져오거나 오래된 파일을 삭제할 수 있습니다.",
@@ -1024,6 +1094,8 @@
           "openFolderFailed": "백업 폴더를 열지 못했습니다: {{error}}",
           "downloadSuccess": "백업을 {{path}}에 다운로드했습니다",
           "downloadFailed": "백업 다운로드 실패: {{error}}"
+          ,"migrating": "백업 폴더 이동 중...", "migrationDone": "{{count}}개 파일을 {{path}}로 이동했습니다", "directoryChanged": "백업 폴더를 {{path}}로 변경했습니다", "directoryChangeFailed": "백업 폴더 변경 실패: {{error}}", "behaviorCleaning": "오래된 동작 백업 정리 중...", "behaviorCleanupDone": "{{count}}개를 정리하고 {{size}}를 확보했습니다", "behaviorCleanupFailed": "동작 백업 정리 실패: {{error}}"
+          ,"scanningMigration": "이전할 백업 확인 중..."
         },
         "errors": {
           "invalidRetention": "보관 기간은 1일에서 365일 사이여야 합니다"
@@ -1151,7 +1223,7 @@
       "title": "애플리케이션 경로를 찾을 수 없음",
       "desc": "{{app}} 애플리케이션 경로를 찾을 수 없습니다. 계속하려면 지금 설정해 주세요.",
       "action": "지금 설정",
-      "codexLaunchHint": "끄면 계정 전환과 로그인 덮어쓰기는 계속 실행되지만, Codex 앱은 더 이상 실행되지 않으며 이 실행 경로 안내도 다시 표시되지 않습니다.",
+      "codexLaunchHint": "계정 전환은 완료되었습니다. 앱을 실행하려면 경로를 설정하세요. 전환 후 실행하지 않으려면 설정에서 「Codex 전환 시 Codex App 자동 실행」을 끄세요.",
       "claudeMultiInstanceRequiresExe": "Claude 다중 인스턴스는 실제 Claude.exe 경로가 필요합니다. Microsoft Store 대상은 기본 데스크톱에만 사용할 수 있습니다.",
       "scanApps": "앱 스캔",
       "scanRoots": "Seukaen beomwi",
@@ -1868,7 +1940,7 @@
     "title": "Codex 계정 관리",
     "experimentalModelCatalog": {
       "title": "표시 모델",
-      "description": "사용 가능한 공식 모델과 사용자 지정 항목으로 Cockpit 관리 카탈로그를 생성하며 사용자 카탈로그는 덮어쓰지 않습니다.",
+      "description": "표시 모델, 추론 강도, 컨텍스트 창 및 압축 임계값을 한곳에서 관리합니다.",
       "enabledHint": "현재 표시 모델 목록을 사용합니다. Codex를 다시 시작하세요.",
       "models": {
         "title": "모델 목록",
@@ -1890,8 +1962,18 @@
           "displayName": "100자 이하의 표시 이름을 입력하세요.",
           "duplicate": "모델 ID는 중복될 수 없습니다.",
           "reasoningEffort": "잘못된 추론 강도 옵션입니다.",
-          "reserved": "이 모델 ID는 공식 모델과 충돌합니다. 다른 ID를 사용하세요."
-        }
+          "reserved": "이 모델 ID는 공식 모델과 충돌합니다. 다른 ID를 사용하세요.",
+          "contextPair": "컨텍스트 창과 압축 임계값을 모두 입력해야 합니다.",
+          "contextWindow": "컨텍스트 창은 0보다 큰 정수여야 합니다.",
+          "autoCompact": "압축 임계값은 0보다 큰 정수여야 합니다.",
+          "autoCompactRange": "압축 임계값은 컨텍스트 창보다 작아야 합니다."
+        },
+        "contextConfig": "컨텍스트 및 압축",
+        "contextDefault": "모델 따름",
+        "contextDefaultShort": "기본값",
+        "contextCustomShort": "사용자 지정",
+        "contextWindow": "컨텍스트 창",
+        "autoCompactLimit": "압축 임계값"
       },
       "unavailable": {
         "cacheMissing": "models_cache.json을 찾을 수 없습니다.",
@@ -1965,6 +2047,24 @@
       "staleAccount": "이 계정은 더 이상 로컬 계정 저장소에 없습니다. 계정 목록을 새로 고쳤습니다. 이 Codex 계정을 다시 가져오거나 다시 로그인하세요.",
       "unsupportedCountryRegion": "현재 네트워크 지역에서는 Codex 인증을 새로고침할 수 없습니다. OpenAI 인증 서비스가 이 네트워크 출구를 거부했습니다. 지원되는 지역으로 전환한 뒤 다시 시도하세요."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "클라이언트 로그인 필요",
+      "reauthorizeTitle": "Codex 인증 만료",
+      "apiOnlyDescription": "현재 access_token은 API 서비스에서 일시적으로 사용할 수 있지만 클라이언트 로그인 정보를 갱신하지 못해 공식 Codex/ChatGPT 클라이언트로 전환하지 않았습니다.",
+      "reauthorizeDescription": "로그인 정보를 갱신할 수 없고 access_token도 API 서비스에서 사용할 수 없습니다. 계속하려면 다시 인증하세요.",
+      "idTokenUnavailable": "클라이언트 ID 정보가 만료되었으며 자동 갱신 후에도 유효한 id_token을 받지 못했습니다.",
+      "reasonLabel": "원인",
+      "accessTokenExpiry": "API 임시 사용 기한: {{time}}",
+      "apiServiceAddFailed": "API 서비스에 계정을 추가하지 못했습니다: {{error}}",
+      "switchingAfterReauth": "인증이 갱신되었습니다. 계정 전환을 계속합니다...",
+      "switchAfterReauthFailed": "인증은 갱신되었지만 계정 전환에 실패했습니다: {{error}}",
+      "reauthGenerationMissing": "이번 인증 자격 증명 버전을 확인할 수 없습니다. 계정을 다시 전환하세요.",
+      "reauthorizedAndSwitched": "재인증 및 전환 완료",
+      "startingInstanceAfterReauth": "인증이 업데이트되었습니다. 인스턴스를 다시 시작합니다...",
+      "startInstanceAfterReauthFailed": "인증은 업데이트되었지만 인스턴스를 시작하지 못했습니다: {{error}}",
+      "reauthorizedAndStartedInstance": "재인증 후 인스턴스를 시작했습니다",
+      "apiOnlyBadge": "인증 필요"
+    },
     "current": "현재",
     "empty": {
       "description": "\"계정 추가\"를 눌러 Codex 계정을 관리하세요"
@@ -2021,6 +2121,7 @@
     "exportFormat": {
       "label": "내보내기 형식",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "공식 auth.json",
       "sub2api": "sub2api 형식",
       "cpa": "cpa 형식",
       "agentIdentityCpaUnsupported": "Agent Identity 계정은 cpa 형식으로 내보낼 수 없습니다. Cockpit Tools 또는 sub2api를 사용하세요.",
@@ -2172,6 +2273,10 @@
       "killPortSuccess": "포트를 정리했습니다({{count}}개 프로세스 종료)",
       "killPortSuccessNone": "포트를 확인했습니다. 외부 프로세스가 사용 중이지 않습니다.",
       "killPortSuccessUnknown": "API 서비스 포트를 정리했습니다",
+      "restartAction": "Sidecar 재시작",
+      "restartTitle": "API 서비스 재시작",
+      "restartConfirmMessage": "API 서비스 Sidecar만 재시작합니다. 계정, Token, API Key 및 계정 풀 설정은 변경되지 않습니다. 진행 중인 요청이 중단될 수 있습니다. 계속하시겠습니까?",
+      "restartSuccess": "API 서비스 Sidecar를 재시작했습니다",
       "refreshStats": "통계 새로고침",
       "refreshStatsSuccess": "API 서비스 통계를 새로고침했습니다",
       "routingStrategy": {
@@ -2223,6 +2328,7 @@
         "title": "할당량 풀",
         "hourlyShort": "5h​",
         "weeklyShort": "주",
+        "balance": "잔액",
         "viewFull": "전체 통계 보기",
         "modalTitle": "API 서비스 할당량 풀",
         "empty": "할당량 통계가 아직 없습니다"
@@ -2432,6 +2538,7 @@
     "quotaError": {
       "badge": "할당량 오류",
       "refreshFailedBadge": "새로고침 실패",
+      "authRefreshDeferred": "refresh_token이 만료되었습니다. 현재 access_token은 API 서비스에서 계속 사용할 수 있지만 공식 클라이언트로 전환할 수 없습니다. 다시 인증한 후 전환하세요.",
       "generic": "할당량 새로고침에 실패했습니다. 나중에 다시 시도하세요",
       "deactivatedWorkspace": "워크스페이스가 비활성화되었습니다. 계정을 전환하거나 다시 인증하세요",
       "requestFailedManualRetry": "네트워크를 확인하세요. 최신 할당량을 가져오지 못했습니다. 새로고침해 다시 시도하세요.",
@@ -3037,6 +3144,7 @@
         "custom": "사용자 지정",
         "endpoint": "공급자 엔드포인트",
         "hint": "호환되는 Base URL이 자동으로 입력되었습니다. 필요하면 수동으로 수정할 수 있습니다.",
+        "cockpitToolsHint": "Base URL을 Cockpit Tools 호스트의 LAN 주소(예: http://HOST_IP:PORT/v1)로 바꾸세요. 계정 카드가 /cockpit/quota를 자동으로 조회합니다.",
         "website": "웹사이트",
         "apiKeyPage": "API 키 페이지",
         "getApiKey": "키 받기"
@@ -3101,6 +3209,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools LAN 서비스"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3278,7 +3389,8 @@
         "contextWindow": "컨텍스트 창",
         "contextWindowHint": "model_context_window를 작성합니다. 사용자 정의 모드에서만 편집할 수 있습니다.",
         "partialDetected": "현재 하나의 관리 필드(model_context_window={{context}}, model_auto_compact_token_limit={{compact}})만 설정되어 있습니다. 저장하면 현재 구성표를 사용하여 두 필드가 모두 다시 작성됩니다.",
-        "notSet": "설정되지 않음"
+        "notSet": "설정되지 않음",
+        "modelCatalogDesc": "표시 모델과 모델별 컨텍스트 설정을 현재 Codex의 Cockpit 관리 모델 카탈로그에 통합하여 기록합니다."
       },
       "testing": "테스트 중...",
       "testSuccess": "공급자 연결이 정상입니다: {{protocol}}, {{model}}, {{latency}}.",
@@ -3388,6 +3500,14 @@
         "rawFields": "서비스 데이터",
         "fields": {
           "status": "상태",
+          "fiveHourRemainingPercent": "5시간 잔여",
+          "weeklyRemainingPercent": "주간 잔여",
+          "accountCount": "계정 풀",
+          "availableAccountCount": "사용 가능한 계정",
+          "abnormalAccountCount": "비정상 계정",
+          "cooldownAccountCount": "대기 중인 계정",
+          "stale": "오래된 데이터",
+          "apiKeyBalance": "API_KEY 잔액",
           "planName": "구독",
           "remaining": "잔여 한도",
           "balance": "잔액",
@@ -3478,6 +3598,56 @@
       "filterMissing": "알 수 없음 ({{count}})",
       "accessTokenOnlyUsable": "토큰 사용 가능",
       "accessTokenOnlyUsableDetail": "구독 정보 엔드포인트는 제한되지만 할당량과 Codex 사용은 정상입니다"
+    },
+    "switchProgress": {
+      "completed": "전환 완료",
+      "needsAttention": "조치 필요",
+      "steps": {
+        "credentials": "계정 인증 정보 읽기",
+        "accessToken": "access_token 확인",
+        "idToken": "id_token 확인",
+        "stopRuntime": "이전 실행 상태 중지",
+        "refreshTokens": "로그인 정보 갱신",
+        "writeCredentials": "클라이언트 인증 정보 쓰기",
+        "syncSettings": "계정 설정 동기화",
+        "startClient": "Codex 클라이언트 시작"
+      },
+      "status": {
+        "pending": "대기 중",
+        "running": "처리 중",
+        "completed": "완료",
+        "warning": "갱신 필요",
+        "skipped": "건너뜀",
+        "error": "실패"
+      },
+      "detail": {
+        "missing": "인증 정보를 찾을 수 없음",
+        "opaqueToken": "불투명 Token이며 만료 여부는 서비스에서 확인합니다",
+        "expiryUnknown": "만료 시간을 확인할 수 없음",
+        "expiresAt": "유효 기한: {{time}} ({{relative}})",
+        "readingCredentials": "로컬 계정과 Token 정보를 읽는 중...",
+        "nonOAuthAccount": "OAuth 계정이 아니므로 로그인 Token 확인이 필요하지 않습니다",
+        "credentialsFound": "읽음: {{tokens}}",
+        "notApplicable": "이 계정에는 해당 확인이 필요하지 않습니다",
+        "refreshNeeded": "만료되었거나 안전 갱신 구간이므로 갱신이 필요합니다",
+        "tokenValid": "현재 유효하며 갱신이 필요하지 않습니다",
+        "stoppingRuntime": "ChatGPT/Codex와 app-server를 안전하게 중지하는 중...",
+        "runtimeStopped": "이전 클라이언트 실행 상태를 안전하게 중지했습니다",
+        "waiting": "이전 단계 완료를 기다리는 중",
+        "refreshingTokens": "새 access_token, id_token, refresh_token을 가져와 저장하는 중...",
+        "refreshSkipped": "AT와 ID Token이 유효하여 refresh_token을 사용하지 않았습니다",
+        "refreshFailed": "전체 Token 세트를 자동으로 갱신할 수 없습니다",
+        "refreshResultReused": "다른 갱신 주체가 저장한 최신 Token을 사용했습니다",
+        "refreshCompleted": "전체 Token 세트를 갱신하고 안전하게 저장했습니다",
+        "credentialsWritten": "공식 규칙에 따라 auth.json / keychain을 갱신했습니다",
+        "writingCredentials": "대상 계정의 로그인 정보를 쓰는 중...",
+        "settingsSynced": "계정 연결, 속도 및 관련 설정을 동기화했습니다",
+        "syncingSettings": "계정 연결과 관련 설정을 동기화하는 중...",
+        "launchDisabled": "전환 후 자동 시작이 꺼져 있습니다. 나중에 직접 시작하세요",
+        "clientStartWarning": "인증 정보는 전환됐지만 시작에 실패했습니다. 나중에 다시 시도하세요",
+        "clientStarted": "Codex 클라이언트를 시작했습니다",
+        "startingClient": "Codex 클라이언트를 시작하는 중..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Codex 세션이 보이지 않음",

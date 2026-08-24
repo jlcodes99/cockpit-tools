@@ -27,6 +27,26 @@
     "editable": "Редактируемо",
     "preview": "Предпросмотр",
     "advancedSettings": "Расширенные настройки",
+    "windowsOperation": {
+      "title": "Операция Windows не завершена",
+      "accessDeniedDescription": "Windows отклонила операцию. Целевая программа может работать с повышенными правами или находиться в защищённой папке.",
+      "fileInUseDescription": "Файл используется другой программой. Закройте её и повторите попытку.",
+      "programNotFoundDescription": "Windows не нашла необходимую программу. Проверьте установку или указанный путь.",
+      "portDeniedDescription": "Windows заблокировала доступ к порту. Его может использовать системная политика или другая программа.",
+      "genericDescription": "Системная операция не завершена. Повторите её или устраните исходную причину.",
+      "originalReason": "Исходная причина",
+      "copyError": "Копировать ошибку",
+      "openTarget": "Открыть расположение",
+      "viewDetails": "Показать подробности",
+      "hideDetails": "Скрыть подробности",
+      "operationLabel": "Операция",
+      "targetLabel": "Цель",
+      "attemptedRecoveries": "Предпринятые попытки",
+      "manualContinue": "Проблема решена",
+      "retry": "Повторить",
+      "authorizeContinue": "Разрешить и продолжить",
+      "authorizationCancelled": "Авторизация Windows отменена. Операция не продолжена."
+    },
     "codexFingerprint": {
       "modeLabel": "Режим отпечатка устройства",
       "modeHint": "Только OAuth; по умолчанию сессия. Разделяет установку и сессию по аккаунту и переписывает рабочие каталоги, чтобы локальные аккаунты не связывались.",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store не может надежно передать каталог экземпляра, поэтому открытие учетной записи по умолчанию заблокировано. Переключите этот экземпляр в режим запуска CLI и повторите попытку. Подробности: {{detail}}",
       "speedUpdated": "Скорость обновлена"
     },
+    "accountLease": {
+      "title": "Запуск экземпляра Codex",
+      "progress": "Ход запуска",
+      "conflictTitle": "Учётная запись уже используется",
+      "completedTitle": "Экземпляр запущен",
+      "failedTitle": "Не удалось запустить экземпляр",
+      "conflictAccount": "Учётная запись: {{account}}",
+      "conflictDescription": "Эта учётная запись работает в {{owners}}. Чтобы официальные экземпляры не конкурировали за refresh_token, одна учётная запись OAuth может работать только в одном экземпляре.",
+      "locate": "Найти экземпляр",
+      "selectOther": "Выбрать другую",
+      "transfer": "Остановить и перенести",
+      "steps": {
+        "checkInstance": "Проверка целевого экземпляра",
+        "checkAccount": "Проверка привязанной записи",
+        "checkOccupancy": "Проверка использования записи",
+        "stopPrevious": "Остановка прежнего экземпляра",
+        "prepareCredentials": "Подготовка данных входа",
+        "writeProfile": "Запись профиля экземпляра",
+        "startClient": "Запуск клиента Codex"
+      },
+      "detail": {
+        "checkingInstance": "Чтение конфигурации экземпляра...",
+        "checkingAccount": "Проверка учётной записи OAuth и токенов...",
+        "noOAuthAccount": "Учётная запись OAuth не привязана; проверка не требуется",
+        "accountInUse": "Эта учётная запись OAuth уже используется работающим экземпляром",
+        "accountAvailable": "Другие работающие экземпляры не используют эту запись",
+        "transferSkipped": "Перенос использования записи не требуется",
+        "stoppingOwners": "Безопасная остановка: {{owners}}",
+        "stoppingPrevious": "Безопасная остановка прежнего экземпляра и получение свежих данных входа...",
+        "preparingCredentials": "Проверка токенов и обновление полного набора данных входа при необходимости...",
+        "profileReady": "auth.json / связка ключей экземпляра безопасно обновлены",
+        "cliPrepared": "Команда запуска CLI готова",
+        "startingClient": "Запуск и проверка процесса клиента Codex..."
+      }
+    },
     "runningDialog": {
       "title": "Инстанс уже запущен",
       "desc": "Этот инстанс уже запущен. Вы можете переключиться в окно или перезапустить его согласно текущей стратегии.",
@@ -682,6 +737,9 @@
       "codexAppUiInjectionPoolLabel": "Аккаунты",
       "codexAppUiInjectionWeeklyLabel": "Неделя",
       "codexAppUiInjectionFiveHourLabel": "5 ч",
+      "codexAppUiInjectionBalanceLabel": "Баланс",
+      "codexLoginPageGuard": "Защита страницы входа",
+      "codexLoginPageGuardDesc": "После перезапуска управляемого экземпляра Codex CDP сохраняет рабочую страницу диалога и не позволяет состоянию OAuth оболочки заменить её экраном входа. Функция блокирует только смену страницы и не восстанавливает просроченные данные OAuth.",
       "codexWslConfigDir": "Каталог Codex в WSL",
       "codexWslConfigDirDesc": "Укажите каталог .codex внутри WSL. Поддерживаются пути \\\\wsl.localhost\\.",
       "codexWslConfigDirPlaceholder": "Пример: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -766,6 +824,11 @@
       "openclawAuthOverwriteDesc": "Если выключено, переключается только Codex, а OpenClaw сохраняет текущее состояние входа в систему.",
       "ghcpOpencodeAuthOverwrite": "Перезаписать логин OpenCode при переключении GitHub Copilot",
       "ghcpOpencodeRestart": "Перезапускать OpenCode при переключении GitHub Copilot",
+      "grokOpencodeAuthOverwrite": "Перезаписать логин OpenCode при переключении Grok",
+      "grokOpencodeAuthOverwriteDesc": "Если выключено, переключается только Grok, а OpenCode сохраняет текущий вход",
+      "grokOpencodeRestart": "Перезапускать OpenCode при переключении Grok",
+      "grokOpencodeRestartDesc": "После перезаписи входа OpenCode перезапустите его, чтобы применить сразу",
+      "grokOpencodeRestartRequiresOverwrite": "Сначала включите «Перезаписать логин OpenCode при переключении Grok»",
       "ghcpLaunchOnSwitch": "Автоматически запускать GitHub Copilot App при переключении GitHub Copilot",
       "zedAutoRefresh": "Автообновление квоты Zed",
       "zedAutoRefreshDesc": "Частота обновления в фоне",
@@ -997,6 +1060,13 @@
         "retentionUnit": "дн.",
         "directoryTitle": "Папка резервных копий",
         "directoryDesc": "Резервные копии всегда сохраняются в папке backups проекта.",
+        "changeDirectory": "Изменить папку", "migrating": "Перенос...", "migrationConfirm": "Перенести существующие копии из {{oldPath}} в {{newPath}}?\n\nОтмена сменит папку без переноса старых файлов.", "usageTitle": "Занятое место копий", "usageDesc": "Показывает локальный объём плановых копий и снимков платформ.", "usageEmpty": "Локальные копии не найдены.", "cleanupBehavior": "Очистить старые поведенческие копии", "behaviorCleanupConfirm": "Очистить старые поведенческие копии? Для каждой платформы и экземпляра останется последняя. Плановые JSON/ZIP не удаляются.", "sources": {"scheduled": "Плановые JSON/ZIP", "behavior": "Поведенческие снимки", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "Другое"},
+        "migrationConfirmTitle": "Изменить папку резервных копий",
+        "migrationConfirmDesc": "Существующие копии просканированы. Перенесите их и освободите старую папку или измените только место будущих копий.",
+        "migrationOldPath": "Старая папка", "migrationNewPath": "Новая папка", "migrationTotalSize": "Данные для переноса", "migrationTotalFiles": "Файлы для переноса",
+        "migrationSafetyNote": "Файлы сначала копируются во временную область и проверяются. Затем папка переключается, а старые копии удаляются.",
+        "switchOnly": "Только изменить", "migrateAndSwitch": "Перенести и изменить",
+        "migrationProgress": {"title": "Перенос папки резервных копий", "filesUnit": "файлов", "currentSource": "Текущий источник", "completedSummary": "Перенесено {{count}} файлов ({{size}}), новая папка активирована.", "switchOnlyCompleted": "Новые копии будут сохраняться в {{path}}. Существующие копии не перемещены.", "cleanupPartial": "Новая папка активна, но следующие старые папки удалить не удалось. Удалите их позже вручную:", "cancelledDesc": "Перенос отменён. Исходная папка не изменена, временные файлы удалены.", "cancelling": "Отмена...", "cancelAction": "Отменить перенос", "finishing": "Завершение...", "phases": {"scanning": "Сканирование копий...", "copying": "Копирование файлов...", "verifying": "Проверка файлов...", "switching": "Переключение папки...", "cleaning": "Удаление старых копий...", "completed": "Перенос завершён", "cancelled": "Перенос отменён"}},
         "openFolder": "Открыть папку",
         "listTitle": "Список копий",
         "listDesc": "Импортируйте копию напрямую или удаляйте старые файлы.",
@@ -1024,6 +1094,8 @@
           "openFolderFailed": "Не удалось открыть папку резервных копий: {{error}}",
           "downloadSuccess": "Резервная копия скачана в {{path}}",
           "downloadFailed": "Не удалось скачать резервную копию: {{error}}"
+          ,"migrating": "Перенос папки копий...", "migrationDone": "Перенесено файлов: {{count}} в {{path}}", "directoryChanged": "Папка копий изменена на {{path}}", "directoryChangeFailed": "Не удалось изменить папку копий: {{error}}", "behaviorCleaning": "Очистка старых поведенческих копий...", "behaviorCleanupDone": "Удалено копий: {{count}}, освобождено {{size}}", "behaviorCleanupFailed": "Не удалось очистить поведенческие копии: {{error}}"
+          ,"scanningMigration": "Сканирование копий для переноса..."
         },
         "errors": {
           "invalidRetention": "Срок хранения должен быть от 1 до 365 дней"
@@ -1151,7 +1223,7 @@
       "title": "Путь к приложению не найден",
       "desc": "Не удалось найти путь к приложению {{app}}. Установите его сейчас, чтобы продолжить.",
       "action": "Установить сейчас",
-      "codexLaunchHint": "После отключения переключение аккаунта и перезапись входа продолжат выполняться, но приложение Codex больше не будет запускаться, и этот запрос пути больше не появится.",
+      "codexLaunchHint": "Смена аккаунта уже выполнена. Чтобы запустить приложение, укажите путь. Чтобы не запускать после смены, в настройках отключите «Автоматически запускать Codex App при переключении Codex».",
       "claudeMultiInstanceRequiresExe": "Для нескольких экземпляров Claude нужен реальный путь к Claude.exe. Цели Microsoft Store подходят только для стандартного настольного профиля.",
       "scanApps": "Сканировать приложения",
       "scanRoots": "Oblast skanirovaniya",
@@ -1868,7 +1940,7 @@
     "title": "Управление аккаунтами Codex",
     "experimentalModelCatalog": {
       "title": "Видимые модели",
-      "description": "Создаёт управляемый Cockpit каталог доступных официальных моделей и пользовательских записей, не перезаписывая каталог пользователя.",
+      "description": "Управляйте видимыми моделями, уровнем рассуждений, контекстом и порогом сжатия в одном месте.",
       "enabledHint": "Использует текущий список видимых моделей. Перезапустите Codex для применения.",
       "models": {
         "title": "Список моделей",
@@ -1890,8 +1962,18 @@
           "displayName": "Введите отображаемое имя длиной не более 100 символов.",
           "duplicate": "ID моделей не должны повторяться.",
           "reasoningEffort": "Недопустимый уровень рассуждений.",
-          "reserved": "Этот ID совпадает с официальной моделью. Используйте другой ID."
-        }
+          "reserved": "Этот ID совпадает с официальной моделью. Используйте другой ID.",
+          "contextPair": "Окно контекста и порог сжатия нужно указывать вместе.",
+          "contextWindow": "Окно контекста должно быть целым числом больше 0.",
+          "autoCompact": "Порог сжатия должен быть целым числом больше 0.",
+          "autoCompactRange": "Порог сжатия должен быть меньше окна контекста."
+        },
+        "contextConfig": "Контекст и сжатие",
+        "contextDefault": "Как в модели",
+        "contextDefaultShort": "По умолчанию",
+        "contextCustomShort": "Свои значения",
+        "contextWindow": "Окно контекста",
+        "autoCompactLimit": "Порог сжатия"
       },
       "unavailable": {
         "cacheMissing": "Файл models_cache.json не найден.",
@@ -1965,6 +2047,24 @@
       "staleAccount": "Этой учетной записи больше нет в локальном хранилище. Список учетных записей обновлен. Импортируйте эту учетную запись Codex заново или войдите снова.",
       "unsupportedCountryRegion": "Текущий сетевой регион не поддерживает обновление авторизации Codex. Сервис авторизации OpenAI отклонил этот сетевой выход. Переключитесь на поддерживаемый регион и повторите попытку."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "Требуется вход в клиент",
+      "reauthorizeTitle": "Авторизация Codex истекла",
+      "apiOnlyDescription": "Текущий access_token временно можно использовать в службе API, но данные входа клиента обновить не удалось, поэтому официальный клиент Codex/ChatGPT не был переключён.",
+      "reauthorizeDescription": "Данные входа не удалось обновить, а access_token больше недоступен для службы API. Авторизуйте аккаунт заново.",
+      "idTokenUnavailable": "Данные идентификации клиента истекли, и автоматическое обновление не вернуло действительный id_token.",
+      "reasonLabel": "Причина",
+      "accessTokenExpiry": "Временный доступ к API до {{time}}",
+      "apiServiceAddFailed": "Не удалось добавить аккаунт в службу API: {{error}}",
+      "switchingAfterReauth": "Авторизация обновлена. Переключение аккаунта продолжается...",
+      "switchAfterReauthFailed": "Авторизация обновлена, но переключить аккаунт не удалось: {{error}}",
+      "reauthGenerationMissing": "Не удалось подтвердить версию новых учётных данных. Переключите аккаунт ещё раз.",
+      "reauthorizedAndSwitched": "Повторно авторизован и переключён",
+      "startingInstanceAfterReauth": "Авторизация обновлена. Перезапускаем экземпляр...",
+      "startInstanceAfterReauthFailed": "Авторизация обновлена, но экземпляр не запустился: {{error}}",
+      "reauthorizedAndStartedInstance": "Повторно авторизован и экземпляр запущен",
+      "apiOnlyBadge": "Нужен вход"
+    },
     "current": "Текущий",
     "empty": {
       "description": "Нажмите «Добавить аккаунт», чтобы начать"
@@ -2021,6 +2121,7 @@
     "exportFormat": {
       "label": "Формат экспорта",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "Официальный auth.json",
       "sub2api": "Формат sub2api",
       "cpa": "Формат cpa",
       "agentIdentityCpaUnsupported": "Аккаунты Agent Identity нельзя экспортировать в формате cpa. Используйте Cockpit Tools или sub2api.",
@@ -2172,6 +2273,10 @@
       "killPortSuccess": "Порт очищен (завершено процессов: {{count}})",
       "killPortSuccessNone": "Порт проверен. Внешние процессы его не используют.",
       "killPortSuccessUnknown": "Порт API-сервиса очищен",
+      "restartAction": "Перезапустить Sidecar",
+      "restartTitle": "Перезапустить API-сервис",
+      "restartConfirmMessage": "Будет перезапущен только Sidecar API-сервиса. Аккаунты, токены, API-ключи и настройки пула аккаунтов не изменятся. Текущие запросы могут быть прерваны. Продолжить?",
+      "restartSuccess": "Sidecar API-сервиса перезапущен",
       "refreshStats": "Обновить статистику",
       "refreshStatsSuccess": "Статистика API-сервиса обновлена",
       "routingStrategy": {
@@ -2223,6 +2328,7 @@
         "title": "Пул квот",
         "hourlyShort": "5h​",
         "weeklyShort": "Неделя",
+        "balance": "Баланс",
         "viewFull": "Показать полную статистику",
         "modalTitle": "Пул квот сервиса API",
         "empty": "Статистики квот пока нет"
@@ -2432,6 +2538,7 @@
     "quotaError": {
       "badge": "Ошибка квоты",
       "refreshFailedBadge": "Сбой обновления",
+      "authRefreshDeferred": "refresh_token недействителен. Текущий access_token всё ещё работает для службы API, но переключить официальный клиент нельзя. Перед переключением выполните повторную авторизацию.",
       "generic": "Не удалось обновить квоту, попробуйте позже",
       "deactivatedWorkspace": "Рабочее пространство деактивировано, переключите аккаунт или авторизуйтесь заново",
       "requestFailedManualRetry": "Проверьте сеть. Не удалось получить актуальную квоту. Обновите, чтобы повторить попытку.",
@@ -3037,6 +3144,7 @@
         "custom": "Пользовательский",
         "endpoint": "Конечная точка провайдера",
         "hint": "Совместимый Base URL был заполнен автоматически. При необходимости вы можете отредактировать его вручную.",
+        "cockpitToolsHint": "Замените Base URL на LAN-адрес хоста Cockpit Tools, например http://HOST_IP:PORT/v1. Карточка аккаунта автоматически запросит /cockpit/quota.",
         "website": "Сайт",
         "apiKeyPage": "Страница ключа API",
         "getApiKey": "Получить ключ"
@@ -3101,6 +3209,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools в локальной сети"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3278,7 +3389,8 @@
         "contextWindow": "Контекстное окно",
         "contextWindowHint": "Записывает model_context_window. Редактируется только в пользовательском режиме.",
         "partialDetected": "В настоящее время установлено только одно управляемое поле: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. При сохранении оба поля перезапишутся по текущей схеме.",
-        "notSet": "Не установлено"
+        "notSet": "Не установлено",
+        "modelCatalogDesc": "Видимые модели и их настройки контекста записываются в управляемый Cockpit каталог моделей активного Codex."
       },
       "testing": "Проверка...",
       "testSuccess": "Подключение провайдера исправно: {{protocol}}, {{model}}, {{latency}}.",
@@ -3388,6 +3500,14 @@
         "rawFields": "Данные сервиса",
         "fields": {
           "status": "Статус",
+          "fiveHourRemainingPercent": "Осталось за 5 ч",
+          "weeklyRemainingPercent": "Осталось за неделю",
+          "accountCount": "Пул аккаунтов",
+          "availableAccountCount": "Доступные аккаунты",
+          "abnormalAccountCount": "Проблемные аккаунты",
+          "cooldownAccountCount": "Аккаунты на паузе",
+          "stale": "Устаревшие данные",
+          "apiKeyBalance": "Баланс API_KEY",
           "planName": "План",
           "remaining": "Остаток",
           "balance": "Баланс",
@@ -3478,6 +3598,56 @@
       "filterMissing": "Неизвестно ({{count}})",
       "accessTokenOnlyUsable": "Токен доступен",
       "accessTokenOnlyUsableDetail": "Интерфейс подписки ограничен, но квота и использование Codex работают нормально"
+    },
+    "switchProgress": {
+      "completed": "Переключение завершено",
+      "needsAttention": "Требуется действие",
+      "steps": {
+        "credentials": "Прочитать данные аккаунта",
+        "accessToken": "Проверить access_token",
+        "idToken": "Проверить id_token",
+        "stopRuntime": "Остановить прежний процесс",
+        "refreshTokens": "Обновить данные входа",
+        "writeCredentials": "Записать данные клиента",
+        "syncSettings": "Синхронизировать настройки",
+        "startClient": "Запустить клиент Codex"
+      },
+      "status": {
+        "pending": "Ожидание",
+        "running": "Выполняется",
+        "completed": "Готово",
+        "warning": "Нужно обновить",
+        "skipped": "Пропущено",
+        "error": "Ошибка"
+      },
+      "detail": {
+        "missing": "Данные не найдены",
+        "opaqueToken": "Непрозрачный Token; срок проверяет сервис",
+        "expiryUnknown": "Срок действия неизвестен",
+        "expiresAt": "Действует до {{time}} ({{relative}})",
+        "readingCredentials": "Чтение локального аккаунта и данных Token...",
+        "nonOAuthAccount": "Это не OAuth-аккаунт; Token входа не требуется",
+        "credentialsFound": "Загружено: {{tokens}}",
+        "notApplicable": "Эта проверка не требуется для аккаунта",
+        "refreshNeeded": "Истёк или вошёл в безопасное окно; нужно обновление",
+        "tokenValid": "Действителен; обновление не требуется",
+        "stoppingRuntime": "Безопасная остановка ChatGPT/Codex и app-server...",
+        "runtimeStopped": "Прежний процесс клиента безопасно остановлен",
+        "waiting": "Ожидание предыдущего шага",
+        "refreshingTokens": "Получение и сохранение новых access_token, id_token и refresh_token...",
+        "refreshSkipped": "AT и ID Token действительны; refresh_token не использовался",
+        "refreshFailed": "Не удалось автоматически обновить полный набор Token",
+        "refreshResultReused": "Используются последние Token от другого владельца обновления",
+        "refreshCompleted": "Полный набор Token безопасно обновлён и сохранён",
+        "credentialsWritten": "auth.json / keychain обновлён по официальным правилам",
+        "writingCredentials": "Запись данных входа целевого аккаунта...",
+        "settingsSynced": "Привязка, скорость и связанные настройки синхронизированы",
+        "syncingSettings": "Синхронизация привязки аккаунта и настроек...",
+        "launchDisabled": "Автозапуск выключен; клиент можно запустить вручную позже",
+        "clientStartWarning": "Данные переключены, но клиент не запустился; повторите позже",
+        "clientStarted": "Клиент Codex запущен",
+        "startingClient": "Запуск клиента Codex..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Сеансы Codex скрыты",

@@ -263,6 +263,11 @@ fn app_server_executable_from_codex_launch_path(path: &Path) -> Option<PathBuf> 
         return Some(contents_dir.join("Resources").join("codex"));
     }
 
+    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if path_file_name_eq(&resolved, "chatgpt") && parent_file_name_eq(&resolved, "chatgpt") {
+        return Some(resolved.parent()?.join("resources").join("codex"));
+    }
+
     if path_file_name_eq(path, "codex.exe") {
         return Some(path.parent()?.join("resources").join("codex.exe"));
     }
@@ -455,6 +460,15 @@ mod tests {
         assert_eq!(
             app_server_executable_from_codex_launch_path(&app_server_path),
             Some(app_server_path)
+        );
+    }
+
+    #[test]
+    fn maps_linux_chatgpt_binary_to_resources_app_server() {
+        let launch_path = PathBuf::from("/usr/lib/chatgpt/ChatGPT");
+        assert_eq!(
+            app_server_executable_from_codex_launch_path(&launch_path),
+            Some(PathBuf::from("/usr/lib/chatgpt/resources/codex"))
         );
     }
 }

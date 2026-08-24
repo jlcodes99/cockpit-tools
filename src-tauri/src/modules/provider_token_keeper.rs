@@ -283,6 +283,19 @@ async fn refresh_due_codex_accounts() -> bool {
         }
     };
 
+    let running_oauth_account_ids = match codex_account::running_codex_oauth_account_ids() {
+        Ok(account_ids) => account_ids,
+        Err(err) => {
+            // 无法确认运行态归属时，宁可暂停本轮 Codex 后台轮换，也不要冒险
+            // 消费运行中官方 app-server 可能仍在使用的 refresh_token。
+            logger::log_warn(&format!(
+                "[TokenKeeper][Codex] 无法确认运行中账号，跳过本轮后台 Token 轮换: {}",
+                err
+            ));
+            return false;
+        }
+    };
+
     let mut refreshed_any = false;
     let mut attempted_refreshes = 0usize;
     for account in accounts
@@ -291,6 +304,20 @@ async fn refresh_due_codex_accounts() -> bool {
     {
         if reached_platform_refresh_limit(attempted_refreshes) {
             break;
+        }
+        if running_oauth_account_ids.contains(&account.id) {
+            logger::log_info(&format!(
+                "[TokenKeeper][Codex] 跳过运行中账号的后台 Token 轮换: account_id={}, email={}",
+                account.id, account.email
+            ));
+            continue;
+        }
+        if codex_account::runtime_account_lease_active(&account.id) {
+            logger::log_info(&format!(
+                "[TokenKeeper][Codex] 跳过正在启动或转移实例的账号: account_id={}, email={}",
+                account.id, account.email
+            ));
+            continue;
         }
         if !account.requires_reauth && !codex_account::is_managed_auth_refresh_due(&account) {
             continue;

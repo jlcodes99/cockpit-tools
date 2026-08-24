@@ -27,6 +27,26 @@
     "editable": "可編輯",
     "preview": "預覽",
     "advancedSettings": "進階設定",
+    "windowsOperation": {
+      "title": "Windows 操作尚未完成",
+      "accessDeniedDescription": "Windows 拒絕了這次操作。目標程式可能以較高權限執行，或位於受保護的位置。",
+      "fileInUseDescription": "目標檔案正由其他程式使用。請關閉占用程式後再試一次。",
+      "programNotFoundDescription": "Windows 找不到完成操作所需的程式。請檢查安裝狀態或設定路徑。",
+      "portDeniedDescription": "Windows 阻擋了連接埠存取。連接埠可能被系統原則或其他程式占用。",
+      "genericDescription": "系統操作尚未完成。你可以重試，或處理原始原因後繼續。",
+      "originalReason": "原始原因",
+      "copyError": "複製錯誤",
+      "openTarget": "開啟位置",
+      "viewDetails": "查看詳情",
+      "hideDetails": "收合詳情",
+      "operationLabel": "操作類型",
+      "targetLabel": "目標",
+      "attemptedRecoveries": "已嘗試",
+      "manualContinue": "我已處理，繼續",
+      "retry": "重試",
+      "authorizeContinue": "授權並繼續",
+      "authorizationCancelled": "已取消 Windows 授權，本次操作未繼續。"
+    },
     "codexFingerprint": {
       "modeLabel": "裝置指紋模式",
       "modeHint": "僅 OAuth；預設工作階段。依帳號隔離安裝／工作階段並改寫工作區，避免同機多號被串。",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store 無法可靠傳遞執行個體目錄，已阻止開啟預設帳號。請將此執行個體的啟動方式切換為 CLI 後重試。詳細資訊：{{detail}}",
       "speedUpdated": "速度已更新"
     },
+    "accountLease": {
+      "title": "啟動 Codex 執行個體",
+      "progress": "啟動進度",
+      "conflictTitle": "帳號正在其他執行個體中使用",
+      "completedTitle": "執行個體啟動完成",
+      "failedTitle": "執行個體啟動失敗",
+      "conflictAccount": "帳號：{{account}}",
+      "conflictDescription": "此帳號正在 {{owners}} 中執行。為避免多個官方執行個體競爭 refresh_token，同一個 OAuth 帳號只能在一個執行個體中執行。",
+      "locate": "定位現有執行個體",
+      "selectOther": "選擇其他帳號",
+      "transfer": "停止原執行個體並轉移",
+      "steps": {
+        "checkInstance": "檢查目標執行個體",
+        "checkAccount": "檢查綁定帳號",
+        "checkOccupancy": "檢查帳號占用",
+        "stopPrevious": "停止原執行個體",
+        "prepareCredentials": "準備登入憑證",
+        "writeProfile": "寫入執行個體設定",
+        "startClient": "啟動 Codex 用戶端"
+      },
+      "detail": {
+        "checkingInstance": "正在讀取執行個體設定...",
+        "checkingAccount": "正在檢查 OAuth 帳號與 Token...",
+        "noOAuthAccount": "目前未綁定 OAuth 帳號，不需要檢查占用",
+        "accountInUse": "此 OAuth 帳號已被執行中的執行個體占用",
+        "accountAvailable": "未發現其他執行個體占用此帳號",
+        "transferSkipped": "不需要轉移帳號執行權",
+        "stoppingOwners": "正在安全停止：{{owners}}",
+        "stoppingPrevious": "正在安全停止原執行個體並回收最新憑證...",
+        "preparingCredentials": "正在檢查 Token，並視需要更新完整登入憑證...",
+        "profileReady": "執行個體 auth.json / 鑰匙圈已安全更新",
+        "cliPrepared": "CLI 啟動命令已準備完成",
+        "startingClient": "正在啟動並確認 Codex 用戶端程序..."
+      }
+    },
     "runningDialog": {
       "title": "實例已在運行",
       "desc": "該實例已經啟動，您可以切換窗口，或根據當前策略重啟。",
@@ -678,6 +733,9 @@
       "codexAppUiInjectionPoolLabel": "帳號",
       "codexAppUiInjectionWeeklyLabel": "週",
       "codexAppUiInjectionFiveHourLabel": "5 小時",
+      "codexAppUiInjectionBalanceLabel": "餘額",
+      "codexLoginPageGuard": "登入頁守衛",
+      "codexLoginPageGuardDesc": "重新啟動受管 Codex 實例後，透過 CDP 保留可用的對話頁面，避免外殼 OAuth 狀態將頁面切換到登入頁。此功能只阻止頁面切換，不會修復失效的 OAuth 憑證。",
       "codexWslConfigDir": "WSL Codex 目錄",
       "codexWslConfigDirDesc": "填入 WSL 內的 .codex 目錄，支援 \\\\wsl.localhost\\ 路徑。",
       "codexWslConfigDirPlaceholder": "例如：\\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -762,6 +820,11 @@
       "openclawAuthOverwriteDesc": "關閉時，僅切換 Codex，OpenClaw 保持目前登入狀態",
       "ghcpOpencodeAuthOverwrite": "切換 GitHub Copilot 時覆蓋 OpenCode 登入",
       "ghcpOpencodeRestart": "切換 GitHub Copilot 時自動重新啟動 OpenCode",
+      "grokOpencodeAuthOverwrite": "切換 Grok 時覆蓋 OpenCode 登入",
+      "grokOpencodeAuthOverwriteDesc": "關閉後只切 Grok，不改 OpenCode 目前登入狀態",
+      "grokOpencodeRestart": "切換 Grok 時自動重新啟動 OpenCode",
+      "grokOpencodeRestartDesc": "覆蓋 OpenCode 登入資訊後重新啟動，讓授權立即生效",
+      "grokOpencodeRestartRequiresOverwrite": "請先開啟「切換 Grok 時覆蓋 OpenCode 登入」",
       "ghcpLaunchOnSwitch": "切換 GitHub Copilot 時自動啟動 GitHub Copilot App",
       "zedAutoRefresh": "Zed 自動重新整理配額",
       "zedAutoRefreshDesc": "背景自動更新頻率",
@@ -997,6 +1060,17 @@
         "retentionUnit": "天",
         "directoryTitle": "備份資料夾",
         "directoryDesc": "備份一律儲存在專案的 backups 資料夾中。",
+        "changeDirectory": "更換資料夾", "migrating": "搬移中...", "migrationConfirm": "要將現有備份從 {{oldPath}} 搬移到 {{newPath}} 嗎？\n\n選擇取消會切換資料夾，但不搬移舊檔案。", "usageTitle": "備份佔用空間", "usageDesc": "顯示定期備份與平台行為快照的本機佔用空間。", "usageEmpty": "找不到本機備份檔案。", "cleanupBehavior": "清理舊行為備份", "behaviorCleanupConfirm": "確定要清理舊行為備份嗎？每個平台與實例只保留最新一份，定期 JSON/ZIP 不會刪除。", "sources": {"scheduled": "定期 JSON/ZIP", "behavior": "行為快照", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "其他"},
+        "migrationConfirmTitle": "更換備份資料夾",
+        "migrationConfirmDesc": "已掃描現有備份。你可以搬移並釋放舊資料夾空間，或只變更後續備份位置。",
+        "migrationOldPath": "原資料夾",
+        "migrationNewPath": "新資料夾",
+        "migrationTotalSize": "待搬移空間",
+        "migrationTotalFiles": "待搬移檔案",
+        "migrationSafetyNote": "檔案會先複製到暫存區並驗證，成功後才切換資料夾並移除舊備份。",
+        "switchOnly": "只變更位置",
+        "migrateAndSwitch": "搬移並切換",
+        "migrationProgress": {"title": "搬移備份資料夾", "filesUnit": "個檔案", "currentSource": "目前來源", "completedSummary": "已搬移 {{count}} 個檔案（{{size}}）並切換到新資料夾。", "switchOnlyCompleted": "後續備份將儲存到 {{path}}，現有備份未搬移。", "cleanupPartial": "新資料夾已生效，但以下舊資料夾無法移除，請稍後手動清理：", "cancelledDesc": "搬移已取消，原備份資料夾保持不變，暫存檔案已清除。", "cancelling": "正在取消...", "cancelAction": "取消搬移", "finishing": "正在完成...", "phases": {"scanning": "正在掃描備份檔案...", "copying": "正在複製備份檔案...", "verifying": "正在驗證搬移結果...", "switching": "正在切換備份資料夾...", "cleaning": "正在移除舊備份...", "completed": "搬移完成", "cancelled": "搬移已取消"}},
         "openFolder": "開啟資料夾",
         "listTitle": "備份清單",
         "listDesc": "可直接匯入備份，或刪除舊檔案。",
@@ -1024,6 +1098,8 @@
           "openFolderFailed": "開啟備份資料夾失敗：{{error}}",
           "downloadSuccess": "備份已下載到 {{path}}",
           "downloadFailed": "下載備份失敗：{{error}}"
+          ,"migrating": "正在搬移備份資料夾...", "migrationDone": "已將 {{count}} 個檔案搬移到 {{path}}", "directoryChanged": "備份資料夾已改為 {{path}}", "directoryChangeFailed": "變更備份資料夾失敗：{{error}}", "behaviorCleaning": "正在清理舊行為備份...", "behaviorCleanupDone": "已清理 {{count}} 份備份，釋放 {{size}}", "behaviorCleanupFailed": "清理行為備份失敗：{{error}}"
+          ,"scanningMigration": "正在掃描待搬移的備份..."
         },
         "errors": {
           "invalidRetention": "保留天數必須介於 1 到 365 天之間"
@@ -1150,7 +1226,7 @@
     "missing": {
       "title": "找不到應用程式路徑",
       "desc": "找不到 {{app}} 的應用程式路徑。請立即設定以繼續。",
-      "codexLaunchHint": "關閉後僅執行切號與登入覆蓋，不再嘗試啟動 Codex App，也不會再次要求設定啟動路徑。",
+      "codexLaunchHint": "切號已完成。啟動應用請先設定路徑；若切號後不需要啟動，請到設定中關閉「切換 Codex 時自動啟動 Codex App」。",
       "action": "立即設定",
       "claudeMultiInstanceRequiresExe": "Claude 應用多開需要真實 Claude.exe 路徑；Microsoft Store 啟動目標僅適用於預設桌面端。",
       "scanApps": "掃描應用",
@@ -1868,7 +1944,7 @@
     "title": "Codex 帳號管理",
     "experimentalModelCatalog": {
       "title": "可見模型",
-      "description": "依目前可用的官方模型與自訂項目產生 Cockpit 受管目錄；不會覆寫使用者自訂目錄。",
+      "description": "統一管理可見模型、推理強度、上下文視窗和壓縮門檻。",
       "enabledHint": "啟用後使用目前可見模型列表，重新啟動 Codex 才會生效。",
       "models": {
         "title": "模型清單",
@@ -1890,8 +1966,18 @@
           "displayName": "請輸入不超過 100 個字元的顯示名稱。",
           "duplicate": "模型 ID 不可重複。",
           "reasoningEffort": "推理強度選項無效。",
-          "reserved": "模型 ID 與官方模型重複，請使用其他 ID。"
-        }
+          "reserved": "模型 ID 與官方模型重複，請使用其他 ID。",
+          "contextPair": "上下文視窗和壓縮門檻必須同時填寫。",
+          "contextWindow": "上下文視窗必須是大於 0 的整數。",
+          "autoCompact": "壓縮門檻必須是大於 0 的整數。",
+          "autoCompactRange": "壓縮門檻必須小於上下文視窗。"
+        },
+        "contextConfig": "上下文與壓縮",
+        "contextDefault": "跟隨模型",
+        "contextDefaultShort": "預設",
+        "contextCustomShort": "自訂",
+        "contextWindow": "上下文視窗",
+        "autoCompactLimit": "壓縮門檻"
       },
       "unavailable": {
         "cacheMissing": "找不到 models_cache.json。",
@@ -1965,6 +2051,24 @@
       "staleAccount": "此帳號已不在本機帳號庫中，帳號清單已重新整理。請重新匯入或重新登入此 Codex 帳號。",
       "unsupportedCountryRegion": "目前網路地區不支援刷新 Codex 授權。OpenAI 授權服務拒絕了目前網路出口的刷新請求，請切換到支援的網路地區後重試。"
     },
+    "switchAuth": {
+      "apiOnlyTitle": "客戶端需登入",
+      "reauthorizeTitle": "Codex 授權已失效",
+      "apiOnlyDescription": "目前的 access_token 仍可暫時用於 API 服務，但客戶端登入所需憑證無法自動更新，因此本次未切換至官方 Codex/ChatGPT 客戶端。",
+      "reauthorizeDescription": "目前登入憑證無法自動更新，且 access_token 已無法用於 API 服務。請重新授權後繼續使用。",
+      "idTokenUnavailable": "客戶端身分憑證已過期，自動更新後仍未取得有效的 id_token。",
+      "reasonLabel": "原因",
+      "accessTokenExpiry": "API 暫時可用至 {{time}}",
+      "apiServiceAddFailed": "加入 API 服務失敗：{{error}}",
+      "switchingAfterReauth": "授權成功，正在繼續切換帳號...",
+      "switchAfterReauthFailed": "授權已更新，但繼續切換失敗：{{error}}",
+      "reauthGenerationMissing": "無法確認本次授權憑證版本，請重新點擊切換。",
+      "reauthorizedAndSwitched": "重新授權並切換成功",
+      "startingInstanceAfterReauth": "授權已更新，正在重新啟動執行個體...",
+      "startInstanceAfterReauthFailed": "授權已更新，但執行個體啟動失敗：{{error}}",
+      "reauthorizedAndStartedInstance": "重新授權並啟動執行個體成功",
+      "apiOnlyBadge": "客戶端需授權"
+    },
     "current": "目前",
     "empty": {
       "description": "點擊「新增帳號」開始管理您的 Codex 帳號"
@@ -2021,6 +2125,7 @@
     "exportFormat": {
       "label": "匯出格式",
       "cockpitTools": "Cockpit Tools",
+      "authJson": "官方 auth.json",
       "sub2api": "sub2api 格式",
       "cpa": "cpa 格式",
       "agentIdentityCpaUnsupported": "Agent Identity 帳號不支援 cpa 格式，請使用 Cockpit Tools 或 sub2api 格式匯出。",
@@ -2172,6 +2277,10 @@
       "killPortSuccess": "連接埠已清理（已結束 {{count}} 個處理程序）",
       "killPortSuccessNone": "連接埠已檢查，未發現外部占用程序",
       "killPortSuccessUnknown": "API 服務連接埠已清理",
+      "restartAction": "重新啟動 Sidecar",
+      "restartTitle": "重新啟動 API 服務",
+      "restartConfirmMessage": "只會重新啟動 API 服務 Sidecar，不會修改帳號、Token、API Key 或帳號池設定。進行中的請求可能會中斷，確定繼續嗎？",
+      "restartSuccess": "API 服務 Sidecar 已重新啟動",
       "refreshStats": "刷新統計",
       "refreshStatsSuccess": "API 服務統計已刷新",
       "routingStrategy": {
@@ -2223,6 +2332,7 @@
         "title": "額度池",
         "hourlyShort": "5h",
         "weeklyShort": "週",
+        "balance": "餘額",
         "viewFull": "查看完整統計",
         "modalTitle": "API 服務額度池",
         "empty": "尚無額度統計"
@@ -2408,6 +2518,7 @@
         "custom": "自訂",
         "endpoint": "供應商端點",
         "hint": "已自動填入相容的 Base URL，你仍可手動編輯。",
+        "cockpitToolsHint": "請將 Base URL 改為 Cockpit Tools 主機的區域網路位址，例如 http://HOST_IP:PORT/v1。帳號卡片會自動查詢 /cockpit/quota。",
         "website": "網站",
         "apiKeyPage": "API Key 頁面",
         "getApiKey": "取得秘鑰"
@@ -2472,6 +2583,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools 區域網路"
         },
         "cockpit_api": {
           "name": "Cockpit Api"
@@ -2563,6 +2677,7 @@
     "quotaError": {
       "badge": "配額異常",
       "refreshFailedBadge": "重新整理失敗",
+      "authRefreshDeferred": "refresh_token 已失效；目前 access_token 仍可用於 API 服務，但無法切換至官方用戶端，請重新授權後再切換帳號。",
       "generic": "配額重新整理失敗，請稍後再試",
       "deactivatedWorkspace": "工作區已停用，請切換帳號或重新授權",
       "requestFailedManualRetry": "請檢查網路，未取得最新配額。可重新整理重試。",
@@ -3278,7 +3393,8 @@
         "contextWindow": "上下文視窗",
         "contextWindowHint": "寫入 model_context_window。僅在「自訂」模式可編輯。",
         "partialDetected": "偵測到目前兩個欄位並不完整：model_context_window={{context}}，model_auto_compact_token_limit={{compact}}。儲存後會依照目前方案改寫。",
-        "notSet": "未設定"
+        "notSet": "未設定",
+        "modelCatalogDesc": "可見模型及各模型的上下文設定會統一寫入目前 Codex 的 Cockpit 受管模型目錄。"
       },
       "testing": "測試中...",
       "testSuccess": "供應商連線正常：{{protocol}}，{{model}}，{{latency}}。",
@@ -3388,6 +3504,14 @@
         "rawFields": "服務資料",
         "fields": {
           "status": "狀態",
+          "fiveHourRemainingPercent": "5 小時剩餘",
+          "weeklyRemainingPercent": "週剩餘",
+          "accountCount": "帳號池",
+          "availableAccountCount": "可用帳號",
+          "abnormalAccountCount": "異常帳號",
+          "cooldownAccountCount": "冷卻帳號",
+          "stale": "資料較舊",
+          "apiKeyBalance": "API_KEY 餘額",
           "planName": "訂閱",
           "remaining": "剩餘額度",
           "balance": "餘額",
@@ -3478,6 +3602,56 @@
       "filterMissing": "未知 ({{count}})",
       "accessTokenOnlyUsable": "Token 可用",
       "accessTokenOnlyUsableDetail": "訂閱資訊介面受限，但配額與 Codex 使用正常"
+    },
+    "switchProgress": {
+      "completed": "切換完成",
+      "needsAttention": "需要處理",
+      "steps": {
+        "credentials": "讀取帳號憑證",
+        "accessToken": "檢查 access_token",
+        "idToken": "檢查 id_token",
+        "stopRuntime": "停止舊執行狀態",
+        "refreshTokens": "更新登入憑證",
+        "writeCredentials": "寫入客戶端憑證",
+        "syncSettings": "同步帳號設定",
+        "startClient": "啟動 Codex 客戶端"
+      },
+      "status": {
+        "pending": "等待",
+        "running": "處理中",
+        "completed": "已完成",
+        "warning": "需更新",
+        "skipped": "已略過",
+        "error": "失敗"
+      },
+      "detail": {
+        "missing": "找不到憑證",
+        "opaqueToken": "不透明 Token，過期時間由服務端驗證",
+        "expiryUnknown": "無法讀取過期時間",
+        "expiresAt": "有效期至 {{time}}（{{relative}}）",
+        "readingCredentials": "正在讀取本機帳號與 Token 資訊...",
+        "nonOAuthAccount": "非 OAuth 帳號，無需檢查登入 Token",
+        "credentialsFound": "已讀取：{{tokens}}",
+        "notApplicable": "目前帳號無需檢查此項",
+        "refreshNeeded": "已過期或進入安全更新範圍，需要更新",
+        "tokenValid": "目前有效，無需更新",
+        "stoppingRuntime": "正在安全停止 ChatGPT/Codex 與 app-server...",
+        "runtimeStopped": "舊客戶端執行狀態已安全停止",
+        "waiting": "等待前一步驟完成",
+        "refreshingTokens": "正在取得並儲存新的 access_token、id_token 與 refresh_token...",
+        "refreshSkipped": "AT 與 ID Token 均有效，未使用 refresh_token",
+        "refreshFailed": "無法自動更新完整 Token 組",
+        "refreshResultReused": "已採用其他更新者寫回的最新 Token",
+        "refreshCompleted": "完整 Token 組已更新並安全儲存",
+        "credentialsWritten": "auth.json / keychain 已依官方規則更新",
+        "writingCredentials": "正在寫入目標帳號登入資訊...",
+        "settingsSynced": "帳號綁定、速度與相關設定已同步",
+        "syncingSettings": "正在同步帳號綁定與相關設定...",
+        "launchDisabled": "已關閉切號後自動啟動，可稍後手動啟動",
+        "clientStartWarning": "憑證已切換，但客戶端啟動失敗，可稍後重試",
+        "clientStarted": "Codex 客戶端已啟動",
+        "startingClient": "正在啟動 Codex 客戶端..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Codex 工作階段不可見",

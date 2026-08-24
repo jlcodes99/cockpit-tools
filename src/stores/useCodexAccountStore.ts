@@ -104,6 +104,11 @@ type FetchCodexCurrentAccountOptions = {
   allowEmpty?: boolean;
 };
 
+type SwitchCodexAccountOptions = {
+  reauthTokenGeneration?: number;
+  reconcileAfterSwitch?: boolean;
+};
+
 interface CodexAccountState {
   accounts: CodexAccount[];
   accountsLoaded: boolean;
@@ -114,7 +119,10 @@ interface CodexAccountState {
   // Actions
   fetchAccounts: (options?: FetchCodexAccountsOptions) => Promise<void>;
   fetchCurrentAccount: (options?: FetchCodexCurrentAccountOptions) => Promise<void>;
-  switchAccount: (accountId: string) => Promise<CodexAccount>;
+  switchAccount: (
+    accountId: string,
+    options?: SwitchCodexAccountOptions,
+  ) => Promise<CodexAccount>;
   deleteAccount: (accountId: string) => Promise<void>;
   deleteAccounts: (accountIds: string[]) => Promise<void>;
   refreshQuota: (accountId: string) => Promise<CodexQuota>;
@@ -220,7 +228,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     }
   },
   
-  switchAccount: async (accountId: string) => {
+  switchAccount: async (accountId: string, options?: SwitchCodexAccountOptions) => {
     const flowStartedAt = performance.now();
     console.info('[Codex Switch][Store] switchAccount started', {
       accountId,
@@ -244,7 +252,17 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       throw new Error(CODEX_STALE_ACCOUNT_ERROR);
     }
 
-    const account = await codexService.switchCodexAccount(accountId);
+    let account: CodexAccount;
+    try {
+      account = await codexService.switchCodexAccount(accountId, {
+        reauthTokenGeneration: options?.reauthTokenGeneration,
+      });
+    } catch (error) {
+      // Token Authority 可能已把账号标记为 requires_reauth。立即回读账号库，
+      // 让账号卡片和切号弹框都展示最新的 API-only / 需授权状态。
+      void get().fetchAccounts();
+      throw error;
+    }
     console.info('[Codex Switch][Store] switchCodexAccount finished', {
       accountId,
       elapsedMs: Math.round(performance.now() - flowStartedAt),
@@ -261,14 +279,18 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
         error: null,
       };
     });
-    void get()
-      .fetchAccounts()
-      .then(() => {
-        console.info('[Codex Switch][Store] background fetchAccounts after switch finished', {
-          accountId,
-          elapsedMs: Math.round(performance.now() - flowStartedAt),
-        });
+    const refreshAfterSwitch = get().fetchAccounts().then(() => {
+      console.info('[Codex Switch][Store] background fetchAccounts after switch finished', {
+        accountId,
+        elapsedMs: Math.round(performance.now() - flowStartedAt),
       });
+    });
+    if (options?.reconcileAfterSwitch) {
+      await refreshAfterSwitch;
+      await get().fetchCurrentAccount();
+    } else {
+      void refreshAfterSwitch;
+    }
     await emitCurrentAccountChanged({
       platformId: 'codex',
       accountId: account.id,

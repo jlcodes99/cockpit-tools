@@ -1550,6 +1550,27 @@ fn sanitize_macos_gui_launch_env(cmd: &mut Command) {
     cmd.env_remove("ELECTRON_NO_ASAR");
     cmd.env_remove("ELECTRON_FORCE_WINDOW_MENU_BAR");
     cmd.env_remove("ELECTRON_NO_ATTACH_CONSOLE");
+    // Default Codex instances must resolve their own ~/.codex and Electron data directory.
+    // Managed instances pass both values explicitly through `open --env` after this cleanup.
+    cmd.env_remove("CODEX_HOME");
+    cmd.env_remove("CODEX_ELECTRON_USER_DATA_PATH");
+}
+
+#[cfg(target_os = "linux")]
+fn sanitize_linux_gui_launch_env(cmd: &mut Command) {
+    for key in [
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_ENV",
+        "npm_config_prefix",
+        "npm_config_devdir",
+        "ELECTRON_RUN_AS_NODE",
+        "ELECTRON_NO_ASAR",
+        "CODEX_HOME",
+        "CODEX_ELECTRON_USER_DATA_PATH",
+    ] {
+        cmd.env_remove(key);
+    }
 }
 
 fn managed_proxy_env_pairs() -> Vec<(&'static str, String)> {
@@ -2535,6 +2556,86 @@ fn find_codex_process_exe() -> Option<std::path::PathBuf> {
 fn is_codex_macos_main_process_command_line(lower_cmdline: &str) -> bool {
     lower_cmdline.contains("chatgpt.app/contents/macos/chatgpt")
         || lower_cmdline.contains("codex.app/contents/macos/codex")
+}
+
+#[cfg(any(test, target_os = "macos"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexProcessTreeEntry {
+    pid: u32,
+    parent_pid: u32,
+    command_line: String,
+}
+
+#[cfg(any(test, target_os = "macos"))]
+fn is_codex_direct_app_server_command_line(
+    command_line: &str,
+    expected_resource_executable: &str,
+) -> bool {
+    let command_line = command_line.trim();
+    let expected = expected_resource_executable.trim();
+    if command_line.is_empty() || expected.is_empty() {
+        return false;
+    }
+
+    let remainder = if let Some(remainder) = command_line.strip_prefix(expected) {
+        remainder
+    } else {
+        let quoted = format!("\"{}\"", expected);
+        let Some(remainder) = command_line.strip_prefix(&quoted) else {
+            return false;
+        };
+        remainder
+    };
+    let args = remainder.trim_start();
+    let Some(after_app_server) = args.strip_prefix("app-server") else {
+        return false;
+    };
+    if !after_app_server.is_empty() && !after_app_server.starts_with(char::is_whitespace) {
+        return false;
+    }
+    !after_app_server.trim_start().starts_with("daemon")
+}
+
+#[cfg(any(test, target_os = "macos"))]
+fn select_codex_direct_app_server_descendants(
+    entries: &[CodexProcessTreeEntry],
+    root_pids: &[u32],
+    expected_resource_executable: &str,
+) -> Vec<u32> {
+    let roots: HashSet<u32> = root_pids.iter().copied().filter(|pid| *pid != 0).collect();
+    if roots.is_empty() {
+        return Vec::new();
+    }
+    let parents: HashMap<u32, u32> = entries
+        .iter()
+        .map(|entry| (entry.pid, entry.parent_pid))
+        .collect();
+    let mut selected = Vec::new();
+
+    for entry in entries {
+        if !is_codex_direct_app_server_command_line(
+            &entry.command_line,
+            expected_resource_executable,
+        ) {
+            continue;
+        }
+        let mut current = entry.parent_pid;
+        let mut visited = HashSet::new();
+        while current != 0 && visited.insert(current) {
+            if roots.contains(&current) {
+                selected.push(entry.pid);
+                break;
+            }
+            let Some(parent) = parents.get(&current) else {
+                break;
+            };
+            current = *parent;
+        }
+    }
+
+    selected.sort();
+    selected.dedup();
+    selected
 }
 
 #[cfg(target_os = "macos")]
@@ -4259,7 +4360,53 @@ pub(crate) fn detect_codex_exec_path() -> Option<std::path::PathBuf> {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    {
+        for candidate in linux_codex_discovery_paths(
+            dirs::home_dir().as_deref(),
+            std::env::var_os("PATH").as_deref(),
+        ) {
+            if is_linux_executable_file(&candidate) {
+                return Some(candidate);
+            }
+        }
+    }
+
     None
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_codex_discovery_paths(
+    home: Option<&Path>,
+    path_env: Option<&std::ffi::OsStr>,
+) -> Vec<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    let mut seen = HashSet::new();
+    let mut push_candidate = |candidate: PathBuf| {
+        if seen.insert(candidate.clone()) {
+            candidates.push(candidate);
+        }
+    };
+
+    for candidate in [
+        "/usr/bin/chatgpt",
+        "/usr/local/bin/chatgpt",
+        "/usr/lib/chatgpt/ChatGPT",
+        "/opt/chatgpt/ChatGPT",
+    ] {
+        push_candidate(PathBuf::from(candidate));
+    }
+    if let Some(home) = home {
+        push_candidate(home.join(".local/bin/chatgpt"));
+    }
+    if let Some(path_env) = path_env {
+        for directory in std::env::split_paths(path_env) {
+            if !directory.as_os_str().is_empty() {
+                push_candidate(directory.join("chatgpt"));
+            }
+        }
+    }
+    candidates
 }
 
 fn detect_and_save_codex_launch_path() -> Option<std::path::PathBuf> {
@@ -4847,7 +4994,7 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
         return Err(app_path_missing_error("codex"));
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         if let Some(detected) = detect_and_save_codex_launch_path() {
             return Ok(detected);
@@ -6017,7 +6164,7 @@ fn resolve_expected_workbuddy_launch_path_for_match() -> Option<String> {
     Some(normalized)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn resolve_expected_codex_launch_path_for_match() -> Option<String> {
     let launch_path = match resolve_codex_launch_path() {
         Ok(path) => path,
@@ -7328,7 +7475,7 @@ pub fn focus_antigravity_legacy_instance(
     Ok(pid)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn resolve_codex_pid_from_entries(
     last_pid: Option<u32>,
     codex_home: Option<&str>,
@@ -7410,7 +7557,7 @@ pub fn resolve_codex_pid_from_entries(
     pick_preferred_pid(matches)
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub fn resolve_codex_pid_from_entries(
     last_pid: Option<u32>,
     _codex_home: Option<&str>,
@@ -7419,7 +7566,7 @@ pub fn resolve_codex_pid_from_entries(
     last_pid.filter(|pid| is_pid_running(*pid))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn resolve_codex_pid(last_pid: Option<u32>, codex_home: Option<&str>) -> Option<u32> {
     let entries = collect_codex_process_entries();
     resolve_codex_pid_from_entries(last_pid, codex_home, &entries)
@@ -7431,7 +7578,7 @@ pub fn resolve_codex_pid(last_pid: Option<u32>, codex_home: Option<&str>) -> Opt
     resolve_codex_pid_from_entries(last_pid, codex_home, &entries)
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub fn resolve_codex_pid(last_pid: Option<u32>, _codex_home: Option<&str>) -> Option<u32> {
     last_pid.filter(|pid| is_pid_running(*pid))
 }
@@ -9800,17 +9947,28 @@ pub fn close_pid(pid: u32, timeout_secs: u64) -> Result<(), String> {
         return Ok(());
     }
 
-    send_close_signal(pid);
+    let close_error = send_close_signal(pid);
     if wait_pids_exit(&[pid], timeout_secs) {
         Ok(())
     } else {
-        Err("无法关闭实例进程，请手动关闭后重试".to_string())
+        Err(crate::modules::windows_operation::format_error(
+            "stop_process",
+            "无法关闭实例进程",
+            close_error
+                .as_deref()
+                .unwrap_or("目标进程在等待超时后仍在运行"),
+            None,
+            &[pid],
+            true,
+            true,
+            true,
+        ))
     }
 }
 
-fn send_close_signal(pid: u32) {
+fn send_close_signal(pid: u32) -> Option<String> {
     if pid == 0 || !is_pid_running(pid) {
-        return;
+        return None;
     }
 
     #[cfg(target_os = "windows")]
@@ -9822,8 +9980,6 @@ fn send_close_signal(pid: u32) {
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .creation_flags(CREATE_NO_WINDOW)
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
             .output();
         match output {
             Ok(value) => {
@@ -9832,13 +9988,23 @@ fn send_close_signal(pid: u32) {
                         "[AG Close] taskkill success pid={} status={}",
                         pid, value.status
                     ));
+                    return None;
                 } else {
                     let stderr = String::from_utf8_lossy(&value.stderr);
+                    let stdout = String::from_utf8_lossy(&value.stdout);
                     crate::modules::logger::log_warn(&format!(
-                        "[AG Close] taskkill failed pid={} status={} stderr={}",
+                        "[AG Close] taskkill failed pid={} status={} stderr={} stdout={}",
                         pid,
                         value.status,
-                        stderr.trim()
+                        stderr.trim(),
+                        stdout.trim()
+                    ));
+                    return Some(format_kill_command_failure(
+                        pid,
+                        "taskkill",
+                        value.status,
+                        &value.stderr,
+                        &value.stdout,
                     ));
                 }
             }
@@ -9847,15 +10013,27 @@ fn send_close_signal(pid: u32) {
                     "[AG Close] taskkill error pid={} err={}",
                     pid, err
                 ));
+                return Some(format!("pid {}: taskkill failed: {}", pid, err));
             }
         }
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
-        let _ = Command::new("kill")
+        let result = Command::new("kill")
             .args(["-15", &pid.to_string()])
             .output();
+        return match result {
+            Ok(output) if output.status.success() => None,
+            Ok(output) => Some(format_kill_command_failure(
+                pid,
+                "kill",
+                output.status,
+                &output.stderr,
+                &output.stdout,
+            )),
+            Err(error) => Some(format!("pid {}: kill failed: {}", pid, error)),
+        };
     }
 }
 
@@ -9999,9 +10177,10 @@ fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
         timeout_secs
     ));
 
-    for pid in &targets {
-        send_close_signal(*pid);
-    }
+    let close_errors = targets
+        .iter()
+        .filter_map(|pid| send_close_signal(*pid))
+        .collect::<Vec<_>>();
 
     if wait_pids_exit(&targets, timeout_secs) {
         crate::modules::logger::log_info(&format!(
@@ -10019,7 +10198,24 @@ fn close_pids(pids: &[u32], timeout_secs: u64) -> Result<(), String> {
             "[ClosePids] timeout, remaining={}",
             summarize_pid_list_for_log(&remaining)
         ));
-        Err("无法关闭实例进程，请手动关闭后重试".to_string())
+        let original_reason = if close_errors.is_empty() {
+            format!(
+                "目标进程在等待超时后仍在运行: pids={}",
+                summarize_pid_list_for_log(&remaining)
+            )
+        } else {
+            close_errors.join(" | ")
+        };
+        Err(crate::modules::windows_operation::format_error(
+            "stop_process",
+            "无法关闭实例进程",
+            &original_reason,
+            None,
+            &remaining,
+            true,
+            true,
+            true,
+        ))
     }
 }
 
@@ -10707,6 +10903,123 @@ pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
         .collect()
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn collect_codex_process_tree_entries() -> Vec<CodexProcessTreeEntry> {
+    let output = match Command::new("ps")
+        .args(["-axww", "-o", "pid=,ppid=,command="])
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return Vec::new(),
+    };
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut pid_parts = line.trim().splitn(2, |ch: char| ch.is_whitespace());
+            let pid = pid_parts.next()?.trim().parse::<u32>().ok()?;
+            let remainder = pid_parts.next()?.trim_start();
+            let mut parent_parts = remainder.splitn(2, |ch: char| ch.is_whitespace());
+            let parent_pid = parent_parts.next()?.trim().parse::<u32>().ok()?;
+            let command_line = parent_parts.next()?.trim().to_string();
+            if command_line.is_empty() {
+                return None;
+            }
+            Some(CodexProcessTreeEntry {
+                pid,
+                parent_pid,
+                command_line,
+            })
+        })
+        .collect()
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn collect_codex_direct_app_server_pids_for_roots(root_pids: &[u32]) -> Vec<u32> {
+    #[cfg(target_os = "macos")]
+    let Some(app_root) = resolve_codex_launch_path()
+        .ok()
+        .and_then(|path| resolve_macos_app_root_from_launch_path(&path))
+        .or_else(|| resolve_macos_app_root_from_config("codex"))
+    else {
+        return Vec::new();
+    };
+    #[cfg(target_os = "macos")]
+    let expected_resource_executable = Path::new(&app_root)
+        .join("Contents")
+        .join("Resources")
+        .join("codex")
+        .to_string_lossy()
+        .to_string();
+    #[cfg(target_os = "linux")]
+    let Some(expected_resource_executable) = resolve_codex_launch_path().ok().and_then(|path| {
+        let resolved = std::fs::canonicalize(&path).unwrap_or(path);
+        resolved
+            .parent()
+            .map(|parent| parent.join("resources").join("codex"))
+            .filter(|candidate| candidate.is_file())
+            .map(|candidate| candidate.to_string_lossy().to_string())
+    }) else {
+        return Vec::new();
+    };
+    select_codex_direct_app_server_descendants(
+        &collect_codex_process_tree_entries(),
+        root_pids,
+        &expected_resource_executable,
+    )
+}
+
+/// 查找指定 Codex profile 对应的官方 direct `app-server` 子进程。
+///
+/// 官方桌面端负责启动 app-server，Cockpit 无法接管它的 stdio；这里提供只读的
+/// 进程归属查询，供认证诊断记录 PID、网络连接和实例关系。
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub fn collect_codex_app_server_pids_for_profile(profile_dir: &Path) -> Vec<u32> {
+    let profile_key = normalize_path_for_compare(&profile_dir.to_string_lossy());
+    let default_profile_key = dirs::home_dir()
+        .map(|home| home.join(".codex"))
+        .map(|path| normalize_path_for_compare(&path.to_string_lossy()));
+    let root_pids = collect_codex_process_entries()
+        .into_iter()
+        .filter_map(|(pid, codex_home)| {
+            let matches_profile = codex_home
+                .as_deref()
+                .map(normalize_path_for_compare)
+                .is_some_and(|home| home == profile_key)
+                || (codex_home.is_none()
+                    && default_profile_key.as_deref() == Some(profile_key.as_str()));
+            matches_profile.then_some(pid)
+        })
+        .collect::<Vec<_>>();
+    collect_codex_direct_app_server_pids_for_roots(&root_pids)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub fn collect_codex_app_server_pids_for_profile(_profile_dir: &Path) -> Vec<u32> {
+    Vec::new()
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn close_captured_codex_direct_app_servers(
+    captured_pids: &[u32],
+    timeout_secs: u64,
+) -> Result<(), String> {
+    let remaining = collect_running_pids(captured_pids);
+    if remaining.is_empty() {
+        return Ok(());
+    }
+    crate::modules::logger::log_warn(&format!(
+        "[Codex Close] direct app-server remained after main process exit; closing captured pids={}",
+        summarize_pid_list_for_log(&remaining)
+    ));
+    close_pids(&remaining, timeout_secs.min(5).max(1)).map_err(|error| {
+        format!(
+            "failed to close Codex direct app-server before auth switch: {}",
+            error
+        )
+    })
+}
+
 #[cfg(target_os = "windows")]
 fn collect_codex_process_entries_from_powershell(
     expected_exe_path: &str,
@@ -11037,7 +11350,70 @@ pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
     collect_codex_process_entries_from_sysinfo_fallback(&expected)
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+#[cfg(target_os = "linux")]
+fn linux_process_env_value(pid: u32, key: &str) -> Option<String> {
+    let bytes = std::fs::read(format!("/proc/{}/environ", pid)).ok()?;
+    let prefix = format!("{}=", key);
+    bytes.split(|byte| *byte == 0).find_map(|entry| {
+        let entry = String::from_utf8_lossy(entry);
+        entry
+            .strip_prefix(&prefix)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
+    let expected_launch = resolve_expected_codex_launch_path_for_match();
+    if expected_launch.is_none() {
+        return Vec::new();
+    }
+
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_exe(UpdateKind::Always)
+            .with_cmd(UpdateKind::Always),
+    );
+    let current_pid = std::process::id();
+    let mut entries = Vec::new();
+    for (pid, process) in system.processes() {
+        let pid = pid.as_u32();
+        if pid == current_pid {
+            continue;
+        }
+        let name = process.name().to_string_lossy().to_ascii_lowercase();
+        let executable = process
+            .exe()
+            .map(|path| normalize_path_for_compare(&path.to_string_lossy()))
+            .unwrap_or_default();
+        if name != "chatgpt" && !executable.ends_with("/chatgpt") {
+            continue;
+        }
+        let command_line = process
+            .cmd()
+            .iter()
+            .map(|value| value.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let lower = command_line.to_ascii_lowercase();
+        if is_helper_command_line(&lower) || lower.contains("crashpad_handler") {
+            continue;
+        }
+        entries.push((pid, linux_process_env_value(pid, "CODEX_HOME")));
+    }
+
+    filter_entries_by_expected_launch_path("Codex", entries, expected_launch)
+        .into_iter()
+        .filter(|(pid, _)| is_pid_running(*pid))
+        .collect()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
     Vec::new()
 }
@@ -11056,7 +11432,7 @@ pub fn is_codex_running() -> bool {
     }
 }
 
-/// 启动 Codex（支持 CODEX_HOME 与附加参数，仅 macOS）
+/// 启动 Codex 桌面实例（支持独立 CODEX_HOME、Electron user-data 与附加参数）。
 pub fn start_codex_with_args(codex_home: &str, extra_args: &[String]) -> Result<u32, String> {
     #[cfg(target_os = "macos")]
     {
@@ -11262,14 +11638,76 @@ pub fn start_codex_with_args(codex_home: &str, extra_args: &[String]) -> Result<
         }
     }
 
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    {
+        let codex_home_trimmed = codex_home.trim();
+        if codex_home_trimmed.is_empty() {
+            return Err("实例目录为空，无法启动".to_string());
+        }
+        let launch_path = resolve_codex_launch_path()?;
+        let app_user_data_dir = crate::modules::codex_instance::get_linux_app_user_data_dir(
+            Path::new(codex_home_trimmed),
+        )?;
+        std::fs::create_dir_all(&app_user_data_dir).map_err(|error| {
+            format!(
+                "创建 Codex Linux 实例运行目录失败 ({}): {}",
+                app_user_data_dir.display(),
+                error
+            )
+        })?;
+
+        let mut command = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut command);
+        sanitize_linux_gui_launch_env(&mut command);
+        command
+            .env("CODEX_HOME", codex_home_trimmed)
+            .env("CODEX_ELECTRON_USER_DATA_PATH", &app_user_data_dir)
+            .arg(format!("--user-data-dir={}", app_user_data_dir.display()));
+        for arg in build_codex_app_launch_args(extra_args) {
+            command.arg(arg);
+        }
+        if should_detach_child() {
+            command
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        }
+        let child = spawn_detached_unix(&mut command)
+            .map_err(|error| format!("启动 Codex 失败: {}", error))?;
+        let spawned_pid = child.id();
+        crate::modules::logger::log_info(&format!(
+            "[Codex Start] Linux managed desktop instance launched: launch_path={} codex_home={} electron_user_data={} pid={}",
+            launch_path.display(),
+            summarize_text_for_process_log(codex_home_trimmed, 96),
+            app_user_data_dir.display(),
+            spawned_pid
+        ));
+
+        let probe_started = Instant::now();
+        while probe_started.elapsed() < Duration::from_secs(10) {
+            if let Some(pid) = resolve_codex_pid(None, Some(codex_home_trimmed)) {
+                return Ok(pid);
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+        if is_pid_running(spawned_pid) {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Start] Linux 实例启动后未读取到 CODEX_HOME，回退 spawn pid={}",
+                spawned_pid
+            ));
+            return Ok(spawned_pid);
+        }
+        return Err("Codex Linux 实例启动超时，未找到真实主进程".to_string());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = (codex_home, extra_args);
-        Err("Codex 应用多开仅支持 macOS 和 Windows".to_string())
+        Err("当前系统不支持 Codex 应用多开".to_string())
     }
 }
 
-/// 启动 Codex 默认实例（不注入 CODEX_HOME，支持附加参数，支持 macOS / Windows）
+/// 启动 Codex 默认桌面实例（不注入 CODEX_HOME，支持附加参数）。
 pub fn start_codex_default(extra_args: &[String]) -> Result<u32, String> {
     start_codex_default_internal(extra_args, false)
 }
@@ -11483,10 +11921,41 @@ fn start_codex_default_internal(
         return Ok(child.id());
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    {
+        let launch_path = resolve_codex_launch_path()?;
+        let mut command = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut command);
+        sanitize_linux_gui_launch_env(&mut command);
+        for arg in build_codex_default_launch_args(extra_args) {
+            command.arg(arg);
+        }
+        if should_detach_child() {
+            command
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        }
+        let child = spawn_detached_unix(&mut command)
+            .map_err(|error| format!("启动 Codex 失败: {}", error))?;
+        let spawned_pid = child.id();
+        let probe_started = Instant::now();
+        while probe_started.elapsed() < Duration::from_secs(10) {
+            if let Some(pid) = resolve_codex_pid(None, None) {
+                return Ok(pid);
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+        if is_pid_running(spawned_pid) {
+            return Ok(spawned_pid);
+        }
+        return Err("Codex Linux 默认实例启动超时，未找到真实主进程".to_string());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = extra_args;
-        Err("Codex 启动仅支持 macOS 和 Windows".to_string())
+        Err("当前系统不支持 Codex 桌面应用启动".to_string())
     }
 }
 
@@ -11562,7 +12031,7 @@ pub fn close_codex_default_fast_by_pid(
 }
 
 pub fn close_codex_default(timeout_secs: u64) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let default_home = crate::modules::codex_account::get_codex_home()
             .to_string_lossy()
@@ -11578,10 +12047,10 @@ pub fn close_codex_default(timeout_secs: u64) -> Result<(), String> {
         return close_codex_instances(&[default_home], timeout_secs);
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = timeout_secs;
-        Err("Codex 启动仅支持 macOS 和 Windows".to_string())
+        Err("当前系统不支持 Codex 桌面应用关闭".to_string())
     }
 }
 
@@ -11681,6 +12150,35 @@ fn request_codex_graceful_close(pid: u32) -> bool {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn request_codex_graceful_close(pid: u32) -> bool {
+    if pid == 0 || !is_pid_running(pid) {
+        return true;
+    }
+    match Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .output()
+    {
+        Ok(output) if output.status.success() => true,
+        Ok(output) => {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Close] Linux SIGTERM failed pid={} status={} stderr={}",
+                pid,
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+            false
+        }
+        Err(error) => {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Close] Linux SIGTERM error pid={} error={}",
+                pid, error
+            ));
+            false
+        }
+    }
+}
+
 /// 重启 Codex 默认实例，让官方 App 重新读取磁盘上的全局状态。
 pub fn restart_codex_default(extra_args: &[String], timeout_secs: u64) -> Result<u32, String> {
     ensure_codex_launch_path_configured()?;
@@ -11690,7 +12188,7 @@ pub fn restart_codex_default(extra_args: &[String], timeout_secs: u64) -> Result
 
 /// 关闭受管 Codex 实例（按 CODEX_HOME 匹配，包含默认实例目录）
 pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         crate::modules::logger::log_info("正在关闭受管 Codex 实例...");
 
@@ -11731,6 +12229,16 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
             crate::modules::logger::log_info("受管 Codex 实例未在运行，无需关闭");
             return Ok(());
         }
+        // Capture direct stdio app-server descendants before Electron exits. Once the main
+        // process is gone they can be re-parented, and an in-flight OAuth refresh could otherwise
+        // write the old token tuple after the account switch commits the new credentials.
+        let direct_app_server_pids = collect_codex_direct_app_server_pids_for_roots(&pids);
+        if !direct_app_server_pids.is_empty() {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Close] captured direct app-server pids={}",
+                summarize_pid_list_for_log(&direct_app_server_pids)
+            ));
+        }
 
         crate::modules::logger::log_info(&format!(
             "准备关闭 {} 个受管 Codex 主进程...",
@@ -11746,6 +12254,7 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
             if wait_pids_exit(&graceful_pids, graceful_wait_secs) {
                 let remaining = collect_running_pids(&pids);
                 if remaining.is_empty() {
+                    close_captured_codex_direct_app_servers(&direct_app_server_pids, timeout_secs)?;
                     crate::modules::logger::log_info(&format!(
                         "[Codex Close] graceful close finished, targets={}",
                         summarize_pid_list_for_log(&pids)
@@ -11755,7 +12264,7 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
             }
         } else {
             crate::modules::logger::log_warn(
-                "[Codex Close] graceful close request failed for all macOS targets, skip grace wait",
+                "[Codex Close] graceful close request failed for all targets, skip grace wait",
             );
         }
         let remaining = collect_running_pids(&pids);
@@ -11778,6 +12287,7 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
                 );
             }
         }
+        close_captured_codex_direct_app_servers(&direct_app_server_pids, timeout_secs)?;
 
         let still_running = !collect_running_pids(&pids).is_empty();
         if still_running {
@@ -11890,7 +12400,8 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
                 "[Codex Close] graceful close incomplete, retry force close for remaining pids={}",
                 summarize_pid_list_for_log(&remaining)
             ));
-            if let Err(err) = close_pids(&remaining, timeout_secs) {
+            let force_close_error = close_pids(&remaining, timeout_secs).err();
+            if let Some(err) = force_close_error.as_deref() {
                 crate::modules::logger::log_warn(&format!(
                     "[Codex Close] force close_pids failed: {}",
                     err
@@ -11898,10 +12409,18 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
             }
             let after_force_remaining = collect_running_pids(&remaining);
             if !after_force_remaining.is_empty() {
-                return Err(
-                    "failed to close managed Codex instance process; please close it manually and retry"
-                        .to_string(),
-                );
+                return Err(force_close_error.unwrap_or_else(|| {
+                    crate::modules::windows_operation::format_error(
+                        "stop_process",
+                        "无法关闭受管 Codex 实例进程",
+                        "目标进程在等待超时后仍在运行",
+                        None,
+                        &after_force_remaining,
+                        true,
+                        true,
+                        true,
+                    )
+                }));
             }
         }
         if includes_default
@@ -11922,15 +12441,25 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
 
         let still_running = !collect_running_pids(&pids).is_empty();
         if still_running {
-            return Err("无法关闭受管 Codex 实例进程，请手动关闭后重试".to_string());
+            let remaining = collect_running_pids(&pids);
+            return Err(crate::modules::windows_operation::format_error(
+                "stop_process",
+                "无法关闭受管 Codex 实例进程",
+                "目标进程在等待超时后仍在运行",
+                None,
+                &remaining,
+                true,
+                true,
+                true,
+            ));
         }
         Ok(())
     }
 
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = (codex_homes, timeout_secs);
-        Err("Codex 应用多开仅支持 macOS 和 Windows".to_string())
+        Err("当前系统不支持 Codex 应用多开".to_string())
     }
 }
 
@@ -12540,7 +13069,23 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
     }
 
     if !failed.is_empty() {
-        return Err(format!("关闭进程失败: {}", failed.join("; ")));
+        let original_reason = failed.join("; ");
+        #[cfg(target_os = "windows")]
+        {
+            let remaining = collect_running_pids(&pids);
+            return Err(crate::modules::windows_operation::format_error(
+                "stop_process",
+                "无法清理端口占用进程",
+                &original_reason,
+                None,
+                &remaining,
+                true,
+                false,
+                true,
+            ));
+        }
+        #[cfg(not(target_os = "windows"))]
+        return Err(format!("关闭进程失败: {}", original_reason));
     }
 
     Ok(cleaned)
@@ -14420,7 +14965,10 @@ mod legacy_platform_adapter_cleanup_tests {
 
 #[cfg(all(test, target_os = "macos"))]
 mod codex_macos_launch_tests {
-    use super::is_codex_macos_main_process_command_line;
+    use super::{
+        is_codex_direct_app_server_command_line, is_codex_macos_main_process_command_line,
+        select_codex_direct_app_server_descendants, CodexProcessTreeEntry,
+    };
 
     #[test]
     fn matches_chatgpt_and_legacy_codex_main_processes() {
@@ -14433,6 +14981,68 @@ mod codex_macos_launch_tests {
         assert!(!is_codex_macos_main_process_command_line(
             "/applications/chatgpt.app/contents/resources/codex app-server"
         ));
+    }
+
+    #[test]
+    fn matches_only_bundled_direct_app_server_commands() {
+        let executable = "/Applications/ChatGPT.app/Contents/Resources/codex";
+        assert!(is_codex_direct_app_server_command_line(
+            "/Applications/ChatGPT.app/Contents/Resources/codex app-server --analytics-default-enabled",
+            executable,
+        ));
+        assert!(is_codex_direct_app_server_command_line(
+            "\"/Applications/ChatGPT.app/Contents/Resources/codex\" app-server --listen stdio://",
+            executable,
+        ));
+        assert!(!is_codex_direct_app_server_command_line(
+            "/Applications/ChatGPT.app/Contents/Resources/codex app-server daemon",
+            executable,
+        ));
+        assert!(!is_codex_direct_app_server_command_line(
+            "/opt/homebrew/bin/codex app-server --analytics-default-enabled",
+            executable,
+        ));
+        assert!(!is_codex_direct_app_server_command_line(
+            "/Applications/ChatGPT.app/Contents/Resources/codex exec hello",
+            executable,
+        ));
+    }
+
+    #[test]
+    fn selects_direct_app_server_only_from_target_main_process_tree() {
+        let executable = "/Applications/ChatGPT.app/Contents/Resources/codex";
+        let entries = vec![
+            CodexProcessTreeEntry {
+                pid: 100,
+                parent_pid: 1,
+                command_line: "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT".to_string(),
+            },
+            CodexProcessTreeEntry {
+                pid: 110,
+                parent_pid: 100,
+                command_line: "helper".to_string(),
+            },
+            CodexProcessTreeEntry {
+                pid: 120,
+                parent_pid: 110,
+                command_line: format!("{} app-server --analytics-default-enabled", executable),
+            },
+            CodexProcessTreeEntry {
+                pid: 200,
+                parent_pid: 1,
+                command_line: "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT".to_string(),
+            },
+            CodexProcessTreeEntry {
+                pid: 220,
+                parent_pid: 200,
+                command_line: format!("{} app-server --analytics-default-enabled", executable),
+            },
+        ];
+
+        assert_eq!(
+            select_codex_direct_app_server_descendants(&entries, &[100], executable),
+            vec![120]
+        );
     }
 }
 
@@ -14465,6 +15075,53 @@ mod codex_launch_args_tests {
         assert!(error.starts_with(CODEX_MANAGED_STORE_LAUNCH_UNSAFE_PREFIX));
         assert!(error.contains("direct_error=denied"));
         assert!(error.contains("powershell_error=fallback failed"));
+    }
+}
+
+#[cfg(test)]
+mod codex_linux_layout_tests {
+    use super::{
+        linux_codex_discovery_paths, select_codex_direct_app_server_descendants,
+        CodexProcessTreeEntry,
+    };
+    use std::ffi::OsString;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn discovery_includes_official_linux_package_and_path_launchers() {
+        let home = Path::new("/home/demo");
+        let path = OsString::from("/custom/bin:/usr/bin");
+        let candidates = linux_codex_discovery_paths(Some(home), Some(path.as_os_str()));
+        assert!(candidates.contains(&PathBuf::from("/usr/bin/chatgpt")));
+        assert!(candidates.contains(&PathBuf::from("/usr/lib/chatgpt/ChatGPT")));
+        assert!(candidates.contains(&PathBuf::from("/home/demo/.local/bin/chatgpt")));
+        assert!(candidates.contains(&PathBuf::from("/custom/bin/chatgpt")));
+    }
+
+    #[test]
+    fn selects_linux_bundled_app_server_from_target_desktop_tree() {
+        let executable = "/usr/lib/chatgpt/resources/codex";
+        let entries = vec![
+            CodexProcessTreeEntry {
+                pid: 100,
+                parent_pid: 1,
+                command_line: "/usr/lib/chatgpt/ChatGPT".to_string(),
+            },
+            CodexProcessTreeEntry {
+                pid: 120,
+                parent_pid: 100,
+                command_line: format!("{} app-server --analytics-default-enabled", executable),
+            },
+            CodexProcessTreeEntry {
+                pid: 220,
+                parent_pid: 200,
+                command_line: format!("{} app-server --analytics-default-enabled", executable),
+            },
+        ];
+        assert_eq!(
+            select_codex_direct_app_server_descendants(&entries, &[100], executable),
+            vec![120]
+        );
     }
 }
 

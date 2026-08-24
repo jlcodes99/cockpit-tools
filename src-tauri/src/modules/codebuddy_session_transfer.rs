@@ -62,12 +62,11 @@ pub fn transfer_local_sessions(
 
     let operation_id = operation_id();
     let extension_data_dir = codebuddy_extension_data_dir()?;
-    let backup_root = extension_data_dir
-        .parent()
-        .unwrap_or(&extension_data_dir)
-        .join("Backups")
-        .join("CockpitTools")
-        .join(&operation_id);
+    let backup_root = crate::modules::backup_storage::behavior_backup_dir(
+        "codebuddy",
+        &crate::modules::backup_storage::scope_for_path(user_data_dir),
+        &operation_id,
+    )?;
 
     let mut report =
         sync_history_between_accounts(&extension_data_dir, source_uid, target_uid, &backup_root)?;
@@ -77,6 +76,11 @@ pub fn transfer_local_sessions(
         target_uid,
         &backup_root,
     )?;
+
+    let _ = crate::modules::backup_storage::prune_behavior_backups(
+        "codebuddy",
+        &crate::modules::backup_storage::scope_for_path(user_data_dir),
+    );
 
     logger::log_info(&format!(
         "[CodeBuddy Session Transfer] 合并完成: source_uid={}, target_uid={}, workspaces={}, added={}, replaced={}, db_rows={}",

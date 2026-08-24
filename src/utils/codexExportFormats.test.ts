@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { CodexAccount } from '../types/codex.ts';
 import {
+  buildCodexExportContent,
   hasCodexExportAgentIdentity,
   transformCodexExportJson,
 } from './codexExportFormats.ts';
@@ -72,6 +73,113 @@ test('sub2api export preserves Agent Identity credentials', () => {
   assert.equal(credentials.task_id, 'task-fixture');
   assert.equal(credentials.chatgpt_account_id, 'account-fixture');
   assert.equal(credentials.chatgpt_user_id, 'user-fixture');
+});
+
+test('official auth.json export uses nested tokens for OAuth accounts', () => {
+  const account: CodexAccount = {
+    id: 'codex-token-fixture',
+    email: 'token@example.com',
+    account_id: 'account-token',
+    tokens: {
+      id_token: 'id-token-fixture',
+      access_token: 'access-token-fixture',
+      refresh_token: 'refresh-token-fixture',
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+  const exported = JSON.parse(
+    transformCodexExportJson(JSON.stringify([account]), 'auth_json'),
+  ) as Record<string, unknown>;
+  const tokens = exported.tokens as Record<string, unknown>;
+
+  assert.equal(exported.type, 'codex');
+  assert.equal(exported.OPENAI_API_KEY, null);
+  assert.equal(tokens.id_token, 'id-token-fixture');
+  assert.equal(tokens.access_token, 'access-token-fixture');
+  assert.equal(tokens.refresh_token, 'refresh-token-fixture');
+  assert.equal(tokens.account_id, 'account-token');
+  assert.equal(typeof exported.last_refresh, 'string');
+  assert.equal(exported.email, undefined);
+});
+
+test('official auth.json export uses personal_access_token for access-token-only accounts', () => {
+  const account: CodexAccount = {
+    id: 'codex-pat-fixture',
+    email: 'pat@example.com',
+    tokens: {
+      id_token: '',
+      access_token: 'at-personal-token',
+      refresh_token: '',
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+  const exported = JSON.parse(
+    transformCodexExportJson(JSON.stringify([account]), 'auth_json'),
+  ) as Record<string, unknown>;
+
+  assert.equal(exported.type, 'codex');
+  assert.equal(exported.personal_access_token, 'at-personal-token');
+  assert.equal(exported.OPENAI_API_KEY, null);
+  assert.equal(exported.tokens, undefined);
+});
+
+test('official auth.json export preserves Agent Identity shape', () => {
+  const exported = JSON.parse(
+    transformCodexExportJson(JSON.stringify([agentIdentityAccount()]), 'auth_json'),
+  ) as Record<string, unknown>;
+  const identity = exported.agent_identity as Record<string, unknown>;
+
+  assert.equal(exported.auth_mode, 'agentIdentity');
+  assert.equal(exported.type, 'codex');
+  assert.equal(identity.agent_runtime_id, 'runtime-fixture');
+  assert.equal(identity.agent_private_key, 'private-key-fixture');
+  assert.equal(exported.tokens, undefined);
+});
+
+test('official auth.json export splits multiple accounts into downloadable files', () => {
+  const accounts: CodexAccount[] = [
+    {
+      id: 'codex-a',
+      email: 'a@example.com',
+      account_id: 'acc-a',
+      tokens: {
+        id_token: 'id-a',
+        access_token: 'access-a',
+        refresh_token: 'refresh-a',
+      },
+      created_at: 1,
+      last_used: 1,
+    },
+    {
+      id: 'codex-b',
+      email: 'b@example.com',
+      auth_mode: 'apikey',
+      openai_api_key: 'sk-test',
+      tokens: {
+        id_token: '',
+        access_token: '',
+        refresh_token: '',
+      },
+      created_at: 1,
+      last_used: 1,
+    },
+  ];
+  const content = buildCodexExportContent(
+    JSON.stringify(accounts),
+    'auth_json',
+    'codex_accounts',
+  );
+  assert.equal(content.type, 'multiple');
+  if (content.type !== 'multiple') return;
+  assert.equal(content.documents.length, 2);
+  assert.match(content.fileNameBase, /_auth$/);
+  const first = JSON.parse(content.documents[0].jsonContent) as Record<string, unknown>;
+  const second = JSON.parse(content.documents[1].jsonContent) as Record<string, unknown>;
+  assert.equal((first.tokens as Record<string, unknown>).access_token, 'access-a');
+  assert.equal(second.auth_mode, 'apikey');
+  assert.equal(second.OPENAI_API_KEY, 'sk-test');
 });
 
 test('CPA export rejects Agent Identity instead of producing empty tokens', () => {

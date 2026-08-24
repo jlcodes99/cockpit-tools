@@ -469,6 +469,18 @@ func (t *codexAgentIdentityRoundTripper) RoundTrip(req *http.Request) (*http.Res
 
 func newCodexAuthenticatedHTTPClient(ctx context.Context, cfg *config.Config, auth *cliproxyauth.Auth) *http.Client {
 	client := helps.NewUtlsHTTPClient(ctx, cfg, auth, 0)
+	return wrapCodexAuthenticatedHTTPClient(client, auth)
+}
+
+func newCodexStreamingHTTPClient(ctx context.Context, cfg *config.Config, auth *cliproxyauth.Auth) *http.Client {
+	client := helps.NewUtlsStreamingHTTPClient(ctx, cfg, auth, 0)
+	return wrapCodexAuthenticatedHTTPClient(client, auth)
+}
+
+func wrapCodexAuthenticatedHTTPClient(client *http.Client, auth *cliproxyauth.Auth) *http.Client {
+	if client == nil {
+		client = &http.Client{}
+	}
 	if !isCodexAgentIdentityAuth(auth) {
 		return client
 	}

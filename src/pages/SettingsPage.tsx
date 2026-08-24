@@ -151,6 +151,8 @@ interface GeneralConfig {
   cursor_auto_refresh_minutes: number;
   grok_auto_refresh_minutes: number;
   grok_sync_official_auth_on_switch: boolean;
+  grok_opencode_sync_on_switch?: boolean;
+  grok_opencode_auth_overwrite_on_switch?: boolean;
   close_behavior: 'ask' | 'minimize' | 'quit';
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
@@ -533,6 +535,8 @@ export function SettingsPage() {
   const [cursorAutoRefresh, setCursorAutoRefresh] = useState('10');
   const [grokAutoRefresh, setGrokAutoRefresh] = useState('10');
   const [grokSyncOfficialAuthOnSwitch, setGrokSyncOfficialAuthOnSwitch] = useState(false);
+  const [grokOpencodeAuthOverwriteOnSwitch, setGrokOpencodeAuthOverwriteOnSwitch] = useState(false);
+  const [grokOpencodeSyncOnSwitch, setGrokOpencodeSyncOnSwitch] = useState(false);
   const [grokCliPath, setGrokCliPath] = useState('');
   const [grokCliStatus, setGrokCliStatus] = useState<GrokCliStatus | null>(null);
   const [grokCliStatusError, setGrokCliStatusError] = useState<string | null>(null);
@@ -1091,6 +1095,8 @@ export function SettingsPage() {
       cursor_auto_refresh_minutes: cursorAutoRefreshNum,
       grok_auto_refresh_minutes: grokAutoRefreshNum,
       grok_sync_official_auth_on_switch: grokSyncOfficialAuthOnSwitch,
+      grok_opencode_auth_overwrite_on_switch: grokOpencodeAuthOverwriteOnSwitch,
+      grok_opencode_sync_on_switch: grokOpencodeAuthOverwriteOnSwitch && grokOpencodeSyncOnSwitch,
       close_behavior: closeBehavior,
       minimize_behavior: minimizeBehavior,
       hide_dock_icon: hideDockIcon,
@@ -1315,6 +1321,8 @@ export function SettingsPage() {
     cursorAutoRefresh,
     grokAutoRefresh,
     grokSyncOfficialAuthOnSwitch,
+    grokOpencodeAuthOverwriteOnSwitch,
+    grokOpencodeSyncOnSwitch,
     closeBehavior,
     minimizeBehavior,
     hideDockIcon,
@@ -1672,6 +1680,8 @@ export function SettingsPage() {
       setCursorAutoRefresh(String(config.cursor_auto_refresh_minutes ?? 10));
       setGrokAutoRefresh(String(config.grok_auto_refresh_minutes ?? 10));
       setGrokSyncOfficialAuthOnSwitch(Boolean(config.grok_sync_official_auth_on_switch));
+      setGrokOpencodeAuthOverwriteOnSwitch(Boolean(config.grok_opencode_auth_overwrite_on_switch));
+      setGrokOpencodeSyncOnSwitch(Boolean(config.grok_opencode_sync_on_switch));
       setCloseBehavior(config.close_behavior || 'ask');
       setMinimizeBehavior(config.minimize_behavior || 'dock_and_tray');
       setHideDockIcon(Boolean(config.hide_dock_icon));
@@ -3248,6 +3258,7 @@ export function SettingsPage() {
               </button>
             </div>
           )}
+          <SettingsAccountTransferSection directoryEntryOnly />
           <fieldset
             className="settings-general-fieldset"
             disabled={!generalLoaded}
@@ -7350,6 +7361,69 @@ export function SettingsPage() {
                           onChange={(event) =>
                             setGrokSyncOfficialAuthOnSwitch(event.target.checked)
                           }
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t(
+                          'settings.general.grokOpencodeAuthOverwrite',
+                          '切换 Grok 时覆盖 OpenCode 登录信息',
+                        )}
+                      </div>
+                      <div className="row-desc">
+                        {t(
+                          'settings.general.grokOpencodeAuthOverwriteDesc',
+                          '关闭后只切 Grok，不改 OpenCode 当前登录态',
+                        )}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={grokOpencodeAuthOverwriteOnSwitch}
+                          onChange={(event) => {
+                            const enabled = event.target.checked;
+                            setGrokOpencodeAuthOverwriteOnSwitch(enabled);
+                            if (!enabled) {
+                              setGrokOpencodeSyncOnSwitch(false);
+                            }
+                          }}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t('settings.general.grokOpencodeRestart', '切换 Grok 时自动重启 OpenCode')}
+                      </div>
+                      <div className="row-desc">
+                        {grokOpencodeAuthOverwriteOnSwitch
+                          ? t(
+                              'settings.general.grokOpencodeRestartDesc',
+                              '覆盖 OpenCode 登录信息后重启，使授权立即生效',
+                            )
+                          : t(
+                              'settings.general.grokOpencodeRestartRequiresOverwrite',
+                              '请先开启“切换 Grok 时覆盖 OpenCode 登录信息”',
+                            )}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={grokOpencodeSyncOnSwitch}
+                          onChange={(event) => setGrokOpencodeSyncOnSwitch(event.target.checked)}
+                          disabled={!grokOpencodeAuthOverwriteOnSwitch}
                         />
                         <span className="slider"></span>
                       </label>

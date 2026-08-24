@@ -402,9 +402,8 @@
   color: var(--text-muted);
   font-size: 10.5px;
   line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .codex-api-service-grid {

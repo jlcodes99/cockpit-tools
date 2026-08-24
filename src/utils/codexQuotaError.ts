@@ -1,4 +1,5 @@
-import type { CodexQuotaErrorInfo } from "../types/codex";
+import type { CodexAccount, CodexQuotaErrorInfo } from "../types/codex";
+import { isCodexClientReauthNoticeOnly } from "./codexSwitchAuthFailure";
 
 const BLOCKING_STATUS_CODES = new Set(["401", "403", "429"]);
 const BLOCKING_ERROR_CODES = new Set([
@@ -117,5 +118,14 @@ export function isBlockingCodexQuotaError(
     lower.includes("缺少 refresh_token") ||
     lower.includes("token 已过期且刷新失败") ||
     lower.includes("刷新 token 失败")
+  );
+}
+
+export function isBlockingCodexAccountQuotaError(
+  account: CodexAccount,
+): boolean {
+  return (
+    !isCodexClientReauthNoticeOnly(account) &&
+    isBlockingCodexQuotaError(account.quota_error)
   );
 }

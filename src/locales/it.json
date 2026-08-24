@@ -27,6 +27,26 @@
     "editable": "Modificabile",
     "preview": "Anteprima",
     "advancedSettings": "Impostazioni avanzate",
+    "windowsOperation": {
+      "title": "Operazione Windows non completata",
+      "accessDeniedDescription": "Windows ha negato l’operazione. Il programma può avere privilegi superiori o trovarsi in una posizione protetta.",
+      "fileInUseDescription": "Il file è utilizzato da un altro programma. Chiudilo e riprova.",
+      "programNotFoundDescription": "Windows non ha trovato il programma necessario. Controlla l’installazione o il percorso configurato.",
+      "portDeniedDescription": "Windows ha bloccato l’accesso alla porta. Potrebbe essere usata da un criterio di sistema o da un altro programma.",
+      "genericDescription": "L’operazione di sistema non è stata completata. Riprova o risolvi la causa originale e continua.",
+      "originalReason": "Causa originale",
+      "copyError": "Copia errore",
+      "openTarget": "Apri posizione",
+      "viewDetails": "Mostra dettagli",
+      "hideDetails": "Nascondi dettagli",
+      "operationLabel": "Operazione",
+      "targetLabel": "Destinazione",
+      "attemptedRecoveries": "Tentativi",
+      "manualContinue": "Problema risolto",
+      "retry": "Riprova",
+      "authorizeContinue": "Autorizza e continua",
+      "authorizationCancelled": "L’autorizzazione Windows è stata annullata. L’operazione non è proseguita."
+    },
     "codexFingerprint": {
       "modeLabel": "Modalità impronta del dispositivo",
       "modeHint": "Solo OAuth; Sessione predefinita. Isola installazione/sessione per account e riscrive le workspace per non collegare gli account locali.",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store non può trasmettere in modo affidabile la directory dell’istanza, quindi l’apertura dell’account predefinito è stata bloccata. Passa questa istanza alla modalità di avvio CLI e riprova. Dettagli: {{detail}}",
       "speedUpdated": "Velocità aggiornata"
     },
+    "accountLease": {
+      "title": "Avvio istanza Codex",
+      "progress": "Avanzamento avvio",
+      "conflictTitle": "Account già in uso",
+      "completedTitle": "Istanza avviata",
+      "failedTitle": "Avvio istanza non riuscito",
+      "conflictAccount": "Account: {{account}}",
+      "conflictDescription": "Questo account è in esecuzione in {{owners}}. Per evitare che le istanze ufficiali competano per il refresh_token, un account OAuth può essere eseguito in una sola istanza.",
+      "locate": "Trova istanza",
+      "selectOther": "Scegli account",
+      "transfer": "Arresta e trasferisci",
+      "steps": {
+        "checkInstance": "Verifica istanza destinazione",
+        "checkAccount": "Verifica account associato",
+        "checkOccupancy": "Verifica utilizzo account",
+        "stopPrevious": "Arresta istanza precedente",
+        "prepareCredentials": "Prepara credenziali",
+        "writeProfile": "Scrivi profilo istanza",
+        "startClient": "Avvia client Codex"
+      },
+      "detail": {
+        "checkingInstance": "Lettura della configurazione dell’istanza...",
+        "checkingAccount": "Verifica dell’account OAuth e dei token...",
+        "noOAuthAccount": "Nessun account OAuth associato; verifica non necessaria",
+        "accountInUse": "Questo account OAuth è già usato da un’istanza attiva",
+        "accountAvailable": "Nessun’altra istanza attiva usa questo account",
+        "transferSkipped": "Nessun trasferimento dell’account necessario",
+        "stoppingOwners": "Arresto sicuro: {{owners}}",
+        "stoppingPrevious": "Arresto sicuro dell’istanza precedente e recupero delle credenziali più recenti...",
+        "preparingCredentials": "Verifica dei token e aggiornamento delle credenziali complete se necessario...",
+        "profileReady": "auth.json / portachiavi dell’istanza aggiornato in sicurezza",
+        "cliPrepared": "Il comando di avvio CLI è pronto",
+        "startingClient": "Avvio e verifica del processo client Codex..."
+      }
+    },
     "runningDialog": {
       "title": "L'istanza è già in esecuzione",
       "desc": "Questa istanza è già avviata. Puoi passare alla finestra o riavviarla secondo la strategia attuale.",
@@ -678,6 +733,9 @@
       "codexAppUiInjectionPoolLabel": "Account",
       "codexAppUiInjectionWeeklyLabel": "Settimana",
       "codexAppUiInjectionFiveHourLabel": "5 h",
+      "codexAppUiInjectionBalanceLabel": "Saldo",
+      "codexLoginPageGuard": "Protezione pagina di accesso",
+      "codexLoginPageGuardDesc": "Dopo il riavvio di un’istanza Codex gestita, CDP mantiene la pagina di conversazione funzionante e impedisce allo stato OAuth dell’interfaccia di sostituirla con la schermata di accesso. Blocca solo il cambio di pagina e non ripara credenziali OAuth scadute.",
       "codexWslConfigDir": "Directory Codex WSL",
       "codexWslConfigDirDesc": "Inserisci la directory .codex in WSL. I percorsi \\\\wsl.localhost\\ sono supportati.",
       "codexWslConfigDirPlaceholder": "Esempio: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -762,6 +820,11 @@
       "openclawAuthOverwriteDesc": "Se disattivato, viene cambiato solo Codex e OpenClaw mantiene lo stato di accesso corrente",
       "ghcpOpencodeAuthOverwrite": "Sovrascrivi il login OpenCode quando cambi GitHub Copilot",
       "ghcpOpencodeRestart": "Riavvia OpenCode quando si cambia GitHub Copilot",
+      "grokOpencodeAuthOverwrite": "Sovrascrivi il login OpenCode quando cambi Grok",
+      "grokOpencodeAuthOverwriteDesc": "Se disattivato, viene cambiato solo Grok e OpenCode mantiene lo stato di accesso corrente",
+      "grokOpencodeRestart": "Riavvia OpenCode quando si cambia Grok",
+      "grokOpencodeRestartDesc": "Dopo aver sovrascritto il login OpenCode, riavvialo per applicarlo subito",
+      "grokOpencodeRestartRequiresOverwrite": "Attiva prima «Sovrascrivi il login OpenCode quando cambi Grok»",
       "ghcpLaunchOnSwitch": "Avvia GitHub Copilot App quando cambi GitHub Copilot",
       "zedAutoRefresh": "Aggiornamento automatico quota Zed",
       "zedAutoRefreshDesc": "Frequenza di aggiornamento in background",
@@ -997,6 +1060,17 @@
         "retentionUnit": "giorni",
         "directoryTitle": "Cartella backup",
         "directoryDesc": "I backup vengono sempre salvati nella cartella backups del progetto.",
+        "changeDirectory": "Cambia cartella", "migrating": "Migrazione...", "migrationConfirm": "Spostare i backup esistenti da {{oldPath}} a {{newPath}}?\n\nAnnulla cambierà cartella senza spostare i file vecchi.", "usageTitle": "Spazio dei backup", "usageDesc": "Mostra lo spazio locale dei backup pianificati e degli snapshot delle piattaforme.", "usageEmpty": "Nessun backup locale trovato.", "cleanupBehavior": "Pulisci backup comportamento", "behaviorCleanupConfirm": "Pulire i vecchi backup del comportamento? Verrà conservato il più recente per piattaforma e istanza. I JSON/ZIP pianificati non saranno eliminati.", "sources": {"scheduled": "JSON/ZIP pianificati", "behavior": "Snapshot comportamento", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "Altri"},
+        "migrationConfirmTitle": "Cambia cartella di backup",
+        "migrationConfirmDesc": "I backup esistenti sono stati analizzati. Migrali per liberare la vecchia cartella oppure cambia solo la destinazione dei backup futuri.",
+        "migrationOldPath": "Vecchia cartella",
+        "migrationNewPath": "Nuova cartella",
+        "migrationTotalSize": "Dati da migrare",
+        "migrationTotalFiles": "File da migrare",
+        "migrationSafetyNote": "I file vengono copiati in un’area temporanea e verificati prima di cambiare cartella e rimuovere i vecchi backup.",
+        "switchOnly": "Cambia soltanto",
+        "migrateAndSwitch": "Migra e cambia",
+        "migrationProgress": {"title": "Migra cartella di backup", "filesUnit": "file", "currentSource": "Origine attuale", "completedSummary": "Migrati {{count}} file ({{size}}) e attivata la nuova cartella.", "switchOnlyCompleted": "I backup futuri saranno salvati in {{path}}. I backup esistenti non sono stati spostati.", "cleanupPartial": "La nuova cartella è attiva, ma queste vecchie cartelle non sono state rimosse. Eliminale manualmente in seguito:", "cancelledDesc": "Migrazione annullata. La cartella originale non è cambiata e i file temporanei sono stati rimossi.", "cancelling": "Annullamento...", "cancelAction": "Annulla migrazione", "finishing": "Completamento...", "phases": {"scanning": "Analisi dei backup...", "copying": "Copia dei backup...", "verifying": "Verifica dei file...", "switching": "Cambio della cartella...", "cleaning": "Rimozione dei vecchi backup...", "completed": "Migrazione completata", "cancelled": "Migrazione annullata"}},
         "openFolder": "Apri cartella",
         "listTitle": "Elenco backup",
         "listDesc": "Importa un backup direttamente oppure elimina i file vecchi.",
@@ -1024,6 +1098,8 @@
           "openFolderFailed": "Apertura della cartella di backup non riuscita: {{error}}",
           "downloadSuccess": "Backup scaricato in {{path}}",
           "downloadFailed": "Download backup non riuscito: {{error}}"
+          ,"migrating": "Migrazione della cartella...", "migrationDone": "{{count}} file migrati in {{path}}", "directoryChanged": "Cartella backup cambiata in {{path}}", "directoryChangeFailed": "Impossibile cambiare cartella backup: {{error}}", "behaviorCleaning": "Pulizia dei vecchi backup...", "behaviorCleanupDone": "Puliti {{count}} backup, liberati {{size}}", "behaviorCleanupFailed": "Impossibile pulire i backup del comportamento: {{error}}"
+          ,"scanningMigration": "Analisi dei backup da migrare..."
         },
         "errors": {
           "invalidRetention": "La conservazione deve essere compresa tra 1 e 365 giorni"
@@ -1151,7 +1227,7 @@
       "title": "Percorso dell’applicazione non trovato",
       "desc": "Impossibile trovare il percorso dell’applicazione {{app}}. Impostalo ora per continuare.",
       "action": "Imposta ora",
-      "codexLaunchHint": "Se disattivato, il cambio account e la sovrascrittura del login continuano a funzionare, ma l'app Codex non verrà più avviata e questo avviso sul percorso non verrà più mostrato.",
+      "codexLaunchHint": "Il cambio account è completato. Imposta il percorso per avviare l'app. Per non avviarla dopo il cambio, disattiva «Avvia Codex App quando cambi Codex» in Impostazioni.",
       "claudeMultiInstanceRequiresExe": "Le istanze multiple di Claude richiedono il percorso reale di Claude.exe. Le destinazioni Microsoft Store valgono solo per il profilo desktop predefinito.",
       "scanApps": "Scansiona app",
       "scanRoots": "Ambito scansione",
@@ -1868,7 +1944,7 @@
     "title": "Gestione account Codex",
     "experimentalModelCatalog": {
       "title": "Modelli visibili",
-      "description": "Genera un catalogo gestito da Cockpit con i modelli ufficiali disponibili e le tue voci personalizzate, senza sovrascrivere il catalogo.",
+      "description": "Gestisci insieme modelli visibili, livello di ragionamento, contesto e soglia di compattazione.",
       "enabledHint": "Usa l'elenco attuale dei modelli visibili. Riavvia Codex per applicarlo.",
       "models": {
         "title": "Elenco modelli",
@@ -1890,8 +1966,18 @@
           "displayName": "Inserisci un nome visualizzato di massimo 100 caratteri.",
           "duplicate": "Gli ID modello devono essere univoci.",
           "reasoningEffort": "Opzione di ragionamento non valida.",
-          "reserved": "Questo ID modello è in conflitto con un modello ufficiale. Usa un ID diverso."
-        }
+          "reserved": "Questo ID modello è in conflitto con un modello ufficiale. Usa un ID diverso.",
+          "contextPair": "Finestra di contesto e soglia di compattazione devono essere impostate insieme.",
+          "contextWindow": "La finestra di contesto deve essere un intero maggiore di 0.",
+          "autoCompact": "La soglia di compattazione deve essere un intero maggiore di 0.",
+          "autoCompactRange": "La soglia di compattazione deve essere inferiore alla finestra di contesto."
+        },
+        "contextConfig": "Contesto e compattazione",
+        "contextDefault": "Segui modello",
+        "contextDefaultShort": "Predefinito",
+        "contextCustomShort": "Personalizzato",
+        "contextWindow": "Finestra di contesto",
+        "autoCompactLimit": "Soglia di compattazione"
       },
       "unavailable": {
         "cacheMissing": "models_cache.json non è stato trovato.",
@@ -1965,6 +2051,24 @@
       "staleAccount": "Questo account non è più nell’archivio account locale. L’elenco account è stato aggiornato. Reimporta questo account Codex o accedi di nuovo.",
       "unsupportedCountryRegion": "La regione di rete attuale non supporta l’aggiornamento dell’autorizzazione Codex. Il servizio di autorizzazione OpenAI ha rifiutato questa uscita di rete. Passa a una regione supportata e riprova."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "Accesso client richiesto",
+      "reauthorizeTitle": "Autorizzazione Codex scaduta",
+      "apiOnlyDescription": "L’attuale access_token può essere usato temporaneamente dal servizio API, ma non è stato possibile aggiornare le credenziali del client; il client ufficiale Codex/ChatGPT non è quindi stato cambiato.",
+      "reauthorizeDescription": "Non è stato possibile aggiornare le credenziali e access_token non è più disponibile per il servizio API. Autorizza di nuovo l’account per continuare.",
+      "idTokenUnavailable": "L’identità del client è scaduta e l’aggiornamento automatico non ha restituito un id_token valido.",
+      "reasonLabel": "Motivo",
+      "accessTokenExpiry": "Accesso API temporaneo fino a {{time}}",
+      "apiServiceAddFailed": "Impossibile aggiungere l’account al servizio API: {{error}}",
+      "switchingAfterReauth": "Autorizzazione aggiornata. Continuazione del cambio account...",
+      "switchAfterReauthFailed": "L’autorizzazione è stata aggiornata, ma il cambio account non è riuscito: {{error}}",
+      "reauthGenerationMissing": "Impossibile confermare la versione delle credenziali appena autorizzate. Cambia di nuovo account.",
+      "reauthorizedAndSwitched": "Riautorizzato e cambiato",
+      "startingInstanceAfterReauth": "Autorizzazione aggiornata. Riavvio dell’istanza...",
+      "startInstanceAfterReauthFailed": "Autorizzazione aggiornata, ma l’istanza non è stata avviata: {{error}}",
+      "reauthorizedAndStartedInstance": "Riautorizzato e istanza avviata",
+      "apiOnlyBadge": "Accesso richiesto"
+    },
     "current": "Attuale",
     "empty": {
       "description": "Fai clic su \"Aggiungi account\" per iniziare"
@@ -2021,6 +2125,7 @@
     "exportFormat": {
       "label": "Formato di esportazione",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "auth.json ufficiale",
       "sub2api": "Formato sub2api",
       "cpa": "Formato cpa",
       "agentIdentityCpaUnsupported": "Gli account Agent Identity non possono essere esportati nel formato cpa. Usa Cockpit Tools o sub2api.",
@@ -2172,6 +2277,10 @@
       "killPortSuccess": "Porta pulita ({{count}} processo/i chiuso/i)",
       "killPortSuccessNone": "Porta controllata. Nessun processo esterno la sta usando.",
       "killPortSuccessUnknown": "Porta del servizio API pulita",
+      "restartAction": "Riavvia Sidecar",
+      "restartTitle": "Riavvia servizio API",
+      "restartConfirmMessage": "Verrà riavviato solo il Sidecar del servizio API. Account, token, chiavi API e impostazioni del pool di account non verranno modificati. Le richieste in corso potrebbero interrompersi. Continuare?",
+      "restartSuccess": "Sidecar del servizio API riavviato",
       "refreshStats": "Aggiorna statistiche",
       "refreshStatsSuccess": "Le statistiche del servizio API sono state aggiornate",
       "routingStrategy": {
@@ -2223,6 +2332,7 @@
         "title": "Pool quota",
         "hourlyShort": "5h​",
         "weeklyShort": "Settimana",
+        "balance": "Saldo",
         "viewFull": "Vedi statistiche complete",
         "modalTitle": "Pool quota del servizio API",
         "empty": "Nessuna statistica quota"
@@ -2432,6 +2542,7 @@
     "quotaError": {
       "badge": "Errore quota",
       "refreshFailedBadge": "Aggiornamento fallito",
+      "authRefreshDeferred": "Il refresh_token non è valido. L’access_token attuale funziona ancora per il servizio API, ma non consente di cambiare il client ufficiale. Autorizza di nuovo prima del cambio.",
       "generic": "Aggiornamento quota non riuscito, riprova più tardi",
       "deactivatedWorkspace": "Workspace disattivato, cambia account o riautorizza",
       "requestFailedManualRetry": "Controlla la rete. La quota più recente non è stata recuperata. Aggiorna per riprovare.",
@@ -3037,6 +3148,7 @@
         "custom": "Personalizzato",
         "endpoint": "Endpoint del provider",
         "hint": "È stata compilata automaticamente una Base URL compatibile. Puoi comunque modificarla manualmente.",
+        "cockpitToolsHint": "Sostituisci la Base URL con l’indirizzo LAN dell’host Cockpit Tools, ad esempio http://HOST_IP:PORT/v1. La scheda account interrogherà automaticamente /cockpit/quota.",
         "website": "Sito web",
         "apiKeyPage": "Pagina della chiave API",
         "getApiKey": "Ottieni chiave"
@@ -3101,6 +3213,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools nella LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3278,7 +3393,8 @@
         "contextWindow": "Finestra di contesto",
         "contextWindowHint": "Scrive model_context_window. Modificabile solo in modalità personalizzata.",
         "partialDetected": "Attualmente è impostato un solo campo gestito: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Il salvataggio riscriverà entrambi i campi utilizzando lo schema corrente.",
-        "notSet": "Non impostato"
+        "notSet": "Non impostato",
+        "modelCatalogDesc": "I modelli visibili e le impostazioni di contesto per modello vengono scritti nel catalogo modelli gestito da Cockpit del Codex attivo."
       },
       "testing": "Test in corso...",
       "testSuccess": "Connessione del provider valida: {{protocol}}, {{model}}, {{latency}}.",
@@ -3388,6 +3504,14 @@
         "rawFields": "Dati servizio",
         "fields": {
           "status": "Stato",
+          "fiveHourRemainingPercent": "Residuo 5 ore",
+          "weeklyRemainingPercent": "Residuo settimanale",
+          "accountCount": "Pool account",
+          "availableAccountCount": "Account disponibili",
+          "abnormalAccountCount": "Account anomali",
+          "cooldownAccountCount": "Account in attesa",
+          "stale": "Dati non aggiornati",
+          "apiKeyBalance": "Saldo API_KEY",
           "planName": "Piano",
           "remaining": "Credito residuo",
           "balance": "Saldo",
@@ -3478,6 +3602,56 @@
       "filterMissing": "Sconosciuti ({{count}})",
       "accessTokenOnlyUsable": "Token utilizzabile",
       "accessTokenOnlyUsableDetail": "L'endpoint dell'abbonamento è limitato, ma quota e uso di Codex funzionano normalmente"
+    },
+    "switchProgress": {
+      "completed": "Cambio completato",
+      "needsAttention": "Azione richiesta",
+      "steps": {
+        "credentials": "Leggi credenziali account",
+        "accessToken": "Controlla access_token",
+        "idToken": "Controlla id_token",
+        "stopRuntime": "Arresta sessione precedente",
+        "refreshTokens": "Aggiorna credenziali",
+        "writeCredentials": "Scrivi credenziali client",
+        "syncSettings": "Sincronizza impostazioni",
+        "startClient": "Avvia client Codex"
+      },
+      "status": {
+        "pending": "In attesa",
+        "running": "In corso",
+        "completed": "Completato",
+        "warning": "Aggiornamento richiesto",
+        "skipped": "Ignorato",
+        "error": "Non riuscito"
+      },
+      "detail": {
+        "missing": "Credenziale non trovata",
+        "opaqueToken": "Token opaco; la scadenza è verificata dal servizio",
+        "expiryUnknown": "Scadenza non disponibile",
+        "expiresAt": "Valido fino al {{time}} ({{relative}})",
+        "readingCredentials": "Lettura dell’account locale e dei dati Token...",
+        "nonOAuthAccount": "Account non OAuth; non richiede Token di accesso",
+        "credentialsFound": "Caricato: {{tokens}}",
+        "notApplicable": "Questo controllo non si applica all’account",
+        "refreshNeeded": "Scaduto o nel margine di sicurezza; aggiornamento richiesto",
+        "tokenValid": "Valido; nessun aggiornamento richiesto",
+        "stoppingRuntime": "Arresto sicuro di ChatGPT/Codex e app-server...",
+        "runtimeStopped": "La sessione precedente è stata arrestata in sicurezza",
+        "waiting": "In attesa del passaggio precedente",
+        "refreshingTokens": "Acquisizione e salvataggio dei nuovi access_token, id_token e refresh_token...",
+        "refreshSkipped": "AT e ID Token sono validi; refresh_token non è stato usato",
+        "refreshFailed": "Impossibile aggiornare automaticamente il set completo di Token",
+        "refreshResultReused": "Uso dei Token più recenti scritti da un altro responsabile",
+        "refreshCompleted": "Set completo di Token aggiornato e salvato in sicurezza",
+        "credentialsWritten": "auth.json / keychain aggiornato secondo le regole ufficiali",
+        "writingCredentials": "Scrittura dei dati di accesso dell’account...",
+        "settingsSynced": "Associazione, velocità e impostazioni sincronizzate",
+        "syncingSettings": "Sincronizzazione dell’associazione e delle impostazioni...",
+        "launchDisabled": "Avvio automatico disattivato; avvia il client manualmente",
+        "clientStartWarning": "Credenziali cambiate, ma il client non si è avviato; riprova più tardi",
+        "clientStarted": "Client Codex avviato",
+        "startingClient": "Avvio del client Codex..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Sessioni Codex nascoste",

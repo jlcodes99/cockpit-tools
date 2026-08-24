@@ -2,9 +2,28 @@ package executor
 
 import (
 	"testing"
+	"time"
 
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
+
+func TestLockCodexWebsocketRequestUnlocksOnce(t *testing.T) {
+	sess := &codexWebsocketSession{sessionID: "lock-once"}
+	unlock := lockCodexWebsocketRequest(sess)
+	unlocked := make(chan struct{})
+	go func() {
+		sess.reqMu.Lock()
+		close(unlocked)
+		sess.reqMu.Unlock()
+	}()
+	unlock()
+	unlock()
+	select {
+	case <-unlocked:
+	case <-time.After(2 * time.Second):
+		t.Fatal("websocket request lock was not released after terminal unlock")
+	}
+}
 
 func TestCodexWebsocketsExecutor_SessionStoreSurvivesExecutorReplacement(t *testing.T) {
 	sessionID := "test-session-store-survives-replace"

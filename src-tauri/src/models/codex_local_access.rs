@@ -609,6 +609,10 @@ pub struct CodexLocalAccessStatsWindow {
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessAccountWindowQuery {
     pub account_id: String,
+    #[serde(default)]
+    pub official_account_id: String,
+    #[serde(default)]
+    pub account_email: String,
     pub window_key: String,
     pub start_at: i64,
     pub end_at: i64,

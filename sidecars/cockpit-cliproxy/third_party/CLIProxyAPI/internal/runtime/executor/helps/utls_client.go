@@ -191,3 +191,45 @@ func NewUtlsHTTPClient(ctx context.Context, cfg *config.Config, auth *cliproxyau
 	}
 	return client
 }
+
+// NewUtlsStreamingHTTPClient is NewUtlsHTTPClient with keep-alives disabled on the
+// standard transport. Codex SSE streams must not return a half-open HTTP/2
+// connection to the shared pool, or the next conversation on that host hangs.
+func NewUtlsStreamingHTTPClient(ctx context.Context, cfg *config.Config, auth *cliproxyauth.Auth, timeout time.Duration) *http.Client {
+	client := NewUtlsHTTPClient(ctx, cfg, auth, timeout)
+	if client == nil {
+		return nil
+	}
+	switch transport := client.Transport.(type) {
+	case *fallbackRoundTripper:
+		transport.fallback = disableKeepAlivesRoundTripper(transport.fallback)
+	default:
+		client.Transport = disableKeepAlivesRoundTripper(client.Transport)
+	}
+	return client
+}
+
+func disableKeepAlivesRoundTripper(base http.RoundTripper) http.RoundTripper {
+	if base == nil {
+		return &http.Transport{DisableKeepAlives: true}
+	}
+	if transport, ok := base.(*http.Transport); ok && transport != nil {
+		cloned := transport.Clone()
+		cloned.DisableKeepAlives = true
+		return cloned
+	}
+	return closeAfterRequestRoundTripper{base: base}
+}
+
+type closeAfterRequestRoundTripper struct {
+	base http.RoundTripper
+}
+
+func (t closeAfterRequestRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req == nil {
+		return t.base.RoundTrip(req)
+	}
+	cloned := req.Clone(req.Context())
+	cloned.Close = true
+	return t.base.RoundTrip(cloned)
+}

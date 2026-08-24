@@ -557,11 +557,10 @@ jobs:
 
   build-macos-universal:
     name: "🏗️ Build: macOS Universal"
-    # Still sequential after both arch builds (needs arm + x64 artifacts).
+    # This is an independent source build; run it in parallel with the two
+    # architecture-specific jobs instead of waiting for their release assets.
     needs:
       - prepare-release
-      - build-macos-aarch64
-      - build-macos-x86_64
     runs-on: macos-latest
     permissions:
       contents: write
@@ -777,6 +776,8 @@ jobs:
     needs:
       - prepare-release
       - build-windows
+      - build-macos-aarch64
+      - build-macos-x86_64
       - build-macos-universal
       - build-linux
     runs-on: ubuntu-latest
@@ -923,7 +924,6 @@ jobs:
     needs:
       - prepare-release
       - finalize-legacy-latest
-      - upload-checksums
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1003,4 +1003,21 @@ jobs:
             echo "Unexpected PR branch: ${PR_BRANCH}"
             exit 1
           fi
-          gh pr merge "${PR_NUMBER}" --auto --squash --delete-branch
+          if gh pr merge "${PR_NUMBER}" --auto --squash --delete-branch; then
+            exit 0
+          fi
+
+          PR_STATE="$(gh pr view "${PR_NUMBER}" --json state --jq '.state')"
+          PR_MERGE_STATE="$(gh pr view "${PR_NUMBER}" --json mergeStateStatus --jq '.mergeStateStatus')"
+          if [ "${PR_STATE}" = "MERGED" ]; then
+            echo "Cask PR ${PR_NUMBER} was merged while enabling auto-merge"
+            exit 0
+          fi
+          if [ "${PR_STATE}" = "OPEN" ] && [ "${PR_MERGE_STATE}" = "CLEAN" ]; then
+            echo "Cask PR ${PR_NUMBER} is ready; merging directly"
+            gh pr merge "${PR_NUMBER}" --squash --delete-branch
+            exit 0
+          fi
+
+          echo "Unable to enable auto-merge for cask PR ${PR_NUMBER}: state=${PR_STATE}, merge_state=${PR_MERGE_STATE}"
+          exit 1

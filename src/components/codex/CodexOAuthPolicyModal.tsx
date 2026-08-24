@@ -241,12 +241,12 @@ export function CodexOAuthPolicyModal({
                   <SingleSelectDropdown
                     value={batchAppServer}
                     options={[
-                      { value: 'unchanged', label: t('codex.oauthPolicy.appServerUnchanged', 'app-server：不修改') },
-                      { value: 'on', label: t('codex.oauthPolicy.appServerOn', 'app-server：开启') },
-                      { value: 'off', label: t('codex.oauthPolicy.appServerOff', 'app-server：关闭') },
+                      { value: 'unchanged', label: t('codex.oauthPolicy.appServerUnchanged', '第三方客户端：不修改') },
+                      { value: 'on', label: t('codex.oauthPolicy.appServerOn', '第三方客户端：开启') },
+                      { value: 'off', label: t('codex.oauthPolicy.appServerOff', '第三方客户端：关闭') },
                     ]}
                     onChange={(value) => setBatchAppServer(value as BatchToggleValue)}
-                    ariaLabel={t('codex.oauthPolicy.appServer', '允许 app-server')}
+                    ariaLabel={t('codex.oauthPolicy.appServer', '允许第三方客户端')}
                     disabled={batchSaving}
                     menuClassName="codex-oauth-policy-dropdown-menu"
                     menuWidth={230}
@@ -337,7 +337,7 @@ export function CodexOAuthPolicyModal({
                             })
                           }
                         />
-                        <span>{t('codex.oauthPolicy.appServerShort', 'app-server')}</span>
+                        <span>{t('codex.oauthPolicy.appServerShort', '第三方客户端：允许')}</span>
                       </label>
                       <SingleSelectDropdown
                         value={fingerprintMode}

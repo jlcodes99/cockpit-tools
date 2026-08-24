@@ -834,6 +834,10 @@ fn repair_session_visibility_for_instances_with_options(
             None,
         );
         prune_session_visibility_repair_backups(&instances);
+        for instance in &instances {
+            let scope = modules::backup_storage::scope_for_path(&instance.data_dir);
+            let _ = modules::backup_storage::prune_behavior_backups("codex", &scope);
+        }
     }
 
     let message = if options.dry_run {
@@ -3767,15 +3771,17 @@ fn backup_instance_files(
     target_provider: &str,
     options: CodexSessionVisibilityRepairOptions,
 ) -> Result<PathBuf, String> {
-    let backup_dir_name = format!(
-        "{}{}{}",
-        SESSION_VISIBILITY_REPAIR_BACKUP_PREFIX,
-        Utc::now().format("%Y%m%d-%H%M%S"),
-        SESSION_VISIBILITY_REPAIR_BACKUP_SUFFIX
-    );
-    let backup_dir = data_dir.join(backup_dir_name);
-    fs::create_dir_all(&backup_dir)
-        .map_err(|error| format!("创建备份目录失败 ({}): {}", backup_dir.display(), error))?;
+    let scope = modules::backup_storage::scope_for_path(data_dir);
+    let backup_dir = modules::backup_storage::behavior_backup_dir(
+        "codex",
+        &scope,
+        &format!(
+            "{}{}{}",
+            SESSION_VISIBILITY_REPAIR_BACKUP_PREFIX,
+            Utc::now().format("%Y%m%d-%H%M%S"),
+            SESSION_VISIBILITY_REPAIR_BACKUP_SUFFIX
+        ),
+    )?;
 
     let mut backed_up_files = Vec::new();
     let mut sqlite_backup_files = Vec::new();

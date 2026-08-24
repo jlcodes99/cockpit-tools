@@ -66,6 +66,18 @@ pub fn quarantine_file(path: &Path, reason: &str) -> Result<Option<PathBuf>, Str
         safe_reason,
         unique_timestamp_nanos()
     ));
+    let prefix = format!("{}.{}.", file_name, safe_reason);
+    if let Ok(entries) = fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let candidate = entry.path();
+            let Some(name) = candidate.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if name.starts_with(&prefix) && candidate != quarantine_path {
+                let _ = fs::remove_file(candidate);
+            }
+        }
+    }
     fs::rename(path, &quarantine_path).map_err(|e| format_io_error("隔离损坏文件", path, &e))?;
     Ok(Some(quarantine_path))
 }

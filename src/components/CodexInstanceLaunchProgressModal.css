@@ -1,0 +1,55 @@
+.codex-instance-launch-modal {
+  max-height: min(860px, calc(100vh - 40px));
+}
+
+.codex-instance-account-conflict {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  margin: 14px 0 6px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 34%, transparent);
+  border-radius: 10px;
+  color: var(--warning, #f59e0b);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 9%, transparent);
+}
+
+.codex-instance-account-conflict > svg {
+  margin-top: 2px;
+}
+
+.codex-instance-account-conflict strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.codex-instance-account-conflict p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.codex-instance-launch-footer {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.codex-instance-launch-footer .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .codex-instance-launch-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .codex-instance-launch-footer .btn {
+    width: 100%;
+  }
+}

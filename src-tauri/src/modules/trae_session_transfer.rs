@@ -198,11 +198,11 @@ pub fn transfer_local_session_state(
     }
     reject_symlink(&workspace_root)?;
 
-    let backup_root = user_data_dir
-        .join("Backups")
-        .join("CockpitTools")
-        .join("TraeSessions")
-        .join(operation_id());
+    let backup_root = crate::modules::backup_storage::behavior_backup_dir(
+        "trae",
+        &crate::modules::backup_storage::scope_for_path(user_data_dir),
+        &operation_id(),
+    )?;
     let mut workspaces = fs::read_dir(&workspace_root)
         .map_err(|error| format!("读取 Trae workspaceStorage 失败: {}", error))?
         .filter_map(Result::ok)
@@ -240,6 +240,10 @@ pub fn transfer_local_session_state(
         "[Trae Session Transfer] workspace 会话状态共享完成: source_uid={}, target_uid={}, workspaces={}, copied_keys={}, merged_keys={}",
         source_uid, target_uid, report.scanned_workspaces, report.copied_keys, report.merged_keys
     ));
+    let _ = crate::modules::backup_storage::prune_behavior_backups(
+        "trae",
+        &crate::modules::backup_storage::scope_for_path(user_data_dir),
+    );
     Ok(report)
 }
 

@@ -27,6 +27,26 @@
     "editable": "Dapat Diedit",
     "preview": "Pratinjau",
     "advancedSettings": "Pengaturan lanjutan",
+    "windowsOperation": {
+      "title": "Operasi Windows belum selesai",
+      "accessDeniedDescription": "Windows menolak operasi ini. Target mungkin berjalan dengan izin lebih tinggi atau berada di lokasi terlindungi.",
+      "fileInUseDescription": "File target sedang digunakan program lain. Tutup program tersebut lalu coba lagi.",
+      "programNotFoundDescription": "Windows tidak menemukan program yang diperlukan. Periksa instalasi atau jalur yang diatur.",
+      "portDeniedDescription": "Windows memblokir akses ke port. Kebijakan sistem atau program lain mungkin sedang menggunakannya.",
+      "genericDescription": "Operasi sistem belum selesai. Coba lagi atau atasi penyebab awal lalu lanjutkan.",
+      "originalReason": "Penyebab awal",
+      "copyError": "Salin kesalahan",
+      "openTarget": "Buka lokasi",
+      "viewDetails": "Lihat detail",
+      "hideDetails": "Sembunyikan detail",
+      "operationLabel": "Operasi",
+      "targetLabel": "Target",
+      "attemptedRecoveries": "Sudah dicoba",
+      "manualContinue": "Sudah ditangani",
+      "retry": "Coba lagi",
+      "authorizeContinue": "Izinkan dan lanjutkan",
+      "authorizationCancelled": "Otorisasi Windows dibatalkan. Operasi tidak dilanjutkan."
+    },
     "codexFingerprint": {
       "modeLabel": "Mode sidik perangkat",
       "modeHint": "Hanya OAuth; default Sesi. Memisahkan instalasi/sesi per akun dan menulis ulang workspace agar akun lokal tidak tertaut.",
@@ -582,6 +602,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store tidak dapat meneruskan direktori instans secara andal, sehingga pembukaan akun default diblokir. Ubah instans ini ke mode peluncuran CLI lalu coba lagi. Detail: {{detail}}",
       "speedUpdated": "Kecepatan diperbarui"
     },
+    "accountLease": {
+      "title": "Memulai instans Codex",
+      "progress": "Progres peluncuran",
+      "conflictTitle": "Akun sedang digunakan",
+      "completedTitle": "Instans telah dimulai",
+      "failedTitle": "Gagal memulai instans",
+      "conflictAccount": "Akun: {{account}}",
+      "conflictDescription": "Akun ini sedang berjalan di {{owners}}. Agar instans resmi tidak berebut refresh_token, satu akun OAuth hanya dapat berjalan di satu instans.",
+      "locate": "Temukan instans",
+      "selectOther": "Pilih akun lain",
+      "transfer": "Hentikan dan pindahkan",
+      "steps": {
+        "checkInstance": "Periksa instans tujuan",
+        "checkAccount": "Periksa akun terikat",
+        "checkOccupancy": "Periksa penggunaan akun",
+        "stopPrevious": "Hentikan instans sebelumnya",
+        "prepareCredentials": "Siapkan kredensial",
+        "writeProfile": "Tulis profil instans",
+        "startClient": "Mulai klien Codex"
+      },
+      "detail": {
+        "checkingInstance": "Membaca konfigurasi instans...",
+        "checkingAccount": "Memeriksa akun OAuth dan token...",
+        "noOAuthAccount": "Tidak ada akun OAuth terikat; pemeriksaan tidak diperlukan",
+        "accountInUse": "Akun OAuth ini sudah digunakan oleh instans yang berjalan",
+        "accountAvailable": "Tidak ada instans lain yang menggunakan akun ini",
+        "transferSkipped": "Pemindahan penggunaan akun tidak diperlukan",
+        "stoppingOwners": "Menghentikan dengan aman: {{owners}}",
+        "stoppingPrevious": "Menghentikan instans sebelumnya dan mengambil kredensial terbaru...",
+        "preparingCredentials": "Memeriksa token dan memperbarui kredensial lengkap bila diperlukan...",
+        "profileReady": "auth.json / keychain instans telah diperbarui dengan aman",
+        "cliPrepared": "Perintah peluncuran CLI siap",
+        "startingClient": "Memulai dan memverifikasi proses klien Codex..."
+      }
+    },
     "runningDialog": {
       "title": "Instansi sudah berjalan",
       "desc": "Instansi ini sudah berjalan. Anda dapat membuka jendelanya atau memulai ulang setelah menutup.",
@@ -739,6 +794,9 @@
       "codexAppUiInjectionPoolLabel": "Akun",
       "codexAppUiInjectionWeeklyLabel": "Minggu",
       "codexAppUiInjectionFiveHourLabel": "5 jam",
+      "codexAppUiInjectionBalanceLabel": "Saldo",
+      "codexLoginPageGuard": "Pelindung halaman masuk",
+      "codexLoginPageGuardDesc": "Setelah instans Codex terkelola dimulai ulang, CDP mempertahankan halaman percakapan yang berfungsi dan mencegah status OAuth antarmuka menggantinya dengan halaman masuk. Fitur ini hanya mencegah perpindahan halaman dan tidak memperbaiki kredensial OAuth yang kedaluwarsa.",
       "codexWslConfigDir": "Direktori Codex WSL",
       "codexWslConfigDirDesc": "Masukkan direktori .codex di dalam WSL. Path \\\\wsl.localhost\\ didukung.",
       "codexWslConfigDirPlaceholder": "Contoh: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -847,6 +905,11 @@
       "openclawAuthOverwriteDesc": "Jika dinonaktifkan, hanya Codex yang diganti dan OpenClaw mempertahankan status login saat ini",
       "ghcpOpencodeAuthOverwrite": "Timpa login OpenCode saat mengganti GitHub Copilot",
       "ghcpOpencodeRestart": "Mulai ulang OpenCode saat mengganti GitHub Copilot",
+      "grokOpencodeAuthOverwrite": "Timpa login OpenCode saat mengganti Grok",
+      "grokOpencodeAuthOverwriteDesc": "Jika dimatikan, hanya Grok yang diganti dan OpenCode tetap pada status login saat ini",
+      "grokOpencodeRestart": "Mulai ulang OpenCode saat mengganti Grok",
+      "grokOpencodeRestartDesc": "Setelah menimpa info login OpenCode, mulai ulang OpenCode agar langsung berlaku",
+      "grokOpencodeRestartRequiresOverwrite": "Aktifkan dulu \"Timpa login OpenCode saat mengganti Grok\"",
       "ghcpLaunchOnSwitch": "Luncurkan Aplikasi GitHub Copilot saat mengganti GitHub Copilot",
       "antigravityDualSwitchNoRestart": "Penggantian ganda tanpa mulai ulang",
       "antigravityDualSwitchNoRestartDesc": "Saat mengganti, tulis data akun lokal dan panggil penggantian mulus ekstensi dalam satu alur, tanpa memulai ulang Antigravity IDE.",
@@ -1044,6 +1107,13 @@
         "retentionUnit": "hari",
         "directoryTitle": "Folder cadangan",
         "directoryDesc": "Cadangan selalu disimpan di folder backups milik proyek.",
+        "changeDirectory": "Ganti folder", "migrating": "Memindahkan...", "migrationConfirm": "Pindahkan cadangan yang ada dari {{oldPath}} ke {{newPath}}?\n\nMembatalkan tetap mengganti folder tanpa memindahkan berkas lama.", "usageTitle": "Penggunaan ruang cadangan", "usageDesc": "Menampilkan penggunaan lokal cadangan terjadwal dan snapshot perilaku platform.", "usageEmpty": "Tidak ada berkas cadangan lokal.", "cleanupBehavior": "Bersihkan cadangan perilaku lama", "behaviorCleanupConfirm": "Bersihkan cadangan perilaku lama? Hanya cadangan terbaru per platform dan instans yang dipertahankan. JSON/ZIP terjadwal tidak dihapus.", "sources": {"scheduled": "JSON/ZIP terjadwal", "behavior": "Snapshot perilaku", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "Lainnya"},
+        "migrationConfirmTitle": "Ubah folder cadangan",
+        "migrationConfirmDesc": "Cadangan lama telah dipindai. Migrasikan untuk mengosongkan folder lama, atau hanya ubah lokasi cadangan berikutnya.",
+        "migrationOldPath": "Folder lama", "migrationNewPath": "Folder baru", "migrationTotalSize": "Data dipindahkan", "migrationTotalFiles": "File dipindahkan",
+        "migrationSafetyNote": "File disalin ke area sementara dan diverifikasi sebelum folder dialihkan dan cadangan lama dihapus.",
+        "switchOnly": "Ubah saja", "migrateAndSwitch": "Migrasi dan ubah",
+        "migrationProgress": {"title": "Migrasi folder cadangan", "filesUnit": "file", "currentSource": "Sumber saat ini", "completedSummary": "{{count}} file ({{size}}) dimigrasikan dan folder baru diaktifkan.", "switchOnlyCompleted": "Cadangan berikutnya akan disimpan di {{path}}. Cadangan lama tidak dipindahkan.", "cleanupPartial": "Folder baru sudah aktif, tetapi folder lama berikut tidak dapat dihapus. Hapus secara manual nanti:", "cancelledDesc": "Migrasi dibatalkan. Folder asli tidak berubah dan file sementara telah dihapus.", "cancelling": "Membatalkan...", "cancelAction": "Batalkan migrasi", "finishing": "Menyelesaikan...", "phases": {"scanning": "Memindai cadangan...", "copying": "Menyalin cadangan...", "verifying": "Memverifikasi file...", "switching": "Mengubah folder...", "cleaning": "Menghapus cadangan lama...", "completed": "Migrasi selesai", "cancelled": "Migrasi dibatalkan"}},
         "openFolder": "Buka folder",
         "listTitle": "Daftar cadangan",
         "listDesc": "Impor cadangan secara langsung atau hapus file lama.",
@@ -1071,6 +1141,8 @@
           "openFolderFailed": "Gagal membuka folder cadangan: {{error}}",
           "downloadSuccess": "Cadangan diunduh ke {{path}}",
           "downloadFailed": "Gagal mengunduh cadangan: {{error}}"
+          ,"migrating": "Memindahkan folder cadangan...", "migrationDone": "{{count}} berkas dipindahkan ke {{path}}", "directoryChanged": "Folder cadangan diubah ke {{path}}", "directoryChangeFailed": "Gagal mengganti folder cadangan: {{error}}", "behaviorCleaning": "Membersihkan cadangan perilaku lama...", "behaviorCleanupDone": "{{count}} cadangan dibersihkan, {{size}} dibebaskan", "behaviorCleanupFailed": "Gagal membersihkan cadangan perilaku: {{error}}"
+          ,"scanningMigration": "Memindai cadangan untuk dimigrasikan..."
         },
         "errors": {
           "invalidRetention": "Masa simpan harus antara 1 dan 365 hari"
@@ -1197,7 +1269,7 @@
     "missing": {
       "title": "Jalur aplikasi tidak ditemukan",
       "desc": "Tidak dapat menemukan jalur aplikasi {{app}}. Silakan atur sekarang untuk melanjutkan.",
-      "codexLaunchHint": "Jika dinonaktifkan, penggantian akun dan penimpaan login tetap berjalan, tetapi Aplikasi Codex tidak akan diluncurkan lagi dan perintah jalur ini tidak akan muncul kembali.",
+      "codexLaunchHint": "Perpindahan akun sudah selesai. Atur path untuk menjalankan aplikasi. Jika tidak ingin diluncurkan setelah ganti akun, matikan «Luncurkan Aplikasi Codex saat mengganti Codex» di Pengaturan.",
       "action": "Atur sekarang",
       "claudeMultiInstanceRequiresExe": "Profil multi-instans Claude memerlukan jalur Claude.exe asli. Target Microsoft Store hanya untuk profil desktop default.",
       "scanApps": "Pindai aplikasi",
@@ -1915,7 +1987,7 @@
     "title": "Codex Account​",
     "experimentalModelCatalog": {
       "title": "Model yang terlihat",
-      "description": "Membuat katalog yang dikelola Cockpit dari model resmi yang tersedia dan entri khusus Anda tanpa menimpa katalog pengguna.",
+      "description": "Kelola model yang terlihat, tingkat penalaran, konteks, dan ambang pemadatan di satu tempat.",
       "enabledHint": "Menggunakan daftar model yang terlihat saat ini. Mulai ulang Codex untuk menerapkan.",
       "models": {
         "title": "Daftar model",
@@ -1937,8 +2009,18 @@
           "displayName": "Masukkan nama tampilan maksimal 100 karakter.",
           "duplicate": "ID model harus unik.",
           "reasoningEffort": "Opsi tingkat penalaran tidak valid.",
-          "reserved": "ID model ini bertentangan dengan model resmi. Gunakan ID lain."
-        }
+          "reserved": "ID model ini bertentangan dengan model resmi. Gunakan ID lain.",
+          "contextPair": "Jendela konteks dan ambang pemadatan harus diisi bersama.",
+          "contextWindow": "Jendela konteks harus berupa bilangan bulat lebih dari 0.",
+          "autoCompact": "Ambang pemadatan harus berupa bilangan bulat lebih dari 0.",
+          "autoCompactRange": "Ambang pemadatan harus lebih kecil daripada jendela konteks."
+        },
+        "contextConfig": "Konteks & pemadatan",
+        "contextDefault": "Ikuti model",
+        "contextDefaultShort": "Bawaan",
+        "contextCustomShort": "Kustom",
+        "contextWindow": "Jendela konteks",
+        "autoCompactLimit": "Ambang pemadatan"
       },
       "unavailable": {
         "cacheMissing": "models_cache.json tidak ditemukan.",
@@ -2012,6 +2094,24 @@
       "staleAccount": "Akun ini tidak lagi ada di penyimpanan akun lokal. Daftar akun telah disegarkan. Impor ulang atau masuk lagi ke akun Codex ini.",
       "unsupportedCountryRegion": "Wilayah jaringan saat ini tidak mendukung penyegaran otorisasi Codex. Layanan otorisasi OpenAI menolak jalur keluar jaringan ini. Beralih ke wilayah yang didukung lalu coba lagi."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "Klien perlu masuk",
+      "reauthorizeTitle": "Otorisasi Codex kedaluwarsa",
+      "apiOnlyDescription": "access_token saat ini masih dapat dipakai sementara oleh layanan API, tetapi kredensial masuk klien tidak dapat diperbarui sehingga klien resmi Codex/ChatGPT tidak dialihkan.",
+      "reauthorizeDescription": "Kredensial masuk tidak dapat diperbarui dan access_token tidak lagi tersedia untuk layanan API. Otorisasi ulang akun untuk melanjutkan.",
+      "idTokenUnavailable": "Identitas klien telah kedaluwarsa dan pembaruan otomatis tidak menghasilkan id_token yang valid.",
+      "reasonLabel": "Alasan",
+      "accessTokenExpiry": "Akses API sementara hingga {{time}}",
+      "apiServiceAddFailed": "Akun tidak dapat ditambahkan ke layanan API: {{error}}",
+      "switchingAfterReauth": "Otorisasi diperbarui. Melanjutkan pengalihan akun...",
+      "switchAfterReauthFailed": "Otorisasi diperbarui, tetapi pengalihan akun gagal: {{error}}",
+      "reauthGenerationMissing": "Versi kredensial yang baru diotorisasi tidak dapat dikonfirmasi. Alihkan akun lagi.",
+      "reauthorizedAndSwitched": "Diotorisasi ulang dan dialihkan",
+      "startingInstanceAfterReauth": "Otorisasi diperbarui. Memulai ulang instance...",
+      "startInstanceAfterReauthFailed": "Otorisasi diperbarui, tetapi instance gagal dimulai: {{error}}",
+      "reauthorizedAndStartedInstance": "Diotorisasi ulang dan instance dimulai",
+      "apiOnlyBadge": "Perlu otorisasi"
+    },
     "current": "Saat Ini",
     "account": {
       "personal": "Akun pribadi"
@@ -2071,6 +2171,7 @@
     "exportFormat": {
       "label": "Format ekspor",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "auth.json resmi",
       "sub2api": "Format sub2api",
       "cpa": "Format cpa",
       "agentIdentityCpaUnsupported": "Akun Agent Identity tidak dapat diekspor dalam format cpa. Gunakan Cockpit Tools atau sub2api.",
@@ -2222,6 +2323,10 @@
       "killPortSuccess": "Port dibersihkan ({{count}} proses dihentikan)",
       "killPortSuccessNone": "Port diperiksa. Tidak ada proses eksternal yang memakainya.",
       "killPortSuccessUnknown": "Port layanan API dibersihkan",
+      "restartAction": "Mulai Ulang Sidecar",
+      "restartTitle": "Mulai Ulang Layanan API",
+      "restartConfirmMessage": "Hanya Sidecar layanan API yang dimulai ulang. Akun, token, API key, dan pengaturan kumpulan akun tidak akan diubah. Permintaan yang sedang berjalan dapat terputus. Lanjutkan?",
+      "restartSuccess": "Sidecar layanan API dimulai ulang",
       "refreshStats": "Segarkan Statistik",
       "refreshStatsSuccess": "Statistik layanan API telah disegarkan",
       "routingStrategy": {
@@ -2273,6 +2378,7 @@
         "title": "Kumpulan kuota",
         "hourlyShort": "5h​",
         "weeklyShort": "Minggu",
+        "balance": "Saldo",
         "viewFull": "Lihat statistik lengkap",
         "modalTitle": "Kumpulan kuota layanan API",
         "empty": "Belum ada statistik kuota"
@@ -2458,6 +2564,7 @@
         "custom": "Kustom",
         "endpoint": "Endpoint penyedia",
         "hint": "Base URL yang kompatibel sudah diisi otomatis. Anda masih bisa mengubahnya secara manual.",
+        "cockpitToolsHint": "Ganti Base URL dengan alamat LAN host Cockpit Tools, misalnya http://HOST_IP:PORT/v1. Kartu akun akan meminta /cockpit/quota secara otomatis.",
         "website": "Situs web",
         "apiKeyPage": "Halaman API Key",
         "getApiKey": "Dapatkan kunci"
@@ -2522,6 +2629,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools jaringan lokal"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -2621,6 +2731,7 @@
     "quotaError": {
       "badge": "Kesalahan kuota",
       "refreshFailedBadge": "Gagal menyegarkan",
+      "authRefreshDeferred": "refresh_token tidak valid. access_token saat ini masih berfungsi untuk layanan API, tetapi tidak dapat mengganti klien resmi. Otorisasi ulang sebelum beralih.",
       "generic": "Penyegaran kuota gagal, silakan coba lagi nanti",
       "deactivatedWorkspace": "Workspace dinonaktifkan, ganti akun atau otorisasi ulang",
       "requestFailedManualRetry": "Periksa jaringan. Kuota terbaru belum diambil. Segarkan untuk mencoba lagi.",
@@ -3325,7 +3436,8 @@
         "contextWindow": "Jendela Konteks",
         "contextWindowHint": "Menulis model_context_window. Hanya dapat diedit dalam mode Kustom.",
         "partialDetected": "Hanya satu bidang terkelola yang saat ini disetel: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Menyimpan akan menulis ulang kedua bidang menggunakan skema saat ini.",
-        "notSet": "Tidak disetel"
+        "notSet": "Tidak disetel",
+        "modelCatalogDesc": "Model yang terlihat dan pengaturan konteks per model ditulis ke katalog model Codex aktif yang dikelola Cockpit."
       },
       "testing": "Menguji...",
       "testSuccess": "Koneksi penyedia normal: {{protocol}}, {{model}}, {{latency}}.",
@@ -3435,6 +3547,14 @@
         "rawFields": "Data layanan",
         "fields": {
           "status": "Keadaan",
+          "fiveHourRemainingPercent": "Sisa 5 jam",
+          "weeklyRemainingPercent": "Sisa mingguan",
+          "accountCount": "Kumpulan akun",
+          "availableAccountCount": "Akun tersedia",
+          "abnormalAccountCount": "Akun bermasalah",
+          "cooldownAccountCount": "Akun masa tunggu",
+          "stale": "Data lama",
+          "apiKeyBalance": "Saldo API_KEY",
           "planName": "Paket",
           "remaining": "Sisa kuota",
           "balance": "Saldo",
@@ -3525,6 +3645,56 @@
       "filterMissing": "Tidak diketahui ({{count}})",
       "accessTokenOnlyUsable": "Token dapat digunakan",
       "accessTokenOnlyUsableDetail": "Endpoint langganan dibatasi, tetapi kuota dan penggunaan Codex berjalan normal"
+    },
+    "switchProgress": {
+      "completed": "Pengalihan selesai",
+      "needsAttention": "Perlu tindakan",
+      "steps": {
+        "credentials": "Baca kredensial akun",
+        "accessToken": "Periksa access_token",
+        "idToken": "Periksa id_token",
+        "stopRuntime": "Hentikan runtime sebelumnya",
+        "refreshTokens": "Perbarui kredensial masuk",
+        "writeCredentials": "Tulis kredensial klien",
+        "syncSettings": "Sinkronkan pengaturan akun",
+        "startClient": "Jalankan klien Codex"
+      },
+      "status": {
+        "pending": "Menunggu",
+        "running": "Diproses",
+        "completed": "Selesai",
+        "warning": "Perlu diperbarui",
+        "skipped": "Dilewati",
+        "error": "Gagal"
+      },
+      "detail": {
+        "missing": "Kredensial tidak ditemukan",
+        "opaqueToken": "Token buram; masa berlaku diverifikasi oleh layanan",
+        "expiryUnknown": "Waktu kedaluwarsa tidak tersedia",
+        "expiresAt": "Berlaku hingga {{time}} ({{relative}})",
+        "readingCredentials": "Membaca akun lokal dan data Token...",
+        "nonOAuthAccount": "Bukan akun OAuth; Token masuk tidak diperlukan",
+        "credentialsFound": "Dimuat: {{tokens}}",
+        "notApplicable": "Pemeriksaan ini tidak berlaku untuk akun",
+        "refreshNeeded": "Kedaluwarsa atau dalam batas aman; pembaruan diperlukan",
+        "tokenValid": "Masih berlaku; tidak perlu diperbarui",
+        "stoppingRuntime": "Menghentikan ChatGPT/Codex dan app-server dengan aman...",
+        "runtimeStopped": "Runtime klien sebelumnya dihentikan dengan aman",
+        "waiting": "Menunggu langkah sebelumnya",
+        "refreshingTokens": "Mengambil dan menyimpan access_token, id_token, dan refresh_token baru...",
+        "refreshSkipped": "AT dan ID Token masih berlaku; refresh_token tidak digunakan",
+        "refreshFailed": "Set Token lengkap tidak dapat diperbarui otomatis",
+        "refreshResultReused": "Menggunakan Token terbaru dari pemilik pembaruan lain",
+        "refreshCompleted": "Set Token lengkap diperbarui dan disimpan dengan aman",
+        "credentialsWritten": "auth.json / keychain diperbarui sesuai aturan resmi",
+        "writingCredentials": "Menulis data masuk akun tujuan...",
+        "settingsSynced": "Ikatan akun, kecepatan, dan pengaturan telah disinkronkan",
+        "syncingSettings": "Menyinkronkan ikatan akun dan pengaturan...",
+        "launchDisabled": "Peluncuran otomatis dinonaktifkan; jalankan klien secara manual nanti",
+        "clientStartWarning": "Kredensial dialihkan tetapi klien gagal dimulai; coba lagi nanti",
+        "clientStarted": "Klien Codex telah dijalankan",
+        "startingClient": "Menjalankan klien Codex..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Sesi Codex tersembunyi",

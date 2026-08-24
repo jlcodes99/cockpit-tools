@@ -260,6 +260,12 @@ pub struct UserConfig {
     /// 切换 GitHub Copilot 时是否覆盖 OpenCode 登录信息
     #[serde(default = "default_ghcp_opencode_auth_overwrite_on_switch")]
     pub ghcp_opencode_auth_overwrite_on_switch: bool,
+    /// 切换 Grok 时是否自动重启 OpenCode
+    #[serde(default = "default_grok_opencode_sync_on_switch")]
+    pub grok_opencode_sync_on_switch: bool,
+    /// 切换 Grok 时是否覆盖 OpenCode 登录信息
+    #[serde(default = "default_grok_opencode_auth_overwrite_on_switch")]
+    pub grok_opencode_auth_overwrite_on_switch: bool,
     /// 切换 GitHub Copilot 时是否自动启动 GitHub Copilot
     #[serde(default = "default_ghcp_launch_on_switch")]
     pub ghcp_launch_on_switch: bool,
@@ -639,6 +645,12 @@ fn default_ghcp_opencode_sync_on_switch() -> bool {
 fn default_ghcp_opencode_auth_overwrite_on_switch() -> bool {
     false
 }
+fn default_grok_opencode_sync_on_switch() -> bool {
+    false
+}
+fn default_grok_opencode_auth_overwrite_on_switch() -> bool {
+    false
+}
 fn default_ghcp_launch_on_switch() -> bool {
     true
 }
@@ -843,6 +855,9 @@ impl Default for UserConfig {
             ghcp_opencode_sync_on_switch: default_ghcp_opencode_sync_on_switch(),
             ghcp_opencode_auth_overwrite_on_switch: default_ghcp_opencode_auth_overwrite_on_switch(
             ),
+            grok_opencode_sync_on_switch: default_grok_opencode_sync_on_switch(),
+            grok_opencode_auth_overwrite_on_switch:
+                default_grok_opencode_auth_overwrite_on_switch(),
             ghcp_launch_on_switch: default_ghcp_launch_on_switch(),
             openclaw_auth_overwrite_on_switch: default_openclaw_auth_overwrite_on_switch(),
             codex_launch_on_switch: default_codex_launch_on_switch(),

@@ -74,7 +74,6 @@ const CLAUDE_OAUTH_SCOPES: [&str; 6] = [
 const CLAUDE_DESKTOP_LOGIN_STATE_FILE: &str = "claude_desktop_login_pending.json";
 const CLAUDE_DESKTOP_PROFILES_DIR: &str = "claude_desktop_profiles";
 const CLAUDE_DESKTOP_LOGIN_DIR: &str = "claude_desktop_login";
-const CLAUDE_DESKTOP_BACKUPS_DIR: &str = "claude_desktop_backups";
 const CLAUDE_DESKTOP_CONFIG_FILE_NAME: &str = "claude_desktop_config.json";
 const CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR: &str = "configLibrary";
 const CLAUDE_DESKTOP_THREEP_DIR_NAME: &str = "Claude-3p";
@@ -971,12 +970,6 @@ fn resolve_valid_desktop_profile_dir(account: &mut ClaudeAccount) -> Result<Path
 fn get_desktop_login_root_dir() -> Result<PathBuf, String> {
     let dir = get_data_dir()?.join(CLAUDE_DESKTOP_LOGIN_DIR);
     fs::create_dir_all(&dir).map_err(|e| format!("创建 Claude 登录工作目录失败: {}", e))?;
-    Ok(dir)
-}
-
-fn get_desktop_backups_dir() -> Result<PathBuf, String> {
-    let dir = get_data_dir()?.join(CLAUDE_DESKTOP_BACKUPS_DIR);
-    fs::create_dir_all(&dir).map_err(|e| format!("创建 Claude 切号备份目录失败: {}", e))?;
     Ok(dir)
 }
 
@@ -4388,8 +4381,16 @@ fn backup_current_desktop_profile(target_dir: &Path) -> Result<Option<PathBuf>, 
     if !target_dir.exists() {
         return Ok(None);
     }
-    let backup_dir = get_desktop_backups_dir()?.join(format!("{}", now_ts_ms()));
+    let backup_dir = crate::modules::backup_storage::behavior_backup_dir(
+        "claude",
+        &crate::modules::backup_storage::scope_for_path(target_dir),
+        &format!("{}", now_ts_ms()),
+    )?;
     copy_desktop_profile_snapshot(target_dir, &backup_dir)?;
+    let _ = crate::modules::backup_storage::prune_behavior_backups(
+        "claude",
+        &crate::modules::backup_storage::scope_for_path(target_dir),
+    );
     Ok(Some(backup_dir))
 }
 

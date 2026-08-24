@@ -90,6 +90,20 @@ pub fn backup_existing_index(path: &Path) -> Result<Option<PathBuf>, String> {
 
     let backup_name = format!("{}.bak.{}", file_name, Utc::now().timestamp_millis());
     let backup_path = path.with_file_name(backup_name);
+    if let Some(parent) = path.parent() {
+        let prefix = format!("{}.bak.", file_name);
+        if let Ok(entries) = fs::read_dir(parent) {
+            for entry in entries.flatten() {
+                let candidate = entry.path();
+                let Some(name) = candidate.file_name().and_then(|value| value.to_str()) else {
+                    continue;
+                };
+                if name.starts_with(&prefix) && candidate != backup_path {
+                    let _ = fs::remove_file(candidate);
+                }
+            }
+        }
+    }
     fs::rename(path, &backup_path).map_err(|e| {
         format!(
             "备份账号索引失败: from={}, to={}, error={}",

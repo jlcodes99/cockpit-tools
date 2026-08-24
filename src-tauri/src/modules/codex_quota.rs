@@ -1832,11 +1832,40 @@ pub async fn refresh_quotas_for_account_ids_with_options(
 
 /// 刷新所有账号配额（自动跳过分组「不刷新」账号）
 pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
+    refresh_all_quotas_with_options(false).await
+}
+
+/// 后台自动刷新所有账号配额；运行中的 OAuth 账号由官方 app-server 自己维护凭据，
+/// 避免外部轮换 refresh_token 后让已运行进程进入 Auth/relogin。
+pub async fn refresh_all_quotas_for_background(
+) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
+    refresh_all_quotas_with_options(true).await
+}
+
+async fn refresh_all_quotas_with_options(
+    skip_running_oauth_accounts: bool,
+) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
     let disabled = codex_account::load_quota_refresh_disabled_account_ids();
+    let running_oauth_account_ids = if skip_running_oauth_accounts {
+        codex_account::running_codex_oauth_account_ids().unwrap_or_else(|error| {
+            logger::log_warn(&format!(
+                "[Codex配额] 无法确认运行中账号，自动刷新将跳过 OAuth 账号: {}",
+                error
+            ));
+            codex_account::list_accounts()
+                .into_iter()
+                .filter(|account| !account.is_api_key_auth())
+                .map(|account| account.id)
+                .collect()
+        })
+    } else {
+        std::collections::HashSet::new()
+    };
     let account_ids: Vec<String> = codex_account::list_accounts()
         .into_iter()
         .filter(supports_quota_refresh)
         .filter(|account| !disabled.contains(&account.id))
+        .filter(|account| !running_oauth_account_ids.contains(&account.id))
         .map(|account| account.id)
         .collect();
     refresh_quotas_for_account_ids_with_options(&account_ids, false).await

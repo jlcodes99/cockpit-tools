@@ -14,6 +14,7 @@ import {
   CodexQuota,
   CodexResetCreditsSnapshot,
 } from '../types/codex';
+import { normalizeCodexSwitchError } from '../utils/codexSwitchAuthFailure';
 
 export interface CodexOAuthLoginStartResponse {
   loginId: string;
@@ -95,16 +96,39 @@ export async function refreshCodexAccountProfile(accountId: string): Promise<Cod
 /** 切换 Codex 账号 */
 export async function switchCodexAccount(
   accountId: string,
+  options?: { reauthTokenGeneration?: number },
 ): Promise<CodexAccount> {
   const startedAt = performance.now();
   console.info('[Codex Switch][Service] invoke switch_codex_account started', {
     accountId,
   });
   try {
-    return await invoke('switch_codex_account', {
+    window.dispatchEvent(new CustomEvent('codex-switch-progress', {
+      detail: { type: 'start', accountId, stage: 'preparing', progress: 4 },
+    }));
+    const account = await invoke<CodexAccount>('switch_codex_account', {
       accountId,
       autoRepairMode: null,
+      reauthTokenGeneration:
+        typeof options?.reauthTokenGeneration === 'number'
+          ? options.reauthTokenGeneration
+          : null,
     });
+    window.dispatchEvent(new CustomEvent('codex-switch-progress', {
+      detail: { type: 'complete', accountId, stage: 'completed', progress: 100 },
+    }));
+    return account;
+  } catch (error) {
+    const normalizedError = normalizeCodexSwitchError(error);
+    window.dispatchEvent(new CustomEvent('codex-switch-progress', {
+      detail: {
+        type: 'error',
+        accountId,
+        error: normalizedError.message,
+        authFailure: normalizedError.authFailure,
+      },
+    }));
+    throw normalizedError;
   } finally {
     console.info('[Codex Switch][Service] invoke switch_codex_account finished', {
       accountId,

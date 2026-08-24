@@ -1,4 +1,4 @@
-import { Plus, Star, Trash2, X } from 'lucide-react';
+import { ChevronDown, Plus, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -24,6 +24,43 @@ const REASONING_EFFORT_OPTIONS: CodexReasoningEffort[] = [
   'high',
   'xhigh',
 ];
+const CONTEXT_PRESETS = {
+  preset_516k: { context_window: 516000, auto_compact_token_limit: 460000 },
+  preset_1m: { context_window: 1000000, auto_compact_token_limit: 900000 },
+} as const;
+type ContextPresetId = 'default' | keyof typeof CONTEXT_PRESETS | 'custom';
+
+interface CustomContextDraft {
+  index: number;
+  contextWindow: string;
+  autoCompactTokenLimit: string;
+}
+
+function resolveContextPreset(
+  model: CodexExperimentalModelDefinition,
+): ContextPresetId {
+  if (
+    model.context_window === undefined &&
+    model.auto_compact_token_limit === undefined
+  ) {
+    return 'default';
+  }
+  if (
+    model.context_window === CONTEXT_PRESETS.preset_516k.context_window &&
+    model.auto_compact_token_limit ===
+      CONTEXT_PRESETS.preset_516k.auto_compact_token_limit
+  ) {
+    return 'preset_516k';
+  }
+  if (
+    model.context_window === CONTEXT_PRESETS.preset_1m.context_window &&
+    model.auto_compact_token_limit ===
+      CONTEXT_PRESETS.preset_1m.auto_compact_token_limit
+  ) {
+    return 'preset_1m';
+  }
+  return 'custom';
+}
 
 export function validateCodexExperimentalModels(
   models: CodexExperimentalModelDefinition[],
@@ -57,6 +94,42 @@ export function validateCodexExperimentalModels(
         '模型 ID 不能重复。',
       );
     }
+    const contextWindow = model.context_window;
+    const autoCompactLimit = model.auto_compact_token_limit;
+    if ((contextWindow === undefined) !== (autoCompactLimit === undefined)) {
+      return translate(
+        'codex.experimentalModelCatalog.models.validation.contextPair',
+        '上下文窗口和压缩阈值必须同时填写。',
+      );
+    }
+    if (
+      contextWindow !== undefined &&
+      (!Number.isInteger(contextWindow) || contextWindow <= 0)
+    ) {
+      return translate(
+        'codex.experimentalModelCatalog.models.validation.contextWindow',
+        '上下文窗口必须是大于 0 的整数。',
+      );
+    }
+    if (
+      autoCompactLimit !== undefined &&
+      (!Number.isInteger(autoCompactLimit) || autoCompactLimit <= 0)
+    ) {
+      return translate(
+        'codex.experimentalModelCatalog.models.validation.autoCompact',
+        '压缩阈值必须是大于 0 的整数。',
+      );
+    }
+    if (
+      contextWindow !== undefined &&
+      autoCompactLimit !== undefined &&
+      autoCompactLimit >= contextWindow
+    ) {
+      return translate(
+        'codex.experimentalModelCatalog.models.validation.autoCompactRange',
+        '压缩阈值必须小于上下文窗口。',
+      );
+    }
     seen.add(key);
   }
   return null;
@@ -65,7 +138,9 @@ export function validateCodexExperimentalModels(
 function nextModelDefinition(
   models: CodexExperimentalModelDefinition[],
 ): CodexExperimentalModelDefinition {
-  const existing = new Set(models.map((model) => model.model_id.trim().toLowerCase()));
+  const existing = new Set(
+    models.map((model) => model.model_id.trim().toLowerCase()),
+  );
   let suffix = 1;
   while (existing.has(`custom-model${suffix}`)) suffix += 1;
   return {
@@ -84,21 +159,32 @@ export function CodexExperimentalModelEditor({
   onValidationChange,
 }: CodexExperimentalModelEditorProps) {
   const { t } = useTranslation();
-  const [openReasoningIndex, setOpenReasoningIndex] = useState<number | null>(null);
+  const [openReasoningIndex, setOpenReasoningIndex] = useState<number | null>(
+    null,
+  );
+  const [openContextIndex, setOpenContextIndex] = useState<number | null>(null);
+  const [customContextDraft, setCustomContextDraft] =
+    useState<CustomContextDraft | null>(null);
   const [managerOpen, setManagerOpen] = useState(false);
   const reasoningPickerRef = useRef<HTMLDivElement | null>(null);
+  const contextPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (openReasoningIndex === null) return;
+    if (openReasoningIndex === null && openContextIndex === null) return;
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (target instanceof Node && !reasoningPickerRef.current?.contains(target)) {
+      if (
+        target instanceof Node &&
+        !reasoningPickerRef.current?.contains(target) &&
+        !contextPickerRef.current?.contains(target)
+      ) {
         setOpenReasoningIndex(null);
+        setOpenContextIndex(null);
       }
     };
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [openReasoningIndex]);
+  }, [openContextIndex, openReasoningIndex]);
   const rowErrors = useMemo(() => {
     const counts = new Map<string, number>();
     models.forEach((model) => {
@@ -127,6 +213,35 @@ export function CodexExperimentalModelEditor({
                 '请输入不超过 100 个字符的展示名。',
               )
             : null,
+        context:
+          (model.context_window === undefined) !==
+          (model.auto_compact_token_limit === undefined)
+            ? t(
+                'codex.experimentalModelCatalog.models.validation.contextPair',
+                '上下文窗口和压缩阈值必须同时填写。',
+              )
+            : model.context_window !== undefined &&
+                (!Number.isInteger(model.context_window) ||
+                  model.context_window <= 0)
+              ? t(
+                  'codex.experimentalModelCatalog.models.validation.contextWindow',
+                  '上下文窗口必须是大于 0 的整数。',
+                )
+              : model.auto_compact_token_limit !== undefined &&
+                  (!Number.isInteger(model.auto_compact_token_limit) ||
+                    model.auto_compact_token_limit <= 0)
+                ? t(
+                    'codex.experimentalModelCatalog.models.validation.autoCompact',
+                    '压缩阈值必须是大于 0 的整数。',
+                  )
+                : model.context_window !== undefined &&
+                    model.auto_compact_token_limit !== undefined &&
+                    model.auto_compact_token_limit >= model.context_window
+                  ? t(
+                      'codex.experimentalModelCatalog.models.validation.autoCompactRange',
+                      '压缩阈值必须小于上下文窗口。',
+                    )
+                  : null,
       };
     });
   }, [models, t]);
@@ -142,11 +257,18 @@ export function CodexExperimentalModelEditor({
   useEffect(() => {
     if (!managerOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setManagerOpen(false);
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (customContextDraft) {
+        setCustomContextDraft(null);
+        return;
+      }
+      setManagerOpen(false);
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [managerOpen]);
+  }, [customContextDraft, managerOpen]);
 
   const updateModel = (
     index: number,
@@ -191,6 +313,111 @@ export function CodexExperimentalModelEditor({
     if (effort === 'official') setOpenReasoningIndex(null);
   };
 
+  const applyContextPreset = (
+    index: number,
+    preset: Exclude<ContextPresetId, 'custom'>,
+  ) => {
+    onChange(
+      models.map((model, modelIndex) => {
+        if (modelIndex !== index) return model;
+        if (preset === 'default') {
+          const {
+            context_window: _context,
+            auto_compact_token_limit: _compact,
+            ...rest
+          } = model;
+          return rest;
+        }
+        return { ...model, ...CONTEXT_PRESETS[preset] };
+      }),
+    );
+    setOpenContextIndex(null);
+  };
+
+  const openCustomContextEditor = (index: number) => {
+    const model = models[index];
+    setOpenContextIndex(null);
+    setCustomContextDraft({
+      index,
+      contextWindow: String(
+        model.context_window ?? CONTEXT_PRESETS.preset_1m.context_window,
+      ),
+      autoCompactTokenLimit: String(
+        model.auto_compact_token_limit ??
+          CONTEXT_PRESETS.preset_1m.auto_compact_token_limit,
+      ),
+    });
+  };
+
+  const customContextWindow = customContextDraft
+    ? Number(customContextDraft.contextWindow.trim())
+    : Number.NaN;
+  const customAutoCompactTokenLimit = customContextDraft
+    ? Number(customContextDraft.autoCompactTokenLimit.trim())
+    : Number.NaN;
+  const customContextError = customContextDraft
+    ? !Number.isInteger(customContextWindow) || customContextWindow <= 0
+      ? t(
+          'codex.experimentalModelCatalog.models.validation.contextWindow',
+          '上下文窗口必须是大于 0 的整数。',
+        )
+      : !Number.isInteger(customAutoCompactTokenLimit) ||
+          customAutoCompactTokenLimit <= 0
+        ? t(
+            'codex.experimentalModelCatalog.models.validation.autoCompact',
+            '压缩阈值必须是大于 0 的整数。',
+          )
+        : customAutoCompactTokenLimit >= customContextWindow
+          ? t(
+              'codex.experimentalModelCatalog.models.validation.autoCompactRange',
+              '压缩阈值必须小于上下文窗口。',
+            )
+          : null
+    : null;
+
+  const saveCustomContext = () => {
+    if (!customContextDraft || customContextError) return;
+    onChange(
+      models.map((model, index) =>
+        index === customContextDraft.index
+          ? {
+              ...model,
+              context_window: customContextWindow,
+              auto_compact_token_limit: customAutoCompactTokenLimit,
+            }
+          : model,
+      ),
+    );
+    setCustomContextDraft(null);
+  };
+
+  const formatTokenSize = (value?: number) => {
+    if (value === undefined) {
+      return t(
+        'codex.experimentalModelCatalog.models.contextDefault',
+        '跟随模型',
+      );
+    }
+    if (value === 1_000_000) return '1M';
+    if (value % 1_000 === 0) return `${value / 1_000}K`;
+    return value.toLocaleString();
+  };
+
+  const contextLabel = (model: CodexExperimentalModelDefinition) => {
+    const preset = resolveContextPreset(model);
+    if (preset === 'default') {
+      return t(
+        'codex.experimentalModelCatalog.models.contextDefault',
+        '跟随模型',
+      );
+    }
+    if (preset === 'preset_516k') return '516K / 460K';
+    if (preset === 'preset_1m') return '1M / 900K';
+    return `${formatTokenSize(model.context_window)} / ${formatTokenSize(
+      model.auto_compact_token_limit,
+    )}`;
+  };
+
   const editorContent = (
     <div className="codex-experimental-model-editor">
       <div className="codex-experimental-model-editor__header">
@@ -203,13 +430,46 @@ export function CodexExperimentalModelEditor({
           onClick={() => onChange([...models, nextModelDefinition(models)])}
           disabled={disabled}
           title={t('codex.experimentalModelCatalog.models.add', '添加模型')}
-          aria-label={t('codex.experimentalModelCatalog.models.add', '添加模型')}
+          aria-label={t(
+            'codex.experimentalModelCatalog.models.add',
+            '添加模型',
+          )}
         >
           <Plus size={15} />
         </button>
       </div>
 
-      <div className="codex-experimental-model-editor__list">
+      <div
+        className="codex-experimental-model-editor__table-head"
+        aria-hidden="true"
+      >
+        <span>
+          {t('codex.experimentalModelCatalog.models.modelId', '模型 ID')}
+        </span>
+        <span>
+          {t('codex.experimentalModelCatalog.models.displayName', '展示名')}
+        </span>
+        <span>
+          {t('codex.experimentalModelCatalog.models.reasoning', '推理强度')}
+        </span>
+        <span>
+          {t(
+            'codex.experimentalModelCatalog.models.contextConfig',
+            '上下文与压缩',
+          )}
+        </span>
+        <span>
+          {t('codex.experimentalModelCatalog.models.operation', '操作')}
+        </span>
+      </div>
+
+      <div
+        className={`codex-experimental-model-editor__list${
+          openReasoningIndex !== null || openContextIndex !== null
+            ? ' has-open-menu'
+            : ''
+        }`}
+      >
         {models.map((model, index) => (
           <div
             className="codex-experimental-model-editor__row"
@@ -217,11 +477,18 @@ export function CodexExperimentalModelEditor({
           >
             <div className="codex-experimental-model-editor__fields">
               <label>
-                <span>{t('codex.experimentalModelCatalog.models.modelId', '模型 ID')}</span>
+                <span>
+                  {t(
+                    'codex.experimentalModelCatalog.models.modelId',
+                    '模型 ID',
+                  )}
+                </span>
                 <input
                   type="text"
                   value={model.model_id}
-                  onChange={(event) => updateModel(index, 'model_id', event.target.value)}
+                  onChange={(event) =>
+                    updateModel(index, 'model_id', event.target.value)
+                  }
                   disabled={disabled}
                   className={rowErrors[index]?.modelId ? 'has-error' : ''}
                   placeholder="custom-model"
@@ -234,12 +501,17 @@ export function CodexExperimentalModelEditor({
               </label>
               <label>
                 <span>
-                  {t('codex.experimentalModelCatalog.models.displayName', '展示名')}
+                  {t(
+                    'codex.experimentalModelCatalog.models.displayName',
+                    '展示名',
+                  )}
                 </span>
                 <input
                   type="text"
                   value={model.display_name}
-                  onChange={(event) => updateModel(index, 'display_name', event.target.value)}
+                  onChange={(event) =>
+                    updateModel(index, 'display_name', event.target.value)
+                  }
                   disabled={disabled}
                   className={rowErrors[index]?.displayName ? 'has-error' : ''}
                   placeholder="Custom Model"
@@ -252,18 +524,26 @@ export function CodexExperimentalModelEditor({
               </label>
               <div
                 className="codex-experimental-model-editor__reasoning"
-                ref={openReasoningIndex === index ? reasoningPickerRef : undefined}
+                ref={
+                  openReasoningIndex === index ? reasoningPickerRef : undefined
+                }
               >
                 <span className="codex-experimental-model-editor__field-label">
-                  {t('codex.experimentalModelCatalog.models.reasoning', '推理强度')}
+                  {t(
+                    'codex.experimentalModelCatalog.models.reasoning',
+                    '推理强度',
+                  )}
                 </span>
                 <div className="codex-experimental-model-editor__reasoning-picker">
                   <button
                     type="button"
                     className="codex-experimental-model-editor__reasoning-trigger"
-                    onClick={() =>
-                      setOpenReasoningIndex((current) => (current === index ? null : index))
-                    }
+                    onClick={() => {
+                      setOpenContextIndex(null);
+                      setOpenReasoningIndex((current) =>
+                        current === index ? null : index,
+                      );
+                    }}
                     disabled={disabled}
                     aria-expanded={openReasoningIndex === index}
                     title={
@@ -275,21 +555,28 @@ export function CodexExperimentalModelEditor({
                           )
                     }
                   >
-                    {model.reasoning_efforts?.length
-                      ? model.reasoning_efforts.map(reasoningLabel).join('、')
-                      : t(
-                          'codex.experimentalModelCatalog.models.followOfficial',
-                          '跟随官方',
-                        )}
+                    <span>
+                      {model.reasoning_efforts?.length
+                        ? model.reasoning_efforts.map(reasoningLabel).join('、')
+                        : t(
+                            'codex.experimentalModelCatalog.models.followOfficial',
+                            '跟随官方',
+                          )}
+                    </span>
+                    <ChevronDown size={14} />
                   </button>
                   {openReasoningIndex === index && (
                     <div className="codex-experimental-model-editor__reasoning-menu">
                       <button
                         type="button"
                         className={`codex-experimental-model-editor__reasoning-option${
-                          !model.reasoning_efforts?.length ? ' is-selected' : ' is-muted'
+                          !model.reasoning_efforts?.length
+                            ? ' is-selected'
+                            : ' is-muted'
                         }`}
-                        onClick={() => updateReasoningEfforts(index, 'official')}
+                        onClick={() =>
+                          updateReasoningEfforts(index, 'official')
+                        }
                       >
                         <span
                           className="codex-experimental-model-editor__check"
@@ -303,7 +590,8 @@ export function CodexExperimentalModelEditor({
                         )}
                       </button>
                       {REASONING_EFFORT_OPTIONS.map((effort) => {
-                        const selected = model.reasoning_efforts?.includes(effort) ?? false;
+                        const selected =
+                          model.reasoning_efforts?.includes(effort) ?? false;
                         return (
                           <button
                             key={effort}
@@ -315,7 +603,9 @@ export function CodexExperimentalModelEditor({
                                   ? ' is-muted'
                                   : ''
                             }`}
-                            onClick={() => updateReasoningEfforts(index, effort)}
+                            onClick={() =>
+                              updateReasoningEfforts(index, effort)
+                            }
                           >
                             <span
                               className="codex-experimental-model-editor__check"
@@ -331,6 +621,91 @@ export function CodexExperimentalModelEditor({
                   )}
                 </div>
               </div>
+              <div className="codex-experimental-model-editor__context">
+                <span className="codex-experimental-model-editor__field-label">
+                  {t(
+                    'codex.experimentalModelCatalog.models.contextConfig',
+                    '上下文与压缩',
+                  )}
+                </span>
+                <div
+                  className="codex-experimental-model-editor__context-picker"
+                  ref={
+                    openContextIndex === index ? contextPickerRef : undefined
+                  }
+                >
+                  <button
+                    type="button"
+                    className="codex-experimental-model-editor__context-trigger"
+                    onClick={() => {
+                      setOpenReasoningIndex(null);
+                      setOpenContextIndex((current) =>
+                        current === index ? null : index,
+                      );
+                    }}
+                    disabled={disabled}
+                    aria-expanded={openContextIndex === index}
+                    title={contextLabel(model)}
+                  >
+                    <span>{contextLabel(model)}</span>
+                    <ChevronDown size={14} />
+                  </button>
+                  {openContextIndex === index && (
+                    <div className="codex-experimental-model-editor__context-menu">
+                      {(
+                        [
+                          [
+                            'default',
+                            t(
+                              'codex.experimentalModelCatalog.models.contextDefaultShort',
+                              '默认',
+                            ),
+                            t(
+                              'codex.experimentalModelCatalog.models.contextDefault',
+                              '跟随模型',
+                            ),
+                          ],
+                          ['preset_516k', '516K', '516K / 460K'],
+                          ['preset_1m', '1M', '1M / 900K'],
+                          [
+                            'custom',
+                            t(
+                              'codex.experimentalModelCatalog.models.contextCustomShort',
+                              '自定义',
+                            ),
+                            contextLabel(model),
+                          ],
+                        ] as Array<[ContextPresetId, string, string]>
+                      ).map(([preset, label, detail]) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className={`codex-experimental-model-editor__context-option${
+                            resolveContextPreset(model) === preset
+                              ? ' is-selected'
+                              : ''
+                          }`}
+                          onClick={() => {
+                            if (preset === 'custom') {
+                              openCustomContextEditor(index);
+                            } else {
+                              applyContextPreset(index, preset);
+                            }
+                          }}
+                        >
+                          <span>{label}</span>
+                          <small>{detail}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {rowErrors[index]?.context && (
+                  <small className="codex-experimental-model-editor__error">
+                    {rowErrors[index].context}
+                  </small>
+                )}
+              </div>
               <div className="codex-experimental-model-editor__operation">
                 <span className="codex-experimental-model-editor__field-label">
                   {t('codex.experimentalModelCatalog.models.operation', '操作')}
@@ -339,28 +714,49 @@ export function CodexExperimentalModelEditor({
                   <button
                     type="button"
                     className="codex-experimental-model-editor__icon-btn"
-                    data-default={defaultModelId === model.model_id ? 'true' : undefined}
+                    data-default={
+                      defaultModelId === model.model_id ? 'true' : undefined
+                    }
                     onClick={() => onDefaultModelChange?.(model.model_id)}
                     disabled={disabled || !onDefaultModelChange}
-                    title={t('codex.experimentalModelCatalog.models.setDefault', '设为默认模型')}
-                    aria-label={t('codex.experimentalModelCatalog.models.setDefault', '设为默认模型')}
+                    title={t(
+                      'codex.experimentalModelCatalog.models.setDefault',
+                      '设为默认模型',
+                    )}
+                    aria-label={t(
+                      'codex.experimentalModelCatalog.models.setDefault',
+                      '设为默认模型',
+                    )}
                     aria-pressed={defaultModelId === model.model_id}
                   >
                     <Star
                       size={14}
-                      fill={defaultModelId === model.model_id ? 'currentColor' : 'none'}
+                      fill={
+                        defaultModelId === model.model_id
+                          ? 'currentColor'
+                          : 'none'
+                      }
                     />
                   </button>
                   <button
                     type="button"
                     className="codex-experimental-model-editor__icon-btn is-danger"
                     onClick={() => {
-                      onChange(models.filter((_, itemIndex) => itemIndex !== index));
-                      if (defaultModelId === model.model_id) onDefaultModelChange?.(null);
+                      onChange(
+                        models.filter((_, itemIndex) => itemIndex !== index),
+                      );
+                      if (defaultModelId === model.model_id)
+                        onDefaultModelChange?.(null);
                     }}
                     disabled={disabled || models.length === 1}
-                    title={t('codex.experimentalModelCatalog.models.remove', '删除模型')}
-                    aria-label={t('codex.experimentalModelCatalog.models.remove', '删除模型')}
+                    title={t(
+                      'codex.experimentalModelCatalog.models.remove',
+                      '删除模型',
+                    )}
+                    aria-label={t(
+                      'codex.experimentalModelCatalog.models.remove',
+                      '删除模型',
+                    )}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -384,7 +780,9 @@ export function CodexExperimentalModelEditor({
       <>
         <div className="codex-experimental-model-summary">
           <div className="codex-experimental-model-summary__header">
-            <span>{t('codex.experimentalModelCatalog.models.title', '模型列表')}</span>
+            <span>
+              {t('codex.experimentalModelCatalog.models.title', '模型列表')}
+            </span>
             <button
               type="button"
               className="codex-experimental-model-summary__manage"
@@ -393,6 +791,32 @@ export function CodexExperimentalModelEditor({
             >
               {t('codex.experimentalModelCatalog.models.manage', '管理')}
             </button>
+          </div>
+          <div
+            className="codex-experimental-model-summary__table-head"
+            aria-hidden="true"
+          >
+            <span>
+              {t('codex.experimentalModelCatalog.models.displayName', '展示名')}
+            </span>
+            <span>
+              {t('codex.experimentalModelCatalog.models.modelId', '模型 ID')}
+            </span>
+            <span>
+              {t('codex.experimentalModelCatalog.models.reasoning', '推理强度')}
+            </span>
+            <span>
+              {t(
+                'codex.experimentalModelCatalog.models.contextConfig',
+                '上下文与压缩',
+              )}
+            </span>
+            <span>
+              {t(
+                'codex.experimentalModelCatalog.models.default',
+                '默认',
+              )}
+            </span>
           </div>
           <div className="codex-experimental-model-summary__list">
             {models.map((model) => (
@@ -410,13 +834,20 @@ export function CodexExperimentalModelEditor({
                     : t(
                         'codex.experimentalModelCatalog.models.followOfficial',
                         '跟随官方',
-                      )}
+                    )}
                 </span>
-                {defaultModelId === model.model_id && (
-                  <span className="codex-experimental-model-summary__default">
-                    {t('codex.experimentalModelCatalog.models.default', '默认')}
-                  </span>
-                )}
+                <span className="codex-experimental-model-summary__context">
+                  {contextLabel(model)}
+                </span>
+                <span
+                  className={`codex-experimental-model-summary__default${
+                    defaultModelId === model.model_id ? ' is-active' : ''
+                  }`}
+                >
+                  {defaultModelId === model.model_id
+                    ? t('codex.experimentalModelCatalog.models.default', '默认')
+                    : '—'}
+                </span>
               </div>
             ))}
           </div>
@@ -443,6 +874,144 @@ export function CodexExperimentalModelEditor({
                 </button>
               </div>
               {editorContent}
+            </div>
+          </div>
+        )}
+        {customContextDraft && (
+          <div className="codex-experimental-model-custom-context-overlay">
+            <div
+              className="codex-experimental-model-custom-context-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="codex-experimental-model-custom-context-title"
+            >
+              <div className="codex-experimental-model-custom-context-modal__header">
+                <h3 id="codex-experimental-model-custom-context-title">
+                  {t(
+                    'codex.experimentalModelCatalog.models.contextCustomShort',
+                    '自定义',
+                  )}
+                  {' · '}
+                  {t(
+                    'codex.experimentalModelCatalog.models.contextConfig',
+                    '上下文与压缩',
+                  )}
+                </h3>
+                <button
+                  type="button"
+                  className="codex-experimental-model-manager-modal__close"
+                  onClick={() => setCustomContextDraft(null)}
+                  aria-label={t('common.close', '关闭')}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="codex-experimental-model-custom-context-modal__body">
+                <label>
+                  <span>
+                    {t(
+                      'codex.experimentalModelCatalog.models.contextWindow',
+                      '上下文窗口',
+                    )}
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={customContextDraft.contextWindow}
+                    onChange={(event) =>
+                      setCustomContextDraft((current) =>
+                        current
+                          ? { ...current, contextWindow: event.target.value }
+                          : current,
+                      )
+                    }
+                    className={
+                      !Number.isInteger(customContextWindow) ||
+                      customContextWindow <= 0
+                        ? 'has-error'
+                        : ''
+                    }
+                    autoFocus
+                  />
+                  {(!Number.isInteger(customContextWindow) ||
+                    customContextWindow <= 0) && (
+                    <small className="codex-experimental-model-editor__error">
+                      {t(
+                        'codex.experimentalModelCatalog.models.validation.contextWindow',
+                        '上下文窗口必须是大于 0 的整数。',
+                      )}
+                    </small>
+                  )}
+                </label>
+                <label>
+                  <span>
+                    {t(
+                      'codex.experimentalModelCatalog.models.autoCompactLimit',
+                      '压缩阈值',
+                    )}
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={customContextDraft.autoCompactTokenLimit}
+                    onChange={(event) =>
+                      setCustomContextDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              autoCompactTokenLimit: event.target.value,
+                            }
+                          : current,
+                      )
+                    }
+                    className={
+                      !Number.isInteger(customAutoCompactTokenLimit) ||
+                      customAutoCompactTokenLimit <= 0 ||
+                      customAutoCompactTokenLimit >= customContextWindow
+                        ? 'has-error'
+                        : ''
+                    }
+                  />
+                  {(!Number.isInteger(customAutoCompactTokenLimit) ||
+                    customAutoCompactTokenLimit <= 0) && (
+                    <small className="codex-experimental-model-editor__error">
+                      {t(
+                        'codex.experimentalModelCatalog.models.validation.autoCompact',
+                        '压缩阈值必须是大于 0 的整数。',
+                      )}
+                    </small>
+                  )}
+                  {Number.isInteger(customAutoCompactTokenLimit) &&
+                    customAutoCompactTokenLimit > 0 &&
+                    customAutoCompactTokenLimit >= customContextWindow && (
+                      <small className="codex-experimental-model-editor__error">
+                        {t(
+                          'codex.experimentalModelCatalog.models.validation.autoCompactRange',
+                          '压缩阈值必须小于上下文窗口。',
+                        )}
+                      </small>
+                    )}
+                </label>
+              </div>
+              <div className="codex-experimental-model-custom-context-modal__footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setCustomContextDraft(null)}
+                >
+                  {t('common.cancel', '取消')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={saveCustomContext}
+                  disabled={Boolean(customContextError)}
+                >
+                  {t('common.confirm', '确认')}
+                </button>
+              </div>
             </div>
           </div>
         )}

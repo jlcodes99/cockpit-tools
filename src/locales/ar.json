@@ -27,6 +27,26 @@
     "editable": "قابل للتعديل",
     "preview": "معاينة",
     "advancedSettings": "إعدادات متقدمة",
+    "windowsOperation": {
+      "title": "لم تكتمل عملية Windows",
+      "accessDeniedDescription": "رفض Windows هذه العملية. قد يعمل البرنامج الهدف بصلاحيات أعلى أو يوجد في موقع محمي.",
+      "fileInUseDescription": "الملف الهدف مستخدم بواسطة برنامج آخر. أغلق البرنامج ثم أعد المحاولة.",
+      "programNotFoundDescription": "تعذر على Windows العثور على البرنامج المطلوب. تحقق من التثبيت أو المسار المحدد.",
+      "portDeniedDescription": "منع Windows الوصول إلى المنفذ. قد تستخدمه سياسة النظام أو برنامج آخر.",
+      "genericDescription": "لم تكتمل عملية النظام. أعد المحاولة أو عالج السبب الأصلي ثم تابع.",
+      "originalReason": "السبب الأصلي",
+      "copyError": "نسخ الخطأ",
+      "openTarget": "فتح الموقع",
+      "viewDetails": "عرض التفاصيل",
+      "hideDetails": "إخفاء التفاصيل",
+      "operationLabel": "العملية",
+      "targetLabel": "الهدف",
+      "attemptedRecoveries": "المحاولات",
+      "manualContinue": "عالجت المشكلة، متابعة",
+      "retry": "إعادة المحاولة",
+      "authorizeContinue": "السماح والمتابعة",
+      "authorizationCancelled": "تم إلغاء تفويض Windows ولم تتابع العملية."
+    },
     "codexFingerprint": {
       "modeLabel": "وضع بصمة الجهاز",
       "modeHint": "OAuth فقط؛ الافتراضي الجلسة. يعزل التثبيت والجلسة لكل حساب ويعيد كتابة مساحة العمل حتى لا تُربط الحسابات المحلية.",
@@ -570,6 +590,41 @@
       "codexManagedStoreLaunchUnsafe": "يتعذر على Windows Store تمرير مجلد المثيل بشكل موثوق، لذا تم منع فتح الحساب الافتراضي. غيّر طريقة تشغيل هذا المثيل إلى CLI ثم أعد المحاولة. التفاصيل: {{detail}}",
       "speedUpdated": "تم تحديث السرعة"
     },
+    "accountLease": {
+      "title": "بدء تشغيل مثيل Codex",
+      "progress": "تقدم التشغيل",
+      "conflictTitle": "الحساب قيد الاستخدام",
+      "completedTitle": "تم تشغيل المثيل",
+      "failedTitle": "فشل تشغيل المثيل",
+      "conflictAccount": "الحساب: {{account}}",
+      "conflictDescription": "هذا الحساب يعمل في {{owners}}. لمنع المثيلات الرسمية من التنافس على refresh_token، يمكن تشغيل حساب OAuth واحد في مثيل واحد فقط.",
+      "locate": "تحديد موقع المثيل",
+      "selectOther": "اختيار حساب آخر",
+      "transfer": "إيقاف ونقل",
+      "steps": {
+        "checkInstance": "فحص المثيل الهدف",
+        "checkAccount": "فحص الحساب المرتبط",
+        "checkOccupancy": "فحص استخدام الحساب",
+        "stopPrevious": "إيقاف المثيل السابق",
+        "prepareCredentials": "تجهيز بيانات الدخول",
+        "writeProfile": "كتابة ملف المثيل",
+        "startClient": "تشغيل عميل Codex"
+      },
+      "detail": {
+        "checkingInstance": "جارٍ قراءة إعدادات المثيل...",
+        "checkingAccount": "جارٍ فحص حساب OAuth والرموز...",
+        "noOAuthAccount": "لا يوجد حساب OAuth مرتبط؛ لا حاجة إلى فحص الاستخدام",
+        "accountInUse": "حساب OAuth هذا مستخدم بالفعل في مثيل قيد التشغيل",
+        "accountAvailable": "لا يوجد مثيل آخر قيد التشغيل يستخدم هذا الحساب",
+        "transferSkipped": "لا حاجة إلى نقل استخدام الحساب",
+        "stoppingOwners": "إيقاف آمن: {{owners}}",
+        "stoppingPrevious": "جارٍ إيقاف المثيل السابق بأمان واستعادة أحدث بيانات الدخول...",
+        "preparingCredentials": "جارٍ فحص الرموز وتحديث بيانات الدخول الكاملة عند الحاجة...",
+        "profileReady": "تم تحديث auth.json / سلسلة المفاتيح للمثيل بأمان",
+        "cliPrepared": "أمر تشغيل CLI جاهز",
+        "startingClient": "جارٍ تشغيل عملية عميل Codex والتحقق منها..."
+      }
+    },
     "runningDialog": {
       "title": "المثيل قيد التشغيل",
       "desc": "المثيل قيد التشغيل بالفعل، يمكنك الانتقال إليه أو إعادة تشغيله وفقًا للاستراتيجية الحالية.",
@@ -725,6 +780,9 @@
       "codexAppUiInjectionPoolLabel": "الحسابات",
       "codexAppUiInjectionWeeklyLabel": "أسبوع",
       "codexAppUiInjectionFiveHourLabel": "5 س",
+      "codexAppUiInjectionBalanceLabel": "الرصيد",
+      "codexLoginPageGuard": "حارس صفحة تسجيل الدخول",
+      "codexLoginPageGuardDesc": "بعد إعادة تشغيل مثيل Codex مُدار، يستخدم CDP للإبقاء على صفحة المحادثة العاملة ومنع حالة OAuth للواجهة من استبدالها بصفحة تسجيل الدخول. يمنع هذا تبديل الصفحة فقط ولا يصلح بيانات OAuth المنتهية.",
       "codexWslConfigDir": "مجلد Codex في WSL",
       "codexWslConfigDirDesc": "أدخل مجلد .codex داخل WSL. مسارات \\\\wsl.localhost\\ مدعومة.",
       "codexWslConfigDirPlaceholder": "مثال: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -809,6 +867,11 @@
       "openclawAuthOverwriteDesc": "عند التعطيل، يتم تبديل Codex فقط ويحتفظ OpenClaw بحالة تسجيل الدخول الحالية",
       "ghcpOpencodeAuthOverwrite": "استبدال تسجيل دخول OpenCode عند تبديل GitHub Copilot",
       "ghcpOpencodeRestart": "إعادة تشغيل OpenCode عند تبديل GitHub Copilot",
+      "grokOpencodeAuthOverwrite": "استبدال تسجيل دخول OpenCode عند تبديل Grok",
+      "grokOpencodeAuthOverwriteDesc": "عند التعطيل، يتم تبديل Grok فقط ويحتفظ OpenCode بحالة تسجيل الدخول الحالية",
+      "grokOpencodeRestart": "إعادة تشغيل OpenCode عند تبديل Grok",
+      "grokOpencodeRestartDesc": "بعد استبدال معلومات تسجيل دخول OpenCode، أعد تشغيل OpenCode لتطبيقها فورًا",
+      "grokOpencodeRestartRequiresOverwrite": "فعّل أولاً «استبدال تسجيل دخول OpenCode عند تبديل Grok»",
       "ghcpLaunchOnSwitch": "تشغيل تطبيق GitHub Copilot App تلقائيًا عند تبديل GitHub Copilot",
       "zedAutoRefresh": "تحديث حصة Zed تلقائيًا",
       "zedAutoRefreshDesc": "تكرار التحديث في الخلفية",
@@ -1044,6 +1107,21 @@
         "retentionUnit": "أيام",
         "directoryTitle": "مجلد النسخ الاحتياطي",
         "directoryDesc": "تُحفظ النسخ الاحتياطية دائمًا في مجلد backups الخاص بالمشروع.",
+        "changeDirectory": "تغيير المجلد",
+        "migrating": "جارٍ النقل...",
+        "migrationConfirm": "نقل النسخ الحالية من {{oldPath}} إلى {{newPath}}؟\n\nسيؤدي الإلغاء إلى تبديل المجلد دون نقل الملفات القديمة.",
+        "usageTitle": "مساحة النسخ الاحتياطية",
+        "usageDesc": "عرض مساحة النسخ المجدولة ولقطات سلوك المنصات.",
+        "usageEmpty": "لا توجد ملفات نسخ محلية.",
+        "cleanupBehavior": "تنظيف نسخ السلوك القديمة",
+        "behaviorCleanupConfirm": "تنظيف نسخ السلوك القديمة؟ ستبقى أحدث نسخة لكل منصة ومثيل، ولن تحذف ملفات JSON/ZIP المجدولة.",
+        "sources": {"scheduled": "JSON/ZIP مجدولة", "behavior": "لقطات السلوك", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "أخرى"},
+        "migrationConfirmTitle": "تغيير مجلد النسخ الاحتياطي",
+        "migrationConfirmDesc": "تم فحص النسخ الحالية. يمكنك نقلها وتحرير مساحة المجلد القديم، أو تغيير موقع النسخ الجديدة فقط.",
+        "migrationOldPath": "المجلد القديم", "migrationNewPath": "المجلد الجديد", "migrationTotalSize": "بيانات للنقل", "migrationTotalFiles": "ملفات للنقل",
+        "migrationSafetyNote": "تُنسخ الملفات أولاً إلى منطقة مؤقتة ويتم التحقق منها قبل تبديل المجلد وحذف النسخ القديمة.",
+        "switchOnly": "تغيير فقط", "migrateAndSwitch": "نقل وتغيير",
+        "migrationProgress": {"title": "نقل مجلد النسخ الاحتياطي", "filesUnit": "ملفات", "currentSource": "المصدر الحالي", "completedSummary": "تم نقل {{count}} ملفًا ({{size}}) وتفعيل المجلد الجديد.", "switchOnlyCompleted": "ستُحفظ النسخ الجديدة في {{path}}. لم تُنقل النسخ الحالية.", "cleanupPartial": "المجلد الجديد نشط، لكن تعذر حذف المجلدات القديمة التالية. احذفها يدويًا لاحقًا:", "cancelledDesc": "تم إلغاء النقل. بقي المجلد الأصلي دون تغيير وحُذفت الملفات المؤقتة.", "cancelling": "جارٍ الإلغاء...", "cancelAction": "إلغاء النقل", "finishing": "جارٍ الإكمال...", "phases": {"scanning": "جارٍ فحص ملفات النسخ...", "copying": "جارٍ نسخ الملفات...", "verifying": "جارٍ التحقق من الملفات...", "switching": "جارٍ تبديل المجلد...", "cleaning": "جارٍ حذف النسخ القديمة...", "completed": "اكتمل النقل", "cancelled": "أُلغي النقل"}},
         "openFolder": "فتح المجلد",
         "listTitle": "قائمة النسخ الاحتياطية",
         "listDesc": "استورد نسخة احتياطية مباشرة أو احذف الملفات القديمة.",
@@ -1071,6 +1149,8 @@
           "openFolderFailed": "فشل فتح مجلد النسخ الاحتياطي: {{error}}",
           "downloadSuccess": "تم تنزيل النسخة الاحتياطية إلى {{path}}",
           "downloadFailed": "فشل تنزيل النسخة الاحتياطية: {{error}}"
+          ,"migrating": "جارٍ نقل مجلد النسخ...", "migrationDone": "تم نقل {{count}} ملف إلى {{path}}", "directoryChanged": "تم تغيير المجلد إلى {{path}}", "directoryChangeFailed": "تعذر تغيير مجلد النسخ: {{error}}", "behaviorCleaning": "جارٍ تنظيف نسخ السلوك...", "behaviorCleanupDone": "تم تنظيف {{count}} نسخة وتحرير {{size}}", "behaviorCleanupFailed": "تعذر تنظيف نسخ السلوك: {{error}}"
+          ,"scanningMigration": "جارٍ فحص النسخ المطلوب نقلها..."
         },
         "errors": {
           "invalidRetention": "يجب أن تكون مدة الاحتفاظ بين 1 و365 يومًا"
@@ -1198,7 +1278,7 @@
       "title": "لم يتم العثور على مسار التطبيق",
       "desc": "تعذر العثور على مسار تطبيق {{app}}. الرجاء تعيينه الآن للمتابعة.",
       "action": "تعيين الآن",
-      "codexLaunchHint": "عند إيقافه، يستمر تبديل الحساب واستبدال تسجيل الدخول، لكن لن يتم تشغيل تطبيق Codex بعد الآن ولن يظهر هذا التنبيه لمسار التشغيل مرة أخرى.",
+      "codexLaunchHint": "اكتمل تبديل الحساب. عيّن المسار لتشغيل التطبيق. إذا لم ترد التشغيل بعد التبديل، أوقف «تشغيل تطبيق Codex App تلقائيًا عند تبديل Codex» من الإعدادات.",
       "claudeMultiInstanceRequiresExe": "تتطلب ملفات Claude متعددة المثيلات مسار Claude.exe الحقيقي. أهداف Microsoft Store مخصصة لملف سطح المكتب الافتراضي فقط.",
       "scanApps": "فحص التطبيقات",
       "scanRoots": "Nitaq al-fahs",
@@ -1915,7 +1995,7 @@
     "title": "إدارة حسابات Codex",
     "experimentalModelCatalog": {
       "title": "النماذج المرئية",
-      "description": "ينشئ دليلاً تديره Cockpit يضم النماذج الرسمية المتاحة وإدخالاتك المخصصة من دون استبدال دليل المستخدم.",
+      "description": "إدارة النماذج الظاهرة ومستوى الاستدلال ونافذة السياق وحد الضغط في مكان واحد.",
       "enabledHint": "يستخدم قائمة النماذج المرئية الحالية. أعد تشغيل Codex لتطبيق التغيير.",
       "models": {
         "title": "قائمة النماذج",
@@ -1937,8 +2017,18 @@
           "displayName": "أدخل اسم عرض لا يتجاوز 100 حرف.",
           "duplicate": "يجب ألا تتكرر معرّفات النماذج.",
           "reasoningEffort": "خيار جهد استدلال غير صالح.",
-          "reserved": "يتعارض معرّف النموذج هذا مع نموذج رسمي. استخدم معرّفًا آخر."
-        }
+          "reserved": "يتعارض معرّف النموذج هذا مع نموذج رسمي. استخدم معرّفًا آخر.",
+          "contextPair": "يجب إدخال نافذة السياق وحد الضغط معًا.",
+          "contextWindow": "يجب أن تكون نافذة السياق عددًا صحيحًا أكبر من 0.",
+          "autoCompact": "يجب أن يكون حد الضغط عددًا صحيحًا أكبر من 0.",
+          "autoCompactRange": "يجب أن يكون حد الضغط أصغر من نافذة السياق."
+        },
+        "contextConfig": "السياق والضغط",
+        "contextDefault": "اتباع النموذج",
+        "contextDefaultShort": "افتراضي",
+        "contextCustomShort": "مخصص",
+        "contextWindow": "نافذة السياق",
+        "autoCompactLimit": "حد الضغط"
       },
       "unavailable": {
         "cacheMissing": "لم يتم العثور على models_cache.json.",
@@ -2012,6 +2102,24 @@
       "staleAccount": "لم يعد هذا الحساب موجوداً في مخزن الحسابات المحلي. تم تحديث قائمة الحسابات. أعد استيراد حساب Codex هذا أو سجّل الدخول إليه مجدداً.",
       "unsupportedCountryRegion": "منطقة الشبكة الحالية لا تدعم تحديث تفويض Codex. رفضت خدمة تفويض OpenAI هذا منفذ الشبكة. انتقل إلى منطقة مدعومة ثم أعد المحاولة."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "يلزم تسجيل دخول العميل",
+      "reauthorizeTitle": "انتهى تفويض Codex",
+      "apiOnlyDescription": "لا يزال access_token الحالي صالحًا مؤقتًا لخدمة API، لكن تعذر تحديث بيانات تسجيل دخول العميل، لذلك لم يتم التبديل في عميل Codex/ChatGPT الرسمي.",
+      "reauthorizeDescription": "تعذر تحديث بيانات تسجيل الدخول ولم يعد access_token متاحًا لخدمة API. أعد تفويض الحساب للمتابعة.",
+      "idTokenUnavailable": "انتهت صلاحية بيانات هوية العميل ولم يُرجع التحديث التلقائي id_token صالحًا.",
+      "reasonLabel": "السبب",
+      "accessTokenExpiry": "وصول API مؤقت حتى {{time}}",
+      "apiServiceAddFailed": "تعذرت إضافة الحساب إلى خدمة API: {{error}}",
+      "switchingAfterReauth": "تم تحديث التفويض. جارٍ متابعة تبديل الحساب...",
+      "switchAfterReauthFailed": "تم تحديث التفويض، لكن فشل تبديل الحساب: {{error}}",
+      "reauthGenerationMissing": "تعذر تأكيد إصدار بيانات الاعتماد التي تم تفويضها حديثًا. بدّل الحساب مرة أخرى.",
+      "reauthorizedAndSwitched": "تمت إعادة التفويض والتبديل",
+      "startingInstanceAfterReauth": "تم تحديث التفويض. جارٍ إعادة تشغيل المثيل...",
+      "startInstanceAfterReauthFailed": "تم تحديث التفويض، لكن فشل تشغيل المثيل: {{error}}",
+      "reauthorizedAndStartedInstance": "تمت إعادة التفويض وتشغيل المثيل",
+      "apiOnlyBadge": "يلزم التفويض"
+    },
     "current": "الحالي",
     "empty": {
       "description": "انقر على \"إضافة حساب\" للبدء"
@@ -2068,6 +2176,7 @@
     "exportFormat": {
       "label": "تنسيق التصدير",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "auth.json الرسمي",
       "sub2api": "تنسيق sub2api",
       "cpa": "تنسيق cpa",
       "agentIdentityCpaUnsupported": "لا يمكن تصدير حسابات Agent Identity بتنسيق cpa. استخدم Cockpit Tools أو sub2api.",
@@ -2219,6 +2328,10 @@
       "killPortSuccess": "تم تنظيف المنفذ (تم إنهاء {{count}} عملية)",
       "killPortSuccessNone": "تم فحص المنفذ. لا توجد عملية خارجية تستخدمه.",
       "killPortSuccessUnknown": "تم تنظيف منفذ خدمة API",
+      "restartAction": "إعادة تشغيل Sidecar",
+      "restartTitle": "إعادة تشغيل خدمة API",
+      "restartConfirmMessage": "سيتم إعادة تشغيل Sidecar لخدمة API فقط، دون تعديل الحسابات أو Token أو API Key أو إعدادات مجموعة الحسابات. قد تنقطع الطلبات الجارية. هل تريد المتابعة؟",
+      "restartSuccess": "تمت إعادة تشغيل Sidecar لخدمة API",
       "refreshStats": "تحديث الإحصاءات",
       "refreshStatsSuccess": "تم تحديث إحصاءات خدمة API",
       "routingStrategy": {
@@ -2270,6 +2383,7 @@
         "title": "مجمع الحصة",
         "hourlyShort": "5h​",
         "weeklyShort": "أسبوع",
+        "balance": "الرصيد",
         "viewFull": "عرض الإحصاء الكامل",
         "modalTitle": "مجمع حصة خدمة API",
         "empty": "لا توجد إحصاءات حصة بعد"
@@ -2479,6 +2593,7 @@
     "quotaError": {
       "badge": "خطأ في الحصة",
       "refreshFailedBadge": "فشل التحديث",
+      "authRefreshDeferred": "انتهت صلاحية refresh_token. ما زال access_token الحالي يعمل لخدمة API، لكن لا يمكن تبديل العميل الرسمي. أعد التفويض قبل التبديل.",
       "generic": "فشل تحديث الحصة، يرجى المحاولة لاحقا",
       "deactivatedWorkspace": "تم تعطيل مساحة العمل، بدّل الحساب أو أعد التفويض",
       "requestFailedManualRetry": "تحقّق من الشبكة. لم يتم جلب أحدث حصة. حدّث للمحاولة مجددًا.",
@@ -3084,6 +3199,7 @@
         "custom": "مخصّص",
         "endpoint": "نقطة نهاية المزوّد",
         "hint": "تم ملء Base URL متوافق تلقائيًا، وما زال بإمكانك تعديله يدويًا.",
+        "cockpitToolsHint": "استبدل Base URL بعنوان الشبكة المحلية لمضيف Cockpit Tools، مثل http://HOST_IP:PORT/v1. ستستعلم بطاقة الحساب عن /cockpit/quota تلقائيًا.",
         "website": "الموقع الإلكتروني",
         "apiKeyPage": "صفحة مفتاح API",
         "getApiKey": "الحصول على المفتاح"
@@ -3148,6 +3264,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools للشبكة المحلية"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3325,7 +3444,8 @@
         "contextWindow": "نافذة السياق",
         "contextWindowHint": "يكتب model_context_window. قابل للتحرير فقط في الوضع المخصص.",
         "partialDetected": "تم حاليًا تعيين حقل مُدار واحد فقط: model_context_window={{context}}، model_auto_compact_token_limit={{compact}}. سيؤدي الحفظ إلى إعادة كتابة كلا الحقلين باستخدام المخطط الحالي.",
-        "notSet": "لم يتم ضبطه"
+        "notSet": "لم يتم ضبطه",
+        "modelCatalogDesc": "تُكتب النماذج الظاهرة وإعدادات السياق لكل نموذج في كتالوج نماذج Codex الحالي الذي يديره Cockpit."
       },
       "testing": "جار الاختبار...",
       "testSuccess": "اتصال المزوّد سليم: {{protocol}}، {{model}}، {{latency}}.",
@@ -3435,6 +3555,14 @@
         "rawFields": "بيانات الخدمة",
         "fields": {
           "status": "الحالة",
+          "fiveHourRemainingPercent": "المتبقي خلال 5 ساعات",
+          "weeklyRemainingPercent": "المتبقي الأسبوعي",
+          "accountCount": "مجموعة الحسابات",
+          "availableAccountCount": "الحسابات المتاحة",
+          "abnormalAccountCount": "الحسابات غير الطبيعية",
+          "cooldownAccountCount": "الحسابات قيد التهدئة",
+          "stale": "بيانات قديمة",
+          "apiKeyBalance": "رصيد API_KEY",
           "planName": "الخطة",
           "remaining": "المتبقي",
           "balance": "الرصيد",
@@ -3525,6 +3653,56 @@
       "filterMissing": "غير معروف ({{count}})",
       "accessTokenOnlyUsable": "الرمز قابل للاستخدام",
       "accessTokenOnlyUsableDetail": "واجهة الاشتراك محدودة، لكن الحصة واستخدام Codex يعملان بشكل طبيعي"
+    },
+    "switchProgress": {
+      "completed": "اكتمل التبديل",
+      "needsAttention": "يلزم إجراء",
+      "steps": {
+        "credentials": "قراءة بيانات الحساب",
+        "accessToken": "فحص access_token",
+        "idToken": "فحص id_token",
+        "stopRuntime": "إيقاف التشغيل السابق",
+        "refreshTokens": "تحديث بيانات الدخول",
+        "writeCredentials": "كتابة بيانات العميل",
+        "syncSettings": "مزامنة إعدادات الحساب",
+        "startClient": "تشغيل عميل Codex"
+      },
+      "status": {
+        "pending": "انتظار",
+        "running": "قيد التنفيذ",
+        "completed": "مكتمل",
+        "warning": "يلزم تحديث",
+        "skipped": "تم التخطي",
+        "error": "فشل"
+      },
+      "detail": {
+        "missing": "لم يتم العثور على بيانات الاعتماد",
+        "opaqueToken": "Token غير شفاف؛ يتحقق الخادم من انتهاء الصلاحية",
+        "expiryUnknown": "وقت الانتهاء غير متاح",
+        "expiresAt": "صالح حتى {{time}} ({{relative}})",
+        "readingCredentials": "جارٍ قراءة الحساب وبيانات Token المحلية...",
+        "nonOAuthAccount": "هذا ليس حساب OAuth ولا يحتاج إلى Token دخول",
+        "credentialsFound": "تمت القراءة: {{tokens}}",
+        "notApplicable": "هذا الفحص لا ينطبق على الحساب",
+        "refreshNeeded": "منتهي أو داخل نافذة الأمان؛ يلزم التحديث",
+        "tokenValid": "صالح حاليًا ولا يحتاج إلى تحديث",
+        "stoppingRuntime": "جارٍ إيقاف ChatGPT/Codex وapp-server بأمان...",
+        "runtimeStopped": "تم إيقاف التشغيل السابق بأمان",
+        "waiting": "بانتظار الخطوة السابقة",
+        "refreshingTokens": "جارٍ جلب وحفظ access_token وid_token وrefresh_token الجديدة...",
+        "refreshSkipped": "AT وID Token صالحان؛ لم يُستخدم refresh_token",
+        "refreshFailed": "تعذر تحديث مجموعة Token الكاملة تلقائيًا",
+        "refreshResultReused": "تم اعتماد أحدث Token كتبها مالك تحديث آخر",
+        "refreshCompleted": "تم تحديث مجموعة Token الكاملة وحفظها بأمان",
+        "credentialsWritten": "تم تحديث auth.json / keychain وفق قواعد التخزين الرسمية",
+        "writingCredentials": "جارٍ كتابة بيانات دخول الحساب الهدف...",
+        "settingsSynced": "تمت مزامنة الربط والسرعة والإعدادات المرتبطة",
+        "syncingSettings": "جارٍ مزامنة ربط الحساب والإعدادات...",
+        "launchDisabled": "التشغيل التلقائي بعد التبديل معطل؛ شغّله يدويًا لاحقًا",
+        "clientStartWarning": "تم تبديل البيانات لكن تعذر تشغيل العميل؛ أعد المحاولة لاحقًا",
+        "clientStarted": "تم تشغيل عميل Codex",
+        "startingClient": "جارٍ تشغيل عميل Codex..."
+      }
     },
     "apiSwitchNotice": {
       "title": "جلسات Codex مخفية",

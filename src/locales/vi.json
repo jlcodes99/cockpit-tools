@@ -27,6 +27,26 @@
     "editable": "Có thể chỉnh sửa",
     "preview": "Preview​",
     "advancedSettings": "Cài đặt nâng cao",
+    "windowsOperation": {
+      "title": "Thao tác Windows chưa hoàn tất",
+      "accessDeniedDescription": "Windows đã từ chối thao tác. Chương trình đích có thể chạy với quyền cao hơn hoặc nằm trong vị trí được bảo vệ.",
+      "fileInUseDescription": "Tệp đích đang được chương trình khác sử dụng. Hãy đóng chương trình rồi thử lại.",
+      "programNotFoundDescription": "Windows không tìm thấy chương trình cần thiết. Hãy kiểm tra cài đặt hoặc đường dẫn đã cấu hình.",
+      "portDeniedDescription": "Windows đã chặn truy cập cổng. Chính sách hệ thống hoặc chương trình khác có thể đang sử dụng cổng.",
+      "genericDescription": "Thao tác hệ thống chưa hoàn tất. Hãy thử lại hoặc xử lý nguyên nhân ban đầu rồi tiếp tục.",
+      "originalReason": "Nguyên nhân ban đầu",
+      "copyError": "Sao chép lỗi",
+      "openTarget": "Mở vị trí",
+      "viewDetails": "Xem chi tiết",
+      "hideDetails": "Ẩn chi tiết",
+      "operationLabel": "Thao tác",
+      "targetLabel": "Mục tiêu",
+      "attemptedRecoveries": "Đã thử",
+      "manualContinue": "Đã xử lý, tiếp tục",
+      "retry": "Thử lại",
+      "authorizeContinue": "Cấp quyền và tiếp tục",
+      "authorizationCancelled": "Đã hủy cấp quyền Windows. Thao tác không tiếp tục."
+    },
     "codexFingerprint": {
       "modeLabel": "Chế độ dấu vân tay thiết bị",
       "modeHint": "Chỉ OAuth; mặc định Phiên. Tách cài đặt/phiên theo tài khoản và viết lại workspace để các tài khoản máy không bị nối.",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store không thể truyền thư mục phiên bản một cách đáng tin cậy, vì vậy hệ thống đã chặn việc mở tài khoản mặc định. Hãy chuyển phiên bản này sang chế độ khởi chạy CLI rồi thử lại. Chi tiết: {{detail}}",
       "speedUpdated": "Đã cập nhật tốc độ"
     },
+    "accountLease": {
+      "title": "Đang khởi động phiên bản Codex",
+      "progress": "Tiến độ khởi động",
+      "conflictTitle": "Tài khoản đang được sử dụng",
+      "completedTitle": "Đã khởi động phiên bản",
+      "failedTitle": "Không thể khởi động phiên bản",
+      "conflictAccount": "Tài khoản: {{account}}",
+      "conflictDescription": "Tài khoản này đang chạy trong {{owners}}. Để các phiên bản chính thức không tranh chấp refresh_token, một tài khoản OAuth chỉ được chạy trong một phiên bản.",
+      "locate": "Tìm phiên bản",
+      "selectOther": "Chọn tài khoản khác",
+      "transfer": "Dừng và chuyển",
+      "steps": {
+        "checkInstance": "Kiểm tra phiên bản đích",
+        "checkAccount": "Kiểm tra tài khoản liên kết",
+        "checkOccupancy": "Kiểm tra việc sử dụng tài khoản",
+        "stopPrevious": "Dừng phiên bản trước",
+        "prepareCredentials": "Chuẩn bị thông tin đăng nhập",
+        "writeProfile": "Ghi hồ sơ phiên bản",
+        "startClient": "Khởi động ứng dụng Codex"
+      },
+      "detail": {
+        "checkingInstance": "Đang đọc cấu hình phiên bản...",
+        "checkingAccount": "Đang kiểm tra tài khoản OAuth và token...",
+        "noOAuthAccount": "Không có tài khoản OAuth liên kết; không cần kiểm tra",
+        "accountInUse": "Tài khoản OAuth này đã được một phiên bản đang chạy sử dụng",
+        "accountAvailable": "Không có phiên bản đang chạy nào khác sử dụng tài khoản này",
+        "transferSkipped": "Không cần chuyển quyền sử dụng tài khoản",
+        "stoppingOwners": "Đang dừng an toàn: {{owners}}",
+        "stoppingPrevious": "Đang dừng phiên bản trước và thu hồi thông tin đăng nhập mới nhất...",
+        "preparingCredentials": "Đang kiểm tra token và cập nhật đầy đủ thông tin đăng nhập khi cần...",
+        "profileReady": "auth.json / chuỗi khóa của phiên bản đã được cập nhật an toàn",
+        "cliPrepared": "Lệnh khởi động CLI đã sẵn sàng",
+        "startingClient": "Đang khởi động và xác minh tiến trình ứng dụng Codex..."
+      }
+    },
     "runningDialog": {
       "title": "Phiên bản đã đang chạy",
       "desc": "Phiên bản này đã được bắt đầu. Bạn có thể chuyển sang cửa sổ đó hoặc khởi động lại theo chiến lược hiện tại.",
@@ -682,6 +737,9 @@
       "codexAppUiInjectionPoolLabel": "Tài khoản",
       "codexAppUiInjectionWeeklyLabel": "Tuần",
       "codexAppUiInjectionFiveHourLabel": "5 giờ",
+      "codexAppUiInjectionBalanceLabel": "Số dư",
+      "codexLoginPageGuard": "Bảo vệ trang đăng nhập",
+      "codexLoginPageGuardDesc": "Sau khi khởi động lại phiên Codex được quản lý, CDP giữ trang hội thoại đang hoạt động và ngăn trạng thái OAuth của giao diện thay thế bằng màn hình đăng nhập. Tính năng chỉ chặn chuyển trang, không khôi phục thông tin OAuth đã hết hạn.",
       "codexWslConfigDir": "Thư mục Codex WSL",
       "codexWslConfigDirDesc": "Nhập thư mục .codex trong WSL. Hỗ trợ đường dẫn \\\\wsl.localhost\\.",
       "codexWslConfigDirPlaceholder": "Ví dụ: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -766,6 +824,11 @@
       "openclawAuthOverwriteDesc": "Khi tắt, chỉ Codex được chuyển đổi và OpenClaw giữ trạng thái đăng nhập hiện tại",
       "ghcpOpencodeAuthOverwrite": "Ghi đè đăng nhập OpenCode khi chuyển đổi GitHub Copilot",
       "ghcpOpencodeRestart": "Khởi động lại OpenCode khi chuyển GitHub Copilot",
+      "grokOpencodeAuthOverwrite": "Ghi đè đăng nhập OpenCode khi chuyển đổi Grok",
+      "grokOpencodeAuthOverwriteDesc": "Khi tắt, chỉ chuyển Grok và OpenCode giữ nguyên trạng thái đăng nhập hiện tại",
+      "grokOpencodeRestart": "Khởi động lại OpenCode khi chuyển Grok",
+      "grokOpencodeRestartDesc": "Sau khi ghi đè thông tin đăng nhập OpenCode, khởi động lại để áp dụng ngay",
+      "grokOpencodeRestartRequiresOverwrite": "Hãy bật \"Ghi đè đăng nhập OpenCode khi chuyển đổi Grok\" trước",
       "ghcpLaunchOnSwitch": "Tự động khởi chạy GitHub Copilot App khi chuyển GitHub Copilot",
       "zedAutoRefresh": "Tự động làm mới hạn mức Zed",
       "zedAutoRefreshDesc": "Tần suất cập nhật nền",
@@ -997,6 +1060,13 @@
         "retentionUnit": "ngày",
         "directoryTitle": "Thư mục sao lưu",
         "directoryDesc": "Các bản sao lưu luôn được lưu trong thư mục backups của dự án.",
+        "changeDirectory": "Đổi thư mục", "migrating": "Đang di chuyển...", "migrationConfirm": "Di chuyển bản sao hiện có từ {{oldPath}} sang {{newPath}}?\n\nHủy sẽ chỉ đổi thư mục mà không di chuyển tệp cũ.", "usageTitle": "Dung lượng sao lưu", "usageDesc": "Hiển thị dung lượng cục bộ của bản sao định kỳ và snapshot hành vi nền tảng.", "usageEmpty": "Không tìm thấy tệp sao lưu cục bộ.", "cleanupBehavior": "Dọn bản sao hành vi cũ", "behaviorCleanupConfirm": "Dọn bản sao hành vi cũ? Chỉ giữ bản mới nhất cho mỗi nền tảng và phiên bản; không xóa JSON/ZIP định kỳ.", "sources": {"scheduled": "JSON/ZIP định kỳ", "behavior": "Snapshot hành vi", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "Khác"},
+        "migrationConfirmTitle": "Đổi thư mục sao lưu",
+        "migrationConfirmDesc": "Đã quét các bản sao lưu hiện có. Hãy di chuyển để giải phóng thư mục cũ hoặc chỉ đổi nơi lưu các bản sao lưu sau này.",
+        "migrationOldPath": "Thư mục cũ", "migrationNewPath": "Thư mục mới", "migrationTotalSize": "Dữ liệu cần chuyển", "migrationTotalFiles": "Tệp cần chuyển",
+        "migrationSafetyNote": "Tệp được sao chép vào vùng tạm và xác minh trước khi đổi thư mục và xóa bản sao lưu cũ.",
+        "switchOnly": "Chỉ đổi thư mục", "migrateAndSwitch": "Chuyển và đổi",
+        "migrationProgress": {"title": "Di chuyển thư mục sao lưu", "filesUnit": "tệp", "currentSource": "Nguồn hiện tại", "completedSummary": "Đã chuyển {{count}} tệp ({{size}}) và kích hoạt thư mục mới.", "switchOnlyCompleted": "Các bản sao lưu sau sẽ được lưu tại {{path}}. Bản sao lưu hiện có chưa được di chuyển.", "cleanupPartial": "Thư mục mới đã hoạt động nhưng không thể xóa các thư mục cũ sau. Hãy xóa thủ công sau:", "cancelledDesc": "Đã hủy di chuyển. Thư mục gốc không thay đổi và các tệp tạm đã được xóa.", "cancelling": "Đang hủy...", "cancelAction": "Hủy di chuyển", "finishing": "Đang hoàn tất...", "phases": {"scanning": "Đang quét bản sao lưu...", "copying": "Đang sao chép tệp...", "verifying": "Đang xác minh tệp...", "switching": "Đang đổi thư mục...", "cleaning": "Đang xóa bản sao lưu cũ...", "completed": "Di chuyển hoàn tất", "cancelled": "Đã hủy di chuyển"}},
         "openFolder": "Mở thư mục",
         "listTitle": "Danh sách sao lưu",
         "listDesc": "Nhập trực tiếp một bản sao lưu hoặc xóa các tệp cũ.",
@@ -1024,6 +1094,8 @@
           "openFolderFailed": "Mở thư mục sao lưu thất bại: {{error}}",
           "downloadSuccess": "Đã tải bản sao lưu xuống {{path}}",
           "downloadFailed": "Không thể tải bản sao lưu: {{error}}"
+          ,"migrating": "Đang di chuyển thư mục sao lưu...", "migrationDone": "Đã chuyển {{count}} tệp sang {{path}}", "directoryChanged": "Đã đổi thư mục sao lưu sang {{path}}", "directoryChangeFailed": "Không thể đổi thư mục sao lưu: {{error}}", "behaviorCleaning": "Đang dọn bản sao hành vi cũ...", "behaviorCleanupDone": "Đã dọn {{count}} bản sao, giải phóng {{size}}", "behaviorCleanupFailed": "Không thể dọn bản sao hành vi: {{error}}"
+          ,"scanningMigration": "Đang quét bản sao lưu cần di chuyển..."
         },
         "errors": {
           "invalidRetention": "Thời gian lưu phải từ 1 đến 365 ngày"
@@ -1151,7 +1223,7 @@
       "title": "Không tìm thấy đường dẫn ứng dụng",
       "desc": "Không tìm thấy đường dẫn ứng dụng {{app}}. Vui lòng đặt ngay để tiếp tục.",
       "action": "Đặt ngay",
-      "codexLaunchHint": "Khi tắt, thao tác chuyển tài khoản và ghi đè đăng nhập vẫn chạy, nhưng ứng dụng Codex sẽ không còn được khởi động và lời nhắc đường dẫn này cũng sẽ không xuất hiện lại.",
+      "codexLaunchHint": "Đã chuyển tài khoản xong. Muốn khởi chạy thì hãy đặt đường dẫn. Nếu không cần khởi chạy sau khi chuyển, hãy tắt «Tự động khởi chạy Codex App khi chuyển Codex» trong Cài đặt.",
       "claudeMultiInstanceRequiresExe": "Hồ sơ đa phiên bản Claude cần đường dẫn Claude.exe thật. Mục tiêu Microsoft Store chỉ dùng cho hồ sơ desktop mặc định.",
       "scanApps": "Quét ứng dụng",
       "scanRoots": "Pham vi quet",
@@ -1868,7 +1940,7 @@
     "title": "Quản lý tài khoản Codex",
     "experimentalModelCatalog": {
       "title": "Mô hình hiển thị",
-      "description": "Tạo danh mục do Cockpit quản lý gồm các mô hình chính thức hiện có và mục tùy chỉnh mà không ghi đè danh mục của người dùng.",
+      "description": "Quản lý tập trung mô hình hiển thị, mức suy luận, ngữ cảnh và ngưỡng nén.",
       "enabledHint": "Sử dụng danh sách mô hình hiển thị hiện tại. Khởi động lại Codex để áp dụng.",
       "models": {
         "title": "Danh sách mô hình",
@@ -1890,8 +1962,18 @@
           "displayName": "Nhập tên hiển thị không quá 100 ký tự.",
           "duplicate": "ID mô hình không được trùng lặp.",
           "reasoningEffort": "Tùy chọn mức suy luận không hợp lệ.",
-          "reserved": "ID mô hình này trùng với mô hình chính thức. Hãy dùng ID khác."
-        }
+          "reserved": "ID mô hình này trùng với mô hình chính thức. Hãy dùng ID khác.",
+          "contextPair": "Phải nhập đồng thời cửa sổ ngữ cảnh và ngưỡng nén.",
+          "contextWindow": "Cửa sổ ngữ cảnh phải là số nguyên lớn hơn 0.",
+          "autoCompact": "Ngưỡng nén phải là số nguyên lớn hơn 0.",
+          "autoCompactRange": "Ngưỡng nén phải nhỏ hơn cửa sổ ngữ cảnh."
+        },
+        "contextConfig": "Ngữ cảnh & nén",
+        "contextDefault": "Theo mô hình",
+        "contextDefaultShort": "Mặc định",
+        "contextCustomShort": "Tùy chỉnh",
+        "contextWindow": "Cửa sổ ngữ cảnh",
+        "autoCompactLimit": "Ngưỡng nén"
       },
       "unavailable": {
         "cacheMissing": "Không tìm thấy models_cache.json.",
@@ -1965,6 +2047,24 @@
       "staleAccount": "Tài khoản này không còn trong kho tài khoản cục bộ. Danh sách tài khoản đã được làm mới. Hãy nhập lại hoặc đăng nhập lại tài khoản Codex này.",
       "unsupportedCountryRegion": "Khu vực mạng hiện tại không hỗ trợ làm mới ủy quyền Codex. Dịch vụ ủy quyền OpenAI đã từ chối lối ra mạng này. Hãy chuyển sang khu vực được hỗ trợ rồi thử lại."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "Ứng dụng cần đăng nhập",
+      "reauthorizeTitle": "Ủy quyền Codex đã hết hạn",
+      "apiOnlyDescription": "access_token hiện tại vẫn có thể tạm dùng cho dịch vụ API, nhưng thông tin đăng nhập ứng dụng không thể làm mới nên ứng dụng Codex/ChatGPT chính thức chưa được chuyển tài khoản.",
+      "reauthorizeDescription": "Không thể làm mới thông tin đăng nhập và access_token không còn dùng được cho dịch vụ API. Hãy ủy quyền lại tài khoản để tiếp tục.",
+      "idTokenUnavailable": "Danh tính ứng dụng đã hết hạn và quá trình làm mới tự động không trả về id_token hợp lệ.",
+      "reasonLabel": "Lý do",
+      "accessTokenExpiry": "Quyền truy cập API tạm thời đến {{time}}",
+      "apiServiceAddFailed": "Không thể thêm tài khoản vào dịch vụ API: {{error}}",
+      "switchingAfterReauth": "Đã cập nhật ủy quyền. Đang tiếp tục chuyển tài khoản...",
+      "switchAfterReauthFailed": "Đã cập nhật ủy quyền nhưng chuyển tài khoản thất bại: {{error}}",
+      "reauthGenerationMissing": "Không thể xác nhận phiên bản thông tin đăng nhập vừa được ủy quyền. Hãy chuyển tài khoản lại.",
+      "reauthorizedAndSwitched": "Đã ủy quyền lại và chuyển",
+      "startingInstanceAfterReauth": "Đã cập nhật ủy quyền. Đang khởi động lại phiên...",
+      "startInstanceAfterReauthFailed": "Đã cập nhật ủy quyền nhưng không thể khởi động phiên: {{error}}",
+      "reauthorizedAndStartedInstance": "Đã ủy quyền lại và khởi động phiên",
+      "apiOnlyBadge": "Cần đăng nhập"
+    },
     "current": "Hiện tại",
     "empty": {
       "description": "Nhấn \"Thêm tài khoản\" để bắt đầu"
@@ -2021,6 +2121,7 @@
     "exportFormat": {
       "label": "Định dạng xuất",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "auth.json chính thức",
       "sub2api": "Định dạng sub2api",
       "cpa": "Định dạng cpa",
       "agentIdentityCpaUnsupported": "Không thể xuất tài khoản Agent Identity ở định dạng cpa. Hãy dùng Cockpit Tools hoặc sub2api.",
@@ -2172,6 +2273,10 @@
       "killPortSuccess": "Đã dọn cổng (đã đóng {{count}} tiến trình)",
       "killPortSuccessNone": "Đã kiểm tra cổng. Không có tiến trình bên ngoài nào đang dùng.",
       "killPortSuccessUnknown": "Đã dọn cổng dịch vụ API",
+      "restartAction": "Khởi động lại Sidecar",
+      "restartTitle": "Khởi động lại dịch vụ API",
+      "restartConfirmMessage": "Chỉ Sidecar của dịch vụ API sẽ được khởi động lại. Tài khoản, token, API key và cài đặt nhóm tài khoản sẽ không thay đổi. Các yêu cầu đang chạy có thể bị gián đoạn. Tiếp tục?",
+      "restartSuccess": "Đã khởi động lại Sidecar dịch vụ API",
       "refreshStats": "Làm mới thống kê",
       "refreshStatsSuccess": "Đã làm mới thống kê dịch vụ API",
       "routingStrategy": {
@@ -2223,6 +2328,7 @@
         "title": "Nhóm hạn mức",
         "hourlyShort": "5h​",
         "weeklyShort": "Tuần",
+        "balance": "Số dư",
         "viewFull": "Xem thống kê đầy đủ",
         "modalTitle": "Nhóm hạn mức dịch vụ API",
         "empty": "Chưa có thống kê hạn mức"
@@ -2432,6 +2538,7 @@
     "quotaError": {
       "badge": "Lỗi quota",
       "refreshFailedBadge": "Làm mới thất bại",
+      "authRefreshDeferred": "refresh_token đã mất hiệu lực. access_token hiện tại vẫn dùng được cho dịch vụ API nhưng không thể chuyển ứng dụng chính thức. Hãy cấp quyền lại trước khi chuyển.",
       "generic": "Làm mới quota thất bại, vui lòng thử lại sau",
       "deactivatedWorkspace": "Workspace đã bị vô hiệu hoá, hãy đổi tài khoản hoặc cấp quyền lại",
       "requestFailedManualRetry": "Kiểm tra mạng. Chưa lấy được quota mới nhất. Làm mới để thử lại.",
@@ -3037,6 +3144,7 @@
         "custom": "Tùy chỉnh",
         "endpoint": "Điểm cuối nhà cung cấp",
         "hint": "Base URL tương thích đã được điền tự động. Bạn vẫn có thể chỉnh sửa thủ công.",
+        "cockpitToolsHint": "Thay Base URL bằng địa chỉ LAN của máy chủ Cockpit Tools, ví dụ http://HOST_IP:PORT/v1. Thẻ tài khoản sẽ tự động truy vấn /cockpit/quota.",
         "website": "Trang web",
         "apiKeyPage": "Trang API Key",
         "getApiKey": "Lấy khóa"
@@ -3101,6 +3209,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools trong mạng LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3278,7 +3389,8 @@
         "contextWindow": "Cửa sổ ngữ cảnh",
         "contextWindowHint": "Viết model_context_window. Chỉ có thể chỉnh sửa ở chế độ Tùy chỉnh.",
         "partialDetected": "Hiện chỉ có một trường được quản lý được đặt: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Việc lưu sẽ ghi lại cả hai trường bằng cách sử dụng lược đồ hiện tại.",
-        "notSet": "Chưa đặt"
+        "notSet": "Chưa đặt",
+        "modelCatalogDesc": "Mô hình hiển thị và cấu hình ngữ cảnh theo mô hình được ghi vào danh mục mô hình do Cockpit quản lý của Codex hiện tại."
       },
       "testing": "Đang kiểm tra...",
       "testSuccess": "Kết nối nhà cung cấp ổn định: {{protocol}}, {{model}}, {{latency}}.",
@@ -3388,6 +3500,14 @@
         "rawFields": "Dữ liệu dịch vụ",
         "fields": {
           "status": "Trạng thái",
+          "fiveHourRemainingPercent": "Còn lại 5 giờ",
+          "weeklyRemainingPercent": "Còn lại theo tuần",
+          "accountCount": "Nhóm tài khoản",
+          "availableAccountCount": "Tài khoản khả dụng",
+          "abnormalAccountCount": "Tài khoản bất thường",
+          "cooldownAccountCount": "Tài khoản đang chờ",
+          "stale": "Dữ liệu cũ",
+          "apiKeyBalance": "Số dư API_KEY",
           "planName": "Gói",
           "remaining": "Còn lại",
           "balance": "Số dư",
@@ -3478,6 +3598,56 @@
       "filterMissing": "Không rõ ({{count}})",
       "accessTokenOnlyUsable": "Token dùng được",
       "accessTokenOnlyUsableDetail": "Điểm cuối thuê bao bị giới hạn, nhưng hạn ngạch và việc dùng Codex vẫn bình thường"
+    },
+    "switchProgress": {
+      "completed": "Chuyển đổi hoàn tất",
+      "needsAttention": "Cần xử lý",
+      "steps": {
+        "credentials": "Đọc thông tin tài khoản",
+        "accessToken": "Kiểm tra access_token",
+        "idToken": "Kiểm tra id_token",
+        "stopRuntime": "Dừng phiên chạy trước",
+        "refreshTokens": "Cập nhật thông tin đăng nhập",
+        "writeCredentials": "Ghi thông tin ứng dụng",
+        "syncSettings": "Đồng bộ cài đặt tài khoản",
+        "startClient": "Khởi động ứng dụng Codex"
+      },
+      "status": {
+        "pending": "Đang chờ",
+        "running": "Đang xử lý",
+        "completed": "Hoàn tất",
+        "warning": "Cần cập nhật",
+        "skipped": "Đã bỏ qua",
+        "error": "Thất bại"
+      },
+      "detail": {
+        "missing": "Không tìm thấy thông tin xác thực",
+        "opaqueToken": "Token không trong suốt; dịch vụ sẽ kiểm tra thời hạn",
+        "expiryUnknown": "Không đọc được thời hạn",
+        "expiresAt": "Có hiệu lực đến {{time}} ({{relative}})",
+        "readingCredentials": "Đang đọc tài khoản cục bộ và dữ liệu Token...",
+        "nonOAuthAccount": "Không phải tài khoản OAuth; không cần Token đăng nhập",
+        "credentialsFound": "Đã đọc: {{tokens}}",
+        "notApplicable": "Kiểm tra này không áp dụng cho tài khoản",
+        "refreshNeeded": "Đã hết hạn hoặc trong ngưỡng an toàn; cần cập nhật",
+        "tokenValid": "Còn hiệu lực; không cần cập nhật",
+        "stoppingRuntime": "Đang dừng an toàn ChatGPT/Codex và app-server...",
+        "runtimeStopped": "Đã dừng an toàn phiên chạy trước",
+        "waiting": "Đang chờ bước trước",
+        "refreshingTokens": "Đang lấy và lưu access_token, id_token, refresh_token mới...",
+        "refreshSkipped": "AT và ID Token còn hiệu lực; không dùng refresh_token",
+        "refreshFailed": "Không thể tự động cập nhật đầy đủ bộ Token",
+        "refreshResultReused": "Đang dùng Token mới nhất do chủ thể làm mới khác lưu",
+        "refreshCompleted": "Đã cập nhật và lưu an toàn đầy đủ bộ Token",
+        "credentialsWritten": "Đã cập nhật auth.json / keychain theo quy tắc chính thức",
+        "writingCredentials": "Đang ghi thông tin đăng nhập của tài khoản đích...",
+        "settingsSynced": "Đã đồng bộ liên kết, tốc độ và cài đặt liên quan",
+        "syncingSettings": "Đang đồng bộ liên kết tài khoản và cài đặt...",
+        "launchDisabled": "Tự khởi động đã tắt; có thể mở ứng dụng thủ công sau",
+        "clientStartWarning": "Đã đổi thông tin nhưng ứng dụng không khởi động; hãy thử lại sau",
+        "clientStarted": "Đã khởi động ứng dụng Codex",
+        "startingClient": "Đang khởi động ứng dụng Codex..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Phiên Codex bị ẩn",

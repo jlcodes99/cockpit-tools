@@ -7,7 +7,7 @@ import type {
   CodexLocalAccessAccountCooldown,
 } from "../types/codexLocalAccess";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
-import { isBlockingCodexQuotaError } from "../utils/codexQuotaError";
+import { isBlockingCodexAccountQuotaError } from "../utils/codexQuotaError";
 import {
   ModalErrorMessage,
   useModalErrorState,
@@ -71,7 +71,7 @@ function issueKindForHealth(
   }
   if (
     health?.schedulerReason === "quota" ||
-    isBlockingCodexQuotaError(account.quota_error)
+    isBlockingCodexAccountQuotaError(account)
   ) {
     return "quota";
   }

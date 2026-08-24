@@ -105,11 +105,15 @@ interface RawUserConfig extends Record<string, unknown> {
   auto_switch_selected_account_ids?: string[];
   codex_auto_switch_selected_account_ids?: string[];
   webdav_sync_password?: string;
+  backup_directory?: string;
 }
 
 interface ExportedUserConfig extends Omit<
   RawUserConfig,
-  'auto_switch_selected_account_ids' | 'codex_auto_switch_selected_account_ids' | 'webdav_sync_password'
+  | 'auto_switch_selected_account_ids'
+  | 'codex_auto_switch_selected_account_ids'
+  | 'webdav_sync_password'
+  | 'backup_directory'
 > {
   auto_switch_selected_account_refs: DataTransferAccountRef[];
   codex_auto_switch_selected_account_refs: DataTransferAccountRef[];
@@ -681,6 +685,7 @@ function exportUserConfig(config: RawUserConfig, registry: AccountRegistry): Exp
     auto_switch_selected_account_ids,
     codex_auto_switch_selected_account_ids,
     webdav_sync_password: _webdavSyncPassword,
+    backup_directory: _backupDirectory,
     ...rest
   } = config;
 

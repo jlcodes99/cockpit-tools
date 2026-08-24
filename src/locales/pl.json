@@ -27,6 +27,26 @@
     "editable": "Edytowalne",
     "preview": "Podgląd",
     "advancedSettings": "Ustawienia zaawansowane",
+    "windowsOperation": {
+      "title": "Operacja Windows nie została ukończona",
+      "accessDeniedDescription": "Windows odmówił wykonania operacji. Program może działać z wyższymi uprawnieniami lub znajdować się w chronionej lokalizacji.",
+      "fileInUseDescription": "Plik jest używany przez inny program. Zamknij go i spróbuj ponownie.",
+      "programNotFoundDescription": "Windows nie znalazł wymaganego programu. Sprawdź instalację lub skonfigurowaną ścieżkę.",
+      "portDeniedDescription": "Windows zablokował dostęp do portu. Może go używać zasada systemowa lub inny program.",
+      "genericDescription": "Operacja systemowa nie została ukończona. Spróbuj ponownie lub usuń pierwotną przyczynę.",
+      "originalReason": "Pierwotna przyczyna",
+      "copyError": "Kopiuj błąd",
+      "openTarget": "Otwórz lokalizację",
+      "viewDetails": "Pokaż szczegóły",
+      "hideDetails": "Ukryj szczegóły",
+      "operationLabel": "Operacja",
+      "targetLabel": "Cel",
+      "attemptedRecoveries": "Podjęte próby",
+      "manualContinue": "Rozwiązano, kontynuuj",
+      "retry": "Spróbuj ponownie",
+      "authorizeContinue": "Autoryzuj i kontynuuj",
+      "authorizationCancelled": "Autoryzacja Windows została anulowana. Operacja nie była kontynuowana."
+    },
     "codexFingerprint": {
       "modeLabel": "Tryb odcisku urządzenia",
       "modeHint": "Tylko OAuth; domyślnie sesja. Izoluje instalację/sesję na konto i przepisuje przestrzenie robocze, by nie wiązać lokalnych kont.",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store nie może niezawodnie przekazać katalogu instancji, dlatego zablokowano otwarcie konta domyślnego. Zmień tryb uruchamiania tej instancji na CLI i spróbuj ponownie. Szczegóły: {{detail}}",
       "speedUpdated": "Szybkość zaktualizowana"
     },
+    "accountLease": {
+      "title": "Uruchamianie instancji Codex",
+      "progress": "Postęp uruchamiania",
+      "conflictTitle": "Konto jest używane",
+      "completedTitle": "Instancja uruchomiona",
+      "failedTitle": "Nie udało się uruchomić instancji",
+      "conflictAccount": "Konto: {{account}}",
+      "conflictDescription": "To konto działa w {{owners}}. Aby oficjalne instancje nie rywalizowały o refresh_token, jedno konto OAuth może działać tylko w jednej instancji.",
+      "locate": "Znajdź instancję",
+      "selectOther": "Wybierz inne konto",
+      "transfer": "Zatrzymaj i przenieś",
+      "steps": {
+        "checkInstance": "Sprawdź instancję docelową",
+        "checkAccount": "Sprawdź powiązane konto",
+        "checkOccupancy": "Sprawdź użycie konta",
+        "stopPrevious": "Zatrzymaj poprzednią instancję",
+        "prepareCredentials": "Przygotuj dane logowania",
+        "writeProfile": "Zapisz profil instancji",
+        "startClient": "Uruchom klienta Codex"
+      },
+      "detail": {
+        "checkingInstance": "Odczytywanie konfiguracji instancji...",
+        "checkingAccount": "Sprawdzanie konta OAuth i tokenów...",
+        "noOAuthAccount": "Brak powiązanego konta OAuth; sprawdzanie nie jest potrzebne",
+        "accountInUse": "To konto OAuth jest już używane przez działającą instancję",
+        "accountAvailable": "Żadna inna działająca instancja nie używa tego konta",
+        "transferSkipped": "Przenoszenie użycia konta nie jest potrzebne",
+        "stoppingOwners": "Bezpieczne zatrzymywanie: {{owners}}",
+        "stoppingPrevious": "Bezpieczne zatrzymywanie poprzedniej instancji i odzyskiwanie najnowszych danych logowania...",
+        "preparingCredentials": "Sprawdzanie tokenów i aktualizowanie pełnych danych logowania w razie potrzeby...",
+        "profileReady": "auth.json / pęk kluczy instancji został bezpiecznie zaktualizowany",
+        "cliPrepared": "Polecenie uruchomienia CLI jest gotowe",
+        "startingClient": "Uruchamianie i sprawdzanie procesu klienta Codex..."
+      }
+    },
     "runningDialog": {
       "title": "Instancja jest już uruchomiona",
       "desc": "Ta instancja jest już uruchomiona. Możesz przejść do okna lub zrestartować ją zgodnie z aktualną strategią.",
@@ -682,6 +737,9 @@
       "codexAppUiInjectionPoolLabel": "Konta",
       "codexAppUiInjectionWeeklyLabel": "Tydzień",
       "codexAppUiInjectionFiveHourLabel": "5 godz.",
+      "codexAppUiInjectionBalanceLabel": "Saldo",
+      "codexLoginPageGuard": "Ochrona strony logowania",
+      "codexLoginPageGuardDesc": "Po restarcie zarządzanej instancji Codex CDP zachowuje działającą stronę rozmowy i zapobiega zastąpieniu jej ekranem logowania przez stan OAuth powłoki. Blokuje tylko zmianę strony i nie naprawia wygasłych danych OAuth.",
       "codexWslConfigDir": "Katalog Codex w WSL",
       "codexWslConfigDirDesc": "Wpisz katalog .codex w WSL. Ścieżki \\\\wsl.localhost\\ są obsługiwane.",
       "codexWslConfigDirPlaceholder": "Przykład: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -766,6 +824,11 @@
       "openclawAuthOverwriteDesc": "Gdy wyłączone, przełączany jest tylko Codex, a OpenClaw zachowuje bieżący stan logowania",
       "ghcpOpencodeAuthOverwrite": "Nadpisuj logowanie OpenCode podczas przełączania GitHub Copilot",
       "ghcpOpencodeRestart": "Uruchom ponownie OpenCode przy przełączaniu GitHub Copilot",
+      "grokOpencodeAuthOverwrite": "Nadpisuj logowanie OpenCode podczas przełączania Grok",
+      "grokOpencodeAuthOverwriteDesc": "Gdy wyłączone, zmieniany jest tylko Grok, a OpenCode zachowuje bieżący stan logowania",
+      "grokOpencodeRestart": "Uruchom ponownie OpenCode przy przełączaniu Grok",
+      "grokOpencodeRestartDesc": "Po nadpisaniu logowania OpenCode uruchom go ponownie, aby od razu zastosować zmianę",
+      "grokOpencodeRestartRequiresOverwrite": "Najpierw włącz „Nadpisuj logowanie OpenCode podczas przełączania Grok”",
       "ghcpLaunchOnSwitch": "Automatycznie uruchamiaj GitHub Copilot App podczas przełączania GitHub Copilot",
       "zedAutoRefresh": "Automatyczne odświeżanie limitu Zed",
       "zedAutoRefreshDesc": "Częstotliwość aktualizacji w tle",
@@ -997,6 +1060,13 @@
         "retentionUnit": "dni",
         "directoryTitle": "Folder kopii",
         "directoryDesc": "Kopie są zawsze zapisywane w folderze backups projektu.",
+        "changeDirectory": "Zmień folder", "migrating": "Przenoszenie...", "migrationConfirm": "Przenieść istniejące kopie z {{oldPath}} do {{newPath}}?\n\nAnulowanie zmieni folder bez przenoszenia starych plików.", "usageTitle": "Zajęte miejsce kopii", "usageDesc": "Pokazuje lokalne użycie kopii zaplanowanych i migawek platform.", "usageEmpty": "Nie znaleziono lokalnych kopii.", "cleanupBehavior": "Wyczyść stare kopie zachowania", "behaviorCleanupConfirm": "Wyczyścić stare kopie zachowania? Zostanie najnowsza kopia dla każdej platformy i instancji. Zaplanowane JSON/ZIP nie zostaną usunięte.", "sources": {"scheduled": "Zaplanowane JSON/ZIP", "behavior": "Migawki zachowania", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "Inne"},
+        "migrationConfirmTitle": "Zmień folder kopii",
+        "migrationConfirmDesc": "Istniejące kopie zostały przeskanowane. Przenieś je i zwolnij stary folder albo zmień tylko lokalizację przyszłych kopii.",
+        "migrationOldPath": "Stary folder", "migrationNewPath": "Nowy folder", "migrationTotalSize": "Dane do przeniesienia", "migrationTotalFiles": "Pliki do przeniesienia",
+        "migrationSafetyNote": "Pliki są najpierw kopiowane do obszaru tymczasowego i sprawdzane. Dopiero potem folder zostaje przełączony, a stare kopie usunięte.",
+        "switchOnly": "Tylko zmień", "migrateAndSwitch": "Przenieś i zmień",
+        "migrationProgress": {"title": "Przenieś folder kopii", "filesUnit": "plików", "currentSource": "Bieżące źródło", "completedSummary": "Przeniesiono {{count}} plików ({{size}}) i aktywowano nowy folder.", "switchOnlyCompleted": "Przyszłe kopie będą zapisywane w {{path}}. Istniejące kopie nie zostały przeniesione.", "cleanupPartial": "Nowy folder jest aktywny, ale nie udało się usunąć tych starych folderów. Usuń je później ręcznie:", "cancelledDesc": "Przenoszenie anulowano. Oryginalny folder pozostał bez zmian, a pliki tymczasowe usunięto.", "cancelling": "Anulowanie...", "cancelAction": "Anuluj przenoszenie", "finishing": "Kończenie...", "phases": {"scanning": "Skanowanie kopii...", "copying": "Kopiowanie plików...", "verifying": "Sprawdzanie plików...", "switching": "Zmiana folderu...", "cleaning": "Usuwanie starych kopii...", "completed": "Przenoszenie zakończone", "cancelled": "Przenoszenie anulowane"}},
         "openFolder": "Otwórz folder",
         "listTitle": "Lista kopii",
         "listDesc": "Zaimportuj kopię bezpośrednio lub usuń stare pliki.",
@@ -1024,6 +1094,8 @@
           "openFolderFailed": "Nie udało się otworzyć folderu kopii: {{error}}",
           "downloadSuccess": "Kopia zapasowa pobrana do {{path}}",
           "downloadFailed": "Nie udało się pobrać kopii: {{error}}"
+          ,"migrating": "Przenoszenie folderu kopii...", "migrationDone": "Przeniesiono {{count}} plików do {{path}}", "directoryChanged": "Folder kopii zmieniono na {{path}}", "directoryChangeFailed": "Nie udało się zmienić folderu kopii: {{error}}", "behaviorCleaning": "Czyszczenie starych kopii...", "behaviorCleanupDone": "Usunięto {{count}} kopii, zwolniono {{size}}", "behaviorCleanupFailed": "Nie udało się wyczyścić kopii zachowania: {{error}}"
+          ,"scanningMigration": "Skanowanie kopii do przeniesienia..."
         },
         "errors": {
           "invalidRetention": "Czas przechowywania musi wynosić od 1 do 365 dni"
@@ -1151,7 +1223,7 @@
       "title": "Nie znaleziono ścieżki aplikacji",
       "desc": "Nie udało się znaleźć ścieżki aplikacji {{app}}. Ustaw ją teraz, aby kontynuować.",
       "action": "Ustaw teraz",
-      "codexLaunchHint": "Po wyłączeniu przełączanie konta i nadpisanie logowania nadal będą działać, ale aplikacja Codex nie będzie już uruchamiana i ten monit o ścieżkę nie pojawi się ponownie.",
+      "codexLaunchHint": "Przełączenie konta już się zakończyło. Ustaw ścieżkę, aby uruchomić aplikację. Jeśli po przełączeniu nie ma się uruchamiać, wyłącz w ustawieniach «Automatycznie uruchamiaj Codex App podczas przełączania Codex».",
       "claudeMultiInstanceRequiresExe": "Wiele instancji Claude wymaga prawdziwej ścieżki Claude.exe. Cele Microsoft Store są tylko dla domyślnego profilu pulpitu.",
       "scanApps": "Skanuj aplikacje",
       "scanRoots": "Zakres skanowania",
@@ -1868,7 +1940,7 @@
     "title": "Zarządzanie kontami Codex",
     "experimentalModelCatalog": {
       "title": "Widoczne modele",
-      "description": "Tworzy katalog zarządzany przez Cockpit z dostępnymi modelami oficjalnymi i własnymi wpisami bez zastępowania katalogu użytkownika.",
+      "description": "Zarządzaj w jednym miejscu widocznymi modelami, poziomem rozumowania, kontekstem i progiem kompresji.",
       "enabledHint": "Używa bieżącej listy widocznych modeli. Uruchom ponownie Codex, aby zastosować zmianę.",
       "models": {
         "title": "Lista modeli",
@@ -1890,8 +1962,18 @@
           "displayName": "Wprowadź nazwę wyświetlaną o długości do 100 znaków.",
           "duplicate": "ID modeli muszą być unikalne.",
           "reasoningEffort": "Nieprawidłowa opcja rozumowania.",
-          "reserved": "To ID modelu koliduje z oficjalnym modelem. Użyj innego ID."
-        }
+          "reserved": "To ID modelu koliduje z oficjalnym modelem. Użyj innego ID.",
+          "contextPair": "Okno kontekstu i próg kompresji muszą być podane razem.",
+          "contextWindow": "Okno kontekstu musi być liczbą całkowitą większą od 0.",
+          "autoCompact": "Próg kompresji musi być liczbą całkowitą większą od 0.",
+          "autoCompactRange": "Próg kompresji musi być mniejszy od okna kontekstu."
+        },
+        "contextConfig": "Kontekst i kompresja",
+        "contextDefault": "Ustawienia modelu",
+        "contextDefaultShort": "Domyślne",
+        "contextCustomShort": "Własne",
+        "contextWindow": "Okno kontekstu",
+        "autoCompactLimit": "Próg kompresji"
       },
       "unavailable": {
         "cacheMissing": "Nie znaleziono pliku models_cache.json.",
@@ -1965,6 +2047,24 @@
       "staleAccount": "Tego konta nie ma już w lokalnym magazynie kont. Lista kont została odświeżona. Zaimportuj ponownie to konto Codex albo zaloguj się ponownie.",
       "unsupportedCountryRegion": "Bieżący region sieci nie obsługuje odświeżania autoryzacji Codex. Usługa autoryzacji OpenAI odrzuciła to wyjście sieciowe. Przełącz się na obsługiwany region i spróbuj ponownie."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "Klient wymaga logowania",
+      "reauthorizeTitle": "Autoryzacja Codex wygasła",
+      "apiOnlyDescription": "Bieżący access_token może być tymczasowo używany przez usługę API, ale danych logowania klienta nie udało się odnowić, więc oficjalny klient Codex/ChatGPT nie został przełączony.",
+      "reauthorizeDescription": "Nie udało się odnowić danych logowania, a access_token nie jest już dostępny dla usługi API. Ponownie autoryzuj konto.",
+      "idTokenUnavailable": "Tożsamość klienta wygasła, a automatyczne odnowienie nie zwróciło prawidłowego id_token.",
+      "reasonLabel": "Powód",
+      "accessTokenExpiry": "Tymczasowy dostęp do API do {{time}}",
+      "apiServiceAddFailed": "Nie udało się dodać konta do usługi API: {{error}}",
+      "switchingAfterReauth": "Autoryzacja została odnowiona. Trwa przełączanie konta...",
+      "switchAfterReauthFailed": "Autoryzacja została odnowiona, ale przełączenie konta nie powiodło się: {{error}}",
+      "reauthGenerationMissing": "Nie udało się potwierdzić wersji nowo autoryzowanych danych. Przełącz konto ponownie.",
+      "reauthorizedAndSwitched": "Ponownie autoryzowano i przełączono",
+      "startingInstanceAfterReauth": "Autoryzacja została zaktualizowana. Ponowne uruchamianie instancji...",
+      "startInstanceAfterReauthFailed": "Autoryzacja została zaktualizowana, ale nie udało się uruchomić instancji: {{error}}",
+      "reauthorizedAndStartedInstance": "Ponownie autoryzowano i uruchomiono instancję",
+      "apiOnlyBadge": "Wymagane logowanie"
+    },
     "current": "Bieżące",
     "empty": {
       "description": "Kliknij „Dodaj konto”, aby rozpocząć"
@@ -2021,6 +2121,7 @@
     "exportFormat": {
       "label": "Format eksportu",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "Oficjalny auth.json",
       "sub2api": "Format sub2api",
       "cpa": "Format cpa",
       "agentIdentityCpaUnsupported": "Kont Agent Identity nie można eksportować w formacie cpa. Użyj Cockpit Tools lub sub2api.",
@@ -2172,6 +2273,10 @@
       "killPortSuccess": "Port wyczyszczony (zamknięto {{count}} procesów)",
       "killPortSuccessNone": "Port sprawdzony. Nie używa go żaden proces zewnętrzny.",
       "killPortSuccessUnknown": "Port usługi API został wyczyszczony",
+      "restartAction": "Uruchom Sidecar ponownie",
+      "restartTitle": "Uruchom usługę API ponownie",
+      "restartConfirmMessage": "Zostanie ponownie uruchomiony tylko Sidecar usługi API. Konta, tokeny, klucze API i ustawienia puli kont pozostaną bez zmian. Trwające żądania mogą zostać przerwane. Kontynuować?",
+      "restartSuccess": "Sidecar usługi API został uruchomiony ponownie",
       "refreshStats": "Odśwież statystyki",
       "refreshStatsSuccess": "Statystyki usługi API zostały odświeżone",
       "routingStrategy": {
@@ -2223,6 +2328,7 @@
         "title": "Pula limitów",
         "hourlyShort": "5h​",
         "weeklyShort": "Tydzień",
+        "balance": "Saldo",
         "viewFull": "Pokaż pełne statystyki",
         "modalTitle": "Pula limitów usługi API",
         "empty": "Brak statystyk limitów"
@@ -2432,6 +2538,7 @@
     "quotaError": {
       "badge": "Błąd limitu",
       "refreshFailedBadge": "Odświeżenie nieudane",
+      "authRefreshDeferred": "refresh_token jest nieważny. Bieżący access_token nadal działa w usłudze API, ale nie pozwala przełączyć oficjalnego klienta. Przed zmianą wykonaj ponowną autoryzację.",
       "generic": "Odświeżenie limitu nie powiodło się, spróbuj ponownie później",
       "deactivatedWorkspace": "Obszar roboczy jest wyłączony, przełącz konto lub ponownie autoryzuj",
       "requestFailedManualRetry": "Sprawdź sieć. Nie pobrano najnowszego limitu. Odśwież i spróbuj ponownie.",
@@ -3037,6 +3144,7 @@
         "custom": "Niestandardowy",
         "endpoint": "Punkt końcowy dostawcy",
         "hint": "Zgodny Base URL został uzupełniony automatycznie. Nadal możesz go edytować ręcznie.",
+        "cockpitToolsHint": "Zastąp Base URL adresem LAN hosta Cockpit Tools, na przykład http://HOST_IP:PORT/v1. Karta konta automatycznie odpyta /cockpit/quota.",
         "website": "Witryna",
         "apiKeyPage": "Strona klucza API",
         "getApiKey": "Pobierz klucz"
@@ -3101,6 +3209,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools w sieci LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3278,7 +3389,8 @@
         "contextWindow": "Okno kontekstowe",
         "contextWindowHint": "Zapisuje model_context_window. Można edytować tylko w trybie niestandardowym.",
         "partialDetected": "Aktualnie ustawione jest tylko jedno pole zarządzane: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Zapisanie spowoduje przepisanie obu pól według aktualnego schematu.",
-        "notSet": "Nie ustawiono"
+        "notSet": "Nie ustawiono",
+        "modelCatalogDesc": "Widoczne modele i ich ustawienia kontekstu są zapisywane w katalogu modeli aktywnego Codex zarządzanym przez Cockpit."
       },
       "testing": "Testowanie...",
       "testSuccess": "Połączenie dostawcy działa poprawnie: {{protocol}}, {{model}}, {{latency}}.",
@@ -3388,6 +3500,14 @@
         "rawFields": "Dane usługi",
         "fields": {
           "status": "Stan",
+          "fiveHourRemainingPercent": "Pozostało 5 godz.",
+          "weeklyRemainingPercent": "Pozostało tygodniowo",
+          "accountCount": "Pula kont",
+          "availableAccountCount": "Dostępne konta",
+          "abnormalAccountCount": "Nieprawidłowe konta",
+          "cooldownAccountCount": "Konta w okresie oczekiwania",
+          "stale": "Nieaktualne dane",
+          "apiKeyBalance": "Saldo API_KEY",
           "planName": "Pakiet",
           "remaining": "Pozostało",
           "balance": "Saldo",
@@ -3478,6 +3598,56 @@
       "filterMissing": "Nieznane ({{count}})",
       "accessTokenOnlyUsable": "Token działa",
       "accessTokenOnlyUsableDetail": "Endpoint subskrypcji jest ograniczony, ale limit i użycie Codex działają normalnie"
+    },
+    "switchProgress": {
+      "completed": "Przełączanie zakończone",
+      "needsAttention": "Wymagane działanie",
+      "steps": {
+        "credentials": "Odczytaj dane konta",
+        "accessToken": "Sprawdź access_token",
+        "idToken": "Sprawdź id_token",
+        "stopRuntime": "Zatrzymaj poprzednie środowisko",
+        "refreshTokens": "Odśwież dane logowania",
+        "writeCredentials": "Zapisz dane klienta",
+        "syncSettings": "Zsynchronizuj ustawienia",
+        "startClient": "Uruchom klienta Codex"
+      },
+      "status": {
+        "pending": "Oczekuje",
+        "running": "W toku",
+        "completed": "Gotowe",
+        "warning": "Wymaga aktualizacji",
+        "skipped": "Pominięto",
+        "error": "Niepowodzenie"
+      },
+      "detail": {
+        "missing": "Nie znaleziono danych logowania",
+        "opaqueToken": "Nieprzezroczysty Token; ważność sprawdza usługa",
+        "expiryUnknown": "Czas wygaśnięcia niedostępny",
+        "expiresAt": "Ważne do {{time}} ({{relative}})",
+        "readingCredentials": "Odczytywanie lokalnego konta i danych Token...",
+        "nonOAuthAccount": "To nie jest konto OAuth; Token logowania nie jest wymagany",
+        "credentialsFound": "Wczytano: {{tokens}}",
+        "notApplicable": "Ta kontrola nie dotyczy konta",
+        "refreshNeeded": "Wygasło lub jest w oknie bezpieczeństwa; wymaga aktualizacji",
+        "tokenValid": "Ważne; aktualizacja nie jest potrzebna",
+        "stoppingRuntime": "Bezpieczne zatrzymywanie ChatGPT/Codex i app-server...",
+        "runtimeStopped": "Poprzednie środowisko klienta zatrzymano bezpiecznie",
+        "waiting": "Oczekiwanie na poprzedni krok",
+        "refreshingTokens": "Pobieranie i zapisywanie nowych access_token, id_token i refresh_token...",
+        "refreshSkipped": "AT i ID Token są ważne; refresh_token nie został użyty",
+        "refreshFailed": "Nie udało się automatycznie odświeżyć pełnego zestawu Token",
+        "refreshResultReused": "Użyto najnowszych Token zapisanych przez innego właściciela",
+        "refreshCompleted": "Pełny zestaw Token został bezpiecznie odświeżony i zapisany",
+        "credentialsWritten": "auth.json / keychain zaktualizowano zgodnie z oficjalnymi zasadami",
+        "writingCredentials": "Zapisywanie danych logowania konta docelowego...",
+        "settingsSynced": "Powiązanie, szybkość i ustawienia zostały zsynchronizowane",
+        "syncingSettings": "Synchronizowanie powiązania konta i ustawień...",
+        "launchDisabled": "Automatyczne uruchamianie jest wyłączone; uruchom klienta ręcznie",
+        "clientStartWarning": "Dane przełączono, ale klient nie wystartował; spróbuj później",
+        "clientStarted": "Klient Codex został uruchomiony",
+        "startingClient": "Uruchamianie klienta Codex..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Sesje Codex są ukryte",

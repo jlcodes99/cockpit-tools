@@ -200,6 +200,50 @@ func TestCodexFingerprintHeadersRewriteLineage(t *testing.T) {
 	}
 }
 
+func TestCodexFingerprintKeepsConversationsApartOnSameAccount(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{}
+	auth := testFingerprintAuth("auth-a", "session")
+	first := []byte(`{"client_metadata":{"session_id":"conversation-1","thread_id":"thread-1"}}`)
+	second := []byte(`{"client_metadata":{"session_id":"conversation-2","thread_id":"thread-2"}}`)
+	repeat := []byte(`{"client_metadata":{"session_id":"conversation-1","thread_id":"thread-1"}}`)
+
+	_, firstState := applyCodexFingerprintBody(cfg, auth, first, first, codexIdentityConfuseState{})
+	_, secondState := applyCodexFingerprintBody(cfg, auth, second, second, codexIdentityConfuseState{})
+	_, repeatState := applyCodexFingerprintBody(cfg, auth, repeat, repeat, codexIdentityConfuseState{})
+
+	if firstState.sessionID == "" || firstState.sessionID == "conversation-1" {
+		t.Fatalf("conversation session was not remapped: %q", firstState.sessionID)
+	}
+	if firstState.sessionID == secondState.sessionID {
+		t.Fatal("different conversations were collapsed onto one official session")
+	}
+	if firstState.sessionID != repeatState.sessionID {
+		t.Fatalf("same conversation must keep the same official session: first=%q repeat=%q", firstState.sessionID, repeatState.sessionID)
+	}
+	if firstState.sessionID == mapFingerprintSessionID("auth-a", "account") {
+		t.Fatal("conversation session still uses the old per-account seed")
+	}
+}
+
+func TestCodexFingerprintEmptySessionDoesNotReuseAccountSeed(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{}
+	auth := testFingerprintAuth("auth-a", "session")
+	payload := []byte(`{"client_metadata":{}}`)
+	_, first := applyCodexFingerprintBody(cfg, auth, payload, payload, codexIdentityConfuseState{})
+	_, second := applyCodexFingerprintBody(cfg, auth, payload, payload, codexIdentityConfuseState{})
+	if first.sessionID == "" || second.sessionID == "" {
+		t.Fatal("empty session should still receive an official session id")
+	}
+	if first.sessionID == second.sessionID {
+		t.Fatal("requests without a conversation id must not share one official session")
+	}
+	if first.sessionID == mapFingerprintSessionID("auth-a", "account") || second.sessionID == mapFingerprintSessionID("auth-a", "account") {
+		t.Fatal("empty session still uses the old per-account seed")
+	}
+}
+
 func TestCodexFingerprintFullCollapsesThread(t *testing.T) {
 	t.Parallel()
 	payload := testFingerprintPayload()

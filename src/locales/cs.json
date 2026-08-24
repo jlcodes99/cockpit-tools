@@ -27,6 +27,26 @@
     "editable": "Upravitelné",
     "preview": "Náhled",
     "advancedSettings": "Pokročilá nastavení",
+    "windowsOperation": {
+      "title": "Operace Windows nebyla dokončena",
+      "accessDeniedDescription": "Windows tuto operaci zamítl. Cílový program může běžet s vyšším oprávněním nebo být v chráněném umístění.",
+      "fileInUseDescription": "Cílový soubor používá jiný program. Zavřete jej a zkuste to znovu.",
+      "programNotFoundDescription": "Windows nenašel program potřebný pro tuto operaci. Zkontrolujte instalaci nebo nastavenou cestu.",
+      "portDeniedDescription": "Windows zablokoval přístup k portu. Může jej používat systémová zásada nebo jiný program.",
+      "genericDescription": "Systémová operace nebyla dokončena. Zkuste ji znovu nebo odstraňte původní příčinu.",
+      "originalReason": "Původní příčina",
+      "copyError": "Kopírovat chybu",
+      "openTarget": "Otevřít umístění",
+      "viewDetails": "Zobrazit podrobnosti",
+      "hideDetails": "Skrýt podrobnosti",
+      "operationLabel": "Operace",
+      "targetLabel": "Cíl",
+      "attemptedRecoveries": "Vyzkoušeno",
+      "manualContinue": "Vyřešeno, pokračovat",
+      "retry": "Zkusit znovu",
+      "authorizeContinue": "Povolit a pokračovat",
+      "authorizationCancelled": "Autorizace Windows byla zrušena. Operace nepokračovala."
+    },
     "codexFingerprint": {
       "modeLabel": "Režim otisku zařízení",
       "modeHint": "Pouze OAuth; výchozí je relace. Odděluje instalaci/relaci podle účtu a přepisuje workspace, aby se místní účty nespojovaly.",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store nedokáže spolehlivě předat adresář instance, proto bylo otevření výchozího účtu zablokováno. Přepněte tuto instanci na spouštění přes CLI a zkuste to znovu. Podrobnosti: {{detail}}",
       "speedUpdated": "Rychlost aktualizována"
     },
+    "accountLease": {
+      "title": "Spouštění instance Codex",
+      "progress": "Průběh spuštění",
+      "conflictTitle": "Účet se již používá",
+      "completedTitle": "Instance spuštěna",
+      "failedTitle": "Spuštění instance selhalo",
+      "conflictAccount": "Účet: {{account}}",
+      "conflictDescription": "Tento účet běží v {{owners}}. Aby oficiální instance nesoutěžily o refresh_token, může jeden účet OAuth běžet pouze v jedné instanci.",
+      "locate": "Najít instanci",
+      "selectOther": "Vybrat jiný účet",
+      "transfer": "Zastavit a převést",
+      "steps": {
+        "checkInstance": "Zkontrolovat cílovou instanci",
+        "checkAccount": "Zkontrolovat propojený účet",
+        "checkOccupancy": "Zkontrolovat využití účtu",
+        "stopPrevious": "Zastavit předchozí instanci",
+        "prepareCredentials": "Připravit přihlašovací údaje",
+        "writeProfile": "Zapsat profil instance",
+        "startClient": "Spustit klienta Codex"
+      },
+      "detail": {
+        "checkingInstance": "Načítání konfigurace instance...",
+        "checkingAccount": "Kontrola účtu OAuth a tokenů...",
+        "noOAuthAccount": "Není propojen účet OAuth; kontrola není nutná",
+        "accountInUse": "Tento účet OAuth již používá spuštěná instance",
+        "accountAvailable": "Tento účet nepoužívá žádná jiná spuštěná instance",
+        "transferSkipped": "Převod využití účtu není potřeba",
+        "stoppingOwners": "Bezpečné zastavení: {{owners}}",
+        "stoppingPrevious": "Bezpečné zastavení předchozí instance a načtení nejnovějších údajů...",
+        "preparingCredentials": "Kontrola tokenů a případná aktualizace úplných přihlašovacích údajů...",
+        "profileReady": "auth.json / klíčenka instance byly bezpečně aktualizovány",
+        "cliPrepared": "Příkaz ke spuštění CLI je připraven",
+        "startingClient": "Spouštění a kontrola procesu klienta Codex..."
+      }
+    },
     "runningDialog": {
       "title": "Instance již běží",
       "desc": "Tato instance je již spuštěna. Můžete se přepnout do okna nebo ji restartovat podle aktuální strategie.",
@@ -678,6 +733,9 @@
       "codexAppUiInjectionPoolLabel": "Účty",
       "codexAppUiInjectionWeeklyLabel": "Týden",
       "codexAppUiInjectionFiveHourLabel": "5 h",
+      "codexAppUiInjectionBalanceLabel": "Zůstatek",
+      "codexLoginPageGuard": "Ochrana přihlašovací stránky",
+      "codexLoginPageGuardDesc": "Po restartu spravované instance Codex použije CDP k zachování funkční stránky konverzace a zabrání stavu OAuth prostředí v přepnutí na přihlášení. Blokuje pouze změnu stránky a neopravuje neplatné přihlašovací údaje OAuth.",
       "codexWslConfigDir": "Adresář Codex ve WSL",
       "codexWslConfigDirDesc": "Zadejte adresář .codex ve WSL. Cesty \\\\wsl.localhost\\ jsou podporované.",
       "codexWslConfigDirPlaceholder": "Příklad: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -762,6 +820,11 @@
       "openclawAuthOverwriteDesc": "Pokud je vypnuto, přepne se pouze Codex a OpenClaw zůstane v aktuálním přihlášení",
       "ghcpOpencodeAuthOverwrite": "Při přepnutí GitHub Copilot přepsat přihlášení OpenCode",
       "ghcpOpencodeRestart": "Restartovat OpenCode při přepnutí GitHub Copilot",
+      "grokOpencodeAuthOverwrite": "Při přepnutí Groku přepsat přihlášení OpenCode",
+      "grokOpencodeAuthOverwriteDesc": "Pokud je vypnuto, přepne se pouze Grok a OpenCode zůstane v aktuálním přihlášení",
+      "grokOpencodeRestart": "Restartovat OpenCode při přepnutí Groku",
+      "grokOpencodeRestartDesc": "Po přepsání přihlášení OpenCode ho restartujte, aby se změny projevily ihned",
+      "grokOpencodeRestartRequiresOverwrite": "Nejprve zapněte „Při přepnutí Groku přepsat přihlášení OpenCode“",
       "ghcpLaunchOnSwitch": "Při přepnutí GitHub Copilot automaticky spustit GitHub Copilot App",
       "zedAutoRefresh": "Automatické obnovení kvóty Zed",
       "zedAutoRefreshDesc": "Frekvence aktualizace na pozadí",
@@ -997,6 +1060,13 @@
         "retentionUnit": "dní",
         "directoryTitle": "Složka záloh",
         "directoryDesc": "Zálohy se vždy ukládají do složky backups projektu.",
+        "changeDirectory": "Změnit složku", "migrating": "Přesouvání...", "migrationConfirm": "Přesunout existující zálohy z {{oldPath}} do {{newPath}}?\n\nZrušení přepne složku bez přesunu starých souborů.", "usageTitle": "Využití místa záloh", "usageDesc": "Zobrazuje místní využití plánovaných záloh a snímků platforem.", "usageEmpty": "Nebyly nalezeny místní zálohy.", "cleanupBehavior": "Vyčistit staré zálohy chování", "behaviorCleanupConfirm": "Vyčistit staré zálohy chování? Zachová se nejnovější záloha pro každou platformu a instanci. Plánované JSON/ZIP soubory se nesmažou.", "sources": {"scheduled": "Plánované JSON/ZIP", "behavior": "Snímky chování", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "Ostatní"},
+        "migrationConfirmTitle": "Změnit složku záloh",
+        "migrationConfirmDesc": "Existující zálohy byly zkontrolovány. Přesuňte je a uvolněte starou složku, nebo změňte jen umístění budoucích záloh.",
+        "migrationOldPath": "Stará složka", "migrationNewPath": "Nová složka", "migrationTotalSize": "Data k přesunu", "migrationTotalFiles": "Soubory k přesunu",
+        "migrationSafetyNote": "Soubory se nejprve zkopírují do dočasné oblasti a ověří. Teprve potom se složka přepne a staré zálohy odstraní.",
+        "switchOnly": "Jen změnit", "migrateAndSwitch": "Přesunout a změnit",
+        "migrationProgress": {"title": "Přesun složky záloh", "filesUnit": "souborů", "currentSource": "Aktuální zdroj", "completedSummary": "Přesunuto {{count}} souborů ({{size}}) a aktivována nová složka.", "switchOnlyCompleted": "Budoucí zálohy se uloží do {{path}}. Existující zálohy nebyly přesunuty.", "cleanupPartial": "Nová složka je aktivní, ale tyto staré složky se nepodařilo odstranit. Odstraňte je později ručně:", "cancelledDesc": "Přesun byl zrušen. Původní složka zůstala beze změny a dočasné soubory byly odstraněny.", "cancelling": "Rušení...", "cancelAction": "Zrušit přesun", "finishing": "Dokončování...", "phases": {"scanning": "Kontrola záloh...", "copying": "Kopírování záloh...", "verifying": "Ověřování souborů...", "switching": "Změna složky...", "cleaning": "Odstraňování starých záloh...", "completed": "Přesun dokončen", "cancelled": "Přesun zrušen"}},
         "openFolder": "Otevřít složku",
         "listTitle": "Seznam záloh",
         "listDesc": "Zálohu můžete přímo importovat nebo odstranit staré soubory.",
@@ -1024,6 +1094,8 @@
           "openFolderFailed": "Otevření složky se zálohami selhalo: {{error}}",
           "downloadSuccess": "Záloha stažena do {{path}}",
           "downloadFailed": "Stažení zálohy selhalo: {{error}}"
+          ,"migrating": "Přesouvání složky záloh...", "migrationDone": "Přesunuto {{count}} souborů do {{path}}", "directoryChanged": "Složka změněna na {{path}}", "directoryChangeFailed": "Složku záloh se nepodařilo změnit: {{error}}", "behaviorCleaning": "Čištění starých záloh chování...", "behaviorCleanupDone": "Vyčištěno {{count}} záloh, uvolněno {{size}}", "behaviorCleanupFailed": "Zálohy chování se nepodařilo vyčistit: {{error}}"
+          ,"scanningMigration": "Kontrola záloh k přesunu..."
         },
         "errors": {
           "invalidRetention": "Doba uchování musí být mezi 1 a 365 dny"
@@ -1151,7 +1223,7 @@
       "title": "Cesta k aplikaci nebyla nalezena",
       "desc": "Nepodařilo se najít cestu k aplikaci {{app}}. Pro pokračování ji nyní nastavte.",
       "action": "Nastavit nyní",
-      "codexLaunchHint": "Po vypnutí se přepnutí účtu a přepsání přihlášení stále provede, ale aplikace Codex se už nespustí a tato výzva k cestě se znovu nezobrazí.",
+      "codexLaunchHint": "Přepnutí účtu je hotové. Pro spuštění nastavte cestu. Pokud se po přepnutí spouštět nemá, v nastavení vypněte «Při přepnutí Codex automaticky spustit Codex App».",
       "claudeMultiInstanceRequiresExe": "Více instancí Claude vyžaduje skutečnou cestu k Claude.exe. Cíle Microsoft Store jsou jen pro výchozí desktopový profil.",
       "scanApps": "Skenovat aplikace",
       "scanRoots": "Rozsah skenovani",
@@ -1868,7 +1940,7 @@
     "title": "Správa účtů Codex",
     "experimentalModelCatalog": {
       "title": "Viditelné modely",
-      "description": "Vytvoří katalog spravovaný Cockpitem z dostupných oficiálních modelů a vlastních položek, aniž by přepsal uživatelský katalog.",
+      "description": "Spravujte viditelné modely, úroveň uvažování, kontext a práh komprese na jednom místě.",
       "enabledHint": "Použije aktuální seznam viditelných modelů. Pro použití restartujte Codex.",
       "models": {
         "title": "Seznam modelů",
@@ -1890,8 +1962,18 @@
           "displayName": "Zadejte zobrazovaný název o délce nejvýše 100 znaků.",
           "duplicate": "ID modelů musí být jedinečná.",
           "reasoningEffort": "Neplatná úroveň uvažování.",
-          "reserved": "Toto ID modelu koliduje s oficiálním modelem. Použijte jiné ID."
-        }
+          "reserved": "Toto ID modelu koliduje s oficiálním modelem. Použijte jiné ID.",
+          "contextPair": "Okno kontextu a práh komprese musí být zadány společně.",
+          "contextWindow": "Okno kontextu musí být celé číslo větší než 0.",
+          "autoCompact": "Práh komprese musí být celé číslo větší než 0.",
+          "autoCompactRange": "Práh komprese musí být menší než okno kontextu."
+        },
+        "contextConfig": "Kontext a komprese",
+        "contextDefault": "Podle modelu",
+        "contextDefaultShort": "Výchozí",
+        "contextCustomShort": "Vlastní",
+        "contextWindow": "Okno kontextu",
+        "autoCompactLimit": "Práh komprese"
       },
       "unavailable": {
         "cacheMissing": "Soubor models_cache.json nebyl nalezen.",
@@ -1965,6 +2047,24 @@
       "staleAccount": "Tento účet už není v místním úložišti účtů. Seznam účtů byl obnoven. Znovu tento účet Codex importujte nebo se k němu přihlaste.",
       "unsupportedCountryRegion": "Aktuální síťová oblast nepodporuje obnovení autorizace Codexu. Autorizační služba OpenAI odmítla tento síťový výstup. Přepněte na podporovanou oblast a zkuste to znovu."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "Klient vyžaduje přihlášení",
+      "reauthorizeTitle": "Autorizace Codex vypršela",
+      "apiOnlyDescription": "Aktuální access_token lze dočasně používat pro službu API, ale přihlašovací údaje klienta se nepodařilo obnovit, takže oficiální klient Codex/ChatGPT nebyl přepnut.",
+      "reauthorizeDescription": "Přihlašovací údaje se nepodařilo obnovit a access_token už nelze použít pro službu API. Pokračujte novou autorizací.",
+      "idTokenUnavailable": "Identita klienta vypršela a automatická obnova nevrátila platný id_token.",
+      "reasonLabel": "Důvod",
+      "accessTokenExpiry": "Dočasný přístup k API do {{time}}",
+      "apiServiceAddFailed": "Účet se nepodařilo přidat do služby API: {{error}}",
+      "switchingAfterReauth": "Autorizace byla obnovena. Pokračuje přepnutí účtu...",
+      "switchAfterReauthFailed": "Autorizace byla obnovena, ale přepnutí účtu selhalo: {{error}}",
+      "reauthGenerationMissing": "Verzi nově autorizovaných přihlašovacích údajů se nepodařilo ověřit. Přepněte účet znovu.",
+      "reauthorizedAndSwitched": "Znovu autorizováno a přepnuto",
+      "startingInstanceAfterReauth": "Autorizace byla aktualizována. Instance se znovu spouští...",
+      "startInstanceAfterReauthFailed": "Autorizace byla aktualizována, ale instance se nepodařilo spustit: {{error}}",
+      "reauthorizedAndStartedInstance": "Znovu autorizováno a instance spuštěna",
+      "apiOnlyBadge": "Nutné přihlášení"
+    },
     "current": "Aktuální",
     "empty": {
       "description": "Klikněte na „Přidat účet“"
@@ -2021,6 +2121,7 @@
     "exportFormat": {
       "label": "Formát exportu",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "Oficiální auth.json",
       "sub2api": "sub2api formát",
       "cpa": "cpa formát",
       "agentIdentityCpaUnsupported": "Účty Agent Identity nelze exportovat ve formátu cpa. Použijte Cockpit Tools nebo sub2api.",
@@ -2172,6 +2273,10 @@
       "killPortSuccess": "Port byl vyčištěn (ukončeno {{count}} procesů)",
       "killPortSuccessNone": "Port byl zkontrolován. Nepoužívá ho žádný externí proces.",
       "killPortSuccessUnknown": "Port služby API byl vyčištěn",
+      "restartAction": "Restartovat Sidecar",
+      "restartTitle": "Restartovat službu API",
+      "restartConfirmMessage": "Restartuje se pouze Sidecar služby API. Účty, tokeny, API klíče ani nastavení fondu účtů se nezmění. Probíhající požadavky mohou být přerušeny. Pokračovat?",
+      "restartSuccess": "Sidecar služby API byl restartován",
       "refreshStats": "Obnovit statistiky",
       "refreshStatsSuccess": "Statistiky služby API byly obnoveny",
       "routingStrategy": {
@@ -2223,6 +2328,7 @@
         "title": "Fond kvóty",
         "hourlyShort": "5h​",
         "weeklyShort": "Týden",
+        "balance": "Zůstatek",
         "viewFull": "Zobrazit úplné statistiky",
         "modalTitle": "Fond kvóty služby API",
         "empty": "Zatím žádné statistiky kvóty"
@@ -2432,6 +2538,7 @@
     "quotaError": {
       "badge": "Chyba kvóty",
       "refreshFailedBadge": "Obnovení selhalo",
+      "authRefreshDeferred": "refresh_token je neplatný. Aktuální access_token stále funguje pro službu API, ale nelze přepnout oficiálního klienta. Před přepnutím proveďte nové ověření.",
       "generic": "Obnovení kvóty se nezdařilo, zkuste to prosím později",
       "deactivatedWorkspace": "Pracovní prostor je deaktivovaný, přepněte účet nebo znovu autorizujte",
       "requestFailedManualRetry": "Zkontrolujte síť. Nejnovější kvóta nebyla načtena. Obnovte a zkuste to znovu.",
@@ -3037,6 +3144,7 @@
         "custom": "Vlastní",
         "endpoint": "Koncový bod poskytovatele",
         "hint": "Kompatibilní Base URL byla vyplněna automaticky. Stále ji můžete upravit ručně.",
+        "cockpitToolsHint": "Nahraďte Base URL adresou hostitele Cockpit Tools v síti LAN, například http://HOST_IP:PORT/v1. Karta účtu automaticky načte /cockpit/quota.",
         "website": "Web",
         "apiKeyPage": "Stránka API klíče",
         "getApiKey": "Získat klíč"
@@ -3101,6 +3209,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools v LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3278,7 +3389,8 @@
         "contextWindow": "Kontextové okno",
         "contextWindowHint": "Zapíše model_context_window. Upravitelné pouze v uživatelském režimu.",
         "partialDetected": "Aktuálně je nastaveno pouze jedno spravované pole: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Uložením se přepíší obě pole podle aktuálního schématu.",
-        "notSet": "Nenastaveno"
+        "notSet": "Nenastaveno",
+        "modelCatalogDesc": "Viditelné modely a jejich nastavení kontextu se zapisují do katalogu modelů aktivního Codex spravovaného nástrojem Cockpit."
       },
       "testing": "Testování...",
       "testSuccess": "Připojení poskytovatele je v pořádku: {{protocol}}, {{model}}, {{latency}}.",
@@ -3388,6 +3500,14 @@
         "rawFields": "Data služby",
         "fields": {
           "status": "Stav",
+          "fiveHourRemainingPercent": "Zbývá za 5 h",
+          "weeklyRemainingPercent": "Zbývá týdně",
+          "accountCount": "Fond účtů",
+          "availableAccountCount": "Dostupné účty",
+          "abnormalAccountCount": "Problémové účty",
+          "cooldownAccountCount": "Účty v čekací době",
+          "stale": "Zastaralá data",
+          "apiKeyBalance": "Zůstatek API_KEY",
           "planName": "Tarif",
           "remaining": "Zbývá",
           "balance": "Zůstatek",
@@ -3478,6 +3598,56 @@
       "filterMissing": "Neznámé ({{count}})",
       "accessTokenOnlyUsable": "Token je použitelný",
       "accessTokenOnlyUsableDetail": "Rozhraní předplatného je omezené, ale kvóta a používání Codexu fungují normálně"
+    },
+    "switchProgress": {
+      "completed": "Přepnutí dokončeno",
+      "needsAttention": "Vyžaduje zásah",
+      "steps": {
+        "credentials": "Načíst údaje účtu",
+        "accessToken": "Zkontrolovat access_token",
+        "idToken": "Zkontrolovat id_token",
+        "stopRuntime": "Zastavit předchozí běh",
+        "refreshTokens": "Aktualizovat přihlášení",
+        "writeCredentials": "Zapsat údaje klienta",
+        "syncSettings": "Synchronizovat nastavení",
+        "startClient": "Spustit klienta Codex"
+      },
+      "status": {
+        "pending": "Čeká",
+        "running": "Probíhá",
+        "completed": "Hotovo",
+        "warning": "Nutná aktualizace",
+        "skipped": "Přeskočeno",
+        "error": "Selhalo"
+      },
+      "detail": {
+        "missing": "Přihlašovací údaj nenalezen",
+        "opaqueToken": "Neprůhledný Token; platnost ověří služba",
+        "expiryUnknown": "Čas vypršení není dostupný",
+        "expiresAt": "Platné do {{time}} ({{relative}})",
+        "readingCredentials": "Načítají se místní údaje účtu a Token...",
+        "nonOAuthAccount": "Nejde o účet OAuth; přihlašovací Token není potřeba",
+        "credentialsFound": "Načteno: {{tokens}}",
+        "notApplicable": "Tato kontrola se na účet nevztahuje",
+        "refreshNeeded": "Vypršelo nebo je v bezpečnostním okně; je nutná aktualizace",
+        "tokenValid": "Platné; aktualizace není nutná",
+        "stoppingRuntime": "Bezpečně se zastavuje ChatGPT/Codex a app-server...",
+        "runtimeStopped": "Předchozí běh klienta byl bezpečně zastaven",
+        "waiting": "Čeká se na předchozí krok",
+        "refreshingTokens": "Získávají a ukládají se nové access_token, id_token a refresh_token...",
+        "refreshSkipped": "AT a ID Token jsou platné; refresh_token nebyl použit",
+        "refreshFailed": "Úplnou sadu Token nelze automaticky aktualizovat",
+        "refreshResultReused": "Používají se nejnovější Token od jiného vlastníka obnovy",
+        "refreshCompleted": "Úplná sada Token byla bezpečně aktualizována a uložena",
+        "credentialsWritten": "auth.json / keychain byl aktualizován podle oficiálních pravidel",
+        "writingCredentials": "Zapisují se přihlašovací údaje cílového účtu...",
+        "settingsSynced": "Propojení, rychlost a související nastavení jsou synchronizována",
+        "syncingSettings": "Synchronizuje se propojení účtu a nastavení...",
+        "launchDisabled": "Automatické spuštění je vypnuté; klienta lze spustit ručně",
+        "clientStartWarning": "Údaje byly přepnuty, ale klient se nespustil; zkuste to později",
+        "clientStarted": "Klient Codex byl spuštěn",
+        "startingClient": "Spouští se klient Codex..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Relace Codexu jsou skryté",

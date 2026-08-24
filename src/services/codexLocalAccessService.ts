@@ -121,6 +121,10 @@ export async function prepareCodexLocalAccessForRestart(): Promise<CodexLocalAcc
   return await invoke("codex_local_access_prepare_restart");
 }
 
+export async function restartCodexLocalAccessSidecar(): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_restart_sidecar");
+}
+
 export async function killCodexLocalAccessPort(): Promise<CodexLocalAccessPortCleanupResult> {
   return await invoke("codex_local_access_kill_port");
 }

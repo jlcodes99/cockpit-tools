@@ -27,6 +27,26 @@
     "editable": "Editable​",
     "preview": "Vista previa",
     "advancedSettings": "Configuración avanzada",
+    "windowsOperation": {
+      "title": "Operación de Windows incompleta",
+      "accessDeniedDescription": "Windows rechazó la operación. El destino puede ejecutarse con más privilegios o estar en una ubicación protegida.",
+      "fileInUseDescription": "Otro programa está usando el archivo. Ciérralo e inténtalo de nuevo.",
+      "programNotFoundDescription": "Windows no encontró el programa necesario. Comprueba la instalación o la ruta configurada.",
+      "portDeniedDescription": "Windows bloqueó el acceso al puerto. Puede estar reservado por una directiva o por otro programa.",
+      "genericDescription": "La operación del sistema no terminó. Reinténtala o corrige la causa original y continúa.",
+      "originalReason": "Causa original",
+      "copyError": "Copiar error",
+      "openTarget": "Abrir ubicación",
+      "viewDetails": "Ver detalles",
+      "hideDetails": "Ocultar detalles",
+      "operationLabel": "Operación",
+      "targetLabel": "Destino",
+      "attemptedRecoveries": "Intentos",
+      "manualContinue": "Ya está resuelto",
+      "retry": "Reintentar",
+      "authorizeContinue": "Autorizar y continuar",
+      "authorizationCancelled": "Se canceló la autorización de Windows. La operación no continuó."
+    },
     "codexFingerprint": {
       "modeLabel": "Modo de huella del dispositivo",
       "modeHint": "Solo OAuth; Sesión por defecto. Aísla instalación/sesión por cuenta y reescribe el espacio de trabajo para no agrupar cuentas locales.",
@@ -523,6 +543,41 @@
       "codexManagedStoreLaunchUnsafe": "Windows Store no puede transferir de forma fiable el directorio de la instancia, por lo que se bloqueó la apertura de la cuenta predeterminada. Cambia esta instancia al modo de inicio CLI e inténtalo de nuevo. Detalles: {{detail}}",
       "speedUpdated": "Velocidad actualizada"
     },
+    "accountLease": {
+      "title": "Iniciando instancia de Codex",
+      "progress": "Progreso de inicio",
+      "conflictTitle": "La cuenta está en uso",
+      "completedTitle": "Instancia iniciada",
+      "failedTitle": "Error al iniciar la instancia",
+      "conflictAccount": "Cuenta: {{account}}",
+      "conflictDescription": "Esta cuenta se está ejecutando en {{owners}}. Para evitar que las instancias oficiales compitan por el refresh_token, una cuenta OAuth solo puede ejecutarse en una instancia.",
+      "locate": "Localizar instancia",
+      "selectOther": "Elegir otra cuenta",
+      "transfer": "Detener y transferir",
+      "steps": {
+        "checkInstance": "Comprobar instancia destino",
+        "checkAccount": "Comprobar cuenta vinculada",
+        "checkOccupancy": "Comprobar uso de cuenta",
+        "stopPrevious": "Detener instancia anterior",
+        "prepareCredentials": "Preparar credenciales",
+        "writeProfile": "Escribir perfil de instancia",
+        "startClient": "Iniciar cliente Codex"
+      },
+      "detail": {
+        "checkingInstance": "Leyendo la configuración de la instancia...",
+        "checkingAccount": "Comprobando la cuenta OAuth y los tokens...",
+        "noOAuthAccount": "No hay una cuenta OAuth vinculada; no se requiere comprobación",
+        "accountInUse": "Esta cuenta OAuth ya está en uso por una instancia activa",
+        "accountAvailable": "Ninguna otra instancia activa usa esta cuenta",
+        "transferSkipped": "No es necesario transferir el uso de la cuenta",
+        "stoppingOwners": "Deteniendo de forma segura: {{owners}}",
+        "stoppingPrevious": "Deteniendo la instancia anterior y recuperando sus credenciales más recientes...",
+        "preparingCredentials": "Comprobando tokens y actualizando las credenciales completas si es necesario...",
+        "profileReady": "auth.json / llavero de la instancia se actualizó de forma segura",
+        "cliPrepared": "El comando de inicio de CLI está listo",
+        "startingClient": "Iniciando y verificando el proceso del cliente Codex..."
+      }
+    },
     "runningDialog": {
       "title": "La instancia ya está en ejecución",
       "desc": "Esta instancia ya está iniciada. Puede cambiar a la ventana o reiniciarla según la estrategia actual.",
@@ -678,6 +733,9 @@
       "codexAppUiInjectionPoolLabel": "Cuentas",
       "codexAppUiInjectionWeeklyLabel": "Semana",
       "codexAppUiInjectionFiveHourLabel": "5 h",
+      "codexAppUiInjectionBalanceLabel": "Saldo",
+      "codexLoginPageGuard": "Protección de inicio de sesión",
+      "codexLoginPageGuardDesc": "Tras reiniciar una instancia administrada de Codex, usa CDP para mantener la página de conversación operativa e impedir que el estado OAuth de la interfaz la cambie por la pantalla de inicio de sesión. Solo bloquea el cambio de página; no repara credenciales OAuth caducadas.",
       "codexWslConfigDir": "Directorio Codex en WSL",
       "codexWslConfigDirDesc": "Introduce el directorio .codex dentro de WSL. Se admiten rutas \\\\wsl.localhost\\.",
       "codexWslConfigDirPlaceholder": "Ejemplo: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -762,6 +820,11 @@
       "openclawAuthOverwriteDesc": "Si está desactivado, solo se cambia Codex y OpenClaw mantiene su sesión actual",
       "ghcpOpencodeAuthOverwrite": "Sobrescribir inicio de sesión de OpenCode al cambiar GitHub Copilot",
       "ghcpOpencodeRestart": "Reiniciar OpenCode al cambiar GitHub Copilot",
+      "grokOpencodeAuthOverwrite": "Sobrescribir inicio de sesión de OpenCode al cambiar Grok",
+      "grokOpencodeAuthOverwriteDesc": "Si está desactivado, solo se cambia Grok y OpenCode mantiene su sesión actual",
+      "grokOpencodeRestart": "Reiniciar OpenCode al cambiar Grok",
+      "grokOpencodeRestartDesc": "Tras sobrescribir el inicio de sesión de OpenCode, reinícialo para aplicarlo de inmediato",
+      "grokOpencodeRestartRequiresOverwrite": "Activa primero «Sobrescribir inicio de sesión de OpenCode al cambiar Grok»",
       "ghcpLaunchOnSwitch": "Iniciar GitHub Copilot App al cambiar GitHub Copilot",
       "zedAutoRefresh": "Actualización automática de cuota de Zed",
       "zedAutoRefreshDesc": "Frecuencia de actualización en segundo plano",
@@ -997,6 +1060,17 @@
         "retentionUnit": "días",
         "directoryTitle": "Carpeta de copias",
         "directoryDesc": "Las copias siempre se guardan en la carpeta backups del proyecto.",
+        "changeDirectory": "Cambiar carpeta", "migrating": "Migrando...", "migrationConfirm": "¿Mover las copias existentes de {{oldPath}} a {{newPath}}?\n\nCancelar cambiará la carpeta sin mover los archivos antiguos.", "usageTitle": "Espacio de copias", "usageDesc": "Uso local de copias programadas e instantáneas de plataformas.", "usageEmpty": "No se encontraron copias locales.", "cleanupBehavior": "Limpiar copias de comportamiento", "behaviorCleanupConfirm": "¿Limpiar copias antiguas? Se conservará la más reciente por plataforma e instancia y no se borrarán los JSON/ZIP programados.", "sources": {"scheduled": "JSON/ZIP programados", "behavior": "Instantáneas", "claude": "Claude", "codex": "Codex", "workbuddy": "WorkBuddy", "codebuddy": "CodeBuddy", "trae": "Trae", "other": "Otros"},
+        "migrationConfirmTitle": "Cambiar carpeta de copias",
+        "migrationConfirmDesc": "Se analizaron las copias existentes. Migra y libera la carpeta anterior, o cambia solo la ubicación de las próximas copias.",
+        "migrationOldPath": "Carpeta anterior",
+        "migrationNewPath": "Carpeta nueva",
+        "migrationTotalSize": "Datos por migrar",
+        "migrationTotalFiles": "Archivos por migrar",
+        "migrationSafetyNote": "Los archivos se copian a una zona temporal y se verifican antes de cambiar la carpeta y eliminar las copias anteriores.",
+        "switchOnly": "Solo cambiar",
+        "migrateAndSwitch": "Migrar y cambiar",
+        "migrationProgress": {"title": "Migrar carpeta de copias", "filesUnit": "archivos", "currentSource": "Origen actual", "completedSummary": "Se migraron {{count}} archivos ({{size}}) y se activó la carpeta nueva.", "switchOnlyCompleted": "Las próximas copias se guardarán en {{path}}. Las copias existentes no se movieron.", "cleanupPartial": "La carpeta nueva está activa, pero no se pudieron borrar estas carpetas anteriores. Elimínalas manualmente más tarde:", "cancelledDesc": "La migración se canceló. La carpeta original no cambió y se eliminaron los archivos temporales.", "cancelling": "Cancelando...", "cancelAction": "Cancelar migración", "finishing": "Finalizando...", "phases": {"scanning": "Analizando copias...", "copying": "Copiando archivos...", "verifying": "Verificando archivos...", "switching": "Cambiando carpeta...", "cleaning": "Eliminando copias anteriores...", "completed": "Migración completada", "cancelled": "Migración cancelada"}},
         "openFolder": "Abrir carpeta",
         "listTitle": "Lista de copias",
         "listDesc": "Importa una copia directamente o elimina archivos antiguos.",
@@ -1024,6 +1098,8 @@
           "openFolderFailed": "No se pudo abrir la carpeta de copias: {{error}}",
           "downloadSuccess": "Copia descargada en {{path}}",
           "downloadFailed": "Error al descargar la copia: {{error}}"
+          ,"migrating": "Migrando la carpeta...", "migrationDone": "Se migraron {{count}} archivos a {{path}}", "directoryChanged": "Carpeta cambiada a {{path}}", "directoryChangeFailed": "No se pudo cambiar la carpeta: {{error}}", "behaviorCleaning": "Limpiando copias antiguas...", "behaviorCleanupDone": "Se limpiaron {{count}} copias y se liberaron {{size}}", "behaviorCleanupFailed": "No se pudieron limpiar las copias: {{error}}"
+          ,"scanningMigration": "Analizando copias para migrar..."
         },
         "errors": {
           "invalidRetention": "La retención debe estar entre 1 y 365 días"
@@ -1151,7 +1227,7 @@
       "title": "No se encontró la ruta de la aplicación",
       "desc": "No se pudo encontrar la ruta de la aplicación {{app}}. Establécela ahora para continuar.",
       "action": "Establecer ahora",
-      "codexLaunchHint": "Al desactivarlo, el cambio de cuenta y la sobrescritura de inicio de sesión seguirán ejecutándose, pero ya no se iniciará Codex App y este aviso de ruta no volverá a mostrarse.",
+      "codexLaunchHint": "El cambio de cuenta ya se hizo. Configura la ruta para iniciar la app. Si no quieres iniciarla al cambiar, desactiva «Iniciar Codex App al cambiar Codex» en Ajustes.",
       "claudeMultiInstanceRequiresExe": "Las instancias múltiples de Claude requieren la ruta real de Claude.exe. Los destinos de Microsoft Store solo sirven para el perfil de escritorio predeterminado.",
       "scanApps": "Escanear apps",
       "scanRoots": "Rango de escaneo",
@@ -1868,7 +1944,7 @@
     "title": "Gestión de cuentas de Codex",
     "experimentalModelCatalog": {
       "title": "Modelos visibles",
-      "description": "Genera un catálogo gestionado por Cockpit con los modelos oficiales disponibles y tus entradas personalizadas, sin sobrescribir tu catálogo.",
+      "description": "Administra en un solo lugar los modelos visibles, el nivel de razonamiento, el contexto y el límite de compactación.",
       "enabledHint": "Usa la lista actual de modelos visibles. Reinicia Codex para aplicarlo.",
       "models": {
         "title": "Lista de modelos",
@@ -1890,8 +1966,18 @@
           "displayName": "Introduce un nombre visible de 100 caracteres como máximo.",
           "duplicate": "Los ID de modelo deben ser únicos.",
           "reasoningEffort": "Opción de razonamiento no válida.",
-          "reserved": "Este ID de modelo coincide con un modelo oficial. Usa otro ID."
-        }
+          "reserved": "Este ID de modelo coincide con un modelo oficial. Usa otro ID.",
+          "contextPair": "La ventana de contexto y el límite de compactación deben indicarse juntos.",
+          "contextWindow": "La ventana de contexto debe ser un entero mayor que 0.",
+          "autoCompact": "El límite de compactación debe ser un entero mayor que 0.",
+          "autoCompactRange": "El límite de compactación debe ser menor que la ventana de contexto."
+        },
+        "contextConfig": "Contexto y compactación",
+        "contextDefault": "Seguir modelo",
+        "contextDefaultShort": "Predeterminado",
+        "contextCustomShort": "Personalizado",
+        "contextWindow": "Ventana de contexto",
+        "autoCompactLimit": "Límite de compactación"
       },
       "unavailable": {
         "cacheMissing": "No se encontró models_cache.json.",
@@ -1965,6 +2051,24 @@
       "staleAccount": "Esta cuenta ya no está en el almacén local de cuentas. Se actualizó la lista de cuentas. Vuelve a importar esta cuenta de Codex o inicia sesión de nuevo.",
       "unsupportedCountryRegion": "La región de red actual no permite renovar la autorización de Codex. El servicio de autorización de OpenAI rechazó esta salida de red. Cambia a una región compatible y vuelve a intentarlo."
     },
+    "switchAuth": {
+      "apiOnlyTitle": "El cliente requiere iniciar sesión",
+      "reauthorizeTitle": "La autorización de Codex caducó",
+      "apiOnlyDescription": "El access_token actual aún puede usarse temporalmente en el servicio API, pero no fue posible renovar las credenciales del cliente, por lo que no se cambió la cuenta en el cliente oficial de Codex/ChatGPT.",
+      "reauthorizeDescription": "No fue posible renovar las credenciales y el access_token ya no está disponible para el servicio API. Vuelve a autorizar la cuenta para continuar.",
+      "idTokenUnavailable": "La identidad del cliente caducó y la renovación automática no devolvió un id_token válido.",
+      "reasonLabel": "Motivo",
+      "accessTokenExpiry": "Acceso temporal a la API hasta {{time}}",
+      "apiServiceAddFailed": "No se pudo añadir la cuenta al servicio API: {{error}}",
+      "switchingAfterReauth": "Autorización actualizada. Continuando el cambio de cuenta...",
+      "switchAfterReauthFailed": "La autorización se actualizó, pero falló el cambio de cuenta: {{error}}",
+      "reauthGenerationMissing": "No se pudo confirmar la versión de las credenciales recién autorizadas. Vuelve a cambiar de cuenta.",
+      "reauthorizedAndSwitched": "Reautorizada y cambiada",
+      "startingInstanceAfterReauth": "Autorización actualizada. Reiniciando la instancia...",
+      "startInstanceAfterReauthFailed": "Autorización actualizada, pero no se pudo iniciar la instancia: {{error}}",
+      "reauthorizedAndStartedInstance": "Reautorizada e instancia iniciada",
+      "apiOnlyBadge": "Falta autorizar"
+    },
     "current": "Actual",
     "empty": {
       "description": "Haz clic en \"Agregar cuenta\" para comenzar"
@@ -2021,6 +2125,7 @@
     "exportFormat": {
       "label": "Formato de exportación",
       "cockpitTools": "Cockpit Tools​",
+      "authJson": "auth.json oficial",
       "sub2api": "Formato sub2api",
       "cpa": "Formato cpa",
       "agentIdentityCpaUnsupported": "Las cuentas Agent Identity no se pueden exportar en formato cpa. Usa Cockpit Tools o sub2api.",
@@ -2172,6 +2277,10 @@
       "killPortSuccess": "Puerto limpiado ({{count}} proceso(s) cerrado(s))",
       "killPortSuccessNone": "Puerto comprobado. Ningún proceso externo lo está usando.",
       "killPortSuccessUnknown": "Puerto del servicio API limpiado",
+      "restartAction": "Reiniciar Sidecar",
+      "restartTitle": "Reiniciar servicio API",
+      "restartConfirmMessage": "Solo se reiniciará el Sidecar del servicio API. No se modificarán las cuentas, los tokens, las claves API ni la configuración del grupo de cuentas. Las solicitudes en curso pueden interrumpirse. ¿Continuar?",
+      "restartSuccess": "Sidecar del servicio API reiniciado",
       "refreshStats": "Actualizar estadísticas",
       "refreshStatsSuccess": "Se actualizaron las estadísticas del servicio API",
       "routingStrategy": {
@@ -2223,6 +2332,7 @@
         "title": "Bolsa de cuota",
         "hourlyShort": "5h​",
         "weeklyShort": "Semana",
+        "balance": "Saldo",
         "viewFull": "Ver estadísticas completas",
         "modalTitle": "Bolsa de cuota del servicio API",
         "empty": "Aún no hay estadísticas de cuota"
@@ -2432,6 +2542,7 @@
     "quotaError": {
       "badge": "Error de cuota",
       "refreshFailedBadge": "Actualización fallida",
+      "authRefreshDeferred": "El refresh_token no es válido. El access_token actual aún funciona para el servicio API, pero no permite cambiar el cliente oficial. Vuelve a autorizar antes de cambiar.",
       "generic": "No se pudo actualizar la cuota, inténtalo más tarde",
       "deactivatedWorkspace": "El espacio de trabajo está desactivado, cambia de cuenta o vuelve a autorizar",
       "requestFailedManualRetry": "Comprueba la red. No se obtuvo la cuota más reciente. Actualiza para reintentarlo.",
@@ -3037,6 +3148,7 @@
         "custom": "Personalizado",
         "endpoint": "Punto final del proveedor",
         "hint": "Se ha completado automáticamente una Base URL compatible. Aún puedes editarla manualmente.",
+        "cockpitToolsHint": "Sustituye la Base URL por la dirección LAN del host de Cockpit Tools, por ejemplo http://HOST_IP:PORT/v1. La tarjeta de la cuenta consultará /cockpit/quota automáticamente.",
         "website": "Sitio web",
         "apiKeyPage": "Página de clave API",
         "getApiKey": "Obtener clave"
@@ -3101,6 +3213,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools en LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3278,7 +3393,8 @@
         "contextWindow": "Ventana de contexto",
         "contextWindowHint": "Escribe model_context_window. Editable solo en modo personalizado.",
         "partialDetected": "Actualmente, solo hay un campo administrado configurado: model_context_window={{context}}, model_auto_compact_token_limit={{compact}}. Al guardar se reescribirán ambos campos utilizando el esquema actual.",
-        "notSet": "No establecido"
+        "notSet": "No establecido",
+        "modelCatalogDesc": "Los modelos visibles y sus ajustes de contexto se escriben en el catálogo de modelos administrado por Cockpit del Codex activo."
       },
       "testing": "Probando...",
       "testSuccess": "La conexión del proveedor es correcta: {{protocol}}, {{model}}, {{latency}}.",
@@ -3388,6 +3504,14 @@
         "rawFields": "Datos del servicio",
         "fields": {
           "status": "Estado",
+          "fiveHourRemainingPercent": "Restante de 5 h",
+          "weeklyRemainingPercent": "Restante semanal",
+          "accountCount": "Grupo de cuentas",
+          "availableAccountCount": "Cuentas disponibles",
+          "abnormalAccountCount": "Cuentas anómalas",
+          "cooldownAccountCount": "Cuentas en espera",
+          "stale": "Datos desactualizados",
+          "apiKeyBalance": "Saldo de API_KEY",
           "planName": "Suscripción",
           "remaining": "Crédito restante",
           "balance": "Saldo",
@@ -3478,6 +3602,56 @@
       "filterMissing": "Desconocidas ({{count}})",
       "accessTokenOnlyUsable": "Token utilizable",
       "accessTokenOnlyUsableDetail": "El endpoint de suscripción está limitado, pero la cuota y el uso de Codex funcionan normalmente"
+    },
+    "switchProgress": {
+      "completed": "Cambio completado",
+      "needsAttention": "Requiere atención",
+      "steps": {
+        "credentials": "Leer credenciales de la cuenta",
+        "accessToken": "Comprobar access_token",
+        "idToken": "Comprobar id_token",
+        "stopRuntime": "Detener la sesión anterior",
+        "refreshTokens": "Actualizar credenciales",
+        "writeCredentials": "Escribir credenciales del cliente",
+        "syncSettings": "Sincronizar ajustes",
+        "startClient": "Iniciar cliente Codex"
+      },
+      "status": {
+        "pending": "En espera",
+        "running": "En curso",
+        "completed": "Completado",
+        "warning": "Requiere actualización",
+        "skipped": "Omitido",
+        "error": "Falló"
+      },
+      "detail": {
+        "missing": "No se encontró la credencial",
+        "opaqueToken": "Token opaco; el servicio verifica su caducidad",
+        "expiryUnknown": "No se conoce la caducidad",
+        "expiresAt": "Válido hasta {{time}} ({{relative}})",
+        "readingCredentials": "Leyendo la cuenta local y los datos de Token...",
+        "nonOAuthAccount": "No es una cuenta OAuth; no requiere Token de acceso",
+        "credentialsFound": "Cargado: {{tokens}}",
+        "notApplicable": "Esta comprobación no se aplica a la cuenta",
+        "refreshNeeded": "Caducado o dentro del margen de seguridad; requiere actualización",
+        "tokenValid": "Válido; no requiere actualización",
+        "stoppingRuntime": "Deteniendo ChatGPT/Codex y app-server de forma segura...",
+        "runtimeStopped": "La sesión anterior se detuvo de forma segura",
+        "waiting": "Esperando el paso anterior",
+        "refreshingTokens": "Obteniendo y guardando nuevos access_token, id_token y refresh_token...",
+        "refreshSkipped": "AT e ID Token son válidos; no se usó refresh_token",
+        "refreshFailed": "No se pudo actualizar automáticamente el conjunto completo de Token",
+        "refreshResultReused": "Se usan los Token recientes escritos por otro renovador",
+        "refreshCompleted": "El conjunto completo de Token se actualizó y guardó de forma segura",
+        "credentialsWritten": "auth.json / keychain actualizado según las reglas oficiales",
+        "writingCredentials": "Escribiendo los datos de acceso de la cuenta...",
+        "settingsSynced": "La vinculación, velocidad y ajustes están sincronizados",
+        "syncingSettings": "Sincronizando la vinculación y los ajustes...",
+        "launchDisabled": "El inicio automático está desactivado; inicia el cliente manualmente",
+        "clientStartWarning": "Las credenciales cambiaron, pero el cliente no se inició; inténtalo después",
+        "clientStarted": "Cliente Codex iniciado",
+        "startingClient": "Iniciando el cliente Codex..."
+      }
     },
     "apiSwitchNotice": {
       "title": "Sesiones de Codex ocultas",

@@ -90,11 +90,11 @@ pub fn transfer_local_sessions(
     let runtime_dir_string = runtime_dir.to_string_lossy().to_string();
     let (config_dir, electron_data_dir) =
         workbuddy_instance::resolve_workbuddy_runtime_dirs(&runtime_dir_string)?;
-    let backup_root = config_dir
-        .join("Backups")
-        .join("CockpitTools")
-        .join("WorkBuddySessions")
-        .join(operation_id());
+    let backup_root = crate::modules::backup_storage::behavior_backup_dir(
+        "workbuddy",
+        &crate::modules::backup_storage::scope_for_path(runtime_dir),
+        &operation_id(),
+    )?;
 
     let mut report = WorkbuddySessionTransferReport::default();
     let extension_roots = select_extension_data_roots(source_uid)?;
@@ -153,6 +153,10 @@ pub fn transfer_local_sessions(
         report.replaced_conversations,
         report.updated_session_rows
     ));
+    let _ = crate::modules::backup_storage::prune_behavior_backups(
+        "workbuddy",
+        &crate::modules::backup_storage::scope_for_path(runtime_dir),
+    );
     Ok(report)
 }
 

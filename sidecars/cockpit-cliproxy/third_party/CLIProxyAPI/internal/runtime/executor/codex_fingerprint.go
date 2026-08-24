@@ -77,6 +77,17 @@ func fingerprintShortHash(authID, kind, value string) string {
 	return hex.EncodeToString(sum[:4])
 }
 
+func mapFingerprintSessionID(authID, original string) string {
+	original = strings.TrimSpace(original)
+	if original == "" {
+		// API clients without a conversation id must not collapse onto one
+		// per-account session; that serializes every later turn behind the
+		// previous upstream stream.
+		original = uuid.NewString()
+	}
+	return codexFingerprintUUID(authID, "session", original)
+}
+
 func mapFingerprintThreadID(mode, authID, sessionID, original string) string {
 	original = strings.TrimSpace(original)
 	if mode == "full" || original == "" {
@@ -187,7 +198,7 @@ func applyCodexFingerprintBody(cfg *config.Config, auth *cliproxyauth.Auth, user
 	)
 
 	if mode != "device" {
-		state.sessionID = codexFingerprintUUID(authID, "session", "account")
+		state.sessionID = mapFingerprintSessionID(authID, firstNonEmpty(state.originalSessionID, state.originalThreadID))
 		state.threadID = mapFingerprintThreadID(mode, authID, state.sessionID, state.originalThreadID)
 		state.windowID = state.threadID + ":0"
 		if state.originalParentThreadID != "" {
@@ -233,8 +244,13 @@ func applyCodexFingerprintHeaders(headers http.Header, state *codexIdentityConfu
 	if headers == nil || state == nil || state.fingerprintMode == "off" {
 		return
 	}
-	if state.originalSessionID == "" {
-		state.originalSessionID = codexSessionHeaderValue(headers)
+	if headerSession := strings.TrimSpace(codexSessionHeaderValue(headers)); headerSession != "" {
+		if state.originalSessionID == "" || state.originalSessionID == headerSession {
+			state.originalSessionID = headerSession
+			if state.fingerprintMode != "device" && strings.TrimSpace(state.authID) != "" {
+				state.sessionID = mapFingerprintSessionID(state.authID, headerSession)
+			}
+		}
 	}
 	if state.installationID != "" {
 		setHeaderCasePreserved(headers, "X-Codex-Installation-Id", state.installationID)

@@ -34,6 +34,47 @@ const CODEX_MAIL_PREVIEW_MAX_BYTES: usize = 512 * 1024;
 static CODEX_BATCH_DELETE_JOBS: LazyLock<Mutex<HashMap<String, CodexBatchDeleteJob>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+struct CodexSwitchProgressGuard {
+    app: AppHandle,
+    account_id: String,
+    completed: bool,
+}
+
+impl Drop for CodexSwitchProgressGuard {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        let _ = self.app.emit(
+            "codex:switch-progress",
+            serde_json::json!({
+                "accountId": self.account_id,
+                "type": "error",
+            }),
+        );
+    }
+}
+
+fn emit_codex_switch_step(
+    app: &AppHandle,
+    account_id: &str,
+    step: &str,
+    status: &str,
+    progress: u8,
+    details: serde_json::Value,
+) {
+    let _ = app.emit(
+        "codex:switch-progress",
+        serde_json::json!({
+            "accountId": account_id,
+            "step": step,
+            "stepStatus": status,
+            "progress": progress,
+            "details": details,
+        }),
+    );
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexBatchDeleteJobStatus {
@@ -627,6 +668,29 @@ fn restart_codex_specified_app_if_enabled(user_config: &config::UserConfig) {
     }
 }
 
+async fn stop_default_codex_runtime_before_auth_commit() -> Result<(), String> {
+    let codex_home = codex_account::get_codex_home();
+    let launch_mode = crate::modules::codex_instance::load_default_settings()?.launch_mode;
+    crate::modules::codex_app_injection::stop_for_profile(&codex_home);
+
+    if launch_mode == crate::models::InstanceLaunchMode::App {
+        tauri::async_runtime::spawn_blocking(|| process::close_codex_default(20))
+            .await
+            .map_err(|error| format!("停止 Codex 旧授权运行态后台任务失败: {}", error))??;
+    } else {
+        logger::log_info("[Codex Switch][Backend] CLI 模式无需关闭桌面运行态，继续提交新授权");
+    }
+
+    codex_local_access::stop_provider_gateways_for_profile(&codex_home).await;
+    if let Err(error) = crate::modules::codex_instance::update_default_pid(None) {
+        logger::log_warn(&format!(
+            "[Codex Switch][Backend] 清理默认实例 PID 失败，继续提交新授权: {}",
+            error
+        ));
+    }
+    Ok(())
+}
+
 /// 列出所有 Codex 账号
 #[tauri::command]
 pub async fn list_codex_accounts() -> Result<Vec<CodexAccount>, String> {
@@ -802,27 +866,225 @@ pub async fn switch_codex_account(
     app: AppHandle,
     account_id: String,
     auto_repair_mode: Option<codex_session_visibility::CodexSessionVisibilityAutoRepairMode>,
+    reauth_token_generation: Option<u64>,
 ) -> Result<CodexAccount, String> {
+    let mut progress_guard = CodexSwitchProgressGuard {
+        app: app.clone(),
+        account_id: account_id.clone(),
+        completed: false,
+    };
+    emit_codex_switch_step(
+        &app,
+        &account_id,
+        "credentials",
+        "running",
+        4,
+        serde_json::json!({}),
+    );
     let flow_started = Instant::now();
     logger::log_info(&format!(
         "[Codex Switch][Backend] switch_codex_account started: account_id={}",
         account_id
     ));
+    let initial_account = codex_account::load_account(&account_id)
+        .ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    let is_oauth_account = !initial_account.is_api_key_auth()
+        && !initial_account.is_agent_identity_auth()
+        && !initial_account.is_web_session_auth();
+    let access_token_present = !initial_account.tokens.access_token.trim().is_empty();
+    let id_token_present = !initial_account.tokens.id_token.trim().is_empty();
+    let refresh_token_present = codex_account::account_has_refresh_token(&initial_account);
+    let access_token_expires_at =
+        codex_oauth::jwt_token_expiration_timestamp(&initial_account.tokens.access_token);
+    let id_token_expires_at =
+        codex_oauth::jwt_token_expiration_timestamp(&initial_account.tokens.id_token);
+    let access_token_refresh_due =
+        is_oauth_account && codex_oauth::is_token_expired(&initial_account.tokens.access_token);
+    let id_token_refresh_due =
+        is_oauth_account && codex_oauth::is_id_token_refresh_due(&initial_account.tokens.id_token);
+    let is_reauth_handoff = reauth_token_generation.is_some();
+    let credentials_need_refresh = !is_reauth_handoff
+        && is_oauth_account
+        && (access_token_refresh_due || id_token_refresh_due || initial_account.requires_reauth);
+    let initial_token_generation = initial_account.token_generation;
+    let user_config = config::get_user_config();
+    if user_config.codex_launch_on_switch {
+        let default_settings = crate::modules::codex_instance::load_default_settings()?;
+        if default_settings.launch_mode != crate::models::InstanceLaunchMode::Cli {
+            process::ensure_codex_launch_path_configured()?;
+        }
+    }
+
+    emit_codex_switch_step(
+        &app,
+        &account_id,
+        "credentials",
+        "completed",
+        10,
+        serde_json::json!({
+            "accountKind": if is_oauth_account { "oauth" } else { "other" },
+            "hasAccessToken": access_token_present,
+            "hasIdToken": id_token_present,
+            "hasRefreshToken": refresh_token_present,
+        }),
+    );
+    emit_codex_switch_step(
+        &app,
+        &account_id,
+        "accessToken",
+        if !is_oauth_account {
+            "skipped"
+        } else if access_token_refresh_due {
+            "warning"
+        } else {
+            "completed"
+        },
+        16,
+        serde_json::json!({
+            "present": access_token_present,
+            "expiresAt": access_token_expires_at,
+            "refreshDue": access_token_refresh_due,
+            "opaque": access_token_present && access_token_expires_at.is_none(),
+        }),
+    );
+    emit_codex_switch_step(
+        &app,
+        &account_id,
+        "idToken",
+        if !is_oauth_account {
+            "skipped"
+        } else if id_token_refresh_due {
+            "warning"
+        } else {
+            "completed"
+        },
+        22,
+        serde_json::json!({
+            "present": id_token_present,
+            "expiresAt": id_token_expires_at,
+            "refreshDue": id_token_refresh_due,
+        }),
+    );
+
     let previous_credential = read_current_codex_launch_credential_snapshot();
     logger::log_info(&format!(
         "[Codex Switch][Backend] previous credential resolved: account_id={}, elapsed_ms={}",
         account_id,
         flow_started.elapsed().as_millis()
     ));
-    // 切换账号（写入 auth.json）
+    // 切换账号事务：先准备并验证目标凭据，通过后再按启动模式停止旧运行态并提交。
+    // 桌面模式关闭官方客户端；CLI 模式保留终端进程，仅停止受管 profile 服务。
     let switch_started = Instant::now();
-    let account = codex_account::switch_account_managed(&account_id).await?;
+    let step_app = app.clone();
+    let step_account_id = account_id.clone();
+    if credentials_need_refresh {
+        emit_codex_switch_step(
+            &app,
+            &account_id,
+            "refreshTokens",
+            "running",
+            26,
+            serde_json::json!({
+                "required": true,
+                "hasRefreshToken": refresh_token_present,
+            }),
+        );
+    } else {
+        emit_codex_switch_step(
+            &app,
+            &account_id,
+            "refreshTokens",
+            "skipped",
+            30,
+            serde_json::json!({ "required": false }),
+        );
+    }
+    let before_commit = move || {
+        let step_app = step_app.clone();
+        let step_account_id = step_account_id.clone();
+        async move {
+            if credentials_need_refresh {
+                let prepared_account = codex_account::load_account(&step_account_id);
+                emit_codex_switch_step(
+                    &step_app,
+                    &step_account_id,
+                    "refreshTokens",
+                    "completed",
+                    40,
+                    serde_json::json!({
+                        "required": true,
+                        "tokenGenerationChanged": prepared_account.as_ref().is_some_and(|account| {
+                            account.token_generation > initial_token_generation
+                        }),
+                        "accessTokenExpiresAt": prepared_account.as_ref().and_then(|account| {
+                            codex_oauth::jwt_token_expiration_timestamp(
+                                &account.tokens.access_token,
+                            )
+                        }),
+                        "idTokenExpiresAt": prepared_account.as_ref().and_then(|account| {
+                            codex_oauth::jwt_token_expiration_timestamp(&account.tokens.id_token)
+                        }),
+                    }),
+                );
+            }
+            emit_codex_switch_step(
+                &step_app,
+                &step_account_id,
+                "stopRuntime",
+                "running",
+                44,
+                serde_json::json!({}),
+            );
+            stop_default_codex_runtime_before_auth_commit().await?;
+            emit_codex_switch_step(
+                &step_app,
+                &step_account_id,
+                "stopRuntime",
+                "completed",
+                54,
+                serde_json::json!({}),
+            );
+            emit_codex_switch_step(
+                &step_app,
+                &step_account_id,
+                "writeCredentials",
+                "running",
+                58,
+                serde_json::json!({}),
+            );
+            Ok(())
+        }
+    };
+    let switch_result = if let Some(expected_generation) = reauth_token_generation {
+        codex_account::switch_account_managed_after_reauth_with_before_commit(
+            &account_id,
+            expected_generation,
+            before_commit,
+        )
+        .await
+    } else {
+        codex_account::switch_account_managed_with_before_commit_and_revalidation(
+            &account_id,
+            before_commit,
+        )
+        .await
+    };
+    let account = switch_result
+        .map_err(|error| codex_account::format_account_switch_error(&account_id, error))?;
     logger::log_info(&format!(
         "[Codex Switch][Backend] switch_account_managed finished: account_id={}, elapsed_ms={}, total_ms={}",
         account_id,
         switch_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
+    emit_codex_switch_step(
+        &app,
+        &account_id,
+        "writeCredentials",
+        "completed",
+        68,
+        serde_json::json!({}),
+    );
     let account_speed = account.app_speed.clone();
     let speed_started = Instant::now();
     codex_speed::write_official_app_speed(account_speed.clone())?;
@@ -832,6 +1094,14 @@ pub async fn switch_codex_account(
         speed_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
+    emit_codex_switch_step(
+        &app,
+        &account_id,
+        "syncSettings",
+        "running",
+        72,
+        serde_json::json!({}),
+    );
     let repair_started = Instant::now();
     repair_codex_session_visibility_after_credential_kind_change(
         "after-account-switch",
@@ -882,7 +1152,6 @@ pub async fn switch_codex_account(
         flow_started.elapsed().as_millis()
     ));
 
-    let user_config = config::get_user_config();
     apply_codex_switch_auth_projections(&account, &user_config);
 
     // Full #1404: optional auto SSH sync after switch (hash-verified remote projection + app-server reload).
@@ -904,28 +1173,59 @@ pub async fn switch_codex_account(
         let _ = app.emit("codex:ssh-sync-result", &ssh_sync);
     }
 
+    emit_codex_switch_step(
+        &app,
+        &account_id,
+        "syncSettings",
+        "completed",
+        82,
+        serde_json::json!({}),
+    );
+
     if user_config.codex_launch_on_switch {
+        emit_codex_switch_step(
+            &app,
+            &account_id,
+            "startClient",
+            "running",
+            86,
+            serde_json::json!({}),
+        );
         let launch_started = Instant::now();
         #[cfg(target_os = "macos")]
         if process::is_codex_running() {
             logger::log_info("检测到 Codex 正在运行，将按默认实例 PID 逻辑重启");
         }
-        match crate::commands::codex_instance::codex_start_default_with_prepared_profile(
-            app.clone(),
-        )
-        .await
-        {
-            Ok(_) => {}
-            Err(e) => {
-                logger::log_warn(&format!("Codex 启动失败: {}", e));
-                if e.starts_with("APP_PATH_NOT_FOUND:") {
-                    let _ = app.emit(
-                        "app:path_missing",
-                        serde_json::json!({ "app": "codex", "retry": { "kind": "default" } }),
-                    );
+        let launch_error =
+            match crate::commands::codex_instance::codex_start_default_with_prepared_profile(
+                app.clone(),
+            )
+            .await
+            {
+                Ok(_) => None,
+                Err(e) => {
+                    logger::log_warn(&format!("Codex 启动失败: {}", e));
+                    if e.starts_with("APP_PATH_NOT_FOUND:") {
+                        let _ = app.emit(
+                            "app:path_missing",
+                            serde_json::json!({ "app": "codex", "retry": { "kind": "default" } }),
+                        );
+                    }
+                    Some(e)
                 }
-            }
-        }
+            };
+        emit_codex_switch_step(
+            &app,
+            &account_id,
+            "startClient",
+            if launch_error.is_some() {
+                "warning"
+            } else {
+                "completed"
+            },
+            96,
+            serde_json::json!({ "error": launch_error }),
+        );
         logger::log_info(&format!(
             "[Codex Switch][Backend] codex_start_default_with_prepared_profile finished: account_id={}, elapsed_ms={}, total_ms={}",
             account_id,
@@ -934,6 +1234,14 @@ pub async fn switch_codex_account(
         ));
     } else {
         logger::log_info("已关闭切换 Codex 时自动启动 Codex App");
+        emit_codex_switch_step(
+            &app,
+            &account_id,
+            "startClient",
+            "skipped",
+            96,
+            serde_json::json!({ "launchDisabled": true }),
+        );
     }
 
     let restart_specified_started = Instant::now();
@@ -953,6 +1261,16 @@ pub async fn switch_codex_account(
         tray_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
+    let _ = app.emit(
+        "codex:switch-progress",
+        serde_json::json!({
+            "accountId": account_id,
+            "type": "complete",
+            "stage": "completed",
+            "progress": 100,
+        }),
+    );
+    progress_guard.completed = true;
     Ok(account)
 }
 
@@ -967,7 +1285,7 @@ async fn run_codex_post_refresh_checks(app: &AppHandle) {
     match codex_account::pick_auto_switch_target_if_needed() {
         Ok(Some(target)) => {
             let target_id = target.id.clone();
-            match switch_codex_account(app.clone(), target_id.clone(), None).await {
+            match switch_codex_account(app.clone(), target_id.clone(), None, None).await {
                 Ok(switched_account) => {
                     logger::log_info(&format!(
                         "[AutoSwitch][Codex] 自动切号完成: target_id={}, email={}",
@@ -1751,11 +2069,7 @@ pub async fn update_codex_account_client_policy(
     codex_cli_only: bool,
     allow_app_server: bool,
 ) -> Result<CodexAccount, String> {
-    codex_account::update_account_client_policy(
-        &account_id,
-        codex_cli_only,
-        allow_app_server,
-    )
+    codex_account::update_account_client_policy(&account_id, codex_cli_only, allow_app_server)
 }
 
 #[tauri::command]
@@ -4579,6 +4893,11 @@ pub async fn codex_local_access_query_account_window_stats(
 #[tauri::command]
 pub async fn codex_local_access_prepare_restart() -> Result<CodexLocalAccessState, String> {
     codex_local_access::prepare_local_access_gateway_for_restart().await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_restart_sidecar() -> Result<CodexLocalAccessState, String> {
+    codex_local_access::restart_local_access_sidecar().await
 }
 
 #[tauri::command]
