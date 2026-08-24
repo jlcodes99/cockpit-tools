@@ -3295,6 +3295,7 @@
       "hint": "Kuota resmi adalah batas paket. Log layanan API hanya mencakup gateway lokal. Di sini delta JSONL per permintaan dijumlahkan.",
       "range": {
         "label": "Rentang",
+        "today": "Hari ini",
         "7d": "7 hari",
         "30d": "30 hari",
         "month": "Bulan ini",

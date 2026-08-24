@@ -3934,6 +3934,7 @@
       "hint": "Official quota is plan allowance. API Service logs only cover local-gateway traffic. This view sums per-request JSONL usage deltas.",
       "range": {
         "label": "Range",
+        "today": "Today",
         "7d": "7 days",
         "30d": "30 days",
         "month": "This month",
