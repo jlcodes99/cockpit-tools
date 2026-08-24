@@ -18,6 +18,7 @@ import {
 } from '../utils/apikeyFunLinks';
 import {
   queryModelProviderUsage,
+  type ModelProviderUsageIntegrationType,
   type ModelProviderUsageSummary,
 } from './modelProviderUsageService';
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
@@ -30,12 +31,14 @@ export interface CodexModelProviderApiKey {
   updatedAt: number;
 }
 
+export type CodexModelProviderIntegrationType = ModelProviderUsageIntegrationType;
+
 export interface CodexModelProvider {
   id: string;
   name: string;
   baseUrl: string;
   sourceTag?: string;
-  integrationType?: 'sub2api' | 'new_api' | 'cockpit_tools';
+  integrationType?: CodexModelProviderIntegrationType;
   modelCatalog?: string[];
   modelContextWindows?: Record<string, number>;
   supportsVision?: boolean;
@@ -72,7 +75,7 @@ interface UpsertFromCredentialInput {
   apiKeyUrl?: string | null;
   wireApi?: CodexProviderWireApi | null;
   supportsWebsockets?: boolean;
-  integrationType?: 'sub2api' | 'new_api' | 'cockpit_tools' | null;
+  integrationType?: CodexModelProviderIntegrationType | null;
 }
 
 let providerIdCounter = 0;
@@ -185,7 +188,7 @@ function hasOwnProperty(value: object, key: string): boolean {
 
 function normalizeIntegrationType(
   value: unknown,
-): 'sub2api' | 'new_api' | 'cockpit_tools' | undefined {
+): CodexModelProviderIntegrationType | undefined {
   return value === 'sub2api' || value === 'new_api' || value === 'cockpit_tools'
     ? value
     : undefined;
@@ -566,7 +569,7 @@ export async function createCodexModelProvider(input: {
   wireApi?: CodexProviderWireApi;
   supportsWebsockets?: boolean;
   enableModePreference?: CodexProviderEnableModePreference;
-  integrationType?: 'sub2api' | 'new_api' | 'cockpit_tools';
+  integrationType?: CodexModelProviderIntegrationType;
   boundOauthAccountId?: string | null;
   initialApiKey?: string;
   initialApiKeyName?: string;
@@ -637,7 +640,7 @@ export async function updateCodexModelProvider(
     wireApi?: CodexProviderWireApi | null;
     supportsWebsockets?: boolean;
     enableModePreference?: CodexProviderEnableModePreference | null;
-    integrationType?: 'sub2api' | 'new_api' | 'cockpit_tools' | null;
+    integrationType?: CodexModelProviderIntegrationType | null;
     boundOauthAccountId?: string | null;
   },
 ): Promise<CodexModelProvider> {
@@ -912,14 +915,14 @@ export async function cancelCodexModelProviderChatTest(runId: string): Promise<b
 export async function queryCodexModelProviderUsage(input: {
   baseUrl: string;
   apiKey: string;
-  integrationType?: 'sub2api' | 'new_api' | 'cockpit_tools' | null;
+  integrationType?: CodexModelProviderIntegrationType | null;
 }): Promise<CodexModelProviderUsageSummary> {
   return await queryModelProviderUsage(input);
 }
 
 export async function saveCodexModelProviderDetectedIntegrationType(
   providerId: string,
-  integrationType: 'sub2api' | 'new_api' | 'cockpit_tools',
+  integrationType: CodexModelProviderIntegrationType,
 ): Promise<CodexModelProvider> {
   return updateCodexModelProvider(providerId, { integrationType });
 }

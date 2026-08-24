@@ -102,8 +102,9 @@ test("token plan percentages render without currency decimals", () => {
 });
 
 test("Cockpit Tools API key balance keeps decimal precision", () => {
-  assert.equal(formatCockpitToolsApiKeyBalance(5.6), "5.6");
-  assert.equal(formatCockpitToolsApiKeyBalance(1234.567), "1,234.57");
+  assert.equal(formatCockpitToolsApiKeyBalance(5.6), "¥5.6");
+  assert.equal(formatCockpitToolsApiKeyBalance(1234.567), "¥1,234.57");
+  assert.equal(formatCockpitToolsApiKeyBalance(5.6, "%"), "¥5.6");
 });
 
 test("provider usage balance matches the API key account card", () => {
@@ -118,6 +119,24 @@ test("provider usage balance matches the API key account card", () => {
       summary({ mode: "token_plan", remaining: 72, unit: "%" }),
     ),
     null,
+  );
+  assert.equal(
+    resolveModelProviderUsageBalance(
+      summary({ mode: "cockpit_tools", balance: 5.6, unit: "CNY" }),
+    ),
+    5.6,
+  );
+  assert.equal(
+    resolveModelProviderUsageBalance(
+      summary({
+        mode: "cockpit_tools",
+        unit: "%",
+        details: [
+          { key: "apiKeyBalance", label: "API_KEY balance", value: "5.6" },
+        ],
+      }),
+    ),
+    5.6,
   );
 });
 

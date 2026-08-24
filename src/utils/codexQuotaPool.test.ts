@@ -92,7 +92,7 @@ test("shows an API key balance without adding it to OAuth quota windows", () => 
   assert.deepEqual(summary.byPlan.API_KEY.windows, []);
 });
 
-test("uses the same cached provider balance shown on an API key account card", () => {
+test("keeps a legacy Cockpit Tools API key balance cached before CNY support", () => {
   const summary = summarizeCodexQuotaPool([
     {
       ...account(
@@ -101,9 +101,9 @@ test("uses the same cached provider balance shown on an API key account card", (
         quota({
           raw_data: {
             provider_usage: {
-              mode: "sub2api",
-              remaining: 5.6,
-              unit: "USD",
+              mode: "cockpit_tools",
+              unit: "%",
+              details: [{ key: "apiKeyBalance", value: "5.6" }],
             },
           },
         }),

@@ -285,6 +285,7 @@ import {
   queryCodexModelProviderUsage,
   saveCodexModelProviderDetectedIntegrationType,
   type CodexModelProvider,
+  type CodexModelProviderIntegrationType,
   type CodexModelProviderUsageSummary,
   upsertCodexModelProviderFromCredential,
 } from "../services/codexModelProviderService";
@@ -915,7 +916,7 @@ interface SponsorApiProviderTemplate {
   website: string;
   apiKeyUrl: string;
   wireApi?: "responses" | "chat_completions" | null;
-  integrationType?: "sub2api" | "new_api" | null;
+  integrationType?: CodexModelProviderIntegrationType | null;
 }
 
 function normalizeSponsorApiProviderTemplates(
@@ -3960,7 +3961,7 @@ export function CodexAccountsPage() {
       apiProviderMode: CodexApiProviderMode;
       apiProviderId?: string;
       apiProviderName?: string;
-      apiIntegrationType?: "sub2api" | "new_api" | "cockpit_tools";
+      apiIntegrationType?: CodexModelProviderIntegrationType;
       apiModelCatalog?: string[];
       apiWireApi?: "responses" | "chat_completions";
       apiSupportsWebsockets?: boolean;

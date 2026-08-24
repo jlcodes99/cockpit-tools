@@ -4712,104 +4712,6 @@ mod imp {
         (cards, current_id, recommended)
     }
 
-    fn normalize_provider_base_url(value: &str) -> String {
-        value.trim().trim_end_matches('/').to_ascii_lowercase()
-    }
-
-    fn find_codex_provider_for_account(
-        providers: &[Value],
-        account: &crate::models::codex::CodexAccount,
-    ) -> Option<Value> {
-        let provider_id = account
-            .api_provider_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        if let Some(provider_id) = provider_id {
-            if let Some(provider) = providers.iter().find(|provider| {
-                json_path(Some(provider), &["id"])
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    == Some(provider_id)
-            }) {
-                return Some(provider.clone());
-            }
-        }
-        let account_base = account
-            .api_base_url
-            .as_deref()
-            .map(normalize_provider_base_url)
-            .filter(|value| !value.is_empty())?;
-        providers
-            .iter()
-            .find(|provider| {
-                json_path(Some(provider), &["baseUrl"])
-                    .and_then(Value::as_str)
-                    .map(normalize_provider_base_url)
-                    == Some(account_base.clone())
-            })
-            .cloned()
-    }
-
-    async fn save_detected_codex_provider_integration_type(
-        provider_id: Option<&str>,
-        base_url: &str,
-        mode: &str,
-    ) -> Result<(), String> {
-        if mode != "new_api" && mode != "sub2api" {
-            return Ok(());
-        }
-        let raw = commands::codex::load_codex_model_providers().await?;
-        let mut providers: Value = serde_json::from_str(&raw)
-            .map_err(|err| format!("解析 Codex 模型供应商失败: {}", err))?;
-        let Some(items) = providers.as_array_mut() else {
-            return Ok(());
-        };
-        let normalized_base_url = normalize_provider_base_url(base_url);
-        let mut changed = false;
-        for provider in items {
-            let id_matches = provider_id.is_some_and(|target_id| {
-                json_path(Some(provider), &["id"])
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    == Some(target_id)
-            });
-            let base_matches = json_path(Some(provider), &["baseUrl"])
-                .and_then(Value::as_str)
-                .map(normalize_provider_base_url)
-                == Some(normalized_base_url.clone());
-            if id_matches || base_matches {
-                if provider
-                    .get("integrationType")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    != Some(mode)
-                {
-                    if let Some(object) = provider.as_object_mut() {
-                        object.insert(
-                            "integrationType".to_string(),
-                            Value::String(mode.to_string()),
-                        );
-                        object.insert(
-                            "updatedAt".to_string(),
-                            Value::Number(serde_json::Number::from(
-                                chrono::Utc::now().timestamp_millis(),
-                            )),
-                        );
-                        changed = true;
-                    }
-                }
-                break;
-            }
-        }
-        if changed {
-            let data = serde_json::to_string_pretty(&providers)
-                .map_err(|err| format!("序列化 Codex 模型供应商失败: {}", err))?;
-            commands::codex::save_codex_model_providers(data).await?;
-        }
-        Ok(())
-    }
-
     async fn refresh_codex_api_key_usage_for_menu(
         app: AppHandle,
         account_id: String,
@@ -4822,77 +4724,19 @@ mod imp {
             commands::codex::refresh_codex_quota(app, account_id).await?;
             return Ok(());
         }
-        let api_key = account
-            .openai_api_key
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| "Codex API Key 为空".to_string())?;
-        let providers_raw = commands::codex::load_codex_model_providers().await?;
-        let providers: Vec<Value> = serde_json::from_str(&providers_raw).unwrap_or_default();
-        let provider = find_codex_provider_for_account(&providers, &account);
-        let base_url = provider
-            .as_ref()
-            .and_then(|provider| json_path(Some(provider), &["baseUrl"]))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .or_else(|| {
-                account
-                    .api_base_url
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-            })
-            .ok_or_else(|| "Codex API Base URL 为空".to_string())?
-            .to_string();
-        let integration_type = provider
-            .as_ref()
-            .and_then(|provider| json_path(Some(provider), &["integrationType"]))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string);
-        let summary = commands::codex::codex_query_model_provider_usage(
-            base_url.clone(),
-            api_key.to_string(),
-            integration_type,
-        )
-        .await?;
-        let summary_value = serde_json::to_value(&summary)
-            .map_err(|err| format!("序列化 Codex API Key 用量失败: {}", err))?;
-        commands::codex::codex_sync_api_key_usage_summary(
-            account.id.clone(),
-            summary_value,
-            Some(chrono::Utc::now().timestamp_millis()),
-        )
-        .await?;
-        if let Some(mode) = summary.mode.as_deref() {
-            let provider_id = provider
-                .as_ref()
-                .and_then(|provider| json_path(Some(provider), &["id"]))
-                .and_then(Value::as_str);
-            save_detected_codex_provider_integration_type(provider_id, &base_url, mode).await?;
-        }
+        commands::codex::refresh_codex_api_key_usage(&account.id).await?;
         let _ = crate::modules::tray::update_tray_menu(&app);
         Ok(())
     }
 
     async fn refresh_all_codex_usage_for_menu(app: AppHandle) -> Result<i32, String> {
-        let accounts = modules::codex_account::list_accounts();
-        let mut refreshed = 0;
-        let mut last_error: Option<String> = None;
-        for account in accounts {
-            match refresh_codex_api_key_usage_for_menu(app.clone(), account.id.clone()).await {
-                Ok(_) => refreshed += 1,
-                Err(err) => last_error = Some(err),
-            }
-        }
-        if refreshed > 0 {
-            Ok(refreshed)
-        } else {
-            Err(last_error.unwrap_or_else(|| "没有可刷新的 Codex 账号".to_string()))
-        }
+        let account_ids = modules::codex_account::list_accounts()
+            .into_iter()
+            .map(|account| account.id)
+            .collect();
+        let (refreshed, _) =
+            commands::codex::refresh_codex_account_usage_batch(app, account_ids, false).await?;
+        Ok(refreshed)
     }
 
     async fn refresh_codex_api_service_pool_for_menu(app: AppHandle) -> Result<i32, String> {

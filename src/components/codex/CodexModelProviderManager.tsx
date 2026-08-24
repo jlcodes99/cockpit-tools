@@ -104,6 +104,7 @@ import {
   testCodexModelProviderChatBatch,
   type CodexModelProvider,
   type CodexModelProviderApiKey,
+  type CodexModelProviderIntegrationType,
   type CodexModelProviderChatTestProgressPayload,
   type CodexModelProviderChatTestRecord,
   type CodexModelProviderChatTestTarget,
@@ -115,6 +116,7 @@ import {
   readCodexApiKeyUsageCache,
 } from "../../services/codexApiKeyUsageRefreshService";
 import {
+  formatCockpitToolsApiKeyBalance,
   formatModelProviderUsageMoney,
   resolveNewApiQuotaSnapshot,
 } from "../../services/modelProviderUsageService";
@@ -411,7 +413,7 @@ interface ProviderFormState {
   wireApi: CodexProviderWireApi;
   supportsWebsockets: boolean;
   enableModePreference: CodexProviderEnableModePreference;
-  integrationType: "sub2api" | "new_api" | "cockpit_tools" | "";
+  integrationType: CodexModelProviderIntegrationType | "";
   newApiKeyName: string;
   newApiKey: string;
 }
@@ -453,7 +455,7 @@ interface SponsorProviderTemplate {
   website: string;
   apiKeyUrl: string;
   wireApi?: CodexProviderWireApi | null;
-  integrationType?: "sub2api" | "new_api" | null;
+  integrationType?: CodexModelProviderIntegrationType | null;
 }
 
 interface ProviderPreviewPaths {
@@ -3410,7 +3412,7 @@ export function CodexModelProviderManager({
         Number.isFinite(numeric) &&
         item.key === "apiKeyBalance"
       ) {
-        return numeric.toLocaleString("en-US", { maximumFractionDigits: 2 });
+        return formatCockpitToolsApiKeyBalance(numeric, unit ?? undefined);
       }
       if (
         Number.isFinite(numeric) &&

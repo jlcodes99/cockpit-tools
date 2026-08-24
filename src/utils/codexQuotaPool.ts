@@ -49,6 +49,16 @@ function getCodexApiKeyBalance(account: CodexAccount): number | undefined {
   const raw = asRecord(account.quota?.raw_data);
   if (!raw) return undefined;
   const providerUsage = asRecord(raw.provider_usage);
+  if (providerUsage?.mode === "cockpit_tools") {
+    const apiKeyBalance = Array.isArray(providerUsage.details)
+      ? providerUsage.details
+          .map(asRecord)
+          .find((detail) => detail?.key === "apiKeyBalance")
+      : null;
+    const balance =
+      asNumber(providerUsage.balance) ?? asNumber(apiKeyBalance?.value);
+    if (balance !== undefined) return balance;
+  }
   if (providerUsage && providerUsage.unit !== "%") {
     const totalAvailable = Array.isArray(providerUsage.details)
       ? providerUsage.details

@@ -900,7 +900,7 @@ fn injection_script(
         const badgeStyle = 'display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--color-token-border-subtle,rgba(127,127,127,.20));border-radius:999px;padding:0 9px;background:var(--color-token-main-surface-primary,rgba(127,127,127,.10));color:inherit;font:inherit;box-shadow:0 1px 2px rgba(0,0,0,.08);backdrop-filter:blur(8px);font-weight:500;cursor:pointer;pointer-events:auto;';
         const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, (char) => ({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}}[char]));
         const formatPercent = (value) => Number.isFinite(value) ? Math.round(value) + '%' : '—';
-        const formatBalance = (value) => Number.isFinite(value) ? Number(value).toLocaleString(undefined, {{ maximumFractionDigits: 2 }}) : '—';
+        const formatBalance = (value) => Number.isFinite(value) ? '¥' + Number(value).toLocaleString(undefined, {{ maximumFractionDigits: 2 }}) : '—';
         const renderPlan = (plan) => {{
           const weekly = formatPercent(plan.weeklyRemainingPercent);
           const fiveHour = formatPercent(plan.fiveHourRemainingPercent);
@@ -1135,7 +1135,7 @@ async fn api_service_quota_refresh_targets() -> Result<(usize, Vec<String>), Str
     };
     let mut existing_account_count = 0;
     let mut target_ids = Vec::new();
-    for account_id in collection.account_ids {
+    for account_id in codex_local_access::effective_api_service_account_ids(&collection) {
         let Some(account) = codex_account::load_account(&account_id) else {
             continue;
         };
@@ -1471,6 +1471,7 @@ mod tests {
         assert!(script.contains("const accountCount = 14"));
         assert!(script.contains("const apiKeyBalance = 123.5"));
         assert!(script.contains("const balanceLabel = \"余额\""));
+        assert!(script.contains("Number.isFinite(value) ? '¥' +"));
         assert!(script.contains("const weeklyLabel = \"周\""));
         assert!(script.contains("const fiveHourLabel = \"5h\""));
         assert!(script.contains("data-cockpit-quota-footer"));

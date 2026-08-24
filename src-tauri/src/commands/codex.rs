@@ -1438,7 +1438,7 @@ pub async fn refresh_codex_account_usage_batch(
     }
 
     for account_id in api_key_ids {
-        match refresh_codex_api_key_usage(&account_id).await {
+        match query_and_persist_codex_api_key_usage(&account_id).await {
             Ok(()) => success_count += 1,
             Err(error) => {
                 logger::log_warn(&format!(
@@ -2800,6 +2800,17 @@ pub async fn codex_sync_api_key_usage_summary(
     summary: serde_json::Value,
     updated_at_ms: Option<i64>,
 ) -> Result<(), String> {
+    if persist_codex_api_key_usage_summary(&account_id, summary, updated_at_ms)? {
+        codex_local_access::refresh_sidecar_quota_pool_state().await?;
+    }
+    Ok(())
+}
+
+fn persist_codex_api_key_usage_summary(
+    account_id: &str,
+    summary: serde_json::Value,
+    updated_at_ms: Option<i64>,
+) -> Result<bool, String> {
     let account_id = account_id.trim();
     if account_id.is_empty() {
         return Err("Codex API Key 账号 ID 为空".to_string());
@@ -2807,10 +2818,10 @@ pub async fn codex_sync_api_key_usage_summary(
     let mut account = codex_account::load_account(account_id)
         .ok_or_else(|| "未找到 Codex API Key 账号".to_string())?;
     if !apply_codex_api_key_usage_summary(&mut account, summary, updated_at_ms)? {
-        return Ok(());
+        return Ok(false);
     }
     codex_account::save_account(&account)?;
-    codex_local_access::refresh_sidecar_quota_pool_state().await
+    Ok(true)
 }
 
 fn normalize_codex_provider_base_url(value: &str) -> String {
@@ -2970,8 +2981,9 @@ async fn save_detected_codex_provider_integration_type(
     Ok(())
 }
 
-/// 使用账号卡片相同的供应商查询逻辑刷新 API Key 余额，并更新 API 服务快照。
-pub async fn refresh_codex_api_key_usage(account_id: &str) -> Result<(), String> {
+/// 使用账号卡片相同的供应商查询逻辑刷新并持久化 API Key 余额。
+/// API 服务快照由单账号或批量调用者在刷新边界统一更新。
+async fn query_and_persist_codex_api_key_usage(account_id: &str) -> Result<(), String> {
     let account = codex_account::load_account(account_id)
         .ok_or_else(|| "未找到 Codex API Key 账号".to_string())?;
     if !account.is_api_key_auth() {
@@ -3013,21 +3025,34 @@ pub async fn refresh_codex_api_key_usage(account_id: &str) -> Result<(), String>
         query_codex_provider_usage_with_fallback(&base_url, api_key, integration_type).await?;
     let summary_value = serde_json::to_value(&summary)
         .map_err(|error| format!("序列化 Codex API Key 用量失败: {}", error))?;
-    codex_sync_api_key_usage_summary(
-        account.id.clone(),
+    persist_codex_api_key_usage_summary(
+        &account.id,
         summary_value,
         Some(chrono::Utc::now().timestamp_millis()),
-    )
-    .await?;
+    )?;
 
     if let Some(mode) = summary.mode.as_deref() {
         let provider_id = provider
             .as_ref()
             .and_then(|provider| provider.get("id"))
             .and_then(serde_json::Value::as_str);
-        save_detected_codex_provider_integration_type(provider_id, &base_url, mode).await?;
+        if let Err(error) =
+            save_detected_codex_provider_integration_type(provider_id, &base_url, mode).await
+        {
+            logger::log_warn(&format!(
+                "[Codex Quota] 供应商用量类型保存失败，不影响本次余额刷新: account_id={}, error={}",
+                account.id, error
+            ));
+        }
     }
     Ok(())
+}
+
+/// 刷新单个 API Key 账号，并在成功后更新一次 API 服务快照。
+#[cfg(target_os = "macos")]
+pub async fn refresh_codex_api_key_usage(account_id: &str) -> Result<(), String> {
+    query_and_persist_codex_api_key_usage(account_id).await?;
+    codex_local_access::refresh_sidecar_quota_pool_state().await
 }
 
 fn json_f64_at(value: &serde_json::Value, path: &[&str]) -> Option<f64> {
@@ -3880,8 +3905,8 @@ fn summarize_cockpit_tools_quota(
                 .unwrap_or_else(|| "Cockpit Tools".to_string()),
         ),
         remaining: None,
-        balance: None,
-        unit: Some("%".to_string()),
+        balance: quota.api_key_balance,
+        unit: Some("CNY".to_string()),
         quota_unlimited: None,
         quota_limit: None,
         quota_used: None,
@@ -4977,6 +5002,39 @@ mod tests {
                 .expect("valid provider URL"),
             vec!["https://aihub.top/v1".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn cockpit_tools_usage_exposes_api_key_balance_in_cny() {
+        let server = tiny_http::Server::http("127.0.0.1:0")
+            .expect("mock Cockpit Tools provider should start");
+        let port = server
+            .server_addr()
+            .to_ip()
+            .expect("mock provider should use an IP address")
+            .port();
+        let responder = std::thread::spawn(move || {
+            let request = server.recv().expect("mock provider should receive quota query");
+            assert_eq!(request.url(), "/v1/cockpit/quota");
+            request
+                .respond(tiny_http::Response::from_string(
+                    r#"{"version":1,"scope":"api_key_account_pool","apiKeyBalance":5.6,"accountCount":1,"availableAccountCount":1,"stale":false}"#,
+                ))
+                .expect("mock provider should return quota response");
+        });
+
+        let summary = codex_query_model_provider_usage(
+            format!("http://127.0.0.1:{port}/v1"),
+            "test-api-key".to_string(),
+            Some("cockpit_tools".to_string()),
+        )
+        .await
+        .expect("Cockpit Tools quota should be summarized");
+
+        responder.join().expect("mock provider should finish");
+        assert_eq!(summary.mode.as_deref(), Some("cockpit_tools"));
+        assert_eq!(summary.balance, Some(5.6));
+        assert_eq!(summary.unit.as_deref(), Some("CNY"));
     }
 
     #[tokio::test]

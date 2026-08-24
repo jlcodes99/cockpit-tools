@@ -1366,7 +1366,7 @@ fn account_uses_codex_fingerprint_convergence(account: &CodexAccount) -> bool {
 
 fn prune_prepared_account_cache(runtime: &mut GatewayRuntime, now: i64) {
     let allowed_account_ids = runtime.collection.as_ref().map(|collection| {
-        effective_sidecar_account_ids(collection)
+        effective_api_service_account_ids(collection)
             .into_iter()
             .collect::<HashSet<_>>()
     });
@@ -1392,7 +1392,7 @@ fn prune_runtime_account_state(runtime: &mut GatewayRuntime) {
         return;
     };
 
-    let allowed_account_ids = effective_sidecar_account_ids(collection)
+    let allowed_account_ids = effective_api_service_account_ids(collection)
         .into_iter()
         .collect::<HashSet<_>>();
 
@@ -1750,7 +1750,7 @@ fn sidecar_account_needs_background_refresh(account: &CodexAccount) -> bool {
 }
 
 fn sidecar_background_refresh_account_ids(collection: &CodexLocalAccessCollection) -> Vec<String> {
-    effective_sidecar_account_ids(collection)
+    effective_api_service_account_ids(collection)
         .into_iter()
         .filter(|account_id| {
             codex_account::load_account(account_id)
@@ -5652,7 +5652,7 @@ fn metered_feature_model_patterns_for_pool(
 ) -> HashMap<String, String> {
     let persisted_accounts = codex_account::list_accounts_checked().ok();
     let mut patterns = HashMap::new();
-    for account_id in effective_sidecar_account_ids(collection) {
+    for account_id in effective_api_service_account_ids(collection) {
         let account = account_overrides.get(&account_id).or_else(|| {
             persisted_accounts
                 .as_ref()
@@ -11169,7 +11169,9 @@ fn effective_api_key_account_ids(
     }
 }
 
-fn effective_sidecar_account_ids(collection: &CodexLocalAccessCollection) -> Vec<String> {
+pub(crate) fn effective_api_service_account_ids(
+    collection: &CodexLocalAccessCollection,
+) -> Vec<String> {
     let mut account_ids = collection.account_ids.clone();
     let mut seen: HashSet<String> = account_ids.iter().cloned().collect();
     for api_key in &collection.api_keys {
@@ -11273,7 +11275,7 @@ pub(crate) fn menu_bar_api_service_quota() -> ApiServiceMenuBarQuota {
     let mut windows: Vec<ApiServicePoolWindowSum> = Vec::new();
     let mut account_count = 0usize;
 
-    for account_id in effective_sidecar_account_ids(&collection) {
+    for account_id in effective_api_service_account_ids(&collection) {
         let Some(account) = codex_account::load_account(&account_id) else {
             continue;
         };
@@ -11326,7 +11328,7 @@ pub(crate) fn api_service_refreshable_account_ids() -> Vec<String> {
     let Ok(Some(collection)) = load_collection_from_disk() else {
         return Vec::new();
     };
-    effective_sidecar_account_ids(&collection)
+    effective_api_service_account_ids(&collection)
         .into_iter()
         .filter(|account_id| {
             codex_account::load_account(account_id)
@@ -11344,7 +11346,7 @@ pub(crate) fn api_service_collection_has_accounts() -> bool {
     let Ok(Some(collection)) = load_collection_from_disk() else {
         return false;
     };
-    !effective_sidecar_account_ids(&collection).is_empty()
+    !effective_api_service_account_ids(&collection).is_empty()
 }
 
 fn remove_account_refs_from_collection(
@@ -11662,7 +11664,7 @@ fn sync_sidecar_auth_file_for_account_with_task_source(
     let Some(collection) = load_collection_from_disk()? else {
         return Ok(());
     };
-    if !effective_sidecar_account_ids(&collection)
+    if !effective_api_service_account_ids(&collection)
         .iter()
         .any(|account_id| account_id == &account.id)
     {
@@ -11842,6 +11844,27 @@ fn sidecar_quota_pool_balance_value(account: &CodexAccount) -> Option<f64> {
     };
     let provider_usage = raw.get("provider_usage");
     let provider_balance = provider_usage.and_then(|usage| {
+        let detail_number = |expected_key: &str| {
+            usage
+                .get("details")
+                .and_then(Value::as_array)
+                .and_then(|details| {
+                    details.iter().find_map(|detail| {
+                        let key = detail.get("key").and_then(Value::as_str)?;
+                        key.eq_ignore_ascii_case(expected_key)
+                            .then(|| read_number(detail.get("value")))
+                            .flatten()
+                    })
+                })
+        };
+        if usage
+            .get("mode")
+            .and_then(Value::as_str)
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("cockpit_tools"))
+        {
+            return read_number(usage.get("balance"))
+                .or_else(|| detail_number("apiKeyBalance"));
+        }
         if usage
             .get("unit")
             .and_then(Value::as_str)
@@ -11849,17 +11872,7 @@ fn sidecar_quota_pool_balance_value(account: &CodexAccount) -> Option<f64> {
         {
             return None;
         }
-        let total_available = usage
-            .get("details")
-            .and_then(Value::as_array)
-            .and_then(|details| {
-                details.iter().find_map(|detail| {
-                    let key = detail.get("key").and_then(Value::as_str)?;
-                    key.eq_ignore_ascii_case("totalAvailable")
-                        .then(|| read_number(detail.get("value")))
-                        .flatten()
-                })
-            });
+        let total_available = detail_number("totalAvailable");
         if usage
             .get("mode")
             .and_then(Value::as_str)
@@ -11888,7 +11901,7 @@ fn sidecar_quota_pool_balance_value(account: &CodexAccount) -> Option<f64> {
 
 fn sidecar_quota_pool_state_value(collection: &CodexLocalAccessCollection) -> Value {
     let mut accounts = Map::new();
-    for account_id in effective_sidecar_account_ids(collection) {
+    for account_id in effective_api_service_account_ids(collection) {
         let Some(account) = codex_account::load_account(&account_id) else {
             continue;
         };
@@ -12568,7 +12581,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     let mut expected_auth_files = HashSet::new();
     let metered_feature_patterns =
         metered_feature_model_patterns_for_pool(collection, &account_overrides);
-    for (index, account_id) in effective_sidecar_account_ids(collection)
+    for (index, account_id) in effective_api_service_account_ids(collection)
         .into_iter()
         .enumerate()
     {
@@ -16337,7 +16350,7 @@ async fn ensure_gateway_matches_runtime_locked() -> Result<(), String> {
 
     let bind_host = bind_host_for_collection(&collection);
 
-    let preparation_total = effective_sidecar_account_ids(&collection).len();
+    let preparation_total = effective_api_service_account_ids(&collection).len();
     let preparation_guard = GatewayPreparationGuard::begin(preparation_total);
     let launch_config = match prepare_sidecar_launch_config(
         &collection,
@@ -16908,7 +16921,7 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
         .map(|item| (item.account_id.as_str(), item.email.as_str()))
         .collect();
 
-    effective_sidecar_account_ids(collection)
+    effective_api_service_account_ids(collection)
         .iter()
         .map(|account_id| {
             let health = runtime.account_health.get(account_id);
@@ -17150,7 +17163,7 @@ fn build_state_snapshot_inner(
     let collection = runtime.collection.clone();
     let member_count = collection
         .as_ref()
-        .map(|item| effective_sidecar_account_ids(item).len())
+        .map(|item| effective_api_service_account_ids(item).len())
         .unwrap_or(0);
     let api_port_url = collection
         .as_ref()
@@ -27787,6 +27800,28 @@ mod tests {
     }
 
     #[test]
+    fn api_service_account_ids_include_key_scoped_members() {
+        let mut collection = test_local_access_collection(vec!["plus-1".to_string()]);
+        let mut api_key = super::build_local_access_api_key(Some("Scoped API Key"));
+        api_key.inherit_account_pool = Some(false);
+        api_key.account_ids = vec![
+            "api-key-1".to_string(),
+            "plus-1".to_string(),
+            "api-key-2".to_string(),
+        ];
+        collection.api_keys = vec![api_key];
+
+        assert_eq!(
+            super::effective_api_service_account_ids(&collection),
+            vec![
+                "plus-1".to_string(),
+                "api-key-1".to_string(),
+                "api-key-2".to_string(),
+            ]
+        );
+    }
+
+    #[test]
     fn sidecar_quota_pool_balance_reads_cached_provider_usage() {
         let mut account = CodexAccount::new_api_key(
             "api-key-balance".to_string(),
@@ -27812,9 +27847,9 @@ mod tests {
             reset_credits_next_expires_at: None,
             raw_data: Some(json!({
                 "provider_usage": {
-                    "mode": "sub2api",
-                    "remaining": 5.6,
-                    "unit": "USD"
+                    "mode": "cockpit_tools",
+                    "unit": "%",
+                    "details": [{ "key": "apiKeyBalance", "value": "5.6" }]
                 }
             })),
         });

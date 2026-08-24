@@ -94,7 +94,14 @@ export function resolveNewApiQuotaSnapshot(
 export function resolveModelProviderUsageBalance(
   summary?: ModelProviderUsageSummary,
 ): number | null {
-  if (!summary || summary.unit?.trim() === "%") return null;
+  if (!summary) return null;
+  if (summary.mode === "cockpit_tools") {
+    return (
+      finiteUsageNumber(summary.balance) ??
+      usageDetailNumber(summary, "apiKeyBalance")
+    );
+  }
+  if (summary.unit?.trim() === "%") return null;
   if (summary.mode === "new_api") {
     return resolveNewApiQuotaSnapshot(summary).available;
   }
@@ -234,11 +241,17 @@ export function formatModelProviderUsageMoney(
 
 export function formatCockpitToolsApiKeyBalance(
   value?: number | null,
+  unit: string = 'CNY',
 ): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  return Math.max(0, value).toLocaleString('en-US', {
+  const formatted = Math.max(0, value).toLocaleString('en-US', {
     maximumFractionDigits: 2,
   });
+  const rawUnit = unit.trim();
+  const normalizedUnit = !rawUnit || rawUnit === '%' ? 'CNY' : rawUnit;
+  if (normalizedUnit === 'CNY') return `¥${formatted}`;
+  if (normalizedUnit === 'USD') return `$${formatted}`;
+  return `${formatted} ${normalizedUnit}`;
 }
 
 export function formatModelProviderUsageInteger(value?: number | null): string {
