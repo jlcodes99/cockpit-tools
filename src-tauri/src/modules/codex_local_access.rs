@@ -233,6 +233,8 @@ const CODEX_LOCAL_ACCESS_LONG_CONTEXT_OUTPUT_MULTIPLIER: f64 = 1.5;
 const CHAT_COMPLETIONS_PATH: &str = "/v1/chat/completions";
 const RESPONSES_PATH: &str = "/v1/responses";
 const RESPONSES_COMPACT_PATH: &str = "/v1/responses/compact";
+const LIVE_PATH: &str = "/v1/live";
+const LIVE_REALTIME_QUERY: &str = "intent=quicksilver&architecture=avas";
 const BACKEND_CODEX_PREFIX: &str = "/backend-api/codex";
 const BACKEND_CODEX_RESPONSES_PATH: &str = "/backend-api/codex/responses";
 const BACKEND_CODEX_RESPONSES_COMPACT_PATH: &str = "/backend-api/codex/responses/compact";
@@ -2921,6 +2923,29 @@ fn is_backend_codex_responses_websocket_request(target: &str) -> bool {
     proxy_target_path(target) == BACKEND_CODEX_RESPONSES_PATH
 }
 
+fn is_live_call_create_request(target: &str) -> bool {
+    proxy_target_path(target) == LIVE_PATH
+}
+
+fn live_sideband_call_id(target: &str) -> Option<&str> {
+    let path = proxy_target_path(target);
+    let call_id = path.strip_prefix("/v1/live/")?;
+    if call_id.is_empty()
+        || call_id.len() > 128
+        || call_id.contains('/')
+        || !call_id.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '_' || character == '-'
+        })
+    {
+        return None;
+    }
+    Some(call_id)
+}
+
+fn is_live_sideband_request(target: &str) -> bool {
+    live_sideband_call_id(target).is_some()
+}
+
 fn is_supported_proxy_target(target: &str) -> bool {
     target.starts_with("/v1/") || is_backend_codex_request(target)
 }
@@ -3708,6 +3733,35 @@ fn multipart_field_value<'a>(form: &'a MultipartFormData, key: &str) -> Option<&
         .map(String::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
+}
+
+fn prepare_backend_live_call_body(
+    headers: &HashMap<String, String>,
+    body: &[u8],
+) -> Result<Option<Vec<u8>>, String> {
+    let content_type = header_value(headers, "content-type").unwrap_or("");
+    if !content_type
+        .to_ascii_lowercase()
+        .starts_with("multipart/form-data")
+    {
+        return Ok(None);
+    }
+
+    let form = parse_multipart_form_data(content_type, body)?;
+    let sdp = multipart_field_value(&form, "sdp")
+        .ok_or("live 请求缺少 sdp".to_string())?
+        .to_string();
+    let mut payload = Map::new();
+    payload.insert("sdp".to_string(), Value::String(sdp));
+    if let Some(session_raw) = multipart_field_value(&form, "session") {
+        let session = serde_json::from_str::<Value>(session_raw)
+            .map_err(|e| format!("live 请求 session 不是合法 JSON: {}", e))?;
+        payload.insert("session".to_string(), session);
+    }
+
+    serde_json::to_vec(&Value::Object(payload))
+        .map(Some)
+        .map_err(|e| format!("序列化 ChatGPT live 请求失败: {}", e))
 }
 
 fn multipart_field_bool(form: &MultipartFormData, key: &str, fallback: bool) -> bool {
@@ -22722,6 +22776,50 @@ fn resolve_upstream_target(target: &str) -> Result<String, String> {
     }
 }
 
+fn target_query(target: &str) -> Option<&str> {
+    target
+        .split_once('?')
+        .map(|(_, query)| query.trim())
+        .filter(|query| !query.is_empty())
+}
+
+fn append_target_query(path: &str, query: Option<&str>) -> String {
+    match query {
+        Some(query) => format!("{}?{}", path, query),
+        None => path.to_string(),
+    }
+}
+
+fn resolve_upstream_target_for_account(
+    account: &CodexAccount,
+    target: &str,
+) -> Result<String, String> {
+    let query = target_query(target);
+    if is_live_call_create_request(target) {
+        if account.is_api_key_auth() {
+            return Ok(append_target_query("/live", query));
+        }
+
+        let mut upstream_target = format!("/realtime/calls?{}", LIVE_REALTIME_QUERY);
+        if let Some(query) = query {
+            upstream_target.push('&');
+            upstream_target.push_str(query);
+        }
+        return Ok(upstream_target);
+    }
+
+    if let Some(call_id) = live_sideband_call_id(target) {
+        let upstream_path = if account.is_api_key_auth() {
+            format!("/live/{}", call_id)
+        } else {
+            format!("/{}", call_id)
+        };
+        return Ok(append_target_query(&upstream_path, query));
+    }
+
+    resolve_upstream_target(target)
+}
+
 fn account_upstream_base_url(account: &CodexAccount) -> String {
     if !account.is_api_key_auth() {
         return UPSTREAM_CODEX_BASE_URL.to_string();
@@ -23203,7 +23301,7 @@ async fn write_chunked_response_headers(
         CORS_ALLOW_HEADERS
     );
 
-    for header_name in ["x-request-id", "openai-processing-ms"] {
+    for header_name in ["location", "x-request-id", "openai-processing-ms"] {
         if let Some(value) = upstream_headers
             .get(header_name)
             .and_then(|item| item.to_str().ok())
@@ -24406,13 +24504,22 @@ async fn send_upstream_request_with_authorization_url(
     let method =
         Method::from_bytes(method.as_bytes()).map_err(|e| format!("不支持的请求方法: {}", e))?;
     let client = upstream_http_client(upstream_proxy_url, connect_timeout)?;
-    let upstream_body = build_account_scoped_upstream_body(
+    let mut upstream_body = build_account_scoped_upstream_body(
         target,
         body,
         account,
         image_generation_mode,
         request_kind,
     )?;
+    let mut upstream_content_type = None;
+    if !account.is_api_key_auth() && proxy_target_path(target) == "/realtime/calls" {
+        if let Some(converted_body) =
+            prepare_backend_live_call_body(headers, upstream_body.as_ref())?
+        {
+            upstream_body = Cow::Owned(converted_body);
+            upstream_content_type = Some("application/json");
+        }
+    }
     let max_send_retries = timeouts.upstream_send_retry_attempts as usize;
     for retry_attempt in 0..=max_send_retries {
         let mut request = client.request(method.clone(), url);
@@ -24433,6 +24540,9 @@ async fn send_upstream_request_with_authorization_url(
                     | "session_id"
                     | "session-id"
             ) {
+                continue;
+            }
+            if upstream_content_type.is_some() && name.eq_ignore_ascii_case("content-type") {
                 continue;
             }
             if !account.is_api_key_auth() && matches!(name.as_str(), "user-agent" | "originator") {
@@ -24469,7 +24579,9 @@ async fn send_upstream_request_with_authorization_url(
             );
         }
         request = request.header("Connection", "Keep-Alive");
-        if !headers.contains_key("content-type") && !upstream_body.is_empty() {
+        if let Some(content_type) = upstream_content_type {
+            request = request.header(CONTENT_TYPE, content_type);
+        } else if !headers.contains_key("content-type") && !upstream_body.is_empty() {
             request = request.header(CONTENT_TYPE, "application/json");
         }
         if !upstream_body.is_empty() {
@@ -24845,14 +24957,6 @@ async fn proxy_request_with_account_pool(
         });
     }
 
-    let upstream_target =
-        resolve_upstream_target(&request.target).map_err(|err| ProxyDispatchError {
-            status: 400,
-            message: err,
-            account_id: None,
-            account_email: None,
-            error_category: Some("bad_request".to_string()),
-        })?;
     let timeouts = collection_timeouts(collection);
     let upstream_connect_timeout = duration_from_millis(
         timeouts.legacy_upstream_connect_timeout_ms,
@@ -24996,6 +25100,14 @@ async fn proxy_request_with_account_pool(
 
             last_account_id = Some(account.id.clone());
             last_account_email = Some(account.email.clone());
+            let upstream_target = resolve_upstream_target_for_account(&account, &request.target)
+                .map_err(|err| ProxyDispatchError {
+                    status: 400,
+                    message: err,
+                    account_id: Some(account.id.clone()),
+                    account_email: Some(account.email.clone()),
+                    error_category: Some("bad_request".to_string()),
+                })?;
             legacy_debug_log(
                 collection.debug_logs,
                 format!(
@@ -25956,7 +26068,8 @@ async fn connect_upstream_websocket(
         }
     }
     let beta_header = header_value(&request.headers, "openai-beta").unwrap_or_default();
-    if !beta_header.contains("responses_websockets=") {
+    if !is_live_sideband_request(&request.target) && !beta_header.contains("responses_websockets=")
+    {
         upstream_request.headers_mut().insert(
             "OpenAI-Beta",
             websocket_header_value(CODEX_RESPONSES_WEBSOCKET_BETA_HEADER_VALUE)
@@ -25998,14 +26111,6 @@ async fn proxy_websocket_with_account_pool(
         });
     }
 
-    let upstream_target =
-        resolve_upstream_target(&request.target).map_err(|err| ProxyDispatchError {
-            status: 400,
-            message: err,
-            account_id: None,
-            account_email: None,
-            error_category: Some("bad_request".to_string()),
-        })?;
     let timeouts = collection_timeouts(collection);
     let websocket_connect_timeout = duration_from_millis(
         timeouts.websocket_connect_timeout_ms,
@@ -26113,6 +26218,14 @@ async fn proxy_websocket_with_account_pool(
 
         last_account_id = Some(account.id.clone());
         last_account_email = Some(account.email.clone());
+        let upstream_target = resolve_upstream_target_for_account(&account, &request.target)
+            .map_err(|err| ProxyDispatchError {
+                status: 400,
+                message: err,
+                account_id: Some(account.id.clone()),
+                account_email: Some(account.email.clone()),
+                error_category: Some("bad_request".to_string()),
+            })?;
 
         match connect_upstream_websocket(
             request,
@@ -26539,29 +26652,31 @@ fn filter_websocket_client_message(
 async fn bridge_websocket_streams(
     downstream: WebSocketStream<TcpStream>,
     mut upstream: WebSocketStream<MaybeTlsStream<TcpStream>>,
-    first_payload: Vec<u8>,
+    first_payload: Option<Vec<u8>>,
     timeouts: CodexLocalAccessTimeouts,
     image_filter: Option<WebSocketImageGenerationFilter>,
 ) -> Result<WebSocketBridgeResult, String> {
-    let first_payload = if let Some(filter) = image_filter.as_ref() {
-        let mode = current_websocket_image_generation_mode(filter).await;
-        build_account_scoped_upstream_body(
-            "/responses",
-            &first_payload,
-            &filter.account,
-            mode,
-            CodexLocalAccessRequestKind::Text,
-        )?
-        .into_owned()
-    } else {
-        first_payload
-    };
-    let first_text = String::from_utf8(first_payload)
-        .map_err(|e| format!("WebSocket response.create 不是合法 UTF-8: {}", e))?;
-    upstream
-        .send(Message::Text(first_text.into()))
-        .await
-        .map_err(|e| format!("发送首个 WebSocket 上游消息失败: {}", e))?;
+    if let Some(first_payload) = first_payload {
+        let first_payload = if let Some(filter) = image_filter.as_ref() {
+            let mode = current_websocket_image_generation_mode(filter).await;
+            build_account_scoped_upstream_body(
+                "/responses",
+                &first_payload,
+                &filter.account,
+                mode,
+                CodexLocalAccessRequestKind::Text,
+            )?
+            .into_owned()
+        } else {
+            first_payload
+        };
+        let first_text = String::from_utf8(first_payload)
+            .map_err(|e| format!("WebSocket response.create 不是合法 UTF-8: {}", e))?;
+        upstream
+            .send(Message::Text(first_text.into()))
+            .await
+            .map_err(|e| format!("发送首个 WebSocket 上游消息失败: {}", e))?;
+    }
 
     let (mut downstream_write, mut downstream_read) = downstream.split();
     let (mut upstream_write, mut upstream_read) = upstream.split();
@@ -26661,21 +26776,29 @@ async fn handle_websocket_connection(
     let started_at = Instant::now();
     let timeouts = collection_timeouts(&collection);
     let mut downstream = accept_downstream_websocket(stream, &parsed).await?;
+    let is_live_sideband = is_live_sideband_request(&parsed.target);
     let initial_message_timeout = duration_from_millis(
         timeouts.websocket_initial_message_timeout_ms,
         CODEX_WEBSOCKET_INITIAL_MESSAGE_TIMEOUT,
     );
-    let initial_payload =
-        match read_initial_websocket_payload(&mut downstream, initial_message_timeout).await {
-            Ok(payload) => payload,
-            Err(err) => {
-                let _ = downstream.send(Message::Close(None)).await;
-                return Err(err);
-            }
-        };
-    parsed.body = initial_payload;
-    let default_service_tier = api_service_default_service_tier()?;
-    prepare_websocket_initial_request(&mut parsed, &resolved_api_key, default_service_tier)?;
+    let initial_payload = if is_live_sideband {
+        None
+    } else {
+        Some(
+            match read_initial_websocket_payload(&mut downstream, initial_message_timeout).await {
+                Ok(payload) => payload,
+                Err(err) => {
+                    let _ = downstream.send(Message::Close(None)).await;
+                    return Err(err);
+                }
+            },
+        )
+    };
+    if let Some(payload) = initial_payload.as_ref() {
+        parsed.body = payload.clone();
+        let default_service_tier = api_service_default_service_tier()?;
+        prepare_websocket_initial_request(&mut parsed, &resolved_api_key, default_service_tier)?;
+    }
     let stats_context = RequestStatsContext {
         request_kind: CodexLocalAccessRequestKind::Text,
         model_id: stats_model_id_for_request_kind(&parsed.body, CodexLocalAccessRequestKind::Text),
@@ -26701,9 +26824,9 @@ async fn handle_websocket_connection(
             let bridge_result = bridge_websocket_streams(
                 downstream,
                 success.upstream,
-                parsed.body.clone(),
+                initial_payload,
                 timeouts.clone(),
-                Some(WebSocketImageGenerationFilter {
+                (!is_live_sideband).then_some(WebSocketImageGenerationFilter {
                     account: success.account.clone(),
                     fallback_mode: collection.image_generation_mode,
                     request_headers: parsed.headers.clone(),
@@ -27077,6 +27200,7 @@ async fn handle_connection(
     if is_websocket_upgrade_request(&parsed) {
         if !is_backend_codex_responses_websocket_request(&parsed.target)
             && !is_responses_request(&parsed.target)
+            && !is_live_sideband_request(&parsed.target)
         {
             write_json_error_response(
                 &mut stream,
@@ -27084,7 +27208,7 @@ async fn handle_connection(
                 Some(&parsed),
                 404,
                 "Not Found",
-                "WebSocket 仅支持 /backend-api/codex/responses",
+                "WebSocket 仅支持 Responses 或 /v1/live/{call_id}",
                 None,
                 None,
                 None,
@@ -30797,7 +30921,7 @@ wire_api = "responses"
         let bridge_task = tokio::spawn(bridge_websocket_streams(
             downstream,
             upstream,
-            br#"{"type":"response.create","payload":{}}"#.to_vec(),
+            Some(br#"{"type":"response.create","payload":{}}"#.to_vec()),
             CodexLocalAccessTimeouts::default(),
             None,
         ));
@@ -30851,7 +30975,7 @@ wire_api = "responses"
         let bridge_task = tokio::spawn(bridge_websocket_streams(
             downstream,
             upstream,
-            br#"{"type":"response.create","payload":{}}"#.to_vec(),
+            Some(br#"{"type":"response.create","payload":{}}"#.to_vec()),
             CodexLocalAccessTimeouts::default(),
             None,
         ));
@@ -34663,6 +34787,85 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             resolve_upstream_target("/v1/responses?debug=1").unwrap(),
             "/responses?debug=1"
         );
+    }
+
+    #[test]
+    fn resolves_live_targets_for_oauth_and_api_key_accounts() {
+        let api_key_account = CodexAccount::new_api_key(
+            "api-1".to_string(),
+            "api-key@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::OpenaiBuiltin,
+            Some("https://api.openai.com/v1".to_string()),
+            None,
+            None,
+            Vec::new(),
+        );
+        let oauth_account = test_account_with_plan("plus");
+
+        assert_eq!(
+            resolve_upstream_target_for_account(&api_key_account, "/v1/live").unwrap(),
+            "/live"
+        );
+        assert_eq!(
+            resolve_upstream_target_for_account(&api_key_account, "/v1/live/rtc_test").unwrap(),
+            "/live/rtc_test"
+        );
+        assert_eq!(
+            resolve_upstream_target_for_account(&oauth_account, "/v1/live").unwrap(),
+            "/realtime/calls?intent=quicksilver&architecture=avas"
+        );
+        assert_eq!(
+            resolve_upstream_target_for_account(&oauth_account, "/v1/live/rtc_test").unwrap(),
+            "/rtc_test"
+        );
+        assert_eq!(
+            resolve_upstream_target_for_account(&api_key_account, "/v1/live?debug=1").unwrap(),
+            "/live?debug=1"
+        );
+        assert!(is_live_sideband_request("/v1/live/rtc_test"));
+        assert!(!is_live_sideband_request("/v1/live/rtc_test/extra"));
+        assert!(!is_live_sideband_request("/v1/live"));
+    }
+
+    #[test]
+    fn converts_multipart_live_call_for_chatgpt_backend() {
+        let boundary = "live-call-boundary";
+        let mut body = Vec::new();
+        body.extend_from_slice(b"--live-call-boundary\r\n");
+        body.extend_from_slice(b"Content-Disposition: form-data; name=\"sdp\"\r\n\r\n");
+        body.extend_from_slice(b"v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n");
+        body.extend_from_slice(b"--live-call-boundary\r\n");
+        body.extend_from_slice(b"Content-Disposition: form-data; name=\"session\"\r\n\r\n");
+        body.extend_from_slice(br#"{"type":"realtime","model":"gpt-realtime"}"#);
+        body.extend_from_slice(b"\r\n--live-call-boundary--\r\n");
+        let headers = HashMap::from([(
+            "content-type".to_string(),
+            format!("multipart/form-data; boundary={}", boundary),
+        )]);
+
+        let converted = prepare_backend_live_call_body(&headers, &body)
+            .expect("multipart body should convert")
+            .expect("multipart body should be converted");
+        let payload: Value =
+            serde_json::from_slice(&converted).expect("converted body should be JSON");
+        assert_eq!(
+            payload.get("sdp").and_then(Value::as_str),
+            Some("v=0\r\no=- 1 2 IN IP4 127.0.0.1")
+        );
+        assert_eq!(
+            payload
+                .get("session")
+                .and_then(|session| session.get("model"))
+                .and_then(Value::as_str),
+            Some("gpt-realtime")
+        );
+
+        let raw_headers =
+            HashMap::from([("content-type".to_string(), "application/sdp".to_string())]);
+        assert!(prepare_backend_live_call_body(&raw_headers, b"v=0\r\n")
+            .expect("raw SDP should be accepted")
+            .is_none());
     }
 
     #[test]
