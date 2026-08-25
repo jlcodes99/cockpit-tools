@@ -323,7 +323,9 @@ export function CodexSessionUsagePanel({
     }
   }, [t]);
 
+  /** 扫描会话日志，并在每次刷新时使用最新的时间范围截止点。 */
   const runSync = useCallback(async (rebuild: boolean) => {
+    const syncQuery = buildUsageQuery(range, instanceId);
     const version = ++requestVersionRef.current;
     setSyncing(true);
     if (rebuild) {
@@ -333,13 +335,13 @@ export function CodexSessionUsagePanel({
     try {
       const result = await codexInstanceService.syncSessionUsage({
         rebuild,
-        query,
+        query: syncQuery,
       });
       if (version === requestVersionRef.current) {
         if (result.report) {
           setReport(result.report);
         } else {
-          const nextReport = await codexInstanceService.querySessionUsage(query);
+          const nextReport = await codexInstanceService.querySessionUsage(syncQuery);
           setReport(nextReport);
         }
         if (result.errors.length > 0) {
@@ -362,7 +364,7 @@ export function CodexSessionUsagePanel({
         setLoading(false);
       }
     }
-  }, [query, t]);
+  }, [instanceId, range, t]);
 
   useEffect(() => {
     void loadCached(query);
