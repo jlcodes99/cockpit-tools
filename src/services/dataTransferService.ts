@@ -26,6 +26,10 @@ import {
   listCodexModelProviders,
 } from './codexModelProviderService';
 import {
+  isPlaintextOpenCodeGoApiKey,
+  sanitizeOpenCodeGoProviderForTransfer,
+} from '../utils/openCodeGoPlatform';
+import {
   getCodexWakeupCliStatus,
   getCodexWakeupState,
   saveCodexWakeupState,
@@ -284,7 +288,9 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
     (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
   codex: async () => (await codexService.listCodexAccounts()) as unknown as TransferAccountRecord[],
   codex_api_service: async () => [],
-  opencode_go: async () => [],
+  opencode_go: async () =>
+    (await import('./openCodeGoService')).openCodeGoService
+      .listConnections() as unknown as TransferAccountRecord[],
   claude_manager: listClaudeManagerTransferAccounts,
   zed: async () => (await zedService.listZedAccounts()) as unknown as TransferAccountRecord[],
   'github-copilot': async () =>
@@ -1056,7 +1062,9 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     group_settings: groupSettings,
     account_groups: exportAccountGroups(accountGroups, registry),
     codex_account_groups: exportCodexAccountGroups(codexAccountGroups, registry),
-    codex_model_providers: codexModelProviders,
+    codex_model_providers: codexModelProviders.map(
+      sanitizeOpenCodeGoProviderForTransfer,
+    ),
     instance_stores: Object.fromEntries(instanceStoreEntries) as Partial<
       Record<InstancePlatform, ExportedInstanceStore>
     >,
@@ -1114,7 +1122,17 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
   invalidateCodexGroupCache();
 
   await invoke('save_codex_model_providers', {
-    data: JSON.stringify(bundle.codex_model_providers, null, 2),
+    data: JSON.stringify(
+      bundle.codex_model_providers.map((provider) => ({
+        ...provider,
+        // OpenCode Go keys are redacted in exports; keep local material.
+        apiKeys: provider.apiKeys.filter(
+          (apiKey) => !isPlaintextOpenCodeGoApiKey(apiKey?.apiKey),
+        ),
+      })),
+      null,
+      2,
+    ),
   });
   invalidateCodexModelProviderCache();
 
