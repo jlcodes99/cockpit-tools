@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import {
   formatModelProviderUsageInteger,
   formatModelProviderUsageMoney,
+  formatModelProviderUsageResetCountdown,
   formatModelProviderUsageTokenCount,
   resolveOpenCodeGoQuotaSnapshot,
   resolveModelProviderUsageMode,
@@ -74,13 +75,20 @@ export function ModelProviderUsagePanel({
             const resetText = window.resetsAt != null
               ? new Date(window.resetsAt * 1000).toLocaleString()
               : '-';
+            const countdown = formatModelProviderUsageResetCountdown(
+              window.resetsAt,
+            );
             return (
               <div key={key} title={`${label} · ${resetText}`}>
                 <span>{label}</span>
                 <strong>
                   {formatModelProviderUsageMoney(window.remainingPercent, '%')}
                 </strong>
-                <small className="codex-api-key-usage-reset">↻ {resetText}</small>
+                <small className="codex-api-key-usage-reset">
+                  ↻ {countdown !== '-'
+                    ? t('codex.modelProviders.usage.resetsIn', 'resets in {{value}}', { value: countdown })
+                    : '-'}
+                </small>
               </div>
             );
           })}

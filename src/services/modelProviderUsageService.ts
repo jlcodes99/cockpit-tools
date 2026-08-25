@@ -200,9 +200,12 @@ export function resolveModelProviderUsageMode(
     return 'sub2api';
   }
   const detailKeys = new Set((summary.details ?? []).map((item) => item.key));
+  // OpenCode Go may report quota windows partially (e.g. only the 5-hour
+  // rolling window before the weekly/monthly counters are provisioned).
+  // Classify from any recognized window key instead of demanding all three.
   if (
-    detailKeys.has('rollingRemainingPercent') &&
-    detailKeys.has('weeklyRemainingPercent') &&
+    detailKeys.has('rollingRemainingPercent') ||
+    detailKeys.has('weeklyRemainingPercent') ||
     detailKeys.has('monthlyRemainingPercent')
   ) {
     return 'opencode_go';
@@ -222,6 +225,22 @@ export function resolveModelProviderUsageMode(
     return 'new_api';
   }
   return null;
+}
+
+/** Human "resets in …" countdown for a unix-seconds reset timestamp. */
+export function formatModelProviderUsageResetCountdown(
+  resetsAt?: number | null,
+): string {
+  if (typeof resetsAt !== 'number' || !Number.isFinite(resetsAt)) return '-';
+  const remainingMs = resetsAt * 1000 - Date.now();
+  if (remainingMs <= 0) return 'resetting';
+  const totalMinutes = Math.floor(remainingMs / 60_000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 }
 
 export function formatModelProviderUsageMoney(
