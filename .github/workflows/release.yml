@@ -31,6 +31,39 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
+      # Fail fast before any platform build burns CI minutes: every bundle job
+      # needs the Tauri updater signing key, and macOS builds additionally need
+      # an Apple Developer ID identity for Gatekeeper-clean distribution.
+      - name: 🔐 Check signing availability
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not configured."
+            echo "All bundle jobs sign updater artifacts (.sig); without the key they would all fail after building. Configure the secret, then re-run."
+            exit 1
+          fi
+          {
+            echo "### Release signing preflight"
+            echo "- Tauri updater signing key: ✅ configured"
+            if [ -z "${APPLE_CERTIFICATE}" ]; then
+              echo "- macOS Developer ID certificate (APPLE_CERTIFICATE): ⚠️ not configured; macOS bundles will be ad-hoc signed and blocked by Gatekeeper"
+            else
+              echo "- macOS Developer ID certificate (APPLE_CERTIFICATE): ✅ configured"
+            fi
+            if [ -z "${APPLE_ID}" ] || [ -z "${APPLE_PASSWORD}" ] || [ -z "${APPLE_TEAM_ID}" ]; then
+              echo "- macOS notarization (APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID): ⚠️ not fully configured; DMGs will NOT be notarized"
+            else
+              echo "- macOS notarization credentials: ✅ configured"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
