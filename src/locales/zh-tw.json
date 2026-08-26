@@ -674,7 +674,7 @@
       "themeDark": "深色 (Dark)",
       "themeSystem": "跟隨系統",
       "uiScale": "介面縮放",
-      "uiScaleDesc": "調整介面縮放比例（⌘+/⌘- 縮放，⌘0 重設）",
+      "uiScaleDesc": "調整介面縮放比例（⌘+/⌘- 或 Ctrl+/Ctrl-，⌘0/Ctrl+0 重設）",
       "accountManagement": "帳號管理",
       "autoRefresh": "Antigravity IDE 自動刷新配額",
       "codexAutoRefresh": "Codex 自動刷新配額",

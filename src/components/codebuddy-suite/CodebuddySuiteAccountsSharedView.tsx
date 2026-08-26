@@ -977,7 +977,7 @@ export function CodebuddySuiteAccountsSharedView<
           <MultiSelectFilterDropdown
             options={tierFilterOptions}
             selectedValues={filterTypes}
-            allLabel={`ALL (${tierSummary.all})`}
+            allLabel={t('common.shared.filter.all', '全部 ({{count}})', { count: tierSummary.all })}
             filterLabel={t("common.shared.filterLabel", "筛选")}
             clearLabel={t("accounts.clearFilter", "清空筛选")}
             emptyLabel={t("common.none", "暂无")}
