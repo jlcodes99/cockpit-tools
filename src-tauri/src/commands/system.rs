@@ -83,6 +83,8 @@ pub struct GeneralConfig {
     pub auto_refresh_minutes: i32,
     /// Codex 自动刷新间隔（分钟），-1 表示禁用
     pub codex_auto_refresh_minutes: i32,
+    /// Codex 后台自动刷新额度的套餐分类
+    pub codex_auto_refresh_plan_types: Vec<String>,
     /// Codex 切号时是否同步覆盖 WSL 配置 (Windows Only)
     pub codex_sync_wsl: bool,
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
@@ -1130,6 +1132,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "ui_scale"
             | "auto_refresh_minutes"
             | "codex_auto_refresh_minutes"
+            | "codex_auto_refresh_plan_types"
             | "codex_sync_wsl"
             | "codex_app_ui_injection_enabled"
             | "codex_login_page_guard_enabled"
@@ -2690,6 +2693,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         ui_scale: user_config.ui_scale,
         auto_refresh_minutes: user_config.auto_refresh_minutes,
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
+        codex_auto_refresh_plan_types: user_config.codex_auto_refresh_plan_types,
         codex_sync_wsl: user_config.codex_sync_wsl,
         codex_app_ui_injection_enabled: user_config.codex_app_ui_injection_enabled,
         codex_login_page_guard_enabled: user_config.codex_login_page_guard_enabled,
@@ -4575,6 +4579,21 @@ mod tests {
 
         assert_eq!(config.theme, "light");
         assert_eq!(config.auto_refresh_minutes, 10);
+    }
+
+    #[test]
+    fn general_config_patch_updates_codex_auto_refresh_plan_types() {
+        let mut config = UserConfig::default();
+        let updates = serde_json::json!({
+            "codex_auto_refresh_plan_types": ["plus", "pro"]
+        })
+        .as_object()
+        .expect("patch should be an object")
+        .clone();
+
+        apply_general_config_updates(&mut config, &updates).expect("patch should succeed");
+
+        assert_eq!(config.codex_auto_refresh_plan_types, ["plus", "pro"]);
     }
 
     #[test]

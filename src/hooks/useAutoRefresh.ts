@@ -51,13 +51,17 @@ import {
   getCodexInheritPlatformQuotaRefreshAccountIds,
   resolveCodexGroupQuotaAutoRefreshMinutes,
 } from '../services/codexAccountGroupService';
-import { isCodexApiKeyAccount, isCodexNewApiAccount } from '../types/codex';
+import {
+  createCodexAutomaticQuotaRefreshPredicate,
+  sanitizeCodexAutoRefreshPlanKeys,
+} from '../utils/codexAutoRefreshPlanScope';
 
 interface GeneralConfig {
   language: string;
   theme: string;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_auto_refresh_plan_types: string[];
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_wsl_config_dir: string;
@@ -409,6 +413,23 @@ export function useAutoRefresh() {
 
           const currentRefreshMinutesMap = loadCurrentAccountRefreshMinutesMap();
           const currentAccountEmails = getCurrentAccountEmails();
+          const codexAutoRefreshPlanTypes = sanitizeCodexAutoRefreshPlanKeys(
+            config.codex_auto_refresh_plan_types,
+          );
+          const isCodexAccountEligibleForAutomaticQuotaRefresh =
+            createCodexAutomaticQuotaRefreshPredicate(codexAutoRefreshPlanTypes);
+          const filterCodexAutomaticQuotaRefreshIds = (accountIds: readonly string[]) => {
+            const accountById = new Map(
+              useCodexAccountStore.getState().accounts.map((account) => [account.id, account]),
+            );
+            return accountIds.filter((accountId) => {
+              const account = accountById.get(accountId);
+              return Boolean(
+                account &&
+                  isCodexAccountEligibleForAutomaticQuotaRefresh(account),
+              );
+            });
+          };
           const runProviderCurrentRefresh = async (
             fetchCurrentProviderAccountId: () => Promise<string | null>,
             refreshProviderToken: (accountId: string) => Promise<void>,
@@ -479,10 +500,7 @@ export function useAutoRefresh() {
                   // 平台间隔只刷「继承平台 + 未分组」；自定义间隔分组由独立任务负责
                   const accounts = useCodexAccountStore.getState().accounts;
                   const refreshableIds = accounts
-                    .filter(
-                      (account) =>
-                        !isCodexApiKeyAccount(account) || isCodexNewApiAccount(account),
-                    )
+                    .filter(isCodexAccountEligibleForAutomaticQuotaRefresh)
                     .map((account) => account.id);
                   const inheritIds =
                     await getCodexInheritPlatformQuotaRefreshAccountIds(refreshableIds);
@@ -836,9 +854,13 @@ export function useAutoRefresh() {
                 executeWithGuard(
                   codexRefreshingRef,
                   async () => {
+                    const eligibleIds = filterCodexAutomaticQuotaRefreshIds(uniqueIds);
+                    if (eligibleIds.length === 0) {
+                      return;
+                    }
                     try {
-                      // 自定义分组任务目标明确，不因「不刷新」外的策略再过滤
-                      await codexService.refreshCodexQuotasBatch(uniqueIds, {
+                      // 自定义分组间隔仍需服从全局套餐范围。
+                      await codexService.refreshCodexQuotasBatch(eligibleIds, {
                         respectGroupQuotaRefresh: false,
                       });
                     } finally {
