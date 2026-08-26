@@ -13687,6 +13687,29 @@ async fn probe_sidecar_ready_once(
     }
 }
 
+async fn recover_provider_gateway_ready_from_http(
+    collection: &CodexLocalAccessCollection,
+    bind_host: &str,
+    ready_error: &str,
+) -> Result<SidecarReadySignal, String> {
+    probe_sidecar_ready_once(collection, Duration::from_secs(2))
+        .await
+        .map_err(|probe_error| {
+            format!(
+                "{}; authenticated_http_probe_failed={}",
+                ready_error, probe_error
+            )
+        })?;
+    logger::log_codex_api_warn(&format!(
+        "[CodexLocalAccess][provider-gateway] stdout ready event missing, authenticated /v1/models probe passed: bind={}:{}",
+        bind_host, collection.port
+    ));
+    Ok(SidecarReadySignal {
+        host: bind_host.to_string(),
+        port: Some(collection.port),
+    })
+}
+
 fn bind_host_for_access_scope(scope: CodexLocalAccessScope) -> &'static str {
     match scope {
         CodexLocalAccessScope::Localhost => CODEX_LOCAL_ACCESS_LOCALHOST_BIND_HOST,
@@ -19632,15 +19655,43 @@ async fn spawn_provider_gateway_sidecar(
         Ok(signal) => signal,
         Err(error) => {
             let diagnostics = sidecar_startup_diagnostics_text(&startup_diagnostics);
-            let message = format!("{}; {}", error, diagnostics);
-            logger::log_codex_api_warn(&format!(
-                "[CodexLocalAccess][provider-gateway] sidecar ready 等待失败，将停止进程: {}",
-                message
-            ));
-            let _ = child.kill().await;
-            task.abort();
-            let _ = task.await;
-            return Err(message);
+            let ready_error = format!("{}; {}", error, diagnostics);
+            match recover_provider_gateway_ready_from_http(collection, bind_host, &ready_error)
+                .await
+            {
+                Ok(signal) => match child.try_wait() {
+                    Ok(None) => signal,
+                    Ok(Some(status)) => {
+                        let message = format!(
+                            "{}; authenticated HTTP probe passed but sidecar exited: {}",
+                            ready_error, status
+                        );
+                        task.abort();
+                        let _ = task.await;
+                        return Err(message);
+                    }
+                    Err(check_error) => {
+                        let message = format!(
+                            "{}; authenticated HTTP probe passed but process state check failed: {}",
+                            ready_error, check_error
+                        );
+                        let _ = child.kill().await;
+                        task.abort();
+                        let _ = task.await;
+                        return Err(message);
+                    }
+                },
+                Err(message) => {
+                    logger::log_codex_api_warn(&format!(
+                        "[CodexLocalAccess][provider-gateway] sidecar ready wait and HTTP fallback failed; stopping process: {}",
+                        message
+                    ));
+                    let _ = child.kill().await;
+                    task.abort();
+                    let _ = task.await;
+                    return Err(message);
+                }
+            }
         }
     };
 
@@ -28238,6 +28289,58 @@ mod tests {
             bytes.extend_from_slice(&chunk[..read]);
         }
         String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    #[tokio::test]
+    async fn provider_gateway_ready_recovers_from_missing_stdout_event_via_http() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind ready fallback server");
+        let port = listener
+            .local_addr()
+            .expect("ready fallback address")
+            .port();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accept ready fallback");
+            let request = read_wakeup_test_http_request(&mut stream).await;
+            let request_line = request.lines().next().unwrap_or_default();
+            assert!(
+                request_line.contains("/v1/models"),
+                "ready fallback must probe /v1/models: {request_line}"
+            );
+            assert!(
+                request
+                    .lines()
+                    .any(|line| line.eq_ignore_ascii_case("authorization: Bearer ready-key")),
+                "ready fallback must authenticate with the profile bearer token"
+            );
+            let body = r#"{"object":"list","data":[]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("write ready fallback response");
+        });
+
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.port = port;
+        collection.api_key = "ready-key".to_string();
+
+        let signal = super::recover_provider_gateway_ready_from_http(
+            &collection,
+            "127.0.0.1",
+            "stdout ready event missing",
+        )
+        .await
+        .expect("authenticated HTTP health should recover missing ready event");
+
+        assert_eq!(signal.host, "127.0.0.1");
+        assert_eq!(signal.port, Some(port));
+        server.await.expect("ready fallback server");
     }
 
     #[tokio::test]
