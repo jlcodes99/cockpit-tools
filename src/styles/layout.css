@@ -8,7 +8,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 46px;
+  height: 10px;
   /* Keep title-bar drag area above modal overlays so window can still move when dialogs are open. */
   z-index: 13050;
   -webkit-app-region: drag;
