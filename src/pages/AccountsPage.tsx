@@ -749,10 +749,16 @@ export function AccountsPage({ onNavigate }: AccountsPageProps) {
     }
   }, [t])
 
+  // The countdown is only ever rendered next to a live TOTP token, so ticking it
+  // unconditionally re-rendered this whole page once a second for nothing.
+  const mfaCountdownActive = activeAccountNoteForm.twoFactorSecret.trim().length > 0
+
   useEffect(() => {
+    if (!mfaCountdownActive) return
+    setMfaTimeRemaining(getMfaTimeRemaining())
     const timer = window.setInterval(() => setMfaTimeRemaining(getMfaTimeRemaining()), 1000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [mfaCountdownActive])
 
   const [displayGroups, setDisplayGroups] = useState<DisplayGroup[]>([])
   const [displayGroupsLoaded, setDisplayGroupsLoaded] = useState(false)

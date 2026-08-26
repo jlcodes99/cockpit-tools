@@ -1430,12 +1430,20 @@ export function CodexAccountsPage() {
     set: setAccountNoteError,
   } = useModalErrorState();
 
+  // The countdown is only ever rendered next to a live TOTP token, so ticking it
+  // unconditionally re-rendered this whole page once a second for nothing.
+  const mfaCountdownActive =
+    editingAccountNoteForm.twoFactorSecret.trim().length > 0 ||
+    pendingOAuthNoteForm.twoFactorSecret.trim().length > 0;
+
   useEffect(() => {
+    if (!mfaCountdownActive) return;
+    setMfaTimeRemaining(getMfaTimeRemaining());
     const timer = window.setInterval(() => {
       setMfaTimeRemaining(getMfaTimeRemaining());
     }, 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [mfaCountdownActive]);
 
   // Use the common hook WITHOUT oauthService since Codex uses Tauri event-based OAuth
   // Codex batch-delete confirm is wired after confirmCodexDelete is defined.
