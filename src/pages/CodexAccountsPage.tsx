@@ -7330,6 +7330,8 @@ export function CodexAccountsPage() {
     setQuickSwitchError(null);
   }, [quickSwitchSubmitting]);
 
+  useEscClose(Boolean(quickSwitchAccountId), closeQuickSwitchModal);
+
   const openQuickSwitchProviderModal = useCallback(
     (account: CodexAccount) => {
       if (!isCodexApiKeyAccount(account)) return;
