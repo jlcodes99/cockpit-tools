@@ -153,6 +153,8 @@ interface GeneralConfig {
   codex_local_access_entry_visible: boolean;
   codex_hide_relay_quota?: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
+  antigravity_switch_sync_mode: string;
+  antigravity_switch_targets: string[];
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
   auto_switch_credits_enabled: boolean;
@@ -3187,6 +3189,80 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       {t(
                         'settings.general.antigravityDualSwitchNoRestartDesc',
                         '切号时同时执行本地落盘与扩展无感切号，不再自动重启 Antigravity IDE。'
+                      )}
+                    </div>
+
+                    <div className="qs-row">
+                      <div className="qs-row-label">
+                        <span>
+                          {t(
+                            'settings.general.antigravitySwitchSyncMode',
+                            '切号同步范围'
+                          )}
+                        </span>
+                      </div>
+                      <div className="qs-row-control">
+                        <select
+                          className="qs-select"
+                          value={config.antigravity_switch_sync_mode ?? 'active_only'}
+                          onChange={(e) =>
+                            saveConfig({ antigravity_switch_sync_mode: e.target.value })
+                          }
+                        >
+                          <option value="active_only">
+                            {t(
+                              'settings.general.antigravitySwitchSyncModeActiveOnly',
+                              '仅当前选中的产品'
+                            )}
+                          </option>
+                          <option value="all_targets">
+                            {t(
+                              'settings.general.antigravitySwitchSyncModeAllTargets',
+                              '同步所有已启用目标'
+                            )}
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {config.antigravity_switch_sync_mode === 'all_targets' && (
+                      <div className="qs-checkbox-group">
+                        {(['desktop', 'ide', 'cli'] as const).map((target) => {
+                          const enabled = (config.antigravity_switch_targets ?? []).includes(target);
+                          const label =
+                            target === 'desktop'
+                              ? 'Antigravity'
+                              : target === 'ide'
+                                ? 'Antigravity IDE'
+                                : 'agy CLI';
+                          return (
+                            <label key={target} className="qs-checkbox-row">
+                              <input
+                                type="checkbox"
+                                checked={enabled}
+                                onChange={(e) => {
+                                  const current = new Set(config.antigravity_switch_targets ?? []);
+                                  if (e.target.checked) {
+                                    current.add(target);
+                                  } else {
+                                    current.delete(target);
+                                  }
+                                  saveConfig({
+                                    antigravity_switch_targets: Array.from(current),
+                                  });
+                                }}
+                              />
+                              <span>{label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="qs-hint">
+                      {t(
+                        'settings.general.antigravitySwitchTargetsHint',
+                        '未勾选具体目标时：手动「同步所有目标」会检测本机已安装产品；自动切号默认只切首选已安装产品。CLI 在 Windows 上与桌面版共用 gemini:antigravity 系统凭据。'
                       )}
                     </div>
                   </>

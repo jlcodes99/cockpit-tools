@@ -558,6 +558,35 @@ pub async fn switch_account(
 ) -> Result<models::Account, String> {
     let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
     let user_config = modules::config::get_user_config();
+    if user_config.antigravity_switch_sync_mode == "all_targets" {
+        let surfaces = modules::account::resolve_effective_antigravity_switch_surfaces(
+            &user_config.antigravity_switch_targets,
+        );
+        let result = modules::account::switch_account_configured_surfaces(
+            &account_id,
+            &surfaces,
+            "manual",
+            "tools.account.switch",
+            "all_targets",
+            None,
+        )
+        .await;
+        if let Ok(account) = &result {
+            modules::websocket::broadcast_account_switched(&account.id, &account.email);
+            modules::websocket::broadcast_data_changed("switch_account_all_targets");
+        } else if let Err(error) = &result {
+            if error.starts_with("APP_PATH_NOT_FOUND:") {
+                let _ = app.emit(
+                    "app:path_missing",
+                    serde_json::json!({
+                        "app": "antigravity",
+                        "retry": { "kind": "switchAccount", "accountId": account_id }
+                    }),
+                );
+            }
+        }
+        return result;
+    }
     match resolve_antigravity_switch_flow(
         runtime_target,
         user_config.antigravity_launch_on_switch,

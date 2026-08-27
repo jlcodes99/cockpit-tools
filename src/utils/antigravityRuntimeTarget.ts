@@ -41,6 +41,10 @@ export function setAntigravityRuntimeTarget(target: AntigravityRuntimeTarget): v
   );
 }
 
+export function isAntigravitySuitePlatformIds(platformIds: PlatformId[]): boolean {
+  return platformIds.includes('antigravity') && platformIds.includes('antigravity_ide');
+}
+
 export function setAntigravityRuntimeTargetFromPlatform(platformId: PlatformId): void {
   if (!isAntigravityRuntimeTarget(platformId)) {
     return;

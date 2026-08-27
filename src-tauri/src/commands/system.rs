@@ -247,6 +247,10 @@ pub struct GeneralConfig {
     pub top_right_ad_visible: bool,
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
     pub antigravity_dual_switch_no_restart_enabled: bool,
+    /// Antigravity 切号同步模式：active_only | all_targets
+    pub antigravity_switch_sync_mode: String,
+    /// 参与切号同步的产品面：desktop | ide | cli
+    pub antigravity_switch_targets: Vec<String>,
     /// 是否启用自动切号
     pub auto_switch_enabled: bool,
     /// 自动切号阈值（百分比）
@@ -1072,6 +1076,34 @@ fn resolve_antigravity_installed_version_info_quick_for_target(
     )
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AntigravityRuntimeTargetKind {
+    Legacy,
+    Ide,
+}
+
+pub fn is_antigravity_runtime_target_installed(target: AntigravityRuntimeTargetKind) -> bool {
+    let target_str = match target {
+        AntigravityRuntimeTargetKind::Legacy => "antigravity",
+        AntigravityRuntimeTargetKind::Ide => "antigravity_ide",
+    };
+    resolve_antigravity_installed_version_info_quick_for_target(Some(target_str))
+        .or_else(|| resolve_antigravity_installed_version_info_for_target(Some(target_str)))
+        .is_some()
+}
+
+/// Pick the Antigravity runtime that matches what is actually installed.
+pub fn resolve_preferred_antigravity_runtime_target() -> AntigravityRuntimeTargetKind {
+    let legacy = is_antigravity_runtime_target_installed(AntigravityRuntimeTargetKind::Legacy);
+    let ide = is_antigravity_runtime_target_installed(AntigravityRuntimeTargetKind::Ide);
+    match (legacy, ide) {
+        (true, false) => AntigravityRuntimeTargetKind::Legacy,
+        (false, true) => AntigravityRuntimeTargetKind::Ide,
+        (true, true) => AntigravityRuntimeTargetKind::Ide,
+        (false, false) => AntigravityRuntimeTargetKind::Ide,
+    }
+}
+
 fn sanitize_startup_wakeup_delay_seconds(raw: i32) -> i32 {
     raw.clamp(0, MAX_STARTUP_WAKEUP_DELAY_SECONDS)
 }
@@ -1219,6 +1251,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codex_hide_relay_quota"
             | "top_right_ad_visible"
             | "antigravity_dual_switch_no_restart_enabled"
+            | "antigravity_switch_sync_mode"
+            | "antigravity_switch_targets"
             | "auto_switch_enabled"
             | "auto_switch_threshold"
             | "auto_switch_credits_enabled"
@@ -2823,6 +2857,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         top_right_ad_visible: user_config.top_right_ad_visible,
         antigravity_dual_switch_no_restart_enabled: user_config
             .antigravity_dual_switch_no_restart_enabled,
+        antigravity_switch_sync_mode: user_config.antigravity_switch_sync_mode.clone(),
+        antigravity_switch_targets: user_config.antigravity_switch_targets.clone(),
         auto_switch_enabled: user_config.auto_switch_enabled,
         auto_switch_threshold: user_config.auto_switch_threshold,
         auto_switch_credits_enabled: user_config.auto_switch_credits_enabled,
@@ -3208,6 +3244,8 @@ pub fn save_general_config(
     codex_hide_relay_quota: Option<bool>,
     top_right_ad_visible: Option<bool>,
     antigravity_dual_switch_no_restart_enabled: Option<bool>,
+    antigravity_switch_sync_mode: Option<String>,
+    antigravity_switch_targets: Option<Vec<String>>,
     auto_switch_enabled: Option<bool>,
     auto_switch_threshold: Option<i32>,
     auto_switch_credits_enabled: Option<bool>,
@@ -3595,6 +3633,21 @@ pub fn save_general_config(
         }
         if let Some(value) = antigravity_dual_switch_no_restart_enabled {
             current.antigravity_dual_switch_no_restart_enabled = value;
+        }
+        if let Some(value) = antigravity_switch_sync_mode {
+            let normalized = value.trim().to_lowercase();
+            current.antigravity_switch_sync_mode = if normalized == "all_targets" {
+                "all_targets".to_string()
+            } else {
+                "active_only".to_string()
+            };
+        }
+        if let Some(value) = antigravity_switch_targets {
+            current.antigravity_switch_targets = value
+                .into_iter()
+                .map(|item| item.trim().to_lowercase())
+                .filter(|item| matches!(item.as_str(), "desktop" | "ide" | "cli"))
+                .collect();
         }
 
         if let Some(value) = auto_switch_enabled {

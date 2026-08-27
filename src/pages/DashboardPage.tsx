@@ -75,7 +75,6 @@ import {
 import { isDeepSeekAccount } from '../utils/codexDeepSeekAccess';
 import './DashboardPage.css';
 import apiKeyFunIcon from '../assets/icons/apikey-fun.png';
-import { RobotIcon } from '../components/icons/RobotIcon';
 import { CodexIcon } from '../components/icons/CodexIcon';
 import { WindsurfIcon } from '../components/icons/WindsurfIcon';
 import { KiroIcon } from '../components/icons/KiroIcon';
@@ -87,7 +86,10 @@ import { ZcodeIcon } from '../components/icons/ZcodeIcon';
 import { WorkbuddyIcon } from '../components/icons/WorkbuddyIcon';
 import { isAccountPlatform, PlatformId, PLATFORM_PAGE_MAP } from '../types/platform';
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
-import { setAntigravityRuntimeTargetFromPlatform } from '../utils/antigravityRuntimeTarget';
+import {
+  isAntigravitySuitePlatformIds,
+  setAntigravityRuntimeTargetFromPlatform,
+} from '../utils/antigravityRuntimeTarget';
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget';
 import { ManualHelpIconButton } from '../components/ManualHelpIconButton';
 import { AnnouncementCenter } from '../components/AnnouncementCenter';
@@ -2778,8 +2780,8 @@ export function DashboardPage({
         <div className="main-card antigravity-card" key={platformId}>
           <div className="main-card-header">
             <div className="header-title">
-              <RobotIcon className="" style={{ width: 18, height: 18 }} />
-              <h3>{getPlatformLabel(platformId, t)}</h3>
+              {renderPlatformIcon(antigravityRuntimeTarget, 18)}
+              <h3>{getPlatformLabel(antigravityRuntimeTarget, t)}</h3>
             </div>
             <div className="header-action-group">
               <button
@@ -3611,6 +3613,14 @@ export function DashboardPage({
           const label = group
             ? group.name
             : getPlatformLabel(platformId, t);
+          const displayPlatformId =
+            group && isAntigravitySuitePlatformIds(group.platformIds)
+              ? antigravityRuntimeTarget
+              : (group?.iconPlatformId ?? platformId);
+          const navigatePlatformId =
+            group && isAntigravitySuitePlatformIds(group.platformIds)
+              ? antigravityRuntimeTarget
+              : platformId;
           const iconClass =
             platformId === 'antigravity'
               ? 'success'
@@ -3629,7 +3639,7 @@ export function DashboardPage({
             <button
               className="stat-card stat-card-button"
               key={entryId}
-              onClick={() => navigateToPlatform(platformId)}
+              onClick={() => navigateToPlatform(navigatePlatformId)}
               title={
                 groupExtraCount > 0
                   ? `${t('dashboard.switchTo', '切换到此账号')} · ${groupTooltip}`
@@ -3657,7 +3667,7 @@ export function DashboardPage({
                     style={{ width: 24, height: 24 }}
                   />
                 ) : (
-                  renderPlatformIcon(group?.iconPlatformId ?? platformId, 24)
+                  renderPlatformIcon(displayPlatformId, 24)
                 )}
               </div>
               <div className="stat-info">

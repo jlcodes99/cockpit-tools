@@ -1827,20 +1827,25 @@ async fn run_auto_switch_if_needed_inner() -> Result<Option<Account>, String> {
         trigger_context.rule
     ));
 
-    let switched = if cfg.antigravity_dual_switch_no_restart_enabled {
-        switch_account_dual_no_restart(
-            &target.id,
-            "auto",
-            "tools.account.auto_switch",
-            "auto_switch",
-            Some(reason_snapshot),
-        )
-        .await?
-    } else {
-        let switched = switch_account_internal(&target.id).await?;
-        modules::websocket::broadcast_account_switched(&switched.id, &switched.email);
-        switched
-    };
+    let surfaces = resolve_auto_switch_antigravity_surfaces(&cfg.antigravity_switch_targets);
+    modules::logger::log_info(&format!(
+        "[AutoSwitch] 切号目标: {:?}",
+        surfaces
+            .iter()
+            .map(|surface| format!("{:?}", surface))
+            .collect::<Vec<_>>()
+    ));
+
+    let switched = switch_account_configured_surfaces(
+        &target.id,
+        &surfaces,
+        "auto",
+        "tools.account.auto_switch",
+        "auto_switch",
+        Some(reason_snapshot),
+    )
+    .await?;
+    modules::websocket::broadcast_account_switched(&switched.id, &switched.email);
     modules::websocket::broadcast_data_changed("auto_switch");
     Ok(Some(switched))
 }
@@ -2026,6 +2031,209 @@ pub async fn fetch_quota_with_fresh_token(
             Err(err)
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AntigravitySwitchSurface {
+    Desktop,
+    Ide,
+    Cli,
+}
+
+fn dedupe_antigravity_switch_surfaces(
+    surfaces: Vec<AntigravitySwitchSurface>,
+) -> Vec<AntigravitySwitchSurface> {
+    let mut result = Vec::new();
+    for surface in surfaces {
+        if !result.contains(&surface) {
+            result.push(surface);
+        }
+    }
+    result
+}
+
+pub fn resolve_effective_antigravity_switch_surfaces(
+    configured_targets: &[String],
+) -> Vec<AntigravitySwitchSurface> {
+    let parsed = parse_configured_antigravity_switch_surfaces(configured_targets);
+    if !parsed.is_empty() {
+        return parsed;
+    }
+    detect_installed_antigravity_switch_surfaces()
+}
+
+/// Auto-switch prefers a single installed product unless the user explicitly
+/// configured `antigravity_switch_targets`.
+pub fn resolve_auto_switch_antigravity_surfaces(
+    configured_targets: &[String],
+) -> Vec<AntigravitySwitchSurface> {
+    let parsed = parse_configured_antigravity_switch_surfaces(configured_targets);
+    if !parsed.is_empty() {
+        return parsed;
+    }
+
+    match crate::commands::system::resolve_preferred_antigravity_runtime_target() {
+        crate::commands::system::AntigravityRuntimeTargetKind::Legacy => {
+            vec![AntigravitySwitchSurface::Desktop]
+        }
+        crate::commands::system::AntigravityRuntimeTargetKind::Ide => {
+            vec![AntigravitySwitchSurface::Ide]
+        }
+    }
+}
+
+fn parse_configured_antigravity_switch_surfaces(
+    configured_targets: &[String],
+) -> Vec<AntigravitySwitchSurface> {
+    dedupe_antigravity_switch_surfaces(
+        configured_targets
+            .iter()
+            .filter_map(|raw| match raw.trim().to_lowercase().as_str() {
+                "desktop" | "antigravity" | "legacy" => Some(AntigravitySwitchSurface::Desktop),
+                "ide" | "antigravity_ide" => Some(AntigravitySwitchSurface::Ide),
+                "cli" | "agy" | "antigravity_cli" => Some(AntigravitySwitchSurface::Cli),
+                _ => None,
+            })
+            .collect(),
+    )
+}
+
+fn detect_installed_antigravity_switch_surfaces() -> Vec<AntigravitySwitchSurface> {
+    let mut auto = Vec::new();
+    if crate::commands::system::is_antigravity_runtime_target_installed(
+        crate::commands::system::AntigravityRuntimeTargetKind::Legacy,
+    ) {
+        auto.push(AntigravitySwitchSurface::Desktop);
+    }
+    if crate::commands::system::is_antigravity_runtime_target_installed(
+        crate::commands::system::AntigravityRuntimeTargetKind::Ide,
+    ) {
+        auto.push(AntigravitySwitchSurface::Ide);
+    }
+    if auto.is_empty() {
+        auto.push(AntigravitySwitchSurface::Ide);
+    }
+    auto
+}
+
+async fn switch_account_cli_credential_only(account: &Account) -> Result<(), String> {
+    modules::logger::log_info("[Switch][CLI] 写入 agy / 系统凭据");
+    modules::antigravity_credential::write_antigravity_system_credential(account)?;
+    Ok(())
+}
+
+pub async fn switch_account_configured_surfaces(
+    account_id: &str,
+    surfaces: &[AntigravitySwitchSurface],
+    trigger_type: &str,
+    trigger_source: &str,
+    reason: &str,
+    auto_switch_reason: Option<modules::antigravity_switch_history::AntigravityAutoSwitchReason>,
+) -> Result<Account, String> {
+    if surfaces.is_empty() {
+        return Err("未配置 Antigravity 切号目标".to_string());
+    }
+
+    let cfg = modules::config::get_user_config();
+    let mut account = prepare_account_for_injection(account_id).await?;
+    set_current_account_id(account_id)?;
+    account.update_last_used();
+    save_account(&account)?;
+
+    for surface in surfaces {
+        match surface {
+            AntigravitySwitchSurface::Desktop => {
+                switch_account_legacy_internal(account_id).await?;
+            }
+            AntigravitySwitchSurface::Ide => {
+                if cfg.antigravity_dual_switch_no_restart_enabled {
+                    account = switch_account_dual_no_restart(
+                        account_id,
+                        trigger_type,
+                        trigger_source,
+                        reason,
+                        auto_switch_reason.clone(),
+                    )
+                    .await?;
+                } else {
+                    account = switch_account_internal(account_id).await?;
+                }
+            }
+            AntigravitySwitchSurface::Cli => {
+                switch_account_cli_credential_only(&account).await?;
+            }
+        }
+    }
+
+    Ok(account)
+}
+
+/// 内部切换 Antigravity 桌面版账号（供自动切号等内部流程调用）
+pub async fn switch_account_legacy_internal(account_id: &str) -> Result<Account, String> {
+    modules::logger::log_info(&format!(
+        "[Switch][Legacy] 开始切换 Antigravity 桌面版账号: {}",
+        account_id
+    ));
+
+    modules::process::ensure_antigravity_legacy_launch_path_configured()?;
+
+    let mut account = prepare_account_for_injection(account_id).await?;
+    set_current_account_id(account_id)?;
+    account.update_last_used();
+    save_account(&account)?;
+
+    if let Err(e) = modules::antigravity_legacy_instance::update_default_settings(
+        Some(Some(account_id.to_string())),
+        None,
+        Some(false),
+    ) {
+        modules::logger::log_warn(&format!(
+            "[Switch][Legacy] 更新默认实例绑定账号失败: {}",
+            e
+        ));
+    }
+
+    let default_dir = modules::antigravity_legacy_instance::get_default_user_data_dir()?;
+    let cfg = modules::config::get_user_config();
+
+    if !cfg.antigravity_launch_on_switch {
+        modules::logger::log_info(
+            "[Switch][Legacy] 切号后自动启动已关闭，仅写入本地账号数据",
+        );
+        modules::antigravity_legacy_instance::inject_account_to_profile(&default_dir, account_id)?;
+        modules::logger::log_info(&format!(
+            "[Switch][Legacy] 本地切号完成: {}",
+            account.email
+        ));
+        return Ok(account);
+    }
+
+    let default_dir_str = default_dir.to_string_lossy().to_string();
+    modules::process::close_antigravity_legacy_instances(
+        &[default_dir_str.clone()],
+        &default_dir_str,
+        20,
+    )?;
+    let _ = modules::antigravity_legacy_instance::update_default_pid(None);
+    modules::antigravity_legacy_instance::inject_account_to_profile(&default_dir, account_id)?;
+
+    modules::logger::log_info("[Switch][Legacy] 正在启动 Antigravity 默认实例...");
+    let default_settings = modules::antigravity_legacy_instance::load_default_settings()?;
+    let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
+    match modules::process::start_antigravity_legacy_with_args("", &extra_args) {
+        Ok(pid) => {
+            let _ = modules::antigravity_legacy_instance::update_default_pid(Some(pid));
+        }
+        Err(e) => {
+            modules::logger::log_warn(&format!("[Switch][Legacy] Antigravity 启动失败: {}", e));
+        }
+    }
+
+    modules::logger::log_info(&format!(
+        "[Switch][Legacy] 账号切换完成: {}",
+        account.email
+    ));
+    Ok(account)
 }
 
 /// 内部切换账号函数（供 WebSocket 调用）

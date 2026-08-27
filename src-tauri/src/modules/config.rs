@@ -415,6 +415,12 @@ pub struct UserConfig {
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
     #[serde(default = "default_antigravity_dual_switch_no_restart_enabled")]
     pub antigravity_dual_switch_no_restart_enabled: bool,
+    /// Antigravity 切号同步模式：active_only=仅当前选中产品 | all_targets=同步所有已启用目标
+    #[serde(default = "default_antigravity_switch_sync_mode")]
+    pub antigravity_switch_sync_mode: String,
+    /// 参与切号同步的产品面：desktop | ide | cli（空数组=自动检测已安装产品）
+    #[serde(default = "default_antigravity_switch_targets")]
+    pub antigravity_switch_targets: Vec<String>,
     /// 是否启用自动切号
     #[serde(default = "default_auto_switch_enabled")]
     pub auto_switch_enabled: bool,
@@ -1028,6 +1034,12 @@ fn default_top_right_ad_visible() -> bool {
 fn default_antigravity_dual_switch_no_restart_enabled() -> bool {
     false
 }
+fn default_antigravity_switch_sync_mode() -> String {
+    "active_only".to_string()
+}
+fn default_antigravity_switch_targets() -> Vec<String> {
+    Vec::new()
+}
 fn default_auto_switch_enabled() -> bool {
     false
 }
@@ -1298,6 +1310,8 @@ impl Default for UserConfig {
             top_right_ad_visible: default_top_right_ad_visible(),
             antigravity_dual_switch_no_restart_enabled:
                 default_antigravity_dual_switch_no_restart_enabled(),
+            antigravity_switch_sync_mode: default_antigravity_switch_sync_mode(),
+            antigravity_switch_targets: default_antigravity_switch_targets(),
             auto_switch_enabled: default_auto_switch_enabled(),
             auto_switch_threshold: default_auto_switch_threshold(),
             auto_switch_credits_enabled: default_auto_switch_credits_enabled(),
