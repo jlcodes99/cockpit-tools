@@ -1123,6 +1123,8 @@ fn account_has_refresh_token(account: &CodexAccount) -> bool {
 
 fn managed_account_tokens_need_refresh(account: &CodexAccount) -> bool {
     // app-server 使用 access_token 作为请求登录态；id_token 仅用于账号资料元数据。
+    // 刷新响应可能不返回 id_token，若把 id_token 过期当作强制刷新条件，会反复轮换
+    // refresh_token，最终在 access_token 仍健康时把账号刷失效。
     codex_oauth::is_token_expired(&account.tokens.access_token)
 }
 
@@ -3618,12 +3620,13 @@ mod tests {
         ensure_managed_account_fresh, extract_codex_import_candidate_from_value,
         extract_codex_tokens_from_value, force_refresh_managed_account, get_accounts_dir,
         get_accounts_storage_path, get_current_account, list_accounts_checked, load_account,
-        load_account_index, looks_like_sub2api_export, merge_existing_auth_file_value,
-        read_api_provider_from_config_toml, read_quick_config_from_config_toml,
-        resolve_api_provider_config, save_account, save_account_index, sync_account_from_auth_dir,
-        sync_api_key_account_from_local_state, sync_managed_projection_from_auth_dir,
-        upsert_account, upsert_account_for_reauth, upsert_account_from_access_token,
-        upsert_account_from_auth_tokens, validate_api_key_credentials, write_account_bundle_to_dir,
+        load_account_index, looks_like_sub2api_export, managed_account_tokens_need_refresh,
+        merge_existing_auth_file_value, read_api_provider_from_config_toml,
+        read_quick_config_from_config_toml, resolve_api_provider_config, save_account,
+        save_account_index, sync_account_from_auth_dir, sync_api_key_account_from_local_state,
+        sync_managed_projection_from_auth_dir, upsert_account, upsert_account_for_reauth,
+        upsert_account_from_access_token, upsert_account_from_auth_tokens,
+        validate_api_key_credentials, write_account_bundle_to_dir,
         write_api_key_provider_to_config_toml, write_api_provider_to_config_toml,
         write_auth_file_to_dir, write_quick_config_to_config_toml, ApiProviderConfig,
         CodexAccountIndex, CodexAccountSummary, CodexAuthFile, CodexAuthTokens,
@@ -3775,6 +3778,92 @@ mod tests {
             access_token,
             refresh_token: Some(refresh_token.to_string()),
         }
+    }
+
+    fn now_timestamp() -> i64 {
+        chrono::Utc::now().timestamp()
+    }
+
+    fn make_fresh_access_token(suffix: &str, account_id: &str, organization_id: &str) -> String {
+        make_jwt(serde_json::json!({
+            "exp": now_timestamp() + 3600,
+            "sub": format!("access-{}", suffix),
+            "https://api.openai.com/auth": {
+                "chatgpt_account_id": account_id,
+                "organization_id": organization_id,
+            }
+        }))
+    }
+
+    #[test]
+    fn expired_id_token_does_not_force_refresh_when_access_token_is_fresh() {
+        let mut account = CodexAccount::new(
+            "codex_expired_id_token".to_string(),
+            "expired-id@example.com".to_string(),
+            make_codex_tokens(
+                "expired-id@example.com",
+                "acc-expired-id",
+                "org-expired-id",
+                "expired-id",
+                "rt-expired-id",
+            ),
+        );
+        account.tokens.id_token = make_jwt(serde_json::json!({ "exp": 1i64 }));
+        account.tokens.access_token = make_fresh_access_token(
+            "expired-id",
+            "acc-expired-id",
+            "org-expired-id",
+        );
+
+        assert!(!managed_account_tokens_need_refresh(&account));
+    }
+
+    #[test]
+    fn id_token_within_refresh_lead_does_not_force_refresh_when_access_token_is_fresh() {
+        let mut account = CodexAccount::new(
+            "codex_id_token_refresh_lead".to_string(),
+            "id-token-lead@example.com".to_string(),
+            make_codex_tokens(
+                "id-token-lead@example.com",
+                "acc-id-token-lead",
+                "org-id-token-lead",
+                "id-token-lead",
+                "rt-id-token-lead",
+            ),
+        );
+        account.tokens.id_token = make_jwt(serde_json::json!({
+            "exp": now_timestamp() + crate::modules::codex_oauth::ID_TOKEN_REFRESH_LEAD_SECONDS - 30,
+        }));
+        account.tokens.access_token = make_fresh_access_token(
+            "id-token-lead",
+            "acc-id-token-lead",
+            "org-id-token-lead",
+        );
+
+        assert!(!managed_account_tokens_need_refresh(&account));
+    }
+
+    #[test]
+    fn unparsable_id_token_does_not_force_refresh_when_access_token_is_fresh() {
+        let mut account = CodexAccount::new(
+            "codex_unparsable_id_token".to_string(),
+            "unparsable-id@example.com".to_string(),
+            make_codex_tokens(
+                "unparsable-id@example.com",
+                "acc-unparsable-id",
+                "org-unparsable-id",
+                "unparsable-id",
+                "rt-unparsable-id",
+            ),
+        );
+        account.tokens.id_token = "not-a-jwt".to_string();
+        account.tokens.access_token = make_fresh_access_token(
+            "unparsable-id",
+            "acc-unparsable-id",
+            "org-unparsable-id",
+        );
+
+        assert!(!managed_account_tokens_need_refresh(&account));
     }
 
     fn seed_oauth_account(tokens: CodexTokens) -> CodexAccount {
