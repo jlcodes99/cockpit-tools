@@ -12829,7 +12829,8 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     );
     config.insert("ws-auth".to_string(), json!(true));
     config.insert("disable-auth-auto-refresh".to_string(), json!(true));
-    // 不写 disable-image-generation：默认允许生图（绑定 OAuth 与改前一致；纯 API Key 也靠正常注入/上游能力）。
+    // 普通文本接口默认移除图片工具声明，同时保留 /v1/images/* 图片接口。
+    config.insert("disable-image-generation".to_string(), json!("chat"));
     config.insert(
         "request-retry".to_string(),
         json!(MAX_REQUEST_RETRY_ATTEMPTS as i32),
@@ -35727,6 +35728,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         .expect("parse sidecar config");
 
         assert_eq!(config.get("disable-auth-auto-refresh"), Some(&json!(true)));
+        assert_eq!(config.get("disable-image-generation"), Some(&json!("chat")));
 
         fs::remove_dir_all(&dir).expect("cleanup temp dir");
     }
@@ -35754,10 +35756,11 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         )
         .await
         .expect("sidecar config should build");
-        let _config: Value = serde_json::from_str(
+        let config: Value = serde_json::from_str(
             &fs::read_to_string(&launch_config.config_path).expect("read sidecar config"),
         )
         .expect("parse sidecar config");
+        assert_eq!(config.get("disable-image-generation"), Some(&json!("chat")));
 
         fs::remove_dir_all(&dir).expect("cleanup temp dir");
     }
