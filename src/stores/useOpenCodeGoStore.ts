@@ -17,7 +17,7 @@ interface OpenCodeGoState {
   setConnectionEnabled(connectionId: string, enabled: boolean): Promise<void>;
   deleteConnection(connectionId: string): Promise<void>;
   testConnection(connectionId: string): Promise<void>;
-  refreshConnection(connectionId: string): Promise<void>; 
+  refreshConnection(connectionId: string): Promise<void>;
   refreshAll(): Promise<void>;
 }
 

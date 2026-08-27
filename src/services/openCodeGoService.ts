@@ -119,7 +119,7 @@ export interface OpenCodeGoConnectionService {
   setConnectionEnabled(connectionId: string, enabled: boolean): Promise<OpenCodeGoConnection>;
   deleteConnection(connectionId: string): Promise<void>;
   testConnection(connectionId: string): Promise<void>;
-  queryQuota(connectionId: string): Promise<OpenCodeGoQuotaQueryResult>; 
+  queryQuota(connectionId: string): Promise<OpenCodeGoQuotaQueryResult>;
   queryAllQuotas(): Promise<OpenCodeGoConnection[]>;
 }
 
