@@ -287,7 +287,7 @@ export function CodexSessionUsagePanel({
   const { t, i18n } = useTranslation();
   const lang = i18n.resolvedLanguage || i18n.language || 'zh-CN';
   const isZh = lang.toLowerCase().startsWith('zh');
-  const [range, setRange] = useState<UsageRange>('30d');
+  const [range, setRange] = useState<UsageRange>('today');
   const [instanceId, setInstanceId] = useState('');
   const [report, setReport] = useState<CodexSessionUsageReport | null>(null);
   const [loading, setLoading] = useState(true);

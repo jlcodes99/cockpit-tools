@@ -6,7 +6,7 @@
 //!
 //! 数据与官方配额、API 服务 `request_logs` 完全隔离，打开用量面板时才扫描。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -149,7 +149,7 @@ struct TokenUsageSignature {
     last: Option<TokenCountersSignature>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct TimestampedTokenSignature {
     timestamp: DateTime<Utc>,
     signature: TokenUsageSignature,
@@ -541,21 +541,53 @@ fn is_rollout_path(path: &Path) -> bool {
         .is_some_and(is_rollout_filename)
 }
 
+/// 判断文件名是否包含可识别的 Codex rollout 会话 ID。
 fn is_rollout_filename(file_name: &str) -> bool {
     if !file_name.starts_with("rollout-") || !file_name.ends_with(".jsonl") {
         return false;
     }
-    let stem = file_name.trim_end_matches(".jsonl");
-    stem.get(stem.len().saturating_sub(36)..)
-        .is_some_and(|candidate| uuid::Uuid::parse_str(candidate).is_ok())
+    !rollout_ids_from_filename(file_name).is_empty()
 }
 
+/// 从 rollout 文件名中提取根会话 ID，兼容“根会话 ID_分片 ID”格式。
 fn thread_id_from_filename(path: &Path) -> Option<String> {
-    let stem = path.file_stem()?.to_str()?;
-    let candidate = stem.get(stem.len().checked_sub(36)?..)?;
-    uuid::Uuid::parse_str(candidate)
-        .ok()
-        .map(|value| value.hyphenated().to_string())
+    let file_name = path.file_name()?.to_str()?;
+    rollout_ids_from_filename(file_name).into_iter().next()
+}
+
+/// 从 rollout 文件名中提取用于区分分片的末尾 ID。
+fn rollout_scope_id_from_filename(path: &Path) -> Option<String> {
+    let file_name = path.file_name()?.to_str()?;
+    rollout_ids_from_filename(file_name).into_iter().next_back()
+}
+
+/// 按文件名中的出现顺序提取全部 UUID，避免把新版分片 ID 误认为根会话 ID。
+fn rollout_ids_from_filename(file_name: &str) -> Vec<String> {
+    let Some(stem) = file_name
+        .strip_prefix("rollout-")
+        .and_then(|value| value.strip_suffix(".jsonl"))
+    else {
+        return Vec::new();
+    };
+    let bytes = stem.as_bytes();
+    let mut ids = Vec::new();
+    let mut start = 0usize;
+    while start.saturating_add(36) <= bytes.len() {
+        let end = start + 36;
+        let separated_before = start == 0 || matches!(bytes[start - 1], b'-' | b'_');
+        let separated_after = end == bytes.len() || bytes[end] == b'_';
+        if separated_before && separated_after {
+            if let Ok(candidate) = std::str::from_utf8(&bytes[start..end]) {
+                if let Ok(value) = uuid::Uuid::parse_str(candidate) {
+                    ids.push(value.hyphenated().to_string());
+                    start = end;
+                    continue;
+                }
+            }
+        }
+        start += 1;
+    }
+    ids
 }
 
 type RolloutIndex = HashMap<String, Vec<PathBuf>>;
@@ -625,6 +657,7 @@ fn inherit_archived_cursor(
         .map(|(offset, modified, size)| (modified, size, offset))
 }
 
+/// 同步单个 rollout 文件，并按根会话与文件分片生成稳定且唯一的请求记录。
 fn sync_single_file(
     conn: &mut Connection,
     instance: &UsageInstance,
@@ -767,6 +800,8 @@ fn sync_single_file(
         caches.pending.remove(file_path);
     }
 
+    let rollout_scope_id =
+        rollout_scope_id_from_filename(file_path).unwrap_or_else(|| root_thread_id.to_string());
     let mut to_insert = Vec::new();
     let mut result = FileSyncResult::default();
     for (token_offset, event) in parsed.token_events.iter().enumerate() {
@@ -800,7 +835,13 @@ fn sync_single_file(
                 .map_err(|error| format!("准备会话用量写入失败: {error}"))?;
             for chunk in to_insert.chunks(INSERT_BATCH_SIZE) {
                 for (event, event_index) in chunk {
-                    let request_id = format!("{REQUEST_ID_PREFIX}:{root_thread_id}:{event_index}");
+                    let request_id = if rollout_scope_id == root_thread_id {
+                        format!("{REQUEST_ID_PREFIX}:{root_thread_id}:{event_index}")
+                    } else {
+                        format!(
+                            "{REQUEST_ID_PREFIX}:{root_thread_id}:{rollout_scope_id}:{event_index}"
+                        )
+                    };
                     let changed = statement
                         .execute(params![
                             request_id,
@@ -1127,6 +1168,7 @@ fn explicit_parent_from_meta(payload: &JsonValue) -> Result<Option<String>, Stri
         .map_err(|_| format!("显式 parent_thread_id 不是有效 UUID: {parent}"))
 }
 
+/// 合并父会话的全部 rollout 分片，生成分叉时刻之前的有序用量快照。
 fn resolve_parent_signatures(
     parent_id: &str,
     cutoff: DateTime<Utc>,
@@ -1135,25 +1177,30 @@ fn resolve_parent_signatures(
     let Some(candidates) = rollout_index.get(parent_id) else {
         return Err(format!("找不到父 rollout: {parent_id}"));
     };
-    let mut snapshots = Vec::with_capacity(candidates.len());
+    let mut parent_events = Vec::new();
+    let mut has_any_token_event = false;
     for candidate in candidates {
-        snapshots.push(parent_signatures_before(candidate, cutoff)?);
+        let (events, has_token_event) = parent_events_before(candidate, cutoff)?;
+        has_any_token_event |= has_token_event;
+        parent_events.extend(events);
     }
-    let Some(first) = snapshots.first() else {
-        return Err(format!("找不到父 rollout: {parent_id}"));
-    };
-    if snapshots.iter().skip(1).any(|snapshot| snapshot != first) {
-        return Err(format!(
-            "父 rollout UUID {parent_id} 对应多个内容不一致的文件"
-        ));
+    if !has_any_token_event {
+        return Err(format!("父 rollout UUID {parent_id} 尚无可用 token_count"));
     }
-    Ok(first.clone())
+    parent_events.sort_by_key(|event| event.timestamp);
+    let mut seen_events = HashSet::new();
+    parent_events.retain(|event| seen_events.insert(event.clone()));
+    Ok(parent_events
+        .into_iter()
+        .map(|event| event.signature)
+        .collect())
 }
 
-fn parent_signatures_before(
+/// 读取单个父 rollout 分片在分叉时刻前的用量快照。
+fn parent_events_before(
     parent_path: &Path,
     cutoff: DateTime<Utc>,
-) -> Result<Vec<TokenUsageSignature>, String> {
+) -> Result<(Vec<TimestampedTokenSignature>, bool), String> {
     let metadata = fs::metadata(parent_path)
         .map_err(|error| format!("无法读取父 rollout {}: {error}", parent_path.display()))?;
     let stamp = ParentFileStamp {
@@ -1166,7 +1213,7 @@ fn parent_signatures_before(
             .get(parent_path)
             .filter(|entry| entry.stamp == stamp)
         {
-            return signatures_before(&cached.timeline, parent_path, cutoff);
+            return events_before(&cached.timeline, parent_path, cutoff);
         }
     }
 
@@ -1215,7 +1262,7 @@ fn parent_signatures_before(
         events,
         has_token_without_timestamp,
     };
-    let result = signatures_before(&timeline, parent_path, cutoff);
+    let result = events_before(&timeline, parent_path, cutoff);
     if let Ok(mut caches) = replay_caches().lock() {
         caches.parent_timelines.insert(
             parent_path.to_path_buf(),
@@ -1225,29 +1272,27 @@ fn parent_signatures_before(
     result
 }
 
-fn signatures_before(
+/// 筛选父 rollout 在分叉时刻前的事件，并保留父分片是否包含用量事件的信息。
+fn events_before(
     timeline: &ParentTokenTimeline,
     parent_path: &Path,
     cutoff: DateTime<Utc>,
-) -> Result<Vec<TokenUsageSignature>, String> {
+) -> Result<(Vec<TimestampedTokenSignature>, bool), String> {
     if timeline.has_token_without_timestamp {
         return Err(format!(
             "父 rollout {} 的 token_count 缺少有效 timestamp",
             parent_path.display()
         ));
     }
-    if timeline.events.is_empty() {
-        return Err(format!(
-            "父 rollout {} 尚无可用 token_count",
-            parent_path.display()
-        ));
-    }
-    Ok(timeline
-        .events
-        .iter()
-        .filter(|event| event.timestamp <= cutoff)
-        .map(|event| event.signature.clone())
-        .collect())
+    Ok((
+        timeline
+            .events
+            .iter()
+            .filter(|event| event.timestamp <= cutoff)
+            .cloned()
+            .collect(),
+        !timeline.events.is_empty(),
+    ))
 }
 
 fn matching_replay_prefix(child: &[ParsedTokenEvent], parent: &[TokenUsageSignature]) -> usize {
@@ -1652,6 +1697,7 @@ mod tests {
 
     const PARENT_ID: &str = "00000000-0000-4000-8000-000000000001";
     const CHILD_ID: &str = "00000000-0000-4000-8000-000000000002";
+    const SHARD_ID: &str = "00000000-0000-4000-8000-000000000003";
 
     fn write_jsonl(path: &Path, values: &[JsonValue]) {
         if let Some(parent) = path.parent() {
@@ -1933,6 +1979,70 @@ mod tests {
         assert_eq!(report.totals.request_count, 2);
         assert_eq!(report.by_model.len(), 1);
         assert_eq!(report.by_model[0].key, "gpt-5.4");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 验证同一根会话拆成多个 rollout 文件后仍可准确导入并排除分叉重放用量。
+    #[test]
+    fn rollout_shards_use_root_thread_id_and_unique_request_scope() {
+        let dir = make_temp_dir("codex-usage-rollout-shards");
+        let db_path = dir.join("usage.sqlite");
+        let home = dir.join("home");
+        let sessions = home.join("sessions").join("2026").join("07").join("10");
+        let parent = sessions.join(format!("rollout-2026-07-10T03-00-00-{PARENT_ID}.jsonl"));
+        let parent_shard = sessions.join(format!(
+            "rollout-2026-07-10T03-05-00-{PARENT_ID}_{SHARD_ID}.jsonl"
+        ));
+        let child = sessions.join(format!("rollout-2026-07-10T03-10-00-{CHILD_ID}.jsonl"));
+        write_jsonl(
+            &parent,
+            &[
+                session_meta(PARENT_ID),
+                turn_context("gpt-5.4"),
+                token_count_with_last(1_000, 0, 20, 1_000, 0, 20, "codex", "2026-07-10T03:00:02Z"),
+            ],
+        );
+        write_jsonl(
+            &parent_shard,
+            &[
+                session_meta_at(PARENT_ID, None, "2026-07-10T03:05:00Z"),
+                turn_context("gpt-5.4"),
+                token_count_with_last(1_400, 0, 35, 400, 0, 15, "codex", "2026-07-10T03:05:02Z"),
+            ],
+        );
+        write_jsonl(
+            &child,
+            &[
+                session_meta_at(CHILD_ID, Some(PARENT_ID), "2026-07-10T03:10:00Z"),
+                turn_context("gpt-5.4"),
+                token_count_with_last(1_000, 0, 20, 1_000, 0, 20, "codex", "2026-07-10T03:00:02Z"),
+                token_count_with_last(1_400, 0, 35, 400, 0, 15, "codex", "2026-07-10T03:05:02Z"),
+                token_count_with_last(1_600, 0, 40, 200, 0, 5, "codex", "2026-07-10T03:10:05Z"),
+            ],
+        );
+
+        assert_eq!(
+            thread_id_from_filename(&parent_shard).as_deref(),
+            Some(PARENT_ID)
+        );
+        assert_eq!(
+            rollout_scope_id_from_filename(&parent_shard).as_deref(),
+            Some(SHARD_ID)
+        );
+
+        let store = SessionUsageStore::open_path(db_path);
+        let instances = vec![UsageInstance {
+            id: DEFAULT_INSTANCE_ID.to_string(),
+            name: DEFAULT_INSTANCE_NAME.to_string(),
+            data_dir: home,
+        }];
+        let sync = store.sync(false, &instances).unwrap();
+        assert_eq!(sync.deferred_files, 0);
+        assert_eq!(sync.imported, 3);
+        let report = store.query(&CodexSessionUsageQuery::default()).unwrap();
+        assert_eq!(report.totals.input_tokens, 1_600);
+        assert_eq!(report.totals.output_tokens, 40);
+        assert_eq!(report.totals.request_count, 3);
         fs::remove_dir_all(&dir).ok();
     }
 
