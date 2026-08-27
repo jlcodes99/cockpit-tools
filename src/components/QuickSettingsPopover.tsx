@@ -73,6 +73,11 @@ import { CodexSshSyncSettingsControl } from './codex/CodexSshSyncSettingsControl
 import { getCodexExperimentalModelErrorMessage } from '../utils/codexExperimentalModel';
 import { CodexExperimentalModelEditor } from './codex/CodexExperimentalModelEditor';
 import { CodexOAuthPolicyModal } from './codex/CodexOAuthPolicyModal';
+import { CodexRefreshPlanScopeSelector } from './CodexRefreshPlanScopeSelector';
+import {
+  buildCodexAutoRefreshPlanOptions,
+  sanitizeCodexAutoRefreshPlanKeys,
+} from '../utils/codexAutoRefreshPlanScope';
 import './QuickSettingsPopover.css';
 
 /** GeneralConfig from backend */
@@ -82,6 +87,7 @@ interface GeneralConfig {
   ui_scale: number;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_auto_refresh_plan_types: string[];
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_app_ui_injection_enabled?: boolean;
@@ -473,6 +479,11 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const codexQuickConfigSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const codexQuickConfigSaveVersionRef = useRef(0);
   const refreshPresets = ['-1', '2', '5', '10', '15'];
+
+  const codexAutoRefreshPlanOptions = useMemo(
+    () => buildCodexAutoRefreshPlanOptions(codexAccounts.filter(isStandardCodexOAuthAccount)),
+    [codexAccounts],
+  );
   const thresholdPresets = ['0', '20', '40', '60'];
   const creditsThresholdPresets = ['0', '5', '10', '20'];
   const antigravityScopeTypeOptions = useMemo(
@@ -2295,6 +2306,33 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 )}
               </div>
             </div>
+
+            {type === 'codex' && (
+              <div className="qs-section">
+                <div className="qs-section-header">
+                  <Settings size={15} />
+                  <span>{t('settings.general.codexAutoRefreshPlans', 'Auto-refresh plans')}</span>
+                </div>
+                <div className="qs-field-group">
+                  <CodexRefreshPlanScopeSelector
+                    options={codexAutoRefreshPlanOptions}
+                    selectedKeys={sanitizeCodexAutoRefreshPlanKeys(
+                      config.codex_auto_refresh_plan_types,
+                    )}
+                    onChange={(nextKeys) => {
+                      void saveConfig({ codex_auto_refresh_plan_types: nextKeys });
+                    }}
+                    variant="quick"
+                  />
+                  <div className="qs-hint">
+                    {t(
+                      'settings.general.codexAutoRefreshPlansDesc',
+                      'Only limits background quota auto-refresh. Token keep-alive, manual refresh, and current-account refresh are unaffected.',
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="qs-section">
               <div className="qs-section-header">

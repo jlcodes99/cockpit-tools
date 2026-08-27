@@ -1,0 +1,253 @@
+.codex-plan-scope {
+  --plan-scope-bg: var(--bg-secondary);
+  --plan-scope-surface: var(--bg-tertiary);
+  --plan-scope-hover: var(--bg-hover);
+  --plan-scope-border: var(--border);
+  --plan-scope-border-soft: var(--border-light);
+  --plan-scope-text: var(--text-primary);
+  --plan-scope-text-secondary: var(--text-secondary);
+  --plan-scope-text-muted: var(--text-muted);
+  --plan-scope-accent: var(--primary);
+  --plan-scope-accent-soft: var(--primary-light);
+
+  position: relative;
+  width: 220px;
+  font-family: var(--font-sans), 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif;
+}
+
+.codex-plan-scope-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid var(--plan-scope-border);
+  border-radius: var(--radius-sm);
+  background: var(--plan-scope-surface);
+  color: var(--plan-scope-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.codex-plan-scope-trigger:hover,
+.codex-plan-scope-trigger.is-open {
+  border-color: var(--plan-scope-accent);
+  background: var(--plan-scope-hover);
+}
+
+.codex-plan-scope-trigger:active {
+  background: var(--plan-scope-accent-soft);
+}
+
+.codex-plan-scope-trigger:focus-visible {
+  outline: 2px solid var(--plan-scope-accent);
+  outline-offset: 2px;
+}
+
+.codex-plan-scope-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.codex-plan-scope-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-plan-scope-trigger svg {
+  flex-shrink: 0;
+  color: var(--plan-scope-text-secondary);
+  transition: transform 160ms ease;
+}
+
+.codex-plan-scope-trigger.is-open svg {
+  transform: rotate(180deg);
+}
+
+.codex-plan-scope--quick {
+  width: 100%;
+}
+
+.codex-plan-scope--quick .codex-plan-scope-trigger {
+  min-height: 32px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  font-weight: 500;
+}
+
+.codex-plan-scope--quick .codex-plan-scope-trigger:hover {
+  border-color: var(--border-light);
+}
+
+.codex-plan-scope--quick .codex-plan-scope-trigger.is-open,
+.codex-plan-scope--quick .codex-plan-scope-trigger:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+  outline: none;
+}
+
+.codex-plan-scope-menu {
+  position: absolute;
+  z-index: 120;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 300px;
+  max-height: min(420px, calc(100vh - 32px));
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--plan-scope-border);
+  border-radius: var(--radius-md);
+  background: var(--plan-scope-bg);
+  box-shadow: var(--shadow-md);
+  animation: codexPlanScopeMenuIn 140ms ease-out both;
+}
+
+.codex-plan-scope--quick .codex-plan-scope-menu {
+  right: auto;
+  left: 0;
+  width: 100%;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.codex-plan-scope-menu:focus-within {
+  border-color: var(--plan-scope-accent);
+}
+
+.codex-plan-scope-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--plan-scope-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 150ms ease;
+}
+
+.codex-plan-scope-option:hover,
+.codex-plan-scope-option:active,
+.codex-plan-scope-option.is-selected:hover {
+  background: var(--plan-scope-hover);
+}
+
+.codex-plan-scope-option:focus-visible {
+  outline: 2px solid var(--plan-scope-accent);
+  outline-offset: -2px;
+}
+
+.codex-plan-scope-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.codex-plan-scope-option-all {
+  font-weight: 600;
+}
+
+.codex-plan-scope-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--plan-scope-border);
+  border-radius: 5px;
+  background: var(--plan-scope-bg);
+  color: var(--plan-scope-bg);
+}
+
+.codex-plan-scope-checkbox.is-checked {
+  border-color: var(--plan-scope-accent);
+  background: var(--plan-scope-accent);
+}
+
+.codex-plan-scope-option-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.codex-plan-scope-count {
+  margin-left: auto;
+  color: var(--plan-scope-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.codex-plan-scope-separator {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--plan-scope-border-soft);
+}
+
+@keyframes codexPlanScopeMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 600px) {
+  .codex-plan-scope {
+    width: 100%;
+  }
+
+  .codex-plan-scope-menu {
+    right: auto;
+    left: 0;
+    width: 100%;
+  }
+
+  .codex-plan-scope-option {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-plan-scope-menu,
+  .codex-plan-scope-trigger,
+  .codex-plan-scope-trigger svg,
+  .codex-plan-scope-option {
+    animation: none;
+    transition: none;
+  }
+}
+
+html[data-reduced-motion='true'] .codex-plan-scope-menu,
+html[data-reduced-motion='true'] .codex-plan-scope-trigger,
+html[data-reduced-motion='true'] .codex-plan-scope-trigger svg,
+html[data-reduced-motion='true'] .codex-plan-scope-option {
+  animation: none;
+  transition: none;
+}

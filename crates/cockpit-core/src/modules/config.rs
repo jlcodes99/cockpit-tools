@@ -89,6 +89,9 @@ pub struct UserConfig {
     /// Codex 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_codex_auto_refresh")]
     pub codex_auto_refresh_minutes: i32,
+    /// Codex 后台自动刷新额度的套餐分类；空数组表示全部禁用
+    #[serde(default = "default_codex_auto_refresh_plan_types")]
+    pub codex_auto_refresh_plan_types: Vec<String>,
     /// Codex 切号时是否同步覆盖 WSL 配置 (Windows Only)
     #[serde(default = "default_codex_sync_wsl")]
     pub codex_sync_wsl: bool,
@@ -485,6 +488,22 @@ fn default_auto_refresh() -> i32 {
 fn default_codex_auto_refresh() -> i32 {
     10
 } // 默认 10 分钟
+fn default_codex_auto_refresh_plan_types() -> Vec<String> {
+    [
+        "free",
+        "go",
+        "plus",
+        "pro",
+        "team",
+        "business",
+        "enterprise",
+        "edu_k12",
+        "unknown",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
 fn default_codex_sync_wsl() -> bool {
     false
 }
@@ -793,6 +812,7 @@ impl Default for UserConfig {
             ui_scale: default_ui_scale(),
             auto_refresh_minutes: default_auto_refresh(),
             codex_auto_refresh_minutes: default_codex_auto_refresh(),
+            codex_auto_refresh_plan_types: default_codex_auto_refresh_plan_types(),
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
@@ -1819,6 +1839,30 @@ mod tests {
     use std::sync::{Arc, Barrier, RwLock};
     use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn codex_auto_refresh_plan_types_are_backward_compatible() {
+        let legacy: UserConfig =
+            serde_json::from_value(serde_json::json!({})).expect("旧配置反序列化应成功");
+        assert_eq!(
+            legacy.codex_auto_refresh_plan_types,
+            super::default_codex_auto_refresh_plan_types()
+        );
+
+        let disabled: UserConfig = serde_json::from_value(serde_json::json!({
+            "codex_auto_refresh_plan_types": []
+        }))
+        .expect("空套餐范围反序列化应成功");
+        assert!(disabled.codex_auto_refresh_plan_types.is_empty());
+
+        let mut selected = UserConfig::default();
+        selected.codex_auto_refresh_plan_types = vec!["plus".to_string(), "pro".to_string()];
+        let round_trip: UserConfig = serde_json::from_value(
+            serde_json::to_value(&selected).expect("配置序列化应成功"),
+        )
+        .expect("配置往返反序列化应成功");
+        assert_eq!(round_trip.codex_auto_refresh_plan_types, ["plus", "pro"]);
+    }
 
     fn make_temp_dir(prefix: &str) -> std::path::PathBuf {
         let unique = SystemTime::now()
