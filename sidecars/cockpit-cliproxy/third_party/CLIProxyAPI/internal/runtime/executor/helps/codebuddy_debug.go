@@ -22,8 +22,11 @@ const codebuddyDebugBodyEnv = "CODEBUDDY_DEBUG_BODY"
 const codebuddyDebugBodyDirEnv = "CODEBUDDY_DEBUG_BODY_DIR"
 
 // codebuddyDebugBodyMaxLen caps the redacted dump length so a single request with
-// large payloads (e.g. images) cannot flood the log stream.
-const codebuddyDebugBodyMaxLen = 16384
+// large payloads (e.g. images) cannot flood the log stream. The value is large
+// enough to capture the full tools array and complete messages (Cursor sends 40+
+// tool definitions) so the exact invalid parameter behind 11133 can be inspected;
+// inline image base64 is already truncated separately by codebuddyDebugImageDataRe.
+const codebuddyDebugBodyMaxLen = 300000
 
 var (
 	// codebuddyDebugAccessTokenRe masks access_token / refresh_token values.

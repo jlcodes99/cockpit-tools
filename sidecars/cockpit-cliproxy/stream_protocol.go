@@ -149,6 +149,12 @@ func relayContext(c *gin.Context) context.Context {
 	if c == nil || c.Request == nil {
 		return context.Background()
 	}
+	// Attach the vision sub-agent holder to the request context so the
+	// downstream executor's SetVisionSubagent and the request-completed
+	// diagnostic's GetVisionSubagent observe the same holder instance. Without
+	// this, both sides would hold distinct (or missing) holders and the
+	// request_completed event's visionSubagent flag would always be false.
+	c.Request = c.Request.WithContext(internallogging.WithVisionSubagentHolder(c.Request.Context()))
 	endpoint := c.Request.Method
 	if c.Request.URL != nil {
 		endpoint += " " + c.Request.URL.Path

@@ -372,9 +372,9 @@ export function CodebuddyApiServicePage() {
     totals && totals.requestCount > 0
       ? Math.round((totals.successCount / totals.requestCount) * 1000) / 10
       : 0;
-  const avgLatency =
+  const avgLatencySec =
     totals && totals.requestCount > 0
-      ? Math.round(totals.totalLatencyMs / totals.requestCount)
+      ? totals.totalLatencyMs / totals.requestCount / 1000
       : 0;
   const cacheHitRate =
     totals &&
@@ -415,11 +415,11 @@ export function CodebuddyApiServicePage() {
       {
         key: "latency",
         label: "平均延迟",
-        value: avgLatency > 0 ? `${avgLatency}ms` : "-",
+        value: avgLatencySec > 0 ? `${avgLatencySec.toFixed(2)}s` : "-",
         detail: `成功率 ${successRate}%`,
       },
     ],
-    [totals, cacheHitRate, avgLatency, successRate],
+    [totals, cacheHitRate, avgLatencySec, successRate],
   );
 
   const selectedStatsRangeTitle =
@@ -2542,6 +2542,20 @@ function ModelsTab(props: {
 
 /* ----------------------------- Logs ----------------------------- */
 
+// renderModelLabel renders the request-log model cell. When the request was
+// handled by the pure-text vision sub-agent (visionSubagent flag), a blue
+// "视" pill is appended to the plain model label.
+function renderModelLabel(model: string | null | undefined, visionSubagent?: boolean) {
+  if (!model) return "-";
+  if (!visionSubagent) return model;
+  return (
+    <>
+      {model}
+      <span className="cb-api-vision-badge" title="由「纯文本视觉子代理」处理（主模型 + 视觉模型协作）">视</span>
+    </>
+  );
+}
+
 function LogsTab() {
   const [stats, setStats] = useState<CodebuddyLocalAccessStats | null>(null);
   const [logs, setLogs] = useState<CodebuddyLocalAccessLogPage | null>(null);
@@ -2550,6 +2564,8 @@ function LogsTab() {
   const [successFilter, setSuccessFilter] = useState<string>("");
   const [statsLoading, setStatsLoading] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [clearStatsConfirmOpen, setClearStatsConfirmOpen] = useState(false);
+  const [clearingStats, setClearingStats] = useState(false);
 
   const loadLogs = useCallback(async () => {
     setLogsLoading(true);
@@ -2594,13 +2610,18 @@ function LogsTab() {
   }, [loadStats, loadLogs]);
 
   const clearStats = useCallback(async () => {
+    if (clearingStats) return;
+    setClearingStats(true);
     try {
       setStats(await codebuddyLocalAccessService.clearCodebuddyLocalAccessStats());
       void loadLogs();
     } catch {
       // ignore
+    } finally {
+      setClearingStats(false);
+      setClearStatsConfirmOpen(false);
     }
-  }, [loadLogs]);
+  }, [clearingStats, loadLogs]);
 
   const totals = stats?.totals;
 
@@ -2633,7 +2654,12 @@ function LogsTab() {
           <BarChart3 />
           <h3>用量统计</h3>
           <div className="codex-api-service-head-actions">
-            <button type="button" className="cb-api-btn danger" onClick={clearStats}>
+            <button
+              type="button"
+              className="cb-api-btn danger"
+              onClick={() => setClearStatsConfirmOpen(true)}
+              disabled={clearingStats}
+            >
               <Trash2 size={14} /> 清空统计
             </button>
           </div>
@@ -2708,7 +2734,7 @@ function LogsTab() {
                 {logs.logs.map((log) => (
                   <tr key={log.requestId}>
                     <td>{new Date(log.timestamp).toLocaleTimeString()}</td>
-                    <td>{log.model || "-"}</td>
+                    <td>{renderModelLabel(log.model, log.visionSubagent)}</td>
                     <td>{log.apiKeyId || "-"}</td>
                     <td>
                       <span className={`cb-api-log-status ${log.success ? "ok" : "err"}`}>
@@ -2747,6 +2773,57 @@ function LogsTab() {
           </>
         )}
       </section>
+
+      {clearStatsConfirmOpen && (
+        <div
+          className="confirm-overlay"
+          onClick={() => {
+            if (!clearingStats) setClearStatsConfirmOpen(false);
+          }}
+        >
+          <div
+            className="confirm-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="cb-api-clear-stats-title"
+            aria-describedby="cb-api-clear-stats-desc"
+          >
+            <h3 id="cb-api-clear-stats-title">
+              {t("codebuddyLocalAccess.clearStatsTitle", "清空统计")}
+            </h3>
+            <p id="cb-api-clear-stats-desc">
+              {t(
+                "codebuddyLocalAccess.clearStatsConfirm",
+                "确定要清空 API 服务统计吗？此操作不可撤销。",
+              )}
+            </p>
+            <div className="confirm-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setClearStatsConfirmOpen(false)}
+                disabled={clearingStats}
+              >
+                {t("common.cancel", "取消")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => void clearStats()}
+                disabled={clearingStats}
+              >
+                {clearingStats ? (
+                  <RefreshCw size={14} className="loading-spinner" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                {t("codebuddyLocalAccess.clearStats", "清空统计")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

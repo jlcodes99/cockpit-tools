@@ -40,69 +40,10 @@ const BASE_URL_CN: &str = "https://copilot.tencent.com";
 /// 上游图片协议尚未实测，该 ID 为占位，待官方确认后替换。
 const CODEBUDDY_IMAGE_MODEL_ID: &str = "codebuddy-image-1";
 
-/// CodeBuddy 订阅可用的模型 ID（与 Go 侧 registry 模型清单保持一致）。
-/// 该清单来自官方 WorkBuddy/CodeBuddy 客户端内置模型目录（去重全集），
-/// sidecar 启动时还会从本机客户端 app.asar 动态同步覆盖。
-const CODEBUDDY_MODEL_IDS: &[&str] = &[
-    "auto",
-    "deepseek-chat",
-    "deepseek-reasoner",
-    "deepseek-v4-flash",
-    "deepseek-v4-flash-202605",
-    "deepseek-v4-pro",
-    "deepseek-v4-pro-202606",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
-    "gemini-3-flash-preview",
-    "gemini-3.1-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-3.1-pro-preview",
-    "gemini-3.5-flash",
-    "glm-4.6v",
-    "glm-4.7",
-    "glm-5",
-    "glm-5-turbo",
-    "glm-5.1",
-    "glm-5.2",
-    "gpt-4.1",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "gpt-5.3-codex",
-    "gpt-5.4",
-    "hunyuan-2.0-instruct",
-    "hunyuan-2.0-thinking",
-    "hunyuan-t1",
-    "hunyuan-turbos",
-    "hy3",
-    "hy3-preview",
-    "kimi-k2-0711-preview",
-    "kimi-k2-0905-preview",
-    "kimi-k2-thinking",
-    "kimi-k2-thinking-turbo",
-    "kimi-k2-turbo-preview",
-    "kimi-k2.5",
-    "kimi-k2.6",
-    "kimi-k2.7-code",
-    "kimi-k2.7-code-highspeed",
-    "kimi-k3",
-    "minimax-m2.5",
-    "minimax-m2.7",
-    "minimax-m3",
-    "MiniMax-M2",
-    "MiniMax-M2.1",
-    "MiniMax-M2.1-highspeed",
-    "MiniMax-M2.5",
-    "MiniMax-M2.5-highspeed",
-    "o1",
-    "o3",
-    "o3-mini",
-    "tc-code-latest",
-    CODEBUDDY_IMAGE_MODEL_ID,
-];
+/// CodeBuddy 模型清单占位。具体可用模型不再依赖本地硬编码清单，而是由
+/// sidecar 从腾讯中国站后端动态拉取（/v2/enterprises/personal/models，按账号
+/// token 返回真实可用模型）。此处仅保留 "auto" 路由占位，供后端同步失败时兜底。
+const CODEBUDDY_MODEL_IDS: &[&str] = &["auto"];
 
 /// 视觉代理层模式常量。
 const CODEBUDDY_VISION_MODE_OFF: &str = "off";
@@ -1110,6 +1051,10 @@ async fn ingest_sidecar_log_event(value: &Value) {
                     .get("errorMessage")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
+                vision_subagent: value
+                    .get("visionSubagent")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
             };
 
             let mut runtime = gateway_runtime().lock().await;
@@ -1171,19 +1116,32 @@ async fn ingest_sidecar_log_event(value: &Value) {
             if request_id.is_empty() {
                 return;
             }
-            let input_tokens = value
-                .get("usage")
-                .and_then(|v| v.get("tokenBreakdown"))
-                .and_then(|v| v.get("input"))
-                .and_then(|v| v.get("total_tokens"))
+            // 优先读 sidecar 顶层 inputTokens/outputTokens（视觉子代理聚合后
+            // TokenBreakdown 可能因 CodeBuddy 语义未知而回退为 Unclassified，
+            // 导致 tokenBreakdown.input/output.total_tokens 为 0），
+            // 回退到 tokenBreakdown 嵌套字段保持对旧 sidecar 的兼容。
+            let usage = value.get("usage");
+            let input_tokens = usage
+                .and_then(|v| v.get("inputTokens"))
                 .and_then(|v| v.as_u64())
+                .or_else(|| {
+                    usage
+                        .and_then(|v| v.get("tokenBreakdown"))
+                        .and_then(|v| v.get("input"))
+                        .and_then(|v| v.get("total_tokens"))
+                        .and_then(|v| v.as_u64())
+                })
                 .unwrap_or(0);
-            let output_tokens = value
-                .get("usage")
-                .and_then(|v| v.get("tokenBreakdown"))
-                .and_then(|v| v.get("output"))
-                .and_then(|v| v.get("total_tokens"))
+            let output_tokens = usage
+                .and_then(|v| v.get("outputTokens"))
                 .and_then(|v| v.as_u64())
+                .or_else(|| {
+                    usage
+                        .and_then(|v| v.get("tokenBreakdown"))
+                        .and_then(|v| v.get("output"))
+                        .and_then(|v| v.get("total_tokens"))
+                        .and_then(|v| v.as_u64())
+                })
                 .unwrap_or(0);
             let credit = value
                 .get("usage")

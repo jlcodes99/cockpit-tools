@@ -41,6 +41,11 @@ const defaultCodebuddyVisionPrompt = "请仔细观察图片，用中文详细、
 // request degrades to omitting images.
 const codebuddyOmittedImageText = "[图片因视觉代理失败被省略]"
 
+// codebuddyHistoricalImageText replaces historical image parts in agentic mode
+// so a later turn does not re-send stale images to a text-only model that
+// rejects image input.
+const codebuddyHistoricalImageText = "[历史图片]"
+
 func (a codebuddyVisionAction) String() string {
 	switch a {
 	case codebuddyVisionRoute:
@@ -52,22 +57,38 @@ func (a codebuddyVisionAction) String() string {
 	}
 }
 
+// lastCodebuddyUserMessageIndex returns the index of the last role=="user"
+// message, or -1 if there is none. Detecting images only in the last user
+// message isolates the "current request" from historical turns, so a text-only
+// follow-up in the same session is not misclassified by a previous image.
+func lastCodebuddyUserMessageIndex(messages []gjson.Result) int {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Get("role").String() == "user" {
+			return i
+		}
+	}
+	return -1
+}
+
 // codebuddyChatHasImageInput reports whether the OpenAI-style chat body carries
-// at least one image part (image_url or input_image) in any message content.
+// at least one image part (image_url or input_image) in the last user message.
 func codebuddyChatHasImageInput(body []byte) bool {
 	messages := gjson.GetBytes(body, "messages")
 	if !messages.IsArray() {
 		return false
 	}
-	for _, msg := range messages.Array() {
-		content := msg.Get("content")
-		if !content.IsArray() {
-			continue
-		}
-		for _, part := range content.Array() {
-			if isCodebuddyImagePartType(part.Get("type").String()) {
-				return true
-			}
+	arr := messages.Array()
+	idx := lastCodebuddyUserMessageIndex(arr)
+	if idx < 0 {
+		return false
+	}
+	content := arr[idx].Get("content")
+	if !content.IsArray() {
+		return false
+	}
+	for _, part := range content.Array() {
+		if isCodebuddyImagePartType(part.Get("type").String()) {
+			return true
 		}
 	}
 	return false

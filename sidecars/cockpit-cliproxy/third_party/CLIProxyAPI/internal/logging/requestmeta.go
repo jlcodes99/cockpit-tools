@@ -19,8 +19,14 @@ type ClientRequestMetadata struct {
 	UserAgent     string
 }
 
+type visionSubagentKey struct{}
+
 type responseStatusHolder struct {
 	status atomic.Int32
+}
+
+type visionSubagentHolder struct {
+	flag atomic.Bool
 }
 
 type responseHeadersHolder struct {
@@ -141,4 +147,44 @@ func cloneHTTPHeader(src http.Header) http.Header {
 		dst[key] = append([]string(nil), values...)
 	}
 	return dst
+}
+
+// WithVisionSubagentHolder attaches a pointer holder so that a downstream
+// executor can flag the request as handled by the pure-text vision sub-agent
+// loop, which the upstream request policy later reads when emitting request
+// diagnostics.
+func WithVisionSubagentHolder(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if holder, ok := ctx.Value(visionSubagentKey{}).(*visionSubagentHolder); ok && holder != nil {
+		return ctx
+	}
+	return context.WithValue(ctx, visionSubagentKey{}, &visionSubagentHolder{})
+}
+
+// SetVisionSubagent flags (or clears) the vision sub-agent marker on the
+// request held by ctx. Safe to call from downstream executors.
+func SetVisionSubagent(ctx context.Context, value bool) {
+	if ctx == nil {
+		return
+	}
+	holder, ok := ctx.Value(visionSubagentKey{}).(*visionSubagentHolder)
+	if !ok || holder == nil {
+		return
+	}
+	holder.flag.Store(value)
+}
+
+// GetVisionSubagent reports whether the request was flagged as handled by the
+// vision sub-agent loop.
+func GetVisionSubagent(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	holder, ok := ctx.Value(visionSubagentKey{}).(*visionSubagentHolder)
+	if !ok || holder == nil {
+		return false
+	}
+	return holder.flag.Load()
 }

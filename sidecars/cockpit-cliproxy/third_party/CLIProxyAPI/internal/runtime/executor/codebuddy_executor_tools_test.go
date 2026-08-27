@@ -122,3 +122,44 @@ func TestNormalizeCodebuddyToolMessages_CallIDAlias(t *testing.T) {
 		t.Fatalf("tool_call_id = %q, want %q", got, "call_9")
 	}
 }
+
+func TestNormalizeCodebuddyToolMessages_AppendsUserAfterTrailingTool(t *testing.T) {
+	body := []byte(`{
+		"messages":[
+			{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"run","arguments":"{}"}}]},
+			{"role":"tool","tool_call_id":"call_1","content":"ok"}
+		]
+	}`)
+	out, err := normalizeCodebuddyToolMessages(body)
+	if err != nil {
+		t.Fatalf("normalizeCodebuddyToolMessages() error = %v", err)
+	}
+	msgs := gjson.GetBytes(out, "messages").Array()
+	if len(msgs) != 3 {
+		t.Fatalf("messages length = %d, want 3; body=%s", len(msgs), string(out))
+	}
+	if got := msgs[len(msgs)-1].Get("role").String(); got != "user" {
+		t.Fatalf("last role = %q, want user; body=%s", got, string(out))
+	}
+}
+
+func TestNormalizeCodebuddyToolMessages_KeepsUserTrailingUnchanged(t *testing.T) {
+	body := []byte(`{
+		"messages":[
+			{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"run","arguments":"{}"}}]},
+			{"role":"tool","tool_call_id":"call_1","content":"ok"},
+			{"role":"user","content":"next"}
+		]
+	}`)
+	out, err := normalizeCodebuddyToolMessages(body)
+	if err != nil {
+		t.Fatalf("normalizeCodebuddyToolMessages() error = %v", err)
+	}
+	msgs := gjson.GetBytes(out, "messages").Array()
+	if len(msgs) != 3 {
+		t.Fatalf("messages length = %d, want 3; body=%s", len(msgs), string(out))
+	}
+	if got := msgs[len(msgs)-1].Get("role").String(); got != "user" {
+		t.Fatalf("last role = %q, want user; body=%s", got, string(out))
+	}
+}

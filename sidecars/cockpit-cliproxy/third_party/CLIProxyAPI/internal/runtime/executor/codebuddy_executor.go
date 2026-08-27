@@ -13,6 +13,8 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/auth/codebuddy"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
@@ -96,8 +98,19 @@ func (e *CodebuddyExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 
 	// Agentic vision: server-side tool-calling loop for text-only models to
 	// autonomously inspect images via the vision model.
-	if e.codebuddyVisionAgenticEnabled() && codebuddyChatHasImageInput(body) {
-		return e.executeCodebuddyVisionAgentic(ctx, auth, req, opts, body, baseModel, creds, baseURL)
+	if e.codebuddyVisionAgenticEnabled() {
+		if codebuddyChatHasImageInput(body) {
+			helps.DumpCodebuddyDebugBody("vision-reporter-trigger",
+				[]byte(fmt.Sprintf("path=Execute baseModel=%s visionModel=%s", baseModel, e.cfg.CodebuddyVision.VisionModel())))
+			internallogging.SetVisionSubagent(ctx, true)
+			visionReporter := helps.NewUsageReporter(ctx, e.Identifier(), baseModel, auth)
+			visionReporter.MarkVisionSubagent()
+			defer visionReporter.TrackFailure(ctx, &err)
+			return e.executeCodebuddyVisionAgentic(ctx, auth, req, opts, body, baseModel, creds, baseURL, visionReporter)
+		}
+		// Text-only turn in agentic mode: strip any stale images re-sent by the
+		// client so they don't reach the text-only model and get filtered.
+		body = replaceCodebuddyImagesWithText(body, codebuddyHistoricalImageText)
 	}
 
 	// Prompt cache: inject a stable session-bound key so repeated turns in the
@@ -124,6 +137,10 @@ func (e *CodebuddyExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 	if err != nil {
 		return resp, err
 	}
+
+	// Clamp oversized max_tokens (Cursor sends 65536) to the model's declared
+	// MaxCompletionTokens ceiling so strict backend routes do not reject it.
+	body = clampCodebuddyMaxTokens(body, baseModel)
 
 	url := baseURL + codebuddy.ChatPath
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -152,7 +169,7 @@ func (e *CodebuddyExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 		// Diagnostic: dump the upstream error body (redacted) so the invalid
 		// field / param reported by the backend can be inspected.
 		helps.DumpCodebuddyDebugBody("error-response", b)
-		err = statusErr{code: httpResp.StatusCode, msg: string(b)}
+		err = statusErr{code: codebuddyEffectiveStatus(httpResp.StatusCode, b), msg: string(b)}
 		return resp, err
 	}
 
@@ -220,8 +237,19 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 
 	// Agentic vision: server-side tool-calling loop for text-only models to
 	// autonomously inspect images via the vision model.
-	if e.codebuddyVisionAgenticEnabled() && codebuddyChatHasImageInput(body) {
-		return e.executeCodebuddyVisionAgenticStream(ctx, auth, req, opts, body, baseModel, creds, baseURL)
+	if e.codebuddyVisionAgenticEnabled() {
+		if codebuddyChatHasImageInput(body) {
+			helps.DumpCodebuddyDebugBody("vision-reporter-trigger",
+				[]byte(fmt.Sprintf("path=ExecuteStream baseModel=%s visionModel=%s", baseModel, e.cfg.CodebuddyVision.VisionModel())))
+			internallogging.SetVisionSubagent(ctx, true)
+			visionReporter := helps.NewUsageReporter(ctx, e.Identifier(), baseModel, auth)
+			visionReporter.MarkVisionSubagent()
+			defer visionReporter.TrackFailure(ctx, &err)
+			return e.executeCodebuddyVisionAgenticStream(ctx, auth, req, opts, body, baseModel, creds, baseURL, visionReporter)
+		}
+		// Text-only turn in agentic mode: strip any stale images re-sent by the
+		// client so they don't reach the text-only model and get filtered.
+		body = replaceCodebuddyImagesWithText(body, codebuddyHistoricalImageText)
 	}
 
 	// Prompt cache: inject a stable session-bound key so repeated turns in the
@@ -247,6 +275,10 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 	if err != nil {
 		return nil, err
 	}
+
+	// Clamp oversized max_tokens (Cursor sends 65536) to the model's declared
+	// MaxCompletionTokens ceiling so strict backend routes do not reject it.
+	body = clampCodebuddyMaxTokens(body, baseModel)
 
 	url := baseURL + codebuddy.ChatPath
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -277,7 +309,7 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 		if errClose := httpResp.Body.Close(); errClose != nil {
 			log.Errorf("codebuddy executor: close response body error: %v", errClose)
 		}
-		err = statusErr{code: httpResp.StatusCode, msg: string(b)}
+		err = statusErr{code: codebuddyEffectiveStatus(httpResp.StatusCode, b), msg: string(b)}
 		return nil, err
 	}
 
@@ -629,6 +661,48 @@ func extractCodebuddyImageURL(img gjson.Result) string {
 	return ""
 }
 
+// codebuddyQuotaExhaustedCode is the backend business error code reported when
+// the account's credit/额度 is exhausted. It surfaces inside the error body as
+// either a top-level `code` or a nested `error.data.code`.
+const codebuddyQuotaExhaustedCode = 14018
+
+// clampCodebuddyMaxTokens clamps the request's `max_tokens` (and its
+// `max_completion_tokens` alias) to the model's declared MaxCompletionTokens
+// ceiling. Third-party clients (Cursor, etc.) send oversized values such as
+// 65536 that exceed the backend's 32768 ceiling and can trigger
+// `400 invalid_parameter_value` on strict routes. Values already at or below
+// the ceiling pass through unchanged.
+func clampCodebuddyMaxTokens(body []byte, model string) []byte {
+	limit := registry.CodebuddyModelMaxCompletionTokens(model)
+	if limit <= 0 {
+		limit = registry.CodebuddyMaxCompletionTokensDefault
+	}
+	out := body
+	for _, field := range []string{"max_tokens", "max_completion_tokens"} {
+		v := gjson.GetBytes(out, field)
+		if v.Exists() && v.Type == gjson.Number && v.Int() > int64(limit) {
+			if next, err := sjson.SetBytes(out, field, limit); err == nil {
+				out = next
+			}
+		}
+	}
+	return out
+}
+
+// codebuddyEffectiveStatus maps a non-2xx upstream HTTP status to an effective
+// status used for account health handling. A quota-exhausted business error
+// (code 14018) is surfaced as HTTP 429 so the routing layer applies the quota
+// cooldown rather than treating it as a generic 400 validation failure.
+func codebuddyEffectiveStatus(httpStatus int, body []byte) int {
+	if httpStatus < 200 || httpStatus >= 300 {
+		if gjson.GetBytes(body, "code").Int() == codebuddyQuotaExhaustedCode ||
+			gjson.GetBytes(body, "error.data.code").Int() == codebuddyQuotaExhaustedCode {
+			return http.StatusTooManyRequests
+		}
+	}
+	return httpStatus
+}
+
 // applyCodebuddyHeaders sets the headers required by the CodeBuddy backend.
 func applyCodebuddyHeaders(r *http.Request, creds codebuddy.Creds) {
 	r.Header.Set("Content-Type", "application/json")
@@ -662,6 +736,11 @@ func recordCodebuddyRequest(ctx context.Context, cfg *config.Config, provider st
 		authLabel = auth.Label
 		authType, authValue = auth.AccountInfo()
 	}
+	// Diagnostic: correlate each upstream request with the auth account and wall-clock
+	// timestamp so 200-vs-400 pairs can be attributed to account switching vs upstream flakiness.
+	helps.DumpCodebuddyDebugBody("request-meta",
+		[]byte(fmt.Sprintf("url=%s authID=%s authLabel=%s authType=%s at=%s",
+			url, authID, authLabel, authType, time.Now().Format("15:04:05.000"))))
 	helps.RecordAPIRequest(ctx, cfg, helps.UpstreamRequestLog{
 		URL:       url,
 		Method:    http.MethodPost,

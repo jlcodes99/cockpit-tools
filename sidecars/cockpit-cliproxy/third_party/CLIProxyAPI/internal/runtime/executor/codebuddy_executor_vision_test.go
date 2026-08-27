@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
 	"github.com/tidwall/gjson"
 )
 
@@ -44,6 +45,21 @@ func TestCodebuddyChatHasImageInput(t *testing.T) {
 		{
 			name: "invalid json",
 			in:   `not-json`,
+			want: false,
+		},
+		{
+			name: "historical image ignored when last user message is text-only",
+			in:   `{"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]},{"role":"assistant","content":"ok"},{"role":"user","content":[{"type":"text","text":"继续"}]}]}`,
+			want: false,
+		},
+		{
+			name: "image in last user message detected despite text history",
+			in:   `{"messages":[{"role":"user","content":[{"type":"text","text":"之前"}]},{"role":"assistant","content":"ok"},{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`,
+			want: true,
+		},
+		{
+			name: "no user message",
+			in:   `{"messages":[{"role":"assistant","content":"ok"}]}`,
 			want: false,
 		},
 	}
@@ -237,6 +253,64 @@ func TestExtractCodebuddyImagesForAgentic(t *testing.T) {
 	}
 }
 
+func TestExtractCodebuddyImagesForAgentic_OnlyLastUserMessage(t *testing.T) {
+	body := []byte(`{"model":"deepseek-v4-pro","messages":[
+		{"role":"user","content":[
+			{"type":"image_url","image_url":{"url":"data:image/png;base64,HIST"}}
+		]},
+		{"role":"assistant","content":"ok"},
+		{"role":"user","content":[
+			{"type":"text","text":"再看这张"},
+			{"type":"image_url","image_url":{"url":"data:image/png;base64,NEW"}}
+		]}
+	]}`)
+
+	out, images, err := extractCodebuddyImagesForAgentic(body)
+	if err != nil {
+		t.Fatalf("extractCodebuddyImagesForAgentic() error: %v", err)
+	}
+	if len(images) != 1 {
+		t.Fatalf("expected 1 image (only last user message), got %d", len(images))
+	}
+	// The historical image (messages.0.content.0) must be replaced with a
+	// placeholder so it never reaches the text-only model.
+	if gjson.GetBytes(out, "messages.0.content.0.type").String() != "text" {
+		t.Fatalf("historical image should be replaced with text, got %s", gjson.GetBytes(out, "messages.0.content.0").Raw)
+	}
+	// The last user message's image (messages.2.content.1) must be replaced.
+	if gjson.GetBytes(out, "messages.2.content.1.type").String() != "text" {
+		t.Fatalf("last user image should be replaced with text, got %s", gjson.GetBytes(out, "messages.2.content.1").Raw)
+	}
+	if !strings.Contains(gjson.GetBytes(out, "messages.2.content.1.text").String(), "inspect_image") {
+		t.Fatalf("replacement should reference inspect_image tool")
+	}
+}
+
+func TestExtractCodebuddyImagesForAgentic_HistoricalImageIgnored(t *testing.T) {
+	body := []byte(`{"model":"deepseek-v4-pro","messages":[
+		{"role":"user","content":[
+			{"type":"image_url","image_url":{"url":"data:image/png;base64,HIST"}}
+		]},
+		{"role":"assistant","content":"ok"},
+		{"role":"user","content":[
+			{"type":"text","text":"继续"}
+		]}
+	]}`)
+
+	out, images, err := extractCodebuddyImagesForAgentic(body)
+	if err != nil {
+		t.Fatalf("extractCodebuddyImagesForAgentic() error: %v", err)
+	}
+	if len(images) != 0 {
+		t.Fatalf("expected 0 images (last user message is text-only), got %d", len(images))
+	}
+	// The historical image must be replaced with a placeholder so it never
+	// reaches the text-only model.
+	if gjson.GetBytes(out, "messages.0.content.0.type").String() != "text" {
+		t.Fatalf("historical image should be replaced with text, got %s", gjson.GetBytes(out, "messages.0.content.0").Raw)
+	}
+}
+
 func TestInjectCodebuddyInspectTool(t *testing.T) {
 	body := []byte(`{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"hi"}]}`)
 	out := injectCodebuddyInspectTool(body, 1)
@@ -270,6 +344,71 @@ func TestAppendAgenticMessage(t *testing.T) {
 	}
 	if gjson.GetBytes(out, "messages.1.role").String() != "assistant" {
 		t.Fatalf("expected assistant message appended")
+	}
+}
+
+// TestAddCodebuddyAgenticUsageAccumulatesTokenBreakdown guards the regression
+// where addCodebuddyAgenticUsage only summed TokenBreakdown.TotalTokens, leaving
+// the Input/Output sub-fields at zero and making the aggregated breakdown
+// invalid (which in turn caused the request log's input/output columns to show 0).
+func TestAddCodebuddyAgenticUsageAccumulatesTokenBreakdown(t *testing.T) {
+	total := usage.Detail{}
+	add1 := usage.Detail{
+		InputTokens:  100,
+		OutputTokens: 50,
+		TokenBreakdown: usage.TokenBreakdown{
+			TotalTokens: 150,
+			Input: usage.TokenInputBreakdown{
+				TotalTokens:      100,
+				UncachedTokens:   80,
+				CacheReadTokens:  15,
+				CacheWriteTokens: 5,
+			},
+			Output: usage.TokenOutputBreakdown{
+				TotalTokens:        50,
+				NonReasoningTokens: 40,
+				ReasoningTokens:    10,
+			},
+		},
+	}
+	add2 := usage.Detail{
+		InputTokens:  20,
+		OutputTokens: 30,
+		TokenBreakdown: usage.TokenBreakdown{
+			TotalTokens: 50,
+			Input: usage.TokenInputBreakdown{
+				TotalTokens:      20,
+				UncachedTokens:   12,
+				CacheReadTokens:  8,
+				CacheWriteTokens: 0,
+			},
+			Output: usage.TokenOutputBreakdown{
+				TotalTokens:        30,
+				NonReasoningTokens: 30,
+				ReasoningTokens:    0,
+			},
+		},
+	}
+
+	addCodebuddyAgenticUsage(&total, add1)
+	addCodebuddyAgenticUsage(&total, add2)
+
+	if total.InputTokens != 120 || total.OutputTokens != 80 {
+		t.Fatalf("top-level tokens = %d/%d, want 120/80", total.InputTokens, total.OutputTokens)
+	}
+	if total.TokenBreakdown.TotalTokens != 200 {
+		t.Fatalf("breakdown total = %d, want 200", total.TokenBreakdown.TotalTokens)
+	}
+	if total.TokenBreakdown.Input.TotalTokens != 120 ||
+		total.TokenBreakdown.Input.UncachedTokens != 92 ||
+		total.TokenBreakdown.Input.CacheReadTokens != 23 ||
+		total.TokenBreakdown.Input.CacheWriteTokens != 5 {
+		t.Fatalf("breakdown input = %+v", total.TokenBreakdown.Input)
+	}
+	if total.TokenBreakdown.Output.TotalTokens != 80 ||
+		total.TokenBreakdown.Output.NonReasoningTokens != 70 ||
+		total.TokenBreakdown.Output.ReasoningTokens != 10 {
+		t.Fatalf("breakdown output = %+v", total.TokenBreakdown.Output)
 	}
 }
 

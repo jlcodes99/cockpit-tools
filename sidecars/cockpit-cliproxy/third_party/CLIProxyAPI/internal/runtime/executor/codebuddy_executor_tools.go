@@ -128,6 +128,24 @@ func normalizeCodebuddyToolMessages(body []byte) ([]byte, error) {
 		}
 	}
 
+	// The backend rejects a messages array that ends with a tool or assistant
+	// message when the request carries both `tools` and `reasoning_effort`
+	// (400 invalid_parameter_value, param empty). Cursor's tool-result
+	// follow-ups end on a tool message, so append a user continuation to make
+	// the trailing role legal — mirroring Cursor's own `<system_reminder>`
+	// follow-up that the backend accepts. This runs after
+	// filterCodebuddyEmptyAssistantMessages so it is never dropped.
+	lastMsgs := gjson.GetBytes(out, "messages").Array()
+	if len(lastMsgs) > 0 && strings.TrimSpace(lastMsgs[len(lastMsgs)-1].Get("role").String()) == "tool" {
+		next, errSet := sjson.SetRawBytes(out, "messages.-1", []byte(`{"role":"user","content":"<system_reminder>The tool call completed. Continue based on the tool result.</system_reminder>"}`))
+		if errSet != nil {
+			return body, errSet
+		}
+		out = next
+		patched++
+		log.Debug("codebuddy executor: appended user continuation after trailing tool message")
+	}
+
 	if patched > 0 {
 		log.WithField("patched_tool_messages", patched).
 			Debug("codebuddy executor: normalized tool message fields")

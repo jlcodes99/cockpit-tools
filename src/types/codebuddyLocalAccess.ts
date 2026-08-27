@@ -153,6 +153,8 @@ export interface CodebuddyLocalAccessRequestLog {
   /** 失败分类（client_canceled / stream_incomplete / upstream_response_failed），成功或未分类为 undefined。 */
   errorCategory?: string | null;
   errorMessage?: string | null;
+  /** 是否由「纯文本视觉子代理」处理（主模型 + 视觉模型协作）。 */
+  visionSubagent?: boolean;
 }
 
 export interface CodebuddyLocalAccessStats {

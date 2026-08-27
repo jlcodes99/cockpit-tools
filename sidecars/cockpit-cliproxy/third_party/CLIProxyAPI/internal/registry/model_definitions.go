@@ -145,6 +145,16 @@ var codebuddyVisionBackendWhitelist = map[string]struct{}{
 	"glm-5.2": {},
 }
 
+// codebuddyVisionBlacklist lists CodeBuddy models whose backend supportsImages
+// flag is true but which verifiably reject image input at inference time (the
+// backend returns a "this model does not support image input" refusal text).
+// They are treated as text-only so the vision-proxy layer routes them through
+// the configured vision model (hy3-preview) instead of passing images through.
+var codebuddyVisionBlacklist = map[string]struct{}{
+	"deepseek-v4-pro":   {},
+	"deepseek-v4-flash": {},
+}
+
 // CodebuddyMaxCompletionTokensDefault is the fallback max completion token
 // ceiling shared by CodeBuddy models when a specific value is unknown. The
 // synced catalog and the static models.json fallback both declare 32768 for
@@ -168,9 +178,11 @@ func CodebuddyModelMaxCompletionTokens(modelID string) int {
 
 // CodebuddyModelSupportsImages reports whether the given CodeBuddy model accepts
 // image input. It consults, in order:
-//  1. The measured backend whitelist (models the live backend verifiably routes
+//  1. The measured blacklist (models the backend flags as vision-capable but
+//     which verifiably reject image input, e.g. deepseek-v4-pro/flash).
+//  2. The measured backend whitelist (models the live backend verifiably routes
 //     to a vision sub-model despite app.asar marking them text-only).
-//  2. The official client's app.asar supportsImages flag (or the static
+//  3. The official client's app.asar supportsImages flag (or the static
 //     models.json fallback when the client is not installed).
 //
 // Unknown or empty model IDs report false.
@@ -179,7 +191,11 @@ func CodebuddyModelSupportsImages(modelID string) bool {
 	if modelID == "" {
 		return false
 	}
-	if _, ok := codebuddyVisionBackendWhitelist[strings.ToLower(modelID)]; ok {
+	key := strings.ToLower(modelID)
+	if _, ok := codebuddyVisionBlacklist[key]; ok {
+		return false
+	}
+	if _, ok := codebuddyVisionBackendWhitelist[key]; ok {
 		return true
 	}
 	for _, m := range GetCodebuddyModels() {

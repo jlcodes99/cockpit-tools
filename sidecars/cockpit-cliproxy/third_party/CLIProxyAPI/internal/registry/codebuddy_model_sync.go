@@ -258,63 +258,102 @@ func NotifyCodebuddyModelRefresh() {
 
 // InstallCodebuddyModelIDs installs an externally-fetched model ID list (e.g.
 // from the official backend model-list endpoint) as the active codebuddy
-// registry catalog. Callers should prefer this over the app.asar extraction
-// when they have access to the live backend. It returns the installed,
+// registry catalog. It builds ModelInfo entries with default capability
+// fields; prefer InstallCodebuddyModels when the backend response carries
+// capability metadata (supportsImages, max tokens). It returns the installed,
 // de-duplicated, sorted IDs, or nil when the input is empty.
 func InstallCodebuddyModelIDs(ids []string) []string {
 	if len(ids) == 0 {
 		return nil
 	}
+	models := make([]*ModelInfo, 0, len(ids))
+	for _, id := range ids {
+		models = append(models, &ModelInfo{
+			ID:          id,
+			DisplayName: id,
+			Description: "Tencent CodeBuddy model (synced from official backend).",
+		})
+	}
+	return InstallCodebuddyModels(models)
+}
+
+// InstallCodebuddyModels installs an externally-fetched model list (e.g. from
+// the official backend model-list endpoint) as the active codebuddy registry
+// catalog, preserving capability fields such as SupportsImages so vision-proxy
+// routing can correctly classify text-only vs vision-capable models. It
+// returns the installed, de-duplicated, sorted IDs, or nil when the input is
+// empty.
+func InstallCodebuddyModels(models []*ModelInfo) []string {
+	if len(models) == 0 {
+		return nil
+	}
 
 	seen := make(map[string]*ModelInfo)
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		// 剥离 thinking 变体后缀（如 kimi-k3-1 → kimi-k3），对齐后端真实模型 ID。
-		id = stripCodebuddyThinkingSuffix(id)
+	for _, m := range models {
+		if m == nil {
+			continue
+		}
+		id := stripCodebuddyThinkingSuffix(strings.TrimSpace(m.ID))
 		if id == "" || !isValidModelID(id) {
 			continue
 		}
-		if _, exists := seen[id]; exists {
+		if existing, exists := seen[id]; exists {
+			// 同一模型可能出现在多个 provider 组，能力字段保守合并。
+			if m.SupportsImages {
+				existing.SupportsImages = true
+			}
 			continue
 		}
-		seen[id] = &ModelInfo{
-			ID:                  id,
-			Object:              "model",
-			Created:             codebuddyModelCreatedAt,
-			OwnedBy:             "tencent",
-			Type:                "codebuddy",
-			DisplayName:         id,
-			Description:         "Tencent CodeBuddy model (synced from official backend).",
-			ContextLength:       200000,
-			MaxCompletionTokens: 32768,
+		m.ID = id
+		if m.Object == "" {
+			m.Object = "model"
 		}
+		if m.Created == 0 {
+			m.Created = codebuddyModelCreatedAt
+		}
+		if m.OwnedBy == "" {
+			m.OwnedBy = "tencent"
+		}
+		if m.Type == "" {
+			m.Type = "codebuddy"
+		}
+		if m.DisplayName == "" {
+			m.DisplayName = id
+		}
+		if m.ContextLength <= 0 {
+			m.ContextLength = 200000
+		}
+		if m.MaxCompletionTokens <= 0 {
+			m.MaxCompletionTokens = 32768
+		}
+		seen[id] = m
 	}
 	if len(seen) == 0 {
 		return nil
 	}
 
-	models := make([]*ModelInfo, 0, len(seen))
+	out := make([]*ModelInfo, 0, len(seen))
 	for _, m := range seen {
-		models = append(models, m)
+		out = append(out, m)
 	}
-	sort.Slice(models, func(i, j int) bool {
-		return models[i].ID < models[j].ID
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ID < out[j].ID
 	})
 
 	codebuddySyncMu.Lock()
-	changed := modelSectionChanged(codebuddySynced, models)
-	codebuddySynced = models
+	changed := modelSectionChanged(codebuddySynced, out)
+	codebuddySynced = out
 	codebuddySyncMu.Unlock()
 
 	if changed {
-		log.Infof("codebuddy model sync: backend list updated (%d models)", len(models))
+		log.Infof("codebuddy model sync: backend list updated (%d models)", len(out))
 		notifyModelRefresh([]string{"codebuddy"})
 	} else {
-		log.Infof("codebuddy model sync: backend list unchanged (%d models)", len(models))
+		log.Infof("codebuddy model sync: backend list unchanged (%d models)", len(out))
 	}
 
-	result := make([]string, 0, len(models))
-	for _, m := range models {
+	result := make([]string, 0, len(out))
+	for _, m := range out {
 		if m != nil && m.ID != "" {
 			result = append(result, m.ID)
 		}

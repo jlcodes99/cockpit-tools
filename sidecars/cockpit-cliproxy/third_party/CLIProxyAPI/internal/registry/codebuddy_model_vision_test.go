@@ -57,3 +57,18 @@ func TestCodebuddyModelSupportsImagesFakeVision(t *testing.T) {
 		}
 	}
 }
+
+// TestCodebuddyModelMaxCompletionTokens verifies the max-completion ceiling
+// lookup falls back to the shared default for unknown/empty model IDs.
+func TestCodebuddyModelMaxCompletionTokens(t *testing.T) {
+	if got := CodebuddyModelMaxCompletionTokens(""); got != CodebuddyMaxCompletionTokensDefault {
+		t.Fatalf("empty model = %d, want %d", got, CodebuddyMaxCompletionTokensDefault)
+	}
+	if got := CodebuddyModelMaxCompletionTokens("unknown-model"); got != CodebuddyMaxCompletionTokensDefault {
+		t.Fatalf("unknown model = %d, want %d", got, CodebuddyMaxCompletionTokensDefault)
+	}
+	// A known CodeBuddy model should resolve to a positive ceiling (32768).
+	if got := CodebuddyModelMaxCompletionTokens("deepseek-v4-pro"); got <= 0 {
+		t.Fatalf("known model = %d, want > 0", got)
+	}
+}

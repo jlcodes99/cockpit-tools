@@ -52,6 +52,13 @@ func (s *Service) StartRuntime(ctx context.Context) error {
 		}
 	}
 	s.ensureWebsocketGateway()
+	// Embedded runtimes never go through Service.Start, so the model-catalog
+	// refresh callback (re-registering per-auth models when a provider catalog
+	// changes, e.g. backend-only codebuddy models like glm-5.3) must be wired
+	// here as well. Without it, NotifyCodebuddyModelRefresh notifications pile
+	// up in pendingRefreshChanges and codebuddy auths keep their stale
+	// supportedModelSet, making scheduler picks fail with auth_not_found.
+	s.registerModelRefreshCallback()
 	s.registerAvailableExecutors(ctx, executorRegistrationOptions{includeBaseline: true})
 	if s.hooks.OnBeforeStart != nil {
 		s.hooks.OnBeforeStart(s.cfg)

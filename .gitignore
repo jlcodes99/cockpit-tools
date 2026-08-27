@@ -60,3 +60,6 @@ sidecars/cockpit-cliproxy/cockpit-cliproxy.exe
 
 # Local project data
 .codebuddy/
+
+# Local notes/docs — never tracked
+docs/

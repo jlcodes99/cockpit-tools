@@ -15,6 +15,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -24,6 +25,11 @@ import (
 // inspectImageToolName is the tool injected into the text-only model so it can
 // autonomously query the vision model for image details during reasoning.
 const inspectImageToolName = "inspect_image"
+
+// codebuddyVisionSubagentSuffix is appended to the request-log model label when
+// a text-only model request is handled by the pure-text vision sub-agent loop
+// (主模型 + 混元视觉子代理), so the log reads e.g. "deepseek-v4-pro视".
+const codebuddyVisionSubagentSuffix = "视"
 
 // codebuddyAgenticImageRef holds an extracted image's original content part,
 // kept in memory so inspect_image can re-send it to the vision model on demand.
@@ -64,38 +70,53 @@ func inspectImageToolDef() map[string]any {
 	}
 }
 
-// extractCodebuddyImagesForAgentic extracts every image content part from the
-// messages, replaces each with a text hint, and returns the rewritten body plus
-// the extracted image references (1-based ids).
+// extractCodebuddyImagesForAgentic rewrites the body so no image part reaches a
+// text-only model: images in the last user message (the current request) are
+// extracted as inspect_image targets, while images in earlier messages (stale
+// history re-sent by the client) are replaced with a neutral placeholder.
 func extractCodebuddyImagesForAgentic(body []byte) ([]byte, []codebuddyAgenticImageRef, error) {
 	messages := gjson.GetBytes(body, "messages")
 	if !messages.IsArray() {
 		return body, nil, nil
 	}
+	arr := messages.Array()
+	lastUserIdx := lastCodebuddyUserMessageIndex(arr)
+	if lastUserIdx < 0 {
+		return body, nil, nil
+	}
 
 	out := body
 	var images []codebuddyAgenticImageRef
-	for mi, msg := range messages.Array() {
+	for mi, msg := range arr {
 		content := msg.Get("content")
 		if !content.IsArray() {
 			continue
 		}
+		isCurrent := mi == lastUserIdx
 		for ci, part := range content.Array() {
 			if !isCodebuddyImagePartType(part.Get("type").String()) {
 				continue
 			}
-			id := len(images) + 1
-			images = append(images, codebuddyAgenticImageRef{
-				id:       id,
-				partJSON: append([]byte(nil), []byte(part.Raw)...),
-			})
-
-			text := fmt.Sprintf("[图片 #%d 已附加，可用 inspect_image 工具查看，image_id=%d]", id, id)
-			replacement, err := json.Marshal(map[string]string{"type": "text", "text": text})
-			if err != nil {
-				return body, nil, err
-			}
 			path := fmt.Sprintf("messages.%d.content.%d", mi, ci)
+
+			var replacement []byte
+			if isCurrent {
+				id := len(images) + 1
+				images = append(images, codebuddyAgenticImageRef{
+					id:       id,
+					partJSON: append([]byte(nil), []byte(part.Raw)...),
+				})
+				text := fmt.Sprintf("[图片 #%d 已附加，可用 inspect_image 工具查看，image_id=%d]", id, id)
+				var err error
+				replacement, err = json.Marshal(map[string]string{"type": "text", "text": text})
+				if err != nil {
+					return body, nil, err
+				}
+			} else {
+				replacement, _ = json.Marshal(map[string]string{"type": "text", "text": codebuddyHistoricalImageText})
+			}
+
+			var err error
 			out, err = sjson.SetRawBytes(out, path, replacement)
 			if err != nil {
 				return body, nil, err
@@ -122,6 +143,14 @@ func injectCodebuddyInspectTool(body []byte, imageCount int) []byte {
 		return out
 	}
 	out, err = sjson.SetRawBytes(out, "tools", toolsJSON)
+	if err != nil {
+		return body
+	}
+	// The client may have sent a `tool_choice` naming one of its own tools (or
+	// "required"). Since `tools` was just replaced with the single inspect_image
+	// tool, a stale tool_choice is now inconsistent and can be rejected by the
+	// strict backend with 400 — reset it to "auto".
+	out, err = sjson.SetBytes(out, "tool_choice", "auto")
 	if err != nil {
 		return body
 	}
@@ -152,6 +181,9 @@ func (e *CodebuddyExecutor) doCodebuddyChatRequest(
 	if err != nil {
 		return nil, nil, err
 	}
+	// Clamp oversized max_tokens (Cursor sends 65536) to the model's declared
+	// ceiling, matching the normal request path.
+	body = clampCodebuddyMaxTokens(body, gjson.GetBytes(body, "model").String())
 
 	url := baseURL + codebuddy.ChatPath
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -161,6 +193,10 @@ func (e *CodebuddyExecutor) doCodebuddyChatRequest(
 	applyCodebuddyHeaders(httpReq, creds)
 	httpReq.Header.Set("Accept", "text/event-stream")
 
+	// Diagnostic: dump the agentic sub-request body (redacted) so the exact
+	// tools/tool_choice/max_tokens the loop sends can be inspected on failure.
+	helps.DumpCodebuddyDebugBody("agentic-request", body)
+
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
@@ -169,7 +205,10 @@ func (e *CodebuddyExecutor) doCodebuddyChatRequest(
 	defer func() { _ = httpResp.Body.Close() }()
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		b, _ := io.ReadAll(httpResp.Body)
-		return nil, httpResp.Header.Clone(), statusErr{code: httpResp.StatusCode, msg: string(b)}
+		helps.DumpCodebuddyDebugBody("agentic-error", b)
+		log.Warnf("codebuddy vision agentic: round request failed status=%d body=%s",
+			httpResp.StatusCode, summarize(b))
+		return nil, httpResp.Header.Clone(), statusErr{code: codebuddyEffectiveStatus(httpResp.StatusCode, b), msg: string(b)}
 	}
 
 	lines := make([][]byte, 0, 64)
@@ -194,7 +233,7 @@ func (e *CodebuddyExecutor) inspectCodebuddyImage(
 	imagePart []byte,
 	question string,
 	visionModel string,
-) (string, error) {
+) (string, usage.Detail, error) {
 	userContent := []any{
 		json.RawMessage(imagePart),
 		map[string]any{"type": "text", "text": question},
@@ -207,18 +246,18 @@ func (e *CodebuddyExecutor) inspectCodebuddyImage(
 	}
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
-		return "", err
+		return "", usage.Detail{}, err
 	}
 
 	aggregated, _, err := e.doCodebuddyChatRequest(ctx, auth, creds, baseURL, bodyJSON)
 	if err != nil {
-		return "", err
+		return "", usage.Detail{}, err
 	}
 	content := strings.TrimSpace(gjson.GetBytes(aggregated, "choices.0.message.content").String())
 	if content == "" {
-		return "", fmt.Errorf("vision model returned empty answer")
+		return "", helps.ParseOpenAIUsage(aggregated), fmt.Errorf("vision model returned empty answer")
 	}
-	return content, nil
+	return content, helps.ParseOpenAIUsage(aggregated), nil
 }
 
 // runAgenticLoop runs the server-side tool-calling loop: repeatedly send the
@@ -235,9 +274,24 @@ func (e *CodebuddyExecutor) runAgenticLoop(
 	images []codebuddyAgenticImageRef,
 	visionModel string,
 	maxRounds int,
+	reporter *helps.UsageReporter,
 ) ([]byte, http.Header, error) {
 	var lastAggregated []byte
 	var lastHeaders http.Header
+	var totalUsage usage.Detail
+
+	// Publish the aggregated usage of the whole agentic loop exactly once,
+	// regardless of which return path terminates the loop. The reporter is
+	// constructed with the "<model>视" label upstream so the request log shows
+	// that this text-only model request used the vision sub-agent.
+	defer func() {
+		if reporter != nil {
+			helps.DumpCodebuddyDebugBody("vision-reporter-publish",
+				[]byte(fmt.Sprintf("model=%s visionSubagent=true inputTokens=%d outputTokens=%d credit=%v",
+					reporter.Model(), totalUsage.InputTokens, totalUsage.OutputTokens, totalUsage.Credit)))
+			reporter.Publish(ctx, totalUsage)
+		}
+	}()
 
 	for round := 0; round < maxRounds; round++ {
 		aggregated, headers, err := e.doCodebuddyChatRequest(ctx, auth, creds, baseURL, body)
@@ -249,6 +303,10 @@ func (e *CodebuddyExecutor) runAgenticLoop(
 		}
 		lastAggregated = aggregated
 		lastHeaders = headers
+
+		// Accumulate the main-loop usage so the request log's token/credit
+		// columns reflect the entire vision sub-agent conversation.
+		addCodebuddyAgenticUsage(&totalUsage, helps.ParseOpenAIUsage(aggregated))
 
 		toolCalls := gjson.GetBytes(aggregated, "choices.0.message.tool_calls")
 		if !toolCalls.IsArray() || len(toolCalls.Array()) == 0 {
@@ -278,7 +336,7 @@ func (e *CodebuddyExecutor) runAgenticLoop(
 
 			var answer string
 			if imageID >= 1 && imageID <= len(images) {
-				a, inspectErr := e.inspectCodebuddyImage(
+				a, inspectUsage, inspectErr := e.inspectCodebuddyImage(
 					ctx, auth, creds, baseURL, images[imageID-1].partJSON, question, visionModel,
 				)
 				if inspectErr != nil {
@@ -286,6 +344,9 @@ func (e *CodebuddyExecutor) runAgenticLoop(
 					log.Warnf("codebuddy vision agentic: inspect_image(%d) failed: %v", imageID, inspectErr)
 				} else {
 					answer = a
+					// Accumulate the vision sub-model usage so the request log's
+					// token/credit columns include the whole sub-agent loop.
+					addCodebuddyAgenticUsage(&totalUsage, inspectUsage)
 				}
 			} else {
 				answer = fmt.Sprintf("[无效的图片编号 %d，可用范围 1-%d]", imageID, len(images))
@@ -318,6 +379,31 @@ func (e *CodebuddyExecutor) runAgenticLoop(
 	return nil, nil, fmt.Errorf("codebuddy vision agentic: no result after %d rounds", maxRounds)
 }
 
+// addCodebuddyAgenticUsage accumulates a single round's usage into the running
+// total for the vision sub-agent loop.
+func addCodebuddyAgenticUsage(total *usage.Detail, add usage.Detail) {
+	if total == nil {
+		return
+	}
+	total.InputTokens += add.InputTokens
+	total.OutputTokens += add.OutputTokens
+	total.ReasoningTokens += add.ReasoningTokens
+	total.CachedTokens += add.CachedTokens
+	total.CacheReadTokens += add.CacheReadTokens
+	total.CacheCreationTokens += add.CacheCreationTokens
+	total.TotalTokens += add.TotalTokens
+	total.Credit += add.Credit
+	total.TokenBreakdown.TotalTokens += add.TokenBreakdown.TotalTokens
+	total.TokenBreakdown.Input.TotalTokens += add.TokenBreakdown.Input.TotalTokens
+	total.TokenBreakdown.Input.UncachedTokens += add.TokenBreakdown.Input.UncachedTokens
+	total.TokenBreakdown.Input.CacheReadTokens += add.TokenBreakdown.Input.CacheReadTokens
+	total.TokenBreakdown.Input.CacheWriteTokens += add.TokenBreakdown.Input.CacheWriteTokens
+	total.TokenBreakdown.Output.TotalTokens += add.TokenBreakdown.Output.TotalTokens
+	total.TokenBreakdown.Output.NonReasoningTokens += add.TokenBreakdown.Output.NonReasoningTokens
+	total.TokenBreakdown.Output.ReasoningTokens += add.TokenBreakdown.Output.ReasoningTokens
+	total.TokenBreakdown.UnclassifiedTokens += add.TokenBreakdown.UnclassifiedTokens
+}
+
 // executeCodebuddyVisionAgentic runs the agentic loop for non-streaming Execute
 // and translates the final aggregated payload back to the client format.
 func (e *CodebuddyExecutor) executeCodebuddyVisionAgentic(
@@ -329,6 +415,7 @@ func (e *CodebuddyExecutor) executeCodebuddyVisionAgentic(
 	baseModel string,
 	creds codebuddy.Creds,
 	baseURL string,
+	reporter *helps.UsageReporter,
 ) (cliproxyexecutor.Response, error) {
 	visionCfg := e.cfg.CodebuddyVision
 	visionModel := visionCfg.VisionModel()
@@ -346,7 +433,7 @@ func (e *CodebuddyExecutor) executeCodebuddyVisionAgentic(
 	log.Infof("codebuddy vision agentic: %d images, model=%s, vision=%s, maxRounds=%d",
 		len(images), baseModel, visionModel, maxRounds)
 
-	aggregated, headers, err := e.runAgenticLoop(ctx, auth, creds, baseURL, body, images, visionModel, maxRounds)
+	aggregated, headers, err := e.runAgenticLoop(ctx, auth, creds, baseURL, body, images, visionModel, maxRounds, reporter)
 	if err != nil {
 		return cliproxyexecutor.Response{}, err
 	}
@@ -371,6 +458,7 @@ func (e *CodebuddyExecutor) executeCodebuddyVisionAgenticStream(
 	baseModel string,
 	creds codebuddy.Creds,
 	baseURL string,
+	reporter *helps.UsageReporter,
 ) (*cliproxyexecutor.StreamResult, error) {
 	visionCfg := e.cfg.CodebuddyVision
 	visionModel := visionCfg.VisionModel()
@@ -416,8 +504,28 @@ func (e *CodebuddyExecutor) executeCodebuddyVisionAgenticStream(
 		}
 
 		// 2. Run the loop (blocking; may take 10-30s).
-		aggregated, _, loopErr := e.runAgenticLoop(ctx, auth, creds, baseURL, body, images, visionModel, maxRounds)
+		aggregated, _, loopErr := e.runAgenticLoop(ctx, auth, creds, baseURL, body, images, visionModel, maxRounds, reporter)
 		if loopErr != nil || aggregated == nil {
+			// Surface the failure as visible assistant content instead of a
+			// silent empty response, and log the full error for diagnosis.
+			errText := "codebuddy 视觉代理失败，未能获取图片描述"
+			if loopErr != nil {
+				errText = fmt.Sprintf("codebuddy 视觉代理失败: %s", summarize([]byte(loopErr.Error())))
+				log.Errorf("codebuddy vision agentic (stream): loop failed: %v", loopErr)
+			} else {
+				log.Errorf("codebuddy vision agentic (stream): loop returned no result")
+			}
+			errChunk, errJSON := json.Marshal(map[string]any{
+				"id": "", "object": "chat.completion.chunk", "created": 0, "model": baseModel,
+				"choices": []any{
+					map[string]any{"index": 0, "delta": map[string]any{"content": errText}, "finish_reason": nil},
+				},
+			})
+			if errJSON == nil {
+				if !emit(append([]byte("data: "), errChunk...)) {
+					return
+				}
+			}
 			emit([]byte("data: [DONE]"))
 			return
 		}

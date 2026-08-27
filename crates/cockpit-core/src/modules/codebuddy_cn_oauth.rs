@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
@@ -25,6 +26,16 @@ lazy_static::lazy_static! {
 
 fn now_timestamp() -> i64 {
     chrono::Utc::now().timestamp()
+}
+
+/// 从 access_token（JWT）的 payload 中解码 `exp`（秒）。CodeBuddy CN 的刷新/登录
+/// 接口响应通常不携带 `expiresAt`/`expires_at`，但 access_token 是标准 JWT，
+/// 可直接从其 exp 恢复过期时间，避免 TokenKeeper 因 expires_at 缺失而反复刷新。
+fn decode_jwt_exp(token: &str) -> Option<i64> {
+    let payload_base64 = token.split('.').nth(1)?;
+    let payload_bytes = URL_SAFE_NO_PAD.decode(payload_base64).ok()?;
+    let payload: Value = serde_json::from_slice(&payload_bytes).ok()?;
+    payload.get("exp").and_then(Value::as_i64)
 }
 
 fn generate_login_id() -> String {
@@ -234,7 +245,8 @@ pub async fn complete_login(login_id: &str) -> Result<CodebuddyOAuthCompletePayl
                                 let expires_at = data
                                     .get("expiresAt")
                                     .or_else(|| data.get("expires_at"))
-                                    .and_then(|v| v.as_i64());
+                                    .and_then(|v| v.as_i64())
+                                    .or_else(|| decode_jwt_exp(access_token.as_str()));
 
                                 let domain = data
                                     .get("domain")
@@ -714,6 +726,10 @@ async fn refresh_payload_for_account_inner(
                     .get("expiresAt")
                     .or_else(|| token_data.get("expires_at"))
                     .and_then(|v| v.as_i64())
+                    .or_else(|| {
+                        logger::log_info("[CodeBuddy] 刷新响应未包含 expiresAt/expires_at 字段，已从 access_token JWT exp 回填过期时间");
+                        decode_jwt_exp(new_access_token.as_str())
+                    })
                     .or(account.expires_at);
 
                 new_domain = token_data

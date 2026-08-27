@@ -408,6 +408,7 @@ type requestDiagnosticPayload struct {
 	Path                    string                     `json:"path,omitempty"`
 	RequestKind             string                     `json:"requestKind,omitempty"`
 	Model                   string                     `json:"model,omitempty"`
+	VisionSubagent          bool                       `json:"visionSubagent,omitempty"`
 	APIKeyID                string                     `json:"apiKeyId,omitempty"`
 	APIKeyLabel             string                     `json:"apiKeyLabel,omitempty"`
 	Transport               string                     `json:"transport,omitempty"`
@@ -1190,12 +1191,13 @@ func (p *requestPolicy) emitRequestCompleted(c *gin.Context, requestID string, s
 		RequestID:     requestID,
 		Method:        c.Request.Method,
 		Path:          requestPath(c.Request),
-		RequestKind:   requestKind,
-		Model:         model,
-		APIKeyID:      stringFromAPIKey(spec, "id"),
-		APIKeyLabel:   stringFromAPIKey(spec, "label"),
-		Transport:     diagnosticTransport(c.Request),
-		Status:        status,
+		RequestKind:    requestKind,
+		Model:          model,
+		VisionSubagent: internallogging.GetVisionSubagent(c.Request.Context()),
+		APIKeyID:       stringFromAPIKey(spec, "id"),
+		APIKeyLabel:    stringFromAPIKey(spec, "label"),
+		Transport:      diagnosticTransport(c.Request),
+		Status:         status,
 		LatencyMS:     latencyMS,
 		CompletedAtMS: completedAtMS,
 		Aborted:       c.IsAborted(),

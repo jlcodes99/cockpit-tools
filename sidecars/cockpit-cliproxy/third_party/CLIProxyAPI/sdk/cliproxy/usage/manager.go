@@ -44,7 +44,10 @@ type Record struct {
 	// Generate reports whether the client requested actual generation.
 	// nil or true means generation is enabled; only an explicit false disables generation.
 	// Use GenerateFlag to set the value and GenerateEnabled to read it with the default.
-	Generate    *bool
+	Generate *bool
+	// VisionSubagent marks requests handled by the pure-text vision sub-agent
+	// loop (text-only model + vision model), so the UI can render a badge.
+	VisionSubagent bool
 	RequestedAt time.Time
 	Latency     time.Duration
 	TTFT        time.Duration

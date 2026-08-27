@@ -42,6 +42,23 @@ type UsageReporter struct {
 	ttftStart       time.Time
 	ttftSet         bool
 	once            sync.Once
+	visionSubagent  bool
+}
+
+// Model returns the model label this reporter will publish.
+func (r *UsageReporter) Model() string {
+	if r == nil {
+		return ""
+	}
+	return r.model
+}
+
+// MarkVisionSubagent flags this reporter's record as handled by the pure-text
+// vision sub-agent loop, so the UI can render a "视" badge next to the model.
+func (r *UsageReporter) MarkVisionSubagent() {
+	if r != nil {
+		r.visionSubagent = true
+	}
 }
 
 type usageExecutor interface {
@@ -296,6 +313,7 @@ func (r *UsageReporter) buildRecordForModel(model string, detail usage.Detail, f
 		ServiceTier:         r.serviceTier,
 		ResponseServiceTier: strings.TrimSpace(detail.ResponseServiceTier),
 		Generate:            usage.GenerateFlag(r.generate),
+		VisionSubagent:      r.visionSubagent,
 		RequestedAt:         r.requestedAt,
 		Latency:             r.latency(),
 		TTFT:                r.ttftDuration(),

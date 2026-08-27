@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -112,9 +116,13 @@ type codebuddyModelsResponse struct {
 	Msg  string `json:"msg"`
 	Data struct {
 		Models []struct {
-			ID   string   `json:"id"`
-			Name string   `json:"name"`
-			Tags []string `json:"tags"`
+			ID               string   `json:"id"`
+			Name             string   `json:"name"`
+			Tags             []string `json:"tags"`
+			SupportsImages   bool     `json:"supportsImages"`
+			SupportsToolCall bool     `json:"supportsToolCall"`
+			MaxOutputTokens  int      `json:"maxOutputTokens"`
+			MaxInputTokens   int      `json:"maxInputTokens"`
 		} `json:"models"`
 	} `json:"data"`
 }
@@ -134,6 +142,11 @@ func syncCodebuddyModelsFromBackend(auths []*coreauth.Auth) []string {
 			continue
 		}
 		c := codebuddyauth.CredsFromAuth(a)
+		// 仅使用中国站账号拉取模型清单：国际站（www.codebuddy.ai）账号体系
+		// 暂未对外暴露，避免误取到国际站的模型目录。
+		if !strings.EqualFold(strings.TrimSpace(c.Region), codebuddyauth.RegionCN) {
+			continue
+		}
 		if strings.TrimSpace(c.AccessToken) != "" {
 			creds = c
 			break
@@ -170,7 +183,7 @@ func syncCodebuddyModelsFromBackend(auths []*coreauth.Auth) []string {
 
 	// 过滤非对话模型（如 text-to-image），与官方客户端 listAvailableModels 行为一致。
 	nonChatTags := map[string]bool{"text-to-image": true}
-	ids := make([]string, 0, len(envelope.Data.Models))
+	models := make([]*internalregistry.ModelInfo, 0, len(envelope.Data.Models))
 	for _, m := range envelope.Data.Models {
 		if strings.TrimSpace(m.ID) == "" {
 			continue
@@ -185,34 +198,114 @@ func syncCodebuddyModelsFromBackend(auths []*coreauth.Auth) []string {
 		if hasNonChat {
 			continue
 		}
-		ids = append(ids, m.ID)
+		models = append(models, &internalregistry.ModelInfo{
+			ID:                  m.ID,
+			Name:                m.Name,
+			Object:              "model",
+			OwnedBy:             "tencent",
+			Type:                "codebuddy",
+			SupportsImages:      m.SupportsImages,
+			ContextLength:       m.MaxInputTokens,
+			MaxCompletionTokens: m.MaxOutputTokens,
+		})
 	}
 
+	// 探测过滤已下线模型：清单里存在但推理路由已返回 11102 的模型（如
+	// glm-4.6v、kimi-k2-thinking）不应暴露给客户端。
+	models = probeCodebuddyModelAvailability(creds, models)
+
 	// 安装到 registry（去重、排序、变更检测、刷新通知）。
-	return internalregistry.InstallCodebuddyModelIDs(ids)
+	return internalregistry.InstallCodebuddyModels(models)
+}
+
+// codebuddyAvailabilityProbeConcurrency caps the number of concurrent
+// availability probe requests issued during a model sync.
+const codebuddyAvailabilityProbeConcurrency = 5
+
+// probeCodebuddyModelAvailability filters out models that the backend lists but
+// whose inference route is already decommissioned (HTTP 400 with code 11102
+// "service info not found", e.g. glm-4.6v, kimi-k2-thinking). A minimal
+// 1-token chat request is issued per model; only a definitive 11102 marks a
+// model unavailable, while network errors and other business errors keep the
+// model so upstream flakiness does not thrash the catalog.
+func probeCodebuddyModelAvailability(creds codebuddyauth.Creds, models []*internalregistry.ModelInfo) []*internalregistry.ModelInfo {
+	if len(models) == 0 {
+		return models
+	}
+	out := make([]*internalregistry.ModelInfo, 0, len(models))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, codebuddyAvailabilityProbeConcurrency)
+	for _, m := range models {
+		if m == nil {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(m *internalregistry.ModelInfo) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if codebuddyModelAvailable(creds, m.ID) {
+				mu.Lock()
+				out = append(out, m)
+				mu.Unlock()
+			}
+		}(m)
+	}
+	wg.Wait()
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// codebuddyModelAvailable reports whether a model's inference route is live by
+// sending a minimal chat request. It returns true on HTTP 2xx, on network
+// errors, and on any business error other than 11102 (service info not found),
+// so that only definitively decommissioned models are filtered out.
+func codebuddyModelAvailable(creds codebuddyauth.Creds, modelID string) bool {
+	payload, err := json.Marshal(map[string]any{
+		"model":      modelID,
+		"messages":   []map[string]string{{"role": "user", "content": "hi"}},
+		"max_tokens": 1,
+		"stream":     true,
+	})
+	if err != nil {
+		return true
+	}
+	req, err := http.NewRequest(http.MethodPost, creds.ResolveBaseURL()+codebuddyauth.ChatPath, bytes.NewReader(payload))
+	if err != nil {
+		return true
+	}
+	codebuddyauth.ApplyHeaders(req, creds)
+	req.Header.Set("Accept", "text/event-stream")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return true
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return true
+	}
+	b, _ := io.ReadAll(resp.Body)
+	// 11102 = "service info not found" — the model's inference route is gone.
+	return !bytes.Contains(b, []byte("11102"))
 }
 
 // handleCodebuddySyncModels 立即触发一次 CodeBuddy 模型同步，刷新 manifest 与
-// /v1/models 响应。优先从腾讯官方后端拉取实时模型清单（含 app.asar 未打包的
-// 新模型，如 glm-5.3）；后端不可用时回退到 app.asar 静态提取。
+// /v1/models 响应。模型清单仅以腾讯后端为准（含 app.asar 未打包的新模型，
+// 如 glm-5.3），不做 app.asar / 本地注册表回退。
 func (s *relayServer) handleCodebuddySyncModels(c *gin.Context) {
 	if _, ok := s.requireAPIKey(c); !ok {
 		return
 	}
 
 	var synced []string
-	source := "official-client-asar"
+	source := "tencent-backend"
 
-	// 1) 优先：从腾讯后端动态拉取（需要 CodeBuddy 账号 access_token）。
+	// 仅从腾讯后端动态拉取（需要 CodeBuddy 账号 access_token）。
 	if s.authManager != nil {
-		if ids := syncCodebuddyModelsFromBackend(s.authManager.List()); len(ids) > 0 {
-			synced = ids
-			source = "tencent-backend"
-		}
-	}
-	// 2) 回退：从本机官方客户端 app.asar 静态提取。
-	if len(synced) == 0 {
-		synced = internalregistry.SyncCodebuddyModelsFromOfficialClient()
+		synced = syncCodebuddyModelsFromBackend(s.authManager.List())
 	}
 
 	refreshed := false

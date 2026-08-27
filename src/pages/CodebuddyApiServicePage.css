@@ -1358,6 +1358,32 @@
   color: #ef4444;
 }
 
+/* 「视」徽标：淡蓝色圆底卡片 + 深蓝色字体，标记纯文本视觉子代理请求 */
+.codebuddy-api-service-page .cb-api-vision-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #3b82f6 12%, transparent);
+  color: #2563eb;
+  border: 1px solid color-mix(in srgb, #3b82f6 30%, transparent);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .codebuddy-api-service-page .cb-api-vision-badge {
+  background: color-mix(in srgb, #60a5fa 18%, transparent);
+  color: #93c5fd;
+  border-color: color-mix(in srgb, #60a5fa 35%, transparent);
+}
+
 .codebuddy-api-service-page .cb-api-log-empty {
   padding: 24px;
   text-align: center;

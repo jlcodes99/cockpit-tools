@@ -320,6 +320,9 @@ pub struct CodebuddyLocalAccessRequestLog {
     pub error_category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
+    /// 是否由「纯文本视觉子代理」处理（主模型 + 视觉模型协作）。
+    #[serde(default)]
+    pub vision_subagent: bool,
 }
 
 /// 统计查询结果。
