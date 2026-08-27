@@ -4485,6 +4485,10 @@
     "title": "CodeBuddy Account",
     "noAccounts": "No CodeBuddy accounts",
     "addAccount": "Add CodeBuddy Account",
+    "apiService": {
+      "navTitle": "CodeBuddy API Service",
+      "title": "CodeBuddy API Service"
+    },
     "flowNotice": {
       "title": "CodeBuddy Account Info (click to expand/collapse)",
       "desc": "Switching accounts requires reading CodeBuddy local auth storage and calling system credential services for decryption/re-encryption. Data is processed locally only.",

@@ -113,6 +113,10 @@ const CodexAccountsPage = lazy(() =>
 const CodexApiServicePage = lazy(() =>
   import('./pages/CodexApiServicePage').then((module) => ({ default: module.CodexApiServicePage })),
 );
+
+const CodebuddyApiServicePage = lazy(() =>
+  import('./pages/CodebuddyApiServicePage').then((module) => ({ default: module.CodebuddyApiServicePage })),
+);
 const ClaudeAccountsPage = lazy(() =>
   import('./pages/ClaudeAccountsPage').then((module) => ({ default: module.ClaudeAccountsPage })),
 );
@@ -214,6 +218,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'grok',
   'codebuddy',
   'codebuddy-cn',
+  'codebuddy-api-service',
   'qoder',
   'zcode',
   'trae',
@@ -250,6 +255,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   grok: ['grok'],
   codebuddy: ['codebuddy'],
   'codebuddy-cn': ['codebuddy-cn'],
+  'codebuddy-api-service': ['codebuddy_api_service', 'codebuddy'],
   qoder: ['qoder'],
   zcode: ['zcode'],
   trae: ['trae', 'trae-suite'],
@@ -4011,6 +4017,14 @@ function MainApp() {
               >
                 <CodexApiServicePage />
                 {page === 'codex-api-service' ? <BootReadyMarker /> : null}
+              </div>
+            </Suspense>
+          )}
+          {page === 'codebuddy-api-service' && (
+            <Suspense fallback={null}>
+              <div className="app-page-keep-alive">
+                <CodebuddyApiServicePage />
+                <BootReadyMarker />
               </div>
             </Suspense>
           )}

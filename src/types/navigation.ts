@@ -15,6 +15,7 @@ export type Page =
   | 'grok'
   | 'codebuddy'
   | 'codebuddy-cn'
+  | 'codebuddy-api-service'
   | 'qoder'
   | 'zcode'
   | 'trae'

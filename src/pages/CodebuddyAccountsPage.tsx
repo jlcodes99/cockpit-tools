@@ -47,6 +47,7 @@ import {
 } from '../utils/accountsOverviewFilterPersistence';
 import { CodebuddySessionListPanel } from '../components/codebuddy/CodebuddySessionListPanel';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
+import { CodebuddyApiServiceInlineCard } from '../components/codebuddy-suite/CodebuddyApiServiceInlineCard';
 
 const CB_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.codebuddy.flow_notice_collapsed';
 const CB_CURRENT_ACCOUNT_ID_KEY = 'agtools.codebuddy.current_account_id';
@@ -477,6 +478,19 @@ export function CodebuddyAccountsPage() {
     );
   }, [renderResourceQuotaItems, renderUsageInfo, t]);
 
+  const renderApiServiceInlineCard = () => (
+    <CodebuddyApiServiceInlineCard
+      platformRegion="intl"
+      onOpenFullPage={() => {
+        window.dispatchEvent(
+          new CustomEvent('app-request-navigate', {
+            detail: 'codebuddy-api-service',
+          }),
+        );
+      }}
+    />
+  );
+
   const renderGridCards = (items: typeof filteredAccounts, groupKey?: string) =>
     items.map((account) => {
       const displayEmail = getCodebuddyAccountDisplayEmail(account);
@@ -695,15 +709,8 @@ export function CodebuddyAccountsPage() {
       {loading && accounts.length === 0 ? (
         <div className="loading-container"><RefreshCw size={24} className="loading-spinner" /><p>{t('common.loading', '加载中...')}</p></div>
       ) : accounts.length === 0 ? (
-        <div className="empty-state">
-          <Globe size={48} />
-          <h3>{t('common.shared.empty.title', '暂无账号')}</h3>
-          <p>{t('codebuddy.noAccounts', '暂无 CodeBuddy 账号')}</p>
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '16px' }}>
-            <button className="btn btn-primary" onClick={() => openAddModal('oauth')}>
-              <Plus size={16} /> {t('common.shared.addAccount', '添加账号')}
-            </button>
-          </div>
+        <div className="codex-group-entry-grid">
+          {renderApiServiceInlineCard()}
         </div>
       ) : filteredAccounts.length === 0 ? (
         <div className="empty-state">
@@ -720,12 +727,18 @@ export function CodebuddyAccountsPage() {
                   <span className="tag-group-title">{resolveGroupLabel(groupKey)}</span>
                   <span className="tag-group-count">{totalCount}</span>
                 </div>
-                <div className="tag-group-grid ghcp-accounts-grid">{renderGridCards(items, groupKey)}</div>
+                <div className="tag-group-grid ghcp-accounts-grid">
+                  {renderApiServiceInlineCard()}
+                  {renderGridCards(items, groupKey)}
+                </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="ghcp-accounts-grid">{renderGridCards(paginatedAccounts)}</div>
+          <div className="ghcp-accounts-grid">
+            {renderApiServiceInlineCard()}
+            {renderGridCards(paginatedAccounts)}
+          </div>
         )}
         </div>
       ) : groupByTag ? (

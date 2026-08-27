@@ -56,6 +56,7 @@ import {
 import { KNOWN_PLAN_FILTERS } from "./CodebuddySuiteConfig";
 import { DosageNotifyUsageStatus } from "../platform/DosageNotifyUsageStatus";
 import { CodeBuddyQuotaCategoryList } from "../codebuddy/CodeBuddyQuotaCategoryList";
+import { CodebuddyApiServiceInlineCard } from "./CodebuddyApiServiceInlineCard";
 import {
   MultiSelectFilterDropdown,
   type MultiSelectFilterOption,
@@ -193,6 +194,8 @@ interface CodebuddySuiteAccountsSharedViewProps<
   page: UseProviderAccountsPageReturn;
   platformConfig: CodebuddySuiteAccountsPlatformConfig<TAccount>;
   onRefreshAccounts: () => void;
+  /** 注入到 toolbar-right 末尾的额外元素（如便捷启动 API 按钮） */
+  toolbarExtra?: ReactNode;
 }
 
 export function CodebuddySuiteAccountsSharedView<
@@ -203,6 +206,7 @@ export function CodebuddySuiteAccountsSharedView<
   page,
   platformConfig,
   onRefreshAccounts,
+  toolbarExtra,
 }: CodebuddySuiteAccountsSharedViewProps<TAccount>) {
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
     page.filterPersistenceEnabled
@@ -635,6 +639,25 @@ export function CodebuddySuiteAccountsSharedView<
     },
     [platformConfig, renderResourceQuotaItems, renderUsageInfo, t],
   );
+
+  const renderApiServiceInlineCard = () => {
+    const region: "intl" | "cn" =
+      platformConfig.quickSettingsType === "codebuddy_cn" ? "cn" : "intl";
+    return (
+      <CodebuddyApiServiceInlineCard
+        platformRegion={region}
+        onOpenFullPage={() => {
+          window.dispatchEvent(
+            new CustomEvent("app-request-navigate", {
+              detail: "codebuddy-api-service",
+            }),
+          );
+        }}
+      />
+    );
+  };
+
+  // 调用方负责在无账号时独立渲染「API 服务」卡片（与 codex 行为一致）
 
   const renderGridCards = (items: typeof filteredAccounts, groupKey?: string) =>
     items.map((account) => {
@@ -1123,6 +1146,7 @@ export function CodebuddySuiteAccountsSharedView<
           {platformConfig.quickSettingsType && (
             <QuickSettingsPopover type={platformConfig.quickSettingsType} />
           )}
+          {toolbarExtra}
         </div>
       </div>
 
@@ -1152,27 +1176,8 @@ export function CodebuddySuiteAccountsSharedView<
           <p>{t("common.loading", "加载中...")}</p>
         </div>
       ) : accounts.length === 0 ? (
-        <div className="empty-state">
-          <Globe size={48} />
-          <h3>{t("common.shared.empty.title", "暂无账号")}</h3>
-          <p>
-            {t(platformConfig.noAccountsKey, platformConfig.noAccountsDefault)}
-          </p>
-          <div
-            style={{
-              display: "flex",
-              gap: "12px",
-              justifyContent: "center",
-              marginTop: "16px",
-            }}
-          >
-            <button
-              className="btn btn-primary"
-              onClick={() => openAddModal("oauth")}
-            >
-              <Plus size={16} /> {t("common.shared.addAccount", "添加账号")}
-            </button>
-          </div>
+        <div className="codex-group-entry-grid">
+          {renderApiServiceInlineCard()}
         </div>
       ) : filteredAccounts.length === 0 ? (
         <div className="empty-state">
@@ -1193,6 +1198,7 @@ export function CodebuddySuiteAccountsSharedView<
                       <span className="tag-group-count">{totalCount}</span>
                     </div>
                     <div className="tag-group-grid ghcp-accounts-grid">
+                      {renderApiServiceInlineCard()}
                       {renderGridCards(items, groupKey)}
                     </div>
                   </div>
@@ -1201,6 +1207,7 @@ export function CodebuddySuiteAccountsSharedView<
             </div>
           ) : (
             <div className="ghcp-accounts-grid">
+              {renderApiServiceInlineCard()}
               {renderGridCards(paginatedAccounts)}
             </div>
           )}

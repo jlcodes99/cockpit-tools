@@ -4485,6 +4485,10 @@
     "title": "CodeBuddy 账号管理",
     "noAccounts": "暂无 CodeBuddy 账号",
     "addAccount": "添加 CodeBuddy 账号",
+    "apiService": {
+      "navTitle": "CodeBuddy API 服务",
+      "title": "CodeBuddy API 服务"
+    },
     "flowNotice": {
       "title": "CodeBuddy 账号管理说明（点击展开/收起）",
       "desc": "切换账号需读取 CodeBuddy 本地认证存储并调用系统凭据服务进行加解密，数据仅在本地处理。",

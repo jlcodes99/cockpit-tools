@@ -26,6 +26,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return 'Codex';
     case 'codex_api_service':
       return _t('codex.apiService.navTitle', 'Codex API Service');
+    case 'codebuddy_api_service':
+      return _t('codebuddy.apiService.navTitle', 'CodeBuddy API Service');
     case 'claude_manager':
       return 'Claude';
     case 'zed':
@@ -73,6 +75,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <CodexIcon size={size} />;
     case 'codex_api_service':
       return <CodexIcon size={size} />;
+    case 'codebuddy_api_service':
+      return <CodebuddyIcon style={{ width: size, height: size }} />;
     case 'claude_manager':
       return <ClaudeIcon size={size} />;
     case 'zed':

@@ -5,6 +5,7 @@ export type PlatformId =
   | 'antigravity_ide'
   | 'codex'
   | 'codex_api_service'
+  | 'codebuddy_api_service'
   | 'claude_manager'
   | 'zed'
   | 'github-copilot'
@@ -26,6 +27,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'claude_manager',
   'codex',
   'codex_api_service',
+  'codebuddy_api_service',
   'antigravity',
   'antigravity_ide',
   'zed',
@@ -46,7 +48,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
 ];
 
 /** Platforms that do not own account lists (service / feature pages). */
-export const ACCOUNTLESS_PLATFORM_IDS: readonly PlatformId[] = ['codex_api_service'];
+export const ACCOUNTLESS_PLATFORM_IDS: readonly PlatformId[] = ['codex_api_service', 'codebuddy_api_service'];
 
 export function isAccountPlatform(platformId: PlatformId): boolean {
   return !ACCOUNTLESS_PLATFORM_IDS.includes(platformId);
@@ -67,6 +69,7 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   antigravity_ide: 'overview',
   codex: 'codex',
   codex_api_service: 'codex-api-service',
+  codebuddy_api_service: 'codebuddy-api-service',
   claude_manager: 'claude',
   zed: 'zed',
   'github-copilot': 'github-copilot',

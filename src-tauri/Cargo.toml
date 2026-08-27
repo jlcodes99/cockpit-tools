@@ -68,6 +68,8 @@ lazy_static = "1.5"
 trash = "5"
 reqwest_dav = "0.3.3"
 zip = { version = "4.6.1", default-features = false, features = ["deflate"] }
+# 用于解析本机局域网 IPv4，提供给 CodeBuddy API 反代服务的局域网 URL
+local-ip-address = "0.6"
 
 # VS Code Copilot token injection (Windows only)
 aes-gcm = "0.10"

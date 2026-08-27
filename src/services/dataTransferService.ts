@@ -295,6 +295,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   codebuddy: async () => (await codebuddyService.listCodebuddyAccounts()) as unknown as TransferAccountRecord[],
   codebuddy_cn: async () =>
     (await codebuddyCnService.listCodebuddyCnAccounts()) as unknown as TransferAccountRecord[],
+  codebuddy_api_service: async () => [],
   qoder: async () => (await qoderService.listQoderAccounts()) as unknown as TransferAccountRecord[],
   zcode: async () => (await zcodeService.listZcodeAccounts()) as unknown as TransferAccountRecord[],
   trae: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
@@ -318,6 +319,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   grok: undefined,
   codebuddy: codebuddyService.importCodebuddyFromJson,
   codebuddy_cn: codebuddyCnService.importCodebuddyCnFromJson,
+  codebuddy_api_service: undefined,
   qoder: qoderService.importQoderFromJson,
   zcode: zcodeService.importZcodeFromJson,
   trae: traeService.importTraeFromJson,

@@ -1,0 +1,1719 @@
+use crate::models::codebuddy::CodebuddyAccount;
+use crate::models::codebuddy_local_access::{
+    CodebuddyLocalAccessAccountHealth, CodebuddyLocalAccessApiKey, CodebuddyLocalAccessCollection,
+    CodebuddyLocalAccessCustomRoutingRule, CodebuddyLocalAccessImageGenerationMode,
+    CodebuddyLocalAccessImageGenerationStatus, CodebuddyLocalAccessRequestKind,
+    CodebuddyLocalAccessRequestLog, CodebuddyLocalAccessRoutingStrategy, CodebuddyLocalAccessScope,
+    CodebuddyLocalAccessStats, CodebuddyLocalAccessUsageStats,
+};
+use crate::modules::atomic_write::write_string_atomic;
+use crate::modules::{account, codebuddy_account, codebuddy_cn_account, logger};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::OnceLock;
+use std::time::Duration;
+use tokio::process::{Child, Command as TokioCommand};
+use tokio::sync::Mutex as TokioMutex;
+
+const CODEBUDDY_LOCAL_ACCESS_FILE: &str = "codebuddy_local_access.json";
+const CODEBUDDY_LOCAL_ACCESS_SIDECAR_DIR: &str = "codebuddy_local_access_sidecar";
+const CODEBUDDY_SIDECAR_CONFIG_FILE: &str = "config.json";
+const CODEBUDDY_SIDECAR_MANIFEST_FILE: &str = "manifest.json";
+const CODEBUDDY_SIDECAR_AUTHS_DIR: &str = "auths";
+const CODEBUDDY_SIDECAR_BIN_NAME: &str = "cockpit-cliproxy";
+
+const REGION_INTL: &str = "intl";
+const REGION_CN: &str = "cn";
+const BASE_URL_INTL: &str = "https://www.codebuddy.ai";
+const BASE_URL_CN: &str = "https://copilot.tencent.com";
+
+/// CodeBuddy 图片生成占位模型 ID（与 Go 侧 `defaultImagesToolModel` 的 codebuddy 分支一致）。
+/// 上游图片协议尚未实测，该 ID 为占位，待官方确认后替换。
+const CODEBUDDY_IMAGE_MODEL_ID: &str = "codebuddy-image-1";
+
+/// CodeBuddy 订阅可用的模型 ID（与 Go 侧 registry 模型清单保持一致）。
+/// 该清单来自官方 WorkBuddy/CodeBuddy 客户端内置模型目录（去重全集），
+/// sidecar 启动时还会从本机客户端 app.asar 动态同步覆盖。
+const CODEBUDDY_MODEL_IDS: &[&str] = &[
+    "auto",
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-202605",
+    "deepseek-v4-pro",
+    "deepseek-v4-pro-202606",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-3.5-flash",
+    "glm-4.6v",
+    "glm-4.7",
+    "glm-5",
+    "glm-5-turbo",
+    "glm-5.1",
+    "glm-5.2",
+    "gpt-4.1",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "hunyuan-2.0-instruct",
+    "hunyuan-2.0-thinking",
+    "hunyuan-t1",
+    "hunyuan-turbos",
+    "hy3",
+    "hy3-preview",
+    "kimi-k2-0711-preview",
+    "kimi-k2-0905-preview",
+    "kimi-k2-thinking",
+    "kimi-k2-thinking-turbo",
+    "kimi-k2-turbo-preview",
+    "kimi-k2.5",
+    "kimi-k2.6",
+    "kimi-k2.7-code",
+    "kimi-k2.7-code-highspeed",
+    "kimi-k3",
+    "minimax-m2.5",
+    "minimax-m2.7",
+    "minimax-m3",
+    "MiniMax-M2",
+    "MiniMax-M2.1",
+    "MiniMax-M2.1-highspeed",
+    "MiniMax-M2.5",
+    "MiniMax-M2.5-highspeed",
+    "o1",
+    "o3",
+    "o3-mini",
+    "tc-code-latest",
+    CODEBUDDY_IMAGE_MODEL_ID,
+];
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SidecarLaunchConfig {
+    config_path: PathBuf,
+    manifest_path: PathBuf,
+    fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodebuddyLocalAccessAccountOption {
+    pub id: String,
+    pub email: String,
+    pub region: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enterprise_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodebuddyLocalAccessState {
+    pub collection: CodebuddyLocalAccessCollection,
+    pub running: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actual_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    pub intl_accounts: Vec<CodebuddyLocalAccessAccountOption>,
+    pub cn_accounts: Vec<CodebuddyLocalAccessAccountOption>,
+    pub base_url: String,
+    /// 局域网模式下供外部设备使用的 URL（如 http://192.168.1.10:11435）。
+    /// 仅在 scope=lan 且能解析到本机局域网 IP 时返回。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lan_base_url: Option<String>,
+    /// 选中账号的图片生成能力健康状态（镜像 codex 的 image_generation_status）。
+    pub account_health: Vec<CodebuddyLocalAccessAccountHealth>,
+}
+
+#[derive(Default)]
+struct CodebuddyGatewayRuntime {
+    loaded: bool,
+    collection: CodebuddyLocalAccessCollection,
+    running: bool,
+    actual_port: Option<u16>,
+    child: Option<Child>,
+    fingerprint: Option<String>,
+    last_error: Option<String>,
+    /// 捕获自 sidecar stdout 的请求日志（按 requestId 索引，保留顺序）。
+    request_logs: Vec<CodebuddyLocalAccessRequestLog>,
+    /// 请求日志的 requestId 索引，用于 usage 事件回填 token 统计。
+    request_index: HashMap<String, usize>,
+    /// 统计起始时间戳（最近一次清空统计）。
+    stats_since: i64,
+}
+
+const MAX_REQUEST_LOGS: usize = 500;
+
+static GATEWAY_RUNTIME: OnceLock<TokioMutex<CodebuddyGatewayRuntime>> = OnceLock::new();
+
+fn gateway_runtime() -> &'static TokioMutex<CodebuddyGatewayRuntime> {
+    GATEWAY_RUNTIME.get_or_init(|| TokioMutex::new(CodebuddyGatewayRuntime::default()))
+}
+
+fn state_file_path() -> Result<PathBuf, String> {
+    Ok(account::get_data_dir()?.join(CODEBUDDY_LOCAL_ACCESS_FILE))
+}
+
+fn sidecar_base_dir() -> Result<PathBuf, String> {
+    Ok(account::get_data_dir()?.join(CODEBUDDY_LOCAL_ACCESS_SIDECAR_DIR))
+}
+
+fn sidecar_config_path(base_dir: &Path) -> PathBuf {
+    base_dir.join(CODEBUDDY_SIDECAR_CONFIG_FILE)
+}
+
+fn sidecar_manifest_path(base_dir: &Path) -> PathBuf {
+    base_dir.join(CODEBUDDY_SIDECAR_MANIFEST_FILE)
+}
+
+fn sidecar_auths_dir(base_dir: &Path) -> PathBuf {
+    base_dir.join(CODEBUDDY_SIDECAR_AUTHS_DIR)
+}
+
+fn sidecar_auth_file_name(account_id: &str) -> String {
+    let safe: String = account_id
+        .trim()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let safe = if safe.trim_matches('_').is_empty() {
+        uuid::Uuid::new_v4().to_string()
+    } else {
+        safe
+    };
+    format!("{safe}.json")
+}
+
+fn load_collection() -> CodebuddyLocalAccessCollection {
+    let path = match state_file_path() {
+        Ok(path) => path,
+        Err(_) => return CodebuddyLocalAccessCollection::default(),
+    };
+    match std::fs::read_to_string(&path) {
+        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Err(_) => CodebuddyLocalAccessCollection::default(),
+    }
+}
+
+fn save_collection(collection: &CodebuddyLocalAccessCollection) -> Result<(), String> {
+    let path = state_file_path()?;
+    let content = serde_json::to_string_pretty(collection)
+        .map_err(|e| format!("序列化 CodeBuddy 反代配置失败: {e}"))?;
+    write_string_atomic(&path, &content)
+}
+
+fn effective_bind_host(collection: &CodebuddyLocalAccessCollection) -> String {
+    if collection.scope == CodebuddyLocalAccessScope::Lan {
+        "0.0.0.0".to_string()
+    } else {
+        let host = collection.bind_host.trim();
+        if host.is_empty() {
+            "127.0.0.1".to_string()
+        } else {
+            host.to_string()
+        }
+    }
+}
+
+fn account_option(account: &CodebuddyAccount, region: &str) -> CodebuddyLocalAccessAccountOption {
+    CodebuddyLocalAccessAccountOption {
+        id: account.id.clone(),
+        email: account.email.clone(),
+        region: region.to_string(),
+        uid: account.uid.clone(),
+        enterprise_id: account.enterprise_id.clone(),
+        plan_type: account.plan_type.clone(),
+    }
+}
+
+fn list_intl_accounts() -> Vec<CodebuddyLocalAccessAccountOption> {
+    codebuddy_account::list_accounts()
+        .iter()
+        .map(|a| account_option(a, REGION_INTL))
+        .collect()
+}
+
+fn list_cn_accounts() -> Vec<CodebuddyLocalAccessAccountOption> {
+    codebuddy_cn_account::list_accounts()
+        .iter()
+        .map(|a| account_option(a, REGION_CN))
+        .collect()
+}
+
+fn auth_json_for_account(account: &CodebuddyAccount, region: &str, custom_rules: &[CodebuddyLocalAccessCustomRoutingRule]) -> Value {
+    let base_url = if region == REGION_CN {
+        BASE_URL_CN
+    } else {
+        BASE_URL_INTL
+    };
+    let meta = account_routing_metadata(account);
+    let mut obj = json!({
+        "type": "codebuddy",
+        "access_token": account.access_token.clone(),
+        "refresh_token": account.refresh_token.clone().unwrap_or_default(),
+        "uid": account.uid.clone().unwrap_or_default(),
+        "enterprise_id": account.enterprise_id.clone().unwrap_or_default(),
+        "domain": account.domain.clone().unwrap_or_default(),
+        "base_url": base_url,
+        "region": region,
+        "email": account.email.clone(),
+    });
+    if let Some(map) = obj.as_object_mut() {
+        if let Some(v) = meta.quota_remain {
+            map.insert("quota_remain".to_string(), json!(v));
+        }
+        if let Some(v) = meta.plan_rank {
+            map.insert("plan_rank".to_string(), json!(v));
+        }
+        if let Some(v) = meta.subscription_expiry_ms {
+            map.insert("subscription_expiry_ms".to_string(), json!(v));
+        }
+        if let Some(v) = meta.payment_type {
+            map.insert("payment_type".to_string(), json!(v));
+        }
+        // 自定义路由规则（custom 策略）：注入到 auth 顶层，Go 侧 customSelector 读取。
+        if let Some(rule) = custom_rules.iter().find(|r| r.account_id == account.id) {
+            map.insert("routing_priority".to_string(), json!(rule.priority));
+            map.insert("routing_weight".to_string(), json!(rule.weight.max(1)));
+            map.insert("routing_is_backup".to_string(), json!(rule.is_backup));
+            map.insert("routing_is_preferred".to_string(), json!(rule.is_preferred));
+        }
+    }
+    obj
+}
+
+/// 从账号元数据提取调度策略所需的配额/订阅/到期信息。
+/// 配额来源：`quota_raw.userResource.data.Response.Data.Accounts[0]`。
+struct AccountRoutingMetadata {
+    quota_remain: Option<f64>,
+    plan_rank: Option<i64>,
+    subscription_expiry_ms: Option<i64>,
+    payment_type: Option<String>,
+}
+
+fn account_routing_metadata(account: &CodebuddyAccount) -> AccountRoutingMetadata {
+    let payment_type = account.payment_type.clone();
+    let plan_rank = payment_type
+        .as_deref()
+        .map(|p| plan_type_rank(p))
+        .unwrap_or(0);
+
+    let (quota_remain, subscription_expiry_ms) = account
+        .quota_raw
+        .as_ref()
+        .and_then(|q| q.get("userResource")?.get("data")?.get("Response")?.get("Data")?.get("Accounts")?.as_array()?.first().cloned())
+        .map(|first| {
+            let remain = first
+                .get("CapacityRemain")
+                .and_then(|v| v.as_f64())
+                .or_else(|| first.get("CapacityRemainPrecise").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok()));
+            let expiry = first
+                .get("CycleEndTime")
+                .and_then(|v| v.as_str())
+                .and_then(parse_cycle_end_time_ms);
+            (remain, expiry)
+        })
+        .unwrap_or((None, None));
+
+    AccountRoutingMetadata {
+        quota_remain,
+        plan_rank: Some(plan_rank),
+        subscription_expiry_ms,
+        payment_type,
+    }
+}
+
+/// 订阅类型 → 等级数值（越大越优先，供 plan_high_first / plan_low_first 使用）。
+fn plan_type_rank(payment_type: &str) -> i64 {
+    match payment_type.trim().to_ascii_lowercase().as_str() {
+        "enterprise" | "团队版" | "企业版" => 3,
+        "team" | "pro" | "专业版" => 2,
+        "plus" | "会员" => 1,
+        _ => 0, // free 及未知类型
+    }
+}
+
+/// 解析 `CycleEndTime`（格式 `2026-08-31 23:59:59`）为 Unix 毫秒时间戳。
+fn parse_cycle_end_time_ms(s: &str) -> Option<i64> {
+    let normalized = s.trim().replace(' ', "T");
+    chrono::NaiveDateTime::parse_from_str(&normalized, "%Y-%m-%dT%H:%M:%S")
+        .ok()
+        .map(|dt| dt.and_utc().timestamp() * 1000)
+}
+
+fn sidecar_binary_path() -> Result<PathBuf, String> {
+    let exe =
+        std::env::current_exe().map_err(|e| format!("读取当前程序路径失败: {e}"))?;
+    let parent = exe
+        .parent()
+        .ok_or_else(|| format!("当前程序路径缺少父目录: {}", exe.display()))?;
+
+    let mut names: Vec<String> = if cfg!(target_os = "windows") {
+        vec![
+            format!("{CODEBUDDY_SIDECAR_BIN_NAME}.exe"),
+            format!("{CODEBUDDY_SIDECAR_BIN_NAME}-{}.exe", env!("COCKPIT_RUST_TARGET")),
+        ]
+    } else {
+        vec![
+            CODEBUDDY_SIDECAR_BIN_NAME.to_string(),
+            format!("{CODEBUDDY_SIDECAR_BIN_NAME}-{}", env!("COCKPIT_RUST_TARGET")),
+        ]
+    };
+    if !cfg!(target_os = "windows") {
+        names.push(format!("{CODEBUDDY_SIDECAR_BIN_NAME}.exe"));
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let dev_sidecar_dir = manifest_dir.join("../sidecars/cockpit-cliproxy/bin");
+
+    for dir in [dev_sidecar_dir, parent.to_path_buf()] {
+        for name in &names {
+            let path = dir.join(name);
+            if !candidates.contains(&path) {
+                candidates.push(path);
+            }
+        }
+    }
+    if let Some(contents_dir) = parent.parent() {
+        for name in &names {
+            let path = contents_dir.join("Resources").join(name);
+            if !candidates.contains(&path) {
+                candidates.push(path);
+            }
+        }
+    }
+
+    candidates
+        .iter()
+        .find(|path| path.exists())
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "CodeBuddy 反代 sidecar 二进制不存在，已检查: {}。请重新构建应用。",
+                candidates
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+}
+
+fn config_fingerprint(config: &str, manifest: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(config.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(manifest.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn prepare_sidecar_launch_config(
+    collection: &CodebuddyLocalAccessCollection,
+    base_dir: &Path,
+) -> Result<SidecarLaunchConfig, String> {
+    let auths_dir = sidecar_auths_dir(base_dir);
+    std::fs::create_dir_all(&auths_dir)
+        .map_err(|e| format!("创建 CodeBuddy 反代认证目录失败: {e}"))?;
+
+    let mut expected_auth_files = HashSet::new();
+    let mut manifest_accounts = Vec::new();
+
+    // 国际站账号
+    for account_id in &collection.intl_account_ids {
+        let Some(account) = codebuddy_account::load_account(account_id) else {
+            logger::log_warn(&format!(
+                "[CodeBuddyLocalAccess] 跳过不存在的国际站账号: account_id={account_id}"
+            ));
+            continue;
+        };
+        write_auth_file(&auths_dir, &account, REGION_INTL, &collection.custom_routing_rules, &mut expected_auth_files)?;
+        manifest_accounts.push(json!({
+            "id": account.id.clone(),
+            "email": account.email.clone(),
+            "authId": sidecar_auth_file_name(&account.id),
+            "authKind": "oauth",
+        }));
+    }
+
+    // 中国站账号
+    for account_id in &collection.cn_account_ids {
+        let Some(account) = codebuddy_cn_account::load_account(account_id) else {
+            logger::log_warn(&format!(
+                "[CodeBuddyLocalAccess] 跳过不存在的中国站账号: account_id={account_id}"
+            ));
+            continue;
+        };
+        write_auth_file(&auths_dir, &account, REGION_CN, &collection.custom_routing_rules, &mut expected_auth_files)?;
+        manifest_accounts.push(json!({
+            "id": account.id.clone(),
+            "email": account.email.clone(),
+            "authId": sidecar_auth_file_name(&account.id),
+            "authKind": "oauth",
+        }));
+    }
+
+    remove_stale_auth_files(&auths_dir, &expected_auth_files)?;
+
+    // 图片生成关闭时，从模型清单中隐藏图片模型（镜像 codex 的 /v1/models 可见性规则）。
+    let image_models_enabled =
+        collection.image_generation_mode != CodebuddyLocalAccessImageGenerationMode::Disabled;
+    let model_ids: Vec<String> = CODEBUDDY_MODEL_IDS
+        .iter()
+        .map(|id| id.to_string())
+        .filter(|id| !collection.excluded_models.contains(id))
+        .filter(|id| {
+            image_models_enabled || *id != CODEBUDDY_IMAGE_MODEL_ID
+        })
+        .collect();
+
+    let manifest = json!({
+        "apiKeys": manifest_api_keys(collection),
+        "accounts": manifest_accounts,
+        "modelIds": model_ids,
+        "modelAliases": collection.model_aliases.iter().map(|alias| json!({
+            "sourceModel": alias.source_model.clone(),
+            "alias": alias.alias.clone(),
+            "fork": alias.fork,
+        })).collect::<Vec<_>>(),
+        "excludedModels": collection.excluded_models.clone(),
+        "routingStrategy": routing_strategy_name(collection.routing_strategy),
+        "debugLogs": collection.debug_logs,
+        "imageGenerationMode": match collection.image_generation_mode {
+            CodebuddyLocalAccessImageGenerationMode::Disabled => "disabled",
+            CodebuddyLocalAccessImageGenerationMode::ImagesOnly => "images_only",
+            CodebuddyLocalAccessImageGenerationMode::Enabled => "enabled",
+        },
+        "imageModels": [CODEBUDDY_IMAGE_MODEL_ID],
+    });
+
+    let mut config = serde_json::Map::new();
+    config.insert("host".to_string(), json!(effective_bind_host(collection)));
+    config.insert("port".to_string(), json!(collection.port));
+    config.insert(
+        "auth-dir".to_string(),
+        json!(auths_dir.to_string_lossy().to_string()),
+    );
+    config.insert("debug".to_string(), json!(collection.debug_logs));
+    config.insert(
+        "api-keys".to_string(),
+        json!(client_api_keys(collection)),
+    );
+    config.insert("request-log".to_string(), json!(false));
+    config.insert("logging-to-file".to_string(), json!(false));
+    config.insert("commercial-mode".to_string(), json!(true));
+    config.insert("ws-auth".to_string(), json!(true));
+    // CodeBuddy token 由 Go 侧 executor 自动刷新，因此不禁用 auth-auto-refresh。
+    config.insert("disable-auth-auto-refresh".to_string(), json!(false));
+    config.insert(
+        "routing".to_string(),
+        json!({
+            // 策略名直接使用 snake_case 传入，Go 侧 normalizeStrategy 负责映射到
+            // 具体 selector（round-robin / fill-first / random / quota_* / plan_* /
+            // expiry_soon_first）。
+            "strategy": routing_strategy_name(collection.routing_strategy),
+            "session-affinity": collection.session_affinity,
+            "session-affinity-ttl": collection.session_affinity_ttl_ms,
+        }),
+    );
+    config.insert(
+        "max-retry-credentials".to_string(),
+        json!(collection.max_retry_credentials as i32),
+    );
+    config.insert(
+        "max-retry-interval".to_string(),
+        json!(((collection.max_retry_interval_ms + 999) / 1000) as i32),
+    );
+    config.insert(
+        "disable-cooling".to_string(),
+        json!(collection.disable_cooling),
+    );
+    config.insert(
+        "image-generation-mode".to_string(),
+        json!(match collection.image_generation_mode {
+            CodebuddyLocalAccessImageGenerationMode::Disabled => "disabled",
+            CodebuddyLocalAccessImageGenerationMode::ImagesOnly => "images_only",
+            CodebuddyLocalAccessImageGenerationMode::Enabled => "enabled",
+        }),
+    );
+    config.insert(
+        "max-concurrent-image-requests".to_string(),
+        json!(collection.max_concurrent_image_requests as i32),
+    );
+    if !collection.excluded_models.is_empty() {
+        config.insert(
+            "oauth-excluded-models".to_string(),
+            json!({ "codebuddy": collection.excluded_models.clone() }),
+        );
+    }
+    if !collection.model_aliases.is_empty() {
+        config.insert(
+            "oauth-model-alias".to_string(),
+            json!({ "codebuddy": collection.model_aliases.iter().map(|alias| json!({
+                "sourceModel": alias.source_model.clone(),
+                "alias": alias.alias.clone(),
+                "fork": alias.fork,
+            })).collect::<Vec<_>>() }),
+        );
+    }
+
+    // 视觉代理层配置（高级功能，默认关闭）。通过环境变量覆盖，避免引入 UI 改动：
+    //   CODEBUDDY_VISION_MODE    off | routing | preprocess
+    //   CODEBUDDY_VISION_MODEL   视觉引擎模型（默认 hy3-preview）
+    //   CODEBUDDY_VISION_PREPROCESS_PROMPT  预处理模式的自定义提示词（可选）
+    let vision_mode =
+        std::env::var("CODEBUDDY_VISION_MODE").unwrap_or_else(|_| "off".to_string());
+    let vision_model =
+        std::env::var("CODEBUDDY_VISION_MODEL").unwrap_or_else(|_| "hy3-preview".to_string());
+    let vision_preprocess_prompt =
+        std::env::var("CODEBUDDY_VISION_PREPROCESS_PROMPT").unwrap_or_default();
+    let mut vision_cfg = json!({
+        "mode": vision_mode,
+        "model": vision_model,
+    });
+    if !vision_preprocess_prompt.is_empty() {
+        vision_cfg["preprocess-prompt"] = json!(vision_preprocess_prompt);
+    }
+    config.insert("codebuddy-vision".to_string(), vision_cfg);
+
+    let config_path = sidecar_config_path(base_dir);
+    let manifest_path = sidecar_manifest_path(base_dir);
+    let config_content = serde_json::to_string_pretty(&Value::Object(config))
+        .map_err(|e| format!("序列化 CodeBuddy sidecar 配置失败: {e}"))?;
+    let manifest_content = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| format!("序列化 CodeBuddy sidecar manifest 失败: {e}"))?;
+    let fingerprint = config_fingerprint(&config_content, &manifest_content);
+
+    write_string_atomic(&config_path, &config_content)?;
+    write_string_atomic(&manifest_path, &manifest_content)?;
+
+    Ok(SidecarLaunchConfig {
+        config_path,
+        manifest_path,
+        fingerprint,
+    })
+}
+
+fn write_auth_file(
+    auths_dir: &Path,
+    account: &CodebuddyAccount,
+    region: &str,
+    custom_rules: &[CodebuddyLocalAccessCustomRoutingRule],
+    expected: &mut HashSet<String>,
+) -> Result<(), String> {
+    let file_name = sidecar_auth_file_name(&account.id);
+    let auth_path = auths_dir.join(&file_name);
+    expected.insert(file_name);
+    let auth_json = auth_json_for_account(account, region, custom_rules);
+    let content = serde_json::to_string_pretty(&auth_json)
+        .map_err(|e| format!("序列化 CodeBuddy 认证失败: {e}"))?;
+    write_string_atomic(&auth_path, &content)
+}
+
+fn remove_stale_auth_files(auths_dir: &Path, expected: &HashSet<String>) -> Result<(), String> {
+    let entries = std::fs::read_dir(auths_dir)
+        .map_err(|e| format!("读取 CodeBuddy 认证目录失败: {e}"))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !expected.contains(name) {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+    Ok(())
+}
+
+fn manifest_api_keys(collection: &CodebuddyLocalAccessCollection) -> Vec<Value> {
+    collection
+        .api_keys
+        .iter()
+        .map(|key| {
+            let mut entry = json!({
+                "id": key.id.clone(),
+                "label": key.name.clone(),
+                "key": key.key.clone(),
+                "enabled": key.enabled,
+            });
+            if let Some(account_ids) = &key.account_ids {
+                if !account_ids.is_empty() {
+                    entry["accountIds"] = json!(account_ids);
+                }
+            }
+            entry
+        })
+        .collect()
+}
+
+fn client_api_keys(collection: &CodebuddyLocalAccessCollection) -> Vec<String> {
+    collection
+        .api_keys
+        .iter()
+        .filter(|key| key.enabled)
+        .map(|key| key.key.clone())
+        .collect()
+}
+
+fn client_base_url(collection: &CodebuddyLocalAccessCollection) -> String {
+    let host = if collection.bind_host.is_empty() {
+        "127.0.0.1"
+    } else {
+        collection.bind_host.as_str()
+    };
+    // LAN 模式下本机访问仍走 127.0.0.1（避免误导用户复制 0.0.0.0）
+    let display_host = if host == "0.0.0.0" || host == "::" {
+        "127.0.0.1"
+    } else {
+        host
+    };
+    format!("http://{}:{}", display_host, collection.port)
+}
+
+/// 局域网模式下供外部设备使用的 URL。
+/// 解析本机非环回、非虚拟网卡的 IPv4 地址，返回形如 `http://192.168.1.10:11435` 的字符串。
+/// 若解析失败则返回 None。
+fn lan_base_url(collection: &CodebuddyLocalAccessCollection) -> Option<String> {
+    if !matches!(collection.scope, CodebuddyLocalAccessScope::Lan) {
+        return None;
+    }
+    let lan_ip = resolve_lan_ipv4()?;
+    Some(format!("http://{}:{}", lan_ip, collection.port))
+}
+
+/// 选择本机局域网 IPv4：优先非虚拟网卡、非环回、非链路本地地址。
+fn resolve_lan_ipv4() -> Option<String> {
+    use std::net::IpAddr;
+
+    // local_ip_address::local_ip() 已经筛选出用于外部网络通信的本机 IP
+    let ip = local_ip_address::local_ip().ok()?;
+    match ip {
+        IpAddr::V4(v4) => {
+            if v4.is_loopback() {
+                return None;
+            }
+            let octets = v4.octets();
+            // 链路本地 169.254.x.x
+            if octets[0] == 169 && octets[1] == 254 {
+                return None;
+            }
+            Some(v4.to_string())
+        }
+        IpAddr::V6(_) => None,
+    }
+}
+
+async fn start_sidecar_inner(collection: &CodebuddyLocalAccessCollection) -> Result<SidecarLaunchConfig, String> {
+    let base_dir = sidecar_base_dir()?;
+    let launch_config = prepare_sidecar_launch_config(collection, &base_dir)?;
+
+    let binary = sidecar_binary_path()?;
+    let mut command = TokioCommand::new(&binary);
+    command
+        .arg("--config")
+        .arg(&launch_config.config_path)
+        .arg("--manifest")
+        .arg(&launch_config.manifest_path)
+        .arg("--parent-pid")
+        .arg(std::process::id().to_string())
+        .current_dir(&base_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("启动 CodeBuddy 反代 sidecar 失败: {e}"))?;
+
+    let stdout = child.stdout.take();
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        runtime.request_logs.clear();
+        runtime.request_index.clear();
+        runtime.child = Some(child);
+        runtime.actual_port = Some(collection.port);
+        runtime.fingerprint = Some(launch_config.fingerprint.clone());
+        runtime.running = true;
+        runtime.last_error = None;
+    }
+
+    if let Some(stdout) = stdout {
+        tokio::spawn(read_sidecar_stdout(stdout));
+    }
+
+    Ok(launch_config)
+}
+
+async fn read_sidecar_stdout(stdout: tokio::process::ChildStdout) {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let reader = BufReader::new(stdout);
+    let mut lines = reader.lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+            ingest_sidecar_log_event(&value).await;
+        }
+    }
+}
+
+fn event_str(value: &Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn request_kind_from_str(raw: &str) -> CodebuddyLocalAccessRequestKind {
+    match raw.trim() {
+        "text" => CodebuddyLocalAccessRequestKind::Text,
+        "image_generation" => CodebuddyLocalAccessRequestKind::ImageGeneration,
+        "image_edit" => CodebuddyLocalAccessRequestKind::ImageEdit,
+        _ => CodebuddyLocalAccessRequestKind::Other,
+    }
+}
+
+async fn ingest_sidecar_log_event(value: &Value) {
+    let event_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    match event_type {
+        "request_completed" => {
+            let request_id = event_str(value, "requestId");
+            if request_id.is_empty() {
+                return;
+            }
+            let log_entry = CodebuddyLocalAccessRequestLog {
+                request_id: request_id.clone(),
+                timestamp: value
+                    .get("completedAtMs")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or_else(|| {
+                        value
+                            .get("startedAtMs")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0)
+                    }),
+                model: event_str(value, "model"),
+                api_key_id: event_str(value, "apiKeyId"),
+                account_id: String::new(),
+                status: value.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
+                success: value
+                    .get("status")
+                    .and_then(|v| v.as_u64())
+                    .map(|s| s < 400)
+                    .unwrap_or(false),
+                latency_ms: value.get("latencyMs").and_then(|v| v.as_u64()).unwrap_or(0),
+                input_tokens: 0,
+                output_tokens: 0,
+                credit: 0.0,
+                prompt_cache_hit_tokens: 0,
+                prompt_cache_miss_tokens: 0,
+                prompt_cache_write_tokens: 0,
+                request_kind: request_kind_from_str(&event_str(value, "requestKind")),
+                error_message: value
+                    .get("errorMessage")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+            };
+            let mut runtime = gateway_runtime().lock().await;
+            let next_idx = runtime.request_logs.len();
+            runtime.request_index.insert(request_id, next_idx);
+            runtime.request_logs.push(log_entry);
+            if runtime.request_logs.len() > MAX_REQUEST_LOGS {
+                let removed = runtime.request_logs.len() - MAX_REQUEST_LOGS;
+                runtime.request_logs.drain(0..removed);
+                let rebuild: Vec<(String, usize)> = runtime
+                    .request_logs
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, log)| (log.request_id.clone(), idx))
+                    .collect();
+                runtime.request_index.clear();
+                for (rid, idx) in rebuild {
+                    runtime.request_index.insert(rid, idx);
+                }
+            }
+        }
+        "usage" => {
+            let request_id = event_str(value, "requestId");
+            if request_id.is_empty() {
+                return;
+            }
+            let input_tokens = value
+                .get("usage")
+                .and_then(|v| v.get("tokenBreakdown"))
+                .and_then(|v| v.get("input"))
+                .and_then(|v| v.get("total_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let output_tokens = value
+                .get("usage")
+                .and_then(|v| v.get("tokenBreakdown"))
+                .and_then(|v| v.get("output"))
+                .and_then(|v| v.get("total_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let credit = value
+                .get("usage")
+                .and_then(|v| v.get("tokenBreakdown"))
+                .and_then(|v| v.get("credit"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            // prompt cache token 回传（Go 侧 usage.tokenBreakdown.input 下的
+            // cache_read_tokens / uncached_tokens / cache_write_tokens）。
+            let cache_hit = value
+                .get("usage")
+                .and_then(|v| v.get("tokenBreakdown"))
+                .and_then(|v| v.get("input"))
+                .and_then(|v| v.get("cache_read_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cache_miss = value
+                .get("usage")
+                .and_then(|v| v.get("tokenBreakdown"))
+                .and_then(|v| v.get("input"))
+                .and_then(|v| v.get("uncached_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cache_write = value
+                .get("usage")
+                .and_then(|v| v.get("tokenBreakdown"))
+                .and_then(|v| v.get("input"))
+                .and_then(|v| v.get("cache_write_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let account_id = event_str(value, "accountId");
+            let mut runtime = gateway_runtime().lock().await;
+            if let Some(idx) = runtime.request_index.get(&request_id).copied() {
+                if let Some(log) = runtime.request_logs.get_mut(idx) {
+                    log.input_tokens = input_tokens;
+                    log.output_tokens = output_tokens;
+                    log.credit = credit;
+                    log.prompt_cache_hit_tokens = cache_hit;
+                    log.prompt_cache_miss_tokens = cache_miss;
+                    log.prompt_cache_write_tokens = cache_write;
+                    if !account_id.is_empty() {
+                        log.account_id = account_id;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+async fn stop_sidecar_inner() -> Result<(), String> {
+    let mut runtime = gateway_runtime().lock().await;
+    if let Some(mut child) = runtime.child.take() {
+        let _ = child.kill().await;
+    }
+    runtime.child = None;
+    runtime.running = false;
+    runtime.actual_port = None;
+    runtime.fingerprint = None;
+    runtime.last_error = None;
+    Ok(())
+}
+
+async fn reconcile_sidecar(collection: &CodebuddyLocalAccessCollection) -> Result<(), String> {
+    if !collection.enabled {
+        return stop_sidecar_inner().await;
+    }
+
+    let base_dir = sidecar_base_dir()?;
+    let launch_config = prepare_sidecar_launch_config(collection, &base_dir)?;
+
+    let runtime = gateway_runtime().lock().await;
+    let needs_restart = runtime.running != true
+        || runtime.fingerprint.as_deref() != Some(launch_config.fingerprint.as_str())
+        || runtime.actual_port != Some(collection.port);
+    drop(runtime);
+
+    if !needs_restart {
+        return Ok(());
+    }
+
+    stop_sidecar_inner().await?;
+    start_sidecar_inner(collection).await?;
+    Ok(())
+}
+
+async fn restore_on_startup() {
+    let collection = load_collection();
+    let enabled = collection.enabled;
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        runtime.collection = collection.clone();
+        runtime.loaded = true;
+    }
+    if enabled {
+        if let Err(error) = reconcile_sidecar(&collection).await {
+            logger::log_error(&format!("[CodeBuddyLocalAccess] 启动时恢复 sidecar 失败: {error}"));
+            let mut runtime = gateway_runtime().lock().await;
+            runtime.last_error = Some(error);
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_get_state() -> Result<CodebuddyLocalAccessState, String> {
+    let mut runtime = gateway_runtime().lock().await;
+    if !runtime.loaded {
+        runtime.collection = load_collection();
+        runtime.loaded = true;
+    }
+    let collection = runtime.collection.clone();
+    let running = runtime.running;
+    let actual_port = runtime.actual_port;
+    let last_error = runtime.last_error.clone();
+    drop(runtime);
+
+    Ok(CodebuddyLocalAccessState {
+        base_url: client_base_url(&collection),
+        lan_base_url: lan_base_url(&collection),
+        collection: collection.clone(),
+        running,
+        actual_port,
+        last_error,
+        intl_accounts: list_intl_accounts(),
+        cn_accounts: list_cn_accounts(),
+        account_health: build_account_health(&collection),
+    })
+}
+
+/// 构建选中账号的图片生成能力健康状态。
+///
+/// 因 CodeBuddy 上游图片协议未实测，健康探测不发起真实上游调用：
+/// - 图片生成模式为 Disabled 时，所有账号标记为 Disabled；
+/// - 否则标记为 Unknown（待上游图片协议确认后，可接入真实探测）。
+fn build_account_health(collection: &CodebuddyLocalAccessCollection) -> Vec<CodebuddyLocalAccessAccountHealth> {
+    let status = match collection.image_generation_mode {
+        CodebuddyLocalAccessImageGenerationMode::Disabled => {
+            CodebuddyLocalAccessImageGenerationStatus::Disabled
+        }
+        CodebuddyLocalAccessImageGenerationMode::ImagesOnly
+        | CodebuddyLocalAccessImageGenerationMode::Enabled => {
+            CodebuddyLocalAccessImageGenerationStatus::Unknown
+        }
+    };
+    let mut health: Vec<CodebuddyLocalAccessAccountHealth> = Vec::new();
+    let mut seen = HashSet::new();
+    for account in list_intl_accounts() {
+        if seen.insert(account.id.clone()) {
+            health.push(CodebuddyLocalAccessAccountHealth {
+                account_id: account.id,
+                email: account.email,
+                image_generation_status: status,
+                image_generation_checked_at: None,
+            });
+        }
+    }
+    for account in list_cn_accounts() {
+        if seen.insert(account.id.clone()) {
+            health.push(CodebuddyLocalAccessAccountHealth {
+                account_id: account.id,
+                email: account.email,
+                image_generation_status: status,
+                image_generation_checked_at: None,
+            });
+        }
+    }
+    health
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_save_collection(
+    collection: CodebuddyLocalAccessCollection,
+) -> Result<CodebuddyLocalAccessState, String> {
+    save_collection(&collection)?;
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        runtime.collection = collection.clone();
+    }
+    reconcile_sidecar(&collection).await?;
+    codebuddy_local_access_get_state().await
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_set_enabled(enabled: bool) -> Result<CodebuddyLocalAccessState, String> {
+    let mut collection = {
+        let mut runtime = gateway_runtime().lock().await;
+        if !runtime.loaded {
+            runtime.collection = load_collection();
+            runtime.loaded = true;
+        }
+        runtime.collection.clone()
+    };
+    collection.enabled = enabled;
+    codebuddy_local_access_save_collection(collection).await
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_start() -> Result<CodebuddyLocalAccessState, String> {
+    let mut collection = gateway_runtime().lock().await.collection.clone();
+    collection.enabled = true;
+    codebuddy_local_access_save_collection(collection).await
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_stop() -> Result<CodebuddyLocalAccessState, String> {
+    let mut collection = gateway_runtime().lock().await.collection.clone();
+    collection.enabled = false;
+    codebuddy_local_access_save_collection(collection).await
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_test() -> Result<String, String> {
+    let runtime = gateway_runtime().lock().await;
+    if !runtime.running {
+        return Err("CodeBuddy 反代服务未运行".to_string());
+    }
+    let port = runtime.actual_port.ok_or_else(|| "CodeBuddy 反代服务端口未知".to_string())?;
+    drop(runtime);
+
+    let url = format!("http://127.0.0.1:{port}/v1/models");
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("构建测试客户端失败: {e}"))?;
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("请求 {url} 失败: {e}"))?;
+    let status = response.status();
+    if status.is_success() {
+        Ok(format!("联通正常 (HTTP {status})"))
+    } else {
+        Err(format!("服务返回异常状态码: HTTP {status}"))
+    }
+}
+
+/// 强制回收占用指定端口的进程。
+///
+/// 用途：当 sidecar 进程异常退出、端口仍被占用导致重启失败时，
+/// 前端可调用此命令清理残留进程。
+#[tauri::command]
+pub async fn codebuddy_local_access_kill_port(port: u16) -> Result<usize, String> {
+    let killed = tokio::task::spawn_blocking(move || crate::modules::process::kill_port_processes(port))
+        .await
+        .map_err(|e| format!("执行 kill_port 任务失败: {e}"))??;
+    Ok(killed)
+}
+
+fn now_epoch_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn merge_usage(target: &mut CodebuddyLocalAccessUsageStats, log: &CodebuddyLocalAccessRequestLog) {
+    target.request_count += 1;
+    if log.success {
+        target.success_count += 1;
+    } else {
+        target.failure_count += 1;
+    }
+    target.total_latency_ms += log.latency_ms;
+    target.input_tokens += log.input_tokens;
+    target.output_tokens += log.output_tokens;
+    target.total_tokens += log.input_tokens + log.output_tokens;
+    target.total_credit += log.credit;
+    target.prompt_cache_hit_tokens += log.prompt_cache_hit_tokens;
+    target.prompt_cache_miss_tokens += log.prompt_cache_miss_tokens;
+    target.prompt_cache_write_tokens += log.prompt_cache_write_tokens;
+    match log.request_kind {
+        CodebuddyLocalAccessRequestKind::Text => {
+            target.text_request_count += 1;
+        }
+        CodebuddyLocalAccessRequestKind::ImageGeneration => {
+            target.image_request_count += 1;
+            target.image_generation_request_count += 1;
+            if !log.success {
+                target.image_generation_capability_failure_count += 1;
+            }
+        }
+        CodebuddyLocalAccessRequestKind::ImageEdit => {
+            target.image_request_count += 1;
+            target.image_edit_request_count += 1;
+            if !log.success {
+                target.image_generation_capability_failure_count += 1;
+            }
+        }
+        CodebuddyLocalAccessRequestKind::Other => {}
+    }
+}
+
+/// 调度策略的 snake_case 名称（用于 manifest 展示）。
+fn routing_strategy_name(strategy: CodebuddyLocalAccessRoutingStrategy) -> &'static str {
+    match strategy {
+        CodebuddyLocalAccessRoutingStrategy::Auto => "auto",
+        CodebuddyLocalAccessRoutingStrategy::Random => "random",
+        CodebuddyLocalAccessRoutingStrategy::SingleAccount => "single_account",
+        CodebuddyLocalAccessRoutingStrategy::QuotaHighFirst => "quota_high_first",
+        CodebuddyLocalAccessRoutingStrategy::QuotaLowFirst => "quota_low_first",
+        CodebuddyLocalAccessRoutingStrategy::PlanHighFirst => "plan_high_first",
+        CodebuddyLocalAccessRoutingStrategy::PlanLowFirst => "plan_low_first",
+        CodebuddyLocalAccessRoutingStrategy::ExpirySoonFirst => "expiry_soon_first",
+        CodebuddyLocalAccessRoutingStrategy::Custom => "custom",
+    }
+}
+
+fn build_stats(runtime: &CodebuddyGatewayRuntime) -> CodebuddyLocalAccessStats {
+    let mut stats = CodebuddyLocalAccessStats {
+        since: runtime.stats_since,
+        ..Default::default()
+    };
+    let mut by_model: HashMap<String, CodebuddyLocalAccessUsageStats> = HashMap::new();
+    let mut by_api_key: HashMap<String, CodebuddyLocalAccessUsageStats> = HashMap::new();
+    let mut by_account: HashMap<String, CodebuddyLocalAccessUsageStats> = HashMap::new();
+
+    for log in &runtime.request_logs {
+        merge_usage(&mut stats.totals, log);
+        let model_entry = by_model.entry(log.model.clone()).or_default();
+        merge_usage(model_entry, log);
+        let key_entry = by_api_key.entry(log.api_key_id.clone()).or_default();
+        merge_usage(key_entry, log);
+        if !log.account_id.is_empty() {
+            let account_entry = by_account.entry(log.account_id.clone()).or_default();
+            merge_usage(account_entry, log);
+        }
+    }
+
+    let mut models: Vec<_> = by_model
+        .into_iter()
+        .map(|(model_id, usage)| crate::models::codebuddy_local_access::CodebuddyLocalAccessModelStats {
+            model_id,
+            usage,
+        })
+        .collect();
+    models.sort_by(|a, b| b.usage.request_count.cmp(&a.usage.request_count));
+
+    let mut keys: Vec<_> = by_api_key
+        .into_iter()
+        .map(|(api_key_id, usage)| crate::models::codebuddy_local_access::CodebuddyLocalAccessApiKeyStats {
+            api_key_id,
+            usage,
+        })
+        .collect();
+    keys.sort_by(|a, b| b.usage.request_count.cmp(&a.usage.request_count));
+
+    let mut accounts: Vec<_> = by_account
+        .into_iter()
+        .map(|(account_id, usage)| crate::models::codebuddy_local_access::CodebuddyLocalAccessAccountStats {
+            account_id,
+            usage,
+        })
+        .collect();
+    accounts.sort_by(|a, b| b.usage.request_count.cmp(&a.usage.request_count));
+
+    stats.by_model = models;
+    stats.by_api_key = keys;
+    stats.by_account = accounts;
+    stats.recent_logs = runtime.request_logs.iter().rev().take(200).cloned().collect();
+    stats
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_get_stats() -> Result<CodebuddyLocalAccessStats, String> {
+    let runtime = gateway_runtime().lock().await;
+    Ok(build_stats(&runtime))
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_clear_stats() -> Result<CodebuddyLocalAccessStats, String> {
+    let mut runtime = gateway_runtime().lock().await;
+    runtime.request_logs.clear();
+    runtime.request_index.clear();
+    runtime.stats_since = now_epoch_secs();
+    Ok(build_stats(&runtime))
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_get_logs(
+    page: u32,
+    page_size: u32,
+    model_filter: Option<String>,
+    api_key_filter: Option<String>,
+    success_filter: Option<bool>,
+) -> Result<Value, String> {
+    let page = page.max(1);
+    let page_size = page_size.clamp(1, 200);
+    let runtime = gateway_runtime().lock().await;
+
+    let filtered: Vec<&CodebuddyLocalAccessRequestLog> = runtime
+        .request_logs
+        .iter()
+        .filter(|log| {
+            if let Some(model) = &model_filter {
+                if !model.is_empty() && !log.model.contains(model) {
+                    return false;
+                }
+            }
+            if let Some(key) = &api_key_filter {
+                if !key.is_empty() && !log.api_key_id.contains(key) {
+                    return false;
+                }
+            }
+            if let Some(success) = success_filter {
+                if log.success != success {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+
+    let total = filtered.len() as u64;
+    let total_pages = if total == 0 {
+        1
+    } else {
+        ((total + page_size as u64 - 1) / page_size as u64)
+    };
+    let start = ((page - 1) as usize * page_size as usize).min(filtered.len());
+    let end = (start + page_size as usize).min(filtered.len());
+    let logs: Vec<&CodebuddyLocalAccessRequestLog> = filtered[start..end].to_vec();
+
+    Ok(json!({
+        "logs": logs,
+        "total": total,
+        "page": page,
+        "pageSize": page_size,
+        "totalPages": total_pages,
+    }))
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_create_api_key(
+    name: String,
+    account_ids: Option<Vec<String>>,
+) -> Result<CodebuddyLocalAccessState, String> {
+    let now = now_epoch_secs();
+    let key = CodebuddyLocalAccessApiKey {
+        id: uuid::Uuid::new_v4().to_string(),
+        name,
+        key: format!("sk-cockpit-{}", uuid::Uuid::new_v4().simple()),
+        enabled: true,
+        account_ids,
+        created_at: now,
+        updated_at: now,
+    };
+    let collection = {
+        let mut runtime = gateway_runtime().lock().await;
+        runtime.collection.api_keys.push(key);
+        runtime.collection.clone()
+    };
+    codebuddy_local_access_save_collection(collection).await
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_update_api_key(
+    id: String,
+    name: Option<String>,
+    enabled: Option<bool>,
+    account_ids: Option<Vec<String>>,
+) -> Result<CodebuddyLocalAccessState, String> {
+    let collection = {
+        let mut runtime = gateway_runtime().lock().await;
+        let now = now_epoch_secs();
+        let mut updated = false;
+        for key in runtime.collection.api_keys.iter_mut() {
+            if key.id == id {
+                if let Some(name) = &name {
+                    key.name = name.clone();
+                }
+                if let Some(enabled) = enabled {
+                    key.enabled = enabled;
+                }
+                if let Some(account_ids) = &account_ids {
+                    key.account_ids = Some(account_ids.clone());
+                }
+                key.updated_at = now;
+                updated = true;
+                break;
+            }
+        }
+        if !updated {
+            return Err(format!("未找到 Key: {id}"));
+        }
+        runtime.collection.clone()
+    };
+    codebuddy_local_access_save_collection(collection).await
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_rotate_api_key(
+    id: String,
+) -> Result<CodebuddyLocalAccessState, String> {
+    let collection = {
+        let mut runtime = gateway_runtime().lock().await;
+        let now = now_epoch_secs();
+        let mut rotated = false;
+        for key in runtime.collection.api_keys.iter_mut() {
+            if key.id == id {
+                key.key = format!("sk-cockpit-{}", uuid::Uuid::new_v4().simple());
+                key.updated_at = now;
+                rotated = true;
+                break;
+            }
+        }
+        if !rotated {
+            return Err(format!("未找到 Key: {id}"));
+        }
+        runtime.collection.clone()
+    };
+    codebuddy_local_access_save_collection(collection).await
+}
+
+#[tauri::command]
+pub async fn codebuddy_local_access_delete_api_key(
+    id: String,
+) -> Result<CodebuddyLocalAccessState, String> {
+    let collection = {
+        let mut runtime = gateway_runtime().lock().await;
+        let before = runtime.collection.api_keys.len();
+        runtime.collection.api_keys.retain(|key| key.id != id);
+        if runtime.collection.api_keys.len() == before {
+            return Err(format!("未找到 Key: {id}"));
+        }
+        runtime.collection.clone()
+    };
+    codebuddy_local_access_save_collection(collection).await
+}
+
+/// 通过本地网关发起一轮对话测试（非流式）。
+#[tauri::command]
+pub async fn codebuddy_local_access_chat_test(
+    model: String,
+    messages: Vec<Value>,
+) -> Result<Value, String> {
+    let (running, port) = {
+        let runtime = gateway_runtime().lock().await;
+        (runtime.running, runtime.actual_port)
+    };
+    if !running {
+        return Err("CodeBuddy 反代服务未运行".to_string());
+    }
+    let port = port.ok_or_else(|| "CodeBuddy 反代服务端口未知".to_string())?;
+
+    let api_key = {
+        let runtime = gateway_runtime().lock().await;
+        runtime
+            .collection
+            .api_keys
+            .iter()
+            .find(|k| k.enabled)
+            .map(|k| k.key.clone())
+            .unwrap_or_default()
+    };
+
+    let url = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let body = json!({
+        "model": model,
+        "messages": messages,
+        "stream": false,
+    });
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(180))
+        .build()
+        .map_err(|e| format!("构建测试客户端失败: {e}"))?;
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("请求 {url} 失败: {e}"))?;
+    let status = response.status();
+    let payload = response
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {e}"))?;
+    let value: Value = serde_json::from_str(&payload).unwrap_or_else(|_| json!({ "raw": payload }));
+    if status.is_success() {
+        Ok(value)
+    } else {
+        Err(format!("服务返回异常 (HTTP {status}): {payload}"))
+    }
+}
+
+/// 应用启动时调用，恢复反代服务状态。
+pub async fn restore_codebuddy_local_access() {
+    restore_on_startup().await;
+}
+
+/// 应用退出时停止 sidecar（sidecar 亦会因 parent-pid 失效而退出）。
+pub async fn shutdown_codebuddy_local_access() {
+    let _ = stop_sidecar_inner().await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::codebuddy::CodebuddyAccount;
+
+    fn sample_account() -> CodebuddyAccount {
+        CodebuddyAccount {
+            id: "acc-123".to_string(),
+            email: "user@example.com".to_string(),
+            uid: Some("uid-456".to_string()),
+            nickname: None,
+            enterprise_id: Some("ent-789".to_string()),
+            enterprise_name: None,
+            tags: None,
+            access_token: "at-secret".to_string(),
+            refresh_token: Some("rt-secret".to_string()),
+            token_type: None,
+            expires_at: None,
+            domain: Some("www.codebuddy.cn".to_string()),
+            plan_type: Some("pro".to_string()),
+            dosage_notify_code: None,
+            dosage_notify_zh: None,
+            dosage_notify_en: None,
+            payment_type: None,
+            quota_raw: None,
+            auth_raw: None,
+            profile_raw: None,
+            usage_raw: None,
+            status: None,
+            status_reason: None,
+            last_checkin_time: None,
+            checkin_streak: 0,
+            checkin_rewards: None,
+            quota_query_last_error: None,
+            quota_query_last_error_at: None,
+            usage_updated_at: None,
+            created_at: 0,
+            last_used: 0,
+        }
+    }
+
+    #[test]
+    fn test_sidecar_auth_file_name_sanitizes() {
+        assert_eq!(sidecar_auth_file_name("acc-123"), "acc-123.json");
+        assert_eq!(sidecar_auth_file_name("a b/c"), "a_b_c.json");
+        assert!(sidecar_auth_file_name("").ends_with(".json"));
+    }
+
+    #[test]
+    fn test_auth_json_for_account_intl() {
+        let account = sample_account();
+        let value = auth_json_for_account(&account, REGION_INTL, &[]);
+        assert_eq!(value["type"].as_str(), Some("codebuddy"));
+        assert_eq!(value["access_token"].as_str(), Some("at-secret"));
+        assert_eq!(value["refresh_token"].as_str(), Some("rt-secret"));
+        assert_eq!(value["region"].as_str(), Some(REGION_INTL));
+        assert_eq!(value["base_url"].as_str(), Some(BASE_URL_INTL));
+        assert_eq!(value["uid"].as_str(), Some("uid-456"));
+        assert_eq!(value["enterprise_id"].as_str(), Some("ent-789"));
+        assert_eq!(value["domain"].as_str(), Some("www.codebuddy.cn"));
+    }
+
+    #[test]
+    fn test_auth_json_for_account_cn() {
+        let account = sample_account();
+        let value = auth_json_for_account(&account, REGION_CN, &[]);
+        assert_eq!(value["base_url"].as_str(), Some(BASE_URL_CN));
+        assert_eq!(value["region"].as_str(), Some(REGION_CN));
+    }
+
+    #[test]
+    fn test_auth_json_injects_custom_routing_metadata() {
+        let account = sample_account();
+        let rules = vec![CodebuddyLocalAccessCustomRoutingRule {
+            account_id: account.id.clone(),
+            priority: 7,
+            weight: 3,
+            is_backup: false,
+            is_preferred: true,
+        }];
+        let value = auth_json_for_account(&account, REGION_CN, &rules);
+        assert_eq!(value["routing_priority"], json!(7));
+        assert_eq!(value["routing_weight"], json!(3));
+        assert_eq!(value["routing_is_backup"], json!(false));
+        assert_eq!(value["routing_is_preferred"], json!(true));
+    }
+
+    #[test]
+    fn test_config_fingerprint_deterministic() {
+        let a = config_fingerprint("config-a", "manifest-a");
+        let b = config_fingerprint("config-a", "manifest-a");
+        let c = config_fingerprint("config-b", "manifest-a");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_effective_bind_host() {
+        let mut collection = CodebuddyLocalAccessCollection::default();
+        collection.scope = CodebuddyLocalAccessScope::Localhost;
+        collection.bind_host = "127.0.0.1".to_string();
+        assert_eq!(effective_bind_host(&collection), "127.0.0.1");
+
+        collection.scope = CodebuddyLocalAccessScope::Lan;
+        assert_eq!(effective_bind_host(&collection), "0.0.0.0");
+
+        collection.scope = CodebuddyLocalAccessScope::Localhost;
+        collection.bind_host = "".to_string();
+        assert_eq!(effective_bind_host(&collection), "127.0.0.1");
+    }
+
+    fn sample_api_key(enabled: bool) -> CodebuddyLocalAccessApiKey {
+        CodebuddyLocalAccessApiKey {
+            id: "key-1".to_string(),
+            name: "codex-cli".to_string(),
+            key: "sk-cockpit-abc".to_string(),
+            enabled,
+            account_ids: Some(vec!["acc-1".to_string()]),
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn test_manifest_api_keys_maps_go_fields() {
+        let mut collection = CodebuddyLocalAccessCollection::default();
+        collection.api_keys = vec![sample_api_key(true)];
+        let keys = manifest_api_keys(&collection);
+        assert_eq!(keys.len(), 1);
+        let entry = &keys[0];
+        assert_eq!(entry["id"].as_str(), Some("key-1"));
+        assert_eq!(entry["label"].as_str(), Some("codex-cli"));
+        assert_eq!(entry["key"].as_str(), Some("sk-cockpit-abc"));
+        assert_eq!(entry["enabled"].as_bool(), Some(true));
+        assert_eq!(entry["accountIds"][0].as_str(), Some("acc-1"));
+    }
+
+    #[test]
+    fn test_client_api_keys_filters_disabled() {
+        let mut collection = CodebuddyLocalAccessCollection::default();
+        collection.api_keys = vec![sample_api_key(true), sample_api_key(false)];
+        let keys = client_api_keys(&collection);
+        assert_eq!(keys, vec!["sk-cockpit-abc".to_string()]);
+    }
+
+    fn sample_log(success: bool, model: &str) -> CodebuddyLocalAccessRequestLog {
+        CodebuddyLocalAccessRequestLog {
+            request_id: format!("req-{model}-{success}"),
+            timestamp: 0,
+            model: model.to_string(),
+            api_key_id: "key-1".to_string(),
+            account_id: "acc-1".to_string(),
+            status: if success { 200 } else { 503 },
+            success,
+            latency_ms: 100,
+            input_tokens: 10,
+            output_tokens: 20,
+            credit: 0.5,
+            prompt_cache_hit_tokens: 6,
+            prompt_cache_miss_tokens: 4,
+            prompt_cache_write_tokens: 0,
+            request_kind: CodebuddyLocalAccessRequestKind::Other,
+            error_message: None,
+        }
+    }
+
+    #[test]
+    fn test_merge_usage_accumulates() {
+        let mut target = CodebuddyLocalAccessUsageStats::default();
+        merge_usage(&mut target, &sample_log(true, "auto"));
+        merge_usage(&mut target, &sample_log(false, "auto"));
+        assert_eq!(target.request_count, 2);
+        assert_eq!(target.success_count, 1);
+        assert_eq!(target.failure_count, 1);
+        assert_eq!(target.total_latency_ms, 200);
+        assert_eq!(target.input_tokens, 20);
+        assert_eq!(target.output_tokens, 40);
+        assert_eq!(target.total_tokens, 60);
+        assert!((target.total_credit - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_build_stats_groups_by_model() {
+        let mut runtime = CodebuddyGatewayRuntime::default();
+        runtime.request_logs = vec![
+            sample_log(true, "auto"),
+            sample_log(true, "auto"),
+            sample_log(false, "glm-5.2"),
+        ];
+        let stats = build_stats(&runtime);
+        assert_eq!(stats.totals.request_count, 3);
+        assert_eq!(stats.by_model.len(), 2);
+        let auto_entry = stats
+            .by_model
+            .iter()
+            .find(|m| m.model_id == "auto")
+            .expect("auto model group");
+        assert_eq!(auto_entry.usage.request_count, 2);
+        let glm_entry = stats
+            .by_model
+            .iter()
+            .find(|m| m.model_id == "glm-5.2")
+            .expect("glm model group");
+        assert_eq!(glm_entry.usage.failure_count, 1);
+    }
+
+    #[test]
+    fn test_build_stats_groups_by_account() {
+        let mut runtime = CodebuddyGatewayRuntime::default();
+        let mut log_a = sample_log(true, "auto");
+        log_a.account_id = "acc-a".to_string();
+        let mut log_b1 = sample_log(true, "auto");
+        log_b1.account_id = "acc-b".to_string();
+        let mut log_b2 = sample_log(false, "glm-5.2");
+        log_b2.account_id = "acc-b".to_string();
+        runtime.request_logs = vec![log_a, log_b1, log_b2];
+
+        let stats = build_stats(&runtime);
+        assert_eq!(stats.by_account.len(), 2);
+
+        let acc_a = stats
+            .by_account
+            .iter()
+            .find(|a| a.account_id == "acc-a")
+            .expect("acc-a group");
+        assert_eq!(acc_a.usage.request_count, 1);
+
+        let acc_b = stats
+            .by_account
+            .iter()
+            .find(|a| a.account_id == "acc-b")
+            .expect("acc-b group");
+        assert_eq!(acc_b.usage.request_count, 2);
+        assert_eq!(acc_b.usage.prompt_cache_hit_tokens, 12);
+    }
+}

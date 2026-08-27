@@ -364,6 +364,10 @@ pub fn run() {
                 modules::codex_local_access::restore_local_access_gateway().await;
             });
 
+            tauri::async_runtime::spawn(async {
+                modules::codebuddy_local_access::restore_codebuddy_local_access().await;
+            });
+
             {
                 let app_handle = app.handle().clone();
                 std::thread::spawn(move || {
@@ -940,6 +944,22 @@ pub fn run() {
             commands::codex::codex_local_access_test,
             commands::codex::codex_local_access_chat_test,
             commands::codex::codex_local_access_chat_test_stream,
+            // CodeBuddy 反代 API 中转 Commands
+            modules::codebuddy_local_access::codebuddy_local_access_get_state,
+            modules::codebuddy_local_access::codebuddy_local_access_save_collection,
+            modules::codebuddy_local_access::codebuddy_local_access_set_enabled,
+            modules::codebuddy_local_access::codebuddy_local_access_start,
+            modules::codebuddy_local_access::codebuddy_local_access_stop,
+            modules::codebuddy_local_access::codebuddy_local_access_test,
+            modules::codebuddy_local_access::codebuddy_local_access_get_stats,
+            modules::codebuddy_local_access::codebuddy_local_access_clear_stats,
+            modules::codebuddy_local_access::codebuddy_local_access_get_logs,
+            modules::codebuddy_local_access::codebuddy_local_access_create_api_key,
+            modules::codebuddy_local_access::codebuddy_local_access_update_api_key,
+            modules::codebuddy_local_access::codebuddy_local_access_rotate_api_key,
+            modules::codebuddy_local_access::codebuddy_local_access_delete_api_key,
+            modules::codebuddy_local_access::codebuddy_local_access_chat_test,
+            modules::codebuddy_local_access::codebuddy_local_access_kill_port,
             // GitHub Copilot Commands
             commands::github_copilot::list_github_copilot_accounts,
             commands::github_copilot::delete_github_copilot_account,
@@ -1371,6 +1391,7 @@ pub fn run() {
                 modules::codex_app_injection::stop_all();
                 tauri::async_runtime::spawn(async {
                     modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await;
+                    modules::codebuddy_local_access::shutdown_codebuddy_local_access().await;
                 });
             }
             _ => {}

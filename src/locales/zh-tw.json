@@ -5111,6 +5111,10 @@
     "title": "CodeBuddy 帳號管理",
     "noAccounts": "暫無 CodeBuddy 帳號",
     "addAccount": "新增 CodeBuddy 帳號",
+    "apiService": {
+      "navTitle": "CodeBuddy API 服務",
+      "title": "CodeBuddy API 服務"
+    },
     "flowNotice": {
       "title": "CodeBuddy 帳號管理說明（點擊展開/收起）",
       "desc": "切換帳號需讀取 CodeBuddy 本地認證儲存並呼叫系統憑證服務進行解密與重新加密，資料僅在本地處理。",

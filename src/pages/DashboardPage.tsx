@@ -2672,6 +2672,7 @@ export function DashboardPage({
     grok: stats.grok,
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
+    codebuddy_api_service: 0,
     qoder: stats.qoder,
     zcode: stats.zcode,
     trae: stats.trae,

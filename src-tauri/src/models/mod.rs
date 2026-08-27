@@ -1,6 +1,7 @@
 pub mod account;
 pub mod claude;
 pub mod codebuddy;
+pub mod codebuddy_local_access;
 pub mod codex;
 pub mod codex_local_access;
 pub mod cursor;

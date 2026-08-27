@@ -1,0 +1,483 @@
+/* =====================================================================
+   CodeBuddy API 服务小卡片样式
+   - 严格对齐 codex「API 服务-新」卡片的视觉规范
+   - 覆盖 .folder-inline-card 的蓝色渐变 + 虚线边框
+   ===================================================================== */
+
+/* 覆盖 .folder-inline-card 基础样式（蓝色渐变 + 虚线边框 + hover 提升） */
+.folder-inline-card.codebuddy-api-inline-card {
+  --cb-inline-surface: var(--bg-card);
+  --cb-inline-surface-strong: color-mix(in srgb, var(--bg-card) 96%, rgba(255, 255, 255, 0.74));
+  --cb-inline-border: var(--border);
+  --cb-inline-border-soft: var(--border-light);
+  --cb-inline-shadow: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--cb-inline-border);
+  border-radius: 12px;
+  background: var(--cb-inline-surface);
+  cursor: default;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-width: 0;
+  min-height: 260px;
+}
+
+.folder-inline-card.codebuddy-api-inline-card.is-collapsed {
+  min-height: auto;
+}
+
+.folder-inline-card.codebuddy-api-inline-card:hover {
+  background: var(--cb-inline-surface);
+  border-color: var(--cb-inline-border);
+  transform: none;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(15, 23, 42, 0.08));
+}
+
+.folder-inline-card.codebuddy-api-inline-card::before {
+  display: none;
+}
+
+/* 兼容 list 模式：占满一行 */
+.codebuddy-api-inline-card--list {
+  width: 100%;
+}
+
+/* grid 模式：作为一个网格单元 */
+.codebuddy-api-inline-card--grid {
+  width: 100%;
+}
+
+/* ---------- Header（对齐 codex 紧凑布局） ---------- */
+.codebuddy-api-inline-card .codex-local-access-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 28px;
+  padding-top: 1px;
+}
+
+.codebuddy-api-inline-card .codex-local-access-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex-wrap: nowrap;
+  flex: 1;
+}
+
+.codebuddy-api-inline-card .codex-local-access-title-text {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.codebuddy-api-inline-card .codex-local-access-summary-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.codebuddy-api-inline-card .codex-local-access-header-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* 状态徽章（对齐 codex：纯文字 pill，无圆点） */
+.codebuddy-api-inline-card .codex-local-access-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.codebuddy-api-inline-card .codex-local-access-status.running {
+  background: rgba(34, 197, 94, 0.14);
+  color: #15803d;
+}
+
+.codebuddy-api-inline-card .codex-local-access-status.stopped {
+  background: rgba(248, 113, 113, 0.14);
+  color: #b91c1c;
+}
+
+.codebuddy-api-inline-card .codex-local-access-status.disabled {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-secondary);
+}
+
+/* 关闭按钮（X） */
+.codebuddy-api-inline-card .codex-local-access-close-btn {
+  color: var(--text-muted);
+  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.codebuddy-api-inline-card .codex-local-access-close-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.codebuddy-api-inline-card .codex-local-access-close-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---------- Meta（展开区：紧凑行布局） ---------- */
+.codebuddy-api-inline-card .codex-local-access-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codebuddy-api-inline-card .codex-local-access-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 28px;
+}
+
+.codebuddy-api-inline-card .codex-local-access-label {
+  flex: 0 0 auto;
+  width: 44px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.codebuddy-api-inline-card .codex-local-access-code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  background: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0;
+}
+
+.codebuddy-api-inline-card .codex-local-access-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* 地址行：scope 下拉框（紧凑 58px 宽） */
+.codebuddy-api-inline-card .codex-local-access-address-select {
+  width: 58px;
+  flex: 0 0 auto;
+}
+
+.codebuddy-api-inline-card .codex-local-access-address-select .single-select-dropdown-trigger {
+  min-height: 24px;
+  gap: 2px;
+  padding: 0 2px 0 6px;
+  border-color: transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  box-shadow: none;
+  height: 24px;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.codebuddy-api-inline-card .codex-local-access-address-select .single-select-dropdown-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+}
+
+.codebuddy-api-inline-card .codex-local-access-address-select .single-select-dropdown-arrow {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  margin-left: 0;
+}
+
+.codebuddy-api-inline-card .codex-local-access-address-select .single-select-dropdown-arrow svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 账号池健康摘要（对齐 codex：内联文字，无边框无背景） */
+.codebuddy-api-inline-card .codex-local-access-health-summary {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 22px;
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.codebuddy-api-inline-card .codex-local-access-health-summary-title {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.codebuddy-api-inline-card .codex-local-access-health-summary-value {
+  color: #047857;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.codebuddy-api-inline-card .codex-local-access-health-summary-value.empty {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* 错误行 */
+.codebuddy-api-inline-card .codebuddy-api-error-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger, #ef4444);
+  font-size: 11.5px;
+}
+
+.codebuddy-api-inline-card .codebuddy-api-error-row span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Bottom（对齐 codex grid 两行：监听范围 / 按钮组） ---------- */
+.codebuddy-api-inline-card .codex-card-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codebuddy-api-inline-card .codex-card-bottom .card-date {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codebuddy-api-inline-card .codex-card-bottom .card-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codebuddy-api-inline-card .codex-card-bottom .card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* 强制 codebuddy 卡片内的 .card-action-btn 呈现 codex 风格 28x28 icon-only */
+.codebuddy-api-inline-card .card-action-btn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.codebuddy-api-inline-card .card-action-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.codebuddy-api-inline-card .card-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.codebuddy-api-inline-card .card-action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.codebuddy-api-inline-card .card-action-btn.success {
+  color: var(--success);
+}
+
+.codebuddy-api-inline-card .card-action-btn.success:hover:not(:disabled) {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.codebuddy-api-inline-card .card-action-btn.danger {
+  color: var(--text-secondary);
+}
+
+.codebuddy-api-inline-card .card-action-btn.danger:hover:not(:disabled) {
+  color: #b91c1c;
+  background: color-mix(in srgb, #b91c1c 10%, transparent);
+}
+
+/* ---------- folder-icon-btn 复用（沿用 codex 全局无边框样式） ---------- */
+.codebuddy-api-inline-card .folder-icon-btn {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.codebuddy-api-inline-card .folder-icon-btn:hover:not(:disabled) {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.codebuddy-api-inline-card .folder-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.codebuddy-api-inline-card .folder-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------- Placeholder ---------- */
+.codebuddy-api-inline-card-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---------- Spin ---------- */
+.codebuddy-api-inline-card .loading-spinner,
+.codebuddy-api-inline-card .cb-api-spin {
+  animation: codebuddyApiSpin 0.9s linear infinite;
+}
+
+@keyframes codebuddyApiSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ====================================================================
+   暗色模式微调
+   ==================================================================== */
+[data-theme="dark"] .folder-inline-card.codebuddy-api-inline-card {
+  --cb-inline-surface: var(--bg-card);
+  --cb-inline-surface-strong: color-mix(in srgb, var(--bg-card) 88%, rgba(255, 255, 255, 0.06));
+  --cb-inline-border: var(--border);
+  --cb-inline-border-soft: var(--border-light);
+}
+
+[data-theme="dark"] .codebuddy-api-inline-card .codex-local-access-status.running {
+  color: #4ade80;
+}
+
+[data-theme="dark"] .codebuddy-api-inline-card .codex-local-access-status.stopped {
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .codebuddy-api-inline-card .codex-local-access-health-summary-value {
+  color: #86efac;
+}
+
+[data-theme="dark"] .codebuddy-api-inline-card .codex-local-access-health-summary-value.empty {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .codebuddy-api-inline-card .codex-local-access-pool-pill {
+  border-color: rgba(14, 165, 233, 0.28);
+  background: rgba(14, 165, 233, 0.12);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .codebuddy-api-inline-card .codebuddy-api-error-row {
+  color: #fca5a5;
+}

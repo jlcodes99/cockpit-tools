@@ -214,6 +214,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useCodebuddyInstanceStore.getState();
     case 'codebuddy_cn':
       return useCodebuddyCnInstanceStore.getState();
+    case 'codebuddy_api_service':
+      return null;
     case 'qoder':
       return useQoderInstanceStore.getState();
     case 'trae':
