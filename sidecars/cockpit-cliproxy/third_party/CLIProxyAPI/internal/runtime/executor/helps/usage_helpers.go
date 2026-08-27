@@ -619,6 +619,11 @@ func parseOpenAIStyleUsageNode(usageNode gjson.Result) usage.Detail {
 	if !cached.Exists() {
 		cached = usageNode.Get("input_tokens_details.cached_tokens")
 	}
+	// CodeBuddy (Tencent) reports cache hits at the top level as
+	// prompt_cache_hit_tokens instead of the OpenAI nested details structure.
+	if !cached.Exists() {
+		cached = usageNode.Get("prompt_cache_hit_tokens")
+	}
 	if cached.Exists() {
 		detail.CachedTokens = cached.Int()
 		detail.CacheReadTokens = cached.Int()
@@ -629,6 +634,7 @@ func parseOpenAIStyleUsageNode(usageNode gjson.Result) usage.Detail {
 		"input_tokens_details.cache_write_tokens",
 		"prompt_tokens_details.cache_creation_tokens",
 		"prompt_tokens_details.cache_write_tokens",
+		"prompt_cache_write_tokens",
 	)
 	if cacheCreation.Exists() {
 		detail.CacheCreationTokens = cacheCreation.Int()

@@ -49,3 +49,14 @@ target/
 docs/plugin-architecture-proposal.md
 .aitasks
 .qoder/
+
+# CodeBuddy local probe scripts and build artifacts (kept locally, not versioned)
+_tmp_*.py
+_tmp_models_extracted.json
+scripts/__pycache__/
+scripts/diag_codebuddy_vision.py
+scripts/test_codebuddy_images.py
+sidecars/cockpit-cliproxy/cockpit-cliproxy.exe
+
+# Local project data
+.codebuddy/

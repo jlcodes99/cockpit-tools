@@ -365,7 +365,7 @@ func readManifestCodexTokenAuth(account *accountSpec, authDir, path string) (*co
 	if provider == "" {
 		provider = "codex"
 	}
-	if !strings.EqualFold(provider, "codex") {
+	if !strings.EqualFold(provider, "codex") && !strings.EqualFold(provider, "codebuddy") {
 		return nil, fmt.Errorf("codex token auth file %s has unsupported provider %q", path, provider)
 	}
 	accessToken := firstMetadataString(
@@ -425,7 +425,7 @@ func readManifestCodexTokenAuth(account *accountSpec, authDir, path string) (*co
 	}
 	auth := &coreauth.Auth{
 		ID:       id,
-		Provider: "codex",
+		Provider: provider,
 		FileName: id,
 		Label:    label,
 		Status:   status,
@@ -663,7 +663,11 @@ func registerManifestModelsForAuth(manager *coreauth.Manager, m *manifest, auth 
 		manager.RefreshSchedulerEntry(auth.ID)
 		return
 	}
-	cliproxy.GlobalModelRegistry().RegisterClient(auth.ID, "codex", models)
+	provider := auth.Provider
+	if strings.TrimSpace(provider) == "" {
+		provider = "codex"
+	}
+	cliproxy.GlobalModelRegistry().RegisterClient(auth.ID, provider, models)
 	manager.ReconcileRegistryModelStates(context.Background(), auth.ID)
 	manager.RefreshSchedulerEntry(auth.ID)
 }
@@ -783,9 +787,10 @@ func manifestRegistryModels(m *manifest) []*cliproxy.ModelInfo {
 	if m == nil {
 		return nil
 	}
-	entries := make([]manifestRegistryModelEntry, 0, len(m.ModelIDs)+len(m.ModelAliases)*2)
+	modelIDs := m.modelIDs()
+	entries := make([]manifestRegistryModelEntry, 0, len(modelIDs)+len(m.ModelAliases)*2)
 	seen := make(map[string]struct{}, cap(entries))
-	for _, id := range m.ModelIDs {
+	for _, id := range modelIDs {
 		entries = appendManifestRegistryModelEntry(entries, seen, id, "")
 	}
 	for _, alias := range m.ModelAliases {

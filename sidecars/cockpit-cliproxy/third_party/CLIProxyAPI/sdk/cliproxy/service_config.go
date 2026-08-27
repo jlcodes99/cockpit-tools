@@ -42,8 +42,22 @@ func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
 	switch strings.ToLower(strings.TrimSpace(cfg.Routing.Strategy)) {
 	case "weighted-round-robin", "weightedroundrobin", "wrr":
 		state.strategy = "weighted-round-robin"
-	case "fill-first", "fillfirst", "ff":
+	case "fill-first", "fillfirst", "ff", "single_account", "single-account":
 		state.strategy = "fill-first"
+	case "random":
+		state.strategy = "random"
+	case "quota_high_first", "quota-high-first":
+		state.strategy = "quota_high_first"
+	case "quota_low_first", "quota-low-first":
+		state.strategy = "quota_low_first"
+	case "plan_high_first", "plan-high-first":
+		state.strategy = "plan_high_first"
+	case "plan_low_first", "plan-low-first":
+		state.strategy = "plan_low_first"
+	case "expiry_soon_first", "expiry-soon-first":
+		state.strategy = "expiry_soon_first"
+	case "custom":
+		state.strategy = "custom"
 	}
 	state.sessionAffinity = cfg.Routing.SessionAffinity
 	if ttl := strings.TrimSpace(cfg.Routing.SessionAffinityTTL); ttl != "" {
@@ -61,6 +75,20 @@ func newRoutingSelector(state routingRuntimeState) coreauth.Selector {
 		selector = &coreauth.WeightedRoundRobinSelector{}
 	case "fill-first":
 		selector = &coreauth.FillFirstSelector{}
+	case "random":
+		selector = &coreauth.RandomSelector{}
+	case "quota_high_first":
+		selector = coreauth.NewQuotaHighFirstSelector()
+	case "quota_low_first":
+		selector = coreauth.NewQuotaLowFirstSelector()
+	case "plan_high_first":
+		selector = coreauth.NewPlanHighFirstSelector()
+	case "plan_low_first":
+		selector = coreauth.NewPlanLowFirstSelector()
+	case "expiry_soon_first":
+		selector = coreauth.NewExpirySoonFirstSelector()
+	case "custom":
+		selector = coreauth.NewCustomSelector()
 	default:
 		selector = &coreauth.RoundRobinSelector{}
 	}

@@ -15,6 +15,7 @@ const (
 	xaiBuiltinVideoModelID        = "grok-imagine-video"
 	xaiBuiltinVideo15ModelID      = "grok-imagine-video-1.5"
 	xaiBuiltinVideo15PreviewID    = "grok-imagine-video-1.5-preview"
+	codebuddyBuiltinImageModelID  = "codebuddy-image-1"
 )
 
 // staticModelsJSON mirrors the top-level structure of models.json.
@@ -30,6 +31,7 @@ type staticModelsJSON struct {
 	Kimi        []*ModelInfo `json:"kimi"`
 	Antigravity []*ModelInfo `json:"antigravity"`
 	XAI         []*ModelInfo `json:"xai"`
+	Codebuddy   []*ModelInfo `json:"codebuddy"`
 }
 
 // GetClaudeModels returns the standard Claude model definitions.
@@ -112,6 +114,67 @@ func GetXAIModels() []*ModelInfo {
 	return WithXAIBuiltins(cloneModelInfos(getModels().XAI))
 }
 
+// GetCodebuddyModels returns the Tencent CodeBuddy model definitions.
+//
+// When a locally installed official WorkBuddy/CodeBuddy client has been
+// successfully synced (see codebuddy_model_sync.go), its authoritative model
+// list is returned. Otherwise the static catalog embedded in models.json is
+// used as a fallback.
+func GetCodebuddyModels() []*ModelInfo {
+	codebuddySyncMu.RLock()
+	synced := codebuddySynced
+	codebuddySyncMu.RUnlock()
+	if len(synced) > 0 {
+		return WithCodebuddyBuiltins(cloneModelInfos(synced))
+	}
+	return WithCodebuddyBuiltins(cloneModelInfos(getModels().Codebuddy))
+}
+
+// codebuddyVisionBackendWhitelist lists CodeBuddy models whose official app.asar
+// supportsImages flag is false but which the live backend verifiably routes to a
+// vision sub-model (confirmed 2026-08-20 with a content-rich image). They are
+// treated as vision-capable so the vision-proxy layer does not re-route them.
+var codebuddyVisionBackendWhitelist = map[string]struct{}{
+	"deepseek-v4-flash": {},
+	"deepseek-v4-pro":   {},
+	"glm-5.1":           {},
+	"glm-5.2":           {},
+}
+
+// CodebuddyModelSupportsImages reports whether the given CodeBuddy model accepts
+// image input. It consults, in order:
+//  1. The measured backend whitelist (models the live backend verifiably routes
+//     to a vision sub-model despite app.asar marking them text-only).
+//  2. The official client's app.asar supportsImages flag (or the static
+//     models.json fallback when the client is not installed).
+//
+// Unknown or empty model IDs report false.
+func CodebuddyModelSupportsImages(modelID string) bool {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return false
+	}
+	if _, ok := codebuddyVisionBackendWhitelist[strings.ToLower(modelID)]; ok {
+		return true
+	}
+	for _, m := range GetCodebuddyModels() {
+		if m != nil && strings.EqualFold(m.ID, modelID) {
+			return m.SupportsImages
+		}
+	}
+	return false
+}
+
+// WithCodebuddyBuiltins injects embedded CodeBuddy-only model definitions that
+// should not depend on remote models.json updates or the official client's
+// app.asar extraction. Built-ins replace any matching IDs already present.
+//
+// The CodeBuddy image model is a placeholder (upstream image protocol is not
+// yet verified) and is only visible when image generation is enabled.
+func WithCodebuddyBuiltins(models []*ModelInfo) []*ModelInfo {
+	return upsertModelInfos(models, codebuddyBuiltinImageModelInfo())
+}
+
 // WithCodexBuiltins injects hard-coded Codex-only model definitions that should
 // not depend on remote models.json updates. Built-ins replace any matching IDs
 // already present in the provided slice.
@@ -154,6 +217,18 @@ func codexBuiltinImageModelInfo() *ModelInfo {
 		Type:        "openai",
 		DisplayName: "GPT Image 2",
 		Version:     codexBuiltinImageModelID,
+	}
+}
+
+func codebuddyBuiltinImageModelInfo() *ModelInfo {
+	return &ModelInfo{
+		ID:          codebuddyBuiltinImageModelID,
+		Object:      "model",
+		Created:     1704067200, // 2024-01-01
+		OwnedBy:     "codebuddy",
+		Type:        "codebuddy",
+		DisplayName: "CodeBuddy Image 1",
+		Version:     codebuddyBuiltinImageModelID,
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	"math/rand/v2"
 	"net/http"
 	"sort"
 	"strconv"
@@ -1197,4 +1198,311 @@ func extractResponsesAPIContent(content gjson.Result) string {
 // Deprecated: Use ExtractSessionID instead.
 func extractSessionID(payload []byte) string {
 	return ExtractSessionID(nil, payload, nil)
+}
+
+// ---------------------------------------------------------------------------
+// Account-metadata driven selectors (quota / plan / expiry).
+//
+// These selectors order available accounts by metadata injected by the host
+// orchestrator (Rust) into the auth file's top-level JSON. Those top-level
+// fields land in Auth.Metadata when the file store reads the auth file.
+// ---------------------------------------------------------------------------
+
+// authMetaFloat reads a numeric account-metadata key from Auth.Metadata.
+// Values may arrive as float64 (JSON number), string, or int. Returns (value, ok).
+func authMetaFloat(auth *Auth, key string) (float64, bool) {
+	if auth == nil || auth.Metadata == nil {
+		return 0, false
+	}
+	raw, exists := auth.Metadata[key]
+	if !exists || raw == nil {
+		return 0, false
+	}
+	switch v := raw.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		if f, err := v.Float64(); err == nil {
+			return f, true
+		}
+		return 0, false
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return f, true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
+
+// authQuotaRemainKey is the metadata key for remaining quota (credits).
+const authQuotaRemainKey = "quota_remain"
+
+// authPlanRankKey is the metadata key for the subscription tier rank
+// (free=0, pro=1, team=2, ...). Precomputed by the orchestrator.
+const authPlanRankKey = "plan_rank"
+
+// authExpiryMsKey is the metadata key for subscription expiry as a Unix ms
+// timestamp. Zero means "no expiry" (e.g. auto-renew or permanent).
+const authExpiryMsKey = "subscription_expiry_ms"
+
+func authQuotaRemainRank(auth *Auth) (float64, bool) {
+	return authMetaFloat(auth, authQuotaRemainKey)
+}
+
+func authPlanRank(auth *Auth) (float64, bool) {
+	return authMetaFloat(auth, authPlanRankKey)
+}
+
+// authExpiryRank returns the subscription expiry timestamp in milliseconds.
+// Accounts without expiry metadata rank as far-future so they sort last under
+// "expiry soon first".
+func authExpiryRank(auth *Auth) (float64, bool) {
+	v, ok := authMetaFloat(auth, authExpiryMsKey)
+	if !ok || v <= 0 {
+		return math.MaxInt64, true
+	}
+	return v, true
+}
+
+// rankedSelector orders available accounts by an account-metadata rank key and
+// picks the first. It is the shared implementation behind the quota/plan/expiry
+// strategy selectors.
+type rankedSelector struct {
+	rank func(auth *Auth) (float64, bool)
+	// desc selects the direction: true = larger rank first (high quota/plan).
+	desc bool
+}
+
+func (s *rankedSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
+	_ = opts
+	available, err := getAvailableAuths(auths, provider, model, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	available = preferCodexWebsocketAuths(ctx, provider, available)
+	if len(available) == 1 {
+		return available[0], nil
+	}
+
+	sort.SliceStable(available, func(i, j int) bool {
+		ri, iok := s.rank(available[i])
+		rj, jok := s.rank(available[j])
+		// Accounts missing the rank key sort to the end regardless of direction,
+		// so known accounts are always preferred over unknown ones.
+		if iok != jok {
+			return iok
+		}
+		if iok && jok {
+			if ri != rj {
+				if s.desc {
+					return ri > rj
+				}
+				return ri < rj
+			}
+		}
+		return available[i].ID < available[j].ID
+	})
+	return available[0], nil
+}
+
+// RandomSelector picks a uniformly random account from the available set.
+type RandomSelector struct{}
+
+func (s *RandomSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
+	_ = opts
+	available, err := getAvailableAuths(auths, provider, model, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	available = preferCodexWebsocketAuths(ctx, provider, available)
+	if len(available) == 1 {
+		return available[0], nil
+	}
+	return available[rand.IntN(len(available))], nil
+}
+
+// NewQuotaHighFirstSelector prefers accounts with the largest remaining quota.
+func NewQuotaHighFirstSelector() Selector {
+	return &rankedSelector{rank: authQuotaRemainRank, desc: true}
+}
+
+// NewQuotaLowFirstSelector prefers accounts with the smallest remaining quota.
+func NewQuotaLowFirstSelector() Selector {
+	return &rankedSelector{rank: authQuotaRemainRank, desc: false}
+}
+
+// NewPlanHighFirstSelector prefers accounts with the highest subscription tier.
+func NewPlanHighFirstSelector() Selector {
+	return &rankedSelector{rank: authPlanRank, desc: true}
+}
+
+// NewPlanLowFirstSelector prefers accounts with the lowest subscription tier.
+func NewPlanLowFirstSelector() Selector {
+	return &rankedSelector{rank: authPlanRank, desc: false}
+}
+
+// NewExpirySoonFirstSelector prefers accounts whose subscription expires soonest.
+func NewExpirySoonFirstSelector() Selector {
+	return &rankedSelector{rank: authExpiryRank, desc: false}
+}
+
+// ---------------------------------------------------------------------------
+// Custom routing selector (custom strategy).
+//
+// Reads per-account custom routing rules injected by the host orchestrator into
+// Auth.Metadata (routing_priority / routing_weight / routing_is_backup /
+// routing_is_preferred). Semantics mirror the Codex custom routing:
+//   - accounts are grouped by priority (descending);
+//   - within a group, accounts are picked by weighted round-robin;
+//   - is_preferred accounts sort first, is_backup accounts sort last (fallback).
+// ---------------------------------------------------------------------------
+
+func authMetaBool(auth *Auth, key string) bool {
+	if auth == nil || auth.Metadata == nil {
+		return false
+	}
+	raw, exists := auth.Metadata[key]
+	if !exists || raw == nil {
+		return false
+	}
+	switch v := raw.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
+	}
+}
+
+const authRoutingPriorityKey = "routing_priority"
+const authRoutingWeightKey = "routing_weight"
+const authRoutingIsBackupKey = "routing_is_backup"
+const authRoutingIsPreferredKey = "routing_is_preferred"
+
+func authRoutingPriority(auth *Auth) int {
+	if v, ok := authMetaFloat(auth, authRoutingPriorityKey); ok {
+		return int(v)
+	}
+	return 0
+}
+
+func authRoutingWeight(auth *Auth) int {
+	if v, ok := authMetaFloat(auth, authRoutingWeightKey); ok && v >= 1 {
+		return int(v)
+	}
+	return 1
+}
+
+func authRoutingIsBackup(auth *Auth) bool {
+	return authMetaBool(auth, authRoutingIsBackupKey)
+}
+
+func authRoutingIsPreferred(auth *Auth) bool {
+	return authMetaBool(auth, authRoutingIsPreferredKey)
+}
+
+// customSelector implements the "custom" routing strategy.
+type customSelector struct {
+	mu     sync.Mutex
+	cursor int
+}
+
+// NewCustomSelector returns a selector driven by per-account custom routing rules.
+func NewCustomSelector() Selector {
+	return &customSelector{}
+}
+
+func (s *customSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
+	_ = opts
+	available, err := getAvailableAuths(auths, provider, model, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	available = preferCodexWebsocketAuths(ctx, provider, available)
+	if len(available) == 1 {
+		return available[0], nil
+	}
+
+	ordered := s.orderCustom(available)
+
+	s.mu.Lock()
+	start := s.cursor
+	s.cursor++
+	s.mu.Unlock()
+
+	// Weighted round-robin across the whole ordered list: preferred/priority
+	// accounts carry more weight, backups the least.
+	total := 0
+	weights := make([]int, len(ordered))
+	for i, auth := range ordered {
+		w := authRoutingWeight(auth)
+		if authRoutingIsBackup(auth) {
+			// Backups participate only as a last resort but keep minimal weight.
+			w = 1
+		}
+		if authRoutingIsPreferred(auth) {
+			w = maxInt(w*2, 2)
+		}
+		weights[i] = w
+		total += w
+	}
+	if total <= 0 {
+		return ordered[0], nil
+	}
+	slot := start % total
+	for i, w := range weights {
+		if slot < w {
+			return ordered[i], nil
+		}
+		slot -= w
+	}
+	return ordered[0], nil
+}
+
+// orderCustom sorts available accounts by custom routing semantics:
+// preferred first, backup last, then priority descending (stable by ID).
+func (s *customSelector) orderCustom(auths []*Auth) []*Auth {
+	out := make([]*Auth, len(auths))
+	copy(out, auths)
+	sort.SliceStable(out, func(i, j int) bool {
+		pi := customClass(out[i])
+		pj := customClass(out[j])
+		if pi != pj {
+			return pi > pj
+		}
+		priI := authRoutingPriority(out[i])
+		priJ := authRoutingPriority(out[j])
+		if priI != priJ {
+			return priI > priJ
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+// customClass returns 1 for preferred accounts, -1 for backup, else 0.
+func customClass(auth *Auth) int {
+	if authRoutingIsPreferred(auth) {
+		return 1
+	}
+	if authRoutingIsBackup(auth) {
+		return -1
+	}
+	return 0
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -27,7 +27,18 @@ import (
 )
 
 type imageRelayRequest struct {
-	body           []byte
+	// body is the pre-built Codex Responses-style upstream payload (legacy path).
+	body []byte
+	// rawBody is the original OpenAI Images API request body (for providers whose
+	// upstream image endpoint is itself OpenAI Images API compatible, e.g.
+	// CodeBuddy /v2/images/generations).
+	rawBody []byte
+	// prompt / images / tool are the generic image request inputs, retained so the
+	// relay can rebuild the upstream payload per-provider (Codex Responses vs
+	// CodeBuddy Chat Completions).
+	prompt         string
+	images         []string
+	tool           map[string]any
 	stream         bool
 	responseFormat string
 	streamPrefix   string
@@ -120,6 +131,9 @@ func buildImageGenerationRelayRequest(rawJSON []byte) (imageRelayRequest, error)
 	}
 	return imageRelayRequest{
 		body:           body,
+		rawBody:        rawJSON,
+		prompt:         prompt,
+		tool:           tool,
 		stream:         boolField(payload, "stream"),
 		responseFormat: normalizeImageResponseFormat(stringField(payload, "response_format")),
 		streamPrefix:   "image_generation",
@@ -169,6 +183,10 @@ func buildImageEditRelayRequest(c *gin.Context) (imageRelayRequest, error) {
 	}
 	return imageRelayRequest{
 		body:           body,
+		rawBody:        rawJSON,
+		prompt:         prompt,
+		images:         images,
+		tool:           tool,
 		stream:         boolField(payload, "stream"),
 		responseFormat: normalizeImageResponseFormat(stringField(payload, "response_format")),
 		streamPrefix:   "image_edit",
@@ -230,6 +248,9 @@ func buildImageEditRelayRequestFromMultipart(c *gin.Context) (imageRelayRequest,
 	}
 	return imageRelayRequest{
 		body:           body,
+		prompt:         prompt,
+		images:         images,
+		tool:           tool,
 		stream:         boolField(payload, "stream"),
 		responseFormat: normalizeImageResponseFormat(stringField(payload, "response_format")),
 		streamPrefix:   "image_edit",
@@ -247,10 +268,19 @@ func (s *relayServer) handleImagesRelayRequest(c *gin.Context, imageReq imageRel
 		writeAPIError(c, http.StatusNotFound, fmt.Sprintf("模型 %s 不在当前 API Key 的可用模型范围内", requestedModel), "model_not_available")
 		return
 	}
+	// Resolve the upstream provider from the requested image model so CodeBuddy
+	// image requests route to the CodeBuddy executor instead of being hard-coded
+	// to Codex. Unknown models fall back to Codex (legacy behaviour).
+	providers := resolveRequestProviders(requestedModel)
+	if providersContain(providers, "codebuddy") {
+		s.handleCodebuddyImagesRelay(c, imageReq, requestedModel)
+		return
+	}
 	model := defaultImagesMainModel
+	upstreamBody := imageReq.body
 	req, opts := buildExecutorRequest(c, imageReq.body, model, sdktranslator.FormatOpenAIResponse, "", true)
 	startedAt := time.Now()
-	timeouts := s.streamTimeoutsForRequest(c.Request, imageReq.body, defaultImagesToolModel)
+	timeouts := s.streamTimeoutsForRequest(c.Request, upstreamBody, requestedModel)
 	immediateSSE := imageReq.stream && s.manifest != nil && s.manifest.ImmediateSSEResponse
 	var immediateFlusher http.Flusher
 	if immediateSSE {
@@ -267,7 +297,7 @@ func (s *relayServer) handleImagesRelayRequest(c *gin.Context, imageReq imageRel
 	}
 	streamCtx, cancelStream := context.WithCancel(relayContext(c))
 	defer cancelStream()
-	result, err := s.executeStreamWithOpenTimeout(c, streamCtx, []string{"codex"}, req, opts, model, startedAt, timeouts.open)
+	result, err := s.executeStreamWithOpenTimeout(c, streamCtx, providers, req, opts, model, startedAt, timeouts.open)
 	if err != nil {
 		if immediateSSE {
 			writeImagesStreamError(c, immediateFlusher, err)
@@ -478,13 +508,16 @@ func imageModelOrDefault(payload map[string]any) string {
 
 func buildImageTool(payload map[string]any, action string) (map[string]any, error) {
 	model := imageModelOrDefault(payload)
-	if modelBase(model) != defaultImagesToolModel {
-		return nil, fmt.Errorf("model %s is not supported on %s or %s. Use %s.", model, imagesGenerationsPath, imagesEditsPath, defaultImagesToolModel)
+	switch modelBase(model) {
+	case defaultImagesToolModel, codebuddyImageToolModel:
+		// supported image models
+	default:
+		return nil, fmt.Errorf("model %s is not supported on %s or %s. Use %s or %s.", model, imagesGenerationsPath, imagesEditsPath, defaultImagesToolModel, codebuddyImageToolModel)
 	}
 	tool := map[string]any{
 		"type":   "image_generation",
 		"action": action,
-		"model":  defaultImagesToolModel,
+		"model":  model,
 	}
 	for _, key := range []string{"size", "quality", "background", "output_format", "moderation"} {
 		if value := stringField(payload, key); value != "" {

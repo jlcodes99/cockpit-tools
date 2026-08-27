@@ -106,6 +106,10 @@ type manifest struct {
 	accountByEmail    map[string]*accountSpec
 	aliasToSource     map[string]string
 	originalIndexByID map[string]int
+
+	// modelMu guards ModelIDs so the periodic codebuddy model sync can update
+	// the catalog while HTTP requests concurrently read it.
+	modelMu sync.RWMutex
 }
 
 type apiKeySpec struct {
@@ -1821,7 +1825,7 @@ func visibleModelsForAPIKey(m *manifest, spec *apiKeySpec) []string {
 		}
 		return normalizeStringList(models)
 	}
-	models := applyModelFilters(m.ModelIDs, nil, m.ExcludedModels)
+	models := applyModelFilters(m.modelIDs(), nil, m.ExcludedModels)
 	if spec != nil {
 		models = applyModelFilters(models, spec.AllowedModels, spec.ExcludedModels)
 		if strings.TrimSpace(spec.ModelPrefix) != "" {

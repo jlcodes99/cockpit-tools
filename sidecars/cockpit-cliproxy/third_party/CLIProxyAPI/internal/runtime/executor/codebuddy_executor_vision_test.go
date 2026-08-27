@@ -1,0 +1,203 @@
+package executor
+
+import (
+	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/tidwall/gjson"
+)
+
+// --- image input detection -------------------------------------------------
+
+func TestCodebuddyChatHasImageInput(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{
+			name: "image_url part detected",
+			in:   `{"messages":[{"role":"user","content":[{"type":"text","text":"hi"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`,
+			want: true,
+		},
+		{
+			name: "input_image part detected",
+			in:   `{"messages":[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,BBBB"}]}]}`,
+			want: true,
+		},
+		{
+			name: "text only",
+			in:   `{"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}]}`,
+			want: false,
+		},
+		{
+			name: "string content",
+			in:   `{"messages":[{"role":"user","content":"hello"}]}`,
+			want: false,
+		},
+		{
+			name: "no messages",
+			in:   `{"model":"auto"}`,
+			want: false,
+		},
+		{
+			name: "invalid json",
+			in:   `not-json`,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := codebuddyChatHasImageInput([]byte(tt.in)); got != tt.want {
+				t.Fatalf("codebuddyChatHasImageInput() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// --- model rewrite (routing mode) ------------------------------------------
+
+func TestRewriteCodebuddyModel(t *testing.T) {
+	tests := []struct {
+		name  string
+		in    string
+		model string
+		want  string
+	}{
+		{
+			name:  "existing model replaced",
+			in:    `{"model":"deepseek-v4-flash","messages":[]}`,
+			model: "hy3-preview",
+			want:  "hy3-preview",
+		},
+		{
+			name:  "missing model added",
+			in:    `{"messages":[]}`,
+			model: "hy3-preview",
+			want:  "hy3-preview",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := rewriteCodebuddyModel([]byte(tt.in), tt.model)
+			got := gjson.GetBytes(out, "model").String()
+			if got != tt.want {
+				t.Fatalf("model = %q, want %q; out=%s", got, tt.want, out)
+			}
+			// messages must survive untouched
+			if !gjson.GetBytes(out, "messages").Exists() {
+				t.Fatalf("messages lost; out=%s", out)
+			}
+		})
+	}
+}
+
+// --- image -> text replacement (preprocess mode) ---------------------------
+
+func TestReplaceCodebuddyImagesWithText(t *testing.T) {
+	in := `{"messages":[{"role":"user","content":[{"type":"text","text":"这是什么？"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`
+	out := replaceCodebuddyImagesWithText([]byte(in), "一张红色方块")
+
+	parts := gjson.GetBytes(out, "messages.0.content").Array()
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 parts, got %d; out=%s", len(parts), out)
+	}
+	if parts[0].Get("type").String() != "text" || parts[0].Get("text").String() != "这是什么？" {
+		t.Fatalf("text part corrupted: %s", parts[0].Raw)
+	}
+	if parts[1].Get("type").String() != "text" {
+		t.Fatalf("image part not replaced by text: %s", parts[1].Raw)
+	}
+	if got := parts[1].Get("text").String(); got != "一张红色方块" {
+		t.Fatalf("replacement text = %q, want %q", got, "一张红色方块")
+	}
+}
+
+func TestReplaceCodebuddyImagesWithText_NoImages(t *testing.T) {
+	in := `{"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}]}`
+	out := replaceCodebuddyImagesWithText([]byte(in), "ignored")
+	if string(out) != in {
+		t.Fatalf("expected unchanged, got %s", out)
+	}
+}
+
+// --- vision proxy plan (decision) -------------------------------------------
+
+func TestCodebuddyVisionPlan(t *testing.T) {
+	tests := []struct {
+		name         string
+		mode         string
+		visionModel  string
+		currentModel string
+		hasImage     bool
+		supportsImg  bool
+		want         codebuddyVisionAction
+	}{
+		{
+			name:         "off always passes through",
+			mode:         config.CodebuddyVisionModeOff,
+			currentModel: "deepseek-v4-flash",
+			hasImage:     true,
+			want:         codebuddyVisionPassThrough,
+		},
+		{
+			name:         "no image passes through",
+			mode:         config.CodebuddyVisionModeRouting,
+			currentModel: "deepseek-v4-flash",
+			hasImage:     false,
+			want:         codebuddyVisionPassThrough,
+		},
+		{
+			name:         "vision model itself passes through (no recursion)",
+			mode:         config.CodebuddyVisionModeRouting,
+			visionModel:  "hy3-preview",
+			currentModel: "hy3-preview",
+			hasImage:     true,
+			want:         codebuddyVisionPassThrough,
+		},
+		{
+			name:         "native vision model passes through",
+			mode:         config.CodebuddyVisionModeRouting,
+			visionModel:  "hy3-preview",
+			currentModel: "glm-4.6v",
+			hasImage:     true,
+			supportsImg:  true,
+			want:         codebuddyVisionPassThrough,
+		},
+		{
+			name:         "routing swaps text-only model",
+			mode:         config.CodebuddyVisionModeRouting,
+			visionModel:  "hy3-preview",
+			currentModel: "deepseek-v4-flash",
+			hasImage:     true,
+			want:         codebuddyVisionRoute,
+		},
+		{
+			name:         "preprocess describes then keeps model",
+			mode:         config.CodebuddyVisionModePreprocess,
+			visionModel:  "hy3-preview",
+			currentModel: "deepseek-v4-flash",
+			hasImage:     true,
+			want:         codebuddyVisionPreprocess,
+		},
+		{
+			name:         "unknown mode falls back to pass-through",
+			mode:         "bogus",
+			visionModel:  "hy3-preview",
+			currentModel: "deepseek-v4-flash",
+			hasImage:     true,
+			want:         codebuddyVisionPassThrough,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := codebuddyVisionPlan(tt.mode, tt.visionModel, tt.currentModel, tt.hasImage, tt.supportsImg)
+			if got != tt.want {
+				t.Fatalf("codebuddyVisionPlan() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

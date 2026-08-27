@@ -5,6 +5,7 @@ import (
 
 	"errors"
 	"flag"
+	"fmt"
 
 	"net"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	codexlive "github.com/router-for-me/CLIProxyAPI/v7/internal/client/codex/live"
+	internalregistry "github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 
 	sdkhandlers "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
 	sdkopenai "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers/openai"
@@ -120,6 +122,19 @@ func main() {
 		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
 		os.Exit(2)
 	}
+	// Sync the CodeBuddy model catalog from the locally installed official
+	// WorkBuddy/CodeBuddy client. The official Tencent backend exposes no public
+	// model-list API, so the client bundle is the authoritative local source of
+	// the real model list (e.g. kimi-k3). This overrides the static manifest
+	// modelIds so /v1/models and model routing reflect the actual client models,
+	// and installs the same catalog into the global registry for routing.
+	if synced := internalregistry.SyncCodebuddyModelsFromOfficialClient(); len(synced) > 0 {
+		m.setModelIDs(synced)
+		emitter.emit(map[string]any{
+			"type":    "codebuddy_model_sync",
+			"message": fmt.Sprintf("synced %d codebuddy models from official client", len(synced)),
+		})
+	}
 	emitter.emitStartupStage("init_runtime")
 	quotaState := newQuotaReserveStateStore(*quotaReserveStatePath, m)
 	if err := quotaState.load(); err != nil {
@@ -164,6 +179,50 @@ func main() {
 		os.Exit(1)
 	}
 	defer runtime.Stop()
+	// Periodically re-sync the CodeBuddy model catalog so that both client
+	// upgrades (which change the bundled app.asar model list) and backend model
+	// releases (e.g. glm-5.3 that is not yet in app.asar) are picked up without a
+	// full sidecar restart. Prefer the official backend; fall back to app.asar.
+	go func() {
+		const codebuddySyncInterval = 3 * time.Hour
+		syncOnce := func() {
+			var synced []string
+			source := "official-client-asar"
+			if coreManager != nil {
+				if ids := syncCodebuddyModelsFromBackend(coreManager.List()); len(ids) > 0 {
+					synced = ids
+					source = "tencent-backend"
+				}
+			}
+			if len(synced) == 0 {
+				synced = internalregistry.SyncCodebuddyModelsFromOfficialClient()
+			}
+			if len(synced) == 0 {
+				return
+			}
+			if !m.setModelIDs(synced) {
+				return
+			}
+			internalregistry.NotifyCodebuddyModelRefresh()
+			emitter.emit(map[string]any{
+				"type":    "codebuddy_model_sync",
+				"message": fmt.Sprintf("codebuddy models updated to %d entries (source=%s)", len(synced), source),
+			})
+		}
+		// Run once immediately after the auth manager is ready so backend-only
+		// models (e.g. glm-5.3) become available without waiting for the ticker.
+		syncOnce()
+		ticker := time.NewTicker(codebuddySyncInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				syncOnce()
+			}
+		}
+	}()
 	emitter.emitStartupStage("start_http_server")
 
 	// Reuse the same coreManager so WS upgrades share OAuth pool, routing and

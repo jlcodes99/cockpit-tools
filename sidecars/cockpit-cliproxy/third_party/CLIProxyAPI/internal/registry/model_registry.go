@@ -66,6 +66,12 @@ type ModelInfo struct {
 	// fetchAvailableModels.webSearchModelIds and can execute native googleSearch.
 	SupportsWebSearch bool `json:"supports_web_search,omitempty"`
 
+	// SupportsImages indicates whether the model accepts image input.
+	// Populated for CodeBuddy models from the official client's app.asar
+	// supportsImages capability flag. It drives vision-proxy routing: text-only
+	// models that receive image input are transparently routed/pre-processed.
+	SupportsImages bool `json:"supports_images,omitempty"`
+
 	// Thinking holds provider-specific reasoning/thinking budget capabilities.
 	// This is optional and currently used for Gemini thinking budget normalization.
 	Thinking *ThinkingSupport `json:"thinking,omitempty"`

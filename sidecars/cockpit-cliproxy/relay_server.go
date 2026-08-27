@@ -65,6 +65,8 @@ func (s *relayServer) router() *gin.Engine {
 	router.POST("/v1/realtime/calls/:call_id/accept", s.handleCodexSIPControl)
 	router.POST("/v1/realtime/calls/:call_id/reject", s.handleCodexSIPControl)
 	router.POST("/v1/realtime/calls/:call_id/refer", s.handleCodexSIPControl)
+	// 手动触发 CodeBuddy 官方客户端模型同步（立即从 app.asar 重新提取）
+	router.POST("/v1/cockpit/codebuddy/sync", s.handleCodebuddySyncModels)
 	// Codex Responses WebSocket upgrade uses GET /v1/responses (not POST/SSE).
 	router.GET("/v1/responses", s.handleResponsesWebsocket)
 	router.POST("/v1/responses", s.handleResponses)

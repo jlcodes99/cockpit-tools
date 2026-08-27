@@ -73,10 +73,13 @@ func init() {
 
 // StartModelsUpdater starts a background updater that fetches models
 // immediately on startup and then refreshes the model catalog every 3 hours.
+// It also starts the codebuddy model sync loop which keeps the CodeBuddy model
+// list in sync with the locally installed official client.
 // Safe to call multiple times; only one updater will run.
 func StartModelsUpdater(ctx context.Context) {
 	updaterOnce.Do(func() {
 		go runModelsUpdater(ctx)
+		go runCodebuddyModelSync(ctx)
 	})
 }
 
@@ -216,6 +219,7 @@ func detectChangedProviders(oldData, newData *staticModelsJSON) []string {
 		{"kimi", oldData.Kimi, newData.Kimi},
 		{"antigravity", oldData.Antigravity, newData.Antigravity},
 		{"xai", oldData.XAI, newData.XAI},
+		{"codebuddy", oldData.Codebuddy, newData.Codebuddy},
 	}
 
 	seen := make(map[string]bool, len(sections))

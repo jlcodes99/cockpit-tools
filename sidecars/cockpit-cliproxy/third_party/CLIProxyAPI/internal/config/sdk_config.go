@@ -4,6 +4,8 @@
 // debug settings, proxy configuration, and API keys.
 package config
 
+import "strings"
+
 // SDKConfig represents the application's configuration, loaded from a YAML file.
 type SDKConfig struct {
 	EnableGeminiCLIEndpoint bool `yaml:"enable-gemini-cli-endpoint,omitempty" json:"enable-gemini-cli-endpoint,omitempty"`
@@ -62,6 +64,12 @@ type SDKConfig struct {
 	// NonStreamKeepAliveInterval controls how often blank lines are emitted for non-streaming responses.
 	// <= 0 disables keep-alives. Value is in seconds.
 	NonStreamKeepAliveInterval int `yaml:"nonstream-keepalive-interval,omitempty" json:"nonstream-keepalive-interval,omitempty"`
+
+	// CodebuddyVision configures the CodeBuddy vision-proxy layer. When a chat
+	// request carries image input for a model that does not natively support
+	// images, the proxy either swaps the model to a vision model (routing) or
+	// converts the images to text descriptions first (preprocess).
+	CodebuddyVision CodebuddyVisionConfig `yaml:"codebuddy-vision" json:"codebuddy-vision"`
 }
 
 // ClaudeCodeConfig configures Claude Code compatibility behavior.
@@ -87,4 +95,56 @@ type StreamingConfig struct {
 	ImageStreamIdleTimeoutMS  int `yaml:"image-stream-idle-timeout-ms,omitempty" json:"image-stream-idle-timeout-ms,omitempty"`
 	BootstrapRetryBaseDelayMS int `yaml:"bootstrap-retry-base-delay-ms,omitempty" json:"bootstrap-retry-base-delay-ms,omitempty"`
 	BootstrapRetryMaxDelayMS  int `yaml:"bootstrap-retry-max-delay-ms,omitempty" json:"bootstrap-retry-max-delay-ms,omitempty"`
+}
+
+// CodebuddyVisionConfig controls the CodeBuddy vision-proxy layer.
+//
+// The Tencent CodeBuddy backend accepts image input on a per-model basis. Some
+// text-only models (e.g. hunyuan-2.0-instruct) silently ignore images and reply
+// with "this model does not support image input" instead of an error. When
+// enabled, the proxy detects image input and handles it for non-vision models.
+type CodebuddyVisionConfig struct {
+	// Mode selects the strategy:
+	//   - "off" (default): disabled; images pass through unchanged.
+	//   - "routing": swap the request model to Model for non-vision models.
+	//   - "preprocess": describe images with Model first, then continue with the
+	//     original model.
+	// Any other value falls back to "off".
+	Mode string `yaml:"mode" json:"mode"`
+
+	// Model is the vision model used as the routing target / preprocess engine.
+	// Default "hy3-preview".
+	Model string `yaml:"model" json:"model"`
+
+	// PreprocessPrompt overrides the user-visible prompt sent to the vision model
+	// in preprocess mode. Empty uses a built-in default.
+	PreprocessPrompt string `yaml:"preprocess-prompt" json:"preprocess-prompt"`
+}
+
+// VisionMode constants for CodebuddyVisionConfig.Mode.
+const (
+	CodebuddyVisionModeOff         = "off"
+	CodebuddyVisionModeRouting     = "routing"
+	CodebuddyVisionModePreprocess  = "preprocess"
+)
+
+// NormalizedVisionMode returns the effective mode, mapping unknown values to "off".
+func (c CodebuddyVisionConfig) NormalizedVisionMode() string {
+	switch strings.ToLower(strings.TrimSpace(c.Mode)) {
+	case CodebuddyVisionModeRouting:
+		return CodebuddyVisionModeRouting
+	case CodebuddyVisionModePreprocess:
+		return CodebuddyVisionModePreprocess
+	default:
+		return CodebuddyVisionModeOff
+	}
+}
+
+// VisionModel returns the configured vision model, defaulting to "hy3-preview".
+func (c CodebuddyVisionConfig) VisionModel() string {
+	model := strings.TrimSpace(c.Model)
+	if model == "" {
+		return "hy3-preview"
+	}
+	return model
 }
