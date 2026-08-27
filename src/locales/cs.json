@@ -324,7 +324,8 @@
     "apiRelay": "API relay",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Účty Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Sponzoři",
@@ -4501,6 +4502,21 @@
       "syncOfficialAuthOnSwitch": "Synchronizovat oficiální přihlášení",
       "syncOfficialAuthOnSwitchDesc": "Po zapnutí změna účtu OAuth ve výchozí instanci zapíše oficiální soubor ~/.grok/auth.json. Po vypnutí se použije samostatný GROK_HOME. Klíče API ani další instance oficiální přihlášení nepřepisují."
     },
+    "kimi": {
+      "title": "Nastavení Kimi Code",
+      "cliPath": "Cesta CLI",
+      "cliDetected": "Zjištěno: {{version}} · {{path}}",
+      "cliMissing": "Kimi CLI nebylo nalezeno. Zadejte vlastní cestu.",
+      "cliPick": "Vybrat Kimi CLI",
+      "cliDetect": "Automaticky zjistit Kimi CLI",
+      "homePick": "Vybrat KIMI_CODE_HOME",
+      "homeDetect": "Automaticky zjistit KIMI_CODE_HOME",
+      "home": "Složka KIMI_CODE_HOME",
+      "homeDesc": "Přepíše oficiální konfigurační adresář. Proměnná prostředí má přednost. Aktuálně: {{home}}",
+      "launchOnSwitch": "Po přepnutí otevřít oficiální CLI",
+      "launchOnSwitchDesc": "Po zapnutí otevře přepnutí účtu terminál a spustí kimi. Po vypnutí se zapíše jen oficiální konfigurace, bez okna."
+    },
+    "kimiRefreshInterval": "Automatická obnova kvóty",
     "grokRefreshInterval": "Automatická obnova kvóty",
     "codebuddy": {
       "title": "Nastavení CodeBuddy",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Správa klíčů OpenCode Go/Zen a filtr podle tier."
+  },
+  "kimi": {
+    "search": "Hledat účty Kimi Code...",
+    "flowNotice": {
+      "title": "Průvodce účty Kimi Code",
+      "desc": "Index více účtů zůstává v Cockpitu. Při přepnutí se zapíší oficiální přihlašovací údaje a přes GET /models vznikne kompletní config.toml včetně tabulky models.",
+      "permission": "Místní rozsah: výchozí údaje ~/.kimi-code lze importovat; při přepnutí se zapíší oficiální credentials a kompletní config.toml. Respektuje KIMI_CODE_HOME.",
+      "network": "Síťový rozsah: oprávnění OAuth, obnovení tokenu a /me · /models · /usages. Údaje se na služby Cockpitu neodesílají."
+    },
+    "empty": "Zatím žádné účty Kimi Code",
+    "addAccount": "Přidat účet Kimi Code",
+    "oauth": {
+      "desc": "Otevřete autorizační stránku Kimi a zadejte kód zařízení. Účet se po dokončení uloží sám.",
+      "title": "Přihlášení Kimi Code kódem zařízení",
+      "item1": "Používá oficiální device flow a nezabírá místní callback port.",
+      "item2": "Při přepnutí se zapíše ~/.kimi-code/credentials/kimi-code.json v oficiálním wire formátu.",
+      "item3": "Kvóta pochází z /usages. Přihlášení stahuje jen /me.",
+      "urlPlaceholder": "URL autorizace OAuth Kimi",
+      "waiting": "Čeká se na autorizaci OAuth Kimi...",
+      "openWindow": "Otevřít autorizační stránku",
+      "success": "Přihlášení OAuth Kimi Code bylo úspěšné"
+    },
+    "import": {
+      "tokenDesc": "Vložte oficiální credentials/kimi-code.json nebo úplný JSON účtu exportovaný touto aplikací.",
+      "pasteDesc": "Vložte oficiální credentials/kimi-code.json nebo úplný JSON účtu exportovaný touto aplikací.",
+      "pastePlaceholder": "Vložte JSON účtu Kimi Code",
+      "pasteAction": "Importovat JSON",
+      "localDesc": "Import z ~/.kimi-code/credentials/kimi-code.json (respektuje KIMI_CODE_HOME).",
+      "localClient": "Import z místního Kimi Code CLI"
+    },
+    "quota": {
+      "resetAt": "{{label}} se resetuje v {{time}}",
+      "empty": "Zatím žádná kvóta",
+      "weekly": "Týdenní kvóta"
+    },
+    "switch": {
+      "buttonTitle": "Zapsat oficiální konfiguraci",
+      "wroteOfficialConfig": "Oficiální konfigurace zapsána — kimi spusťte sami ({{email}})",
+      "currentOnly": "Aktuální účet přepnut (oficiální konfigurace nezapsána): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "Když některá položka kvóty klesne pod práh, odešle se nativní oznámení a nabídne se rychlé přepnutí.",
+      "thresholdDesc": "Upozornit, když zbývající kvóta klesne pod toto procento"
+    }
   }
 }

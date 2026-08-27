@@ -20,6 +20,7 @@ pub mod grok_instance;
 pub mod group;
 pub mod import;
 pub mod instance;
+pub mod kimi;
 pub mod kiro;
 pub mod kiro_instance;
 pub mod logs;

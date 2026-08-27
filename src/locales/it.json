@@ -324,7 +324,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Account Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -4501,6 +4502,21 @@
       "syncOfficialAuthOnSwitch": "Sincronizza l’accesso ufficiale",
       "syncOfficialAuthOnSwitchDesc": "Se attivo, il passaggio dell’istanza predefinita a un account OAuth scrive il file ufficiale ~/.grok/auth.json. Se disattivo, viene usato un GROK_HOME separato. Le chiavi API e le istanze aggiuntive non sovrascrivono l’accesso ufficiale."
     },
+    "kimi": {
+      "title": "Impostazioni Kimi Code",
+      "cliPath": "Percorso CLI",
+      "cliDetected": "Rilevato: {{version}} · {{path}}",
+      "cliMissing": "Kimi CLI non trovato. Indica un percorso.",
+      "cliPick": "Scegli Kimi CLI",
+      "cliDetect": "Rileva automaticamente Kimi CLI",
+      "homePick": "Scegli KIMI_CODE_HOME",
+      "homeDetect": "Rileva automaticamente KIMI_CODE_HOME",
+      "home": "Cartella KIMI_CODE_HOME",
+      "homeDesc": "Sovrascrive la cartella di configurazione ufficiale. La variabile d’ambiente ha la priorità. Attuale: {{home}}",
+      "launchOnSwitch": "Apri la CLI ufficiale dopo il cambio",
+      "launchOnSwitchDesc": "Se attivo, il cambio account apre un terminale ed esegue kimi. Se disattivo, viene scritta solo la configurazione ufficiale, senza finestra."
+    },
+    "kimiRefreshInterval": "Aggiornamento automatico quota",
     "grokRefreshInterval": "Aggiornamento automatico quota",
     "codebuddy": {
       "title": "Impostazioni CodeBuddy",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gestisci chiavi OpenCode Go/Zen e filtra per tier."
+  },
+  "kimi": {
+    "search": "Cerca account Kimi Code...",
+    "flowNotice": {
+      "title": "Guida agli account Kimi Code",
+      "desc": "L’indice multi-account resta in Cockpit. Il cambio scrive le credenziali ufficiali e un config.toml completo, tabella models inclusa, tramite GET /models.",
+      "permission": "Ambito locale: le credenziali predefinite di ~/.kimi-code si possono importare; al cambio vengono scritti i credentials ufficiali e un config.toml completo. Rispetta KIMI_CODE_HOME.",
+      "network": "Ambito di rete: autorizzazione OAuth, rinnovo token e /me · /models · /usages. Le credenziali non vengono caricate sui servizi Cockpit."
+    },
+    "empty": "Nessun account Kimi Code ancora",
+    "addAccount": "Aggiungi account Kimi Code",
+    "oauth": {
+      "desc": "Apri la pagina di autorizzazione Kimi e inserisci il codice dispositivo. L’account viene salvato automaticamente.",
+      "title": "Accesso Kimi Code con codice dispositivo",
+      "item1": "Usa il device flow ufficiale senza occupare una porta di callback locale.",
+      "item2": "Il cambio scrive ~/.kimi-code/credentials/kimi-code.json nel formato wire ufficiale.",
+      "item3": "La quota arriva da /usages. L’accesso recupera solo /me.",
+      "urlPlaceholder": "URL di autorizzazione OAuth Kimi",
+      "waiting": "In attesa dell’autorizzazione OAuth Kimi...",
+      "openWindow": "Apri pagina di autorizzazione",
+      "success": "Accesso OAuth Kimi Code riuscito"
+    },
+    "import": {
+      "tokenDesc": "Incolla il credentials/kimi-code.json ufficiale o un JSON account esportato da questa app.",
+      "pasteDesc": "Incolla il credentials/kimi-code.json ufficiale o un JSON account esportato da questa app.",
+      "pastePlaceholder": "Incolla il JSON dell’account Kimi Code",
+      "pasteAction": "Importa JSON",
+      "localDesc": "Importa da ~/.kimi-code/credentials/kimi-code.json (rispetta KIMI_CODE_HOME).",
+      "localClient": "Importa dalla CLI Kimi Code locale"
+    },
+    "quota": {
+      "resetAt": "{{label}} si reimposta alle {{time}}",
+      "empty": "Nessuna quota ancora",
+      "weekly": "Quota settimanale"
+    },
+    "switch": {
+      "buttonTitle": "Scrivi la configurazione ufficiale",
+      "wroteOfficialConfig": "Configurazione ufficiale scritta — avvia kimi tu ({{email}})",
+      "currentOnly": "Account corrente cambiato (configurazione ufficiale non scritta): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "Se una voce di quota scende sotto la soglia, viene inviata una notifica nativa e proposto un cambio rapido.",
+      "thresholdDesc": "Avvisa quando una voce di quota scende sotto questa percentuale residua"
+    }
   }
 }

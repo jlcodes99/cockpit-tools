@@ -65,6 +65,7 @@ import {
 } from '../types/kiro';
 import { CursorAccount, getCursorUsage } from '../types/cursor';
 import { GrokAccount, getGrokUsage } from '../types/grok';
+import { useKimiAccountStore } from '../stores/useKimiAccountStore';
 import { ClaudeAccount } from '../types/claude';
 import { ZedAccount, getZedUsage } from '../types/zed';
 import {
@@ -324,6 +325,9 @@ export function DashboardPage({
           break;
         case 'grok':
           await useGrokAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
+        case 'kimi':
+          await useKimiAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
         case 'codebuddy':
           await useCodebuddyAccountStore.getState().updateAccountTags(accountId, newTags);
@@ -2670,6 +2674,7 @@ export function DashboardPage({
     kiro: stats.kiro,
     cursor: stats.cursor,
     grok: stats.grok,
+    kimi: 0,
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,

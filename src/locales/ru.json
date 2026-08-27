@@ -324,7 +324,8 @@
     "apiRelay": "Релей",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Аккаунты Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Спонсоры",
@@ -4501,6 +4502,21 @@
       "syncOfficialAuthOnSwitch": "Синхронизировать официальный вход",
       "syncOfficialAuthOnSwitchDesc": "Если включено, при переключении OAuth-аккаунта экземпляра по умолчанию записывается официальный файл ~/.grok/auth.json. Если выключено, используется отдельный GROK_HOME. API-ключи и дополнительные экземпляры не перезаписывают официальный вход."
     },
+    "kimi": {
+      "title": "Настройки Kimi Code",
+      "cliPath": "Путь к CLI",
+      "cliDetected": "Обнаружено: {{version}} · {{path}}",
+      "cliMissing": "Kimi CLI не найден. Укажите свой путь.",
+      "cliPick": "Выбрать Kimi CLI",
+      "cliDetect": "Автоопределение Kimi CLI",
+      "homePick": "Выбрать KIMI_CODE_HOME",
+      "homeDetect": "Автоопределение KIMI_CODE_HOME",
+      "home": "Каталог KIMI_CODE_HOME",
+      "homeDesc": "Переопределяет официальный каталог настроек. Переменная окружения имеет приоритет. Сейчас: {{home}}",
+      "launchOnSwitch": "Открыть официальный CLI после смены",
+      "launchOnSwitchDesc": "Если включено, смена аккаунта открывает терминал и запускает kimi. Если выключено, записывается только официальная конфигурация, без окна."
+    },
+    "kimiRefreshInterval": "Автоматическое обновление квоты",
     "grokRefreshInterval": "Автоматическое обновление квоты",
     "codebuddy": {
       "title": "Настройки CodeBuddy",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Управление ключами OpenCode Go/Zen и фильтр по tier."
+  },
+  "kimi": {
+    "search": "Искать аккаунты Kimi Code...",
+    "flowNotice": {
+      "title": "Справка по аккаунтам Kimi Code",
+      "desc": "Индекс нескольких аккаунтов хранится в Cockpit. При переключении записываются официальные учётные данные и полный config.toml с таблицей models из GET /models.",
+      "permission": "Локально: можно импортировать стандартные данные ~/.kimi-code; при переключении пишутся официальные credentials и полный config.toml. Учитывается KIMI_CODE_HOME.",
+      "network": "Сеть: OAuth, обновление токена и /me · /models · /usages. Учётные данные не отправляются в сервисы Cockpit."
+    },
+    "empty": "Пока нет аккаунтов Kimi Code",
+    "addAccount": "Добавить аккаунт Kimi Code",
+    "oauth": {
+      "desc": "Откройте страницу авторизации Kimi и введите код устройства. Аккаунт сохранится автоматически.",
+      "title": "Вход в Kimi Code по коду устройства",
+      "item1": "Используется официальный device flow без локального callback-порта.",
+      "item2": "При переключении записывается ~/.kimi-code/credentials/kimi-code.json в официальном wire-формате.",
+      "item3": "Квота берётся из /usages. При входе запрашивается только /me.",
+      "urlPlaceholder": "URL авторизации OAuth Kimi",
+      "waiting": "Ожидание авторизации OAuth Kimi...",
+      "openWindow": "Открыть страницу авторизации",
+      "success": "Вход OAuth в Kimi Code выполнен"
+    },
+    "import": {
+      "tokenDesc": "Вставьте официальный credentials/kimi-code.json или полный JSON аккаунта, экспортированный этим приложением.",
+      "pasteDesc": "Вставьте официальный credentials/kimi-code.json или полный JSON аккаунта, экспортированный этим приложением.",
+      "pastePlaceholder": "Вставьте JSON аккаунта Kimi Code",
+      "pasteAction": "Импортировать JSON",
+      "localDesc": "Импорт из ~/.kimi-code/credentials/kimi-code.json (учитывает KIMI_CODE_HOME).",
+      "localClient": "Импорт из локального Kimi Code CLI"
+    },
+    "quota": {
+      "resetAt": "{{label}} сбросится в {{time}}",
+      "empty": "Квоты пока нет",
+      "weekly": "Недельная квота"
+    },
+    "switch": {
+      "buttonTitle": "Записать официальную конфигурацию",
+      "wroteOfficialConfig": "Официальная конфигурация записана — запустите kimi сами ({{email}})",
+      "currentOnly": "Текущий аккаунт переключён (официальная конфигурация не записана): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "Если любой пункт квоты опустится ниже порога, придёт системное уведомление и предложение быстро переключить.",
+      "thresholdDesc": "Предупреждать, когда остаток любого пункта квоты ниже этого процента"
+    }
   }
 }

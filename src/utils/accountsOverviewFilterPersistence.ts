@@ -15,6 +15,7 @@ const QUICK_SETTINGS_SCOPE_MAP: Record<string, string> = {
   kiro: 'kiro',
   cursor: 'cursor',
   grok: 'grok',
+  kimi: 'kimi',
   codebuddy: 'codebuddy',
   codebuddy_cn: 'codebuddy_cn',
   qoder: 'qoder',

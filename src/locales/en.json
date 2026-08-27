@@ -371,7 +371,8 @@
     "2faManager": "2FA",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Sponsors",
@@ -4815,6 +4816,21 @@
       "syncOfficialAuthOnSwitch": "Sync official login on switch",
       "syncOfficialAuthOnSwitchDesc": "When enabled, switching the default instance to an OAuth account writes the official ~/.grok/auth.json. When disabled, a separate GROK_HOME is used. API keys and additional instances never overwrite the official login."
     },
+    "kimi": {
+      "title": "Kimi Code Settings",
+      "cliPath": "CLI path",
+      "cliDetected": "Detected {{version}} · {{path}}",
+      "cliMissing": "Kimi CLI not found. Enter a custom path.",
+      "cliPick": "Choose Kimi CLI",
+      "cliDetect": "Auto-detect Kimi CLI",
+      "homePick": "Choose KIMI_CODE_HOME",
+      "homeDetect": "Auto-detect KIMI_CODE_HOME",
+      "home": "KIMI_CODE_HOME",
+      "homeDesc": "Override the official config directory. The environment variable wins over this field. Current: {{home}}",
+      "launchOnSwitch": "Open official CLI on switch",
+      "launchOnSwitchDesc": "When enabled, switching opens a terminal and runs kimi. When disabled, official config is written without opening a window."
+    },
+    "kimiRefreshInterval": "Quota Auto Refresh",
     "grokRefreshInterval": "Quota Auto Refresh",
     "error": {
       "loadFailed": "Failed to load config: {{error}}",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Manage OpenCode Go/Zen API keys and filter by tier. Keys stay in local app data."
+  },
+  "kimi": {
+    "search": "Search Kimi Code accounts...",
+    "flowNotice": {
+      "title": "Kimi Code account guide",
+      "desc": "Cockpit keeps a multi-account index. Switching writes official ~/.kimi-code credentials and a complete config.toml including the models table from GET /models.",
+      "permission": "Local scope: default ~/.kimi-code credentials can be imported; switching writes official credentials and config.toml. Respects KIMI_CODE_HOME.",
+      "network": "Network scope: device OAuth, token refresh, /me, /models, and /usages. Credentials are not uploaded to Cockpit services."
+    },
+    "empty": "No Kimi Code accounts yet",
+    "addAccount": "Add Kimi Code Account",
+    "oauth": {
+      "desc": "Open the Kimi authorization page and enter the device code. The account is saved automatically after authorization.",
+      "title": "Kimi Code Device OAuth",
+      "item1": "Uses the official device flow without occupying a local callback port.",
+      "item2": "Switching writes ~/.kimi-code/credentials/kimi-code.json in the official wire format.",
+      "item3": "Quota comes from official /usages. Login only fetches /me to save traffic.",
+      "urlPlaceholder": "Kimi OAuth authorization URL",
+      "waiting": "Waiting for Kimi OAuth authorization...",
+      "openWindow": "Open Authorization Page",
+      "success": "Kimi Code OAuth sign-in succeeded"
+    },
+    "import": {
+      "tokenDesc": "Paste official credentials/kimi-code.json, or a full account JSON exported by this app.",
+      "pasteDesc": "Paste official credentials/kimi-code.json, or a full account JSON exported by this app.",
+      "pastePlaceholder": "Paste Kimi Code account JSON",
+      "pasteAction": "Import JSON",
+      "localDesc": "Import from default ~/.kimi-code/credentials/kimi-code.json (respects KIMI_CODE_HOME).",
+      "localClient": "Import from local Kimi Code CLI"
+    },
+    "quota": {
+      "resetAt": "{{label}} resets at {{time}}",
+      "empty": "No quota yet",
+      "weekly": "Weekly quota"
+    },
+    "switch": {
+      "buttonTitle": "Write official config",
+      "wroteOfficialConfig": "Official config written — run kimi yourself ({{email}})",
+      "currentOnly": "Switched current account (official config not written): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "When any quota item drops below the threshold, send a native notification and prompt a quick switch.",
+      "thresholdDesc": "Alert when any quota item falls below this remaining percent"
+    }
   }
 }

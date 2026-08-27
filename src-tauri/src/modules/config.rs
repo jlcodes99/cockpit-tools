@@ -134,9 +134,18 @@ pub struct UserConfig {
     /// Grok CLI 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_grok_auto_refresh")]
     pub grok_auto_refresh_minutes: i32,
+    /// Kimi Code 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_kimi_auto_refresh")]
+    pub kimi_auto_refresh_minutes: i32,
     /// 默认实例切号时是否同步写入官方 ~/.grok/auth.json
     #[serde(default)]
     pub grok_sync_official_auth_on_switch: bool,
+    /// 切号时是否写入官方 Kimi credentials + config.toml（默认开，保持现行为）
+    #[serde(default = "default_kimi_sync_official_config_on_switch")]
+    pub kimi_sync_official_config_on_switch: bool,
+    /// 切号后是否打开终端并运行官方 Kimi CLI（默认关，避免未配置 HOME 时误弹）
+    #[serde(default = "default_kimi_launch_on_switch")]
+    pub kimi_launch_on_switch: bool,
     /// 切换 Grok 时是否自动重启 OpenCode
     #[serde(default = "default_grok_opencode_sync_on_switch")]
     pub grok_opencode_sync_on_switch: bool,
@@ -299,6 +308,12 @@ pub struct UserConfig {
     /// Grok CLI 路径（为空则自动检测）
     #[serde(default)]
     pub grok_cli_path: Option<String>,
+    /// Kimi Code CLI 路径（为空则自动检测）
+    #[serde(default)]
+    pub kimi_cli_path: Option<String>,
+    /// Kimi Code HOME 覆盖（为空则 KIMI_CODE_HOME 环境变量或 ~/.kimi-code）
+    #[serde(default)]
+    pub kimi_code_home: Option<String>,
     /// Claude 桌面应用启动路径（为空则使用默认路径）
     #[serde(default = "default_claude_app_path")]
     pub claude_app_path: String,
@@ -508,6 +523,12 @@ pub struct UserConfig {
     /// Grok CLI 配额预警阈值（剩余百分比）
     #[serde(default = "default_grok_quota_alert_threshold")]
     pub grok_quota_alert_threshold: i32,
+    /// 是否启用 Kimi Code 配额预警通知
+    #[serde(default = "default_kimi_quota_alert_enabled")]
+    pub kimi_quota_alert_enabled: bool,
+    /// Kimi Code 配额预警阈值（剩余百分比）
+    #[serde(default = "default_kimi_quota_alert_threshold")]
+    pub kimi_quota_alert_threshold: i32,
     /// 是否启用 Claude 配额预警通知
     #[serde(default = "default_claude_quota_alert_enabled")]
     pub claude_quota_alert_enabled: bool,
@@ -740,6 +761,15 @@ fn default_cursor_auto_refresh() -> i32 {
 } // 默认 10 分钟
 fn default_grok_auto_refresh() -> i32 {
     10
+}
+fn default_kimi_auto_refresh() -> i32 {
+    10
+}
+fn default_kimi_sync_official_config_on_switch() -> bool {
+    true
+}
+fn default_kimi_launch_on_switch() -> bool {
+    true
 }
 fn default_claude_auto_refresh() -> i32 {
     10
@@ -1121,6 +1151,12 @@ fn default_grok_quota_alert_enabled() -> bool {
 fn default_grok_quota_alert_threshold() -> i32 {
     20
 }
+fn default_kimi_quota_alert_enabled() -> bool {
+    false
+}
+fn default_kimi_quota_alert_threshold() -> i32 {
+    20
+}
 fn default_claude_quota_display_remaining() -> bool {
     false
 }
@@ -1196,7 +1232,10 @@ impl Default for UserConfig {
             kiro_auto_refresh_minutes: default_kiro_auto_refresh(),
             cursor_auto_refresh_minutes: default_cursor_auto_refresh(),
             grok_auto_refresh_minutes: default_grok_auto_refresh(),
+            kimi_auto_refresh_minutes: default_kimi_auto_refresh(),
             grok_sync_official_auth_on_switch: false,
+            kimi_sync_official_config_on_switch: default_kimi_sync_official_config_on_switch(),
+            kimi_launch_on_switch: default_kimi_launch_on_switch(),
             grok_opencode_sync_on_switch: default_grok_opencode_sync_on_switch(),
             grok_opencode_auth_overwrite_on_switch: default_grok_opencode_auth_overwrite_on_switch(
             ),
@@ -1254,6 +1293,8 @@ impl Default for UserConfig {
             antigravity_app_path: default_antigravity_app_path(),
             codex_app_path: default_codex_app_path(),
             grok_cli_path: None,
+            kimi_cli_path: None,
+            kimi_code_home: None,
             claude_app_path: default_claude_app_path(),
             claude_app_scan_roots: default_claude_app_scan_roots(),
             codex_specified_app_path: default_codex_specified_app_path(),
@@ -1330,6 +1371,8 @@ impl Default for UserConfig {
             cursor_quota_alert_threshold: default_cursor_quota_alert_threshold(),
             grok_quota_alert_enabled: default_grok_quota_alert_enabled(),
             grok_quota_alert_threshold: default_grok_quota_alert_threshold(),
+            kimi_quota_alert_enabled: default_kimi_quota_alert_enabled(),
+            kimi_quota_alert_threshold: default_kimi_quota_alert_threshold(),
             claude_quota_alert_enabled: default_claude_quota_alert_enabled(),
             claude_quota_display_remaining: default_claude_quota_display_remaining(),
             claude_quota_alert_threshold: default_claude_quota_alert_threshold(),
@@ -2441,6 +2484,32 @@ pub fn set_grok_cli_path(path: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
+/// 更新 Kimi CLI 路径；空白值恢复为自动检测。
+pub fn set_kimi_cli_path(path: Option<String>) -> Result<(), String> {
+    let normalized = path.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        (!trimmed.is_empty()).then_some(trimmed)
+    });
+    patch_user_config(move |config| {
+        config.kimi_cli_path = normalized;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// 更新 Kimi Code HOME 覆盖；空白值恢复为环境变量 / 默认 ~/.kimi-code。
+pub fn set_kimi_code_home(path: Option<String>) -> Result<(), String> {
+    let normalized = path.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        (!trimmed.is_empty()).then_some(trimmed)
+    });
+    patch_user_config(move |config| {
+        config.kimi_code_home = normalized;
+        Ok(())
+    })?;
+    Ok(())
+}
+
 /// 获取用户配置的首选端口
 pub fn get_preferred_port() -> u16 {
     get_user_config().ws_port
@@ -2568,6 +2637,22 @@ mod tests {
         let cfg: UserConfig =
             serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
         assert!(!cfg.openclaw_auth_overwrite_on_switch);
+    }
+
+    #[test]
+    fn kimi_settings_defaults_match_slim_v1() {
+        let default_cfg = UserConfig::default();
+        assert!(default_cfg.kimi_sync_official_config_on_switch);
+        assert_eq!(default_cfg.kimi_auto_refresh_minutes, 10);
+        assert!(!default_cfg.kimi_quota_alert_enabled);
+        assert_eq!(default_cfg.kimi_quota_alert_threshold, 20);
+        assert!(default_cfg.kimi_cli_path.is_none());
+        assert!(default_cfg.kimi_code_home.is_none());
+        assert!(default_cfg.kimi_launch_on_switch);
+        let migrated_cfg: UserConfig = serde_json::from_str("{}").expect("empty config");
+        assert!(migrated_cfg.kimi_sync_official_config_on_switch);
+        assert_eq!(migrated_cfg.kimi_auto_refresh_minutes, 10);
+        assert!(migrated_cfg.kimi_launch_on_switch);
     }
 
     #[test]

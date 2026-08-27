@@ -324,7 +324,8 @@
     "apiRelay": "Relé",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Cuentas Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Patrocinadores",
@@ -4501,6 +4502,21 @@
       "syncOfficialAuthOnSwitch": "Sincronizar el inicio oficial",
       "syncOfficialAuthOnSwitchDesc": "Al activarlo, cambiar la instancia predeterminada a una cuenta OAuth escribe el archivo oficial ~/.grok/auth.json. Al desactivarlo, se usa un GROK_HOME independiente. Las claves API y las instancias adicionales no sobrescriben el inicio oficial."
     },
+    "kimi": {
+      "title": "Ajustes de Kimi Code",
+      "cliPath": "Ruta de CLI",
+      "cliDetected": "Detectado: {{version}} · {{path}}",
+      "cliMissing": "No se encontró Kimi CLI. Indica una ruta.",
+      "cliPick": "Elegir Kimi CLI",
+      "cliDetect": "Detectar Kimi CLI automáticamente",
+      "homePick": "Elegir KIMI_CODE_HOME",
+      "homeDetect": "Detectar KIMI_CODE_HOME automáticamente",
+      "home": "Directorio KIMI_CODE_HOME",
+      "homeDesc": "Sobrescribe el directorio oficial de configuración. La variable de entorno tiene prioridad. Actual: {{home}}",
+      "launchOnSwitch": "Abrir la CLI oficial al cambiar",
+      "launchOnSwitchDesc": "Si está activo, al cambiar de cuenta se abre una terminal y se ejecuta kimi. Si está inactivo, solo se escribe la configuración oficial, sin ventana."
+    },
+    "kimiRefreshInterval": "Actualización automática de cuota",
     "grokRefreshInterval": "Actualización automática de cuota",
     "codebuddy": {
       "title": "Configuración de CodeBuddy",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gestiona claves OpenCode Go/Zen y filtra por nivel."
+  },
+  "kimi": {
+    "search": "Buscar cuentas de Kimi Code...",
+    "flowNotice": {
+      "title": "Guía de cuentas de Kimi Code",
+      "desc": "El índice de varias cuentas se guarda en Cockpit. Al cambiar se escriben las credenciales oficiales y un config.toml completo, incluida la tabla models, con GET /models.",
+      "permission": "Ámbito local: se pueden importar las credenciales predeterminadas de ~/.kimi-code; al cambiar se escriben las credentials oficiales y un config.toml completo. Respeta KIMI_CODE_HOME.",
+      "network": "Ámbito de red: autorización OAuth, renovación del token y /me · /models · /usages. Las credenciales no se suben a los servicios de Cockpit."
+    },
+    "empty": "Aún no hay cuentas de Kimi Code",
+    "addAccount": "Añadir cuenta de Kimi Code",
+    "oauth": {
+      "desc": "Abre la página de autorización de Kimi e introduce el código de dispositivo. La cuenta se guarda sola al terminar.",
+      "title": "Inicio de Kimi Code con código de dispositivo",
+      "item1": "Usa el device flow oficial y no ocupa un puerto de devolución local.",
+      "item2": "Al cambiar se escribe ~/.kimi-code/credentials/kimi-code.json en el formato wire oficial.",
+      "item3": "La cuota sale de /usages. El inicio de sesión solo pide /me.",
+      "urlPlaceholder": "URL de autorización OAuth de Kimi",
+      "waiting": "Esperando la autorización OAuth de Kimi...",
+      "openWindow": "Abrir página de autorización",
+      "success": "Inicio OAuth de Kimi Code correcto"
+    },
+    "import": {
+      "tokenDesc": "Pega el credentials/kimi-code.json oficial o un JSON de cuenta exportado por esta aplicación.",
+      "pasteDesc": "Pega el credentials/kimi-code.json oficial o un JSON de cuenta exportado por esta aplicación.",
+      "pastePlaceholder": "Pegar JSON de la cuenta de Kimi Code",
+      "pasteAction": "Importar JSON",
+      "localDesc": "Importar desde ~/.kimi-code/credentials/kimi-code.json (respeta KIMI_CODE_HOME).",
+      "localClient": "Importar desde la CLI local de Kimi Code"
+    },
+    "quota": {
+      "resetAt": "{{label}} se restablece a las {{time}}",
+      "empty": "Aún no hay cuota",
+      "weekly": "Cuota semanal"
+    },
+    "switch": {
+      "buttonTitle": "Escribir la configuración oficial",
+      "wroteOfficialConfig": "Configuración oficial escrita; ejecuta kimi tú ({{email}})",
+      "currentOnly": "Cuenta actual cambiada (sin escribir la configuración oficial): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "Si algún cupo baja del umbral, se envía una notificación nativa y se ofrece un cambio rápido.",
+      "thresholdDesc": "Avisar cuando algún cupo quede por debajo de este porcentaje restante"
+    }
   }
 }

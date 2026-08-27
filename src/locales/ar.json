@@ -371,7 +371,8 @@
     "apiRelay": "الترحيل",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "حسابات Kimi Code"
   },
   "sponsors": {
     "pageTitle": "الرعاة",
@@ -4548,6 +4549,21 @@
       "syncOfficialAuthOnSwitch": "مزامنة تسجيل الدخول الرسمي",
       "syncOfficialAuthOnSwitchDesc": "عند التفعيل، يؤدي تبديل حساب OAuth للمثيل الافتراضي إلى الكتابة في الملف الرسمي ~/.grok/auth.json. عند التعطيل، يُستخدم GROK_HOME مستقل. لا تستبدل مفاتيح API والمثيلات الإضافية تسجيل الدخول الرسمي."
     },
+    "kimi": {
+      "title": "إعدادات Kimi Code",
+      "cliPath": "مسار CLI",
+      "cliDetected": "تم الاكتشاف: {{version}} · {{path}}",
+      "cliMissing": "لم يتم العثور على Kimi CLI. أدخل مسارًا مخصصًا.",
+      "cliPick": "اختيار Kimi CLI",
+      "cliDetect": "اكتشاف Kimi CLI تلقائيًا",
+      "homePick": "اختيار KIMI_CODE_HOME",
+      "homeDetect": "اكتشاف KIMI_CODE_HOME تلقائيًا",
+      "home": "مجلد KIMI_CODE_HOME",
+      "homeDesc": "يستبدل مجلد الإعدادات الرسمي. للمتغير البيئي أولوية على هذا الحقل. الحالي: {{home}}",
+      "launchOnSwitch": "فتح واجهة CLI الرسمية بعد التبديل",
+      "launchOnSwitchDesc": "عند التفعيل، يفتح تبديل الحساب طرفية ويشغّل kimi. عند التعطيل تُكتب الإعدادات الرسمية فقط دون نافذة."
+    },
+    "kimiRefreshInterval": "تحديث الحصة تلقائيًا",
     "grokRefreshInterval": "تحديث الحصة تلقائيًا",
     "codebuddy": {
       "title": "إعدادات CodeBuddy",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "إدارة مفاتيح OpenCode Go/Zen والتصفية حسب المستوى."
+  },
+  "kimi": {
+    "search": "البحث في حسابات Kimi Code...",
+    "flowNotice": {
+      "title": "دليل حسابات Kimi Code",
+      "desc": "يُحفظ فهرس الحسابات المتعددة في Cockpit. عند التبديل تُكتب بيانات الاعتماد الرسمية ويُنشأ config.toml كامل يتضمن جدول models عبر GET /models.",
+      "permission": "النطاق المحلي: يمكن استيراد بيانات ~/.kimi-code الافتراضية؛ عند التبديل تُكتب credentials الرسمية وconfig.toml كامل. يُحترم KIMI_CODE_HOME.",
+      "network": "نطاق الشبكة: تفويض OAuth وتحديث الرمز و/me · /models · /usages. لا تُرفع بيانات الاعتماد إلى خدمات Cockpit."
+    },
+    "empty": "لا توجد حسابات Kimi Code بعد",
+    "addAccount": "إضافة حساب Kimi Code",
+    "oauth": {
+      "desc": "افتح صفحة تفويض Kimi وأدخل رمز الجهاز. يُحفظ الحساب تلقائيًا بعد ذلك.",
+      "title": "تسجيل Kimi Code برمز الجهاز",
+      "item1": "يستخدم مسار الجهاز الرسمي دون شغل منفذ رد محلي.",
+      "item2": "عند التبديل يُكتب ~/.kimi-code/credentials/kimi-code.json بصيغة wire الرسمية.",
+      "item3": "الحصة من /usages. تسجيل الدخول يجلب /me فقط.",
+      "urlPlaceholder": "رابط تفويض OAuth لـ Kimi",
+      "waiting": "بانتظار تفويض OAuth لـ Kimi...",
+      "openWindow": "فتح صفحة التفويض",
+      "success": "نجح تسجيل OAuth في Kimi Code"
+    },
+    "import": {
+      "tokenDesc": "الصق ملف credentials/kimi-code.json الرسمي أو JSON الحساب الذي صدّره هذا التطبيق.",
+      "pasteDesc": "الصق ملف credentials/kimi-code.json الرسمي أو JSON الحساب الذي صدّره هذا التطبيق.",
+      "pastePlaceholder": "الصق JSON حساب Kimi Code",
+      "pasteAction": "استيراد JSON",
+      "localDesc": "الاستيراد من ~/.kimi-code/credentials/kimi-code.json (يحترم KIMI_CODE_HOME).",
+      "localClient": "الاستيراد من واجهة Kimi Code المحلية"
+    },
+    "quota": {
+      "resetAt": "يُعاد تعيين {{label}} في {{time}}",
+      "empty": "لا حصة بعد",
+      "weekly": "الحصة الأسبوعية"
+    },
+    "switch": {
+      "buttonTitle": "كتابة الإعداد الرسمي",
+      "wroteOfficialConfig": "كُتب الإعداد الرسمي — شغّل kimi بنفسك ({{email}})",
+      "currentOnly": "تم تبديل الحساب الحالي (دون كتابة الإعداد الرسمي): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "إذا انخفض أي بند حصة دون العتبة تُرسل إشعارًا أصليًا ويُقترح تبديل سريع.",
+      "thresholdDesc": "تنبيه عندما ينخفض أي بند حصة دون هذه النسبة المتبقية"
+    }
   }
 }

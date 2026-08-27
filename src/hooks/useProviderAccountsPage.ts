@@ -1290,7 +1290,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
       const account = accounts.find((item) => item.id === accountId);
       const displayEmail = account ? config.getDisplayEmail(account) : accountId;
       try {
-        await injectFn(accountId);
+        const injectResult = await injectFn(accountId);
         // Grok：以后端为准（关闭「切号同步官方登录」时不应有「当前账号」）。
         // 其他平台仍乐观标记当前账号，避免 resolver 短暂为空导致标识闪烁。
         let resolvedCurrentAccountId: string | null = accountId;
@@ -1306,7 +1306,26 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             reason: 'switch',
           });
         }
-        setMessage({ text: t('messages.switched', { email: maskAccountText(displayEmail) }) });
+        if (platformKey === 'kimi') {
+          const backendText = typeof injectResult === 'string' ? injectResult : '';
+          const wroteOfficial =
+            !backendText ||
+            backendText.includes('已写入官方配置') ||
+            backendText.includes('Official config');
+          setMessage({
+            text: wroteOfficial
+              ? t('kimi.switch.wroteOfficialConfig', {
+                  defaultValue: '已写入官方配置，请自行运行 kimi（{{email}}）',
+                  email: maskAccountText(displayEmail),
+                })
+              : t('kimi.switch.currentOnly', {
+                  defaultValue: '已切换当前账号（未写入官方配置）：{{email}}',
+                  email: maskAccountText(displayEmail),
+                }),
+          });
+        } else {
+          setMessage({ text: t('messages.switched', { email: maskAccountText(displayEmail) }) });
+        }
         if (config.onInjectSuccess) {
           try {
             await config.onInjectSuccess({

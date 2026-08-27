@@ -95,6 +95,11 @@ interface GeneralConfig {
   grok_sync_official_auth_on_switch: boolean;
   grok_opencode_sync_on_switch?: boolean;
   grok_opencode_auth_overwrite_on_switch?: boolean;
+  kimi_auto_refresh_minutes: number;
+  kimi_sync_official_config_on_switch: boolean;
+  kimi_launch_on_switch: boolean;
+  kimi_quota_alert_enabled: boolean;
+  kimi_quota_alert_threshold: number;
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
@@ -214,6 +219,7 @@ export type QuickSettingsType =
   | 'kiro'
   | 'cursor'
   | 'grok'
+  | 'kimi'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -254,6 +260,7 @@ type QuotaAlertEnabledKey =
   | 'kiro_quota_alert_enabled'
   | 'cursor_quota_alert_enabled'
   | 'grok_quota_alert_enabled'
+  | 'kimi_quota_alert_enabled'
   | 'codebuddy_quota_alert_enabled'
   | 'codebuddy_cn_quota_alert_enabled'
   | 'qoder_quota_alert_enabled'
@@ -272,6 +279,7 @@ type QuotaAlertThresholdKey =
   | 'kiro_quota_alert_threshold'
   | 'cursor_quota_alert_threshold'
   | 'grok_quota_alert_threshold'
+  | 'kimi_quota_alert_threshold'
   | 'codebuddy_quota_alert_threshold'
   | 'codebuddy_cn_quota_alert_threshold'
   | 'qoder_quota_alert_threshold'
@@ -367,6 +375,8 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'cursor';
     case 'grok':
       return 'grok';
+    case 'kimi':
+      return 'kimi';
     case 'codebuddy':
       return 'codebuddy';
     case 'codebuddy_cn':
@@ -848,6 +858,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'kiro': return 'kiro_auto_refresh_minutes';
       case 'cursor': return 'cursor_auto_refresh_minutes';
       case 'grok': return 'grok_auto_refresh_minutes';
+      case 'kimi': return 'kimi_auto_refresh_minutes';
       case 'codebuddy': return 'codebuddy_auto_refresh_minutes';
       case 'codebuddy_cn': return 'codebuddy_cn_auto_refresh_minutes';
       case 'qoder': return 'qoder_auto_refresh_minutes';
@@ -1016,6 +1027,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           return 'Cursor';
         case 'grok':
           return 'Grok CLI';
+        case 'kimi':
+          return 'Kimi Code';
         case 'codebuddy':
           return 'CodeBuddy';
         case 'codebuddy_cn':
@@ -1093,6 +1106,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'cursor_quota_alert_enabled';
       case 'grok':
         return 'grok_quota_alert_enabled';
+      case 'kimi':
+        return 'kimi_quota_alert_enabled';
       case 'codebuddy':
         return 'codebuddy_quota_alert_enabled';
       case 'codebuddy_cn':
@@ -1132,6 +1147,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'cursor_quota_alert_threshold';
       case 'grok':
         return 'grok_quota_alert_threshold';
+      case 'kimi':
+        return 'kimi_quota_alert_threshold';
       case 'codebuddy':
         return 'codebuddy_quota_alert_threshold';
       case 'codebuddy_cn':
@@ -1173,6 +1190,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return t('quickSettings.cursorRefreshInterval', '配额自动刷新');
       case 'grok':
         return t('quickSettings.refreshInterval', '配额自动刷新');
+      case 'kimi':
+        return t('quickSettings.kimiRefreshInterval', '配额自动刷新');
       case 'codebuddy':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'codebuddy_cn':
@@ -1193,7 +1212,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     }
   };
 
-  const showAppPathSection = type !== 'grok';
+  const showAppPathSection = type !== 'grok' && type !== 'kimi';
   const antigravityLaunchOnSwitch = config?.antigravity_launch_on_switch ?? true;
 
   const getAppPath = (): string => {
@@ -1298,6 +1317,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'cursor':
         return 'cursor';
       case 'grok':
+        return 'antigravity';
+      case 'kimi':
         return 'antigravity';
       case 'codebuddy':
         return 'codebuddy';
@@ -1599,6 +1620,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const renderQuotaAlertControls = () => {
     const isCodexAlert = type === 'codex';
     const isGrokAlert = type === 'grok';
+    const isKimiAlert = type === 'kimi';
     return (
       <>
         <div className="qs-row" style={{ marginTop: type === 'antigravity' ? 10 : 0 }}>
@@ -1772,7 +1794,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     'grok.quotaAlert.hint',
                     '当当前账号任意配额项低于阈值时，发送原生通知并在页面提示快捷切号。',
                   )
-                : t(
+                : isKimiAlert
+                  ? t(
+                      'kimi.quotaAlert.hint',
+                      '当当前账号任意配额项低于阈值时，发送原生通知并在页面提示快捷切号。',
+                    )
+                  : t(
                     'quickSettings.quotaAlert.hint',
                     '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。',
                   )}
@@ -1833,6 +1860,37 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
         {config && (
           <div className="qs-body">
+            {type === 'kimi' && (
+              <div className="qs-section">
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <span>
+                      {t('quickSettings.kimi.launchOnSwitch', '切号后打开官方 CLI')}
+                    </span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={config.kimi_launch_on_switch !== false}
+                        onChange={(event) =>
+                          saveConfig({
+                            kimi_launch_on_switch: event.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t(
+                    'quickSettings.kimi.launchOnSwitchDesc',
+                    '开启后，切换账号会打开终端并运行 kimi；关闭时只写入官方配置，不弹窗。',
+                  )}
+                </div>
+              </div>
+            )}
             {type === 'grok' && (
               <div className="qs-section">
                 <div className="qs-row">

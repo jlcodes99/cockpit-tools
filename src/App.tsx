@@ -133,6 +133,9 @@ const CursorAccountsPage = lazy(() =>
 const GrokAccountsPage = lazy(() =>
   import('./pages/GrokAccountsPage').then((module) => ({ default: module.GrokAccountsPage })),
 );
+const KimiAccountsPage = lazy(() =>
+  import('./pages/KimiAccountsPage').then((module) => ({ default: module.KimiAccountsPage })),
+);
 const CodebuddyAccountsPage = lazy(() =>
   import('./pages/CodebuddyAccountsPage').then((module) => ({ default: module.CodebuddyAccountsPage })),
 );
@@ -212,6 +215,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'kiro',
   'cursor',
   'grok',
+  'kimi',
   'codebuddy',
   'codebuddy-cn',
   'qoder',
@@ -248,6 +252,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   kiro: ['kiro'],
   cursor: ['cursor'],
   grok: ['grok'],
+  kimi: ['kimi'],
   codebuddy: ['codebuddy'],
   'codebuddy-cn': ['codebuddy-cn'],
   qoder: ['qoder'],
@@ -4034,6 +4039,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'grok'}>
             <GrokAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'kimi'}>
+            <KimiAccountsPage />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'codebuddy'}>
             <CodebuddyAccountsPage />

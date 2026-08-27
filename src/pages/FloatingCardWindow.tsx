@@ -46,6 +46,7 @@ import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore
 import { useCodexAccountStore } from '../stores/useCodexAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import { useGrokAccountStore } from '../stores/useGrokAccountStore';
+import { useKimiAccountStore } from '../stores/useKimiAccountStore';
 import { useGitHubCopilotAccountStore } from '../stores/useGitHubCopilotAccountStore';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { usePlatformLayoutStore } from '../stores/usePlatformLayoutStore';
@@ -210,6 +211,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useCursorInstanceStore.getState();
     case 'grok':
       return useGrokInstanceStore.getState();
+    case 'kimi':
+      return null;
     case 'codebuddy':
       return useCodebuddyInstanceStore.getState();
     case 'codebuddy_cn':
@@ -275,6 +278,10 @@ export function FloatingCardWindow() {
     accounts: grokAccounts,
     currentAccountId: grokCurrentId,
   } = useGrokAccountStore();
+  const {
+    accounts: kimiAccounts,
+    currentAccountId: kimiCurrentId,
+  } = useKimiAccountStore();
   const {
     accounts: codebuddyAccounts,
     currentAccountId: codebuddyCurrentId,
@@ -504,6 +511,9 @@ export function FloatingCardWindow() {
           break;
         case 'grok':
           await useGrokAccountStore.getState().fetchAccounts();
+          break;
+        case 'kimi':
+          await useKimiAccountStore.getState().fetchAccounts();
           break;
         case 'codebuddy':
           await useCodebuddyAccountStore.getState().fetchAccounts();
@@ -800,6 +810,10 @@ export function FloatingCardWindow() {
     () => resolveCurrentAccountById(grokAccounts, grokCurrentId),
     [grokAccounts, grokCurrentId],
   );
+  const kimiCurrent = useMemo(
+    () => resolveCurrentAccountById(kimiAccounts, kimiCurrentId),
+    [kimiAccounts, kimiCurrentId],
+  );
   const codebuddyCurrent = useMemo(
     () => resolveCurrentAccountById(codebuddyAccounts, codebuddyCurrentId),
     [codebuddyAccounts, codebuddyCurrentId],
@@ -877,6 +891,11 @@ export function FloatingCardWindow() {
           accounts: grokAccounts,
           actualCurrentAccount: grokCurrent,
         };
+      case 'kimi':
+        return {
+          accounts: kimiAccounts,
+          actualCurrentAccount: kimiCurrent,
+        };
       case 'codebuddy':
         return {
           accounts: codebuddyAccounts,
@@ -937,6 +956,8 @@ export function FloatingCardWindow() {
 
     grokAccounts,
     grokCurrent,
+    kimiAccounts,
+    kimiCurrent,
     githubCopilotAccounts,
     githubCopilotCurrent,
     kiroAccounts,
@@ -1192,6 +1213,9 @@ export function FloatingCardWindow() {
           case 'grok':
             await useGrokAccountStore.getState().refreshToken(viewedAccount.id);
             break;
+          case 'kimi':
+            await useKimiAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
           case 'codebuddy':
             await useCodebuddyAccountStore.getState().refreshToken(viewedAccount.id);
             break;
@@ -1321,6 +1345,9 @@ export function FloatingCardWindow() {
             break;
           case 'grok':
             await useGrokAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'kimi':
+            await useKimiAccountStore.getState().switchAccount(viewedAccount.id);
             break;
           case 'codebuddy':
             await useCodebuddyAccountStore.getState().switchAccount(viewedAccount.id);

@@ -12,6 +12,7 @@ const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'kiro',
   'cursor',
   'grok',
+  'kimi',
   'codebuddy',
   'codebuddy_cn',
   'qoder',

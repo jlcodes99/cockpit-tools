@@ -324,7 +324,8 @@
     "apiRelay": "중계소",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code 계정"
   },
   "sponsors": {
     "pageTitle": "스폰서",
@@ -4501,6 +4502,21 @@
       "syncOfficialAuthOnSwitch": "전환 시 공식 로그인 동기화",
       "syncOfficialAuthOnSwitchDesc": "켜면 기본 인스턴스에서 OAuth 계정을 전환할 때 공식 ~/.grok/auth.json에 기록합니다. 끄면 별도 GROK_HOME을 사용합니다. API Key와 추가 인스턴스는 공식 로그인을 덮어쓰지 않습니다."
     },
+    "kimi": {
+      "title": "Kimi Code 설정",
+      "cliPath": "CLI 경로",
+      "cliDetected": "감지됨: {{version}} · {{path}}",
+      "cliMissing": "Kimi CLI를 찾지 못했습니다. 사용자 경로를 입력하세요.",
+      "cliPick": "Kimi CLI 선택",
+      "cliDetect": "Kimi CLI 자동 감지",
+      "homePick": "KIMI_CODE_HOME 선택",
+      "homeDetect": "KIMI_CODE_HOME 자동 감지",
+      "home": "홈 디렉터리 KIMI_CODE_HOME",
+      "homeDesc": "공식 설정 디렉터리를 덮어씁니다. 환경 변수가 이 항목보다 우선합니다. 현재: {{home}}",
+      "launchOnSwitch": "전환 후 공식 CLI 열기",
+      "launchOnSwitchDesc": "켜면 계정 전환 시 터미널을 열고 kimi를 실행합니다. 끄면 공식 설정만 기록하고 창을 열지 않습니다."
+    },
+    "kimiRefreshInterval": "할당량 자동 새로고침",
     "grokRefreshInterval": "할당량 자동 새로고침",
     "codebuddy": {
       "title": "CodeBuddy 설정",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen API 키를 관리하고 티어로 필터합니다."
+  },
+  "kimi": {
+    "search": "Kimi Code 계정 검색...",
+    "flowNotice": {
+      "title": "Kimi Code 계정 안내",
+      "desc": "다중 계정 색인은 Cockpit에 보관됩니다. 전환 시 공식 자격 증명을 쓰고, GET /models로 models 표가 포함된 완전한 config.toml을 출력합니다.",
+      "permission": "로컬 범위: 기본 ~/.kimi-code 자격 증명을 가져와 가져올 수 있습니다. 전환 시 공식 credentials와 완전한 config.toml을 기록합니다. KIMI_CODE_HOME을 따릅니다.",
+      "network": "네트워크 범위: OAuth 승인, 토큰 갱신, /me · /models · /usages. 자격 증명은 Cockpit 서비스로 업로드되지 않습니다."
+    },
+    "empty": "아직 Kimi Code 계정이 없습니다",
+    "addAccount": "Kimi Code 계정 추가",
+    "oauth": {
+      "desc": "Kimi 승인 페이지를 열고 장치 코드로 로그인합니다. 완료되면 계정이 자동 저장됩니다.",
+      "title": "Kimi Code 장치 코드 로그인",
+      "item1": "공식 device flow를 사용하며 로컬 콜백 포트를 쓰지 않습니다.",
+      "item2": "전환 시 ~/.kimi-code/credentials/kimi-code.json을 공식 wire 형식으로 기록합니다.",
+      "item3": "할당량은 공식 /usages에서 가져옵니다. 로그인은 /me만 조회합니다.",
+      "urlPlaceholder": "Kimi OAuth 승인 URL",
+      "waiting": "Kimi OAuth 승인을 기다리는 중...",
+      "openWindow": "승인 페이지 열기",
+      "success": "Kimi Code OAuth 로그인 성공"
+    },
+    "import": {
+      "tokenDesc": "공식 credentials/kimi-code.json 또는 이 앱이 내보낸 전체 계정 JSON을 붙여넣습니다.",
+      "pasteDesc": "공식 credentials/kimi-code.json 또는 이 앱이 내보낸 전체 계정 JSON을 붙여넣습니다.",
+      "pastePlaceholder": "Kimi Code 계정 JSON 붙여넣기",
+      "pasteAction": "JSON 가져오기",
+      "localDesc": "기본 ~/.kimi-code/credentials/kimi-code.json에서 가져옵니다(KIMI_CODE_HOME 준수).",
+      "localClient": "로컬 Kimi Code CLI에서 가져오기"
+    },
+    "quota": {
+      "resetAt": "{{label}} 재설정: {{time}}",
+      "empty": "아직 할당량 없음",
+      "weekly": "주간 할당량"
+    },
+    "switch": {
+      "buttonTitle": "공식 설정 쓰기",
+      "wroteOfficialConfig": "공식 설정을 썼습니다. kimi는 직접 실행하세요 ({{email}})",
+      "currentOnly": "현재 계정을 전환했습니다(공식 설정 미기록): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "할당량 항목이 임계값보다 낮아지면 네이티브 알림을 보내고 빠른 전환을 안내합니다.",
+      "thresholdDesc": "남은 할당량이 이 비율보다 낮으면 경고합니다"
+    }
   }
 }

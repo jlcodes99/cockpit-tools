@@ -62,6 +62,7 @@ import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import { useGrokAccountStore } from '../stores/useGrokAccountStore';
+import { useKimiAccountStore } from '../stores/useKimiAccountStore';
 import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
@@ -75,6 +76,7 @@ import { getWindsurfAccountDisplayEmail } from '../types/windsurf';
 import { getKiroAccountDisplayEmail } from '../types/kiro';
 import { getCursorAccountDisplayEmail } from '../types/cursor';
 import { getGrokAccountDisplayEmail } from '../types/grok';
+import { getKimiAccountDisplayEmail } from '../types/kimi';
 import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
@@ -129,6 +131,17 @@ interface GrokCliStatus {
   message?: string | null;
 }
 
+interface KimiCliStatus {
+  available: boolean;
+  binaryPath?: string | null;
+  configuredPath?: string | null;
+  version?: string | null;
+  source?: string | null;
+  message?: string | null;
+  home: string;
+  configuredHome?: string | null;
+}
+
 /** 通用配置类型 */
 interface GeneralConfig {
   language: string;
@@ -150,7 +163,10 @@ interface GeneralConfig {
   kiro_auto_refresh_minutes: number;
   cursor_auto_refresh_minutes: number;
   grok_auto_refresh_minutes: number;
+  kimi_auto_refresh_minutes: number;
   grok_sync_official_auth_on_switch: boolean;
+  kimi_sync_official_config_on_switch: boolean;
+  kimi_launch_on_switch: boolean;
   grok_opencode_sync_on_switch?: boolean;
   grok_opencode_auth_overwrite_on_switch?: boolean;
   close_behavior: 'ask' | 'minimize' | 'quit';
@@ -267,6 +283,8 @@ interface GeneralConfig {
   cursor_quota_alert_threshold: number;
   grok_quota_alert_enabled: boolean;
   grok_quota_alert_threshold: number;
+  kimi_quota_alert_enabled: boolean;
+  kimi_quota_alert_threshold: number;
 }
 
 type AppPathTarget =
@@ -319,6 +337,7 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   kiro: 7,
   cursor: 8,
   grok: 9,
+  kimi: 9.5,
   codebuddy: 10,
   codebuddy_cn: 11,
   qoder: 12,
@@ -502,6 +521,7 @@ export function SettingsPage() {
     { value: 'kiro', label: 'Kiro' },
     { value: 'cursor', label: 'Cursor' },
     { value: 'grok', label: 'Grok' },
+    { value: 'kimi', label: 'Kimi' },
     { value: 'codebuddy', label: 'CodeBuddy' },
     { value: 'codebuddy_cn', label: 'CodeBuddy CN' },
     { value: 'qoder', label: 'Qoder' },
@@ -534,13 +554,21 @@ export function SettingsPage() {
   const [kiroAutoRefresh, setKiroAutoRefresh] = useState('10');
   const [cursorAutoRefresh, setCursorAutoRefresh] = useState('10');
   const [grokAutoRefresh, setGrokAutoRefresh] = useState('10');
+  const [kimiAutoRefresh, setKimiAutoRefresh] = useState('10');
   const [grokSyncOfficialAuthOnSwitch, setGrokSyncOfficialAuthOnSwitch] = useState(false);
+  const [kimiLaunchOnSwitch, setKimiLaunchOnSwitch] = useState(true);
   const [grokOpencodeAuthOverwriteOnSwitch, setGrokOpencodeAuthOverwriteOnSwitch] = useState(false);
   const [grokOpencodeSyncOnSwitch, setGrokOpencodeSyncOnSwitch] = useState(false);
   const [grokCliPath, setGrokCliPath] = useState('');
   const [grokCliStatus, setGrokCliStatus] = useState<GrokCliStatus | null>(null);
   const [grokCliStatusError, setGrokCliStatusError] = useState<string | null>(null);
   const [grokCliSaving, setGrokCliSaving] = useState(false);
+  const [kimiCliPath, setKimiCliPath] = useState('');
+  const [kimiCodeHome, setKimiCodeHome] = useState('');
+  const [kimiCliStatus, setKimiCliStatus] = useState<KimiCliStatus | null>(null);
+  const [kimiCliStatusError, setKimiCliStatusError] = useState<string | null>(null);
+  const [kimiCliSaving, setKimiCliSaving] = useState(false);
+  const [kimiHomeSaving, setKimiHomeSaving] = useState(false);
   const [closeBehavior, setCloseBehavior] = useState<'ask' | 'minimize' | 'quit'>('ask');
   const [minimizeBehavior, setMinimizeBehavior] = useState<'dock_and_tray' | 'tray_only'>('dock_and_tray');
   const [hideDockIcon, setHideDockIcon] = useState(false);
@@ -701,6 +729,8 @@ export function SettingsPage() {
   const [cursorQuotaAlertThreshold, setCursorQuotaAlertThreshold] = useState('20');
   const [grokQuotaAlertEnabled, setGrokQuotaAlertEnabled] = useState(false);
   const [grokQuotaAlertThreshold, setGrokQuotaAlertThreshold] = useState('20');
+  const [kimiQuotaAlertEnabled, setKimiQuotaAlertEnabled] = useState(false);
+  const [kimiQuotaAlertThreshold, setKimiQuotaAlertThreshold] = useState('20');
   const [autoRefreshCustomMode, setAutoRefreshCustomMode] = useState(false);
   const [codexAutoRefreshCustomMode, setCodexAutoRefreshCustomMode] = useState(false);
   const [claudeAutoRefreshCustomMode, setClaudeAutoRefreshCustomMode] = useState(false);
@@ -966,6 +996,7 @@ export function SettingsPage() {
     loadNetworkConfig();
     loadDiagnosticsConfig();
     loadGrokCliStatus();
+    loadKimiCliStatus();
   }, []);
   
   useEffect(() => {
@@ -1018,7 +1049,8 @@ export function SettingsPage() {
       !traeSoloCnAutoRefresh.trim() ||
       !zedAutoRefresh.trim() ||
       !cursorAutoRefresh.trim() ||
-      !grokAutoRefresh.trim()
+      !grokAutoRefresh.trim() ||
+      !kimiAutoRefresh.trim()
     ) {
       return;
     }
@@ -1041,6 +1073,7 @@ export function SettingsPage() {
     const zedAutoRefreshNum = parseInt(zedAutoRefresh, 10) || -1;
     const cursorAutoRefreshNum = parseInt(cursorAutoRefresh, 10) || -1;
     const grokAutoRefreshNum = parseInt(grokAutoRefresh, 10) || -1;
+    const kimiAutoRefreshNum = parseInt(kimiAutoRefresh, 10) || -1;
     const parsedUiScale = Number.parseFloat(uiScale);
     const normalizedUiScale = Number.isFinite(parsedUiScale)
       ? Math.min(2, Math.max(0.3, parsedUiScale))
@@ -1064,6 +1097,7 @@ export function SettingsPage() {
     const parsedZedQuotaAlertThreshold = Number.parseInt(zedQuotaAlertThreshold, 10);
     const parsedCursorQuotaAlertThreshold = Number.parseInt(cursorQuotaAlertThreshold, 10);
     const parsedGrokQuotaAlertThreshold = Number.parseInt(grokQuotaAlertThreshold, 10);
+    const parsedKimiQuotaAlertThreshold = Number.parseInt(kimiQuotaAlertThreshold, 10);
     const payload: Record<string, unknown> = {
       language,
       default_terminal: defaultTerminal,
@@ -1094,7 +1128,10 @@ export function SettingsPage() {
       zed_auto_refresh_minutes: zedAutoRefreshNum,
       cursor_auto_refresh_minutes: cursorAutoRefreshNum,
       grok_auto_refresh_minutes: grokAutoRefreshNum,
+      kimi_auto_refresh_minutes: kimiAutoRefreshNum,
       grok_sync_official_auth_on_switch: grokSyncOfficialAuthOnSwitch,
+      kimi_sync_official_config_on_switch: true,
+      kimi_launch_on_switch: kimiLaunchOnSwitch,
       grok_opencode_auth_overwrite_on_switch: grokOpencodeAuthOverwriteOnSwitch,
       grok_opencode_sync_on_switch: grokOpencodeAuthOverwriteOnSwitch && grokOpencodeSyncOnSwitch,
       close_behavior: closeBehavior,
@@ -1234,10 +1271,15 @@ export function SettingsPage() {
       cursor_quota_alert_enabled: cursorQuotaAlertEnabled,
       cursor_quota_alert_threshold: Number.isNaN(parsedCursorQuotaAlertThreshold)
         ? 20
-        : parsedCursorQuotaAlertThreshold,      grok_quota_alert_enabled: grokQuotaAlertEnabled,
+        : parsedCursorQuotaAlertThreshold,
+      grok_quota_alert_enabled: grokQuotaAlertEnabled,
       grok_quota_alert_threshold: Number.isNaN(parsedGrokQuotaAlertThreshold)
         ? 20
         : parsedGrokQuotaAlertThreshold,
+      kimi_quota_alert_enabled: kimiQuotaAlertEnabled,
+      kimi_quota_alert_threshold: Number.isNaN(parsedKimiQuotaAlertThreshold)
+        ? 20
+        : parsedKimiQuotaAlertThreshold,
     };
     Object.keys(payload).forEach((key) => {
       if (payload[key] === undefined) delete payload[key];
@@ -1320,7 +1362,9 @@ export function SettingsPage() {
     zcodeAutoRefresh,
     cursorAutoRefresh,
     grokAutoRefresh,
+    kimiAutoRefresh,
     grokSyncOfficialAuthOnSwitch,
+    kimiLaunchOnSwitch,
     grokOpencodeAuthOverwriteOnSwitch,
     grokOpencodeSyncOnSwitch,
     closeBehavior,
@@ -1432,6 +1476,8 @@ export function SettingsPage() {
     cursorQuotaAlertThreshold,
     grokQuotaAlertEnabled,
     grokQuotaAlertThreshold,
+    kimiQuotaAlertEnabled,
+    kimiQuotaAlertThreshold,
     configUpdateSource,
     t,
   ]);
@@ -1679,7 +1725,9 @@ export function SettingsPage() {
       setKiroAutoRefresh(String(config.kiro_auto_refresh_minutes ?? 10));
       setCursorAutoRefresh(String(config.cursor_auto_refresh_minutes ?? 10));
       setGrokAutoRefresh(String(config.grok_auto_refresh_minutes ?? 10));
+      setKimiAutoRefresh(String(config.kimi_auto_refresh_minutes ?? 10));
       setGrokSyncOfficialAuthOnSwitch(Boolean(config.grok_sync_official_auth_on_switch));
+      setKimiLaunchOnSwitch(config.kimi_launch_on_switch !== false);
       setGrokOpencodeAuthOverwriteOnSwitch(Boolean(config.grok_opencode_auth_overwrite_on_switch));
       setGrokOpencodeSyncOnSwitch(Boolean(config.grok_opencode_sync_on_switch));
       setCloseBehavior(config.close_behavior || 'ask');
@@ -1802,8 +1850,11 @@ export function SettingsPage() {
       setKiroQuotaAlertEnabled(config.kiro_quota_alert_enabled ?? false);
       setKiroQuotaAlertThreshold(String(config.kiro_quota_alert_threshold ?? 20));
       setCursorQuotaAlertEnabled(config.cursor_quota_alert_enabled ?? false);
-      setCursorQuotaAlertThreshold(String(config.cursor_quota_alert_threshold ?? 20));      setGrokQuotaAlertEnabled(config.grok_quota_alert_enabled ?? false);
+      setCursorQuotaAlertThreshold(String(config.cursor_quota_alert_threshold ?? 20));
+      setGrokQuotaAlertEnabled(config.grok_quota_alert_enabled ?? false);
       setGrokQuotaAlertThreshold(String(config.grok_quota_alert_threshold ?? 20));
+      setKimiQuotaAlertEnabled(config.kimi_quota_alert_enabled ?? false);
+      setKimiQuotaAlertThreshold(String(config.kimi_quota_alert_threshold ?? 20));
       setAutoRefreshCustomMode(false);
       setCodexAutoRefreshCustomMode(false);
       setClaudeAutoRefreshCustomMode(false);
@@ -1899,6 +1950,131 @@ export function SettingsPage() {
       setGrokCliStatusError(null);
     } catch (error) {
       setGrokCliStatusError(String(error));
+    }
+  };
+
+  const loadKimiCliStatus = async () => {
+    try {
+      const status = await invoke<KimiCliStatus>('kimi_get_cli_status');
+      setKimiCliStatus(status);
+      setKimiCliPath(status.configuredPath || '');
+      setKimiCodeHome(status.configuredHome || '');
+      setKimiCliStatusError(null);
+    } catch (error) {
+      setKimiCliStatusError(String(error));
+    }
+  };
+
+  const saveKimiCliPath = async () => {
+    setKimiCliSaving(true);
+    setKimiCliStatusError(null);
+    try {
+      const status = await invoke<KimiCliStatus>('kimi_update_cli_runtime_config', {
+        kimiCliPath: kimiCliPath.trim() || null,
+      });
+      setKimiCliStatus(status);
+      setKimiCliPath(status.configuredPath || '');
+    } catch (error) {
+      setKimiCliStatusError(String(error));
+    } finally {
+      setKimiCliSaving(false);
+    }
+  };
+
+  const pickKimiCliPath = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        filters: isWindows
+          ? [{ name: 'Kimi CLI', extensions: ['exe', 'cmd', 'bat'] }]
+          : undefined,
+      });
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) return;
+      setKimiCliPath(path);
+      setKimiCliSaving(true);
+      setKimiCliStatusError(null);
+      const status = await invoke<KimiCliStatus>('kimi_update_cli_runtime_config', {
+        kimiCliPath: path,
+      });
+      setKimiCliStatus(status);
+      setKimiCliPath(status.configuredPath || path);
+    } catch (error) {
+      setKimiCliStatusError(String(error));
+    } finally {
+      setKimiCliSaving(false);
+    }
+  };
+
+  const detectKimiCliPath = async () => {
+    setKimiCliSaving(true);
+    setKimiCliStatusError(null);
+    try {
+      const status = await invoke<KimiCliStatus>('kimi_update_cli_runtime_config', {
+        kimiCliPath: null,
+      });
+      setKimiCliStatus(status);
+      setKimiCliPath(status.configuredPath || '');
+    } catch (error) {
+      setKimiCliStatusError(String(error));
+    } finally {
+      setKimiCliSaving(false);
+    }
+  };
+
+  const pickKimiHome = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: true,
+      });
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      if (!path) return;
+      setKimiCodeHome(path);
+      setKimiHomeSaving(true);
+      setKimiCliStatusError(null);
+      const status = await invoke<KimiCliStatus>('kimi_update_home_config', {
+        kimiCodeHome: path,
+      });
+      setKimiCliStatus(status);
+      setKimiCodeHome(status.configuredHome || path);
+    } catch (error) {
+      setKimiCliStatusError(String(error));
+    } finally {
+      setKimiHomeSaving(false);
+    }
+  };
+
+  const detectKimiHome = async () => {
+    setKimiHomeSaving(true);
+    setKimiCliStatusError(null);
+    try {
+      const status = await invoke<KimiCliStatus>('kimi_update_home_config', {
+        kimiCodeHome: null,
+      });
+      setKimiCliStatus(status);
+      setKimiCodeHome(status.configuredHome || '');
+    } catch (error) {
+      setKimiCliStatusError(String(error));
+    } finally {
+      setKimiHomeSaving(false);
+    }
+  };
+
+  const saveKimiHome = async () => {
+    setKimiHomeSaving(true);
+    setKimiCliStatusError(null);
+    try {
+      const status = await invoke<KimiCliStatus>('kimi_update_home_config', {
+        kimiCodeHome: kimiCodeHome.trim() || null,
+      });
+      setKimiCliStatus(status);
+      setKimiCodeHome(status.configuredHome || '');
+    } catch (error) {
+      setKimiCliStatusError(String(error));
+    } finally {
+      setKimiHomeSaving(false);
     }
   };
 
@@ -2387,6 +2563,8 @@ export function SettingsPage() {
         return parseRefresh(cursorAutoRefresh) > 0;
       case 'grok':
         return parseRefresh(grokAutoRefresh) > 0;
+      case 'kimi':
+        return parseRefresh(kimiAutoRefresh) > 0;
       case 'codebuddy':
         return parseRefresh(codebuddyAutoRefresh) > 0;
       case 'codebuddy_cn':
@@ -2543,6 +2721,8 @@ export function SettingsPage() {
         return getProviderAccounts(useCursorAccountStore, getCursorAccountDisplayEmail);
       case 'grok':
         return getProviderAccounts(useGrokAccountStore, getGrokAccountDisplayEmail);
+      case 'kimi':
+        return getProviderAccounts(useKimiAccountStore, getKimiAccountDisplayEmail);
       case 'codebuddy':
         return getProviderAccounts(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail);
       case 'codebuddy_cn':
@@ -7499,6 +7679,192 @@ export function SettingsPage() {
                 </div>
               </div>
             </div>
+<div style={{ order: platformSettingsOrder.kimi }}>
+                <div className="group-title">{t('quickSettings.kimi.title', 'Kimi Code 设置')}</div>
+                <div className="settings-group">
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('quickSettings.kimi.cliPath', 'CLI 路径')}</div>
+                      <div className="row-desc">
+                        {kimiCliStatus?.available
+                          ? t('quickSettings.kimi.cliDetected', '已检测 {{version}} · {{path}}', {
+                              version: kimiCliStatus.version || '--',
+                              path: kimiCliStatus.binaryPath || '--',
+                            })
+                          : t('quickSettings.kimi.cliMissing', '未检测到 Kimi CLI，可填写自定义路径')}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <input
+                        className="settings-input settings-input--path"
+                        value={kimiCliPath}
+                        placeholder={kimiCliStatus?.binaryPath || '~/.kimi-code/bin/kimi'}
+                        onChange={(event) => {
+                          setKimiCliPath(event.target.value);
+                          setKimiCliStatusError(null);
+                        }}
+                        onBlur={() => void saveKimiCliPath()}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void pickKimiCliPath()}
+                        disabled={kimiCliSaving}
+                        title={t('quickSettings.kimi.cliPick', '手动选择 Kimi CLI')}
+                        aria-label={t('quickSettings.kimi.cliPick', '手动选择 Kimi CLI')}
+                      >
+                        <FolderOpen size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void detectKimiCliPath()}
+                        disabled={kimiCliSaving}
+                        title={t('quickSettings.kimi.cliDetect', '自动检测 Kimi CLI')}
+                        aria-label={t('quickSettings.kimi.cliDetect', '自动检测 Kimi CLI')}
+                      >
+                        <RefreshCw size={16} className={kimiCliSaving ? 'spin' : undefined} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('quickSettings.kimi.home', 'KIMI_CODE_HOME')}</div>
+                      <div className="row-desc">
+                        {t(
+                          'quickSettings.kimi.homeDesc',
+                          '覆盖官方配置目录。环境变量优先于此处。当前：{{home}}',
+                          { home: kimiCliStatus?.home || '--' },
+                        )}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <input
+                        className="settings-input settings-input--path"
+                        value={kimiCodeHome}
+                        placeholder={kimiCliStatus?.home || '~/.kimi-code'}
+                        onChange={(event) => {
+                          setKimiCodeHome(event.target.value);
+                          setKimiCliStatusError(null);
+                        }}
+                        onBlur={() => void saveKimiHome()}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void pickKimiHome()}
+                        disabled={kimiHomeSaving}
+                        title={t('quickSettings.kimi.homePick', '手动选择 KIMI_CODE_HOME')}
+                        aria-label={t('quickSettings.kimi.homePick', '手动选择 KIMI_CODE_HOME')}
+                      >
+                        <FolderOpen size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => void detectKimiHome()}
+                        disabled={kimiHomeSaving}
+                        title={t('quickSettings.kimi.homeDetect', '自动检测 KIMI_CODE_HOME')}
+                        aria-label={t('quickSettings.kimi.homeDetect', '自动检测 KIMI_CODE_HOME')}
+                      >
+                        <RefreshCw size={16} className={kimiHomeSaving ? 'spin' : undefined} />
+                      </button>
+                    </div>
+                  </div>
+                  {kimiCliStatusError && <div className="form-error">{kimiCliStatusError}</div>}
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">
+                        {t('quickSettings.kimi.launchOnSwitch', '切号后打开官方 CLI')}
+                      </div>
+                      <div className="row-desc">
+                        {t(
+                          'quickSettings.kimi.launchOnSwitchDesc',
+                          '开启后，切换账号会打开终端并运行 kimi；关闭时只写入官方配置，不弹窗。',
+                        )}
+                      </div>
+                    </div>
+                    <div className="row-control">
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={kimiLaunchOnSwitch}
+                          onChange={(event) => setKimiLaunchOnSwitch(event.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('quickSettings.kimiRefreshInterval', '配额自动刷新')}</div>
+                      <div className="row-desc">{t('settings.general.windsurfAutoRefreshDesc', '后台自动更新频率')}</div>
+                    </div>
+                    <div className="row-control">
+                      <div className="settings-inline-input">
+                        <input
+                          type="number"
+                          min={-1}
+                          max={999}
+                          className="settings-select settings-select--input-mode settings-select--with-unit"
+                          value={kimiAutoRefresh}
+                          onChange={(event) => {
+                            if (/^-?\d*$/.test(event.target.value)) {
+                              setKimiAutoRefresh(event.target.value);
+                            }
+                          }}
+                          onBlur={() => setKimiAutoRefresh(normalizeNumberInput(kimiAutoRefresh, -1, 999))}
+                        />
+                        <span className="settings-input-unit">{t('settings.general.minutes')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {renderCurrentAccountRefreshRow('kimi')}
+                  {renderAccountLevelRefreshConfig('kimi')}
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
+                      <div className="row-desc">{t('kimi.quotaAlert.hint', '当当前账号任意配额项低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                    </div>
+                    <div className="row-control">
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={kimiQuotaAlertEnabled}
+                          onChange={(event) => setKimiQuotaAlertEnabled(event.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                  {kimiQuotaAlertEnabled && (
+                    <div className="settings-row">
+                      <div className="row-label">
+                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
+                        <div className="row-desc">{t('kimi.quotaAlert.thresholdDesc', '任意配额项低于此百分比时触发预警')}</div>
+                      </div>
+                      <div className="row-control">
+                        <div className="settings-inline-input">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            className="settings-select settings-select--input-mode settings-select--with-unit"
+                            value={kimiQuotaAlertThreshold}
+                            onChange={(event) => setKimiQuotaAlertThreshold(sanitizeNumberInput(event.target.value))}
+                            onBlur={() => setKimiQuotaAlertThreshold(normalizeNumberInput(kimiQuotaAlertThreshold, 0, 100))}
+                          />
+                          <span className="settings-input-unit">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
           </fieldset>
           </>

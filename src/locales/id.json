@@ -371,7 +371,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Akun Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -4658,6 +4659,21 @@
       "syncOfficialAuthOnSwitch": "Sinkronkan login resmi saat beralih",
       "syncOfficialAuthOnSwitchDesc": "Jika aktif, peralihan akun OAuth pada instans default akan menulis ke ~/.grok/auth.json resmi. Jika nonaktif, GROK_HOME terpisah digunakan. API Key dan instans tambahan tidak menimpa login resmi."
     },
+    "kimi": {
+      "title": "Pengaturan Kimi Code",
+      "cliPath": "Lokasi CLI",
+      "cliDetected": "Terdeteksi: {{version}} · {{path}}",
+      "cliMissing": "Kimi CLI tidak ditemukan. Masukkan lokasi khusus.",
+      "cliPick": "Pilih Kimi CLI",
+      "cliDetect": "Deteksi otomatis Kimi CLI",
+      "homePick": "Pilih KIMI_CODE_HOME",
+      "homeDetect": "Deteksi otomatis KIMI_CODE_HOME",
+      "home": "Direktori KIMI_CODE_HOME",
+      "homeDesc": "Menimpa direktori konfigurasi resmi. Variabel lingkungan lebih diutamakan. Saat ini: {{home}}",
+      "launchOnSwitch": "Buka CLI resmi setelah beralih",
+      "launchOnSwitchDesc": "Jika aktif, beralih akun akan membuka terminal dan menjalankan kimi. Jika nonaktif, hanya konfigurasi resmi yang ditulis, tanpa jendela."
+    },
+    "kimiRefreshInterval": "Segarkan kuota otomatis",
     "grokRefreshInterval": "Segarkan kuota otomatis",
     "error": {
       "loadFailed": "Gagal memuat konfigurasi: {{error}}",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Kelola key OpenCode Go/Zen dan filter per tier."
+  },
+  "kimi": {
+    "search": "Cari akun Kimi Code...",
+    "flowNotice": {
+      "title": "Panduan akun Kimi Code",
+      "desc": "Indeks multi-akun disimpan di Cockpit. Saat beralih, kredensial resmi ditulis dan config.toml lengkap termasuk tabel models dibuat lewat GET /models.",
+      "permission": "Lingkup lokal: kredensial bawaan ~/.kimi-code bisa diimpor; saat beralih, credentials resmi dan config.toml lengkap ditulis. Menghormati KIMI_CODE_HOME.",
+      "network": "Lingkup jaringan: otorisasi OAuth, penyegaran token, serta /me · /models · /usages. Kredensial tidak diunggah ke layanan Cockpit."
+    },
+    "empty": "Belum ada akun Kimi Code",
+    "addAccount": "Tambah akun Kimi Code",
+    "oauth": {
+      "desc": "Buka halaman otorisasi Kimi dan masukkan kode perangkat. Akun disimpan otomatis setelah selesai.",
+      "title": "Masuk Kimi Code dengan kode perangkat",
+      "item1": "Memakai device flow resmi tanpa memakai port callback lokal.",
+      "item2": "Saat beralih menulis ~/.kimi-code/credentials/kimi-code.json dalam format wire resmi.",
+      "item3": "Kuota berasal dari /usages. Login hanya mengambil /me.",
+      "urlPlaceholder": "URL otorisasi OAuth Kimi",
+      "waiting": "Menunggu otorisasi OAuth Kimi...",
+      "openWindow": "Buka halaman otorisasi",
+      "success": "Masuk OAuth Kimi Code berhasil"
+    },
+    "import": {
+      "tokenDesc": "Tempel credentials/kimi-code.json resmi, atau JSON akun lengkap yang diekspor aplikasi ini.",
+      "pasteDesc": "Tempel credentials/kimi-code.json resmi, atau JSON akun lengkap yang diekspor aplikasi ini.",
+      "pastePlaceholder": "Tempel JSON akun Kimi Code",
+      "pasteAction": "Impor JSON",
+      "localDesc": "Impor dari ~/.kimi-code/credentials/kimi-code.json (menghormati KIMI_CODE_HOME).",
+      "localClient": "Impor dari CLI Kimi Code lokal"
+    },
+    "quota": {
+      "resetAt": "{{label}} direset pada {{time}}",
+      "empty": "Belum ada kuota",
+      "weekly": "Kuota mingguan"
+    },
+    "switch": {
+      "buttonTitle": "Tulis konfigurasi resmi",
+      "wroteOfficialConfig": "Konfigurasi resmi ditulis — jalankan kimi sendiri ({{email}})",
+      "currentOnly": "Akun saat ini dialihkan (konfigurasi resmi tidak ditulis): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "Jika suatu item kuota turun di bawah ambang, kirim notifikasi asli dan tawarkan peralihan cepat.",
+      "thresholdDesc": "Peringatkan saat sisa suatu item kuota di bawah persentase ini"
+    }
   }
 }

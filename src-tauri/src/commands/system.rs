@@ -105,8 +105,14 @@ pub struct GeneralConfig {
     pub cursor_auto_refresh_minutes: i32,
     /// Grok CLI 自动刷新间隔（分钟），-1 表示禁用
     pub grok_auto_refresh_minutes: i32,
+    /// Kimi Code 自动刷新间隔（分钟），-1 表示禁用
+    pub kimi_auto_refresh_minutes: i32,
     /// 默认实例切号时是否同步写入官方 ~/.grok/auth.json
     pub grok_sync_official_auth_on_switch: bool,
+    /// 切号时是否写入官方 Kimi credentials + config.toml
+    pub kimi_sync_official_config_on_switch: bool,
+    /// 切号后是否打开终端运行官方 Kimi CLI
+    pub kimi_launch_on_switch: bool,
     /// 切换 Grok 时是否自动重启 OpenCode
     pub grok_opencode_sync_on_switch: bool,
     /// 切换 Grok 时是否覆盖 OpenCode 登录信息
@@ -309,6 +315,10 @@ pub struct GeneralConfig {
     pub grok_quota_alert_enabled: bool,
     /// Grok CLI 配额预警阈值（百分比）
     pub grok_quota_alert_threshold: i32,
+    /// 是否启用 Kimi Code 配额预警通知
+    pub kimi_quota_alert_enabled: bool,
+    /// Kimi Code 配额预警阈值（百分比）
+    pub kimi_quota_alert_threshold: i32,
     /// 是否启用 Claude 配额预警通知
     pub claude_quota_alert_enabled: bool,
     /// Claude 配额预警阈值（百分比）
@@ -1141,7 +1151,10 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "kiro_auto_refresh_minutes"
             | "cursor_auto_refresh_minutes"
             | "grok_auto_refresh_minutes"
+            | "kimi_auto_refresh_minutes"
             | "grok_sync_official_auth_on_switch"
+            | "kimi_sync_official_config_on_switch"
+            | "kimi_launch_on_switch"
             | "grok_opencode_sync_on_switch"
             | "grok_opencode_auth_overwrite_on_switch"
             | "claude_auto_refresh_minutes"
@@ -1250,6 +1263,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "cursor_quota_alert_threshold"
             | "grok_quota_alert_enabled"
             | "grok_quota_alert_threshold"
+            | "kimi_quota_alert_enabled"
+            | "kimi_quota_alert_threshold"
             | "claude_quota_alert_enabled"
             | "claude_quota_alert_threshold"
             | "claude_quota_display_remaining"
@@ -2702,7 +2717,10 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         kiro_auto_refresh_minutes: user_config.kiro_auto_refresh_minutes,
         cursor_auto_refresh_minutes: user_config.cursor_auto_refresh_minutes,
         grok_auto_refresh_minutes: user_config.grok_auto_refresh_minutes,
+        kimi_auto_refresh_minutes: user_config.kimi_auto_refresh_minutes,
         grok_sync_official_auth_on_switch: user_config.grok_sync_official_auth_on_switch,
+        kimi_sync_official_config_on_switch: user_config.kimi_sync_official_config_on_switch,
+        kimi_launch_on_switch: user_config.kimi_launch_on_switch,
         grok_opencode_sync_on_switch: user_config.grok_opencode_sync_on_switch,
         grok_opencode_auth_overwrite_on_switch: user_config.grok_opencode_auth_overwrite_on_switch,
         claude_auto_refresh_minutes: user_config.claude_auto_refresh_minutes,
@@ -2854,6 +2872,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         cursor_quota_alert_threshold: user_config.cursor_quota_alert_threshold,
         grok_quota_alert_enabled: user_config.grok_quota_alert_enabled,
         grok_quota_alert_threshold: user_config.grok_quota_alert_threshold,
+        kimi_quota_alert_enabled: user_config.kimi_quota_alert_enabled,
+        kimi_quota_alert_threshold: user_config.kimi_quota_alert_threshold,
         claude_quota_alert_enabled: user_config.claude_quota_alert_enabled,
         claude_quota_alert_threshold: user_config.claude_quota_alert_threshold,
         claude_quota_display_remaining: user_config.claude_quota_display_remaining,
@@ -3141,7 +3161,10 @@ pub fn save_general_config(
     kiro_auto_refresh_minutes: Option<i32>,
     cursor_auto_refresh_minutes: Option<i32>,
     grok_auto_refresh_minutes: Option<i32>,
+    kimi_auto_refresh_minutes: Option<i32>,
     grok_sync_official_auth_on_switch: Option<bool>,
+    kimi_sync_official_config_on_switch: Option<bool>,
+    kimi_launch_on_switch: Option<bool>,
     grok_opencode_sync_on_switch: Option<bool>,
     grok_opencode_auth_overwrite_on_switch: Option<bool>,
     claude_auto_refresh_minutes: Option<i32>,
@@ -3239,6 +3262,8 @@ pub fn save_general_config(
     cursor_quota_alert_threshold: Option<i32>,
     grok_quota_alert_enabled: Option<bool>,
     grok_quota_alert_threshold: Option<i32>,
+    kimi_quota_alert_enabled: Option<bool>,
+    kimi_quota_alert_threshold: Option<i32>,
     claude_quota_alert_enabled: Option<bool>,
     claude_quota_alert_threshold: Option<i32>,
     claude_quota_display_remaining: Option<bool>,
@@ -3384,8 +3409,17 @@ pub fn save_general_config(
         if let Some(value) = grok_auto_refresh_minutes {
             current.grok_auto_refresh_minutes = value;
         }
+        if let Some(value) = kimi_auto_refresh_minutes {
+            current.kimi_auto_refresh_minutes = value;
+        }
         if let Some(value) = grok_sync_official_auth_on_switch {
             current.grok_sync_official_auth_on_switch = value;
+        }
+        if let Some(value) = kimi_sync_official_config_on_switch {
+            current.kimi_sync_official_config_on_switch = value;
+        }
+        if let Some(value) = kimi_launch_on_switch {
+            current.kimi_launch_on_switch = value;
         }
         let next_grok_opencode_auth_overwrite_on_switch = grok_opencode_auth_overwrite_on_switch
             .unwrap_or(current.grok_opencode_auth_overwrite_on_switch);
@@ -3694,6 +3728,12 @@ pub fn save_general_config(
         }
         if let Some(value) = grok_quota_alert_threshold {
             current.grok_quota_alert_threshold = value;
+        }
+        if let Some(value) = kimi_quota_alert_enabled {
+            current.kimi_quota_alert_enabled = value;
+        }
+        if let Some(value) = kimi_quota_alert_threshold {
+            current.kimi_quota_alert_threshold = value;
         }
         if let Some(value) = claude_quota_alert_enabled {
             current.claude_quota_alert_enabled = value;

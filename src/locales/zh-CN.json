@@ -371,7 +371,8 @@
     "2faManager": "2FA 管理",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code 账号"
   },
   "sponsors": {
     "pageTitle": "赞助商",
@@ -4815,6 +4816,21 @@
       "syncOfficialAuthOnSwitch": "切号同步官方登录",
       "syncOfficialAuthOnSwitchDesc": "开启后，默认实例切换 OAuth 账号会写入官方 ~/.grok/auth.json；关闭时使用独立 GROK_HOME。API Key 和多开实例不改写官方登录。"
     },
+    "kimi": {
+      "title": "Kimi Code 设置",
+      "cliPath": "CLI 路径",
+      "cliDetected": "已检测 {{version}} · {{path}}",
+      "cliMissing": "未检测到 Kimi CLI，可填写自定义路径",
+      "cliPick": "手动选择 Kimi CLI",
+      "cliDetect": "自动检测 Kimi CLI",
+      "homePick": "手动选择 KIMI_CODE_HOME",
+      "homeDetect": "自动检测 KIMI_CODE_HOME",
+      "home": "目录 KIMI_CODE_HOME",
+      "homeDesc": "覆盖官方配置目录。环境变量优先于此处。当前：{{home}}",
+      "launchOnSwitch": "切号后打开官方 CLI",
+      "launchOnSwitchDesc": "开启后，切换账号会打开终端并运行 kimi；关闭时只写入官方配置，不弹窗。"
+    },
+    "kimiRefreshInterval": "配额自动刷新",
     "grokRefreshInterval": "配额自动刷新",
     "error": {
       "loadFailed": "加载配置失败：{{error}}",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 档 API Key，并按档位筛选列表。密钥保存在本机应用数据目录。"
+  },
+  "kimi": {
+    "search": "搜索 Kimi Code 账号...",
+    "flowNotice": {
+      "title": "Kimi Code 账号管理说明",
+      "desc": "多账号索引保存在 Cockpit；切号写入官方凭据，并用 GET /models 写出完整 config.toml（含 models 表）。",
+      "permission": "本地范围：可读取默认 ~/.kimi-code 凭据用于导入；切号时写入官方 credentials 与完整 config.toml。尊重 KIMI_CODE_HOME。",
+      "network": "网络范围：OAuth 授权、token 刷新与 /me · /models · /usages；不会把凭据上传到 Cockpit 服务。"
+    },
+    "empty": "暂无 Kimi Code 账号",
+    "addAccount": "添加 Kimi Code 账号",
+    "oauth": {
+      "desc": "打开 Kimi 授权页完成设备码登录，完成后账号会自动保存。",
+      "title": "Kimi Code 设备码登录",
+      "item1": "使用官方 device flow，不占用本地回调端口。",
+      "item2": "切号写入 ~/.kimi-code/credentials/kimi-code.json（官方 wire 格式）。",
+      "item3": "额度来自官方 /usages；登录仅拉 /me 资料。",
+      "urlPlaceholder": "Kimi OAuth 授权地址",
+      "waiting": "等待 Kimi OAuth 授权...",
+      "openWindow": "打开授权页",
+      "success": "Kimi Code OAuth 登录成功"
+    },
+    "import": {
+      "tokenDesc": "也可粘贴官方 credentials/kimi-code.json，或本应用导出的完整账号 JSON。",
+      "pasteDesc": "粘贴官方 credentials/kimi-code.json，或本应用导出的完整账号 JSON。",
+      "pastePlaceholder": "粘贴 Kimi Code 账号 JSON",
+      "pasteAction": "导入 JSON",
+      "localDesc": "从默认 ~/.kimi-code/credentials/kimi-code.json 导入（尊重 KIMI_CODE_HOME）。",
+      "localClient": "从本机 Kimi Code CLI 导入"
+    },
+    "quota": {
+      "resetAt": "{{label}} 重置：{{time}}",
+      "empty": "暂无额度",
+      "weekly": "每周额度"
+    },
+    "switch": {
+      "buttonTitle": "写入官方配置",
+      "wroteOfficialConfig": "已写入官方配置，请自行运行 kimi（{{email}}）",
+      "currentOnly": "已切换当前账号（未写入官方配置）：{{email}}"
+    },
+    "quotaAlert": {
+      "hint": "当任意配额项低于阈值时，发送原生通知并在页面提示快捷切号。",
+      "thresholdDesc": "任意配额项低于此百分比时触发预警"
+    }
   }
 }

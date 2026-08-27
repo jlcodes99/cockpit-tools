@@ -13,6 +13,7 @@ export type Page =
   | 'kiro'
   | 'cursor'
   | 'grok'
+  | 'kimi'
   | 'codebuddy'
   | 'codebuddy-cn'
   | 'qoder'
@@ -46,6 +47,7 @@ export const MAIN_WINDOW_NAVIGABLE_PAGES: readonly Page[] = [
   'kiro',
   'cursor',
   'grok',
+  'kimi',
   'codebuddy',
   'codebuddy-cn',
   'qoder',

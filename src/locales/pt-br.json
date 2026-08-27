@@ -324,7 +324,8 @@
     "apiRelay": "Relé API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Contas Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Patrocinadores",
@@ -4501,6 +4502,21 @@
       "syncOfficialAuthOnSwitch": "Sincronizar login oficial ao trocar",
       "syncOfficialAuthOnSwitchDesc": "Quando ativado, trocar a instância padrão para uma conta OAuth grava o arquivo oficial ~/.grok/auth.json. Quando desativado, usa um GROK_HOME separado. Chaves de API e instâncias adicionais não substituem o login oficial."
     },
+    "kimi": {
+      "title": "Configurações do Kimi Code",
+      "cliPath": "Caminho da CLI",
+      "cliDetected": "Detectado: {{version}} · {{path}}",
+      "cliMissing": "Kimi CLI não encontrado. Informe um caminho.",
+      "cliPick": "Escolher Kimi CLI",
+      "cliDetect": "Detectar Kimi CLI automaticamente",
+      "homePick": "Escolher KIMI_CODE_HOME",
+      "homeDetect": "Detectar KIMI_CODE_HOME automaticamente",
+      "home": "Diretório KIMI_CODE_HOME",
+      "homeDesc": "Substitui o diretório oficial de configuração. A variável de ambiente tem prioridade. Atual: {{home}}",
+      "launchOnSwitch": "Abrir a CLI oficial ao trocar",
+      "launchOnSwitchDesc": "Quando ativado, a troca de conta abre um terminal e executa o kimi. Quando desativado, apenas a configuração oficial é gravada, sem janela."
+    },
+    "kimiRefreshInterval": "Atualização automática de cota",
     "grokRefreshInterval": "Atualização automática de cota",
     "codebuddy": {
       "title": "Configuracoes do CodeBuddy",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gerencie chaves OpenCode Go/Zen e filtre por nível."
+  },
+  "kimi": {
+    "search": "Pesquisar contas do Kimi Code...",
+    "flowNotice": {
+      "title": "Guia de contas do Kimi Code",
+      "desc": "O índice de várias contas fica no Cockpit. Ao trocar, as credenciais oficiais são gravadas e um config.toml completo, com a tabela models, é gerado via GET /models.",
+      "permission": "Escopo local: as credenciais padrão de ~/.kimi-code podem ser importadas; a troca grava as credentials oficiais e um config.toml completo. Respeita KIMI_CODE_HOME.",
+      "network": "Escopo de rede: autorização OAuth, renovação de token e /me · /models · /usages. As credenciais não são enviadas aos serviços do Cockpit."
+    },
+    "empty": "Ainda não há contas do Kimi Code",
+    "addAccount": "Adicionar conta do Kimi Code",
+    "oauth": {
+      "desc": "Abra a página de autorização do Kimi e informe o código do dispositivo. A conta é salva automaticamente depois.",
+      "title": "Login do Kimi Code com código do dispositivo",
+      "item1": "Usa o device flow oficial sem ocupar uma porta de callback local.",
+      "item2": "A troca grava ~/.kimi-code/credentials/kimi-code.json no formato wire oficial.",
+      "item3": "A cota vem de /usages. O login busca só /me.",
+      "urlPlaceholder": "URL de autorização OAuth do Kimi",
+      "waiting": "Aguardando autorização OAuth do Kimi...",
+      "openWindow": "Abrir página de autorização",
+      "success": "Login OAuth do Kimi Code concluído"
+    },
+    "import": {
+      "tokenDesc": "Cole o credentials/kimi-code.json oficial ou um JSON de conta exportado por este aplicativo.",
+      "pasteDesc": "Cole o credentials/kimi-code.json oficial ou um JSON de conta exportado por este aplicativo.",
+      "pastePlaceholder": "Cole o JSON da conta do Kimi Code",
+      "pasteAction": "Importar JSON",
+      "localDesc": "Importar de ~/.kimi-code/credentials/kimi-code.json (respeita KIMI_CODE_HOME).",
+      "localClient": "Importar da CLI local do Kimi Code"
+    },
+    "quota": {
+      "resetAt": "{{label}} redefine em {{time}}",
+      "empty": "Ainda sem cota",
+      "weekly": "Cota semanal"
+    },
+    "switch": {
+      "buttonTitle": "Gravar configuração oficial",
+      "wroteOfficialConfig": "Configuração oficial gravada — execute o kimi você mesmo ({{email}})",
+      "currentOnly": "Conta atual trocada (configuração oficial não gravada): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "Se algum item de cota cair abaixo do limite, envia uma notificação nativa e sugere troca rápida.",
+      "thresholdDesc": "Alertar quando algum item de cota ficar abaixo deste percentual restante"
+    }
   }
 }

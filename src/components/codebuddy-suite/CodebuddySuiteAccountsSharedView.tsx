@@ -84,7 +84,7 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   TAccount extends CodebuddySuiteAccountBase,
 > {
   pageClassName: string;
-  quickSettingsType?: "codebuddy_cn" | "workbuddy" | "zcode" | "grok";
+  quickSettingsType?: "codebuddy_cn" | "workbuddy" | "zcode" | "grok" | "kimi";
   searchPlaceholderKey: string;
   searchPlaceholderDefault: string;
   flowNotice: {
@@ -118,6 +118,8 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   oauthWaitingDefault: string;
   oauthOpenButtonKey?: string;
   oauthOpenButtonDefault?: string;
+  switchButtonTitleKey?: string;
+  switchButtonTitleDefault?: string;
   showOauthIncognitoOpenButton?: boolean;
   tokenTabLabelKey?: string;
   tokenTabLabelDefault?: string;
@@ -705,7 +707,10 @@ export function CodebuddySuiteAccountsSharedView<
                 className="card-action-btn success"
                 onClick={() => handleInjectToVSCode?.(account.id)}
                 disabled={!!injecting}
-                title={t("common.shared.switchAccount", "切换账号")}
+                title={t(
+                  platformConfig.switchButtonTitleKey ?? "common.shared.switchAccount",
+                  platformConfig.switchButtonTitleDefault ?? "切换账号",
+                )}
               >
                 {injecting === account.id ? (
                   <RefreshCw size={14} className="loading-spinner" />

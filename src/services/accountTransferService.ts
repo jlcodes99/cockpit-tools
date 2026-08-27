@@ -13,6 +13,7 @@ import * as zcodeService from './zcodeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as zedService from './zedService';
+import * as kimiService from './kimiService';
 import type { ClaudeAccount } from '../types/claude';
 
 type AccountWithId = { id: string };
@@ -82,6 +83,11 @@ const PLATFORM_ADAPTERS: Partial<Record<PlatformId, TransferAdapter>> = {
     listAccounts: cursorService.listCursorAccounts,
     exportAccounts: cursorService.exportCursorAccounts,
     importFromJson: cursorService.importCursorFromJson,
+  },
+  kimi: {
+    listAccounts: kimiService.listKimiAccounts,
+    exportAccounts: kimiService.exportKimiAccounts,
+    importFromJson: kimiService.importKimiFromJson,
   },
   codebuddy: {
     listAccounts: codebuddyService.listCodebuddyAccounts,

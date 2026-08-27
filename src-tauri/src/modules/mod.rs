@@ -62,6 +62,8 @@ pub mod i18n;
 pub mod import;
 pub mod instance;
 pub mod instance_store;
+pub mod kimi_account;
+pub mod kimi_oauth;
 pub mod kiro_account;
 pub mod kiro_instance;
 pub mod kiro_oauth;

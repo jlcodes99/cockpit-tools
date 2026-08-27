@@ -9,6 +9,7 @@ import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import { useGrokAccountStore } from '../stores/useGrokAccountStore';
+import { useKimiAccountStore } from '../stores/useKimiAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -21,6 +22,7 @@ import { getWindsurfAccountDisplayEmail } from '../types/windsurf';
 import { getKiroAccountDisplayEmail } from '../types/kiro';
 import { getCursorAccountDisplayEmail } from '../types/cursor';
 import { getGrokAccountDisplayEmail } from '../types/grok';
+import { getKimiAccountDisplayEmail } from '../types/kimi';
 import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
@@ -66,6 +68,7 @@ interface GeneralConfig {
   kiro_auto_refresh_minutes: number;
   cursor_auto_refresh_minutes: number;
   grok_auto_refresh_minutes: number;
+  kimi_auto_refresh_minutes: number;
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
@@ -100,6 +103,8 @@ interface GeneralConfig {
   cursor_quota_alert_threshold?: number;
   grok_quota_alert_enabled?: boolean;
   grok_quota_alert_threshold?: number;
+  kimi_quota_alert_enabled?: boolean;
+  kimi_quota_alert_threshold?: number;
 }
 
 interface PlatformRefreshDescriptor {
@@ -195,6 +200,7 @@ function getCurrentAccountEmails(): Record<CurrentAccountRefreshPlatform, string
     kiro: getProviderEmail(useKiroAccountStore, getKiroAccountDisplayEmail),
     cursor: getProviderEmail(useCursorAccountStore, getCursorAccountDisplayEmail),
     grok: getProviderEmail(useGrokAccountStore, getGrokAccountDisplayEmail),
+    kimi: getProviderEmail(useKimiAccountStore, getKimiAccountDisplayEmail),
     codebuddy: getProviderEmail(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail),
     codebuddy_cn: getProviderEmail(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail),
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),
@@ -233,6 +239,9 @@ export function useAutoRefresh() {
   const refreshAllGrokTokens = useGrokAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentGrokAccountId = useGrokAccountStore((state) => state.fetchCurrentAccountId);
   const refreshGrokToken = useGrokAccountStore((state) => state.refreshToken);
+  const refreshAllKimiTokens = useKimiAccountStore((state) => state.refreshAllTokens);
+  const fetchCurrentKimiAccountId = useKimiAccountStore((state) => state.fetchCurrentAccountId);
+  const refreshKimiToken = useKimiAccountStore((state) => state.refreshToken);
   const refreshAllCodebuddyTokens = useCodebuddyAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentCodebuddyAccountId = useCodebuddyAccountStore((state) => state.fetchCurrentAccountId);
   const refreshCodebuddyToken = useCodebuddyAccountStore((state) => state.refreshToken);
@@ -270,6 +279,8 @@ export function useAutoRefresh() {
   const cursorCurrentRefreshingRef = useRef(false);
   const grokRefreshingRef = useRef(false);
   const grokCurrentRefreshingRef = useRef(false);
+  const kimiRefreshingRef = useRef(false);
+  const kimiCurrentRefreshingRef = useRef(false);
   const codebuddyRefreshingRef = useRef(false);
   const codebuddyCurrentRefreshingRef = useRef(false);
   const codebuddyCnRefreshingRef = useRef(false);
@@ -610,6 +621,20 @@ export function useAutoRefresh() {
               },
             },
             {
+              key: 'kimi',
+              label: 'Kimi',
+              intervalMinutes: config.kimi_auto_refresh_minutes,
+              currentMinutes: resolveCurrentMinutes('kimi', currentAccountEmails.kimi, currentRefreshMinutesMap),
+              fullRefreshingRef: kimiRefreshingRef,
+              currentRefreshingRef: kimiCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await refreshAllKimiTokens();
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(fetchCurrentKimiAccountId, refreshKimiToken);
+              },
+            },
+            {
               key: 'codebuddy',
               label: 'CodeBuddy',
               intervalMinutes: config.codebuddy_auto_refresh_minutes,
@@ -889,6 +914,7 @@ export function useAutoRefresh() {
     fetchCurrentCodexAccount,
     fetchCurrentCursorAccountId,
     fetchCurrentGrokAccountId,
+    fetchCurrentKimiAccountId,
     fetchCurrentGhcpAccountId,
     fetchCurrentKiroAccountId,
     fetchCurrentQoderAccountId,
@@ -903,6 +929,7 @@ export function useAutoRefresh() {
     refreshAllClaudeQuotas,
     refreshAllCursorTokens,
     refreshAllGrokTokens,
+    refreshAllKimiTokens,
     refreshAllGhcpTokens,
     refreshAllKiroTokens,
     refreshAllQuotas,

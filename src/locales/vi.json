@@ -324,7 +324,8 @@
     "apiRelay": "Trạm chuyển",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Tài khoản Kimi Code"
   },
   "sponsors": {
     "pageTitle": "Nhà tài trợ",
@@ -4501,6 +4502,21 @@
       "syncOfficialAuthOnSwitch": "Đồng bộ đăng nhập chính thức",
       "syncOfficialAuthOnSwitchDesc": "Khi bật, việc chuyển tài khoản OAuth cho phiên bản mặc định sẽ ghi vào ~/.grok/auth.json chính thức. Khi tắt, một GROK_HOME riêng sẽ được dùng. API Key và các phiên bản bổ sung không ghi đè đăng nhập chính thức."
     },
+    "kimi": {
+      "title": "Cài đặt Kimi Code",
+      "cliPath": "Đường dẫn CLI",
+      "cliDetected": "Đã phát hiện: {{version}} · {{path}}",
+      "cliMissing": "Không tìm thấy Kimi CLI. Hãy nhập đường dẫn riêng.",
+      "cliPick": "Chọn Kimi CLI",
+      "cliDetect": "Tự động phát hiện Kimi CLI",
+      "homePick": "Chọn KIMI_CODE_HOME",
+      "homeDetect": "Tự động phát hiện KIMI_CODE_HOME",
+      "home": "Thư mục KIMI_CODE_HOME",
+      "homeDesc": "Ghi đè thư mục cấu hình chính thức. Biến môi trường được ưu tiên hơn trường này. Hiện tại: {{home}}",
+      "launchOnSwitch": "Mở CLI chính thức sau khi chuyển",
+      "launchOnSwitchDesc": "Khi bật, chuyển tài khoản sẽ mở terminal và chạy kimi. Khi tắt chỉ ghi cấu hình chính thức, không mở cửa sổ."
+    },
+    "kimiRefreshInterval": "Tự động làm mới hạn ngạch",
     "grokRefreshInterval": "Tự động làm mới hạn ngạch",
     "codebuddy": {
       "title": "Cài đặt CodeBuddy",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Quản lý key OpenCode Go/Zen và lọc theo tier."
+  },
+  "kimi": {
+    "search": "Tìm tài khoản Kimi Code...",
+    "flowNotice": {
+      "title": "Hướng dẫn tài khoản Kimi Code",
+      "desc": "Chỉ mục nhiều tài khoản được giữ trong Cockpit. Khi chuyển sẽ ghi thông tin đăng nhập chính thức và tạo config.toml đầy đủ, gồm bảng models, từ GET /models.",
+      "permission": "Phạm vi cục bộ: có thể nhập thông tin ~/.kimi-code mặc định; khi chuyển sẽ ghi credentials chính thức và config.toml đầy đủ. Tôn trọng KIMI_CODE_HOME.",
+      "network": "Phạm vi mạng: ủy quyền OAuth, làm mới token và /me · /models · /usages. Thông tin đăng nhập không được tải lên dịch vụ Cockpit."
+    },
+    "empty": "Chưa có tài khoản Kimi Code",
+    "addAccount": "Thêm tài khoản Kimi Code",
+    "oauth": {
+      "desc": "Mở trang ủy quyền Kimi và nhập mã thiết bị. Tài khoản sẽ được lưu tự động sau khi xong.",
+      "title": "Đăng nhập Kimi Code bằng mã thiết bị",
+      "item1": "Dùng device flow chính thức, không chiếm cổng callback cục bộ.",
+      "item2": "Khi chuyển sẽ ghi ~/.kimi-code/credentials/kimi-code.json theo định dạng wire chính thức.",
+      "item3": "Hạn ngạch lấy từ /usages. Đăng nhập chỉ tải /me.",
+      "urlPlaceholder": "URL ủy quyền OAuth Kimi",
+      "waiting": "Đang chờ ủy quyền OAuth Kimi...",
+      "openWindow": "Mở trang ủy quyền",
+      "success": "Đăng nhập OAuth Kimi Code thành công"
+    },
+    "import": {
+      "tokenDesc": "Dán credentials/kimi-code.json chính thức, hoặc JSON tài khoản đầy đủ do ứng dụng này xuất.",
+      "pasteDesc": "Dán credentials/kimi-code.json chính thức, hoặc JSON tài khoản đầy đủ do ứng dụng này xuất.",
+      "pastePlaceholder": "Dán JSON tài khoản Kimi Code",
+      "pasteAction": "Nhập JSON",
+      "localDesc": "Nhập từ ~/.kimi-code/credentials/kimi-code.json (tôn trọng KIMI_CODE_HOME).",
+      "localClient": "Nhập từ CLI Kimi Code trên máy"
+    },
+    "quota": {
+      "resetAt": "{{label}} đặt lại lúc {{time}}",
+      "empty": "Chưa có hạn ngạch",
+      "weekly": "Hạn ngạch tuần"
+    },
+    "switch": {
+      "buttonTitle": "Ghi cấu hình chính thức",
+      "wroteOfficialConfig": "Đã ghi cấu hình chính thức — hãy tự chạy kimi ({{email}})",
+      "currentOnly": "Đã chuyển tài khoản hiện tại (chưa ghi cấu hình chính thức): {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "Khi một mục hạn ngạch xuống dưới ngưỡng, gửi thông báo gốc và gợi ý chuyển nhanh.",
+      "thresholdDesc": "Cảnh báo khi phần còn lại của một mục hạn ngạch thấp hơn phần trăm này"
+    }
   }
 }

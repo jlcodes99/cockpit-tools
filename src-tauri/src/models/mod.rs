@@ -7,6 +7,7 @@ pub mod cursor;
 pub mod github_copilot;
 pub mod grok;
 pub mod instance;
+pub mod kimi;
 pub mod kiro;
 pub mod qoder;
 pub mod quota;

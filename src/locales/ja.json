@@ -324,7 +324,8 @@
     "apiRelay": "リレー",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code アカウント"
   },
   "sponsors": {
     "pageTitle": "スポンサー",
@@ -4501,6 +4502,21 @@
       "syncOfficialAuthOnSwitch": "切替時に公式ログインへ同期",
       "syncOfficialAuthOnSwitchDesc": "有効にすると、デフォルトインスタンスで OAuth アカウントを切り替えた際に公式の ~/.grok/auth.json へ書き込みます。無効時は個別の GROK_HOME を使用します。API Key と追加インスタンスは公式ログインを上書きしません。"
     },
+    "kimi": {
+      "title": "Kimi Code 設定",
+      "cliPath": "CLI のパス",
+      "cliDetected": "検出済み: {{version}} · {{path}}",
+      "cliMissing": "Kimi CLI が見つかりません。任意のパスを入力してください。",
+      "cliPick": "Kimi CLI を選ぶ",
+      "cliDetect": "Kimi CLI を自動検出",
+      "homePick": "KIMI_CODE_HOME を選ぶ",
+      "homeDetect": "KIMI_CODE_HOME を自動検出",
+      "home": "ホーム KIMI_CODE_HOME",
+      "homeDesc": "公式設定ディレクトリを上書きします。環境変数がこの項目より優先されます。現在: {{home}}",
+      "launchOnSwitch": "切替後に公式 CLI を開く",
+      "launchOnSwitchDesc": "有効にすると、アカウント切替時に端末を開いて kimi を起動します。無効時は公式設定のみ書き込み、ウィンドウは開きません。"
+    },
+    "kimiRefreshInterval": "クォータ自動更新",
     "grokRefreshInterval": "クォータ自動更新",
     "codebuddy": {
       "title": "CodeBuddy 設定",
@@ -6274,5 +6290,49 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode の Go/Zen API キーを管理し、ティアで絞り込みます。"
+  },
+  "kimi": {
+    "search": "Kimi Code アカウントを検索...",
+    "flowNotice": {
+      "title": "Kimi Code アカウント案内",
+      "desc": "複数アカウントの索引は Cockpit に保存します。切り替え時は公式の認証情報を書き込み、GET /models で完全な config.toml（models 表を含む）を出力します。",
+      "permission": "ローカル範囲：既定の ~/.kimi-code 認証情報を取り込み可能。切り替え時は公式 credentials と完全な config.toml を書き込みます。KIMI_CODE_HOME を尊重します。",
+      "network": "ネットワーク範囲：OAuth 認可、token 更新、/me · /models · /usages。認証情報は Cockpit サービスへ送信しません。"
+    },
+    "empty": "Kimi Code アカウントはまだありません",
+    "addAccount": "Kimi Code アカウントを追加",
+    "oauth": {
+      "desc": "Kimi の認可ページを開き、デバイスコードでログインします。完了後にアカウントは自動保存されます。",
+      "title": "Kimi Code デバイスコード認可",
+      "item1": "公式の device flow を使い、ローカルのコールバックポートは使いません。",
+      "item2": "切り替え時に ~/.kimi-code/credentials/kimi-code.json を公式 wire 形式で書き込みます。",
+      "item3": "枠は公式 /usages から取得します。ログイン時は /me のみ取得します。",
+      "urlPlaceholder": "Kimi OAuth 認可 URL",
+      "waiting": "Kimi OAuth 認可を待っています...",
+      "openWindow": "認可ページを開く",
+      "success": "Kimi Code OAuth ログインに成功しました"
+    },
+    "import": {
+      "tokenDesc": "公式の credentials/kimi-code.json、またはこのアプリが書き出したアカウント JSON を貼り付けます。",
+      "pasteDesc": "公式の credentials/kimi-code.json、またはこのアプリが書き出したアカウント JSON を貼り付けます。",
+      "pastePlaceholder": "Kimi Code アカウント JSON を貼り付け",
+      "pasteAction": "JSON を取り込む",
+      "localDesc": "既定の ~/.kimi-code/credentials/kimi-code.json から取り込みます（KIMI_CODE_HOME を尊重）。",
+      "localClient": "ローカルの Kimi Code CLI から取り込む"
+    },
+    "quota": {
+      "resetAt": "{{label}} のリセット: {{time}}",
+      "empty": "枠はまだありません",
+      "weekly": "週間枠"
+    },
+    "switch": {
+      "buttonTitle": "公式設定を書き込む",
+      "wroteOfficialConfig": "公式設定を書き込みました。kimi は自分で起動してください（{{email}}）",
+      "currentOnly": "現在のアカウントを切り替えました（公式設定は未書き込み）: {{email}}"
+    },
+    "quotaAlert": {
+      "hint": "いずれかの枠がしきい値を下回ったら、ネイティブ通知を送り、画面で素早く切り替えられるようにします。",
+      "thresholdDesc": "いずれかの枠の残量がこの割合を下回ったら警告します"
+    }
   }
 }
