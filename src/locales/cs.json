@@ -3117,6 +3117,7 @@
       "hint": "Oficiální kvóta je limit tarifu. Logy API služby pokrývají jen místní bránu. Zde sčítáme JSONL delty po požadavcích.",
       "range": {
         "label": "Období",
+        "today": "Dnes",
         "7d": "7 dní",
         "30d": "30 dní",
         "month": "Tento měsíc",

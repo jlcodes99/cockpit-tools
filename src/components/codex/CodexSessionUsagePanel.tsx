@@ -19,17 +19,21 @@ import {
   type SessionUsageSummaryLoadState,
 } from '../../utils/codexSessionUsageFormat';
 
-type UsageRange = '7d' | '30d' | 'month' | 'all';
+type UsageRange = 'today' | '7d' | '30d' | 'month' | 'all';
 
+/** 获取指定时间在本机时区中的当天起点。 */
 function startOfLocalDay(value: Date): Date {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
 
+/** 根据时间范围和实例筛选构造会话用量查询条件。 */
 function buildUsageQuery(range: UsageRange, instanceId: string): CodexSessionUsageQuery {
   const now = new Date();
   const toTimestamp = Math.floor(now.getTime() / 1000);
   let fromTimestamp: number | null = null;
-  if (range === '7d') {
+  if (range === 'today') {
+    fromTimestamp = Math.floor(startOfLocalDay(now).getTime() / 1000);
+  } else if (range === '7d') {
     fromTimestamp = Math.floor(startOfLocalDay(now).getTime() / 1000) - 6 * 24 * 60 * 60;
   } else if (range === '30d') {
     fromTimestamp = Math.floor(startOfLocalDay(now).getTime() / 1000) - 29 * 24 * 60 * 60;
@@ -43,6 +47,7 @@ function buildUsageQuery(range: UsageRange, instanceId: string): CodexSessionUsa
   };
 }
 
+/** 以紧凑格式显示 Token 数量，并通过标题保留精确值。 */
 function TokenAmount({
   value,
   lang,
@@ -61,6 +66,7 @@ function TokenAmount({
   );
 }
 
+/** 将同步时间转换为便于阅读的相对时间文案。 */
 function formatRelativeSyncTime(value: number | null | undefined, isZh: boolean): string {
   if (!value) {
     return '';
@@ -81,21 +87,27 @@ function formatRelativeSyncTime(value: number | null | undefined, isZh: boolean)
   return isZh ? `${days} 天前` : `${days}d ago`;
 }
 
+/** 展示会话用量分组表，并按需附加估算费用列。 */
 function UsageBreakdownTable({
   rows,
   emptyLabel,
   keyLabel,
   lang,
+  showEstimatedCost = false,
 }: {
   rows: CodexSessionUsageBreakdownRow[];
   emptyLabel: string;
   keyLabel: string;
   lang: string;
+  showEstimatedCost?: boolean;
 }) {
   const { t } = useTranslation();
+  const columnCount = 6 + (showEstimatedCost ? 1 : 0);
   return (
     <div className="codex-session-usage-table-wrap">
-      <table className="codex-session-usage-table">
+      <table
+        className={`codex-session-usage-table${showEstimatedCost ? ' codex-session-usage-table--daily' : ''}`}
+      >
         <thead>
           <tr>
             <th>{keyLabel}</th>
@@ -104,12 +116,15 @@ function UsageBreakdownTable({
             <th>{t('codex.sessionUsage.tables.output', '输出 Tokens')}</th>
             <th>{t('codex.sessionUsage.tables.total', '合计 Tokens')}</th>
             <th>{t('codex.sessionUsage.tables.requests', '请求')}</th>
+            {showEstimatedCost ? (
+              <th>{t('codex.sessionUsage.cards.cost', '估算费用')}</th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6}>{emptyLabel}</td>
+              <td colSpan={columnCount}>{emptyLabel}</td>
             </tr>
           ) : (
             rows.map((row) => (
@@ -128,6 +143,9 @@ function UsageBreakdownTable({
                   <TokenAmount value={row.totalTokens} lang={lang} />
                 </td>
                 <td>{formatSessionUsageCount(row.requestCount)}</td>
+                {showEstimatedCost ? (
+                  <td>{formatSessionUsageCostUsd(row.estimatedCostUsd)}</td>
+                ) : null}
               </tr>
             ))
           )}
@@ -137,6 +155,7 @@ function UsageBreakdownTable({
   );
 }
 
+/** 展示会话列表页中的近三十天用量摘要。 */
 export function CodexSessionUsageSummary({
   onOpenDetail,
 }: {
@@ -259,6 +278,7 @@ export function CodexSessionUsageSummary({
   );
 }
 
+/** 展示可筛选的 Codex 会话用量详情。 */
 export function CodexSessionUsagePanel({
   onBack,
 }: {
@@ -267,7 +287,7 @@ export function CodexSessionUsagePanel({
   const { t, i18n } = useTranslation();
   const lang = i18n.resolvedLanguage || i18n.language || 'zh-CN';
   const isZh = lang.toLowerCase().startsWith('zh');
-  const [range, setRange] = useState<UsageRange>('30d');
+  const [range, setRange] = useState<UsageRange>('today');
   const [instanceId, setInstanceId] = useState('');
   const [report, setReport] = useState<CodexSessionUsageReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -303,7 +323,9 @@ export function CodexSessionUsagePanel({
     }
   }, [t]);
 
+  /** 扫描会话日志，并在每次刷新时使用最新的时间范围截止点。 */
   const runSync = useCallback(async (rebuild: boolean) => {
+    const syncQuery = buildUsageQuery(range, instanceId);
     const version = ++requestVersionRef.current;
     setSyncing(true);
     if (rebuild) {
@@ -313,13 +335,13 @@ export function CodexSessionUsagePanel({
     try {
       const result = await codexInstanceService.syncSessionUsage({
         rebuild,
-        query,
+        query: syncQuery,
       });
       if (version === requestVersionRef.current) {
         if (result.report) {
           setReport(result.report);
         } else {
-          const nextReport = await codexInstanceService.querySessionUsage(query);
+          const nextReport = await codexInstanceService.querySessionUsage(syncQuery);
           setReport(nextReport);
         }
         if (result.errors.length > 0) {
@@ -342,7 +364,7 @@ export function CodexSessionUsagePanel({
         setLoading(false);
       }
     }
-  }, [query, t]);
+  }, [instanceId, range, t]);
 
   useEffect(() => {
     void loadCached(query);
@@ -373,6 +395,7 @@ export function CodexSessionUsagePanel({
 
   const rangeOptions = useMemo<SingleSelectOption[]>(
     () => [
+      { value: 'today', label: t('codex.sessionUsage.range.today', '当天') },
       { value: '7d', label: t('codex.sessionUsage.range.7d', '近 7 天') },
       { value: '30d', label: t('codex.sessionUsage.range.30d', '近 30 天') },
       { value: 'month', label: t('codex.sessionUsage.range.month', '本月') },
@@ -422,7 +445,7 @@ export function CodexSessionUsagePanel({
             onChange={(value) => setRange(value as UsageRange)}
             ariaLabel={t('codex.sessionUsage.range.label', '时间范围')}
             menuWidth={140}
-            menuMaxHeight={220}
+            menuMaxHeight={260}
           />
         </label>
         <label className="codex-session-usage__field">
@@ -587,6 +610,7 @@ export function CodexSessionUsagePanel({
               keyLabel={t('codex.sessionUsage.tables.dayName', '日期')}
               emptyLabel={t('codex.sessionUsage.empty.title', '还没有会话用量')}
               lang={lang}
+              showEstimatedCost
             />
           </section>
         </>

@@ -3117,6 +3117,7 @@
       "hint": "Hạn mức chính thức là gói. Nhật ký dịch vụ API chỉ gồm cổng cục bộ. Ở đây cộng phần tăng JSONL từng yêu cầu.",
       "range": {
         "label": "Khoảng",
+        "today": "Hôm nay",
         "7d": "7 ngày",
         "30d": "30 ngày",
         "month": "Tháng này",

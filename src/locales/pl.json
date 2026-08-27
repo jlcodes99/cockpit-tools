@@ -3117,6 +3117,7 @@
       "hint": "Oficjalny limit to pula planu. Logi usługi API obejmują tylko lokalną bramkę. Tutaj sumujemy delty JSONL na żądanie.",
       "range": {
         "label": "Zakres",
+        "today": "Dzisiaj",
         "7d": "7 dni",
         "30d": "30 dni",
         "month": "Ten miesiąc",

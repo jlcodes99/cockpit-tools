@@ -13066,6 +13066,28 @@
   text-overflow: ellipsis;
 }
 
+/* 按字段内容分配完整列宽比例，兼顾宽屏均衡与窄屏可读性。 */
+.codex-session-usage-table--daily {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.codex-session-usage-table--daily th:first-child {
+  width: 12%;
+}
+
+.codex-session-usage-table--daily th:nth-child(n + 2):nth-child(-n + 5) {
+  width: 16%;
+}
+
+.codex-session-usage-table--daily th:nth-child(6) {
+  width: 11%;
+}
+
+.codex-session-usage-table--daily th:last-child {
+  width: 13%;
+}
+
 .codex-session-usage__empty {
   padding: 28px 16px;
   text-align: center;

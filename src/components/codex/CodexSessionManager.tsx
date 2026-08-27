@@ -31,6 +31,28 @@ import {
 
 type SessionManagerView = 'list' | 'usage';
 
+const SESSION_MANAGER_VIEW_STORAGE_KEY = 'agtools.codex.session_manager.view';
+
+/** 读取当前窗口内最近一次打开的会话管理视图。 */
+function readSessionManagerView(): SessionManagerView {
+  try {
+    return window.sessionStorage.getItem(SESSION_MANAGER_VIEW_STORAGE_KEY) === 'usage'
+      ? 'usage'
+      : 'list';
+  } catch {
+    return 'list';
+  }
+}
+
+/** 保存当前窗口内的会话管理视图，便于切换标签后恢复。 */
+function writeSessionManagerView(view: SessionManagerView): void {
+  try {
+    window.sessionStorage.setItem(SESSION_MANAGER_VIEW_STORAGE_KEY, view);
+  } catch {
+    // 忽略存储不可用，当前组件生命周期内的状态仍然有效。
+  }
+}
+
 type MessageState = { text: string; tone?: 'error' };
 type SessionTokenStatsMap = Record<string, CodexSessionTokenStats>;
 
@@ -302,7 +324,11 @@ export function CodexSessionManager() {
   const [titleSearchInput, setTitleSearchInput] = useState('');
   const [appliedTitleSearch, setAppliedTitleSearch] = useState('');
   const [sessionKindFilter, setSessionKindFilter] = useState<CodexSessionKindFilter>('conversation');
-  const [sessionView, setSessionView] = useState<SessionManagerView>('list');
+  const [sessionView, setSessionView] = useState<SessionManagerView>(readSessionManagerView);
+
+  useEffect(() => {
+    writeSessionManagerView(sessionView);
+  }, [sessionView]);
   const {
     message: restoreModalError,
     scrollKey: restoreModalErrorScrollKey,

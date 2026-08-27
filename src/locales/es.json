@@ -3117,6 +3117,7 @@
       "hint": "La cuota oficial es el cupo del plan. Los logs del servicio API solo cubren la pasarela local. Aquí se suman los deltas JSONL por solicitud.",
       "range": {
         "label": "Periodo",
+        "today": "Hoy",
         "7d": "7 días",
         "30d": "30 días",
         "month": "Este mes",

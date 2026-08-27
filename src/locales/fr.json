@@ -3117,6 +3117,7 @@
       "hint": "Le quota officiel est l’enveloppe du forfait. Les journaux du service API ne couvrent que la passerelle locale. Ici, on additionne les deltas JSONL par requête.",
       "range": {
         "label": "Période",
+        "today": "Aujourd’hui",
         "7d": "7 jours",
         "30d": "30 jours",
         "month": "Ce mois",
