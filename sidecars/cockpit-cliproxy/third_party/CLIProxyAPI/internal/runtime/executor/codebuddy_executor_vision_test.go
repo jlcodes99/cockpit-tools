@@ -58,6 +58,16 @@ func TestCodebuddyChatHasImageInput(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "image in tool message detected (Read tool result)",
+			in:   `{"messages":[{"role":"user","content":[{"type":"text","text":"读一下这张图"}]},{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"Read","arguments":"{\"file_path\":\"a.png\"}"}}]},{"role":"tool","tool_call_id":"call_1","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`,
+			want: true,
+		},
+		{
+			name: "historical tool image ignored when last user message is text-only",
+			in:   `{"messages":[{"role":"user","content":[{"type":"text","text":"读图"}]},{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"Read","arguments":"{\"file_path\":\"a.png\"}"}}]},{"role":"tool","tool_call_id":"call_1","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,HIST"}}]},{"role":"assistant","content":"看完了"},{"role":"user","content":[{"type":"text","text":"继续"}]}]}`,
+			want: false,
+		},
+		{
 			name: "no user message",
 			in:   `{"messages":[{"role":"assistant","content":"ok"}]}`,
 			want: false,
@@ -308,6 +318,35 @@ func TestExtractCodebuddyImagesForAgentic_HistoricalImageIgnored(t *testing.T) {
 	// reaches the text-only model.
 	if gjson.GetBytes(out, "messages.0.content.0.type").String() != "text" {
 		t.Fatalf("historical image should be replaced with text, got %s", gjson.GetBytes(out, "messages.0.content.0").Raw)
+	}
+}
+
+func TestExtractCodebuddyImagesForAgentic_ToolMessageImage(t *testing.T) {
+	body := []byte(`{"model":"deepseek-v4-pro","messages":[
+		{"role":"user","content":[{"type":"text","text":"读一下这张图"}]},
+		{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"Read","arguments":"{\"file_path\":\"a.png\"}"}}]},
+		{"role":"tool","tool_call_id":"call_1","content":[
+			{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}
+		]}
+	]}`)
+
+	out, images, err := extractCodebuddyImagesForAgentic(body)
+	if err != nil {
+		t.Fatalf("extractCodebuddyImagesForAgentic() error: %v", err)
+	}
+	if len(images) != 1 {
+		t.Fatalf("expected 1 image from tool message, got %d", len(images))
+	}
+	if images[0].id != 1 {
+		t.Fatalf("expected image id 1, got %d", images[0].id)
+	}
+	// The tool message's image must be replaced with a text hint referencing
+	// inspect_image, so the text-only model can query it via the vision model.
+	if gjson.GetBytes(out, "messages.2.content.0.type").String() != "text" {
+		t.Fatalf("tool image should be replaced with text, got %s", gjson.GetBytes(out, "messages.2.content.0").Raw)
+	}
+	if !strings.Contains(gjson.GetBytes(out, "messages.2.content.0.text").String(), "inspect_image") {
+		t.Fatalf("replacement should reference inspect_image tool")
 	}
 }
 

@@ -350,3 +350,23 @@ func TestStreamToolCallBuffer_EmptySnapshotThenRealArgs(t *testing.T) {
 		t.Fatalf("arguments = %q, want real args", got)
 	}
 }
+
+func TestStreamToolCallBuffer_PreservesWhitespaceOnlyFragment(t *testing.T) {
+	buf := newCodebuddyStreamToolCallBuffer()
+	// 片段1：不完整 JSON 前缀（无结尾 }），走增量 append
+	l1 := []byte(`data: {"id":"cmpl-1","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"replace_in_file","arguments":"{\"old_str\": \"OpenAI Chat Completions"}}]},"finish_reason":null}]}`)
+	// 片段2：纯空格（本次 bug 关键：必须被保留为增量 arguments 的一部分，而非被 TrimSpace 丢弃）
+	l2 := []byte(`data: {"id":"cmpl-1","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":" "}}]},"finish_reason":null}]}`)
+	// 片段3：剩余增量
+	l3 := []byte(`data: {"id":"cmpl-1","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"协议\"}"}}]},"finish_reason":null}]}`)
+
+	buf.Consume(l1)
+	buf.Consume(l2)
+	buf.Consume(l3)
+
+	got := gjson.GetBytes(buf.BuildToolCallsChunk(), "choices.0.delta.tool_calls.0.function.arguments").String()
+	want := `{"old_str": "OpenAI Chat Completions 协议"}`
+	if got != want {
+		t.Fatalf("whitespace-only fragment was dropped; arguments = %q, want %q (space preserved)", got, want)
+	}
+}

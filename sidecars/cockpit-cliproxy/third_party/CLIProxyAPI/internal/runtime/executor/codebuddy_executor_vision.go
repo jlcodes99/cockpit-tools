@@ -71,24 +71,30 @@ func lastCodebuddyUserMessageIndex(messages []gjson.Result) int {
 }
 
 // codebuddyChatHasImageInput reports whether the OpenAI-style chat body carries
-// at least one image part (image_url or input_image) in the last user message.
+// at least one image part (image_url or input_image) in the current turn — the
+// last user message and any subsequent assistant/tool messages. This covers both
+// direct image attachment (user message) and Read-tool image results (tool
+// message), while excluding earlier historical messages so a text-only follow-up
+// in the same session is not misclassified by a previous image.
 func codebuddyChatHasImageInput(body []byte) bool {
 	messages := gjson.GetBytes(body, "messages")
 	if !messages.IsArray() {
 		return false
 	}
 	arr := messages.Array()
-	idx := lastCodebuddyUserMessageIndex(arr)
-	if idx < 0 {
+	lastUserIdx := lastCodebuddyUserMessageIndex(arr)
+	if lastUserIdx < 0 {
 		return false
 	}
-	content := arr[idx].Get("content")
-	if !content.IsArray() {
-		return false
-	}
-	for _, part := range content.Array() {
-		if isCodebuddyImagePartType(part.Get("type").String()) {
-			return true
+	for mi := lastUserIdx; mi < len(arr); mi++ {
+		content := arr[mi].Get("content")
+		if !content.IsArray() {
+			continue
+		}
+		for _, part := range content.Array() {
+			if isCodebuddyImagePartType(part.Get("type").String()) {
+				return true
+			}
 		}
 	}
 	return false

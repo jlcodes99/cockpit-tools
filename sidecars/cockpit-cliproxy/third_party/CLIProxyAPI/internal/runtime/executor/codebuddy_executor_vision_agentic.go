@@ -71,9 +71,10 @@ func inspectImageToolDef() map[string]any {
 }
 
 // extractCodebuddyImagesForAgentic rewrites the body so no image part reaches a
-// text-only model: images in the last user message (the current request) are
-// extracted as inspect_image targets, while images in earlier messages (stale
-// history re-sent by the client) are replaced with a neutral placeholder.
+// text-only model: images in the current turn (the last user message and any
+// subsequent assistant/tool messages) are extracted as inspect_image targets,
+// while images in earlier messages (stale history re-sent by the client) are
+// replaced with a neutral placeholder.
 func extractCodebuddyImagesForAgentic(body []byte) ([]byte, []codebuddyAgenticImageRef, error) {
 	messages := gjson.GetBytes(body, "messages")
 	if !messages.IsArray() {
@@ -92,7 +93,7 @@ func extractCodebuddyImagesForAgentic(body []byte) ([]byte, []codebuddyAgenticIm
 		if !content.IsArray() {
 			continue
 		}
-		isCurrent := mi == lastUserIdx
+		isCurrent := mi >= lastUserIdx
 		for ci, part := range content.Array() {
 			if !isCodebuddyImagePartType(part.Get("type").String()) {
 				continue

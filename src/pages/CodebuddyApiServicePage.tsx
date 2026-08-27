@@ -874,7 +874,7 @@ function OverviewTab(props: OverviewTabProps) {
 
   const scopeOptions: Array<{ value: string; label: string }> = [
     { value: "localhost", label: "localhost" },
-    { value: "lan", label: "lan" },
+    { value: "lan", label: "局域网(正在完善)" },
   ];
 
   return (
@@ -1476,7 +1476,7 @@ function KeysTab(props: {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  ))}
               </tbody>
             </table>
           )}
@@ -1673,7 +1673,7 @@ function AccountsTab(props: {
               </button>
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
+                className="btn btn-secondary btn-sm"
                 onClick={onOpenMemberModal}
                 disabled={saving || refreshing}
                 title="管理成员"
@@ -1699,7 +1699,7 @@ function AccountsTab(props: {
                   </button>
                   <button
                     type="button"
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-secondary btn-sm"
                     onClick={onOpenMemberModal}
                     disabled={saving || refreshing}
                   >
@@ -2557,6 +2557,7 @@ function renderModelLabel(model: string | null | undefined, visionSubagent?: boo
 }
 
 function LogsTab() {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<CodebuddyLocalAccessStats | null>(null);
   const [logs, setLogs] = useState<CodebuddyLocalAccessLogPage | null>(null);
   const [page, setPage] = useState(1);
@@ -2614,6 +2615,8 @@ function LogsTab() {
     setClearingStats(true);
     try {
       setStats(await codebuddyLocalAccessService.clearCodebuddyLocalAccessStats());
+      setModelFilter("");
+      setPage(1);
       void loadLogs();
     } catch {
       // ignore
@@ -2624,6 +2627,12 @@ function LogsTab() {
   }, [clearingStats, loadLogs]);
 
   const totals = stats?.totals;
+
+  // 「按模型筛选」下拉框数据源：复用统计接口 byModel（后端已按请求量降序、去重统计），
+  //选项与日志中出现过的模型保持一致。
+  const modelOptions = (stats?.byModel ?? [])
+  .map((m) => m.modelId)
+  .filter((id) => id.length >0);
 
   const summaryCards = [
     { key: "requests", label: "总请求", value: String(totals?.requestCount ?? 0) },
@@ -2684,17 +2693,22 @@ function LogsTab() {
           <ScrollText />
           <h3>请求日志</h3>
           <div className="codex-api-service-head-actions">
-            <input
-              className="cb-api-base-url"
-              type="text"
-              placeholder="按模型筛选"
+            <select
+              className="cb-api-field"
               value={modelFilter}
               onChange={(e) => {
                 setModelFilter(e.target.value);
                 setPage(1);
               }}
-              style={{ width: 140 }}
-            />
+              style={{ padding: "6px 8px", minWidth:150, maxWidth:240 }}
+              >
+                <option value="">全部模型</option>
+                {modelOptions.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                  </option>
+                  ))}
+              </select>
             <select
               className="cb-api-field"
               value={successFilter}
@@ -2746,7 +2760,7 @@ function LogsTab() {
                     <td>{formatNumber(log.outputTokens)}</td>
                     <td>{formatCredit(log.credit)}</td>
                   </tr>
-                ))}
+                  ))}
               </tbody>
             </table>
             <div className="cb-api-pagination" style={{ padding: "10px 14px" }}>
@@ -2922,7 +2936,7 @@ function ChatTestDialog(props: {
               {modelOptions.map((id) => (
                 <option key={id} value={id}>
                   {id}
-                </option>
+                  </option>
               ))}
             </select>
             <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>

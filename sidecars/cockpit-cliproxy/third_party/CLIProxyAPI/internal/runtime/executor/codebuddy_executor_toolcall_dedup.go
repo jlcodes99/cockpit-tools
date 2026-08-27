@@ -225,7 +225,7 @@ func (b *codebuddyStreamToolCallBuffer) accumulate(tc gjson.Result) {
 		return
 	}
 	arg := argRes.String()
-	if strings.TrimSpace(arg) == "" {
+	if arg == "" { // 只跳过完全空的片段，保留 " " 等纯空格（它们是增量 arguments 的一部分）
 		return
 	}
 	switch {
