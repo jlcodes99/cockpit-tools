@@ -109,6 +109,9 @@ type CodebuddyVisionConfig struct {
 	//   - "routing": swap the request model to Model for non-vision models.
 	//   - "preprocess": describe images with Model first, then continue with the
 	//     original model.
+	//   - "agentic": inject an inspect_image tool and run a server-side tool-calling
+	//     loop so the text-only model can autonomously query the vision model
+	//     multiple times during reasoning.
 	// Any other value falls back to "off".
 	Mode string `yaml:"mode" json:"mode"`
 
@@ -119,6 +122,10 @@ type CodebuddyVisionConfig struct {
 	// PreprocessPrompt overrides the user-visible prompt sent to the vision model
 	// in preprocess mode. Empty uses a built-in default.
 	PreprocessPrompt string `yaml:"preprocess-prompt" json:"preprocess-prompt"`
+
+	// MaxToolRounds caps the number of inspect_image tool-call iterations in
+	// agentic mode. Non-positive falls back to a default of 3.
+	MaxToolRounds int `yaml:"max-tool-rounds" json:"max-tool-rounds"`
 }
 
 // VisionMode constants for CodebuddyVisionConfig.Mode.
@@ -126,6 +133,7 @@ const (
 	CodebuddyVisionModeOff         = "off"
 	CodebuddyVisionModeRouting     = "routing"
 	CodebuddyVisionModePreprocess  = "preprocess"
+	CodebuddyVisionModeAgentic     = "agentic"
 )
 
 // NormalizedVisionMode returns the effective mode, mapping unknown values to "off".
@@ -135,9 +143,19 @@ func (c CodebuddyVisionConfig) NormalizedVisionMode() string {
 		return CodebuddyVisionModeRouting
 	case CodebuddyVisionModePreprocess:
 		return CodebuddyVisionModePreprocess
+	case CodebuddyVisionModeAgentic:
+		return CodebuddyVisionModeAgentic
 	default:
 		return CodebuddyVisionModeOff
 	}
+}
+
+// MaxVisionToolRounds returns the effective agentic iteration cap (default 3).
+func (c CodebuddyVisionConfig) MaxVisionToolRounds() int {
+	if c.MaxToolRounds > 0 {
+		return c.MaxToolRounds
+	}
+	return 3
 }
 
 // VisionModel returns the configured vision model, defaulting to "hy3-preview".

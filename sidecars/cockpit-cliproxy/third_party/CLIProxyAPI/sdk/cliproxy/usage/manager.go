@@ -70,6 +70,9 @@ type Detail struct {
 	CacheReadTokens     int64
 	CacheCreationTokens int64
 	TotalTokens         int64
+	// Credit holds the monetary credit consumed by the request. Only the
+	// CodeBuddy (Tencent) backend reports this field (usage.credit).
+	Credit              float64
 	TokenBreakdown      TokenBreakdown
 	ResponseServiceTier string
 }

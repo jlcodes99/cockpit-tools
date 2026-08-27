@@ -15,6 +15,7 @@ import {
   DollarSign,
   Eye,
   EyeOff,
+  FolderPlus,
   Image as ImageIcon,
   KeyRound,
   Layers,
@@ -32,8 +33,10 @@ import {
   X,
   Wrench,
 } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 import * as codebuddyLocalAccessService from "../services/codebuddyLocalAccessService";
 import type {
+  CodebuddyLocalAccessAccountHealth,
   CodebuddyLocalAccessAccountOption,
   CodebuddyLocalAccessApiKey,
   CodebuddyLocalAccessCollection,
@@ -44,6 +47,7 @@ import type {
   CodebuddyLocalAccessScope,
   CodebuddyLocalAccessState,
   CodebuddyLocalAccessStats,
+  CodebuddyLocalAccessUsageStats,
 } from "../types/codebuddyLocalAccess";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CodexStatsRangePicker } from "../components/CodexStatsRangePicker";
@@ -61,6 +65,7 @@ import {
 } from "../stores/usePlatformLayoutStore";
 import { getPlatformLabel } from "../utils/platformMeta";
 import "./CodebuddyApiServicePage.css";
+import "./CodexApiServicePage.css";
 
 type TabId = "overview" | "keys" | "accounts" | "models" | "logs";
 
@@ -121,6 +126,9 @@ const DEFAULT_COLLECTION: CodebuddyLocalAccessCollection = {
   apiKeys: [],
   imageGenerationMode: "disabled",
   maxConcurrentImageRequests: 1,
+  immediateSseResponse: false,
+  responsesWebsocketsEnabled: false,
+  visionToolEnabled: false,
 };
 
 interface ChatMessage {
@@ -149,6 +157,60 @@ export function CodebuddyApiServicePage() {
   const [statsTimeRange, setStatsTimeRange] = useState<CodexStatsTimeRange>(() =>
     buildCodexStatsTimeRange(readStoredCbStatsRange()),
   );
+  // 全局 stats 状态：供账号池按账号统计使用（按账号缓存命中/credit 等）
+  const [stats, setStats] = useState<CodebuddyLocalAccessStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [memberModalOpen, setMemberModalOpen] = useState(false);
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      setStats(await codebuddyLocalAccessService.getCodebuddyLocalAccessStats());
+    } catch {
+      // ignore
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
+
+  // 事件驱动刷新：sidecar 产生新事件时，Rust 侧 emit 事件通知前端刷新统计。
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen("codebuddy-local-access-stats-changed", () => {
+      if (!disposed) {
+        void loadStats();
+      }
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
+
+    // 5 分钟轮询兜底：sidecar 未运行或事件丢失时仍能更新统计（避免频繁刷新）。
+    const timer = setInterval(() => {
+      void loadStats();
+    }, 5 * 60 * 1000);
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+      clearInterval(timer);
+    };
+  }, [loadStats]);
+
+  const handleOpenAddAccount = useCallback(() => {
+    // 跳转到 CodeBuddy 账号登录页（用户登录后可在管理成员弹窗中加入池）。
+    window.dispatchEvent(
+      new CustomEvent("app-request-navigate", { detail: "codebuddy" }),
+    );
+  }, []);
 
   useEffect(() => {
     persistCbStatsRange(statsRange);
@@ -199,6 +261,30 @@ export function CodebuddyApiServicePage() {
       setSaving(false);
     }
   }, [state]);
+
+  // 纯文本模型视觉子代理开关：直接基于当前 collection 持久化（避免 setState
+  // 异步导致 save 读到旧值），开启/关闭即时生效。
+  const toggleVisionTool = useCallback(
+    async (enabled: boolean) => {
+      setSaving(true);
+      setError(null);
+      try {
+        const next =
+          await codebuddyLocalAccessService.saveCodebuddyLocalAccessCollection({
+            ...collection,
+            visionToolEnabled: enabled,
+          });
+        setState(next);
+        setNotice(enabled ? "视觉子代理已开启" : "视觉子代理已关闭");
+        setTimeout(() => setNotice(null), 1800);
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [collection],
+  );
 
   const toggleEnabled = useCallback(async () => {
     setSaving(true);
@@ -279,6 +365,71 @@ export function CodebuddyApiServicePage() {
   }, [collection, portInput]);
 
   const firstApiKey = collection.apiKeys[0]?.key ?? "";
+
+  // ─── 用量统计公共区（所有 tab 共享，对齐 Codex 布局） ───
+  const totals = stats?.totals;
+  const successRate =
+    totals && totals.requestCount > 0
+      ? Math.round((totals.successCount / totals.requestCount) * 1000) / 10
+      : 0;
+  const avgLatency =
+    totals && totals.requestCount > 0
+      ? Math.round(totals.totalLatencyMs / totals.requestCount)
+      : 0;
+  const cacheHitRate =
+    totals &&
+    totals.promptCacheHitTokens + totals.promptCacheMissTokens > 0
+      ? Math.round(
+          (totals.promptCacheHitTokens /
+            (totals.promptCacheHitTokens + totals.promptCacheMissTokens)) *
+            1000,
+        ) / 10
+      : 0;
+
+  const summaryCards = useMemo(
+    () => [
+      {
+        key: "requests",
+        label: "总请求数",
+        value: formatCompactNumber(totals?.requestCount ?? 0),
+        detail: `成功 ${formatCompactNumber(totals?.successCount ?? 0)} / 失败 ${formatCompactNumber(totals?.failureCount ?? 0)}`,
+      },
+      {
+        key: "tokens",
+        label: "总 Token 数",
+        value: formatCompactNumber(totals?.totalTokens ?? 0),
+        detail: `输入 ${formatCompactNumber(totals?.inputTokens ?? 0)} / 输出 ${formatCompactNumber(totals?.outputTokens ?? 0)}`,
+      },
+      {
+        key: "cache",
+        label: "缓存命中",
+        value: formatCompactNumber(totals?.promptCacheHitTokens ?? 0),
+        detail: `命中率 ${cacheHitRate}% · 未命中 ${formatCompactNumber(totals?.promptCacheMissTokens ?? 0)}`,
+      },
+      {
+        key: "cost",
+        label: "Credit 消耗",
+        value: formatCredit(totals?.totalCredit ?? 0),
+        detail: "按 CodeBuddy Credit 累计",
+      },
+      {
+        key: "latency",
+        label: "平均延迟",
+        value: avgLatency > 0 ? `${avgLatency}ms` : "-",
+        detail: `成功率 ${successRate}%`,
+      },
+    ],
+    [totals, cacheHitRate, avgLatency, successRate],
+  );
+
+  const selectedStatsRangeTitle =
+    statsRange === "daily"
+      ? "今日"
+      : statsRange === "weekly"
+        ? "本周"
+        : statsRange === "monthly"
+          ? "本月"
+          : `${statsTimeRange.startInput} - ${statsTimeRange.endInput}`;
 
   const serviceTabs: Array<{ key: TabId; label: string; icon: ReactNode }> = [
     { key: "overview", label: "服务总览", icon: <Route className="tab-icon" /> },
@@ -488,6 +639,49 @@ export function CodebuddyApiServicePage() {
           </div>
         )}
 
+        {/* 用量统计公共区（所有 tab 共享，对齐 Codex 布局） */}
+        <section className="codex-api-service-usage-toolbar">
+          <div className="codex-api-service-usage-context">
+            <Activity size={16} />
+            <div>
+              <strong>用量统计</strong>
+              <span>
+                {selectedStatsRangeTitle}
+                {stats?.since
+                  ? ` · 最后记录 ${formatDateTime(stats.since)}`
+                  : ""}
+              </span>
+            </div>
+          </div>
+          <CodexStatsRangePicker
+            value={statsRange}
+            range={statsTimeRange}
+            onPresetChange={(
+              key: Exclude<CodexStatsRangeKey, "custom">,
+              range: CodexStatsTimeRange,
+            ) => {
+              setStatsRange(key);
+              setStatsTimeRange(range);
+            }}
+            onCustomApply={(range: CodexStatsTimeRange) => {
+              setStatsRange("custom");
+              setStatsTimeRange(range);
+            }}
+            disabled={statsLoading}
+            compact
+          />
+        </section>
+
+        <section className="codex-api-service-summary-grid">
+          {summaryCards.map((item) => (
+            <div key={item.key} className="codex-api-service-summary-card">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.detail}</small>
+            </div>
+          ))}
+        </section>
+
         {activeTab === "overview" && (
           <OverviewTab
             state={state}
@@ -506,19 +700,6 @@ export function CodebuddyApiServicePage() {
             saving={saving}
             onOpenAdvanced={() => setAdvancedOpen(true)}
             onOpenTest={() => setTestOpen(true)}
-            statsRange={statsRange}
-            statsTimeRange={statsTimeRange}
-            onStatsPresetChange={(
-              key: Exclude<CodexStatsRangeKey, "custom">,
-              range: CodexStatsTimeRange,
-            ) => {
-              setStatsRange(key);
-              setStatsTimeRange(range);
-            }}
-            onStatsCustomApply={(range: CodexStatsTimeRange) => {
-              setStatsRange("custom");
-              setStatsTimeRange(range);
-            }}
           />
         )}
         {activeTab === "keys" && (
@@ -530,7 +711,14 @@ export function CodebuddyApiServicePage() {
             collection={collection}
             setState={setState}
             onUpdate={update}
+            onSave={save}
             saving={saving}
+            stats={stats}
+            statsLoading={statsLoading}
+            onReloadStats={loadStats}
+            onOpenAddAccount={handleOpenAddAccount}
+            onOpenMemberModal={() => setMemberModalOpen(true)}
+            onJumpToModels={() => setActiveTab("models")}
           />
         )}
         {activeTab === "models" && (
@@ -540,6 +728,7 @@ export function CodebuddyApiServicePage() {
             onRefresh={load}
             baseUrl={displayBaseUrl}
             firstApiKey={firstApiKey}
+            onToggleVisionTool={toggleVisionTool}
           />
         )}
         {activeTab === "logs" && <LogsTab />}
@@ -555,23 +744,37 @@ export function CodebuddyApiServicePage() {
         />
       )}
 
-      {testOpen && <ChatTestDialog onClose={() => setTestOpen(false)} />}
+      {memberModalOpen && (
+        <MemberModal
+          state={state}
+          collection={collection}
+          saving={saving}
+          onClose={() => setMemberModalOpen(false)}
+          onSave={async (nextIntlIds, nextCnIds) => {
+            // 直接构造最新 collection 持久化，避免 setState/save 时序问题。
+            try {
+              const next = await codebuddyLocalAccessService.saveCodebuddyLocalAccessCollection({
+                ...collection,
+                intlAccountIds: nextIntlIds,
+                cnAccountIds: nextCnIds,
+              });
+              setState(next);
+              void loadStats();
+            } catch (err) {
+              setError(String(err));
+            }
+            setMemberModalOpen(false);
+          }}
+        />
+      )}
 
-      <footer className="cb-api-footer">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={save}
-          disabled={saving}
-        >
-          {saving ? (
-            <RefreshCw size={14} className="loading-spinner" />
-          ) : (
-            <Check size={14} />
-          )}
-          保存并应用
-        </button>
-      </footer>
+      {testOpen && (
+        <ChatTestDialog
+          onClose={() => setTestOpen(false)}
+          baseUrl={displayBaseUrl}
+          firstApiKey={firstApiKey}
+        />
+      )}
     </div>
   );
 }
@@ -595,13 +798,6 @@ interface OverviewTabProps {
   saving: boolean;
   onOpenAdvanced: () => void;
   onOpenTest: () => void;
-  statsRange: CodexStatsRangeKey;
-  statsTimeRange: CodexStatsTimeRange;
-  onStatsPresetChange: (
-    key: Exclude<CodexStatsRangeKey, "custom">,
-    range: CodexStatsTimeRange,
-  ) => void;
-  onStatsCustomApply: (range: CodexStatsTimeRange) => void;
 }
 
 function OverviewTab(props: OverviewTabProps) {
@@ -619,102 +815,13 @@ function OverviewTab(props: OverviewTabProps) {
     onSavePort,
     onOpenAdvanced,
     onOpenTest,
-    statsRange,
-    statsTimeRange,
-    onStatsPresetChange,
-    onStatsCustomApply,
   } = props;
-
-  const [stats, setStats] = useState<CodebuddyLocalAccessStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    try {
-      setStats(await codebuddyLocalAccessService.getCodebuddyLocalAccessStats());
-    } catch {
-      // ignore
-    } finally {
-      setStatsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadStats();
-  }, [loadStats]);
-
-  const totals = stats?.totals;
-  const successRate =
-    totals && totals.requestCount > 0
-      ? Math.round((totals.successCount / totals.requestCount) * 1000) / 10
-      : 0;
-  const avgLatency =
-    totals && totals.requestCount > 0
-      ? Math.round(totals.totalLatencyMs / totals.requestCount)
-      : 0;
-
-  const cacheHitRate =
-    totals &&
-    totals.promptCacheHitTokens + totals.promptCacheMissTokens > 0
-      ? Math.round(
-          (totals.promptCacheHitTokens /
-            (totals.promptCacheHitTokens + totals.promptCacheMissTokens)) *
-            1000,
-        ) / 10
-      : 0;
-
-  const summaryCards = [
-    {
-      key: "requests",
-      label: "总请求数",
-      value: formatCompactNumber(totals?.requestCount ?? 0),
-      detail: `成功 ${formatCompactNumber(totals?.successCount ?? 0)} / 失败 ${formatCompactNumber(totals?.failureCount ?? 0)}`,
-    },
-    {
-      key: "images",
-      label: "图片请求",
-      value: formatCompactNumber(totals?.imageRequestCount ?? 0),
-      detail: `生成 ${formatCompactNumber(totals?.imageGenerationRequestCount ?? 0)} / 编辑 ${formatCompactNumber(totals?.imageEditRequestCount ?? 0)} / 权限 ${formatCompactNumber(totals?.imageGenerationCapabilityFailureCount ?? 0)}`,
-    },
-    {
-      key: "tokens",
-      label: "总 Token 数",
-      value: formatCompactNumber(totals?.totalTokens ?? 0),
-      detail: `输入 ${formatCompactNumber(totals?.inputTokens ?? 0)} / 输出 ${formatCompactNumber(totals?.outputTokens ?? 0)}`,
-    },
-    {
-      key: "cache",
-      label: "缓存命中",
-      value: formatCompactNumber(totals?.promptCacheHitTokens ?? 0),
-      detail: `命中率 ${cacheHitRate}% · 未命中 ${formatCompactNumber(totals?.promptCacheMissTokens ?? 0)}`,
-    },
-    {
-      key: "cost",
-      label: "Credit 消耗",
-      value: formatCredit(totals?.totalCredit ?? 0),
-      detail: "按 CodeBuddy Credit 累计",
-    },
-    {
-      key: "latency",
-      label: "平均延迟",
-      value: avgLatency > 0 ? `${avgLatency}ms` : "-",
-      detail: `成功率 ${successRate}%`,
-    },
-  ];
 
   const memberAccounts = useMemo(() => {
     const intl = state?.intlAccounts ?? [];
     const cn = state?.cnAccounts ?? [];
     return [...intl, ...cn];
   }, [state?.intlAccounts, state?.cnAccounts]);
-
-  const accountEmailById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const account of memberAccounts) {
-      map.set(account.id, account.email || account.id);
-    }
-    return map;
-  }, [memberAccounts]);
 
   const availableAccountCount =
     (state?.intlAccounts?.length ?? 0) + (state?.cnAccounts?.length ?? 0);
@@ -770,95 +877,8 @@ function OverviewTab(props: OverviewTabProps) {
     { value: "lan", label: "lan" },
   ];
 
-  const selectedStatsRangeTitle =
-    statsRange === "daily"
-      ? "今日"
-      : statsRange === "weekly"
-        ? "本周"
-        : statsRange === "monthly"
-          ? "本月"
-          : `${statsTimeRange.startInput} - ${statsTimeRange.endInput}`;
-
   return (
     <div className="codex-api-service-tab-panel">
-      <section className="codex-api-service-usage-toolbar">
-        <div className="codex-api-service-usage-context">
-          <Activity size={16} />
-          <div>
-            <strong>用量统计</strong>
-            <span>
-              {selectedStatsRangeTitle}
-              {stats?.since
-                ? ` · 最后记录 ${formatDateTime(stats.since)}`
-                : ""}
-            </span>
-          </div>
-        </div>
-        <CodexStatsRangePicker
-          value={statsRange}
-          range={statsTimeRange}
-          onPresetChange={onStatsPresetChange}
-          onCustomApply={onStatsCustomApply}
-          disabled={statsLoading}
-          compact
-        />
-      </section>
-
-      <section className="codex-api-service-summary-grid">
-        {summaryCards.map((item) => (
-          <div key={item.key} className="codex-api-service-summary-card">
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <small>{item.detail}</small>
-          </div>
-        ))}
-      </section>
-
-      {stats && stats.byAccount.length > 0 && (
-        <section className="codex-api-service-panel cb-account-stats-panel">
-          <div className="codex-api-service-panel-head">
-            <h2>按账号统计</h2>
-            <span className="cb-account-stats-hint">
-              会话亲和可让同一会话稳定命中缓存，降低 credit 消耗
-            </span>
-          </div>
-          <div className="cb-account-stats-table">
-            <div className="cb-account-stats-row cb-account-stats-head-row">
-              <span>账号</span>
-              <span>请求</span>
-              <span>缓存命中率</span>
-              <span>命中 Token</span>
-              <span>Credit</span>
-            </div>
-            {stats.byAccount.map((account) => {
-              const usage = account.usage;
-              const cacheTotal =
-                usage.promptCacheHitTokens + usage.promptCacheMissTokens;
-              const rate =
-                cacheTotal > 0
-                  ? Math.round((usage.promptCacheHitTokens / cacheTotal) * 1000) /
-                    10
-                  : 0;
-              const displayName =
-                accountEmailById.get(account.accountId) ?? account.accountId;
-              return (
-                <div key={account.accountId} className="cb-account-stats-row">
-                  <span className="cb-account-stats-id" title={account.accountId}>
-                    {displayName}
-                  </span>
-                  <span>{formatCompactNumber(usage.requestCount)}</span>
-                  <span className={rate > 0 ? "cb-account-cache-hit" : ""}>
-                    {rate}%
-                  </span>
-                  <span>{formatCompactNumber(usage.promptCacheHitTokens)}</span>
-                  <span>{formatCredit(usage.totalCredit)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
       <div className="codex-api-service-grid two">
         <section className="codex-api-service-panel">
           <div className="codex-api-service-panel-head">
@@ -1488,26 +1508,31 @@ function AccountsTab(props: {
   collection: CodebuddyLocalAccessCollection;
   setState: React.Dispatch<React.SetStateAction<CodebuddyLocalAccessState | null>>;
   onUpdate: (patch: Partial<CodebuddyLocalAccessCollection>) => void;
+  onSave: () => Promise<void> | void;
   saving: boolean;
+  stats: CodebuddyLocalAccessStats | null;
+  statsLoading: boolean;
+  onReloadStats: () => Promise<void> | void;
+  onOpenAddAccount: () => void;
+  onOpenMemberModal: () => void;
+  onJumpToModels: () => void;
 }) {
-  const { state, collection, setState, onUpdate, saving } = props;
+  const {
+    state,
+    collection,
+    setState,
+    onUpdate,
+    onSave,
+    saving,
+    stats,
+    statsLoading,
+    onReloadStats,
+    onOpenAddAccount,
+    onOpenMemberModal,
+    onJumpToModels,
+  } = props;
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const toggleAccount = useCallback(
-    (region: "intl" | "cn", accountId: string) => {
-      setState((prev) => {
-        if (!prev) return prev;
-        const key = region === "intl" ? "intlAccountIds" : "cnAccountIds";
-        const current = prev.collection[key] ?? [];
-        const next = current.includes(accountId)
-          ? current.filter((id) => id !== accountId)
-          : [...current, accountId];
-        return { ...prev, collection: { ...prev.collection, [key]: next } };
-      });
-    },
-    [setState],
-  );
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -1515,17 +1540,16 @@ function AccountsTab(props: {
     try {
       const next = await codebuddyLocalAccessService.getCodebuddyLocalAccessState();
       setState(next);
+      void onReloadStats();
     } catch (err) {
       setError(String(err));
     } finally {
       setRefreshing(false);
     }
-  }, [setState]);
+  }, [setState, onReloadStats]);
 
-  const selectedCount =
-    (collection.intlAccountIds?.length ?? 0) + (collection.cnAccountIds?.length ?? 0);
-
-  const selectedAccountOptions = useMemo(() => {
+  // 仅渲染池内成员（对齐 Codex 卡片网格：左栏只列已加入账号池的账号）。
+  const memberAccounts = useMemo(() => {
     const intl = state?.intlAccounts ?? [];
     const cn = state?.cnAccounts ?? [];
     const all = [...intl, ...cn];
@@ -1536,6 +1560,58 @@ function AccountsTab(props: {
     return all.filter((a) => selected.has(a.id));
   }, [state?.intlAccounts, state?.cnAccounts, collection.intlAccountIds, collection.cnAccountIds]);
 
+  // 自定义路由所需：池内成员的完整账号对象。
+  const selectedAccountOptions = memberAccounts;
+
+  const usageByAccount = useMemo(() => {
+    const map = new Map<string, CodebuddyLocalAccessUsageStats>();
+    if (stats?.byAccount) {
+      for (const entry of stats.byAccount) {
+        map.set(entry.accountId, entry.usage);
+      }
+    }
+    return map;
+  }, [stats?.byAccount]);
+
+  const healthByAccount = useMemo(() => {
+    const map = new Map<string, CodebuddyLocalAccessAccountHealth>();
+    if (state?.accountHealth) {
+      for (const item of state.accountHealth) {
+        map.set(item.accountId, item);
+      }
+    }
+    return map;
+  }, [state?.accountHealth]);
+
+  // 移出账号池（对齐 Codex 删除按钮：从 intlAccountIds / cnAccountIds 过滤后保存）。
+  const handleRemoveMember = useCallback(
+    (accountId: string) => {
+      setState((prev) => {
+        if (!prev) return prev;
+        const nextIntl = (prev.collection.intlAccountIds ?? []).filter(
+          (id) => id !== accountId,
+        );
+        const nextCn = (prev.collection.cnAccountIds ?? []).filter(
+          (id) => id !== accountId,
+        );
+        return {
+          ...prev,
+          collection: {
+            ...prev.collection,
+            intlAccountIds: nextIntl,
+            cnAccountIds: nextCn,
+          },
+        };
+      });
+      void onSave();
+    },
+    [setState, onSave],
+  );
+
+  const handleSave = useCallback(() => {
+    void onSave();
+  }, [onSave]);
+
   return (
     <div className="codex-api-service-tab-panel">
       <header className="cb-api-section-header">
@@ -1544,10 +1620,13 @@ function AccountsTab(props: {
           type="button"
           className="cb-api-refresh-btn"
           onClick={refresh}
-          disabled={refreshing}
-          title="刷新账号列表"
+          disabled={refreshing || statsLoading}
+          title="刷新账号列表与统计"
         >
-          <RefreshCw size={14} className={refreshing ? "cb-api-spin" : ""} />
+          <RefreshCw
+            size={14}
+            className={refreshing || statsLoading ? "cb-api-spin" : ""}
+          />
         </button>
       </header>
       {error && (
@@ -1556,73 +1635,487 @@ function AccountsTab(props: {
           <span>{error}</span>
         </div>
       )}
-      <section className="codex-api-service-panel">
-        <div className="codex-api-service-panel-head">
-          <Route />
-          <h3>调度策略</h3>
-        </div>
-        <div className="cb-api-panel-body cb-routing-panel">
-          <div className="cb-routing-row">
-            <span className="cb-routing-label">路由策略</span>
-            <SingleSelectDropdown
-              value={collection.routingStrategy}
-              options={ROUTING_STRATEGY_OPTIONS}
-              onChange={(value) =>
-                onUpdate({
-                  routingStrategy: value as CodebuddyLocalAccessRoutingStrategy,
-                })
-              }
-              disabled={saving}
-              className="cb-routing-select"
-              ariaLabel="账号池调度策略"
-            />
+      <div className="codex-api-service-grid accounts">
+        {/* 左栏：按账号统计（Codex 风格账号卡片网格 + 工具栏） */}
+        <section className="codex-api-service-panel">
+          <div className="codex-api-service-panel-head">
+            <h3>按账号统计</h3>
+            <div className="codex-api-service-head-actions">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={onOpenAddAccount}
+                disabled={saving || refreshing}
+                title="添加账号"
+              >
+                <Plus size={14} />
+                添加账号
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={onJumpToModels}
+                disabled={saving || refreshing}
+                title="模型映射"
+              >
+                <Route size={14} />
+                模型映射
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={onJumpToModels}
+                disabled={saving || refreshing}
+                title="禁用模型"
+              >
+                <Wrench size={14} />
+                禁用模型
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={onOpenMemberModal}
+                disabled={saving || refreshing}
+                title="管理成员"
+              >
+                <FolderPlus size={14} />
+                管理成员
+              </button>
+            </div>
           </div>
-          <label className="cb-routing-checkbox">
-            <input
-              type="checkbox"
-              checked={collection.sessionAffinity}
-              onChange={(e) =>
-                onUpdate({ sessionAffinity: e.target.checked })
-              }
-              disabled={saving}
-            />
-            <span>会话亲和（同一会话稳定路由到同一账号，最大化命中缓存）</span>
-          </label>
-          {collection.routingStrategy === "custom" && (
-            <CustomRoutingRulesEditor
-              selectedAccounts={selectedAccountOptions}
-              rules={collection.customRoutingRules ?? []}
-              onChange={(rules) => onUpdate({ customRoutingRules: rules })}
+          <div className="codex-api-service-account-grid">
+            {memberAccounts.length === 0 ? (
+              <div className="codex-api-service-empty">
+                <p>暂无池内成员，请添加账号或管理成员。</p>
+                <div className="codex-api-service-empty-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={onOpenAddAccount}
+                    disabled={saving || refreshing}
+                  >
+                    <Plus size={14} />
+                    添加账号
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={onOpenMemberModal}
+                    disabled={saving || refreshing}
+                  >
+                    <FolderPlus size={14} />
+                    管理成员
+                  </button>
+                </div>
+              </div>
+            ) : (
+              memberAccounts.map((account) => {
+                const usage = usageByAccount.get(account.id);
+                const health = healthByAccount.get(account.id);
+                return (
+                  <AccountStatsCard
+                    key={account.id}
+                    account={account}
+                    usage={usage}
+                    health={health}
+                    onRemove={() => handleRemoveMember(account.id)}
+                  />
+                );
+              })
+            )}
+          </div>
+        </section>
+
+        {/* 右栏：调度选项（保存选项按钮在右上角，对齐 Codex） */}
+        <section className="codex-api-service-panel">
+          <div className="codex-api-service-panel-head">
+            <Route />
+            <h3>调度选项</h3>
+            <div className="codex-api-service-head-actions">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <RefreshCw size={14} className="loading-spinner" />
+                ) : (
+                  <Check size={14} />
+                )}
+                保存选项
+              </button>
+            </div>
+          </div>
+          <div className="cb-api-panel-body">
+            <RoutingOptionsEditor
+              collection={collection}
+              selectedAccountOptions={selectedAccountOptions}
+              onUpdate={onUpdate}
               saving={saving}
             />
-          )}
-        </div>
-      </section>
-      <section className="codex-api-service-panel">
-        <div className="codex-api-service-panel-head">
-          <Users />
-          <h3>账号选择（已选 {selectedCount} 个）</h3>
-        </div>
-        <div className="cb-api-panel-body">
-          <div className="codex-api-service-account-columns">
-            <AccountColumn
-              title="国际站（codebuddy.ai）"
-              accounts={state?.intlAccounts ?? []}
-              selectedIds={collection.intlAccountIds ?? []}
-              onToggle={(id) => toggleAccount("intl", id)}
-            />
-            <AccountColumn
-              title="中国站（codebuddy.cn / workbuddy.cn）"
-              accounts={state?.cnAccounts ?? []}
-              selectedIds={collection.cnAccountIds ?? []}
-              onToggle={(id) => toggleAccount("cn", id)}
-            />
           </div>
-          {selectedCount === 0 && (
-            <p className="cb-api-hint">请至少选择一个已登录的 CodeBuddy 账号作为凭据来源。</p>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function AccountStatsCard(props: {
+  account: CodebuddyLocalAccessAccountOption;
+  usage: CodebuddyLocalAccessUsageStats | undefined;
+  health: CodebuddyLocalAccessAccountHealth | undefined;
+  onRemove: () => void;
+}) {
+  const { account, usage, health, onRemove } = props;
+  const requestCount = usage?.requestCount ?? 0;
+  const totalTokens = usage?.totalTokens ?? 0;
+  const successCount = usage?.successCount ?? 0;
+  const failureCount = usage?.failureCount ?? 0;
+  const canceledCount = usage?.clientCanceledCount ?? 0;
+  const upstreamFailedCount = usage?.upstreamResponseFailedCount ?? 0;
+  const streamIncompleteCount = usage?.streamIncompleteCount ?? 0;
+  // 失败数 = 总失败 - 取消 - 上游失败 - 流未完成（对齐 Codex formatRequestResultDetail）。
+  const plainFailureCount = Math.max(
+    0,
+    failureCount - canceledCount - upstreamFailedCount - streamIncompleteCount,
+  );
+  const consecutiveFailures = health?.consecutiveFailures ?? 0;
+  const cooldowns = health?.cooldowns ?? [];
+  const available = health?.available ?? true;
+  const lastFailureCategory = health?.lastFailureCategory ?? null;
+  const imageStatus = health?.imageGenerationStatus ?? "unknown";
+
+  const planClass = account.planClass ?? "free";
+  const planLabel = (account.planType ?? "free").toUpperCase();
+
+  const healthLabel = formatHealthLabel(
+    available,
+    cooldowns.length,
+    lastFailureCategory,
+  );
+  const imageLabel = formatImageStatusLabel(imageStatus);
+
+  return (
+    <div className="codex-api-service-account-card cb-account-card">
+      <div>
+        <strong title={account.email || account.id}>
+          {account.email || account.id}
+        </strong>
+        <span className={`tier-badge ${planClass}`}>{planLabel}</span>
+      </div>
+      <div className="codex-api-service-account-meta">
+        <span>{formatCompactNumber(requestCount)} 次</span>
+        <span className="codex-api-service-account-meta-token">
+          {formatCompactNumber(totalTokens)} Tokens
+        </span>
+        <span>
+          成功 {formatCompactNumber(successCount)} / 失败{" "}
+          {formatCompactNumber(plainFailureCount)} / 取消{" "}
+          {formatCompactNumber(canceledCount)} / 上游失败{" "}
+          {formatCompactNumber(upstreamFailedCount)} / 流未完成{" "}
+          {formatCompactNumber(streamIncompleteCount)}
+        </span>
+        <span>连续失败 {formatCompactNumber(consecutiveFailures)}</span>
+        <span className={healthLabel === "可用" ? "codex-api-service-account-meta-token" : ""}>
+          {healthLabel}
+        </span>
+        <span>图片 {imageLabel}</span>
+      </div>
+      <button
+        type="button"
+        className="folder-icon-btn cb-account-remove-btn"
+        onClick={onRemove}
+        title="移出账号池"
+        aria-label="移出账号池"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+}
+
+function RoutingOptionsEditor(props: {
+  collection: CodebuddyLocalAccessCollection;
+  selectedAccountOptions: CodebuddyLocalAccessAccountOption[];
+  onUpdate: (patch: Partial<CodebuddyLocalAccessCollection>) => void;
+  saving: boolean;
+}) {
+  const { collection, selectedAccountOptions, onUpdate, saving } = props;
+  return (
+    <div className="codex-api-service-config-list codex-api-service-routing-form">
+      <label>
+        <span>调度策略</span>
+        <SingleSelectDropdown
+          value={collection.routingStrategy}
+          options={ROUTING_STRATEGY_OPTIONS}
+          onChange={(value) =>
+            onUpdate({
+              routingStrategy: value as CodebuddyLocalAccessRoutingStrategy,
+            })
+          }
+          disabled={saving}
+          ariaLabel="账号池调度策略"
+        />
+      </label>
+      <label className="codex-api-service-checkbox-row">
+        <input
+          type="checkbox"
+          checked={collection.sessionAffinity}
+          onChange={(e) => onUpdate({ sessionAffinity: e.target.checked })}
+          disabled={saving}
+        />
+        <span>会话亲和（同一会话稳定路由到同一账号，最大化命中缓存）</span>
+      </label>
+      <label>
+        <span>过期时间（秒）</span>
+        <input
+          type="number"
+          min={60}
+          max={86400}
+          value={Math.round((collection.sessionAffinityTtlMs ?? 1_800_000) / 1000)}
+          onChange={(e) =>
+            onUpdate({
+              sessionAffinityTtlMs:
+                Math.max(60, Math.min(86400, Number(e.target.value) || 1800)) * 1000,
+            })
+          }
+          disabled={saving}
+        />
+      </label>
+      <label className="codex-api-service-checkbox-row">
+        <input
+          type="checkbox"
+          checked={collection.responsesWebsocketsEnabled ?? false}
+          onChange={(e) =>
+            onUpdate({ responsesWebsocketsEnabled: e.target.checked })
+          }
+          disabled={saving}
+        />
+        <span>WebSocket 响应传输（客户端 Key 启用 Responses WS 端点）</span>
+      </label>
+      <label>
+        <span>重试账号数</span>
+        <input
+          type="number"
+          min={0}
+          max={8}
+          value={collection.maxRetryCredentials ?? 2}
+          onChange={(e) =>
+            onUpdate({
+              maxRetryCredentials: Math.max(0, Math.min(8, Number(e.target.value) || 0)),
+            })
+          }
+          disabled={saving}
+        />
+      </label>
+      <label>
+        <span>重试等待（秒）</span>
+        <input
+          type="number"
+          min={0}
+          max={30}
+          value={Math.round((collection.maxRetryIntervalMs ?? 2000) / 1000)}
+          onChange={(e) =>
+            onUpdate({
+              maxRetryIntervalMs:
+                Math.max(0, Math.min(30, Number(e.target.value) || 0)) * 1000,
+            })
+          }
+          disabled={saving}
+        />
+      </label>
+      <label className="codex-api-service-checkbox-row">
+        <input
+          type="checkbox"
+          checked={collection.disableCooling ?? false}
+          onChange={(e) => onUpdate({ disableCooling: e.target.checked })}
+          disabled={saving}
+        />
+        <span>禁用冷却（失败后立即重试其他账号）</span>
+      </label>
+      <label className="codex-api-service-checkbox-row">
+        <input
+          type="checkbox"
+          checked={collection.immediateSseResponse ?? false}
+          onChange={(e) => onUpdate({ immediateSseResponse: e.target.checked })}
+          disabled={saving}
+        />
+        <span>SSE 立即返回 200（先写 SSE 头再转发上游，降低客户端感知延迟）</span>
+      </label>
+      <label>
+        <span>每账户图片请求数</span>
+        <input
+          type="number"
+          min={1}
+          max={16}
+          value={collection.maxConcurrentImageRequests ?? 1}
+          onChange={(e) =>
+            onUpdate({
+              maxConcurrentImageRequests: Math.max(1, Math.min(16, Number(e.target.value) || 1)),
+            })
+          }
+          disabled={saving}
+        />
+      </label>
+      {collection.routingStrategy === "custom" && (
+        <CustomRoutingRulesEditor
+          selectedAccounts={selectedAccountOptions}
+          rules={collection.customRoutingRules ?? []}
+          onChange={(rules) => onUpdate({ customRoutingRules: rules })}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+}
+
+function MemberModal(props: {
+  state: CodebuddyLocalAccessState | null;
+  collection: CodebuddyLocalAccessCollection;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (nextIntlIds: string[], nextCnIds: string[]) => Promise<void> | void;
+}) {
+  const { state, collection, saving, onClose, onSave } = props;
+  const [intlDraft, setIntlDraft] = useState<Set<string>>(
+    () => new Set(collection.intlAccountIds ?? []),
+  );
+  const [cnDraft, setCnDraft] = useState<Set<string>>(
+    () => new Set(collection.cnAccountIds ?? []),
+  );
+
+  const toggleIntl = useCallback((accountId: string) => {
+    setIntlDraft((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleCn = useCallback((accountId: string) => {
+    setCnDraft((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleConfirm = useCallback(() => {
+    void onSave(Array.from(intlDraft), Array.from(cnDraft));
+  }, [onSave, intlDraft, cnDraft]);
+
+  const intlAccounts = state?.intlAccounts ?? [];
+  const cnAccounts = state?.cnAccounts ?? [];
+
+  return (
+    <div className="codex-api-service-modal-overlay" onClick={onClose}>
+      <div
+        className="codex-api-service-modal cb-member-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="codex-api-service-modal-head">
+          <h2>管理成员</h2>
+          <button
+            type="button"
+            className="folder-icon-btn"
+            onClick={onClose}
+            aria-label="关闭"
+            title="关闭"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <div className="codex-api-service-modal-body">
+          {intlAccounts.length === 0 && cnAccounts.length === 0 ? (
+            <p className="cb-api-hint">
+              暂无已登录账号，请先在 CodeBuddy 账号页面登录。
+            </p>
+          ) : (
+            <>
+              {intlAccounts.length > 0 && (
+                <div className="cb-member-group">
+                  <h3>国际站（intl）</h3>
+                  {intlAccounts.map((account) => (
+                    <label
+                      key={account.id}
+                      className="cb-member-row"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={intlDraft.has(account.id)}
+                        onChange={() => toggleIntl(account.id)}
+                        disabled={saving}
+                      />
+                      <span title={account.email || account.id}>
+                        {account.email || account.id}
+                      </span>
+                      <span className={`tier-badge ${account.planClass ?? "free"}`}>
+                        {(account.planType ?? "free").toUpperCase()}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {cnAccounts.length > 0 && (
+                <div className="cb-member-group">
+                  <h3>中国站（cn）</h3>
+                  {cnAccounts.map((account) => (
+                    <label
+                      key={account.id}
+                      className="cb-member-row"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={cnDraft.has(account.id)}
+                        onChange={() => toggleCn(account.id)}
+                        disabled={saving}
+                      />
+                      <span title={account.email || account.id}>
+                        {account.email || account.id}
+                      </span>
+                      <span className={`tier-badge ${account.planClass ?? "free"}`}>
+                        {(account.planType ?? "free").toUpperCase()}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
-      </section>
+        <div className="codex-api-service-modal-foot">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onClose}
+            disabled={saving}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={handleConfirm}
+            disabled={saving}
+          >
+            {saving ? (
+              <RefreshCw size={14} className="loading-spinner" />
+            ) : (
+              <Check size={14} />
+            )}
+            确认
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1741,44 +2234,6 @@ function CustomRoutingRulesEditor(props: {
   );
 }
 
-function AccountColumn(props: {
-  title: string;
-  accounts: CodebuddyLocalAccessAccountOption[];
-  selectedIds: string[];
-  onToggle: (id: string) => void;
-}) {
-  const { title, accounts, selectedIds, onToggle } = props;
-  return (
-    <div className="codex-api-service-account-column">
-      <h4>{title}</h4>
-      {accounts.length === 0 ? (
-        <p className="cb-api-hint">暂无账号，请先在账号页面登录。</p>
-      ) : (
-        <ul className="cb-api-account-list">
-          {accounts.map((account) => {
-            const checked = selectedIds.includes(account.id);
-            return (
-              <li key={account.id}>
-                <label className="cb-api-account-item">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => onToggle(account.id)}
-                  />
-                  <span className="cb-api-account-email">{account.email}</span>
-                  {account.planType && (
-                    <span className="cb-api-account-plan">{account.planType}</span>
-                  )}
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 /* ----------------------------- Models ----------------------------- */
 
 function ModelsTab(props: {
@@ -1787,8 +2242,16 @@ function ModelsTab(props: {
   onRefresh?: () => Promise<void> | void;
   baseUrl?: string;
   firstApiKey?: string;
+  onToggleVisionTool?: (enabled: boolean) => Promise<void> | void;
 }) {
-  const { collection, onUpdate, onRefresh, baseUrl = "", firstApiKey = "" } = props;
+  const {
+    collection,
+    onUpdate,
+    onRefresh,
+    baseUrl = "",
+    firstApiKey = "",
+    onToggleVisionTool,
+  } = props;
   const [aliasText, setAliasText] = useState(
     collection.modelAliases.map((a) => `${a.sourceModel}->${a.alias}`).join("\n"),
   );
@@ -1922,6 +2385,37 @@ function ModelsTab(props: {
           </button>
         )}
       </header>
+
+      {/* ─────────── 纯文本模型视觉子代理开关 ─────────── */}
+      <section className="codex-api-service-panel cb-vision-agentic-card">
+        <div className="codex-api-service-panel-head">
+          <Eye />
+          <h3>纯文本模型视觉子代理</h3>
+          <div className="codex-api-service-head-actions">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={collection.visionToolEnabled ?? false}
+              className={`cb-vision-toggle ${collection.visionToolEnabled ? "on" : ""}`}
+              onClick={() => void onToggleVisionTool?.(!(collection.visionToolEnabled ?? false))}
+              title={
+                collection.visionToolEnabled
+                  ? "点击关闭视觉子代理"
+                  : "点击开启视觉子代理"
+              }
+            >
+              <span className="cb-vision-toggle-knob" />
+            </button>
+          </div>
+        </div>
+        <div className="codex-api-service-panel-body">
+          <p className="cb-vision-agentic-desc">
+            {collection.visionToolEnabled
+              ? "已开启：纯文本模型（如 deepseek）可接收图片，并在推理中自主调用混元视觉模型（hy3-preview）充当「眼睛」，反复查看图片细节。"
+              : "已关闭：纯文本模型无法接收图片（客户端会过滤图片输入）。开启后，deepseek 等纯文本模型能通过内部子代理调用混元免费视觉模型看图。"}
+          </p>
+        </div>
+      </section>
 
       {/* ─────────── 可用模型卡片 ─────────── */}
       <section className="codex-api-service-panel">
@@ -2259,12 +2753,56 @@ function LogsTab() {
 
 /* ----------------------------- Chat test dialog ----------------------------- */
 
-function ChatTestDialog(props: { onClose: () => void }) {
+function ChatTestDialog(props: {
+  onClose: () => void;
+  baseUrl?: string;
+  firstApiKey?: string;
+}) {
+  const { onClose, baseUrl = "", firstApiKey = "" } = props;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [model, setModel] = useState("auto");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modelOptions, setModelOptions] = useState<string[]>(["auto"]);
+
+  // 测试模型下拉复用「同步模型」的数据源：从 /v1/models 拉取 sidecar 实时
+  // 暴露的真实可用模型（经后端同步 / app.asar 提取 + excludedModels 过滤），
+  // 而非 Rust 硬编码模型清单。这样后端不支持（如 kimi-k3）的模型不会出现。
+  useEffect(() => {
+    if (!baseUrl) {
+      setModelOptions(["auto"]);
+      return;
+    }
+    let disposed = false;
+    const headers: Record<string, string> = firstApiKey
+      ? { Authorization: `Bearer ${firstApiKey}` }
+      : {};
+    fetch(`${baseUrl.replace(/\/$/, "")}/v1/models`, { headers })
+      .then((resp) => {
+        if (!resp.ok) throw new Error(`/v1/models 返回 ${resp.status}`);
+        return resp.json();
+      })
+      .then((data) => {
+        if (disposed) return;
+        const ids: string[] = Array.isArray(data?.data)
+          ? data.data
+              .map((m: any) => (typeof m?.id === "string" ? m.id : ""))
+              .filter((s: string) => s.length > 0)
+          : [];
+        // auto 始终在最前（自动路由），其余按后端返回顺序。
+        setModelOptions(ids.length > 0 ? ["auto", ...ids] : ["auto"]);
+      })
+      .catch((err) => {
+        if (!disposed) {
+          console.warn("拉取测试模型失败:", err);
+          setModelOptions(["auto"]);
+        }
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [baseUrl, firstApiKey]);
 
   const send = useCallback(async () => {
     const content = input.trim();
@@ -2290,7 +2828,7 @@ function ChatTestDialog(props: { onClose: () => void }) {
   }, [input, messages, model, sending]);
 
   return (
-    <div className="codex-api-service-modal-backdrop" onClick={props.onClose}>
+    <div className="codex-api-service-modal-backdrop" onClick={onClose}>
       <div
         className="codex-api-service-modal chat-test-modal"
         onClick={(e) => e.stopPropagation()}
@@ -2302,15 +2840,15 @@ function ChatTestDialog(props: { onClose: () => void }) {
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              style={{ padding: "6px 8px" }}
+              style={{ padding: "6px 8px", minWidth: 180 }}
             >
-              <option value="auto">auto（自动）</option>
-              <option value="deepseek-v4-flash">deepseek-v4-flash</option>
-              <option value="deepseek-v4-pro">deepseek-v4-pro</option>
-              <option value="glm-5.2">glm-5.2</option>
-              <option value="kimi-k2.7">kimi-k2.7</option>
+              {modelOptions.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
             </select>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={props.onClose}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>
               <X size={13} /> 关闭
             </button>
           </div>
@@ -2414,5 +2952,48 @@ function formatDateTime(ts: string | number): string {
     return new Date(ts).toLocaleString();
   } catch {
     return String(ts);
+  }
+}
+
+/**
+ * 健康状态标签（对齐 Codex 卡片渲染语义）。
+ * - lastFailureCategory 含 auth/unauthorized/401/403 → "鉴权异常"
+ * - cooldowns 非空 → "冷却 N"
+ * - !available → "暂不可用"
+ * - 否则 → "可用"
+ */
+function formatHealthLabel(
+  available: boolean,
+  cooldownCount: number,
+  lastFailureCategory: string | null,
+): string {
+  const category = (lastFailureCategory ?? "").toLowerCase();
+  if (
+    category.includes("auth") ||
+    category.includes("unauthorized") ||
+    category.includes("401") ||
+    category.includes("403")
+  ) {
+    return "鉴权异常";
+  }
+  if (cooldownCount > 0) {
+    return `冷却 ${cooldownCount}`;
+  }
+  if (!available) {
+    return "暂不可用";
+  }
+  return "可用";
+}
+
+function formatImageStatusLabel(status: string): string {
+  switch (status) {
+    case "disabled":
+      return "禁用";
+    case "available":
+      return "可用";
+    case "unavailable":
+      return "不可用";
+    default:
+      return "unknown";
   }
 }

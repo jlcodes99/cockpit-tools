@@ -1389,6 +1389,7 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 			ReasoningTokens: record.Detail.ReasoningTokens,
 			CachedTokens:    record.Detail.CachedTokens,
 			TotalTokens:     record.Detail.TotalTokens,
+			Credit:          record.Detail.Credit,
 			TokenBreakdown:  record.Detail.TokenBreakdown,
 		},
 		RequestedAtMS: record.RequestedAt.UnixMilli(),

@@ -786,13 +786,15 @@
 .codebuddy-api-service-page .cb-custom-rule-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
   font-size: 12px;
   color: var(--text-secondary);
+  min-width: 0;
 }
 
 .codebuddy-api-service-page .cb-custom-rule-account {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -805,10 +807,13 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .codebuddy-api-service-page .cb-custom-rule-field input {
   width: 56px;
+  min-width: 0;
   padding: 4px 6px;
   border: 1px solid var(--cb-api-border);
   border-radius: 6px;
@@ -867,6 +872,52 @@
 
 .codex-api-service-modal.chat-test-modal {
   max-width: 640px;
+}
+
+/* ---------- 纯文本模型视觉子代理开关卡片 ---------- */
+.codebuddy-api-service-page .cb-vision-agentic-card {
+  border-left: 3px solid color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+.codebuddy-api-service-page .cb-vision-agentic-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.codebuddy-api-service-page .cb-vision-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--cb-api-border);
+  background: var(--bg-input);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+.codebuddy-api-service-page .cb-vision-toggle.on {
+  background: color-mix(in srgb, var(--primary) 88%, #000);
+  border-color: color-mix(in srgb, var(--primary) 88%, #000);
+}
+
+.codebuddy-api-service-page .cb-vision-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s ease;
+}
+
+.codebuddy-api-service-page .cb-vision-toggle.on .cb-vision-toggle-knob {
+  transform: translateX(18px);
 }
 
 /* =====================================================================
@@ -1696,4 +1747,357 @@
 
 [data-theme="dark"] .codebuddy-api-service-page .btn-danger {
   color: #fca5a5;
+}
+
+/* ---------- Account stats: select row + tier badge (Codex 风格) ---------- */
+.codebuddy-api-service-page .cb-account-stats-row.is-selected {
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  border-radius: 8px;
+}
+
+.codebuddy-api-service-page .cb-account-stats-row[role="button"] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.codebuddy-api-service-page .cb-account-stats-row[role="button"]:hover {
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
+}
+
+.codebuddy-api-service-page .cb-account-stats-row .cb-account-stats-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codebuddy-api-service-page .cb-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  background: var(--bg-subtle, #eef0f4);
+  color: var(--text-secondary, #646a73);
+  flex: 0 0 auto;
+}
+
+.codebuddy-api-service-page .cb-tier-badge.k12 {
+  background: #fff4d6;
+  color: #8a6300;
+}
+
+.codebuddy-api-service-page .cb-tier-badge.team,
+.codebuddy-api-service-page .cb-tier-badge.pro {
+  background: #e0eaff;
+  color: #0a4eb7;
+}
+
+.codebuddy-api-service-page .cb-tier-badge.plus {
+  background: #d8f3df;
+  color: #1e6f3a;
+}
+
+.codebuddy-api-service-page .cb-tier-badge.enterprise {
+  background: #f1e0ff;
+  color: #5a1f9c;
+}
+
+.codebuddy-api-service-page .cb-tier-badge.free {
+  background: var(--bg-subtle, #eef0f4);
+  color: var(--text-secondary, #646a73);
+}
+
+.codebuddy-api-service-page .cb-account-stats-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.codebuddy-api-service-page .cb-account-stats-quota {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.codebuddy-api-service-page .cb-account-stats-count {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.codebuddy-api-service-page .cb-account-stats-detail {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.codebuddy-api-service-page .cb-account-stats-empty {
+  padding: 16px 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ---------- 共享 Codex 主题变量（CodexApiServicePage.css 中以
+   .codex-api-service-page 作用域定义，本页为 .codebuddy-api-service-page，
+   故在此镜像同名变量，使 Codex 卡片/面板/表单等复用样式可见） ---------- */
+.codebuddy-api-service-page {
+  --codex-api-surface: color-mix(in srgb, var(--bg-card) 92%, rgba(255, 255, 255, 0.54));
+  --codex-api-surface-strong: color-mix(in srgb, var(--bg-card) 96%, rgba(255, 255, 255, 0.74));
+  --codex-api-surface-soft: color-mix(in srgb, var(--primary) 4%, rgba(255, 255, 255, 0.72));
+  --codex-api-border: color-mix(in srgb, var(--border) 78%, rgba(148, 163, 184, 0.14));
+  --codex-api-border-soft: color-mix(in srgb, var(--border-light) 82%, rgba(148, 163, 184, 0.12));
+  --codex-api-shadow: 0 10px 24px -22px rgba(15, 23, 42, 0.42);
+  --codex-api-shadow-hover: 0 14px 28px -24px rgba(15, 23, 42, 0.48);
+}
+
+/* ---------- Account cards grid (Codex 风格：auto-fill 网格) ---------- */
+.codebuddy-api-service-page .codex-api-service-account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  padding: 12px 14px 16px;
+}
+
+.codebuddy-api-service-page .codex-api-service-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.codebuddy-api-service-page .codex-api-service-empty-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* 复用 .codex-api-service-account-card Codex 样式，外层加 cb-account-card 做主题微调 */
+.codebuddy-api-service-page .codex-api-service-account-card.cb-account-card {
+  border-color: var(--codex-api-border-soft, #e6e8ec);
+}
+
+.codebuddy-api-service-page .codex-api-service-account-card.cb-account-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--codex-api-border-soft, #e6e8ec));
+}
+
+/* 删除按钮：定位到卡片右下（对齐 Codex folder-icon-btn 在卡片 grid 第二列） */
+.codebuddy-api-service-page .cb-account-remove-btn {
+  align-self: end;
+  justify-self: end;
+  color: var(--text-muted);
+}
+
+.codebuddy-api-service-page .cb-account-remove-btn:hover {
+  color: #ef4444;
+  border-color: color-mix(in srgb, #ef4444 30%, transparent);
+  background: color-mix(in srgb, #ef4444 8%, transparent);
+}
+
+/* ---------- Routing input ---------- */
+.codebuddy-api-service-page .cb-routing-input {
+  width: 80px;
+  padding: 4px 6px;
+  border: 1px solid var(--cb-api-border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.codebuddy-api-service-page .cb-routing-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---------- Routing form (Codex label 结构) ---------- */
+.codebuddy-api-service-page .codex-api-service-routing-form {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+/* 在 routing-form 内的非 label 子节点（如 CustomRoutingRulesEditor）需整行铺满，
+   不被父 grid 的 112px / 1fr 列结构限制。 */
+.codebuddy-api-service-page .codex-api-service-routing-form > div,
+.codebuddy-api-service-page .codex-api-service-routing-form > p {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.codebuddy-api-service-page .codex-api-service-routing-form label {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.codebuddy-api-service-page .codex-api-service-routing-form label > span {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+.codebuddy-api-service-page .codex-api-service-routing-form input[type="number"] {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--cb-api-border);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.codebuddy-api-service-page .codex-api-service-routing-form input[type="number"]:focus {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codebuddy-api-service-page .codex-api-service-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.codebuddy-api-service-page .codex-api-service-checkbox-row input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+}
+
+.codebuddy-api-service-page .codex-api-service-checkbox-row input:disabled {
+  cursor: not-allowed;
+}
+
+/* ---------- Member modal ---------- */
+.codebuddy-api-service-page .codex-api-service-modal-overlay,
+.codex-api-service-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+  backdrop-filter: blur(4px);
+}
+
+.codex-api-service-modal.cb-member-modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+  border: 1px solid var(--cb-api-border);
+  border-radius: 14px;
+  background: var(--bg-card);
+  box-shadow: 0 24px 64px -24px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+}
+
+.codex-api-service-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cb-api-border-soft);
+}
+
+.codex-api-service-modal-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.codex-api-service-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.codex-api-service-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--cb-api-border-soft);
+}
+
+.cb-member-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cb-member-group h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cb-member-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  transition: background 0.13s ease;
+}
+
+.cb-member-row:hover {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.cb-member-row input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--primary);
+}
+
+.cb-member-row span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ---------- Removed floating save footer (Codex has no equivalent) ---------- */
+.codebuddy-api-service-page .cb-api-footer {
+  display: none;
 }

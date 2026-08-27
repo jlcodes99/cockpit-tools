@@ -4095,7 +4095,8 @@
       "display_name": "Hy3",
       "description": "Tencent CodeBuddy model.",
       "context_length": 200000,
-      "max_completion_tokens": 32768
+      "max_completion_tokens": 32768,
+      "supports_images": true
     },
     {
       "id": "hy3-preview",
@@ -4106,7 +4107,8 @@
       "display_name": "Hy3 preview",
       "description": "Tencent CodeBuddy model.",
       "context_length": 200000,
-      "max_completion_tokens": 32768
+      "max_completion_tokens": 32768,
+      "supports_images": true
     },
     {
       "id": "kimi-k2-0711-preview",

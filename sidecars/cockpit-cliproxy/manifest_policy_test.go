@@ -254,6 +254,51 @@ func TestCodexClientModelsResponseShape(t *testing.T) {
 	}
 }
 
+func TestCodebuddyModelsResponseReportsInputModalities(t *testing.T) {
+	models := []string{"hy3", "hy3-preview", "deepseek-v4-pro", "deepseek-v4-flash", "hunyuan-2.0-instruct"}
+
+	modalitiesFor := func(response gin.H, modelID string) []any {
+		data, ok := response["data"].([]gin.H)
+		if !ok {
+			t.Fatalf("models response should contain a data array: %#v", response["data"])
+		}
+		for _, entry := range data {
+			if entry["id"] == modelID {
+				got, ok := entry["input_modalities"].([]any)
+				if !ok {
+					t.Fatalf("model %q missing input_modalities: %#v", modelID, entry)
+				}
+				return got
+			}
+		}
+		t.Fatalf("model %q not found in response", modelID)
+		return nil
+	}
+
+	assertModalities := func(response gin.H, modelID string, want []any) {
+		if got := modalitiesFor(response, modelID); !reflect.DeepEqual(got, want) {
+			t.Fatalf("model %q input_modalities = %#v, want %#v", modelID, got, want)
+		}
+	}
+
+	// 情况1：vision-proxy 启用（默认 preprocess）——所有模型都报 image，
+	// 因为反代能透明处理纯文本模型的图片（描述后回填）。
+	enabled := buildModelsResponse(models, true)
+	for _, m := range models {
+		assertModalities(enabled, m, []any{"text", "image"})
+	}
+
+	// 情况2：vision-proxy 关闭——仅后端原生支持视觉的模型报 image。
+	// hy3/hy3-preview（app.asar supportsImages）报 image；
+	// deepseek（已移出白名单，后端返回拒绝）与 hunyuan（假视觉）报 text。
+	disabled := buildModelsResponse(models, false)
+	assertModalities(disabled, "hy3", []any{"text", "image"})
+	assertModalities(disabled, "hy3-preview", []any{"text", "image"})
+	assertModalities(disabled, "deepseek-v4-pro", []any{"text"})
+	assertModalities(disabled, "deepseek-v4-flash", []any{"text"})
+	assertModalities(disabled, "hunyuan-2.0-instruct", []any{"text"})
+}
+
 func TestCodexClientModelsResponsePreserves56Template(t *testing.T) {
 	response := buildCodexClientModelsResponse([]string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "custom-compat-model"}, &apiKeySpec{}, nil)
 	models, ok := response["models"].([]map[string]any)

@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
@@ -199,5 +200,86 @@ func TestCodebuddyVisionPlan(t *testing.T) {
 				t.Fatalf("codebuddyVisionPlan() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// --- agentic vision: image extraction & tool injection ---------------------
+
+func TestExtractCodebuddyImagesForAgentic(t *testing.T) {
+	body := []byte(`{"model":"deepseek-v4-pro","messages":[
+		{"role":"user","content":[
+			{"type":"text","text":"看这两张图"},
+			{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}},
+			{"type":"image_url","image_url":{"url":"data:image/png;base64,BBBB"}}
+		]}
+	]}`)
+
+	out, images, err := extractCodebuddyImagesForAgentic(body)
+	if err != nil {
+		t.Fatalf("extractCodebuddyImagesForAgentic() error: %v", err)
+	}
+	if len(images) != 2 {
+		t.Fatalf("expected 2 images, got %d", len(images))
+	}
+	if images[0].id != 1 || images[1].id != 2 {
+		t.Fatalf("expected sequential ids 1,2, got %d,%d", images[0].id, images[1].id)
+	}
+	// First image part must be replaced by a text hint, second likewise.
+	if gjson.GetBytes(out, "messages.0.content.1.type").String() != "text" {
+		t.Fatalf("image part 1 should be replaced with text, got %s", gjson.GetBytes(out, "messages.0.content.1").Raw)
+	}
+	if !strings.Contains(gjson.GetBytes(out, "messages.0.content.1.text").String(), "inspect_image") {
+		t.Fatalf("replacement should reference inspect_image tool")
+	}
+	// Text part untouched.
+	if gjson.GetBytes(out, "messages.0.content.0.text").String() != "看这两张图" {
+		t.Fatalf("text part should remain untouched")
+	}
+}
+
+func TestInjectCodebuddyInspectTool(t *testing.T) {
+	body := []byte(`{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"hi"}]}`)
+	out := injectCodebuddyInspectTool(body, 1)
+
+	// tools array injected.
+	tools := gjson.GetBytes(out, "tools")
+	if !tools.IsArray() || len(tools.Array()) != 1 {
+		t.Fatalf("expected 1 tool injected, got %s", tools.Raw)
+	}
+	if tools.Get("0.function.name").String() != inspectImageToolName {
+		t.Fatalf("expected inspect_image tool, got %s", tools.Get("0.function.name").String())
+	}
+
+	// System message prepended.
+	sysContent := gjson.GetBytes(out, "messages.0.content").String()
+	if gjson.GetBytes(out, "messages.0.role").String() != "system" || !strings.Contains(sysContent, "inspect_image") {
+		t.Fatalf("expected system guidance message, got role=%s content=%s",
+			gjson.GetBytes(out, "messages.0.role").String(), sysContent)
+	}
+}
+
+func TestAppendAgenticMessage(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+	out, err := appendAgenticMessage(body, []byte(`{"role":"assistant","content":"ok"}`))
+	if err != nil {
+		t.Fatalf("appendAgenticMessage() error: %v", err)
+	}
+	arr := gjson.GetBytes(out, "messages")
+	if !arr.IsArray() || len(arr.Array()) != 2 {
+		t.Fatalf("expected 2 messages, got %s", arr.Raw)
+	}
+	if gjson.GetBytes(out, "messages.1.role").String() != "assistant" {
+		t.Fatalf("expected assistant message appended")
+	}
+}
+
+func TestCodebuddyVisionAgenticEnabled(t *testing.T) {
+	off := &CodebuddyExecutor{cfg: &config.Config{SDKConfig: config.SDKConfig{CodebuddyVision: config.CodebuddyVisionConfig{Mode: "off"}}}}
+	if off.codebuddyVisionAgenticEnabled() {
+		t.Fatal("off mode should not report agentic enabled")
+	}
+	agentic := &CodebuddyExecutor{cfg: &config.Config{SDKConfig: config.SDKConfig{CodebuddyVision: config.CodebuddyVisionConfig{Mode: "agentic"}}}}
+	if !agentic.codebuddyVisionAgenticEnabled() {
+		t.Fatal("agentic mode should report enabled")
 	}
 }

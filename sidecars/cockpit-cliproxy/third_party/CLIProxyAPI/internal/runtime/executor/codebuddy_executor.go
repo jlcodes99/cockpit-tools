@@ -94,6 +94,12 @@ func (e *CodebuddyExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 	// Vision proxy: transparently handle image input for non-vision models.
 	body, _ = e.applyCodebuddyVisionProxy(ctx, auth, body, baseModel)
 
+	// Agentic vision: server-side tool-calling loop for text-only models to
+	// autonomously inspect images via the vision model.
+	if e.codebuddyVisionAgenticEnabled() && codebuddyChatHasImageInput(body) {
+		return e.executeCodebuddyVisionAgentic(ctx, auth, req, opts, body, baseModel, creds, baseURL)
+	}
+
 	// Prompt cache: inject a stable session-bound key so repeated turns in the
 	// same conversation hit the backend prefix cache (lower credit).
 	body = applyCodebuddyPromptCache(body, codebuddyExecutionSessionID(req, opts))
@@ -111,6 +117,13 @@ func (e *CodebuddyExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 	requestedModel := helps.PayloadRequestedModel(opts, req.Model)
 	requestPath := helps.PayloadRequestPath(opts)
 	body = helps.ApplyPayloadConfigWithRequest(e.cfg, baseModel, to.String(), from.String(), "", body, originalTranslated, requestedModel, requestPath, opts.Headers)
+
+	// Normalize tool-related message fields so the strict backend does not
+	// reject tool-calling rounds with 400 invalid_parameter_value.
+	body, err = normalizeCodebuddyToolMessages(body)
+	if err != nil {
+		return resp, err
+	}
 
 	url := baseURL + codebuddy.ChatPath
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -136,6 +149,9 @@ func (e *CodebuddyExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		b, _ := io.ReadAll(httpResp.Body)
 		helps.AppendAPIResponseChunk(ctx, e.cfg, b)
+		// Diagnostic: dump the upstream error body (redacted) so the invalid
+		// field / param reported by the backend can be inspected.
+		helps.DumpCodebuddyDebugBody("error-response", b)
 		err = statusErr{code: httpResp.StatusCode, msg: string(b)}
 		return resp, err
 	}
@@ -148,6 +164,9 @@ func (e *CodebuddyExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 		line := scanner.Bytes()
 		helps.AppendAPIResponseChunk(ctx, e.cfg, line)
 		if detail, ok := helps.ParseOpenAIStreamUsage(line); ok {
+			// Diagnostic: dump the upstream usage chunk (redacted) so the exact
+			// credit field path can be observed.
+			helps.DumpCodebuddyDebugBody("usage", line)
 			reporter.Publish(ctx, detail)
 		}
 		dataLines = append(dataLines, bytes.Clone(line))
@@ -160,6 +179,13 @@ func (e *CodebuddyExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 	aggregated := collectChatCompletion(dataLines)
 	reporter.Publish(ctx, helps.ParseOpenAIUsage(aggregated))
 	reporter.EnsurePublished(ctx)
+
+	// 腾讯 CodeBuddy 后端对部分请求模型 ID（如 glm-5.2）会回退到不同引擎，
+	// 并在响应 model 字段里回填真实服务的引擎名（如 GLM-4）。这里把响应 model
+	// 字段对齐回客户端请求时的模型 ID，避免测试时看到模型名被静默改写。
+	if reqModel := strings.TrimSpace(req.Model); reqModel != "" {
+		aggregated, _ = sjson.SetBytes(aggregated, "model", reqModel)
+	}
 
 	var param any
 	out := sdktranslator.TranslateNonStream(ctx, to, from, req.Model, opts.OriginalRequest, body, aggregated, &param)
@@ -192,6 +218,12 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 	// Vision proxy: transparently handle image input for non-vision models.
 	body, _ = e.applyCodebuddyVisionProxy(ctx, auth, body, baseModel)
 
+	// Agentic vision: server-side tool-calling loop for text-only models to
+	// autonomously inspect images via the vision model.
+	if e.codebuddyVisionAgenticEnabled() && codebuddyChatHasImageInput(body) {
+		return e.executeCodebuddyVisionAgenticStream(ctx, auth, req, opts, body, baseModel, creds, baseURL)
+	}
+
 	// Prompt cache: inject a stable session-bound key so repeated turns in the
 	// same conversation hit the backend prefix cache (lower credit).
 	body = applyCodebuddyPromptCache(body, codebuddyExecutionSessionID(req, opts))
@@ -209,6 +241,13 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 	requestPath := helps.PayloadRequestPath(opts)
 	body = helps.ApplyPayloadConfigWithRequest(e.cfg, baseModel, to.String(), from.String(), "", body, originalTranslated, requestedModel, requestPath, opts.Headers)
 
+	// Normalize tool-related message fields so the strict backend does not
+	// reject tool-calling rounds with 400 invalid_parameter_value.
+	body, err = normalizeCodebuddyToolMessages(body)
+	if err != nil {
+		return nil, err
+	}
+
 	url := baseURL + codebuddy.ChatPath
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -218,6 +257,9 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("Cache-Control", "no-cache")
 	recordCodebuddyRequest(ctx, e.cfg, e.Identifier(), auth, url, httpReq, body)
+	// Diagnostic: dump the upstream request body (redacted) so the exact tools
+	// definition Cursor sent can be inspected.
+	helps.DumpCodebuddyDebugBody("upstream-request", body)
 
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
 	httpResp, err := httpClient.Do(httpReq)
@@ -229,6 +271,9 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		b, _ := io.ReadAll(httpResp.Body)
 		helps.AppendAPIResponseChunk(ctx, e.cfg, b)
+		// Diagnostic: dump the upstream error body (redacted) so the invalid
+		// field / param reported by the backend can be inspected.
+		helps.DumpCodebuddyDebugBody("error-response", b)
 		if errClose := httpResp.Body.Close(); errClose != nil {
 			log.Errorf("codebuddy executor: close response body error: %v", errClose)
 		}
@@ -247,10 +292,39 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 		scanner := bufio.NewScanner(httpResp.Body)
 		scanner.Buffer(nil, 52_428_800) // 50MB
 		var param any
+		tcBuf := newCodebuddyStreamToolCallBuffer()
+		emittedToolCalls := false
+		emit := func(line []byte) bool {
+			chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, body, bytes.Clone(line), &param)
+			for i := range chunks {
+				// Diagnostic: dump each downstream chunk (redacted) so the exact
+				// stream Cursor receives can be inspected for duplicated tool_calls.
+				helps.DumpCodebuddyDebugBody("downstream", chunks[i])
+				select {
+				case out <- cliproxyexecutor.StreamChunk{Payload: chunks[i]}:
+				case <-ctx.Done():
+					return false
+				}
+			}
+			return true
+		}
+		emitToolCalls := func() bool {
+			if emittedToolCalls || !tcBuf.HasToolCalls() {
+				return true
+			}
+			emittedToolCalls = true
+			if tc := tcBuf.BuildToolCallsChunk(); tc != nil {
+				return emit(tc)
+			}
+			return true
+		}
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
 			if detail, ok := helps.ParseOpenAIStreamUsage(line); ok {
+				// Diagnostic: dump the upstream usage chunk (redacted) so the exact
+				// credit field path can be observed.
+				helps.DumpCodebuddyDebugBody("usage", line)
 				reporter.Publish(ctx, detail)
 			}
 			trimmedLine := bytes.TrimSpace(line)
@@ -260,13 +334,17 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 			if !bytes.HasPrefix(trimmedLine, []byte("data:")) {
 				continue
 			}
-			chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, body, bytes.Clone(trimmedLine), &param)
-			for i := range chunks {
-				select {
-				case out <- cliproxyexecutor.StreamChunk{Payload: chunks[i]}:
-				case <-ctx.Done():
+			// Buffer tool_calls and strip them (plus reasoning_content) from the
+			// forwarded delta so Cursor receives one consolidated tool_calls chunk
+			// instead of concatenating multiple complete argument snapshots.
+			stripped, finishReason := tcBuf.Consume(trimmedLine)
+			if finishReason != "" {
+				if !emitToolCalls() {
 					return
 				}
+			}
+			if !emit(stripped) {
+				return
 			}
 		}
 		if errScan := scanner.Err(); errScan != nil {
@@ -278,14 +356,10 @@ func (e *CodebuddyExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 			}
 			return
 		}
-		chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, body, []byte("data: [DONE]"), &param)
-		for i := range chunks {
-			select {
-			case out <- cliproxyexecutor.StreamChunk{Payload: chunks[i]}:
-			case <-ctx.Done():
-				return
-			}
+		if !emitToolCalls() {
+			return
 		}
+		emit([]byte("data: [DONE]"))
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}, nil
 }
@@ -579,6 +653,9 @@ func applyCodebuddyHeaders(r *http.Request, creds codebuddy.Creds) {
 }
 
 func recordCodebuddyRequest(ctx context.Context, cfg *config.Config, provider string, auth *cliproxyauth.Auth, url string, httpReq *http.Request, body []byte) {
+	// Diagnostic: dump the final upstream request body (redacted) to stdout when
+	// CODEBUDDY_DEBUG_BODY=1, so 200 vs 400 field differences can be inspected.
+	helps.DumpCodebuddyDebugBody("request", body)
 	var authID, authLabel, authType, authValue string
 	if auth != nil {
 		authID = auth.ID
@@ -675,15 +752,21 @@ func collectChatCompletion(lines [][]byte) []byte {
 		finish = "stop"
 	}
 
+	toolCalls := mergeToolCallFragments(toolCallFragments)
 	message := map[string]any{
 		"role":    role,
 		"content": content,
 	}
+	if len(toolCalls) > 0 {
+		// Assistant messages carrying tool_calls must not expose non-null text
+		// content; clients (Cursor) expect null here.
+		if strings.TrimSpace(content) == "" {
+			message["content"] = nil
+		}
+		message["tool_calls"] = toolCalls
+	}
 	if reasoningContent != "" {
 		message["reasoning_content"] = reasoningContent
-	}
-	if toolCalls := mergeToolCallFragments(toolCallFragments); len(toolCalls) > 0 {
-		message["tool_calls"] = toolCalls
 	}
 
 	obj := map[string]any{
@@ -739,8 +822,10 @@ func mergeToolCallFragments(fragments []gjson.Result) []map[string]any {
 			byIndex[idx] = a
 			order = append(order, idx)
 		}
-		if v := tc.Get("id"); v.Exists() && v.String() != "" {
-			a.id = normalizeToolCallID(v.String())
+		if a.id == "" {
+			if v := tc.Get("id"); v.Exists() && strings.TrimSpace(v.String()) != "" {
+				a.id = normalizeToolCallID(v.String())
+			}
 		}
 		if v := tc.Get("type"); v.Exists() && v.String() != "" {
 			a.typ = v.String()
@@ -750,7 +835,33 @@ func mergeToolCallFragments(fragments []gjson.Result) []map[string]any {
 				a.name = v.String()
 			}
 			if v := fn.Get("arguments"); v.Exists() && v.String() != "" {
-				a.arguments += v.String()
+				arg := v.String()
+				switch {
+				case a.arguments == "":
+					if isCompleteJSONObject(arg) {
+						if isEmptyToolArguments(arg) {
+							// First snapshot is an empty "{}": skip it and wait
+							// for the real arguments instead of seeding empty.
+							break
+						}
+						a.arguments = strings.TrimSpace(arg)
+					} else {
+						a.arguments = arg
+					}
+				case isCompleteJSONObject(arg):
+					trimmed := strings.TrimSpace(arg)
+					if isEmptyToolArguments(trimmed) {
+						// Empty "{}" snapshot: never clobber real arguments.
+						break
+					}
+					// Full snapshot: replace, not append; identical values dedupe.
+					if trimmed != a.arguments {
+						a.arguments = trimmed
+					}
+				default:
+					// Incremental fragment: append.
+					a.arguments += arg
+				}
 			}
 		}
 	}
@@ -758,13 +869,17 @@ func mergeToolCallFragments(fragments []gjson.Result) []map[string]any {
 	out := make([]map[string]any, 0, len(order))
 	for _, idx := range order {
 		a := byIndex[idx]
+		arguments := a.arguments
+		if strings.TrimSpace(arguments) == "" {
+			arguments = "{}"
+		}
 		item := map[string]any{
 			"index": a.index,
 			"id":    a.id,
 			"type":  "function",
 			"function": map[string]any{
 				"name":      a.name,
-				"arguments": a.arguments,
+				"arguments": arguments,
 			},
 		}
 		if a.typ != "" {

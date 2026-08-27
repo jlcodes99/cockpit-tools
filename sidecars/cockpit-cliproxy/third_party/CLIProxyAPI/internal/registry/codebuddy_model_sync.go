@@ -165,6 +165,9 @@ func extractCodebuddyModels(asarPath string) ([]*ModelInfo, error) {
 		displayName := strings.TrimSpace(string(m[3]))
 		supportsImages := strings.EqualFold(strings.TrimSpace(string(m[5])), "true")
 
+		// 剥离 thinking 变体后缀（如 kimi-k3-1 → kimi-k3），对齐后端真实模型 ID。
+		modelID = stripCodebuddyThinkingSuffix(modelID)
+
 		if !isValidModelID(modelID) {
 			continue
 		}
@@ -266,6 +269,8 @@ func InstallCodebuddyModelIDs(ids []string) []string {
 	seen := make(map[string]*ModelInfo)
 	for _, id := range ids {
 		id = strings.TrimSpace(id)
+		// 剥离 thinking 变体后缀（如 kimi-k3-1 → kimi-k3），对齐后端真实模型 ID。
+		id = stripCodebuddyThinkingSuffix(id)
 		if id == "" || !isValidModelID(id) {
 			continue
 		}
@@ -322,6 +327,29 @@ func codebuddyModelDescription(providerID string) string {
 		return "Tencent CodeBuddy model."
 	}
 	return fmt.Sprintf("Tencent CodeBuddy model (provider: %s).", providerID)
+}
+
+// codebuddyThinkingSuffixes are the model-ID suffixes the official CodeBuddy
+// client appends to mark thinking variants. For example the app.asar advertises
+// `kimi-k3-1` (kimi-k3 in auto-thinking mode), but the Tencent backend routes
+// by the base model ID `kimi-k3` only. The `-1` marker is a client-side UI
+// concern and must be stripped before the ID is sent upstream or exposed via
+// /v1/models — otherwise routing fails with auth_not_found (the backend has no
+// auth bound to `kimi-k3-1`).
+var codebuddyThinkingSuffixes = []string{"-1"}
+
+// stripCodebuddyThinkingSuffix removes a trailing thinking-variant suffix from a
+// CodeBuddy model ID (e.g. `kimi-k3-1` → `kimi-k3`). IDs without a known suffix
+// are returned unchanged.
+func stripCodebuddyThinkingSuffix(id string) string {
+	for _, suffix := range codebuddyThinkingSuffixes {
+		if strings.HasSuffix(id, suffix) {
+			if base := strings.TrimSuffix(id, suffix); base != "" {
+				return base
+			}
+		}
+	}
+	return id
 }
 
 // isValidModelID reports whether id looks like a concrete model identifier

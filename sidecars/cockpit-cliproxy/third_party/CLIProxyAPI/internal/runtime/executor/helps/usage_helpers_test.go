@@ -53,6 +53,50 @@ func TestParseOpenAIUsageCodebuddyPromptCache(t *testing.T) {
 	}
 }
 
+// TestParseOpenAIUsageCodebuddyCredit verifies that CodeBuddy's credit field is
+// resolved from the multiple candidate paths, taking the first non-zero value.
+func TestParseOpenAIUsageCodebuddyCredit(t *testing.T) {
+	cases := []struct {
+		name string
+		data string
+		want float64
+	}{
+		{
+			name: "top-level usage.credit",
+			data: `{"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12,"credit":0.01}}`,
+			want: 0.01,
+		},
+		{
+			name: "nested usage.tokenBreakdown.credit",
+			data: `{"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12,"tokenBreakdown":{"credit":0.02}}}`,
+			want: 0.02,
+		},
+		{
+			name: "usage.total_credit",
+			data: `{"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12,"total_credit":0.03}}`,
+			want: 0.03,
+		},
+		{
+			name: "top-level wins over nested",
+			data: `{"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12,"credit":0.01,"tokenBreakdown":{"credit":0.02}}}`,
+			want: 0.01,
+		},
+		{
+			name: "missing credit",
+			data: `{"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}`,
+			want: 0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			detail := ParseOpenAIUsage([]byte(tc.data))
+			if detail.Credit != tc.want {
+				t.Fatalf("credit = %v, want %v", detail.Credit, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseOpenAIUsageResponses(t *testing.T) {
 	data := []byte(`{"usage":{"input_tokens":10,"output_tokens":20,"total_tokens":30,"input_tokens_details":{"cached_tokens":7},"output_tokens_details":{"reasoning_tokens":9}}}`)
 	detail := ParseOpenAIUsage(data)

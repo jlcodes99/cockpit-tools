@@ -28,6 +28,7 @@ import (
 
 	codexmodels "github.com/router-for-me/CLIProxyAPI/v7/internal/client/codex/models"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
+	internalregistry "github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 
 	coreusage "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
 
@@ -96,6 +97,7 @@ type manifest struct {
 	CustomRoutingRules         []customRoutingRule `json:"customRoutingRules"`
 	ImmediateSSEResponse       bool                `json:"immediateSseResponse"`
 	MaxConcurrentImageRequests int                 `json:"maxConcurrentImageRequests"`
+	VisionMode                 string              `json:"visionMode"`
 	DebugLogs                  *bool               `json:"debugLogs,omitempty"`
 
 	apiKeyByValue     map[string]*apiKeySpec
@@ -478,6 +480,7 @@ type usageDetails struct {
 	ReasoningTokens int64                    `json:"reasoningTokens,omitempty"`
 	CachedTokens    int64                    `json:"cachedTokens,omitempty"`
 	TotalTokens     int64                    `json:"totalTokens,omitempty"`
+	Credit          float64                  `json:"credit,omitempty"`
 	TokenBreakdown  coreusage.TokenBreakdown `json:"tokenBreakdown,omitempty"`
 }
 
@@ -1028,7 +1031,7 @@ func (p *requestPolicy) middleware() gin.HandlerFunc {
 			if isCodexClientModelsRequest(c.Request) {
 				c.JSON(http.StatusOK, buildCodexClientModelsResponse(models, spec, contextWindowsForAPIKey(p.manifest, spec)))
 			} else {
-				c.JSON(http.StatusOK, buildModelsResponse(models))
+				c.JSON(http.StatusOK, buildModelsResponse(models, p.manifest.visionProxyEnabled()))
 			}
 			c.Abort()
 			return
@@ -1292,14 +1295,27 @@ func isCodexClientModelsRequest(r *http.Request) bool {
 	return ok
 }
 
-func buildModelsResponse(models []string) gin.H {
+// buildModelsResponse renders an OpenAI-style /v1/models payload. Each entry
+// carries `input_modalities` so clients (e.g. Cursor) can detect vision-capable
+// models instead of defaulting to text-only and filtering images client-side.
+//
+// A model reports image capability when either:
+//  1. the backend natively supports images for it (registry.CodebuddyModelSupportsImages), or
+//  2. the vision-proxy layer is active and will transparently describe/handle
+//     images for it (preprocess/routing via hy3-preview).
+func buildModelsResponse(models []string, visionProxyEnabled bool) gin.H {
 	data := make([]gin.H, 0, len(models))
 	for _, model := range models {
+		modalities := []any{"text"}
+		if internalregistry.CodebuddyModelSupportsImages(model) || visionProxyEnabled {
+			modalities = []any{"text", "image"}
+		}
 		data = append(data, gin.H{
-			"id":       model,
-			"object":   "model",
-			"created":  0,
-			"owned_by": "openai",
+			"id":               model,
+			"object":           "model",
+			"created":          0,
+			"owned_by":         "openai",
+			"input_modalities": modalities,
 		})
 	}
 	return gin.H{"object": "list", "data": data}

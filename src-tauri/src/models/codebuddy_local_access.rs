@@ -189,6 +189,17 @@ pub struct CodebuddyLocalAccessCollection {
     /// 单账号最大并发图片请求数。
     #[serde(default = "default_max_concurrent_image_requests")]
     pub max_concurrent_image_requests: u16,
+    /// SSE 流式请求立即返回 200（先写 SSE 头再转发上游，降低客户端感知延迟）。
+    #[serde(default)]
+    pub immediate_sse_response: bool,
+    /// 客户端 Key 启用 Responses WebSocket 传输（对齐 Codex 反代 responsesWebsockets）。
+    #[serde(default)]
+    pub responses_websockets_enabled: bool,
+    /// 纯文本模型视觉子代理开关（agentic 模式）：
+    /// 开启后 deepseek 等纯文本模型可接收图片，并通过服务端 tool-calling 循环
+    /// 自主调用混元视觉模型（hy3-preview）"看图"。
+    #[serde(default)]
+    pub vision_tool_enabled: bool,
 }
 
 impl Default for CodebuddyLocalAccessCollection {
@@ -214,6 +225,9 @@ impl Default for CodebuddyLocalAccessCollection {
             api_keys: Vec::new(),
             image_generation_mode: CodebuddyLocalAccessImageGenerationMode::Disabled,
             max_concurrent_image_requests: default_max_concurrent_image_requests(),
+            immediate_sse_response: false,
+            responses_websockets_enabled: false,
+            vision_tool_enabled: false,
         }
     }
 }
@@ -257,7 +271,23 @@ pub struct CodebuddyLocalAccessUsageStats {
     /// prompt cache 写入 token 数（后端通常恒为 0，写入隐式计入 miss）。
     #[serde(default)]
     pub prompt_cache_write_tokens: u64,
+    /// 客户端主动取消的请求数（HTTP aborted / 流 client_gone）。
+    #[serde(default)]
+    pub client_canceled_count: u64,
+    /// 上游响应失败（非 2xx / 鉴权失败等）的请求数。
+    #[serde(default)]
+    pub upstream_response_failed_count: u64,
+    /// 流式响应未正常完成（idle 超时 / 写失败 / 流错误）的请求数。
+    #[serde(default)]
+    pub stream_incomplete_count: u64,
 }
+
+/// 请求失败分类（对齐 Codex 反代 errorCategory 语义）。
+///
+/// 优先级：client_canceled > stream_incomplete > upstream_response_failed。
+pub const CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED: &str = "client_canceled";
+pub const CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE: &str = "stream_incomplete";
+pub const CODEBUDDY_ERROR_CATEGORY_UPSTREAM_FAILED: &str = "upstream_response_failed";
 
 /// 单条请求日志。
 #[derive(Debug, Clone, Serialize)]
@@ -284,6 +314,10 @@ pub struct CodebuddyLocalAccessRequestLog {
     pub prompt_cache_write_tokens: u64,
     #[serde(default)]
     pub request_kind: CodebuddyLocalAccessRequestKind,
+    /// 失败分类（client_canceled / stream_incomplete / upstream_response_failed），
+    /// 成功请求或未分类失败为 None。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
 }
@@ -331,12 +365,45 @@ pub struct CodebuddyLocalAccessAccountStats {
     pub usage: CodebuddyLocalAccessUsageStats,
 }
 
-/// 账号图片生成能力健康状态。
+/// 账号维度的冷却状态（上游失败后的暂时性禁用，对齐 Codex 反代 cooldown 模型）。
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CodebuddyLocalAccessAccountCooldown {
+    /// 触发冷却的模型 ID（空字符串表示账号级冷却）。
+    #[serde(default)]
+    pub model_id: String,
+    /// 冷却结束时间戳（毫秒）。
+    #[serde(default)]
+    pub next_retry_at: i64,
+    /// 距冷却结束的剩余毫秒数。
+    #[serde(default)]
+    pub remaining_ms: i64,
+    /// 冷却原因（上游错误码 / 鉴权失败等）。
+    #[serde(default)]
+    pub reason: String,
+}
+
+/// 账号健康状态（图片生成能力 + 调度健康度，对齐 Codex 反代 AccountHealth）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodebuddyLocalAccessAccountHealth {
     pub account_id: String,
     pub email: String,
+    /// 账号是否可用于调度（连续失败 / 鉴权异常时为 false）。
+    #[serde(default = "default_true")]
+    pub available: bool,
+    /// 连续失败次数（成功后清零）。
+    #[serde(default)]
+    pub consecutive_failures: u32,
+    /// 最近一次失败时间戳（毫秒）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failure_at: Option<i64>,
+    /// 最近一次失败分类（上游错误码）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failure_category: Option<String>,
+    /// 当前生效的冷却列表。
+    #[serde(default)]
+    pub cooldowns: Vec<CodebuddyLocalAccessAccountCooldown>,
     pub image_generation_status: CodebuddyLocalAccessImageGenerationStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_generation_checked_at: Option<i64>,

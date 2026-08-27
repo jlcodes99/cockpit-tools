@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,6 +16,30 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
+
+// traceToolCall is an unconditional diagnostic trace (independent of the
+// CODEBUDDY_DEBUG_BODY env var) used to capture the raw upstream tool_calls
+// argument sequence for a real client session. It appends to a log file under
+// CODEBUDDY_DEBUG_BODY_DIR (default docs/log relative to the sidecar CWD).
+var traceToolCallMu sync.Mutex
+
+func traceToolCall(phase, msg string) {
+	dir := os.Getenv("CODEBUDDY_DEBUG_BODY_DIR")
+	if dir == "" {
+		dir = filepath.Join("docs", "log")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	traceToolCallMu.Lock()
+	defer traceToolCallMu.Unlock()
+	f, err := os.OpenFile(filepath.Join(dir, "toolcall_trace.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.WriteString(fmt.Sprintf("%s [%s] %s\n", time.Now().Format("15:04:05.000"), phase, msg))
+}
 
 type oaiToResponsesStateReasoning struct {
 	ReasoningID   string
@@ -52,6 +79,12 @@ type oaiToResponsesState struct {
 	// these are emitted as custom_tool_call items instead of function_call
 	CustomToolNames map[string]struct{}
 	FinishReason    string
+	// whether a response.function_call_arguments.delta was emitted during the
+	// stream for a given tool call (incremental fragments). When false, the
+	// arguments arrived as a single consolidated snapshot and the delta is
+	// emitted once alongside the .done event so delta-accumulating clients
+	// (e.g. Cursor) still receive the full arguments.
+	FuncArgsDeltaEmitted map[string]bool
 	// usage aggregation
 	PromptTokens     int64
 	CachedTokens     int64
@@ -77,6 +110,39 @@ func incompleteByFinishReason(reason string) ([]byte, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// isCompleteJSONObject reports whether s is exactly one complete JSON object
+// (not a partial fragment). Used to distinguish upstream "full-snapshot"
+// argument deltas (must overwrite) from incremental fragments (must append).
+func isCompleteJSONObject(s string) bool {
+	trimmed := strings.TrimSpace(s)
+	if len(trimmed) < 2 || trimmed[0] != '{' || trimmed[len(trimmed)-1] != '}' {
+		return false
+	}
+	if !gjson.Valid(trimmed) {
+		return false
+	}
+	return gjson.Parse(trimmed).IsObject()
+}
+
+// isEmptyToolArguments reports whether a full-snapshot arguments value carries
+// no real content (empty object "{}", empty string, or whitespace). Such
+// snapshots must not overwrite real arguments: some backends re-send a trailing
+// "{}" after the real payload, which would otherwise clobber it.
+func isEmptyToolArguments(s string) bool {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return true
+	}
+	if !gjson.Valid(trimmed) {
+		return false
+	}
+	res := gjson.Parse(trimmed)
+	if res.IsObject() {
+		return len(res.Map()) == 0
+	}
+	return false
 }
 
 func buildResponsesCompletedEvent(st *oaiToResponsesState, requestRawJSON []byte, nextSeq func() int) []byte {
@@ -269,6 +335,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 			FuncItemCustom:  make(map[string]bool),
 			FuncArgsDone:    make(map[string]bool),
 			FuncItemDone:    make(map[string]bool),
+			FuncArgsDeltaEmitted: make(map[string]bool),
 			Reasonings:      make([]oaiToResponsesStateReasoning, 0),
 		}
 	}
@@ -750,7 +817,28 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 						}
 
 						if args := tc.Get("function.arguments"); args.Exists() && args.String() != "" {
-							st.FuncArgsBuf[key].WriteString(args.String())
+							argStr := args.String()
+							traceToolCall("delta", fmt.Sprintf("idx=%d toolIndex=%d name=%q arguments=%q", idx, toolIndex, st.FuncNames[key], argStr))
+							if isCompleteJSONObject(argStr) {
+								if isEmptyToolArguments(argStr) {
+									// Empty "{}" snapshot: keep any real arguments
+									// already accumulated instead of clobbering them.
+									return true
+								}
+								// Full snapshot: overwrite the buffer (not append) so
+								// repeated snapshots don't concatenate into "{}{}".
+								// FuncArgsSent is reset so emitPendingFunctionArgs on
+								// the .done event re-emits the full consolidated value,
+								// keeping delta-accumulating clients (e.g. Cursor)
+								// intact.
+								st.FuncArgsBuf[key].Reset()
+								st.FuncArgsBuf[key].WriteString(argStr)
+								st.FuncArgsSent[key] = 0
+								return true
+							}
+							// Incremental fragment: append. The delta is emitted by
+							// emitPendingFunctionArgs below.
+							st.FuncArgsBuf[key].WriteString(argStr)
 						}
 						emitToolItem(key, false)
 						emitPendingFunctionArgs(key)

@@ -69,6 +69,12 @@ export interface CodebuddyLocalAccessCollection {
   apiKeys: CodebuddyLocalAccessApiKey[];
   imageGenerationMode: CodebuddyLocalAccessImageGenerationMode;
   maxConcurrentImageRequests: number;
+  /** SSE 流式请求立即返回 200（先写 SSE 头再转发上游）。 */
+  immediateSseResponse?: boolean;
+  /** 客户端 Key 启用 Responses WebSocket 传输（对齐 Codex responsesWebsockets）。 */
+  responsesWebsocketsEnabled?: boolean;
+  /** 纯文本模型视觉子代理开关（agentic 模式）：开启后纯文本模型可接收图片并自主调用混元视觉模型看图。 */
+  visionToolEnabled?: boolean;
 }
 
 export interface CodebuddyLocalAccessAccountOption {
@@ -78,6 +84,14 @@ export interface CodebuddyLocalAccessAccountOption {
   uid?: string | null;
   enterpriseId?: string | null;
   planType?: string | null;
+  /// 计划徽章 CSS 类（K12 / TEAM / FREE / PLUS / PRO / ENTERPRISE）。
+  planClass?: string | null;
+  /// 剩余 credits。
+  quotaRemain?: number | null;
+  /// 总容量 credits。
+  quotaTotal?: number | null;
+  /// 计划过期时间戳（毫秒）。
+  subscriptionExpiryMs?: number | null;
 }
 
 export interface CodebuddyLocalAccessUsageStats {
@@ -97,6 +111,12 @@ export interface CodebuddyLocalAccessUsageStats {
   promptCacheHitTokens: number;
   promptCacheMissTokens: number;
   promptCacheWriteTokens: number;
+  /** 客户端主动取消的请求数（HTTP aborted / 流 client_gone）。 */
+  clientCanceledCount?: number;
+  /** 上游响应失败（非 2xx / 鉴权失败等）的请求数。 */
+  upstreamResponseFailedCount?: number;
+  /** 流式响应未正常完成（idle 超时 / 写失败 / 流错误）的请求数。 */
+  streamIncompleteCount?: number;
 }
 
 export interface CodebuddyLocalAccessModelStats {
@@ -130,6 +150,8 @@ export interface CodebuddyLocalAccessRequestLog {
   promptCacheMissTokens: number;
   promptCacheWriteTokens: number;
   requestKind: CodebuddyLocalAccessRequestKind;
+  /** 失败分类（client_canceled / stream_incomplete / upstream_response_failed），成功或未分类为 undefined。 */
+  errorCategory?: string | null;
   errorMessage?: string | null;
 }
 
@@ -150,9 +172,26 @@ export interface CodebuddyLocalAccessLogPage {
   totalPages: number;
 }
 
+export interface CodebuddyLocalAccessAccountCooldown {
+  modelId: string;
+  nextRetryAt: number;
+  remainingMs: number;
+  reason: string;
+}
+
 export interface CodebuddyLocalAccessAccountHealth {
   accountId: string;
   email: string;
+  /** 账号是否可用于调度（连续失败 / 鉴权异常 / 冷却未过期时为 false）。 */
+  available?: boolean;
+  /** 连续失败次数（成功后清零）。 */
+  consecutiveFailures?: number;
+  /** 最近一次失败时间戳（毫秒）。 */
+  lastFailureAt?: number | null;
+  /** 最近一次失败分类（上游错误码）。 */
+  lastFailureCategory?: string | null;
+  /** 当前生效的冷却列表。 */
+  cooldowns?: CodebuddyLocalAccessAccountCooldown[];
   imageGenerationStatus: CodebuddyLocalAccessImageGenerationStatus;
   imageGenerationCheckedAt?: number | null;
 }

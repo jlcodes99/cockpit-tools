@@ -615,6 +615,14 @@ func parseOpenAIStyleUsageNode(usageNode gjson.Result) usage.Detail {
 		OutputTokens: outputNode.Int(),
 		TotalTokens:  usageNode.Get("total_tokens").Int(),
 	}
+	// CodeBuddy (Tencent) reports the monetary credit consumed by the request.
+	// The exact field path has varied across backend revisions, so try several
+	// candidates and take the first non-zero value.
+	detail.Credit = firstNonZeroFloat(
+		usageNode.Get("credit").Float(),
+		usageNode.Get("tokenBreakdown.credit").Float(),
+		usageNode.Get("total_credit").Float(),
+	)
 	cached := usageNode.Get("prompt_tokens_details.cached_tokens")
 	if !cached.Exists() {
 		cached = usageNode.Get("input_tokens_details.cached_tokens")
@@ -963,6 +971,17 @@ func firstExistingUsageNode(root gjson.Result, paths ...string) gjson.Result {
 		}
 	}
 	return gjson.Result{}
+}
+
+// firstNonZeroFloat returns the first non-zero value from the candidates. It is
+// used to resolve credit fields whose exact path differs across backends.
+func firstNonZeroFloat(values ...float64) float64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 func safeUsageTokenSum(values ...int64) (int64, bool) {

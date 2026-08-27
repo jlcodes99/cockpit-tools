@@ -132,13 +132,38 @@ func GetCodebuddyModels() []*ModelInfo {
 
 // codebuddyVisionBackendWhitelist lists CodeBuddy models whose official app.asar
 // supportsImages flag is false but which the live backend verifiably routes to a
-// vision sub-model (confirmed 2026-08-20 with a content-rich image). They are
-// treated as vision-capable so the vision-proxy layer does not re-route them.
+// vision sub-model. They are treated as vision-capable so the vision-proxy layer
+// does not re-route them.
+//
+// NOTE (2026-08-21): deepseek-v4-flash / deepseek-v4-pro were removed from this
+// list — live testing through the CLIProxy relay showed the backend returns a
+// "this model does not support image input" refusal text for them (the images
+// reach the text model unchanged instead of being routed to a vision sub-model).
+// They now fall through to the vision-proxy layer (preprocess via hy3-preview).
 var codebuddyVisionBackendWhitelist = map[string]struct{}{
-	"deepseek-v4-flash": {},
-	"deepseek-v4-pro":   {},
-	"glm-5.1":           {},
-	"glm-5.2":           {},
+	"glm-5.1": {},
+	"glm-5.2": {},
+}
+
+// CodebuddyMaxCompletionTokensDefault is the fallback max completion token
+// ceiling shared by CodeBuddy models when a specific value is unknown. The
+// synced catalog and the static models.json fallback both declare 32768 for
+// CodeBuddy models.
+const CodebuddyMaxCompletionTokensDefault = 32768
+
+// CodebuddyModelMaxCompletionTokens returns the max completion tokens ceiling
+// for a CodeBuddy model, falling back to CodebuddyMaxCompletionTokensDefault
+// when the model is unknown or declares no explicit limit. Callers use this to
+// clamp oversized `max_tokens` values (e.g. Cursor sends 65536) that the strict
+// backend rejects with `400 invalid_parameter_value`.
+func CodebuddyModelMaxCompletionTokens(modelID string) int {
+	modelID = strings.TrimSpace(modelID)
+	for _, m := range GetCodebuddyModels() {
+		if m != nil && strings.EqualFold(m.ID, modelID) && m.MaxCompletionTokens > 0 {
+			return m.MaxCompletionTokens
+		}
+	}
+	return CodebuddyMaxCompletionTokensDefault
 }
 
 // CodebuddyModelSupportsImages reports whether the given CodeBuddy model accepts

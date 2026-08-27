@@ -33,6 +33,19 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
+// visionProxyEnabled reports whether the vision-proxy layer is active (mode is
+// "routing" or "preprocess"). Used by /v1/models to report `input_modalities:
+// ["text","image"]` for non-vision models that the proxy will transparently
+// handle — otherwise clients (e.g. Cursor) filter image inputs client-side and
+// the image never reaches the relay.
+func (m *manifest) visionProxyEnabled() bool {
+	if m == nil {
+		return false
+	}
+	mode := strings.ToLower(strings.TrimSpace(m.VisionMode))
+	return mode == "routing" || mode == "preprocess" || mode == "agentic"
+}
+
 // modelIDs returns a snapshot of the current model ID list. It is safe for
 // concurrent use with setModelIDs.
 func (m *manifest) modelIDs() []string {

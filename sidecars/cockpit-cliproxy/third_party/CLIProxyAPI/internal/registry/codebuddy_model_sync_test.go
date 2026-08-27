@@ -50,3 +50,27 @@ func TestExtractCodebuddyModelsFromLocalClient(t *testing.T) {
 	}
 	t.Logf("extracted %d unique models from %s", len(models), asarPath)
 }
+
+// TestStripCodebuddyThinkingSuffix verifies that the official client's
+// thinking-variant suffix (e.g. `-1`) is stripped so the ID matches the backend
+// model ID. Without this, routing fails with auth_not_found for models like
+// kimi-k3 (advertised as `kimi-k3-1` in the app.asar).
+func TestStripCodebuddyThinkingSuffix(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"kimi-k3-1", "kimi-k3"},
+		{"kimi-k3", "kimi-k3"},
+		{"deepseek-v4-pro", "deepseek-v4-pro"},
+		{"glm-5.2", "glm-5.2"},
+		{"kimi-k2-0711-preview", "kimi-k2-0711-preview"},
+		{"-1", "-1"}, // 剥离后为空则保留原值，避免产生空 ID
+		{"", ""},
+	}
+	for _, tc := range cases {
+		if got := stripCodebuddyThinkingSuffix(tc.in); got != tc.want {
+			t.Errorf("stripCodebuddyThinkingSuffix(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

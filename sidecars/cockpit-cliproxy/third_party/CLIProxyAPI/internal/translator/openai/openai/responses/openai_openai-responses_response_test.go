@@ -1349,3 +1349,159 @@ func TestConvertOpenAIChatCompletionsResponseToOpenAIResponsesNonStream_Reasonin
 		})
 	}
 }
+
+func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_FullSnapshotDedupe(t *testing.T) {
+	// DeepSeek re-sends the complete accumulated arguments JSON on every delta.
+	// The converter must overwrite (not append) and emit no argument deltas, so
+	// the client receives a single "{}" on .done instead of "{}{}{}".
+	in := []string{
+		`data: {"id":"resp_snap","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_snap","type":"function","function":{"name":"ls","arguments":""}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_snap","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_snap","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_snap","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_snap","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+		`data: [DONE]`,
+	}
+
+	request := []byte(`{"model":"gpt-5.4","tool_choice":"auto","parallel_tool_calls":true}`)
+
+	var param any
+	var out [][]byte
+	for _, line := range in {
+		out = append(out, ConvertOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), "model", request, request, []byte(line), &param)...)
+	}
+
+	var doneArgs string
+	deltaCount := 0
+	for _, chunk := range out {
+		ev, data := parseOpenAIResponsesSSEEvent(t, chunk)
+		switch ev {
+		case "response.function_call_arguments.delta":
+			deltaCount++
+		case "response.function_call_arguments.done":
+			doneArgs = data.Get("arguments").String()
+		}
+	}
+
+	if deltaCount != 0 {
+		t.Fatalf("expected 0 argument deltas for a full-snapshot stream, got %d", deltaCount)
+	}
+	if doneArgs != "{}" {
+		t.Fatalf("done arguments = %q, want %q (no {}{} concatenation)", doneArgs, "{}")
+	}
+}
+
+func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_FullSnapshotTakesLast(t *testing.T) {
+	// Growing full snapshots must collapse to the last non-empty value.
+	in := []string{
+		`data: {"id":"resp_grow","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_grow","type":"function","function":{"name":"shell","arguments":""}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_grow","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"command\":\"echo\"}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_grow","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"command\":\"echo hello\"}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_grow","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+		`data: [DONE]`,
+	}
+
+	request := []byte(`{"model":"gpt-5.4","tool_choice":"auto","parallel_tool_calls":true}`)
+
+	var param any
+	var out [][]byte
+	for _, line := range in {
+		out = append(out, ConvertOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), "model", request, request, []byte(line), &param)...)
+	}
+
+	var doneArgs string
+	for _, chunk := range out {
+		ev, data := parseOpenAIResponsesSSEEvent(t, chunk)
+		if ev == "response.function_call_arguments.done" {
+			doneArgs = data.Get("arguments").String()
+		}
+	}
+
+	if doneArgs != `{"command":"echo hello"}` {
+		t.Fatalf("done arguments = %q, want the last snapshot", doneArgs)
+	}
+	if strings.Contains(doneArgs, "}{") {
+		t.Fatalf("arguments were concatenated: %q", doneArgs)
+	}
+}
+
+func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_FullSnapshotEmitsSingleDelta(t *testing.T) {
+	// A consolidated full snapshot must be emitted as exactly ONE
+	// response.function_call_arguments.delta before the .done event so
+	// delta-accumulating clients (Cursor) receive the complete arguments.
+	in := []string{
+		`data: {"id":"resp_snap2","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_snap2","type":"function","function":{"name":"Read","arguments":"{\"path\": \"H:\\\\test\\\\README.md\"}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_snap2","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+		`data: [DONE]`,
+	}
+
+	request := []byte(`{"model":"gpt-5.4","tool_choice":"auto","parallel_tool_calls":true}`)
+
+	var param any
+	var out [][]byte
+	for _, line := range in {
+		out = append(out, ConvertOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), "model", request, request, []byte(line), &param)...)
+	}
+
+	var deltas []string
+	var doneArgs string
+	var addedArgs gjson.Result
+	for _, chunk := range out {
+		ev, data := parseOpenAIResponsesSSEEvent(t, chunk)
+		switch ev {
+		case "response.output_item.added":
+			addedArgs = data.Get("item.arguments")
+		case "response.function_call_arguments.delta":
+			deltas = append(deltas, data.Get("delta").String())
+		case "response.function_call_arguments.done":
+			doneArgs = data.Get("arguments").String()
+		}
+	}
+
+	// The "added" item must seed an empty STRING, not "{}", so clients that
+	// build their argument buffer from it don't prepend "{}" to the deltas.
+	if !addedArgs.Exists() || addedArgs.String() != "" {
+		t.Fatalf("output_item.added arguments = %q, want empty string (not {})", addedArgs.String())
+	}
+	if len(deltas) != 1 {
+		t.Fatalf("expected exactly 1 arguments.delta, got %d", len(deltas))
+	}
+	if deltas[0] != `{"path": "H:\\test\\README.md"}` {
+		t.Fatalf("delta = %q, want the full snapshot", deltas[0])
+	}
+	if doneArgs != `{"path": "H:\\test\\README.md"}` {
+		t.Fatalf("done arguments = %q, want the same full snapshot", doneArgs)
+	}
+}
+
+func TestConvertOpenAIChatCompletionsResponseToOpenAIResponses_EmptySnapshotDoesNotClobber(t *testing.T) {
+	// Real args followed by a trailing empty "{}" snapshot; the empty snapshot
+	// must be ignored so the real arguments survive to the .done event.
+	in := []string{
+		`data: {"id":"resp_empty","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_e","type":"function","function":{"name":"shell","arguments":""}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_empty","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"command\":\"ls\"}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_empty","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"resp_empty","object":"chat.completion.chunk","created":1,"model":"model","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+		`data: [DONE]`,
+	}
+
+	request := []byte(`{"model":"gpt-5.4","tool_choice":"auto","parallel_tool_calls":true}`)
+
+	var param any
+	var out [][]byte
+	for _, line := range in {
+		out = append(out, ConvertOpenAIChatCompletionsResponseToOpenAIResponses(context.Background(), "model", request, request, []byte(line), &param)...)
+	}
+
+	var doneArgs string
+	for _, chunk := range out {
+		ev, data := parseOpenAIResponsesSSEEvent(t, chunk)
+		if ev == "response.function_call_arguments.done" {
+			doneArgs = data.Get("arguments").String()
+		}
+	}
+
+	if doneArgs != `{"command":"ls"}` {
+		t.Fatalf("done arguments = %q, want real args (empty {} must not clobber)", doneArgs)
+	}
+}

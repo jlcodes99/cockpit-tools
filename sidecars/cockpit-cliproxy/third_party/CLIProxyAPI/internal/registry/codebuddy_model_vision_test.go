@@ -7,8 +7,6 @@ import "testing"
 // text-only) report vision support via the whitelist.
 func TestCodebuddyModelSupportsImagesWhitelist(t *testing.T) {
 	whitelisted := []string{
-		"deepseek-v4-flash",
-		"deepseek-v4-pro",
 		"glm-5.1",
 		"glm-5.2",
 	}
@@ -22,8 +20,24 @@ func TestCodebuddyModelSupportsImagesWhitelist(t *testing.T) {
 // TestCodebuddyModelSupportsImagesCaseInsensitive verifies the whitelist is
 // case-insensitive.
 func TestCodebuddyModelSupportsImagesCaseInsensitive(t *testing.T) {
-	if !CodebuddyModelSupportsImages("DeepSeek-V4-Flash") {
+	if !CodebuddyModelSupportsImages("GLM-5.1") {
 		t.Error("whitelist lookup should be case-insensitive")
+	}
+}
+
+// TestCodebuddyModelSupportsImagesDeepSeekNotWhitelisted verifies that
+// deepseek-v4-flash / deepseek-v4-pro no longer report native vision support:
+// live testing showed the backend returns a refusal text for them, so the
+// vision-proxy layer (preprocess) must handle their image inputs instead.
+func TestCodebuddyModelSupportsImagesDeepSeekNotWhitelisted(t *testing.T) {
+	notWhitelisted := []string{
+		"deepseek-v4-flash",
+		"deepseek-v4-pro",
+	}
+	for _, id := range notWhitelisted {
+		if CodebuddyModelSupportsImages(id) {
+			t.Errorf("model %q should NOT report native vision support (backend returns refusal)", id)
+		}
 	}
 }
 

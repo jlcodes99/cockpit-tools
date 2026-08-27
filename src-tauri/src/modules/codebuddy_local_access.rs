@@ -1,10 +1,13 @@
 use crate::models::codebuddy::CodebuddyAccount;
 use crate::models::codebuddy_local_access::{
-    CodebuddyLocalAccessAccountHealth, CodebuddyLocalAccessApiKey, CodebuddyLocalAccessCollection,
+    CodebuddyLocalAccessAccountCooldown, CodebuddyLocalAccessAccountHealth,
+    CodebuddyLocalAccessApiKey, CodebuddyLocalAccessCollection,
     CodebuddyLocalAccessCustomRoutingRule, CodebuddyLocalAccessImageGenerationMode,
     CodebuddyLocalAccessImageGenerationStatus, CodebuddyLocalAccessRequestKind,
-    CodebuddyLocalAccessRequestLog, CodebuddyLocalAccessRoutingStrategy, CodebuddyLocalAccessScope,
-    CodebuddyLocalAccessStats, CodebuddyLocalAccessUsageStats,
+    CodebuddyLocalAccessRequestLog, CodebuddyLocalAccessRoutingStrategy,
+    CodebuddyLocalAccessScope, CodebuddyLocalAccessStats, CodebuddyLocalAccessUsageStats,
+    CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED, CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE,
+    CODEBUDDY_ERROR_CATEGORY_UPSTREAM_FAILED,
 };
 use crate::modules::atomic_write::write_string_atomic;
 use crate::modules::{account, codebuddy_account, codebuddy_cn_account, logger};
@@ -14,8 +17,10 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
+use tauri::Emitter;
 use tokio::process::{Child, Command as TokioCommand};
 use tokio::sync::Mutex as TokioMutex;
 
@@ -99,6 +104,67 @@ const CODEBUDDY_MODEL_IDS: &[&str] = &[
     CODEBUDDY_IMAGE_MODEL_ID,
 ];
 
+/// 视觉代理层模式常量。
+const CODEBUDDY_VISION_MODE_OFF: &str = "off";
+const CODEBUDDY_VISION_MODE_AGENTIC: &str = "agentic";
+
+/// 视觉子代理最大迭代轮次默认值（deepseek 最多调用这么多次视觉模型）。
+const CODEBUDDY_VISION_MAX_ROUNDS_DEFAULT: i64 = 3;
+
+/// 视觉代理层模式决策（环境变量可覆盖）：
+/// 1. 环境变量 `CODEBUDDY_VISION_MODE` 显式设置时优先（off/routing/preprocess/agentic）；
+/// 2. 否则由 UI 开关 `collection.vision_tool_enabled` 决定：true → agentic，false → off。
+///
+/// agentic 模式让纯文本模型（如 deepseek-v4-pro）在收到图片时，通过服务端
+/// tool-calling 循环自主调用混元视觉模型（hy3-preview）"看图"，弥补纯文本
+/// 模型无法理解图片的缺陷。
+fn codebuddy_vision_mode(vision_tool_enabled: bool) -> String {
+    if let Ok(explicit) = std::env::var("CODEBUDDY_VISION_MODE") {
+        let trimmed = explicit.trim().to_string();
+        if !trimmed.is_empty() {
+            return trimmed;
+        }
+    }
+    if vision_tool_enabled {
+        CODEBUDDY_VISION_MODE_AGENTIC.to_string()
+    } else {
+        CODEBUDDY_VISION_MODE_OFF.to_string()
+    }
+}
+
+/// 视觉子代理最大迭代轮次（环境变量 `CODEBUDDY_VISION_MAX_ROUNDS` 覆盖，默认 3）。
+fn codebuddy_vision_max_rounds() -> i64 {
+    std::env::var("CODEBUDDY_VISION_MAX_ROUNDS")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(CODEBUDDY_VISION_MAX_ROUNDS_DEFAULT)
+}
+
+/// 最近一次向前端推送统计变更事件的时间戳（毫秒），用于防抖：
+/// 同一请求的 request_completed + usage 事件几乎同时到达，500ms 内去重。
+static LAST_STATS_EMIT_MS: AtomicI64 = AtomicI64::new(0);
+
+/// 统计变更事件名（前端 `listen` 监听）。
+pub const CODEBUDDY_STATS_CHANGED_EVENT: &str = "codebuddy-local-access-stats-changed";
+
+/// 通知前端统计已更新（事件驱动刷新）。带 500ms 防抖，避免高频 emit；
+/// 应用尚未就绪（AppHandle 为 None）时静默跳过。
+fn emit_stats_changed() {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let last = LAST_STATS_EMIT_MS.load(Ordering::Relaxed);
+    if now_ms.saturating_sub(last) < 500 {
+        return;
+    }
+    LAST_STATS_EMIT_MS.store(now_ms, Ordering::Relaxed);
+    if let Some(app) = crate::get_app_handle() {
+        let _ = app.emit(CODEBUDDY_STATS_CHANGED_EVENT, ());
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SidecarLaunchConfig {
@@ -119,6 +185,18 @@ pub struct CodebuddyLocalAccessAccountOption {
     pub enterprise_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_type: Option<String>,
+    /// 计划徽章 CSS 类（K12 / TEAM / FREE / ...），供前端卡片渲染。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_class: Option<String>,
+    /// 剩余 credits（来自 quota_raw.CapacityRemain / CapacityRemainPrecise）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quota_remain: Option<f64>,
+    /// 总容量 credits（来自 quota_raw.CapacityNum，登录时刷新）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quota_total: Option<f64>,
+    /// 计划过期时间戳（毫秒），来自 CycleEndTime。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subscription_expiry_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -141,6 +219,33 @@ pub struct CodebuddyLocalAccessState {
     pub account_health: Vec<CodebuddyLocalAccessAccountHealth>,
 }
 
+/// 运行时账号健康跟踪状态（由 auth_result / auth_selected 事件驱动更新，
+/// 对齐 Codex 反代的 AccountHealth 语义：连续失败 / 冷却 / 可用性）。
+#[derive(Debug, Clone)]
+struct AccountHealthState {
+    available: bool,
+    consecutive_failures: u32,
+    last_failure_at: Option<i64>,
+    last_failure_category: Option<String>,
+    cooldowns: Vec<CodebuddyLocalAccessAccountCooldown>,
+}
+
+impl Default for AccountHealthState {
+    fn default() -> Self {
+        Self {
+            available: true,
+            consecutive_failures: 0,
+            last_failure_at: None,
+            last_failure_category: None,
+            cooldowns: Vec::new(),
+        }
+    }
+}
+
+/// 事件映射表的容量上限（requestId → accountId / 流结束原因）。
+/// 请求完成后即清理；超限时整体重置，防止泄漏。
+const MAX_EVENT_MAP_ENTRIES: usize = 4096;
+
 #[derive(Default)]
 struct CodebuddyGatewayRuntime {
     loaded: bool,
@@ -156,6 +261,14 @@ struct CodebuddyGatewayRuntime {
     request_index: HashMap<String, usize>,
     /// 统计起始时间戳（最近一次清空统计）。
     stats_since: i64,
+    /// 账号健康跟踪状态（accountId → 状态）。
+    account_health: HashMap<String, AccountHealthState>,
+    /// requestId → 处理请求的账号 ID（auth_selected / auth_result 提供，
+    /// 供失败请求的账号归因回填）。
+    request_account: HashMap<String, String>,
+    /// requestId → 流结束原因（stream_completed 提供；通常先于
+    /// request_completed 到达，用于标记 stream_incomplete / client_canceled）。
+    request_stream_end: HashMap<String, String>,
 }
 
 const MAX_REQUEST_LOGS: usize = 500;
@@ -238,6 +351,21 @@ fn effective_bind_host(collection: &CodebuddyLocalAccessCollection) -> String {
 }
 
 fn account_option(account: &CodebuddyAccount, region: &str) -> CodebuddyLocalAccessAccountOption {
+    let meta = account_routing_metadata(account);
+    let plan_class = Some(plan_type_class(account.payment_type.as_deref()));
+    let (quota_remain, quota_total) = account
+        .quota_raw
+        .as_ref()
+        .and_then(|q| q.get("userResource")?.get("data")?.get("Response")?.get("Data")?.get("Accounts")?.as_array()?.first().cloned())
+        .map(|first| {
+            let remain = first
+                .get("CapacityRemain")
+                .and_then(|v| v.as_f64())
+                .or_else(|| first.get("CapacityRemainPrecise").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok()));
+            let total = first.get("CapacityNum").and_then(|v| v.as_f64());
+            (remain, total)
+        })
+        .unwrap_or((None, None));
     CodebuddyLocalAccessAccountOption {
         id: account.id.clone(),
         email: account.email.clone(),
@@ -245,6 +373,26 @@ fn account_option(account: &CodebuddyAccount, region: &str) -> CodebuddyLocalAcc
         uid: account.uid.clone(),
         enterprise_id: account.enterprise_id.clone(),
         plan_type: account.plan_type.clone(),
+        plan_class,
+        quota_remain,
+        quota_total,
+        subscription_expiry_ms: meta.subscription_expiry_ms,
+    }
+}
+
+/// `payment_type` → CSS 类名（与 Codex 风格对齐：K12 / TEAM / FREE / PLUS / PRO / ENTERPRISE）。
+fn plan_type_class(payment_type: Option<&str>) -> String {
+    let raw = payment_type.unwrap_or("").trim().to_ascii_lowercase();
+    if raw.is_empty() {
+        return "free".to_string();
+    }
+    match raw.as_str() {
+        "free" => "free".to_string(),
+        "plus" | "会员" => "plus".to_string(),
+        "team" | "pro" | "专业版" => "team".to_string(),
+        "k12" => "k12".to_string(),
+        "enterprise" | "团队版" | "企业版" => "enterprise".to_string(),
+        _ => "free".to_string(),
     }
 }
 
@@ -501,12 +649,14 @@ fn prepare_sidecar_launch_config(
         "excludedModels": collection.excluded_models.clone(),
         "routingStrategy": routing_strategy_name(collection.routing_strategy),
         "debugLogs": collection.debug_logs,
+        "immediateSseResponse": collection.immediate_sse_response,
         "imageGenerationMode": match collection.image_generation_mode {
             CodebuddyLocalAccessImageGenerationMode::Disabled => "disabled",
             CodebuddyLocalAccessImageGenerationMode::ImagesOnly => "images_only",
             CodebuddyLocalAccessImageGenerationMode::Enabled => "enabled",
         },
         "imageModels": [CODEBUDDY_IMAGE_MODEL_ID],
+        "visionMode": codebuddy_vision_mode(collection.vision_tool_enabled),
     });
 
     let mut config = serde_json::Map::new();
@@ -579,12 +729,12 @@ fn prepare_sidecar_launch_config(
         );
     }
 
-    // 视觉代理层配置（高级功能，默认关闭）。通过环境变量覆盖，避免引入 UI 改动：
-    //   CODEBUDDY_VISION_MODE    off | routing | preprocess
+    // 视觉代理层配置。模式由 UI 开关或环境变量决定：
+    //   CODEBUDDY_VISION_MODE    off | routing | preprocess | agentic（显式覆盖优先）
     //   CODEBUDDY_VISION_MODEL   视觉引擎模型（默认 hy3-preview）
+    //   CODEBUDDY_VISION_MAX_ROUNDS   agentic 模式最大迭代轮次（默认 3）
     //   CODEBUDDY_VISION_PREPROCESS_PROMPT  预处理模式的自定义提示词（可选）
-    let vision_mode =
-        std::env::var("CODEBUDDY_VISION_MODE").unwrap_or_else(|_| "off".to_string());
+    let vision_mode = codebuddy_vision_mode(collection.vision_tool_enabled);
     let vision_model =
         std::env::var("CODEBUDDY_VISION_MODEL").unwrap_or_else(|_| "hy3-preview".to_string());
     let vision_preprocess_prompt =
@@ -592,6 +742,7 @@ fn prepare_sidecar_launch_config(
     let mut vision_cfg = json!({
         "mode": vision_mode,
         "model": vision_model,
+        "max-tool-rounds": codebuddy_vision_max_rounds(),
     });
     if !vision_preprocess_prompt.is_empty() {
         vision_cfg["preprocess-prompt"] = json!(vision_preprocess_prompt);
@@ -660,6 +811,7 @@ fn manifest_api_keys(collection: &CodebuddyLocalAccessCollection) -> Vec<Value> 
                 "label": key.name.clone(),
                 "key": key.key.clone(),
                 "enabled": key.enabled,
+                "responsesWebsockets": collection.responses_websockets_enabled,
             });
             if let Some(account_ids) = &key.account_ids {
                 if !account_ids.is_empty() {
@@ -758,8 +910,19 @@ async fn start_sidecar_inner(collection: &CodebuddyLocalAccessCollection) -> Res
     let stdout = child.stdout.take();
     {
         let mut runtime = gateway_runtime().lock().await;
-        runtime.request_logs.clear();
+        // 注意：此处【不清空 request_logs】。request_logs 是历史统计数据的
+        // 唯一来源（用量统计/按账号统计均由此累计），sidecar 因配置变更
+        // （调度策略/路由规则/模型映射等）重启时统计必须保留，只有用户
+        // 主动点击「清除统计」（codebuddy_local_access_clear_stats）才能清零。
+        //
+        // 仅清空与「旧 sidecar 进程」绑定的 requestId 映射表：
+        //  - request_index：旧进程 requestId → request_logs 索引，usage 事件回填用
+        //  - request_account / request_stream_end：旧进程 requestId → 账号/流状态
+        // 这些映射随旧进程退出而永久失效，新进程会产生全新 requestId。
+        // （账号健康状态 account_health 亦跨重启保留。）
         runtime.request_index.clear();
+        runtime.request_account.clear();
+        runtime.request_stream_end.clear();
         runtime.child = Some(child);
         runtime.actual_port = Some(collection.port);
         runtime.fingerprint = Some(launch_config.fingerprint.clone());
@@ -806,6 +969,105 @@ fn request_kind_from_str(raw: &str) -> CodebuddyLocalAccessRequestKind {
     }
 }
 
+/// 失败分类优先级：数值越小优先级越高。
+/// client_canceled > stream_incomplete > upstream_response_failed。
+fn error_category_priority(category: &str) -> i32 {
+    match category {
+        CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED => 0,
+        CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE => 1,
+        CODEBUDDY_ERROR_CATEGORY_UPSTREAM_FAILED => 2,
+        _ => 3,
+    }
+}
+
+/// 将失败分类应用到日志条目（仅在优先级更高时覆盖），并同步 success 语义：
+/// 被分类的请求（取消 / 流未完成 / 上游失败）计入失败而非成功。
+fn apply_error_category(log: &mut CodebuddyLocalAccessRequestLog, category: &str) {
+    let new_priority = error_category_priority(category);
+    let should_apply = match log.error_category.as_deref() {
+        Some(existing) => new_priority < error_category_priority(existing),
+        None => true,
+    };
+    if should_apply {
+        log.error_category = Some(category.to_string());
+        log.success = false;
+    }
+}
+
+/// stream_completed 的 reason → 失败分类。
+/// "done" 为正常结束；"client_gone" 为客户端断开；其余（idle 超时 / 写失败 / 流错误）
+/// 归为流未完成。
+fn stream_end_category(reason: &str) -> Option<&'static str> {
+    match reason.trim() {
+        "client_gone" => Some(CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED),
+        "stream_idle_timeout" | "write_failed" | "stream_error" => {
+            Some(CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE)
+        }
+        _ => None,
+    }
+}
+
+/// 将 auth_result / stream_completed 携带的账号归因与流结束状态回填到已存在的日志。
+fn backfill_log_context(runtime: &mut CodebuddyGatewayRuntime, request_id: &str) {
+    let Some(idx) = runtime.request_index.get(request_id).copied() else {
+        return;
+    };
+    let Some(log) = runtime.request_logs.get_mut(idx) else {
+        return;
+    };
+    if let Some(account_id) = runtime.request_account.get(request_id) {
+        if !account_id.is_empty() && log.account_id.is_empty() {
+            log.account_id = account_id.clone();
+        }
+    }
+}
+
+/// 将 auth_result 事件应用到账号健康状态（纯函数，便于单测）。
+///
+/// 成功：连续失败清零、恢复可用。
+/// 失败：连续失败 +1、记录失败时间与分类；nextRetryAtMs 在未来时登记冷却；
+/// authAvailable 已知时同步可用性。
+fn apply_auth_result_to_health(
+    state: &mut AccountHealthState,
+    success: bool,
+    error_code: &str,
+    next_retry_at_ms: i64,
+    auth_available: Option<bool>,
+    model: &str,
+    now_ms: i64,
+) {
+    if success {
+        state.consecutive_failures = 0;
+        state.available = true;
+        return;
+    }
+    state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+    state.last_failure_at = Some(now_ms);
+    if !error_code.is_empty() {
+        state.last_failure_category = Some(error_code.to_string());
+    }
+    if next_retry_at_ms > now_ms {
+        let cooldown = CodebuddyLocalAccessAccountCooldown {
+            model_id: model.to_string(),
+            next_retry_at: next_retry_at_ms,
+            remaining_ms: next_retry_at_ms - now_ms,
+            reason: if error_code.is_empty() {
+                "upstream_failure".to_string()
+            } else {
+                error_code.to_string()
+            },
+        };
+        // 去重：同模型旧冷却直接替换。
+        state
+            .cooldowns
+            .retain(|item| item.model_id != cooldown.model_id);
+        state.cooldowns.push(cooldown);
+    }
+    if let Some(available) = auth_available {
+        state.available = available;
+    }
+}
+
 async fn ingest_sidecar_log_event(value: &Value) {
     let event_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
     match event_type {
@@ -814,7 +1076,12 @@ async fn ingest_sidecar_log_event(value: &Value) {
             if request_id.is_empty() {
                 return;
             }
-            let log_entry = CodebuddyLocalAccessRequestLog {
+            let status = value.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+            let aborted = value
+                .get("aborted")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let mut log_entry = CodebuddyLocalAccessRequestLog {
                 request_id: request_id.clone(),
                 timestamp: value
                     .get("completedAtMs")
@@ -828,12 +1095,8 @@ async fn ingest_sidecar_log_event(value: &Value) {
                 model: event_str(value, "model"),
                 api_key_id: event_str(value, "apiKeyId"),
                 account_id: String::new(),
-                status: value.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
-                success: value
-                    .get("status")
-                    .and_then(|v| v.as_u64())
-                    .map(|s| s < 400)
-                    .unwrap_or(false),
+                status,
+                success: status > 0 && status < 400,
                 latency_ms: value.get("latencyMs").and_then(|v| v.as_u64()).unwrap_or(0),
                 input_tokens: 0,
                 output_tokens: 0,
@@ -842,12 +1105,46 @@ async fn ingest_sidecar_log_event(value: &Value) {
                 prompt_cache_miss_tokens: 0,
                 prompt_cache_write_tokens: 0,
                 request_kind: request_kind_from_str(&event_str(value, "requestKind")),
+                error_category: None,
                 error_message: value
                     .get("errorMessage")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
             };
+
             let mut runtime = gateway_runtime().lock().await;
+
+            // 账号归因：usage 事件尚未到达时，用 auth_selected / auth_result 的映射回填。
+            if let Some(account_id) = runtime.request_account.get(&request_id) {
+                if !account_id.is_empty() {
+                    log_entry.account_id = account_id.clone();
+                }
+            }
+
+            // 失败分类（优先级：客户端取消 > 流未完成 > 上游失败）。
+            if aborted {
+                apply_error_category(&mut log_entry, CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED);
+            }
+            if let Some(reason) = runtime.request_stream_end.remove(&request_id) {
+                if let Some(category) = stream_end_category(&reason) {
+                    apply_error_category(&mut log_entry, category);
+                }
+            }
+            if log_entry.error_category.is_none() && status >= 400 {
+                apply_error_category(
+                    &mut log_entry,
+                    CODEBUDDY_ERROR_CATEGORY_UPSTREAM_FAILED,
+                );
+            }
+
+            runtime.request_account.remove(&request_id);
+            if runtime.request_account.len() > MAX_EVENT_MAP_ENTRIES {
+                runtime.request_account.clear();
+            }
+            if runtime.request_stream_end.len() > MAX_EVENT_MAP_ENTRIES {
+                runtime.request_stream_end.clear();
+            }
+
             let next_idx = runtime.request_logs.len();
             runtime.request_index.insert(request_id, next_idx);
             runtime.request_logs.push(log_entry);
@@ -865,6 +1162,9 @@ async fn ingest_sidecar_log_event(value: &Value) {
                     runtime.request_index.insert(rid, idx);
                 }
             }
+            // 释放 runtime 锁后通知前端刷新统计（避免持锁 emit）。
+            drop(runtime);
+            emit_stats_changed();
         }
         "usage" => {
             let request_id = event_str(value, "requestId");
@@ -887,7 +1187,6 @@ async fn ingest_sidecar_log_event(value: &Value) {
                 .unwrap_or(0);
             let credit = value
                 .get("usage")
-                .and_then(|v| v.get("tokenBreakdown"))
                 .and_then(|v| v.get("credit"))
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0);
@@ -928,6 +1227,120 @@ async fn ingest_sidecar_log_event(value: &Value) {
                         log.account_id = account_id;
                     }
                 }
+            }
+            // 释放 runtime 锁后通知前端刷新统计。
+            drop(runtime);
+            emit_stats_changed();
+        }
+        "auth_selected" => {
+            // 路由选定账号：记录 requestId → accountId，供失败请求账号归因。
+            let request_id = event_str(value, "requestId");
+            let account_id = event_str(value, "accountId");
+            if request_id.is_empty() || account_id.is_empty() {
+                return;
+            }
+            let mut runtime = gateway_runtime().lock().await;
+            runtime.request_account.insert(request_id, account_id);
+            if runtime.request_account.len() > MAX_EVENT_MAP_ENTRIES {
+                runtime.request_account.clear();
+            }
+        }
+        "auth_result" => {
+            // 上游鉴权 / 响应结果：驱动账号健康跟踪（连续失败 / 冷却 / 可用性）。
+            let request_id = event_str(value, "requestId");
+            let account_id = event_str(value, "accountId");
+            if request_id.is_empty() || account_id.is_empty() {
+                return;
+            }
+            let success = value
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let error_code = event_str(value, "errorCode");
+            let next_retry_at_ms = value
+                .get("nextRetryAtMs")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let auth_available = value.get("authAvailable").and_then(|v| v.as_bool());
+            let model = event_str(value, "model");
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+
+            let mut runtime = gateway_runtime().lock().await;
+            // 失败重试切换账号时，auth_result 提供最新的账号归因。
+            runtime
+                .request_account
+                .insert(request_id.clone(), account_id.clone());
+            if runtime.request_account.len() > MAX_EVENT_MAP_ENTRIES {
+                runtime.request_account.clear();
+            }
+            backfill_log_context(&mut runtime, &request_id);
+
+            let state = runtime
+                .account_health
+                .entry(account_id)
+                .or_default();
+            apply_auth_result_to_health(
+                state,
+                success,
+                &error_code,
+                next_retry_at_ms,
+                auth_available,
+                &model,
+                now_ms,
+            );
+        }
+        "stream_completed" => {
+            // 流结束：reason 标记客户端断开 / 流未完成。
+            // 通常先于 request_completed 到达（defer 在中间件 emit 之前执行），
+            // 此时日志尚未创建，先暂存；若日志已存在（乱序）则直接回填。
+            let request_id = event_str(value, "requestId");
+            if request_id.is_empty() {
+                return;
+            }
+            // reason 编码在 errorMessage：`reason=%s received=%d`。
+            let reason = event_str(value, "errorMessage")
+                .split_whitespace()
+                .next()
+                .and_then(|token| token.strip_prefix("reason="))
+                .unwrap_or("")
+                .to_string();
+
+            let mut runtime = gateway_runtime().lock().await;
+            if let Some(idx) = runtime.request_index.get(&request_id).copied() {
+                if let Some(category) = stream_end_category(&reason) {
+                    // 先取账号归因，避免与日志可变借用冲突。
+                    let attributed_account = runtime
+                        .request_account
+                        .get(&request_id)
+                        .filter(|id| !id.is_empty())
+                        .cloned();
+                    if let Some(log) = runtime.request_logs.get_mut(idx) {
+                        apply_error_category(log, category);
+                        if let Some(account_id) = attributed_account {
+                            if log.account_id.is_empty() {
+                                log.account_id = account_id;
+                            }
+                        }
+                    }
+                }
+                runtime.request_stream_end.remove(&request_id);
+            } else if !reason.is_empty() {
+                runtime.request_stream_end.insert(request_id, reason);
+                if runtime.request_stream_end.len() > MAX_EVENT_MAP_ENTRIES {
+                    runtime.request_stream_end.clear();
+                }
+            }
+        }
+        "codebuddy_debug_body" => {
+            // Go 侧 CODEBUDDY_DEBUG_BODY=1 时的脱敏请求/响应体 dump。仅用于诊断，
+            // 直接落日志，不进统计。
+            let phase = event_str(value, "phase");
+            let body = event_str(value, "body");
+            if !phase.is_empty() {
+                logger::log_info(&format!("[CodeBuddyDebug] {phase}: {body}"));
             }
         }
         _ => {}
@@ -998,6 +1411,7 @@ pub async fn codebuddy_local_access_get_state() -> Result<CodebuddyLocalAccessSt
     let running = runtime.running;
     let actual_port = runtime.actual_port;
     let last_error = runtime.last_error.clone();
+    let health_state = runtime.account_health.clone();
     drop(runtime);
 
     Ok(CodebuddyLocalAccessState {
@@ -1009,16 +1423,38 @@ pub async fn codebuddy_local_access_get_state() -> Result<CodebuddyLocalAccessSt
         last_error,
         intl_accounts: list_intl_accounts(),
         cn_accounts: list_cn_accounts(),
-        account_health: build_account_health(&collection),
+        account_health: build_account_health(&collection, &health_state),
     })
 }
 
-/// 构建选中账号的图片生成能力健康状态。
+/// 由运行时健康状态解析可用性与有效冷却列表（纯函数，便于单测）：
+/// 修剪已过期冷却项；仍存在未到期冷却时账号暂不可用。
+fn resolve_runtime_health(
+    state: &AccountHealthState,
+    now_ms: i64,
+) -> (bool, Vec<CodebuddyLocalAccessAccountCooldown>) {
+    let cooldowns: Vec<CodebuddyLocalAccessAccountCooldown> = state
+        .cooldowns
+        .iter()
+        .filter(|item| item.next_retry_at > now_ms)
+        .cloned()
+        .collect();
+    let available = state.available && cooldowns.is_empty();
+    (available, cooldowns)
+}
+
+/// 构建账号健康状态（图片生成能力 + 运行时调度健康度）。
 ///
-/// 因 CodeBuddy 上游图片协议未实测，健康探测不发起真实上游调用：
+/// 图片生成能力：因 CodeBuddy 上游图片协议未实测，不发起真实上游调用：
 /// - 图片生成模式为 Disabled 时，所有账号标记为 Disabled；
 /// - 否则标记为 Unknown（待上游图片协议确认后，可接入真实探测）。
-fn build_account_health(collection: &CodebuddyLocalAccessCollection) -> Vec<CodebuddyLocalAccessAccountHealth> {
+///
+/// 调度健康度：合并 runtime 中由 auth_result 事件驱动的连续失败 / 冷却 / 可用性
+/// 跟踪状态（无数据账号视为可用、连续失败 0）。
+fn build_account_health(
+    collection: &CodebuddyLocalAccessCollection,
+    health_state: &HashMap<String, AccountHealthState>,
+) -> Vec<CodebuddyLocalAccessAccountHealth> {
     let status = match collection.image_generation_mode {
         CodebuddyLocalAccessImageGenerationMode::Disabled => {
             CodebuddyLocalAccessImageGenerationStatus::Disabled
@@ -1028,26 +1464,41 @@ fn build_account_health(collection: &CodebuddyLocalAccessCollection) -> Vec<Code
             CodebuddyLocalAccessImageGenerationStatus::Unknown
         }
     };
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    let build_entry =
+        |account: &CodebuddyLocalAccessAccountOption| -> CodebuddyLocalAccessAccountHealth {
+            let state = health_state
+                .get(&account.id)
+                .cloned()
+                .unwrap_or_default();
+            let (available, cooldowns) = resolve_runtime_health(&state, now_ms);
+            CodebuddyLocalAccessAccountHealth {
+                account_id: account.id.clone(),
+                email: account.email.clone(),
+                available,
+                consecutive_failures: state.consecutive_failures,
+                last_failure_at: state.last_failure_at,
+                last_failure_category: state.last_failure_category,
+                cooldowns,
+                image_generation_status: status,
+                image_generation_checked_at: None,
+            }
+        };
+
     let mut health: Vec<CodebuddyLocalAccessAccountHealth> = Vec::new();
     let mut seen = HashSet::new();
     for account in list_intl_accounts() {
         if seen.insert(account.id.clone()) {
-            health.push(CodebuddyLocalAccessAccountHealth {
-                account_id: account.id,
-                email: account.email,
-                image_generation_status: status,
-                image_generation_checked_at: None,
-            });
+            health.push(build_entry(&account));
         }
     }
     for account in list_cn_accounts() {
         if seen.insert(account.id.clone()) {
-            health.push(CodebuddyLocalAccessAccountHealth {
-                account_id: account.id,
-                email: account.email,
-                image_generation_status: status,
-                image_generation_checked_at: None,
-            });
+            health.push(build_entry(&account));
         }
     }
     health
@@ -1147,6 +1598,19 @@ fn merge_usage(target: &mut CodebuddyLocalAccessUsageStats, log: &CodebuddyLocal
     } else {
         target.failure_count += 1;
     }
+    // 失败分类子计数（与 failure_count 互斥子集，对齐 Codex 反代语义）。
+    match log.error_category.as_deref() {
+        Some(CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED) => {
+            target.client_canceled_count += 1;
+        }
+        Some(CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE) => {
+            target.stream_incomplete_count += 1;
+        }
+        Some(CODEBUDDY_ERROR_CATEGORY_UPSTREAM_FAILED) => {
+            target.upstream_response_failed_count += 1;
+        }
+        _ => {}
+    }
     target.total_latency_ms += log.latency_ms;
     target.input_tokens += log.input_tokens;
     target.output_tokens += log.output_tokens;
@@ -1193,8 +1657,15 @@ fn routing_strategy_name(strategy: CodebuddyLocalAccessRoutingStrategy) -> &'sta
 }
 
 fn build_stats(runtime: &CodebuddyGatewayRuntime) -> CodebuddyLocalAccessStats {
+    // stats_since 以秒存储；输出毫秒以匹配前端时间显示（new Date(ms)）。
+    // 首次启动（尚未清空统计）时为 0，回退到当前时间，保证前端可显示统计起点。
+    let since_ms = if runtime.stats_since > 0 {
+        runtime.stats_since.saturating_mul(1000)
+    } else {
+        now_epoch_secs().saturating_mul(1000)
+    };
     let mut stats = CodebuddyLocalAccessStats {
-        since: runtime.stats_since,
+        since: since_ms,
         ..Default::default()
     };
     let mut by_model: HashMap<String, CodebuddyLocalAccessUsageStats> = HashMap::new();
@@ -1643,6 +2114,7 @@ mod tests {
             prompt_cache_miss_tokens: 4,
             prompt_cache_write_tokens: 0,
             request_kind: CodebuddyLocalAccessRequestKind::Other,
+            error_category: None,
             error_message: None,
         }
     }
@@ -1660,6 +2132,205 @@ mod tests {
         assert_eq!(target.output_tokens, 40);
         assert_eq!(target.total_tokens, 60);
         assert!((target.total_credit - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_merge_usage_counts_error_categories() {
+        let mut target = CodebuddyLocalAccessUsageStats::default();
+        let mut canceled = sample_log(false, "auto");
+        canceled.error_category = Some(CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED.to_string());
+        let mut incomplete = sample_log(false, "auto");
+        incomplete.error_category = Some(CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE.to_string());
+        let mut upstream = sample_log(false, "auto");
+        upstream.error_category = Some(CODEBUDDY_ERROR_CATEGORY_UPSTREAM_FAILED.to_string());
+        let plain_failure = sample_log(false, "auto");
+        let success = sample_log(true, "auto");
+        for log in [&canceled, &incomplete, &upstream, &plain_failure, &success] {
+            merge_usage(&mut target, log);
+        }
+        assert_eq!(target.request_count, 5);
+        assert_eq!(target.failure_count, 4);
+        assert_eq!(target.success_count, 1);
+        assert_eq!(target.client_canceled_count, 1);
+        assert_eq!(target.stream_incomplete_count, 1);
+        assert_eq!(target.upstream_response_failed_count, 1);
+    }
+
+    #[test]
+    fn test_apply_error_category_priority() {
+        let mut log = sample_log(true, "auto");
+        apply_error_category(&mut log, CODEBUDDY_ERROR_CATEGORY_UPSTREAM_FAILED);
+        assert_eq!(
+            log.error_category.as_deref(),
+            Some(CODEBUDDY_ERROR_CATEGORY_UPSTREAM_FAILED)
+        );
+        assert!(!log.success);
+
+        // 低优先级不覆盖高优先级。
+        apply_error_category(&mut log, CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED);
+        assert_eq!(
+            log.error_category.as_deref(),
+            Some(CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED)
+        );
+        // 高优先级已存在，低优先级不覆盖。
+        apply_error_category(&mut log, CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE);
+        assert_eq!(
+            log.error_category.as_deref(),
+            Some(CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED)
+        );
+    }
+
+    #[test]
+    fn test_stream_end_category_mapping() {
+        assert_eq!(
+            stream_end_category("client_gone"),
+            Some(CODEBUDDY_ERROR_CATEGORY_CLIENT_CANCELED)
+        );
+        assert_eq!(
+            stream_end_category("stream_idle_timeout"),
+            Some(CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE)
+        );
+        assert_eq!(
+            stream_end_category("write_failed"),
+            Some(CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE)
+        );
+        assert_eq!(
+            stream_end_category("stream_error"),
+            Some(CODEBUDDY_ERROR_CATEGORY_STREAM_INCOMPLETE)
+        );
+        assert_eq!(stream_end_category("done"), None);
+        assert_eq!(stream_end_category(""), None);
+    }
+
+    #[test]
+    fn test_apply_auth_result_tracks_failures_and_cooldowns() {
+        let now_ms: i64 = 1_000_000;
+        let mut state = AccountHealthState::default();
+        assert!(state.available);
+
+        // 失败：连续失败 +1，登记冷却，authAvailable=false 生效。
+        apply_auth_result_to_health(
+            &mut state,
+            false,
+            "upstream_timeout",
+            now_ms + 30_000,
+            Some(false),
+            "auto",
+            now_ms,
+        );
+        assert_eq!(state.consecutive_failures, 1);
+        assert_eq!(state.last_failure_category.as_deref(), Some("upstream_timeout"));
+        assert_eq!(state.cooldowns.len(), 1);
+        assert_eq!(state.cooldowns[0].model_id, "auto");
+        assert_eq!(state.cooldowns[0].reason, "upstream_timeout");
+        assert!(!state.available);
+
+        // 再次失败（同模型）：冷却去重替换。
+        apply_auth_result_to_health(
+            &mut state,
+            false,
+            "rate_limited",
+            now_ms + 60_000,
+            None,
+            "auto",
+            now_ms,
+        );
+        assert_eq!(state.consecutive_failures, 2);
+        assert_eq!(state.cooldowns.len(), 1);
+        assert_eq!(state.cooldowns[0].reason, "rate_limited");
+
+        // 成功：连续失败清零、恢复可用（冷却保留至过期）。
+        apply_auth_result_to_health(
+            &mut state,
+            true,
+            "",
+            0,
+            None,
+            "auto",
+            now_ms,
+        );
+        assert_eq!(state.consecutive_failures, 0);
+        assert!(state.available);
+        assert_eq!(state.cooldowns.len(), 1);
+    }
+
+    #[test]
+    fn test_build_account_health_prunes_expired_cooldowns() {
+        let now_ms: i64 = 1_000_000;
+        let mut state = AccountHealthState::default();
+        state.cooldowns.push(CodebuddyLocalAccessAccountCooldown {
+            model_id: "auto".to_string(),
+            next_retry_at: now_ms - 1_000, // 已过期
+            remaining_ms: 0,
+            reason: "old".to_string(),
+        });
+        state.cooldowns.push(CodebuddyLocalAccessAccountCooldown {
+            model_id: "hy3".to_string(),
+            next_retry_at: now_ms + 30_000, // 仍有效
+            remaining_ms: 30_000,
+            reason: "rate_limited".to_string(),
+        });
+
+        let (available, cooldowns) = resolve_runtime_health(&state, now_ms);
+        // 有效冷却未清空 → 暂不可用；过期冷却被修剪。
+        assert!(!available);
+        assert_eq!(cooldowns.len(), 1);
+        assert_eq!(cooldowns[0].model_id, "hy3");
+
+        // 冷却全部过期后恢复可用。
+        let (available, cooldowns) = resolve_runtime_health(&state, now_ms + 60_000);
+        assert!(available);
+        assert!(cooldowns.is_empty());
+
+        // 无事件数据的账号默认可用。
+        let (available, cooldowns) =
+            resolve_runtime_health(&AccountHealthState::default(), now_ms);
+        assert!(available);
+        assert!(cooldowns.is_empty());
+    }
+
+    #[test]
+    fn test_manifest_api_keys_includes_new_flags() {
+        let mut collection = CodebuddyLocalAccessCollection::default();
+        collection.api_keys = vec![sample_api_key(true)];
+        collection.immediate_sse_response = true;
+        collection.responses_websockets_enabled = true;
+        let keys = manifest_api_keys(&collection);
+        assert_eq!(keys[0]["responsesWebsockets"].as_bool(), Some(true));
+    }
+
+    #[test]
+    fn test_vision_mode_derives_from_switch() {
+        // 开关开 → agentic；开关关 → off。
+        // 注意：此测试假设环境变量 CODEBUDDY_VISION_MODE 未设置。
+        // 若 CI 环境设置了该变量，测试仍会因显式覆盖而通过（不脆断），
+        // 但为确定性起见在断言前临时清除。
+        unsafe {
+            std::env::remove_var("CODEBUDDY_VISION_MODE");
+        }
+        assert_eq!(codebuddy_vision_mode(true), "agentic");
+        assert_eq!(codebuddy_vision_mode(false), "off");
+    }
+
+    #[test]
+    fn test_vision_mode_env_override() {
+        unsafe {
+            std::env::set_var("CODEBUDDY_VISION_MODE", "preprocess");
+        }
+        // 环境变量显式设置时优先于开关。
+        assert_eq!(codebuddy_vision_mode(true), "preprocess");
+        assert_eq!(codebuddy_vision_mode(false), "preprocess");
+        unsafe {
+            std::env::remove_var("CODEBUDDY_VISION_MODE");
+        }
+    }
+
+    #[test]
+    fn test_vision_max_rounds_default() {
+        unsafe {
+            std::env::remove_var("CODEBUDDY_VISION_MAX_ROUNDS");
+        }
+        assert_eq!(codebuddy_vision_max_rounds(), 3);
     }
 
     #[test]
