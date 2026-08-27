@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "test:codex-api-key-scope": "node --test src/utils/codexApiKeyAccountScope.test.ts",
+    "test:platform-layout": "node --test src/stores/usePlatformLayoutStore.test.ts",
+    "test:locales": "node --test scripts/check_opencode_go_locales.test.cjs && node scripts/check_locales.cjs",
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
     "build": "npm run sync-version && tsc && vite build",

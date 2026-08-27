@@ -108,6 +108,84 @@ function getValueByPath(obj, keyPath) {
 }
 
 /**
+ * Return the normalized interpolation variables used by an i18next string.
+ * Locale values must preserve the English fallback's variables so translated
+ * copy cannot silently render a literal placeholder or an undefined value.
+ * @param {unknown} value
+ * @returns {Array<string>}
+ */
+function getInterpolationTokens(value) {
+  if (typeof value !== 'string') return [];
+  const tokens = new Set();
+  for (const match of value.matchAll(/\{\{\s*([^{}\s,]+)(?:\s*,[^{}]*)?\s*\}\}/g)) {
+    tokens.add(match[1]);
+  }
+  return [...tokens].sort();
+}
+
+/**
+ * Compare every locale with the English fallback, including interpolation
+ * variables. Exposed as a pure seam so CI tests can validate temporary
+ * fixtures without mutating the repository's generated report.
+ * @param {string} localesDir
+ * @param {string} baselineFile
+ */
+function collectLocaleValidation(localesDir = LOCALES_DIR, baselineFile = BASELINE_FILE) {
+  const files = fs.readdirSync(localesDir).filter(file => file.endsWith('.json')).sort();
+  const localeData = new Map();
+  const localeKeys = new Map();
+  const localeValueMaps = new Map();
+  const parseErrors = [];
+
+  for (const file of files) {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(localesDir, file), 'utf8'));
+      localeData.set(file, data);
+      localeKeys.set(file, getAllKeys(data));
+      localeValueMaps.set(file, getLeafStringMap(data));
+    } catch (error) {
+      parseErrors.push({ file, message: error.message });
+    }
+  }
+
+  const baselineKeys = localeKeys.get(baselineFile) || new Set();
+  const baselineValues = localeValueMaps.get(baselineFile) || new Map();
+  const differences = new Map();
+  const interpolationIssues = [];
+
+  for (const file of files) {
+    if (file === baselineFile || !localeKeys.has(file)) continue;
+    const keys = localeKeys.get(file);
+    const missing = [...baselineKeys].filter(key => !keys.has(key)).sort();
+    const extra = [...keys].filter(key => !baselineKeys.has(key)).sort();
+    if (missing.length > 0 || extra.length > 0) {
+      differences.set(file, { missing, extra });
+    }
+
+    const values = localeValueMaps.get(file);
+    for (const [key, baselineValue] of baselineValues.entries()) {
+      if (!values.has(key)) continue;
+      const expected = getInterpolationTokens(baselineValue);
+      const actual = getInterpolationTokens(values.get(key));
+      if (expected.join('\0') !== actual.join('\0')) {
+        interpolationIssues.push({ file, key, expected, actual });
+      }
+    }
+  }
+
+  return {
+    files,
+    localeData,
+    localeKeys,
+    localeValueMaps,
+    baselineKeys,
+    differences,
+    interpolationIssues,
+    parseErrors,
+  };
+}
+
+/**
  * 判断字符串是否可能是英文文案
  * @param {string} value
  * @returns {boolean}
@@ -214,6 +292,7 @@ function isAllowedEnglishReuse(key, value) {
     'OpenCode Go / Zen',
     'OpenRouter',
     'OpenCode',
+    'OpenCode Go',
     'AICodeMirror',
     'AICoding',
     'CrazyRouter',
@@ -631,8 +710,21 @@ function main() {
   
   log(`✅ 详细报告已生成: ${reportPath}\n`, 'green');
 
+  const validation = collectLocaleValidation(LOCALES_DIR, baselineFile);
+  const openCodeGoInterpolationIssues = validation.interpolationIssues.filter(
+    issue => issue.key.startsWith('openCodeGo.'),
+  );
+  if (openCodeGoInterpolationIssues.length > 0) {
+    log(`❌ 发现 ${openCodeGoInterpolationIssues.length} 个 OpenCode Go 插值变量不一致:`, 'red');
+    openCodeGoInterpolationIssues.slice(0, 10).forEach(issue => {
+      log(`   - ${issue.file}: ${issue.key} (expected: ${issue.expected.join(', ') || 'none'}; actual: ${issue.actual.join(', ') || 'none'})`, 'red');
+    });
+  }
+
   const hasBlockingIssues = differences.size > 0
     || englishReuseIssues.length > 0
+    || openCodeGoInterpolationIssues.length > 0
+    || validation.parseErrors.length > 0
     || (FAIL_ON_PLATFORM_COMMON_DUP && platformCommonIssues.length > 0);
   if (hasBlockingIssues) {
     log('❌ 检查未通过：请先修复以上问题。', 'red');
@@ -765,5 +857,7 @@ module.exports = {
   isAllowedEnglishReuse,
   detectEnglishValueReuse,
   detectPlatformCommonDuplication,
+  getInterpolationTokens,
+  collectLocaleValidation,
   readJsonFile,
 };

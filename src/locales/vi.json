@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Quản lý key OpenCode Go/Zen và lọc theo tier."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Các kết nối đã cấu hình và hạn mức theo năm giờ, tuần và tháng.",
+    "connections": "Các kết nối đã cấu hình",
+    "emptyProvider": "Chưa cấu hình nhà cung cấp OpenCode Go trong Cockpit.",
+    "emptyConnections": "Nhà cung cấp OpenCode Go chưa có khóa kết nối nào được cấu hình.",
+    "connectionFallback": "Kết nối {{index}}",
+    "errors": {
+      "authentication": "Xác thực thất bại. Hãy kiểm tra khóa của kết nối này.",
+      "rateLimit": "OpenCode Go đang giới hạn lượt kiểm tra mức sử dụng. Hãy thử lại sau giây lát.",
+      "network": "Không thể kết nối đến OpenCode Go.",
+      "unavailable": "Dữ liệu sử dụng không khả dụng cho kết nối này.",
+      "configuration": "Cockpit không thể đọc các kết nối OpenCode Go đã cấu hình."
+    }
   }
 }

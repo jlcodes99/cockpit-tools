@@ -2,9 +2,7 @@ import { useTranslation } from 'react-i18next';
 import {
   formatModelProviderUsageInteger,
   formatModelProviderUsageMoney,
-  formatModelProviderUsageResetCountdown,
   formatModelProviderUsageTokenCount,
-  resolveOpenCodeGoQuotaSnapshot,
   resolveModelProviderUsageMode,
   type ModelProviderUsageSummary,
 } from '../../services/modelProviderUsageService';
@@ -31,7 +29,6 @@ export function ModelProviderUsagePanel({
   const isSupportedUsage =
     usageMode === 'sub2api' ||
     usageMode === 'new_api' ||
-    usageMode === 'opencode_go' ||
     usageMode === 'token_plan';
   const classNames = [
     'codex-api-key-usage-panel',
@@ -59,42 +56,6 @@ export function ModelProviderUsagePanel({
 
   if (!isSupportedUsage) {
     return null;
-  }
-
-  if (usageMode === 'opencode_go') {
-    const quota = resolveOpenCodeGoQuotaSnapshot(summary);
-    const windows = [
-      ['rolling', t('codex.modelProviders.usage.fields.rolling5h', '5 小时额度剩余'), quota.rolling],
-      ['weekly', t('codex.modelProviders.usage.fields.weekly', '周额度剩余'), quota.weekly],
-      ['monthly', t('codex.modelProviders.usage.fields.monthly', '月额度剩余'), quota.monthly],
-    ] as const;
-    return (
-      <div className={classNames}>
-        <div className="codex-api-key-usage-grid">
-          {windows.map(([key, label, window]) => {
-            const resetText = window.resetsAt != null
-              ? new Date(window.resetsAt * 1000).toLocaleString()
-              : '-';
-            const countdown = formatModelProviderUsageResetCountdown(
-              window.resetsAt,
-            );
-            return (
-              <div key={key} title={`${label} · ${resetText}`}>
-                <span>{label}</span>
-                <strong>
-                  {formatModelProviderUsageMoney(window.remainingPercent, '%')}
-                </strong>
-                <small className="codex-api-key-usage-reset">
-                  ↻ {countdown !== '-'
-                    ? t('codex.modelProviders.usage.resetsIn', 'resets in {{value}}', { value: countdown })
-                    : '-'}
-                </small>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
   }
 
   if (usageMode === 'token_plan') {

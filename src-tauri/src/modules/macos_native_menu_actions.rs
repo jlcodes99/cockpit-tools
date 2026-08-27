@@ -249,6 +249,9 @@ fn spawn_refresh(platform: PlatformId, account_id: Option<String>) {
                     .map(|_| 0)
             }
             (PlatformId::Codex, None) => refresh_all_codex_usage_for_menu(app.clone()).await,
+            (PlatformId::OpenCodeGo, _) => commands::opencode_go::query_all_opencode_go_quotas()
+                .await
+                .map(|result| result.connections.len() as i32),
             (PlatformId::Claude, Some(account_id)) => {
                 commands::claude::refresh_claude_quota(app.clone(), account_id)
                     .await
@@ -402,6 +405,7 @@ fn spawn_switch_account(platform: PlatformId, account_id: String) {
                     .await
                     .map(|_| ())
             }
+            PlatformId::OpenCodeGo => Ok(()),
             PlatformId::Claude => {
                 commands::claude::switch_claude_account(app, account_id).map(|_| ())
             }

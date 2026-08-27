@@ -162,6 +162,7 @@ pub fn apply_tray_icon_style<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<()
 pub(crate) enum PlatformId {
     Antigravity,
     Codex,
+    OpenCodeGo,
     Claude,
     Zed,
     GitHubCopilot,
@@ -182,10 +183,11 @@ pub(crate) enum PlatformId {
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 18] {
+    pub(crate) fn default_order() -> [Self; 19] {
         [
             Self::Claude,
             Self::Codex,
+            Self::OpenCodeGo,
             Self::Antigravity,
             Self::Zed,
             Self::GitHubCopilot,
@@ -209,6 +211,7 @@ impl PlatformId {
         match value {
             crate::modules::tray_layout::PLATFORM_ANTIGRAVITY => Some(Self::Antigravity),
             crate::modules::tray_layout::PLATFORM_CODEX => Some(Self::Codex),
+            crate::modules::tray_layout::PLATFORM_OPENCODE_GO => Some(Self::OpenCodeGo),
             crate::modules::tray_layout::PLATFORM_CLAUDE_MANAGER => Some(Self::Claude),
             crate::modules::tray_layout::PLATFORM_ZED => Some(Self::Zed),
             crate::modules::tray_layout::PLATFORM_GITHUB_COPILOT => Some(Self::GitHubCopilot),
@@ -233,6 +236,7 @@ impl PlatformId {
         match self {
             Self::Antigravity => crate::modules::tray_layout::PLATFORM_ANTIGRAVITY,
             Self::Codex => crate::modules::tray_layout::PLATFORM_CODEX,
+            Self::OpenCodeGo => crate::modules::tray_layout::PLATFORM_OPENCODE_GO,
             Self::Claude => crate::modules::tray_layout::PLATFORM_CLAUDE_MANAGER,
             Self::Zed => crate::modules::tray_layout::PLATFORM_ZED,
             Self::GitHubCopilot => crate::modules::tray_layout::PLATFORM_GITHUB_COPILOT,
@@ -256,6 +260,7 @@ impl PlatformId {
         match self {
             Self::Antigravity => "Antigravity IDE",
             Self::Codex => "Codex",
+            Self::OpenCodeGo => "OpenCode Go",
             Self::Claude => "Claude",
             Self::Zed => "Zed",
             Self::GitHubCopilot => "GitHub Copilot",
@@ -279,6 +284,7 @@ impl PlatformId {
         match self {
             Self::Antigravity => "overview",
             Self::Codex => "codex",
+            Self::OpenCodeGo => "opencode-go",
             Self::Claude => "claude",
             Self::Zed => "zed",
             Self::GitHubCopilot => "github-copilot",
@@ -807,6 +813,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
     match platform {
         PlatformId::Antigravity => build_antigravity_display_info(lang),
         PlatformId::Codex => build_codex_display_info(lang),
+        PlatformId::OpenCodeGo => build_opencode_go_display_info(lang),
         PlatformId::Claude => build_claude_display_info(lang, true),
         PlatformId::Zed => build_zed_display_info(lang),
         PlatformId::GitHubCopilot => build_github_copilot_display_info(lang),
@@ -1047,6 +1054,77 @@ fn build_codex_display_info(lang: &str) -> AccountDisplayInfo {
             account: format!("📧 {}", get_text("not_logged_in", lang)),
             quota_lines: vec!["—".to_string()],
         }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_opencode_go_display_info(lang: &str) -> AccountDisplayInfo {
+    let connections = crate::modules::opencode_go::list_connections().unwrap_or_default();
+    let selected = connections
+        .iter()
+        .filter(|connection| connection.quota.is_some())
+        .max_by(|left, right| {
+            let left_floor = left
+                .quota
+                .as_ref()
+                .map(|quota| {
+                    quota
+                        .rolling
+                        .remaining_percent
+                        .min(quota.weekly.remaining_percent)
+                        .min(quota.monthly.remaining_percent)
+                })
+                .unwrap_or(-1.0);
+            let right_floor = right
+                .quota
+                .as_ref()
+                .map(|quota| {
+                    quota
+                        .rolling
+                        .remaining_percent
+                        .min(quota.weekly.remaining_percent)
+                        .min(quota.monthly.remaining_percent)
+                })
+                .unwrap_or(-1.0);
+            left_floor
+                .partial_cmp(&right_floor)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.updated_at.cmp(&right.updated_at))
+        })
+        .or_else(|| connections.iter().max_by_key(|connection| connection.updated_at));
+
+    let Some(connection) = selected else {
+        return AccountDisplayInfo {
+            account: format!("🔑 {}", get_text("not_logged_in", lang)),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+
+    let quota_lines = connection
+        .quota
+        .as_ref()
+        .map(|quota| {
+            [
+                ("5h", &quota.rolling),
+                ("Weekly", &quota.weekly),
+                ("Monthly", &quota.monthly),
+            ]
+            .into_iter()
+            .map(|(label, window)| {
+                format_quota_line(
+                    lang,
+                    label,
+                    &format!("{:.0}%", window.remaining_percent.clamp(0.0, 100.0)),
+                    Some(&format_reset_time_from_ts(lang, Some(window.resets_at))),
+                )
+            })
+            .collect()
+        })
+        .unwrap_or_else(|| vec![get_text("loading", lang)]);
+
+    AccountDisplayInfo {
+        account: format!("🔑 {}", first_non_empty(&[Some(connection.name.as_str()), Some(connection.key_hint.as_str())]).unwrap_or("—")),
+        quota_lines,
     }
 }
 

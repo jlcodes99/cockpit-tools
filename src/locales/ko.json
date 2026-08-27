@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen API 키를 관리하고 티어로 필터합니다."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "구성된 연결과 5시간, 주간 및 월간 할당량 기간입니다.",
+    "connections": "구성된 연결",
+    "emptyProvider": "Cockpit에 OpenCode Go 공급자가 구성되어 있지 않습니다.",
+    "emptyConnections": "OpenCode Go 공급자에 구성된 연결 키가 없습니다.",
+    "connectionFallback": "연결 {{index}}",
+    "errors": {
+      "authentication": "인증에 실패했습니다. 이 연결 키를 확인하세요.",
+      "rateLimit": "OpenCode Go에서 사용량 확인을 제한하고 있습니다. 잠시 후 다시 시도하세요.",
+      "network": "OpenCode Go에 연결할 수 없습니다.",
+      "unavailable": "이 연결의 사용량 데이터를 사용할 수 없습니다.",
+      "configuration": "Cockpit에서 구성된 OpenCode Go 연결을 읽을 수 없습니다."
+    }
   }
 }

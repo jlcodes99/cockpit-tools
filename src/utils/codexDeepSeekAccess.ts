@@ -7,7 +7,6 @@ import {
   DEEPSEEK_API_BASE_URL,
   DEEPSEEK_API_PROVIDER_ID,
   DEEPSEEK_CODEX_MODEL_CATALOG,
-  OPENCODE_GO_API_PROVIDER_ID,
 } from "./codexProviderPresets.ts";
 import {
   isCodexApiKeyAccount,
@@ -95,38 +94,16 @@ export function isDeepSeekAccount(
   );
 }
 
-export function isOpenCodeGoAccount(
-  account: Pick<CodexAccount, "api_provider_id" | "api_base_url">,
-): boolean {
-  const providerId = (account.api_provider_id || "").trim().toLowerCase();
-  if (providerId === OPENCODE_GO_API_PROVIDER_ID) {
-    return true;
-  }
-  try {
-    const url = new URL((account.api_base_url || "").trim());
-    const path = url.pathname.replace(/\/+$/, "").toLowerCase();
-    return (
-      url.protocol === "https:" &&
-      url.hostname.toLowerCase() === "opencode.ai" &&
-      (path === "/zen/go" || path === "/zen/go/v1")
-    );
-  } catch {
-    return false;
-  }
-}
-
 export function isCodexApiKeyUsageQueryEligible(
   account: CodexAccount,
 ): boolean {
   const tokenPlan = isCodexTokenPlanAccount(account);
-  const openCodeGo = isOpenCodeGoAccount(account);
   return (
     isCodexApiKeyAccount(account) &&
     !isCodexNewApiAccount(account) &&
     (!isCodexChatCompletionsApiKeyAccount(account) ||
       isDeepSeekAccount(account) ||
-      tokenPlan ||
-      openCodeGo) &&
+      tokenPlan) &&
     Boolean(account.openai_api_key?.trim())
   );
 }
@@ -140,16 +117,10 @@ export function shouldShowCodexApiKeyUsagePanel(
   }
   const deepseek = isDeepSeekAccount(account);
   const tokenPlan = isCodexTokenPlanAccount(account);
-  const openCodeGo = isOpenCodeGoAccount(account);
-  if (
-    isCodexChatCompletionsApiKeyAccount(account) &&
-    !deepseek &&
-    !tokenPlan &&
-    !openCodeGo
-  ) {
+  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek && !tokenPlan) {
     return false;
   }
-  return !hideRelayQuota || deepseek || tokenPlan || openCodeGo;
+  return !hideRelayQuota || deepseek || tokenPlan;
 }
 
 export function isDeepSeekResponsesAccount(

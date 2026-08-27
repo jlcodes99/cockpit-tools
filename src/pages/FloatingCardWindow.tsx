@@ -57,6 +57,7 @@ import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
+import { useOpenCodeGoAccountStore } from '../stores/useOpenCodeGoAccountStore';
 import { useCodebuddyCnInstanceStore } from '../stores/useCodebuddyCnInstanceStore';
 import { useAntigravityLegacyInstanceStore } from '../stores/useAntigravityLegacyInstanceStore';
 import { useClaudeInstanceStore } from '../stores/useClaudeInstanceStore';
@@ -101,6 +102,10 @@ import {
   resolveCurrentOrMostRecentAccount,
 } from '../utils/floatingCardSelectors';
 import { changeLanguage, normalizeLanguage } from '../i18n';
+import {
+  buildOpenCodeGoSummary,
+  formatOpenCodeGoResetCountdown,
+} from '../utils/openCodeGoSummary';
 import {
   ACCOUNTS_CHANGED_EVENT,
   ACTIVE_PLATFORM_FOCUS_EVENT,
@@ -304,6 +309,16 @@ export function FloatingCardWindow() {
     accounts: zedAccounts,
     currentAccountId: zedCurrentId,
   } = useZedAccountStore();
+  const {
+    accounts: openCodeGoAccounts,
+    loading: openCodeGoLoading,
+    fetchAccounts: fetchOpenCodeGoAccounts,
+    refreshAllQuotas: refreshAllOpenCodeGoQuotas,
+  } = useOpenCodeGoAccountStore();
+  const openCodeGoSummary = useMemo(
+    () => buildOpenCodeGoSummary(openCodeGoAccounts),
+    [openCodeGoAccounts],
+  );
   const shellRef = useRef<HTMLDivElement | null>(null);
   const previousInstanceContextRef = useRef<FloatingCardInstanceContext | null>(null);
   const [displayGroups, setDisplayGroups] = useState<DisplayGroup[]>([]);
@@ -484,7 +499,9 @@ export function FloatingCardWindow() {
           ]);
           break;
         case 'codex_api_service':
+          break;
         case 'opencode_go':
+          await fetchOpenCodeGoAccounts();
           break;
         case 'claude_manager':
           await Promise.allSettled([
@@ -535,7 +552,7 @@ export function FloatingCardWindow() {
     } finally {
       setPlatformLoading(false);
     }
-  }, []);
+  }, [fetchOpenCodeGoAccounts]);
 
   useEffect(() => {
     void fetchPlatformData(selectedPlatform);
@@ -845,6 +862,7 @@ export function FloatingCardWindow() {
           actualCurrentAccount: codexCurrent,
         };
       case 'codex_api_service':
+      case 'opencode_go':
         return {
           accounts: [],
           actualCurrentAccount: null,
@@ -977,6 +995,7 @@ export function FloatingCardWindow() {
       case 'codex':
         return getRecommendedCodexAccount(codexAccounts, effectiveCurrentId);
       case 'codex_api_service':
+      case 'opencode_go':
         return null;
       case 'claude_manager':
         return getRecommendedClaudeAccount(claudeAccounts, effectiveCurrentId);
@@ -1076,6 +1095,7 @@ export function FloatingCardWindow() {
       case 'codex':
         return buildCodexAccountPresentation(viewedAccount as typeof codexAccounts[number], t);
       case 'codex_api_service':
+      case 'opencode_go':
         return null;
       case 'claude_manager':
         return buildClaudeAccountPresentation(viewedAccount as typeof claudeAccounts[number], t);
@@ -1137,6 +1157,22 @@ export function FloatingCardWindow() {
   const visibleQuotaItemLimit =
     selectedPlatform === 'antigravity' || selectedPlatform === 'cursor' ? 3 : 2;
   const visibleQuotaItems = presentation?.quotaItems.slice(0, visibleQuotaItemLimit) ?? [];
+  // Partial-window contract: a degraded window carries null numerics, so
+  // only windows with a known remaining percent become render rows.
+  const openCodeGoQuotaItems = openCodeGoSummary.connection?.quota
+    ? ([
+        ['5-hour', openCodeGoSummary.connection.quota.rolling],
+        ['Weekly', openCodeGoSummary.connection.quota.weekly],
+        ['Monthly', openCodeGoSummary.connection.quota.monthly],
+      ] as const).flatMap(
+        (
+          entry,
+        ): Array<readonly [string, { remainingPercent: number; resetsAt: number | null }]> =>
+          entry[1].remainingPercent == null
+            ? []
+            : [[entry[0], { remainingPercent: entry[1].remainingPercent, resetsAt: entry[1].resetsAt }]],
+      )
+    : [];
   const accountStateLabel = viewedAccount
     ? isCurrentViewed
       ? t('floatingCard.currentAccount', '当前账号')
@@ -1238,8 +1274,12 @@ export function FloatingCardWindow() {
   );
 
   const handleRefresh = useCallback(async () => {
+    if (selectedPlatform === 'opencode_go') {
+      await refreshAllOpenCodeGoQuotas();
+      return;
+    }
     await refreshDisplayedAccount();
-  }, [refreshDisplayedAccount]);
+  }, [refreshAllOpenCodeGoQuotas, refreshDisplayedAccount, selectedPlatform]);
 
   useEffect(() => {
     if (!viewedAccount) {
@@ -1592,13 +1632,15 @@ export function FloatingCardWindow() {
                 <ChevronLeft size={15} />
               </button>
               <span className="floating-card-pager-text">
-                {accounts.length > 0
-                  ? t('floatingCard.pager', {
-                      current: Math.max(1, accountIndex + 1),
-                      total: accounts.length,
-                      defaultValue: '{{current}} / {{total}}',
-                    })
-                  : '-- / --'}
+                {selectedPlatform === 'opencode_go'
+                  ? `${openCodeGoSummary.healthyConnectionCount} / ${openCodeGoSummary.connectionCount}`
+                  : accounts.length > 0
+                    ? t('floatingCard.pager', {
+                        current: Math.max(1, accountIndex + 1),
+                        total: accounts.length,
+                        defaultValue: '{{current}} / {{total}}',
+                      })
+                    : '-- / --'}
               </span>
               <button
                 className="floating-card-nav-button"
@@ -1618,7 +1660,58 @@ export function FloatingCardWindow() {
             ) : null}
           </div>
 
-          {viewedAccount && presentation ? (
+          {selectedPlatform === 'opencode_go' ? (
+            <div className="floating-card-account floating-card-opencode-go-summary">
+              <div className="floating-card-account-head">
+                <div className="floating-card-account-title">
+                  <div className="floating-card-account-name">
+                    {openCodeGoSummary.connection?.name || t('openCodeGo.title', 'OpenCode Go')}
+                  </div>
+                  {openCodeGoSummary.connection?.keyHint ? (
+                    <div className="floating-card-account-subline">
+                      <span className="floating-card-inline-value">
+                        {openCodeGoSummary.connection.keyHint}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+                <span className="floating-card-plan floating-card-plan--unknown">
+                  {openCodeGoSummary.connectionCount}
+                </span>
+              </div>
+              <div className="floating-card-quota-panel">
+                {openCodeGoQuotaItems.length > 0 ? (
+                  openCodeGoQuotaItems.map(([label, window]) => (
+                    <div key={label} className="floating-card-quota-row">
+                      <div className="floating-card-quota-top">
+                        <span className="floating-card-quota-label">{label}</span>
+                        <span className="floating-card-quota-value floating-card-quota-value--high">
+                          {Math.round(window.remainingPercent)}%
+                        </span>
+                      </div>
+                      <div className="floating-card-progress-track">
+                        <div
+                          className="floating-card-progress-bar floating-card-progress-bar--high"
+                          style={{ width: `${Math.max(0, Math.min(100, window.remainingPercent))}%` }}
+                        />
+                      </div>
+                      <div className="floating-card-quota-reset">
+                        {formatOpenCodeGoResetCountdown(window.resetsAt) ?? '--'}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="floating-card-empty-text">
+                    {openCodeGoLoading || platformLoading
+                      ? t('common.loading', '加载中...')
+                      : openCodeGoSummary.connection?.quotaError
+                        ? t('openCodeGo.errors.unavailable', 'Usage data is unavailable for this connection.')
+                        : t('openCodeGo.emptyConnections', 'The OpenCode Go provider has no configured connection keys.')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : viewedAccount && presentation ? (
             <div className="floating-card-account">
               <div className="floating-card-account-head">
                 <div className="floating-card-account-title">
@@ -1750,11 +1843,18 @@ export function FloatingCardWindow() {
               className="floating-card-button floating-card-button--ghost floating-card-button--icon"
               type="button"
               onClick={() => void handleRefresh()}
-              disabled={!viewedAccount || Boolean(refreshingAccountId)}
+              disabled={
+                selectedPlatform === 'opencode_go'
+                  ? openCodeGoLoading || openCodeGoSummary.connectionCount === 0
+                  : !viewedAccount || Boolean(refreshingAccountId)
+              }
               title={t('common.refresh', '刷新')}
               aria-label={t('common.refresh', '刷新')}
             >
-              <RefreshCw size={14} className={refreshingAccountId ? 'floating-card-spin' : undefined} />
+              <RefreshCw
+                size={14}
+                className={refreshingAccountId || (selectedPlatform === 'opencode_go' && openCodeGoLoading) ? 'floating-card-spin' : undefined}
+              />
             </button>
             <button
               className="floating-card-button floating-card-button--ghost floating-card-button--icon"

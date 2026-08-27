@@ -207,6 +207,60 @@
   background: transparent;
 }
 
+.opencode-go-dashboard-summary {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+}
+
+.opencode-go-dashboard-connection-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.opencode-go-dashboard-connection-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.opencode-go-dashboard-connection-row strong {
+  color: var(--text-primary);
+  font-size: 26px;
+}
+
+.opencode-go-dashboard-connection-name {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.opencode-go-dashboard-connection-name code {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.opencode-go-dashboard-windows {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1120px) {
+  .opencode-go-dashboard-windows {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 900px) {
   .cards-split-row,
   .cards-split-row.single-platform-row {

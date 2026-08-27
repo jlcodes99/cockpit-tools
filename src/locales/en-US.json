@@ -6295,5 +6295,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Manage OpenCode Go/Zen API keys and filter by tier. Keys stay in local app data."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Configured connections and 5-hour, weekly, and monthly quota windows.",
+    "connections": "Configured connections",
+    "emptyProvider": "No OpenCode Go provider is configured in Cockpit.",
+    "emptyConnections": "The OpenCode Go provider has no configured connection keys.",
+    "connectionFallback": "Connection {{index}}",
+    "errors": {
+      "authentication": "Authentication failed. Check this connection key.",
+      "rateLimit": "OpenCode Go is rate limiting usage checks. Try again shortly.",
+      "network": "Unable to reach OpenCode Go.",
+      "unavailable": "Usage data is unavailable for this connection.",
+      "configuration": "Cockpit could not read the configured OpenCode Go connections."
+    }
   }
 }

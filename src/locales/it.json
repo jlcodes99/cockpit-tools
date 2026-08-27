@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gestisci chiavi OpenCode Go/Zen e filtra per tier."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Connessioni configurate e finestre di quota di cinque ore, settimanali e mensili.",
+    "connections": "Connessioni configurate",
+    "emptyProvider": "Nessun provider OpenCode Go è configurato in Cockpit.",
+    "emptyConnections": "Il provider OpenCode Go non ha chiavi di connessione configurate.",
+    "connectionFallback": "Connessione {{index}}",
+    "errors": {
+      "authentication": "Autenticazione non riuscita. Controlla la chiave di questa connessione.",
+      "rateLimit": "OpenCode Go sta limitando le verifiche di utilizzo. Riprova tra poco.",
+      "network": "Impossibile raggiungere OpenCode Go.",
+      "unavailable": "I dati di utilizzo non sono disponibili per questa connessione.",
+      "configuration": "Cockpit non ha potuto leggere le connessioni OpenCode Go configurate."
+    }
   }
 }

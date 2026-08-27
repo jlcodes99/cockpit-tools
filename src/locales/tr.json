@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen anahtarlarını yönetin ve kademeye göre süzün."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Yapılandırılmış bağlantılar ile beş saatlik, haftalık ve aylık kota dönemleri.",
+    "connections": "Yapılandırılmış bağlantılar",
+    "emptyProvider": "Cockpit’te yapılandırılmış bir OpenCode Go sağlayıcısı yok.",
+    "emptyConnections": "OpenCode Go sağlayıcısında yapılandırılmış bağlantı anahtarı yok.",
+    "connectionFallback": "Bağlantı {{index}}",
+    "errors": {
+      "authentication": "Kimlik doğrulama başarısız oldu. Bu bağlantının anahtarını kontrol edin.",
+      "rateLimit": "OpenCode Go kullanım denetimlerini sınırlıyor. Kısa süre sonra tekrar deneyin.",
+      "network": "OpenCode Go’ya ulaşılamıyor.",
+      "unavailable": "Bu bağlantı için kullanım verisi mevcut değil.",
+      "configuration": "Cockpit yapılandırılmış OpenCode Go bağlantılarını okuyamadı."
+    }
   }
 }

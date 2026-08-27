@@ -1,0 +1,78 @@
+.opencode-go-quota-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.opencode-go-quota-card {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--border-light);
+  border-radius: 9px;
+  background: var(--bg-secondary);
+}
+
+.opencode-go-quota-card > header,
+.opencode-go-quota-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.opencode-go-quota-card > header > span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.opencode-go-quota-card > header > strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opencode-go-quota-card.is-error > header > strong {
+  color: var(--danger-color, #dc2626);
+  font-size: 10px;
+}
+
+.opencode-go-quota-card.is-loading,
+.opencode-go-quota-card.is-unavailable {
+  opacity: 0.72;
+}
+
+.opencode-go-quota-track {
+  height: 5px;
+  margin: 9px 0 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border-light);
+}
+
+.opencode-go-quota-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success-color, #22c55e);
+  transition: width 180ms ease;
+}
+
+.opencode-go-quota-card > footer {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.opencode-go-quota-card > footer time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .opencode-go-quota-cards {
+    grid-template-columns: 1fr;
+  }
+}

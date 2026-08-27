@@ -673,6 +673,7 @@
         match platform {
             PlatformId::Antigravity => build_antigravity_cards(lang),
             PlatformId::Codex => build_codex_cards(lang),
+            PlatformId::OpenCodeGo => build_opencode_go_cards(lang),
             PlatformId::Claude => build_claude_cards(lang, true),
             PlatformId::GitHubCopilot => build_ghcp_cards(lang),
             PlatformId::Windsurf => build_windsurf_cards(lang),
@@ -690,6 +691,107 @@
             PlatformId::Workbuddy => build_workbuddy_cards(lang),
             PlatformId::Zed => build_zed_cards(lang),
         }
+    }
+
+    fn build_opencode_go_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let connections = modules::opencode_go::list_connections().unwrap_or_default();
+        let selected_id = connections
+            .iter()
+            .filter(|connection| connection.quota.is_some())
+            .max_by(|left, right| {
+                let left_floor = left
+                    .quota
+                    .as_ref()
+                    .map(|quota| {
+                        [
+                            quota.rolling.remaining_percent,
+                            quota.weekly.remaining_percent,
+                            quota.monthly.remaining_percent,
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .reduce(f64::min)
+                        .unwrap_or(-1.0)
+                    })
+                    .unwrap_or(-1.0);
+                let right_floor = right
+                    .quota
+                    .as_ref()
+                    .map(|quota| {
+                        [
+                            quota.rolling.remaining_percent,
+                            quota.weekly.remaining_percent,
+                            quota.monthly.remaining_percent,
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .reduce(f64::min)
+                        .unwrap_or(-1.0)
+                    })
+                    .unwrap_or(-1.0);
+                left_floor
+                    .partial_cmp(&right_floor)
+                    .unwrap_or(Ordering::Equal)
+                    .then_with(|| left.updated_at.cmp(&right.updated_at))
+            })
+            .or_else(|| {
+                connections
+                    .iter()
+                    .max_by_key(|connection| connection.updated_at)
+            })
+            .map(|connection| connection.id.clone());
+
+        let cards = connections
+            .into_iter()
+            .map(|connection| {
+                let quota_rows = connection
+                    .quota
+                    .as_ref()
+                    .map(|quota| {
+                        [
+                            ("5h", &quota.rolling),
+                            ("Weekly", &quota.weekly),
+                            ("Monthly", &quota.monthly),
+                        ]
+                        .into_iter()
+                        .map(|(label, window)| {
+                            let remaining = window
+                                .remaining_percent
+                                .map(|value| value.clamp(0.0, 100.0));
+                            QuotaRow {
+                                label: label.to_string(),
+                                value: remaining
+                                    .map(|value| format!("{:.0}%", value))
+                                    .unwrap_or_else(|| "—".to_string()),
+                                progress: remaining.map(|value| value.round() as i32),
+                                progress_tone: remaining
+                                    .map(|value| remaining_balance_tone(value.round() as i32)),
+                                subtext: format_reset_subtext(lang, window.resets_at),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                AccountCard {
+                    id: connection.id,
+                    title: if connection.name.trim().is_empty() {
+                        connection.key_hint
+                    } else {
+                        connection.name
+                    },
+                    plan: Some("OpenCode Go".to_string()),
+                    updated_at: connection
+                        .quota
+                        .as_ref()
+                        .map(|quota| quota.queried_at)
+                        .or(Some(connection.updated_at)),
+                    remaining_percent: min_quota_progress(&quota_rows, true),
+                    quota_rows,
+                }
+            })
+            .collect();
+
+        (cards, selected_id, None)
     }
 
     fn build_antigravity_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {

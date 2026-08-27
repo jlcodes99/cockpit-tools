@@ -47,10 +47,9 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'workbuddy',
 ];
 
-/** Platforms that do not own account lists (service / feature pages). */
+/** Platforms that do not own connection/account lists (service / feature pages). */
 export const ACCOUNTLESS_PLATFORM_IDS: readonly PlatformId[] = [
   'codex_api_service',
-  'opencode_go',
 ];
 
 export function isAccountPlatform(platformId: PlatformId): boolean {

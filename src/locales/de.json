@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen API-Keys verwalten und nach Stufe filtern."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Konfigurierte Verbindungen und Kontingentzeiträume für fünf Stunden, eine Woche und einen Monat.",
+    "connections": "Konfigurierte Verbindungen",
+    "emptyProvider": "In Cockpit ist kein OpenCode-Go-Anbieter konfiguriert.",
+    "emptyConnections": "Für den OpenCode-Go-Anbieter sind keine Verbindungsschlüssel konfiguriert.",
+    "connectionFallback": "Verbindung {{index}}",
+    "errors": {
+      "authentication": "Authentifizierung fehlgeschlagen. Prüfen Sie den Schlüssel dieser Verbindung.",
+      "rateLimit": "OpenCode Go begrenzt derzeit die Häufigkeit der Nutzungsabfragen. Versuchen Sie es gleich erneut.",
+      "network": "OpenCode Go ist nicht erreichbar.",
+      "unavailable": "Für diese Verbindung sind keine Nutzungsdaten verfügbar.",
+      "configuration": "Cockpit konnte die konfigurierten OpenCode-Go-Verbindungen nicht lesen."
+    }
   }
 }

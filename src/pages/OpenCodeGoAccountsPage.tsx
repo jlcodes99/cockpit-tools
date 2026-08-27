@@ -1,236 +1,332 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Clock3, KeyRound, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowDownWideNarrow,
+  BadgeCheck,
+  Clock3,
+  KeyRound,
+  LayoutGrid,
+  List,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { OpenCodeIcon } from '../components/icons/OpenCodeIcon';
-import { ModelProviderUsagePanel } from '../components/model-provider/ModelProviderUsagePanel';
+import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
+import { OpenCodeGoQuotaWindowCards } from '../components/opencode-go/OpenCodeGoQuotaWindowCards';
+import { OpenCodeGoAddAccountModal } from '../components/opencode-go/OpenCodeGoAddAccountModal';
+import { useOpenCodeGoStore } from '../stores/useOpenCodeGoStore';
+import type { OpenCodeGoConnection } from '../types/openCodeGo';
 import {
-  listCodexModelProviders,
-  queryCodexModelProviderUsage,
-  type CodexModelProvider,
-  type CodexModelProviderUsageSummary,
-} from '../services/codexModelProviderService';
-import {
-  classifyOpenCodeGoUsageError,
-  findOpenCodeGoProvider,
-  maskOpenCodeGoApiKey,
-  type OpenCodeGoUsageErrorKind,
-} from '../utils/openCodeGoPlatform';
+  createOpenCodeGoConnectionSlots,
+  filterAndSortOpenCodeGoConnections,
+  normalizeOpenCodeGoConnectionName,
+  resolveOpenCodeGoConnectionTier,
+  type OpenCodeGoConnectionQuery,
+  type OpenCodeGoConnectionTier,
+} from '../utils/openCodeGoConnections';
 
-type ConnectionUsageState = {
-  loading: boolean;
-  summary?: CodexModelProviderUsageSummary;
-  error?: OpenCodeGoUsageErrorKind;
-  updatedAt?: number;
-};
+type EditorState = { slotIndex: number; connection: OpenCodeGoConnection | null };
+type TierFilter = 'all' | OpenCodeGoConnectionTier;
+type SortBy = NonNullable<OpenCodeGoConnectionQuery['sortBy']>;
+type ProviderTab = 'go' | 'zen';
 
 export function OpenCodeGoAccountsPage() {
   const { t } = useTranslation();
-  const requestIdRef = useRef(0);
-  const [provider, setProvider] = useState<CodexModelProvider | null>(null);
-  const [usageByKeyId, setUsageByKeyId] = useState<
-    Record<string, ConnectionUsageState>
-  >({});
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
-
-  const errorText = useCallback(
-    (kind?: OpenCodeGoUsageErrorKind) => {
-      switch (kind) {
-        case 'authentication':
-          return t(
-            'openCodeGo.errors.authentication',
-            'Authentication failed. Check this connection key.',
-          );
-        case 'rate_limit':
-          return t(
-            'openCodeGo.errors.rateLimit',
-            'OpenCode Go is rate limiting usage checks. Try again shortly.',
-          );
-        case 'network':
-          return t(
-            'openCodeGo.errors.network',
-            'Unable to reach OpenCode Go.',
-          );
-        default:
-          return t(
-            'openCodeGo.errors.unavailable',
-            'Usage data is unavailable for this connection.',
-          );
-      }
-    },
-    [t],
-  );
-
-  const refresh = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
-    setLoading(true);
-    setLoadFailed(false);
-
-    try {
-      const providers = await listCodexModelProviders();
-      const nextProvider = findOpenCodeGoProvider(providers);
-      if (requestId !== requestIdRef.current) return;
-
-      setProvider(nextProvider);
-      if (!nextProvider) {
-        setUsageByKeyId({});
-        return;
-      }
-
-      setUsageByKeyId(
-        Object.fromEntries(
-          nextProvider.apiKeys.map((apiKey) => [apiKey.id, { loading: true }]),
-        ),
-      );
-
-      const usageEntries = await Promise.all(
-        nextProvider.apiKeys.map(async (apiKey) => {
-          try {
-            const summary = await queryCodexModelProviderUsage({
-              baseUrl: nextProvider.baseUrl,
-              apiKey: apiKey.apiKey,
-              integrationType: nextProvider.integrationType,
-            });
-            return [
-              apiKey.id,
-              { loading: false, summary, updatedAt: Date.now() },
-            ] as const;
-          } catch (error) {
-            return [
-              apiKey.id,
-              {
-                loading: false,
-                error: classifyOpenCodeGoUsageError(error),
-                updatedAt: Date.now(),
-              },
-            ] as const;
-          }
-        }),
-      );
-
-      if (requestId === requestIdRef.current) {
-        setUsageByKeyId(Object.fromEntries(usageEntries));
-      }
-    } catch {
-      if (requestId === requestIdRef.current) {
-        setProvider(null);
-        setUsageByKeyId({});
-        setLoadFailed(true);
-      }
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setLoading(false);
-      }
+  const quotaErrorText = (kind: string | undefined): string => {
+    switch (kind) {
+      case 'authentication':
+        return t('openCodeGo.errors.authentication', 'Authentication failed. Check this connection key.');
+      case 'rate_limit':
+        return t('openCodeGo.errors.rateLimit', 'OpenCode Go is rate limiting usage checks. Try again shortly.');
+      case 'network':
+        return t('openCodeGo.errors.network', 'Unable to reach OpenCode Go.');
+      default:
+        return t('openCodeGo.errors.unavailable', 'Usage data is unavailable for this connection.');
     }
-  }, []);
+  };
+  const actionErrorText = (error: unknown): string => {
+    const code = String(error).toUpperCase();
+    if (code.includes('AUTHENTICATION')) return quotaErrorText('authentication');
+    if (code.includes('RATE_LIMIT')) return quotaErrorText('rate_limit');
+    if (code.includes('NETWORK')) return quotaErrorText('network');
+    return quotaErrorText(undefined);
+  };
+  const store = useOpenCodeGoStore();
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [name, setName] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tierFilter, setTierFilter] = useState<TierFilter>('all');
+  const [sortBy, setSortBy] = useState<SortBy>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [providerTab, setProviderTab] = useState<ProviderTab>('go');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [refreshingConnectionId, setRefreshingConnectionId] = useState<string | null>(null);
+  const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null);
+  const [testedConnectionId, setTestedConnectionId] = useState<string | null>(null);
 
-  useEffect(() => {
-    void refresh();
-    return () => {
-      requestIdRef.current += 1;
-    };
-  }, [refresh]);
+  useEffect(() => { void store.fetchConnections(); }, [store.fetchConnections]);
+
+  const providerConnections = useMemo(
+    () => store.connections.filter((connection) => (connection.provider ?? 'go') === providerTab),
+    [providerTab, store.connections],
+  );
+  const visibleConnections = useMemo(
+    () => filterAndSortOpenCodeGoConnections(providerConnections, {
+      query: searchQuery,
+      tier: tierFilter,
+      sortBy,
+      sortDirection,
+    }),
+    [providerConnections, searchQuery, sortBy, sortDirection, tierFilter],
+  );
+  const slots = useMemo(
+    () => createOpenCodeGoConnectionSlots(visibleConnections),
+    [visibleConnections],
+  );
+  const hasActiveFilter = Boolean(searchQuery.trim()) || tierFilter !== 'all';
+
+  const openEditor = (slotIndex: number, connection: OpenCodeGoConnection | null) => {
+    setEditor({ slotIndex, connection });
+    setName(connection?.name ?? '');
+    setApiKey('');
+    setActionError('');
+  };
+  const closeEditor = () => {
+    if (saving) return;
+    setEditor(null);
+    setApiKey('');
+    setActionError('');
+  };
+  const refreshConnection = async (connectionId: string) => {
+    setRefreshingConnectionId(connectionId);
+    setActionError('');
+    try {
+      await store.refreshConnection(connectionId);
+    } catch (error) {
+      setActionError(actionErrorText(error));
+    } finally {
+      setRefreshingConnectionId(null);
+    }
+  };
+  const testConnection = async (connectionId: string) => {
+    setTestingConnectionId(connectionId);
+    setTestedConnectionId(null);
+    setActionError('');
+    try {
+      await store.testConnection(connectionId);
+      setTestedConnectionId(connectionId);
+    } catch (error) {
+      setActionError(actionErrorText(error));
+    } finally {
+      setTestingConnectionId(null);
+    }
+  };
+  const deleteConnection = async (connection: OpenCodeGoConnection) => {
+    if (pendingDeleteId) return;
+    if (!window.confirm(t('openCodeGo.delete.confirm', 'Delete this connection? This only removes the local encrypted connection.'))) {
+      return;
+    }
+    setPendingDeleteId(connection.id);
+    setActionError('');
+    try {
+      await store.deleteConnection(connection.id);
+    } catch {
+      setActionError(t('openCodeGo.errors.delete', 'Unable to delete this connection. Try again.'));
+    } finally {
+      setPendingDeleteId(null);
+    }
+  };
+  const saveEditor = async () => {
+    if (!editor || (!editor.connection && !apiKey.trim())) return;
+    setSaving(true);
+    setActionError('');
+    try {
+      if (editor.connection) {
+        await store.updateConnection(editor.connection.id, {
+          name,
+          ...(apiKey.trim() ? { apiKey } : {}),
+        });
+      } else {
+        await store.createConnection(name, apiKey, providerTab);
+      }
+      setEditor(null);
+      setApiKey('');
+    } catch (error) {
+      setActionError(actionErrorText(error));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <main className="main-content opencode-go-accounts-page fade-in">
       <div className="page-tabs-row opencode-go-header">
         <div className="platform-header-title">
-          <span className="opencode-go-title-icon">
-            <OpenCodeIcon size={28} />
-          </span>
+          <span className="opencode-go-title-icon"><OpenCodeIcon size={28} /></span>
           <div>
             <h1 className="opencode-go-title">OpenCode Go</h1>
-            <p>
-              {t(
-                'openCodeGo.subtitle',
-                'Configured connections and 5-hour, weekly, and monthly quota windows.',
-              )}
-            </p>
+            <p>{t('openCodeGo.subtitle', 'Configured connections and 5-hour, weekly, and monthly quota windows.')}</p>
           </div>
         </div>
-        <button
-          type="button"
-          className="header-action-btn"
-          onClick={() => void refresh()}
-          disabled={loading}
-          aria-label={t('common.refresh', 'Refresh')}
-        >
-          <RefreshCw size={15} className={loading ? 'loading-spinner' : ''} />
-          <span>{t('common.refresh', 'Refresh')}</span>
-        </button>
+        <div className="opencode-go-header-actions">
+          <button
+            type="button"
+            className="header-action-btn"
+            onClick={() => setShowAddAccount(true)}
+            disabled={providerConnections.length >= 4}
+          >
+            <Plus size={15} />
+            <span>{t('openCodeGo.add.submit', 'Add connection')}</span>
+          </button>
+          <button type="button" className="header-action-btn" onClick={() => void store.refreshAll()} disabled={store.loading || store.connections.length === 0}>
+            <RefreshCw size={15} className={store.loading ? 'loading-spinner' : ''} />
+            <span>{t('common.refresh', 'Refresh all')}</span>
+          </button>
+        </div>
       </div>
 
       <section className="opencode-go-summary" aria-live="polite">
-        <div>
-          <KeyRound size={18} />
-          <span>{t('openCodeGo.connections', 'Configured connections')}</span>
-          <strong>{provider?.apiKeys.length ?? 0}</strong>
-        </div>
-        {provider && (
-          <code title={provider.baseUrl}>{provider.baseUrl}</code>
-        )}
+        <div><KeyRound size={18} /><span>{t('openCodeGo.connections', 'Configured connections')}</span><strong>{providerConnections.length} / 4</strong></div>
+        <code>{providerTab === 'go' ? 'https://opencode.ai/zen/go/v1' : 'https://opencode.ai/zen/v1'}</code>
       </section>
 
-      {loadFailed ? (
-        <div className="opencode-go-empty" role="alert">
-          {t(
-            'openCodeGo.errors.configuration',
-            'Cockpit could not read the configured OpenCode Go connections.',
-          )}
+      <div className="opencode-provider-tabs" role="tablist" aria-label={t('openCodeGo.providerTabs', 'OpenCode providers')}>
+        {(['go', 'zen'] as const).map((provider) => (
+          <button
+            key={provider}
+            type="button"
+            role="tab"
+            aria-selected={providerTab === provider}
+            className={providerTab === provider ? 'active' : ''}
+            onClick={() => { setProviderTab(provider); setSearchQuery(''); setTierFilter('all'); }}
+          >
+            {provider === 'go' ? t('openCodeGo.tabs.go', 'Go') : t('openCodeGo.tabs.zen', 'Zen')}
+          </button>
+        ))}
+      </div>
+
+      <div className="toolbar opencode-go-toolbar">
+        <div className="toolbar-left">
+          <div className="search-box">
+            <Search className="search-icon" size={16} />
+            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t('openCodeGo.searchPlaceholder', 'Search connections...')} aria-label={t('openCodeGo.searchLabel', 'Search connections')} />
+          </div>
+          <div className="view-switcher" aria-label="View">
+            <button type="button" className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title={t('openCodeGo.gridView', 'Grid view')} aria-pressed={viewMode === 'grid'}><LayoutGrid size={16} /></button>
+            <button type="button" className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title={t('openCodeGo.listView', 'List view')} aria-pressed={viewMode === 'list'}><List size={16} /></button>
+          </div>
+          <SingleSelectFilterDropdown
+            value={tierFilter}
+            options={[
+              { value: 'all', label: t('openCodeGo.filters.allTiers', 'All tiers') },
+              { value: 'available', label: t('openCodeGo.filters.available', 'Available') },
+              { value: 'exhausted', label: t('openCodeGo.filters.exhausted', 'Exhausted') },
+              { value: 'error', label: t('openCodeGo.filters.error', 'Error') },
+              { value: 'pending', label: t('openCodeGo.filters.pending', 'Pending') },
+            ]}
+            ariaLabel={t('openCodeGo.filterLabel', 'Filter by tier')}
+            onChange={(value) => setTierFilter(value as TierFilter)}
+          />
+          <SingleSelectFilterDropdown
+            value={sortBy}
+            options={[
+              { value: 'name', label: t('openCodeGo.sort.name', 'Name') },
+              { value: 'created_at', label: t('openCodeGo.sort.created', 'Created') },
+              { value: 'remaining', label: t('openCodeGo.sort.remaining', 'Remaining quota') },
+            ]}
+            icon={<ArrowDownWideNarrow size={14} />}
+            ariaLabel={t('openCodeGo.sortLabel', 'Sort connections')}
+            onChange={(value) => setSortBy(value as SortBy)}
+          />
+          <button type="button" className="sort-direction-btn opencode-go-sort-direction" onClick={() => setSortDirection((current) => current === 'asc' ? 'desc' : 'asc')} title={t('openCodeGo.toggleSortDirection', 'Toggle sort direction')} aria-label={t('openCodeGo.toggleSortDirection', 'Toggle sort direction')}>{sortDirection === 'desc' ? '⬇' : '⬆'}</button>
         </div>
-      ) : !provider ? (
-        <div className="opencode-go-empty">
-          {loading
-            ? t('common.loading', 'Loading...')
-            : t(
-                'openCodeGo.emptyProvider',
-                'No OpenCode Go provider is configured in Cockpit.',
-              )}
-        </div>
-      ) : provider.apiKeys.length === 0 ? (
-        <div className="opencode-go-empty">
-          {t(
-            'openCodeGo.emptyConnections',
-            'The OpenCode Go provider has no configured connection keys.',
-          )}
-        </div>
+        {hasActiveFilter && <button type="button" className="btn btn-secondary" onClick={() => { setSearchQuery(''); setTierFilter('all'); }}>{t('openCodeGo.clearFilters', 'Clear filters')}</button>}
+      </div>
+
+      {(store.error || actionError) && <div className="opencode-go-empty" role="alert">{store.error || actionError}</div>}
+      {!store.loaded && store.loading ? (
+        <div className="opencode-go-empty">{t('common.loading', 'Loading...')}</div>
       ) : (
-        <div className="opencode-go-connection-grid">
-          {provider.apiKeys.map((apiKey, index) => {
-            const usage = usageByKeyId[apiKey.id];
-            const name =
-              apiKey.name.trim() ||
-              t('openCodeGo.connectionFallback', 'Connection {{index}}', {
-                index: index + 1,
-              });
+        <div className={`opencode-go-connection-grid ${viewMode === 'list' ? 'list' : ''}`}>
+          {slots.map(({ connection }, index) => {
+            if (!connection) {
+              if (hasActiveFilter) return null;
+              return (
+                <button key={`empty-${index}`} type="button" className="opencode-go-connection-card opencode-go-empty-slot" onClick={() => setShowAddAccount(true)}>
+                  <Plus size={24} /><strong>{t('openCodeGo.addSlot', 'Add connection {{index}}', { index: index + 1 })}</strong><span>{t('openCodeGo.storeKey', 'Store one OpenCode Go API key')}</span>
+                </button>
+              );
+            }
+            const displayName = normalizeOpenCodeGoConnectionName(connection.name, index);
+            const tier = resolveOpenCodeGoConnectionTier(connection);
             return (
-              <article className="opencode-go-connection-card" key={apiKey.id}>
+              <article className="opencode-go-connection-card" key={connection.id}>
                 <header>
                   <div>
-                    <span className="opencode-go-connection-icon">
-                      <KeyRound size={16} />
-                    </span>
-                    <div>
-                      <h2>{name}</h2>
-                      <code>{maskOpenCodeGoApiKey(apiKey.apiKey)}</code>
-                    </div>
+                    <span className="opencode-go-connection-icon"><KeyRound size={16} /></span>
+                    <div><h2>{displayName}</h2><code>{connection.keyHint}</code><span className={`opencode-go-tier ${tier}`}>{tier}</span></div>
                   </div>
-                  {usage?.updatedAt && (
-                    <span className="opencode-go-updated" title={new Date(usage.updatedAt).toLocaleString()}>
-                      <Clock3 size={13} />
-                      {new Date(usage.updatedAt).toLocaleTimeString()}
-                    </span>
-                  )}
+                  <div className="opencode-go-card-actions">
+                    <button type="button" aria-label={t('openCodeGo.refreshConnection', 'Refresh {{name}}', { name: displayName })} onClick={() => void refreshConnection(connection.id)} disabled={!connection.enabled || refreshingConnectionId === connection.id}><RefreshCw size={14} className={refreshingConnectionId === connection.id ? 'loading-spinner' : ''} /></button>
+                    <button type="button" aria-label={t('openCodeGo.editConnection', 'Edit {{name}}', { name: displayName })} onClick={() => openEditor(index, connection)} disabled={pendingDeleteId === connection.id}><Pencil size={14} /></button>
+                    <button type="button" aria-label={t('openCodeGo.testConnection', 'Test {{name}}', { name: displayName })} onClick={() => void testConnection(connection.id)} disabled={!connection.enabled || testingConnectionId === connection.id}>{testingConnectionId === connection.id ? <RefreshCw size={14} className="loading-spinner" /> : <BadgeCheck size={14} />}</button>
+                    <button type="button" className={connection.enabled ? '' : 'is-disabled'} aria-label={connection.enabled ? t('openCodeGo.disableConnection', 'Disable {{name}}', { name: displayName }) : t('openCodeGo.enableConnection', 'Enable {{name}}', { name: displayName })} onClick={() => void store.setConnectionEnabled(connection.id, !connection.enabled)} disabled={pendingDeleteId === connection.id}>{connection.enabled ? t('openCodeGo.disable', 'Disable') : t('openCodeGo.enable', 'Enable')}</button>
+                    <button type="button" aria-label={t('openCodeGo.deleteConnection', 'Delete {{name}}', { name: displayName })} onClick={() => void deleteConnection(connection)} disabled={pendingDeleteId === connection.id}>{pendingDeleteId === connection.id ? <RefreshCw size={14} className="loading-spinner" /> : <Trash2 size={14} />}</button>
+                  </div>
                 </header>
-                <ModelProviderUsagePanel
-                  summary={usage?.summary}
-                  loading={usage?.loading ?? loading}
-                  error={usage?.error ? errorText(usage.error) : undefined}
-                  className="opencode-go-quota-panel"
-                />
+                <div className="opencode-go-quota-panel">
+                  <OpenCodeGoQuotaWindowCards
+                    quota={connection.quota}
+                    errors={connection.quotaError ? {
+                      rolling: quotaErrorText(connection.quotaError.kind),
+                      weekly: quotaErrorText(connection.quotaError.kind),
+                      monthly: quotaErrorText(connection.quotaError.kind),
+                    } : undefined}
+                  />
+                  {!connection.enabled && <p className="opencode-go-connection-disabled">{t('openCodeGo.disabledDescription', 'Disabled connections are retained locally and excluded from usage refreshes.')}</p>}
+                  {testedConnectionId === connection.id && <p className="opencode-go-connection-tested" role="status">{t('openCodeGo.testSucceeded', 'Connection verified.')}</p>}
+                  {connection.quotaError && <p className="opencode-go-quota-error">{quotaErrorText(connection.quotaError.kind)}</p>}
+                  {connection.quota?.queriedAt && <span className="opencode-go-updated"><Clock3 size={13} />{new Date(connection.quota.queriedAt * 1000).toLocaleTimeString()}</span>}
+                </div>
               </article>
             );
           })}
+          {hasActiveFilter && visibleConnections.length === 0 && <div className="opencode-go-empty">{t('openCodeGo.noFilterResults', 'No connections match these filters.')}</div>}
+        </div>
+      )}
+
+      <OpenCodeGoAddAccountModal
+        open={showAddAccount}
+        createConnection={async ({ name, apiKey }) => {
+          const beforeIds = new Set(useOpenCodeGoStore.getState().connections.map((connection) => connection.id));
+          await store.createConnection(name, apiKey, providerTab);
+          const connection = useOpenCodeGoStore.getState().connections.find(
+            (candidate) => !beforeIds.has(candidate.id),
+          );
+          if (!connection) throw new Error('OPENCODE_GO_CONNECTION_SAVE_FAILED');
+          return connection;
+        }}
+        onClose={() => setShowAddAccount(false)}
+      />
+
+      {editor && (
+        <div className="opencode-go-editor-backdrop" role="presentation" onMouseDown={closeEditor}>
+          <section className="opencode-go-editor" role="dialog" aria-modal="true" aria-labelledby="opencode-go-editor-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header><h2 id="opencode-go-editor-title">{editor.connection ? t('openCodeGo.edit.title', 'Edit connection') : t('openCodeGo.addSlot', 'Add connection {{index}}', { index: editor.slotIndex + 1 })}</h2><button type="button" onClick={closeEditor} aria-label={t('common.close', 'Close')}><X size={18} /></button></header>
+            <label>{t('openCodeGo.add.name', 'Connection name')}<input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('openCodeGo.connectionFallback', 'Connection {{index}}', { index: editor.slotIndex + 1 })} /></label>
+            <label>{t('openCodeGo.add.apiKey', 'API key')}<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={editor.connection ? t('openCodeGo.edit.keepKey', 'Leave blank to keep the current key') : t('openCodeGo.add.required', 'Required')} /></label>
+            {actionError && <p className="opencode-go-quota-error" role="alert">{actionError}</p>}
+            <footer><button type="button" className="btn btn-secondary" onClick={closeEditor}>{t('common.cancel', 'Cancel')}</button><button type="button" className="btn btn-primary" disabled={saving || (!editor.connection && !apiKey.trim())} onClick={() => void saveEditor()}>{saving ? t('common.saving', 'Saving...') : t('openCodeGo.edit.save', 'Save connection')}</button></footer>
+          </section>
         </div>
       )}
     </main>

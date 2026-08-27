@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "إدارة مفاتيح OpenCode Go/Zen والتصفية حسب المستوى."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "الاتصالات المهيأة ونوافذ الحصة لخمس ساعات وأسبوع وشهر.",
+    "connections": "الاتصالات المهيأة",
+    "emptyProvider": "لم تتم تهيئة موفر OpenCode Go في Cockpit.",
+    "emptyConnections": "لا يحتوي موفر OpenCode Go على مفاتيح اتصال مهيأة.",
+    "connectionFallback": "الاتصال {{index}}",
+    "errors": {
+      "authentication": "فشلت المصادقة. تحقق من مفتاح الاتصال هذا.",
+      "rateLimit": "يحد OpenCode Go حاليًا من معدل فحوصات الاستخدام. حاول مجددًا بعد قليل.",
+      "network": "تعذر الوصول إلى OpenCode Go.",
+      "unavailable": "بيانات الاستخدام غير متاحة لهذا الاتصال.",
+      "configuration": "تعذر على Cockpit قراءة اتصالات OpenCode Go المهيأة."
+    }
   }
 }

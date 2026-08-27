@@ -10,6 +10,7 @@ const TRAY_LAYOUT_FILE: &str = "tray_layout.json";
 
 pub const PLATFORM_ANTIGRAVITY: &str = "antigravity";
 pub const PLATFORM_CODEX: &str = "codex";
+pub const PLATFORM_OPENCODE_GO: &str = "opencode_go";
 pub const PLATFORM_CLAUDE_MANAGER: &str = "claude_manager";
 pub const PLATFORM_ZED: &str = "zed";
 pub const PLATFORM_GITHUB_COPILOT: &str = "github-copilot";
@@ -27,9 +28,10 @@ pub const PLATFORM_TRAE_CN: &str = "trae_cn";
 pub const PLATFORM_TRAE_SOLO_CN: &str = "trae_solo_cn";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 19] = [
     PLATFORM_CLAUDE_MANAGER,
     PLATFORM_CODEX,
+    PLATFORM_OPENCODE_GO,
     PLATFORM_ANTIGRAVITY,
     PLATFORM_ZED,
     PLATFORM_GITHUB_COPILOT,
@@ -145,6 +147,7 @@ fn normalize_platform_id(id: &str) -> Option<&'static str> {
         PLATFORM_CLAUDE_MANAGER => Some(PLATFORM_CLAUDE_MANAGER),
         PLATFORM_ANTIGRAVITY => Some(PLATFORM_ANTIGRAVITY),
         PLATFORM_CODEX => Some(PLATFORM_CODEX),
+        PLATFORM_OPENCODE_GO => Some(PLATFORM_OPENCODE_GO),
         PLATFORM_ZED => Some(PLATFORM_ZED),
         PLATFORM_GITHUB_COPILOT => Some(PLATFORM_GITHUB_COPILOT),
         PLATFORM_WINDSURF => Some(PLATFORM_WINDSURF),
@@ -210,6 +213,7 @@ fn normalize_tray_platforms(
 
     for &new_platform in &[
         PLATFORM_ZED,
+        PLATFORM_OPENCODE_GO,
         PLATFORM_KIRO,
         PLATFORM_CURSOR,
         PLATFORM_CODEBUDDY,
@@ -463,6 +467,7 @@ fn normalize_config(
     let ordered_platform_ids = normalize_order(&config.ordered_platform_ids);
 
     let raw_order_new_platforms: Vec<&str> = [
+        PLATFORM_OPENCODE_GO,
         PLATFORM_KIRO,
         PLATFORM_CURSOR,
         PLATFORM_CODEBUDDY,

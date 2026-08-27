@@ -6295,5 +6295,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 档 API Key，并按档位筛选列表。密钥保存在本机应用数据目录。"
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "查看已配置的连接，以及 5 小时、每周和每月额度周期。",
+    "connections": "已配置的连接",
+    "emptyProvider": "Cockpit 中尚未配置 OpenCode Go 提供商。",
+    "emptyConnections": "OpenCode Go 提供商尚未配置连接密钥。",
+    "connectionFallback": "连接 {{index}}",
+    "errors": {
+      "authentication": "身份验证失败，请检查此连接密钥。",
+      "rateLimit": "OpenCode Go 正在限制用量查询频率，请稍后重试。",
+      "network": "无法连接到 OpenCode Go。",
+      "unavailable": "此连接的用量数据暂不可用。",
+      "configuration": "Cockpit 无法读取已配置的 OpenCode Go 连接。"
+    }
   }
 }

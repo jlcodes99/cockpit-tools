@@ -8,6 +8,7 @@ pub mod github_copilot;
 pub mod grok;
 pub mod instance;
 pub mod kiro;
+pub mod opencode_go;
 pub mod qoder;
 pub mod quota;
 pub mod ssh_server;

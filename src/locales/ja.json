@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode の Go/Zen API キーを管理し、ティアで絞り込みます。"
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "設定済みの接続と、5時間、週間、月間のクォータ期間を表示します。",
+    "connections": "設定済みの接続",
+    "emptyProvider": "Cockpit に OpenCode Go プロバイダーが設定されていません。",
+    "emptyConnections": "OpenCode Go プロバイダーに接続キーが設定されていません。",
+    "connectionFallback": "接続 {{index}}",
+    "errors": {
+      "authentication": "認証に失敗しました。この接続キーを確認してください。",
+      "rateLimit": "OpenCode Go が使用量の確認を制限しています。しばらくしてからもう一度お試しください。",
+      "network": "OpenCode Go に接続できません。",
+      "unavailable": "この接続の使用量データは利用できません。",
+      "configuration": "Cockpit は設定済みの OpenCode Go 接続を読み取れませんでした。"
+    }
   }
 }

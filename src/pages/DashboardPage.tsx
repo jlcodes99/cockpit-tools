@@ -15,6 +15,7 @@ import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
+import { useOpenCodeGoAccountStore } from '../stores/useOpenCodeGoAccountStore';
 import { useSponsorStore } from '../stores/useSponsorStore';
 import { useRemoteConfigStore } from '../stores/useRemoteConfigStore';
 import {
@@ -121,6 +122,10 @@ import {
   resolveNewApiQuotaSnapshot,
   type ModelProviderUsageSummary,
 } from '../services/modelProviderUsageService';
+import {
+  buildOpenCodeGoSummary,
+  formatOpenCodeGoResetCountdown,
+} from '../utils/openCodeGoSummary';
 import * as traeService from '../services/traeService';
 import type { TraePlatformId } from '../services/traeService';
 
@@ -571,6 +576,17 @@ export function DashboardPage({
     switchAccount: switchZedAccount,
   } = useZedAccountStore();
 
+  const {
+    accounts: openCodeGoAccounts,
+    loading: openCodeGoLoading,
+    fetchAccounts: fetchOpenCodeGoAccounts,
+    refreshAllQuotas: refreshAllOpenCodeGoQuotas,
+  } = useOpenCodeGoAccountStore();
+  const openCodeGoSummary = useMemo(
+    () => buildOpenCodeGoSummary(openCodeGoAccounts),
+    [openCodeGoAccounts],
+  );
+
   const agCurrentId = agCurrent?.id;
   const codexCurrentId = codexCurrent?.id;
 
@@ -624,6 +640,7 @@ export function DashboardPage({
       fetchZcodeAccounts,
       fetchTraeAccounts,
       fetchWorkbuddyAccounts,
+      fetchOpenCodeGoAccounts,
     ];
 
     const loadDeferredPlatforms = () => {
@@ -2663,7 +2680,7 @@ export function DashboardPage({
     antigravity_ide: stats.antigravity,
     codex: stats.codex,
     codex_api_service: 0,
-    opencode_go: 0,
+    opencode_go: openCodeGoSummary.connectionCount,
     claude_manager: stats.claude,
     zed: stats.zed,
     'github-copilot': stats.githubCopilot,
@@ -2723,9 +2740,10 @@ export function DashboardPage({
         defaultPlatformId && entryPlatformIds.includes(defaultPlatformId)
           ? defaultPlatformId
           : entryPlatformIds[0];
-      // Account cards need a real account platform; service-only platforms are skipped.
-      const platformId =
-        preferredPlatformId && isAccountPlatform(preferredPlatformId)
+      // OpenCode Go owns a dedicated connection summary despite being accountless.
+      const platformId = preferredPlatformId === 'opencode_go'
+        ? preferredPlatformId
+        : preferredPlatformId && isAccountPlatform(preferredPlatformId)
           ? preferredPlatformId
           : entryPlatformIds.find((candidate) => isAccountPlatform(candidate));
       if (!platformId) {
@@ -2771,6 +2789,91 @@ export function DashboardPage({
   );
 
   const renderPlatformCard = (platformId: PlatformId) => {
+    if (platformId === 'opencode_go') {
+      const summaryConnection = openCodeGoSummary.connection;
+      // Partial-window contract: a degraded window carries null numerics, so
+      // only windows with a known remaining percent become render rows.
+      const quotaWindows = summaryConnection?.quota
+        ? ([
+            ['5-hour', summaryConnection.quota.rolling],
+            ['Weekly', summaryConnection.quota.weekly],
+            ['Monthly', summaryConnection.quota.monthly],
+          ] as const).flatMap(
+            (
+              entry,
+            ): Array<readonly [string, { remainingPercent: number; resetsAt: number | null }]> =>
+              entry[1].remainingPercent == null
+                ? []
+                : [[entry[0], { remainingPercent: entry[1].remainingPercent, resetsAt: entry[1].resetsAt }]],
+          )
+        : [];
+      return (
+        <div className="main-card opencode-go-dashboard-card" key={platformId}>
+          <div className="main-card-header">
+            <div className="header-title">
+              {renderPlatformIcon(platformId, 18)}
+              <h3>{getPlatformLabel(platformId, t)}</h3>
+            </div>
+            <div className="header-action-group">
+              <button
+                className="header-action-btn"
+                onClick={() => void refreshAllOpenCodeGoQuotas()}
+                disabled={openCodeGoLoading || openCodeGoSummary.connectionCount === 0}
+                title={t('common.refresh', '刷新')}
+              >
+                <RotateCw size={14} className={openCodeGoLoading ? 'loading-spinner' : ''} />
+                <span>{t('common.refresh', '刷新')}</span>
+              </button>
+              {renderHideCardButton(platformId)}
+            </div>
+          </div>
+          <div className="opencode-go-dashboard-summary">
+            <div className="opencode-go-dashboard-connection-row">
+              <div>
+                <span className="half-label">{t('openCodeGo.connections', 'Configured connections')}</span>
+                <strong>{openCodeGoSummary.connectionCount}</strong>
+              </div>
+              {summaryConnection ? (
+                <div className="opencode-go-dashboard-connection-name">
+                  <span>{summaryConnection.name || t('openCodeGo.connectionFallback', 'Connection')}</span>
+                  <code>{summaryConnection.keyHint}</code>
+                </div>
+              ) : null}
+            </div>
+            {quotaWindows.length > 0 ? (
+              <div className="account-mini-quotas opencode-go-dashboard-windows">
+                {quotaWindows.map(([label, window]) => (
+                  <div className="mini-quota-row-stacked" key={label}>
+                    <div className="mini-quota-header">
+                      <span className="model-name">{label}</span>
+                      <span className="model-pct high">{Math.round(window.remainingPercent)}%</span>
+                    </div>
+                    <div className="mini-progress-track">
+                      <div
+                        className="mini-progress-bar high"
+                        style={{ width: `${Math.max(0, Math.min(100, window.remainingPercent))}%` }}
+                      />
+                    </div>
+                    <div className="mini-reset-time">
+                      {formatOpenCodeGoResetCountdown(window.resetsAt) ?? t('dashboard.noData', '暂无数据')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-slot-text">
+                {summaryConnection?.quotaError
+                  ? t('openCodeGo.errors.unavailable', 'Usage data is unavailable for this connection.')
+                  : t('dashboard.noData', '暂无数据')}
+              </div>
+            )}
+          </div>
+          <button className="card-footer-action" onClick={() => navigateToPlatform(platformId)}>
+            {t('dashboard.viewAllAccounts', '查看所有账号')}
+          </button>
+        </div>
+      );
+    }
     if (!isAccountPlatform(platformId)) {
       return null;
     }

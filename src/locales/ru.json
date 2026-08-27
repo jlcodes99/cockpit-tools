@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Управление ключами OpenCode Go/Zen и фильтр по tier."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Настроенные подключения и пятичасовые, недельные и месячные периоды квот.",
+    "connections": "Настроенные подключения",
+    "emptyProvider": "В Cockpit не настроен провайдер OpenCode Go.",
+    "emptyConnections": "У провайдера OpenCode Go нет настроенных ключей подключения.",
+    "connectionFallback": "Подключение {{index}}",
+    "errors": {
+      "authentication": "Ошибка аутентификации. Проверьте ключ этого подключения.",
+      "rateLimit": "OpenCode Go ограничивает частоту проверки использования. Повторите попытку чуть позже.",
+      "network": "Не удалось подключиться к OpenCode Go.",
+      "unavailable": "Данные об использовании для этого подключения недоступны.",
+      "configuration": "Cockpit не удалось прочитать настроенные подключения OpenCode Go."
+    }
   }
 }

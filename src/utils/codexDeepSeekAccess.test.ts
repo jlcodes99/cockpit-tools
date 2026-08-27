@@ -5,7 +5,6 @@ import {
   isDeepSeekAccount,
   isDeepSeekCdpAccess,
   isDeepSeekDirectAccess,
-  isOpenCodeGoAccount,
   isCodexApiKeyUsageQueryEligible,
   isCodexTokenPlanAccount,
   parseCodexBoundAccountId,
@@ -195,26 +194,6 @@ test("MiniMax and Zhipu Chat Completions accounts can query Token Plan usage", (
     assert.equal(isCodexApiKeyUsageQueryEligible(tokenPlanAccount), true);
     assert.equal(shouldShowCodexApiKeyUsagePanel(tokenPlanAccount, true), true);
   }
-});
-
-test("OpenCode Go Chat Completions accounts can query and display usage", () => {
-  const openCodeGo = account({
-    auth_mode: "apikey",
-    api_provider_id: "opencode_go",
-    api_base_url: "https://opencode.ai/zen/go/v1",
-    api_wire_api: "chat_completions",
-    openai_api_key: "sk-opencode-go-test",
-  });
-  assert.equal(isOpenCodeGoAccount(openCodeGo), true);
-  assert.equal(isCodexApiKeyUsageQueryEligible(openCodeGo), true);
-  assert.equal(shouldShowCodexApiKeyUsagePanel(openCodeGo, true), true);
-  assert.equal(
-    isOpenCodeGoAccount({
-      api_provider_id: "custom",
-      api_base_url: "https://example.com/zen/go/v1",
-    }),
-    false,
-  );
 });
 
 test("ordinary Chat Completions accounts stay excluded from usage query", () => {

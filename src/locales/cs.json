@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Správa klíčů OpenCode Go/Zen a filtr podle tier."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Nakonfigurovaná připojení a pětihodinová, týdenní a měsíční kvóta.",
+    "connections": "Nakonfigurovaná připojení",
+    "emptyProvider": "V Cockpitu není nakonfigurován poskytovatel OpenCode Go.",
+    "emptyConnections": "Poskytovatel OpenCode Go nemá žádné nakonfigurované klíče připojení.",
+    "connectionFallback": "Připojení {{index}}",
+    "errors": {
+      "authentication": "Ověření se nezdařilo. Zkontrolujte klíč tohoto připojení.",
+      "rateLimit": "OpenCode Go omezuje četnost kontrol využití. Zkuste to za chvíli znovu.",
+      "network": "K OpenCode Go se nelze připojit.",
+      "unavailable": "Data o využití nejsou pro toto připojení dostupná.",
+      "configuration": "Cockpit nemohl načíst nakonfigurovaná připojení OpenCode Go."
+    }
   }
 }

@@ -4,7 +4,6 @@ export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
 export type ModelProviderUsageMode =
   | ModelProviderUsageIntegrationType
   | 'deepseek'
-  | 'opencode_go'
   | 'token_plan';
 
 export interface ModelProviderModel {
@@ -50,18 +49,6 @@ export interface NewApiQuotaSnapshot {
   expiresAt: number | null;
 }
 
-export interface OpenCodeGoQuotaWindowSnapshot {
-  usedPercent: number | null;
-  remainingPercent: number | null;
-  resetsAt: number | null;
-}
-
-export interface OpenCodeGoQuotaSnapshot {
-  rolling: OpenCodeGoQuotaWindowSnapshot;
-  weekly: OpenCodeGoQuotaWindowSnapshot;
-  monthly: OpenCodeGoQuotaWindowSnapshot;
-}
-
 function finiteUsageNumber(value: unknown): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
@@ -101,21 +88,6 @@ export function resolveNewApiQuotaSnapshot(
     usageDetailNumber(summary, 'accessUntil');
 
   return { granted, available, expiresAt };
-}
-
-export function resolveOpenCodeGoQuotaSnapshot(
-  summary?: ModelProviderUsageSummary,
-): OpenCodeGoQuotaSnapshot {
-  const resolveWindow = (key: 'rolling' | 'weekly' | 'monthly') => ({
-    usedPercent: usageDetailNumber(summary, `${key}UsedPercent`),
-    remainingPercent: usageDetailNumber(summary, `${key}RemainingPercent`),
-    resetsAt: usageDetailNumber(summary, `${key}ResetsAt`),
-  });
-  return {
-    rolling: resolveWindow('rolling'),
-    weekly: resolveWindow('weekly'),
-    monthly: resolveWindow('monthly'),
-  };
 }
 
 export function buildUsageBaseUrlCandidates(baseUrl: string): string[] {
@@ -188,7 +160,6 @@ export function resolveModelProviderUsageMode(
     summary.mode === 'new_api' ||
     summary.mode === 'sub2api' ||
     summary.mode === 'deepseek' ||
-    summary.mode === 'opencode_go' ||
     summary.mode === 'token_plan'
   ) {
     return summary.mode;
@@ -200,16 +171,6 @@ export function resolveModelProviderUsageMode(
     return 'sub2api';
   }
   const detailKeys = new Set((summary.details ?? []).map((item) => item.key));
-  // OpenCode Go may report quota windows partially (e.g. only the 5-hour
-  // rolling window before the weekly/monthly counters are provisioned).
-  // Classify from any recognized window key instead of demanding all three.
-  if (
-    detailKeys.has('rollingRemainingPercent') ||
-    detailKeys.has('weeklyRemainingPercent') ||
-    detailKeys.has('monthlyRemainingPercent')
-  ) {
-    return 'opencode_go';
-  }
   if (
     detailKeys.has('todayRequests') ||
     detailKeys.has('todayTokens') ||
@@ -225,22 +186,6 @@ export function resolveModelProviderUsageMode(
     return 'new_api';
   }
   return null;
-}
-
-/** Human "resets in …" countdown for a unix-seconds reset timestamp. */
-export function formatModelProviderUsageResetCountdown(
-  resetsAt?: number | null,
-): string {
-  if (typeof resetsAt !== 'number' || !Number.isFinite(resetsAt)) return '-';
-  const remainingMs = resetsAt * 1000 - Date.now();
-  if (remainingMs <= 0) return 'resetting';
-  const totalMinutes = Math.floor(remainingMs / 60_000);
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
 }
 
 export function formatModelProviderUsageMoney(

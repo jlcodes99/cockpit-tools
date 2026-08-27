@@ -470,6 +470,7 @@
         match platform {
             PlatformId::Antigravity => "#67c27b",
             PlatformId::Codex => "#1976ff",
+            PlatformId::OpenCodeGo => "#14b8a6",
             PlatformId::Claude => "#d97745",
             PlatformId::Zed => "#8b92a1",
             PlatformId::GitHubCopilot => "#8b92a1",

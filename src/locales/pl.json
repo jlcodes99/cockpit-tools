@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Zarządzaj kluczami OpenCode Go/Zen i filtruj po tier."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Skonfigurowane połączenia oraz pięciogodzinne, tygodniowe i miesięczne okresy limitów.",
+    "connections": "Skonfigurowane połączenia",
+    "emptyProvider": "W Cockpit nie skonfigurowano dostawcy OpenCode Go.",
+    "emptyConnections": "Dostawca OpenCode Go nie ma skonfigurowanych kluczy połączeń.",
+    "connectionFallback": "Połączenie {{index}}",
+    "errors": {
+      "authentication": "Uwierzytelnianie nie powiodło się. Sprawdź klucz tego połączenia.",
+      "rateLimit": "OpenCode Go ogranicza częstotliwość sprawdzania użycia. Spróbuj ponownie za chwilę.",
+      "network": "Nie można połączyć się z OpenCode Go.",
+      "unavailable": "Dane o użyciu nie są dostępne dla tego połączenia.",
+      "configuration": "Cockpit nie mógł odczytać skonfigurowanych połączeń OpenCode Go."
+    }
   }
 }

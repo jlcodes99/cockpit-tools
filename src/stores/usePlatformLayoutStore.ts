@@ -69,6 +69,7 @@ type PersistedPlatformLayout = {
   antigravityGroupFirstMigrated?: boolean;
   traeSuiteDefaultGroupRestored?: boolean;
   codexApiServiceSuiteMigrated?: boolean;
+  openCodeGoPlatformMigrated?: boolean;
   apiRelaySidebarVisible?: boolean;
   apiRelayDashboardVisible?: boolean;
   apiRelayEntryOrder?: number;
@@ -88,6 +89,7 @@ interface PlatformLayoutState {
   antigravityGroupFirstMigrated: boolean;
   traeSuiteDefaultGroupRestored: boolean;
   codexApiServiceSuiteMigrated: boolean;
+  openCodeGoPlatformMigrated: boolean;
   apiRelaySidebarVisible: boolean;
   apiRelayDashboardVisible: boolean;
   apiRelayEntryOrder: number;
@@ -132,6 +134,7 @@ interface NormalizedLayoutStateData {
   antigravityGroupFirstMigrated: boolean;
   traeSuiteDefaultGroupRestored: boolean;
   codexApiServiceSuiteMigrated: boolean;
+  openCodeGoPlatformMigrated: boolean;
   apiRelaySidebarVisible: boolean;
   apiRelayDashboardVisible: boolean;
   apiRelayEntryOrder: number;
@@ -357,7 +360,12 @@ function defaultSidebarEntryIds(
   groups: PlatformLayoutGroup[],
   orderedEntryIds = buildEntryOrderFromPlatformOrder(defaultPlatformOrder(), groups),
 ): PlatformLayoutEntryId[] {
-  return orderedEntryIds.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT - 1);
+  const defaults = orderedEntryIds.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT - 1);
+  const openCodeGoEntryId = resolveEntryIdForPlatform('opencode_go', groups);
+  if (!defaults.includes(openCodeGoEntryId)) {
+    defaults.push(openCodeGoEntryId);
+  }
+  return defaults.slice(0, CLASSIC_SIDEBAR_ENTRY_LIMIT);
 }
 
 function defaultSidebarPlatformIds(): PlatformId[] {
@@ -976,7 +984,21 @@ function normalizeSidebarEntryIds(
   groups: PlatformLayoutGroup[],
   legacySidebarPlatformIds: PlatformId[],
 ): PlatformLayoutEntryId[] {
-  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds);
+  if (rawSidebarEntryIds === undefined) {
+    return deriveEntryVisibilityFromLegacyPlatforms(
+      legacySidebarPlatformIds,
+      orderedEntryIds,
+      groups,
+    );
+  }
+  const resolvedSidebarEntryIds = Array.isArray(rawSidebarEntryIds)
+    ? rawSidebarEntryIds.map((item) => {
+        if (typeof item !== 'string') return item;
+        const platformId = parsePlatformEntryId(item);
+        return platformId ? resolveEntryIdForPlatform(platformId, groups) : item;
+      })
+    : rawSidebarEntryIds;
+  const normalized = normalizeEntryVisibilityList(resolvedSidebarEntryIds, orderedEntryIds);
   if (normalized.length > 0) {
     return normalized;
   }
@@ -1150,6 +1172,7 @@ function normalizeStateData(
     antigravityGroupFirstMigrated?: boolean;
     traeSuiteDefaultGroupRestored?: boolean;
     codexApiServiceSuiteMigrated?: boolean;
+    openCodeGoPlatformMigrated?: boolean;
     apiRelaySidebarVisible?: boolean;
     apiRelayDashboardVisible?: boolean;
     apiRelayEntryOrder?: number;
@@ -1209,6 +1232,7 @@ function normalizeStateData(
       raw.antigravityGroupFirstMigrated !== false || options.promoteAntigravityGroupEntry === true,
     traeSuiteDefaultGroupRestored: raw.traeSuiteDefaultGroupRestored !== false,
     codexApiServiceSuiteMigrated: raw.codexApiServiceSuiteMigrated !== false,
+    openCodeGoPlatformMigrated: raw.openCodeGoPlatformMigrated !== false,
     apiRelaySidebarVisible: raw.apiRelaySidebarVisible !== false,
     apiRelayDashboardVisible: raw.apiRelayDashboardVisible !== false,
     apiRelayEntryOrder: normalizeApiRelayEntryOrder(raw.apiRelayEntryOrder, orderedEntryIds.length),
@@ -1234,6 +1258,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
         antigravityGroupFirstMigrated: true,
         traeSuiteDefaultGroupRestored: true,
         codexApiServiceSuiteMigrated: true,
+        openCodeGoPlatformMigrated: true,
         apiRelaySidebarVisible: true,
         apiRelayDashboardVisible: true,
         apiRelayEntryOrder: 0,
@@ -1245,9 +1270,8 @@ function loadPersistedState(): NormalizedLayoutStateData {
     const antigravityGroupFirstMigrated = parsed.antigravityGroupFirstMigrated === true;
     const traeSuiteDefaultGroupRestored = parsed.traeSuiteDefaultGroupRestored === true;
     const codexApiServiceSuiteMigrated = parsed.codexApiServiceSuiteMigrated === true;
-    const openCodeGoPlatformMissing = !sanitizePlatformIds(
-      parsed.orderedPlatformIds ?? [],
-    ).includes('opencode_go');
+    const openCodeGoPlatformMigrated = parsed.openCodeGoPlatformMigrated === true;
+    const openCodeGoPlatformMissing = !openCodeGoPlatformMigrated;
     let orderedPlatformIds = normalizeOrder(parsed.orderedPlatformIds ?? defaultPlatformOrder());
     if (openCodeGoPlatformMissing) {
       orderedPlatformIds = orderedPlatformIds.filter((id) => id !== 'opencode_go');
@@ -1297,16 +1321,20 @@ function loadPersistedState(): NormalizedLayoutStateData {
     ) {
       sidebarEntryIds = [...sidebarEntryIds, openCodeGoEntryId];
     }
+    let trayPlatformIds = normalizeTray(
+      parsed.trayPlatformIds ?? defaultPlatformOrder(),
+      sanitizePlatformIds(parsed.orderedPlatformIds ?? []),
+      true,
+    );
+    if (openCodeGoPlatformMissing && !trayPlatformIds.includes('opencode_go')) {
+      trayPlatformIds = [...trayPlatformIds, 'opencode_go'];
+    }
 
     const normalized = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds,
       sidebarPlatformIds,
-      trayPlatformIds: normalizeTray(
-        parsed.trayPlatformIds ?? defaultPlatformOrder(),
-        sanitizePlatformIds(parsed.orderedPlatformIds ?? []),
-        true,
-      ),
+      trayPlatformIds,
       traySortMode: normalizeTraySortMode(parsed.traySortMode),
       platformGroups,
       orderedEntryIds,
@@ -1315,6 +1343,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       antigravityGroupFirstMigrated,
       traeSuiteDefaultGroupRestored: true,
       codexApiServiceSuiteMigrated: true,
+      openCodeGoPlatformMigrated: true,
       apiRelaySidebarVisible: parsed.apiRelaySidebarVisible,
       apiRelayDashboardVisible: parsed.apiRelayDashboardVisible,
       apiRelayEntryOrder: parsed.apiRelayEntryOrder,
@@ -1325,7 +1354,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       !antigravityGroupFirstMigrated
       || !traeSuiteDefaultGroupRestored
       || !codexApiServiceSuiteMigrated
-      || openCodeGoPlatformMissing
+      || !openCodeGoPlatformMigrated
     ) {
       persist(normalized);
     }
@@ -1346,6 +1375,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       antigravityGroupFirstMigrated: true,
       traeSuiteDefaultGroupRestored: true,
       codexApiServiceSuiteMigrated: true,
+      openCodeGoPlatformMigrated: true,
       apiRelaySidebarVisible: true,
       apiRelayDashboardVisible: true,
       apiRelayEntryOrder: 0,
@@ -1368,6 +1398,7 @@ function persist(
     | 'antigravityGroupFirstMigrated'
     | 'traeSuiteDefaultGroupRestored'
     | 'codexApiServiceSuiteMigrated'
+    | 'openCodeGoPlatformMigrated'
     | 'apiRelaySidebarVisible'
     | 'apiRelayDashboardVisible'
     | 'apiRelayEntryOrder'
@@ -1884,6 +1915,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
       antigravityGroupFirstMigrated: true,
       traeSuiteDefaultGroupRestored: true,
       codexApiServiceSuiteMigrated: true,
+      openCodeGoPlatformMigrated: true,
       apiRelaySidebarVisible: true,
       apiRelayDashboardVisible: true,
       apiRelayEntryOrder: 0,

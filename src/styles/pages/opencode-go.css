@@ -28,6 +28,12 @@
   box-shadow: var(--shadow-sm);
 }
 
+.opencode-go-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .opencode-go-title {
   margin: 0;
   color: var(--text-primary);
@@ -79,10 +85,75 @@
   white-space: nowrap;
 }
 
+.opencode-provider-tabs {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+
+.opencode-provider-tabs button {
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.opencode-provider-tabs button.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.opencode-go-toolbar .toolbar-left {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.opencode-go-toolbar .search-box {
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+
+.opencode-go-sort-direction {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.opencode-go-sort-direction:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .opencode-go-connection-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.opencode-go-connection-grid.list {
+  grid-template-columns: 1fr;
+}
+
+.opencode-go-connection-grid.list .opencode-go-connection-card:not(.opencode-go-empty-slot) {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.opencode-go-connection-grid.list .opencode-go-connection-card > header {
+  margin-bottom: 0;
 }
 
 .opencode-go-connection-card {
@@ -121,6 +192,30 @@
   white-space: nowrap;
 }
 
+.opencode-go-tier {
+  display: inline-flex;
+  margin-top: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-transform: capitalize;
+}
+
+.opencode-go-tier.available {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success, #16a34a);
+}
+
+.opencode-go-tier.exhausted,
+.opencode-go-tier.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger, #dc2626);
+}
+
 .opencode-go-connection-icon {
   width: 32px;
   height: 32px;
@@ -156,8 +251,203 @@
   text-align: center;
 }
 
+.opencode-go-empty-slot {
+  display: flex;
+  min-height: 230px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  border-style: dashed;
+  color: var(--text-secondary);
+  font: inherit;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.opencode-go-empty-slot:hover {
+  border-color: var(--primary-color);
+  background: var(--bg-secondary);
+}
+
+.opencode-go-empty-slot strong { color: var(--text-primary); }
+.opencode-go-empty-slot span { font-size: 12px; }
+
+.opencode-go-card-actions { display: flex; gap: 4px; }
+.opencode-go-card-actions button,
+.opencode-go-editor header button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+}
+.opencode-go-card-actions button:hover,
+.opencode-go-editor header button:hover { background: var(--bg-secondary); color: var(--text-primary); }
+
+.opencode-go-quota-panel { display: grid; gap: 10px; }
+.opencode-go-window { display: grid; gap: 5px; }
+.opencode-go-window > div { display: flex; justify-content: space-between; font-size: 12px; }
+.opencode-go-window > div span,
+.opencode-go-window small { color: var(--text-muted); }
+.opencode-go-window progress { width: 100%; height: 6px; accent-color: var(--success-color, #22c55e); }
+.opencode-go-window small { font-size: 10px; }
+.opencode-go-quota-error { margin: 0; color: var(--danger-color, #dc2626); font-size: 12px; }
+.opencode-go-connection-disabled { margin: 0; color: var(--text-muted); font-size: 12px; }
+.opencode-go-connection-tested { margin: 0; color: var(--success, #16a34a); font-size: 12px; }
+.opencode-go-card-actions button.is-disabled { color: var(--text-muted); }
+
+.opencode-go-editor-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 45%);
+}
+.opencode-go-editor {
+  width: min(440px, 100%);
+  padding: 20px;
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+.opencode-go-editor header,
+.opencode-go-editor footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.opencode-go-editor h2 { margin: 0; font-size: 18px; }
+.opencode-go-editor label { display: grid; gap: 6px; margin-top: 16px; color: var(--text-secondary); font-size: 12px; }
+.opencode-go-editor input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+.opencode-go-editor footer { justify-content: flex-end; margin-top: 20px; }
+
+.opencode-go-add-modal {
+  max-width: 500px;
+}
+
+.opencode-go-add-modal form {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.opencode-go-add-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.opencode-go-add-title > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.opencode-go-add-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.opencode-go-add-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.opencode-go-add-optional {
+  margin-left: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.opencode-go-secret-input {
+  position: relative;
+}
+
+.opencode-go-secret-input input {
+  width: 100%;
+  padding-right: 46px;
+  font-family: var(--font-mono);
+}
+
+.opencode-go-secret-input input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.opencode-go-secret-input input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+
+.opencode-go-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.opencode-go-secret-toggle:hover:not(:disabled),
+.opencode-go-secret-toggle:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.opencode-go-add-field-error {
+  display: block;
+  margin-top: 7px;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.opencode-go-add-error {
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 @media (max-width: 900px) {
   .opencode-go-connection-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .opencode-go-connection-grid.list .opencode-go-connection-card:not(.opencode-go-empty-slot) {
     grid-template-columns: 1fr;
   }
 }
@@ -167,6 +457,15 @@
   .opencode-go-summary {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .opencode-go-header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .opencode-go-header-actions .header-action-btn {
+    flex: 1 1 auto;
   }
 
   .opencode-go-connection-card > header {

@@ -6290,5 +6290,20 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Kelola key OpenCode Go/Zen dan filter per tier."
+  },
+  "openCodeGo": {
+    "title": "OpenCode Go",
+    "subtitle": "Koneksi yang dikonfigurasi serta jendela kuota lima jam, mingguan, dan bulanan.",
+    "connections": "Koneksi yang dikonfigurasi",
+    "emptyProvider": "Belum ada penyedia OpenCode Go yang dikonfigurasi di Cockpit.",
+    "emptyConnections": "Penyedia OpenCode Go tidak memiliki kunci koneksi yang dikonfigurasi.",
+    "connectionFallback": "Koneksi {{index}}",
+    "errors": {
+      "authentication": "Autentikasi gagal. Periksa kunci koneksi ini.",
+      "rateLimit": "OpenCode Go sedang membatasi pemeriksaan penggunaan. Coba lagi sebentar lagi.",
+      "network": "Tidak dapat menjangkau OpenCode Go.",
+      "unavailable": "Data penggunaan tidak tersedia untuk koneksi ini.",
+      "configuration": "Cockpit tidak dapat membaca koneksi OpenCode Go yang dikonfigurasi."
+    }
   }
 }

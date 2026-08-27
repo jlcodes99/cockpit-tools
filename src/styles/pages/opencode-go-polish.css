@@ -1,0 +1,230 @@
+/* Layout-only refinement for the dedicated OpenCode Go surface.
+   Kept separate from the feature stylesheet so quota/data work can land safely. */
+.opencode-go-accounts-page {
+  gap: 24px;
+  min-width: 0;
+}
+
+.opencode-go-header {
+  min-height: 60px;
+}
+
+.opencode-go-header .platform-header-title {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.opencode-go-title-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.opencode-go-title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.opencode-go-header p {
+  max-width: 68ch;
+  line-height: 1.45;
+}
+
+.opencode-go-header .header-action-btn {
+  flex: 0 0 auto;
+  min-height: 32px;
+}
+
+.opencode-go-header .header-action-btn:focus-visible,
+.opencode-go-connection-card button:focus-visible,
+.opencode-go-editor button:focus-visible,
+.opencode-go-editor input:focus-visible,
+.opencode-go-empty-slot:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.opencode-go-summary {
+  min-width: 0;
+  padding: 18px 24px;
+  border-color: var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.opencode-go-summary > div {
+  gap: 10px;
+}
+
+.opencode-go-summary strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.opencode-go-summary code {
+  max-width: min(48%, 520px);
+}
+
+.opencode-go-connection-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.opencode-go-connection-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 224px;
+  padding: 20px;
+  border-color: var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.opencode-go-connection-card > header {
+  min-width: 0;
+  margin-bottom: 18px;
+}
+
+.opencode-go-connection-card > header > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.opencode-go-connection-card > header > div:first-child > div {
+  min-width: 0;
+}
+
+.opencode-go-connection-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.opencode-go-connection-card h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.opencode-go-connection-card code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opencode-go-card-actions,
+.opencode-go-updated {
+  font-variant-numeric: tabular-nums;
+}
+
+.opencode-go-card-actions button {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.opencode-go-quota-panel,
+.opencode-go-quota-cards {
+  margin-top: auto;
+}
+
+.opencode-go-quota-panel .codex-api-key-usage-grid,
+.opencode-go-quota-cards {
+  gap: 10px;
+}
+
+.opencode-go-quota-panel .codex-api-key-usage-grid > div,
+.opencode-go-quota-card {
+  min-height: 84px;
+}
+
+.opencode-go-quota-panel .codex-api-key-usage-grid strong,
+.opencode-go-quota-card > header > strong,
+.opencode-go-window strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.opencode-go-empty-slot {
+  width: 100%;
+  min-height: 224px;
+}
+
+.opencode-go-editor input:focus-visible {
+  border-color: var(--primary);
+}
+
+@media (max-width: 900px) {
+  .opencode-go-connection-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .opencode-go-accounts-page {
+    gap: 18px;
+  }
+
+  .opencode-go-header {
+    gap: 14px;
+  }
+
+  .opencode-go-header .platform-header-title {
+    align-items: flex-start;
+  }
+
+  .opencode-go-header .header-action-btn {
+    align-self: stretch;
+  }
+
+  .opencode-go-summary {
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .opencode-go-summary code {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .opencode-go-connection-card {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .opencode-go-connection-card > header {
+    gap: 10px;
+  }
+
+  .opencode-go-card-actions {
+    align-self: stretch;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 420px) {
+  .opencode-go-title-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .opencode-go-title {
+    font-size: 21px;
+  }
+
+  .opencode-go-quota-panel .codex-api-key-usage-grid,
+  .opencode-go-quota-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opencode-go-accounts-page *,
+  .opencode-go-accounts-page *::before,
+  .opencode-go-accounts-page *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
