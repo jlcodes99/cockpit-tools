@@ -112,6 +112,8 @@ export function normalizeOpenCodeGoConnection(value: unknown): OpenCodeGoConnect
  */
 export interface OpenCodeGoConnectionService {
   listConnections(): Promise<OpenCodeGoConnection[]>;
+  exportConnections(connectionIds: string[]): Promise<string>;
+  importConnections(encryptedStore: string): Promise<OpenCodeGoConnection[]>;
   createConnection(input: { name: string; apiKey: string; email?: string; provider?: 'go' | 'zen' }): Promise<OpenCodeGoConnection>;
   updateConnection(
     connectionId: string,
@@ -127,6 +129,15 @@ export interface OpenCodeGoConnectionService {
 export const openCodeGoService: OpenCodeGoConnectionService = {
   async listConnections() {
     const response = await invoke<unknown[]>('list_opencode_go_connections');
+    return response.map(normalizeOpenCodeGoConnection);
+  },
+
+  async exportConnections(connectionIds) {
+    return invoke<string>('export_opencode_go_connections', { connectionIds });
+  },
+
+  async importConnections(encryptedStore) {
+    const response = await invoke<unknown[]>('import_opencode_go_connections', { encryptedStore });
     return response.map(normalizeOpenCodeGoConnection);
   },
 

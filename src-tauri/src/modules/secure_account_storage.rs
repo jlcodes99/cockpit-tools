@@ -119,6 +119,37 @@ pub fn deserialize_account_file<T: DeserializeOwned>(
     Ok((value, true))
 }
 
+/// Decodes only an AES-GCM envelope. Transfer imports must never accept a
+/// plaintext credential payload, even though ordinary persisted files retain a
+/// legacy migration path through `deserialize_account_file`.
+pub fn deserialize_encrypted_account_file<T: DeserializeOwned>(
+    expected_kind: &str,
+    content: &str,
+) -> Result<T, String> {
+    let envelope = serde_json::from_str::<SecureAccountEnvelope>(content)
+        .map_err(|_| "encrypted account transfer required".to_string())?;
+    if envelope.version != VERSION
+        || envelope.algorithm != "AES-256-GCM"
+        || envelope.kind != expected_kind
+    {
+        return Err("unsupported encrypted account transfer".to_string());
+    }
+    let nonce = general_purpose::STANDARD
+        .decode(envelope.nonce.trim())
+        .map_err(|e| format!("解析账号详情 nonce 失败: {}", e))?;
+    if nonce.len() != 12 {
+        return Err("账号详情 nonce 长度无效".to_string());
+    }
+    let ciphertext = general_purpose::STANDARD
+        .decode(envelope.ciphertext.trim())
+        .map_err(|e| format!("解析账号详情密文失败: {}", e))?;
+    let plaintext = cipher()?
+        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+        .map_err(|_| "encrypted account transfer cannot be opened on this device".to_string())?;
+    serde_json::from_slice::<T>(&plaintext)
+        .map_err(|e| format!("解析账号详情明文失败: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

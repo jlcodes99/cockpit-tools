@@ -18,7 +18,7 @@ import { OpenCodeIcon } from '../components/icons/OpenCodeIcon';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import { OpenCodeGoQuotaWindowCards } from '../components/opencode-go/OpenCodeGoQuotaWindowCards';
 import { OpenCodeGoAddAccountModal } from '../components/opencode-go/OpenCodeGoAddAccountModal';
-import { useOpenCodeGoStore } from '../stores/useOpenCodeGoStore';
+import { useOpenCodeGoAccountStore } from '../stores/useOpenCodeGoAccountStore';
 import type { OpenCodeGoConnection } from '../types/openCodeGo';
 import {
   createOpenCodeGoConnectionSlots,
@@ -55,7 +55,7 @@ export function OpenCodeGoAccountsPage() {
     if (code.includes('NETWORK')) return quotaErrorText('network');
     return quotaErrorText(undefined);
   };
-  const store = useOpenCodeGoStore();
+  const store = useOpenCodeGoAccountStore();
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [name, setName] = useState('');
@@ -75,11 +75,11 @@ export function OpenCodeGoAccountsPage() {
   const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null);
   const [testedConnectionId, setTestedConnectionId] = useState<string | null>(null);
 
-  useEffect(() => { void store.fetchConnections(); }, [store.fetchConnections]);
+  useEffect(() => { void store.fetchAccounts(); }, [store.fetchAccounts]);
 
   const providerConnections = useMemo(
-    () => store.connections.filter((connection) => (connection.provider ?? 'go') === providerTab),
-    [providerTab, store.connections],
+    () => store.accounts.filter((connection) => (connection.provider ?? 'go') === providerTab),
+    [providerTab, store.accounts],
   );
   const visibleConnections = useMemo(
     () => filterAndSortOpenCodeGoConnections(providerConnections, {
@@ -115,7 +115,7 @@ export function OpenCodeGoAccountsPage() {
     setRefreshingConnectionId(connectionId);
     setActionError('');
     try {
-      await store.refreshConnection(connectionId);
+      await store.refreshQuota(connectionId);
     } catch (error) {
       setActionError(actionErrorText(error));
     } finally {
@@ -148,7 +148,7 @@ export function OpenCodeGoAccountsPage() {
       setDeleteCandidateId(null);
     }
   };
-  const deleteCandidate = store.connections.find((connection) => connection.id === deleteCandidateId) ?? null;
+  const deleteCandidate = store.accounts.find((connection) => connection.id === deleteCandidateId) ?? null;
   const saveEditor = async () => {
     if (!editor || (!editor.connection && !apiKey.trim())) return;
     setSaving(true);
@@ -191,7 +191,7 @@ export function OpenCodeGoAccountsPage() {
             <Plus size={15} />
             <span>{t('openCodeGo.add.submit', 'Add connection')}</span>
           </button>
-          <button type="button" className="header-action-btn" onClick={() => void store.refreshAll()} disabled={store.loading || store.connections.length === 0}>
+          <button type="button" className="header-action-btn" onClick={() => void store.refreshAllQuotas()} disabled={store.loading || store.accounts.length === 0}>
             <RefreshCw size={15} className={store.loading ? 'loading-spinner' : ''} />
             <span>{t('common.refresh', 'Refresh all')}</span>
           </button>
@@ -199,7 +199,7 @@ export function OpenCodeGoAccountsPage() {
       </div>
 
       <section className="opencode-go-summary" aria-live="polite">
-        <div><KeyRound size={18} /><span>{t('openCodeGo.connections', 'Configured connections')}</span><strong>{store.connections.length}</strong></div>
+        <div><KeyRound size={18} /><span>{t('openCodeGo.connections', 'Configured connections')}</span><strong>{store.accounts.length}</strong></div>
         <code>{providerTab === 'go' ? 'https://opencode.ai/zen/go/v1' : 'https://opencode.ai/zen/v1'}</code>
       </section>
 
@@ -256,7 +256,7 @@ export function OpenCodeGoAccountsPage() {
         {hasActiveFilter && <button type="button" className="btn btn-secondary" onClick={() => { setSearchQuery(''); setTierFilter('all'); }}>{t('openCodeGo.clearFilters', 'Clear filters')}</button>}
       </div>
 
-      {(store.error || actionError) && <div className="opencode-go-empty" role="alert">{store.error || actionError}</div>}
+      {(store.error || actionError) && <div className="opencode-go-empty" role="alert">{store.error ? quotaErrorText(store.error) : actionError}</div>}
       {!store.loaded && store.loading ? (
         <div className="opencode-go-empty">{t('common.loading', 'Loading...')}</div>
       ) : (
@@ -304,13 +304,7 @@ export function OpenCodeGoAccountsPage() {
       <OpenCodeGoAddAccountModal
         open={showAddAccount}
         createConnection={async ({ name, apiKey, email }) => {
-          const beforeIds = new Set(useOpenCodeGoStore.getState().connections.map((connection) => connection.id));
-          await store.createConnection(name, apiKey, email, providerTab);
-          const connection = useOpenCodeGoStore.getState().connections.find(
-            (candidate) => !beforeIds.has(candidate.id),
-          );
-          if (!connection) throw new Error('OPENCODE_GO_CONNECTION_SAVE_FAILED');
-          return connection;
+          return store.createConnection(name, apiKey, email, providerTab);
         }}
         onClose={() => setShowAddAccount(false)}
       />

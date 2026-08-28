@@ -902,6 +902,8 @@ pub fn run() {
             commands::codex::codex_list_model_provider_models,
             commands::codex::codex_query_model_provider_usage,
             commands::opencode_go::list_opencode_go_connections,
+            commands::opencode_go::export_opencode_go_connections,
+            commands::opencode_go::import_opencode_go_connections,
             commands::opencode_go::create_opencode_go_connection,
             commands::opencode_go::update_opencode_go_connection,
             commands::opencode_go::set_opencode_go_connection_enabled,

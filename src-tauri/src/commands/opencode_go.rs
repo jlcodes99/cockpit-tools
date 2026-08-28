@@ -10,6 +10,26 @@ pub async fn list_opencode_go_connections() -> Result<Vec<OpenCodeGoConnectionSu
         .map_err(|_| "OPENCODE_GO_STORE_TASK_FAILED".to_string())?
 }
 
+#[tauri::command]
+pub async fn export_opencode_go_connections(connection_ids: Vec<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        opencode_go::export_encrypted_transfer(connection_ids)
+    })
+    .await
+    .map_err(|_| "OPENCODE_GO_STORE_TASK_FAILED".to_string())?
+}
+
+#[tauri::command]
+pub async fn import_opencode_go_connections(
+    encrypted_store: String,
+) -> Result<Vec<OpenCodeGoConnectionSummary>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        opencode_go::import_encrypted_transfer(encrypted_store)
+    })
+    .await
+    .map_err(|_| "OPENCODE_GO_STORE_TASK_FAILED".to_string())?
+}
+
 // Keep API-key command names explicit for frontend callers while the connection-named
 // commands remain available for compatibility with the initial integration.
 #[tauri::command]

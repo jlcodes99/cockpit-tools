@@ -34,6 +34,11 @@ function account(
 function client(overrides: Partial<OpenCodeGoAccountClient> = {}): OpenCodeGoAccountClient {
   return {
     listAccounts: async () => [],
+    createConnection: async ({ name }) => account('created', { name }),
+    updateConnection: async (accountId, patch) => account(accountId, patch),
+    setConnectionEnabled: async (accountId, enabled) => account(accountId, { enabled }),
+    deleteConnection: async () => undefined,
+    testConnection: async () => undefined,
     refreshQuota: async (accountId) => ({
       connection: account(accountId, { quota }),
       quota,
@@ -84,6 +89,36 @@ test('refreshAllQuotas publishes cached failures without discarding connections'
 
   assert.deepEqual(store.getState().accounts, [account('first', { quota }), failed]);
   assert.equal(store.getState().error, null);
+});
+
+test('page CRUD mutations update the dashboard and floating-card shared snapshot', async () => {
+  const created = account('created', { name: 'Created' });
+  const updated = account('created', { name: 'Updated' });
+  const store = createOpenCodeGoAccountStore(
+    client({
+      listAccounts: async () => [account('existing')],
+      createConnection: async () => created,
+      updateConnection: async () => updated,
+    }),
+  );
+
+  await store.getState().fetchAccounts();
+  await store.getState().createConnection('Created', 'secret');
+  await store.getState().updateConnection('created', { name: 'Updated' });
+  await store.getState().deleteConnection('existing');
+
+  assert.deepEqual(store.getState().accounts, [updated]);
+});
+
+test('fetch failures are reduced to a safe presentation classification', async () => {
+  const store = createOpenCodeGoAccountStore(
+    client({ listAccounts: async () => { throw new Error('provider token=must-not-render'); } }),
+  );
+
+  await store.getState().fetchAccounts();
+
+  assert.equal(store.getState().error, 'unavailable');
+  assert.equal(store.getState().loaded, true);
 });
 
 test('refreshQuota reconciles the stored account before rethrowing a provider error', async () => {

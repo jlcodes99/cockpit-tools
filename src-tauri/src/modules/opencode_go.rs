@@ -216,6 +216,44 @@ pub fn list_connections() -> Result<Vec<OpenCodeGoConnectionSummary>, String> {
     with_store(|store| Ok((ordered_summaries(&store.connections), false)))
 }
 
+/// The account-transfer boundary carries the existing encrypted store envelope,
+/// never decoded connection data. It can only be restored by the same local
+/// secure-storage key, so a bundle cannot disclose or transplant credentials.
+pub fn export_encrypted_transfer(connection_ids: Vec<String>) -> Result<String, String> {
+    let selected = connection_ids
+        .into_iter()
+        .map(|id| validate_connection_id(&id).map(str::to_string))
+        .collect::<Result<std::collections::HashSet<_>, _>>()?;
+    let _guard = STORE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let path = store_path()?;
+    let store = read_store_from(&path)?;
+    if selected.len() != store.connections.len()
+        || store
+            .connections
+            .iter()
+            .any(|connection| !selected.contains(&connection.id))
+    {
+        return Err("OPENCODE_GO_TRANSFER_SELECTION_INVALID".to_string());
+    }
+    fs::read_to_string(path).map_err(|_| "OPENCODE_GO_STORE_READ_FAILED".to_string())
+}
+
+pub fn import_encrypted_transfer(
+    content: String,
+) -> Result<Vec<OpenCodeGoConnectionSummary>, String> {
+    let imported = crate::modules::secure_account_storage::deserialize_encrypted_account_file::<
+        ConnectionStore,
+    >(STORAGE_KIND, &content)
+    .map_err(|_| "OPENCODE_GO_TRANSFER_UNAVAILABLE".to_string())?;
+    validate_store(&imported)?;
+    with_store(move |store| {
+        *store = imported;
+        Ok((ordered_summaries(&store.connections), true))
+    })
+}
+
 pub fn create_connection(
     name: String,
     api_key: String,
@@ -637,6 +675,43 @@ mod tests {
         assert!(list_connections().expect("list manual store").is_empty());
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn encrypted_transfer_round_trips_without_serializing_credentials() {
+        let _env = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let dir = temp_dir();
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &dir);
+        let created = create_connection(
+            "Transfer".into(),
+            "transfer-secret-key".into(),
+            Some("transfer@example.com".into()),
+            "go".into(),
+        )
+        .expect("create encrypted connection");
+        let transfer = export_encrypted_transfer(vec![created.id.clone()])
+            .expect("export encrypted envelope");
+        assert!(transfer.contains("AES-256-GCM"));
+        assert!(!transfer.contains("transfer-secret-key"));
+        assert!(!transfer.contains("transfer@example.com"));
+        delete_connection(created.id).expect("delete preimage");
+        let restored = import_encrypted_transfer(transfer).expect("restore local envelope");
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].email_hint.as_deref(), Some("t***@example.com"));
+        assert_eq!(api_key(&restored[0].id).expect("key restored locally"), "transfer-secret-key");
+        std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn encrypted_transfer_rejects_plaintext_credentials() {
+        assert_eq!(
+            import_encrypted_transfer(r#"{"connections":[{"apiKey":"must-not-import"}]}"#.into())
+                .unwrap_err(),
+            "OPENCODE_GO_TRANSFER_UNAVAILABLE"
+        );
     }
 
     #[test]

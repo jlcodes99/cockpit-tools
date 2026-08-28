@@ -13,6 +13,7 @@ import * as zcodeService from './zcodeService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as zedService from './zedService';
+import { openCodeGoService } from './openCodeGoService';
 import type { ClaudeAccount } from '../types/claude';
 
 type AccountWithId = { id: string };
@@ -52,6 +53,19 @@ const PLATFORM_ADAPTERS: Partial<Record<PlatformId, TransferAdapter>> = {
     listAccounts: codexService.listCodexAccounts,
     exportAccounts: codexService.exportCodexAccounts,
     importFromJson: codexService.importCodexFromJson,
+  },
+  opencode_go: {
+    listAccounts: openCodeGoService.listConnections,
+    // Account transfer expects each adapter to return JSON; the encrypted
+    // envelope itself is opaque transfer data, so encode it as a JSON string.
+    exportAccounts: async (accountIds) => JSON.stringify(
+      await openCodeGoService.exportConnections(accountIds),
+    ),
+    importFromJson: async (jsonContent) => {
+      const encryptedStore = parseJsonOrThrow(jsonContent, 'invalid_opencode_go_transfer');
+      if (typeof encryptedStore !== 'string') throw new Error('invalid_opencode_go_transfer');
+      return openCodeGoService.importConnections(encryptedStore);
+    },
   },
   claude_manager: {
     listAccounts: listClaudeManagerTransferAccounts,
