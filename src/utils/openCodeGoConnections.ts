@@ -1,11 +1,5 @@
 import type { OpenCodeGoConnection } from '../types/openCodeGo.ts';
 
-/**
- * OpenCode Go exposes exactly four connection slots (enforced by the Rust
- * store: `src-tauri/src/modules/opencode_go.rs::MAX_CONNECTIONS`).
- */
-export const OPENCODE_GO_CONNECTION_LIMIT = 4;
-
 export interface OpenCodeGoConnectionSlot {
   connection: OpenCodeGoConnection | null;
 }
@@ -24,18 +18,13 @@ export interface OpenCodeGoConnectionQuery {
 }
 
 /**
- * Maps stored connections onto the fixed four-slot grid. Throws when a backend
- * response exceeds capacity so over-capacity data can never render silently.
+ * Maps every stored connection to a renderable slot. Connection ownership is
+ * intentionally unbounded; storage and key validation are the real limits.
  */
 export function createOpenCodeGoConnectionSlots(
   connections: OpenCodeGoConnection[],
 ): OpenCodeGoConnectionSlot[] {
-  if (connections.length > OPENCODE_GO_CONNECTION_LIMIT) {
-    throw new Error('OPENCODE_GO_CONNECTION_LIMIT_EXCEEDED');
-  }
-  return Array.from({ length: OPENCODE_GO_CONNECTION_LIMIT }, (_, index) => ({
-    connection: connections[index] ?? null,
-  }));
+  return connections.map((connection) => ({ connection }));
 }
 
 /**
@@ -117,6 +106,7 @@ export function filterAndSortOpenCodeGoConnections(
     if (!query) return true;
     return (
       connection.name.toLowerCase().includes(query) ||
+      connection.emailHint?.toLowerCase().includes(query) ||
       connection.keyHint.toLowerCase().includes(query)
     );
   });

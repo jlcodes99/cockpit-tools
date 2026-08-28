@@ -1068,22 +1068,30 @@ fn build_opencode_go_display_info(lang: &str) -> AccountDisplayInfo {
                 .quota
                 .as_ref()
                 .map(|quota| {
-                    quota
-                        .rolling
-                        .remaining_percent
-                        .min(quota.weekly.remaining_percent)
-                        .min(quota.monthly.remaining_percent)
+                    [
+                        quota.rolling.remaining_percent,
+                        quota.weekly.remaining_percent,
+                        quota.monthly.remaining_percent,
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .reduce(f64::min)
+                    .unwrap_or(-1.0)
                 })
                 .unwrap_or(-1.0);
             let right_floor = right
                 .quota
                 .as_ref()
                 .map(|quota| {
-                    quota
-                        .rolling
-                        .remaining_percent
-                        .min(quota.weekly.remaining_percent)
-                        .min(quota.monthly.remaining_percent)
+                    [
+                        quota.rolling.remaining_percent,
+                        quota.weekly.remaining_percent,
+                        quota.monthly.remaining_percent,
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .reduce(f64::min)
+                    .unwrap_or(-1.0)
                 })
                 .unwrap_or(-1.0);
             left_floor
@@ -1111,11 +1119,15 @@ fn build_opencode_go_display_info(lang: &str) -> AccountDisplayInfo {
             ]
             .into_iter()
             .map(|(label, window)| {
+                let remaining = window
+                    .remaining_percent
+                    .map(|value| format!("{:.0}%", value.clamp(0.0, 100.0)))
+                    .unwrap_or_else(|| "—".to_string());
                 format_quota_line(
                     lang,
                     label,
-                    &format!("{:.0}%", window.remaining_percent.clamp(0.0, 100.0)),
-                    Some(&format_reset_time_from_ts(lang, Some(window.resets_at))),
+                    &remaining,
+                    Some(&format_reset_time_from_ts(lang, window.resets_at)),
                 )
             })
             .collect()

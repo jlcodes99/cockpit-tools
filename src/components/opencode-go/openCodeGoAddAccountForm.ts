@@ -1,14 +1,15 @@
 export interface OpenCodeGoAddAccountFormValues {
   name: string;
+  email: string;
   apiKey: string;
   provider?: 'go' | 'zen';
 }
 
-export type OpenCodeGoAddAccountFieldError = 'required' | 'invalid';
+export type OpenCodeGoAddAccountFieldError = 'required' | 'invalid' | 'invalidEmail';
 
 export interface OpenCodeGoAddAccountValidation {
   values: OpenCodeGoAddAccountFormValues;
-  errors: { apiKey?: OpenCodeGoAddAccountFieldError };
+  errors: { apiKey?: OpenCodeGoAddAccountFieldError; email?: OpenCodeGoAddAccountFieldError };
 }
 
 export interface OpenCodeGoCreatedConnection {
@@ -29,7 +30,7 @@ export type OpenCodeGoAddAccountSubmitResult =
   | { ok: false; error: OpenCodeGoAddAccountErrorKind };
 
 export function initialOpenCodeGoAddAccountForm(): OpenCodeGoAddAccountFormValues {
-  return { name: '', apiKey: '' };
+  return { name: '', email: '', apiKey: '' };
 }
 
 export function validateOpenCodeGoAddAccount(
@@ -37,13 +38,16 @@ export function validateOpenCodeGoAddAccount(
 ): OpenCodeGoAddAccountValidation {
   const values = {
     name: form.name.trim(),
+    email: form.email.trim(),
     apiKey: form.apiKey.trim(),
   };
-  if (!values.apiKey) return { values, errors: { apiKey: 'required' } };
-  if (/\s/.test(values.apiKey)) {
-    return { values, errors: { apiKey: 'invalid' } };
+  const errors: OpenCodeGoAddAccountValidation['errors'] = {};
+  if (!values.apiKey) errors.apiKey = 'required';
+  else if (/\s/.test(values.apiKey)) errors.apiKey = 'invalid';
+  if (values.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) {
+    errors.email = 'invalidEmail';
   }
-  return { values, errors: {} };
+  return { values, errors };
 }
 
 export function describeOpenCodeGoAddError(

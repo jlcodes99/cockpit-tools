@@ -26,7 +26,7 @@ import {
   listCodexModelProviders,
 } from './codexModelProviderService';
 import {
-  isPlaintextOpenCodeGoApiKey,
+  prepareCodexModelProvidersForTransferImport,
   sanitizeOpenCodeGoProviderForTransfer,
 } from '../utils/openCodeGoPlatform';
 import {
@@ -1121,15 +1121,13 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
   });
   invalidateCodexGroupCache();
 
+  const localCodexModelProviders = await listCodexModelProviders();
   await invoke('save_codex_model_providers', {
     data: JSON.stringify(
-      bundle.codex_model_providers.map((provider) => ({
-        ...provider,
-        // OpenCode Go keys are redacted in exports; keep local material.
-        apiKeys: provider.apiKeys.filter(
-          (apiKey) => !isPlaintextOpenCodeGoApiKey(apiKey?.apiKey),
-        ),
-      })),
+      prepareCodexModelProvidersForTransferImport(
+        bundle.codex_model_providers,
+        localCodexModelProviders,
+      ),
       null,
       2,
     ),

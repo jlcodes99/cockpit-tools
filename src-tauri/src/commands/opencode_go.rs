@@ -21,10 +21,16 @@ pub async fn list_opencode_go_api_keys() -> Result<Vec<OpenCodeGoConnectionSumma
 pub async fn create_opencode_go_connection(
     name: String,
     api_key: String,
+    email: Option<String>,
     provider: Option<String>,
 ) -> Result<OpenCodeGoConnectionSummary, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        opencode_go::create_connection(name, api_key, provider.unwrap_or_else(|| "go".to_string()))
+        opencode_go::create_connection(
+            name,
+            api_key,
+            email,
+            provider.unwrap_or_else(|| "go".to_string()),
+        )
     })
         .await
         .map_err(|_| "OPENCODE_GO_STORE_TASK_FAILED".to_string())?
@@ -35,7 +41,7 @@ pub async fn add_opencode_go_api_key(
     name: String,
     api_key: String,
 ) -> Result<OpenCodeGoConnectionSummary, String> {
-    create_opencode_go_connection(name, api_key, Some("go".to_string())).await
+    create_opencode_go_connection(name, api_key, None, Some("go".to_string())).await
 }
 
 #[tauri::command]
@@ -43,9 +49,10 @@ pub async fn update_opencode_go_connection(
     connection_id: String,
     name: Option<String>,
     api_key: Option<String>,
+    email: Option<String>,
 ) -> Result<OpenCodeGoConnectionSummary, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        opencode_go::update_connection(connection_id, name, api_key)
+        opencode_go::update_connection(connection_id, name, api_key, email)
     })
     .await
     .map_err(|_| "OPENCODE_GO_STORE_TASK_FAILED".to_string())?
@@ -57,7 +64,7 @@ pub async fn update_opencode_go_api_key(
     name: Option<String>,
     api_key: Option<String>,
 ) -> Result<OpenCodeGoConnectionSummary, String> {
-    update_opencode_go_connection(connection_id, name, api_key).await
+    update_opencode_go_connection(connection_id, name, api_key, None).await
 }
 
 #[tauri::command]
@@ -218,7 +225,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn api_key_commands_cover_crud_and_enforce_the_four_key_limit() {
+    async fn api_key_commands_cover_crud_without_an_artificial_key_limit() {
         let _env = crate::modules::test_support::env_lock()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -226,35 +233,31 @@ mod tests {
         std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &dir);
 
         let mut created = Vec::new();
-        for index in 0..4 {
+        for index in 0..5 {
             created.push(
                 add_opencode_go_api_key(format!("Key {}", index + 1), format!("test-key-{index}"))
                     .await
                     .unwrap(),
             );
         }
-        assert_eq!(list_opencode_go_api_keys().await.unwrap().len(), 4);
-        assert_eq!(
-            add_opencode_go_api_key("Fifth".into(), "test-key-fifth".into())
-                .await
-                .unwrap_err(),
-            "OPENCODE_GO_CONNECTION_LIMIT_REACHED"
-        );
+        assert_eq!(list_opencode_go_api_keys().await.unwrap().len(), 5);
 
-        let updated = update_opencode_go_api_key(
+        let updated = update_opencode_go_connection(
             created[0].id.clone(),
             Some("Renamed".into()),
             Some("replacement-test-key".into()),
+            Some("owner@example.com".into()),
         )
         .await
         .unwrap();
         assert_eq!(updated.name, "Renamed");
         assert_eq!(updated.key_hint, "repl****-key");
+        assert_eq!(updated.email_hint.as_deref(), Some("o***@example.com"));
 
         delete_opencode_go_api_key(created[1].id.clone())
             .await
             .unwrap();
-        assert_eq!(list_opencode_go_api_keys().await.unwrap().len(), 3);
+        assert_eq!(list_opencode_go_api_keys().await.unwrap().len(), 4);
 
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = std::fs::remove_dir_all(dir);

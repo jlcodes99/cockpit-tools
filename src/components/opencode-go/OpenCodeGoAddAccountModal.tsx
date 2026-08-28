@@ -23,6 +23,7 @@ export interface OpenCodeGoAddAccountModalProps {
   open: boolean;
   createConnection: (input: {
     name: string;
+    email: string;
     apiKey: string;
     provider?: 'go' | 'zen';
   }) => Promise<OpenCodeGoCreatedConnection>;
@@ -45,8 +46,10 @@ export function OpenCodeGoAddAccountModal({
   const nameInputRef = useRef<HTMLInputElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [form, setForm] = useState(initialOpenCodeGoAddAccountForm);
-  const [fieldError, setFieldError] =
-    useState<OpenCodeGoAddAccountFieldError | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    apiKey?: OpenCodeGoAddAccountFieldError;
+    email?: OpenCodeGoAddAccountFieldError;
+  }>({});
   const [submitError, setSubmitError] =
     useState<OpenCodeGoAddAccountErrorKind | null>(null);
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
@@ -64,7 +67,7 @@ export function OpenCodeGoAddAccountModal({
         ? document.activeElement
         : null;
     setForm(initialOpenCodeGoAddAccountForm());
-    setFieldError(null);
+    setFieldErrors({});
     setSubmitError(null);
     setApiKeyVisible(false);
     const frame = window.requestAnimationFrame(() => nameInputRef.current?.focus());
@@ -106,10 +109,9 @@ export function OpenCodeGoAddAccountModal({
     event.preventDefault();
     if (submitting) return;
     const validation = validateOpenCodeGoAddAccount(form);
-    const nextFieldError = validation.errors.apiKey ?? null;
-    setFieldError(nextFieldError);
+    setFieldErrors(validation.errors);
     setSubmitError(null);
-    if (nextFieldError) return;
+    if (Object.keys(validation.errors).length > 0) return;
 
     setSubmitting(true);
     const result = await submitOpenCodeGoAddAccount(form, createConnection);
@@ -121,7 +123,7 @@ export function OpenCodeGoAddAccountModal({
       return;
     }
     if ('errors' in result) {
-      setFieldError(result.errors.apiKey ?? null);
+      setFieldErrors(result.errors);
     } else if ('error' in result) {
       setSubmitError(result.error);
     }
@@ -151,14 +153,17 @@ export function OpenCodeGoAddAccountModal({
   };
 
   const apiKeyErrorText =
-    fieldError === 'required'
+    fieldErrors.apiKey === 'required'
       ? t('openCodeGo.add.errors.required', 'API key is required.')
-      : fieldError === 'invalid'
+      : fieldErrors.apiKey === 'invalid'
         ? t(
             'openCodeGo.add.errors.invalid',
             'Enter a valid API key without spaces.',
           )
         : null;
+  const emailErrorText = fieldErrors.email === 'invalidEmail'
+    ? t('openCodeGo.add.errors.invalidEmail', 'Enter a valid email address.')
+    : null;
 
   return (
     <div className="modal-overlay opencode-go-add-overlay" onMouseDown={handleBackdropClick}>
@@ -226,6 +231,31 @@ export function OpenCodeGoAddAccountModal({
             </div>
 
             <div className="form-group">
+              <label htmlFor={`${titleId}-email`}>
+                {t('openCodeGo.add.email', 'Email')}
+                <span className="opencode-go-add-optional">
+                  {t('common.optional', 'Optional')}
+                </span>
+              </label>
+              <input
+                id={`${titleId}-email`}
+                type="email"
+                value={form.email}
+                onChange={(event) => {
+                  setForm((previous) => ({ ...previous, email: event.target.value }));
+                  if (fieldErrors.email) setFieldErrors((previous) => ({ ...previous, email: undefined }));
+                }}
+                placeholder={t('openCodeGo.add.emailPlaceholder', 'owner@example.com')}
+                autoComplete="email"
+                disabled={submitting}
+                aria-invalid={Boolean(emailErrorText)}
+              />
+              {emailErrorText && (
+                <span className="opencode-go-add-field-error" role="alert">{emailErrorText}</span>
+              )}
+            </div>
+
+            <div className="form-group">
               <label htmlFor={`${titleId}-api-key`}>
                 {t('openCodeGo.add.apiKey', 'API key')}
               </label>
@@ -239,7 +269,7 @@ export function OpenCodeGoAddAccountModal({
                       ...previous,
                       apiKey: event.target.value,
                     }));
-                    if (fieldError) setFieldError(null);
+                    if (fieldErrors.apiKey) setFieldErrors((previous) => ({ ...previous, apiKey: undefined }));
                   }}
                   autoComplete="new-password"
                   autoCapitalize="none"

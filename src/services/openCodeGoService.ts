@@ -6,8 +6,6 @@ import type {
   OpenCodeGoQuotaWindowSnapshot,
 } from '../types/openCodeGo';
 
-export const OPENCODE_GO_CONNECTION_LIMIT = 4;
-
 export type { OpenCodeGoConnection as OpenCodeGoConnectionSummary } from '../types/openCodeGo';
 
 export type OpenCodeGoUsageErrorKind =
@@ -89,6 +87,9 @@ export function normalizeOpenCodeGoConnection(value: unknown): OpenCodeGoConnect
     id: String(raw.id ?? '').trim(),
     name: String(raw.name ?? '').trim(),
     keyHint: String(raw.keyHint ?? '').trim(),
+    ...(typeof raw.emailHint === 'string' && raw.emailHint.trim()
+      ? { emailHint: raw.emailHint.trim() }
+      : {}),
     createdAt: finiteNumber(raw.createdAt, 'CREATED_AT'),
     updatedAt: finiteNumber(raw.updatedAt, 'UPDATED_AT'),
     enabled: raw.enabled !== false,
@@ -111,10 +112,10 @@ export function normalizeOpenCodeGoConnection(value: unknown): OpenCodeGoConnect
  */
 export interface OpenCodeGoConnectionService {
   listConnections(): Promise<OpenCodeGoConnection[]>;
-  createConnection(input: { name: string; apiKey: string; provider?: 'go' | 'zen' }): Promise<OpenCodeGoConnection>;
+  createConnection(input: { name: string; apiKey: string; email?: string; provider?: 'go' | 'zen' }): Promise<OpenCodeGoConnection>;
   updateConnection(
     connectionId: string,
-    patch: { name?: string; apiKey?: string },
+    patch: { name?: string; apiKey?: string; email?: string },
   ): Promise<OpenCodeGoConnection>;
   setConnectionEnabled(connectionId: string, enabled: boolean): Promise<OpenCodeGoConnection>;
   deleteConnection(connectionId: string): Promise<void>;
@@ -129,10 +130,11 @@ export const openCodeGoService: OpenCodeGoConnectionService = {
     return response.map(normalizeOpenCodeGoConnection);
   },
 
-  async createConnection({ name, apiKey, provider = 'go' }) {
+  async createConnection({ name, apiKey, email, provider = 'go' }) {
     return normalizeOpenCodeGoConnection(await invoke('create_opencode_go_connection', {
       name: name.trim(),
       apiKey: apiKey.trim(),
+      ...(email !== undefined ? { email: email.trim() } : {}),
       provider,
     }));
   },
@@ -142,6 +144,7 @@ export const openCodeGoService: OpenCodeGoConnectionService = {
       connectionId,
       name: patch.name?.trim(),
       apiKey: patch.apiKey?.trim(),
+      ...(patch.email !== undefined ? { email: patch.email.trim() } : {}),
     }));
   },
 

@@ -6,8 +6,8 @@ import {
   findOpenCodeGoProvider,
   isPlaintextOpenCodeGoApiKey,
   maskOpenCodeGoApiKey,
-  openCodeGoConnectionCapacity,
   orderOpenCodeGoConnections,
+  prepareCodexModelProvidersForTransferImport,
   sanitizeOpenCodeGoProviderForTransfer,
   stripOpenCodeGoKeyMaterial,
 } from './openCodeGoPlatform.ts';
@@ -35,23 +35,6 @@ test('findOpenCodeGoProvider selects only the official Go endpoint', () => {
       expected,
     ]),
     expected,
-  );
-});
-
-test('OpenCode Go connection policy rejects a fifth key and reports four occupied slots', () => {
-  assert.deepEqual(openCodeGoConnectionCapacity(0), {
-    count: 0,
-    remaining: 4,
-    canAdd: true,
-  });
-  assert.deepEqual(openCodeGoConnectionCapacity(4), {
-    count: 4,
-    remaining: 0,
-    canAdd: false,
-  });
-  assert.throws(
-    () => openCodeGoConnectionCapacity(5),
-    /OPENCODE_GO_CONNECTION_LIMIT_EXCEEDED/,
   );
 });
 
@@ -137,4 +120,23 @@ test('stripOpenCodeGoKeyMaterial keeps only non-secret import fields', () => {
     apiKey: secret,
   });
   assert.deepEqual(stripped, { id: 'key-9', apiKey: 'redacted:' });
+});
+
+test('config transfer keeps unrelated provider credentials and local OpenCode keys', () => {
+  const importedOpenCode = goProviderWithKey('redacted:ocg-****-9876');
+  const importedOther = {
+    ...provider('https://example.com/v1'),
+    id: 'other-provider',
+    apiKeys: [{ id: 'other-key', name: 'Other', apiKey: 'other-credential', createdAt: 1, updatedAt: 1 }],
+  };
+  const localOpenCode = goProviderWithKey(secret);
+
+  const result = prepareCodexModelProvidersForTransferImport(
+    [importedOpenCode, importedOther],
+    [localOpenCode],
+  );
+
+  assert.equal(result[0].apiKeys[0].apiKey, secret);
+  assert.equal(result[1].apiKeys[0].apiKey, 'other-credential');
+  assert.ok(!result.flatMap((item) => item.apiKeys).some((key) => key.apiKey.startsWith('redacted:')));
 });

@@ -3,9 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  createOpenCodeGoConnectionSlots,
-} from '../src/utils/openCodeGoConnections.ts';
+import { createOpenCodeGoConnectionSlots } from '../src/utils/openCodeGoConnections.ts';
 import {
   classifyOpenCodeGoUsageError,
   findOpenCodeGoProvider,
@@ -23,39 +21,18 @@ function connection(id: string): OpenCodeGoConnection {
   };
 }
 
-test('exact-four invariant: the autonomous page always exposes four connection slots', () => {
+test('the autonomous page renders every stored connection without a fixed capacity', () => {
   const slots = createOpenCodeGoConnectionSlots([
-    connection('one'),
-    connection('two'),
+    connection('one'), connection('two'), connection('three'), connection('four'), connection('five'),
   ]);
-  assert.equal(slots.length, 4);
-  assert.deepEqual(slots.map((slot) => slot.connection?.id ?? null), [
-    'one',
-    'two',
-    null,
-    null,
-  ]);
-  assert.throws(
-    () => createOpenCodeGoConnectionSlots([
-      connection('1'),
-      connection('2'),
-      connection('3'),
-      connection('4'),
-      connection('5'),
-    ]),
-    /OPENCODE_GO_CONNECTION_LIMIT_EXCEEDED/,
-  );
+  assert.equal(slots.length, 5);
+  assert.deepEqual(slots.map((slot) => slot.connection?.id), ['one', 'two', 'three', 'four', 'five']);
 });
 
 test('Codex isolation: legacy provider lookup ignores lookalikes and unrelated endpoints', () => {
   const official = {
-    id: 'p-official',
-    name: 'OpenCode Go',
-    baseUrl: 'https://opencode.ai/zen/go/v1/',
-    supportsWebsockets: false,
-    apiKeys: [],
-    createdAt: 1,
-    updatedAt: 1,
+    id: 'p-official', name: 'OpenCode Go', baseUrl: 'https://opencode.ai/zen/go/v1/',
+    supportsWebsockets: false, apiKeys: [], createdAt: 1, updatedAt: 1,
   };
   const lookalike = { ...official, id: 'p-lookalike', baseUrl: 'https://evil.example/zen/go/v1' };
   const codexLike = { ...official, id: 'p-codex', baseUrl: 'https://chatgpt.com/backend-api' };

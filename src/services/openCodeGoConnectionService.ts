@@ -3,7 +3,6 @@
  * `openCodeGoService.ts` is the sole Tauri command boundary.
  */
 export {
-  OPENCODE_GO_CONNECTION_LIMIT,
   normalizeOpenCodeGoConnection,
   normalizeOpenCodeGoQuotaSnapshot,
   toOpenCodeGoCommandError,

@@ -27,6 +27,8 @@ export interface OpenCodeGoConnection {
   id: string;
   name: string;
   keyHint: string;
+  /** Masked local owner identity; raw email remains in encrypted storage. */
+  emailHint?: string;
   createdAt: number;
   updatedAt: number;
   /** Missing values are legacy Go connections and therefore enabled. */

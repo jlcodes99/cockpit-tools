@@ -10,6 +10,8 @@ pub struct OpenCodeGoAccount {
     pub id: String,
     pub name: String,
     pub key_hint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email_hint: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     #[serde(default = "default_enabled")]
@@ -112,6 +114,7 @@ mod tests {
             id: "ocg_account_1".to_string(),
             name: "Primary".to_string(),
             key_hint: "ocg_****demo".to_string(),
+            email_hint: Some("p***@example.com".to_string()),
             created_at: 10,
             updated_at: 20,
             enabled: true,
@@ -130,10 +133,18 @@ mod tests {
             object.get("keyHint").and_then(|value| value.as_str()),
             Some("ocg_****demo")
         );
+        assert_eq!(
+            object.get("emailHint").and_then(|value| value.as_str()),
+            Some("p***@example.com")
+        );
         assert!(!object.contains_key("apiKey"));
+        assert!(!object.contains_key("email"));
         assert!(!object.contains_key("api_key"));
         assert!(!object.contains_key("accessToken"));
         assert!(!object.contains_key("access_token"));
+        assert!(!serde_json::to_string(&value)
+            .expect("serialize public account")
+            .contains("primary@example.com"));
     }
 
     #[test]

@@ -9,7 +9,6 @@ use std::sync::Mutex;
 
 const CONNECTIONS_FILE: &str = "opencode_go_connections.json";
 const STORAGE_KIND: &str = "opencode_go";
-pub const MAX_CONNECTIONS: usize = 4;
 pub const BASE_URL: &str = "https://opencode.ai/zen/go/v1";
 
 static STORE_LOCK: Mutex<()> = Mutex::new(());
@@ -20,6 +19,8 @@ struct StoredConnection {
     id: String,
     name: String,
     api_key: String,
+    #[serde(default)]
+    email: Option<String>,
     created_at: i64,
     updated_at: i64,
     #[serde(default = "default_enabled")]
@@ -84,6 +85,29 @@ fn normalize_key(api_key: &str) -> Result<String, String> {
     Ok(key.to_string())
 }
 
+fn normalize_email(email: Option<&str>) -> Result<Option<String>, String> {
+    let Some(email) = email.map(str::trim).filter(|email| !email.is_empty()) else {
+        return Ok(None);
+    };
+    if email.len() > 254 || email.chars().any(char::is_whitespace) || !email.contains('@') {
+        return Err("OPENCODE_GO_EMAIL_INVALID".to_string());
+    }
+    let mut parts = email.rsplitn(2, '@');
+    let domain = parts.next().unwrap_or_default();
+    let local = parts.next().unwrap_or_default();
+    if local.is_empty() || domain.is_empty() || !domain.contains('.') {
+        return Err("OPENCODE_GO_EMAIL_INVALID".to_string());
+    }
+    Ok(Some(format!("{}@{}", local, domain.to_ascii_lowercase())))
+}
+
+fn email_hint(email: Option<&str>) -> Option<String> {
+    let email = email?;
+    let (local, domain) = email.split_once('@')?;
+    let visible = local.chars().next()?;
+    Some(format!("{}***@{}", visible, domain))
+}
+
 fn validate_connection_id(id: &str) -> Result<&str, String> {
     let id = id.trim();
     if id.is_empty()
@@ -114,6 +138,7 @@ fn to_summary(connection: &StoredConnection) -> OpenCodeGoConnectionSummary {
         id: connection.id.clone(),
         name: connection.name.clone(),
         key_hint: key_hint(&connection.api_key),
+        email_hint: email_hint(connection.email.as_deref()),
         created_at: connection.created_at,
         updated_at: connection.updated_at,
         enabled: connection.enabled,
@@ -145,12 +170,10 @@ fn read_store_from(path: &Path) -> Result<ConnectionStore, String> {
 }
 
 fn validate_store(store: &ConnectionStore) -> Result<(), String> {
-    if store.connections.len() > MAX_CONNECTIONS {
-        return Err("OPENCODE_GO_CONNECTION_LIMIT_EXCEEDED".to_string());
-    }
     for connection in &store.connections {
         validate_connection_id(&connection.id)?;
         normalize_key(&connection.api_key)?;
+        normalize_email(connection.email.as_deref())?;
     }
     Ok(())
 }
@@ -196,15 +219,14 @@ pub fn list_connections() -> Result<Vec<OpenCodeGoConnectionSummary>, String> {
 pub fn create_connection(
     name: String,
     api_key: String,
+    email: Option<String>,
     provider: String,
 ) -> Result<OpenCodeGoConnectionSummary, String> {
     let name = normalize_name(&name);
     let api_key = normalize_key(&api_key)?;
+    let email = normalize_email(email.as_deref())?;
     let provider = normalize_provider(&provider)?;
     with_store(move |store| {
-        if store.connections.len() >= MAX_CONNECTIONS {
-            return Err("OPENCODE_GO_CONNECTION_LIMIT_REACHED".to_string());
-        }
         if store.connections.iter().any(|item| item.api_key == api_key) {
             return Err("OPENCODE_GO_API_KEY_EXISTS".to_string());
         }
@@ -213,6 +235,7 @@ pub fn create_connection(
             id: format!("ocg_{}", uuid::Uuid::new_v4().simple()),
             name,
             api_key,
+            email,
             created_at: now,
             updated_at: now,
             enabled: true,
@@ -230,10 +253,12 @@ pub fn update_connection(
     connection_id: String,
     name: Option<String>,
     api_key: Option<String>,
+    email: Option<String>,
 ) -> Result<OpenCodeGoConnectionSummary, String> {
     let connection_id = validate_connection_id(&connection_id)?.to_string();
     let name = name.map(|value| normalize_name(&value));
     let api_key = api_key.map(|value| normalize_key(&value)).transpose()?;
+    let email = email.map(|value| normalize_email(Some(&value))).transpose()?;
     with_store(move |store| {
         if let Some(ref key) = api_key {
             if store
@@ -256,6 +281,9 @@ pub fn update_connection(
             connection.api_key = api_key;
             connection.quota = None;
             connection.quota_error = None;
+        }
+        if let Some(email) = email {
+            connection.email = email;
         }
         connection.updated_at = chrono::Utc::now().timestamp();
         Ok((to_summary(connection), true))
@@ -463,31 +491,82 @@ mod tests {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let dir = temp_dir();
         std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &dir);
-        let summary = create_connection("Primary".into(), "ocg-super-secret-key".into(), "go".into()).unwrap();
+        let summary = create_connection(
+            "Primary".into(),
+            "ocg-super-secret-key".into(),
+            Some("primary@example.com".into()),
+            "go".into(),
+        ).unwrap();
         assert_eq!(summary.key_hint, "ocg-****-key");
+        assert_eq!(summary.email_hint.as_deref(), Some("p***@example.com"));
         let raw = fs::read_to_string(dir.join(CONNECTIONS_FILE)).unwrap();
         assert!(raw.contains("AES-256-GCM"));
         assert!(!raw.contains("ocg-super-secret-key"));
+        assert!(!raw.contains("primary@example.com"));
         assert_eq!(api_key(&summary.id).unwrap(), "ocg-super-secret-key");
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn exactly_four_connections_are_allowed() {
+    fn connection_count_is_unbounded_and_association_stays_encrypted() {
         let _env = crate::modules::test_support::env_lock()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let dir = temp_dir();
         std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &dir);
-        for index in 0..MAX_CONNECTIONS {
-            create_connection(format!("Connection {}", index + 1), format!("key-{index}"), "go".into()).unwrap();
+        for index in 0..5 {
+            let provider = if index % 2 == 0 { "go" } else { "zen" };
+            create_connection(
+                format!("Connection {}", index + 1),
+                format!("key-{index}"),
+                Some(format!("owner{index}@example.com")),
+                provider.into(),
+            ).unwrap();
         }
-        assert_eq!(list_connections().unwrap().len(), 4);
+        let connections = list_connections().unwrap();
+        assert_eq!(connections.len(), 5);
+        assert_eq!(connections[4].email_hint.as_deref(), Some("o***@example.com"));
+        let raw = fs::read_to_string(dir.join(CONNECTIONS_FILE)).unwrap();
+        assert!(!raw.contains("owner4@example.com"));
+        std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn malformed_email_is_rejected_before_persistence() {
         assert_eq!(
-            create_connection("Fifth".into(), "key-fifth".into(), "go".into()).unwrap_err(),
-            "OPENCODE_GO_CONNECTION_LIMIT_REACHED"
+            create_connection(
+                "Primary".into(),
+                "valid-key".into(),
+                Some("not-an-email".into()),
+                "go".into(),
+            )
+            .unwrap_err(),
+            "OPENCODE_GO_EMAIL_INVALID"
         );
+    }
+
+    #[test]
+    fn updating_email_preserves_key_and_returns_only_a_masked_identity() {
+        let _env = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let dir = temp_dir();
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &dir);
+        let created = create_connection("Primary".into(), "secure-key".into(), None, "go".into())
+            .expect("create connection");
+        let updated = update_connection(
+            created.id.clone(),
+            None,
+            None,
+            Some("owner@example.com".into()),
+        )
+        .expect("update association");
+        assert_eq!(updated.email_hint.as_deref(), Some("o***@example.com"));
+        assert_eq!(api_key(&created.id).expect("key remains available"), "secure-key");
+        let raw = fs::read_to_string(dir.join(CONNECTIONS_FILE)).expect("read encrypted store");
+        assert!(!raw.contains("owner@example.com"));
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         let _ = fs::remove_dir_all(dir);
     }
@@ -498,6 +577,7 @@ mod tests {
             id: "ocg_z-last-id".into(),
             name: "First created".into(),
             api_key: "key-first".into(),
+            email: None,
             created_at: 10,
             updated_at: 30,
             enabled: true,
@@ -509,6 +589,7 @@ mod tests {
             id: "ocg_a-first-id".into(),
             name: "Second created".into(),
             api_key: "key-second".into(),
+            email: None,
             created_at: 20,
             updated_at: 20,
             enabled: true,
@@ -520,6 +601,7 @@ mod tests {
             id: "ocg_b-tied-id".into(),
             name: "Tied creation".into(),
             api_key: "key-tied".into(),
+            email: None,
             created_at: 20,
             updated_at: 10,
             enabled: true,
@@ -564,7 +646,7 @@ mod tests {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let dir = temp_dir();
         std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &dir);
-        let added = create_connection("Manual".into(), "manual-test-key".into(), "go".into()).unwrap();
+        let added = create_connection("Manual".into(), "manual-test-key".into(), None, "go".into()).unwrap();
         assert!(added.enabled);
         let disabled = set_connection_enabled(added.id, false).unwrap();
         assert!(!disabled.enabled);

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { openCodeGoService } from '../services/openCodeGoService';
 import type { OpenCodeGoConnection } from '../types/openCodeGo';
-import { OPENCODE_GO_CONNECTION_LIMIT } from '../utils/openCodeGoConnections';
 
 interface OpenCodeGoState {
   connections: OpenCodeGoConnection[];
@@ -9,10 +8,10 @@ interface OpenCodeGoState {
   loading: boolean;
   error: string | null;
   fetchConnections(): Promise<void>;
-  createConnection(name: string, apiKey: string, provider?: 'go' | 'zen'): Promise<void>;
+  createConnection(name: string, apiKey: string, email?: string, provider?: 'go' | 'zen'): Promise<void>;
   updateConnection(
     connectionId: string,
-    patch: { name?: string; apiKey?: string },
+    patch: { name?: string; apiKey?: string; email?: string },
   ): Promise<void>;
   setConnectionEnabled(connectionId: string, enabled: boolean): Promise<void>;
   deleteConnection(connectionId: string): Promise<void>;
@@ -30,7 +29,7 @@ function replaceConnection(
   );
 }
 
-export const useOpenCodeGoStore = create<OpenCodeGoState>((set, get) => ({
+export const useOpenCodeGoStore = create<OpenCodeGoState>((set) => ({
   connections: [],
   loaded: false,
   loading: false,
@@ -40,20 +39,14 @@ export const useOpenCodeGoStore = create<OpenCodeGoState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const connections = await openCodeGoService.listConnections();
-      if (connections.length > OPENCODE_GO_CONNECTION_LIMIT) {
-        throw new Error('OPENCODE_GO_CONNECTION_LIMIT_EXCEEDED');
-      }
       set({ connections, loaded: true, loading: false });
     } catch (error) {
       set({ error: String(error), loaded: true, loading: false });
     }
   },
 
-  async createConnection(name, apiKey, provider = 'go') {
-    if (get().connections.length >= OPENCODE_GO_CONNECTION_LIMIT) {
-      throw new Error('OPENCODE_GO_CONNECTION_LIMIT_REACHED');
-    }
-    const connection = await openCodeGoService.createConnection({ name, apiKey, provider });
+  async createConnection(name, apiKey, email, provider = 'go') {
+    const connection = await openCodeGoService.createConnection({ name, apiKey, email, provider });
     set((state) => ({
       connections: [...state.connections, connection],
       error: null,

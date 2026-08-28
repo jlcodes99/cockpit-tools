@@ -10,27 +10,6 @@ export type OpenCodeGoUsageErrorKind =
   | 'network'
   | 'unavailable';
 
-export const OPEN_CODE_GO_CONNECTION_LIMIT = 4;
-
-export type OpenCodeGoConnectionCapacity = {
-  count: number;
-  remaining: number;
-  canAdd: boolean;
-};
-
-export function openCodeGoConnectionCapacity(
-  connectionCount: number,
-): OpenCodeGoConnectionCapacity {
-  if (!Number.isInteger(connectionCount) || connectionCount < 0) {
-    throw new Error('OPENCODE_GO_CONNECTION_COUNT_INVALID');
-  }
-  if (connectionCount > OPEN_CODE_GO_CONNECTION_LIMIT) {
-    throw new Error('OPENCODE_GO_CONNECTION_LIMIT_EXCEEDED');
-  }
-  const remaining = OPEN_CODE_GO_CONNECTION_LIMIT - connectionCount;
-  return { count: connectionCount, remaining, canAdd: remaining > 0 };
-}
-
 export function orderOpenCodeGoConnections<
   T extends { id: string; createdAt: number },
 >(connections: readonly T[]): T[] {
@@ -119,6 +98,28 @@ export function sanitizeOpenCodeGoProviderForTransfer<
     ...provider,
     apiKeys: provider.apiKeys.map(redactOpenCodeGoApiKey),
   };
+}
+
+/**
+ * OpenCode Go exports deliberately contain redacted key placeholders. Never
+ * write those placeholders back as credentials; retain the matching local
+ * provider keys instead. Other providers retain the bundle's own keys.
+ */
+export function prepareCodexModelProvidersForTransferImport(
+  importedProviders: CodexModelProvider[],
+  localProviders: CodexModelProvider[],
+): CodexModelProvider[] {
+  return importedProviders.map((provider) => {
+    if (findOpenCodeGoProvider([provider]) === null) return provider;
+
+    const localOpenCodeProvider = findOpenCodeGoProvider(localProviders);
+    return {
+      ...provider,
+      apiKeys: (localOpenCodeProvider?.apiKeys ?? []).filter((apiKey) =>
+        isPlaintextOpenCodeGoApiKey(apiKey.apiKey),
+      ),
+    };
+  });
 }
 
 export function maskOpenCodeGoApiKey(value: string): string {

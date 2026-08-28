@@ -22,22 +22,11 @@ function connection(
   };
 }
 
-test('exactly four connection slots are exposed and extra connections are rejected', () => {
-  const slots = createOpenCodeGoConnectionSlots([
-    connection('one'),
-    connection('two'),
-  ]);
-  assert.equal(slots.length, 4);
-  assert.deepEqual(slots.map((slot) => slot.connection?.id ?? null), [
-    'one', 'two', null, null,
-  ]);
-  assert.throws(
-    () => createOpenCodeGoConnectionSlots([
-      connection('1'), connection('2'), connection('3'),
-      connection('4'), connection('5'),
-    ]),
-    /OPENCODE_GO_CONNECTION_LIMIT_EXCEEDED/,
-  );
+test('every stored connection receives a slot without an artificial cap', () => {
+  const connections = Array.from({ length: 5 }, (_, index) => connection(String(index + 1)));
+  const slots = createOpenCodeGoConnectionSlots(connections);
+  assert.equal(slots.length, 5);
+  assert.deepEqual(slots.map((slot) => slot.connection?.id), ['1', '2', '3', '4', '5']);
 });
 
 test('blank names receive their one-based connection fallback', () => {
@@ -68,9 +57,9 @@ test('connection tier reflects quota and error state', () => {
   assert.equal(resolveOpenCodeGoConnectionTier(connection('new')), 'pending');
 });
 
-test('query filters by name, key hint, and tier', () => {
+test('query filters by name, masked email, key hint, and tier', () => {
   const input = [
-    connection('alpha', { name: 'Primary', keyHint: 'ocg-****-one' }),
+    connection('alpha', { name: 'Primary', emailHint: 'p***@example.com', keyHint: 'ocg-****-one' }),
     connection('beta', {
       name: 'Backup', keyHint: 'ocg-****-two',
       quotaError: { kind: 'network', occurredAt: 8 },
@@ -82,6 +71,7 @@ test('query filters by name, key hint, and tier', () => {
     }).map((item) => item.id);
   assert.deepEqual(filter('backup', 'all'), ['beta']);
   assert.deepEqual(filter('two', 'all'), ['beta']);
+  assert.deepEqual(filter('p***', 'all'), ['alpha']);
   assert.deepEqual(filter('', 'error'), ['beta']);
 });
 

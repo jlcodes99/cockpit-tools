@@ -59,6 +59,7 @@ export function OpenCodeGoAccountsPage() {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -68,6 +69,7 @@ export function OpenCodeGoAccountsPage() {
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [providerTab, setProviderTab] = useState<ProviderTab>('go');
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [refreshingConnectionId, setRefreshingConnectionId] = useState<string | null>(null);
   const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null);
@@ -88,21 +90,24 @@ export function OpenCodeGoAccountsPage() {
     }),
     [providerConnections, searchQuery, sortBy, sortDirection, tierFilter],
   );
+  const hasActiveFilter = Boolean(searchQuery.trim()) || tierFilter !== 'all';
   const slots = useMemo(
     () => createOpenCodeGoConnectionSlots(visibleConnections),
     [visibleConnections],
   );
-  const hasActiveFilter = Boolean(searchQuery.trim()) || tierFilter !== 'all';
 
   const openEditor = (slotIndex: number, connection: OpenCodeGoConnection | null) => {
     setEditor({ slotIndex, connection });
     setName(connection?.name ?? '');
+    // Raw emails never leave encrypted storage; blank means retain the saved association.
+    setEmail('');
     setApiKey('');
     setActionError('');
   };
   const closeEditor = () => {
     if (saving) return;
     setEditor(null);
+    setEmail('');
     setApiKey('');
     setActionError('');
   };
@@ -130,21 +135,20 @@ export function OpenCodeGoAccountsPage() {
       setTestingConnectionId(null);
     }
   };
-  const deleteConnection = async (connection: OpenCodeGoConnection) => {
-    if (pendingDeleteId) return;
-    if (!window.confirm(t('openCodeGo.delete.confirm', 'Delete this connection? This only removes the local encrypted connection.'))) {
-      return;
-    }
-    setPendingDeleteId(connection.id);
+  const deleteConnection = async () => {
+    if (!deleteCandidateId || pendingDeleteId) return;
+    setPendingDeleteId(deleteCandidateId);
     setActionError('');
     try {
-      await store.deleteConnection(connection.id);
+      await store.deleteConnection(deleteCandidateId);
     } catch {
       setActionError(t('openCodeGo.errors.delete', 'Unable to delete this connection. Try again.'));
     } finally {
       setPendingDeleteId(null);
+      setDeleteCandidateId(null);
     }
   };
+  const deleteCandidate = store.connections.find((connection) => connection.id === deleteCandidateId) ?? null;
   const saveEditor = async () => {
     if (!editor || (!editor.connection && !apiKey.trim())) return;
     setSaving(true);
@@ -153,10 +157,11 @@ export function OpenCodeGoAccountsPage() {
       if (editor.connection) {
         await store.updateConnection(editor.connection.id, {
           name,
+          ...(email.trim() ? { email } : {}),
           ...(apiKey.trim() ? { apiKey } : {}),
         });
       } else {
-        await store.createConnection(name, apiKey, providerTab);
+        await store.createConnection(name, apiKey, email, providerTab);
       }
       setEditor(null);
       setApiKey('');
@@ -182,7 +187,6 @@ export function OpenCodeGoAccountsPage() {
             type="button"
             className="header-action-btn"
             onClick={() => setShowAddAccount(true)}
-            disabled={providerConnections.length >= 4}
           >
             <Plus size={15} />
             <span>{t('openCodeGo.add.submit', 'Add connection')}</span>
@@ -195,7 +199,7 @@ export function OpenCodeGoAccountsPage() {
       </div>
 
       <section className="opencode-go-summary" aria-live="polite">
-        <div><KeyRound size={18} /><span>{t('openCodeGo.connections', 'Configured connections')}</span><strong>{providerConnections.length} / 4</strong></div>
+        <div><KeyRound size={18} /><span>{t('openCodeGo.connections', 'Configured connections')}</span><strong>{store.connections.length}</strong></div>
         <code>{providerTab === 'go' ? 'https://opencode.ai/zen/go/v1' : 'https://opencode.ai/zen/v1'}</code>
       </section>
 
@@ -258,14 +262,7 @@ export function OpenCodeGoAccountsPage() {
       ) : (
         <div className={`opencode-go-connection-grid ${viewMode === 'list' ? 'list' : ''}`}>
           {slots.map(({ connection }, index) => {
-            if (!connection) {
-              if (hasActiveFilter) return null;
-              return (
-                <button key={`empty-${index}`} type="button" className="opencode-go-connection-card opencode-go-empty-slot" onClick={() => setShowAddAccount(true)}>
-                  <Plus size={24} /><strong>{t('openCodeGo.addSlot', 'Add connection {{index}}', { index: index + 1 })}</strong><span>{t('openCodeGo.storeKey', 'Store one OpenCode Go API key')}</span>
-                </button>
-              );
-            }
+            if (!connection) return null;
             const displayName = normalizeOpenCodeGoConnectionName(connection.name, index);
             const tier = resolveOpenCodeGoConnectionTier(connection);
             return (
@@ -273,14 +270,14 @@ export function OpenCodeGoAccountsPage() {
                 <header>
                   <div>
                     <span className="opencode-go-connection-icon"><KeyRound size={16} /></span>
-                    <div><h2>{displayName}</h2><code>{connection.keyHint}</code><span className={`opencode-go-tier ${tier}`}>{tier}</span></div>
+                    <div><h2>{displayName}</h2><code>{connection.keyHint}</code>{connection.emailHint && <span className="opencode-go-email-hint">{connection.emailHint}</span>}<span className={`opencode-go-tier ${tier}`}>{tier}</span></div>
                   </div>
                   <div className="opencode-go-card-actions">
                     <button type="button" aria-label={t('openCodeGo.refreshConnection', 'Refresh {{name}}', { name: displayName })} onClick={() => void refreshConnection(connection.id)} disabled={!connection.enabled || refreshingConnectionId === connection.id}><RefreshCw size={14} className={refreshingConnectionId === connection.id ? 'loading-spinner' : ''} /></button>
                     <button type="button" aria-label={t('openCodeGo.editConnection', 'Edit {{name}}', { name: displayName })} onClick={() => openEditor(index, connection)} disabled={pendingDeleteId === connection.id}><Pencil size={14} /></button>
                     <button type="button" aria-label={t('openCodeGo.testConnection', 'Test {{name}}', { name: displayName })} onClick={() => void testConnection(connection.id)} disabled={!connection.enabled || testingConnectionId === connection.id}>{testingConnectionId === connection.id ? <RefreshCw size={14} className="loading-spinner" /> : <BadgeCheck size={14} />}</button>
                     <button type="button" className={connection.enabled ? '' : 'is-disabled'} aria-label={connection.enabled ? t('openCodeGo.disableConnection', 'Disable {{name}}', { name: displayName }) : t('openCodeGo.enableConnection', 'Enable {{name}}', { name: displayName })} onClick={() => void store.setConnectionEnabled(connection.id, !connection.enabled)} disabled={pendingDeleteId === connection.id}>{connection.enabled ? t('openCodeGo.disable', 'Disable') : t('openCodeGo.enable', 'Enable')}</button>
-                    <button type="button" aria-label={t('openCodeGo.deleteConnection', 'Delete {{name}}', { name: displayName })} onClick={() => void deleteConnection(connection)} disabled={pendingDeleteId === connection.id}>{pendingDeleteId === connection.id ? <RefreshCw size={14} className="loading-spinner" /> : <Trash2 size={14} />}</button>
+                    <button type="button" aria-label={t('openCodeGo.deleteConnection', 'Delete {{name}}', { name: displayName })} onClick={() => setDeleteCandidateId(connection.id)} disabled={pendingDeleteId === connection.id}>{pendingDeleteId === connection.id ? <RefreshCw size={14} className="loading-spinner" /> : <Trash2 size={14} />}</button>
                   </div>
                 </header>
                 <div className="opencode-go-quota-panel">
@@ -306,9 +303,9 @@ export function OpenCodeGoAccountsPage() {
 
       <OpenCodeGoAddAccountModal
         open={showAddAccount}
-        createConnection={async ({ name, apiKey }) => {
+        createConnection={async ({ name, apiKey, email }) => {
           const beforeIds = new Set(useOpenCodeGoStore.getState().connections.map((connection) => connection.id));
-          await store.createConnection(name, apiKey, providerTab);
+          await store.createConnection(name, apiKey, email, providerTab);
           const connection = useOpenCodeGoStore.getState().connections.find(
             (candidate) => !beforeIds.has(candidate.id),
           );
@@ -318,11 +315,22 @@ export function OpenCodeGoAccountsPage() {
         onClose={() => setShowAddAccount(false)}
       />
 
+      {deleteCandidate && (
+        <div className="opencode-go-editor-backdrop" role="presentation" onMouseDown={() => !pendingDeleteId && setDeleteCandidateId(null)}>
+          <section className="opencode-go-editor" role="alertdialog" aria-modal="true" aria-labelledby="opencode-go-delete-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header><h2 id="opencode-go-delete-title">{t('openCodeGo.delete.title', 'Delete connection?')}</h2><button type="button" onClick={() => setDeleteCandidateId(null)} disabled={Boolean(pendingDeleteId)} aria-label={t('common.close', 'Close')}><X size={18} /></button></header>
+            <p>{t('openCodeGo.delete.confirm', 'Delete {{name}}? This only removes its local encrypted connection.', { name: deleteCandidate.name || deleteCandidate.emailHint || deleteCandidate.keyHint })}</p>
+            <footer><button type="button" className="btn btn-secondary" onClick={() => setDeleteCandidateId(null)} disabled={Boolean(pendingDeleteId)}>{t('common.cancel', 'Cancel')}</button><button type="button" className="btn btn-danger" onClick={() => void deleteConnection()} disabled={Boolean(pendingDeleteId)}>{pendingDeleteId ? t('common.deleting', 'Deleting...') : t('common.delete', 'Delete')}</button></footer>
+          </section>
+        </div>
+      )}
+
       {editor && (
         <div className="opencode-go-editor-backdrop" role="presentation" onMouseDown={closeEditor}>
           <section className="opencode-go-editor" role="dialog" aria-modal="true" aria-labelledby="opencode-go-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <header><h2 id="opencode-go-editor-title">{editor.connection ? t('openCodeGo.edit.title', 'Edit connection') : t('openCodeGo.addSlot', 'Add connection {{index}}', { index: editor.slotIndex + 1 })}</h2><button type="button" onClick={closeEditor} aria-label={t('common.close', 'Close')}><X size={18} /></button></header>
             <label>{t('openCodeGo.add.name', 'Connection name')}<input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('openCodeGo.connectionFallback', 'Connection {{index}}', { index: editor.slotIndex + 1 })} /></label>
+            <label>{t('openCodeGo.add.email', 'Email')}<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t('openCodeGo.edit.keepEmail', 'Leave blank to keep the saved email')} /></label>
             <label>{t('openCodeGo.add.apiKey', 'API key')}<input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={editor.connection ? t('openCodeGo.edit.keepKey', 'Leave blank to keep the current key') : t('openCodeGo.add.required', 'Required')} /></label>
             {actionError && <p className="opencode-go-quota-error" role="alert">{actionError}</p>}
             <footer><button type="button" className="btn btn-secondary" onClick={closeEditor}>{t('common.cancel', 'Cancel')}</button><button type="button" className="btn btn-primary" disabled={saving || (!editor.connection && !apiKey.trim())} onClick={() => void saveEditor()}>{saving ? t('common.saving', 'Saving...') : t('openCodeGo.edit.save', 'Save connection')}</button></footer>
