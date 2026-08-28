@@ -1754,7 +1754,7 @@ pub async fn codebuddy_local_access_create_api_key(
     let key = CodebuddyLocalAccessApiKey {
         id: uuid::Uuid::new_v4().to_string(),
         name,
-        key: format!("sk-cockpit-{}", uuid::Uuid::new_v4().simple()),
+        key: format!("sk-{}", uuid::Uuid::new_v4().simple()),
         enabled: true,
         account_ids,
         created_at: now,
@@ -1813,7 +1813,7 @@ pub async fn codebuddy_local_access_rotate_api_key(
         let mut rotated = false;
         for key in runtime.collection.api_keys.iter_mut() {
             if key.id == id {
-                key.key = format!("sk-cockpit-{}", uuid::Uuid::new_v4().simple());
+                key.key = format!("sk-{}", uuid::Uuid::new_v4().simple());
                 key.updated_at = now;
                 rotated = true;
                 break;
@@ -2025,7 +2025,7 @@ mod tests {
         CodebuddyLocalAccessApiKey {
             id: "key-1".to_string(),
             name: "codex-cli".to_string(),
-            key: "sk-cockpit-abc".to_string(),
+            key: "sk-abc".to_string(),
             enabled,
             account_ids: Some(vec!["acc-1".to_string()]),
             created_at: 0,
@@ -2042,7 +2042,7 @@ mod tests {
         let entry = &keys[0];
         assert_eq!(entry["id"].as_str(), Some("key-1"));
         assert_eq!(entry["label"].as_str(), Some("codex-cli"));
-        assert_eq!(entry["key"].as_str(), Some("sk-cockpit-abc"));
+        assert_eq!(entry["key"].as_str(), Some("sk-abc"));
         assert_eq!(entry["enabled"].as_bool(), Some(true));
         assert_eq!(entry["accountIds"][0].as_str(), Some("acc-1"));
     }
@@ -2052,7 +2052,7 @@ mod tests {
         let mut collection = CodebuddyLocalAccessCollection::default();
         collection.api_keys = vec![sample_api_key(true), sample_api_key(false)];
         let keys = client_api_keys(&collection);
-        assert_eq!(keys, vec!["sk-cockpit-abc".to_string()]);
+        assert_eq!(keys, vec!["sk-abc".to_string()]);
     }
 
     fn sample_log(success: bool, model: &str) -> CodebuddyLocalAccessRequestLog {
@@ -2074,6 +2074,7 @@ mod tests {
             request_kind: CodebuddyLocalAccessRequestKind::Other,
             error_category: None,
             error_message: None,
+            vision_subagent: false,
         }
     }
 

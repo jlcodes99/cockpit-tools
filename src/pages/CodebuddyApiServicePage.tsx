@@ -206,9 +206,9 @@ export function CodebuddyApiServicePage() {
   }, [loadStats]);
 
   const handleOpenAddAccount = useCallback(() => {
-    // 跳转到 CodeBuddy 账号登录页（用户登录后可在管理成员弹窗中加入池）。
+    // 跳转到 CodeBuddy 中国站账号登录页（用户登录后可在管理成员弹窗中加入池）。
     window.dispatchEvent(
-      new CustomEvent("app-request-navigate", { detail: "codebuddy" }),
+      new CustomEvent("app-request-navigate", { detail: "codebuddy-cn" }),
     );
   }, []);
 
@@ -817,14 +817,13 @@ function OverviewTab(props: OverviewTabProps) {
     onOpenTest,
   } = props;
 
+  // 注：国际站（intl）仍在开发中，此处仅统计中国站账号。
   const memberAccounts = useMemo(() => {
-    const intl = state?.intlAccounts ?? [];
     const cn = state?.cnAccounts ?? [];
-    return [...intl, ...cn];
-  }, [state?.intlAccounts, state?.cnAccounts]);
+    return [...cn];
+  }, [state?.cnAccounts]);
 
-  const availableAccountCount =
-    (state?.intlAccounts?.length ?? 0) + (state?.cnAccounts?.length ?? 0);
+  const availableAccountCount = state?.cnAccounts?.length ?? 0;
 
   const imageUnavailableCount =
     state?.accountHealth?.filter(
@@ -1549,16 +1548,12 @@ function AccountsTab(props: {
   }, [setState, onReloadStats]);
 
   // 仅渲染池内成员（对齐 Codex 卡片网格：左栏只列已加入账号池的账号）。
+  // 注：国际站（intl）仍在开发中，此处仅展示中国站账号。
   const memberAccounts = useMemo(() => {
-    const intl = state?.intlAccounts ?? [];
     const cn = state?.cnAccounts ?? [];
-    const all = [...intl, ...cn];
-    const selected = new Set([
-      ...(collection.intlAccountIds ?? []),
-      ...(collection.cnAccountIds ?? []),
-    ]);
-    return all.filter((a) => selected.has(a.id));
-  }, [state?.intlAccounts, state?.cnAccounts, collection.intlAccountIds, collection.cnAccountIds]);
+    const selected = new Set(collection.cnAccountIds ?? []);
+    return cn.filter((a) => selected.has(a.id));
+  }, [state?.cnAccounts, collection.cnAccountIds]);
 
   // 自定义路由所需：池内成员的完整账号对象。
   const selectedAccountOptions = memberAccounts;
@@ -1978,24 +1973,11 @@ function MemberModal(props: {
   onSave: (nextIntlIds: string[], nextCnIds: string[]) => Promise<void> | void;
 }) {
   const { state, collection, saving, onClose, onSave } = props;
-  const [intlDraft, setIntlDraft] = useState<Set<string>>(
-    () => new Set(collection.intlAccountIds ?? []),
-  );
+  // 国际站（intl）仍在开发中，UI 已隐藏，但保留其历史选择值以便保存时原样回传（可逆）。
+  const intlDraft = new Set(collection.intlAccountIds ?? []);
   const [cnDraft, setCnDraft] = useState<Set<string>>(
     () => new Set(collection.cnAccountIds ?? []),
   );
-
-  const toggleIntl = useCallback((accountId: string) => {
-    setIntlDraft((prev) => {
-      const next = new Set(prev);
-      if (next.has(accountId)) {
-        next.delete(accountId);
-      } else {
-        next.add(accountId);
-      }
-      return next;
-    });
-  }, []);
 
   const toggleCn = useCallback((accountId: string) => {
     setCnDraft((prev) => {
@@ -2013,7 +1995,6 @@ function MemberModal(props: {
     void onSave(Array.from(intlDraft), Array.from(cnDraft));
   }, [onSave, intlDraft, cnDraft]);
 
-  const intlAccounts = state?.intlAccounts ?? [];
   const cnAccounts = state?.cnAccounts ?? [];
 
   return (
@@ -2035,36 +2016,12 @@ function MemberModal(props: {
           </button>
         </div>
         <div className="codex-api-service-modal-body">
-          {intlAccounts.length === 0 && cnAccounts.length === 0 ? (
+          {cnAccounts.length === 0 ? (
             <p className="cb-api-hint">
               暂无已登录账号，请先在 CodeBuddy 账号页面登录。
             </p>
           ) : (
             <>
-              {intlAccounts.length > 0 && (
-                <div className="cb-member-group">
-                  <h3>国际站（intl）</h3>
-                  {intlAccounts.map((account) => (
-                    <label
-                      key={account.id}
-                      className="cb-member-row"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={intlDraft.has(account.id)}
-                        onChange={() => toggleIntl(account.id)}
-                        disabled={saving}
-                      />
-                      <span title={account.email || account.id}>
-                        {account.email || account.id}
-                      </span>
-                      <span className={`tier-badge ${account.planClass ?? "free"}`}>
-                        {(account.planType ?? "free").toUpperCase()}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
               {cnAccounts.length > 0 && (
                 <div className="cb-member-group">
                   <h3>中国站（cn）</h3>

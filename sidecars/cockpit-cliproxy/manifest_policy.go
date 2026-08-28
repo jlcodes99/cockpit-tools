@@ -97,8 +97,8 @@ type manifest struct {
 	CustomRoutingRules         []customRoutingRule `json:"customRoutingRules"`
 	ImmediateSSEResponse       bool                `json:"immediateSseResponse"`
 	MaxConcurrentImageRequests int                 `json:"maxConcurrentImageRequests"`
-	VisionMode                 string              `json:"visionMode"`
 	DebugLogs                  *bool               `json:"debugLogs,omitempty"`
+	VisionMode                 string              `json:"visionMode"`
 
 	apiKeyByValue     map[string]*apiKeySpec
 	accountByID       map[string]*accountSpec
