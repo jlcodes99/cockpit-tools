@@ -50,8 +50,6 @@ export function toCodexLocalAccessLogTimestamp(unixSeconds: number): number {
 
 export function buildCodexAccountWindowStatQueries(
   accountId: string,
-  officialAccountId: string,
-  accountEmail: string,
   windows: Array<{
     id: string;
     resetTime?: number | null;
@@ -60,8 +58,6 @@ export function buildCodexAccountWindowStatQueries(
   nowSeconds: number,
 ): Array<{
   accountId: string;
-  officialAccountId: string;
-  accountEmail: string;
   windowKey: string;
   startAt: number;
   endAt: number;
@@ -81,8 +77,6 @@ export function buildCodexAccountWindowStatQueries(
     return [
       {
         accountId,
-        officialAccountId,
-        accountEmail,
         windowKey: window.id,
         startAt: toCodexLocalAccessLogTimestamp(startSeconds),
         endAt: toCodexLocalAccessLogTimestamp(nowSeconds),

@@ -1,24 +1,10 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"testing"
-
-	"github.com/tidwall/gjson"
 )
-
-type responsesStreamEventTestError struct {
-	event []byte
-}
-
-func (e responsesStreamEventTestError) Error() string { return "stream failed" }
-func (e responsesStreamEventTestError) ResponsesStreamEvent() []byte {
-	return e.event
-}
 
 func TestBuildOpenAIResponsesStreamErrorChunk(t *testing.T) {
 	chunk := BuildOpenAIResponsesStreamErrorChunk(http.StatusInternalServerError, "unexpected EOF", 0)
@@ -61,27 +47,44 @@ func TestBuildOpenAIResponsesStreamErrorChunkExtractsHTTPErrorBody(t *testing.T)
 	}
 }
 
-func TestBuildOpenAIResponsesStreamTerminalEventPreservesResponseFailed(t *testing.T) {
-	want := []byte(`{"type":"response.failed","response":{"status":"failed","error":{"type":"service_unavailable_error","code":"server_is_overloaded","message":"overloaded"}}}`)
-	eventName, payload := BuildOpenAIResponsesStreamTerminalEvent(
-		http.StatusServiceUnavailable,
-		fmt.Errorf("wrapped: %w", responsesStreamEventTestError{event: want}),
+func TestBuildOpenAIResponsesStreamFailedChunkPreservesNestedError(t *testing.T) {
+	chunk := BuildOpenAIResponsesStreamFailedChunk(
+		http.StatusBadRequest,
+		`{"error":{"type":"invalid_request","code":"cyber_policy","message":"blocked","param":null}}`,
 		0,
 	)
-	if eventName != "response.failed" {
-		t.Fatalf("event name = %q, want response.failed", eventName)
-	}
-	if !bytes.Equal(payload, want) {
-		t.Fatalf("payload = %s, want %s", payload, want)
-	}
-}
 
-func TestBuildOpenAIResponsesStreamTerminalEventFallsBackToValidError(t *testing.T) {
-	eventName, payload := BuildOpenAIResponsesStreamTerminalEvent(http.StatusBadGateway, errors.New("upstream closed"), 0)
-	if eventName != "error" {
-		t.Fatalf("event name = %q, want error", eventName)
+	var payload struct {
+		Type           string `json:"type"`
+		SequenceNumber int    `json:"sequence_number"`
+		Response       struct {
+			Status string `json:"status"`
+			Error  struct {
+				Type    string `json:"type"`
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		} `json:"response"`
 	}
-	if got := gjson.GetBytes(payload, "type").String(); got != "error" {
-		t.Fatalf("payload type = %q, want error: %s", got, payload)
+	if err := json.Unmarshal(chunk, &payload); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if payload.Type != "response.failed" {
+		t.Fatalf("type = %q, want %q", payload.Type, "response.failed")
+	}
+	if payload.SequenceNumber != 0 {
+		t.Fatalf("sequence_number = %d, want 0", payload.SequenceNumber)
+	}
+	if payload.Response.Status != "failed" {
+		t.Fatalf("response.status = %q, want %q", payload.Response.Status, "failed")
+	}
+	if payload.Response.Error.Type != "invalid_request" {
+		t.Fatalf("response.error.type = %q, want %q", payload.Response.Error.Type, "invalid_request")
+	}
+	if payload.Response.Error.Code != "cyber_policy" {
+		t.Fatalf("response.error.code = %q, want %q", payload.Response.Error.Code, "cyber_policy")
+	}
+	if payload.Response.Error.Message != "blocked" {
+		t.Fatalf("response.error.message = %q, want %q", payload.Response.Error.Message, "blocked")
 	}
 }

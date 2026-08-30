@@ -1,4 +1,6 @@
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "windows")]
+use std::path::Path;
+use std::path::PathBuf;
 
 #[cfg(target_os = "windows")]
 fn roaming_app_data_dir() -> Result<PathBuf, String> {

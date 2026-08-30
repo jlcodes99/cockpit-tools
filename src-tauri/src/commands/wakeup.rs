@@ -88,16 +88,6 @@ pub fn wakeup_clear_history() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn wakeup_cancel_scope(cancel_scope_id: String) -> Result<(), String> {
-    modules::wakeup::cancel_wakeup_scope(&cancel_scope_id)
-}
-
-#[tauri::command]
-pub fn wakeup_release_scope(cancel_scope_id: String) -> Result<(), String> {
-    modules::wakeup::release_wakeup_scope(&cancel_scope_id)
-}
-
-#[tauri::command]
 pub fn wakeup_verification_load_state(
 ) -> Result<Vec<modules::wakeup_verification::WakeupVerificationStateItem>, String> {
     modules::wakeup_verification::build_display_state_for_all_accounts()

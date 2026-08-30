@@ -33,13 +33,14 @@ import type {
   CodexLocalAccessChatMessage,
   CodexLocalAccessChatStreamEvent,
   CodexLocalAccessCustomRoutingRule,
+  CodexLocalAccessImageGenerationPolicy,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
   CodexLocalAccessState,
   CodexLocalAccessStatsWindow,
   CodexLocalAccessUsageStats,
 } from "../types/codexLocalAccess";
-import { getCodexPlanFilterKey } from "../types/codex";
+import { getCodexPlanFilterKey, isCodexApiKeyAccount } from "../types/codex";
 import { scrollElementTo } from "../utils/reducedMotion";
 import {
   buildCodexAccountPresentation,
@@ -133,6 +134,7 @@ interface CodexLocalAccessModalProps {
     preferredAccountIds: string[];
     sessionAffinity: boolean;
     sessionAffinityTtlMs: number;
+    imageGenerationAccountPolicies: Record<string, CodexLocalAccessImageGenerationPolicy>;
   }) => Promise<unknown> | unknown;
   onClearStats: () => Promise<unknown> | unknown;
   onRefreshStats: () => Promise<unknown> | unknown;
@@ -178,6 +180,7 @@ interface AccountPoolHealthSummary {
   missing: number;
   authError: number;
   quotaLimited: number;
+  poolUnavailable: number;
 }
 
 interface CustomRoutingDraftRule {
@@ -402,6 +405,7 @@ export function CodexLocalAccessModal({
   const [sessionAffinityTtlSeconds, setSessionAffinityTtlSeconds] =
     useState("3600");
   const [sessionAffinityTtlError, setSessionAffinityTtlError] = useState("");
+  const [imageGenerationPolicies, setImageGenerationPolicies] = useState<Record<string, CodexLocalAccessImageGenerationPolicy>>({});
   const [membersDraftDirty, setMembersDraftDirty] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -608,6 +612,7 @@ export function CodexLocalAccessModal({
       missing: 0,
       authError: 0,
       quotaLimited: 0,
+      poolUnavailable: state?.accountPoolHealth?.length ?? 0,
     };
 
     currentQuotaPoolAccountIds.forEach((accountId) => {
@@ -638,7 +643,12 @@ export function CodexLocalAccessModal({
     });
 
     return summary;
-  }, [currentQuotaPoolAccountIds, localAccessAccounts, state?.accountHealth]);
+  }, [
+    currentQuotaPoolAccountIds,
+    localAccessAccounts,
+    state?.accountHealth,
+    state?.accountPoolHealth?.length,
+  ]);
   const initialRestrictFreeAccounts = collection?.restrictFreeAccounts ?? true;
   const initialSessionAffinity = collection?.sessionAffinity ?? true;
   const initialSessionAffinityTtlSeconds = Math.round(
@@ -678,6 +688,7 @@ export function CodexLocalAccessModal({
       setRestrictFreeAccounts(initialRestrictFreeAccounts);
       setSessionAffinity(initialSessionAffinity);
       setSessionAffinityTtlSeconds(String(initialSessionAffinityTtlSeconds));
+      setImageGenerationPolicies(collection?.imageGenerationAccountPolicies ?? {});
     }
     setSessionAffinityTtlError("");
     setError("");
@@ -1136,7 +1147,9 @@ export function CodexLocalAccessModal({
       sessionAffinity !== initialSessionAffinity ||
       sessionAffinityTtlSeconds !== String(initialSessionAffinityTtlSeconds) ||
       !areSetsEqual(currentBackupAccountIds, initialBackupAccountIds) ||
-      !areSetsEqual(currentPreferredAccountIds, initialPreferredAccountIds),
+      !areSetsEqual(currentPreferredAccountIds, initialPreferredAccountIds) ||
+      JSON.stringify(imageGenerationPolicies) !==
+        JSON.stringify(collection?.imageGenerationAccountPolicies ?? {}),
     [
       collection?.restrictFreeAccounts,
       currentBackupAccountIds,
@@ -1150,6 +1163,7 @@ export function CodexLocalAccessModal({
       sessionAffinity,
       sessionAffinityTtlSeconds,
       selected,
+      imageGenerationPolicies,
     ],
   );
 
@@ -1263,6 +1277,14 @@ export function CodexLocalAccessModal({
         value: "highest",
         label: t("codex.localAccess.memberPriorityHighest", "最高"),
       },
+    ],
+    [t],
+  );
+  const imageGenerationPolicyOptions = useMemo(
+    () => [
+      { value: "inherit", label: t("codex.localAccess.imagePolicy.inherit", "生图：自动") },
+      { value: "enabled", label: t("codex.localAccess.imagePolicy.enabled", "生图：启用") },
+      { value: "disabled", label: t("codex.localAccess.imagePolicy.disabled", "生图：禁用") },
     ],
     [t],
   );
@@ -1625,6 +1647,17 @@ export function CodexLocalAccessModal({
         preferredAccountIds,
         sessionAffinity,
         sessionAffinityTtlMs: parsedSessionAffinityTtlSeconds * 1000,
+        imageGenerationAccountPolicies: Object.fromEntries(
+          filtered.map((accountId) => [
+            accountId,
+            imageGenerationPolicies[accountId] ??
+              (isCodexApiKeyAccount(
+                localAccessAccountById.get(accountId) as CodexAccount,
+              )
+                ? "disabled"
+                : "inherit"),
+          ]),
+        ),
       });
       onClose();
     } catch (err) {
@@ -2500,7 +2533,8 @@ export function CodexLocalAccessModal({
                           accountPoolHealthSummary.available <
                             accountPoolHealthSummary.total ||
                           accountPoolHealthSummary.abnormal > 0 ||
-                          accountPoolHealthSummary.cooldown > 0
+                          accountPoolHealthSummary.cooldown > 0 ||
+                          accountPoolHealthSummary.poolUnavailable > 0
                             ? " has-issue"
                             : ""
                         }`}
@@ -2512,6 +2546,8 @@ export function CodexLocalAccessModal({
                           missing: accountPoolHealthSummary.missing,
                           authError: accountPoolHealthSummary.authError,
                           quotaLimited: accountPoolHealthSummary.quotaLimited,
+                          poolUnavailable:
+                            accountPoolHealthSummary.poolUnavailable,
                           defaultValue:
                             "可用 {{available}}/{{total}}，异常 {{abnormal}}，冷却 {{cooldown}}，缺失 {{missing}}，鉴权 {{authError}}，额度 {{quotaLimited}}",
                         })}
@@ -2531,7 +2567,8 @@ export function CodexLocalAccessModal({
                           {accountPoolHealthSummary.available ===
                             accountPoolHealthSummary.total &&
                           accountPoolHealthSummary.abnormal === 0 &&
-                          accountPoolHealthSummary.cooldown === 0
+                          accountPoolHealthSummary.cooldown === 0 &&
+                          accountPoolHealthSummary.poolUnavailable === 0
                             ? t(
                                 "codex.localAccess.accountPoolHealth.allAvailable",
                                 {
@@ -2549,15 +2586,18 @@ export function CodexLocalAccessModal({
                               )}
                         </span>
                         {(accountPoolHealthSummary.abnormal > 0 ||
-                          accountPoolHealthSummary.cooldown > 0) && (
+                          accountPoolHealthSummary.cooldown > 0 ||
+                          accountPoolHealthSummary.poolUnavailable > 0) && (
                           <span className="codex-local-access-quota-pool-value codex-local-access-health-issue">
                             {t(
                               "codex.localAccess.accountPoolHealth.issueSummary",
                               {
                                 abnormal: accountPoolHealthSummary.abnormal,
                                 cooldown: accountPoolHealthSummary.cooldown,
+                                poolUnavailable:
+                                  accountPoolHealthSummary.poolUnavailable,
                                 defaultValue:
-                                  "异常 {{abnormal}} · 冷却 {{cooldown}}",
+                                  "异常 {{abnormal}} · 池异常 {{poolUnavailable}} · 冷却 {{cooldown}}",
                               },
                             )}
                           </span>
@@ -3301,6 +3341,31 @@ export function CodexLocalAccessModal({
                                 ) : null}
                               </span>
                               <span className="codex-local-access-member-plan">
+                                {!isJoinUnsupported && (
+                                  <SingleSelectDropdown
+                                    value={
+                                      imageGenerationPolicies[account.id] ??
+                                      (isCodexApiKeyAccount(account)
+                                        ? "disabled"
+                                        : "inherit")
+                                    }
+                                    options={imageGenerationPolicyOptions}
+                                    className="codex-local-access-member-image-policy-dropdown"
+                                    menuClassName="codex-local-access-member-image-policy-menu"
+                                    menuWidth={120}
+                                    ariaLabel={t(
+                                      "codex.localAccess.imagePolicy.label",
+                                      "生图策略",
+                                    )}
+                                    disabled={membersInteractionDisabled}
+                                    onChange={(value) =>
+                                      setImageGenerationPolicies((prev) => ({
+                                        ...prev,
+                                        [account.id]: value as CodexLocalAccessImageGenerationPolicy,
+                                      }))
+                                    }
+                                  />
+                                )}
                                 <span
                                   className={`tier-badge ${presentation.planClass}`}
                                 >
@@ -3952,6 +4017,7 @@ export function CodexLocalAccessModal({
         accountIds={collection?.accountIds ?? []}
         accounts={accounts}
         accountHealth={state?.accountHealth ?? []}
+        accountPoolHealth={state?.accountPoolHealth ?? []}
         actionBusy={healthActionBusy}
         maskAccountText={(value) => maskAccountText(value)}
         onClose={() => setHealthModalOpen(false)}

@@ -47,6 +47,7 @@ import {
   isCodexPendingOAuthAccount,
 } from "../types/codex";
 import { withCodexPlanBadgeStyle } from "../utils/codexPreferences";
+import { placeCodexMonthlyCreditsLast } from "../utils/codexQuotaItemOrder";
 import {
   formatClaudeResetTime,
   getClaudeAccountDisplayEmail,
@@ -907,7 +908,7 @@ export function buildCodexAccountPresentation(
     displayName,
     planLabel: planBadge.label,
     planClass: withCodexPlanBadgeStyle(planBadge.className),
-    quotaItems,
+    quotaItems: placeCodexMonthlyCreditsLast(quotaItems),
   };
 }
 

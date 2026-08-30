@@ -978,6 +978,11 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   transition: all 0.2s;
   border: 1px solid transparent;
   white-space: nowrap;
+  /* Reset the platform button theme so unqualified variants never render as native gray controls. */
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  color: inherit;
 }
 
 .btn.icon-only {
@@ -1018,6 +1023,26 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 .btn-secondary:hover:not(:disabled) {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+
+.btn-outline {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+.btn-outline:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border-color: var(--border-light);
+  box-shadow: none;
 }
 
 .btn-success {

@@ -39,7 +39,7 @@
   --codex-local-shadow:
     0 34px 90px rgba(2, 6, 23, 0.24), 0 10px 32px rgba(15, 23, 42, 0.14);
   width: 100%;
-  max-width: min(940px, calc(100vw - 48px));
+  max-width: min(1120px, calc(100vw - 32px));
   max-height: none;
   margin: 0 auto;
   border-radius: 28px;
@@ -88,7 +88,7 @@
 }
 
 .codex-local-access-modal-members {
-  max-width: min(780px, calc(100vw - 32px));
+  max-width: min(1080px, calc(100vw - 24px));
 }
 
 .codex-local-access-modal .modal-header {
@@ -1620,6 +1620,26 @@
   border-radius: 9px;
 }
 
+.codex-local-access-member-image-policy-dropdown {
+  width: 112px;
+  min-width: 112px;
+  flex: 0 0 112px;
+}
+
+.codex-local-access-member-image-policy-dropdown
+  .single-select-dropdown-trigger {
+  min-height: 30px;
+  padding: 0 7px 0 9px;
+  border-radius: 9px;
+  gap: 4px;
+}
+
+.codex-local-access-member-image-policy-dropdown
+  .single-select-dropdown-value {
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .codex-local-access-custom-routing-usage-priority-badge {
   display: inline-flex;
   align-items: center;
@@ -2384,17 +2404,17 @@
 .codex-local-access-member-mainline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   width: max-content;
-  min-width: 100%;
+  min-width: 980px;
   flex-wrap: nowrap;
 }
 
 .codex-local-access-member-list .group-account-email {
-  flex: 0 0 12rem;
-  width: 12rem;
-  min-width: 12rem;
-  max-width: 12rem;
+  flex: 0 0 18rem;
+  width: 18rem;
+  min-width: 18rem;
+  max-width: 18rem;
   margin: 0;
   padding: 0;
   border: 0;
@@ -2434,6 +2454,12 @@
 .codex-local-access-member-list .codex-local-access-member-priority-slot {
   margin-left: 0;
   gap: 6px;
+}
+
+.codex-local-access-member-list .codex-local-access-member-plan {
+  gap: 8px;
+  min-width: max-content;
+  flex-shrink: 0;
 }
 
 .codex-local-access-member-list .codex-local-access-member-trailing {

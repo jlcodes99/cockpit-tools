@@ -29,10 +29,6 @@ fn instances_file_for_platform(
     }
 }
 
-fn instances_path() -> Result<PathBuf, String> {
-    instances_path_for_platform(crate::modules::trae_account::TraePlatformKind::Trae)
-}
-
 fn instances_path_for_platform(
     platform: crate::modules::trae_account::TraePlatformKind,
 ) -> Result<PathBuf, String> {

@@ -1864,20 +1864,29 @@ pub async fn refresh_all_quotas_logic(
     use std::sync::Arc;
     use tokio::sync::Semaphore;
 
-    const MAX_CONCURRENT: usize = 5;
+    // 自动刷新与手动单账号刷新保持相同的请求节奏，避免多个账号同时触发
+    // loadCodeAssist/fetchAvailableModels/retrieveUserQuotaSummary，导致服务端
+    // 短时限流或网络连接争用。手动批量刷新仍保留较高并发，避免改变用户主动
+    // 操作的响应速度。
+    const MANUAL_MAX_CONCURRENT: usize = 5;
+    const AUTO_MAX_CONCURRENT: usize = 1;
     let start = std::time::Instant::now();
     let trigger_label = match trigger {
         QuotaRefreshTrigger::ManualBatch => "manual_batch",
         QuotaRefreshTrigger::Auto => "auto",
     };
 
+    let max_concurrent = match trigger {
+        QuotaRefreshTrigger::ManualBatch => MANUAL_MAX_CONCURRENT,
+        QuotaRefreshTrigger::Auto => AUTO_MAX_CONCURRENT,
+    };
     modules::logger::log_info(&format!(
         "开始批量刷新所有账号配额 (trigger={}, 并发模式, 最大并发: {})",
-        trigger_label, MAX_CONCURRENT
+        trigger_label, max_concurrent
     ));
     let accounts = list_accounts()?;
 
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
+    let semaphore = Arc::new(Semaphore::new(max_concurrent));
 
     let tasks: Vec<_> = accounts
         .into_iter()

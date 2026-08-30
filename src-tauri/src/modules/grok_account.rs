@@ -5,7 +5,7 @@ use crate::models::grok::{
 use crate::modules::{account, atomic_write, config, grok_oauth, logger, provider_current_state};
 use chrono::{DateTime, Utc};
 use reqwest::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -3463,6 +3463,7 @@ mod tests {
                 working_dir: None,
                 extra_args: String::new(),
                 bind_account_id: Some(account.id.clone()),
+                model_routing: None,
                 launch_mode: InstanceLaunchMode::Cli,
                 app_speed: CodexAppSpeed::Standard,
                 created_at: 1,

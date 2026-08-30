@@ -128,9 +128,7 @@ fn build_xai_payload_from_grok(account: &GrokAccount) -> Result<serde_json::Valu
             .map(str::trim)
             .is_some_and(|value| !value.is_empty())
         {
-            return Err(
-                "Grok 第三方 API Key 账号不能写入 OpenCode 的 xai 条目".to_string(),
-            );
+            return Err("Grok 第三方 API Key 账号不能写入 OpenCode 的 xai 条目".to_string());
         }
         let key = account
             .resolved_api_key()

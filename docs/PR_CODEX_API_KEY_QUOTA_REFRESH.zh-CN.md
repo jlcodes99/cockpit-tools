@@ -125,20 +125,24 @@ Cockpit Tools 通过局域网提供 Codex API 服务时，远程客户端只能�
 
 ### Go sidecar
 
-- `sidecars/cockpit-cliproxy/main.go`
+- `sidecars/cockpit-cliproxy/relay_server.go`
   - 扩展 quota pool 状态和响应结构，加入认证类型、账号余额、顶层 API Key 余额和计划余额。
   - API Key 账号加入账号数、健康和 stale 统计，并独立于 OAuth 时间窗口聚合。
   - 移除 `remainingPercent`，调整 Provider Gateway 回退条件和 auth health 修正逻辑。
-- `sidecars/cockpit-cliproxy/main_test.go`
+- `sidecars/cockpit-cliproxy/manifest_policy_test.go`
   - 更新窗口、scope 隔离、上游失败和健康统计断言。
   - 新增 OAuth + API Key 混合池的余额、计划、账号数和窗口汇总测试。
 
 ### Rust/Tauri 后端
 
 - `src-tauri/src/commands/codex.rs`
-  - 新增 OAuth/API Key 统一批量刷新入口。
+  - 保持统一命令入口，并通过上游拆分后的账号、供应商和本地访问命令模块继续导出原有 Tauri 接口。
+- `src-tauri/src/commands/codex_account_commands.rs`
+  - 新增 OAuth/API Key 统一批量刷新入口，集中处理成功计数、sidecar 快照与托盘更新边界。
+- `src-tauri/src/commands/codex_model_provider_commands.rs`
   - 新增摘要校验、时间戳防旧写、账号保存、sidecar 同步命令和供应商匹配/回退逻辑。
-  - 新增 Cockpit Tools 查询与摘要适配，并在供应商用量命令中路由 `cockpit_tools`。
+  - 新增 Cockpit Tools 查询与 CNY 摘要适配，并在供应商用量命令中路由 `cockpit_tools`。
+- `src-tauri/src/commands/codex_local_access_commands.rs`
   - 新增持久化、URL fallback 和本地 HTTP CNY 摘要测试。
 - `src-tauri/src/lib.rs`
   - 注册 `codex_sync_api_key_usage_summary` Tauri 命令。
@@ -148,14 +152,19 @@ Cockpit Tools 通过局域网提供 Codex API 服务时，远程客户端只能�
 - `src-tauri/src/modules/mod.rs`
   - 导出 `codex_remote_quota` 模块。
 - `src-tauri/src/modules/codex_local_access.rs`
-  - 将有效账号并集提升为共享 interface，并替换所有 runtime/sidecar/健康/快照调用点。
-  - sidecar 状态写入 auth kind、API Key balance 和 updatedAt。
-  - 新增多结构余额解析、旧 Cockpit Tools `%` 快照兼容、账号并集和 sidecar 状态测试。
+  - 保持 Local Access 统一入口，并接入上游拆分后的运行时、sidecar、定价和测试模块。
+- `src-tauri/src/modules/codex_local_access_sidecar_config.rs`
+  - 将有效账号并集提升为共享 interface，并用于 sidecar 配置、认证文件、余额快照与账号健康数据。
+  - sidecar 状态写入 auth kind、API Key balance 和 updatedAt，并兼容多种新旧余额结构。
+- `src-tauri/src/modules/codex_local_access_foundation.rs`、`codex_local_access_gateway_runtime.rs`、`codex_local_access_routing_pricing.rs`
+  - 将有效账号并集用于运行时缓存、Gateway 准备、后台刷新和模型计费规则，同时保留模型路由账号依赖。
+- `src-tauri/src/modules/codex_local_access_tests_sidecar_gateway.rs`
+  - 新增旧 Cockpit Tools `%` 快照兼容、账号并集、Key 独立账号池健康和 sidecar 状态测试。
 - `src-tauri/src/modules/codex_app_injection.rs`
   - quota 响应和计划结构加入余额。
   - 注入 footer/详情增加 `¥` 余额显示，刷新目标改用账号并集，刷新动作改用统一批量入口。
   - 更新脚本生成测试以覆盖余额常量、标签和人民币格式。
-- `src-tauri/src/modules/macos_native_menu.rs`
+- `src-tauri/src/modules/macos_native_menu_actions.rs`
   - 删除重复的供应商 Base URL 匹配、用量查询、摘要写入和 integration type 保存代码。
   - 单账号、全部账号和 API 服务账号池刷新均委托给 commands 层统一 interface。
 
@@ -164,17 +173,18 @@ Cockpit Tools 通过局域网提供 Codex API 服务时，远程客户端只能�
 - `src/components/CodexLocalAccessModal.tsx`
   - 额度池成员和健康统计包含 Key 独立账号池。
   - 计划摘要新增余额展示。
-- `src/components/codex/CodexModelProviderManager.tsx`
+- `src/components/codex/CodexModelProviderManager.tsx`、`CodexModelProviderManagerView.tsx`
   - 使用共享 integration type，并支持 `cockpit_tools`。
   - 供应商卡片和详情面板增加 Cockpit Tools 5h/周、余额及账号池指标。
   - API Key 余额使用共享人民币格式化并兼容旧 `%` 单位。
-- `src/pages/CodexAccountsPage.tsx`
+- `src/pages/CodexAccountsPage.tsx`、`CodexAccountsOverviewPanel.tsx`、`CodexAddAccountDialog.tsx`
+- `src/pages/codexAccountsControllerModel.ts`、`useCodexAccountsAccessController.tsx`、`useCodexAccountsLocalAccessController.tsx`、`useCodexAccountsOAuthController.ts`、`useCodexAccountsRenderers.tsx`
   - Cockpit Tools 预设自动绑定集成类型并显示 LAN 地址提示。
   - 新增账号卡片和详情的 Cockpit Tools 专用用量布局与字段格式化。
   - 查询缓存变化时同步完整摘要到主机账号，处理本地缓存与主机快照的更新时间优先级。
   - API 服务账号并集、健康统计、额度池摘要和详情均包含 Key 独立账号。
   - 创建/更新供应商时传递共享 integration type。
-- `src/pages/CodexApiServicePage.tsx`
+- `src/pages/CodexApiServicePage.tsx`、`CodexApiServiceView.tsx`
   - 成员列表包含 Key 独立账号；额度池计划增加余额文本。
 
 ### 前端服务与工具
@@ -239,7 +249,7 @@ Cockpit Tools 通过局域网提供 Codex API 服务时，远程客户端只能�
 ## 验证
 
 - `npm run typecheck`：通过。
-- `node scripts/check_locales.cjs`：通过；18 份 locale JSON 均可解析、键集合一致，且每份均为 5675 个 key。
+- `node scripts/check_locales.cjs`：通过；18 份 locale JSON 均可解析、键集合一致，且每份均为 5756 个 key。
 - `node --test src/services/modelProviderUsageService.test.ts`：9/9 通过。
 - `codexQuotaPool.test.ts` 经 Vite SSR 运行：7/7 通过。
 - `cargo check --manifest-path src-tauri/Cargo.toml`：通过。

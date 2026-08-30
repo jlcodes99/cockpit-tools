@@ -267,15 +267,6 @@ fn resolve_cloud_code_base_url(ctx: &QuotaCloudCodeContext) -> String {
     CLOUD_CODE_DAILY_BASE_URL.to_string()
 }
 
-fn truncate_log_text(text: &str, max_len: usize) -> String {
-    if text.chars().count() <= max_len {
-        return text.to_string();
-    }
-    let mut preview = text.chars().take(max_len).collect::<String>();
-    preview.push_str("...");
-    preview
-}
-
 fn header_value(headers: &reqwest::header::HeaderMap, name: reqwest::header::HeaderName) -> String {
     headers
         .get(name)

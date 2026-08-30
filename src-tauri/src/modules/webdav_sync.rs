@@ -414,15 +414,6 @@ pub async fn list_remote_backups(
     client.list_remote_backups().await
 }
 
-pub async fn upload_backup_bytes(
-    settings: &WebdavConnectionSettings,
-    file_name: &str,
-    bytes: Vec<u8>,
-) -> Result<WebdavBackupFileEntry, String> {
-    let client = WebdavSyncClient::new(settings)?;
-    client.upload_backup_bytes(file_name, bytes).await
-}
-
 pub async fn read_remote_backup(
     settings: &WebdavConnectionSettings,
     file_name: &str,
@@ -445,14 +436,6 @@ pub async fn delete_remote_backup(
 ) -> Result<(), String> {
     let client = WebdavSyncClient::new(settings)?;
     client.delete_remote_backup(file_name).await
-}
-
-pub async fn cleanup_remote_backups(
-    settings: &WebdavConnectionSettings,
-    retention_days: i32,
-) -> Result<Vec<String>, String> {
-    let client = WebdavSyncClient::new(settings)?;
-    client.cleanup_remote_backups(retention_days).await
 }
 
 fn modified_sort_key(file: &WebdavBackupFileEntry) -> i64 {

@@ -15,6 +15,49 @@ impl Default for InstanceLaunchMode {
     }
 }
 
+fn default_model_routing_version() -> u32 {
+    1
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexInstanceApiRoute {
+    pub id: String,
+    pub namespace: String,
+    pub provider_account_id: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_models: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_models: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexInstanceModelRouting {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_model_routing_version")]
+    pub version: u32,
+    #[serde(default)]
+    pub routes: Vec<CodexInstanceApiRoute>,
+}
+
+impl Default for CodexInstanceModelRouting {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            version: default_model_routing_version(),
+            routes: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceProfile {
@@ -25,6 +68,8 @@ pub struct InstanceProfile {
     pub working_dir: Option<String>,
     pub extra_args: String,
     pub bind_account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_routing: Option<CodexInstanceModelRouting>,
     #[serde(default)]
     pub launch_mode: InstanceLaunchMode,
     #[serde(default, skip_serializing_if = "is_standard_app_speed")]
@@ -57,6 +102,8 @@ impl InstanceStore {
 pub struct DefaultInstanceSettings {
     #[serde(default)]
     pub bind_account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_routing: Option<CodexInstanceModelRouting>,
     #[serde(default)]
     pub extra_args: String,
     #[serde(default)]
@@ -81,6 +128,7 @@ impl Default for DefaultInstanceSettings {
     fn default() -> Self {
         Self {
             bind_account_id: None,
+            model_routing: None,
             extra_args: String::new(),
             working_dir: None,
             launch_mode: InstanceLaunchMode::App,
@@ -132,4 +180,49 @@ impl InstanceProfileView {
 
 fn is_standard_app_speed(speed: &CodexAppSpeed) -> bool {
     matches!(speed, CodexAppSpeed::Standard)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_instance_store_deserializes_without_model_routing() {
+        let store: InstanceStore = serde_json::from_str(
+            r#"{
+                "instances": [{
+                    "id": "legacy",
+                    "name": "Legacy",
+                    "userDataDir": "/tmp/legacy",
+                    "extraArgs": "",
+                    "bindAccountId": null,
+                    "createdAt": 1,
+                    "lastLaunchedAt": null
+                }],
+                "defaultSettings": {}
+            }"#,
+        )
+        .expect("deserialize legacy instance store");
+
+        assert!(store.instances[0].model_routing.is_none());
+        assert!(store.default_settings.model_routing.is_none());
+    }
+
+    #[test]
+    fn model_routing_defaults_version_and_route_enabled_flag() {
+        let routing: CodexInstanceModelRouting = serde_json::from_str(
+            r#"{
+                "enabled": true,
+                "routes": [{
+                    "id": "route-cpa",
+                    "namespace": "cpa",
+                    "providerAccountId": "api-account"
+                }]
+            }"#,
+        )
+        .expect("deserialize model routing defaults");
+
+        assert_eq!(routing.version, 1);
+        assert!(routing.routes[0].enabled);
+    }
 }

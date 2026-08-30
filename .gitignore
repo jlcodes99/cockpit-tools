@@ -26,8 +26,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local AI instructions
-AGENTS.md
 
 locale-check-report.md
 

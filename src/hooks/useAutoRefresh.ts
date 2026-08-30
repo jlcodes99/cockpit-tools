@@ -453,7 +453,7 @@ export function useAutoRefresh() {
               fullRefreshingRef: antigravityRefreshingRef,
               currentRefreshingRef: antigravityCurrentRefreshingRef,
               runFullRefresh: async () => {
-                await refreshAllQuotas();
+                await refreshAllQuotas('auto');
               },
               runCurrentRefresh: async () => {
                 if (!useAccountStore.getState().currentAccount?.id) {

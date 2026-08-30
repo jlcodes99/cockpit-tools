@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/clienterror"
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
@@ -26,9 +27,11 @@ import (
 
 const (
 	defaultImagesMainModel      = "gpt-5.4-mini"
+	gptImage15Model             = "gpt-image-1.5"
 	defaultImagesToolModel      = "gpt-image-2"
 	defaultXAIImagesModel       = "grok-imagine-image"
 	xaiImagesQualityModel       = "grok-imagine-image-quality"
+	xaiImages20Model            = "grok-imagine-image-2.0"
 	xaiImagesHandlerType        = "openai-image"
 	xaiImagesDefaultAspectRatio = "1:1"
 	xaiImagesDefaultResolution  = "1k"
@@ -56,23 +59,102 @@ type xaiImageResult struct {
 	MimeType      string
 }
 
+type imagesStreamExecutionResult struct {
+	Data            <-chan []byte
+	UpstreamHeaders http.Header
+	Errs            <-chan *interfaces.ErrorMessage
+}
+
+func setImagesSSEHeaders(c *gin.Context) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Access-Control-Allow-Origin", "*")
+}
+
+func (h *OpenAIAPIHandler) newImagesStreamKeepAliveTicker() (*time.Ticker, <-chan time.Time) {
+	if h == nil || h.BaseAPIHandler == nil {
+		return nil, nil
+	}
+	interval := handlers.StreamingKeepAliveInterval(h.Cfg)
+	if interval <= 0 {
+		return nil, nil
+	}
+	ticker := time.NewTicker(interval)
+	return ticker, ticker.C
+}
+
+func writeImagesStreamKeepAlive(c *gin.Context, flusher http.Flusher) {
+	_, _ = c.Writer.Write([]byte(": keep-alive\n\n"))
+	flusher.Flush()
+}
+
+func writeImagesStreamErrorEvent(c *gin.Context, errMsg *interfaces.ErrorMessage) *interfaces.ErrorMessage {
+	original := errMsg
+	errMsg = sanitizeResponsesStreamErrorMessage(errMsg)
+	if errMsg == nil {
+		return nil
+	}
+	if original != nil {
+		*original = *errMsg
+		errMsg = original
+	}
+	status := errMsg.StatusCode
+	errText := responsesStreamErrorText(errMsg, status)
+	body := handlers.BuildErrorResponseBody(status, errText)
+	_, _ = fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", string(body))
+	return errMsg
+}
+
+func (h *OpenAIAPIHandler) waitImagesStreamExecution(c *gin.Context, flusher http.Flusher, execute func() imagesStreamExecutionResult) (imagesStreamExecutionResult, bool, bool) {
+	resultChan := make(chan imagesStreamExecutionResult, 1)
+	go func() {
+		resultChan <- execute()
+	}()
+
+	keepAlive, keepAliveC := h.newImagesStreamKeepAliveTicker()
+	defer func() {
+		if keepAlive != nil {
+			keepAlive.Stop()
+		}
+	}()
+
+	streamStarted := false
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return imagesStreamExecutionResult{}, streamStarted, true
+		case result := <-resultChan:
+			return result, streamStarted, false
+		case <-keepAliveC:
+			setImagesSSEHeaders(c)
+			writeImagesStreamKeepAlive(c, flusher)
+			streamStarted = true
+		}
+	}
+}
+
 func (a *sseFrameAccumulator) AddChunk(chunk []byte) [][]byte {
 	if len(chunk) == 0 {
 		return nil
 	}
 
+	var frames [][]byte
+	if responsesSSEStartsNewDataFrame(a.pending, chunk) {
+		frames = append(frames, bytes.Clone(a.pending))
+		a.pending = a.pending[:0]
+	}
 	if responsesSSENeedsLineBreak(a.pending, chunk) {
 		a.pending = append(a.pending, '\n')
 	}
 	a.pending = append(a.pending, chunk...)
 
-	var frames [][]byte
 	for {
 		frameLen := responsesSSEFrameLen(a.pending)
 		if frameLen == 0 {
 			break
 		}
-		frames = append(frames, a.pending[:frameLen])
+		frames = append(frames, bytes.Clone(a.pending[:frameLen]))
 		copy(a.pending, a.pending[frameLen:])
 		a.pending = a.pending[:len(a.pending)-frameLen]
 	}
@@ -84,7 +166,7 @@ func (a *sseFrameAccumulator) AddChunk(chunk []byte) [][]byte {
 	if len(a.pending) == 0 || !responsesSSECanEmitWithoutDelimiter(a.pending) {
 		return frames
 	}
-	frames = append(frames, a.pending)
+	frames = append(frames, bytes.Clone(a.pending))
 	a.pending = a.pending[:0]
 	return frames
 }
@@ -100,7 +182,7 @@ func (a *sseFrameAccumulator) Flush() [][]byte {
 		if frameLen == 0 {
 			break
 		}
-		frames = append(frames, a.pending[:frameLen])
+		frames = append(frames, bytes.Clone(a.pending[:frameLen]))
 		copy(a.pending, a.pending[frameLen:])
 		a.pending = a.pending[:len(a.pending)-frameLen]
 	}
@@ -109,8 +191,8 @@ func (a *sseFrameAccumulator) Flush() [][]byte {
 		a.pending = nil
 		return frames
 	}
-	if responsesSSECanEmitWithoutDelimiter(a.pending) {
-		frames = append(frames, a.pending)
+	if responsesSSECanFlushWithoutDelimiter(a.pending) {
+		frames = append(frames, bytes.Clone(a.pending))
 	}
 	a.pending = nil
 	return frames
@@ -129,10 +211,18 @@ func imagesModelBase(model string) string {
 	return strings.ToLower(strings.TrimSpace(baseModel))
 }
 
+func isXAIImagesBaseModel(baseModel string) bool {
+	switch strings.ToLower(strings.TrimSpace(baseModel)) {
+	case defaultXAIImagesModel, xaiImagesQualityModel, xaiImages20Model:
+		return true
+	default:
+		return false
+	}
+}
+
 func isXAIImagesModel(model string) bool {
 	prefix, baseModel := imagesModelParts(model)
-	baseModel = strings.ToLower(strings.TrimSpace(baseModel))
-	if baseModel != defaultXAIImagesModel && baseModel != xaiImagesQualityModel {
+	if !isXAIImagesBaseModel(baseModel) {
 		return false
 	}
 
@@ -141,15 +231,15 @@ func isXAIImagesModel(model string) bool {
 }
 
 func isSupportedImagesModel(model string) bool {
-	baseModel := imagesModelBase(model)
-	if baseModel == defaultImagesToolModel {
+	if isCodexImagesToolModel(model) {
 		return true
 	}
 	return isXAIImagesModel(model) || isOpenAICompatImagesModel(model)
 }
 
-func isDefaultImagesToolModel(model string) bool {
-	return imagesModelBase(model) == defaultImagesToolModel
+func isCodexImagesToolModel(model string) bool {
+	baseModel := imagesModelBase(model)
+	return baseModel == gptImage15Model || baseModel == defaultImagesToolModel
 }
 
 func isOpenAICompatImagesModel(model string) bool {
@@ -168,7 +258,7 @@ func rejectUnsupportedImagesModel(c *gin.Context, model string) bool {
 
 	c.JSON(http.StatusBadRequest, handlers.ErrorResponse{
 		Error: handlers.ErrorDetail{
-			Message: fmt.Sprintf("Model %s is not supported on %s or %s. Use %s, %s, %s, or a configured openai-compatibility image model.", model, imagesGenerationsPath, imagesEditsPath, defaultImagesToolModel, defaultXAIImagesModel, xaiImagesQualityModel),
+			Message: fmt.Sprintf("Model %s is not supported on %s or %s. Use %s, %s, %s, %s, %s, or a configured openai-compatibility image model.", model, imagesGenerationsPath, imagesEditsPath, gptImage15Model, defaultImagesToolModel, defaultXAIImagesModel, xaiImagesQualityModel, xaiImages20Model),
 			Type:    "invalid_request_error",
 		},
 	})
@@ -184,10 +274,14 @@ func normalizeImagesResponseFormat(responseFormat string) string {
 
 func canonicalXAIImagesModel(model string) string {
 	baseModel := imagesModelBase(model)
-	if baseModel == xaiImagesQualityModel {
+	switch baseModel {
+	case xaiImagesQualityModel:
 		return xaiImagesQualityModel
+	case xaiImages20Model:
+		return xaiImages20Model
+	default:
+		return defaultXAIImagesModel
 	}
-	return defaultXAIImagesModel
 }
 
 func xaiImagesAspectRatio(raw string, fallback string) string {
@@ -553,7 +647,7 @@ func (h *OpenAIAPIHandler) ImagesGenerations(c *gin.Context) {
 	}
 	stream := gjson.GetBytes(rawJSON, "stream").Bool()
 
-	if isDefaultImagesToolModel(imageModel) {
+	if isCodexImagesToolModel(imageModel) {
 		imageReq := buildOpenAICompatImagesJSONRequest(rawJSON, imageModel, stream)
 		h.handleRoutedImages(c, imageReq, imageModel, stream)
 		return
@@ -698,7 +792,7 @@ func (h *OpenAIAPIHandler) imagesEditsFromMultipart(c *gin.Context) {
 	}
 	stream := parseBoolField(c.PostForm("stream"), false)
 
-	if isDefaultImagesToolModel(imageModel) {
+	if isCodexImagesToolModel(imageModel) {
 		imageReq, contentType, errBuild := buildOpenAICompatImagesMultipartRequest(form, imageModel, stream)
 		if errBuild != nil {
 			c.JSON(http.StatusBadRequest, handlers.ErrorResponse{
@@ -840,7 +934,7 @@ func (h *OpenAIAPIHandler) imagesEditsFromJSON(c *gin.Context) {
 	}
 	stream := gjson.GetBytes(rawJSON, "stream").Bool()
 
-	if isDefaultImagesToolModel(imageModel) {
+	if isCodexImagesToolModel(imageModel) {
 		imageReq := buildOpenAICompatImagesJSONRequest(rawJSON, imageModel, stream)
 		h.handleRoutedImages(c, imageReq, imageModel, stream)
 		return
@@ -1109,14 +1203,26 @@ func (h *OpenAIAPIHandler) streamRoutedImages(c *gin.Context, imageReq []byte, i
 	cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
 	cliCtx = handlers.WithDisallowFreeAuth(cliCtx)
 	model := strings.TrimSpace(imageModel)
-	dataChan, upstreamHeaders, errChan := h.ExecuteImageStreamWithAuthManager(cliCtx, xaiImagesHandlerType, model, imageReq, "")
-
-	setSSEHeaders := func() {
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-		c.Header("Access-Control-Allow-Origin", "*")
+	execution, streamStarted, canceled := h.waitImagesStreamExecution(c, flusher, func() imagesStreamExecutionResult {
+		dataChan, upstreamHeaders, errChan := h.ExecuteImageStreamWithAuthManager(cliCtx, xaiImagesHandlerType, model, imageReq, "")
+		return imagesStreamExecutionResult{Data: dataChan, UpstreamHeaders: upstreamHeaders, Errs: errChan}
+	})
+	if canceled {
+		cliCancel(c.Request.Context().Err())
+		return
 	}
+	dataChan := execution.Data
+	upstreamHeaders := execution.UpstreamHeaders
+	errChan := execution.Errs
+	keepAlive, keepAliveC := h.newImagesStreamKeepAliveTicker()
+	stopKeepAlive := func() {
+		if keepAlive != nil {
+			keepAlive.Stop()
+			keepAlive = nil
+			keepAliveC = nil
+		}
+	}
+	defer stopKeepAlive()
 
 	for {
 		select {
@@ -1128,7 +1234,12 @@ func (h *OpenAIAPIHandler) streamRoutedImages(c *gin.Context, imageReq []byte, i
 				errChan = nil
 				continue
 			}
-			h.WriteErrorResponse(c, errMsg)
+			if streamStarted {
+				writeImagesStreamErrorEvent(c, errMsg)
+				flusher.Flush()
+			} else {
+				h.WriteErrorResponse(c, errMsg)
+			}
 			if errMsg != nil {
 				cliCancel(errMsg.Error)
 			} else {
@@ -1137,7 +1248,18 @@ func (h *OpenAIAPIHandler) streamRoutedImages(c *gin.Context, imageReq []byte, i
 			return
 		case chunk, ok := <-dataChan:
 			if !ok {
-				setSSEHeaders()
+				stopKeepAlive()
+				if errMsg, hasPendingError := handlers.PendingStreamError(errChan); hasPendingError {
+					if streamStarted {
+						writeImagesStreamErrorEvent(c, errMsg)
+						flusher.Flush()
+					} else {
+						h.WriteErrorResponse(c, errMsg)
+					}
+					cliCancel(errMsg.Error)
+					return
+				}
+				setImagesSSEHeaders(c)
 				handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
 				_, _ = c.Writer.Write([]byte("\n"))
 				flusher.Flush()
@@ -1145,35 +1267,30 @@ func (h *OpenAIAPIHandler) streamRoutedImages(c *gin.Context, imageReq []byte, i
 				return
 			}
 
-			setSSEHeaders()
+			stopKeepAlive()
+			setImagesSSEHeaders(c)
 			handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
 			_, _ = c.Writer.Write(chunk)
 			flusher.Flush()
+			streamStarted = true
 			h.forwardRawImageStream(cliCtx, c, func(err error) { cliCancel(err) }, dataChan, errChan)
 			return
+		case <-keepAliveC:
+			setImagesSSEHeaders(c)
+			handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
+			writeImagesStreamKeepAlive(c, flusher)
+			streamStarted = true
 		}
 	}
 }
 
 func (h *OpenAIAPIHandler) forwardRawImageStream(ctx context.Context, c *gin.Context, cancel func(error), data <-chan []byte, errs <-chan *interfaces.ErrorMessage) {
-	emitError := func(errMsg *interfaces.ErrorMessage) {
-		if errMsg == nil {
-			return
+	keepAlive, keepAliveC := h.newImagesStreamKeepAliveTicker()
+	defer func() {
+		if keepAlive != nil {
+			keepAlive.Stop()
 		}
-		status := http.StatusInternalServerError
-		if errMsg.StatusCode > 0 {
-			status = errMsg.StatusCode
-		}
-		errText := http.StatusText(status)
-		if errMsg.Error != nil && strings.TrimSpace(errMsg.Error.Error()) != "" {
-			errText = errMsg.Error.Error()
-		}
-		body := handlers.BuildErrorResponseBody(status, errText)
-		_, _ = fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", string(body))
-		if flusher, ok := c.Writer.(http.Flusher); ok {
-			flusher.Flush()
-		}
-	}
+	}()
 
 	for {
 		select {
@@ -1185,19 +1302,34 @@ func (h *OpenAIAPIHandler) forwardRawImageStream(ctx context.Context, c *gin.Con
 			return
 		case errMsg, ok := <-errs:
 			if ok && errMsg != nil {
-				emitError(errMsg)
+				writeImagesStreamErrorEvent(c, errMsg)
+				if flusher, ok := c.Writer.(http.Flusher); ok {
+					flusher.Flush()
+				}
 				cancel(errMsg.Error)
 				return
 			}
 			errs = nil
 		case chunk, ok := <-data:
 			if !ok {
+				if errMsg, hasPendingError := handlers.PendingStreamError(errs); hasPendingError {
+					writeImagesStreamErrorEvent(c, errMsg)
+					if flusher, ok := c.Writer.(http.Flusher); ok {
+						flusher.Flush()
+					}
+					cancel(errMsg.Error)
+					return
+				}
 				cancel(nil)
 				return
 			}
 			_, _ = c.Writer.Write(chunk)
 			if flusher, ok := c.Writer.(http.Flusher); ok {
 				flusher.Flush()
+			}
+		case <-keepAliveC:
+			if flusher, ok := c.Writer.(http.Flusher); ok {
+				writeImagesStreamKeepAlive(c, flusher)
 			}
 		}
 	}
@@ -1217,14 +1349,26 @@ func (h *OpenAIAPIHandler) streamOpenAICompatImages(c *gin.Context, compatReq []
 
 	cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
 	model := strings.TrimSpace(imageModel)
-	dataChan, upstreamHeaders, errChan := h.ExecuteStreamWithAuthManager(cliCtx, xaiImagesHandlerType, model, compatReq, "")
-
-	setSSEHeaders := func() {
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-		c.Header("Access-Control-Allow-Origin", "*")
+	execution, streamStarted, canceled := h.waitImagesStreamExecution(c, flusher, func() imagesStreamExecutionResult {
+		dataChan, upstreamHeaders, errChan := h.ExecuteImageStreamWithAuthManager(cliCtx, xaiImagesHandlerType, model, compatReq, "")
+		return imagesStreamExecutionResult{Data: dataChan, UpstreamHeaders: upstreamHeaders, Errs: errChan}
+	})
+	if canceled {
+		cliCancel(c.Request.Context().Err())
+		return
 	}
+	dataChan := execution.Data
+	upstreamHeaders := execution.UpstreamHeaders
+	errChan := execution.Errs
+	keepAlive, keepAliveC := h.newImagesStreamKeepAliveTicker()
+	stopKeepAlive := func() {
+		if keepAlive != nil {
+			keepAlive.Stop()
+			keepAlive = nil
+			keepAliveC = nil
+		}
+	}
+	defer stopKeepAlive()
 
 	for {
 		select {
@@ -1236,7 +1380,12 @@ func (h *OpenAIAPIHandler) streamOpenAICompatImages(c *gin.Context, compatReq []
 				errChan = nil
 				continue
 			}
-			h.WriteErrorResponse(c, errMsg)
+			if streamStarted {
+				writeImagesStreamErrorEvent(c, errMsg)
+				flusher.Flush()
+			} else {
+				h.WriteErrorResponse(c, errMsg)
+			}
 			if errMsg != nil {
 				cliCancel(errMsg.Error)
 			} else {
@@ -1245,38 +1394,45 @@ func (h *OpenAIAPIHandler) streamOpenAICompatImages(c *gin.Context, compatReq []
 			return
 		case chunk, ok := <-dataChan:
 			if !ok {
-				setSSEHeaders()
+				stopKeepAlive()
+				if errMsg, hasPendingError := handlers.PendingStreamError(errChan); hasPendingError {
+					if streamStarted {
+						writeImagesStreamErrorEvent(c, errMsg)
+						flusher.Flush()
+					} else {
+						h.WriteErrorResponse(c, errMsg)
+					}
+					cliCancel(errMsg.Error)
+					return
+				}
+				setImagesSSEHeaders(c)
 				handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
 				flusher.Flush()
 				cliCancel(nil)
 				return
 			}
 
-			setSSEHeaders()
+			stopKeepAlive()
+			setImagesSSEHeaders(c)
 			handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
 			_, _ = c.Writer.Write(chunk)
 			flusher.Flush()
+			streamStarted = true
 			h.ForwardStream(c, flusher, func(err error) { cliCancel(err) }, dataChan, errChan, handlers.StreamForwardOptions{
+				NormalizeTerminalError: sanitizeResponsesStreamErrorMessage,
 				WriteChunk: func(next []byte) {
 					_, _ = c.Writer.Write(next)
 				},
 				WriteTerminalError: func(errMsg *interfaces.ErrorMessage) {
-					if errMsg == nil {
-						return
-					}
-					status := http.StatusInternalServerError
-					if errMsg.StatusCode > 0 {
-						status = errMsg.StatusCode
-					}
-					errText := http.StatusText(status)
-					if errMsg.Error != nil && errMsg.Error.Error() != "" {
-						errText = errMsg.Error.Error()
-					}
-					body := handlers.BuildErrorResponseBody(status, errText)
-					_, _ = fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", string(body))
+					writeImagesStreamErrorEvent(c, errMsg)
 				},
 			})
 			return
+		case <-keepAliveC:
+			setImagesSSEHeaders(c)
+			handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
+			writeImagesStreamKeepAlive(c, flusher)
+			streamStarted = true
 		}
 	}
 }
@@ -1293,7 +1449,7 @@ func (h *OpenAIAPIHandler) collectImagesWithModel(c *gin.Context, imageReq []byt
 	stopKeepAlive := h.StartNonStreamingKeepAlive(c, cliCtx)
 
 	model = strings.TrimSpace(model)
-	resp, upstreamHeaders, errMsg := h.ExecuteWithAuthManager(cliCtx, xaiImagesHandlerType, model, imageReq, "")
+	resp, upstreamHeaders, errMsg := h.ExecuteImageWithAuthManager(cliCtx, xaiImagesHandlerType, model, imageReq, "")
 	stopKeepAlive()
 	if errMsg != nil {
 		h.WriteErrorResponse(c, errMsg)
@@ -1337,57 +1493,96 @@ func (h *OpenAIAPIHandler) streamImagesWithModel(c *gin.Context, imageReq []byte
 
 	cliCtx, cliCancel := h.GetContextWithCancel(h, c, context.Background())
 	model = strings.TrimSpace(model)
-	resp, upstreamHeaders, errMsg := h.ExecuteWithAuthManager(cliCtx, xaiImagesHandlerType, model, imageReq, "")
-	if errMsg != nil {
-		h.WriteErrorResponse(c, errMsg)
-		if errMsg.Error != nil {
+	type imageStreamResult struct {
+		resp            []byte
+		upstreamHeaders http.Header
+		errMsg          *interfaces.ErrorMessage
+	}
+	resultChan := make(chan imageStreamResult, 1)
+	go func() {
+		resp, upstreamHeaders, errMsg := h.ExecuteImageWithAuthManager(cliCtx, xaiImagesHandlerType, model, imageReq, "")
+		resultChan <- imageStreamResult{resp: resp, upstreamHeaders: upstreamHeaders, errMsg: errMsg}
+	}()
+
+	keepAlive, keepAliveC := h.newImagesStreamKeepAliveTicker()
+	stopKeepAlive := func() {
+		if keepAlive != nil {
+			keepAlive.Stop()
+			keepAlive = nil
+			keepAliveC = nil
+		}
+	}
+	defer stopKeepAlive()
+	streamStarted := false
+	writeError := func(errMsg *interfaces.ErrorMessage) {
+		if streamStarted {
+			writeImagesStreamErrorEvent(c, errMsg)
+			flusher.Flush()
+		} else {
+			h.WriteErrorResponse(c, errMsg)
+		}
+		if errMsg != nil && errMsg.Error != nil {
 			cliCancel(errMsg.Error)
 		} else {
 			cliCancel(nil)
 		}
-		return
 	}
 
-	results, _, usageRaw, err := extractXAIImagesResponse(resp)
-	if err != nil {
-		errMsg := &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: err}
-		h.WriteErrorResponse(c, errMsg)
-		cliCancel(err)
-		return
-	}
-
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "*")
-	handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
-
-	eventName := streamPrefix + ".completed"
-	responseFormat = normalizeImagesResponseFormat(responseFormat)
-	for _, img := range results {
-		data := []byte(`{"type":""}`)
-		data, _ = sjson.SetBytes(data, "type", eventName)
-		if responseFormat == "url" {
-			if img.URL != "" {
-				data, _ = sjson.SetBytes(data, "url", img.URL)
-			} else {
-				data, _ = sjson.SetBytes(data, "url", "data:"+mimeTypeFromOutputFormat(img.MimeType)+";base64,"+img.B64JSON)
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			cliCancel(c.Request.Context().Err())
+			return
+		case <-keepAliveC:
+			setImagesSSEHeaders(c)
+			writeImagesStreamKeepAlive(c, flusher)
+			streamStarted = true
+		case result := <-resultChan:
+			stopKeepAlive()
+			if result.errMsg != nil {
+				writeError(result.errMsg)
+				return
 			}
-		} else if img.B64JSON != "" {
-			data, _ = sjson.SetBytes(data, "b64_json", img.B64JSON)
-		} else {
-			data, _ = sjson.SetBytes(data, "url", img.URL)
+
+			results, _, usageRaw, err := extractXAIImagesResponse(result.resp)
+			if err != nil {
+				writeError(&interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: err})
+				return
+			}
+
+			setImagesSSEHeaders(c)
+			handlers.WriteUpstreamHeaders(c.Writer.Header(), result.upstreamHeaders)
+
+			eventName := streamPrefix + ".completed"
+			responseFormat = normalizeImagesResponseFormat(responseFormat)
+			for _, img := range results {
+				data := []byte(`{"type":""}`)
+				data, _ = sjson.SetBytes(data, "type", eventName)
+				if responseFormat == "url" {
+					if img.URL != "" {
+						data, _ = sjson.SetBytes(data, "url", img.URL)
+					} else {
+						data, _ = sjson.SetBytes(data, "url", "data:"+mimeTypeFromOutputFormat(img.MimeType)+";base64,"+img.B64JSON)
+					}
+				} else if img.B64JSON != "" {
+					data, _ = sjson.SetBytes(data, "b64_json", img.B64JSON)
+				} else {
+					data, _ = sjson.SetBytes(data, "url", img.URL)
+				}
+				if len(usageRaw) > 0 && json.Valid(usageRaw) {
+					data, _ = sjson.SetRawBytes(data, "usage", usageRaw)
+				}
+				if strings.TrimSpace(eventName) != "" {
+					_, _ = fmt.Fprintf(c.Writer, "event: %s\n", eventName)
+				}
+				_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
+				flusher.Flush()
+				streamStarted = true
+			}
+			cliCancel(nil)
+			return
 		}
-		if len(usageRaw) > 0 && json.Valid(usageRaw) {
-			data, _ = sjson.SetRawBytes(data, "usage", usageRaw)
-		}
-		if strings.TrimSpace(eventName) != "" {
-			_, _ = fmt.Fprintf(c.Writer, "event: %s\n", eventName)
-		}
-		_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
-		flusher.Flush()
 	}
-	cliCancel(nil)
 }
 
 func (h *OpenAIAPIHandler) collectImagesFromResponses(c *gin.Context, responsesReq []byte, responseFormat string) {
@@ -1423,46 +1618,43 @@ func collectImagesFromResponsesStream(ctx context.Context, data <-chan []byte, e
 	acc := &sseFrameAccumulator{}
 
 	processFrame := func(frame []byte) ([]byte, bool, *interfaces.ErrorMessage) {
-		for _, line := range bytes.Split(frame, []byte("\n")) {
-			trimmed := bytes.TrimSpace(bytes.TrimRight(line, "\r"))
-			if len(trimmed) == 0 {
-				continue
-			}
-			if !bytes.HasPrefix(trimmed, []byte("data:")) {
-				continue
-			}
-			payload := bytes.TrimSpace(trimmed[len("data:"):])
-			if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
-				continue
-			}
-			if !json.Valid(payload) {
-				return nil, false, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("invalid SSE data JSON")}
-			}
-
-			if gjson.GetBytes(payload, "type").String() != "response.completed" {
-				continue
-			}
-
-			results, createdAt, usageRaw, firstMeta, err := extractImagesFromResponsesCompleted(payload)
-			if err != nil {
-				return nil, false, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: err}
-			}
-			if len(results) == 0 {
-				return nil, false, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("upstream did not return image output")}
-			}
-			out, err := buildImagesAPIResponse(results, createdAt, usageRaw, firstMeta, responseFormat)
-			if err != nil {
-				return nil, false, &interfaces.ErrorMessage{StatusCode: http.StatusInternalServerError, Error: err}
-			}
-			return out, true, nil
+		payload, ok := responsesSSEDataPayload(frame)
+		if !ok || len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+			return nil, false, nil
 		}
-		return nil, false, nil
+		if !json.Valid(payload) {
+			return nil, false, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("invalid SSE data JSON")}
+		}
+		payloadType := gjson.GetBytes(payload, "type").String()
+		if responsesSSEErrorEvent(payloadType) || responsesSSEErrorEvent(responsesSSEEventName(frame)) || responsesSSEPayloadHasError(payload) {
+			return nil, false, responsesSSEPayloadErrorMessage(payload)
+		}
+		if payloadType != "response.completed" {
+			return nil, false, nil
+		}
+
+		results, createdAt, usageRaw, firstMeta, err := extractImagesFromResponsesCompleted(payload)
+		if err != nil {
+			return nil, false, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: err}
+		}
+		if len(results) == 0 {
+			return nil, false, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("upstream did not return image output")}
+		}
+		out, err := buildImagesAPIResponse(results, createdAt, usageRaw, firstMeta, responseFormat)
+		if err != nil {
+			return nil, false, &interfaces.ErrorMessage{StatusCode: http.StatusInternalServerError, Error: err}
+		}
+		return out, true, nil
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, &interfaces.ErrorMessage{StatusCode: http.StatusRequestTimeout, Error: ctx.Err()}
+			errCtx := ctx.Err()
+			return nil, &interfaces.ErrorMessage{
+				StatusCode: clienterror.HTTPStatusFromErrorOr(errCtx, http.StatusRequestTimeout),
+				Error:      errCtx,
+			}
 		case errMsg, ok := <-errs:
 			if ok && errMsg != nil {
 				return nil, errMsg
@@ -1476,6 +1668,9 @@ func collectImagesFromResponsesStream(ctx context.Context, data <-chan []byte, e
 					} else if done {
 						return out, nil
 					}
+				}
+				if errMsg, hasPendingError := handlers.PendingStreamError(errs); hasPendingError {
+					return nil, errMsg
 				}
 				return nil, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("stream disconnected before completion")}
 			}
@@ -1593,14 +1788,26 @@ func (h *OpenAIAPIHandler) streamImagesFromResponses(c *gin.Context, responsesRe
 	if mainModel == "" {
 		mainModel = defaultImagesMainModel
 	}
-	dataChan, upstreamHeaders, errChan := h.ExecuteStreamWithAuthManager(cliCtx, "openai-response", mainModel, responsesReq, "")
-
-	setSSEHeaders := func() {
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-		c.Header("Access-Control-Allow-Origin", "*")
+	execution, streamStarted, canceled := h.waitImagesStreamExecution(c, flusher, func() imagesStreamExecutionResult {
+		dataChan, upstreamHeaders, errChan := h.ExecuteStreamWithAuthManager(cliCtx, "openai-response", mainModel, responsesReq, "")
+		return imagesStreamExecutionResult{Data: dataChan, UpstreamHeaders: upstreamHeaders, Errs: errChan}
+	})
+	if canceled {
+		cliCancel(c.Request.Context().Err())
+		return
 	}
+	dataChan := execution.Data
+	upstreamHeaders := execution.UpstreamHeaders
+	errChan := execution.Errs
+	keepAlive, keepAliveC := h.newImagesStreamKeepAliveTicker()
+	stopKeepAlive := func() {
+		if keepAlive != nil {
+			keepAlive.Stop()
+			keepAlive = nil
+			keepAliveC = nil
+		}
+	}
+	defer stopKeepAlive()
 
 	writeEvent := func(eventName string, dataJSON []byte) {
 		if strings.TrimSpace(eventName) != "" {
@@ -1610,7 +1817,7 @@ func (h *OpenAIAPIHandler) streamImagesFromResponses(c *gin.Context, responsesRe
 		flusher.Flush()
 	}
 
-	// Peek for first chunk/error so we can still return a JSON error body.
+	// Peek for the first chunk/error while still allowing configured SSE heartbeats.
 	for {
 		select {
 		case <-c.Request.Context().Done():
@@ -1621,7 +1828,12 @@ func (h *OpenAIAPIHandler) streamImagesFromResponses(c *gin.Context, responsesRe
 				errChan = nil
 				continue
 			}
-			h.WriteErrorResponse(c, errMsg)
+			if streamStarted {
+				writeImagesStreamErrorEvent(c, errMsg)
+				flusher.Flush()
+			} else {
+				h.WriteErrorResponse(c, errMsg)
+			}
 			if errMsg != nil {
 				cliCancel(errMsg.Error)
 			} else {
@@ -1630,7 +1842,18 @@ func (h *OpenAIAPIHandler) streamImagesFromResponses(c *gin.Context, responsesRe
 			return
 		case chunk, ok := <-dataChan:
 			if !ok {
-				setSSEHeaders()
+				stopKeepAlive()
+				if errMsg, hasPendingError := handlers.PendingStreamError(errChan); hasPendingError {
+					if streamStarted {
+						writeImagesStreamErrorEvent(c, errMsg)
+						flusher.Flush()
+					} else {
+						h.WriteErrorResponse(c, errMsg)
+					}
+					cliCancel(errMsg.Error)
+					return
+				}
+				setImagesSSEHeaders(c)
 				handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
 				_, _ = c.Writer.Write([]byte("\n"))
 				flusher.Flush()
@@ -1638,11 +1861,17 @@ func (h *OpenAIAPIHandler) streamImagesFromResponses(c *gin.Context, responsesRe
 				return
 			}
 
-			setSSEHeaders()
+			stopKeepAlive()
+			setImagesSSEHeaders(c)
 			handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
 
 			h.forwardImagesStream(cliCtx, c, flusher, func(err error) { cliCancel(err) }, dataChan, errChan, chunk, responseFormat, streamPrefix, writeEvent)
 			return
+		case <-keepAliveC:
+			setImagesSSEHeaders(c)
+			handlers.WriteUpstreamHeaders(c.Writer.Header(), upstreamHeaders)
+			writeImagesStreamKeepAlive(c, flusher)
+			streamStarted = true
 		}
 	}
 }
@@ -1654,87 +1883,95 @@ func (h *OpenAIAPIHandler) forwardImagesStream(ctx context.Context, c *gin.Conte
 	if responseFormat == "" {
 		responseFormat = "b64_json"
 	}
+	keepAlive, keepAliveC := h.newImagesStreamKeepAliveTicker()
+	defer func() {
+		if keepAlive != nil {
+			keepAlive.Stop()
+		}
+	}()
 
-	emitError := func(errMsg *interfaces.ErrorMessage) {
-		if errMsg == nil {
-			return
-		}
-		status := http.StatusInternalServerError
-		if errMsg.StatusCode > 0 {
-			status = errMsg.StatusCode
-		}
-		errText := http.StatusText(status)
-		if errMsg.Error != nil && strings.TrimSpace(errMsg.Error.Error()) != "" {
-			errText = errMsg.Error.Error()
-		}
-		body := handlers.BuildErrorResponseBody(status, errText)
-		writeEvent("error", body)
+	emitError := func(errMsg *interfaces.ErrorMessage) *interfaces.ErrorMessage {
+		errMsg = writeImagesStreamErrorEvent(c, errMsg)
+		flusher.Flush()
+		return errMsg
 	}
 
-	processFrame := func(frame []byte) (done bool) {
-		for _, line := range bytes.Split(frame, []byte("\n")) {
-			trimmed := bytes.TrimSpace(bytes.TrimRight(line, "\r"))
-			if len(trimmed) == 0 || !bytes.HasPrefix(trimmed, []byte("data:")) {
-				continue
-			}
-			payload := bytes.TrimSpace(trimmed[len("data:"):])
-			if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) || !json.Valid(payload) {
-				continue
-			}
+	processFrame := func(frame []byte) (bool, *interfaces.ErrorMessage) {
+		payload, ok := responsesSSEDataPayload(frame)
+		if !ok || len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+			return false, nil
+		}
+		if !json.Valid(payload) {
+			return true, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("invalid SSE data JSON")}
+		}
+		payloadType := gjson.GetBytes(payload, "type").String()
+		if responsesSSEErrorEvent(payloadType) || responsesSSEErrorEvent(responsesSSEEventName(frame)) || responsesSSEPayloadHasError(payload) {
+			return true, responsesSSEPayloadErrorMessage(payload)
+		}
 
-			switch gjson.GetBytes(payload, "type").String() {
-			case "response.image_generation_call.partial_image":
-				b64 := strings.TrimSpace(gjson.GetBytes(payload, "partial_image_b64").String())
-				if b64 == "" {
-					continue
-				}
-				outputFormat := strings.TrimSpace(gjson.GetBytes(payload, "output_format").String())
-				index := gjson.GetBytes(payload, "partial_image_index").Int()
-				eventName := streamPrefix + ".partial_image"
-				data := []byte(`{"type":"","partial_image_index":0}`)
+		switch payloadType {
+		case "response.image_generation_call.partial_image":
+			b64 := strings.TrimSpace(gjson.GetBytes(payload, "partial_image_b64").String())
+			if b64 == "" {
+				return false, nil
+			}
+			outputFormat := strings.TrimSpace(gjson.GetBytes(payload, "output_format").String())
+			index := gjson.GetBytes(payload, "partial_image_index").Int()
+			eventName := streamPrefix + ".partial_image"
+			data := []byte(`{"type":"","partial_image_index":0}`)
+			data, _ = sjson.SetBytes(data, "type", eventName)
+			data, _ = sjson.SetBytes(data, "partial_image_index", index)
+			if responseFormat == "url" {
+				mt := mimeTypeFromOutputFormat(outputFormat)
+				data, _ = sjson.SetBytes(data, "url", "data:"+mt+";base64,"+b64)
+			} else {
+				data, _ = sjson.SetBytes(data, "b64_json", b64)
+			}
+			writeEvent(eventName, data)
+		case "response.completed":
+			results, _, usageRaw, _, err := extractImagesFromResponsesCompleted(payload)
+			if err != nil {
+				return true, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: err}
+			}
+			if len(results) == 0 {
+				return true, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("upstream did not return image output")}
+			}
+			eventName := streamPrefix + ".completed"
+			for _, img := range results {
+				data := []byte(`{"type":""}`)
 				data, _ = sjson.SetBytes(data, "type", eventName)
-				data, _ = sjson.SetBytes(data, "partial_image_index", index)
 				if responseFormat == "url" {
-					mt := mimeTypeFromOutputFormat(outputFormat)
-					data, _ = sjson.SetBytes(data, "url", "data:"+mt+";base64,"+b64)
+					mt := mimeTypeFromOutputFormat(img.OutputFormat)
+					data, _ = sjson.SetBytes(data, "url", "data:"+mt+";base64,"+img.Result)
 				} else {
-					data, _ = sjson.SetBytes(data, "b64_json", b64)
+					data, _ = sjson.SetBytes(data, "b64_json", img.Result)
+				}
+				if len(usageRaw) > 0 && json.Valid(usageRaw) {
+					data, _ = sjson.SetRawBytes(data, "usage", usageRaw)
 				}
 				writeEvent(eventName, data)
-			case "response.completed":
-				results, _, usageRaw, _, err := extractImagesFromResponsesCompleted(payload)
-				if err != nil {
-					emitError(&interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: err})
-					return true
-				}
-				if len(results) == 0 {
-					emitError(&interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("upstream did not return image output")})
-					return true
-				}
-				eventName := streamPrefix + ".completed"
-				for _, img := range results {
-					data := []byte(`{"type":""}`)
-					data, _ = sjson.SetBytes(data, "type", eventName)
-					if responseFormat == "url" {
-						mt := mimeTypeFromOutputFormat(img.OutputFormat)
-						data, _ = sjson.SetBytes(data, "url", "data:"+mt+";base64,"+img.Result)
-					} else {
-						data, _ = sjson.SetBytes(data, "b64_json", img.Result)
-					}
-					if len(usageRaw) > 0 && json.Valid(usageRaw) {
-						data, _ = sjson.SetRawBytes(data, "usage", usageRaw)
-					}
-					writeEvent(eventName, data)
-				}
-				return true
 			}
+			return true, nil
 		}
-		return false
+		return false, nil
+	}
+
+	handleFrame := func(frame []byte) bool {
+		done, errMsg := processFrame(frame)
+		if !done {
+			return false
+		}
+		if errMsg != nil {
+			errMsg = emitError(errMsg)
+			cancel(errMsg.Error)
+		} else {
+			cancel(nil)
+		}
+		return true
 	}
 
 	for _, frame := range acc.AddChunk(firstChunk) {
-		if processFrame(frame) {
-			cancel(nil)
+		if handleFrame(frame) {
 			return
 		}
 	}
@@ -1746,7 +1983,7 @@ func (h *OpenAIAPIHandler) forwardImagesStream(ctx context.Context, c *gin.Conte
 			return
 		case errMsg, ok := <-errs:
 			if ok && errMsg != nil {
-				emitError(errMsg)
+				errMsg = emitError(errMsg)
 				cancel(errMsg.Error)
 				return
 			}
@@ -1754,20 +1991,25 @@ func (h *OpenAIAPIHandler) forwardImagesStream(ctx context.Context, c *gin.Conte
 		case chunk, ok := <-data:
 			if !ok {
 				for _, frame := range acc.Flush() {
-					if processFrame(frame) {
-						cancel(nil)
+					if handleFrame(frame) {
 						return
 					}
+				}
+				if errMsg, hasPendingError := handlers.PendingStreamError(errs); hasPendingError {
+					errMsg = emitError(errMsg)
+					cancel(errMsg.Error)
+					return
 				}
 				cancel(nil)
 				return
 			}
 			for _, frame := range acc.AddChunk(chunk) {
-				if processFrame(frame) {
-					cancel(nil)
+				if handleFrame(frame) {
 					return
 				}
 			}
+		case <-keepAliveC:
+			writeImagesStreamKeepAlive(c, flusher)
 		}
 	}
 }

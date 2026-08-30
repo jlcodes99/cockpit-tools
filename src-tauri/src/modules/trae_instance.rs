@@ -29,10 +29,6 @@ fn instances_file_for_platform(
     }
 }
 
-fn instances_path() -> Result<PathBuf, String> {
-    instances_path_for_platform(crate::modules::trae_account::TraePlatformKind::Trae)
-}
-
 fn instances_path_for_platform(
     platform: crate::modules::trae_account::TraePlatformKind,
 ) -> Result<PathBuf, String> {
@@ -282,6 +278,7 @@ pub fn create_instance_for_platform(
         } else {
             params.bind_account_id
         },
+        model_routing: None,
         launch_mode: crate::models::InstanceLaunchMode::App,
         app_speed: crate::models::codex::CodexAppSpeed::Standard,
         created_at: Utc::now().timestamp_millis(),

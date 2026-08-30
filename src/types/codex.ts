@@ -91,6 +91,11 @@ export interface CodexAccount {
   authorization_status?: string | null;
   requires_reauth?: boolean;
   reauth_reason?: string;
+  client_auth_status?: "available" | "login_required" | "unknown" | string | null;
+  last_client_auth_observed_at?: number | null;
+  last_client_login_redirect_at?: number | null;
+  last_client_launch_at?: number | null;
+  last_client_auth_instance_id?: string | null;
   quota?: CodexQuota;
   quota_error?: CodexQuotaErrorInfo;
   tags?: string[];
@@ -313,6 +318,10 @@ export interface CodexSessionVisibilityRepairItem {
   updatedSqliteTimestampRowCount: number;
   addedSessionIndexEntryCount: number;
   updatedSessionIndexEntryCount: number;
+  insertedCatalogRowCount: number;
+  removedCatalogRowCount: number;
+  updatedGlobalStateEntryCount: number;
+  skippedRolloutFileCount: number;
   skippedSqliteFile: boolean;
   metadataRebuildFailed: boolean;
   backupDir?: string | null;
@@ -380,6 +389,11 @@ export interface CodexSessionVisibilityRepairSummary {
   updatedSqliteTimestampRowCount: number;
   addedSessionIndexEntryCount: number;
   updatedSessionIndexEntryCount: number;
+  insertedCatalogRowCount: number;
+  removedCatalogRowCount: number;
+  updatedGlobalStateEntryCount: number;
+  skippedRolloutFileCount: number;
+  encryptedContentWarning?: string | null;
   skippedSqliteFileCount: number;
   metadataRebuildFailedCount: number;
   items: CodexSessionVisibilityRepairItem[];
@@ -1009,10 +1023,35 @@ function normalizeCodexPlanKey(planType?: string): string {
   return normalized;
 }
 
+function getCodexEffectivePlanKey(account: CodexAccount): string {
+  const planKey = normalizeCodexPlanKey(account.plan_type);
+  if (
+    planKey === "free" ||
+    isCodexApiKeyAccount(account) ||
+    isCodexPendingOAuthAccount(account) ||
+    isCodexAgentIdentityAccount(account) ||
+    isCodexWebSessionAccount(account)
+  ) {
+    return planKey;
+  }
+
+  const subscriptionExpiry = parseCodexSubscriptionDate(
+    account.subscription_active_until,
+  );
+  if (subscriptionExpiry && subscriptionExpiry.getTime() <= Date.now()) {
+    return "free";
+  }
+  return planKey;
+}
+
 export function isCodexExplicitFreePlanType(planType?: string): boolean {
   const normalized = (planType || "").trim();
   if (!normalized) return false;
   return normalizeCodexPlanKey(planType) === "free";
+}
+
+export function isCodexEffectiveFreePlan(account: CodexAccount): boolean {
+  return getCodexEffectivePlanKey(account) === "free";
 }
 
 function normalizeCodexAuthFilePlanType(
@@ -1048,8 +1087,9 @@ function getCodexPlanBadgeLabel(account: CodexAccount): string {
   if (isCodexApiKeyAccount(account)) {
     return "API";
   }
-  const baseLabel = getCodexPlanDisplayName(account.plan_type);
-  if (normalizeCodexPlanKey(account.plan_type) !== "pro") {
+  const effectivePlanKey = getCodexEffectivePlanKey(account);
+  const baseLabel = getCodexPlanDisplayName(effectivePlanKey);
+  if (effectivePlanKey !== "pro") {
     return baseLabel;
   }
 
@@ -1068,7 +1108,7 @@ function getCodexPlanBadgeClass(account: CodexAccount): string {
   if (isCodexNewApiAccount(account)) {
     return "api-key new-api-exclusive";
   }
-  const baseClass = normalizeCodexPlanKey(account.plan_type);
+  const baseClass = getCodexEffectivePlanKey(account);
   if (baseClass === "plus") {
     return "plus codex-plus";
   }
@@ -1117,7 +1157,7 @@ export function getCodexPlanBadgePresentationWithStyle(
 
 export function getCodexPlanFilterKey(account: CodexAccount): string {
   if (isCodexPendingOAuthAccount(account)) return "PENDING";
-  return normalizeCodexPlanKey(account.plan_type).toUpperCase();
+  return getCodexEffectivePlanKey(account).toUpperCase();
 }
 
 export function isCodexTeamLikePlan(planType?: string): boolean {

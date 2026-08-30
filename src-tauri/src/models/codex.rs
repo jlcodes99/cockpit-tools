@@ -228,6 +228,18 @@ pub struct CodexAccount {
     pub requires_reauth: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reauth_reason: Option<String>,
+    /// 官方客户端实际页面认证状态，由实例 CDP 只读观察更新。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_auth_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_client_auth_observed_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_client_login_redirect_at: Option<i64>,
+    /// 最近一次启动并开始观测该 Codex 实例的时间（Unix seconds）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_client_launch_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_client_auth_instance_id: Option<String>,
     pub quota: Option<CodexQuota>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quota_error: Option<CodexQuotaErrorInfo>,
@@ -505,6 +517,11 @@ impl CodexAccount {
             authorization_status: None,
             requires_reauth: false,
             reauth_reason: None,
+            client_auth_status: None,
+            last_client_auth_observed_at: None,
+            last_client_login_redirect_at: None,
+            last_client_launch_at: None,
+            last_client_auth_instance_id: None,
             quota: None,
             quota_error: None,
             usage_updated_at: None,

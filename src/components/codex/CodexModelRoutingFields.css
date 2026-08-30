@@ -1,0 +1,678 @@
+/* ==========================================================================
+   Codex Model Routing (Mixed Model Routing) Styles
+   ========================================================================== */
+
+/* Main Card Container (for InstancesManager or card variant) */
+.codex-model-routing {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+}
+
+.codex-model-routing__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.codex-model-routing__header label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.codex-model-routing__header .form-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* Switch Toggle Component (Sleek Compact Apple-Style Switch) */
+.codex-model-routing__switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.codex-model-routing__switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.codex-model-routing__switch-track {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.codex-model-routing__switch-track::before {
+  content: "";
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.codex-model-routing__switch input:checked + .codex-model-routing__switch-track {
+  background: var(--primary, var(--accent-primary, #3b82f6));
+}
+
+.codex-model-routing__switch input:checked + .codex-model-routing__switch-track::before {
+  transform: translateX(14px);
+}
+
+/* Summary Card View (when enabled inside instance card or standalone) */
+.codex-model-routing-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+}
+
+.codex-model-routing-summary__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.codex-model-routing-summary__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+.codex-model-routing-summary__count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.codex-model-routing-summary__manage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.codex-model-routing-summary__manage-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-tertiary));
+}
+
+.codex-model-routing-summary__empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.codex-model-routing-summary__list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.codex-model-routing-summary__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.codex-model-routing-summary__row:hover {
+  background: color-mix(in srgb, var(--primary) 6%, var(--bg-tertiary));
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.codex-model-routing-summary__row-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.codex-model-routing-summary__namespace {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.codex-model-routing-summary__account-name {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-model-routing-summary__row-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.codex-model-routing-summary__models-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Modal View */
+.codex-model-routing-overlay {
+  z-index: 10030;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.codex-model-routing-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-width: 720px;
+  max-height: min(840px, calc(100vh - 40px));
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.4);
+}
+
+.codex-model-routing-modal .modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.codex-model-routing-modal .modal-header p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.codex-model-routing-modal .modal-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.codex-model-routing-modal .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-surface);
+}
+
+.codex-model-routing-modal__tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-tertiary));
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.codex-model-routing-modal__tip-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Editor Components */
+.codex-model-routing-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.codex-model-routing-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.codex-model-routing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-tertiary);
+}
+
+.codex-model-routing-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-model-routing-card__provider {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.codex-model-routing-card__provider .single-select-dropdown__trigger {
+  height: 32px;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.codex-model-routing-card__namespace-wrap {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.codex-model-routing-card__namespace-input {
+  width: 100%;
+  height: 32px;
+  padding: 4px 20px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.codex-model-routing-card__namespace-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.codex-model-routing-card__namespace-suffix {
+  position: absolute;
+  right: 8px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.codex-model-routing-card__delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.codex-model-routing-card__delete:hover {
+  border-color: var(--danger, #ef4444);
+  color: var(--danger, #ef4444);
+  background: color-mix(in srgb, var(--danger, #ef4444) 10%, var(--bg-secondary));
+}
+
+.codex-model-routing-card__models-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.codex-model-routing-card__models-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.codex-model-routing-card__models-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.codex-model-routing-card__models-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.codex-model-routing-card__action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.codex-model-routing-card__action-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-secondary));
+}
+
+.codex-model-routing-card__action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.codex-model-routing-card__manual-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.codex-model-routing-card__manual-input {
+  flex: 1;
+  height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.codex-model-routing-card__manual-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.codex-model-routing-card__empty-models {
+  margin: 0;
+  padding: 4px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.codex-model-routing-card__filter-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.codex-model-routing-card__filter-input {
+  height: 24px;
+  width: 100px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+  transition: width 0.2s ease, border-color 0.2s ease;
+}
+
+.codex-model-routing-card__filter-input:focus {
+  width: 140px;
+  border-color: var(--primary);
+}
+
+.codex-model-routing-card__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.codex-model-routing-card__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s ease;
+}
+
+.codex-model-routing-card__pill:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--bg-secondary));
+  color: var(--primary);
+}
+
+.codex-model-routing-card__pill.is-selected {
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.codex-model-routing-card__pill-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--border);
+  border-radius: 3.5px;
+  font-size: 10px;
+  font-weight: 800;
+  color: transparent;
+  background: var(--bg-primary);
+  line-height: 1;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.codex-model-routing-card__pill:hover .codex-model-routing-card__pill-checkbox {
+  border-color: var(--primary);
+}
+
+.codex-model-routing-card__pill.is-selected .codex-model-routing-card__pill-checkbox {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.codex-model-routing-card__pill-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin-left: 2px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.codex-model-routing-card__pill-remove:hover {
+  background: color-mix(in srgb, var(--danger, #ef4444) 15%, transparent);
+  color: var(--danger, #ef4444);
+}
+
+.codex-model-routing-modal__add-channel-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.codex-model-routing-empty-accounts {
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.codex-model-routing-empty-accounts p {
+  margin: 0;
+}
+
+/* Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@media (max-width: 640px) {
+  .codex-model-routing-card__header {
+    flex-wrap: wrap;
+  }
+
+  .codex-model-routing-card__namespace-wrap {
+    width: 100%;
+  }
+}
+
+/* Row actions layout in launch preview */
+.codex-model-routing-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Modal header actions & switch */
+.codex-model-routing-modal__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.codex-model-routing-modal__switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-model-routing-modal__switch-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Row title & switch layout in launch preview */
+.codex-model-routing-row__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.codex-model-routing-row__title-row h3 {
+  margin: 0;
+}

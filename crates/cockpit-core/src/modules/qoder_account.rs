@@ -1023,10 +1023,6 @@ pub fn import_from_local() -> Result<Option<QoderAccount>, String> {
     Ok(Some(account))
 }
 
-pub(crate) fn resolve_current_account_id(_accounts: &[QoderAccount]) -> Option<String> {
-    None
-}
-
 fn serialize_raw_or_fallback(raw: &Option<Value>, fallback: Value) -> Result<String, String> {
     let value = raw.clone().unwrap_or(fallback);
     serde_json::to_string(&value).map_err(|e| format!("序列化 Qoder 注入数据失败: {}", e))

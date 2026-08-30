@@ -1277,10 +1277,6 @@ pub fn import_payload_from_local() -> Result<Option<CodebuddyOAuthCompletePayloa
     Ok(Some(payload))
 }
 
-pub(crate) fn resolve_current_account_id(_accounts: &[CodebuddyAccount]) -> Option<String> {
-    None
-}
-
 pub fn run_quota_alert_if_needed() -> Result<(), String> {
     let config = crate::modules::config::get_user_config();
     if !config.codebuddy_quota_alert_enabled {

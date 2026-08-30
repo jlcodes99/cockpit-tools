@@ -165,6 +165,51 @@ func TestNormalizeCodexResponsesLiteRequestUsesFullResponsesForCodexImageGenTool
 	}
 }
 
+func TestNormalizeCodexResponsesLiteRequestUsesFullResponsesForImageToolChoice(t *testing.T) {
+	body := []byte(`{"tool_choice":{"type":"image_generation"}}`)
+	headers := http.Header{codexResponsesLiteHeaderName: []string{"true"}}
+	oauth := &cliproxyauth.Auth{Metadata: map[string]any{"access_token": "oauth-token"}}
+
+	result, useFullResponses := normalizeCodexResponsesLiteRequest(body, headers, oauth, true)
+
+	if !useFullResponses {
+		t.Fatal("image_generation tool_choice should switch to full Responses")
+	}
+	if gjson.GetBytes(result, "parallel_tool_calls").Bool() {
+		t.Fatalf("parallel_tool_calls = true, want false: %s", result)
+	}
+}
+
+func TestNormalizeCodexResponsesLiteRequestUsesFullResponsesForNestedImageGenTools(t *testing.T) {
+	body := []byte(`{"input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}]}`)
+	headers := http.Header{codexResponsesLiteHeaderName: []string{"true"}}
+	oauth := &cliproxyauth.Auth{Metadata: map[string]any{"access_token": "oauth-token"}}
+
+	_, useFullResponses := normalizeCodexResponsesLiteRequest(body, headers, oauth, true)
+
+	if !useFullResponses {
+		t.Fatal("nested image_gen namespace should switch to full Responses")
+	}
+}
+
+func TestNormalizeCodexResponsesLiteRequestDoesNotDuplicateNestedToolsAtTopLevel(t *testing.T) {
+	body := []byte(`{"input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"collaboration","tools":[{"type":"function","name":"spawn_agent"}]}]}]}`)
+	headers := http.Header{codexResponsesLiteHeaderName: []string{"true"}}
+	oauth := &cliproxyauth.Auth{Metadata: map[string]any{"access_token": "oauth-token"}}
+
+	result, useFullResponses := normalizeCodexResponsesLiteRequest(body, headers, oauth, false)
+
+	if useFullResponses {
+		t.Fatal("collaboration tools should remain on Responses Lite")
+	}
+	if gjson.GetBytes(result, "tools").Exists() {
+		t.Fatalf("nested tools were duplicated at top level: %s", result)
+	}
+	if got := gjson.GetBytes(result, "input.0.tools.0.name").String(); got != "collaboration" {
+		t.Fatalf("nested collaboration namespace = %q, want collaboration: %s", got, result)
+	}
+}
+
 func TestCodexExecutorExecutePreservesCollaborationNamespaceInResponsesLiteAdditionalTools(t *testing.T) {
 	type capturedRequest struct {
 		header http.Header

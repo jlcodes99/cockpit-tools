@@ -38,7 +38,6 @@ use crate::modules::logger;
 // ========== 端点 ==========
 
 const PASSWORD_LOGIN_URL: &str = "https://windsurf.com/_devin-auth/password/login";
-const CONNECTIONS_URL: &str = "https://windsurf.com/_devin-auth/connections";
 const POST_AUTH_URL: &str =
     "https://windsurf.com/_backend/exa.seat_management_pb.SeatManagementService/WindsurfPostAuth";
 const GET_OTT_URL: &str =
@@ -610,67 +609,6 @@ pub async fn full_refresh_from_auth1(auth1_token: &str) -> Result<DevinFullRefre
         account_id,
         org_id,
         user_status_proto_b64,
-    })
-}
-
-// ========== 辅助：查询邮箱可用 auth_method (诊断用，可选调用) ==========
-
-#[derive(Debug, Deserialize)]
-struct ConnectionsAuthMethod {
-    method: Option<String>,
-    has_password: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ConnectionsResponse {
-    auth_method: Option<ConnectionsAuthMethod>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ConnectionsInfo {
-    pub method: String,
-    pub has_password: bool,
-}
-
-/// 调 /_devin-auth/connections 询问服务端：这个邮箱目前可用哪种 auth_method
-///
-/// 用法：在用户输入邮箱后、提交密码前先调一次，决定走 Devin 邮密 / Devin OTP / SSO。
-/// 网络失败时返回 Err；服务端正常返回但字段缺失时返回默认值（method=email, has_password=false）。
-pub async fn query_connections(email: &str) -> Result<ConnectionsInfo, String> {
-    let email = email.trim();
-    if email.is_empty() {
-        return Err("邮箱不能为空".to_string());
-    }
-    let client = build_client()?;
-    let resp = client
-        .post(CONNECTIONS_URL)
-        .header("Content-Type", "application/json")
-        .header("Origin", "https://windsurf.com")
-        .header("Referer", "https://windsurf.com/account/login")
-        .json(&json!({"product": "windsurf", "email": email}))
-        .send()
-        .await
-        .map_err(|e| format!("查询 connections 失败: {}", e))?;
-    let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!(
-            "connections HTTP {}: {}",
-            status.as_u16(),
-            truncate(&body, 200)
-        ));
-    }
-    let parsed: ConnectionsResponse = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析 connections 响应失败: {}", e))?;
-    let am = parsed.auth_method.unwrap_or(ConnectionsAuthMethod {
-        method: Some("email".to_string()),
-        has_password: Some(false),
-    });
-    Ok(ConnectionsInfo {
-        method: am.method.unwrap_or_else(|| "email".to_string()),
-        has_password: am.has_password.unwrap_or(false),
     })
 }
 

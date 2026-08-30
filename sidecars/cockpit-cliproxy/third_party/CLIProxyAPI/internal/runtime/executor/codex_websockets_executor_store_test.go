@@ -2,30 +2,11 @@ package executor
 
 import (
 	"testing"
-	"time"
 
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
 
-func TestLockCodexWebsocketRequestUnlocksOnce(t *testing.T) {
-	sess := &codexWebsocketSession{sessionID: "lock-once"}
-	unlock := lockCodexWebsocketRequest(sess)
-	unlocked := make(chan struct{})
-	go func() {
-		sess.reqMu.Lock()
-		close(unlocked)
-		sess.reqMu.Unlock()
-	}()
-	unlock()
-	unlock()
-	select {
-	case <-unlocked:
-	case <-time.After(2 * time.Second):
-		t.Fatal("websocket request lock was not released after terminal unlock")
-	}
-}
-
-func TestCodexWebsocketsExecutor_SessionStoreSurvivesExecutorReplacement(t *testing.T) {
+func TestCodexWebsocketsExecutor_CloseAllReleasesSessions(t *testing.T) {
 	sessionID := "test-session-store-survives-replace"
 
 	globalCodexWebsocketSessionStore.mu.Lock()
@@ -52,16 +33,9 @@ func TestCodexWebsocketsExecutor_SessionStoreSurvivesExecutorReplacement(t *test
 	globalCodexWebsocketSessionStore.mu.Lock()
 	_, stillPresent := globalCodexWebsocketSessionStore.sessions[sessionID]
 	globalCodexWebsocketSessionStore.mu.Unlock()
-	if !stillPresent {
-		t.Fatalf("expected session to remain after executor replacement close marker")
+	if stillPresent {
+		t.Fatalf("expected session to be removed after executor shutdown")
 	}
 
 	exec2.CloseExecutionSession(sessionID)
-
-	globalCodexWebsocketSessionStore.mu.Lock()
-	_, presentAfterClose := globalCodexWebsocketSessionStore.sessions[sessionID]
-	globalCodexWebsocketSessionStore.mu.Unlock()
-	if presentAfterClose {
-		t.Fatalf("expected session to be removed after explicit close")
-	}
 }

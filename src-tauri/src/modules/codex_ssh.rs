@@ -317,20 +317,15 @@ pub fn sync_current_account(id: &str) -> Result<String, String> {
     }
 
     // Best-effort remote Codex app-server reload (#1404) so Desktop picks up new auth.
-    let mut reload_note = String::new();
     let reload_cmd = format!(
         "command -v pkill >/dev/null 2>&1 && pkill -f 'codex.*app-server' || true; command -v codex >/dev/null 2>&1 && (codex app-server --help >/dev/null 2>&1 || true)"
     );
     let mut reload_args = ssh_base_args(&server);
     reload_args.push(reload_cmd);
-    match run_hidden("ssh", &reload_args) {
-        Ok(_) => {
-            reload_note = "；已尝试重载远端 app-server".to_string();
-        }
-        Err(e) => {
-            reload_note = format!("；远端重载跳过: {e}");
-        }
-    }
+    let reload_note = match run_hidden("ssh", &reload_args) {
+        Ok(_) => "；已尝试重载远端 app-server".to_string(),
+        Err(e) => format!("；远端重载跳过: {e}"),
+    };
 
     Ok(format!(
         "已同步账号 {} 的 {} 到 {}@{}:{}{}",

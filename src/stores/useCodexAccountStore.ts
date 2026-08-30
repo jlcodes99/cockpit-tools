@@ -16,9 +16,7 @@ import { removeAccountIdsFromAllCodexGroups } from '../services/codexAccountGrou
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
 
 const APP_PROFILE = (import.meta.env.VITE_COCKPIT_TOOLS_PROFILE || '').trim();
-const STORAGE_PROFILE_SUFFIX =
-  APP_PROFILE && APP_PROFILE !== 'prod' ? `.${APP_PROFILE}` : '';
-const SHOULD_PRESERVE_CACHE_ON_EMPTY_LIST = !STORAGE_PROFILE_SUFFIX;
+const STORAGE_PROFILE_SUFFIX = APP_PROFILE && APP_PROFILE !== 'prod' ? `.${APP_PROFILE}` : '';
 const CODEX_ACCOUNTS_CACHE_KEY = `agtools.codex.accounts.cache${STORAGE_PROFILE_SUFFIX}`;
 const CODEX_CURRENT_ACCOUNT_CACHE_KEY = `agtools.codex.accounts.current${STORAGE_PROFILE_SUFFIX}`;
 const CODEX_PROFILE_SYNC_IN_FLIGHT = new Set<string>();
@@ -107,6 +105,7 @@ type FetchCodexCurrentAccountOptions = {
 type SwitchCodexAccountOptions = {
   reauthTokenGeneration?: number;
   reconcileAfterSwitch?: boolean;
+  launchAfterSwitch?: boolean;
 };
 
 interface CodexAccountState {
@@ -115,14 +114,12 @@ interface CodexAccountState {
   currentAccount: CodexAccount | null;
   loading: boolean;
   error: string | null;
-  
+
   // Actions
   fetchAccounts: (options?: FetchCodexAccountsOptions) => Promise<void>;
   fetchCurrentAccount: (options?: FetchCodexCurrentAccountOptions) => Promise<void>;
-  switchAccount: (
-    accountId: string,
-    options?: SwitchCodexAccountOptions,
-  ) => Promise<CodexAccount>;
+  applyAccountSnapshot: (account: CodexAccount) => void;
+  switchAccount: (accountId: string, options?: SwitchCodexAccountOptions) => Promise<CodexAccount>;
   deleteAccount: (accountId: string) => Promise<void>;
   deleteAccounts: (accountIds: string[]) => Promise<void>;
   refreshQuota: (accountId: string) => Promise<CodexQuota>;
@@ -154,7 +151,10 @@ interface CodexAccountState {
     boundOauthAccountId: string | null,
   ) => Promise<CodexAccount>;
   updateAccountTags: (accountId: string, tags: string[]) => Promise<CodexAccount>;
-  updateAccountNote: (accountId: string, update: string | CodexAccountNoteUpdate) => Promise<CodexAccount>;
+  updateAccountNote: (
+    accountId: string,
+    update: string | CodexAccountNoteUpdate,
+  ) => Promise<CodexAccount>;
   updateAccountAppSpeed: (accountId: string, speed: CodexAppSpeed) => Promise<CodexAccount>;
   updateAccountInstanceAccess: (
     accountId: string,
@@ -169,24 +169,14 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
   currentAccount: initialCachedCodexCurrentAccount,
   loading: false,
   error: null,
-  
+
   fetchAccounts: async (options?: FetchCodexAccountsOptions) => {
-    const allowEmpty = options?.allowEmpty === true;
+    void options;
     const requestId = ++fetchCodexAccountsSeq;
     set({ loading: true, error: null });
     try {
       const accounts = await codexService.listCodexAccounts();
       if (requestId !== fetchCodexAccountsSeq) {
-        return;
-      }
-      if (
-        SHOULD_PRESERVE_CACHE_ON_EMPTY_LIST &&
-        accounts.length === 0 &&
-        get().accounts.length > 0 &&
-        !allowEmpty
-      ) {
-        console.warn('[CodexAccountStore] 忽略异常空账号列表，保留本地缓存账号');
-        set({ accountsLoaded: true, loading: false });
         return;
       }
       set({ accounts, accountsLoaded: true, loading: false });
@@ -199,23 +189,13 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       set({ error: String(e), loading: false });
     }
   },
-  
+
   fetchCurrentAccount: async (options?: FetchCodexCurrentAccountOptions) => {
-    const allowEmpty = options?.allowEmpty === true;
+    void options;
     const requestId = ++fetchCodexCurrentAccountSeq;
     try {
       const currentAccount = await codexService.getCurrentCodexAccount();
       if (requestId !== fetchCodexCurrentAccountSeq) {
-        return;
-      }
-      if (
-        SHOULD_PRESERVE_CACHE_ON_EMPTY_LIST &&
-        !currentAccount &&
-        get().currentAccount &&
-        get().accounts.length > 0 &&
-        !allowEmpty
-      ) {
-        console.warn('[CodexAccountStore] 忽略异常空当前账号，保留本地缓存当前账号');
         return;
       }
       set({ currentAccount });
@@ -227,7 +207,27 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       console.error('获取当前 Codex 账号失败:', e);
     }
   },
-  
+
+  applyAccountSnapshot: (account: CodexAccount) => {
+    if (!account?.id) return;
+
+    // 授权/切号返回的账号是后端刚落盘的权威快照，先写入内存和 localStorage，
+    // 同时使旧的异步回读失效，避免旧结果把刚更新的状态覆盖回去。
+    invalidateCodexFetchRequests();
+    set((state) => {
+      const nextAccounts = mergeCodexAccountIntoList(state.accounts, account);
+      const nextCurrentAccount =
+        state.currentAccount?.id === account.id ? account : state.currentAccount;
+      persistCodexAccountsCache(nextAccounts);
+      persistCodexCurrentAccountCache(nextCurrentAccount);
+      return {
+        accounts: nextAccounts,
+        currentAccount: nextCurrentAccount,
+        error: null,
+      };
+    });
+  },
+
   switchAccount: async (accountId: string, options?: SwitchCodexAccountOptions) => {
     const flowStartedAt = performance.now();
     console.info('[Codex Switch][Store] switchAccount started', {
@@ -256,6 +256,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     try {
       account = await codexService.switchCodexAccount(accountId, {
         reauthTokenGeneration: options?.reauthTokenGeneration,
+        launchAfterSwitch: options?.launchAfterSwitch,
       });
     } catch (error) {
       // Token Authority 可能已把账号标记为 requires_reauth。立即回读账号库，
@@ -279,12 +280,14 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
         error: null,
       };
     });
-    const refreshAfterSwitch = get().fetchAccounts().then(() => {
-      console.info('[Codex Switch][Store] background fetchAccounts after switch finished', {
-        accountId,
-        elapsedMs: Math.round(performance.now() - flowStartedAt),
+    const refreshAfterSwitch = get()
+      .fetchAccounts()
+      .then(() => {
+        console.info('[Codex Switch][Store] background fetchAccounts after switch finished', {
+          accountId,
+          elapsedMs: Math.round(performance.now() - flowStartedAt),
+        });
       });
-    });
     if (options?.reconcileAfterSwitch) {
       await refreshAfterSwitch;
       await get().fetchCurrentAccount();
@@ -302,7 +305,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     });
     return account;
   },
-  
+
   deleteAccount: async (accountId: string) => {
     const previousCurrentAccountId = get().currentAccount?.id ?? null;
     await codexService.deleteCodexAccount(accountId);
@@ -334,7 +337,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       });
     }
   },
-  
+
   deleteAccounts: async (accountIds: string[]) => {
     const previousCurrentAccountId = get().currentAccount?.id ?? null;
     const deleteIdSet = new Set(accountIds);
@@ -369,7 +372,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       });
     }
   },
-  
+
   refreshQuota: async (accountId: string) => {
     const account = get().accounts.find((item) => item.id === accountId);
     if (account && isCodexPendingOAuthAccount(account)) {
@@ -389,7 +392,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     await get().fetchCurrentAccount();
     return account;
   },
-  
+
   refreshAllQuotas: async () => {
     const successCount = await codexService.refreshAllCodexQuotas();
     await get().fetchAccounts();
@@ -438,7 +441,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       }
     }
   },
-  
+
   importFromLocal: async () => {
     const account = await codexService.importCodexFromLocal();
     await get().fetchAccounts();
@@ -448,7 +451,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     });
     return account;
   },
-  
+
   importFromJson: async (jsonContent: string) => {
     const accounts = await codexService.importCodexFromJson(jsonContent);
     await get().fetchAccounts();
@@ -505,10 +508,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     return account;
   },
 
-  updateApiKeyBoundOAuthAccount: async (
-    accountId: string,
-    boundOauthAccountId: string | null,
-  ) => {
+  updateApiKeyBoundOAuthAccount: async (accountId: string, boundOauthAccountId: string | null) => {
     const account = await codexService.updateCodexApiKeyBoundOAuthAccount(
       accountId,
       boundOauthAccountId,

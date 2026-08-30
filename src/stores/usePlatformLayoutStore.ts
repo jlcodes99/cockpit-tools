@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
+import { persistPlatformLayout } from '../utils/uiPreferences';
 import { CLASSIC_SIDEBAR_ENTRY_LIMIT } from './useSideNavLayoutStore';
 
 const PLATFORM_LAYOUT_STORAGE_KEY = 'agtools.platform_layout.v1';
@@ -900,6 +901,7 @@ function normalizeEntryOrder(
 function normalizeEntryVisibilityList(
   rawEntryIds: unknown,
   orderedEntryIds: PlatformLayoutEntryId[],
+  groups: PlatformLayoutGroup[] = [],
 ): PlatformLayoutEntryId[] {
   if (!Array.isArray(rawEntryIds)) {
     return [];
@@ -909,10 +911,18 @@ function normalizeEntryVisibilityList(
   const entries: PlatformLayoutEntryId[] = [];
   for (const item of rawEntryIds) {
     if (typeof item !== 'string') continue;
-    const entryId = item as PlatformLayoutEntryId;
-    if (!orderSet.has(entryId) || seen.has(entryId)) {
+    let entryId = item as PlatformLayoutEntryId;
+    if (!orderSet.has(entryId) && item.startsWith('platform:')) {
+      const platformId = item.slice('platform:'.length);
+      const mapped = ALL_PLATFORM_IDS.includes(platformId as PlatformId)
+        ? resolveEntryIdForPlatform(platformId as PlatformId, groups)
+        : null;
+      if (!mapped || !orderSet.has(mapped)) continue;
+      entryId = mapped;
+    } else if (!orderSet.has(entryId)) {
       continue;
     }
+    if (seen.has(entryId)) continue;
     seen.add(entryId);
     entries.push(entryId);
   }
@@ -937,7 +947,7 @@ function normalizeHiddenEntryIds(
   groups: PlatformLayoutGroup[],
   legacyHiddenPlatformIds: PlatformId[],
 ): PlatformLayoutEntryId[] {
-  const normalized = normalizeEntryVisibilityList(rawHiddenEntryIds, orderedEntryIds);
+  const normalized = normalizeEntryVisibilityList(rawHiddenEntryIds, orderedEntryIds, groups);
   if (normalized.length > 0) {
     return normalized;
   }
@@ -976,7 +986,7 @@ function normalizeSidebarEntryIds(
   groups: PlatformLayoutGroup[],
   legacySidebarPlatformIds: PlatformId[],
 ): PlatformLayoutEntryId[] {
-  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds);
+  const normalized = normalizeEntryVisibilityList(rawSidebarEntryIds, orderedEntryIds, groups);
   if (normalized.length > 0) {
     return normalized;
   }
@@ -1351,7 +1361,7 @@ function persist(
   >,
 ) {
   try {
-    localStorage.setItem(PLATFORM_LAYOUT_STORAGE_KEY, JSON.stringify(state));
+    persistPlatformLayout(JSON.stringify(state));
   } catch {
     // ignore persistence failures
   }

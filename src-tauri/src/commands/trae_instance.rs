@@ -31,7 +31,7 @@ fn resolve_running_pid(
 }
 
 async fn inject_bound_account(
-    platform: modules::trae_account::TraePlatformKind,
+    _platform: modules::trae_account::TraePlatformKind,
     user_data_dir: &str,
     bind_account_id: Option<&str>,
 ) -> Result<(), String> {

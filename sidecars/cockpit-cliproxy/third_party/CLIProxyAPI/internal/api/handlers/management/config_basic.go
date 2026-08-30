@@ -263,6 +263,14 @@ func (h *Handler) PutRequestRetry(c *gin.Context) {
 	h.updateIntField(c, func(v int) { h.cfg.RequestRetry = v })
 }
 
+// Max retry credentials
+func (h *Handler) GetMaxRetryCredentials(c *gin.Context) {
+	c.JSON(200, gin.H{"max-retry-credentials": h.cfg.MaxRetryCredentials})
+}
+func (h *Handler) PutMaxRetryCredentials(c *gin.Context) {
+	h.updateIntField(c, func(v int) { h.cfg.MaxRetryCredentials = v })
+}
+
 // Max retry interval
 func (h *Handler) GetMaxRetryInterval(c *gin.Context) {
 	c.JSON(200, gin.H{"max-retry-interval": h.cfg.MaxRetryInterval})
@@ -284,6 +292,8 @@ func normalizeRoutingStrategy(strategy string) (string, bool) {
 	switch normalized {
 	case "", "round-robin", "roundrobin", "rr":
 		return "round-robin", true
+	case "weighted-round-robin", "weightedroundrobin", "wrr":
+		return "weighted-round-robin", true
 	case "fill-first", "fillfirst", "ff":
 		return "fill-first", true
 	default:

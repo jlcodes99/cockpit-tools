@@ -15,6 +15,8 @@ type RemoteConfigAppliedRuleRaw = {
 
 type RemoteConfigStateRaw = {
   version?: unknown;
+  codexOAuthAppVersion?: unknown;
+  codex_oauth_app_version?: unknown;
   updatedAt?: unknown;
   updated_at?: unknown;
   currentOs?: unknown;
@@ -84,6 +86,10 @@ function normalizeRemoteConfigState(raw: RemoteConfigStateRaw): RemoteConfigStat
     .filter((rule) => rule.platformIds.length > 0);
   return {
     version: typeof raw.version === 'string' ? raw.version : '',
+    codexOAuthAppVersion:
+      typeof (raw.codexOAuthAppVersion ?? raw.codex_oauth_app_version) === 'string'
+        ? String(raw.codexOAuthAppVersion ?? raw.codex_oauth_app_version)
+        : '26.820.60940',
     updatedAt: Number(raw.updatedAt ?? raw.updated_at) || 0,
     currentOs: typeof (raw.currentOs ?? raw.current_os) === 'string'
       ? String(raw.currentOs ?? raw.current_os)

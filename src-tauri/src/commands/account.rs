@@ -378,11 +378,18 @@ pub async fn fetch_account_quota(account_id: String) -> AppResult<models::Accoun
 #[tauri::command]
 pub async fn refresh_all_quotas(
     app: tauri::AppHandle,
+    trigger: Option<String>,
 ) -> Result<modules::account::RefreshStats, String> {
-    let result = modules::account::refresh_all_quotas_logic(
-        modules::account::QuotaRefreshTrigger::ManualBatch,
-    )
-    .await;
+    let trigger = match trigger
+        .as_deref()
+        .map(str::trim)
+        .map(|value| value.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("auto") => modules::account::QuotaRefreshTrigger::Auto,
+        _ => modules::account::QuotaRefreshTrigger::ManualBatch,
+    };
+    let result = modules::account::refresh_all_quotas_logic(trigger).await;
     if result.is_ok() {
         let mut switched = false;
         match modules::account::run_auto_switch_if_needed().await {

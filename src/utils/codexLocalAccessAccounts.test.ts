@@ -72,6 +72,26 @@ test("direct add follows the API service free-account restriction", () => {
   assert.equal(canAddCodexAccountToLocalAccess(free, new Set(), false), true);
 });
 
+test("expired paid subscriptions follow the API service free-account restriction", () => {
+  const expiredPlus = account({
+    plan_type: "plus",
+    subscription_active_until: "2020-01-01T00:00:00Z",
+  });
+
+  assert.equal(
+    getCodexLocalAccessAccountIneligibleReason(expiredPlus, true),
+    "free_restricted",
+  );
+  assert.equal(
+    isCodexLocalAccessEligibleAccount(expiredPlus, true),
+    false,
+  );
+  assert.equal(
+    isCodexLocalAccessEligibleAccount(expiredPlus, false),
+    true,
+  );
+});
+
 test("Agent Identity imports are forced into API service without enabling global sync", () => {
   const regular = account({ id: "regular" });
   const agentIdentity = account({

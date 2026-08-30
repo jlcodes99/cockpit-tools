@@ -1,0 +1,2229 @@
+// macOS Native Menu：Menu status, quota formatting and provider usage aggregation。
+// 通过 include! 保持原 imp 模块作用域和 Objective-C FFI 调用路径。
+    fn menu_bar_account_prefix(label: &str) -> String {
+        let local_part = label.trim().split('@').next().unwrap_or_default().trim();
+        local_part.chars().take(4).collect()
+    }
+
+    fn menu_bar_value_from_remaining(remaining_percent: Option<i32>) -> String {
+        remaining_percent
+            .map(|value| format!("{}%", value.clamp(0, i32::MAX)))
+            .unwrap_or_else(|| "--".to_string())
+    }
+
+    fn is_codex_api_service_current() -> bool {
+        let index = modules::codex_account::load_account_index();
+        if index
+            .current_account_id
+            .as_deref()
+            .map(modules::codex_instance::is_api_service_bind_account_id)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        // 激活 API 服务时会清空 current_account_id，实际当前态看默认实例 bind。
+        if modules::codex_account::get_current_account().is_some() {
+            return false;
+        }
+        modules::codex_instance::load_default_settings()
+            .ok()
+            .and_then(|settings| settings.bind_account_id)
+            .as_deref()
+            .map(modules::codex_instance::is_api_service_bind_account_id)
+            .unwrap_or(false)
+    }
+
+    /// Codex API Key / 模型供应商账号：展示剩余额度金额或数量，前缀固定为 API。
+    fn build_codex_api_key_menu_bar_status(
+        account: &crate::models::codex::CodexAccount,
+    ) -> MenuBarStatus {
+        // 「API」是类型标签，不是邮箱前缀，不受「显示邮箱前 4 位」开关影响。
+        let prefix = "API".to_string();
+        let Some(summary) = codex_api_key_provider_usage(account) else {
+            return MenuBarStatus {
+                account_prefix: prefix,
+                value_text: "--".to_string(),
+                remaining_percent: None,
+            };
+        };
+        let mode = json_path(Some(summary), &["mode"])
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default();
+        let unit = json_path(Some(summary), &["unit"]).and_then(Value::as_str);
+        let has_new_api_fields = codex_api_key_usage_detail(summary, "totalGranted").is_some()
+            || codex_api_key_usage_detail(summary, "totalAvailable").is_some()
+            || codex_api_key_usage_detail(summary, "expiresAt").is_some();
+
+        if mode == "new_api" || has_new_api_fields {
+            let total_granted = codex_api_key_usage_detail_number(summary, "totalGranted");
+            let total_available = codex_api_key_usage_detail_number(summary, "totalAvailable");
+            let remaining_percent = match (total_granted, total_available) {
+                (Some(granted), Some(available)) if granted > 0.0 => {
+                    Some(clamp_percent((available.max(0.0) / granted) * 100.0))
+                }
+                _ => None,
+            };
+            return MenuBarStatus {
+                account_prefix: prefix,
+                value_text: total_available
+                    .map(format_provider_usage_count)
+                    .unwrap_or_else(|| "--".to_string()),
+                remaining_percent,
+            };
+        }
+
+        let remaining = json_path(Some(summary), &["quotaRemaining"])
+            .or_else(|| json_path(Some(summary), &["remaining"]))
+            .or_else(|| json_path(Some(summary), &["balance"]))
+            .and_then(parse_json_number);
+        let used = json_path(Some(summary), &["quotaUsed"])
+            .or_else(|| json_path(Some(summary), &["totalCost"]))
+            .and_then(parse_json_number);
+        let limit = json_path(Some(summary), &["quotaLimit"]).and_then(parse_json_number);
+        let quota_unlimited = json_path(Some(summary), &["quotaUnlimited"])
+            .and_then(json_bool)
+            .unwrap_or(false);
+
+        let remaining_percent = match (used, limit) {
+            (Some(used), Some(limit)) if limit > 0.0 => {
+                Some(clamp_percent(((limit - used).max(0.0) / limit) * 100.0))
+            }
+            _ => None,
+        };
+
+        if quota_unlimited {
+            return MenuBarStatus {
+                account_prefix: prefix,
+                value_text: "∞".to_string(),
+                remaining_percent: Some(100),
+            };
+        }
+
+        let value_text = remaining
+            .or(limit)
+            .map(|value| {
+                if mode == "sub2api"
+                    || unit.is_some()
+                    || json_path(Some(summary), &["balance"]).is_some()
+                {
+                    format_provider_usage_money(value, unit)
+                } else {
+                    format_provider_usage_count(value)
+                }
+            })
+            .unwrap_or_else(|| "--".to_string());
+
+        MenuBarStatus {
+            account_prefix: prefix,
+            value_text,
+            remaining_percent,
+        }
+    }
+
+    fn build_codex_api_service_menu_bar_status() -> MenuBarStatus {
+        let quota = modules::codex_local_access::menu_bar_api_service_quota();
+        MenuBarStatus {
+            // 「API」是类型标签，不受邮箱前缀开关影响。
+            account_prefix: "API".to_string(),
+            value_text: menu_bar_value_from_remaining(quota.remaining_percent),
+            remaining_percent: quota.remaining_percent,
+        }
+    }
+
+    fn build_menu_bar_status() -> Option<MenuBarStatus> {
+        let config = modules::config::get_user_config();
+        if !config.menu_bar_quota_enabled {
+            return None;
+        }
+
+        let platform = PlatformId::from_str(config.menu_bar_quota_platform.trim())
+            .unwrap_or(PlatformId::Codex);
+        let show_prefix = config.menu_bar_show_account_prefix;
+
+        // Codex：当前为 API 服务时，固定展示「API + 池剩余额度」，不回落到普通账号卡片。
+        if matches!(platform, PlatformId::Codex) && is_codex_api_service_current() {
+            return Some(build_codex_api_service_menu_bar_status());
+        }
+
+        // Codex：当前为 API Key 账号时，展示「API + 供应商剩余额度」。
+        if matches!(platform, PlatformId::Codex) {
+            if let Some(account) = modules::codex_account::get_current_account() {
+                if account.is_api_key_auth() {
+                    return Some(build_codex_api_key_menu_bar_status(&account));
+                }
+            }
+        }
+
+        let lang = normalize_lang(&config.language);
+        let (cards, current_account_id, _) = build_platform_cards(platform, &lang);
+        let card = current_account_id
+            .as_deref()
+            .and_then(|id| cards.iter().find(|card| card.id == id))
+            .or_else(|| cards.first());
+
+        let remaining_percent = card.and_then(|card| card.remaining_percent);
+        Some(MenuBarStatus {
+            account_prefix: if show_prefix {
+                card.map(|card| menu_bar_account_prefix(&card.title))
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            },
+            value_text: menu_bar_value_from_remaining(remaining_percent),
+            remaining_percent,
+        })
+    }
+
+    pub(crate) fn update_status_item<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+        let status = build_menu_bar_status();
+        let enabled = status.is_some();
+        let account_prefix_raw = status
+            .as_ref()
+            .map(|value| value.account_prefix.clone())
+            .unwrap_or_default();
+        let account_prefix = to_cstring(&account_prefix_raw);
+        let value_text_raw = status
+            .as_ref()
+            .map(|value| value.value_text.clone())
+            .unwrap_or_else(|| "--".to_string());
+        let value_text = to_cstring(&value_text_raw);
+        let remaining_percent = status
+            .as_ref()
+            .and_then(|value| value.remaining_percent)
+            .unwrap_or(-1);
+        // 先通过 tray-icon 官方 set_title 同步 TaoTrayTarget 点击层尺寸；
+        // 再由 Swift 写入带颜色的 attributedTitle，并再次对齐 frame。
+        let plain_title = if enabled {
+            if account_prefix_raw.is_empty() {
+                value_text_raw.clone()
+            } else {
+                format!("{} {}", account_prefix_raw, value_text_raw)
+            }
+        } else {
+            String::new()
+        };
+        let app = app.clone();
+
+        app.clone()
+            .run_on_main_thread(move || {
+                let Some(tray) = app.tray_by_id(TRAY_ID) else {
+                    return;
+                };
+
+                if let Err(err) = tray.set_title(Some(plain_title)) {
+                    modules::logger::log_warn(&format!("[Tray] 同步菜单栏额度标题失败: {}", err));
+                }
+
+                let status_item_ptr = tray
+                    .with_inner_tray_icon(|tray_icon| {
+                        tray_icon
+                            .ns_status_item()
+                            .map(|status_item| Retained::as_ptr(&status_item) as usize)
+                    })
+                    .ok()
+                    .flatten();
+                let Some(status_item_ptr) = status_item_ptr else {
+                    return;
+                };
+
+                unsafe {
+                    macos_native_menu_update_status_item(
+                        account_prefix.as_ptr(),
+                        value_text.as_ptr(),
+                        remaining_percent,
+                        i32::from(enabled),
+                        status_item_ptr as *mut c_void,
+                    );
+                }
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn toggle_tray_menu<R: Runtime>(app: &AppHandle<R>, _rect: Rect) {
+        let Some(snapshot) = build_snapshot() else {
+            return;
+        };
+        let Ok(snapshot_json) = serde_json::to_string(&snapshot) else {
+            return;
+        };
+        let snapshot_json = to_cstring(&snapshot_json);
+        let app = app.clone();
+
+        let _ = app.clone().run_on_main_thread(move || {
+            let Some(tray) = app.tray_by_id(TRAY_ID) else {
+                return;
+            };
+            let status_item_ptr = tray
+                .with_inner_tray_icon(|tray_icon| {
+                    tray_icon
+                        .ns_status_item()
+                        .map(|status_item| Retained::as_ptr(&status_item) as usize)
+                })
+                .ok()
+                .flatten();
+
+            let Some(status_item_ptr) = status_item_ptr else {
+                return;
+            };
+
+            unsafe {
+                macos_native_menu_toggle(snapshot_json.as_ptr(), status_item_ptr as *mut c_void);
+            }
+        });
+    }
+
+    fn visible_platforms() -> Vec<PlatformId> {
+        let layout = modules::tray_layout::load_tray_layout();
+        let visible = sanitize_platform_list(&layout.tray_platform_ids);
+        let visible_set: HashSet<PlatformId> = visible.iter().copied().collect();
+
+        let mut groups_by_id: HashMap<String, modules::tray_layout::TrayLayoutGroup> =
+            HashMap::new();
+        for group in layout.platform_groups {
+            groups_by_id.insert(group.id.clone(), group);
+        }
+
+        let mut ordered = Vec::new();
+        let mut used_platforms: HashSet<PlatformId> = HashSet::new();
+
+        for raw_entry in &layout.ordered_entry_ids {
+            if let Some(platform) = parse_platform_entry_id(raw_entry) {
+                if visible_set.contains(&platform) && used_platforms.insert(platform) {
+                    ordered.push(platform);
+                }
+                continue;
+            }
+
+            let Some(group_id) = parse_group_entry_id(raw_entry) else {
+                continue;
+            };
+            let Some(group) = groups_by_id.get(&group_id) else {
+                continue;
+            };
+
+            for raw_platform in &group.platform_ids {
+                let Some(platform) = PlatformId::from_str(raw_platform.trim()) else {
+                    continue;
+                };
+                if visible_set.contains(&platform) && used_platforms.insert(platform) {
+                    ordered.push(platform);
+                }
+            }
+        }
+
+        for platform in normalize_platform_order(&layout.ordered_platform_ids) {
+            if visible_set.contains(&platform) && used_platforms.insert(platform) {
+                ordered.push(platform);
+            }
+        }
+
+        ordered
+    }
+
+    fn sanitize_platform_list(ids: &[String]) -> Vec<PlatformId> {
+        let mut result = Vec::new();
+        let mut seen = HashSet::new();
+
+        for raw in ids {
+            let Some(platform) = PlatformId::from_str(raw.trim()) else {
+                continue;
+            };
+            if seen.insert(platform) {
+                result.push(platform);
+            }
+        }
+
+        result
+    }
+
+    fn normalize_platform_order(ids: &[String]) -> Vec<PlatformId> {
+        let mut result = sanitize_platform_list(ids);
+        let mut seen: HashSet<PlatformId> = result.iter().copied().collect();
+
+        for platform in PlatformId::default_order() {
+            if seen.insert(platform) {
+                result.push(platform);
+            }
+        }
+
+        result
+    }
+
+    fn parse_platform_entry_id(raw: &str) -> Option<PlatformId> {
+        let value = raw.strip_prefix("platform:")?;
+        PlatformId::from_str(value.trim())
+    }
+
+    fn parse_group_entry_id(raw: &str) -> Option<String> {
+        let value = raw.strip_prefix("group:")?.trim();
+        if value.is_empty() {
+            return None;
+        }
+        Some(value.to_string())
+    }
+
+    fn build_snapshot() -> Option<MenuSnapshot> {
+        let visible_platforms = visible_platforms();
+        let config = modules::config::get_user_config();
+        let lang = normalize_lang(&config.language);
+        let platforms = visible_platforms
+            .into_iter()
+            .map(|platform| build_platform_snapshot(platform, &lang))
+            .collect::<Vec<_>>();
+
+        // 开启菜单栏额度时：右键默认选中配置的平台，并展示该平台当前账号/额度。
+        let preferred_platform = if config.menu_bar_quota_enabled {
+            PlatformId::from_str(config.menu_bar_quota_platform.trim())
+        } else {
+            None
+        };
+        let prefer_selected_platform = preferred_platform
+            .is_some_and(|platform| platforms.iter().any(|item| item.id == platform.as_str()));
+        let selected_platform_id = if prefer_selected_platform {
+            preferred_platform
+                .map(|platform| platform.as_str().to_string())
+                .unwrap_or_default()
+        } else {
+            platforms
+                .first()
+                .map(|item| item.id.clone())
+                .unwrap_or_default()
+        };
+
+        Some(MenuSnapshot {
+            strings: build_strings(&lang),
+            platforms,
+            selected_platform_id,
+            prefer_selected_platform,
+        })
+    }
+
+    fn build_platform_snapshot(platform: PlatformId, lang: &str) -> PlatformSnapshot {
+        let (cards, current_account_id, recommended_account_id) =
+            build_platform_cards(platform, lang);
+        let cards = cards
+            .into_iter()
+            .map(|card| RenderedAccountCard {
+                id: card.id,
+                title: card.title,
+                plan: card.plan,
+                updated_text: format_updated_label(lang, card.updated_at.unwrap_or(0)),
+                quota_rows: card.quota_rows,
+            })
+            .collect();
+
+        PlatformSnapshot {
+            id: platform.as_str().to_string(),
+            title: platform.title().to_string(),
+            short_title: switcher_title(platform).to_string(),
+            nav_target: platform.nav_target().to_string(),
+            accent_hex: platform_accent_hex(platform).to_string(),
+            current_account_id,
+            recommended_account_id,
+            cards,
+        }
+    }
+
+    fn build_strings(lang: &str) -> MenuStrings {
+        MenuStrings {
+            view_recommended: modules::i18n::translate(
+                lang,
+                "floatingCard.actions.viewRecommended",
+                &[],
+            ),
+            back_to_current: modules::i18n::translate(
+                lang,
+                "floatingCard.actions.backToCurrent",
+                &[],
+            ),
+            switch_to_viewed: modules::i18n::translate(
+                lang,
+                "floatingCard.actions.switchToThisAccount",
+                &[],
+            ),
+            refresh: modules::i18n::translate(lang, "common.refresh", &[]),
+            open_cockpit_tools: modules::i18n::translate(
+                lang,
+                "floatingCard.actions.openCockpitTools",
+                &[],
+            ),
+            open_details: modules::i18n::translate(lang, "accounts.actions.viewDetails", &[]),
+            view_all_accounts: modules::i18n::translate(lang, "dashboard.viewAllAccounts", &[]),
+            settings: modules::i18n::translate(lang, "nav.settings", &[]),
+            quit: modules::i18n::translate(lang, "closeDialog.quit", &[]),
+            empty_title: modules::i18n::translate(lang, "floatingCard.empty.title", &[]),
+            empty_desc: modules::i18n::translate(lang, "floatingCard.empty.desc", &[]),
+        }
+    }
+
+    fn switcher_title(platform: PlatformId) -> &'static str {
+        match platform {
+            PlatformId::Antigravity => "AG IDE",
+            PlatformId::GitHubCopilot => "Copilot",
+            PlatformId::CodebuddyCn => "CodeBuddy CN",
+            _ => platform.title(),
+        }
+    }
+
+    fn platform_accent_hex(platform: PlatformId) -> &'static str {
+        match platform {
+            PlatformId::Antigravity => "#67c27b",
+            PlatformId::Codex => "#1976ff",
+            PlatformId::Claude => "#d97745",
+            PlatformId::Zed => "#8b92a1",
+            PlatformId::GitHubCopilot => "#8b92a1",
+            PlatformId::Windsurf => "#21c7b7",
+            PlatformId::Kiro => "#8b92a1",
+            PlatformId::Cursor => "#21c7b7",
+            PlatformId::Grok => "#6b7280",
+            PlatformId::Codebuddy => "#4b74ff",
+            PlatformId::CodebuddyCn => "#4b74ff",
+            PlatformId::Qoder => "#5664ff",
+            PlatformId::Zcode => "#2f9f7f",
+            PlatformId::Trae
+            | PlatformId::TraeSolo
+            | PlatformId::TraeCn
+            | PlatformId::TraeSoloCn => "#4f46e5",
+            PlatformId::Workbuddy => "#2fa36a",
+        }
+    }
+
+    fn to_cstring(value: &str) -> CString {
+        let sanitized = value.replace('\0', "");
+        CString::new(sanitized).unwrap_or_else(|_| CString::new("{}").unwrap())
+    }
+
+    fn read_optional_c_string(ptr: *const c_char) -> Option<String> {
+        if ptr.is_null() {
+            return None;
+        }
+        Some(unsafe { CStr::from_ptr(ptr) }.to_string_lossy().to_string())
+    }
+
+    #[no_mangle]
+    pub extern "C" fn macos_native_menu_dispatch_action(
+        action: *const c_char,
+        platform_id: *const c_char,
+        account_id: *const c_char,
+    ) {
+        let Some(action) = read_optional_c_string(action) else {
+            return;
+        };
+        let raw_platform_id = read_optional_c_string(platform_id);
+        let platform = raw_platform_id.as_deref().and_then(PlatformId::from_str);
+        let account_id = read_optional_c_string(account_id);
+
+        match action.as_str() {
+            "refresh" => {
+                if let Some(platform) = platform {
+                    spawn_refresh(platform, account_id);
+                }
+            }
+            "switch" => {
+                if let (Some(platform), Some(account_id)) = (platform, account_id) {
+                    spawn_switch_account(platform, account_id);
+                }
+            }
+            "open_details" | "view_all_accounts" => {
+                if let Some(platform) = platform {
+                    open_main_window_page(platform.nav_target());
+                }
+            }
+            "open_cockpit_tools" => {
+                open_main_window();
+            }
+            "settings" => {
+                open_main_window_page("settings");
+            }
+            "quit" => {
+                if let Some(app) = crate::get_app_handle() {
+                    app.exit(0);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn normalize_lang(lang: &str) -> String {
+        lang.trim().replace('_', "-").to_ascii_lowercase()
+    }
+
+    fn normalize_unix_timestamp(value: i64) -> Option<i64> {
+        if value <= 0 {
+            return None;
+        }
+        if value > 1_000_000_000_000 {
+            return Some(value / 1000);
+        }
+        Some(value)
+    }
+
+    fn format_updated_label(lang: &str, updated_at: i64) -> String {
+        let Some(updated_at) = normalize_unix_timestamp(updated_at) else {
+            return modules::i18n::translate(lang, "common.shared.quota.noData", &[]);
+        };
+
+        let now = chrono::Utc::now().timestamp();
+        let diff = (now - updated_at).max(0);
+        let relative = if diff < 60 {
+            modules::i18n::translate(lang, "common.shared.time.lessThanMinute", &[])
+        } else {
+            let days = diff / 86_400;
+            let hours = (diff % 86_400) / 3600;
+            let minutes = (diff % 3600) / 60;
+            if days > 0 {
+                modules::i18n::translate(
+                    lang,
+                    "common.shared.time.relativeDaysHours",
+                    &[("days", &days.to_string()), ("hours", &hours.to_string())],
+                )
+            } else if hours > 0 {
+                modules::i18n::translate(
+                    lang,
+                    "common.shared.time.relativeHoursMinutes",
+                    &[
+                        ("hours", &hours.to_string()),
+                        ("minutes", &minutes.to_string()),
+                    ],
+                )
+            } else {
+                modules::i18n::translate(
+                    lang,
+                    "common.shared.time.relativeMinutes",
+                    &[("minutes", &minutes.to_string())],
+                )
+            }
+        };
+
+        modules::i18n::translate(
+            lang,
+            "common.shared.updated.label",
+            &[("relative", &relative)],
+        )
+    }
+
+    fn display_updated_at(
+        usage_updated_at: Option<i64>,
+        last_used: i64,
+        created_at: i64,
+    ) -> Option<i64> {
+        Some(usage_updated_at.unwrap_or(last_used.max(created_at)))
+    }
+
+    fn format_reset_subtext(lang: &str, ts: Option<i64>) -> Option<String> {
+        let ts = ts?;
+        if ts <= 0 {
+            return None;
+        }
+        let now = chrono::Utc::now().timestamp();
+        if ts <= now {
+            return Some(modules::i18n::translate(
+                lang,
+                "common.shared.quota.resetDone",
+                &[],
+            ));
+        }
+        let diff = ts - now;
+        let days = diff / 86_400;
+        let hours = (diff % 86_400) / 3600;
+        let minutes = (diff % 3600) / 60;
+        let relative = if days > 0 {
+            modules::i18n::translate(
+                lang,
+                "common.shared.time.relativeDaysHours",
+                &[("days", &days.to_string()), ("hours", &hours.to_string())],
+            )
+        } else if hours > 0 {
+            modules::i18n::translate(
+                lang,
+                "common.shared.time.relativeHoursMinutes",
+                &[
+                    ("hours", &hours.to_string()),
+                    ("minutes", &minutes.to_string()),
+                ],
+            )
+        } else if minutes > 0 {
+            modules::i18n::translate(
+                lang,
+                "common.shared.time.relativeMinutes",
+                &[("minutes", &minutes.to_string())],
+            )
+        } else {
+            modules::i18n::translate(lang, "common.shared.time.lessThanMinute", &[])
+        };
+
+        Some(modules::i18n::translate(
+            lang,
+            "common.shared.credits.planEndsInHours",
+            &[("hours", &relative)],
+        ))
+    }
+
+    fn translate_or(
+        lang: &str,
+        key: &str,
+        fallback: &str,
+        replacements: &[(&str, &str)],
+    ) -> String {
+        let translated = modules::i18n::translate(lang, key, replacements);
+        if translated != key {
+            return translated;
+        }
+
+        let mut output = fallback.to_string();
+        for (name, value) in replacements {
+            output = output.replace(&format!("{{{{{}}}}}", name), value);
+        }
+        output
+    }
+
+    fn clamp_percent(value: f64) -> i32 {
+        if !value.is_finite() {
+            return 0;
+        }
+        value.round().clamp(0.0, 100.0) as i32
+    }
+
+    fn first_non_empty<'a>(values: &[Option<&'a str>]) -> Option<&'a str> {
+        values
+            .iter()
+            .flatten()
+            .map(|value| value.trim())
+            .find(|value| !value.is_empty())
+    }
+
+    fn format_quota_number(value: f64) -> String {
+        let normalized = if value.is_finite() {
+            value.max(0.0)
+        } else {
+            0.0
+        };
+        if (normalized.fract()).abs() < f64::EPSILON {
+            format!("{normalized:.0}")
+        } else {
+            format_trimmed_decimal(normalized)
+        }
+    }
+
+    fn format_currency_dollars(value: f64) -> String {
+        format!("${:.2}", value.max(0.0))
+    }
+
+    fn format_provider_usage_money(value: f64, unit: Option<&str>) -> String {
+        let normalized_unit = unit
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("USD");
+        let amount = if value >= 100.0 {
+            format!("{:.0}", value)
+        } else {
+            format!("{:.2}", value)
+        };
+        if normalized_unit.eq_ignore_ascii_case("USD") {
+            format!("${amount}")
+        } else {
+            format!("{amount} {normalized_unit}")
+        }
+    }
+
+    fn format_currency_cents(value: f64) -> String {
+        format!("${:.2}", (value / 100.0).max(0.0))
+    }
+
+    fn format_micros_usd(value: f64) -> String {
+        format!("${:.2}", value.max(0.0) / 1_000_000.0)
+    }
+
+    fn format_zed_plan_label(plan_raw: &str) -> String {
+        let trimmed = plan_raw.trim();
+        if trimmed.is_empty() {
+            return "UNKNOWN".to_string();
+        }
+
+        let normalized = if trimmed.len() >= 4 && trimmed[..4].eq_ignore_ascii_case("zed_") {
+            trimmed[4..].trim()
+        } else {
+            trimmed
+        };
+
+        if normalized.is_empty() {
+            "UNKNOWN".to_string()
+        } else {
+            normalized.to_uppercase()
+        }
+    }
+
+    fn antigravity_remaining_tone(remaining_percent: i32) -> ProgressTone {
+        if remaining_percent >= 70 {
+            ProgressTone::High
+        } else if remaining_percent >= 30 {
+            ProgressTone::Medium
+        } else {
+            ProgressTone::Low
+        }
+    }
+
+    fn codex_remaining_tone(remaining_percent: i32) -> ProgressTone {
+        if remaining_percent >= 80 {
+            ProgressTone::High
+        } else if remaining_percent >= 40 {
+            ProgressTone::Medium
+        } else if remaining_percent >= 10 {
+            ProgressTone::Low
+        } else {
+            ProgressTone::Critical
+        }
+    }
+
+    fn usage_warning_tone(used_percent: i32) -> ProgressTone {
+        if used_percent <= 20 {
+            ProgressTone::High
+        } else if used_percent <= 60 {
+            ProgressTone::Medium
+        } else if used_percent <= 85 {
+            ProgressTone::Low
+        } else {
+            ProgressTone::Critical
+        }
+    }
+
+    fn cursor_usage_tone(used_percent: i32) -> ProgressTone {
+        if used_percent >= 90 {
+            ProgressTone::Low
+        } else if used_percent >= 70 {
+            ProgressTone::Medium
+        } else {
+            ProgressTone::High
+        }
+    }
+
+    fn remaining_balance_tone(remaining_percent: i32) -> ProgressTone {
+        if remaining_percent <= 10 {
+            ProgressTone::Low
+        } else if remaining_percent <= 30 {
+            ProgressTone::Medium
+        } else {
+            ProgressTone::High
+        }
+    }
+
+    fn resource_remaining_tone(resource: &ResourceQuotaEntry) -> ProgressTone {
+        let remaining_percent = if resource.total > 0.0 {
+            clamp_percent((resource.remain / resource.total) * 100.0)
+        } else {
+            (100 - resource.used_percent).clamp(0, 100)
+        };
+        remaining_balance_tone(remaining_percent)
+    }
+
+    fn make_progress_row(
+        label: String,
+        value: String,
+        progress: i32,
+        subtext: Option<String>,
+        progress_tone: ProgressTone,
+    ) -> QuotaRow {
+        QuotaRow {
+            label,
+            value,
+            progress: Some(progress.clamp(0, 100)),
+            progress_tone: Some(progress_tone),
+            subtext,
+        }
+    }
+
+    fn make_text_row(label: String, value: String, subtext: Option<String>) -> QuotaRow {
+        QuotaRow {
+            label,
+            value,
+            progress: None,
+            progress_tone: None,
+            subtext,
+        }
+    }
+
+    fn min_quota_progress(rows: &[QuotaRow], progress_is_remaining: bool) -> Option<i32> {
+        rows.iter()
+            .filter_map(|row| row.progress)
+            .map(|value| {
+                if progress_is_remaining {
+                    value.clamp(0, 100)
+                } else {
+                    (100 - value).clamp(0, 100)
+                }
+            })
+            .min()
+    }
+
+    fn codex_api_key_provider_usage(
+        account: &crate::models::codex::CodexAccount,
+    ) -> Option<&Value> {
+        account
+            .quota
+            .as_ref()
+            .and_then(|quota| quota.raw_data.as_ref())
+            .and_then(|raw| json_path(Some(raw), &["provider_usage"]))
+    }
+
+    fn codex_api_key_usage_detail<'a>(summary: &'a Value, key: &str) -> Option<&'a Value> {
+        summary
+            .get("details")
+            .and_then(Value::as_array)?
+            .iter()
+            .find(|item| item.get("key").and_then(Value::as_str).map(str::trim) == Some(key))
+    }
+
+    fn codex_api_key_usage_detail_number(summary: &Value, key: &str) -> Option<f64> {
+        codex_api_key_usage_detail(summary, key)?
+            .get("value")
+            .and_then(parse_json_number)
+    }
+
+    fn format_provider_usage_count(value: f64) -> String {
+        format_quota_number(value.max(0.0))
+    }
+
+    fn format_provider_usage_count_opt(value: Option<f64>) -> String {
+        value
+            .map(format_provider_usage_count)
+            .unwrap_or_else(|| "-".to_string())
+    }
+
+    fn build_codex_api_key_usage_rows(
+        lang: &str,
+        account: &crate::models::codex::CodexAccount,
+    ) -> Vec<QuotaRow> {
+        let Some(summary) = codex_api_key_provider_usage(account) else {
+            return vec![make_text_row(
+                translate_or(lang, "common.shared.quota.noData", "No quota data", &[]),
+                "-".to_string(),
+                Some(modules::i18n::translate(lang, "common.refresh", &[])),
+            )];
+        };
+        let mode = json_path(Some(summary), &["mode"])
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default();
+        let unit = json_path(Some(summary), &["unit"]).and_then(Value::as_str);
+        let has_new_api_fields = codex_api_key_usage_detail(summary, "totalGranted").is_some()
+            || codex_api_key_usage_detail(summary, "totalAvailable").is_some()
+            || codex_api_key_usage_detail(summary, "expiresAt").is_some();
+        if mode == "new_api" || has_new_api_fields {
+            let total_granted = codex_api_key_usage_detail_number(summary, "totalGranted");
+            let total_available = codex_api_key_usage_detail_number(summary, "totalAvailable");
+            let expires_at = codex_api_key_usage_detail(summary, "expiresAt")
+                .and_then(|item| item.get("value"))
+                .and_then(parse_timestamp_like);
+            let mut rows = Vec::new();
+            rows.push(make_text_row(
+                translate_or(lang, "codex.modelProviders.usage.limit", "Total", &[]),
+                format_provider_usage_count_opt(total_granted),
+                None,
+            ));
+            let used_percent = match (total_granted, total_available) {
+                (Some(granted), Some(available)) if granted > 0.0 => {
+                    clamp_percent(((granted - available).max(0.0) / granted) * 100.0)
+                }
+                _ => 0,
+            };
+            rows.push(QuotaRow {
+                label: translate_or(
+                    lang,
+                    "codex.modelProviders.usage.remaining",
+                    "Remaining",
+                    &[],
+                ),
+                value: format_provider_usage_count_opt(total_available),
+                progress: Some(used_percent),
+                progress_tone: Some(usage_warning_tone(used_percent)),
+                subtext: None,
+            });
+            rows.push(make_text_row(
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.fields.expiresAt",
+                    "Expires At",
+                    &[],
+                ),
+                expires_at
+                    .and_then(|value| format_reset_subtext(lang, Some(value)))
+                    .unwrap_or_else(|| "-".to_string()),
+                None,
+            ));
+            return rows;
+        }
+        let sub2api_remaining = json_path(Some(summary), &["quotaRemaining"])
+            .or_else(|| json_path(Some(summary), &["remaining"]))
+            .or_else(|| json_path(Some(summary), &["balance"]))
+            .and_then(parse_json_number);
+        let sub2api_today_requests =
+            json_path(Some(summary), &["todayRequests"]).and_then(parse_json_number);
+        let sub2api_today_tokens =
+            json_path(Some(summary), &["todayTotalTokens"]).and_then(parse_json_number);
+        let has_sub2api_fields = sub2api_remaining.is_some()
+            || sub2api_today_requests.is_some()
+            || sub2api_today_tokens.is_some();
+        if mode == "sub2api" || has_sub2api_fields {
+            return vec![
+                make_text_row(
+                    translate_or(
+                        lang,
+                        "codex.modelProviders.usage.remaining",
+                        "Remaining",
+                        &[],
+                    ),
+                    sub2api_remaining
+                        .map(|value| format_provider_usage_money(value, unit))
+                        .unwrap_or_else(|| "-".to_string()),
+                    None,
+                ),
+                make_text_row(
+                    translate_or(
+                        lang,
+                        "codex.modelProviders.usage.fields.todayRequests",
+                        "Today Requests",
+                        &[],
+                    ),
+                    format_provider_usage_count_opt(sub2api_today_requests),
+                    None,
+                ),
+                make_text_row(
+                    translate_or(
+                        lang,
+                        "codex.modelProviders.usage.fields.todayTokens",
+                        "Today Tokens",
+                        &[],
+                    ),
+                    format_provider_usage_count_opt(sub2api_today_tokens),
+                    None,
+                ),
+            ];
+        }
+        let quota_unlimited = json_path(Some(summary), &["quotaUnlimited"])
+            .and_then(json_bool)
+            .unwrap_or(false);
+        let remaining = json_path(Some(summary), &["quotaRemaining"])
+            .or_else(|| json_path(Some(summary), &["remaining"]))
+            .or_else(|| json_path(Some(summary), &["balance"]))
+            .and_then(parse_json_number);
+        let balance = json_path(Some(summary), &["balance"]).and_then(parse_json_number);
+        let used = json_path(Some(summary), &["quotaUsed"])
+            .or_else(|| json_path(Some(summary), &["totalCost"]))
+            .and_then(parse_json_number);
+        let limit = json_path(Some(summary), &["quotaLimit"]).and_then(parse_json_number);
+        let percent = match (used, limit) {
+            (Some(used), Some(limit)) if limit > 0.0 => Some(clamp_percent((used / limit) * 100.0)),
+            _ => None,
+        };
+        let mut rows = Vec::new();
+        if quota_unlimited || remaining.is_some() || limit.is_some() || used.is_some() {
+            let value = if quota_unlimited {
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.unlimitedQuota",
+                    "Unlimited",
+                    &[],
+                )
+            } else {
+                remaining
+                    .or(limit)
+                    .map(|value| format_provider_usage_money(value, unit))
+                    .unwrap_or_else(|| "-".to_string())
+            };
+            let subtext = used.map(|value| {
+                let used_label = translate_or(lang, "codex.modelProviders.usage.used", "Used", &[]);
+                format!("{used_label}: {}", format_provider_usage_money(value, unit))
+            });
+            rows.push(QuotaRow {
+                label: translate_or(
+                    lang,
+                    "codex.modelProviders.usage.remaining",
+                    "Remaining",
+                    &[],
+                ),
+                value,
+                progress: Some(percent.unwrap_or(0)),
+                progress_tone: Some(usage_warning_tone(percent.unwrap_or(0))),
+                subtext,
+            });
+        }
+        if let Some(balance) = balance {
+            rows.push(make_text_row(
+                translate_or(
+                    lang,
+                    "codex.modelProviders.usage.accountBalance",
+                    "Account Balance",
+                    &[],
+                ),
+                format_provider_usage_money(balance, unit),
+                None,
+            ));
+        }
+        rows
+    }
+
+    fn json_path<'a>(root: Option<&'a Value>, path: &[&str]) -> Option<&'a Value> {
+        let mut current = root?;
+        for key in path {
+            current = current.as_object()?.get(*key)?;
+        }
+        Some(current)
+    }
+
+    fn parse_json_number(value: &Value) -> Option<f64> {
+        match value {
+            Value::Number(number) => number.as_f64(),
+            Value::String(text) => text.trim().parse::<f64>().ok(),
+            _ => None,
+        }
+        .filter(|number| number.is_finite())
+    }
+
+    fn json_bool(value: &Value) -> Option<bool> {
+        match value {
+            Value::Bool(flag) => Some(*flag),
+            Value::Number(number) => {
+                if number.as_i64() == Some(1) {
+                    Some(true)
+                } else if number.as_i64() == Some(0) {
+                    Some(false)
+                } else {
+                    None
+                }
+            }
+            Value::String(text) => {
+                let normalized = text.trim().to_ascii_lowercase();
+                match normalized.as_str() {
+                    "1" | "true" | "yes" => Some(true),
+                    "0" | "false" | "no" => Some(false),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn first_string_from_roots<'a>(
+        roots: &[Option<&'a Value>],
+        paths: &[&[&str]],
+    ) -> Option<&'a str> {
+        for root in roots.iter().flatten() {
+            for path in paths {
+                if let Some(value) = json_path(Some(*root), path).and_then(|item| item.as_str()) {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        return Some(value);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn first_number_from_roots(roots: &[Option<&Value>], paths: &[&[&str]]) -> Option<f64> {
+        for root in roots.iter().flatten() {
+            for path in paths {
+                if let Some(value) = json_path(Some(*root), path).and_then(parse_json_number) {
+                    return Some(value);
+                }
+            }
+        }
+        None
+    }
+
+    fn first_timestamp_from_roots(roots: &[Option<&Value>], paths: &[&[&str]]) -> Option<i64> {
+        for root in roots.iter().flatten() {
+            for path in paths {
+                if let Some(value) = json_path(Some(*root), path).and_then(parse_timestamp_like) {
+                    return Some(value);
+                }
+            }
+        }
+        None
+    }
+
+    fn parse_timestamp_number(raw: f64) -> Option<i64> {
+        if !raw.is_finite() || raw <= 0.0 {
+            return None;
+        }
+        if raw > 1e12 {
+            return Some((raw / 1000.0).floor() as i64);
+        }
+        Some(raw.floor() as i64)
+    }
+
+    fn parse_timestamp_like(value: &Value) -> Option<i64> {
+        match value {
+            Value::Number(number) => parse_timestamp_number(number.as_f64()?),
+            Value::String(text) => {
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    return None;
+                }
+                if let Ok(number) = trimmed.parse::<f64>() {
+                    return parse_timestamp_number(number);
+                }
+                chrono::DateTime::parse_from_rfc3339(trimmed)
+                    .ok()
+                    .map(|timestamp| timestamp.timestamp())
+            }
+            Value::Object(object) => {
+                if let Some(seconds) = object.get("seconds").and_then(|item| item.as_i64()) {
+                    return Some(seconds);
+                }
+                if let Some(seconds) = object.get("unixSeconds").and_then(|item| item.as_i64()) {
+                    return Some(seconds);
+                }
+                object.get("value").and_then(parse_timestamp_like)
+            }
+            _ => None,
+        }
+    }
+
+    fn calc_used_percent(total: Option<f64>, remaining: Option<f64>) -> Option<i32> {
+        let total = total?;
+        let remaining = remaining?;
+        if total <= 0.0 {
+            return None;
+        }
+        Some(clamp_percent(
+            ((total - remaining).max(0.0) / total) * 100.0,
+        ))
+    }
+
+    fn sum_option_f64(left: Option<f64>, right: Option<f64>) -> Option<f64> {
+        match (left, right) {
+            (Some(a), Some(b)) => Some(a + b),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        }
+    }
+
+    fn parse_token_map(token: &str) -> HashMap<String, String> {
+        let mut values = HashMap::new();
+        let token_str = if token.contains(";sku=") {
+            token
+        } else {
+            token.split(':').next().unwrap_or(token)
+        };
+        for item in token_str.split(';') {
+            let mut parts = item.splitn(2, '=');
+            let key = parts.next().unwrap_or("").trim();
+            if key.is_empty() {
+                continue;
+            }
+            let value = parts.next().unwrap_or("").trim();
+            values.insert(key.to_string(), value.to_string());
+        }
+        values
+    }
+
+    fn parse_token_number(map: &HashMap<String, String>, key: &str) -> Option<f64> {
+        map.get(key)
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .and_then(|value| value.split(':').next())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| value.is_finite())
+    }
+
+    fn parse_reset_date_to_ts(reset_date: Option<&str>) -> Option<i64> {
+        let reset_date = reset_date?.trim();
+        if reset_date.is_empty() {
+            return None;
+        }
+        chrono::DateTime::parse_from_rfc3339(reset_date)
+            .ok()
+            .map(|timestamp| timestamp.timestamp())
+    }
+
+    fn format_resource_time_text(
+        lang: &str,
+        resource: &ResourceQuotaEntry,
+        updated_key: &str,
+        expire_key: &str,
+    ) -> Option<String> {
+        let primary = if resource.is_base_package {
+            resource.refresh_at
+        } else {
+            resource.expire_at
+        };
+        let fallback = if resource.is_base_package {
+            resource.expire_at
+        } else {
+            resource.refresh_at
+        };
+
+        if let Some(primary_text) = format_reset_subtext(lang, primary) {
+            let key = if resource.is_base_package {
+                updated_key
+            } else {
+                expire_key
+            };
+            let fallback_text = if resource.is_base_package {
+                "下次刷新时间：{{time}}"
+            } else {
+                "到期时间：{{time}}"
+            };
+            return Some(translate_or(
+                lang,
+                key,
+                fallback_text,
+                &[("time", primary_text.as_str())],
+            ));
+        }
+
+        if let Some(fallback_text) = format_reset_subtext(lang, fallback) {
+            let key = if resource.is_base_package {
+                expire_key
+            } else {
+                updated_key
+            };
+            let fallback_value = if resource.is_base_package {
+                "到期时间：{{time}}"
+            } else {
+                "下次刷新时间：{{time}}"
+            };
+            return Some(translate_or(
+                lang,
+                key,
+                fallback_value,
+                &[("time", fallback_text.as_str())],
+            ));
+        }
+
+        None
+    }
+
+    fn parse_rfc3339_ts(value: &str) -> Option<i64> {
+        chrono::DateTime::parse_from_rfc3339(value)
+            .ok()
+            .map(|item| item.timestamp())
+    }
+
+    fn normalize_antigravity_model_for_match(value: &str) -> String {
+        let normalized = value.trim().to_lowercase();
+        if normalized.is_empty() {
+            return normalized;
+        }
+        if normalized.starts_with("gemini-3.1-flash")
+            || normalized.starts_with("gemini-2.5-flash")
+            || normalized.starts_with("gemini-3-flash")
+        {
+            return "gemini-3-flash".to_string();
+        }
+        if normalized.starts_with("gemini-3.1-pro-high")
+            || normalized.starts_with("gemini-3-pro-high")
+        {
+            return "gemini-3.1-pro-high".to_string();
+        }
+        if normalized.starts_with("gemini-3.1-pro-low")
+            || normalized.starts_with("gemini-3-pro-low")
+        {
+            return "gemini-3.1-pro-low".to_string();
+        }
+        if normalized.starts_with("claude-sonnet-4-6")
+            || normalized.starts_with("claude-sonnet-4-5")
+        {
+            return "claude-sonnet-4-6".to_string();
+        }
+        if normalized.starts_with("claude-opus-4-6-thinking")
+            || normalized.starts_with("claude-opus-4-5-thinking")
+        {
+            return "claude-opus-4-6-thinking".to_string();
+        }
+        match normalized.as_str() {
+            "gemini-3-pro-high" => "gemini-3.1-pro-high".to_string(),
+            "gemini-3-pro-low" => "gemini-3.1-pro-low".to_string(),
+            "claude-sonnet-4-5" => "claude-sonnet-4-6".to_string(),
+            "claude-sonnet-4-5-thinking" => "claude-sonnet-4-6".to_string(),
+            "claude-opus-4-5-thinking" => "claude-opus-4-6-thinking".to_string(),
+            _ => normalized,
+        }
+    }
+
+    fn antigravity_model_matches(model_name: &str, target: &str) -> bool {
+        let left = normalize_antigravity_model_for_match(model_name);
+        let right = normalize_antigravity_model_for_match(target);
+        if left.is_empty() || right.is_empty() {
+            return false;
+        }
+        left == right
+            || left.starts_with(&(right.clone() + "-"))
+            || right.starts_with(&(left + "-"))
+    }
+
+    fn resolve_antigravity_plan_label(
+        quota: Option<&crate::models::quota::QuotaData>,
+    ) -> Option<String> {
+        let raw = quota
+            .and_then(|item| item.subscription_tier.as_deref())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?;
+        let normalized = raw.to_ascii_lowercase();
+        Some(
+            if normalized.contains("ultra") {
+                "ULTRA"
+            } else if normalized.contains("pro") {
+                "PRO"
+            } else {
+                "FREE"
+            }
+            .to_string(),
+        )
+    }
+
+    fn parse_decimal_amount(raw: &str) -> Option<f64> {
+        let sanitized = raw.replace(',', "");
+        let trimmed = sanitized.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        trimmed
+            .parse::<f64>()
+            .ok()
+            .filter(|value| value.is_finite())
+    }
+
+    fn format_trimmed_decimal(value: f64) -> String {
+        let mut rendered = format!("{value:.2}");
+        while rendered.ends_with('0') {
+            rendered.pop();
+        }
+        if rendered.ends_with('.') {
+            rendered.pop();
+        }
+        rendered
+    }
+
+    fn format_antigravity_available_credits(
+        quota: Option<&crate::models::quota::QuotaData>,
+    ) -> Option<String> {
+        let quota = quota?;
+        let mut total = 0.0;
+        let mut has_valid_amount = false;
+
+        for credit in &quota.credits {
+            let Some(raw_amount) = credit.credit_amount.as_deref() else {
+                continue;
+            };
+            let Some(parsed) = parse_decimal_amount(raw_amount) else {
+                continue;
+            };
+            total += parsed;
+            has_valid_amount = true;
+        }
+
+        has_valid_amount.then(|| format_trimmed_decimal(total))
+    }
+
+    fn build_antigravity_group_quota_rows(
+        lang: &str,
+        quota: &crate::models::quota::QuotaData,
+    ) -> Vec<QuotaRow> {
+        let settings = crate::modules::group_settings::load_group_settings();
+        let ordered_groups = settings.get_ordered_groups(Some(3));
+        if ordered_groups.is_empty() {
+            return Vec::new();
+        }
+
+        let mut rows = Vec::new();
+        for group_id in ordered_groups {
+            let group_models = settings.get_models_in_group(&group_id);
+            if group_models.is_empty() {
+                continue;
+            }
+
+            let mut total_percentage: i64 = 0;
+            let mut count: i64 = 0;
+            let mut earliest_reset_ts: Option<i64> = None;
+
+            for model in &quota.models {
+                let belongs = group_models
+                    .iter()
+                    .any(|group_model| antigravity_model_matches(&model.name, group_model));
+                if !belongs {
+                    continue;
+                }
+
+                total_percentage += i64::from(model.percentage.clamp(0, 100));
+                count += 1;
+                if let Some(reset_ts) = parse_rfc3339_ts(&model.reset_time) {
+                    earliest_reset_ts = Some(match earliest_reset_ts {
+                        Some(current) => current.min(reset_ts),
+                        None => reset_ts,
+                    });
+                }
+            }
+
+            if count <= 0 {
+                continue;
+            }
+
+            let avg_percentage = (total_percentage as f64 / count as f64).round() as i32;
+            let percentage = avg_percentage.clamp(0, 100);
+            rows.push(make_progress_row(
+                settings.get_group_name(&group_id),
+                format!("{percentage}%"),
+                percentage,
+                format_reset_subtext(lang, earliest_reset_ts),
+                antigravity_remaining_tone(percentage),
+            ));
+        }
+
+        rows
+    }
+
+    fn build_antigravity_fallback_quota_rows(
+        lang: &str,
+        quota: &crate::models::quota::QuotaData,
+    ) -> Vec<QuotaRow> {
+        quota
+            .models
+            .iter()
+            .take(3)
+            .map(|model| {
+                let percentage = model.percentage.clamp(0, 100);
+                make_progress_row(
+                    model
+                        .display_name
+                        .clone()
+                        .filter(|value| !value.trim().is_empty())
+                        .unwrap_or_else(|| model.name.clone()),
+                    format!("{percentage}%"),
+                    percentage,
+                    format_reset_subtext(lang, parse_rfc3339_ts(&model.reset_time)),
+                    antigravity_remaining_tone(percentage),
+                )
+            })
+            .collect()
+    }
+
+    fn build_antigravity_quota_rows(
+        lang: &str,
+        quota: Option<&crate::models::quota::QuotaData>,
+    ) -> Vec<QuotaRow> {
+        let Some(quota) = quota else {
+            return Vec::new();
+        };
+
+        let mut rows = build_antigravity_group_quota_rows(lang, quota);
+        if rows.is_empty() {
+            rows = build_antigravity_fallback_quota_rows(lang, quota);
+        }
+
+        rows.push(QuotaRow {
+            label: modules::i18n::translate(lang, "common.shared.credits.availableAiCredits", &[]),
+            value: format_antigravity_available_credits(Some(quota)).unwrap_or_default(),
+            progress: None,
+            progress_tone: None,
+            subtext: None,
+        });
+        rows
+    }
+
+    fn format_codex_quota_metric_label(window_minutes: Option<i64>, fallback: &str) -> String {
+        let Some(minutes) = window_minutes.filter(|value| *value > 0) else {
+            return fallback.to_string();
+        };
+
+        const HOUR_MINUTES: i64 = 60;
+        const DAY_MINUTES: i64 = 24 * HOUR_MINUTES;
+        const WEEK_MINUTES: i64 = 7 * DAY_MINUTES;
+
+        if minutes >= WEEK_MINUTES - 1 {
+            let weeks = (minutes + WEEK_MINUTES - 1) / WEEK_MINUTES;
+            return if weeks <= 1 {
+                "Weekly".to_string()
+            } else {
+                format!("{weeks} Week")
+            };
+        }
+        if minutes >= DAY_MINUTES - 1 {
+            return format!("{}d", (minutes + DAY_MINUTES - 1) / DAY_MINUTES);
+        }
+        if minutes >= HOUR_MINUTES {
+            return format!("{}h", (minutes + HOUR_MINUTES - 1) / HOUR_MINUTES);
+        }
+        format!("{}m", minutes.max(1))
+    }
+
+    fn parse_code_review_metric(
+        quota: Option<&crate::models::codex::CodexQuota>,
+    ) -> Option<QuotaRow> {
+        let raw = quota?.raw_data.as_ref()?;
+        let rate_limit = raw.get("code_review_rate_limit")?.as_object()?;
+        let primary_window = rate_limit.get("primary_window");
+        let secondary_window = rate_limit.get("secondary_window");
+
+        let normalize_window = |window: &Value| -> Option<QuotaRow> {
+            let used_percent = window.get("used_percent").and_then(parse_json_number)?;
+            let percentage = clamp_percent(100.0 - used_percent);
+            let limit_window_seconds = window
+                .get("limit_window_seconds")
+                .and_then(parse_json_number)
+                .filter(|value| *value > 0.0);
+            let window_minutes = limit_window_seconds.map(|value| (value / 60.0).ceil() as i64);
+            let reset_at = window
+                .get("reset_at")
+                .and_then(parse_json_number)
+                .map(|value| value.floor() as i64);
+            let reset_after_seconds = window
+                .get("reset_after_seconds")
+                .and_then(parse_json_number)
+                .filter(|value| *value >= 0.0)
+                .map(|value| chrono::Utc::now().timestamp() + value.floor() as i64);
+
+            let _reset_ts = reset_at.or(reset_after_seconds);
+            Some(make_progress_row(
+                "Code Review".to_string(),
+                format!("{percentage}%"),
+                percentage,
+                None,
+                codex_remaining_tone(percentage),
+            ))
+            .map(|mut row| {
+                row.label = format_codex_quota_metric_label(window_minutes, "Code Review");
+                row
+            })
+        };
+
+        primary_window
+            .and_then(normalize_window)
+            .or_else(|| secondary_window.and_then(normalize_window))
+    }
+
+    fn quota_row_from_copilot_metric(
+        lang: &str,
+        label: String,
+        metric: CopilotMetric,
+        reset_ts: Option<i64>,
+    ) -> QuotaRow {
+        let value = if metric.included {
+            translate_or(lang, "githubCopilot.usage.included", "Included", &[])
+        } else {
+            metric
+                .used_percent
+                .map(|percentage| format!("{percentage}%"))
+                .unwrap_or_else(|| "-".to_string())
+        };
+
+        QuotaRow {
+            label,
+            value,
+            progress: Some(metric.used_percent.unwrap_or(0).clamp(0, 100)),
+            progress_tone: Some(usage_warning_tone(metric.used_percent.unwrap_or(0))),
+            subtext: format_reset_subtext(lang, reset_ts),
+        }
+    }
+
+    fn get_quota_snapshot<'a>(
+        quota_snapshots: Option<&'a Value>,
+        key: &str,
+    ) -> Option<&'a serde_json::Map<String, Value>> {
+        let snapshots = quota_snapshots.and_then(|value| value.as_object())?;
+        if matches!(key, "premium_models" | "premium_interactions") {
+            return snapshots
+                .get("premium_models")
+                .or_else(|| snapshots.get("premium_interactions"))
+                .and_then(|snapshot| snapshot.as_object());
+        }
+        snapshots.get(key).and_then(|snapshot| snapshot.as_object())
+    }
+
+    fn snapshot_without_displayable_quota(
+        snapshot: Option<&serde_json::Map<String, Value>>,
+    ) -> bool {
+        let Some(data) = snapshot else {
+            return false;
+        };
+        if data.get("unlimited").and_then(|value| value.as_bool()) == Some(true) {
+            return false;
+        }
+
+        let entitlement = data.get("entitlement").and_then(parse_json_number);
+        if entitlement.map(|value| value < 0.0).unwrap_or(false) {
+            return false;
+        }
+        if let Some(value) = entitlement {
+            return value <= 0.0;
+        }
+
+        data.get("has_quota").and_then(|value| value.as_bool()) == Some(false)
+    }
+
+    fn entitlement_from_snapshot(snapshot: Option<&serde_json::Map<String, Value>>) -> Option<f64> {
+        snapshot
+            .and_then(|data| data.get("entitlement"))
+            .and_then(parse_json_number)
+            .filter(|value| *value > 0.0)
+    }
+
+    fn remaining_from_snapshot(snapshot: Option<&serde_json::Map<String, Value>>) -> Option<f64> {
+        if snapshot_without_displayable_quota(snapshot) {
+            return None;
+        }
+
+        if let Some(remaining) = snapshot
+            .and_then(|data| data.get("remaining"))
+            .and_then(parse_json_number)
+        {
+            return Some(remaining);
+        }
+
+        let entitlement = snapshot
+            .and_then(|data| data.get("entitlement"))
+            .and_then(parse_json_number)?;
+        let percent_remaining = snapshot
+            .and_then(|data| data.get("percent_remaining"))
+            .and_then(parse_json_number)?;
+        if entitlement <= 0.0 {
+            return None;
+        }
+        Some((entitlement * (percent_remaining / 100.0)).max(0.0))
+    }
+
+    fn is_included_snapshot(snapshot: Option<&serde_json::Map<String, Value>>) -> bool {
+        if snapshot
+            .and_then(|data| data.get("unlimited"))
+            .and_then(|value| value.as_bool())
+            == Some(true)
+        {
+            return true;
+        }
+
+        snapshot
+            .and_then(|data| data.get("entitlement"))
+            .and_then(parse_json_number)
+            .map(|value| value < 0.0)
+            .unwrap_or(false)
+    }
+
+    fn used_percent_from_snapshot(
+        snapshot: Option<&serde_json::Map<String, Value>>,
+    ) -> Option<i32> {
+        if snapshot
+            .and_then(|data| data.get("unlimited"))
+            .and_then(|value| value.as_bool())
+            == Some(true)
+        {
+            return Some(0);
+        }
+        if snapshot_without_displayable_quota(snapshot) {
+            return None;
+        }
+
+        let entitlement = snapshot
+            .and_then(|data| data.get("entitlement"))
+            .and_then(parse_json_number);
+        let remaining = snapshot
+            .and_then(|data| data.get("remaining"))
+            .and_then(parse_json_number);
+        if let (Some(total), Some(left)) = (entitlement, remaining) {
+            return calc_used_percent(Some(total), Some(left));
+        }
+
+        snapshot
+            .and_then(|data| data.get("percent_remaining"))
+            .and_then(parse_json_number)
+            .map(|value| clamp_percent(100.0 - value))
+    }
+
+    fn compute_copilot_usage(
+        token: &str,
+        plan: Option<&str>,
+        limited_quotas: Option<&Value>,
+        quota_snapshots: Option<&Value>,
+        limited_reset_ts: Option<i64>,
+        quota_reset_date: Option<&str>,
+    ) -> CopilotUsage {
+        let token_map = parse_token_map(token);
+        let reset_ts = limited_reset_ts
+            .or_else(|| parse_reset_date_to_ts(quota_reset_date))
+            .or_else(|| parse_token_number(&token_map, "rd").map(|value| value.floor() as i64));
+        let sku = token_map
+            .get("sku")
+            .map(|value| value.to_ascii_lowercase())
+            .unwrap_or_default();
+        let is_free_limited = sku.contains("free_limited")
+            || sku.contains("no_auth_limited")
+            || plan
+                .map(|value| value.to_ascii_lowercase().contains("free_limited"))
+                .unwrap_or(false);
+
+        let completions_snapshot = get_quota_snapshot(quota_snapshots, "completions");
+        let chat_snapshot = get_quota_snapshot(quota_snapshots, "chat");
+        let premium_snapshot = get_quota_snapshot(quota_snapshots, "premium_interactions");
+
+        let limited = limited_quotas.and_then(|value| value.as_object());
+        let remaining_inline = remaining_from_snapshot(completions_snapshot).or_else(|| {
+            limited
+                .and_then(|object| object.get("completions"))
+                .and_then(parse_json_number)
+        });
+        let remaining_chat = remaining_from_snapshot(chat_snapshot).or_else(|| {
+            limited
+                .and_then(|object| object.get("chat"))
+                .and_then(parse_json_number)
+        });
+
+        let total_inline = entitlement_from_snapshot(completions_snapshot)
+            .or_else(|| parse_token_number(&token_map, "cq"))
+            .or(remaining_inline);
+        let total_chat = entitlement_from_snapshot(chat_snapshot)
+            .or_else(|| parse_token_number(&token_map, "tq"))
+            .or_else(|| {
+                if is_free_limited {
+                    remaining_chat.map(|_| 500.0)
+                } else {
+                    remaining_chat
+                }
+            });
+
+        CopilotUsage {
+            inline: CopilotMetric {
+                used_percent: used_percent_from_snapshot(completions_snapshot)
+                    .or_else(|| calc_used_percent(total_inline, remaining_inline)),
+                included: is_included_snapshot(completions_snapshot),
+            },
+            chat: CopilotMetric {
+                used_percent: used_percent_from_snapshot(chat_snapshot)
+                    .or_else(|| calc_used_percent(total_chat, remaining_chat)),
+                included: is_included_snapshot(chat_snapshot),
+            },
+            premium: CopilotMetric {
+                used_percent: used_percent_from_snapshot(premium_snapshot),
+                included: is_included_snapshot(premium_snapshot),
+            },
+            reset_ts,
+        }
+    }
+
+    fn windsurf_plan_status_roots<'a>(
+        account: &'a crate::models::windsurf::WindsurfAccount,
+    ) -> Vec<Option<&'a Value>> {
+        let user_status = account.windsurf_user_status.as_ref();
+        let snapshots = account.copilot_quota_snapshots.as_ref();
+        let direct_plan_status = account.windsurf_plan_status.as_ref();
+
+        vec![
+            direct_plan_status,
+            json_path(direct_plan_status, &["planStatus"]),
+            json_path(user_status, &["userStatus", "planStatus"]),
+            json_path(user_status, &["planStatus"]),
+            json_path(snapshots, &["windsurfPlanStatus"]),
+            json_path(snapshots, &["windsurfPlanStatus", "planStatus"]),
+            json_path(
+                snapshots,
+                &["windsurfUserStatus", "userStatus", "planStatus"],
+            ),
+        ]
+    }
+
+    fn windsurf_plan_info_roots<'a>(
+        account: &'a crate::models::windsurf::WindsurfAccount,
+    ) -> Vec<Option<&'a Value>> {
+        let direct_plan_status = account.windsurf_plan_status.as_ref();
+        let snapshots = account.copilot_quota_snapshots.as_ref();
+        vec![
+            json_path(direct_plan_status, &["planInfo"]),
+            json_path(direct_plan_status, &["plan_info"]),
+            json_path(snapshots, &["windsurfPlanInfo"]),
+            json_path(snapshots, &["windsurf_plan_info"]),
+        ]
+    }
+
+    fn resolve_windsurf_plan_end_ts(
+        account: &crate::models::windsurf::WindsurfAccount,
+    ) -> Option<i64> {
+        let user_status = account.windsurf_user_status.as_ref();
+        let snapshots = account.copilot_quota_snapshots.as_ref();
+        let candidates = [
+            json_path(user_status, &["userStatus", "planStatus", "planEnd"]),
+            json_path(user_status, &["userStatus", "planStatus", "plan_end"]),
+            json_path(user_status, &["planStatus", "planEnd"]),
+            json_path(user_status, &["planStatus", "plan_end"]),
+            json_path(snapshots, &["windsurfPlanStatus", "planEnd"]),
+            json_path(snapshots, &["windsurfPlanStatus", "plan_end"]),
+            json_path(snapshots, &["windsurfPlanStatus", "planStatus", "planEnd"]),
+            json_path(snapshots, &["windsurfPlanStatus", "planStatus", "plan_end"]),
+            json_path(
+                snapshots,
+                &["windsurfUserStatus", "userStatus", "planStatus", "planEnd"],
+            ),
+            json_path(
+                snapshots,
+                &["windsurfUserStatus", "userStatus", "planStatus", "plan_end"],
+            ),
+        ];
+
+        candidates
+            .into_iter()
+            .flatten()
+            .find_map(parse_timestamp_like)
+    }
+
+    fn resolve_windsurf_billing_strategy(
+        account: &crate::models::windsurf::WindsurfAccount,
+    ) -> Option<String> {
+        let plan_status_roots = windsurf_plan_status_roots(account);
+        let plan_info_roots = windsurf_plan_info_roots(account);
+        let raw = first_string_from_roots(
+            &plan_status_roots,
+            &[&["billingStrategy"], &["billing_strategy"]],
+        )
+        .or_else(|| {
+            first_string_from_roots(
+                &plan_info_roots,
+                &[&["billingStrategy"], &["billing_strategy"]],
+            )
+        })?;
+
+        let normalized = raw.trim().to_ascii_lowercase();
+        let canonical = normalized
+            .trim_start_matches("billing_strategy_")
+            .trim_start_matches("billing-strategy-")
+            .trim_start_matches("billingstrategy")
+            .trim_matches('_')
+            .trim_matches('-')
+            .to_string();
+
+        if canonical == "quota" {
+            return Some("quota".to_string());
+        }
+        if canonical.contains("credit") {
+            return Some("credits".to_string());
+        }
+        Some(canonical)
+    }
+
+    fn resolve_windsurf_usage_mode(
+        account: &crate::models::windsurf::WindsurfAccount,
+    ) -> WindsurfUsageMode {
+        match resolve_windsurf_billing_strategy(account).as_deref() {
+            Some("quota") => WindsurfUsageMode::Quota,
+            _ => WindsurfUsageMode::Credits,
+        }
+    }
+
+    fn resolve_windsurf_quota_usage_summary(
+        account: &crate::models::windsurf::WindsurfAccount,
+    ) -> WindsurfQuotaUsageSummary {
+        let plan_status_roots = windsurf_plan_status_roots(account);
+        let is_quota_billing =
+            resolve_windsurf_billing_strategy(account).as_deref() == Some("quota");
+        let daily_used = first_number_from_roots(
+            &plan_status_roots,
+            &[
+                &["dailyQuotaRemainingPercent"],
+                &["daily_quota_remaining_percent"],
+            ],
+        );
+        let weekly_used = first_number_from_roots(
+            &plan_status_roots,
+            &[
+                &["weeklyQuotaRemainingPercent"],
+                &["weekly_quota_remaining_percent"],
+            ],
+        );
+
+        WindsurfQuotaUsageSummary {
+            daily_used_percent: daily_used
+                .map(|value| clamp_percent(100.0 - value))
+                .or(if is_quota_billing { Some(100) } else { None }),
+            weekly_used_percent: weekly_used
+                .map(|value| clamp_percent(100.0 - value))
+                .or(if is_quota_billing { Some(100) } else { None }),
+            daily_reset_ts: first_timestamp_from_roots(
+                &plan_status_roots,
+                &[&["dailyQuotaResetAtUnix"], &["daily_quota_reset_at_unix"]],
+            ),
+            weekly_reset_ts: first_timestamp_from_roots(
+                &plan_status_roots,
+                &[&["weeklyQuotaResetAtUnix"], &["weekly_quota_reset_at_unix"]],
+            ),
+            overage_balance_micros: first_number_from_roots(
+                &plan_status_roots,
+                &[&["overageBalanceMicros"], &["overage_balance_micros"]],
+            ),
+        }
+    }
+
+    fn resolve_windsurf_credits_summary(
+        account: &crate::models::windsurf::WindsurfAccount,
+    ) -> WindsurfCreditsSummary {
+        let plan_status_roots = windsurf_plan_status_roots(account);
+        let plan_info_roots = windsurf_plan_info_roots(account);
+
+        let prompt_left = first_number_from_roots(
+            &plan_status_roots,
+            &[&["availablePromptCredits"], &["available_prompt_credits"]],
+        );
+        let prompt_used = first_number_from_roots(
+            &plan_status_roots,
+            &[&["usedPromptCredits"], &["used_prompt_credits"]],
+        );
+        let mut prompt_total = first_number_from_roots(
+            &plan_info_roots,
+            &[&["monthlyPromptCredits"], &["monthly_prompt_credits"]],
+        )
+        .or(prompt_left);
+        if prompt_total.is_none() && prompt_left.is_some() {
+            prompt_total = prompt_left;
+        }
+        let prompt_left_actual = match (prompt_total, prompt_used, prompt_left) {
+            (Some(total), Some(used), _) => Some((total - used).max(0.0)),
+            (Some(total), None, Some(left)) if total >= left => Some(left),
+            (_, _, left) => left,
+        };
+
+        let add_on_left = first_number_from_roots(
+            &plan_status_roots,
+            &[
+                &["availableFlexCredits"],
+                &["available_flex_credits"],
+                &["flexCreditsAvailable"],
+                &["flex_credits_available"],
+                &["availableAddOnCredits"],
+                &["available_add_on_credits"],
+                &["addOnCreditsAvailable"],
+                &["add_on_credits_available"],
+                &["availableTopUpCredits"],
+                &["available_top_up_credits"],
+                &["topUpCreditsAvailable"],
+                &["top_up_credits_available"],
+            ],
+        )
+        .or(Some(0.0));
+        let add_on_used = first_number_from_roots(
+            &plan_status_roots,
+            &[
+                &["usedFlexCredits"],
+                &["used_flex_credits"],
+                &["usedAddOnCredits"],
+                &["used_add_on_credits"],
+                &["usedTopUpCredits"],
+                &["used_top_up_credits"],
+            ],
+        );
+        let mut add_on_total = first_number_from_roots(
+            &plan_info_roots,
+            &[
+                &["monthlyFlexCreditPurchaseAmount"],
+                &["monthly_flex_credit_purchase_amount"],
+                &["monthlyAddOnCredits"],
+                &["monthly_add_on_credits"],
+                &["monthlyTopUpCredits"],
+                &["monthly_top_up_credits"],
+            ],
+        )
+        .or(add_on_left);
+        if let (Some(total), Some(left)) = (add_on_total, add_on_left) {
+            if total < left {
+                add_on_total = Some(left);
+            }
+        }
+        let add_on_left_actual = match (add_on_total, add_on_used, add_on_left) {
+            (Some(total), Some(used), _) => Some((total - used).max(0.0)),
+            (Some(total), None, Some(left)) if total >= left => Some(left),
+            (_, _, left) => left,
+        };
+
+        WindsurfCreditsSummary {
+            credits_left: sum_option_f64(prompt_left_actual, add_on_left_actual),
+            prompt_left: prompt_left_actual,
+            prompt_total,
+            prompt_used,
+            add_on_left: add_on_left_actual,
+            add_on_total,
+            add_on_used,
+            plan_end_ts: resolve_windsurf_plan_end_ts(account),
+        }
+    }
+
+    fn clamp_cursor_percent(value: f64) -> i32 {
+        if !value.is_finite() {
+            return 0;
+        }
+        if value <= 0.0 {
+            return 0;
+        }
+        if value >= 100.0 {
+            return 100;
+        }
+        value.round() as i32
+    }
+
+    fn pick_cursor_number(value: Option<&Value>, keys: &[&str]) -> Option<f64> {
+        let object = value?.as_object()?;
+        for key in keys {
+            let Some(raw) = object.get(*key) else {
+                continue;
+            };
+            if let Some(value) = parse_json_number(raw) {
+                return Some(value);
+            }
+        }
+        None
+    }
+
+    fn pick_cursor_bool(value: Option<&Value>, keys: &[&str]) -> Option<bool> {
+        let object = value?.as_object()?;
+        for key in keys {
+            let Some(raw) = object.get(*key) else {
+                continue;
+            };
+            if let Some(value) = json_bool(raw) {
+                return Some(value);
+            }
+        }
+        None
+    }
+
+    fn read_cursor_tray_usage(account: &crate::models::cursor::CursorAccount) -> CursorTrayUsage {
+        let Some(raw) = account.cursor_usage_raw.as_ref() else {
+            return CursorTrayUsage::default();
+        };
+        let Some(raw_obj) = raw.as_object() else {
+            return CursorTrayUsage::default();
+        };
+
+        let plan = raw_obj
+            .get("individualUsage")
+            .and_then(|value| value.as_object())
+            .and_then(|value| value.get("plan"))
+            .or_else(|| {
+                raw_obj
+                    .get("individual_usage")
+                    .and_then(|value| value.as_object())
+                    .and_then(|value| value.get("plan"))
+            })
+            .or_else(|| raw_obj.get("planUsage"))
+            .or_else(|| raw_obj.get("plan_usage"));
+
+        let total_direct = pick_cursor_number(plan, &["totalPercentUsed", "total_percent_used"]);
+        let auto_direct = pick_cursor_number(plan, &["autoPercentUsed", "auto_percent_used"]);
+        let api_direct = pick_cursor_number(plan, &["apiPercentUsed", "api_percent_used"]);
+
+        let plan_used = pick_cursor_number(plan, &["used", "totalSpend", "total_spend"]);
+        let plan_limit = pick_cursor_number(plan, &["limit"]);
+        let total_ratio = match (plan_used, plan_limit) {
+            (Some(used), Some(limit)) if limit > 0.0 => Some((used / limit) * 100.0),
+            _ => None,
+        };
+
+        let individual_on_demand = raw_obj
+            .get("individualUsage")
+            .and_then(|value| value.as_object())
+            .and_then(|value| value.get("onDemand"))
+            .or_else(|| {
+                raw_obj
+                    .get("individual_usage")
+                    .and_then(|value| value.as_object())
+                    .and_then(|value| value.get("onDemand"))
+            });
+        let team_on_demand = raw_obj
+            .get("teamUsage")
+            .and_then(|value| value.as_object())
+            .and_then(|value| value.get("onDemand"))
+            .or_else(|| {
+                raw_obj
+                    .get("team_usage")
+                    .and_then(|value| value.as_object())
+                    .and_then(|value| value.get("onDemand"))
+            });
+        let spend_limit_usage = raw_obj
+            .get("spendLimitUsage")
+            .or_else(|| raw_obj.get("spend_limit_usage"));
+
+        let on_demand_obj = individual_on_demand.or(spend_limit_usage);
+        let on_demand_limit = pick_cursor_number(
+            on_demand_obj,
+            &[
+                "limit",
+                "individualLimit",
+                "individual_limit",
+                "pooledLimit",
+                "pooled_limit",
+            ],
+        );
+        let on_demand_used = pick_cursor_number(
+            on_demand_obj,
+            &[
+                "used",
+                "totalSpend",
+                "total_spend",
+                "individualUsed",
+                "individual_used",
+            ],
+        );
+        let team_on_demand_used = pick_cursor_number(team_on_demand, &["used"]);
+        let on_demand_enabled = pick_cursor_bool(individual_on_demand, &["enabled"]);
+
+        let limit_type = raw_obj
+            .get("limitType")
+            .or_else(|| raw_obj.get("limit_type"))
+            .or_else(|| {
+                spend_limit_usage
+                    .and_then(|value| value.as_object())
+                    .and_then(|value| value.get("limitType").or_else(|| value.get("limit_type")))
+            })
+            .and_then(|value| value.as_str())
+            .map(|value| value.trim().to_ascii_lowercase());
+        let is_team_limit = matches!(limit_type.as_deref(), Some("team"));
+
+        let effective_used = if on_demand_used.unwrap_or(0.0) > 0.0 {
+            on_demand_used.unwrap_or(0.0)
+        } else if is_team_limit {
+            team_on_demand_used.unwrap_or(0.0)
+        } else {
+            on_demand_used.unwrap_or(0.0)
+        };
+
+        let has_on_demand_hint = on_demand_obj.is_some()
+            || on_demand_enabled.is_some()
+            || is_team_limit
+            || on_demand_limit.is_some();
+        let (on_demand_text, on_demand_percent) = if !has_on_demand_hint {
+            (None, None)
+        } else if let Some(limit) = on_demand_limit {
+            if limit > 0.0 {
+                let percent = clamp_cursor_percent((effective_used / limit) * 100.0);
+                (
+                    Some(format!(
+                        "{} / {}",
+                        format_currency_cents(effective_used),
+                        format_currency_cents(limit)
+                    )),
+                    Some(percent),
+                )
+            } else {
+                (None, None)
+            }
+        } else if on_demand_enabled == Some(true) && !is_team_limit {
+            (Some("Unlimited".to_string()), Some(0))
+        } else {
+            (Some("Disabled".to_string()), Some(0))
+        };
+
+        let reset_ts = raw_obj
+            .get("billingCycleEnd")
+            .or_else(|| raw_obj.get("billing_cycle_end"))
+            .and_then(|value| value.as_str())
+            .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+            .map(|value| value.timestamp());
+
+        CursorTrayUsage {
+            total_used_percent: total_direct.or(total_ratio).map(clamp_cursor_percent),
+            auto_used_percent: auto_direct.map(clamp_cursor_percent),
+            api_used_percent: api_direct.map(clamp_cursor_percent),
+            reset_ts,
+            on_demand_text,
+            on_demand_percent,
+        }
+    }
+

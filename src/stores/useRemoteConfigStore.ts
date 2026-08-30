@@ -10,6 +10,7 @@ const DEFAULT_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
 const EMPTY_STATE: RemoteConfigState = {
   version: '',
+  codexOAuthAppVersion: '26.820.60940',
   updatedAt: 0,
   currentOs: '',
   hiddenPlatformIds: [],

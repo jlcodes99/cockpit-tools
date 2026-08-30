@@ -51,7 +51,7 @@ func codexFingerprintMode(cfg *config.Config, auth *cliproxyauth.Auth) string {
 		}
 	}
 	if mode == "" {
-		mode = "session"
+		mode = "off"
 	}
 	switch mode {
 	case "device", "session", "full", "off":
@@ -241,7 +241,7 @@ func applyCodexFingerprintBody(cfg *config.Config, auth *cliproxyauth.Auth, user
 }
 
 func applyCodexFingerprintHeaders(headers http.Header, state *codexIdentityConfuseState) {
-	if headers == nil || state == nil || state.fingerprintMode == "off" {
+	if headers == nil || state == nil || state.fingerprintMode == "" || state.fingerprintMode == "off" {
 		return
 	}
 	if headerSession := strings.TrimSpace(codexSessionHeaderValue(headers)); headerSession != "" {
@@ -296,7 +296,7 @@ func headerFingerprintAuthID(state *codexIdentityConfuseState) string {
 }
 
 func applyCodexFingerprintResponsePayload(payload []byte, state codexIdentityConfuseState, exposeClient bool) []byte {
-	if state.fingerprintMode == "off" {
+	if state.fingerprintMode == "" || state.fingerprintMode == "off" {
 		return payload
 	}
 	pairs := [][2]string{

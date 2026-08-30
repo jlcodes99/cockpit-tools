@@ -437,3 +437,7 @@ export function isCursorAccountBanned(account: CursorAccount): boolean {
 export function hasCursorQuotaData(account: CursorAccount): boolean {
   return account.cursor_usage_raw != null;
 }
+
+export function hasCursorQuotaQueryError(account: CursorAccount): boolean {
+  return Boolean(account.quota_query_last_error?.trim());
+}

@@ -106,7 +106,6 @@ import {
   findClaudeApiProviderPresetById,
   inferClaudeApiKeyField,
   normalizeClaudeApiProviderBaseUrl,
-  type ClaudeApiProviderPreset,
 } from '../utils/claudeProviderPresets';
 import {
   CLAUDE_DESKTOP_GATEWAY_DEFAULT_MODELS,
@@ -122,13 +121,22 @@ import {
   type ApiKeyFunPrefillPayload,
 } from '../utils/apiKeyFunPrefill';
 import { getPlatformLabel } from '../utils/platformMeta';
+import {
+  applyClaudeApiProviderTemplateValue,
+  getClaudeApiProviderTemplateInitialValues,
+  resolveClaudeApiProviderExtraEnv,
+} from '../utils/claudeApiProviderTemplates';
+import {
+  persistLastClaudeCliWorkingDir,
+  readLastClaudeCliWorkingDir,
+  sanitizeClaudeCliInstanceName,
+} from '../utils/claudeCliLaunchPreferences';
 import { ClaudeInstancesContent } from './ClaudeInstancesPage';
 import type { InstanceProfile } from '../types/instance';
 
 const CLAUDE_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.claude.flow_notice_collapsed';
 const CLAUDE_ACCOUNTS_VIEW_MODE_KEY = 'agtools.claude.accounts_view_mode';
 const CLAUDE_API_KEY_USAGE_CACHE_KEY = 'agtools.claude.apiKeyUsage.cache.v1';
-const CLAUDE_CLI_LAST_WORKING_DIR_KEY = 'agtools.claude.cli.last_working_dir';
 const CLAUDE_API_KEY_USAGE_REFRESH_THROTTLE_MS = 10 * 1000;
 const CLAUDE_DESKTOP_LOGIN_PROGRESS_EVENT = 'claude:desktop-login-progress';
 const claudeApiKeyUsageInFlight = new Set<string>();
@@ -271,57 +279,6 @@ function joinFilePath(directory: string, fileName: string): string {
 
 function normalizePathForCompare(value?: string | null): string {
   return (value || '').trim();
-}
-
-function sanitizeClaudeCliInstanceName(value: string): string {
-  return value.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim() || 'Claude CLI';
-}
-
-function readLastClaudeCliWorkingDir(): string {
-  try {
-    return localStorage.getItem(CLAUDE_CLI_LAST_WORKING_DIR_KEY)?.trim() || '';
-  } catch {
-    return '';
-  }
-}
-
-function persistLastClaudeCliWorkingDir(value: string): void {
-  const trimmed = value.trim();
-  if (!trimmed) return;
-  try {
-    localStorage.setItem(CLAUDE_CLI_LAST_WORKING_DIR_KEY, trimmed);
-  } catch {
-    // Ignore storage errors. The selected workspace is only a UI convenience.
-  }
-}
-
-function getClaudeApiProviderTemplateInitialValues(
-  preset?: ClaudeApiProviderPreset | null,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(preset?.templateValues ?? {}).map(([key, config]) => [
-      key,
-      config.editorValue ?? config.defaultValue ?? '',
-    ]),
-  );
-}
-
-function applyClaudeApiProviderTemplateValue(
-  value: string,
-  templateValues: Record<string, string>,
-): string {
-  return value.replace(/\$\{([A-Z0-9_]+)\}/g, (matched, key: string) => templateValues[key] ?? matched);
-}
-
-function resolveClaudeApiProviderExtraEnv(
-  preset: ClaudeApiProviderPreset | null | undefined,
-  templateValues: Record<string, string>,
-): Record<string, string> | null {
-  const entries = Object.entries(preset?.extraEnv ?? {}).map(([key, value]) => [
-    key,
-    applyClaudeApiProviderTemplateValue(value, templateValues),
-  ]);
-  return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
 function formatDate(timestamp: number): string {

@@ -154,8 +154,34 @@ func TestCodexExecutorReasoningReplaySessionKeyUsesClaudeCodeJSONSessionID(t *te
 	body := []byte(`{"model":"gpt-5.4","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"next"}]}]}`)
 
 	got := codexReasoningReplaySessionKey(context.Background(), from, req, cliproxyexecutor.Options{SourceFormat: from}, body)
-	if got != "claude:session-json-1" {
-		t.Fatalf("codexReasoningReplaySessionKey() = %q, want claude:session-json-1", got)
+	if got != "claude:session-json-1:agent:main" {
+		t.Fatalf("codexReasoningReplaySessionKey() = %q, want claude:session-json-1:agent:main", got)
+	}
+}
+
+func TestCodexExecutorReasoningReplaySessionKeyIsolatesClaudeCodeAgents(t *testing.T) {
+	from := sdktranslator.FromString("claude")
+	req := cliproxyexecutor.Request{
+		Model:   "local-alias-high",
+		Payload: []byte(`{"model":"local-alias","messages":[{"role":"user","content":"next"}]}`),
+	}
+	body := []byte(`{"model":"gpt-5.4","prompt_cache_key":"shared-client-key","input":[{"type":"message","role":"user","content":"next"}]}`)
+	rootHeaders := http.Header{}
+	rootHeaders.Set("X-Claude-Code-Session-Id", "session-agents")
+	childAHeaders := rootHeaders.Clone()
+	childAHeaders.Set("X-Claude-Code-Agent-Id", "agent-a")
+	childBHeaders := rootHeaders.Clone()
+	childBHeaders.Set("X-Claude-Code-Agent-Id", "agent-b")
+
+	metadata := map[string]any{cliproxyexecutor.ExecutionSessionMetadataKey: "shared-execution-session"}
+	root := codexReasoningReplayScopeFromRequest(context.Background(), from, req, cliproxyexecutor.Options{SourceFormat: from, Headers: rootHeaders, Metadata: metadata}, body)
+	childA := codexReasoningReplayScopeFromRequest(context.Background(), from, req, cliproxyexecutor.Options{SourceFormat: from, Headers: childAHeaders, Metadata: metadata}, body)
+	childB := codexReasoningReplayScopeFromRequest(context.Background(), from, req, cliproxyexecutor.Options{SourceFormat: from, Headers: childBHeaders, Metadata: metadata}, body)
+	if root.modelName != "gpt-5.4" || childA.modelName != "gpt-5.4" || childB.modelName != "gpt-5.4" {
+		t.Fatalf("replay scopes did not use resolved model: root=%#v a=%#v b=%#v", root, childA, childB)
+	}
+	if root.sessionKey == childA.sessionKey || childA.sessionKey == childB.sessionKey || root.sessionKey == childB.sessionKey {
+		t.Fatalf("agent replay scopes are not isolated: root=%#v a=%#v b=%#v", root, childA, childB)
 	}
 }
 
@@ -367,7 +393,7 @@ func TestCodexExecutorReasoningReplayCacheDoesNotDuplicateClaudeClientReasoning(
 
 	cachedEncryptedContent := validCodexReasoningEncryptedContentForTestSeed(5)
 	clientEncryptedContent := validCodexReasoningEncryptedContentForTestSeed(6)
-	internalcache.CacheCodexReasoningReplayItem("gpt-5.4", "claude:session-2", []byte(`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+cachedEncryptedContent+`"}`))
+	internalcache.CacheCodexReasoningReplayItem("gpt-5.4", "claude:session-2:agent:main", []byte(`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+cachedEncryptedContent+`"}`))
 
 	var gotBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -418,7 +444,7 @@ func TestCodexExecutorReasoningReplayCacheInsertsReasoningBeforeAssistantOutputI
 	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
 
 	cachedEncryptedContent := validCodexReasoningEncryptedContentForTestSeed(7)
-	internalcache.CacheCodexReasoningReplayItem("gpt-5.4", "claude:session-history", []byte(`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+cachedEncryptedContent+`"}`))
+	internalcache.CacheCodexReasoningReplayItem("gpt-5.4", "claude:session-history:agent:main", []byte(`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+cachedEncryptedContent+`"}`))
 
 	var gotBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -546,7 +572,7 @@ func TestCodexExecutorReasoningReplayCacheClearsOnNonStreamResponseFailedInvalid
 	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
 
 	cachedEncryptedContent := validCodexReasoningEncryptedContentForTestSeed(9)
-	internalcache.CacheCodexReasoningReplayItem("gpt-5.4", "claude:session-invalid-nonstream", []byte(`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+cachedEncryptedContent+`"}`))
+	internalcache.CacheCodexReasoningReplayItem("gpt-5.4", "claude:session-invalid-nonstream:agent:main", []byte(`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+cachedEncryptedContent+`"}`))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.ReadAll(r.Body)
@@ -572,7 +598,7 @@ func TestCodexExecutorReasoningReplayCacheClearsOnNonStreamResponseFailedInvalid
 	if err == nil {
 		t.Fatal("expected invalid signature error")
 	}
-	if _, ok := internalcache.GetCodexReasoningReplayItem("gpt-5.4", "claude:session-invalid-nonstream"); ok {
+	if _, ok := internalcache.GetCodexReasoningReplayItem("gpt-5.4", "claude:session-invalid-nonstream:agent:main"); ok {
 		t.Fatal("invalid signature response.failed should clear cached replay item")
 	}
 }
@@ -582,7 +608,7 @@ func TestCodexExecutorReasoningReplayCacheClearsOnStreamResponseFailedInvalidSig
 	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
 
 	cachedEncryptedContent := validCodexReasoningEncryptedContentForTestSeed(10)
-	internalcache.CacheCodexReasoningReplayItem("gpt-5.4", "claude:session-invalid-stream", []byte(`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+cachedEncryptedContent+`"}`))
+	internalcache.CacheCodexReasoningReplayItem("gpt-5.4", "claude:session-invalid-stream:agent:main", []byte(`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+cachedEncryptedContent+`"}`))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.ReadAll(r.Body)
@@ -618,7 +644,7 @@ func TestCodexExecutorReasoningReplayCacheClearsOnStreamResponseFailedInvalidSig
 	if !gotChunkErr {
 		t.Fatal("expected stream chunk error for invalid signature response.failed")
 	}
-	if _, ok := internalcache.GetCodexReasoningReplayItem("gpt-5.4", "claude:session-invalid-stream"); ok {
+	if _, ok := internalcache.GetCodexReasoningReplayItem("gpt-5.4", "claude:session-invalid-stream:agent:main"); ok {
 		t.Fatal("invalid signature response.failed should clear cached replay item")
 	}
 }
@@ -710,135 +736,266 @@ func TestCodexExecutorReasoningReplayCacheReplaysFunctionCallForClaudeToolResult
 	}
 }
 
-func TestCodexExecutorReasoningReplayCacheSkipsFunctionCallWithoutToolResult(t *testing.T) {
+func TestCodexExecutorReasoningReplayCacheRestoresCumulativeToolTurns(t *testing.T) {
 	internalcache.ClearCodexReasoningReplayCache()
 	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
 
-	reasoningEncryptedContent := validCodexReasoningEncryptedContentForTestSeed(14)
-	var bodies [][]byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, errRead := io.ReadAll(r.Body)
-		if errRead != nil {
-			t.Fatalf("read body: %v", errRead)
+	scope := codexReasoningReplayScope{
+		modelName:  "gpt-5.4",
+		sessionKey: "claude:session-cumulative-tools:agent:main",
+	}
+	firstEncrypted := validCodexReasoningEncryptedContentForTestSeed(21)
+	secondEncrypted := validCodexReasoningEncryptedContentForTestSeed(22)
+	cacheCodexReasoningReplayFromCompleted(scope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+firstEncrypted+`"},`+
+		`{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{\"q\":\"first\"}"}`+
+		`]}}`))
+	cacheCodexReasoningReplayFromCompleted(scope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+secondEncrypted+`"},`+
+		`{"type":"function_call","call_id":"call_2","name":"lookup","arguments":"{\"q\":\"second\"}"}`+
+		`]}}`))
+
+	body := []byte(`{"model":"gpt-5.4","input":[` +
+		`{"type":"message","role":"user","content":"first"},` +
+		`{"type":"function_call_output","call_id":"call_1","output":"one"},` +
+		`{"type":"message","role":"user","content":"second"},` +
+		`{"type":"function_call_output","call_id":"call_2","output":"two"},` +
+		`{"type":"message","role":"user","content":"third"}` +
+		`]}`)
+	req := cliproxyexecutor.Request{
+		Model:   "gpt-5.4",
+		Payload: []byte(`{"metadata":{"user_id":"{\"session_id\":\"session-cumulative-tools\"}"}}`),
+	}
+	updated, gotScope := applyCodexReasoningReplayCache(context.Background(), sdktranslator.FromString("claude"), req, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("claude")}, body)
+	if gotScope.modelName != scope.modelName || gotScope.sessionKey != scope.sessionKey {
+		t.Fatalf("replay scope = %#v, want model/session %#v", gotScope, scope)
+	}
+	wantTypes := []string{"message", "reasoning", "function_call", "function_call_output", "message", "reasoning", "function_call", "function_call_output", "message"}
+	gotItems := gjson.GetBytes(updated, "input").Array()
+	if len(gotItems) != len(wantTypes) {
+		t.Fatalf("input length = %d, want %d; body=%s", len(gotItems), len(wantTypes), updated)
+	}
+	for index, wantType := range wantTypes {
+		if gotType := gotItems[index].Get("type").String(); gotType != wantType {
+			t.Fatalf("input.%d.type = %q, want %q; body=%s", index, gotType, wantType, updated)
 		}
-		bodies = append(bodies, body)
+	}
+	if gotItems[1].Get("encrypted_content").String() != firstEncrypted || gotItems[5].Get("encrypted_content").String() != secondEncrypted {
+		t.Fatalf("cumulative reasoning was not restored in turn order: %s", updated)
+	}
+}
 
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte(`data: {"type":"response.output_item.done","item":{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"` + reasoningEncryptedContent + `"},"output_index":0}` + "\n"))
-		_, _ = w.Write([]byte(`data: {"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","call_id":"call_replay_1","name":"lookup","arguments":"{\"q\":\"weather\"}","status":"completed"},"output_index":1}` + "\n"))
-		_, _ = w.Write([]byte(`data: {"type":"response.completed","response":{"id":"resp_1","object":"response","created_at":0,"status":"completed","model":"gpt-5.4","output":[]}}` + "\n\n"))
-	}))
-	defer server.Close()
+func TestCodexExecutorReasoningReplayCacheRestoresCumulativeAssistantTurns(t *testing.T) {
+	internalcache.ClearCodexReasoningReplayCache()
+	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
 
-	executor := NewCodexExecutor(&config.Config{})
-	auth := &cliproxyauth.Auth{
-		ID: "auth-replay-claude-tool-without-result",
-		Attributes: map[string]string{
-			"base_url": server.URL,
-			"api_key":  "test",
-		},
+	scope := codexReasoningReplayScope{
+		modelName:  "gpt-5.4",
+		sessionKey: "claude:session-cumulative-messages:agent:main",
 	}
-	opts := cliproxyexecutor.Options{
-		SourceFormat: sdktranslator.FromString("claude"),
-		Stream:       false,
-	}
+	firstEncrypted := validCodexReasoningEncryptedContentForTestSeed(23)
+	secondEncrypted := validCodexReasoningEncryptedContentForTestSeed(24)
+	cacheCodexReasoningReplayFromCompleted(scope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+firstEncrypted+`"},`+
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first answer"}]}`+
+		`]}}`))
+	cacheCodexReasoningReplayFromCompleted(scope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+secondEncrypted+`"},`+
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second answer"}]}`+
+		`]}}`))
 
-	_, err := executor.Execute(context.Background(), auth, cliproxyexecutor.Request{
-		Model: "gpt-5.4",
-		Payload: []byte(`{
-			"model":"gpt-5.4",
-			"metadata":{"user_id":"{\"device_id\":\"device-test\",\"account_uuid\":\"\",\"session_id\":\"claude-session-tool-no-result\"}"},
-			"messages":[{"role":"user","content":[{"type":"text","text":"call lookup"}]}],
-			"tools":[{"name":"lookup","input_schema":{"type":"object","properties":{"q":{"type":"string"}}}}]
-		}`),
-	}, opts)
-	if err != nil {
-		t.Fatalf("first Execute error: %v", err)
+	body := []byte(`{"model":"gpt-5.4","input":[` +
+		`{"type":"message","role":"user","content":"first"},` +
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first answer"}]},` +
+		`{"type":"message","role":"user","content":"second"},` +
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second answer"}]},` +
+		`{"type":"message","role":"user","content":"third"}` +
+		`]}`)
+	req := cliproxyexecutor.Request{
+		Model:   "gpt-5.4",
+		Payload: []byte(`{"metadata":{"user_id":"{\"session_id\":\"session-cumulative-messages\"}"}}`),
 	}
+	updated, gotScope := applyCodexReasoningReplayCache(context.Background(), sdktranslator.FromString("claude"), req, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("claude")}, body)
+	if gotScope.modelName != scope.modelName || gotScope.sessionKey != scope.sessionKey {
+		t.Fatalf("replay scope = %#v, want model/session %#v", gotScope, scope)
+	}
+	wantTypes := []string{"message", "reasoning", "message", "message", "reasoning", "message", "message"}
+	gotItems := gjson.GetBytes(updated, "input").Array()
+	if len(gotItems) != len(wantTypes) {
+		t.Fatalf("input length = %d, want %d; body=%s", len(gotItems), len(wantTypes), updated)
+	}
+	for index, wantType := range wantTypes {
+		if gotType := gotItems[index].Get("type").String(); gotType != wantType {
+			t.Fatalf("input.%d.type = %q, want %q; body=%s", index, gotType, wantType, updated)
+		}
+	}
+	if gotItems[1].Get("encrypted_content").String() != firstEncrypted || gotItems[4].Get("encrypted_content").String() != secondEncrypted {
+		t.Fatalf("assistant reasoning was not restored at its original turns: %s", updated)
+	}
+}
 
-	_, err = executor.Execute(context.Background(), auth, cliproxyexecutor.Request{
-		Model: "gpt-5.4",
-		Payload: []byte(`{
-			"model":"gpt-5.4",
-			"metadata":{"user_id":"{\"device_id\":\"device-test\",\"account_uuid\":\"\",\"session_id\":\"claude-session-tool-no-result\"}"},
-			"messages":[{"role":"user","content":[{"type":"text","text":"auto mode check"}]}],
-			"tools":[{"name":"lookup","input_schema":{"type":"object","properties":{"q":{"type":"string"}}}}]
-		}`),
-	}, opts)
-	if err != nil {
-		t.Fatalf("second Execute error: %v", err)
-	}
+func TestCodexExecutorReasoningReplayCacheSkipsDetachedTurnAfterCompaction(t *testing.T) {
+	internalcache.ClearCodexReasoningReplayCache()
+	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
 
-	if len(bodies) != 2 {
-		t.Fatalf("upstream request count = %d, want 2", len(bodies))
+	scope := codexReasoningReplayScope{
+		modelName:  "gpt-5.4",
+		sessionKey: "claude:session-compacted:agent:main",
 	}
-	secondBody := bodies[1]
-	if got := gjson.GetBytes(secondBody, "input.0.type").String(); got != "reasoning" {
-		t.Fatalf("input.0.type = %q, want cached reasoning; body=%s", got, string(secondBody))
+	detachedEncrypted := validCodexReasoningEncryptedContentForTestSeed(25)
+	retainedEncrypted := validCodexReasoningEncryptedContentForTestSeed(26)
+	cacheCodexReasoningReplayFromCompleted(scope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+detachedEncrypted+`"},`+
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"removed answer"}]}`+
+		`]}}`))
+	cacheCodexReasoningReplayFromCompleted(scope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+retainedEncrypted+`"},`+
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"retained answer"}]}`+
+		`]}}`))
+
+	body := []byte(`{"model":"gpt-5.4","input":[` +
+		`{"type":"message","role":"user","content":"compacted summary"},` +
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"retained answer"}]},` +
+		`{"type":"message","role":"user","content":"continue"}` +
+		`]}`)
+	req := cliproxyexecutor.Request{
+		Model:   "gpt-5.4",
+		Payload: []byte(`{"metadata":{"user_id":"{\"session_id\":\"session-compacted\"}"}}`),
 	}
-	for _, item := range gjson.GetBytes(secondBody, "input").Array() {
-		if got := item.Get("type").String(); got == "function_call" || got == "custom_tool_call" {
-			t.Fatalf("unanswered cached tool call should not be replayed; body=%s", string(secondBody))
+	updated, _ := applyCodexReasoningReplayCache(context.Background(), sdktranslator.FromString("claude"), req, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("claude")}, body)
+	gotItems := gjson.GetBytes(updated, "input").Array()
+	if len(gotItems) != 4 || gotItems[1].Get("encrypted_content").String() != retainedEncrypted {
+		t.Fatalf("retained turn reasoning was not restored: %s", updated)
+	}
+	for _, item := range gotItems {
+		if item.Get("encrypted_content").String() == detachedEncrypted {
+			t.Fatalf("detached reasoning moved into compacted history: %s", updated)
 		}
 	}
 }
 
-func TestCodexExecutorDropsUnansweredClaudeAgentToolUseBeforeUpstream(t *testing.T) {
+func TestCodexExecutorReasoningReplayCacheMatchesNewestDuplicateAssistantAfterCompaction(t *testing.T) {
 	internalcache.ClearCodexReasoningReplayCache()
 	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
 
-	var body []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var errRead error
-		body, errRead = io.ReadAll(r.Body)
-		if errRead != nil {
-			t.Fatalf("read body: %v", errRead)
+	scope := codexReasoningReplayScope{
+		modelName:  "gpt-5.4",
+		sessionKey: "claude:session-duplicate-compaction:agent:main",
+	}
+	oldEncrypted := validCodexReasoningEncryptedContentForTestSeed(27)
+	newEncrypted := validCodexReasoningEncryptedContentForTestSeed(28)
+	for _, encryptedContent := range []string{oldEncrypted, newEncrypted} {
+		cacheCodexReasoningReplayFromCompleted(scope, []byte(`{"response":{"output":[`+
+			`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+encryptedContent+`"},`+
+			`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done"}]}`+
+			`]}}`))
+	}
+
+	body := []byte(`{"model":"gpt-5.4","input":[` +
+		`{"type":"message","role":"user","content":"compacted summary"},` +
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done"}]},` +
+		`{"type":"message","role":"user","content":"continue"}` +
+		`]}`)
+	req := cliproxyexecutor.Request{
+		Model:   "gpt-5.4",
+		Payload: []byte(`{"metadata":{"user_id":"{\"session_id\":\"session-duplicate-compaction\"}"}}`),
+	}
+	updated, _ := applyCodexReasoningReplayCache(context.Background(), sdktranslator.FromString("claude"), req, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("claude")}, body)
+	gotItems := gjson.GetBytes(updated, "input").Array()
+	if len(gotItems) != 4 || gotItems[1].Get("encrypted_content").String() != newEncrypted {
+		t.Fatalf("newest duplicate assistant turn was not retained: %s", updated)
+	}
+	for _, item := range gotItems {
+		if item.Get("encrypted_content").String() == oldEncrypted {
+			t.Fatalf("detached duplicate assistant reasoning was restored: %s", updated)
 		}
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte(`data: {"type":"response.completed","response":{"id":"resp_1","object":"response","created_at":0,"status":"completed","model":"gpt-5.4","output":[]}}` + "\n\n"))
-	}))
-	defer server.Close()
-
-	executor := NewCodexExecutor(&config.Config{})
-	auth := &cliproxyauth.Auth{
-		ID: "auth-claude-agent-unanswered-tool",
-		Attributes: map[string]string{
-			"base_url": server.URL,
-			"api_key":  "test",
-		},
 	}
-	opts := cliproxyexecutor.Options{
-		SourceFormat: sdktranslator.FromString("claude"),
-		Stream:       false,
-	}
+}
 
-	_, err := executor.Execute(context.Background(), auth, cliproxyexecutor.Request{
+func TestCodexExecutorReasoningReplayCacheUsesRequestPrefixForDuplicateOutOfOrderTurns(t *testing.T) {
+	internalcache.ClearCodexReasoningReplayCache()
+	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
+
+	body := []byte(`{"model":"gpt-5.4","input":[` +
+		`{"type":"message","role":"user","content":"first"},` +
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done"}]},` +
+		`{"type":"message","role":"user","content":"second"},` +
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done"}]},` +
+		`{"type":"message","role":"user","content":"third"}` +
+		`]}`)
+	inputItems := gjson.GetBytes(body, "input").Array()
+	baseScope := codexReasoningReplayScope{
+		modelName:  "gpt-5.4",
+		sessionKey: "claude:session-duplicate-prefix:agent:main",
+	}
+	oldEncrypted := validCodexReasoningEncryptedContentForTestSeed(29)
+	newEncrypted := validCodexReasoningEncryptedContentForTestSeed(30)
+	newScope := baseScope
+	newScope.requestFingerprint = codexReplayInputPrefixFingerprint(inputItems, 3)
+	cacheCodexReasoningReplayFromCompleted(newScope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+newEncrypted+`"},`+
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done"}]}`+
+		`]}}`))
+	oldScope := baseScope
+	oldScope.requestFingerprint = codexReplayInputPrefixFingerprint(inputItems, 1)
+	cacheCodexReasoningReplayFromCompleted(oldScope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+oldEncrypted+`"},`+
+		`{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done"}]}`+
+		`]}}`))
+
+	req := cliproxyexecutor.Request{
+		Model:   "gpt-5.4",
+		Payload: []byte(`{"metadata":{"user_id":"{\"session_id\":\"session-duplicate-prefix\"}"}}`),
+	}
+	updated, _ := applyCodexReasoningReplayCache(context.Background(), sdktranslator.FromString("claude"), req, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("claude")}, body)
+	gotItems := gjson.GetBytes(updated, "input").Array()
+	if len(gotItems) != 7 || gotItems[1].Get("encrypted_content").String() != oldEncrypted || gotItems[4].Get("encrypted_content").String() != newEncrypted {
+		t.Fatalf("duplicate out-of-order turns were not matched by request prefix: %s", updated)
+	}
+}
+
+func TestCodexExecutorReasoningReplayCacheDropsFunctionCallWithoutMatchingOutput(t *testing.T) {
+	internalcache.ClearCodexReasoningReplayCache()
+	t.Cleanup(internalcache.ClearCodexReasoningReplayCache)
+
+	encryptedContent := validCodexReasoningEncryptedContentForTestSeed(14)
+	scope := codexReasoningReplayScope{
+		modelName:  "gpt-5.4",
+		sessionKey: "claude:session-dropped-tool:agent:main",
+	}
+	cacheCodexReasoningReplayFromCompleted(scope, []byte(`{"response":{"output":[`+
+		`{"type":"reasoning","summary":[],"content":null,"encrypted_content":"`+encryptedContent+`"},`+
+		`{"type":"function_call","call_id":"call_dropped","name":"TaskCreate","arguments":"{}"}`+
+		`]}}`))
+
+	body := []byte(`{"model":"gpt-5.4","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"next"}]}]}`)
+	req := cliproxyexecutor.Request{
 		Model: "gpt-5.4",
 		Payload: []byte(`{
 			"model":"gpt-5.4",
-			"metadata":{"user_id":"{\"device_id\":\"device-test\",\"account_uuid\":\"\",\"session_id\":\"claude-agent-sidechain\"}"},
-			"messages":[
-				{"role":"user","content":[{"type":"text","text":"parent starts agent"}]},
-				{"role":"assistant","content":[{"type":"tool_use","id":"call_agent_parent","name":"Agent","input":{"prompt":"run child"}}]},
-				{"role":"user","content":[{"type":"text","text":"child self check"}]}
-			],
-			"tools":[{"name":"Agent","input_schema":{"type":"object","properties":{"prompt":{"type":"string"}}}}]
+			"metadata":{"user_id":"{\"device_id\":\"device-test\",\"account_uuid\":\"\",\"session_id\":\"session-dropped-tool\"}"},
+			"messages":[{"role":"user","content":[{"type":"text","text":"next"}]}]
 		}`),
-	}, opts)
-	if err != nil {
-		t.Fatalf("Execute error: %v", err)
 	}
-	if len(body) == 0 {
-		t.Fatal("upstream request body is empty")
+
+	updated, replayScope := applyCodexReasoningReplayCache(
+		context.Background(),
+		sdktranslator.FromString("claude"),
+		req,
+		cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("claude")},
+		body,
+	)
+	if replayScope.modelName != scope.modelName || replayScope.sessionKey != scope.sessionKey {
+		t.Fatalf("replay scope = %#v, want model/session %#v", replayScope, scope)
 	}
-	for _, item := range gjson.GetBytes(body, "input").Array() {
-		if got := item.Get("type").String(); got == "function_call" || got == "custom_tool_call" {
-			t.Fatalf("unanswered Claude Agent tool_use should be dropped before upstream; body=%s", string(body))
-		}
+	if got := gjson.GetBytes(updated, "input.0.role").String(); got != "user" {
+		t.Fatalf("input.0.role = %q, want detached turn to be skipped; body=%s", got, string(updated))
 	}
-	if strings.Contains(string(body), "call_agent_parent") {
-		t.Fatalf("unanswered Claude Agent call_id leaked upstream; body=%s", string(body))
+	if gjson.GetBytes(updated, `input.#(type=="reasoning")`).Exists() {
+		t.Fatalf("detached turn reasoning should not move to the front; body=%s", string(updated))
+	}
+	if gjson.GetBytes(updated, `input.#(call_id=="call_dropped")`).Exists() {
+		t.Fatalf("cached function_call without matching output should not be replayed; body=%s", string(updated))
 	}
 }
 
@@ -931,5 +1088,27 @@ func TestCodexExecutorReasoningReplayCacheMatchesShortenedClaudeToolResultCallID
 	}
 	if got := gjson.GetBytes(secondBody, "input.3.call_id").String(); got != shortCallID {
 		t.Fatalf("input.3.call_id = %q, want shortened call_id %q; body=%s", got, shortCallID, string(secondBody))
+	}
+}
+
+func TestCodexReplayPrefixFingerprintsMatchesDirectComputation(t *testing.T) {
+	items := []gjson.Result{
+		gjson.Parse(`{"type":"message","role":"user","content":"a"}`),
+		gjson.Parse(`{"type":"reasoning","encrypted_content":"abc"}`),
+		gjson.Parse(`{"type":"function_call","call_id":"call_1"}`),
+		gjson.Parse(`{"type":"function_call_output","call_id":"call_1","output":"ok"}`),
+	}
+	cache := newCodexReplayPrefixFingerprints(items)
+	// Out-of-order and repeated probes mirror the downward anchor scan.
+	for _, end := range []int{4, 2, 0, 3, 1, 4, 2} {
+		want := codexReplayInputPrefixFingerprint(items, end)
+		if got := cache.at(end); got != want {
+			t.Fatalf("cache.at(%d) = %q, want %q", end, got, want)
+		}
+	}
+	for _, end := range []int{-1, 5} {
+		if got := cache.at(end); got != "" {
+			t.Fatalf("cache.at(%d) = %q, want empty for out-of-range", end, got)
+		}
 	}
 }

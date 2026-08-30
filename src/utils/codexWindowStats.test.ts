@@ -50,8 +50,6 @@ test("builds 5h/7d queries from last full window to now in log milliseconds", ()
   const resetAt = now + 3_600;
   const queries = buildCodexAccountWindowStatQueries(
     "acct-1",
-    "chatgpt-account-1",
-    "account@example.com",
     [
       { id: "primary", resetTime: resetAt, windowMinutes: 300 },
       { id: "secondary", resetTime: resetAt + 86_400, windowMinutes: 10_080 },
@@ -61,16 +59,12 @@ test("builds 5h/7d queries from last full window to now in log milliseconds", ()
   assert.deepEqual(queries, [
     {
       accountId: "acct-1",
-      officialAccountId: "chatgpt-account-1",
-      accountEmail: "account@example.com",
       windowKey: "primary",
       startAt: (resetAt - 300 * 60) * 1000,
       endAt: now * 1000,
     },
     {
       accountId: "acct-1",
-      officialAccountId: "chatgpt-account-1",
-      accountEmail: "account@example.com",
       windowKey: "secondary",
       startAt: (resetAt + 86_400 - 10_080 * 60) * 1000,
       endAt: now * 1000,

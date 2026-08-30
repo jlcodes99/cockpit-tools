@@ -12,7 +12,7 @@
       "enabled": true,
       "relayRelated": false,
       "priority": 100,
-      "text": "Codex Plus30天成品号，Gemini给自己账号订阅一年Pro 需要的了解一下",
+      "text": "GPT Plus 30天成品号｜各套餐实付代充 可续费 需要的了解下 感谢支持",
       "badge": "推广",
       "ctaLabel": "选购",
       "ctaUrl": "https://xiangzili.xyz/user/index/shop",
@@ -30,7 +30,7 @@
       "expiresAt": null,
       "locales": {
         "zh-CN": {
-          "text": "Codex Plus30天成品号，Gemini给自己账号订阅一年Pro 需要的了解一下",
+          "text": "GPT Plus 30天成品号｜各套餐实付代充 可续费 需要的了解下 感谢支持",
           "badge": "推广",
           "ctaLabel": "选购"
         }
@@ -108,385 +108,72 @@
   },
   "announcements": [
     {
-      "id": "ann-2026-05-12-v0230-withdrawn-manual-update",
-      "type": "urgent",
-      "priority": 1000,
-      "title": "Withdrawn v0.23.0: install v0.23.1 manually",
-      "summary": "v0.23.0 was published by mistake. It contains unverified PR changes and may use the wrong update channel. Please install the official v0.23.1 build manually.",
-      "content": "Cockpit Tools v0.23.0 was published by mistake and has been withdrawn.\n\nThis version was built from an incorrect integration branch. It may contain PR changes that were not fully reviewed or tested, and its auto-update channel may point to the wrong release source.\n\nIf your current version is v0.23.0, we do not recommend continuing to use it. The in-app updater may fail, or it may not find the official v0.23.1 release.\n\nPlease download and install the official v0.23.1 build manually as soon as possible. After installing v0.23.1, the updater will use the official release channel again.\n\nUsers on v0.22.22 or earlier do not need this manual fix and can continue using normal updates.",
-      "action": {
-        "type": "url",
-        "target": "https://github.com/jlcodes99/cockpit-tools/releases/latest",
-        "label": "Download latest version"
-      },
-      "targetVersions": "=0.23.0",
-      "targetLanguages": [
-        "*"
-      ],
-      "showOnce": true,
-      "popup": true,
-      "createdAt": "2026-05-12T13:00:00Z",
-      "expiresAt": null,
-      "locales": {
-        "zh-CN": {
-          "title": "v0.23.0 已撤回，请手动安装 v0.23.1",
-          "summary": "v0.23.0 是误发布版本，包含未完整验证的 PR 集成改动，且自动更新通道可能指向错误来源，请手动安装官方 v0.23.1。",
-          "content": "Cockpit Tools v0.23.0 是误发布版本，现已撤回。\n\n该版本来自错误的集成分支，可能包含未经过完整评审和测试的 PR 改动，同时自动更新通道也可能指向错误的发布来源。\n\n如果你当前正在使用 v0.23.0，不建议继续使用该版本。应用内更新可能失败，或无法找到官方 v0.23.1。\n\n请尽快手动下载并安装官方 v0.23.1。安装 v0.23.1 后，后续自动更新会恢复到官方发布通道。\n\nv0.22.22 及更早版本用户不需要手动修复，可继续使用正常更新。",
-          "actionLabel": "下载最新版本"
-        },
-        "zh-tw": {
-          "title": "v0.23.0 已撤回，請手動安裝 v0.23.1",
-          "summary": "v0.23.0 是誤發布版本，包含未完整驗證的 PR 整合改動，且自動更新通道可能指向錯誤來源，請手動安裝官方 v0.23.1。",
-          "content": "Cockpit Tools v0.23.0 是誤發布版本，現已撤回。\n\n該版本來自錯誤的整合分支，可能包含未經完整審查和測試的 PR 改動，同時自動更新通道也可能指向錯誤的發布來源。\n\n如果你目前正在使用 v0.23.0，不建議繼續使用該版本。應用內更新可能失敗，或無法找到官方 v0.23.1。\n\n請盡快手動下載並安裝官方 v0.23.1。安裝 v0.23.1 後，後續自動更新會恢復到官方發布通道。\n\nv0.22.22 及更早版本使用者不需要手動修復，可繼續使用正常更新。",
-          "actionLabel": "下載最新版本"
-        },
-        "en": {
-          "title": "Withdrawn v0.23.0: install v0.23.1 manually",
-          "summary": "v0.23.0 was published by mistake. It contains unverified PR changes and may use the wrong update channel. Please install the official v0.23.1 build manually.",
-          "content": "Cockpit Tools v0.23.0 was published by mistake and has been withdrawn.\n\nThis version was built from an incorrect integration branch. It may contain PR changes that were not fully reviewed or tested, and its auto-update channel may point to the wrong release source.\n\nIf your current version is v0.23.0, we do not recommend continuing to use it. The in-app updater may fail, or it may not find the official v0.23.1 release.\n\nPlease download and install the official v0.23.1 build manually as soon as possible. After installing v0.23.1, the updater will use the official release channel again.\n\nUsers on v0.22.22 or earlier do not need this manual fix and can continue using normal updates.",
-          "actionLabel": "Download latest version"
-        },
-        "en-US": {
-          "title": "Withdrawn v0.23.0: install v0.23.1 manually",
-          "summary": "v0.23.0 was published by mistake. It contains unverified PR changes and may use the wrong update channel. Please install the official v0.23.1 build manually.",
-          "content": "Cockpit Tools v0.23.0 was published by mistake and has been withdrawn.\n\nThis version was built from an incorrect integration branch. It may contain PR changes that were not fully reviewed or tested, and its auto-update channel may point to the wrong release source.\n\nIf your current version is v0.23.0, we do not recommend continuing to use it. The in-app updater may fail, or it may not find the official v0.23.1 release.\n\nPlease download and install the official v0.23.1 build manually as soon as possible. After installing v0.23.1, the updater will use the official release channel again.\n\nUsers on v0.22.22 or earlier do not need this manual fix and can continue using normal updates.",
-          "actionLabel": "Download latest version"
-        }
-      }
-    },
-    {
-      "id": "ann-2026-02-welcome-cockpit-tools",
+      "id": "codex-client-login-observation-2026-08-28",
       "type": "info",
-      "priority": 300,
-      "title": "👋 欢迎使用 Cockpit Tools",
-      "summary": "账号管理、配额监控与多开能力已就绪。",
-      "content": "感谢你选择 Cockpit Tools。\n\n这个桌面端目前可以帮助你：\n• 统一管理 Antigravity、Codex、GitHub Copilot、Windsurf、Kiro 账号\n• 实时查看模型配额与重置时间\n• 快速切换当前账号并支持批量刷新\n• 管理设备指纹与应用多开\n• 使用唤醒任务与账号验证能力\n\n如果你有建议或问题，欢迎随时反馈。",
+      "priority": 100,
+      "title": "Codex 客户端登录状态检测与凭据刷新说明",
+      "summary": "官方 Codex 客户端最新版增加了新的登录状态检测，部分账号可能在使用一段时间后或者对话后被跳转到登录页面。经过持续排查和大量测试，Cockpit Tools 最新版已调整客户端监测、切号和凭据刷新流程，并与官方最新 OAuth 授权参数保持一致。",
+      "content": "官方 Codex 客户端最新版更新后，增加了一些新的登录状态检测。当客户端请求远端接口并收到特定结果时，部分账号可能在使用一段时间后或者对话后被跳转到登录页面。\n\n最近我们一直在研究这个问题，在不同账号、不同系统和多种使用场景上投入了大量时间和精力，进行了大量测试。期间也连续调整过好几个版本，根据当时的测试结果尝试了多套我们认为可行的认证和切号规则。但随着测试样本增加，最终仍没有找到一个适用于所有账号和环境的固定规律。\n\n同一组登录凭证在不同环境下也可能出现完全不同的结果。例如，同一个账号在我的 macOS 电脑上会退出登录，导入 Windows 后却可能正常使用、不再跳转登录页面。这也说明问题并不能仅通过某一个 Token 的本地状态或一条固定规则准确判断。\n\n另外，Cockpit Tools 最新版本的 OAuth 授权请求已与官方最新桌面客户端的内层授权流程保持一致，使用相同的官方授权端点和主要参数，包括 `client_id`、授权 scope、PKCE、`id_token_add_organizations=true`、`codex_cli_simplified_flow=true` 及 `originator=Codex Desktop`。官方使用的 `https://chatgpt.com/codex/desktop-auth` 属于桌面前端的外层包装，内层仍然是 `https://auth.openai.com/oauth/authorize`；Cockpit 直接使用同一内层 OAuth 协议完成授权。\n\n目前 Cockpit Tools 最新版本已经采用以下逻辑：\n\n1. 监听客户端实际登录状态\nCockpit 会监听 Codex 客户端是否真正跳转到登录页面。确认跳转后，只会给对应账号添加提示标记，由用户自行决定是否重新授权，不会强制阻止切号。\n\n2. 切号不再受本地 Token 到期信息强制限制\n切号不会再仅因为本地 id_token 等 Token 的过期时间而被拦截。\n\n3. 启动预览支持手动刷新登录凭证\n启动预览中增加了强制刷新功能，可以使用当前 refresh_token 获取新的登录凭证，同时检查该 refresh_token 是否仍然有效。刷新失败时，可以选择重新检测或重新授权。\n\n目前通过大量测试能够得到的阶段性结论是：refresh_token 失效不一定会直接导致客户端退出登录；但已经跳转到登录页面的账号，其 refresh_token 基本都已经失效。大部分账号在重新授权并获取新的登录信息后，可以恢复正常使用。\n\n不同系统、客户端版本和账号状态之间仍可能存在差异，因此目前无法承诺某一种规则能够覆盖所有情况。如果你发现了新的触发条件、账号表现或更可靠的处理方式，欢迎通过 GitHub 提交 Issue 或 Pull Request，帮助我们继续完善判断和处理方案。",
       "action": {
         "type": "url",
-        "target": "https://github.com/jlcodes99/cockpit-tools/issues",
-        "label": "反馈建议"
+        "target": "https://github.com/jlcodes99/cockpit-tools/issues/new",
+        "label": "提交反馈"
       },
       "targetVersions": "*",
       "targetLanguages": [
         "*"
       ],
       "showOnce": true,
-      "popup": false,
-      "createdAt": "2026-02-27T09:52:12Z",
+      "popup": true,
+      "createdAt": "2026-08-28T13:00:00Z",
       "expiresAt": null,
       "locales": {
-        "zh-CN": {
-          "title": "👋 欢迎使用 Cockpit Tools",
-          "summary": "账号管理、配额监控与多开能力已就绪。",
-          "content": "感谢你选择 Cockpit Tools。\n\n这个桌面端目前可以帮助你：\n• 统一管理 Antigravity、Codex、GitHub Copilot、Windsurf、Kiro 账号\n• 实时查看模型配额与重置时间\n• 快速切换当前账号并支持批量刷新\n• 管理设备指纹与应用多开\n• 使用唤醒任务与账号验证能力\n\n如果你有建议或问题，欢迎随时反馈。",
-          "actionLabel": "反馈建议"
-        },
-        "zh-tw": {
-          "title": "👋 歡迎使用 Cockpit Tools",
-          "summary": "帳號管理、配額監控與多開能力已就緒。",
-          "content": "感謝你選擇 Cockpit Tools。\n\n這個桌面端目前可以幫助你：\n• 統一管理 Antigravity、Codex、GitHub Copilot、Windsurf、Kiro 帳號\n• 即時查看模型配額與重置時間\n• 快速切換當前帳號並支援批量刷新\n• 管理裝置指紋與應用多開\n• 使用喚醒任務與帳號驗證能力\n\n如果你有建議或問題，歡迎隨時回饋。",
-          "actionLabel": "回饋建議"
-        },
         "en": {
-          "title": "👋 Welcome to Cockpit Tools",
-          "summary": "Account management, quota monitoring, and multi-instance tools are ready.",
-          "content": "Thanks for choosing Cockpit Tools.\n\nThis desktop app can help you with:\n• Unified account management for Antigravity, Codex, GitHub Copilot, Windsurf, and Kiro\n• Real-time quota and reset-time visibility\n• Fast current-account switching and batch refresh\n• Device fingerprint and multi-instance management\n• Wakeup tasks and account verification workflows\n\nIf you have suggestions or run into issues, we would love your feedback.",
-          "actionLabel": "Send Feedback"
+          "title": "Codex client sign-in observation and credential refresh",
+          "summary": "The latest official Codex client introduced new sign-in checks. Some accounts may be redirected to sign-in after being used for a while or after a conversation. Following extensive investigation and testing, the latest Cockpit Tools release updates client observation, switching, and credential refresh behavior while matching the latest official OAuth authorization parameters.",
+          "content": "The latest official Codex client introduced additional sign-in state checks. When the client receives certain results from remote requests, some accounts may be redirected to the sign-in page after being used for a while or after a conversation.\n\nWe have spent substantial time and effort investigating this issue across different accounts, operating systems, and usage scenarios, with extensive testing. Across several releases, we adjusted authentication and switching rules based on what the available results suggested at the time. As the test sample grew, however, we still could not identify one fixed trigger that applies to every account and environment.\n\nThe same credentials can behave completely differently across environments. For example, the same account may sign out on my macOS computer while continuing to work normally after being imported on Windows. This also shows that the outcome cannot be determined reliably from one local Token state or a single fixed rule.\n\nIn addition, the latest Cockpit Tools version uses the same inner OAuth authorization flow as the latest official desktop client, including the official authorization endpoint and main parameters such as `client_id`, authorization scopes, PKCE, `id_token_add_organizations=true`, `codex_cli_simplified_flow=true`, and `originator=Codex Desktop`. The official `https://chatgpt.com/codex/desktop-auth` URL is an outer wrapper used by the desktop front end; its inner authorization request still targets `https://auth.openai.com/oauth/authorize`. Cockpit uses that same inner OAuth protocol directly.\n\nThe latest Cockpit Tools version now uses the following logic:\n\n1. Observe the client's actual sign-in state\nCockpit observes whether the Codex client actually redirects to the sign-in page. If confirmed, it adds a notice to the matching account and lets you decide whether to reauthorize. It does not forcibly block account switching.\n\n2. Do not block switching solely because of local Token expiration\nAccount switching is no longer blocked only because a local id_token or another Token is shown as expired.\n\n3. Manually refresh credentials from launch preview\nLaunch preview can use the current refresh_token to obtain new credentials and check whether that refresh_token is still valid. If refresh fails, you can retry or reauthorize.\n\nOur findings from extensive testing so far are: an invalid refresh_token does not always cause the client to sign out, but accounts that have redirected to sign-in generally also have an invalid refresh_token. Most affected accounts return to normal after reauthorization obtains new credentials.\n\nBehavior can still vary by operating system, client version, and account state, so no single rule can currently be guaranteed to cover every case. If you discover a reproducible trigger or a more reliable approach, please submit a GitHub Issue or Pull Request to help us continue improving the detection and recovery flow.",
+          "actionLabel": "Send feedback"
         },
         "en-US": {
-          "title": "👋 Welcome to Cockpit Tools",
-          "summary": "Account management, quota monitoring, and multi-instance tools are ready.",
-          "content": "Thanks for choosing Cockpit Tools.\n\nThis desktop app can help you with:\n• Unified account management for Antigravity, Codex, GitHub Copilot, Windsurf, and Kiro\n• Real-time quota and reset-time visibility\n• Fast current-account switching and batch refresh\n• Device fingerprint and multi-instance management\n• Wakeup tasks and account verification workflows\n\nIf you have suggestions or run into issues, we would love your feedback.",
-          "actionLabel": "Send Feedback"
-        },
-        "ja": {
-          "title": "👋 Cockpit Tools へようこそ",
-          "summary": "アカウント管理、クォータ監視、マルチインスタンス機能が利用できます。",
-          "content": "Cockpit Tools を選んでいただきありがとうございます。\n\nこのデスクトップアプリでできること：\n• Antigravity / Codex / GitHub Copilot / Windsurf / Kiro のアカウントを一元管理\n• モデルクォータとリセット時刻をリアルタイムで確認\n• 現在アカウントの高速切替と一括更新\n• デバイスフィンガープリントとマルチインスタンス管理\n• ウェイクアップタスクとアカウント検証機能\n\nご意見や問題があれば、ぜひお知らせください。",
-          "actionLabel": "フィードバックを送る"
-        },
-        "ko": {
-          "title": "👋 Cockpit Tools에 오신 것을 환영합니다",
-          "summary": "계정 관리, 할당량 모니터링, 멀티 인스턴스 기능을 사용할 수 있습니다.",
-          "content": "Cockpit Tools를 선택해 주셔서 감사합니다.\n\n이 데스크톱 앱으로 할 수 있는 일:\n• Antigravity, Codex, GitHub Copilot, Windsurf, Kiro 계정을 통합 관리\n• 모델 할당량과 리셋 시간을 실시간으로 확인\n• 현재 계정 빠른 전환 및 일괄 새로고침\n• 디바이스 지문 및 멀티 인스턴스 관리\n• 웨이크업 작업 및 계정 검증 기능\n\n문의나 제안이 있다면 언제든지 알려주세요.",
-          "actionLabel": "피드백 보내기"
-        },
-        "de": {
-          "title": "👋 Willkommen bei Cockpit Tools",
-          "summary": "Kontoverwaltung, Quotenüberwachung und Multi-Instanz-Funktionen sind bereit.",
-          "content": "Danke, dass du Cockpit Tools gewählt hast.\n\nDiese Desktop-App hilft dir bei:\n• Zentraler Verwaltung von Antigravity-, Codex-, GitHub Copilot-, Windsurf- und Kiro-Konten\n• Echtzeit-Anzeige von Modellquoten und Reset-Zeiten\n• Schnellem Kontowechsel und Massenaktualisierung\n• Verwaltung von Geräte-Fingerprints und Multi-Instanzen\n• Wakeup-Tasks und Kontoverifikation\n\nWenn du Feedback oder Fragen hast, freuen wir uns auf deine Rückmeldung.",
-          "actionLabel": "Feedback senden"
-        },
-        "fr": {
-          "title": "👋 Bienvenue dans Cockpit Tools",
-          "summary": "La gestion des comptes, le suivi des quotas et le multi-instance sont prêts.",
-          "content": "Merci d'avoir choisi Cockpit Tools.\n\nCette application desktop vous permet de :\n• Gérer de façon unifiée les comptes Antigravity, Codex, GitHub Copilot, Windsurf et Kiro\n• Suivre en temps réel les quotas de modèles et les heures de réinitialisation\n• Changer rapidement de compte actif et lancer des rafraîchissements en lot\n• Gérer les empreintes d'appareil et les instances multiples\n• Utiliser les tâches de réveil et la vérification de compte\n\nSi vous avez des suggestions ou des problèmes, n'hésitez pas à nous le dire.",
-          "actionLabel": "Envoyer un retour"
-        },
-        "es": {
-          "title": "👋 Bienvenido a Cockpit Tools",
-          "summary": "La gestión de cuentas, el monitoreo de cuotas y las funciones multiinstancia están listas.",
-          "content": "Gracias por elegir Cockpit Tools.\n\nEsta aplicación de escritorio te ayuda a:\n• Gestionar de forma unificada cuentas de Antigravity, Codex, GitHub Copilot, Windsurf y Kiro\n• Ver en tiempo real las cuotas de modelos y horarios de reinicio\n• Cambiar rápidamente la cuenta actual y refrescar en lote\n• Gestionar huellas del dispositivo e instancias múltiples\n• Usar tareas de activación y verificación de cuentas\n\nSi tienes sugerencias o problemas, estaremos encantados de recibir tus comentarios.",
-          "actionLabel": "Enviar comentarios"
-        },
-        "it": {
-          "title": "👋 Benvenuto in Cockpit Tools",
-          "summary": "Gestione account, monitoraggio quote e funzioni multi-istanza sono pronti.",
-          "content": "Grazie per aver scelto Cockpit Tools.\n\nQuesta app desktop ti aiuta a:\n• Gestire in modo unificato gli account Antigravity, Codex, GitHub Copilot, Windsurf e Kiro\n• Monitorare in tempo reale quote modello e orari di reset\n• Cambiare rapidamente account corrente e aggiornare in batch\n• Gestire impronte dispositivo e istanze multiple\n• Usare attività di wakeup e verifica account\n\nSe hai suggerimenti o problemi, inviaci pure un feedback.",
-          "actionLabel": "Invia feedback"
-        },
-        "ru": {
-          "title": "👋 Добро пожаловать в Cockpit Tools",
-          "summary": "Управление аккаунтами, мониторинг квот и мультиинстанс уже готовы.",
-          "content": "Спасибо, что выбрали Cockpit Tools.\n\nЭто настольное приложение помогает:\n• Единообразно управлять аккаунтами Antigravity, Codex, GitHub Copilot, Windsurf и Kiro\n• В реальном времени отслеживать квоты моделей и время сброса\n• Быстро переключать текущий аккаунт и обновлять данные пакетно\n• Управлять отпечатками устройства и несколькими инстансами\n• Использовать задачи пробуждения и проверку аккаунтов\n\nЕсли у вас есть предложения или проблемы, будем рады обратной связи.",
-          "actionLabel": "Отправить отзыв"
-        },
-        "pt-br": {
-          "title": "👋 Bem-vindo ao Cockpit Tools",
-          "summary": "Gerenciamento de contas, monitoramento de cotas e recursos de múltiplas instâncias estão prontos.",
-          "content": "Obrigado por escolher o Cockpit Tools.\n\nEste app desktop ajuda você a:\n• Gerenciar de forma unificada contas Antigravity, Codex, GitHub Copilot, Windsurf e Kiro\n• Acompanhar em tempo real cotas de modelos e horários de reset\n• Trocar rapidamente a conta atual e fazer atualização em lote\n• Gerenciar impressões digitais do dispositivo e múltiplas instâncias\n• Usar tarefas de wakeup e verificação de contas\n\nSe tiver sugestões ou problemas, envie seu feedback.",
-          "actionLabel": "Enviar feedback"
-        },
-        "tr": {
-          "title": "👋 Cockpit Tools'a hoş geldiniz",
-          "summary": "Hesap yönetimi, kota izleme ve çoklu örnek özellikleri hazır.",
-          "content": "Cockpit Tools'u seçtiğiniz için teşekkürler.\n\nBu masaüstü uygulaması size şunlarda yardımcı olur:\n• Antigravity, Codex, GitHub Copilot, Windsurf ve Kiro hesaplarını tek yerden yönetme\n• Model kotalarını ve sıfırlanma zamanlarını gerçek zamanlı izleme\n• Mevcut hesabı hızlı değiştirme ve toplu yenileme\n• Cihaz parmak izi ve çoklu örnek yönetimi\n• Wakeup görevleri ve hesap doğrulama\n\nÖneriniz veya sorununuz varsa geri bildiriminizi bekliyoruz.",
-          "actionLabel": "Geri bildirim gönder"
-        },
-        "vi": {
-          "title": "👋 Chào mừng bạn đến với Cockpit Tools",
-          "summary": "Quản lý tài khoản, theo dõi hạn mức và tính năng đa phiên bản đã sẵn sàng.",
-          "content": "Cảm ơn bạn đã chọn Cockpit Tools.\n\nỨng dụng desktop này có thể giúp bạn:\n• Quản lý tập trung tài khoản Antigravity, Codex, GitHub Copilot, Windsurf và Kiro\n• Theo dõi thời gian thực hạn mức mô hình và thời điểm đặt lại\n• Chuyển nhanh tài khoản hiện tại và làm mới hàng loạt\n• Quản lý dấu vân tay thiết bị và đa phiên bản\n• Sử dụng tác vụ wakeup và xác minh tài khoản\n\nNếu bạn có góp ý hoặc gặp vấn đề, hãy phản hồi cho chúng tôi.",
-          "actionLabel": "Gửi phản hồi"
-        },
-        "pl": {
-          "title": "👋 Witamy w Cockpit Tools",
-          "summary": "Zarządzanie kontami, monitorowanie limitów i obsługa wielu instancji są gotowe.",
-          "content": "Dziękujemy za wybór Cockpit Tools.\n\nTa aplikacja desktopowa pomaga w:\n• Zunifikowanym zarządzaniu kontami Antigravity, Codex, GitHub Copilot, Windsurf i Kiro\n• Monitorowaniu limitów modeli i czasu resetu w czasie rzeczywistym\n• Szybkim przełączaniu aktywnego konta i odświeżaniu wsadowym\n• Zarządzaniu fingerprintami urządzenia i wieloma instancjami\n• Korzystaniu z zadań wakeup i weryfikacji kont\n\nJeśli masz sugestie lub problemy, chętnie poznamy Twoją opinię.",
-          "actionLabel": "Wyślij opinię"
-        },
-        "cs": {
-          "title": "👋 Vítejte v Cockpit Tools",
-          "summary": "Správa účtů, sledování kvót a podpora více instancí jsou připravené.",
-          "content": "Děkujeme, že používáte Cockpit Tools.\n\nTato desktopová aplikace vám pomůže s:\n• Jednotnou správou účtů Antigravity, Codex, GitHub Copilot, Windsurf a Kiro\n• Sledováním kvót modelů a časů resetu v reálném čase\n• Rychlým přepínáním aktuálního účtu a hromadným obnovením\n• Správou fingerprintů zařízení a více instancí\n• Používáním wakeup úloh a ověřením účtu\n\nPokud máte návrhy nebo narazíte na problém, pošlete nám zpětnou vazbu.",
-          "actionLabel": "Odeslat zpětnou vazbu"
-        },
-        "ar": {
-          "title": "👋 مرحبًا بك في Cockpit Tools",
-          "summary": "إدارة الحسابات ومراقبة الحصص وميزات تعدد المثيلات جاهزة.",
-          "content": "شكرًا لاختيارك Cockpit Tools.\n\nيمكن لهذا التطبيق المكتبي مساعدتك في:\n• إدارة حسابات Antigravity وCodex وGitHub Copilot وWindsurf وKiro بشكل موحّد\n• متابعة حصص النماذج وأوقات إعادة التعيين في الوقت الفعلي\n• التبديل السريع للحساب الحالي مع التحديث الدفعي\n• إدارة بصمة الجهاز وتعدد المثيلات\n• استخدام مهام الإيقاظ وميزة التحقق من الحساب\n\nإذا كان لديك اقتراح أو واجهت مشكلة، يسعدنا تلقي ملاحظاتك.",
-          "actionLabel": "إرسال ملاحظات"
+          "title": "Codex client sign-in observation and credential refresh",
+          "summary": "The latest official Codex client introduced new sign-in checks. Some accounts may be redirected to sign-in after being used for a while or after a conversation. Following extensive investigation and testing, the latest Cockpit Tools release updates client observation, switching, and credential refresh behavior while matching the latest official OAuth authorization parameters.",
+          "content": "The latest official Codex client introduced additional sign-in state checks. When the client receives certain results from remote requests, some accounts may be redirected to the sign-in page after being used for a while or after a conversation.\n\nWe have spent substantial time and effort investigating this issue across different accounts, operating systems, and usage scenarios, with extensive testing. Across several releases, we adjusted authentication and switching rules based on what the available results suggested at the time. As the test sample grew, however, we still could not identify one fixed trigger that applies to every account and environment.\n\nThe same credentials can behave completely differently across environments. For example, the same account may sign out on my macOS computer while continuing to work normally after being imported on Windows. This also shows that the outcome cannot be determined reliably from one local Token state or a single fixed rule.\n\nIn addition, the latest Cockpit Tools version uses the same inner OAuth authorization flow as the latest official desktop client, including the official authorization endpoint and main parameters such as `client_id`, authorization scopes, PKCE, `id_token_add_organizations=true`, `codex_cli_simplified_flow=true`, and `originator=Codex Desktop`. The official `https://chatgpt.com/codex/desktop-auth` URL is an outer wrapper used by the desktop front end; its inner authorization request still targets `https://auth.openai.com/oauth/authorize`. Cockpit uses that same inner OAuth protocol directly.\n\nThe latest Cockpit Tools version now uses the following logic:\n\n1. Observe the client's actual sign-in state\nCockpit observes whether the Codex client actually redirects to the sign-in page. If confirmed, it adds a notice to the matching account and lets you decide whether to reauthorize. It does not forcibly block account switching.\n\n2. Do not block switching solely because of local Token expiration\nAccount switching is no longer blocked only because a local id_token or another Token is shown as expired.\n\n3. Manually refresh credentials from launch preview\nLaunch preview can use the current refresh_token to obtain new credentials and check whether that refresh_token is still valid. If refresh fails, you can retry or reauthorize.\n\nOur findings from extensive testing so far are: an invalid refresh_token does not always cause the client to sign out, but accounts that have redirected to sign-in generally also have an invalid refresh_token. Most affected accounts return to normal after reauthorization obtains new credentials.\n\nBehavior can still vary by operating system, client version, and account state, so no single rule can currently be guaranteed to cover every case. If you discover a reproducible trigger or a more reliable approach, please submit a GitHub Issue or Pull Request to help us continue improving the detection and recovery flow.",
+          "actionLabel": "Send feedback"
         }
       }
     },
     {
-      "id": "ann-2026-02-antigravity-v090-update",
-      "type": "feature",
-      "priority": 280,
-      "title": "🚀 Cockpit Tools v0.9.0 重要更新",
-      "summary": "支持一键验证账号有效性，唤醒/验证链路已对齐官方 APP 实现。",
-      "content": "Cockpit Tools 最近已升级至 v0.9.0，核心变化如下：\n• Antigravity账号支持一键发起账号有效性验证（可按模型批量验证，进度实时可见，结果可回查）\n• Antigravity唤醒/验证链路已对齐Antigravity官方APP实现：本地网关 + 官方 Language Server 协议\n• 403 场景新增快捷处理：立即验证、复制验证地址、复制调试信息\n建议升级到 v0.9.0 及以上版本，以获得更稳定的使用体验。",
+      "id": "codex-windows-login-switch-2026-08-29",
+      "type": "info",
+      "priority": 110,
+      "title": "Windows 用户切号跳转登录页问题说明",
+      "summary": "仅使用官方 ChatGPT 客户端也可能遇到切号后跳转登录页的问题。目前 Windows 更新到 ChatGPT 26.825 或更高版本后基本可以恢复。",
+      "content": "近期发现，仅使用官方 ChatGPT 客户端也可能在切换账号后跳转到登录页面，并非只有使用第三方工具才会出现。\n\n目前测试显示，Windows 用户将 ChatGPT 更新到 26.825 或更高版本后，登录跳转问题基本可以恢复。遇到类似问题的用户，建议及时更新官方客户端后再测试。macOS 目前仍可能出现类似问题。",
       "action": {
         "type": "url",
-        "target": "https://github.com/jlcodes99/cockpit-tools/releases/latest",
-        "label": "下载最新版"
+        "target": "https://github.com/jlcodes99/cockpit-tools/issues/new",
+        "label": "提交反馈"
       },
       "targetVersions": "*",
       "targetLanguages": [
-        "ar",
-        "cs",
-        "de",
-        "en-US",
-        "en",
-        "es",
-        "fr",
-        "it",
-        "ja",
-        "ko",
-        "pl",
-        "pt-br",
-        "ru",
-        "tr",
-        "vi",
-        "zh-CN",
-        "zh-tw"
-      ],
-      "showOnce": true,
-      "popup": false,
-      "createdAt": "2026-02-27T10:30:15.244Z",
-      "expiresAt": null,
-      "locales": {
-        "ar": {
-          "title": "🚀 تحديث مهم لـ Cockpit Tools v0.9.0",
-          "summary": "تم دعم التحقق من صلاحية الحساب بنقرة واحدة، وتمت مواءمة مسار التنبيه/التحقق مع التطبيق الرسمي.",
-          "content": "تمت ترقية Cockpit Tools مؤخرًا إلى الإصدار v0.9.0. أبرز التغييرات:\n• تدعم حسابات Antigravity الآن التحقق من صلاحية الحساب بنقرة واحدة (تحقق دفعي حسب النموذج، عرض التقدم لحظيًا، وإمكانية مراجعة النتائج)\n• تمت مواءمة مسار التنبيه/التحقق في Antigravity مع تطبيق Antigravity الرسمي: بوابة محلية + بروتوكول Language Server الرسمي\n• إضافة معالجة سريعة لحالات 403: التحقق الآن، نسخ عنوان التحقق، نسخ معلومات التصحيح\nننصح بالترقية إلى v0.9.0 أو أعلى للحصول على تجربة أكثر استقرارًا.",
-          "actionLabel": "تنزيل أحدث إصدار"
-        },
-        "cs": {
-          "title": "🚀 Důležitá aktualizace Cockpit Tools v0.9.0",
-          "summary": "Podporujeme ověření platnosti účtu jedním kliknutím a řetězec probuzení/ověření je sladěn s oficiální aplikací.",
-          "content": "Cockpit Tools byl nedávno aktualizován na verzi v0.9.0. Hlavní změny:\n• Účty Antigravity nyní podporují ověření platnosti jedním kliknutím (hromadné ověření podle modelu, průběh v reálném čase, výsledky lze zpětně dohledat)\n• Řetězec probuzení/ověření Antigravity je nyní sladěn s oficiální aplikací Antigravity: lokální brána + oficiální protokol Language Server\n• Nové rychlé akce pro scénáře 403: Ověřit nyní, kopírovat ověřovací adresu, kopírovat ladicí informace\nPro stabilnější používání doporučujeme aktualizovat na v0.9.0 nebo vyšší.",
-          "actionLabel": "Stáhnout nejnovější verzi"
-        },
-        "de": {
-          "title": "🚀 Wichtiges Update zu Cockpit Tools v0.9.0",
-          "summary": "Die Ein-Klick-Prüfung der Konto-Gültigkeit wird unterstützt, und die Wake/Verifizierungs-Kette ist an die offizielle App angepasst.",
-          "content": "Cockpit Tools wurde kürzlich auf v0.9.0 aktualisiert. Die wichtigsten Änderungen:\n• Antigravity-Konten unterstützen jetzt eine Ein-Klick-Gültigkeitsprüfung (modellweise Stapelprüfung, Fortschritt in Echtzeit sichtbar, Ergebnisse nachverfolgbar)\n• Die Antigravity-Wake/Verifizierungs-Kette ist nun an die offizielle Antigravity-App angepasst: lokales Gateway + offizielles Language-Server-Protokoll\n• Neue Schnellaktionen für 403-Szenarien: Sofort verifizieren, Verifizierungsadresse kopieren, Debug-Informationen kopieren\nFür ein stabileres Nutzungserlebnis empfehlen wir ein Upgrade auf v0.9.0 oder höher.",
-          "actionLabel": "Neueste Version herunterladen"
-        },
-        "en-US": {
-          "title": "🚀 Cockpit Tools v0.9.0 Major Update",
-          "summary": "One-click account validity verification is now supported, and the wake/verification pipeline is aligned with the official app.",
-          "content": "Cockpit Tools has recently been upgraded to v0.9.0. Key changes:\n• Antigravity accounts now support one-click validity verification (batch verification by model, real-time progress visibility, and traceable results)\n• The Antigravity wake/verification pipeline is now aligned with the official Antigravity app: local gateway + official Language Server protocol\n• New quick actions for 403 scenarios: Verify now, copy verification URL, and copy debug info\nWe recommend upgrading to v0.9.0 or later for a more stable experience.",
-          "actionLabel": "Download Latest"
-        },
-        "en": {
-          "title": "🚀 Cockpit Tools v0.9.0 Major Update",
-          "summary": "One-click account validity verification is now supported, and the wake/verification pipeline is aligned with the official app.",
-          "content": "Cockpit Tools has recently been upgraded to v0.9.0. Key changes:\n• Antigravity accounts now support one-click validity verification (batch verification by model, real-time progress visibility, and traceable results)\n• The Antigravity wake/verification pipeline is now aligned with the official Antigravity app: local gateway + official Language Server protocol\n• New quick actions for 403 scenarios: Verify now, copy verification URL, and copy debug info\nWe recommend upgrading to v0.9.0 or later for a more stable experience.",
-          "actionLabel": "Download Latest"
-        },
-        "es": {
-          "title": "🚀 Actualización importante de Cockpit Tools v0.9.0",
-          "summary": "Ya se admite la validación de cuenta con un clic y el flujo de activación/validación está alineado con la app oficial.",
-          "content": "Cockpit Tools se ha actualizado recientemente a la v0.9.0. Cambios clave:\n• Las cuentas de Antigravity ahora admiten validación de cuenta con un clic (validación por lotes por modelo, progreso en tiempo real y resultados consultables)\n• El flujo de activación/validación de Antigravity ya está alineado con la app oficial de Antigravity: puerta de enlace local + protocolo oficial Language Server\n• Nuevas acciones rápidas para casos 403: Validar ahora, copiar URL de validación y copiar información de depuración\nRecomendamos actualizar a la v0.9.0 o superior para obtener una experiencia más estable.",
-          "actionLabel": "Descargar la última versión"
-        },
-        "fr": {
-          "title": "🚀 Mise à jour majeure de Cockpit Tools v0.9.0",
-          "summary": "La vérification de validité du compte en un clic est prise en charge, et le flux réveil/vérification est aligné sur l’app officielle.",
-          "content": "Cockpit Tools a récemment été mis à niveau vers la v0.9.0. Changements clés :\n• Les comptes Antigravity prennent désormais en charge la vérification de validité en un clic (vérification par lot par modèle, progression en temps réel et résultats consultables)\n• Le flux réveil/vérification d’Antigravity est désormais aligné sur l’app officielle Antigravity : passerelle locale + protocole officiel Language Server\n• Nouvelles actions rapides pour les cas 403 : Vérifier maintenant, copier l’URL de vérification, copier les informations de débogage\nNous recommandons de passer à la v0.9.0 ou supérieure pour une expérience plus stable.",
-          "actionLabel": "Télécharger la dernière version"
-        },
-        "it": {
-          "title": "🚀 Aggiornamento importante di Cockpit Tools v0.9.0",
-          "summary": "È supportata la verifica della validità dell’account con un clic e il flusso risveglio/verifica è allineato all’app ufficiale.",
-          "content": "Cockpit Tools è stato recentemente aggiornato alla v0.9.0. Modifiche principali:\n• Gli account Antigravity ora supportano la verifica della validità con un clic (verifica batch per modello, avanzamento in tempo reale e risultati consultabili)\n• Il flusso di risveglio/verifica di Antigravity è ora allineato all’app ufficiale Antigravity: gateway locale + protocollo ufficiale Language Server\n• Nuove azioni rapide per gli scenari 403: Verifica ora, copia indirizzo di verifica, copia informazioni di debug\nConsigliamo di aggiornare alla v0.9.0 o successiva per un’esperienza più stabile.",
-          "actionLabel": "Scarica l'ultima versione"
-        },
-        "ja": {
-          "title": "🚀 Cockpit Tools v0.9.0 重要アップデート",
-          "summary": "アカウント有効性のワンクリック検証に対応し、起動/検証経路は公式 APP 実装に整合しました。",
-          "content": "Cockpit Tools は最近 v0.9.0 にアップグレードされました。主な変更点は以下のとおりです。\n• Antigravity アカウントでワンクリック有効性検証に対応（モデル単位の一括検証、進捗のリアルタイム表示、結果の追跡が可能）\n• Antigravity の起動/検証経路が Antigravity 公式 APP 実装に整合：ローカルゲートウェイ + 公式 Language Server プロトコル\n• 403 シナリオにクイック対応を追加：今すぐ検証、検証 URL をコピー、デバッグ情報をコピー\nより安定した利用体験のため、v0.9.0 以上へのアップグレードを推奨します。",
-          "actionLabel": "最新版をダウンロード"
-        },
-        "ko": {
-          "title": "🚀 Cockpit Tools v0.9.0 주요 업데이트",
-          "summary": "계정 유효성 원클릭 검증을 지원하며, 깨우기/검증 체인이 공식 APP 구현과 정렬되었습니다.",
-          "content": "Cockpit Tools가 최근 v0.9.0으로 업그레이드되었습니다. 핵심 변경 사항은 다음과 같습니다.\n• Antigravity 계정에서 계정 유효성 원클릭 검증 지원 (모델별 일괄 검증, 실시간 진행 상황 확인, 결과 추적 가능)\n• Antigravity 깨우기/검증 체인이 Antigravity 공식 APP 구현과 정렬됨: 로컬 게이트웨이 + 공식 Language Server 프로토콜\n• 403 시나리오에 빠른 처리 추가: 즉시 검증, 검증 주소 복사, 디버그 정보 복사\n더 안정적인 사용 경험을 위해 v0.9.0 이상으로 업그레이드할 것을 권장합니다.",
-          "actionLabel": "최신 버전 다운로드"
-        },
-        "pl": {
-          "title": "🚀 Ważna aktualizacja Cockpit Tools v0.9.0",
-          "summary": "Obsługiwane jest jednoklikowe sprawdzanie ważności konta, a łańcuch wybudzania/weryfikacji został dopasowany do oficjalnej aplikacji.",
-          "content": "Cockpit Tools został niedawno zaktualizowany do wersji v0.9.0. Najważniejsze zmiany:\n• Konta Antigravity obsługują teraz jednoklikową weryfikację ważności (weryfikacja wsadowa według modelu, postęp widoczny w czasie rzeczywistym, możliwość ponownego sprawdzenia wyników)\n• Łańcuch wybudzania/weryfikacji Antigravity został dopasowany do oficjalnej aplikacji Antigravity: lokalna brama + oficjalny protokół Language Server\n• Nowe szybkie działania dla scenariuszy 403: Zweryfikuj teraz, skopiuj adres weryfikacji, skopiuj informacje debugowania\nZalecamy aktualizację do v0.9.0 lub nowszej, aby uzyskać bardziej stabilne działanie.",
-          "actionLabel": "Pobierz najnowszą wersję"
-        },
-        "pt-br": {
-          "title": "🚀 Atualização importante do Cockpit Tools v0.9.0",
-          "summary": "A validação de conta com um clique agora é suportada, e o fluxo de despertar/validação foi alinhado ao app oficial.",
-          "content": "O Cockpit Tools foi atualizado recentemente para a v0.9.0. Principais mudanças:\n• As contas Antigravity agora suportam validação de conta com um clique (validação em lote por modelo, progresso em tempo real e resultados consultáveis)\n• O fluxo de despertar/validação do Antigravity agora está alinhado ao app oficial Antigravity: gateway local + protocolo oficial Language Server\n• Novas ações rápidas para cenários 403: Validar agora, copiar endereço de validação e copiar informações de depuração\nRecomendamos atualizar para a v0.9.0 ou superior para uma experiência mais estável.",
-          "actionLabel": "Baixar versão mais recente"
-        },
-        "ru": {
-          "title": "🚀 Важное обновление Cockpit Tools v0.9.0",
-          "summary": "Поддерживается проверка валидности аккаунта в один клик, а цепочка пробуждения/проверки выровнена с официальным приложением.",
-          "content": "Cockpit Tools недавно обновился до v0.9.0. Ключевые изменения:\n• Для аккаунтов Antigravity теперь доступна проверка валидности в один клик (пакетная проверка по моделям, прогресс в реальном времени, результаты доступны для повторной проверки)\n• Цепочка пробуждения/проверки Antigravity теперь выровнена с официальным приложением Antigravity: локальный шлюз + официальный протокол Language Server\n• Добавлены быстрые действия для сценариев 403: Проверить сейчас, скопировать адрес проверки, скопировать отладочную информацию\nРекомендуем обновиться до v0.9.0 или выше для более стабильной работы.",
-          "actionLabel": "Скачать последнюю версию"
-        },
-        "tr": {
-          "title": "🚀 Cockpit Tools v0.9.0 için önemli güncelleme",
-          "summary": "Tek tıkla hesap geçerlilik doğrulaması destekleniyor ve uyandırma/doğrulama hattı resmi uygulama ile hizalandı.",
-          "content": "Cockpit Tools yakın zamanda v0.9.0 sürümüne yükseltildi. Temel değişiklikler:\n• Antigravity hesapları artık tek tıkla hesap geçerlilik doğrulamasını destekliyor (model bazında toplu doğrulama, gerçek zamanlı ilerleme ve geriye dönük sonuç inceleme)\n• Antigravity uyandırma/doğrulama hattı artık resmi Antigravity APP uygulamasıyla hizalı: yerel ağ geçidi + resmi Language Server protokolü\n• 403 senaryoları için yeni hızlı işlemler: Hemen doğrula, doğrulama adresini kopyala, hata ayıklama bilgisini kopyala\nDaha kararlı bir kullanım deneyimi için v0.9.0 ve üzeri sürümlere yükseltmenizi öneririz.",
-          "actionLabel": "En son sürümü indir"
-        },
-        "vi": {
-          "title": "🚀 Cập nhật quan trọng Cockpit Tools v0.9.0",
-          "summary": "Đã hỗ trợ xác minh hiệu lực tài khoản bằng một lần bấm, và luồng đánh thức/xác minh đã được đồng bộ với ứng dụng chính thức.",
-          "content": "Cockpit Tools gần đây đã được nâng cấp lên v0.9.0. Các thay đổi cốt lõi gồm:\n• Tài khoản Antigravity nay hỗ trợ xác minh hiệu lực chỉ với một lần bấm (xác minh hàng loạt theo mô hình, theo dõi tiến độ thời gian thực, và tra cứu lại kết quả)\n• Luồng đánh thức/xác minh của Antigravity đã đồng bộ với ứng dụng APP chính thức của Antigravity: cổng nội bộ + giao thức Language Server chính thức\n• Bổ sung xử lý nhanh cho tình huống 403: Xác minh ngay, sao chép địa chỉ xác minh, sao chép thông tin gỡ lỗi\nKhuyến nghị nâng cấp lên v0.9.0 trở lên để có trải nghiệm ổn định hơn.",
-          "actionLabel": "Tải phiên bản mới nhất"
-        },
-        "zh-CN": {
-          "title": "🚀 Cockpit Tools v0.9.0 重要更新",
-          "summary": "支持一键验证账号有效性，唤醒/验证链路已对齐官方 APP 实现。",
-          "content": "Cockpit Tools 最近已升级至 v0.9.0，核心变化如下：\n• Antigravity账号支持一键发起账号有效性验证（可按模型批量验证，进度实时可见，结果可回查）\n• Antigravity唤醒/验证链路已对齐Antigravity官方APP实现：本地网关 + 官方 Language Server 协议\n• 403 场景新增快捷处理：立即验证、复制验证地址、复制调试信息\n建议升级到 v0.9.0 及以上版本，以获得更稳定的使用体验。",
-          "actionLabel": "下载最新版"
-        },
-        "zh-tw": {
-          "title": "🚀 Cockpit Tools v0.9.0 重要更新",
-          "summary": "支援一鍵驗證帳號有效性，喚醒/驗證鏈路已對齊官方 APP 實作。",
-          "content": "Cockpit Tools 最近已升級至 v0.9.0，核心變更如下：\n• Antigravity 帳號支援一鍵發起帳號有效性驗證（可按模型批次驗證，進度即時可見，結果可回查）\n• Antigravity 喚醒/驗證鏈路已對齊 Antigravity 官方 APP 實作：本地網關 + 官方 Language Server 協議\n• 403 場景新增快捷處理：立即驗證、複製驗證地址、複製除錯資訊\n建議升級到 v0.9.0 及以上版本，以獲得更穩定的使用體驗。",
-          "actionLabel": "下載最新版本"
-        }
-      }
-    },
-    {
-      "id": "ann-2026-07-windows-gpt56-model-visibility",
-      "type": "info",
-      "priority": 500,
-      "title": "Windows GPT-5.6 模型显示问题",
-      "summary": "Windows 使用 Codex API 服务或 API Key 时，未显示 GPT-5.6 模型的处理方式。",
-      "content": "部分 Windows 用户在使用 Codex API 服务或 API Key 切号后，可能只显示 GPT-5.4/GPT-5.5，未显示 GPT-5.6。通常是 Codex 启动路径仍指向旧版 Codex.exe。\n\n请进入 Codex 账号页面右上角的「设置」，向下找到「Codex 启动路径」，点击「扫描应用」，并选择路径末尾为 ChatGPT.exe 的新版客户端。\n\n完成后重新切换一次账号即可。请勿继续选择旧版 Codex.exe。",
-      "targetVersions": ">=1.1.4",
-      "targetLanguages": [
-        "zh-CN",
-        "en",
-        "en-US"
+        "*"
       ],
       "showOnce": true,
       "popup": true,
-      "createdAt": "2026-07-10T00:00:00.000Z",
+      "createdAt": "2026-08-29T00:00:00Z",
       "expiresAt": null,
       "locales": {
-        "zh-CN": {
-          "title": "Windows GPT-5.6 模型显示问题",
-          "summary": "Windows 使用 Codex API 服务或 API Key 时，未显示 GPT-5.6 模型的处理方式。",
-          "content": "部分 Windows 用户在使用 Codex API 服务或 API Key 切号后，可能只显示 GPT-5.4/GPT-5.5，未显示 GPT-5.6。通常是 Codex 启动路径仍指向旧版 Codex.exe。\n\n请进入 Codex 账号页面右上角的「设置」，向下找到「Codex 启动路径」，点击「扫描应用」，并选择路径末尾为 ChatGPT.exe 的新版客户端。\n\n完成后重新切换一次账号即可。请勿继续选择旧版 Codex.exe。"
-        },
         "en": {
-          "title": "Windows GPT-5.6 Model Visibility Issue",
-          "summary": "How to restore GPT-5.6 model visibility when using the Codex API service or an API key on Windows.",
-          "content": "Some Windows users may see only GPT-5.4 and GPT-5.5 after switching accounts through the Codex API service or an API key. This usually means the Codex launch path still points to the legacy Codex.exe.\n\nOpen Settings from the upper-right corner of the Codex account page, scroll to Codex App Path, click Scan Apps, and select the current client whose path ends in ChatGPT.exe.\n\nSwitch the account again after saving the path. Do not select the legacy Codex.exe."
+          "title": "Windows users: sign-in redirect after account switching",
+          "summary": "The official ChatGPT client can also redirect to sign-in after switching accounts. On Windows, updating to ChatGPT 26.825 or later has generally restored normal behavior in current testing.",
+          "content": "We found that the official ChatGPT client can redirect to the sign-in page after switching accounts even when no third-party tool is used.\n\nCurrent testing shows that Windows users generally recover normal behavior after updating ChatGPT to 26.825 or later. If you encounter this issue, update the official client and test again. Similar behavior may still occur on macOS.",
+          "actionLabel": "Send feedback"
         },
         "en-US": {
-          "title": "Windows GPT-5.6 Model Visibility Issue",
-          "summary": "How to restore GPT-5.6 model visibility when using the Codex API service or an API key on Windows.",
-          "content": "Some Windows users may see only GPT-5.4 and GPT-5.5 after switching accounts through the Codex API service or an API key. This usually means the Codex launch path still points to the legacy Codex.exe.\n\nOpen Settings from the upper-right corner of the Codex account page, scroll to Codex App Path, click Scan Apps, and select the current client whose path ends in ChatGPT.exe.\n\nSwitch the account again after saving the path. Do not select the legacy Codex.exe."
-        }
-      }
-    },
-    {
-      "id": "ann-2026-07-chatgpt-api-key-gpt56-oauth-binding",
-      "type": "info",
-      "priority": 510,
-      "title": "ChatGPT API Key GPT-5.6 模型显示补充说明",
-      "summary": "启动路径正确但 GPT-5.6 仍未显示时，可通过绑定 OAuth 账号解决。",
-      "content": "如果已经按照上一条公告正确设置 ChatGPT.exe 启动路径，但通过 Cockpit Tools 切号或重启 ChatGPT 后，GPT-5.6 仍未显示，可以为对应的 API Key 绑定一个 OAuth 账号。\n\n绑定方法：\n\n1. 进入 Cockpit Tools 的 Codex 账号页面\n2. 找到需要使用的 API Key 账号卡片或 Codex API 服务账号卡片\n3. 在账号卡片信息中找到「OAuth 绑定」\n4. 点击右侧的「绑定」\n5. 从账号列表中选择一个已添加的普通 Codex OAuth 账号\n6. 完成绑定后，重新通过 Cockpit Tools 切换一次该 API Key 账号\n\n绑定后的效果：\n\n• ChatGPT 的启动、重启、模型显示和客户端交互与普通账号一致\n• 实际对话请求仍通过该 API Key 对应的供应商发送\n• Codex API 服务账号同样适用，不会改为消耗 OAuth 账号的对话额度\n\n建议优先选择 Plus、Team 或更高套餐的 OAuth 账号进行绑定，以获得更完整、稳定的客户端功能和模型显示体验。",
-      "targetVersions": ">=1.1.4",
-      "targetLanguages": [
-        "zh-CN",
-        "en",
-        "en-US"
-      ],
-      "showOnce": true,
-      "popup": true,
-      "createdAt": "2026-07-10T00:00:00.000Z",
-      "expiresAt": null,
-      "locales": {
-        "zh-CN": {
-          "title": "ChatGPT API Key GPT-5.6 模型显示补充说明",
-          "summary": "启动路径正确但 GPT-5.6 仍未显示时，可通过绑定 OAuth 账号解决。",
-          "content": "如果已经按照上一条公告正确设置 ChatGPT.exe 启动路径，但通过 Cockpit Tools 切号或重启 ChatGPT 后，GPT-5.6 仍未显示，可以为对应的 API Key 绑定一个 OAuth 账号。\n\n绑定方法：\n\n1. 进入 Cockpit Tools 的 Codex 账号页面\n2. 找到需要使用的 API Key 账号卡片或 Codex API 服务账号卡片\n3. 在账号卡片信息中找到「OAuth 绑定」\n4. 点击右侧的「绑定」\n5. 从账号列表中选择一个已添加的普通 Codex OAuth 账号\n6. 完成绑定后，重新通过 Cockpit Tools 切换一次该 API Key 账号\n\n绑定后的效果：\n\n• ChatGPT 的启动、重启、模型显示和客户端交互与普通账号一致\n• 实际对话请求仍通过该 API Key 对应的供应商发送\n• Codex API 服务账号同样适用，不会改为消耗 OAuth 账号的对话额度\n\n建议优先选择 Plus、Team 或更高套餐的 OAuth 账号进行绑定，以获得更完整、稳定的客户端功能和模型显示体验。"
-        },
-        "en": {
-          "title": "ChatGPT API Key GPT-5.6 Model Visibility: Additional Guidance",
-          "summary": "If GPT-5.6 is still missing after correcting the launch path, bind an OAuth account to the API key.",
-          "content": "If ChatGPT.exe is already configured as described in the previous announcement but GPT-5.6 is still missing after switching or restarting ChatGPT through Cockpit Tools, bind an OAuth account to the corresponding API key.\n\nHow to bind an account:\n\n1. Open the Codex account page in Cockpit Tools\n2. Find the API key account card or Codex API service account card you want to use\n3. Find OAuth Binding in the account card details\n4. Click Bind on the right\n5. Select a regular Codex OAuth account that has already been added\n6. After binding, switch to the API key account again through Cockpit Tools\n\nAfter binding:\n\n• ChatGPT startup, restart, model visibility, and client interactions work like a regular account\n• Actual conversation requests still use the provider associated with the API key\n• Codex API service accounts are also supported and do not consume the OAuth account's conversation quota\n\nWe recommend binding a Plus, Team, or higher-tier OAuth account for more complete and stable client features and model visibility."
-        },
-        "en-US": {
-          "title": "ChatGPT API Key GPT-5.6 Model Visibility: Additional Guidance",
-          "summary": "If GPT-5.6 is still missing after correcting the launch path, bind an OAuth account to the API key.",
-          "content": "If ChatGPT.exe is already configured as described in the previous announcement but GPT-5.6 is still missing after switching or restarting ChatGPT through Cockpit Tools, bind an OAuth account to the corresponding API key.\n\nHow to bind an account:\n\n1. Open the Codex account page in Cockpit Tools\n2. Find the API key account card or Codex API service account card you want to use\n3. Find OAuth Binding in the account card details\n4. Click Bind on the right\n5. Select a regular Codex OAuth account that has already been added\n6. After binding, switch to the API key account again through Cockpit Tools\n\nAfter binding:\n\n• ChatGPT startup, restart, model visibility, and client interactions work like a regular account\n• Actual conversation requests still use the provider associated with the API key\n• Codex API service accounts are also supported and do not consume the OAuth account's conversation quota\n\nWe recommend binding a Plus, Team, or higher-tier OAuth account for more complete and stable client features and model visibility."
+          "title": "Windows users: sign-in redirect after account switching",
+          "summary": "The official ChatGPT client can also redirect to sign-in after switching accounts. On Windows, updating to ChatGPT 26.825 or later has generally restored normal behavior in current testing.",
+          "content": "We found that the official ChatGPT client can redirect to the sign-in page after switching accounts even when no third-party tool is used.\n\nCurrent testing shows that Windows users generally recover normal behavior after updating ChatGPT to 26.825 or later. If you encounter this issue, update the official client and test again. Similar behavior may still occur on macOS.",
+          "actionLabel": "Send feedback"
         }
       }
     }

@@ -48,8 +48,8 @@ func TestCodexExecutorExecuteNormalizesNullInstructions(t *testing.T) {
 	if gjson.GetBytes(gotBody, "instructions").Type != gjson.String {
 		t.Fatalf("instructions type = %v, want string", gjson.GetBytes(gotBody, "instructions").Type)
 	}
-	if instructions := gjson.GetBytes(gotBody, "instructions").String(); len(instructions) < 100 {
-		t.Fatalf("instructions = %q, want model base instructions", instructions)
+	if gjson.GetBytes(gotBody, "instructions").String() != "" {
+		t.Fatalf("instructions = %q, want empty string", gjson.GetBytes(gotBody, "instructions").String())
 	}
 }
 
@@ -89,12 +89,12 @@ func TestCodexExecutorExecuteStreamNormalizesNullInstructions(t *testing.T) {
 	if gjson.GetBytes(gotBody, "instructions").Type != gjson.String {
 		t.Fatalf("instructions type = %v, want string", gjson.GetBytes(gotBody, "instructions").Type)
 	}
-	if instructions := gjson.GetBytes(gotBody, "instructions").String(); len(instructions) < 100 {
-		t.Fatalf("instructions = %q, want model base instructions", instructions)
+	if gjson.GetBytes(gotBody, "instructions").String() != "" {
+		t.Fatalf("instructions = %q, want empty string", gjson.GetBytes(gotBody, "instructions").String())
 	}
 }
 
-func TestCodexExecutorCountTokensNormalizesBlankInstructions(t *testing.T) {
+func TestCodexExecutorCountTokensTreatsNullInstructionsAsEmpty(t *testing.T) {
 	executor := NewCodexExecutor(&config.Config{})
 
 	nullResp, err := executor.CountTokens(context.Background(), nil, cliproxyexecutor.Request{

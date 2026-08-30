@@ -426,13 +426,6 @@ fn save_update_settings_unlocked(settings: &UpdateSettings) -> Result<(), String
         .map_err(|e| format!("Failed to write settings file: {}", e))
 }
 
-pub fn save_update_settings(settings: &UpdateSettings) -> Result<(), String> {
-    let _guard = update_settings_lock()
-        .lock()
-        .map_err(|_| "Update settings lock poisoned".to_string())?;
-    save_update_settings_unlocked(settings)
-}
-
 pub fn patch_update_settings<F>(patch: F) -> Result<UpdateSettings, String>
 where
     F: FnOnce(&mut UpdateSettings),

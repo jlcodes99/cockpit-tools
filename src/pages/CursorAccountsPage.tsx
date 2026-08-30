@@ -45,6 +45,7 @@ import {
   getCursorUsage,
   formatCursorUsageDollars,
   hasCursorQuotaData,
+  hasCursorQuotaQueryError,
   isCursorAccountBanned,
 } from '../types/cursor';
 import type { CursorAccount } from '../types/cursor';
@@ -89,6 +90,7 @@ const CURSOR_TOKEN_BATCH_EXAMPLE = `[
   {"access_token":"eyJhbGciOiJIUzI1NiIs...","email":"a@example.com"},
   {"access_token":"eyJhbGciOiJIUzI1NiIs...","email":"b@example.com"}
 ]`;
+const CURSOR_QUOTA_FAILED_FILTER_VALUE = 'QUOTA_FAILED';
 
 function getCursorQuotaClass(percentage: number): string {
   if (percentage >= 90) return 'critical';
@@ -395,22 +397,29 @@ export function CursorAccountsPage() {
       (count, account) => (isAbnormalAccount(account) ? count : count + 1),
       0,
     );
+    const quotaFailedCount = accounts.reduce(
+      (count, account) => (hasCursorQuotaQueryError(account) ? count + 1 : count),
+      0,
+    );
 
     const extraKeys = Array.from(dynamicCounts.keys())
       .filter((tier) => !(CURSOR_KNOWN_PLAN_FILTERS as readonly string[]).includes(tier))
       .sort((a, b) => a.localeCompare(b));
 
-    return { all: accounts.length, validCount, knownCounts, dynamicCounts, extraKeys, displayLabels };
+    return { all: accounts.length, validCount, quotaFailedCount, knownCounts, dynamicCounts, extraKeys, displayLabels };
   }, [accounts, isAbnormalAccount, resolvePlanKey, resolvePlanLabel]);
 
   useEffect(() => {
     setFilterTypes((prev) => {
       const next = prev.filter(
-        (value) => value === VALID_ACCOUNTS_FILTER_VALUE || tierSummary.dynamicCounts.has(value),
+        (value) =>
+          value === VALID_ACCOUNTS_FILTER_VALUE ||
+          (value === CURSOR_QUOTA_FAILED_FILTER_VALUE && tierSummary.quotaFailedCount > 0) ||
+          tierSummary.dynamicCounts.has(value),
       );
       return next.length === prev.length ? prev : next;
     });
-  }, [tierSummary.dynamicCounts]);
+  }, [tierSummary.dynamicCounts, tierSummary.quotaFailedCount]);
 
   const resolveFilterLabel = useCallback(
     (planKey: string, count: number) => {
@@ -435,9 +444,18 @@ export function CursorAccountsPage() {
         label: resolveFilterLabel(planKey, tierSummary.dynamicCounts.get(planKey) ?? 0),
       });
     });
+    if (tierSummary.quotaFailedCount > 0) {
+      options.push({
+        value: CURSOR_QUOTA_FAILED_FILTER_VALUE,
+        label: t('cursor.filters.quotaFailed', {
+          count: tierSummary.quotaFailedCount,
+          defaultValue: '配额查询失败 ({{count}})',
+        }),
+      });
+    }
     options.push(buildValidAccountsFilterOption(t, tierSummary.validCount));
     return options;
-  }, [resolveFilterLabel, t, tierSummary.dynamicCounts, tierSummary.extraKeys, tierSummary.knownCounts.ENTERPRISE, tierSummary.knownCounts.FREE, tierSummary.knownCounts.FREE_TRIAL, tierSummary.knownCounts.PRO, tierSummary.knownCounts.PRO_PLUS, tierSummary.knownCounts.ULTRA, tierSummary.validCount]);
+  }, [resolveFilterLabel, t, tierSummary.dynamicCounts, tierSummary.extraKeys, tierSummary.knownCounts.ENTERPRISE, tierSummary.knownCounts.FREE, tierSummary.knownCounts.FREE_TRIAL, tierSummary.knownCounts.PRO, tierSummary.knownCounts.PRO_PLUS, tierSummary.knownCounts.ULTRA, tierSummary.quotaFailedCount, tierSummary.validCount]);
 
   // ─── Filtering & Sorting ──────────────────────────────────────────
 
@@ -496,7 +514,17 @@ export function CursorAccountsPage() {
         result = result.filter((account) => !isAbnormalAccount(account));
       }
       if (selectedTypes.size > 0) {
-        result = result.filter((account) => selectedTypes.has(resolvePlanKey(account)));
+        result = result.filter((account) => {
+          const matchesQuotaFailed =
+            selectedTypes.has(CURSOR_QUOTA_FAILED_FILTER_VALUE) &&
+            hasCursorQuotaQueryError(account);
+          const matchesPlan = Array.from(selectedTypes).some(
+            (key) =>
+              key !== CURSOR_QUOTA_FAILED_FILTER_VALUE &&
+              resolvePlanKey(account) === key,
+          );
+          return matchesQuotaFailed || matchesPlan;
+        });
       }
     }
 
@@ -514,6 +542,20 @@ export function CursorAccountsPage() {
   }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, normalizeTag, resolvePlanKey, searchQuery, tagFilter]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
+  const quotaFailedAccountIds = useMemo(
+    () => accounts.filter(hasCursorQuotaQueryError).map((account) => account.id),
+    [accounts],
+  );
+  const handleClearQuotaFailedAccounts = useCallback(() => {
+    if (quotaFailedAccountIds.length === 0) return;
+    setDeleteConfirm({
+      ids: quotaFailedAccountIds,
+      message: t('cursor.filters.cleanQuotaFailedConfirm', {
+        count: quotaFailedAccountIds.length,
+        defaultValue: '确定要删除全部 {{count}} 个配额查询失败的账号吗？',
+      }),
+    });
+  }, [quotaFailedAccountIds, setDeleteConfirm, t]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
   const pagination = usePagination({
     items: filteredAccounts,
@@ -1013,6 +1055,23 @@ export function CursorAccountsPage() {
             aria-label={exportSelectionCount > 0 ? `${t('common.shared.export.title', '导出')} (${exportSelectionCount})` : t('common.shared.export.title', '导出')}>
             <Upload size={14} />
           </button>
+          {quotaFailedAccountIds.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-danger icon-only"
+              onClick={handleClearQuotaFailedAccounts}
+              title={t('cursor.filters.cleanQuotaFailedAction', {
+                count: quotaFailedAccountIds.length,
+                defaultValue: '删除配额查询失败账号 ({{count}})',
+              })}
+              aria-label={t('cursor.filters.cleanQuotaFailedAction', {
+                count: quotaFailedAccountIds.length,
+                defaultValue: '删除配额查询失败账号 ({{count}})',
+              })}
+            >
+              <CircleAlert size={14} />
+            </button>
+          )}
           <QuickSettingsPopover type="cursor" />
         </div>
       </div>

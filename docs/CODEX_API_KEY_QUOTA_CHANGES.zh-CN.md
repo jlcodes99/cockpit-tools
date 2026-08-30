@@ -66,13 +66,16 @@ API 服务配额接口现在可以返回：
 
 ## 主要代码区域
 
-- `src-tauri/src/commands/codex.rs`：供应商用量查询、API Key 用量持久化、账号池统一刷新和 `/v1/cockpit/quota` 数据来源。
-- `src-tauri/src/modules/codex_local_access.rs`：sidecar 配额池快照及 API 服务账号池刷新目标。
+- `src-tauri/src/commands/codex_account_commands.rs`：OAuth/API Key 账号池统一刷新与刷新后的 sidecar 更新边界。
+- `src-tauri/src/commands/codex_model_provider_commands.rs`：供应商用量查询、API Key 用量持久化和 Cockpit Tools CNY 摘要。
+- `src-tauri/src/modules/codex_local_access_sidecar_config.rs`：有效账号并集、sidecar 配额池快照及余额恢复。
+- `src-tauri/src/modules/codex_local_access_gateway_runtime.rs`：API 服务运行时缓存、准备进度和账号池刷新目标。
 - `src-tauri/src/modules/codex_app_injection.rs`：Codex 页面中的 API 服务额度显示与刷新按钮。
-- `sidecars/cockpit-cliproxy/main.go`：sidecar 配额池响应中的 API Key 余额及计划汇总。
+- `sidecars/cockpit-cliproxy/relay_server.go`：sidecar 配额池响应中的 API Key 余额及计划汇总。
 - `src/services/modelProviderUsageService.ts`：前端供应商用量查询、余额格式化和账号摘要同步。
 - `src/services/codexApiKeyUsageRefreshService.ts`：API Key 用量刷新缓存及刷新后同步。
-- `src/pages/CodexAccountsPage.tsx`、`src/components/codex/CodexModelProviderManager.tsx`：账号页和供应商管理页的用量显示。
+- `src/pages/useCodexAccountsAccessController.tsx`、`src/pages/useCodexAccountsRenderers.tsx`：账号页查询、缓存同步和用量显示。
+- `src/components/codex/CodexModelProviderManager.tsx`、`src/components/codex/CodexModelProviderManagerView.tsx`：供应商管理页的查询与用量展示。
 - `src/utils/codexProviderPresets.ts`、`src/services/codexModelProviderService.ts`：供应商模板、配置和接口类型。
 - `src/locales/*.json`：API Key 余额、账号池和 API 服务用量相关文案。
 

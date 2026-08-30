@@ -331,6 +331,13 @@ fn send_request(stdin: &mut impl Write, request: JsonValue) -> Result<(), String
 }
 
 fn wait_for_response(receiver: &mpsc::Receiver<String>, request_id: i64) -> Result<(), String> {
+    wait_for_response_value(receiver, request_id).map(|_| ())
+}
+
+fn wait_for_response_value(
+    receiver: &mpsc::Receiver<String>,
+    request_id: i64,
+) -> Result<JsonValue, String> {
     loop {
         let line = receiver
             .recv_timeout(APP_SERVER_RESPONSE_TIMEOUT)
@@ -352,7 +359,7 @@ fn wait_for_response(receiver: &mpsc::Receiver<String>, request_id: i64) -> Resu
             ));
         }
         if value.get("result").is_some() {
-            return Ok(());
+            return Ok(value);
         }
         return Err(format!(
             "官方 app-server 响应缺少 result (id={}): {}",

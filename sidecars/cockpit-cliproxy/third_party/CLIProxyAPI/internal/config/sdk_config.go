@@ -6,6 +6,7 @@ package config
 
 // SDKConfig represents the application's configuration, loaded from a YAML file.
 type SDKConfig struct {
+	EnableGeminiCLIEndpoint bool `yaml:"enable-gemini-cli-endpoint,omitempty" json:"enable-gemini-cli-endpoint,omitempty"`
 	// ProxyURL is the URL of an optional proxy server to use for outbound requests.
 	ProxyURL string `yaml:"proxy-url" json:"proxy-url"`
 
@@ -17,18 +18,22 @@ type SDKConfig struct {
 	//     and returns 404 for /v1/images/generations and /v1/images/edits.
 	//   - "chat": disable image_generation injection for all non-images endpoints (e.g. /v1/responses, /v1/chat/completions),
 	//     while keeping /v1/images/generations and /v1/images/edits enabled and preserving image_generation there.
+	//   - "passthrough": do not modify the tool list on non-images endpoints — keep image_generation if the client
+	//     sent it and do not inject it otherwise; on /v1/images/generations and /v1/images/edits behave like "chat".
 	DisableImageGeneration DisableImageGenerationMode `yaml:"disable-image-generation" json:"disable-image-generation"`
 
-	// GPTImage2BaseModel sets the base (mainline) model used when proxying GPT Image 2
-	// requests via the hosted image_generation tool (e.g. Codex OAuth /v1/images/*).
+	// GPTImage2BaseModel sets the base (mainline) model used by the legacy hosted
+	// image_generation tool path when a Codex image request is not proxied directly
+	// through the Image API.
 	//
 	// The value must start with "gpt-" (case-insensitive). If empty or invalid, the
 	// default base model ("gpt-5.4-mini") is used.
 	GPTImage2BaseModel string `yaml:"gpt-image-2-base-model,omitempty" json:"gpt-image-2-base-model,omitempty"`
 
-	// EnableGeminiCLIEndpoint controls whether Gemini CLI internal endpoints (/v1internal:*) are enabled.
-	// Default is false for safety; when false, /v1internal:* requests are rejected.
-	EnableGeminiCLIEndpoint bool `yaml:"enable-gemini-cli-endpoint" json:"enable-gemini-cli-endpoint"`
+	// VideoResultAuthCacheTTL controls how long video IDs stay pinned to the credential
+	// that created them. Accepts duration strings like "30m" or "3h".
+	// Empty or invalid values use the default 3h.
+	VideoResultAuthCacheTTL string `yaml:"video-result-auth-cache-ttl,omitempty" json:"video-result-auth-cache-ttl,omitempty"`
 
 	// ForceModelPrefix requires explicit model prefixes (e.g., "teamA/gemini-3-pro-preview")
 	// to target prefixed credentials. When false, unprefixed model requests may use prefixed
@@ -41,15 +46,11 @@ type SDKConfig struct {
 	// CodexOptimizeMultiAgentV2 mirrors the provider-wide runtime setting for API handlers.
 	CodexOptimizeMultiAgentV2 bool `yaml:"-" json:"-"`
 
+	// ClaudeCode configures Claude Code compatibility behavior.
+	ClaudeCode ClaudeCodeConfig `yaml:"claude-code" json:"claude-code"`
+
 	// APIKeys is a list of keys for authenticating clients to this proxy server.
 	APIKeys []string `yaml:"api-keys" json:"api-keys"`
-
-	// APIKeyAccountIDs optionally limits which auth IDs a client API key may use.
-	APIKeyAccountIDs map[string][]string `yaml:"api-key-account-ids,omitempty" json:"api-key-account-ids,omitempty"`
-
-	// AuthErrorLocalization provides user-facing auth selection messages keyed by locale.
-	// The request Accept-Language is preferred, then DefaultLocale, then English.
-	AuthErrorLocalization AuthErrorLocalizationConfig `yaml:"auth-error-localization,omitempty" json:"auth-error-localization,omitempty"`
 
 	// PassthroughHeaders controls whether upstream response headers are forwarded to downstream clients.
 	// Default is false (disabled).
@@ -63,11 +64,10 @@ type SDKConfig struct {
 	NonStreamKeepAliveInterval int `yaml:"nonstream-keepalive-interval,omitempty" json:"nonstream-keepalive-interval,omitempty"`
 }
 
-// AuthErrorLocalizationConfig contains localized user-facing auth selection errors.
-type AuthErrorLocalizationConfig struct {
-	DefaultLocale   string            `yaml:"default-locale,omitempty" json:"default-locale,omitempty"`
-	AuthUnavailable map[string]string `yaml:"auth-unavailable,omitempty" json:"auth-unavailable,omitempty"`
-	AuthNotFound    map[string]string `yaml:"auth-not-found,omitempty" json:"auth-not-found,omitempty"`
+// ClaudeCodeConfig configures Claude Code compatibility behavior.
+type ClaudeCodeConfig struct {
+	// DisableCloakingModelList disables model ID cloaking in Anthropic model list responses.
+	DisableCloakingModelList bool `yaml:"disable-cloaking-model-list" json:"disable-cloaking-model-list"`
 }
 
 // StreamingConfig holds server streaming behavior configuration.
@@ -79,26 +79,12 @@ type StreamingConfig struct {
 	// BootstrapRetries controls how many times the server may retry a streaming request before any bytes are sent,
 	// to allow auth rotation / transient recovery.
 	// <= 0 disables bootstrap retries. Default is 0.
-	BootstrapRetries int `yaml:"bootstrap-retries,omitempty" json:"bootstrap-retries,omitempty"`
-
-	// BootstrapRetryBaseDelayMS controls the initial wait before a bootstrap retry.
+	BootstrapRetries          int `yaml:"bootstrap-retries,omitempty" json:"bootstrap-retries,omitempty"`
+	StreamOpenMaxAttempts     int `yaml:"stream-open-max-attempts,omitempty" json:"stream-open-max-attempts,omitempty"`
+	StreamOpenTimeoutMS       int `yaml:"stream-open-timeout-ms,omitempty" json:"stream-open-timeout-ms,omitempty"`
+	StreamIdleTimeoutMS       int `yaml:"stream-idle-timeout-ms,omitempty" json:"stream-idle-timeout-ms,omitempty"`
+	ImageStreamOpenTimeoutMS  int `yaml:"image-stream-open-timeout-ms,omitempty" json:"image-stream-open-timeout-ms,omitempty"`
+	ImageStreamIdleTimeoutMS  int `yaml:"image-stream-idle-timeout-ms,omitempty" json:"image-stream-idle-timeout-ms,omitempty"`
 	BootstrapRetryBaseDelayMS int `yaml:"bootstrap-retry-base-delay-ms,omitempty" json:"bootstrap-retry-base-delay-ms,omitempty"`
-
-	// BootstrapRetryMaxDelayMS caps the bootstrap retry wait.
-	BootstrapRetryMaxDelayMS int `yaml:"bootstrap-retry-max-delay-ms,omitempty" json:"bootstrap-retry-max-delay-ms,omitempty"`
-
-	// StreamOpenTimeoutMS controls how long the sidecar waits for a text stream to open.
-	StreamOpenTimeoutMS int `yaml:"stream-open-timeout-ms,omitempty" json:"stream-open-timeout-ms,omitempty"`
-
-	// StreamIdleTimeoutMS controls how long a text stream may remain idle between chunks.
-	StreamIdleTimeoutMS int `yaml:"stream-idle-timeout-ms,omitempty" json:"stream-idle-timeout-ms,omitempty"`
-
-	// ImageStreamOpenTimeoutMS controls how long the sidecar waits for an image stream to open.
-	ImageStreamOpenTimeoutMS int `yaml:"image-stream-open-timeout-ms,omitempty" json:"image-stream-open-timeout-ms,omitempty"`
-
-	// ImageStreamIdleTimeoutMS controls how long an image stream may remain idle between chunks.
-	ImageStreamIdleTimeoutMS int `yaml:"image-stream-idle-timeout-ms,omitempty" json:"image-stream-idle-timeout-ms,omitempty"`
-
-	// StreamOpenMaxAttempts controls how many attempts are allowed while opening a stream.
-	StreamOpenMaxAttempts int `yaml:"stream-open-max-attempts,omitempty" json:"stream-open-max-attempts,omitempty"`
+	BootstrapRetryMaxDelayMS  int `yaml:"bootstrap-retry-max-delay-ms,omitempty" json:"bootstrap-retry-max-delay-ms,omitempty"`
 }

@@ -631,6 +631,20 @@
   flex: 1 1 280px;
 }
 
+.instance-model-routing-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--primary) 9%, var(--bg-secondary));
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* Account column */
 .instance-account {
   min-width: 0;
@@ -847,6 +861,83 @@
   border: 1px solid rgba(245, 158, 11, 0.28);
   color: var(--warning);
   font-size: 12px;
+}
+
+.instances-page .instance-model-routing {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-tertiary) 78%, var(--bg-secondary));
+}
+
+.instances-page .instance-model-routing__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.instances-page .instance-model-routing__header label {
+  margin: 0;
+}
+
+.instances-page .instance-model-routing__header .form-hint {
+  margin: 4px 0 0;
+}
+
+.instances-page .instance-model-routing__body,
+.instances-page .instance-model-routing__routes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.instances-page .instance-model-routing__route {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(190px, 1.3fr) 34px 34px;
+  gap: 8px;
+  align-items: center;
+}
+
+.instances-page .instance-model-routing__namespace,
+.instances-page .instance-model-routing__provider {
+  min-width: 0;
+}
+
+.instances-page .instance-model-routing__enabled {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.instances-page .instance-model-routing__enabled input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+}
+
+.instances-page .instance-model-routing__delete {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+}
+
+.instances-page .instance-model-routing__add {
+  align-self: flex-start;
+  height: 32px;
+}
+
+.instances-page .instance-model-routing .form-hint.warning {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .instances-page .instance-codex-quick-config {
@@ -1120,6 +1211,15 @@
 
   .instances-page .instance-codex-experimental-model {
     align-items: flex-start;
+  }
+
+  .instances-page .instance-model-routing__route {
+    grid-template-columns: minmax(0, 1fr) 34px 34px;
+  }
+
+  .instances-page .instance-model-routing__provider {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
 

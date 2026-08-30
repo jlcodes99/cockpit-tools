@@ -63,6 +63,7 @@ import type {
 } from '../types/codex';
 import { isStandardCodexOAuthAccount } from '../types/codex';
 import { getDisplayGroups, type DisplayGroup } from '../services/groupService';
+import { useRemoteConfigStore } from '../stores/useRemoteConfigStore';
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
 import {
   readAccountsOverviewFilterPersistenceEnabled,
@@ -85,6 +86,7 @@ interface GeneralConfig {
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_app_ui_injection_enabled?: boolean;
+  codex_oauth_app_version?: string;
   codex_cli_only_allow_app_server_clients?: boolean;
   codex_wsl_config_dir: string;
   ghcp_auto_refresh_minutes: number;
@@ -400,6 +402,9 @@ const normalizeAutoSwitchAccountScopeMode = (
 export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const { t } = useTranslation();
   const isWindows = usePlatformRuntimeSupport('windows-only');
+  const remoteCodexOAuthAppVersion = useRemoteConfigStore(
+    (state) => state.state.codexOAuthAppVersion,
+  );
   const overviewFilterScope = useMemo(
     () => resolveAccountsOverviewScopeFromQuickSettingsType(type),
     [type],
@@ -1980,6 +1985,31 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     'settings.general.codexAppUiInjectionDesc',
                     '重启 Codex 实例后，在输入框下方显示 Cockpit Tools API 服务的账号数、周额度和 5h 额度。需保持 Cockpit Tools 在后台运行；完全退出或网络不可用时，额度不会继续刷新。',
                   )}
+                </div>
+                <div className="qs-row" style={{ marginTop: 8 }}>
+                  <div className="qs-row-label">
+                    <span>{t('settings.general.codexOAuthAppVersion', 'OAuth 客户端版本')}</span>
+                  </div>
+                  <div className="qs-row-control">
+                    <input
+                      type="text"
+                      className="qs-path-input"
+                      value={config.codex_oauth_app_version || ''}
+                      placeholder={t('settings.general.codexOAuthAppVersionPlaceholder', {
+                        defaultValue: '留空使用 {{version}}',
+                        version: remoteCodexOAuthAppVersion || '26.820.60940',
+                      })}
+                      onChange={(event) =>
+                        saveConfig({ codex_oauth_app_version: event.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t('settings.general.codexOAuthAppVersionDesc', {
+                    defaultValue: '留空跟随远端默认值 {{version}}；填写后仅覆盖 OAuth 授权链接中的版本字段。',
+                    version: remoteCodexOAuthAppVersion || '26.820.60940',
+                  })}
                 </div>
                 <div className="qs-codex-experimental-model">
                   <div className="qs-row qs-row--top">

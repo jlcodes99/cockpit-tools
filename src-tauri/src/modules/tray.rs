@@ -3,8 +3,7 @@
 
 #[cfg(not(target_os = "macos"))]
 use std::collections::{HashMap, HashSet};
-#[cfg(target_os = "macos")]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 #[cfg(target_os = "macos")]
 use tauri::image::Image;
@@ -28,6 +27,17 @@ const MACOS_STATUS_ITEM_AUTOSAVE_NAME: &str = "com.jlcodes.cockpit-tools.main-tr
 
 #[cfg(target_os = "macos")]
 static MACOS_TRAY_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// How long a rebuild request waits for its neighbours before the menu is built.
+///
+/// Long enough to swallow a quota sweep's fan-out, short enough that a tray the
+/// user opens right after switching accounts already shows the new state.
+const TRAY_MENU_COALESCE_WINDOW: std::time::Duration = std::time::Duration::from_millis(150);
+
+/// Rebuild requests received since the pending rebuild last took a batch.
+static TRAY_MENU_REQUESTS: AtomicUsize = AtomicUsize::new(0);
+/// Whether a worker is already committed to serving the outstanding requests.
+static TRAY_MENU_REBUILD_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
 /// 单层最多直出的平台数量（超出进入“更多平台”子菜单）
 #[cfg(not(target_os = "macos"))]
@@ -3600,8 +3610,51 @@ fn handle_tray_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEvent) {
     }
 }
 
-/// 更新托盘菜单
+/// 请求更新托盘菜单（合并同一时间窗内的重复请求）
+///
+/// Rebuilding the menu re-reads every platform's account library from disk, so
+/// the ~120 call sites that fire on any account mutation must not each pay for
+/// one: a single quota refresh sweep touches a dozen platforms and used to queue
+/// a dozen full rebuilds. Requests are collapsed into one trailing rebuild.
 pub fn update_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    TRAY_MENU_REQUESTS.fetch_add(1, Ordering::AcqRel);
+    if TRAY_MENU_REBUILD_SCHEDULED.swap(true, Ordering::AcqRel) {
+        // A worker is already going to pick this request up.
+        return Ok(());
+    }
+    spawn_tray_menu_rebuild_worker(app.clone());
+    Ok(())
+}
+
+fn spawn_tray_menu_rebuild_worker<R: Runtime>(app: tauri::AppHandle<R>) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(TRAY_MENU_COALESCE_WINDOW);
+        let collapsed = TRAY_MENU_REQUESTS.swap(0, Ordering::AcqRel);
+        let started = std::time::Instant::now();
+        if let Err(err) = rebuild_tray_menu_now(&app) {
+            logger::log_warn(&format!("[Tray] 托盘菜单重建失败: {}", err));
+        } else {
+            logger::log_info(&format!(
+                "[Tray] 托盘菜单已更新: 合并请求={}, 耗时={}ms",
+                collapsed,
+                started.elapsed().as_millis()
+            ));
+        }
+
+        // Release the slot, then re-check: a request that landed between the
+        // swap above and this store would otherwise never be served.
+        TRAY_MENU_REBUILD_SCHEDULED.store(false, Ordering::Release);
+        if TRAY_MENU_REQUESTS.load(Ordering::Acquire) == 0 {
+            return;
+        }
+        if TRAY_MENU_REBUILD_SCHEDULED.swap(true, Ordering::AcqRel) {
+            // Someone else claimed the slot and will do the work.
+            return;
+        }
+    });
+}
+
+fn rebuild_tray_menu_now<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         crate::modules::macos_native_menu::update_status_item(app)?;
@@ -3614,7 +3667,6 @@ pub fn update_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Str
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let menu = build_tray_menu(app).map_err(|e| e.to_string())?;
         tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
-        logger::log_info("[Tray] 托盘菜单已更新");
     }
     Ok(())
 }

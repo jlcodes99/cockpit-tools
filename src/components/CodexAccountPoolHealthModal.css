@@ -156,6 +156,73 @@
   color: var(--text-secondary);
 }
 
+.codex-account-pool-health-item.is-pool {
+  border-color: color-mix(in srgb, var(--danger, #dc2626) 36%, var(--border-light));
+  background: color-mix(in srgb, var(--danger, #dc2626) 5%, var(--bg-card));
+}
+
+.codex-account-pool-health-pool-error {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.codex-account-pool-health-members {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+.codex-account-pool-health-member {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+}
+
+.codex-account-pool-health-member-primary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.codex-account-pool-health-member-primary strong {
+  min-width: 0;
+  max-width: min(100%, 300px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.codex-account-pool-health-member-primary code {
+  color: var(--text-muted, var(--text-secondary));
+  font-size: 10px;
+}
+
+.codex-account-pool-health-member.is-available .codex-account-pool-health-item-status {
+  color: var(--success, #16a34a);
+}
+
+.codex-account-pool-health-member-detail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .codex-account-pool-health-item-primary > .btn {
   flex-shrink: 0;
 }

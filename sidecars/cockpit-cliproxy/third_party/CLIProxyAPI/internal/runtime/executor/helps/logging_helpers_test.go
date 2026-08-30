@@ -12,6 +12,34 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 )
 
+func TestRecordAPIRequestClonesDeferredBodyWhenRequestLogDisabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(recorder)
+	ctx := context.WithValue(context.Background(), "gin", ginCtx)
+	body := []byte(`{"model":"original"}`)
+
+	RecordAPIRequest(ctx, &config.Config{}, UpstreamRequestLog{
+		URL:    "https://api.example.com/v1/responses",
+		Method: http.MethodPost,
+		Body:   body,
+	})
+	body[10] = 'X'
+
+	value, exists := ginCtx.Get(logging.DeferredAPIRequestContextKey)
+	if !exists {
+		t.Fatal("deferred API request was not captured")
+	}
+	requests, ok := value.([]logging.DeferredAPIRequest)
+	if !ok || len(requests) != 1 {
+		t.Fatalf("deferred API requests = %#v, want one request", value)
+	}
+	captured := string(requests[0]())
+	if !strings.Contains(captured, `{"model":"original"}`) {
+		t.Fatalf("captured API request = %q, want original body", captured)
+	}
+}
+
 func TestRecordAPIResponseMetadataStoresHeadersWhenRequestLogDisabled(t *testing.T) {
 	ctx := logging.WithResponseHeadersHolder(context.Background())
 	headers := http.Header{}
@@ -23,27 +51,5 @@ func TestRecordAPIResponseMetadataStoresHeadersWhenRequestLogDisabled(t *testing
 	got := logging.GetResponseHeaders(ctx)
 	if got.Get("X-Upstream-Request-Id") != "upstream-req-1" {
 		t.Fatalf("response header = %q, want %q", got.Get("X-Upstream-Request-Id"), "upstream-req-1")
-	}
-}
-
-func TestRecordAPIStreamSemanticStatusKeepsTransportStatusSeparate(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx := context.WithValue(context.Background(), "gin", ginCtx)
-	cfg := &config.Config{}
-	cfg.RequestLog = true
-
-	RecordAPIResponseMetadata(ctx, cfg, http.StatusOK, http.Header{})
-	RecordAPIStreamSemanticStatus(ctx, cfg, http.StatusServiceUnavailable, "response.failed")
-
-	raw, exists := ginCtx.Get(apiResponseKey)
-	if !exists {
-		t.Fatal("expected aggregated API response log")
-	}
-	logged := string(raw.([]byte))
-	for _, want := range []string{"Status: 200", "Stream-Status: 503", "Stream-Event: response.failed"} {
-		if !strings.Contains(logged, want) {
-			t.Fatalf("response log missing %q: %s", want, logged)
-		}
 	}
 }

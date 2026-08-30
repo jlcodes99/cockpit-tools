@@ -51,8 +51,10 @@ export async function fetchAccountQuota(accountId: string): Promise<Account> {
     return await invoke('fetch_account_quota', { accountId });
 }
 
-export async function refreshAllQuotas(): Promise<RefreshStats> {
-    return await invoke('refresh_all_quotas');
+export async function refreshAllQuotas(
+    trigger?: 'auto' | 'manual',
+): Promise<RefreshStats> {
+    return await invoke('refresh_all_quotas', { trigger });
 }
 
 export async function startOAuthLogin(update?: AccountNoteUpdate): Promise<Account> {

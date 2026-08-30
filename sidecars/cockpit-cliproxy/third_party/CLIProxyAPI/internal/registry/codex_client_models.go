@@ -1,132 +1,215 @@
 package registry
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
+	"fmt"
+	"math"
 	"strings"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
 )
 
 //go:embed models/codex_client_models.json
-var codexClientModelsJSON []byte
+var embeddedCodexClientModelsJSON []byte
 
-type codexClientModelOverridesPayload struct {
-	ModelOverrides []codexClientModelOverride `json:"model_overrides"`
-	Models         []codexClientModelOverride `json:"models"`
+type codexClientModelsPayload struct {
+	Models []map[string]any `json:"models"`
 }
 
-type codexClientModelOverride struct {
-	Slug                     string                      `json:"slug"`
-	DisplayName              string                      `json:"display_name"`
-	Description              string                      `json:"description"`
-	BaseInstructions         string                      `json:"base_instructions"`
-	ContextWindow            int                         `json:"context_window"`
-	UseResponsesLite         bool                        `json:"use_responses_lite"`
-	SupportedReasoningLevels []codexClientReasoningLevel `json:"supported_reasoning_levels"`
+type codexClientModelsStore struct {
+	mu       sync.RWMutex
+	data     []byte
+	revision uint64
 }
 
-type codexClientReasoningLevel struct {
-	Effort string `json:"effort"`
+var codexClientCatalogStore = &codexClientModelsStore{}
+
+func init() {
+	if _, err := loadCodexClientModelsFromBytes(embeddedCodexClientModelsJSON, "embed"); err != nil {
+		log.Warnf("registry: failed to parse embedded codex_client_models.json (Codex client catalog will remain unavailable until a valid remote refresh): %v", err)
+	}
 }
 
-var (
-	codexClientBuiltinModelsOnce sync.Once
-	codexClientBuiltinModels     []*ModelInfo
-	codexResponsesLiteModels     map[string]struct{}
-	codexClientBaseInstructions  map[string]string
-)
-
-const codexClientFallbackInstructions = "You are Codex, a coding agent. Help the user complete software engineering tasks accurately and safely."
-
-// GetCodexClientModelsJSON returns the embedded Codex client model catalog.
+// GetCodexClientModelsJSON returns the current Codex client model catalog.
 func GetCodexClientModelsJSON() []byte {
-	return append([]byte(nil), codexClientModelsJSON...)
+	data, _ := GetCodexClientModelsSnapshot()
+	return data
 }
 
-func codexClientBuiltinModelInfos() []*ModelInfo {
-	codexClientBuiltinModelsOnce.Do(func() {
-		var payload codexClientModelOverridesPayload
-		if err := json.Unmarshal(codexClientModelsJSON, &payload); err != nil {
-			return
+func CodexClientModelBaseInstructions(modelID string) string {
+	var payload codexClientModelsPayload
+	if json.Unmarshal(GetCodexClientModelsJSON(), &payload) != nil {
+		return ""
+	}
+	for _, model := range payload.Models {
+		if strings.EqualFold(strings.TrimSpace(fmt.Sprint(model["slug"])), strings.TrimSpace(modelID)) {
+			return strings.TrimSpace(fmt.Sprint(model["base_instructions"]))
 		}
-		codexResponsesLiteModels = make(map[string]struct{})
-		codexClientBaseInstructions = make(map[string]string)
-		seen := make(map[string]struct{})
-
-		register := func(model codexClientModelOverride) {
-			slug := strings.TrimSpace(model.Slug)
-			if slug == "" {
-				return
-			}
-			if model.UseResponsesLite {
-				codexResponsesLiteModels[strings.ToLower(slug)] = struct{}{}
-			}
-			if instructions := strings.TrimSpace(model.BaseInstructions); instructions != "" {
-				codexClientBaseInstructions[strings.ToLower(slug)] = model.BaseInstructions
-			}
-			if _, ok := seen[slug]; ok {
-				return
-			}
-			// Prefer override entries for builtin ModelInfo (richer display/reasoning);
-			// full models also contribute when overrides are absent.
-			levels := make([]string, 0, len(model.SupportedReasoningLevels))
-			for _, rawLevel := range model.SupportedReasoningLevels {
-				level := strings.ToLower(strings.TrimSpace(rawLevel.Effort))
-				if level != "" {
-					levels = append(levels, level)
-				}
-			}
-			// Only materialize ModelInfo when we have usable metadata.
-			if model.DisplayName == "" && model.ContextWindow == 0 && len(levels) == 0 && !model.UseResponsesLite {
-				return
-			}
-			seen[slug] = struct{}{}
-			var thinking *ThinkingSupport
-			if len(levels) > 0 {
-				thinking = &ThinkingSupport{Levels: levels}
-			}
-			codexClientBuiltinModels = append(codexClientBuiltinModels, &ModelInfo{
-				ID:            slug,
-				Object:        "model",
-				OwnedBy:       "openai",
-				Type:          "openai",
-				DisplayName:   model.DisplayName,
-				Version:       slug,
-				Description:   model.Description,
-				ContextLength: model.ContextWindow,
-				Thinking:      thinking,
-			})
-		}
-
-		// Overrides first so ModelInfo prefers the compact metadata block.
-		for _, model := range payload.ModelOverrides {
-			register(model)
-		}
-		for _, model := range payload.Models {
-			register(model)
-		}
-	})
-
-	return cloneModelInfos(codexClientBuiltinModels)
+	}
+	return ""
 }
 
-// CodexClientModelUsesResponsesLite reports whether the embedded Codex client
+// CodexClientModelUsesResponsesLite reports whether the active Codex client
 // catalog routes the model through the Responses Lite protocol.
 func CodexClientModelUsesResponsesLite(modelID string) bool {
-	codexClientBuiltinModelInfos()
-	_, ok := codexResponsesLiteModels[strings.ToLower(strings.TrimSpace(modelID))]
-	return ok
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return false
+	}
+	var payload codexClientModelsPayload
+	if json.Unmarshal(GetCodexClientModelsJSON(), &payload) != nil {
+		return false
+	}
+	for _, model := range payload.Models {
+		if !strings.EqualFold(strings.TrimSpace(fmt.Sprint(model["slug"])), modelID) {
+			continue
+		}
+		value, _ := model["use_responses_lite"].(bool)
+		return value
+	}
+	return false
 }
 
-// CodexClientModelBaseInstructions returns the embedded Codex instructions for
-// a model. Unknown models use the current GPT-5.5 instructions when available.
-func CodexClientModelBaseInstructions(modelID string) string {
-	codexClientBuiltinModelInfos()
-	if instructions := codexClientBaseInstructions[strings.ToLower(strings.TrimSpace(modelID))]; strings.TrimSpace(instructions) != "" {
-		return instructions
+// GetCodexClientModelsRevision returns the current revision of the Codex client model catalog.
+func GetCodexClientModelsRevision() uint64 {
+	codexClientCatalogStore.mu.RLock()
+	defer codexClientCatalogStore.mu.RUnlock()
+	return codexClientCatalogStore.revision
+}
+
+// GetCodexClientModelsSnapshot returns a consistent catalog copy and revision.
+// The revision changes only when validated catalog content changes.
+func GetCodexClientModelsSnapshot() ([]byte, uint64) {
+	codexClientCatalogStore.mu.RLock()
+	defer codexClientCatalogStore.mu.RUnlock()
+	return append([]byte(nil), codexClientCatalogStore.data...), codexClientCatalogStore.revision
+}
+
+func loadCodexClientModelsFromBytes(data []byte, source string) (bool, error) {
+	if err := ValidateCodexClientModelsJSON(data); err != nil {
+		return false, fmt.Errorf("%s: %w", source, err)
 	}
-	if instructions := codexClientBaseInstructions["gpt-5.5"]; strings.TrimSpace(instructions) != "" {
-		return instructions
+
+	cloned := append([]byte(nil), data...)
+	codexClientCatalogStore.mu.Lock()
+	defer codexClientCatalogStore.mu.Unlock()
+	if bytes.Equal(codexClientCatalogStore.data, cloned) {
+		return false, nil
 	}
-	return codexClientFallbackInstructions
+	codexClientCatalogStore.data = cloned
+	codexClientCatalogStore.revision++
+	return true, nil
+}
+
+// ValidateCodexClientModelsJSON validates the fields required to serve a
+// complete Codex client model catalog.
+func ValidateCodexClientModelsJSON(data []byte) error {
+	var payload codexClientModelsPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return fmt.Errorf("decode Codex client model catalog: %w", err)
+	}
+	if len(payload.Models) == 0 {
+		return fmt.Errorf("Codex client model catalog has no models")
+	}
+
+	seen := make(map[string]struct{}, len(payload.Models))
+	for i, model := range payload.Models {
+		slug, err := requiredCodexClientModelString(model, "slug")
+		if err != nil {
+			return fmt.Errorf("Codex client model catalog models[%d]: %w", i, err)
+		}
+		if _, exists := seen[slug]; exists {
+			return fmt.Errorf("Codex client model catalog contains duplicate slug %q", slug)
+		}
+		seen[slug] = struct{}{}
+
+		if err = validateCodexClientModel(model); err != nil {
+			return fmt.Errorf("Codex client model catalog model %q: %w", slug, err)
+		}
+	}
+	if _, ok := seen["gpt-5.5"]; !ok {
+		return fmt.Errorf("Codex client model catalog is missing default template %q", "gpt-5.5")
+	}
+	return nil
+}
+
+func validateCodexClientModel(model map[string]any) error {
+	for _, field := range []string{
+		"display_name",
+		"description",
+		"base_instructions",
+		"minimal_client_version",
+		"visibility",
+		"default_reasoning_level",
+	} {
+		if _, err := requiredCodexClientModelString(model, field); err != nil {
+			return err
+		}
+	}
+
+	contextWindow, err := requiredCodexClientModelInteger(model, "context_window", true)
+	if err != nil {
+		return err
+	}
+	maxContextWindow, err := requiredCodexClientModelInteger(model, "max_context_window", true)
+	if err != nil {
+		return err
+	}
+	if contextWindow > maxContextWindow {
+		return fmt.Errorf("context_window %d exceeds max_context_window %d", contextWindow, maxContextWindow)
+	}
+	if _, err = requiredCodexClientModelInteger(model, "priority", false); err != nil {
+		return err
+	}
+
+	levels, ok := model["supported_reasoning_levels"].([]any)
+	if !ok || len(levels) == 0 {
+		return fmt.Errorf("field %q must be a non-empty array", "supported_reasoning_levels")
+	}
+	seenLevels := make(map[string]struct{}, len(levels))
+	for i, rawLevel := range levels {
+		level, ok := rawLevel.(map[string]any)
+		if !ok {
+			return fmt.Errorf("field %q entry %d must be an object", "supported_reasoning_levels", i)
+		}
+		effort, errEffort := requiredCodexClientModelString(level, "effort")
+		if errEffort != nil {
+			return fmt.Errorf("field %q entry %d: %w", "supported_reasoning_levels", i, errEffort)
+		}
+		if _, exists := seenLevels[effort]; exists {
+			return fmt.Errorf("field %q contains duplicate effort %q", "supported_reasoning_levels", effort)
+		}
+		seenLevels[effort] = struct{}{}
+	}
+	defaultLevel, _ := requiredCodexClientModelString(model, "default_reasoning_level")
+	if _, ok = seenLevels[defaultLevel]; !ok {
+		return fmt.Errorf("default_reasoning_level %q is not listed in supported_reasoning_levels", defaultLevel)
+	}
+	return nil
+}
+
+func requiredCodexClientModelString(model map[string]any, field string) (string, error) {
+	value, ok := model[field].(string)
+	value = strings.TrimSpace(value)
+	if !ok || value == "" {
+		return "", fmt.Errorf("field %q must be a non-empty string", field)
+	}
+	return value, nil
+}
+
+func requiredCodexClientModelInteger(model map[string]any, field string, positive bool) (int64, error) {
+	value, ok := model[field].(float64)
+	if !ok || math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value || value > math.MaxInt64 {
+		return 0, fmt.Errorf("field %q must be an integer", field)
+	}
+	if positive && value <= 0 {
+		return 0, fmt.Errorf("field %q must be positive", field)
+	}
+	if !positive && value < 0 {
+		return 0, fmt.Errorf("field %q must not be negative", field)
+	}
+	return int64(value), nil
 }

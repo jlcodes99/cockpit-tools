@@ -3,10 +3,13 @@ package executor
 import (
 	"context"
 	"encoding/base64"
+	"strings"
 	"testing"
 
 	"github.com/tidwall/gjson"
 )
+
+var benchmarkSanitizeOpenAIResponsesReasoningOutput []byte
 
 func validOpenAIResponsesReasoningEncryptedContentForTest() string {
 	payload := make([]byte, 1+8+16+16+32)
@@ -15,31 +18,6 @@ func validOpenAIResponsesReasoningEncryptedContentForTest() string {
 		payload[i] = byte(i)
 	}
 	return base64.RawURLEncoding.EncodeToString(payload)
-}
-
-func TestSanitizeOpenAIResponsesReasoningEncryptedContent_RebuildsMultipleInvalidItems(t *testing.T) {
-	valid := validOpenAIResponsesReasoningEncryptedContentForTest()
-	body := []byte(`{"input":[` +
-		`{"id":"rs_bad","type":"reasoning","encrypted_content":"bad","summary":[]},` +
-		`{"id":"msg_1","type":"message","role":"user","content":"hi"},` +
-		`{"id":"rs_null","type":"reasoning","encrypted_content":null,"summary":[]},` +
-		`{"id":"rs_good","type":"reasoning","encrypted_content":"` + valid + `","summary":[]}` +
-		`]}`)
-
-	got := sanitizeOpenAIResponsesReasoningEncryptedContent(context.Background(), "test", body)
-
-	if gjson.GetBytes(got, "input.0.encrypted_content").Exists() {
-		t.Fatalf("invalid encrypted_content still present: %s", got)
-	}
-	if gotID := gjson.GetBytes(got, "input.1.id").String(); gotID != "msg_1" {
-		t.Fatalf("middle item id = %q, want msg_1; body=%s", gotID, got)
-	}
-	if gjson.GetBytes(got, "input.2.encrypted_content").Exists() {
-		t.Fatalf("null encrypted_content still present: %s", got)
-	}
-	if gotEC := gjson.GetBytes(got, "input.3.encrypted_content").String(); gotEC != valid {
-		t.Fatalf("valid encrypted_content not preserved: %s", got)
-	}
 }
 
 func TestSanitizeOpenAIResponsesReasoningEncryptedContent_StripsOrphanIDsWhenStoreDisabled(t *testing.T) {
@@ -65,8 +43,11 @@ func TestSanitizeOpenAIResponsesReasoningEncryptedContent_StripsOrphanIDsWhenSto
 	if gotID := gjson.GetBytes(got, "input.2.id").String(); gotID != "rs_good" {
 		t.Fatalf("valid reasoning id = %q, want rs_good; body=%s", gotID, got)
 	}
+	if gotEC := gjson.GetBytes(got, "input.2.encrypted_content").String(); gotEC != valid {
+		t.Fatalf("valid encrypted_content not preserved: %s", got)
+	}
 	if gotID := gjson.GetBytes(got, "input.3.id").String(); gotID != "msg_1" {
-		t.Fatalf("non-reasoning id = %q, want msg_1; body=%s", gotID, got)
+		t.Fatalf("non-reasoning id should stay: %s", got)
 	}
 }
 
@@ -91,12 +72,22 @@ func TestSanitizeOpenAIResponsesReasoningEncryptedContent_KeepsIDsWhenStoreEnabl
 
 func TestSanitizeOpenAIResponsesReasoningEncryptedContent_NoopReturnsOriginalBody(t *testing.T) {
 	valid := validOpenAIResponsesReasoningEncryptedContentForTest()
-	body := []byte(`{"input":[{"id":"rs_good","type":"reasoning","encrypted_content":"` + valid + `","summary":[]},{"role":"user","content":"hi"}]}`)
+	body := []byte(`{"store":false,"input":[{"id":"rs_good","type":"reasoning","encrypted_content":"` + valid + `","summary":[]},{"role":"user","content":"hi"}]}`)
 	got := sanitizeOpenAIResponsesReasoningEncryptedContent(context.Background(), "test", body)
 	if string(got) != string(body) {
 		t.Fatalf("noop path should return original body unchanged\ngot=%s\nwant=%s", got, body)
 	}
 	if len(got) > 0 && len(body) > 0 && &got[0] != &body[0] {
 		t.Fatalf("noop path should return the original body slice")
+	}
+}
+
+func BenchmarkSanitizeOpenAIResponsesReasoningEncryptedContentLargeNoopPayload(b *testing.B) {
+	body := []byte(`{"store":false,"input":[{"type":"message","role":"user","content":"` + strings.Repeat("x", 8<<20) + `"}]}`)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(body)))
+	b.ResetTimer()
+	for b.Loop() {
+		benchmarkSanitizeOpenAIResponsesReasoningOutput = sanitizeOpenAIResponsesReasoningEncryptedContent(context.Background(), "benchmark", body)
 	}
 }

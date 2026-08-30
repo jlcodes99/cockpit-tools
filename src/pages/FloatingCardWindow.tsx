@@ -1131,7 +1131,9 @@ export function FloatingCardWindow() {
   ]);
 
   const isCurrentViewed = Boolean(viewedAccount?.id && viewedAccount.id === currentAccount?.id);
-  const visibleQuotaItemLimit = selectedPlatform === 'antigravity' ? 3 : 2;
+  // Cursor's account page shows 3 primary bars (Total / Auto+Composer / API).
+  const visibleQuotaItemLimit =
+    selectedPlatform === 'antigravity' || selectedPlatform === 'cursor' ? 3 : 2;
   const visibleQuotaItems = presentation?.quotaItems.slice(0, visibleQuotaItemLimit) ?? [];
   const accountStateLabel = viewedAccount
     ? isCurrentViewed

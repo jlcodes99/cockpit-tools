@@ -6,12 +6,12 @@
 package gemini
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"strings"
 	"time"
 
+	sigcompat "github.com/router-for-me/CLIProxyAPI/v7/internal/signature"
 	translatorcommon "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/common"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -37,6 +37,7 @@ type ConvertAnthropicResponseToGeminiParams struct {
 	// Keyed by content_block index from Claude SSE events
 	ToolUseNames map[int]string           // function/tool name per block index
 	ToolUseArgs  map[int]*strings.Builder // accumulates partial_json across deltas
+	ToolUseIDs   map[int]string           // tool use ID per block index
 }
 
 // ConvertClaudeResponseToGemini converts Claude Code streaming response format to Gemini format.
@@ -110,6 +111,19 @@ func ConvertClaudeResponseToGemini(_ context.Context, modelName string, original
 				if name := cb.Get("name"); name.Exists() {
 					(*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseNames[idx] = name.String()
 				}
+				if toolID := cb.Get("id").String(); toolID != "" {
+					if (*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseIDs == nil {
+						(*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseIDs = map[int]string{}
+					}
+					(*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseIDs[idx] = toolID
+				}
+			} else if cb.Get("type").String() == "thinking" {
+				if sig := cb.Get("signature"); sig.Exists() && sig.String() != "" {
+					thinkingPart := []byte(`{"thought":true,"thoughtSignature":""}`)
+					thinkingPart, _ = sjson.SetBytes(thinkingPart, "thoughtSignature", sigcompat.GeminiReplaySignatureOrBypass(sig.String(), sigcompat.SignatureBlockKindGeminiModelPart))
+					template, _ = sjson.SetRawBytes(template, "candidates.0.content.parts.-1", thinkingPart)
+					return [][]byte{template}
+				}
 			}
 		}
 		return [][]byte{}
@@ -132,6 +146,12 @@ func ConvertClaudeResponseToGemini(_ context.Context, modelName string, original
 				if text := delta.Get("thinking"); text.Exists() && text.String() != "" {
 					thinkingPart := []byte(`{"thought":true,"text":""}`)
 					thinkingPart, _ = sjson.SetBytes(thinkingPart, "text", text.String())
+					template, _ = sjson.SetRawBytes(template, "candidates.0.content.parts.-1", thinkingPart)
+				}
+			case "signature_delta":
+				if sig := delta.Get("signature"); sig.Exists() && sig.String() != "" {
+					thinkingPart := []byte(`{"thought":true,"thoughtSignature":""}`)
+					thinkingPart, _ = sjson.SetBytes(thinkingPart, "thoughtSignature", sigcompat.GeminiReplaySignatureOrBypass(sig.String(), sigcompat.SignatureBlockKindGeminiModelPart))
 					template, _ = sjson.SetRawBytes(template, "candidates.0.content.parts.-1", thinkingPart)
 				}
 			case "input_json_delta":
@@ -169,6 +189,10 @@ func ConvertClaudeResponseToGemini(_ context.Context, modelName string, original
 				argsTrim = strings.TrimSpace(b.String())
 			}
 		}
+		toolID := ""
+		if (*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseIDs != nil {
+			toolID = (*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseIDs[idx]
+		}
 		if name != "" || argsTrim != "" {
 			functionCall := []byte(`{"functionCall":{"name":"","args":{}}}`)
 			if name != "" {
@@ -176,6 +200,9 @@ func ConvertClaudeResponseToGemini(_ context.Context, modelName string, original
 			}
 			if argsTrim != "" {
 				functionCall, _ = sjson.SetRawBytes(functionCall, "functionCall.args", []byte(argsTrim))
+			}
+			if toolID != "" {
+				functionCall, _ = sjson.SetBytes(functionCall, "functionCall.id", toolID)
 			}
 			template, _ = sjson.SetRawBytes(template, "candidates.0.content.parts.-1", functionCall)
 			template, _ = sjson.SetBytes(template, "candidates.0.finishReason", "STOP")
@@ -186,6 +213,9 @@ func ConvertClaudeResponseToGemini(_ context.Context, modelName string, original
 			}
 			if (*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseNames != nil {
 				delete((*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseNames, idx)
+			}
+			if (*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseIDs != nil {
+				delete((*param).(*ConvertAnthropicResponseToGeminiParams).ToolUseIDs, idx)
 			}
 			return [][]byte{template}
 		}
@@ -284,13 +314,18 @@ func ConvertClaudeResponseToGeminiNonStream(_ context.Context, modelName string,
 	template, _ = sjson.SetBytes(template, "modelVersion", modelName)
 
 	streamingEvents := make([][]byte, 0)
-
-	scanner := bufio.NewScanner(bytes.NewReader(rawJSON))
-	buffer := make([]byte, 52_428_800) // 50MB
-	scanner.Buffer(buffer, 52_428_800)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		// log.Debug(string(line))
+	remaining := rawJSON
+	for len(remaining) > 0 {
+		var line []byte
+		idx := bytes.IndexByte(remaining, '\n')
+		if idx >= 0 {
+			line = remaining[:idx]
+			remaining = remaining[idx+1:]
+		} else {
+			line = remaining
+			remaining = nil
+		}
+		line = bytes.TrimRight(line, "\r")
 		if bytes.HasPrefix(line, dataTag) {
 			jsonData := bytes.TrimSpace(line[5:])
 			streamingEvents = append(streamingEvents, jsonData)
@@ -308,6 +343,7 @@ func ConvertClaudeResponseToGeminiNonStream(_ context.Context, modelName string,
 		IsStreaming:       false,
 		ToolUseNames:      nil,
 		ToolUseArgs:       nil,
+		ToolUseIDs:        nil,
 	}
 
 	// Process each streaming event and collect parts
@@ -348,6 +384,18 @@ func ConvertClaudeResponseToGeminiNonStream(_ context.Context, modelName string,
 					if name := cb.Get("name"); name.Exists() {
 						newParam.ToolUseNames[idx] = name.String()
 					}
+					if toolID := cb.Get("id").String(); toolID != "" {
+						if newParam.ToolUseIDs == nil {
+							newParam.ToolUseIDs = map[int]string{}
+						}
+						newParam.ToolUseIDs[idx] = toolID
+					}
+				} else if cb.Get("type").String() == "thinking" {
+					if sig := cb.Get("signature"); sig.Exists() && sig.String() != "" {
+						partJSON := []byte(`{"thought":true,"thoughtSignature":""}`)
+						partJSON, _ = sjson.SetBytes(partJSON, "thoughtSignature", sigcompat.GeminiReplaySignatureOrBypass(sig.String(), sigcompat.SignatureBlockKindGeminiModelPart))
+						allParts = append(allParts, partJSON)
+					}
 				}
 			}
 			continue
@@ -369,6 +417,12 @@ func ConvertClaudeResponseToGeminiNonStream(_ context.Context, modelName string,
 					if text := delta.Get("thinking"); text.Exists() && text.String() != "" {
 						partJSON := []byte(`{"thought":true,"text":""}`)
 						partJSON, _ = sjson.SetBytes(partJSON, "text", text.String())
+						allParts = append(allParts, partJSON)
+					}
+				case "signature_delta":
+					if sig := delta.Get("signature"); sig.Exists() && sig.String() != "" {
+						partJSON := []byte(`{"thought":true,"thoughtSignature":""}`)
+						partJSON, _ = sjson.SetBytes(partJSON, "thoughtSignature", sigcompat.GeminiReplaySignatureOrBypass(sig.String(), sigcompat.SignatureBlockKindGeminiModelPart))
 						allParts = append(allParts, partJSON)
 					}
 				case "input_json_delta":
@@ -401,6 +455,10 @@ func ConvertClaudeResponseToGeminiNonStream(_ context.Context, modelName string,
 					argsTrim = strings.TrimSpace(b.String())
 				}
 			}
+			toolID := ""
+			if newParam.ToolUseIDs != nil {
+				toolID = newParam.ToolUseIDs[idx]
+			}
 			if name != "" || argsTrim != "" {
 				functionCallJSON := []byte(`{"functionCall":{"name":"","args":{}}}`)
 				if name != "" {
@@ -409,6 +467,9 @@ func ConvertClaudeResponseToGeminiNonStream(_ context.Context, modelName string,
 				if argsTrim != "" {
 					functionCallJSON, _ = sjson.SetRawBytes(functionCallJSON, "functionCall.args", []byte(argsTrim))
 				}
+				if toolID != "" {
+					functionCallJSON, _ = sjson.SetBytes(functionCallJSON, "functionCall.id", toolID)
+				}
 				allParts = append(allParts, functionCallJSON)
 				// cleanup used state for this index
 				if newParam.ToolUseArgs != nil {
@@ -416,6 +477,9 @@ func ConvertClaudeResponseToGeminiNonStream(_ context.Context, modelName string,
 				}
 				if newParam.ToolUseNames != nil {
 					delete(newParam.ToolUseNames, idx)
+				}
+				if newParam.ToolUseIDs != nil {
+					delete(newParam.ToolUseIDs, idx)
 				}
 			}
 
@@ -470,11 +534,7 @@ func ConvertClaudeResponseToGeminiNonStream(_ context.Context, modelName string,
 
 	// Set the consolidated parts array
 	if len(consolidatedParts) > 0 {
-		partsJSON := []byte(`[]`)
-		for _, partJSON := range consolidatedParts {
-			partsJSON, _ = sjson.SetRawBytes(partsJSON, "-1", partJSON)
-		}
-		template, _ = sjson.SetRawBytes(template, "candidates.0.content.parts", partsJSON)
+		template, _ = sjson.SetRawBytes(template, "candidates.0.content.parts", translatorcommon.JoinRawArray(consolidatedParts))
 	}
 
 	// Set usage metadata
@@ -501,6 +561,7 @@ func consolidateParts(parts [][]byte) [][]byte {
 	var consolidated [][]byte
 	var currentTextPart strings.Builder
 	var currentThoughtPart strings.Builder
+	var currentThoughtSignature string
 	var hasText, hasThought bool
 
 	flushText := func() {
@@ -516,11 +577,15 @@ func consolidateParts(parts [][]byte) [][]byte {
 
 	flushThought := func() {
 		// Flush accumulated thinking content to the consolidated parts array
-		if hasThought && currentThoughtPart.Len() > 0 {
+		if hasThought && (currentThoughtPart.Len() > 0 || currentThoughtSignature != "") {
 			thoughtPartJSON := []byte(`{"thought":true,"text":""}`)
 			thoughtPartJSON, _ = sjson.SetBytes(thoughtPartJSON, "text", currentThoughtPart.String())
+			if currentThoughtSignature != "" {
+				thoughtPartJSON, _ = sjson.SetBytes(thoughtPartJSON, "thoughtSignature", currentThoughtSignature)
+			}
 			consolidated = append(consolidated, thoughtPartJSON)
 			currentThoughtPart.Reset()
+			currentThoughtSignature = ""
 			hasThought = false
 		}
 	}
@@ -542,6 +607,10 @@ func consolidateParts(parts [][]byte) [][]byte {
 
 			if text := part.Get("text"); text.Exists() && text.Type == gjson.String {
 				currentThoughtPart.WriteString(text.String())
+				hasThought = true
+			}
+			if sig := part.Get("thoughtSignature"); sig.Exists() && sig.Type == gjson.String && sig.String() != "" {
+				currentThoughtSignature = sig.String()
 				hasThought = true
 			}
 		} else if text := part.Get("text"); text.Exists() && text.Type == gjson.String {

@@ -176,19 +176,31 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
 }
 
 pub(crate) fn managed_codex_model_ids() -> Vec<String> {
-    codex_client_model_catalog()
-        .get("model_overrides")
-        .and_then(Value::as_array)
-        .map(|models| {
-            models
-                .iter()
-                .filter_map(|model| model.get("slug").and_then(Value::as_str))
-                .map(str::trim)
-                .filter(|model| !model.is_empty())
-                .map(str::to_string)
-                .collect()
+    let catalog = codex_client_model_catalog();
+    let overrides = catalog.get("model_overrides").and_then(Value::as_array);
+    let models = overrides
+        .filter(|models| !models.is_empty())
+        .or_else(|| catalog.get("models").and_then(Value::as_array));
+
+    models
+        .into_iter()
+        .flatten()
+        .filter(|model| {
+            overrides.is_some_and(|overrides| !overrides.is_empty())
+                || (model
+                    .get("use_responses_lite")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                    && !model
+                        .get("visibility")
+                        .and_then(Value::as_str)
+                        .is_some_and(|visibility| visibility.eq_ignore_ascii_case("hide")))
         })
-        .unwrap_or_default()
+        .filter_map(|model| model.get("slug").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 pub fn normalize_responses_body_for_codex(body: &mut Value) -> bool {
@@ -225,10 +237,11 @@ pub fn normalize_responses_body_for_codex_with_lite(
 }
 
 pub(crate) fn codex_model_uses_responses_lite(model_id: &str) -> bool {
-    codex_client_model_catalog()
-        .get("model_overrides")
-        .and_then(Value::as_array)
-        .is_some_and(|models| {
+    let catalog = codex_client_model_catalog();
+    ["model_overrides", "models"]
+        .into_iter()
+        .filter_map(|key| catalog.get(key).and_then(Value::as_array))
+        .any(|models| {
             models.iter().any(|model| {
                 model
                     .get("slug")
@@ -1182,7 +1195,11 @@ mod tests {
             );
             assert_eq!(
                 model.get("context_window").and_then(Value::as_i64),
-                Some(372_000)
+                Some(272_000)
+            );
+            assert_eq!(
+                model.get("max_context_window").and_then(Value::as_i64),
+                Some(921_000)
             );
             assert_eq!(
                 model.get("tool_mode").and_then(Value::as_str),

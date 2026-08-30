@@ -9,6 +9,7 @@ export interface RemoteConfigAppliedRule {
 
 export interface RemoteConfigState {
   version: string;
+  codexOAuthAppVersion: string;
   updatedAt: number;
   currentOs: string;
   hiddenPlatformIds: PlatformId[];

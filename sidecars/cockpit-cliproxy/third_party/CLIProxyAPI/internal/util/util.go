@@ -10,58 +10,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	log "github.com/sirupsen/logrus"
 )
 
 var functionNameSanitizer = regexp.MustCompile(`[^a-zA-Z0-9_.:-]`)
-
-// SleepContext waits for the delay to pass or returns early when ctx is canceled.
-func SleepContext(ctx context.Context, delay time.Duration) error {
-	if delay <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	if ctx == nil {
-		<-timer.C
-		return nil
-	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-// BackoffDelay returns the bounded retry delay for a one-based retry attempt.
-func BackoffDelay(attempt int, base time.Duration, max time.Duration) time.Duration {
-	if attempt <= 0 || base <= 0 {
-		return 0
-	}
-	multiplier := 4
-	switch attempt {
-	case 1:
-		multiplier = 1
-	case 2:
-		multiplier = 2
-	}
-	delay := base
-	if multiplier > 1 {
-		if max > 0 && base > max/time.Duration(multiplier) {
-			delay = max
-		} else {
-			delay = base * time.Duration(multiplier)
-		}
-	}
-	if max > 0 && delay > max {
-		return max
-	}
-	return delay
-}
 
 // SanitizeFunctionName ensures a function name matches the requirements for Gemini/Vertex AI.
 // It replaces invalid characters with underscores, ensures it starts with a letter or underscore,

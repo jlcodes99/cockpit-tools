@@ -13,12 +13,15 @@ const (
 	AuthSourceObjectStore = "objectstore"
 	AuthSourcePostgres    = "postgres"
 
-	AttributeAPIKey        = "api_key"
-	AttributeAuthKind      = "auth_kind"
-	AttributePath          = "path"
-	AttributeRuntimeOnly   = "runtime_only"
-	AttributeSource        = "source"
-	AttributeSourceBackend = "source_backend"
+	AttributeAPIKey           = "api_key"
+	AttributeAuthKind         = "auth_kind"
+	AttributeCodexAlphaSearch = "codex_alpha_search"
+	AttributeConfigIndex      = "config_index"
+	AttributePath             = "path"
+	AttributeRuntimeOnly      = "runtime_only"
+	AttributeSource           = "source"
+	AttributeSourceBackend    = "source_backend"
+	AttributeWeight           = "weight"
 )
 
 // AuthKind returns the credential kind using explicit metadata first and legacy
@@ -77,11 +80,7 @@ func normalizeAuthKind(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case AuthKindAPIKey, "api_key", "api-key":
 		return AuthKindAPIKey
-	case AuthKindOAuth, "oauth2",
-		"access_token", "access-token", "accesstoken",
-		"personal_access_token", "pat", "at":
-		// Cockpit stores OAuth refresh files and PAT-style Codex tokens under
-		// several auth_kind labels; all are eligible for ChatGPT OAuth backends.
+	case AuthKindOAuth, "oauth2":
 		return AuthKindOAuth
 	default:
 		return ""

@@ -83,7 +83,7 @@
   justify-content: space-between;
 }
 
-.btn-outline:hover {
+.btn-outline:hover:not(:disabled) {
   background: var(--bg-hover);
 }
 

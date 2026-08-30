@@ -55,12 +55,6 @@ pub fn get_update_settings() -> Result<UpdateSettings, String> {
     result
 }
 
-/// Save update settings
-#[tauri::command]
-pub fn save_update_settings(settings: UpdateSettings) -> Result<(), String> {
-    update_checker::save_update_settings(&settings)
-}
-
 /// Patch only the updater fields changed by the caller.
 #[tauri::command]
 pub fn patch_update_settings(

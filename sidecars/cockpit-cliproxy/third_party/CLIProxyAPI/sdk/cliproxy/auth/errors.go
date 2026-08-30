@@ -1,11 +1,19 @@
 package auth
 
-import (
-	"errors"
-	"net/http"
-)
+// ErrorCodeRequestScoped identifies failures tied to the current request rather
+// than the selected credential.
+const ErrorCodeRequestScoped = "request_scoped"
 
-const requestScopedErrorCode = "request_scoped"
+const requestScopedErrorCode = ErrorCodeRequestScoped
+
+// ErrorCodeConnectionLifecycle marks transport/session lifecycle failures that
+// must skip credential cooldown without being treated as request-scoped faults.
+const ErrorCodeConnectionLifecycle = "connection_lifecycle"
+
+const connectionLifecycleErrorCode = ErrorCodeConnectionLifecycle
+
+// ErrorCodeForceCooldown marks failures that must enforce credential cooldown.
+const ErrorCodeForceCooldown = "force_cooldown"
 
 // Error describes an authentication related failure in a provider agnostic format.
 type Error struct {
@@ -35,23 +43,29 @@ func (e *Error) StatusCode() int {
 	if e == nil {
 		return 0
 	}
-	if e.HTTPStatus <= 0 && IsAuthSelectionUnavailable(e) {
-		return http.StatusServiceUnavailable
-	}
 	return e.HTTPStatus
 }
 
 // IsRequestScoped reports whether the failure is tied to the current request
 // rather than the selected credential.
 func (e *Error) IsRequestScoped() bool {
-	return e != nil && e.Code == requestScopedErrorCode
+	return e != nil && e.Code == ErrorCodeRequestScoped
 }
 
-// IsAuthSelectionUnavailable reports local auth selection failures that leave no usable credential.
-func IsAuthSelectionUnavailable(err error) bool {
-	var authErr *Error
-	if !errors.As(err, &authErr) || authErr == nil {
-		return false
+// MarkRequestScoped marks the error as request-scoped in place and returns it.
+func (e *Error) MarkRequestScoped() *Error {
+	if e != nil {
+		e.Code = ErrorCodeRequestScoped
 	}
-	return authErr.Code == "auth_not_found" || authErr.Code == "auth_unavailable"
+	return e
+}
+
+// NewRequestScopedError creates an Error explicitly flagged as request-scoped so
+// that credential cooldown is skipped.
+func NewRequestScopedError(message string, httpStatus int) *Error {
+	return &Error{
+		Code:       ErrorCodeRequestScoped,
+		Message:    message,
+		HTTPStatus: httpStatus,
+	}
 }

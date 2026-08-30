@@ -668,7 +668,7 @@ pub async fn fetch_enterprise_user_usage(
         WORKBUDDY_API_ENDPOINT
     );
 
-    let mut req = client
+    let req = client
         .post(&url)
         .header("Accept", "application/json, text/plain, */*")
         .header("Accept-Language", "zh-CN,zh;q=0.9")

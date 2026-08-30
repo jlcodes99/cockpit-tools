@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { PlatformOverviewTabsHeader, PlatformOverviewTab } from './platform/PlatformOverviewTabsHeader';
+import { CODEX_SUITE_ENSURE_MOUNTED_EVENT } from '../utils/codexAddAccountRequest';
 
 export type CodexTab = PlatformOverviewTab;
 
@@ -13,6 +15,15 @@ export function CodexOverviewTabsHeader({
   onTabChange,
   tabs,
 }: CodexOverviewTabsHeaderProps) {
+  useEffect(() => {
+    if (!onTabChange) return;
+    const showSharedAccountModal = () => onTabChange('overview');
+    window.addEventListener(CODEX_SUITE_ENSURE_MOUNTED_EVENT, showSharedAccountModal);
+    return () => {
+      window.removeEventListener(CODEX_SUITE_ENSURE_MOUNTED_EVENT, showSharedAccountModal);
+    };
+  }, [onTabChange]);
+
   return (
     <PlatformOverviewTabsHeader
       platform="codex"

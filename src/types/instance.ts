@@ -16,6 +16,21 @@ export interface CodexLaunchCredentialChange {
   to: CodexLaunchCredentialType;
 }
 
+export interface CodexInstanceApiRoute {
+  id: string;
+  namespace: string;
+  providerAccountId: string;
+  enabled: boolean;
+  selectedModels?: string[];
+  extraModels?: string[];
+}
+
+export interface CodexInstanceModelRouting {
+  enabled: boolean;
+  version: number;
+  routes: CodexInstanceApiRoute[];
+}
+
 export interface InstanceProfile {
   id: string;
   name: string;
@@ -23,6 +38,7 @@ export interface InstanceProfile {
   workingDir?: string | null;
   extraArgs: string;
   bindAccountId?: string | null;
+  modelRouting?: CodexInstanceModelRouting | null;
   launchMode?: InstanceLaunchMode;
   appSpeed?: CodexAppSpeed;
   createdAt: number;

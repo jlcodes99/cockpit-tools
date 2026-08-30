@@ -17,6 +17,7 @@ const BUILTIN_HIDDEN_PLATFORM_IDS: &[&str] = &[];
 const NEVER_REMOTE_HIDE_PLATFORM_IDS: &[&str] = &["claude_manager"];
 const UPDATE_PROMPT_MODE_NORMAL: &str = "normal";
 const UPDATE_PROMPT_MODE_POPUP: &str = "popup";
+pub const DEFAULT_CODEX_OAUTH_APP_VERSION: &str = "26.820.60940";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +69,9 @@ pub struct RemoteUpdatePromptPolicy {
 pub struct RemoteConfigPayload {
     #[serde(default)]
     pub version: String,
+    /// OAuth hosted login 中使用的官方桌面版本；留空时使用内置默认值。
+    #[serde(default)]
+    pub codex_oauth_app_version: String,
     #[serde(default)]
     pub refresh_interval_ms: Option<i64>,
     #[serde(default)]
@@ -99,6 +103,7 @@ pub struct RemoteConfigAppliedRule {
 #[serde(rename_all = "camelCase")]
 pub struct RemoteConfigState {
     pub version: String,
+    pub codex_oauth_app_version: String,
     pub updated_at: i64,
     pub current_os: String,
     pub hidden_platform_ids: Vec<String>,
@@ -114,12 +119,43 @@ fn default_target_versions() -> String {
 fn empty_payload() -> RemoteConfigPayload {
     RemoteConfigPayload {
         version: String::new(),
+        codex_oauth_app_version: DEFAULT_CODEX_OAUTH_APP_VERSION.to_string(),
         refresh_interval_ms: Some(DEFAULT_REFRESH_INTERVAL_MS),
         hidden_platform_ids: Vec::new(),
         platforms: BTreeMap::new(),
         rules: Vec::new(),
         update_prompt: None,
     }
+}
+
+pub fn normalize_codex_oauth_app_version(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 64 || !value.is_ascii() {
+        return None;
+    }
+    if value
+        .chars()
+        .any(|character| character.is_ascii_whitespace())
+    {
+        return None;
+    }
+    Some(value.to_string())
+}
+
+pub fn cached_codex_oauth_app_version() -> String {
+    if let Ok(Some(payload)) = load_local_remote_config() {
+        if let Some(version) = normalize_codex_oauth_app_version(&payload.codex_oauth_app_version) {
+            return version;
+        }
+    }
+    if let Ok(Some(cache)) = load_cache() {
+        if let Some(version) =
+            normalize_codex_oauth_app_version(&cache.data.codex_oauth_app_version)
+        {
+            return version;
+        }
+    }
+    DEFAULT_CODEX_OAUTH_APP_VERSION.to_string()
 }
 
 fn get_shared_dir() -> Result<PathBuf, String> {
@@ -494,6 +530,10 @@ fn build_state(payload: RemoteConfigPayload, updated_at: i64) -> RemoteConfigSta
 
     RemoteConfigState {
         version: payload.version,
+        codex_oauth_app_version: normalize_codex_oauth_app_version(
+            &payload.codex_oauth_app_version,
+        )
+        .unwrap_or_else(|| DEFAULT_CODEX_OAUTH_APP_VERSION.to_string()),
         updated_at,
         current_os,
         hidden_platform_ids: hidden.into_iter().collect(),

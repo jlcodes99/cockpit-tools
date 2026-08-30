@@ -107,9 +107,6 @@ pub struct UserConfig {
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     #[serde(default = "default_codex_app_ui_injection_enabled")]
     pub codex_app_ui_injection_enabled: bool,
-    /// 是否通过 CDP 阻止受管 Codex 实例因外壳 OAuth 状态切换到登录页
-    #[serde(default)]
-    pub codex_login_page_guard_enabled: bool,
     /// 是否全局允许 Codex app-server 第三方客户端（账户级开关仍可单独放行）
     #[serde(default = "default_codex_cli_only_allow_app_server_clients")]
     pub codex_cli_only_allow_app_server_clients: bool,
@@ -296,6 +293,9 @@ pub struct UserConfig {
     /// Codex 启动路径（为空则使用默认路径）
     #[serde(default = "default_codex_app_path")]
     pub codex_app_path: String,
+    /// OAuth hosted login 使用的官方桌面版本（为空则跟随远端默认值）
+    #[serde(default)]
+    pub codex_oauth_app_version: String,
     /// Grok CLI 路径（为空则自动检测）
     #[serde(default)]
     pub grok_cli_path: Option<String>,
@@ -1186,7 +1186,6 @@ impl Default for UserConfig {
             codex_auto_refresh_minutes: default_codex_auto_refresh(),
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
-            codex_login_page_guard_enabled: false,
             codex_cli_only_allow_app_server_clients:
                 default_codex_cli_only_allow_app_server_clients(),
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
@@ -1198,8 +1197,8 @@ impl Default for UserConfig {
             grok_auto_refresh_minutes: default_grok_auto_refresh(),
             grok_sync_official_auth_on_switch: false,
             grok_opencode_sync_on_switch: default_grok_opencode_sync_on_switch(),
-            grok_opencode_auth_overwrite_on_switch:
-                default_grok_opencode_auth_overwrite_on_switch(),
+            grok_opencode_auth_overwrite_on_switch: default_grok_opencode_auth_overwrite_on_switch(
+            ),
             claude_auto_refresh_minutes: default_claude_auto_refresh(),
             codebuddy_auto_refresh_minutes: default_codebuddy_auto_refresh(),
             codebuddy_cn_auto_refresh_minutes: default_codebuddy_cn_auto_refresh(),
@@ -1253,6 +1252,7 @@ impl Default for UserConfig {
             opencode_app_path: default_opencode_app_path(),
             antigravity_app_path: default_antigravity_app_path(),
             codex_app_path: default_codex_app_path(),
+            codex_oauth_app_version: String::new(),
             grok_cli_path: None,
             claude_app_path: default_claude_app_path(),
             claude_app_scan_roots: default_claude_app_scan_roots(),
@@ -2606,22 +2606,6 @@ mod tests {
         }))
         .expect("显式关闭配置反序列化应成功");
         assert!(!disabled_cfg.codex_app_ui_injection_enabled);
-    }
-
-    #[test]
-    fn codex_login_page_guard_defaults_to_disabled() {
-        let default_cfg = UserConfig::default();
-        assert!(!default_cfg.codex_login_page_guard_enabled);
-
-        let upgraded_cfg: UserConfig =
-            serde_json::from_value(serde_json::json!({})).expect("旧配置反序列化应成功");
-        assert!(!upgraded_cfg.codex_login_page_guard_enabled);
-
-        let enabled_cfg: UserConfig = serde_json::from_value(serde_json::json!({
-            "codex_login_page_guard_enabled": true
-        }))
-        .expect("显式启用配置反序列化应成功");
-        assert!(enabled_cfg.codex_login_page_guard_enabled);
     }
 
     #[test]

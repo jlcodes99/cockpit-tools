@@ -5,6 +5,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::fs;
 use std::io::{ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -12,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use url::Url;
+use uuid::Uuid;
 
 const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTH_ENDPOINT: &str = "https://auth.openai.com/oauth/authorize";
@@ -23,10 +25,18 @@ const OAUTH_CALLBACK_PORT: u16 = 1455;
 const OAUTH_PORT_IN_USE_CODE: &str = "CODEX_OAUTH_PORT_IN_USE";
 const OAUTH_STATE_FILE: &str = "codex_oauth_pending.json";
 const OAUTH_WINDOW_LABEL: &str = "codex-oauth-incognito";
-const OAUTH_TIMEOUT_SECONDS: i64 = 300;
+const OAUTH_TIMEOUT_SECONDS: i64 = 10 * 60;
+const OFFICIAL_HOSTED_AUTH_ENDPOINT: &str = "https://chatgpt.com/codex/desktop-auth";
+const OFFICIAL_CLIENT_IDENTITY_FILE: &str = "codex-official-client-identity.txt";
 const TOKEN_REFRESH_SKEW_SECONDS: i64 = 300;
 pub const ID_TOKEN_REFRESH_LEAD_SECONDS: i64 = 10 * 60;
 const TOKEN_REFRESH_TIMEOUT: Duration = Duration::from_secs(25);
+const DEVICE_USER_CODE_ENDPOINT: &str = "https://auth.openai.com/api/accounts/deviceauth/usercode";
+const DEVICE_TOKEN_ENDPOINT: &str = "https://auth.openai.com/api/accounts/deviceauth/token";
+const DEVICE_VERIFICATION_URL: &str = "https://auth.openai.com/codex/device";
+const DEVICE_EXCHANGE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
+const DEVICE_TIMEOUT_SECONDS: u64 = 15 * 60;
+const DEVICE_DEFAULT_POLL_SECONDS: u64 = 5;
 
 pub fn get_callback_port() -> u16 {
     OAUTH_CALLBACK_PORT
@@ -56,6 +66,22 @@ pub struct CodexOAuthLoginStartResponse {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CodexDeviceAuthStartResponse {
+    pub login_id: String,
+    pub user_code: String,
+    pub verification_url: String,
+    pub poll_interval_seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexDeviceAuthErrorEvent {
+    login_id: String,
+    error: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CodexOAuthLoginCallbackEvent {
     login_id: String,
 }
@@ -78,11 +104,20 @@ struct OAuthState {
     port: u16,
     expires_at: i64,
     code: Option<String>,
+    #[serde(default)]
+    device_auth_id: Option<String>,
+    #[serde(default)]
+    device_user_code: Option<String>,
+    #[serde(default)]
+    device_poll_interval_seconds: Option<u64>,
+    #[serde(default)]
+    exchange_redirect_uri: Option<String>,
 }
 
 lazy_static::lazy_static! {
     static ref OAUTH_STATE: Arc<Mutex<Option<OAuthState>>> = Arc::new(Mutex::new(None));
     static ref COMPLETE_ATTEMPT_SEQ: AtomicU64 = AtomicU64::new(0);
+    static ref OFFICIAL_CLIENT_STABLE_ID: Mutex<Option<String>> = Mutex::new(None);
 }
 
 fn generate_base64url_token() -> String {
@@ -141,6 +176,11 @@ fn load_pending_state_from_disk() -> Option<OAuthState> {
 
 fn persist_state_to_disk(state: Option<&OAuthState>) {
     let result = match state {
+        // Device auth is tied to an in-process poller. Do not restore a stale
+        // device code after restart as if it were a local callback flow.
+        Some(value) if value.device_auth_id.is_some() => {
+            crate::modules::oauth_pending_state::clear(OAUTH_STATE_FILE)
+        }
         Some(value) => crate::modules::oauth_pending_state::save(OAUTH_STATE_FILE, value),
         None => crate::modules::oauth_pending_state::clear(OAUTH_STATE_FILE),
     };
@@ -165,6 +205,9 @@ fn set_oauth_state(state: Option<OAuthState>) {
 }
 
 fn ensure_callback_listener_for_state(app_handle: &AppHandle, state: &OAuthState) {
+    if state.device_auth_id.is_some() {
+        return;
+    }
     if state.expires_at <= now_timestamp() {
         clear_oauth_state_if_matches(&state.state, &state.login_id);
         return;
@@ -225,6 +268,241 @@ fn find_available_port() -> Result<u16, String> {
     }
 }
 
+fn parse_device_poll_interval(value: Option<&serde_json::Value>) -> u64 {
+    value
+        .and_then(|item| item.as_u64().or_else(|| item.as_str()?.parse().ok()))
+        .filter(|seconds| *seconds > 0)
+        .unwrap_or(DEVICE_DEFAULT_POLL_SECONDS)
+}
+
+async fn request_device_user_code() -> Result<(String, String, u64), String> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(TOKEN_REFRESH_TIMEOUT)
+        .timeout(TOKEN_REFRESH_TIMEOUT)
+        .build()
+        .map_err(|error| format!("创建 Codex 设备授权 HTTP 客户端失败: {}", error))?;
+    let response = client
+        .post(DEVICE_USER_CODE_ENDPOINT)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .json(&serde_json::json!({ "client_id": CLIENT_ID }))
+        .send()
+        .await
+        .map_err(|error| format!("请求 Codex 设备授权码失败: {}", error))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("读取 Codex 设备授权响应失败: {}", error))?;
+    if !status.is_success() {
+        return Err(format!("Codex 设备授权码请求失败: status={}", status));
+    }
+    let value: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|error| format!("解析 Codex 设备授权响应失败: {}", error))?;
+    let device_auth_id = value
+        .get("device_auth_id")
+        .and_then(|item| item.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let user_code = value
+        .get("user_code")
+        .or_else(|| value.get("usercode"))
+        .and_then(|item| item.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if device_auth_id.is_empty() || user_code.is_empty() {
+        return Err("Codex 设备授权响应缺少 device_auth_id 或 user_code".to_string());
+    }
+    Ok((
+        device_auth_id,
+        user_code,
+        parse_device_poll_interval(value.get("interval")),
+    ))
+}
+
+async fn poll_device_token(
+    login_id: String,
+    device_auth_id: String,
+    user_code: String,
+    poll_interval_seconds: u64,
+    app_handle: AppHandle,
+) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(DEVICE_TIMEOUT_SECONDS);
+    let client = match reqwest::Client::builder()
+        .connect_timeout(TOKEN_REFRESH_TIMEOUT)
+        .timeout(TOKEN_REFRESH_TIMEOUT)
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            emit_device_auth_error(
+                &app_handle,
+                &login_id,
+                format!("创建 HTTP 客户端失败: {}", error),
+            );
+            return;
+        }
+    };
+    loop {
+        let still_active = OAUTH_STATE.lock().unwrap().as_ref().is_some_and(|state| {
+            state.login_id == login_id
+                && state.device_auth_id.as_deref() == Some(device_auth_id.as_str())
+        });
+        if !still_active {
+            return;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            clear_oauth_state_for_login_id(&login_id);
+            let _ = app_handle.emit(
+                "codex-oauth-login-timeout",
+                CodexOAuthLoginTimeoutEvent {
+                    login_id: login_id.clone(),
+                    callback_url: DEVICE_VERIFICATION_URL.to_string(),
+                    timeout_seconds: DEVICE_TIMEOUT_SECONDS,
+                },
+            );
+            return;
+        }
+        let response = client
+            .post(DEVICE_TOKEN_ENDPOINT)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .json(&serde_json::json!({
+                "device_auth_id": device_auth_id,
+                "user_code": user_code,
+            }))
+            .send()
+            .await;
+        match response {
+            Ok(response) if response.status().is_success() => {
+                let body = match response.text().await {
+                    Ok(body) => body,
+                    Err(error) => {
+                        logger::log_warn(&format!("读取 Codex 设备令牌响应失败: {}", error));
+                        continue;
+                    }
+                };
+                let value: serde_json::Value = match serde_json::from_str(&body) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        logger::log_warn(&format!("解析 Codex 设备令牌响应失败: {}", error));
+                        continue;
+                    }
+                };
+                let code = value
+                    .get("authorization_code")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or_default()
+                    .trim();
+                let verifier = value
+                    .get("code_verifier")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or_default()
+                    .trim();
+                let challenge = value
+                    .get("code_challenge")
+                    .and_then(|item| item.as_str())
+                    .unwrap_or_default()
+                    .trim();
+                if code.is_empty() || verifier.is_empty() || challenge.is_empty() {
+                    emit_device_auth_error(
+                        &app_handle,
+                        &login_id,
+                        "Codex 设备令牌响应缺少 authorization_code/code_verifier/code_challenge"
+                            .to_string(),
+                    );
+                    return;
+                }
+                let mut guard = OAUTH_STATE.lock().unwrap();
+                if let Some(state) = guard.as_mut().filter(|state| {
+                    state.login_id == login_id
+                        && state.device_auth_id.as_deref() == Some(device_auth_id.as_str())
+                }) {
+                    state.code = Some(code.to_string());
+                    state.code_verifier = verifier.to_string();
+                    state.exchange_redirect_uri = Some(DEVICE_EXCHANGE_REDIRECT_URI.to_string());
+                    persist_state_to_disk(Some(state));
+                    drop(guard);
+                    let _ = app_handle.emit(
+                        "codex-oauth-login-completed",
+                        CodexOAuthLoginCallbackEvent { login_id },
+                    );
+                }
+                return;
+            }
+            Ok(response)
+                if response.status() == reqwest::StatusCode::FORBIDDEN
+                    || response.status() == reqwest::StatusCode::NOT_FOUND => {}
+            Ok(response) => {
+                emit_device_auth_error(
+                    &app_handle,
+                    &login_id,
+                    format!("Codex 设备授权轮询失败: status={}", response.status()),
+                );
+                return;
+            }
+            Err(error) => logger::log_warn(&format!("Codex 设备授权轮询请求失败: {}", error)),
+        }
+        tokio::time::sleep(Duration::from_secs(poll_interval_seconds.max(1))).await;
+    }
+}
+
+fn emit_device_auth_error(app_handle: &AppHandle, login_id: &str, error: String) {
+    logger::log_warn(&format!(
+        "Codex 设备授权失败: login_id={}, error={}",
+        login_id, error
+    ));
+    clear_oauth_state_for_login_id(login_id);
+    let _ = app_handle.emit(
+        "codex-device-auth-error",
+        CodexDeviceAuthErrorEvent {
+            login_id: login_id.to_string(),
+            error,
+        },
+    );
+}
+
+pub async fn start_device_auth(
+    app_handle: AppHandle,
+) -> Result<CodexDeviceAuthStartResponse, String> {
+    hydrate_oauth_state_if_missing();
+    if OAUTH_STATE.lock().unwrap().is_some() {
+        return Err("Codex OAuth 登录会话已存在，请先取消当前流程".to_string());
+    }
+    let (device_auth_id, user_code, poll_interval_seconds) = request_device_user_code().await?;
+    let login_id = generate_base64url_token();
+    let state = OAuthState {
+        login_id: login_id.clone(),
+        auth_url: DEVICE_VERIFICATION_URL.to_string(),
+        redirect_uri: DEVICE_EXCHANGE_REDIRECT_URI.to_string(),
+        code_verifier: String::new(),
+        state: generate_base64url_token(),
+        port: 0,
+        expires_at: now_timestamp() + DEVICE_TIMEOUT_SECONDS as i64,
+        code: None,
+        device_auth_id: Some(device_auth_id.clone()),
+        device_user_code: Some(user_code.clone()),
+        device_poll_interval_seconds: Some(poll_interval_seconds),
+        exchange_redirect_uri: Some(DEVICE_EXCHANGE_REDIRECT_URI.to_string()),
+    };
+    set_oauth_state(Some(state));
+    tokio::spawn(poll_device_token(
+        login_id.clone(),
+        device_auth_id,
+        user_code.clone(),
+        poll_interval_seconds,
+        app_handle,
+    ));
+    Ok(CodexDeviceAuthStartResponse {
+        login_id,
+        user_code,
+        verification_url: DEVICE_VERIFICATION_URL.to_string(),
+        poll_interval_seconds,
+    })
+}
+
 fn notify_cancel(port: u16) {
     if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) {
         let _ = stream
@@ -281,23 +559,85 @@ fn parse_callback_url(callback_url: &str, port: u16) -> Result<Url, String> {
 }
 
 fn build_auth_url(redirect_uri: &str, code_challenge: &str, state: &str) -> String {
+    let mut url = Url::parse(AUTH_ENDPOINT).expect("valid Codex OAuth authorize endpoint");
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("response_type", "code");
+        query.append_pair("client_id", CLIENT_ID);
+        query.append_pair("redirect_uri", redirect_uri);
+        query.append_pair("scope", SCOPES);
+        query.append_pair("code_challenge", code_challenge);
+        query.append_pair("code_challenge_method", "S256");
+        query.append_pair("id_token_add_organizations", "true");
+        query.append_pair("codex_cli_simplified_flow", "true");
+        query.append_pair("codex_streamlined_login", "true");
+        query.append_pair("state", state);
+        query.append_pair("originator", ORIGINATOR);
+        query.append_pair("codex_app_version", &official_client_version());
+        let stable_id = official_client_stable_id();
+        query.append_pair("source_surface_stable_id", &stable_id);
+        query.append_pair("codex_origin_stable_id", &stable_id);
+    }
+    hosted_auth_url(&url.to_string())
+}
+
+/// 用户设置优先；留空时使用远端配置缓存，并在无缓存时回退内置默认值。
+fn official_client_version() -> String {
+    let configured = crate::modules::config::get_user_config().codex_oauth_app_version;
+    if let Some(version) =
+        crate::modules::remote_config::normalize_codex_oauth_app_version(&configured)
+    {
+        return version;
+    }
+    crate::modules::remote_config::cached_codex_oauth_app_version()
+}
+
+/// 为两个 stable ID 提供同一个持久化值；它们用于官方登录包装的客户端关联标识。
+fn official_client_stable_id() -> String {
+    if let Ok(mut cached) = OFFICIAL_CLIENT_STABLE_ID.lock() {
+        if let Some(value) = cached.as_ref() {
+            return value.clone();
+        }
+
+        let path = crate::modules::account::get_data_dir()
+            .ok()
+            .map(|dir| dir.join(OFFICIAL_CLIENT_IDENTITY_FILE));
+        if let Some(path) = path.as_ref() {
+            if let Ok(value) = fs::read_to_string(path) {
+                let value = value.trim();
+                if !value.is_empty() {
+                    let value = value.to_string();
+                    *cached = Some(value.clone());
+                    return value;
+                }
+            }
+        }
+
+        let value = Uuid::new_v4().to_string();
+        if let Some(path) = path {
+            if let Some(parent) = path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(path, &value);
+        }
+        *cached = Some(value.clone());
+        value
+    } else {
+        Uuid::new_v4().to_string()
+    }
+}
+
+/// 将授权地址包装成官方桌面使用的 hosted login 地址。
+fn hosted_auth_url(auth_url: &str) -> String {
     format!(
-        "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&code_challenge={}&code_challenge_method=S256&id_token_add_organizations=true&codex_cli_simplified_flow=true&state={}&originator={}",
-        AUTH_ENDPOINT,
-        CLIENT_ID,
-        urlencoding::encode(redirect_uri),
-        urlencoding::encode(SCOPES),
-        code_challenge,
-        state,
-        urlencoding::encode(ORIGINATOR)
+        "{}?authorize_url={}&codex_streamlined_login=true&no_universal_links=1",
+        OFFICIAL_HOSTED_AUTH_ENDPOINT,
+        urlencoding::encode(auth_url)
     )
 }
 
 fn authorize_url_matches_pending(url: &Url, pending: &OAuthState) -> bool {
-    url.scheme() == "https"
-        && url.host_str() == Some("auth.openai.com")
-        && url.path() == "/oauth/authorize"
-        && Url::parse(&pending.auth_url).is_ok_and(|expected| expected == *url)
+    Url::parse(&pending.auth_url).is_ok_and(|expected| expected == *url)
 }
 
 fn is_callback_navigation(url: &Url, callback_port: u16) -> bool {
@@ -389,6 +729,17 @@ fn clear_oauth_state_if_matches(expected_state: &str, expected_login_id: &str) {
     }
 }
 
+fn clear_oauth_state_for_login_id(expected_login_id: &str) {
+    let should_clear = OAUTH_STATE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|state| state.login_id == expected_login_id);
+    if should_clear {
+        set_oauth_state(None);
+    }
+}
+
 pub async fn start_oauth_login(
     app_handle: AppHandle,
 ) -> Result<CodexOAuthLoginStartResponse, String> {
@@ -429,6 +780,10 @@ pub async fn start_oauth_login(
         port,
         expires_at: now_timestamp() + OAUTH_TIMEOUT_SECONDS,
         code: None,
+        device_auth_id: None,
+        device_user_code: None,
+        device_poll_interval_seconds: None,
+        exchange_redirect_uri: None,
     };
 
     set_oauth_state(Some(oauth_state));
@@ -679,8 +1034,9 @@ async fn exchange_code_for_token_internal(
     code: &str,
     code_verifier: &str,
     port: u16,
+    exchange_redirect_uri: Option<&str>,
 ) -> Result<CodexTokens, String> {
-    let redirect_uri = format!("http://localhost:{}/auth/callback", port);
+    let redirect_uri = resolve_exchange_redirect_uri(port, exchange_redirect_uri);
     let client = reqwest::Client::new();
 
     let params = [
@@ -708,6 +1064,17 @@ async fn exchange_code_for_token_internal(
         .map_err(|e| format!("读取响应失败: {}", e))?;
 
     if !status.is_success() {
+        let response_summary = serde_json::from_str::<serde_json::Value>(&body)
+            .map(|value| crate::modules::codex_auth_diagnostic::oauth_response_summary(&value))
+            .unwrap_or_else(|_| serde_json::json!({"body_type":"non_json"}));
+        crate::modules::codex_auth_diagnostic::log_event(
+            "oauth_token_exchange_failed",
+            serde_json::json!({
+                "status": status.as_u16(),
+                "body_length": body.len(),
+                "response": response_summary,
+            }),
+        );
         logger::log_error(&format!(
             "Token 交换失败: status={}, body_len={}",
             status,
@@ -724,6 +1091,15 @@ async fn exchange_code_for_token_internal(
 
     let token_response: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| format!("解析 Token 响应失败: {}", e))?;
+
+    crate::modules::codex_auth_diagnostic::log_event(
+        "oauth_token_exchange_response",
+        serde_json::json!({
+            "status": status.as_u16(),
+            "body_length": body.len(),
+            "response": crate::modules::codex_auth_diagnostic::oauth_response_summary(&token_response),
+        }),
+    );
 
     let id_token = token_response
         .get("id_token")
@@ -749,6 +1125,13 @@ async fn exchange_code_for_token_internal(
     })
 }
 
+fn resolve_exchange_redirect_uri(port: u16, exchange_redirect_uri: Option<&str>) -> String {
+    exchange_redirect_uri
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("http://localhost:{}/auth/callback", port))
+}
+
 pub async fn complete_oauth_login(login_id: &str) -> Result<CodexTokens, String> {
     hydrate_oauth_state_if_missing();
     let attempt_id = COMPLETE_ATTEMPT_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
@@ -757,7 +1140,7 @@ pub async fn complete_oauth_login(login_id: &str) -> Result<CodexTokens, String>
         "Codex OAuth 开始完成登录: attempt_id={}, login_id={}, started_at_ms={}",
         attempt_id, login_id, started_at_ms
     ));
-    let (code, code_verifier, port) = {
+    let (code, code_verifier, port, exchange_redirect_uri) = {
         let oauth_state = OAUTH_STATE.lock().unwrap();
         let state = oauth_state
             .as_ref()
@@ -781,10 +1164,22 @@ pub async fn complete_oauth_login(login_id: &str) -> Result<CodexTokens, String>
             "Codex OAuth 准备完成登录: attempt_id={}, login_id={}",
             attempt_id, login_id
         ));
-        (code, state.code_verifier.clone(), state.port)
+        (
+            code,
+            state.code_verifier.clone(),
+            state.port,
+            state.exchange_redirect_uri.clone(),
+        )
     };
 
-    let tokens = match exchange_code_for_token_internal(&code, &code_verifier, port).await {
+    let tokens = match exchange_code_for_token_internal(
+        &code,
+        &code_verifier,
+        port,
+        exchange_redirect_uri.as_deref(),
+    )
+    .await
+    {
         Ok(tokens) => tokens,
         Err(e) => {
             let finished_ms = chrono::Utc::now().timestamp_millis();
@@ -798,6 +1193,15 @@ pub async fn complete_oauth_login(login_id: &str) -> Result<CodexTokens, String>
             return Err(e);
         }
     };
+
+    crate::modules::codex_auth_diagnostic::log_event(
+        "oauth_login_tokens_received",
+        serde_json::json!({
+            "attempt_id": attempt_id,
+            "login_id": login_id,
+            "tokens": crate::modules::codex_auth_diagnostic::tokens_summary(&tokens),
+        }),
+    );
 
     set_oauth_state(None);
 
@@ -838,7 +1242,9 @@ pub fn cancel_oauth_flow_for(login_id: Option<&str>) -> Result<(), String> {
     };
     set_oauth_state(None);
 
-    notify_cancel(port);
+    if port > 0 {
+        notify_cancel(port);
+    }
     logger::log_info(&format!(
         "Codex OAuth 流程已取消: login_id={}",
         login_id.unwrap_or("<none>")
@@ -1041,6 +1447,19 @@ pub async fn refresh_access_token_with_fallback(
 
     if !status.is_success() {
         let error_code = extract_token_error_code(&body);
+        let response_summary = serde_json::from_str::<serde_json::Value>(&body)
+            .map(|value| crate::modules::codex_auth_diagnostic::oauth_response_summary(&value))
+            .unwrap_or_else(|_| serde_json::json!({"body_type":"non_json"}));
+        crate::modules::codex_auth_diagnostic::log_event(
+            "oauth_token_refresh_failed",
+            serde_json::json!({
+                "status": status.as_u16(),
+                "error_code": error_code,
+                "body_length": body.len(),
+                "response": response_summary,
+                "refresh_token": crate::modules::codex_auth_diagnostic::token_summary(refresh_token, "refresh_token"),
+            }),
+        );
         logger::log_error(&format!(
             "Token 刷新失败: status={}, error_code={:?}, body_len={}",
             status,
@@ -1074,19 +1493,32 @@ pub async fn refresh_access_token_with_fallback(
         .map(|s| s.to_string())
         .or_else(|| Some(refresh_token.to_string()));
 
-    Ok(CodexTokens {
+    let refreshed_tokens = CodexTokens {
         id_token,
         access_token,
         refresh_token: new_refresh_token,
-    })
+    };
+    crate::modules::codex_auth_diagnostic::log_event(
+        "oauth_token_refresh_response",
+        serde_json::json!({
+            "status": status.as_u16(),
+            "body_length": body.len(),
+            "response": crate::modules::codex_auth_diagnostic::oauth_response_summary(&token_response),
+            "tokens": crate::modules::codex_auth_diagnostic::tokens_summary(&refreshed_tokens),
+        }),
+    );
+
+    Ok(refreshed_tokens)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        authorize_url_matches_pending, is_callback_navigation, is_id_token_expired,
-        is_id_token_refresh_due, is_token_expired, resolve_refreshed_id_token, OAuthState,
-        ID_TOKEN_REFRESH_LEAD_SECONDS, ORIGINATOR, TOKEN_REFRESH_SKEW_SECONDS,
+        authorize_url_matches_pending, build_auth_url, is_callback_navigation, is_id_token_expired,
+        is_id_token_refresh_due, is_token_expired, parse_device_poll_interval,
+        resolve_exchange_redirect_uri, resolve_refreshed_id_token, OAuthState,
+        DEVICE_DEFAULT_POLL_SECONDS, DEVICE_EXCHANGE_REDIRECT_URI, ID_TOKEN_REFRESH_LEAD_SECONDS,
+        ORIGINATOR, TOKEN_REFRESH_SKEW_SECONDS,
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
@@ -1101,6 +1533,82 @@ mod tests {
         assert_eq!(ORIGINATOR, "Codex Desktop");
     }
 
+    #[test]
+    fn browser_oauth_uses_official_hosted_url_without_app_server() {
+        let auth_url = build_auth_url(
+            "http://localhost:1455/auth/callback",
+            "challenge-1",
+            "state-1",
+        );
+        let hosted = url::Url::parse(&auth_url).expect("parse hosted auth url");
+        assert_eq!(hosted.host_str(), Some("chatgpt.com"));
+        assert_eq!(hosted.path(), "/codex/desktop-auth");
+
+        let hosted_params = hosted
+            .query_pairs()
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(
+            hosted_params
+                .get("codex_streamlined_login")
+                .map(|value| value.as_ref()),
+            Some("true")
+        );
+        assert_eq!(
+            hosted_params
+                .get("no_universal_links")
+                .map(|value| value.as_ref()),
+            Some("1")
+        );
+
+        let authorize_url = hosted_params
+            .get("authorize_url")
+            .expect("hosted URL contains authorize_url");
+        let authorize = url::Url::parse(authorize_url).expect("parse authorize URL");
+        assert_eq!(authorize.host_str(), Some("auth.openai.com"));
+        assert_eq!(authorize.path(), "/oauth/authorize");
+        let params = authorize
+            .query_pairs()
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(
+            params.get("redirect_uri").map(|value| value.as_ref()),
+            Some("http://localhost:1455/auth/callback")
+        );
+        assert_eq!(
+            params.get("code_challenge").map(|value| value.as_ref()),
+            Some("challenge-1")
+        );
+        assert_eq!(
+            params.get("state").map(|value| value.as_ref()),
+            Some("state-1")
+        );
+        assert_eq!(
+            params.get("originator").map(|value| value.as_ref()),
+            Some("Codex Desktop")
+        );
+        assert!(params.contains_key("codex_app_version"));
+        let source_id = params
+            .get("source_surface_stable_id")
+            .expect("source stable ID");
+        assert_eq!(params.get("codex_origin_stable_id"), Some(source_id));
+    }
+
+    #[test]
+    fn device_auth_uses_official_exchange_redirect_and_poll_interval() {
+        assert_eq!(
+            resolve_exchange_redirect_uri(0, Some(DEVICE_EXCHANGE_REDIRECT_URI)),
+            DEVICE_EXCHANGE_REDIRECT_URI
+        );
+        assert_eq!(
+            parse_device_poll_interval(None),
+            DEVICE_DEFAULT_POLL_SECONDS
+        );
+        assert_eq!(parse_device_poll_interval(Some(&serde_json::json!("7"))), 7);
+        assert_eq!(
+            resolve_exchange_redirect_uri(1455, None),
+            "http://localhost:1455/auth/callback"
+        );
+    }
+
     fn pending(auth_url: &str) -> OAuthState {
         OAuthState {
             login_id: "login-1".to_string(),
@@ -1111,12 +1619,16 @@ mod tests {
             port: 1455,
             expires_at: chrono::Utc::now().timestamp() + 60,
             code: None,
+            device_auth_id: None,
+            device_user_code: None,
+            device_poll_interval_seconds: None,
+            exchange_redirect_uri: None,
         }
     }
 
     #[test]
-    fn incognito_window_accepts_only_current_official_authorize_url() {
-        let url = "https://auth.openai.com/oauth/authorize?state=state-1";
+    fn incognito_window_accepts_only_current_hosted_authorize_url() {
+        let url = "https://chatgpt.com/codex/desktop-auth?authorize_url=https%3A%2F%2Fauth.openai.com%2Foauth%2Fauthorize%3Fstate%3Dstate-1";
         let pending = pending(url);
         assert!(authorize_url_matches_pending(
             &url::Url::parse(url).unwrap(),

@@ -165,7 +165,7 @@ interface AccountState {
     deleteAccounts: (accountIds: string[]) => Promise<void>;
     setCurrentAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<void>;
     refreshQuota: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<void>;
-    refreshAllQuotas: () => Promise<RefreshStats>;
+    refreshAllQuotas: (trigger?: 'auto' | 'manual') => Promise<RefreshStats>;
     startOAuthLogin: (update?: AccountNoteUpdate) => Promise<Account>;
     reorderAccounts: (accountIds: string[]) => Promise<void>;
     switchAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<Account>;
@@ -431,8 +431,8 @@ export const useAccountStore = create<AccountState>()(
         }
     },
 
-    refreshAllQuotas: async () => {
-        const stats = await accountService.refreshAllQuotas();
+    refreshAllQuotas: async (trigger) => {
+        const stats = await accountService.refreshAllQuotas(trigger);
         await get().fetchAccounts();
         await Promise.allSettled([
             get().fetchCurrentAccount('antigravity'),

@@ -1,7 +1,7 @@
 import {
   isCodexApiKeyAccount,
   isCodexAgentIdentityAccount,
-  isCodexExplicitFreePlanType,
+  isCodexEffectiveFreePlan,
   isCodexPendingOAuthAccount,
   isCodexWebSessionAccount,
   type CodexAccount,
@@ -106,7 +106,7 @@ export function getCodexLocalAccessAccountIneligibleReason(
   if (
     restrictFreeAccounts &&
     !isCodexAgentIdentityAccount(account) &&
-    isCodexExplicitFreePlanType(account.plan_type)
+    isCodexEffectiveFreePlan(account)
   ) {
     return "free_restricted";
   }

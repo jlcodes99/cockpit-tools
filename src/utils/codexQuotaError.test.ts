@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   extractCodexQuotaErrorStatusCode,
+  isBlockingCodexQuotaError,
   isVerboseCodexQuotaErrorMessage,
   summarizeCodexQuotaErrorMessage,
 } from "./codexQuotaError.ts";
@@ -24,4 +25,16 @@ test("summarizes long HTML dumps without keeping markup", () => {
   assert.ok(summary.length < htmlDump.length);
   assert.equal(summary.toLowerCase().includes("<html"), false);
   assert.ok(summary.includes("403"));
+});
+
+test("does not classify refresh token reuse as a blocking quota error", () => {
+  assert.equal(
+    isBlockingCodexQuotaError({
+      code: "refresh_token_reused",
+      message:
+        "Token 刷新失败: status=401 Unauthorized, error_code=refresh_token_reused",
+      timestamp: 1,
+    }),
+    false,
+  );
 });
