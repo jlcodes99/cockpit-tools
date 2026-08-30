@@ -5,6 +5,16 @@ edition = "2021"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"
 
+# `cockpit quota --json` is the public command. Keep `cockpit-cli` as a
+# compatibility alias for older consumers.
+[[bin]]
+name = "cockpit"
+path = "src/main.rs"
+
+[[bin]]
+name = "cockpit-cli"
+path = "src/main.rs"
+
 [dependencies]
 cockpit-core = { path = "../cockpit-core" }
 clap = { version = "4.5", features = ["derive", "env"] }
