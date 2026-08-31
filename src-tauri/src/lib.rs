@@ -598,11 +598,24 @@ pub fn run() {
                     }
                 }
             }
-            WindowEvent::Resized(_) | WindowEvent::Moved(_) => {
+            WindowEvent::Resized(_) => {
                 if window.label() == "main" {
-                    modules::main_window_state::capture_and_save_from_window_handle_debounced(
-                        window,
-                    );
+                    modules::main_window_state::request_main_window_resized();
+                }
+            }
+            WindowEvent::Moved(_) => {
+                if window.label() == "main" {
+                    modules::main_window_state::request_main_window_moved();
+                }
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                if window.label() == "main" {
+                    modules::main_window_state::request_main_window_viewport_refresh();
+                }
+            }
+            WindowEvent::Focused(true) => {
+                if window.label() == "main" {
+                    modules::main_window_state::request_main_window_viewport_refresh();
                 }
             }
             _ => {}
@@ -1359,6 +1372,9 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         match &event {
+            RunEvent::MainEventsCleared => {
+                modules::main_window_state::flush_pending_main_window_reconcile(app_handle);
+            }
             RunEvent::ExitRequested { api, .. } => {
                 if modules::floating_card_window::should_keep_alive_after_main_window_destroyed()
                     && !modules::app_lifecycle::is_shutdown_started()
