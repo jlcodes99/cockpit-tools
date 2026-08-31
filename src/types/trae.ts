@@ -65,7 +65,7 @@ export type TraeUsage = {
   payAsYouGoUsd?: number | null;
   usageExhausted?: boolean | null;
   /** CN 速通额度模型（premium_model_fast_*），与国际站 USD basic 额度不同 */
-  usageModel?: 'usd' | 'fast_request' | 'unknown';
+  usageModel?: 'usd' | 'fast_request' | 'credits' | 'unknown';
   fastRequestAvailable?: number | null;
   fastRequestLimit?: number | null;
   fastRequestUsed?: number | null;
@@ -74,6 +74,10 @@ export type TraeUsage = {
   canGetExpressStatus?: number | null;
   soloParallelLimit?: number | null;
   hasSoloPackage?: boolean | null;
+  /** CN 积分计费模式（is_credits_billing）：usage_summary 汇总 */
+  isCreditsBilling?: boolean | null;
+  creditsConsumed?: number | null;
+  creditsTotal?: number | null;
 };
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -419,6 +423,30 @@ function getPackTimeInfo(pack: Record<string, unknown> | null) {
   };
 }
 
+function getCreditsUsageSummary(rawUsage: unknown): {
+  isCreditsBilling: boolean;
+  consumed: number | null;
+  total: number | null;
+} {
+  const root = toRecord(rawUsage);
+  const nested = root ? toRecord(root.raw) : null;
+  const source =
+    root != null && root.is_credits_billing != null
+      ? root
+      : (nested ?? root);
+  if (!source) {
+    return { isCreditsBilling: false, consumed: null, total: null };
+  }
+
+  const isCreditsBilling = toBoolean(source.is_credits_billing) === true;
+  const summary = toRecord(source.usage_summary);
+  return {
+    isCreditsBilling,
+    consumed: summary ? toNumber(summary.consumed_amount) : null,
+    total: summary ? toNumber(summary.total_amount) : null,
+  };
+}
+
 function getUsageStatusFromPackList(
   rawUsage: unknown,
   options?: { preferCnSelection?: boolean },
@@ -510,10 +538,23 @@ function getUsageStatusFromPackList(
     'Free';
   const derivedPercent = totalUsd > 0 ? (spentUsd / totalUsd) * 100 : 0;
   const fastUsage = preferCn ? getFastRequestUsage(rawUsage) : null;
+  const creditsSummary = preferCn ? getCreditsUsageSummary(rawUsage) : null;
+  const isCreditsBilling = creditsSummary?.isCreditsBilling === true;
 
   let usedPercent: number | null = Math.max(0, Math.min(100, Math.round(derivedPercent)));
   let usageModel: TraeUsage['usageModel'] = 'usd';
-  if (preferCn && fastUsage) {
+  if (preferCn && isCreditsBilling && creditsSummary?.total != null) {
+    // 积分计费模式：usage_summary.consumed_amount / total_amount 为权威数据，
+    // 优先级高于速通次数与 USD 展示。
+    usageModel = 'credits';
+    const total = creditsSummary.total;
+    if (total > 0) {
+      const consumed = creditsSummary.consumed ?? 0;
+      usedPercent = Math.max(0, Math.min(100, Math.round((consumed / total) * 100)));
+    } else {
+      usedPercent = 0;
+    }
+  } else if (preferCn && fastUsage) {
     usageModel = 'fast_request';
     if (fastUsage.limit === -1) {
       usedPercent = 0;
@@ -532,8 +573,8 @@ function getUsageStatusFromPackList(
 
   return {
     usedPercent,
-    spentUsd: usageModel === 'fast_request' ? null : spentUsd,
-    totalUsd: usageModel === 'fast_request' ? null : totalUsd,
+    spentUsd: usageModel === 'fast_request' || usageModel === 'credits' ? null : spentUsd,
+    totalUsd: usageModel === 'fast_request' || usageModel === 'credits' ? null : totalUsd,
     resetAt: toUnixSeconds(resetAtRaw),
     basicQuota,
     basicUsage,
@@ -556,6 +597,9 @@ function getUsageStatusFromPackList(
     fastRequestAvailable: fastUsage?.available ?? null,
     fastRequestLimit: fastUsage?.limit ?? null,
     fastRequestUsed: fastUsage?.used ?? null,
+    isCreditsBilling,
+    creditsConsumed: creditsSummary?.consumed ?? null,
+    creditsTotal: creditsSummary?.total ?? null,
   };
 }
 
@@ -849,8 +893,18 @@ export function getTraeUsage(account: TraeAccount): TraeUsage {
     };
   }
 
+  const creditsSummary = preferCn ? getCreditsUsageSummary(account.trae_usage_raw) : null;
+  const isCreditsBilling = creditsSummary?.isCreditsBilling === true;
+  let fallbackPercent: number | null = null;
+  if (isCreditsBilling && creditsSummary?.total != null && creditsSummary.total > 0) {
+    fallbackPercent = Math.max(
+      0,
+      Math.min(100, Math.round(((creditsSummary.consumed ?? 0) / creditsSummary.total) * 100)),
+    );
+  }
+
   return {
-    usedPercent: null,
+    usedPercent: fallbackPercent,
     spentUsd: null,
     totalUsd: null,
     resetAt: account.plan_reset_at ?? null,
@@ -868,7 +922,7 @@ export function getTraeUsage(account: TraeAccount): TraeUsage {
     payAsYouGoOpen: false,
     payAsYouGoUsd: null,
     usageExhausted: false,
-    usageModel: preferCn ? 'unknown' : 'usd',
+    usageModel: isCreditsBilling ? 'credits' : preferCn ? 'unknown' : 'usd',
     fastRequestAvailable: null,
     fastRequestLimit: null,
     fastRequestUsed: null,
@@ -876,6 +930,9 @@ export function getTraeUsage(account: TraeAccount): TraeUsage {
     canGetExpressStatus: cnDetail.canGetExpressStatus,
     soloParallelLimit: cnDetail.soloParallelLimit,
     hasSoloPackage: cnDetail.hasSoloPackage,
+    isCreditsBilling,
+    creditsConsumed: creditsSummary?.consumed ?? null,
+    creditsTotal: creditsSummary?.total ?? null,
   };
 }
 

@@ -84,6 +84,11 @@ import {
   getWorkbuddyAutoCheckinConfig,
   migrateWorkbuddyAutoCheckinConfigAsync,
 } from './services/workbuddyAutoCheckinService';
+import {
+  clearLegacyTraeAutoCheckinLogs,
+  getTraeAutoCheckinConfig,
+  migrateTraeAutoCheckinConfigAsync,
+} from './services/traeAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
 import { isCodexInstanceAccountConflict } from './utils/codexInstanceLaunchConflict';
@@ -2272,6 +2277,11 @@ function MainApp() {
     clearLegacyWorkbuddyAutoCheckinLogs();
     void migrateWorkbuddyAutoCheckinConfigAsync(getWorkbuddyAutoCheckinConfig()).catch((err) => {
       console.warn('[WorkbuddyAutoCheckin] 迁移旧版自动签到配置失败:', err);
+    });
+
+    clearLegacyTraeAutoCheckinLogs();
+    void migrateTraeAutoCheckinConfigAsync(getTraeAutoCheckinConfig()).catch((err) => {
+      console.warn('[TraeAutoCheckin] 迁移旧版自动签到配置失败:', err);
     });
   }, []);
 

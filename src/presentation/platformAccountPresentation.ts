@@ -1533,6 +1533,30 @@ export function buildTraeAccountPresentation(
   const quotaItems: UnifiedQuotaMetric[] = [];
 
   if (
+    usage.usageModel === "credits" &&
+    usage.creditsTotal != null &&
+    (usage.creditsTotal ?? 0) > 0
+  ) {
+    const creditsTotal = usage.creditsTotal ?? 0;
+    const creditsRemaining = Math.max(
+      0,
+      creditsTotal - (usage.creditsConsumed ?? 0),
+    );
+    quotaItems.push({
+      key: "credits",
+      label: t("trae.quota.creditsLabel", "积分"),
+      percentage: remainingPercent ?? 0,
+      progressPercent: remainingPercent ?? 0,
+      quotaClass: getCursorUsageQuotaClass(usedPercent ?? 0),
+      valueText: t("trae.quota.creditsAvailable", {
+        remaining: formatQuotaNumber(creditsRemaining),
+        total: formatQuotaNumber(creditsTotal),
+        defaultValue: "积分可用 {{remaining}} / {{total}}",
+      }),
+      resetText: formatMetricResetText(usage.resetAt, t),
+      showProgress: true,
+    });
+  } else if (
     remainingPercent != null ||
     usage.spentUsd != null ||
     usage.totalUsd != null ||

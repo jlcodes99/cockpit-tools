@@ -2734,41 +2734,28 @@ pub async fn get_trae_checkin_status(
             .map_err(|e| e.to_string())?,
     );
     headers.insert(
-        reqwest::header::ORIGIN,
-        "https://www.trae.cn"
-            .parse::<reqwest::header::HeaderValue>()
-            .map_err(|e| e.to_string())?,
-    );
-    headers.insert(
-        reqwest::header::REFERER,
-        "https://www.trae.cn/"
-            .parse::<reqwest::header::HeaderValue>()
-            .map_err(|e| e.to_string())?,
-    );
-    headers.insert(
-        "x-app-type",
-        "trae"
+        "User-Agent",
+        "Trae/1.0.0 antigravity-cockpit-tools"
             .parse::<reqwest::header::HeaderValue>()
             .map_err(|e| e.to_string())?,
     );
     headers.insert(
         reqwest::header::AUTHORIZATION,
-        format!("Bearer {}", account.access_token)
+        format!("Cloud-IDE-JWT {}", account.access_token)
             .parse::<reqwest::header::HeaderValue>()
             .map_err(|e| e.to_string())?,
     );
 
-    let mut url = "https://api.trae.cn/trae/api/v2/ug/checkin_credits/status".to_string();
     if !device_id.is_empty() {
-        url.push_str(&format!("?did={}", device_id));
         if let Ok(device_header) = reqwest::header::HeaderValue::from_bytes(device_id.as_bytes()) {
             headers.insert("x-device-id", device_header);
         }
     }
 
     let response = client
-        .get(&url)
+        .post("https://api.trae.cn/trae/api/v2/ug/checkin_credits/status")
         .headers(headers)
+        .body("{}")
         .send()
         .await
         .map_err(|e| format!("签到状态请求失败: {}", e))?;
@@ -2784,10 +2771,12 @@ pub async fn get_trae_checkin_status(
         serde_json::from_str(&body).map_err(|e| format!("解析签到状态响应失败: {}", e))?;
 
     if data.code != 0 {
-        return Err(format!(
-            "获取签到状态失败 (code={}): Token 已过期，请重新登录",
-            data.code
-        ));
+        let reason = if data.message.is_empty() {
+            "Token 已过期，请重新登录".to_string()
+        } else {
+            data.message
+        };
+        return Err(format!("获取签到状态失败 (code={}): {}", data.code, reason));
     }
 
     let message = if data.checked_in {
@@ -2832,26 +2821,14 @@ pub async fn claim_trae_checkin(
             .map_err(|e| e.to_string())?,
     );
     headers.insert(
-        reqwest::header::ORIGIN,
-        "https://www.trae.cn"
-            .parse::<reqwest::header::HeaderValue>()
-            .map_err(|e| e.to_string())?,
-    );
-    headers.insert(
-        reqwest::header::REFERER,
-        "https://www.trae.cn/"
-            .parse::<reqwest::header::HeaderValue>()
-            .map_err(|e| e.to_string())?,
-    );
-    headers.insert(
-        "x-app-type",
-        "trae"
+        "User-Agent",
+        "Trae/1.0.0 antigravity-cockpit-tools"
             .parse::<reqwest::header::HeaderValue>()
             .map_err(|e| e.to_string())?,
     );
     headers.insert(
         reqwest::header::AUTHORIZATION,
-        format!("Bearer {}", account.access_token)
+        format!("Cloud-IDE-JWT {}", account.access_token)
             .parse::<reqwest::header::HeaderValue>()
             .map_err(|e| e.to_string())?,
     );
@@ -2882,10 +2859,12 @@ pub async fn claim_trae_checkin(
         serde_json::from_str(&body).map_err(|e| format!("解析签到领取响应失败: {}", e))?;
 
     if claim_data.code != 0 {
-        return Err(format!(
-            "签到领取失败 (code={}): Token 已过期，请重新登录",
-            claim_data.code
-        ));
+        let reason = if claim_data.message.is_empty() {
+            "Token 已过期，请重新登录".to_string()
+        } else {
+            claim_data.message
+        };
+        return Err(format!("签到领取失败 (code={}): {}", claim_data.code, reason));
     }
 
     // 领取后重新查询状态

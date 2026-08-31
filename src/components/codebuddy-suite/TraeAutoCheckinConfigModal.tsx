@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { listen } from '@tauri-apps/api/event';
 import {
   X,
   Clock,
@@ -19,7 +20,7 @@ import {
   TraeAutoCheckinConfig,
   TraeAutoCheckinLogRecord,
   parseTimeToMinutes,
-  getTraeAutoCheckinLogs,
+  getTraeAutoCheckinLogsAsync,
   clearTraeAutoCheckinLogs,
   runTraeAutoCheckinCycleIfNeeded,
   TRAE_AUTO_CHECKIN_LOGS_CHANGED_EVENT,
@@ -27,7 +28,7 @@ import {
 
 interface TraeAutoCheckinConfigModalProps {
   config: TraeAutoCheckinConfig;
-  onSave: (newConfig: TraeAutoCheckinConfig) => void;
+  onSave: (newConfig: TraeAutoCheckinConfig) => Promise<void>;
   onClose: () => void;
 }
 
@@ -45,23 +46,62 @@ export function TraeAutoCheckinConfigModal({
   const [endTime, setEndTime] = useState(config.endTime || '12:00');
   const [error, setError] = useState<string | null>(null);
 
-  const [logs, setLogs] = useState<TraeAutoCheckinLogRecord[]>(() =>
-    getTraeAutoCheckinLogs(),
-  );
+  const [logs, setLogs] = useState<TraeAutoCheckinLogRecord[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [manualTesting, setManualTesting] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const handleLogsChange = () => {
-      setLogs(getTraeAutoCheckinLogs());
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    let requestId = 0;
+
+    const loadLogs = async () => {
+      const currentRequestId = ++requestId;
+      setLogsLoading(true);
+      setLogsError(null);
+
+      try {
+        const nextLogs = await getTraeAutoCheckinLogsAsync();
+        if (!disposed && currentRequestId === requestId) {
+          setLogs(nextLogs);
+        }
+      } catch (err) {
+        console.warn('[TraeAutoCheckin] 读取后端签到日志失败:', err);
+        if (!disposed && currentRequestId === requestId) {
+          setLogsError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (!disposed && currentRequestId === requestId) {
+          setLogsLoading(false);
+        }
+      }
     };
-    window.addEventListener(TRAE_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange);
+
+    void loadLogs();
+    const handleLogsChange = () => {
+      void loadLogs();
+    };
+    void listen(TRAE_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange)
+      .then((stopListening) => {
+        if (disposed) {
+          stopListening();
+        } else {
+          unlisten = stopListening;
+        }
+      })
+      .catch((err) => {
+        console.warn('[TraeAutoCheckin] 监听后端签到日志事件失败:', err);
+      });
     return () => {
-      window.removeEventListener(TRAE_AUTO_CHECKIN_LOGS_CHANGED_EVENT, handleLogsChange);
+      disposed = true;
+      unlisten?.();
     };
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
       setError(t('workbuddy.autoCheckin.error.invalidTime', '开始时间格式错误'));
       return;
@@ -76,8 +116,20 @@ export function TraeAutoCheckinConfigModal({
       setError(t('workbuddy.autoCheckin.error.endBeforeStart', '结束时间不能早于开始时间'));
       return;
     }
+    setSaving(true);
     setError(null);
-    onSave({ enabled, startTime, endTime });
+    try {
+      await onSave({
+        ...config,
+        enabled,
+        startTime,
+        endTime,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleManualTest = async () => {
@@ -86,6 +138,18 @@ export function TraeAutoCheckinConfigModal({
       await runTraeAutoCheckinCycleIfNeeded(true);
     } finally {
       setManualTesting(false);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    if (!confirm(t('workbuddy.autoCheckin.confirmClear', '确定清空所有记录？'))) {
+      return;
+    }
+    try {
+      await clearTraeAutoCheckinLogs();
+    } catch (err) {
+      console.warn('[TraeAutoCheckin] 清空签到日志失败:', err);
+      setLogsError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -130,7 +194,7 @@ export function TraeAutoCheckinConfigModal({
         <div className="modal-header">
           <h2>
             <Settings size={18} />
-            {t('trae.autoCheckin.title', 'TRAE SOLO CN 自动签到设置')}
+            {t('trae.autoCheckin.title', 'TRAE CN 自动签到设置')}
           </h2>
           <button className="modal-close" onClick={onClose}>
             <X size={18} />
@@ -199,11 +263,20 @@ export function TraeAutoCheckinConfigModal({
                 </div>
               </div>
 
+              <div className="setting-desc">
+                {t(
+                  'workbuddy.autoCheckin.desc',
+                  '开启后，将在所选时间段内为每个账号随机选择一个时刻自动签到（Trae CN / TraeWork 积分模式）。',
+                )}
+              </div>
+
               <div className="setting-actions">
                 <button
                   className="btn btn-primary btn-full"
-                  onClick={handleSave}
+                  onClick={() => void handleSave()}
+                  disabled={saving}
                 >
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : null}
                   {t('common.save', '保存')}
                 </button>
               </div>
@@ -237,11 +310,7 @@ export function TraeAutoCheckinConfigModal({
                 {logs.length > 0 && (
                   <button
                     className="btn btn-danger btn-sm"
-                    onClick={() => {
-                      if (confirm(t('workbuddy.autoCheckin.confirmClear', '确定清空所有记录？'))) {
-                        clearTraeAutoCheckinLogs();
-                      }
-                    }}
+                    onClick={() => void handleClearLogs()}
                   >
                     <Trash2 size={14} />
                     {t('common.clear', '清空')}
@@ -249,7 +318,15 @@ export function TraeAutoCheckinConfigModal({
                 )}
               </div>
 
-              {logs.length === 0 ? (
+              {logsLoading ? (
+                <div className="history-empty">
+                  <p>{t('common.loading', '加载中...')}</p>
+                </div>
+              ) : logsError ? (
+                <div className="history-empty">
+                  <p className="checkin-error-text">{logsError}</p>
+                </div>
+              ) : logs.length === 0 ? (
                 <div className="history-empty">
                   <p>{t('workbuddy.autoCheckin.noLogs', '暂无签到记录')}</p>
                 </div>
@@ -289,6 +366,9 @@ export function TraeAutoCheckinConfigModal({
                               {detail.time && <span className="detail-time">{detail.time}</span>}
                               {detail.message && (
                                 <span className="detail-message">{detail.message}</span>
+                              )}
+                              {typeof detail.credit === 'number' && (
+                                <span className="detail-message">+{detail.credit}</span>
                               )}
                             </div>
                           ))}

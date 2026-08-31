@@ -3,7 +3,7 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
 use crate::models::trae::{TraeAccount, TraeOAuthStartResponse};
-use crate::modules::{logger, trae_account, trae_oauth};
+use crate::modules::{logger, trae_account, trae_auto_checkin, trae_oauth};
 
 fn resolve_trae_refresh_protection_map(
     accounts: &[TraeAccount],
@@ -512,4 +512,48 @@ pub async fn claim_trae_checkin(
     device_id: String,
 ) -> Result<trae_account::CheckinStatusResult, String> {
     trae_account::claim_trae_checkin(&account_id, &device_id).await
+}
+
+/// 获取前端与后端共用的签到设备 ID
+#[tauri::command]
+pub fn get_trae_checkin_device_id() -> Result<String, String> {
+    trae_auto_checkin::get_or_create_device_id()
+}
+
+#[tauri::command]
+pub fn get_trae_auto_checkin_config() -> Result<trae_auto_checkin::TraeAutoCheckinConfig, String> {
+    trae_auto_checkin::get_config_checked()
+}
+
+#[tauri::command]
+pub fn migrate_trae_auto_checkin_config(
+    legacy_config: trae_auto_checkin::TraeAutoCheckinConfig,
+) -> Result<trae_auto_checkin::TraeAutoCheckinConfig, String> {
+    trae_auto_checkin::migrate_config_if_missing(&legacy_config)
+}
+
+#[tauri::command]
+pub fn save_trae_auto_checkin_config(
+    config: trae_auto_checkin::TraeAutoCheckinConfig,
+) -> Result<(), String> {
+    trae_auto_checkin::save_config(&config)
+}
+
+#[tauri::command]
+pub fn get_trae_auto_checkin_logs(
+) -> Result<Vec<trae_auto_checkin::TraeAutoCheckinLogRecord>, String> {
+    trae_auto_checkin::get_logs_checked()
+}
+
+#[tauri::command]
+pub fn clear_trae_auto_checkin_logs() -> Result<(), String> {
+    trae_auto_checkin::save_logs(&[])
+}
+
+#[tauri::command]
+pub async fn run_trae_auto_checkin_now(
+    app: AppHandle,
+    force: Option<bool>,
+) -> Result<String, String> {
+    trae_auto_checkin::run_trae_auto_checkin_cycle_if_needed(&app, force.unwrap_or(false)).await
 }

@@ -145,8 +145,13 @@ export interface TraeCheckinStatusResult {
 
 const TRAE_CHECKIN_DEVICE_ID_KEY = 'agtools.trae.checkin_device_id';
 
-/** 获取或生成 Trae 签到使用的设备 ID */
-export function getTraeCheckinDeviceId(): string {
+/** 获取或生成 Trae 签到使用的设备 ID（与 Rust 后端共用，避免同账号多设备） */
+export async function getTraeCheckinDeviceId(): Promise<string> {
+  try {
+    return await invoke<string>('get_trae_checkin_device_id');
+  } catch {
+    // 后端命令不可用时退回 WebView 本地生成
+  }
   if (typeof window === 'undefined') return '';
   try {
     let deviceId = localStorage.getItem(TRAE_CHECKIN_DEVICE_ID_KEY);
@@ -164,7 +169,7 @@ export function getTraeCheckinDeviceId(): string {
 export async function getTraeCheckinStatus(
   accountId: string,
 ): Promise<TraeCheckinStatusResult> {
-  const deviceId = getTraeCheckinDeviceId();
+  const deviceId = await getTraeCheckinDeviceId();
   return await invoke('get_trae_checkin_status', { accountId, deviceId });
 }
 
@@ -172,6 +177,6 @@ export async function getTraeCheckinStatus(
 export async function claimTraeCheckin(
   accountId: string,
 ): Promise<TraeCheckinStatusResult> {
-  const deviceId = getTraeCheckinDeviceId();
+  const deviceId = await getTraeCheckinDeviceId();
   return await invoke('claim_trae_checkin', { accountId, deviceId });
 }

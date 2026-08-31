@@ -532,6 +532,7 @@ pub fn run() {
 
             apply_startup_minimized(&app.handle());
             modules::workbuddy_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
+            modules::trae_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
 
             Ok(())
         })
@@ -1205,6 +1206,13 @@ pub fn run() {
             commands::trae::inject_trae_account,
             commands::trae::get_trae_checkin_status,
             commands::trae::claim_trae_checkin,
+            commands::trae::get_trae_checkin_device_id,
+            commands::trae::get_trae_auto_checkin_config,
+            commands::trae::migrate_trae_auto_checkin_config,
+            commands::trae::save_trae_auto_checkin_config,
+            commands::trae::get_trae_auto_checkin_logs,
+            commands::trae::clear_trae_auto_checkin_logs,
+            commands::trae::run_trae_auto_checkin_now,
             // Trae Instance Commands
             commands::trae_instance::trae_get_instance_defaults,
             commands::trae_instance::trae_list_instances,

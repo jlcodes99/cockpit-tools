@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   BookOpen,
+  CalendarCheck,
 } from 'lucide-react';
 import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
@@ -41,6 +42,7 @@ import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../comp
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
 import { TraeInstancesContent } from './TraeInstancesPage';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
+import { TraeCheckinModal } from '../components/codebuddy-suite/TraeCheckinModal';
 import * as traeService from '../services/traeService';
 import type { TraePlatformId } from '../services/traeService';
 import type { TraeAccount } from '../types/trae';
@@ -172,6 +174,8 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
   const filterPersistenceScopeSeed = platformConfig.platformKey;
   const targetFilterPersistenceScope = normalizeAccountsOverviewScope(filterPersistenceScopeSeed);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
+  const isCnPlatform = platformId === 'trae_cn' || platformId === 'trae_solo_cn';
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
     readAccountsOverviewFilterPersistenceEnabled(targetFilterPersistenceScope)
       ? readAccountsOverviewFilterStringArray(targetFilterPersistenceScope, FILTER_TYPES_FIELD)
@@ -607,17 +611,33 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
       const hasUsageRaw = account.trae_usage_raw != null || account.trae_entitlement_raw != null;
       const hasFastRequest =
         usage.usageModel === 'fast_request' && usage.fastRequestAvailable != null;
+      const hasCredits =
+        usage.usageModel === 'credits' &&
+        usage.creditsTotal != null &&
+        (usage.creditsTotal ?? 0) > 0;
       const formatFastTimes = (value: number) =>
         value === -1
           ? t('trae.quota.fastUnlimited', '无限次')
           : t('trae.quota.fastTimes', '{{count}} 次', {
               count: value,
             });
+      const formatCredits = (value: number) =>
+        Number.isInteger(value) ? String(value) : value.toFixed(1);
 
-      // CN：优先速通次数展示，无可靠剩余时不猜测（对齐社区 #1281）
+      // CN：积分计费模式优先展示（usage_summary 为权威数据），其次速通次数，
+      // 无可靠剩余时不猜测（对齐社区 #1281）
       let costText: string;
       if (isCnAccount) {
-        if (hasFastRequest) {
+        if (hasCredits) {
+          const remaining = Math.max(
+            0,
+            (usage.creditsTotal ?? 0) - (usage.creditsConsumed ?? 0),
+          );
+          costText = t('trae.quota.creditsAvailable', '积分可用 {{remaining}} / {{total}}', {
+            remaining: formatCredits(remaining),
+            total: formatCredits(usage.creditsTotal ?? 0),
+          });
+        } else if (hasFastRequest) {
           costText = t('trae.quota.fastAvailable', '速通可用 {{times}}', {
             times: formatFastTimes(usage.fastRequestAvailable ?? 0),
           });
@@ -654,11 +674,15 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
       const statusTone: TraeQuotaSummary['statusTone'] = !hasUsageRaw
         ? 'unknown'
         : isCnAccount
-          ? hasFastRequest
-            ? usage.usageExhausted
+          ? hasCredits
+            ? percentage != null && percentage >= 90
               ? 'warning'
               : 'normal'
-            : 'unknown'
+            : hasFastRequest
+              ? usage.usageExhausted
+                ? 'warning'
+                : 'normal'
+              : 'unknown'
           : usage.usageExhausted
             ? usage.payAsYouGoOpen && !isFreePlan
               ? 'normal'
@@ -668,7 +692,11 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
       const statusText = !hasUsageRaw
         ? t('trae.quota.statusUnknown', 'Status: --')
         : isCnAccount
-          ? hasFastRequest
+          ? hasCredits
+            ? percentage != null && percentage >= 90
+              ? t('trae.quota.statusCreditsLow', '状态：积分即将耗尽')
+              : t('trae.quota.statusSynced', '状态：已同步')
+            : hasFastRequest
             ? usage.usageExhausted
               ? t('trae.quota.statusExhaustedFree', 'Status: Usage exhausted, upgrade recommended')
               : t('trae.quota.statusSynced', '状态：已同步')
@@ -723,15 +751,15 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
           : t('trae.quota.packageEmpty', 'Package: --');
 
       return {
-        percentage: isCnAccount && !hasFastRequest && usage.usageModel !== 'usd' ? null : percentage,
+        percentage: isCnAccount && !hasCredits && !hasFastRequest && usage.usageModel !== 'usd' ? null : percentage,
         percentageText:
-          isCnAccount && !hasFastRequest && usage.usageModel !== 'usd'
+          isCnAccount && !hasCredits && !hasFastRequest && usage.usageModel !== 'usd'
             ? '--'
             : percentage == null
               ? '--'
               : `${percentage}%`,
         quotaClass: computeQuotaClass(
-          isCnAccount && !hasFastRequest && usage.usageModel !== 'usd' ? null : percentage,
+          isCnAccount && !hasCredits && !hasFastRequest && usage.usageModel !== 'usd' ? null : percentage,
         ),
         costText,
         statusText,
@@ -1392,6 +1420,17 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             </div>
 
             <div className="toolbar-right">
+              {isCnPlatform && (
+                <button
+                  className="btn btn-secondary icon-only"
+                  onClick={() => setShowCheckinModal(true)}
+                  disabled={accounts.length === 0}
+                  title={t('trae.checkin.modalTitle', '每日签到')}
+                  aria-label={t('trae.checkin.modalTitle', '每日签到')}
+                >
+                  <CalendarCheck size={14} />
+                </button>
+              )}
               <button
                 className="btn btn-primary icon-only"
                 onClick={() => openAddModal('oauth')}
@@ -1957,6 +1996,14 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
             onClose={() => setShowTagModal(null)}
             onSave={handleSaveTags}
           />
+
+          {isCnPlatform && showCheckinModal && (
+            <TraeCheckinModal
+              accounts={accounts}
+              onClose={() => setShowCheckinModal(false)}
+              onCheckinComplete={() => { void store.fetchAccounts(); }}
+            />
+          )}
         </>
       )}
 

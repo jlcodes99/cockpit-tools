@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { listen } from '@tauri-apps/api/event';
 import {
   X,
   ChevronLeft,
@@ -18,11 +19,21 @@ import {
   Flame,
   Trophy,
   Ban,
+  Settings,
+  Clock,
 } from 'lucide-react';
 import { TraeAccount } from '../../types/trae';
 import { TraeCheckinStatusResult, getTraeCheckinStatus, claimTraeCheckin } from '../../services/traeService';
 import { useEscClose } from '../../hooks/useEscClose';
 import { getTraeAccountDisplayEmail } from '../../types/trae';
+import { TraeAutoCheckinConfigModal } from './TraeAutoCheckinConfigModal';
+import {
+  getTraeAutoCheckinConfig,
+  getTraeAutoCheckinConfigAsync,
+  saveTraeAutoCheckinConfigAsync,
+  TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT,
+  TraeAutoCheckinConfig,
+} from '../../services/traeAutoCheckinService';
 
 type CheckinUiState = 'loading' | 'available' | 'claimed' | 'inactive' | 'error';
 
@@ -68,6 +79,40 @@ export function TraeCheckinModal({
   const [accountStates, setAccountStates] = useState<Record<string, AccountCheckinState>>({});
   const [checkAllLoading, setCheckAllLoading] = useState(false);
   const [refreshLoading, setRefreshLoading] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [autoCheckinConfig, setAutoCheckinConfig] = useState<TraeAutoCheckinConfig>(() =>
+    getTraeAutoCheckinConfig(),
+  );
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const handleConfigChange = () => {
+      void getTraeAutoCheckinConfigAsync().then((nextConfig) => {
+        if (!disposed) {
+          setAutoCheckinConfig(nextConfig);
+        }
+      });
+    };
+    handleConfigChange();
+    window.addEventListener(TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
+    void listen(TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange)
+      .then((stopListening) => {
+        if (disposed) {
+          stopListening();
+        } else {
+          unlisten = stopListening;
+        }
+      })
+      .catch((err) => {
+        console.warn('[TraeAutoCheckin] 监听后端签到配置事件失败:', err);
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+      window.removeEventListener(TRAE_AUTO_CHECKIN_CONFIG_CHANGED_EVENT, handleConfigChange);
+    };
+  }, []);
 
   const updateAccountState = useCallback(
     (accountId: string, update: Partial<AccountCheckinState>) => {
@@ -208,6 +253,39 @@ export function TraeCheckinModal({
                 <Ban size={14} /> {errorCount} {t('workbuddy.checkin.errors', '异常')}
               </span>
             )}
+            <span
+              className={`checkin-stat auto-checkin-badge ${
+                autoCheckinConfig.enabled ? 'enabled' : 'disabled'
+              }`}
+              onClick={() => setShowConfigModal(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setShowConfigModal(true);
+                }
+              }}
+              title={
+                autoCheckinConfig.enabled
+                  ? t(
+                      'workbuddy.checkin.autoCheckinEnabledHint',
+                      '自动签到已开启：将在 {{start}} 至 {{end}} 随机签到（点击设置）',
+                      {
+                        start: autoCheckinConfig.startTime,
+                        end: autoCheckinConfig.endTime,
+                      },
+                    )
+                  : t('workbuddy.checkin.autoCheckinDisabledHint', '自动签到未开启（点击设置）')
+              }
+            >
+              <Clock size={14} />
+              {autoCheckinConfig.enabled
+                ? `${t('workbuddy.checkin.autoCheckinLabel', '自动签到')} (${
+                    autoCheckinConfig.startTime
+                  }-${autoCheckinConfig.endTime})`
+                : t('workbuddy.checkin.autoCheckinOff', '自动签到未开启')}
+            </span>
           </div>
           <div className="checkin-actions">
             <button
@@ -262,6 +340,11 @@ export function TraeCheckinModal({
                       })}
                     </span>
                   )}
+                  {state.error && (
+                    <span className="checkin-account-error" title={state.error}>
+                      <XCircle size={12} /> {state.error}
+                    </span>
+                  )}
                 </div>
 
                 <div className="checkin-account-action">
@@ -309,6 +392,31 @@ export function TraeCheckinModal({
           <div className="checkin-empty">
             <p>{t('workbuddy.checkin.noAccounts', '暂无账号')}</p>
           </div>
+        )}
+
+        <div className="modal-footer checkin-modal-footer">
+          <button
+            className="btn btn-secondary icon-only"
+            onClick={() => setShowConfigModal(true)}
+            title={t('workbuddy.checkin.autoCheckinSettings', '自动签到设置')}
+            aria-label={t('workbuddy.checkin.autoCheckinSettings', '自动签到设置')}
+          >
+            <Settings size={14} />
+          </button>
+          <button className="btn btn-secondary" onClick={onClose}>
+            {t('common.close', '关闭')}
+          </button>
+        </div>
+
+        {showConfigModal && (
+          <TraeAutoCheckinConfigModal
+            config={autoCheckinConfig}
+            onSave={async (newConfig) => {
+              await saveTraeAutoCheckinConfigAsync(newConfig);
+              setAutoCheckinConfig(newConfig);
+            }}
+            onClose={() => setShowConfigModal(false)}
+          />
         )}
       </div>
     </div>
