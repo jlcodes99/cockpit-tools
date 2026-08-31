@@ -39,8 +39,15 @@ fn generate_login_id() -> String {
     )
 }
 
+/// The billing gateway rejects requests without a User-Agent header with
+/// HTTP 403 / code=10085 ("请求不合法，请检查请求系统头"), while `reqwest`
+/// sends none by default. Any non-empty UA passes the gateway check.
+const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+                  (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36";
+
 fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
+        .user_agent(UA)
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
