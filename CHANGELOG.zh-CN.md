@@ -7,6 +7,12 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
+## [Unreleased]
+
+### 修复
+
+- **同步官方 WorkBuddy 5.4.5 Credits 额度查询**：`get-user-resource` 改为先发空请求体读取 `data.resources`，失败再回退 `PackageStartTimeRange`。旧的 `PackageEndTimeRange` 会被上游 403 拒绝，导致额度查不出来。
+
 ## [1.3.34] - 2026-08-28
 
 ### 新增

@@ -42,7 +42,12 @@ export function parseDateTimeToEpoch(value: unknown): number | null {
  */
 export function parseCycleTotal(a: Record<string, unknown>): number {
   return (
-    parseNumeric(a.CycleCapacitySizePrecise) ?? parseNumeric(a.CycleCapacitySize) ?? parseNumeric(a.CapacitySizePrecise) ?? parseNumeric(a.CapacitySize) ?? 0
+    parseNumeric(a.CycleCapacitySizePrecise) ??
+    parseNumeric(a.CycleCapacitySize) ??
+    parseNumeric(a.CapacitySizePrecise) ??
+    parseNumeric(a.CapacitySize) ??
+    parseNumeric(a.total) ??
+    0
   );
 }
 
@@ -51,7 +56,13 @@ export function parseCycleTotal(a: Record<string, unknown>): number {
  */
 export function parseCycleRemain(a: Record<string, unknown>): number {
   return (
-    parseNumeric(a.CycleCapacityRemainPrecise) ?? parseNumeric(a.CycleCapacityRemain) ?? parseNumeric(a.CapacityRemainPrecise) ?? parseNumeric(a.CapacityRemain) ?? 0
+    parseNumeric(a.CycleCapacityRemainPrecise) ??
+    parseNumeric(a.CycleCapacityRemain) ??
+    parseNumeric(a.CapacityRemainPrecise) ??
+    parseNumeric(a.CapacityRemain) ??
+    parseNumeric(a.remaining) ??
+    parseNumeric(a.remain) ??
+    0
   );
 }
 
@@ -59,8 +70,11 @@ export function parseCycleRemain(a: Record<string, unknown>): number {
  * 检查是否为活跃资源
  */
 export function isActiveResource(a: Record<string, unknown>): boolean {
-  const s = typeof a.Status === 'number' ? a.Status : -1;
-  return s === RESOURCE_STATUS.valid || s === RESOURCE_STATUS.usedUp;
+  const s = typeof a.Status === 'number' ? a.Status : null;
+  if (s === RESOURCE_STATUS.valid || s === RESOURCE_STATUS.usedUp) return true;
+  // Official WorkBuddy desktop credits resources may omit Status.
+  if (s == null && (parseCycleTotal(a) > 0 || parseCycleRemain(a) > 0)) return true;
+  return false;
 }
 
 /**
@@ -87,6 +101,40 @@ export function isProPackage(a: Record<string, unknown>): boolean {
   return code === PACKAGE_CODE.proMon || code === PACKAGE_CODE.proYear;
 }
 
+function mapDesktopCreditResource(raw: Record<string, unknown>): Record<string, unknown> {
+  const remaining = parseNumeric(raw.remaining) ?? parseNumeric(raw.remain) ?? parseCycleRemain(raw);
+  const total = parseNumeric(raw.total) ?? parseCycleTotal(raw) ?? remaining;
+  const name =
+    (typeof raw.name === 'string' && raw.name) ||
+    (typeof raw.PackageName === 'string' && raw.PackageName) ||
+    null;
+  const code =
+    (typeof raw.commodity_code === 'string' && raw.commodity_code) ||
+    (typeof raw.commodityCode === 'string' && raw.commodityCode) ||
+    (typeof raw.PackageCode === 'string' && raw.PackageCode) ||
+    null;
+  const inferredCode = code || (name?.includes('基础') ? PACKAGE_CODE.free : null);
+  const expire = raw.expire_at ?? raw.expireAt ?? raw.ExpiredTime ?? raw.CycleEndTime ?? null;
+  const expireText = expire == null ? null : String(expire);
+  const status =
+    typeof raw.Status === 'number' ? raw.Status : remaining > 0 ? RESOURCE_STATUS.valid : RESOURCE_STATUS.usedUp;
+
+  return {
+    ...raw,
+    PackageCode: inferredCode,
+    PackageName: name,
+    CycleCapacitySizePrecise: String(total),
+    CycleCapacityRemainPrecise: String(remaining),
+    CycleCapacitySize: total,
+    CycleCapacityRemain: remaining,
+    Status: status,
+    ExpiredTime: expireText,
+    DeductionEndTime: expire,
+    CycleEndTime: expireText,
+    __source: 'desktop-credits',
+  };
+}
+
 /**
  * 提取资源账号列表
  */
@@ -98,7 +146,19 @@ export function extractResourceAccounts(account: CodebuddySuiteAccountBase): Arr
   const response = asRecord(data?.Response);
   const payload = asRecord(response?.Data);
   const list = Array.isArray(payload?.Accounts) ? (payload!.Accounts as unknown[]) : [];
-  return list.filter((a): a is Record<string, unknown> => a != null && typeof a === 'object');
+  if (list.length > 0) {
+    return list.filter((a): a is Record<string, unknown> => a != null && typeof a === 'object');
+  }
+
+  // Official WorkBuddy desktop v5.4.5 billing() returns data.resources Credits rows.
+  const resources = Array.isArray(data?.resources)
+    ? data!.resources
+    : Array.isArray(userResource?.resources)
+      ? userResource!.resources
+      : [];
+  return resources
+    .filter((a): a is Record<string, unknown> => a != null && typeof a === 'object')
+    .map(mapDesktopCreditResource);
 }
 
 /**

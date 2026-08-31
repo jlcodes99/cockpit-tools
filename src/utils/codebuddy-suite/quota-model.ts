@@ -258,8 +258,10 @@ export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): Offic
   const mergedTrialOrFreeMon = aggregateCycleResources(trialOrFreeMon);
   const mergedFree = aggregateCycleResources(free);
   const mergedEnterprise = aggregateCycleResources(enterprise);
-  const ordered = [mergedTrialOrFreeMon, ...pro, ...activity, mergedEnterprise, mergedFree].filter(
-    (item): item is Record<string, unknown> => item != null && !!item.PackageCode,
+  const classified = new Set([...pro, ...extras, ...trialOrFreeMon, ...free, ...activity, ...enterprise]);
+  const leftovers = all.filter((item) => !classified.has(item));
+  const ordered = [mergedTrialOrFreeMon, ...pro, ...activity, mergedEnterprise, mergedFree, ...leftovers].filter(
+    (item): item is Record<string, unknown> => item != null && !!(item.PackageCode || item.PackageName),
   );
   const resources = ordered.map(toOfficialQuotaResource);
 
@@ -272,6 +274,7 @@ export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): Offic
  * 解析包名称
  */
 function resolvePackageName(resource: OfficialQuotaResource): string {
+  if (resource.packageName) return resource.packageName;
   if (resource.packageCode === PACKAGE_CODE.enterprise) return '企业版';
   if (resource.packageCode === PACKAGE_CODE.extra) return '加量包';
   if (resource.packageCode === PACKAGE_CODE.activity) return '活动赠送包';
@@ -281,7 +284,7 @@ function resolvePackageName(resource: OfficialQuotaResource): string {
   if (resource.packageCode === PACKAGE_CODE.proMon || resource.packageCode === PACKAGE_CODE.proYear) {
     return '专业版订阅';
   }
-  return resource.packageName || '基础包';
+  return '基础包';
 }
 
 /**
@@ -343,11 +346,19 @@ export function getQuotaCategoryGroups(account: CodebuddySuiteAccountBase, t: (k
 
   for (const resource of model.resources) {
     const code = resource.packageCode;
+    const name = resource.packageName || '';
     if (code === PACKAGE_CODE.enterprise) {
       baseItems.push(resource);
-    } else if (code === PACKAGE_CODE.free || code === PACKAGE_CODE.gift || code === PACKAGE_CODE.freeMon || code === PACKAGE_CODE.proMon || code === PACKAGE_CODE.proYear) {
+    } else if (
+      code === PACKAGE_CODE.free ||
+      code === PACKAGE_CODE.gift ||
+      code === PACKAGE_CODE.freeMon ||
+      code === PACKAGE_CODE.proMon ||
+      code === PACKAGE_CODE.proYear ||
+      name.includes('基础')
+    ) {
       baseItems.push(resource);
-    } else if (code === PACKAGE_CODE.activity) {
+    } else if (code === PACKAGE_CODE.activity || name.includes('赠')) {
       activityItems.push(resource);
     } else {
       otherItems.push(resource);

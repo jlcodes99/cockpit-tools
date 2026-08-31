@@ -65,12 +65,26 @@ fn normalize_user_resource_status(status: &[i32]) -> Vec<i32> {
 }
 
 fn build_default_user_resource_time_range() -> (String, String) {
+    // Official WorkBuddy 5.4.5 / CodeBuddy web client uses PackageStartTimeRange
+    // from a fixed start date to now. PackageEndTimeRange is rejected with HTTP 403.
     let now = chrono::Local::now();
-    let begin = now.format("%Y-%m-%d %H:%M:%S").to_string();
-    let end = (now + chrono::Duration::days(365 * 101))
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
+    let begin = "2024-12-01 21:25:00".to_string();
+    let end = now.format("%Y-%m-%d %H:%M:%S").to_string();
     (begin, end)
+}
+
+fn user_resource_has_payload(body: &Value) -> bool {
+    let has_resources = body
+        .pointer("/data/resources")
+        .and_then(|v| v.as_array())
+        .map(|arr| !arr.is_empty())
+        .unwrap_or(false);
+    let has_accounts = body
+        .pointer("/data/Response/Data/Accounts")
+        .and_then(|v| v.as_array())
+        .map(|arr| !arr.is_empty())
+        .unwrap_or(false);
+    has_resources || has_accounts
 }
 
 fn clear_pending_login(login_id: &str) -> Result<(), String> {
@@ -553,20 +567,29 @@ pub async fn fetch_user_resource_with_access_token(
     page_number: i32,
     page_size: i32,
 ) -> Result<Value, String> {
-    let client = build_client()?;
-    let url = format!(
-        "{}/v2/billing/meter/get-user-resource",
-        CODEBUDDY_API_ENDPOINT
-    );
-
     let body = json!({
         "PageNumber": page_number,
         "PageSize": page_size,
         "ProductCode": product_code,
         "Status": status,
-        "PackageEndTimeRangeBegin": package_end_time_range_begin,
-        "PackageEndTimeRangeEnd": package_end_time_range_end
+        "PackageStartTimeRangeBegin": package_end_time_range_begin,
+        "PackageStartTimeRangeEnd": package_end_time_range_end
     });
+    post_user_resource(access_token, uid, enterprise_id, domain, body).await
+}
+
+async fn post_user_resource(
+    access_token: &str,
+    uid: Option<&str>,
+    enterprise_id: Option<&str>,
+    domain: Option<&str>,
+    body: Value,
+) -> Result<Value, String> {
+    let client = build_client()?;
+    let url = format!(
+        "{}/v2/billing/meter/get-user-resource",
+        CODEBUDDY_API_ENDPOINT
+    );
 
     let mut req = client
         .post(&url)
@@ -590,7 +613,7 @@ pub async fn fetch_user_resource_with_access_token(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("请求 user resource（Token）失败: {}", e))?;
+        .map_err(|e| format!("请求 user resource（Token）失败:{}", e))?;
 
     let status_code = resp.status();
     let content_type = resp
@@ -605,19 +628,21 @@ pub async fn fetch_user_resource_with_access_token(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
-
-    let body: Value = resp.json().await.map_err(|e| {
-        format!(
-            "解析 user resource（Token）响应失败: {} (http={}, url={}, has_uid={}, has_enterprise_id={}, content_type={}, content_encoding={})",
-            e,
-            status_code.as_u16(),
-            url,
-            uid.is_some(),
-            enterprise_id.is_some(),
-            content_type,
-            content_encoding
-        )
-    })?;
+    let body: Value = resp
+        .json()
+        .await
+        .map_err(|e| {
+            format!(
+                "解析 user resource（Token）响应失败:{} (http={}, url={}, has_uid={}, has_enterprise_id={}, content_type={}, content_encoding={})",
+                e,
+                status_code.as_u16(),
+                url,
+                uid.is_some(),
+                enterprise_id.is_some(),
+                content_type,
+                content_encoding
+            )
+        })?;
 
     if !status_code.is_success() {
         let message = body
@@ -655,23 +680,51 @@ async fn fetch_user_resource_with_access_token_default(
     enterprise_id: Option<&str>,
     domain: Option<&str>,
 ) -> Result<Value, String> {
+    // Official WorkBuddy desktop billing() posts an empty body and reads data.resources.
+    let mut empty_ok: Option<Value> = None;
+    let mut empty_err: Option<String> = None;
+    match post_user_resource(access_token, uid, enterprise_id, domain, json!({})).await {
+        Ok(body) if user_resource_has_payload(&body) => {
+            logger::log_info("[CodeBuddy][IDE Token] user_resource 使用官方空请求体 Credits 接口成功");
+            return Ok(body);
+        }
+        Ok(body) => {
+            logger::log_info(
+                "[CodeBuddy][IDE Token] 官方空请求体未返回资源，回退 PackageStartTimeRange",
+            );
+            empty_ok = Some(body);
+        }
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[CodeBuddy][IDE Token] 官方空请求体失败，回退 PackageStartTimeRange: {}",
+                err
+            ));
+            empty_err = Some(err);
+        }
+    }
+
     let product_code = normalize_product_code(None);
     let status = normalize_user_resource_status(&[]);
-    let (package_end_time_range_begin, package_end_time_range_end) =
+    let (package_start_time_range_begin, package_start_time_range_end) =
         build_default_user_resource_time_range();
-    fetch_user_resource_with_access_token(
+    match fetch_user_resource_with_access_token(
         access_token,
         uid,
         enterprise_id,
         domain,
         product_code.as_str(),
         &status,
-        package_end_time_range_begin.as_str(),
-        package_end_time_range_end.as_str(),
+        package_start_time_range_begin.as_str(),
+        package_start_time_range_end.as_str(),
         1,
         100,
     )
     .await
+    {
+        Ok(body) if user_resource_has_payload(&body) => Ok(body),
+        Ok(body) => Ok(empty_ok.unwrap_or(body)),
+        Err(err) => empty_ok.ok_or_else(|| empty_err.unwrap_or(err)),
+    }
 }
 
 async fn refresh_payload_for_account_inner(
