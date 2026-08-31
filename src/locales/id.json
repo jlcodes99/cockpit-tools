@@ -5466,6 +5466,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Check-in Harian"
+    },
+    "autoCheckin": {
+      "title": "Pengaturan check-in otomatis TRAE CN"
+    },
     "title": "Akun Trae",
     "empty": {
       "description": "Klik \"Tambah Akun\" untuk mulai mengelola akun Trae Anda, atau impor dari data Trae lokal atau berkas JSON.",
@@ -5485,6 +5491,9 @@
       "localDescWithPlatform": "Mengimpor akun yang sedang masuk, informasi paket, dan data kuota cache dari direktori konfigurasi lokal {{platform}}."
     },
     "quota": {
+      "creditsLabel": "Kredit",
+      "creditsAvailable": "Kredit tersisa {{remaining}} / {{total}}",
+      "statusCreditsLow": "Status: kredit hampir habis",
       "usedOfTotal": "${{used}} / ${{total}}​",
       "usageUnknown": "Penggunaan: --",
       "resetAt": "Reset langganan: {{date}}",

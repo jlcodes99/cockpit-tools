@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "일일 체크인"
+    },
+    "autoCheckin": {
+      "title": "TRAE CN 자동 체크인 설정"
+    },
     "title": "Trae 계정 관리",
     "empty": {
       "description": "\"계정 추가\"를 클릭해 Trae 계정 관리를 시작하거나 로컬 Trae 데이터 또는 JSON 파일에서 가져올 수 있습니다.",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "로컬 {{platform}} 설정 디렉터리에서 현재 로그인된 계정, 플랜 정보, 캐시된 할당량 데이터를 가져옵니다."
     },
     "quota": {
+      "creditsLabel": "크레딧",
+      "creditsAvailable": "크레딧 잔여 {{remaining}} / {{total}}",
+      "statusCreditsLow": "상태: 크레딧이 곧 소진됩니다",
       "usedOfTotal": "사용량 $ {{used}} / $ {{total}}",
       "usageUnknown": "사용량: --",
       "resetAt": "재설정 시간: {{date}}",

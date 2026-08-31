@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Check-in diário"
+    },
+    "autoCheckin": {
+      "title": "Configurações de check-in automático do TRAE CN"
+    },
     "title": "Gerenciamento de contas Trae",
     "empty": {
       "description": "Clique em \"Adicionar conta\" para comecar a gerenciar suas contas Trae ou importe-as dos dados locais do Trae ou de um arquivo JSON.",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "Importa a conta conectada atual, informações do plano e dados de cota em cache do diretório local de configuração do {{platform}}."
     },
     "quota": {
+      "creditsLabel": "Créditos",
+      "creditsAvailable": "Créditos: {{remaining}} / {{total}}",
+      "statusCreditsLow": "Status: créditos quase esgotados",
       "usedOfTotal": "Usado $ {{used}} de $ {{total}}",
       "usageUnknown": "Uso: --",
       "resetAt": "Redefinicao: {{date}}",

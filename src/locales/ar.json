@@ -5338,6 +5338,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "التسجيل اليومي"
+    },
+    "autoCheckin": {
+      "title": "إعدادات التسجيل التلقائي TRAE CN"
+    },
     "title": "إدارة حسابات Trae",
     "empty": {
       "description": "انقر على \"إضافة حساب\" لبدء إدارة حسابات Trae، أو استيرادها من بيانات Trae المحلية أو من ملف JSON.",
@@ -5357,6 +5363,9 @@
       "localDescWithPlatform": "استيراد الحساب المسجل حاليًا ومعلومات الخطة وبيانات الحصة المخزنة مؤقتًا من مجلد إعدادات {{platform}} المحلي."
     },
     "quota": {
+      "creditsLabel": "الرصيد",
+      "creditsAvailable": "الرصيد المتبقي {{remaining}} / {{total}}",
+      "statusCreditsLow": "الحالة: الرصيد على وشك النفاد",
       "usedOfTotal": "المستخدم $ {{used}} من $ {{total}}",
       "usageUnknown": "الاستخدام: --",
       "resetAt": "وقت إعادة التعيين: {{date}}",

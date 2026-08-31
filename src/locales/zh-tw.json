@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "每日簽到"
+    },
+    "autoCheckin": {
+      "title": "TRAE CN 自動簽到設定"
+    },
     "title": "Trae 帳號管理",
     "empty": {
       "description": "點擊「新增帳號」開始管理您的 Trae 帳號，也可以從本機 Trae 資料或 JSON 檔案匯入。",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "支援從本機 {{platform}} 設定目錄讀取目前登入帳號、方案資訊與額度快取。"
     },
     "quota": {
+      "creditsLabel": "積分",
+      "creditsAvailable": "積分可用 {{remaining}} / {{total}}",
+      "statusCreditsLow": "狀態：積分即將耗盡",
       "usedOfTotal": "已用 $ {{used}} / $ {{total}}",
       "usageUnknown": "用量：--",
       "resetAt": "重設時間：{{date}}",

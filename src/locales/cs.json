@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Denní check-in"
+    },
+    "autoCheckin": {
+      "title": "Nastavení automatického check-inu TRAE CN"
+    },
     "title": "Sprava uctu Trae",
     "empty": {
       "description": "Kliknete na „Pridat ucet“ a zacnete spravovat ucty Trae, nebo je importujte z mistnich dat Trae ci ze souboru JSON.",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "Importuje aktuálně přihlášený účet, informace o plánu a uložená data kvóty z místního konfiguračního adresáře {{platform}}."
     },
     "quota": {
+      "creditsLabel": "Kredity",
+      "creditsAvailable": "Kredity: {{remaining}} / {{total}}",
+      "statusCreditsLow": "Stav: kredity téměř vyčerpány",
       "usedOfTotal": "Vyuzito $ {{used}} z $ {{total}}",
       "usageUnknown": "Vyuziti: --",
       "resetAt": "Cas resetu: {{date}}",

@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "デイリーチェックイン"
+    },
+    "autoCheckin": {
+      "title": "TRAE CN 自動チェックイン設定"
+    },
     "title": "Trae アカウント管理",
     "empty": {
       "description": "「アカウント追加」をクリックして Trae アカウント管理を開始するか、ローカル Trae データまたは JSON ファイルからインポートできます。",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "ローカルの {{platform}} 設定ディレクトリから、現在ログイン中のアカウント、プラン情報、キャッシュ済みクォータデータをインポートします。"
     },
     "quota": {
+      "creditsLabel": "クレジット",
+      "creditsAvailable": "クレジット残り {{remaining}} / {{total}}",
+      "statusCreditsLow": "状態：クレジットが残りわずかです",
       "usedOfTotal": "使用済み $ {{used}} / $ {{total}}",
       "usageUnknown": "利用量：--",
       "resetAt": "リセット時刻: {{date}}",

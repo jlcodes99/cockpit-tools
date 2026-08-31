@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Günlük check-in"
+    },
+    "autoCheckin": {
+      "title": "TRAE CN otomatik check-in ayarları"
+    },
     "title": "Trae hesap yonetimi",
     "empty": {
       "description": "Trae hesaplarinizi yonetmeye baslamak icin \"Hesap ekle\" dugmesine tiklayin veya yerel Trae verilerinden ya da bir JSON dosyasindan ice aktarın.",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "Geçerli oturum açmış hesabı, plan bilgilerini ve önbelleğe alınmış kota verilerini yerel {{platform}} yapılandırma dizininden içe aktarır."
     },
     "quota": {
+      "creditsLabel": "Kredi",
+      "creditsAvailable": "Kredi: {{remaining}} / {{total}}",
+      "statusCreditsLow": "Durum: kredi neredeyse tükendi",
       "usedOfTotal": "Kullanilan $ {{used}} / $ {{total}}",
       "usageUnknown": "Kullanim: --",
       "resetAt": "Sifirlama zamani: {{date}}",

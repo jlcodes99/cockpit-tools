@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Ежедневный check-in"
+    },
+    "autoCheckin": {
+      "title": "Настройки автоматического check-in TRAE CN"
+    },
     "title": "Управление аккаунтами Trae",
     "empty": {
       "description": "Нажмите «Добавить аккаунт», чтобы начать управлять аккаунтами Trae, или импортируйте их из локальных данных Trae либо из JSON-файла.",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "Импортирует текущий вошедший аккаунт, сведения о плане и кэшированные данные квоты из локального каталога настроек {{platform}}."
     },
     "quota": {
+      "creditsLabel": "Кредиты",
+      "creditsAvailable": "Кредиты: {{remaining}} / {{total}}",
+      "statusCreditsLow": "Статус: кредиты почти исчерпаны",
       "usedOfTotal": "Использовано $ {{used}} из $ {{total}}",
       "usageUnknown": "Использование: --",
       "resetAt": "Сброс: {{date}}",

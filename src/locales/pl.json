@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Codzienne zameldowanie"
+    },
+    "autoCheckin": {
+      "title": "Ustawienia automatycznego check-in TRAE CN"
+    },
     "title": "Zarzadzanie kontami Trae",
     "empty": {
       "description": "Kliknij „Dodaj konto”, aby zaczac zarzadzac kontami Trae, albo zaimportuj je z lokalnych danych Trae lub pliku JSON.",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "Importuje aktualnie zalogowane konto, informacje o planie i dane limitów z pamięci podręcznej z lokalnego katalogu konfiguracji {{platform}}."
     },
     "quota": {
+      "creditsLabel": "Kredyty",
+      "creditsAvailable": "Kredyty: {{remaining}} / {{total}}",
+      "statusCreditsLow": "Status: kredyty prawie wyczerpane",
       "usedOfTotal": "Wykorzystano $ {{used}} z $ {{total}}",
       "usageUnknown": "Zuzycie: --",
       "resetAt": "Reset: {{date}}",

@@ -5618,6 +5618,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "每日签到"
+    },
+    "autoCheckin": {
+      "title": "TRAE CN 自动签到设置"
+    },
     "title": "Trae 账号管理",
     "empty": {
       "description": "点击“添加账号”开始管理您的 Trae 账号，也可以从本机 Trae 数据或 JSON 文件导入。",
@@ -5637,6 +5643,9 @@
       "localDescWithPlatform": "支持从本机 {{platform}} 配置目录读取当前登录账号、套餐信息和配额缓存数据。"
     },
     "quota": {
+      "creditsLabel": "积分",
+      "creditsAvailable": "积分可用 {{remaining}} / {{total}}",
+      "statusCreditsLow": "状态：积分即将耗尽",
       "usedOfTotal": "${{used}} / ${{total}}",
       "usageUnknown": "用量：--",
       "resetAt": "订阅重置：{{date}}",

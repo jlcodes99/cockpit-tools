@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Điểm danh hằng ngày"
+    },
+    "autoCheckin": {
+      "title": "Cài đặt điểm danh tự động TRAE CN"
+    },
     "title": "Quan ly tai khoan Trae",
     "empty": {
       "description": "Nhan \"Them tai khoan\" de bat dau quan ly cac tai khoan Trae, hoac nhap tu du lieu Trae cuc bo hay tep JSON.",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "Nhập tài khoản đang đăng nhập, thông tin gói và dữ liệu hạn mức đã lưu cache từ thư mục cấu hình {{platform}} cục bộ."
     },
     "quota": {
+      "creditsLabel": "Tín dụng",
+      "creditsAvailable": "Tín dụng còn {{remaining}} / {{total}}",
+      "statusCreditsLow": "Trạng thái: tín dụng sắp hết",
       "usedOfTotal": "Da dung $ {{used}} / $ {{total}}",
       "usageUnknown": "Muc dung: --",
       "resetAt": "Thoi gian dat lai: {{date}}",

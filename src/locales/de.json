@@ -5291,6 +5291,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Täglicher Check-in"
+    },
+    "autoCheckin": {
+      "title": "TRAE CN Auto-Check-in-Einstellungen"
+    },
     "title": "Trae-Kontenverwaltung",
     "empty": {
       "description": "Klicken Sie auf „Konto hinzufugen“, um Ihre Trae-Konten zu verwalten, oder importieren Sie sie aus lokalen Trae-Daten oder einer JSON-Datei.",
@@ -5310,6 +5316,9 @@
       "localDescWithPlatform": "Importiert das aktuell angemeldete Konto, Planinformationen und zwischengespeicherte Kontingentdaten aus dem lokalen {{platform}}-Konfigurationsverzeichnis."
     },
     "quota": {
+      "creditsLabel": "Guthaben",
+      "creditsAvailable": "Guthaben: {{remaining}} / {{total}}",
+      "statusCreditsLow": "Status: Guthaben fast aufgebraucht",
       "usedOfTotal": "Verbraucht $ {{used}} von $ {{total}}",
       "usageUnknown": "Nutzung: --",
       "resetAt": "Zurucksetzung: {{date}}",

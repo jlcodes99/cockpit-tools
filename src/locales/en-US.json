@@ -5618,6 +5618,12 @@
     }
   },
   "trae": {
+    "checkin": {
+      "modalTitle": "Daily Check-in"
+    },
+    "autoCheckin": {
+      "title": "TRAE CN Auto Check-in Settings"
+    },
     "title": "Trae Account",
     "empty": {
       "description": "Click \"Add Account\" to start managing your Trae accounts, or import from local Trae data or a JSON file.",
@@ -5637,6 +5643,9 @@
       "localDescWithPlatform": "Import the current signed-in account, plan information, and cached quota data from the local {{platform}} configuration directory."
     },
     "quota": {
+      "creditsLabel": "Credits",
+      "creditsAvailable": "Credits left: {{remaining}} / {{total}}",
+      "statusCreditsLow": "Status: Credits running low",
       "usedOfTotal": "${{used}} / ${{total}}",
       "usageUnknown": "Usage: --",
       "resetAt": "Subscription reset: {{date}}",
