@@ -20,6 +20,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     antigravityAppPath,
     antigravityDualSwitchNoRestartEnabled,
     antigravityLaunchOnSwitch,
+    antigravitySyncCliOnSwitch,
+    setAntigravitySyncCliOnSwitch,
     antigravityScopeAccounts,
     antigravityScopeTypeOptions,
     antigravitySeamlessSwitchUnlocked,
@@ -1255,6 +1257,33 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       type="checkbox"
                       checked={antigravityLaunchOnSwitch}
                       onChange={(e) => setAntigravityLaunchOnSwitch(e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">
+                    {t(
+                      'settings.general.antigravitySyncCliOnSwitch',
+                      '切号时同步 Antigravity CLI 凭据',
+                    )}
+                  </div>
+                  <div className="row-desc">
+                    {t(
+                      'settings.general.antigravitySyncCliOnSwitchDesc',
+                      '切号时自动同步 ~/.gemini/antigravity-cli 与 Language Server 凭据文件，使终端 agy 命令无缝生效。',
+                    )}
+                  </div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={antigravitySyncCliOnSwitch}
+                      onChange={(e) => setAntigravitySyncCliOnSwitch(e.target.checked)}
                     />
                     <span className="slider"></span>
                   </label>
