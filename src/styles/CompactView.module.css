@@ -203,13 +203,15 @@
 }
 
 .tierPro {
-  background: linear-gradient(135deg, #1d4ed8, #0ea5a5);
-  color: white;
+  background: var(--plan-pro-bg);
+  color: var(--plan-pro-color);
+  border: 1px solid var(--plan-pro-border);
 }
 
 .tierUltra {
-  background: linear-gradient(135deg, #f97316, #f59e0b);
-  color: white;
+  background: var(--plan-ultra-bg);
+  color: var(--plan-ultra-color);
+  border: 1px solid var(--plan-ultra-border);
 }
 
 .tierFree {

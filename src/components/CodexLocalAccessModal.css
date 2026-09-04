@@ -133,11 +133,11 @@
   height: 18px;
   padding: 10px;
   box-sizing: content-box;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #2563eb 0%, #0ea5a5 100%);
+  border-radius: var(--radius-xl);
+  background: var(--primary);
   color: #fff;
   box-shadow:
-    0 14px 28px -18px rgba(29, 78, 216, 0.72),
+    0 14px 28px -18px color-mix(in srgb, var(--primary) 72%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
@@ -512,10 +512,9 @@
 }
 
 .codex-local-access-stats-range-tab.is-active {
-  color: #1d4ed8;
-  border-color: rgba(37, 99, 235, 0.24);
-  background: rgba(219, 234, 254, 0.9);
-  box-shadow: 0 8px 16px -12px rgba(37, 99, 235, 0.65);
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 24%, transparent);
+  background: var(--primary-light);
 }
 
 .codex-local-access-inline-error,
@@ -1707,11 +1706,11 @@
 }
 
 .codex-local-access-stat-card-cost {
-  color: #059669;
+  color: var(--success);
 }
 
 .codex-local-access-stat-card-latency {
-  color: #d97706;
+  color: var(--warning);
 }
 
 .codex-local-access-stat-label {
@@ -3114,13 +3113,9 @@
 }
 
 [data-theme="dark"] .codex-local-access-inline-info {
-  color: #93c5fd;
-  background: linear-gradient(
-    135deg,
-    rgba(30, 58, 138, 0.72),
-    rgba(37, 99, 235, 0.5)
-  );
-  border-color: rgba(96, 165, 250, 0.24);
+  color: var(--primary);
+  background: var(--primary-light);
+  border-color: color-mix(in srgb, var(--primary) 24%, transparent);
 }
 
 [data-theme="dark"] .codex-local-access-test-dialog {
