@@ -54,6 +54,11 @@ import { useEscClose } from '../hooks/useEscClose';
 import { useEnterConfirm } from '../hooks/useEnterConfirm';
 import { useExportJsonModal } from '../hooks/useExportJsonModal';
 import { useLaunchTerminalOptions } from '../hooks/useLaunchTerminalOptions';
+import {
+  DEFAULT_VIEW_MODE,
+  normalizeViewMode,
+  type ViewMode,
+} from '../hooks/useProviderAccountsPage';
 import { getProviderCurrentAccountId, type ProviderCurrentPlatform } from '../services/providerCurrentAccountService';
 import {
   isModelProviderUsageUnavailableError,
@@ -229,7 +234,6 @@ function getClaudeDesktopLoginProgressDetail(
   return t('claude.desktopOAuth.progress.hint', '首次准备完成后，后续会直接复用本地缓存。');
 }
 
-type ViewMode = 'grid' | 'list';
 type AddTab = 'desktop' | 'desktopGateway' | 'oauth' | 'apikey' | 'import';
 type ClaudeSubPlatform = 'desktop' | 'cli';
 type ClaudePageSection = ClaudeSubPlatform | 'instances';
@@ -289,13 +293,10 @@ function formatDate(timestamp: number): string {
 
 function readInitialViewMode(): ViewMode {
   try {
-    const value = localStorage.getItem(CLAUDE_ACCOUNTS_VIEW_MODE_KEY);
-    if (value === 'grid' || value === 'list') return value;
-    if (value === 'compact') return 'list';
+    return normalizeViewMode(localStorage.getItem(CLAUDE_ACCOUNTS_VIEW_MODE_KEY));
   } catch {
-    // ignore storage failures
+    return DEFAULT_VIEW_MODE;
   }
-  return 'grid';
 }
 
 function readClaudeApiKeyUsageCache(): Record<string, ClaudeApiKeyUsageState> {
