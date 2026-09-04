@@ -1106,6 +1106,11 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
     proxy_url: Option<&str>,
     metered_feature_patterns: &HashMap<String, String>,
 ) -> Value {
+    let effective_plan_type = if resolve_effective_plan_key(account) == "free" {
+        Some("free".to_string())
+    } else {
+        account.plan_type.clone()
+    };
     let account_id = account
         .account_id
         .as_deref()
@@ -1125,7 +1130,7 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
             "chatgpt_user_id": identity.chatgpt_user_id,
             "chatgpt_account_is_fedramp": identity.chatgpt_account_is_fedramp,
             "email": account.email,
-            "plan_type": account.plan_type,
+            "plan_type": effective_plan_type.clone(),
             "excluded_models": excluded_models,
             "disable_cooling": collection.disable_cooling,
             "websockets": collection.responses_websockets_enabled,
@@ -1145,7 +1150,7 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
         "refresh_owner": "cockpit_token_authority",
         "last_refresh": sidecar_account_last_refresh(account),
         "email": account.email.clone(),
-        "plan_type": account.plan_type.clone(),
+        "plan_type": effective_plan_type.clone(),
         "excluded_models": excluded_models,
         "disable_cooling": collection.disable_cooling,
         "websockets": collection.responses_websockets_enabled,
@@ -1485,6 +1490,11 @@ fn sidecar_account_manifest_value(
     auth_id: Option<&str>,
     collection: &CodexLocalAccessCollection,
 ) -> Value {
+    let effective_plan_type = if resolve_effective_plan_key(account) == "free" {
+        Some("free".to_string())
+    } else {
+        account.plan_type.clone()
+    };
     let auth_kind = if account.is_api_key_auth() {
         "api_key"
     } else if account.is_agent_identity_auth() {
@@ -1499,7 +1509,7 @@ fn sidecar_account_manifest_value(
         "email": account.email.clone(),
         "authId": auth_id,
         "authKind": auth_kind,
-        "planType": account.plan_type.as_deref(),
+        "planType": effective_plan_type.as_deref(),
         "accessTokenOnly": account_is_access_token_only(account),
         "chatgptAccountId": account.account_id.as_deref().unwrap_or_default(),
         "upstreamApiKey": account.openai_api_key.as_deref().unwrap_or_default(),

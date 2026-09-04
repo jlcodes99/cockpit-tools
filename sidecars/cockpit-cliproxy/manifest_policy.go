@@ -837,6 +837,16 @@ func loadManifest(path string) (*manifest, error) {
 		account.Email = strings.TrimSpace(account.Email)
 		account.AuthKind = strings.ToLower(strings.TrimSpace(account.AuthKind))
 		account.ChatGPTAccountID = strings.TrimSpace(account.ChatGPTAccountID)
+		// 修正过期的付费计划为 free
+		if account.SubscriptionExpiryMS != nil && *account.SubscriptionExpiryMS > 0 {
+			now := time.Now().UnixMilli()
+			if *account.SubscriptionExpiryMS <= now {
+				lower := strings.ToLower(strings.TrimSpace(account.PlanType))
+				if lower != "free" && lower != "api_key" && lower != "" {
+					account.PlanType = "free"
+				}
+			}
+		}
 		m.accountByID[account.ID] = account
 		m.originalIndexByID[account.ID] = i
 		if authID := strings.TrimSpace(account.AuthID); authID != "" {
