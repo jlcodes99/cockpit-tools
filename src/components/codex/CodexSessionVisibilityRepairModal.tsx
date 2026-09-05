@@ -131,7 +131,7 @@ export function CodexSessionVisibilityRepairProgressView({
         case "write_rollout_files":
           return t(
             "codex.sessionManager.repairModal.progress.writeRolloutFiles",
-            "正在跳过旧会话文件写入...",
+            "正在校正 {{instance}} 的会话文件时间...",
             values,
           );
         case "write_sqlite_timestamps":
@@ -629,7 +629,7 @@ export function CodexSessionVisibilityRepairModal({
             {description ??
               t(
                 "codex.sessionManager.repairModal.description",
-                "将历史会话迁移到目标实例当前的 Provider，并修复会话文件、SQLite 索引、本地会话目录和工作区状态。执行前会创建本地备份。",
+                "将历史会话的 Provider 归一到目标实例当前状态（仅修正 SQLite 索引、会话目录和工作区状态；会话日志文件保持原样，只校正文件时间）。执行前会创建本地备份。",
               )}
           </p>
           <div className="codex-visibility-repair-options">
@@ -659,7 +659,7 @@ export function CodexSessionVisibilityRepairModal({
                   <small>
                     {t(
                       "codex.sessionManager.repairModal.modeQuickDesc",
-                      "只校正官方 state DB 和会话文件首条元数据，适合日常切号后恢复。",
+                      "只校正官方 state DB 和会话索引的 Provider，会话日志文件保持原样，适合日常切号后恢复。",
                     )}
                   </small>
                 </button>
@@ -681,7 +681,7 @@ export function CodexSessionVisibilityRepairModal({
                   <small>
                     {t(
                       "codex.sessionManager.repairModal.modeDeepDesc",
-                      "全量迁移历史 Provider，并修复目录、工作区和子 Agent 索引；执行前需退出目标实例。",
+                      "全量归一历史 Provider，并修复目录、工作区和子 Agent 索引；会话日志文件保持原样，执行前需退出目标实例。",
                     )}
                   </small>
                 </button>
