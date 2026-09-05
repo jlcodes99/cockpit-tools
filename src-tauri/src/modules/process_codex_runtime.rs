@@ -347,6 +347,168 @@ pub fn close_codex_default(timeout_secs: u64) -> Result<(), String> {
     }
 }
 
+/// Closes the default Codex desktop instance only when it acknowledges a
+/// normal application shutdown. Unlike `close_codex_default`, this function
+/// never escalates to `taskkill /F` / `close_pids`.
+///
+/// It is intended for automatic account rotation, where preserving the latest
+/// visible thread state is more important than immediately consuming the next
+/// account. A caller can retry on a later quota refresh when Codex is idle.
+pub fn close_codex_default_gracefully(timeout_secs: u64) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::logger::log_info(
+            "[Codex Safe AutoSwitch] requesting a checkpoint-preserving Codex shutdown",
+        );
+        let default_home = crate::modules::codex_account::get_codex_home()
+            .to_string_lossy()
+            .to_string();
+        let current_default_app_dirs = get_default_codex_windows_app_user_data_dirs(&default_home);
+        let entries = collect_codex_process_entries();
+        let mut pids: Vec<u32> = entries
+            .iter()
+            .filter_map(|(pid, dir)| match dir {
+                Some(dir) => current_default_app_dirs
+                    .contains(&normalize_path_for_compare(dir))
+                    .then_some(*pid),
+                None => Some(*pid),
+            })
+            .collect();
+        pids.sort();
+        pids.dedup();
+
+        if pids.is_empty() {
+            crate::modules::logger::log_info(
+                "[Codex Safe AutoSwitch] Codex is not running; no shutdown is needed",
+            );
+            return Ok(());
+        }
+
+        let requested: Vec<u32> = pids
+            .iter()
+            .copied()
+            .filter(|pid| request_codex_graceful_close(*pid))
+            .collect();
+        if requested.is_empty() {
+            return Err(
+                "CODEX_AUTO_SWITCH_DEFERRED: Codex did not accept a normal close request; will retry without force-closing it"
+                    .to_string(),
+            );
+        }
+
+        let graceful_wait_secs = timeout_secs.min(15).max(3);
+        if wait_pids_exit(&requested, graceful_wait_secs)
+            && collect_running_pids(&pids).is_empty()
+        {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Safe AutoSwitch] graceful close finished, targets={}",
+                summarize_pid_list_for_log(&pids)
+            ));
+            return Ok(());
+        }
+
+        Err(format!(
+            "CODEX_AUTO_SWITCH_DEFERRED: Codex is still running after a normal close request (targets={}); will retry without force-closing it",
+            summarize_pid_list_for_log(&collect_running_pids(&pids))
+        ))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        #[cfg(target_os = "linux")]
+        {
+            let default_home = normalize_path_for_compare(
+                &crate::modules::codex_account::get_codex_home()
+                    .to_string_lossy()
+                    .to_string(),
+            );
+            let has_running_codex = collect_codex_process_entries().iter().any(|(_, home)| {
+                home.as_ref()
+                    .map(|value| normalize_path_for_compare(value))
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| default_home.clone())
+                    == default_home
+            });
+            if !has_running_codex {
+                crate::modules::logger::log_info(
+                    "[Codex Safe AutoSwitch] Codex is not running; no shutdown is needed",
+                );
+                return Ok(());
+            }
+            return Err(
+                "CODEX_AUTO_SWITCH_DEFERRED: Codex is still running on Linux; will retry without sending it a termination signal"
+                    .to_string(),
+            );
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            crate::modules::logger::log_info(
+                "[Codex Safe AutoSwitch] requesting a checkpoint-preserving Codex shutdown",
+            );
+            let default_home = normalize_path_for_compare(
+                &crate::modules::codex_account::get_codex_home()
+                    .to_string_lossy()
+                    .to_string(),
+            );
+            let entries = collect_codex_process_entries();
+            let mut pids: Vec<u32> = entries
+                .iter()
+                .filter_map(|(pid, home)| {
+                    let resolved_home = home
+                        .as_ref()
+                        .map(|value| normalize_path_for_compare(value))
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or_else(|| default_home.clone());
+                    (resolved_home == default_home).then_some(*pid)
+                })
+                .collect();
+            pids.sort();
+            pids.dedup();
+
+            if pids.is_empty() {
+                crate::modules::logger::log_info(
+                    "[Codex Safe AutoSwitch] Codex is not running; no shutdown is needed",
+                );
+                return Ok(());
+            }
+
+            let direct_app_server_pids = collect_codex_direct_app_server_pids_for_roots(&pids);
+            let requested: Vec<u32> = pids
+                .iter()
+                .copied()
+                .filter(|pid| request_codex_graceful_close(*pid))
+                .collect();
+            if requested.is_empty() {
+                return Err(
+                "CODEX_AUTO_SWITCH_DEFERRED: Codex did not accept a normal close request; will retry without force-closing it"
+                    .to_string(),
+            );
+            }
+
+            let mut observed_pids = pids.clone();
+            observed_pids.extend(direct_app_server_pids);
+            observed_pids.sort();
+            observed_pids.dedup();
+            let graceful_wait_secs = timeout_secs.min(15).max(3);
+            if wait_pids_exit(&observed_pids, graceful_wait_secs)
+                && collect_running_pids(&observed_pids).is_empty()
+            {
+                crate::modules::logger::log_info(&format!(
+                    "[Codex Safe AutoSwitch] graceful close finished, targets={}",
+                    summarize_pid_list_for_log(&observed_pids)
+                ));
+                return Ok(());
+            }
+
+            Err(format!(
+            "CODEX_AUTO_SWITCH_DEFERRED: Codex is still running after a normal close request (targets={}); will retry without force-closing it",
+            summarize_pid_list_for_log(&collect_running_pids(&observed_pids))
+        ))
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn request_codex_graceful_close(pid: u32) -> bool {
     if pid == 0 || !is_pid_running(pid) {
@@ -404,6 +566,13 @@ fn request_codex_graceful_close(pid: u32) -> bool {
         return true;
     }
 
+    // Store-packaged Codex does not reliably accept `taskkill` without `/F`.
+    // Ask its top-level windows to close first so the application gets a chance
+    // to flush the current thread and its SQLite/session-index state.
+    if request_codex_window_close(pid) {
+        return true;
+    }
+
     use std::os::windows::process::CommandExt;
 
     crate::modules::logger::log_info(&format!(
@@ -441,6 +610,67 @@ fn request_codex_graceful_close(pid: u32) -> bool {
             false
         }
     }
+}
+
+/// Posts WM_CLOSE to every top-level window owned by `pid`.
+///
+/// This is deliberately kept separate from process termination: callers that
+/// need a lossless checkpoint can decline to force-close when the application
+/// does not exit after this request.
+#[cfg(target_os = "windows")]
+fn request_codex_window_close(pid: u32) -> bool {
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, PostMessageW, WM_CLOSE,
+    };
+
+    #[derive(Default)]
+    struct WindowCloseContext {
+        pid: u32,
+        posted: bool,
+    }
+
+    unsafe extern "system" fn close_owned_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let context = unsafe { &mut *(lparam.0 as *mut WindowCloseContext) };
+        let mut window_pid = 0u32;
+        unsafe {
+            GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
+        }
+        if window_pid == context.pid
+            && unsafe { PostMessageW(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0)).is_ok() }
+        {
+            context.posted = true;
+        }
+        BOOL(1)
+    }
+
+    let mut context = WindowCloseContext {
+        pid,
+        posted: false,
+    };
+    crate::modules::logger::log_info(&format!(
+        "[Codex Close] graceful WM_CLOSE request start pid={}",
+        pid
+    ));
+    let result = unsafe {
+        EnumWindows(
+            Some(close_owned_window),
+            LPARAM((&mut context as *mut WindowCloseContext) as isize),
+        )
+    };
+    if let Err(error) = result {
+        crate::modules::logger::log_warn(&format!(
+            "[Codex Close] graceful WM_CLOSE enumeration failed pid={} error={}",
+            pid, error
+        ));
+    }
+    if context.posted {
+        crate::modules::logger::log_info(&format!(
+            "[Codex Close] graceful WM_CLOSE request sent pid={}",
+            pid
+        ));
+    }
+    context.posted
 }
 
 #[cfg(target_os = "linux")]

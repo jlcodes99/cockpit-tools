@@ -11,6 +11,205 @@ static CODEX_BATCH_DELETE_JOBS: LazyLock<Mutex<HashMap<String, CodexBatchDeleteJ
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static CODEX_SWITCH_CANCEL_REQUESTS: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static CODEX_SAFE_AUTO_SWITCH_ARMED_ACCOUNT_ID: LazyLock<Mutex<Option<String>>> =
+    LazyLock::new(|| Mutex::new(None));
+const CODEX_SAFE_AUTO_SWITCH_PREPARE_WINDOW: Duration = Duration::from_secs(12);
+const CODEX_SAFE_AUTO_SWITCH_FINAL_WINDOW: Duration = Duration::from_secs(2);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexSessionFileStamp {
+    path: PathBuf,
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexSessionCheckpoint {
+    files: Vec<CodexSessionFileStamp>,
+}
+
+fn codex_session_file_stamp(path: &Path) -> Result<Option<CodexSessionFileStamp>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let metadata = fs::metadata(path).map_err(|error| {
+        format!(
+            "读取 Codex 会话文件元数据失败 ({}): {}",
+            path.display(),
+            error
+        )
+    })?;
+    Ok(Some(CodexSessionFileStamp {
+        path: path.to_path_buf(),
+        len: metadata.len(),
+        modified: metadata.modified().ok(),
+    }))
+}
+
+fn collect_newest_rollout_stamp(
+    directory: &Path,
+    newest: &mut Option<CodexSessionFileStamp>,
+) -> Result<(), String> {
+    if !directory.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(directory).map_err(|error| {
+        format!(
+            "读取 Codex 会话目录失败 ({}): {}",
+            directory.display(),
+            error
+        )
+    })? {
+        let entry = entry.map_err(|error| format!("读取 Codex 会话目录条目失败: {}", error))?;
+        let path = entry.path();
+        let file_type = entry.file_type().map_err(|error| {
+            format!(
+                "读取 Codex 会话条目类型失败 ({}): {}",
+                path.display(),
+                error
+            )
+        })?;
+        if file_type.is_dir() {
+            collect_newest_rollout_stamp(&path, newest)?;
+            continue;
+        }
+        let file_name = entry.file_name();
+        let is_rollout = file_name.to_string_lossy().starts_with("rollout-");
+        if !is_rollout {
+            continue;
+        }
+        let Some(candidate) = codex_session_file_stamp(&path)? else {
+            continue;
+        };
+        let replace = newest.as_ref().is_none_or(|current| {
+            candidate
+                .modified
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                > current
+                    .modified
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        });
+        if replace {
+            *newest = Some(candidate);
+        }
+    }
+    Ok(())
+}
+
+fn capture_codex_session_checkpoint() -> Result<CodexSessionCheckpoint, String> {
+    let codex_home = codex_account::get_codex_home();
+    let mut files = Vec::new();
+    for name in [
+        "session_index.jsonl",
+        ".codex-global-state.json",
+        "state_5.sqlite",
+        "state_5.sqlite-wal",
+        "thread_history_1.sqlite",
+        "thread_history_1.sqlite-wal",
+    ] {
+        if let Some(stamp) = codex_session_file_stamp(&codex_home.join(name))? {
+            files.push(stamp);
+        }
+    }
+    let mut newest_rollout = None;
+    collect_newest_rollout_stamp(&codex_home.join("sessions"), &mut newest_rollout)?;
+    if let Some(stamp) = newest_rollout {
+        files.push(stamp);
+    }
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(CodexSessionCheckpoint { files })
+}
+
+async fn wait_for_codex_session_checkpoint(
+    window: Duration,
+    phase: &str,
+) -> Result<CodexSessionCheckpoint, String> {
+    let before = tauri::async_runtime::spawn_blocking(capture_codex_session_checkpoint)
+        .await
+        .map_err(|error| format!("读取 Codex 切号前会话检查点失败: {}", error))??;
+    tauri::async_runtime::spawn_blocking(move || std::thread::sleep(window))
+        .await
+        .map_err(|error| format!("等待 Codex 会话安静窗口失败: {}", error))?;
+    let after = tauri::async_runtime::spawn_blocking(capture_codex_session_checkpoint)
+        .await
+        .map_err(|error| format!("读取 Codex 切号后会话检查点失败: {}", error))??;
+
+    let history_status = if before != after {
+        "advanced; the latest local state is durable"
+    } else {
+        "remained stable"
+    };
+    logger::log_info(&format!(
+        "[Codex Safe AutoSwitch] {} checkpoint {} during the {}s window",
+        phase,
+        history_status,
+        window.as_secs()
+    ));
+    Ok(after)
+}
+
+fn codex_auto_switch_is_armed_for(account_id: &str) -> bool {
+    CODEX_SAFE_AUTO_SWITCH_ARMED_ACCOUNT_ID
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .as_deref()
+        == Some(account_id)
+}
+
+async fn arm_codex_auto_switch_checkpoint(account_id: &str) -> Result<(), String> {
+    if codex_auto_switch_is_armed_for(account_id) {
+        logger::log_info(&format!(
+            "[Codex Safe AutoSwitch] checkpoint is already armed for current_id={}",
+            account_id
+        ));
+        return Ok(());
+    }
+
+    let checkpoint =
+        wait_for_codex_session_checkpoint(CODEX_SAFE_AUTO_SWITCH_PREPARE_WINDOW, "preparation")
+            .await?;
+    if checkpoint.files.is_empty() {
+        return Err(
+            "CODEX_AUTO_SWITCH_DEFERRED: no local Codex session files were found while preparing the checkpoint"
+                .to_string(),
+        );
+    }
+
+    *CODEX_SAFE_AUTO_SWITCH_ARMED_ACCOUNT_ID
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Some(account_id.to_string());
+    logger::log_info(&format!(
+        "[Codex Safe AutoSwitch] checkpoint armed for current_id={}; work may continue until the final low-quota threshold",
+        account_id
+    ));
+    Ok(())
+}
+
+async fn confirm_codex_auto_switch_checkpoint(account_id: &str) -> Result<(), String> {
+    // Do a final short quiet-window check even when the early checkpoint was
+    // prepared. This gives a just-finished response a chance to flush its
+    // latest session state before the bounded close/relaunch sequence starts.
+    let phase = if codex_auto_switch_is_armed_for(account_id) {
+        "final after preparation"
+    } else {
+        "final without preparation"
+    };
+    let checkpoint =
+        wait_for_codex_session_checkpoint(CODEX_SAFE_AUTO_SWITCH_FINAL_WINDOW, phase).await?;
+    if checkpoint.files.is_empty() {
+        return Err(
+            "CODEX_AUTO_SWITCH_DEFERRED: no local Codex session files were found at the final low-quota threshold"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn clear_codex_auto_switch_checkpoint() {
+    *CODEX_SAFE_AUTO_SWITCH_ARMED_ACCOUNT_ID
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = None;
+}
 
 fn request_codex_switch_cancel(account_id: &str) {
     CODEX_SWITCH_CANCEL_REQUESTS
@@ -691,13 +890,30 @@ fn restart_codex_specified_app_if_enabled(user_config: &config::UserConfig) {
     }
 }
 
-async fn stop_default_codex_runtime_before_auth_commit() -> Result<(), String> {
+async fn stop_default_codex_runtime_before_auth_commit(
+    checkpoint_preserving: bool,
+) -> Result<(), String> {
     let codex_home = codex_account::get_codex_home();
     let launch_mode = crate::modules::codex_instance::load_default_settings()?.launch_mode;
     crate::modules::codex_app_injection::stop_for_profile(&codex_home);
 
     if launch_mode == crate::models::InstanceLaunchMode::App {
-        tauri::async_runtime::spawn_blocking(|| process::close_codex_default(20))
+        tauri::async_runtime::spawn_blocking(move || {
+            if checkpoint_preserving {
+                #[cfg(target_os = "windows")]
+                {
+                    logger::log_info(
+                        "[Codex Safe AutoSwitch] session checkpoint is stable; using the proven bounded desktop shutdown before credential rotation",
+                    );
+                    return process::close_codex_default(20);
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    return process::close_codex_default_gracefully(15);
+                }
+            }
+            process::close_codex_default(20)
+        })
             .await
             .map_err(|error| format!("停止 Codex 旧授权运行态后台任务失败: {}", error))??;
     } else {
@@ -945,6 +1161,7 @@ pub async fn switch_codex_account(
     auto_repair_mode: Option<codex_session_visibility::CodexSessionVisibilityAutoRepairMode>,
     reauth_token_generation: Option<u64>,
     launch_after_switch: Option<bool>,
+    checkpoint_preserving: Option<bool>,
 ) -> Result<CodexAccount, String> {
     clear_codex_switch_cancel(&account_id);
     let _profile_lease = codex_account::try_acquire_profile_mutation_lease(
@@ -987,6 +1204,7 @@ pub async fn switch_codex_account(
     let initial_token_generation = initial_account.token_generation;
     let user_config = config::get_user_config();
     let launch_after_switch = launch_after_switch.unwrap_or(user_config.codex_launch_on_switch);
+    let checkpoint_preserving = checkpoint_preserving.unwrap_or(false);
     // client_auth_status 仅记录官方客户端运行后的观测结果，不参与切号或启动拦截。
     // 真实 Token Authority 失败仍由 prepare/switch 流程返回结构化授权错误。
     if launch_after_switch {
@@ -1108,7 +1326,7 @@ pub async fn switch_codex_account(
                 44,
                 serde_json::json!({}),
             );
-            stop_default_codex_runtime_before_auth_commit().await?;
+            stop_default_codex_runtime_before_auth_commit(checkpoint_preserving).await?;
             emit_codex_switch_step(
                 &step_app,
                 &step_account_id,
@@ -1427,27 +1645,61 @@ async fn run_codex_post_refresh_checks(app: &AppHandle) {
 
     let mut switched = false;
 
-    match codex_account::pick_auto_switch_target_if_needed() {
-        Ok(Some(target)) => {
+    match codex_account::evaluate_auto_switch_plan() {
+        Ok(codex_account::CodexAutoSwitchPlan::Prepare { current_account_id }) => {
+            if let Err(e) = arm_codex_auto_switch_checkpoint(&current_account_id).await {
+                logger::log_info(&format!(
+                    "[AutoSwitch][Codex] 安全自动切号准备检查点已推迟: current_id={}, reason={}",
+                    current_account_id, e
+                ));
+            }
+        }
+        Ok(codex_account::CodexAutoSwitchPlan::Switch {
+            current_account_id,
+            target,
+        }) => {
             let target_id = target.id.clone();
-            match switch_codex_account(app.clone(), target_id.clone(), None, None, None).await
-            {
-                Ok(switched_account) => {
-                    logger::log_info(&format!(
-                        "[AutoSwitch][Codex] 自动切号完成: target_id={}, email={}",
-                        switched_account.id, switched_account.email
-                    ));
-                    switched = true;
-                }
+            match confirm_codex_auto_switch_checkpoint(&current_account_id).await {
+                Ok(()) => match switch_codex_account(
+                    app.clone(),
+                    target_id.clone(),
+                    None,
+                    None,
+                    None,
+                    Some(true),
+                )
+                .await
+                {
+                    Ok(switched_account) => {
+                        clear_codex_auto_switch_checkpoint();
+                        logger::log_info(&format!(
+                            "[AutoSwitch][Codex] 安全自动切号完成: target_id={}, email={}",
+                            switched_account.id, switched_account.email
+                        ));
+                        switched = true;
+                    }
+                    Err(e) if e.starts_with("CODEX_AUTO_SWITCH_DEFERRED:") => {
+                        logger::log_info(&format!(
+                            "[AutoSwitch][Codex] 安全自动切号已推迟: target_id={}, reason={}",
+                            target_id, e
+                        ));
+                    }
+                    Err(e) => {
+                        logger::log_warn(&format!(
+                            "[AutoSwitch][Codex] 自动切号失败: target_id={}, error={}",
+                            target_id, e
+                        ));
+                    }
+                },
                 Err(e) => {
-                    logger::log_warn(&format!(
-                        "[AutoSwitch][Codex] 自动切号失败: target_id={}, error={}",
+                    logger::log_info(&format!(
+                        "[AutoSwitch][Codex] 安全自动切号等待最终会话检查点: target_id={}, reason={}",
                         target_id, e
                     ));
                 }
             }
         }
-        Ok(None) => {}
+        Ok(codex_account::CodexAutoSwitchPlan::None) => {}
         Err(e) => {
             logger::log_warn(&format!("[AutoSwitch][Codex] 自动切号检查失败: {}", e));
         }

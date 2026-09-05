@@ -398,7 +398,7 @@ fn spawn_switch_account(platform: PlatformId, account_id: String) {
                     .map(|_| ())
             }
             PlatformId::Codex => {
-                { commands::codex::switch_codex_account(app, account_id, None, None, None) }
+                { commands::codex::switch_codex_account(app, account_id, None, None, None, None) }
                     .await
                     .map(|_| ())
             }

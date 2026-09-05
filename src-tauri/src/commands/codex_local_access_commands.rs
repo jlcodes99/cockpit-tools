@@ -337,7 +337,7 @@ pub async fn codex_local_access_set_enabled(
         },
     )?;
     if enabled {
-        stop_default_codex_runtime_before_auth_commit().await?;
+        stop_default_codex_runtime_before_auth_commit(false).await?;
     }
     codex_local_access::set_local_access_enabled(enabled).await
 }
@@ -365,9 +365,11 @@ pub async fn codex_local_access_activate(
     let codex_home = launch_target.user_data_dir.clone();
     let _profile_lease =
         codex_account::try_acquire_profile_mutation_lease(&codex_home, "api-service-activate")?;
-    // 先停止目标 profile 的官方客户端，再写入 API Service 凭据。
+    // Stop the client that owns the target profile before changing its API
+    // Service credentials. Default-profile shutdown remains graceful; named
+    // instances keep their own isolated stop path.
     if launch_target.is_default {
-        stop_default_codex_runtime_before_auth_commit().await?;
+        stop_default_codex_runtime_before_auth_commit(false).await?;
     } else {
         crate::commands::codex_instance::codex_stop_instance(target_instance_id.clone()).await?;
     }

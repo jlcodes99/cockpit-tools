@@ -2944,7 +2944,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-row">
                         <div className="qs-row-label">
                           <span>
-                            primary_window ({t('codex.quota.hourly', '5小时配额')}) {t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            primary_window ({t('codex.quota.hourly', '5小时配额')}) {t('quickSettings.autoSwitch.threshold', '切换阈值')}
                           </span>
                         </div>
                         <div className="qs-row-control">
@@ -2994,7 +2994,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-row">
                         <div className="qs-row-label">
                           <span>
-                            secondary_window ({t('codex.quota.weekly', '周配额')}) {t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            secondary_window ({t('codex.quota.weekly', '周配额')}) {t('quickSettings.autoSwitch.threshold', '切换阈值')}
                           </span>
                         </div>
                         <div className="qs-row-control">
@@ -3035,6 +3035,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                             <span className="qs-input-unit">%</span>
                           </div>
                         </div>
+                      </div>
+
+                      <div className="qs-hint" style={{ marginTop: 0, marginBottom: 4 }}>
+                        {t(
+                          'quickSettings.autoSwitch.codexStagedThresholdHint',
+                          '在任一窗口达到 10% 或此值（以较早者为准）时准备会话检查点；在此处设置的最终阈值自动切换。',
+                        )}
                       </div>
 
                       <div className="qs-row qs-row--top">

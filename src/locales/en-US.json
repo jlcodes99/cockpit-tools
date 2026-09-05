@@ -4807,6 +4807,8 @@
       "title": "Auto Switch",
       "enable": "Enable Auto Switch",
       "threshold": "Switch Threshold",
+      "prepareThreshold": "Checkpoint Preparation Threshold",
+      "codexStagedThresholdHint": "Cockpit prepares a session checkpoint when either window reaches 10% or this value, whichever comes first; it switches automatically at the final threshold set here.",
       "thresholdDesc": "Auto switch when monitored model groups hit this percentage threshold",
       "creditsEnable": "Monitor Credits",
       "creditsThreshold": "Credits Threshold",
