@@ -1,5 +1,138 @@
 // Codex Local Access 测试：Takeover reconciliation, gateway configuration and remaining integration cases。
 // 测试与生产实现共享 super 作用域，验证真实网关、持久化和请求协议行为。
+    fn realtime_mixed_test_collection() -> CodexLocalAccessCollection {
+        let mut collection = test_local_access_collection(Vec::new());
+        collection.api_key = "mixed-realtime-test-key".to_string();
+        let mut key = build_local_access_api_key(Some("Mixed realtime"));
+        key.key = collection.api_key.clone();
+        key.model_routing = Some(CodexLocalAccessModelRouting {
+            default_route: "oauth".to_string(),
+            failure_policy: "strict".to_string(),
+            routes: Vec::new(),
+        });
+        collection.api_keys = vec![key];
+        collection
+    }
+
+    #[tokio::test]
+    async fn mixed_realtime_takeover_preserves_bound_oauth_and_local_bearer() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let _env = LocalAccessTestDataGuard::new("mixed-realtime-bound-oauth");
+        let profile_dir = make_temp_dir("mixed-realtime-bound-profile");
+        let tokens = CodexTokens {
+            id_token: make_test_jwt(json!({
+                "email": "voice@example.test", "exp": 4_102_444_800i64,
+                "https://api.openai.com/auth": { "chatgpt_account_id": "voice-test-account" }
+            })),
+            access_token: make_test_jwt(json!({"sub": "voice-test", "exp": 4_102_444_800i64})),
+            refresh_token: Some("voice-test-refresh".to_string()),
+        };
+        let account = CodexAccount::new(
+            "voice-oauth-test".to_string(), "voice@example.test".to_string(), tokens
+        );
+        crate::modules::codex_account::save_account(&account).expect("save OAuth fixture");
+        let mut collection = realtime_mixed_test_collection();
+        collection.bound_oauth_account_id = Some(account.id.clone());
+        collection.account_ids = vec![account.id.clone()];
+        collection.api_keys[0].account_ids = vec![account.id.clone()];
+        write_local_access_profile_takeover(&profile_dir, &collection, None)
+            .await.expect("write bound mixed takeover");
+        let auth: Value = serde_json::from_str(
+            &fs::read_to_string(profile_dir.join(CODEX_PROFILE_AUTH_FILE)).expect("read auth")
+        ).expect("parse auth");
+        assert_eq!(auth.pointer("/tokens/id_token").and_then(Value::as_str), Some(account.tokens.id_token.as_str()));
+        assert_eq!(auth.pointer("/tokens/refresh_token").and_then(Value::as_str), Some("voice-test-refresh"));
+        let config = fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read config");
+        let doc = config.parse::<Document>().expect("parse config");
+        assert_eq!(doc["model_providers"]["codex_local_access"]["requires_openai_auth"].as_bool(), Some(true));
+        assert_eq!(doc["model_providers"]["codex_local_access"]["experimental_bearer_token"].as_str(), Some(collection.api_key.as_str()));
+        assert_eq!(doc["experimental_realtime_ws_base_url"].as_str(), Some(build_collection_base_url(&collection).as_str()));
+        fs::remove_dir_all(profile_dir).expect("cleanup fixture");
+    }
+
+    #[tokio::test]
+    async fn mixed_realtime_takeover_routes_sideband_without_enabling_responses_websocket() {
+        let profile_dir = make_temp_dir("mixed-realtime-sideband");
+        let collection = realtime_mixed_test_collection();
+        let original = "model_context_window = 1000000\nmodel_auto_compact_token_limit = 900000\n";
+        fs::write(profile_dir.join(CODEX_PROFILE_CONFIG_FILE), original).expect("write original");
+        write_local_access_profile_takeover(&profile_dir, &collection, None)
+            .await
+            .expect("write mixed takeover");
+        let config = fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read config");
+        let doc = config.parse::<Document>().expect("parse config");
+        assert_eq!(
+            doc["experimental_realtime_ws_base_url"].as_str(),
+            Some(build_collection_base_url(&collection).as_str())
+        );
+        assert_eq!(doc["model_providers"]["codex_local_access"]["supports_websockets"].as_bool(), Some(false));
+        assert_eq!(doc["model_context_window"].as_integer(), Some(1_000_000));
+
+        let restored = restore_config_toml_from_takeover_backup(Some(&config), Some(original))
+            .expect("restore config").expect("config exists");
+        let restored = restored.parse::<Document>().expect("parse restored");
+        assert!(restored.get("experimental_realtime_ws_base_url").is_none());
+        assert_eq!(restored["model_auto_compact_token_limit"].as_integer(), Some(900_000));
+        let cleaned = remove_codex_local_access_config(&config).expect("cleanup without backup");
+        assert!(!cleaned.contains("experimental_realtime_ws_base_url"));
+        fs::remove_dir_all(profile_dir).expect("cleanup fixture");
+    }
+
+    #[tokio::test]
+    async fn mixed_realtime_takeover_preserves_explicit_user_sideband_override() {
+        let profile_dir = make_temp_dir("mixed-realtime-user-override");
+        let collection = realtime_mixed_test_collection();
+        let original = "experimental_realtime_ws_base_url = \"https://voice.example.test/v1\"\n";
+        fs::write(profile_dir.join(CODEX_PROFILE_CONFIG_FILE), original).expect("write original");
+        write_local_access_profile_takeover(&profile_dir, &collection, None)
+            .await.expect("write mixed takeover");
+        let config = fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read config");
+        assert_eq!(
+            config.parse::<Document>().expect("parse")["experimental_realtime_ws_base_url"].as_str(),
+            Some("https://voice.example.test/v1")
+        );
+        let cleaned = remove_codex_local_access_config(&config).expect("cleanup");
+        assert!(cleaned.contains("https://voice.example.test/v1"));
+        fs::remove_dir_all(profile_dir).expect("cleanup fixture");
+    }
+
+    #[test]
+    fn mixed_realtime_cleanup_restores_backup_and_preserves_later_user_edits() {
+        let base = "http://localhost:14998/v1";
+        let config = format!(
+            "model_provider = \"codex_local_access\"\nexperimental_realtime_ws_base_url = \"{base}\"\n\
+             [model_providers.codex_local_access]\nbase_url = \"{base}\"\n"
+        );
+        let original = "experimental_realtime_ws_base_url = \"https://original.example.test/v1\"\n";
+        let restored = restore_config_toml_from_takeover_backup(Some(&config), Some(original))
+            .expect("restore").expect("config");
+        assert_eq!(
+            restored.parse::<Document>().expect("parse")["experimental_realtime_ws_base_url"].as_str(),
+            Some("https://original.example.test/v1")
+        );
+        let mut edited = config.parse::<Document>().expect("parse config");
+        edited["experimental_realtime_ws_base_url"] = value("https://edited.example.test/v1");
+        let restored = restore_config_toml_from_takeover_backup(Some(&edited.to_string()), Some(original))
+            .expect("restore edited").expect("config");
+        assert!(restored.contains("https://edited.example.test/v1"));
+    }
+
+    #[test]
+    fn mixed_realtime_override_ignores_non_mixed_or_wrong_keys() {
+        let profile_dir = make_temp_dir("mixed-realtime-key-scope");
+        let mut collection = realtime_mixed_test_collection();
+        let original = "model = \"gpt-6-astra\"\n";
+        fs::write(profile_dir.join(CODEX_PROFILE_CONFIG_FILE), original).expect("write original");
+        super::write_mixed_model_realtime_sideband_override(&profile_dir, &collection, "different-key")
+            .expect("wrong key no-op");
+        collection.api_keys[0].model_routing = None;
+        super::write_mixed_model_realtime_sideband_override(&profile_dir, &collection, &collection.api_key)
+            .expect("non-mixed no-op");
+        assert_eq!(fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read"), original);
+        fs::remove_dir_all(profile_dir).expect("cleanup fixture");
+    }
+
     #[tokio::test]
     async fn local_access_takeover_writes_a_complete_model_catalog() {
         let profile_dir = make_temp_dir("codex-local-access-model-catalog-test");

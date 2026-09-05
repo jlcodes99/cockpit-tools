@@ -325,11 +325,28 @@
   min-width: 0;
 }
 
-.codex-model-routing-card__provider .single-select-dropdown__trigger {
+.codex-model-routing-card__provider .single-select-dropdown-trigger {
   height: 32px;
   min-height: 32px;
-  padding: 4px 10px;
+  padding: 0 8px 0 10px;
+  gap: 8px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.codex-model-routing-card__provider .single-select-dropdown-trigger:hover:not(:disabled),
+.codex-model-routing-card__provider .single-select-dropdown-trigger.open {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.codex-model-routing-card__provider .single-select-dropdown-value {
   font-size: 12px;
+  font-weight: 600;
+}
+
+.codex-model-routing-card__provider .single-select-dropdown-arrow {
+  width: 18px;
+  height: 18px;
 }
 
 .codex-model-routing-card__namespace-wrap {

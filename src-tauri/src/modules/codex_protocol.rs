@@ -465,6 +465,7 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
             Value::Array(Vec::new()),
         );
         object.insert("service_tiers".to_string(), Value::Array(Vec::new()));
+        inherit_routed_gpt_capabilities(object, model_id);
     }
     if visibility == "hide" || !object.contains_key("visibility") {
         object.insert(
@@ -484,6 +485,31 @@ fn codex_client_model_catalog() -> &'static Value {
         serde_json::from_str(CODEX_CLIENT_MODEL_TEMPLATES_JSON)
             .expect("Codex client model templates JSON should be valid")
     })
+}
+
+fn inherit_routed_gpt_capabilities(object: &mut Map<String, Value>, model_id: &str) {
+    let Some((namespace, upstream)) = model_id.split_once('/') else {
+        return;
+    };
+    if namespace.is_empty() || !upstream.starts_with("gpt-") || upstream.contains('/') {
+        return;
+    }
+    let (template, known) = codex_client_model_template(upstream);
+    if !known {
+        return;
+    }
+    for field in [
+        "supported_reasoning_levels",
+        "default_reasoning_level",
+        "service_tiers",
+        "additional_speed_tiers",
+        "context_window",
+        "max_context_window",
+    ] {
+        if let Some(value) = template.get(field) {
+            object.insert(field.to_string(), value.clone());
+        }
+    }
 }
 
 fn codex_client_model_template(model_id: &str) -> (Value, bool) {
@@ -829,6 +855,52 @@ fn remove_unsupported_responses_fields(obj: &mut Map<String, Value>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn routed_gpt_models_preserve_capabilities_and_dispatch_identity() {
+        for upstream in ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna"] {
+            let routed = format!("cpa/{upstream}");
+            let catalog = build_codex_client_models_response(&[upstream.into(), routed.clone()]);
+            for field in ["service_tiers", "additional_speed_tiers", "supported_reasoning_levels", "context_window"] {
+                assert_eq!(catalog["models"][0][field], catalog["models"][1][field], "{upstream}: {field}");
+            }
+            assert_eq!(catalog["models"][1]["slug"], routed);
+            assert_eq!(catalog["models"][1]["priority"], json!(1001));
+            assert_ne!(catalog["models"][0]["priority"], catalog["models"][1]["priority"]);
+        }
+        let catalog = build_codex_client_models_response(&["cpa/unknown-model".into()]);
+        assert_eq!(catalog["models"][0]["service_tiers"], json!([]));
+        assert_eq!(catalog["models"][0]["priority"], json!(1000));
+    }
+
+    #[test]
+    fn routed_gpt_models_keep_catalog_order_instead_of_official_priority() {
+        let catalog = build_codex_client_models_response(&[
+            "cpa/gpt-5.6-sol".into(),
+            "cpa/gpt-5.6-terra".into(),
+            "1024/gpt-5.6-sol".into(),
+            "weilong/gpt-6-astra".into(),
+        ]);
+        let priorities = catalog["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|model| model["priority"].as_i64())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            priorities,
+            vec![Some(1000), Some(1001), Some(1002), Some(1003)]
+        );
+    }
+
+    #[test]
+    fn routed_gpt_models_keep_explicit_reasoning_selection() {
+        let catalog = build_codex_client_models_response_with_model_definitions_and_reasoning(&[
+            ("cpa/gpt-6-astra".into(), "CPA Astra".into(), Some(vec!["ultra".into()])),
+        ]);
+        assert_eq!(catalog["models"][0]["supported_reasoning_levels"][0]["effort"], "ultra");
+        assert_eq!(catalog["models"][0]["display_name"], "CPA Astra");
+    }
 
     #[test]
     fn reserve_is_selectable_without_changing_other_models_or_request_id() {

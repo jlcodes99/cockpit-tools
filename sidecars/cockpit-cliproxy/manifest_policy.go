@@ -28,6 +28,7 @@ import (
 
 	codexmodels "github.com/router-for-me/CLIProxyAPI/v7/internal/client/codex/models"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 
 	coreusage "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
 
@@ -1585,6 +1586,25 @@ func buildCodexClientModelsResponse(models []string, spec *apiKeySpec, windows m
 	}, false))
 	if data, ok := response["models"].([]map[string]any); ok {
 		hydrateCodexCompatibilityModels(data)
+		// Only declared routes to a known GPT template inherit capabilities.
+		var catalog struct { Models []map[string]any `json:"models"` }
+		_ = json.Unmarshal(registry.GetCodexClientModelsJSON(), &catalog)
+		for _, model := range data {
+			slug, _ := model["slug"].(string)
+			_, upstream, status := resolveModelRouting(spec, slug)
+			if status != "matched" || !strings.HasPrefix(upstream, "gpt-") { continue }
+			for _, template := range catalog.Models {
+				if template["slug"] != upstream { continue }
+				for _, field := range []string{
+					"supported_reasoning_levels", "default_reasoning_level",
+					"service_tiers", "additional_speed_tiers",
+					"context_window", "max_context_window",
+				} {
+					if value, exists := template[field]; exists { model[field] = value }
+				}
+				break
+			}
+		}
 		preferWebsockets := spec != nil && spec.ProviderGateway == nil && spec.ResponsesWebsockets
 		for _, model := range data {
 			model["prefer_websockets"] = preferWebsockets

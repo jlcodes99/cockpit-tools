@@ -380,6 +380,25 @@ fn set_provider_header_value(
     }
 }
 
+fn has_managed_realtime_sideband_override(doc: &Document) -> bool {
+    let base_url = doc
+        .get("model_providers")
+        .and_then(|item| item.get(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID))
+        .and_then(|item| item.get("base_url"))
+        .and_then(|item| item.as_str());
+    let sideband_url = doc
+        .get("experimental_realtime_ws_base_url")
+        .and_then(|item| item.as_str());
+    match (base_url, sideband_url) {
+        (Some(base), Some(sideband)) if base.trim_end_matches('/') == sideband.trim_end_matches('/') => {
+            url::Url::parse(base).ok().is_some_and(|url| {
+                matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+            })
+        }
+        _ => false,
+    }
+}
+
 fn remove_codex_local_access_config(config_text: &str) -> Result<String, String> {
     if config_text.trim().is_empty() {
         return Ok(String::new());
@@ -396,6 +415,9 @@ fn remove_codex_local_access_config(config_text: &str) -> Result<String, String>
         return Ok(config_text.to_string());
     }
 
+    if has_managed_realtime_sideband_override(&doc) {
+        doc.remove("experimental_realtime_ws_base_url");
+    }
     let _ = doc.remove("model_provider");
     if doc
         .get("model_catalog_json")
@@ -507,6 +529,7 @@ fn restore_config_toml_from_takeover_backup(
         .and_then(|item| item.as_str())
         .is_some_and(is_cockpit_managed_model_catalog_name);
     if current_selected_local_access {
+        let restore_realtime_sideband = has_managed_realtime_sideband_override(&current_doc);
         let cleaned = remove_codex_local_access_config(
             &crate::modules::codex_config_format::codex_config_doc_to_string(&mut current_doc),
         )?;
@@ -516,6 +539,15 @@ fn restore_config_toml_from_takeover_backup(
             crate::modules::codex_config_format::read_codex_config_doc_from_str(&cleaned)
                 .map_err(|e| format!("解析清理后的 Codex config.toml 失败: {}", e))?
         };
+
+        if restore_realtime_sideband {
+            if let Some(original) = backup_doc
+                .as_ref()
+                .and_then(|doc| doc.get("experimental_realtime_ws_base_url"))
+            {
+                current_doc["experimental_realtime_ws_base_url"] = original.clone();
+            }
+        }
 
         if let Some(backup_provider) = backup_doc
             .as_ref()

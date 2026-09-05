@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { GitBranch, Info, Plus, RefreshCw, SlidersHorizontal, Trash2, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useEscClose } from "../../hooks/useEscClose";
@@ -15,8 +15,8 @@ import type {
 import {
   CODEX_PROVIDER_GATEWAY_INTERNAL_NAMESPACE,
   CodexInstanceApiRoute,
-  CodexInstanceModelRouting,
 } from "../../types/instance";
+export { buildCodexModelRoutingValue } from "../../utils/codexModelRoutingValue";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import type { CodexExperimentalModelSource } from "./CodexExperimentalModelEditor";
 import "./CodexModelRoutingFields.css";
@@ -348,25 +348,6 @@ export const createCodexModelSourceResolver = (
     managed: true,
   };
 };
-
-export const buildCodexModelRoutingValue = (
-  enabled: boolean,
-  routes: CodexInstanceApiRoute[],
-): CodexInstanceModelRouting | null =>
-  enabled
-    ? {
-        enabled: true,
-        version: 1,
-        routes: routes.map((route) => ({
-          id: route.id,
-          namespace: route.namespace,
-          providerAccountId: route.providerAccountId,
-          enabled: route.enabled,
-          selectedModels: route.selectedModels,
-          extraModels: route.extraModels,
-        })),
-      }
-    : null;
 
 export function syncExperimentalModelsWithRouting(
   currentModels: CodexExperimentalModelDefinition[],
@@ -1078,16 +1059,15 @@ export function CodexModelRoutingModal({
     onEnabledChange(nextEnabled);
   };
 
-  useMemo(() => {
-    if (open) {
-      setDraftRoutes(
-        routes.map((r) => ({
-          ...r,
-          extraModels: r.extraModels ? [...r.extraModels] : [],
-        })),
-      );
-    }
-  }, [open, routes]);
+  useEffect(() => {
+    if (!open) return;
+    setDraftRoutes(
+      routes.map((r) => ({
+        ...r,
+        extraModels: r.extraModels ? [...r.extraModels] : [],
+      })),
+    );
+  }, [open]);
 
   useEscClose(open, onClose);
 

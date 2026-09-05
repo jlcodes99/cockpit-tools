@@ -1533,6 +1533,7 @@ supports_websockets = false
         let mixed_config = format!(
             r#"model = "gpt-5.5"
 custom_setting = "keep"
+experimental_realtime_ws_base_url = "http://127.0.0.1:14998/v1"
 model_provider = "codex_local_access"
 model_catalog_json = "{}"
 
@@ -1576,6 +1577,7 @@ supports_websockets = false
         );
         assert!(restored_doc.get("model_provider").is_none());
         assert!(restored_doc.get("model_catalog_json").is_none());
+        assert!(restored_doc.get("experimental_realtime_ws_base_url").is_none());
         assert_eq!(
             fs::read_to_string(profile_dir.join(CODEX_PROFILE_AUTH_FILE))
                 .expect("read refreshed auth"),
@@ -1710,7 +1712,7 @@ supports_websockets = false
             .expect("save partial takeover backup");
         fs::write(
             profile_dir.join(CODEX_PROFILE_CONFIG_FILE),
-            "model_provider = \"codex_local_access\"\n",
+            "model_provider = \"codex_local_access\"\nexperimental_realtime_ws_base_url = \"http://localhost:14998/v1\"\n",
         )
         .expect("write partial config");
         fs::write(
