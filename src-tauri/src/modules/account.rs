@@ -2068,6 +2068,12 @@ pub async fn switch_account_internal(account_id: &str) -> Result<Account, String
     let _ = modules::instance::update_default_pid(None);
     modules::instance::inject_account_to_profile(&default_dir, account_id)?;
 
+    if modules::config::get_user_config().antigravity_sync_cli_on_switch {
+        if let Err(e) = modules::antigravity_credential::write_antigravity_cli_credential(&account) {
+            modules::logger::log_warn(&format!("[Switch] 同步 Antigravity CLI 凭据失败: {}", e));
+        }
+    }
+
     // 7. 启动 Antigravity IDE（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
     modules::logger::log_info("[Switch] 正在启动 Antigravity IDE 默认实例...");
     let default_settings = modules::instance::load_default_settings()?;
@@ -2375,6 +2381,15 @@ pub async fn switch_account_local_no_restart(account_id: &str) -> Result<Account
 
     let default_dir = modules::instance::get_default_user_data_dir()?;
     modules::instance::inject_account_to_profile(&default_dir, account_id)?;
+
+    if modules::config::get_user_config().antigravity_sync_cli_on_switch {
+        if let Err(e) = modules::antigravity_credential::write_antigravity_cli_credential(&account) {
+            modules::logger::log_warn(&format!(
+                "[Switch][NoRestart] 同步 Antigravity CLI 凭据失败: {}",
+                e
+            ));
+        }
+    }
 
     modules::logger::log_info(&format!(
         "[Switch][NoRestart] 本地切号完成: {}",

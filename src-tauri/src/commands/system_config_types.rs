@@ -239,6 +239,8 @@ pub struct GeneralConfig {
     pub codex_launch_on_switch: bool,
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
     pub antigravity_launch_on_switch: bool,
+    /// 切换 Antigravity 时是否自动同步更新 Antigravity CLI / Language Server 凭据文件
+    pub antigravity_sync_cli_on_switch: bool,
     /// 切换 Codex 时是否自动重启指定应用
     pub codex_restart_specified_app_on_switch: bool,
     /// 是否在 Codex 总览中显示 API 服务入口
@@ -1216,6 +1218,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "hermes_auth_overwrite_on_switch"
             | "codex_launch_on_switch"
             | "antigravity_launch_on_switch"
+            | "antigravity_sync_cli_on_switch"
             | "codex_restart_specified_app_on_switch"
             | "codex_local_access_entry_visible"
             | "codex_hide_relay_quota"

@@ -403,6 +403,9 @@ pub struct UserConfig {
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
     #[serde(default = "default_antigravity_launch_on_switch")]
     pub antigravity_launch_on_switch: bool,
+    /// 切换 Antigravity 时是否自动同步更新 Antigravity CLI / Language Server 凭据文件
+    #[serde(default = "default_antigravity_sync_cli_on_switch")]
+    pub antigravity_sync_cli_on_switch: bool,
     /// 切换 Codex 时是否自动重启指定应用
     #[serde(default = "default_codex_restart_specified_app_on_switch")]
     pub codex_restart_specified_app_on_switch: bool,
@@ -1019,6 +1022,9 @@ fn default_codex_auto_restore_takeover_on_launch() -> bool {
 fn default_antigravity_launch_on_switch() -> bool {
     true
 }
+fn default_antigravity_sync_cli_on_switch() -> bool {
+    true
+}
 fn default_codex_restart_specified_app_on_switch() -> bool {
     false
 }
@@ -1300,6 +1306,7 @@ impl Default for UserConfig {
             codex_auto_restore_takeover_on_launch:
                 default_codex_auto_restore_takeover_on_launch(),
             antigravity_launch_on_switch: default_antigravity_launch_on_switch(),
+            antigravity_sync_cli_on_switch: default_antigravity_sync_cli_on_switch(),
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
             codex_local_access_entry_visible: default_codex_local_access_entry_visible(),
             codex_hide_relay_quota: default_codex_hide_relay_quota(),
@@ -2576,6 +2583,22 @@ mod tests {
         let cfg: UserConfig =
             serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
         assert!(!cfg.openclaw_auth_overwrite_on_switch);
+    }
+
+    #[test]
+    fn antigravity_sync_cli_on_switch_defaults_to_enabled() {
+        let default_cfg = UserConfig::default();
+        assert!(default_cfg.antigravity_sync_cli_on_switch);
+
+        let migrated_cfg: UserConfig =
+            serde_json::from_value(serde_json::json!({})).expect("旧配置反序列化应成功");
+        assert!(migrated_cfg.antigravity_sync_cli_on_switch);
+
+        let disabled_cfg: UserConfig = serde_json::from_value(serde_json::json!({
+            "antigravity_sync_cli_on_switch": false
+        }))
+        .expect("显式关闭配置反序列化应成功");
+        assert!(!disabled_cfg.antigravity_sync_cli_on_switch);
     }
 
     #[test]

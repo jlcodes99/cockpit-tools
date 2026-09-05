@@ -174,6 +174,27 @@ pub fn legacy_state_db_path() -> Result<PathBuf, String> {
     Ok(legacy_global_storage_dir()?.join("state.vscdb"))
 }
 
+pub fn gemini_dir() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+    Ok(home.join(".gemini"))
+}
+
+pub fn antigravity_cli_dir() -> Result<PathBuf, String> {
+    Ok(gemini_dir()?.join("antigravity-cli"))
+}
+
+pub fn jetski_oauth_token_path() -> Result<PathBuf, String> {
+    Ok(gemini_dir()?.join("jetski-standalone-oauth-token"))
+}
+
+pub fn antigravity_cli_oauth_token_path() -> Result<PathBuf, String> {
+    Ok(antigravity_cli_dir()?.join("antigravity-oauth-token"))
+}
+
+pub fn google_accounts_path() -> Result<PathBuf, String> {
+    Ok(gemini_dir()?.join("google_accounts.json"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::prefer_user_data_dir_with_state_db;
@@ -227,5 +248,14 @@ mod tests {
             prefer_user_data_dir_with_state_db(&[first.clone(), second.clone()], second.clone());
         assert_eq!(picked, first);
         let _ = fs::remove_dir_all(root);
+    }
+    #[test]
+    fn antigravity_cli_paths_resolve_under_gemini() {
+        let gemini = super::gemini_dir().expect("gemini dir");
+        assert!(gemini.ends_with(".gemini"));
+        let jetski = super::jetski_oauth_token_path().expect("jetski token path");
+        assert!(jetski.ends_with(".gemini/jetski-standalone-oauth-token") || jetski.ends_with(".gemini\\jetski-standalone-oauth-token"));
+        let cli = super::antigravity_cli_oauth_token_path().expect("cli token path");
+        assert!(cli.ends_with(".gemini/antigravity-cli/antigravity-oauth-token") || cli.ends_with(".gemini\\antigravity-cli\\antigravity-oauth-token"));
     }
 }
