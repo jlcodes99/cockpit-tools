@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test:codex-api-key-scope": "node --test src/utils/codexApiKeyAccountScope.test.ts",
+    "test": "node scripts/run_ts_tests.cjs",
+    "test:release": "node --test scripts/release/*.test.cjs",
+    "test:go": "cd sidecars/cockpit-cliproxy && go test ./...",
+    "test:codex-api-key-scope": "tsx --test src/utils/codexApiKeyAccountScope.test.ts",
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
     "build": "npm run sync-version && tsc && vite build",
@@ -15,7 +18,8 @@
     "tauri:dev": "node scripts/tauri-dev.cjs",
     "pretauri": "npm run typecheck",
     "tauri": "node scripts/tauri.cjs",
-    "sync-version": "node scripts/sync-version.js"
+    "sync-version": "node scripts/sync-version.js",
+    "test:rust:core": "cargo test --package cockpit-core -- --test-threads=1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -51,6 +55,7 @@
     "electron": "^42.4.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
+    "tsx": "4.20.5",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   }

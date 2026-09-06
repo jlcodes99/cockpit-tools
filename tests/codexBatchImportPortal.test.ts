@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 describe("codex batch import portal rendering", () => {
   it("renders the modal overlay through document.body so it opens outside hidden pages", () => {
     const source = readFileSync(
-      `${process.cwd()}/src/pages/CodexAccountsPage.tsx`,
+      `${process.cwd()}/src/pages/CodexAccountsView.tsx`,
       "utf8",
     );
 
@@ -61,7 +61,7 @@ describe("codex batch import portal rendering", () => {
 
   it("consumes each reopen request once so background progress cannot reopen the dialog", () => {
     const source = readFileSync(
-      `${process.cwd()}/src/pages/CodexAccountsPage.tsx`,
+      `${process.cwd()}/src/pages/useCodexAccountsBaseController.tsx`,
       "utf8",
     );
 

@@ -63,9 +63,42 @@ jobs:
       - name: 🛡️ Typecheck
         run: npm run typecheck
 
+  preflight-tests:
+    name: "🧪 Preflight: Regression Tests"
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: 🐹 Go setup
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sidecars/cockpit-cliproxy/go.mod
+          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
+
+      - name: 📦 Install frontend dependencies
+        run: npm ci
+
+      - name: 🧪 TypeScript regression tests
+        run: npm test
+
+      - name: 🧪 Release script tests
+        run: npm run test:release
+
+      - name: 🐹 Go sidecar tests
+        run: npm run test:go
+
   build:
     name: "🏗️ Build: ${{ matrix.label }}"
-    needs: [preflight-locales, preflight-typecheck]
+    needs: [preflight-locales, preflight-typecheck, preflight-tests]
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: read
@@ -125,6 +158,10 @@ jobs:
         run: |
           cargo test instance_configuration_save --lib
           cargo test quick_config_catalog_only_context_preservation --lib
+
+      - name: 🧪 Test core Rust library
+        if: matrix.label == 'ubuntu-22.04'
+        run: cargo test --package cockpit-core -- --test-threads=1
 
       - name: 🐹 Go setup
         uses: actions/setup-go@v5

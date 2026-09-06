@@ -23,6 +23,7 @@ import { WindowsOperationDialog } from './components/WindowsOperationDialog';
 import { CodexSwitchProgressModal } from './components/CodexSwitchProgressModal';
 import { CodexInstanceLaunchProgressModal } from './components/CodexInstanceLaunchProgressModal';
 import { AnnouncementHost } from './components/AnnouncementCenter';
+import { CodexBatchImportGlobalTask } from './components/CodexBatchImportGlobalTask';
 import { TopCenterPromoBanner } from './components/TopCenterPromoBanner';
 import type { QuickSettingsType } from './components/QuickSettingsPopover';
 import { isMainWindowNavigablePage, type Page } from './types/navigation';
@@ -3946,6 +3947,7 @@ function MainApp() {
       />
 
       <AnnouncementHost onNavigate={setPage} />
+      <CodexBatchImportGlobalTask onOpenCodex={() => setPage('codex')} />
 
       {sideNavLayoutMode !== 'classic' && (
         <button
