@@ -581,7 +581,7 @@ func TestRelayServerMixedRoutingBareModelUsesOAuthRuntime(t *testing.T) {
 	spec := mixedRoutingAPIKey(&providerGatewaySpec{
 		BaseURL:        upstream.URL,
 		APIKey:         "cpa-secret",
-		UpstreamModels: []string{"gpt-5.5", "grok-4.6"},
+		UpstreamModels: []string{"gpt-5.5", "gpt-6-astra", "grok-4.6"},
 		WireAPI:        "responses",
 	})
 	m := mixedRoutingManifest(spec)
@@ -635,7 +635,7 @@ func TestRelayServerMixedRoutingNamespacedModelsUseProviderAndStripPrefix(t *tes
 	spec := mixedRoutingAPIKey(&providerGatewaySpec{
 		BaseURL:        upstream.URL,
 		APIKey:         "cpa-secret",
-		UpstreamModels: []string{"gpt-5.5", "grok-4.6"},
+		UpstreamModels: []string{"gpt-5.5", "gpt-6-astra", "grok-4.6"},
 		WireAPI:        "responses",
 	})
 	m := mixedRoutingManifest(spec)
@@ -651,12 +651,13 @@ func TestRelayServerMixedRoutingNamespacedModelsUseProviderAndStripPrefix(t *tes
 		upstreamModel string
 	}{
 		{clientModel: "cpa/gpt-5.5", upstreamModel: "gpt-5.5"},
+		{clientModel: "cpa/gpt-6-astra", upstreamModel: "gpt-6-astra"},
 		{clientModel: "cpa/grok-4.6", upstreamModel: "grok-4.6"},
 	} {
 		upstreamHits = 0
 		upstreamAuth = ""
 		upstreamBody = ""
-		req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(fmt.Sprintf(`{"model":%q,"input":"hello","stream":false}`, tc.clientModel)))
+		req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(fmt.Sprintf(`{"model":%q,"input":"hello","stream":false,"reasoning":{"effort":"ultra"},"service_tier":"priority"}`, tc.clientModel)))
 		req.Header.Set("Authorization", "Bearer client-key")
 		req.Header.Set("Chatgpt-Account-Id", "oauth-account")
 		req.Header.Set("Content-Type", "application/json")
@@ -680,6 +681,11 @@ func TestRelayServerMixedRoutingNamespacedModelsUseProviderAndStripPrefix(t *tes
 		}
 		if !strings.Contains(upstreamBody, fmt.Sprintf(`"model":"%s"`, tc.upstreamModel)) || strings.Contains(upstreamBody, tc.clientModel) {
 			t.Fatalf("%s should strip namespace before upstream: %s", tc.clientModel, upstreamBody)
+		}
+		var forwarded map[string]any
+		if err := json.Unmarshal([]byte(upstreamBody), &forwarded); err != nil { t.Fatal(err) }
+		if forwarded["service_tier"] != "priority" || forwarded["reasoning"].(map[string]any)["effort"] != "ultra" {
+			t.Fatalf("routing dropped requested capabilities: %s", upstreamBody)
 		}
 	}
 }
@@ -1914,6 +1920,47 @@ func TestRelayRegistersCodexLiveRoutesAndSkipsModelRewriting(t *testing.T) {
 	router.ServeHTTP(realtimeRecorder, realtimeCall)
 	if realtimeRecorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("realtime call status = %d, want %d; body=%s", realtimeRecorder.Code, http.StatusServiceUnavailable, realtimeRecorder.Body.String())
+	}
+}
+
+func TestMixedRoutingRealtimeRoutesIgnoreResponsesWebsocketFlag(t *testing.T) {
+	t.Parallel()
+	spec := &apiKeySpec{
+		ID: "mixed-voice", Key: "mixed-voice-key", Enabled: true,
+		BoundOAuth: true, ResponsesWebsockets: false,
+		ModelRouting: &modelRoutingSpec{DefaultRoute: "oauth", FailurePolicy: "strict"},
+		AllowedModels: []string{"gpt-6-astra"},
+	}
+	m := &manifest{
+		APIKeys: []apiKeySpec{*spec}, ModelIDs: []string{"gpt-6-astra"},
+		apiKeyByValue: map[string]*apiKeySpec{spec.Key: spec},
+	}
+	router := (&relayServer{
+		manifest: m,
+		policy: &requestPolicy{manifest: m, tokenLimiter: newAPIKeyTokenLimiter(m)},
+	}).router()
+	for _, endpoint := range []struct{ method, path string }{
+		{http.MethodPost, "/v1/realtime/calls"},
+		{http.MethodGet, "/v1/live/rtc_test"},
+		{http.MethodGet, "/v1/realtime?call_id=rtc_test"},
+		{http.MethodGet, "/v1/realtime/calls/rtc_test"},
+	} {
+		for _, authorized := range []bool{false, true} {
+			req := httptest.NewRequest(endpoint.method, endpoint.path, strings.NewReader(`{"model":"gpt-live-1-codex"}`))
+			req.Header.Set("Content-Type", "application/json")
+			want := http.StatusUnauthorized
+			if authorized {
+				req.Header.Set("Authorization", "Bearer "+spec.Key)
+				// No handler is installed in this routing-only fixture.
+				want = http.StatusServiceUnavailable
+			}
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != want {
+				t.Fatalf("%s %s authorized=%v: got %d, want %d: %s",
+					endpoint.method, endpoint.path, authorized, recorder.Code, want, recorder.Body.String())
+			}
+		}
 	}
 }
 

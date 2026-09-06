@@ -1,11 +1,21 @@
-import { ChevronDown, Plus, Star, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, GripVertical, Plus, Star, Trash2, X } from "lucide-react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type {
   CodexExperimentalModelDefinition,
   CodexReasoningEffort,
 } from "../../types/codex";
+import {
+  insertModelsBySource,
+  moveModel,
+} from "../../utils/codexExperimentalModelOrder";
 import "./CodexExperimentalModelEditor.css";
 
 export interface CodexExperimentalModelSource {
@@ -42,6 +52,7 @@ const REASONING_EFFORT_OPTIONS: CodexReasoningEffort[] = [
   "high",
   "xhigh",
   "max",
+  "ultra",
 ];
 const CONTEXT_PRESETS = {
   preset_516k: { context_window: 516000, auto_compact_token_limit: 460000 },
@@ -334,6 +345,7 @@ export function CodexExperimentalModelEditor({
   );
   const [openContextIndex, setOpenContextIndex] = useState<number | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [draggingModelId, setDraggingModelId] = useState<string | null>(null);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
   const addMenuRef = useRef<HTMLDivElement | null>(null);
   const reasoningPickerRef = useRef<HTMLDivElement | null>(null);
@@ -367,14 +379,40 @@ export function CodexExperimentalModelEditor({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [openContextIndex, openReasoningIndex]);
 
+  useEffect(() => {
+    if (draggingModelId === null) return;
+    const handleMouseUp = () => setDraggingModelId(null);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => window.removeEventListener("mouseup", handleMouseUp);
+  }, [draggingModelId]);
+
   const existingModelIds = useMemo(
     () => new Set(models.map((m) => m.model_id.trim().toLowerCase())),
     [models],
   );
 
+  const handleReorderDragStart = (
+    event: ReactMouseEvent,
+    modelId: string,
+  ) => {
+    if (disabled || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingModelId(modelId);
+  };
+
+  const handleReorderDragMove = (targetIndex: number) => {
+    if (disabled || draggingModelId === null) return;
+    const from = models.findIndex((item) => item.model_id === draggingModelId);
+    if (from < 0 || from === targetIndex) return;
+    onChange(moveModel(models, from, targetIndex));
+  };
+
   const handleAddBlankModel = () => {
     const newModel = nextModelDefinition(models);
-    onChange([...models, newModel]);
+    onChange(
+      insertModelsBySource(models, [newModel], resolveModelSource),
+    );
     onModelAdded?.(newModel.model_id);
     setAddMenuOpen(false);
   };
@@ -396,7 +434,13 @@ export function CodexExperimentalModelEditor({
       onModelRemoved?.(modelId);
     } else {
       const displayName = `${namespace} / ${upstreamModel.trim()}`;
-      onChange([...models, { model_id: modelId, display_name: displayName }]);
+      onChange(
+        insertModelsBySource(
+          models,
+          [{ model_id: modelId, display_name: displayName }],
+          resolveModelSource,
+        ),
+      );
       onModelAdded?.(modelId);
     }
   };
@@ -415,7 +459,7 @@ export function CodexExperimentalModelEditor({
       onModelAdded?.(modelId);
     }
     if (toAdd.length > 0) {
-      onChange([...models, ...toAdd]);
+      onChange(insertModelsBySource(models, toAdd, resolveModelSource));
     }
   };
 
@@ -807,6 +851,7 @@ export function CodexExperimentalModelEditor({
         }`}
         aria-hidden="true"
       >
+        <span className="codex-experimental-model-editor__drag-head" />
         <span>
           {t("codex.experimentalModelCatalog.models.modelId", "模型 ID")}
         </span>
@@ -835,20 +880,41 @@ export function CodexExperimentalModelEditor({
           openReasoningIndex !== null || openContextIndex !== null
             ? " has-open-menu"
             : ""
-        }`}
+        }${draggingModelId ? " is-sorting" : ""}`}
       >
         {models.map((model, index) => {
           const source = resolveModelSource?.(model.model_id);
           return (
           <div
-            className="codex-experimental-model-editor__row"
+            className={`codex-experimental-model-editor__row${
+              draggingModelId === model.model_id ? " is-dragging" : ""
+            }`}
             key={`${index}:${model.model_id}`}
+            onMouseEnter={() => handleReorderDragMove(index)}
           >
             <div
               className={`codex-experimental-model-editor__fields${
                 showModelSource ? " has-source" : ""
               }`}
             >
+              <button
+                type="button"
+                className="codex-experimental-model-editor__drag-handle"
+                disabled={disabled}
+                onMouseDown={(event) =>
+                  handleReorderDragStart(event, model.model_id)
+                }
+                title={t(
+                  "codex.experimentalModelCatalog.models.dragToReorder",
+                  "拖动排序",
+                )}
+                aria-label={t(
+                  "codex.experimentalModelCatalog.models.dragToReorder",
+                  "拖动排序",
+                )}
+              >
+                <GripVertical size={12} strokeWidth={1.75} />
+              </button>
               <label>
                 <span>
                   {t(
@@ -1210,6 +1276,7 @@ export function CodexExperimentalModelEditor({
             }`}
             aria-hidden="true"
           >
+            <span className="codex-experimental-model-editor__drag-head" />
             <span>
               {t("codex.experimentalModelCatalog.models.modelId", "模型 ID")}
             </span>
@@ -1232,16 +1299,41 @@ export function CodexExperimentalModelEditor({
               {t("codex.experimentalModelCatalog.models.default", "默认")}
             </span>
           </div>
-          <div className="codex-experimental-model-summary__list">
-            {models.map((model) => {
+          <div
+            className={`codex-experimental-model-summary__list${
+              draggingModelId ? " is-sorting" : ""
+            }`}
+          >
+            {models.map((model, index) => {
               const source = resolveModelSource?.(model.model_id);
               return (
               <div
                 className={`codex-experimental-model-summary__row${
                   showModelSource ? " has-source" : ""
+                }${
+                  draggingModelId === model.model_id ? " is-dragging" : ""
                 }`}
                 key={`${model.model_id}:${model.display_name}`}
+                onMouseEnter={() => handleReorderDragMove(index)}
               >
+                <button
+                  type="button"
+                  className="codex-experimental-model-editor__drag-handle"
+                  disabled={disabled}
+                  onMouseDown={(event) =>
+                    handleReorderDragStart(event, model.model_id)
+                  }
+                  title={t(
+                    "codex.experimentalModelCatalog.models.dragToReorder",
+                    "拖动排序",
+                  )}
+                  aria-label={t(
+                    "codex.experimentalModelCatalog.models.dragToReorder",
+                    "拖动排序",
+                  )}
+                >
+                  <GripVertical size={12} strokeWidth={1.75} />
+                </button>
                 <code>{model.model_id}</code>
                 <span className="codex-experimental-model-summary__name">
                   {model.display_name || model.model_id}

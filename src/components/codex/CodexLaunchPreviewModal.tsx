@@ -43,6 +43,7 @@ import {
 } from "./CodexModelRoutingFields";
 import { forceRefreshCodexTokens } from "../../services/codexService";
 import { requestCodexOpenAddAccount } from "../../utils/codexAddAccountRequest";
+import { areCodexModelRoutingsEqual, resolveRoutingCatalog } from "../../utils/codexModelRoutingValue";
 import type {
   CodexAccount,
   CodexExperimentalModelDefinition,
@@ -197,6 +198,7 @@ export function CodexLaunchPreviewModal({
     [accounts, routingRoutes, t],
   );
   const availableChannels = useMemo(() => {
+    if (!routingEnabled) return [];
     const providerAccounts = eligibleCodexModelRoutingAccounts(accounts);
     return normalizeCodexModelRoutingRoutes(routingRoutes, accounts)
       .filter((route) => route.enabled)
@@ -217,7 +219,7 @@ export function CodexLaunchPreviewModal({
         };
       })
       .filter((group) => group.models.length > 0);
-  }, [accounts, routingRoutes]);
+  }, [accounts, routingRoutes, routingEnabled]);
   const {
     message: error,
     scrollKey: errorScrollKey,
@@ -303,7 +305,7 @@ export function CodexLaunchPreviewModal({
     return () => {
       active = false;
     };
-  }, [account?.id, accounts, applyLoadedConfig, instanceId, selectedInstance, setError, t]);
+  }, [account?.id, applyLoadedConfig, instanceId, selectedInstance, setError, t]);
 
   const normalizedRoutingRoutes = useMemo(
     () => normalizeCodexModelRoutingRoutes(routingRoutes, accounts),
@@ -330,8 +332,7 @@ export function CodexLaunchPreviewModal({
   );
   const routingDirty = useMemo(
     () =>
-      JSON.stringify(selectedInstance?.modelRouting ?? null) !==
-        JSON.stringify(nextModelRouting) ||
+      !areCodexModelRoutingsEqual(selectedInstance?.modelRouting, nextModelRouting) ||
       routingBindingNeedsRepair ||
       mixedRoutingBindAccountId !== undefined,
     [
@@ -361,7 +362,7 @@ export function CodexLaunchPreviewModal({
   ]);
 
   const persistDraft = useCallback(async () => {
-    if (!loadedConfig || (catalogEnabled && modelsError && !routingEnabled)) {
+    if (!loadedConfig || (catalogEnabled && modelsError && models.length > 0 && !routingEnabled)) {
       if (catalogEnabled && modelsError) setError(modelsError);
       return false;
     }
@@ -406,19 +407,6 @@ export function CodexLaunchPreviewModal({
           );
           return false;
         }
-        if (
-          route.enabled &&
-          route.selectedModels !== undefined &&
-          route.selectedModels.filter((model) => model.trim()).length === 0
-        ) {
-          setError(
-            t(
-              "instances.form.modelRouting.modelRequired",
-              "每个已启用的 API 路由至少需要选择一个模型。",
-            ),
-          );
-          return false;
-        }
       }
     }
     setSaving(true);
@@ -436,6 +424,7 @@ export function CodexLaunchPreviewModal({
         );
         nextCatalogEnabled = true;
       }
+      const nextCatalog = resolveRoutingCatalog(nextModels, nextCatalogEnabled, defaultModelId);
       const saved = routingDirty
         ? (
             await saveCodexInstanceConfiguration({
@@ -443,20 +432,22 @@ export function CodexLaunchPreviewModal({
               bindAccountId: mixedRoutingBindAccountId,
               modelRouting: nextModelRouting,
               deferBindAccountApplication: true,
-              experimentalModelCatalogEnabled: nextCatalogEnabled,
-              experimentalModelCatalogModels: nextModels,
-              experimentalModelCatalogDefaultModelId: defaultModelId,
+              experimentalModelCatalogEnabled: nextCatalog.enabled,
+              experimentalModelCatalogModels: nextCatalog.models,
+              experimentalModelCatalogDefaultModelId: nextCatalog.defaultModelId,
             })
           ).quickConfig
         : await saveCodexInstanceModelCatalog(
             instanceId,
-            nextCatalogEnabled,
-            nextModels,
-            defaultModelId,
+            nextCatalog.enabled,
+            nextCatalog.models,
+            nextCatalog.defaultModelId,
           );
       applyLoadedConfig(saved);
       setRoutingRoutes(normalizedRoutingRoutes);
-      setNotice(
+      setNotice(routingDirty
+        ? t("instances.form.modelRouting.savedForNextLaunch", "已保存，下次通过 Cockpit 启动 Codex 时生效；当前会话保持不变。")
+        :
         t(
           "codex.modelProviders.quickConfig.saveSuccess",
           "当前 Codex 配置已保存",
@@ -1084,6 +1075,13 @@ export function CodexLaunchPreviewModal({
                     accounts={accounts}
                     running={Boolean(selectedInstance?.running)}
                     onEnabledChange={(nextEnabled) => {
+                      const catalog = resolveRoutingCatalog(
+                        syncExperimentalModelsWithRouting(models, routingRoutes, accounts, nextEnabled),
+                        nextEnabled || catalogEnabled,
+                        defaultModelId,
+                      );
+                      setCatalogEnabled(catalog.enabled);
+                      setDefaultModelId(catalog.defaultModelId);
                       if (!nextEnabled) {
                         persistRoutingDisableRef.current = true;
                       }
@@ -1225,7 +1223,7 @@ export function CodexLaunchPreviewModal({
             </div>
 
             {notice && (
-              <div className="add-status success">
+              <div className="codex-launch-preview-notice">
                 <Save size={14} />
                 <span>{notice}</span>
               </div>
@@ -1290,7 +1288,7 @@ export function CodexLaunchPreviewModal({
                   type="button"
                   className="btn btn-primary"
                   onClick={() => void handleExecute(mode !== "instance")}
-                  disabled={busy || (catalogEnabled && Boolean(modelsError))}
+                  disabled={busy || (catalogEnabled && models.length > 0 && Boolean(modelsError))}
                 >
                   {mode !== "instance" && <Play size={15} />}
                   {executing !== null

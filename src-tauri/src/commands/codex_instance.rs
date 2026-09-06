@@ -5,7 +5,7 @@ use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
@@ -710,19 +710,38 @@ fn configured_mixed_model_gateways() -> Result<Vec<ConfiguredMixedModelGateway>,
     Ok(targets)
 }
 
-fn configured_codex_profile_dirs() -> Result<Vec<PathBuf>, String> {
-    let mut profiles = vec![modules::codex_instance::get_default_codex_home()?];
-    profiles.extend(
-        modules::codex_instance::load_instance_store()?
-            .instances
-            .into_iter()
-            .map(|instance| PathBuf::from(instance.user_data_dir)),
-    );
-    Ok(profiles)
+fn idle_codex_profile_dirs_for_app_exit(
+    default_dir: PathBuf,
+    default_last_pid: Option<u32>,
+    instances: Vec<InstanceProfile>,
+    mut is_running: impl FnMut(Option<u32>, Option<&str>) -> bool,
+) -> Vec<PathBuf> {
+    let mut profiles = Vec::new();
+    if !is_running(default_last_pid, None) {
+        profiles.push(default_dir);
+    }
+    for instance in instances {
+        // Use live process state, not saved routing.enabled: a running profile
+        // may have a disabled configuration saved for its next launch.
+        if !is_running(instance.last_pid, Some(&instance.user_data_dir)) {
+            profiles.push(PathBuf::from(instance.user_data_dir));
+        }
+    }
+    profiles
+}
+
+fn configured_idle_codex_profile_dirs() -> Result<Vec<PathBuf>, String> {
+    let settings = modules::codex_instance::load_default_settings()?;
+    Ok(idle_codex_profile_dirs_for_app_exit(
+        modules::codex_instance::get_default_codex_home()?,
+        settings.last_pid,
+        modules::codex_instance::load_instance_store()?.instances,
+        |last_pid, profile| modules::process::resolve_codex_pid(last_pid, profile).is_some(),
+    ))
 }
 
 pub fn restore_mixed_model_profiles_for_app_exit() {
-    let profiles = match configured_codex_profile_dirs() {
+    let profiles = match configured_idle_codex_profile_dirs() {
         Ok(profiles) => profiles,
         Err(error) => {
             modules::logger::log_warn(&format!(
@@ -1375,6 +1394,160 @@ mod tests {
         }]
     }
 
+    #[test]
+    fn app_exit_preserves_running_profiles_even_when_routing_was_disabled_for_later() {
+        let profile = |id: &str, enabled: bool, pid: u32| InstanceProfile {
+            id: id.to_string(),
+            name: id.to_string(),
+            user_data_dir: format!("/test/{id}"),
+            working_dir: None,
+            extra_args: String::new(),
+            bind_account_id: None,
+            model_routing: Some(CodexInstanceModelRouting {
+                enabled,
+                ..Default::default()
+            }),
+            launch_mode: InstanceLaunchMode::App,
+            app_speed: CodexAppSpeed::Standard,
+            created_at: 1,
+            last_launched_at: None,
+            last_pid: Some(pid),
+        };
+        let profiles = vec![
+            profile("active", true, 11),
+            profile("disabled-for-later", false, 12),
+            profile("stopped", true, 13),
+        ];
+        let idle = idle_codex_profile_dirs_for_app_exit(
+            PathBuf::from("/test/default"),
+            Some(10),
+            profiles.clone(),
+            |pid, _| matches!(pid, Some(10 | 11 | 12)),
+        );
+        assert_eq!(idle, vec![PathBuf::from("/test/stopped")]);
+        let all_idle = idle_codex_profile_dirs_for_app_exit(
+            PathBuf::from("/test/default"),
+            Some(10),
+            profiles,
+            |_, _| false,
+        );
+        assert_eq!(all_idle.len(), 4);
+        assert_eq!(all_idle[0], PathBuf::from("/test/default"));
+    }
+
+    #[tokio::test]
+    async fn instance_configuration_disable_routing_survives_reload_and_binding_update() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let env = TestDataDirGuard::new("cockpit-codex-disable-routing");
+        let instance_id = "disable-routing-instance";
+        let profile_dir =
+            save_instance_with_quick_config(&env, instance_id, Some(1_000_000), Some(900_000));
+        let before_config = std::fs::read(profile_dir.join("config.toml")).unwrap();
+        let mut store = modules::codex_instance::load_instance_store().expect("load store");
+        store.instances[0].model_routing = Some(CodexInstanceModelRouting {
+            enabled: true,
+            ..Default::default()
+        });
+        modules::codex_instance::save_instance_store(&store).expect("seed enabled routing");
+
+        // Match command argument decoding: null is not an explicit disable.
+        let omitted: Option<Option<CodexInstanceModelRouting>> =
+            serde_json::from_value(serde_json::Value::Null).expect("decode null");
+        assert!(omitted.is_none());
+        let disabled: Option<Option<CodexInstanceModelRouting>> =
+            serde_json::from_value(serde_json::json!({
+                "enabled": false, "version": 1, "routes": []
+            }))
+            .expect("decode explicit disable");
+        let saved = codex_save_instance_configuration(
+            instance_id.to_string(),
+            None, None, None, None,
+            disabled,
+            None, None, None, None,
+            Some(true),
+            false,
+            test_experimental_models(),
+            None,
+        )
+        .await
+        .expect("disable routing");
+        assert!(!saved.instance.model_routing.expect("saved routing").enabled);
+        assert_eq!(std::fs::read(profile_dir.join("config.toml")).unwrap(), before_config);
+        assert!(profile_dir.join(PENDING_MODEL_CATALOG_FILE).exists());
+
+        // A later account selection must preserve the disabled state.
+        codex_update_instance(
+            instance_id.to_string(),
+            None, None, None,
+            Some(Some("another-oauth-account".to_string())),
+            None, None, None, None, None,
+            Some(true),
+        )
+        .await
+        .expect("save new binding without launching Codex");
+        let reloaded = modules::codex_instance::load_instance_store().expect("reload store");
+        let instance = &reloaded.instances[0];
+        assert!(!instance.model_routing.as_ref().expect("persisted routing").enabled);
+        assert_eq!(instance.bind_account_id.as_deref(), Some("another-oauth-account"));
+        let config = std::fs::read_to_string(profile_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model_context_window = 1000000"));
+        assert!(config.contains("model_auto_compact_token_limit = 900000"));
+        apply_pending_model_catalog(&profile_dir).expect("apply at next startup");
+        assert!(!profile_dir.join(PENDING_MODEL_CATALOG_FILE).exists());
+    }
+
+    #[test]
+    fn pending_catalog_preserves_active_files_and_handles_removed_default() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let env = TestDataDirGuard::new("pending-catalog");
+        let profile = save_instance_with_quick_config(&env, "pending", Some(1_000_000), Some(900_000));
+        let before = std::fs::read(profile.join("config.toml")).unwrap();
+        let view = save_pending_model_catalog(&profile, true, test_experimental_models(), Some("cpa/gpt-6-astra".into())).unwrap();
+        assert!(view.experimental_model_catalog_default_model_id.is_none());
+        assert_eq!(std::fs::read(profile.join("config.toml")).unwrap(), before);
+        assert!(read_pending_model_catalog(&profile).unwrap().unwrap().enabled);
+        apply_pending_model_catalog(&profile).unwrap();
+        assert!(read_pending_model_catalog(&profile).unwrap().is_none());
+        let config = std::fs::read_to_string(profile.join("config.toml")).unwrap();
+        assert!(config.contains("model_context_window = 1000000"));
+        assert!(!config.contains("cpa/gpt-6-astra"));
+        save_pending_model_catalog(&profile, false, Vec::new(), None).unwrap();
+        apply_pending_model_catalog(&profile).unwrap();
+        let config = std::fs::read_to_string(profile.join("config.toml")).unwrap();
+        assert!(!config.contains("model_catalog_json"));
+    }
+
+    #[test]
+    fn invalid_pending_catalog_does_not_replace_saved_draft() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let env = TestDataDirGuard::new("pending-invalid");
+        let profile = save_instance_with_quick_config(&env, "pending", None, None);
+        save_pending_model_catalog(&profile, true, test_experimental_models(), None).unwrap();
+        let path = profile.join(PENDING_MODEL_CATALOG_FILE);
+        let before = std::fs::read(&path).unwrap();
+        assert!(save_pending_model_catalog(&profile, true, Vec::new(), None).is_err());
+        assert_eq!(std::fs::read(path).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn pending_catalog_rolls_back_when_routing_validation_fails() {
+        let _lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+        let env = TestDataDirGuard::new("pending-rollback");
+        let profile = save_instance_with_quick_config(&env, "pending", None, None);
+        save_pending_model_catalog(&profile, false, Vec::new(), None).unwrap();
+        let path = profile.join(PENDING_MODEL_CATALOG_FILE);
+        let before = std::fs::read(&path).unwrap();
+        let result = codex_save_instance_configuration(
+            "pending".into(), None, None, None, None,
+            Some(Some(CodexInstanceModelRouting { enabled: true, ..Default::default() })),
+            None, None, None, None, Some(true), true, test_experimental_models(), None,
+        ).await;
+        assert!(result.is_err(), "enabled routing must require a valid OAuth binding");
+        assert_eq!(std::fs::read(path).unwrap(), before);
+    }
+
     #[tokio::test]
     async fn instance_configuration_save_preserves_context_window_settings() {
         let _lock = crate::modules::test_support::env_lock()
@@ -1994,7 +2167,11 @@ pub async fn codex_get_instance_quick_config(
 ) -> Result<crate::models::codex::CodexQuickConfig, String> {
     let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
     tauri::async_runtime::spawn_blocking(move || {
-        modules::codex_account::read_quick_config_from_config_toml(&base_dir)
+        let mut config = modules::codex_account::read_quick_config_from_config_toml(&base_dir)?;
+        if let Some(draft) = read_pending_model_catalog(&base_dir)? {
+            draft.apply_to_view(&mut config);
+        }
+        Ok(config)
     })
     .await
     .map_err(|error| format!("读取 Codex 实例快捷配置后台任务失败: {}", error))?
@@ -2051,6 +2228,14 @@ pub async fn codex_save_instance_model_catalog(
     experimental_model_catalog_default_model_id: Option<String>,
 ) -> Result<crate::models::codex::CodexQuickConfig, String> {
     let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
+    if read_pending_model_catalog(&base_dir)?.is_some() {
+        return save_pending_model_catalog(
+            &base_dir,
+            experimental_model_catalog_enabled,
+            experimental_model_catalog_models,
+            experimental_model_catalog_default_model_id,
+        );
+    }
     let saved = tauri::async_runtime::spawn_blocking(move || {
         let saved = modules::codex_account::save_model_catalog_for_base_dir_preserving_context(
             &base_dir,
@@ -2065,6 +2250,66 @@ pub async fn codex_save_instance_model_catalog(
     .map_err(|error| format!("保存 Codex 实例可见模型后台任务失败: {}", error))??;
     modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
     Ok(saved)
+}
+
+const PENDING_MODEL_CATALOG_FILE: &str = ".cockpit-pending-model-catalog.json";
+
+#[derive(Clone, Serialize, Deserialize)]
+struct PendingModelCatalog {
+    enabled: bool,
+    models: Vec<CodexExperimentalModelDefinition>,
+    default_model_id: Option<String>,
+}
+
+impl PendingModelCatalog {
+    fn apply_to_view(&self, config: &mut CodexQuickConfig) {
+        config.experimental_model_catalog_enabled = self.enabled;
+        config.experimental_model_catalog_models = self.models.clone();
+        config.experimental_model_catalog_default_model_id = self.default_model_id.clone();
+    }
+}
+
+fn read_pending_model_catalog(profile: &Path) -> Result<Option<PendingModelCatalog>, String> {
+    match std::fs::read(profile.join(PENDING_MODEL_CATALOG_FILE)) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map(Some)
+            .map_err(|error| format!("读取待生效模型配置失败: {}", error)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("读取待生效模型配置失败: {}", error)),
+    }
+}
+
+fn save_pending_model_catalog(
+    profile: &Path,
+    enabled: bool,
+    models: Vec<CodexExperimentalModelDefinition>,
+    default_model_id: Option<String>,
+) -> Result<CodexQuickConfig, String> {
+    let mut config = modules::codex_account::read_quick_config_from_config_toml(profile)?;
+    if !config.experimental_model_catalog_available {
+        return Err("当前实例不支持受管模型目录".to_string());
+    }
+    let models = if enabled {
+        modules::codex_account::normalize_experimental_model_definitions(models)?
+    } else {
+        models
+    };
+    let default_model_id = default_model_id.filter(|id| {
+        enabled && models.iter().any(|model| model.model_id.eq_ignore_ascii_case(id))
+    });
+    let draft = PendingModelCatalog { enabled, models, default_model_id };
+    let content = serde_json::to_string_pretty(&draft).map_err(|error| error.to_string())?;
+    modules::atomic_write::write_string_atomic(&profile.join(PENDING_MODEL_CATALOG_FILE), &content)?;
+    draft.apply_to_view(&mut config);
+    Ok(config)
+}
+
+fn apply_pending_model_catalog(profile: &Path) -> Result<(), String> {
+    let Some(draft) = read_pending_model_catalog(profile)? else { return Ok(()); };
+    modules::codex_account::save_model_catalog_for_base_dir_preserving_context(
+        profile, draft.enabled, draft.models, draft.default_model_id,
+    )?;
+    modules::atomic_write::remove_file_locked(&profile.join(PENDING_MODEL_CATALOG_FILE))?;
+    Ok(())
 }
 
 /// Save the instance record and its managed model catalog as one compensated transaction.
@@ -2087,6 +2332,32 @@ pub async fn codex_save_instance_configuration(
     experimental_model_catalog_models: Vec<CodexExperimentalModelDefinition>,
     experimental_model_catalog_default_model_id: Option<String>,
 ) -> Result<CodexInstanceConfigurationSaveResult, String> {
+    let profile = resolve_instance_base_dir(&instance_id)?;
+    if defer_bind_account_application == Some(true) && model_routing.is_some() {
+        let previous = read_pending_model_catalog(&profile)?;
+        let quick_config = save_pending_model_catalog(
+            &profile, experimental_model_catalog_enabled,
+            experimental_model_catalog_models, experimental_model_catalog_default_model_id,
+        )?;
+        let result = codex_update_instance(
+            instance_id, name, working_dir, extra_args, bind_account_id, model_routing,
+            follow_local_account, launch_mode, app_speed, auto_sync_threads, Some(true),
+        ).await;
+        return match result {
+            Ok(instance) => Ok(CodexInstanceConfigurationSaveResult { instance, quick_config }),
+            Err(error) => {
+                let path = profile.join(PENDING_MODEL_CATALOG_FILE);
+                let rollback = match previous {
+                    Some(previous) => modules::atomic_write::write_string_atomic(
+                        &path, &serde_json::to_string_pretty(&previous).map_err(|e| e.to_string())?,
+                    ),
+                    None => modules::atomic_write::remove_file_locked(&path).map(|_| ()),
+                };
+                rollback.map_err(|rollback| format!("{error}; 恢复待生效配置失败: {rollback}"))?;
+                Err(error)
+            }
+        };
+    }
     let previous_quick_config = codex_get_instance_quick_config(instance_id.clone()).await?;
     let saved_quick_config = codex_save_instance_model_catalog(
         instance_id.clone(),
@@ -3016,6 +3287,7 @@ async fn codex_start_instance_internal(
             default_settings.model_routing.as_ref(),
         )
         .await?;
+        apply_pending_model_catalog(&default_dir)?;
         ensure_codex_instance_start_not_cancelled(&instance_id)?;
         modules::logger::log_info(&format!(
             "[Codex Start] default close phase finished, mode={}, elapsed_ms={}",
@@ -3327,6 +3599,7 @@ async fn codex_start_instance_internal(
     modules::codex_local_access::stop_provider_gateways_for_profile(instance_dir).await;
     restore_mixed_model_gateway_when_disabled(instance_dir, instance.model_routing.as_ref())
         .await?;
+    apply_pending_model_catalog(instance_dir)?;
     modules::logger::log_info(&format!(
         "[Codex Start] instance close/provider-stop phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
         instance.id,

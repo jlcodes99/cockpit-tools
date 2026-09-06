@@ -682,7 +682,7 @@ fn normalize_reasoning_efforts(
     Ok(Some(normalized))
 }
 
-fn normalize_experimental_model_definitions(
+pub(crate) fn normalize_experimental_model_definitions(
     models: Vec<CodexExperimentalModelDefinition>,
 ) -> Result<Vec<CodexExperimentalModelDefinition>, String> {
     if models.is_empty() {

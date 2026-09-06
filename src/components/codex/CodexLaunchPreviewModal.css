@@ -668,16 +668,32 @@
   border-radius: 8px;
 }
 
-.codex-launch-preview-dirty {
+.codex-launch-preview-dirty,
+.codex-launch-preview-notice {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  margin-top: 12px;
   padding: 10px 12px;
   border-radius: 10px;
-  color: var(--warning-color, #b7791f);
-  background: color-mix(in srgb, #f59e0b 10%, transparent);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.codex-launch-preview-dirty svg,
+.codex-launch-preview-notice svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.codex-launch-preview-dirty {
+  color: var(--warning-color, #b7791f);
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+}
+
+.codex-launch-preview-notice {
+  color: var(--success, #15803d);
+  background: color-mix(in srgb, var(--success, #22c55e) 10%, transparent);
 }
 
 .codex-launch-preview-modal .btn-outline,

@@ -1242,6 +1242,38 @@ pub(crate) fn invalidate_codex_model_cache(profile_dir: &Path) -> Result<(), Str
     }
 }
 
+fn write_mixed_model_realtime_sideband_override(
+    profile_dir: &Path,
+    collection: &CodexLocalAccessCollection,
+    api_key: &str,
+) -> Result<(), String> {
+    let is_mixed = collection.api_keys.iter().any(|item| {
+        item.enabled
+            && item.key.trim() == api_key.trim()
+            && item.provider_gateway.is_none()
+            && item.model_routing.as_ref().is_some_and(|routing| {
+                routing.default_route.eq_ignore_ascii_case("oauth")
+            })
+    });
+    if !is_mixed {
+        return Ok(());
+    }
+    let path = profile_config_path(profile_dir);
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("读取 Codex 语音接管配置失败: {}", error))?;
+    let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
+        .map_err(|error| format!("解析 Codex 语音接管配置失败: {}", error))?;
+    // WebRTC sideband ignores model provider.base_url by default but reuses its
+    // bearer. Keep call creation and sideband on the same gateway/account.
+    // An explicit user override is outside Cockpit's ownership.
+    if doc.get("experimental_realtime_ws_base_url").is_some() {
+        return Ok(());
+    }
+    doc["experimental_realtime_ws_base_url"] = value(build_collection_base_url(collection));
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&path, &content)
+}
+
 async fn write_local_access_profile_takeover(
     profile_dir: &Path,
     collection: &CodexLocalAccessCollection,
@@ -1269,6 +1301,7 @@ async fn write_local_access_profile_takeover(
         supports_websockets,
     );
     codex_account::write_account_bundle_to_dir(profile_dir, &runtime_account)?;
+    write_mixed_model_realtime_sideband_override(profile_dir, collection, &runtime_api_key)?;
     write_local_access_profile_model_catalog(
         profile_dir,
         supports_websockets,

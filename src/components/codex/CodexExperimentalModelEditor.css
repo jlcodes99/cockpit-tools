@@ -50,8 +50,9 @@
 .codex-experimental-model-summary__table-head,
 .codex-experimental-model-summary__row {
   display: grid;
-  min-width: 620px;
+  min-width: 640px;
   grid-template-columns:
+    18px
     minmax(130px, 1.2fr)
     minmax(180px, 1.8fr)
     minmax(96px, 0.8fr)
@@ -63,8 +64,9 @@
 
 .codex-experimental-model-summary__table-head.has-source,
 .codex-experimental-model-summary__row.has-source {
-  min-width: 720px;
+  min-width: 740px;
   grid-template-columns:
+    18px
     minmax(120px, 1.1fr)
     minmax(180px, 1.7fr)
     64px
@@ -81,8 +83,17 @@
   font-weight: 600;
 }
 
-.codex-experimental-model-summary__table-head.has-source > span:nth-child(3) {
+.codex-experimental-model-summary__table-head.has-source > span:nth-child(4) {
   text-align: center;
+}
+
+.codex-experimental-model-summary__list.is-sorting {
+  user-select: none;
+}
+
+.codex-experimental-model-summary__row.is-dragging {
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 .codex-experimental-model-summary__list {
@@ -297,19 +308,21 @@
   width: 100%;
   min-width: 0;
   grid-template-columns:
-    minmax(200px, 1.6fr)
-    minmax(160px, 1.2fr)
+    18px
+    minmax(180px, 1.6fr)
+    minmax(140px, 1.2fr)
+    minmax(120px, 1fr)
     minmax(130px, 1fr)
-    minmax(140px, 1fr)
     64px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .codex-experimental-model-editor__table-head.has-source,
 .codex-experimental-model-editor__fields.has-source {
   min-width: 0;
   grid-template-columns:
+    18px
     minmax(190px, 1.4fr)
     minmax(140px, 1.1fr)
     76px
@@ -317,7 +330,7 @@
     minmax(130px, 1fr)
     64px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .codex-experimental-model-editor__table-head {
@@ -329,23 +342,23 @@
   letter-spacing: 0.2px;
 }
 
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(1),
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(2) {
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(2),
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(3) {
   text-align: left;
   padding-left: 2px;
 }
 
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(3) {
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(4) {
   text-align: center;
 }
 
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(4),
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(5) {
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(5),
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(6) {
   text-align: left;
   padding-left: 2px;
 }
 
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(6) {
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(7) {
   text-align: center;
 }
 
@@ -355,11 +368,20 @@
   flex: 1;
   max-height: 520px;
   flex-direction: column;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .codex-experimental-model-editor__list.has-open-menu {
   padding-bottom: 150px;
+}
+
+.codex-experimental-model-editor__list.is-sorting {
+  user-select: none;
+}
+
+.codex-experimental-model-editor__list.is-sorting .codex-experimental-model-editor__row {
+  cursor: grabbing;
 }
 
 .codex-experimental-model-editor__row {
@@ -372,6 +394,45 @@
 
 .codex-experimental-model-editor__row:hover {
   background: color-mix(in srgb, var(--primary) 3%, transparent);
+}
+
+.codex-experimental-model-editor__row.is-dragging {
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.codex-experimental-model-editor__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0.35;
+}
+
+.codex-experimental-model-editor__row:hover .codex-experimental-model-editor__drag-handle {
+  opacity: 0.7;
+}
+
+.codex-experimental-model-editor__drag-handle:hover:not(:disabled),
+.codex-experimental-model-editor__drag-handle:focus-visible {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.codex-experimental-model-editor__drag-handle:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.codex-experimental-model-editor__drag-handle:disabled {
+  cursor: not-allowed;
+  opacity: 0.2;
 }
 
 .codex-experimental-model-editor__fields > label,
@@ -532,6 +593,8 @@
 
 .codex-experimental-model-editor__operation-actions {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 5px;
 }
 
