@@ -417,12 +417,22 @@ async fn inject_preflighted_bound_account_to_profile(
     .await
 }
 
+fn is_mixed_model_routing_binding(account_id: &str) -> bool {
+    // API Service owns its routing; stale instance routing must not treat its
+    // synthetic binding as an OAuth account.
+    !modules::codex_instance::is_api_service_bind_account_id(account_id)
+}
+
 async fn ensure_provider_gateway_for_bind_account(
     profile_dir: &Path,
     bind_account_id: Option<&str>,
     model_routing: Option<&CodexInstanceModelRouting>,
 ) -> Result<(), String> {
     if let Some(routing) = model_routing.filter(|routing| routing.enabled) {
+        if bind_account_id.is_some_and(|id| !is_mixed_model_routing_binding(id)) {
+            modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
+            return Ok(());
+        }
         let oauth_account_id = bind_account_id
             .and_then(|value| {
                 modules::codex_account::oauth_account_id_for_runtime_binding(Some(value))
@@ -673,7 +683,8 @@ fn configured_mixed_model_gateways() -> Result<Vec<ConfiguredMixedModelGateway>,
             .model_routing
             .clone()
             .filter(|routing| routing.enabled),
-        resolve_default_account_id(&default_settings),
+        resolve_default_account_id(&default_settings)
+            .filter(|id| is_mixed_model_routing_binding(id)),
     ) {
         let profile_dir = modules::codex_instance::get_default_codex_home()?;
         if is_profile_initialized(&profile_dir.to_string_lossy()) {
@@ -691,7 +702,10 @@ fn configured_mixed_model_gateways() -> Result<Vec<ConfiguredMixedModelGateway>,
         let Some(routing) = instance.model_routing.filter(|routing| routing.enabled) else {
             continue;
         };
-        let Some(oauth_account_id) = instance.bind_account_id else {
+        let Some(oauth_account_id) = instance
+            .bind_account_id
+            .filter(|id| is_mixed_model_routing_binding(id))
+        else {
             continue;
         };
         if !is_profile_initialized(&instance.user_data_dir) {
@@ -1061,6 +1075,15 @@ mod tests {
         assert!(ensure_codex_instance_start_not_cancelled(instance_id).is_err());
         clear_codex_instance_start_cancel(instance_id);
         assert!(ensure_codex_instance_start_not_cancelled(instance_id).is_ok());
+    }
+
+    #[test]
+    fn api_service_binding_is_not_an_oauth_mixed_routing_target() {
+        assert!(!is_mixed_model_routing_binding(
+            modules::codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID
+        ));
+        assert!(!is_mixed_model_routing_binding("  __api_service__  "));
+        assert!(is_mixed_model_routing_binding("codex_oauth_account"));
     }
 
     #[test]
