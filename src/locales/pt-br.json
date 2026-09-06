@@ -768,6 +768,7 @@
       "codexAppUiInjectionPoolLabel": "Contas",
       "codexAppUiInjectionWeeklyLabel": "Semana",
       "codexAppUiInjectionFiveHourLabel": "5 h",
+      "codexAppUiInjectionBalanceLabel": "Saldo",
       "codexWslConfigDir": "Diretório Codex no WSL",
       "codexWslConfigDirDesc": "Informe o diretório .codex dentro do WSL. Caminhos \\\\wsl.localhost\\ são compatíveis.",
       "codexWslConfigDirPlaceholder": "Exemplo: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "Pool de cota",
         "hourlyShort": "5h​",
         "weeklyShort": "Semana",
+        "balance": "Saldo",
         "viewFull": "Ver estatísticas completas",
         "modalTitle": "Pool de cota do serviço API",
         "empty": "Ainda sem estatísticas de cota"
@@ -3274,6 +3276,7 @@
         "custom": "Personalizado",
         "endpoint": "Endpoint do provedor",
         "hint": "Uma Base URL compatível foi preenchida automaticamente. Você ainda pode editá-la manualmente.",
+        "cockpitToolsHint": "Substitua a Base URL pelo endereço LAN do host do Cockpit Tools, por exemplo http://HOST_IP:PORT/v1. O cartão da conta consultará /cockpit/quota automaticamente.",
         "website": "Site",
         "apiKeyPage": "Página da chave API",
         "getApiKey": "Obter chave"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools na rede local"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "Dados do serviço",
         "fields": {
           "status": "Situação",
+          "fiveHourRemainingPercent": "Restante em 5 h",
+          "weeklyRemainingPercent": "Restante semanal",
+          "accountCount": "Pool de contas",
+          "availableAccountCount": "Contas disponíveis",
+          "abnormalAccountCount": "Contas anormais",
+          "cooldownAccountCount": "Contas em espera",
+          "stale": "Dados desatualizados",
+          "apiKeyBalance": "Saldo da API_KEY",
           "planName": "Plano",
           "remaining": "Crédito restante",
           "balance": "Saldo",

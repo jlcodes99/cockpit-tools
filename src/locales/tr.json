@@ -768,6 +768,7 @@
       "codexAppUiInjectionPoolLabel": "Hesaplar",
       "codexAppUiInjectionWeeklyLabel": "Hafta",
       "codexAppUiInjectionFiveHourLabel": "5 sa",
+      "codexAppUiInjectionBalanceLabel": "Bakiye",
       "codexWslConfigDir": "WSL Codex dizini",
       "codexWslConfigDirDesc": "WSL içindeki .codex dizinini girin. \\\\wsl.localhost\\ yolları desteklenir.",
       "codexWslConfigDirPlaceholder": "Örnek: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "Kota havuzu",
         "hourlyShort": "5h​",
         "weeklyShort": "Hafta",
+        "balance": "Bakiye",
         "viewFull": "Tam istatistikleri gör",
         "modalTitle": "API hizmeti kota havuzu",
         "empty": "Henüz kota istatistiği yok"
@@ -3274,6 +3276,7 @@
         "custom": "Özel",
         "endpoint": "Sağlayıcı uç noktası",
         "hint": "Uyumlu bir Base URL otomatik olarak dolduruldu. İsterseniz bunu yine de elle düzenleyebilirsiniz.",
+        "cockpitToolsHint": "Base URL'yi Cockpit Tools ana makinesinin LAN adresiyle değiştirin; örneğin http://HOST_IP:PORT/v1. Hesap kartı /cockpit/quota adresini otomatik olarak sorgular.",
         "website": "Web sitesi",
         "apiKeyPage": "API anahtarı sayfası",
         "getApiKey": "Anahtarı al"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Yerel ağdaki Cockpit Tools"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "Servis verileri",
         "fields": {
           "status": "Durum",
+          "fiveHourRemainingPercent": "Kalan 5 saat",
+          "weeklyRemainingPercent": "Haftalık kalan",
+          "accountCount": "Hesap havuzu",
+          "availableAccountCount": "Kullanılabilir hesaplar",
+          "abnormalAccountCount": "Sorunlu hesaplar",
+          "cooldownAccountCount": "Beklemedeki hesaplar",
+          "stale": "Eski veri",
+          "apiKeyBalance": "API_KEY bakiyesi",
           "planName": "Paket",
           "remaining": "Kalan kota",
           "balance": "Bakiye",

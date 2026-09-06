@@ -768,6 +768,7 @@
       "codexAppUiInjectionPoolLabel": "Tài khoản",
       "codexAppUiInjectionWeeklyLabel": "Tuần",
       "codexAppUiInjectionFiveHourLabel": "5 giờ",
+      "codexAppUiInjectionBalanceLabel": "Số dư",
       "codexWslConfigDir": "Thư mục Codex WSL",
       "codexWslConfigDirDesc": "Nhập thư mục .codex trong WSL. Hỗ trợ đường dẫn \\\\wsl.localhost\\.",
       "codexWslConfigDirPlaceholder": "Ví dụ: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "Nhóm hạn mức",
         "hourlyShort": "5h​",
         "weeklyShort": "Tuần",
+        "balance": "Số dư",
         "viewFull": "Xem thống kê đầy đủ",
         "modalTitle": "Nhóm hạn mức dịch vụ API",
         "empty": "Chưa có thống kê hạn mức"
@@ -3274,6 +3276,7 @@
         "custom": "Tùy chỉnh",
         "endpoint": "Điểm cuối nhà cung cấp",
         "hint": "Base URL tương thích đã được điền tự động. Bạn vẫn có thể chỉnh sửa thủ công.",
+        "cockpitToolsHint": "Thay Base URL bằng địa chỉ LAN của máy chủ Cockpit Tools, ví dụ http://HOST_IP:PORT/v1. Thẻ tài khoản sẽ tự động truy vấn /cockpit/quota.",
         "website": "Trang web",
         "apiKeyPage": "Trang API Key",
         "getApiKey": "Lấy khóa"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools trong mạng LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "Dữ liệu dịch vụ",
         "fields": {
           "status": "Trạng thái",
+          "fiveHourRemainingPercent": "Còn lại 5 giờ",
+          "weeklyRemainingPercent": "Còn lại theo tuần",
+          "accountCount": "Nhóm tài khoản",
+          "availableAccountCount": "Tài khoản khả dụng",
+          "abnormalAccountCount": "Tài khoản bất thường",
+          "cooldownAccountCount": "Tài khoản đang chờ",
+          "stale": "Dữ liệu cũ",
+          "apiKeyBalance": "Số dư API_KEY",
           "planName": "Gói",
           "remaining": "Còn lại",
           "balance": "Số dư",

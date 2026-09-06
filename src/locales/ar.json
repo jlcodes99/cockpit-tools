@@ -811,6 +811,7 @@
       "codexAppUiInjectionPoolLabel": "الحسابات",
       "codexAppUiInjectionWeeklyLabel": "أسبوع",
       "codexAppUiInjectionFiveHourLabel": "5 س",
+      "codexAppUiInjectionBalanceLabel": "الرصيد",
       "codexWslConfigDir": "مجلد Codex في WSL",
       "codexWslConfigDirDesc": "أدخل مجلد .codex داخل WSL. مسارات \\\\wsl.localhost\\ مدعومة.",
       "codexWslConfigDirPlaceholder": "مثال: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2496,6 +2497,7 @@
         "title": "مجمع الحصة",
         "hourlyShort": "5h​",
         "weeklyShort": "أسبوع",
+        "balance": "الرصيد",
         "viewFull": "عرض الإحصاء الكامل",
         "modalTitle": "مجمع حصة خدمة API",
         "empty": "لا توجد إحصاءات حصة بعد"
@@ -3321,6 +3323,7 @@
         "custom": "مخصّص",
         "endpoint": "نقطة نهاية المزوّد",
         "hint": "تم ملء Base URL متوافق تلقائيًا، وما زال بإمكانك تعديله يدويًا.",
+        "cockpitToolsHint": "استبدل Base URL بعنوان الشبكة المحلية لمضيف Cockpit Tools، مثل http://HOST_IP:PORT/v1. ستستعلم بطاقة الحساب عن /cockpit/quota تلقائيًا.",
         "website": "الموقع الإلكتروني",
         "apiKeyPage": "صفحة مفتاح API",
         "getApiKey": "الحصول على المفتاح"
@@ -3385,6 +3388,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools للشبكة المحلية"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3673,6 +3679,14 @@
         "rawFields": "بيانات الخدمة",
         "fields": {
           "status": "الحالة",
+          "fiveHourRemainingPercent": "المتبقي خلال 5 ساعات",
+          "weeklyRemainingPercent": "المتبقي الأسبوعي",
+          "accountCount": "مجموعة الحسابات",
+          "availableAccountCount": "الحسابات المتاحة",
+          "abnormalAccountCount": "الحسابات غير الطبيعية",
+          "cooldownAccountCount": "الحسابات قيد التهدئة",
+          "stale": "بيانات قديمة",
+          "apiKeyBalance": "رصيد API_KEY",
           "planName": "الخطة",
           "remaining": "المتبقي",
           "balance": "الرصيد",

@@ -768,6 +768,7 @@
       "codexAppUiInjectionPoolLabel": "Konta",
       "codexAppUiInjectionWeeklyLabel": "Tydzień",
       "codexAppUiInjectionFiveHourLabel": "5 godz.",
+      "codexAppUiInjectionBalanceLabel": "Saldo",
       "codexWslConfigDir": "Katalog Codex w WSL",
       "codexWslConfigDirDesc": "Wpisz katalog .codex w WSL. Ścieżki \\\\wsl.localhost\\ są obsługiwane.",
       "codexWslConfigDirPlaceholder": "Przykład: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "Pula limitów",
         "hourlyShort": "5h​",
         "weeklyShort": "Tydzień",
+        "balance": "Saldo",
         "viewFull": "Pokaż pełne statystyki",
         "modalTitle": "Pula limitów usługi API",
         "empty": "Brak statystyk limitów"
@@ -3274,6 +3276,7 @@
         "custom": "Niestandardowy",
         "endpoint": "Punkt końcowy dostawcy",
         "hint": "Zgodny Base URL został uzupełniony automatycznie. Nadal możesz go edytować ręcznie.",
+        "cockpitToolsHint": "Zastąp Base URL adresem LAN hosta Cockpit Tools, na przykład http://HOST_IP:PORT/v1. Karta konta automatycznie odpyta /cockpit/quota.",
         "website": "Witryna",
         "apiKeyPage": "Strona klucza API",
         "getApiKey": "Pobierz klucz"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools w sieci LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "Dane usługi",
         "fields": {
           "status": "Stan",
+          "fiveHourRemainingPercent": "Pozostało 5 godz.",
+          "weeklyRemainingPercent": "Pozostało tygodniowo",
+          "accountCount": "Pula kont",
+          "availableAccountCount": "Dostępne konta",
+          "abnormalAccountCount": "Nieprawidłowe konta",
+          "cooldownAccountCount": "Konta w okresie oczekiwania",
+          "stale": "Nieaktualne dane",
+          "apiKeyBalance": "Saldo API_KEY",
           "planName": "Pakiet",
           "remaining": "Pozostało",
           "balance": "Saldo",

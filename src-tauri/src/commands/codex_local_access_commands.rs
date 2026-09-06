@@ -576,6 +576,114 @@ pub async fn codex_local_access_chat_test_stream(
 mod tests {
     use super::*;
 
+    #[test]
+    fn api_key_usage_summary_is_persisted_for_quota_pool_snapshots() {
+        let mut account = CodexAccount::new_api_key(
+            "api-key-usage".to_string(),
+            "api-key@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://provider.example".to_string()),
+            Some("custom-provider".to_string()),
+            Some("Custom Provider".to_string()),
+            Vec::new(),
+        );
+        let summary = serde_json::json!({
+            "mode": "sub2api",
+            "remaining": 5.6,
+            "unit": "USD"
+        });
+
+        assert!(apply_codex_api_key_usage_summary(
+            &mut account,
+            summary.clone(),
+            Some(1_787_406_691_000),
+        )
+        .expect("persist provider usage"));
+        assert_eq!(account.usage_updated_at, Some(1_787_406_691));
+        assert_eq!(
+            account
+                .quota
+                .as_ref()
+                .and_then(|quota| quota.raw_data.as_ref())
+                .and_then(|raw| raw.get("provider_usage")),
+            Some(&summary)
+        );
+
+        assert!(!apply_codex_api_key_usage_summary(
+            &mut account,
+            serde_json::json!({
+                "mode": "sub2api",
+                "remaining": 1.2,
+                "unit": "USD"
+            }),
+            Some(1_787_406_000_000),
+        )
+        .expect("ignore stale provider usage"));
+        assert_eq!(
+            account
+                .quota
+                .as_ref()
+                .and_then(|quota| quota.raw_data.as_ref())
+                .and_then(|raw| raw.get("provider_usage")),
+            Some(&summary)
+        );
+    }
+
+    #[test]
+    fn provider_usage_root_url_also_tries_v1() {
+        assert_eq!(
+            codex_provider_usage_base_url_candidates("https://aihub.top/")
+                .expect("valid provider URL"),
+            vec![
+                "https://aihub.top".to_string(),
+                "https://aihub.top/v1".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn provider_usage_v1_url_is_not_modified() {
+        assert_eq!(
+            codex_provider_usage_base_url_candidates("https://aihub.top/v1")
+                .expect("valid provider URL"),
+            vec!["https://aihub.top/v1".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn cockpit_tools_usage_exposes_api_key_balance_in_cny() {
+        let server = tiny_http::Server::http("127.0.0.1:0")
+            .expect("mock Cockpit Tools provider should start");
+        let port = server
+            .server_addr()
+            .to_ip()
+            .expect("mock provider should use an IP address")
+            .port();
+        let responder = std::thread::spawn(move || {
+            let request = server.recv().expect("mock provider should receive quota query");
+            assert_eq!(request.url(), "/v1/cockpit/quota");
+            request
+                .respond(tiny_http::Response::from_string(
+                    r#"{"version":1,"scope":"api_key_account_pool","apiKeyBalance":5.6,"accountCount":1,"availableAccountCount":1,"stale":false}"#,
+                ))
+                .expect("mock provider should return quota response");
+        });
+
+        let summary = codex_query_model_provider_usage(
+            format!("http://127.0.0.1:{port}/v1"),
+            "test-api-key".to_string(),
+            Some("cockpit_tools".to_string()),
+        )
+        .await
+        .expect("Cockpit Tools quota should be summarized");
+
+        responder.join().expect("mock provider should finish");
+        assert_eq!(summary.mode.as_deref(), Some("cockpit_tools"));
+        assert_eq!(summary.balance, Some(5.6));
+        assert_eq!(summary.unit.as_deref(), Some("CNY"));
+    }
+
     #[tokio::test]
     async fn account_pool_cleanup_error_does_not_block_local_delete_flow() {
         run_account_pool_cleanup_best_effort("test_error", 1, Duration::from_secs(1), async {

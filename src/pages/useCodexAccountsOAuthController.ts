@@ -16,11 +16,11 @@ import { CODEX_ADDITIONAL_QUOTA_VISIBILITY_CHANGED_EVENT, CODEX_CODE_REVIEW_QUOT
 import { emitAccountsChanged } from "../utils/accountSyncEvents";
 import { resolveCodexModelProviderAccountName } from "../utils/codexModelProviderAccountName";
 import { readCodexCustomSortOrder, writeCodexCustomSortActive, writeCodexCustomSortOrder } from "../utils/codexAccountOverview";
-import { CODEX_API_PROVIDER_CUSTOM_ID, COCKPIT_API_PROVIDER_ID, COCKPIT_API_PROVIDER_NAME, codexApiProviderPresetVisionSupport, findCodexApiProviderPresetById, isCockpitApiProviderBaseUrl } from "../utils/codexProviderPresets";
+import { CODEX_API_PROVIDER_CUSTOM_ID, COCKPIT_API_PROVIDER_ID, COCKPIT_API_PROVIDER_NAME, COCKPIT_TOOLS_API_PROVIDER_ID, codexApiProviderPresetVisionSupport, findCodexApiProviderPresetById, isCockpitApiProviderBaseUrl } from "../utils/codexProviderPresets";
 import { isApiKeyFunProviderBaseUrl } from "../utils/apikeyFunLinks";
 import { type ApiKeyFunPrefillPayload } from "../utils/apiKeyFunPrefill";
 import { resolveCodexProviderCapabilityProfile } from "../utils/codexProviderGateway";
-import { findCodexModelProviderById, findCodexModelProviderByBaseUrl, listCodexModelProviders, type CodexModelProvider } from "../services/codexModelProviderService";
+import { findCodexModelProviderById, findCodexModelProviderByBaseUrl, listCodexModelProviders, type CodexModelProvider, type CodexModelProviderIntegrationType } from "../services/codexModelProviderService";
 import { readCodexApiKeyUsageCache, type CodexApiKeyUsageState } from "../services/codexApiKeyUsageRefreshService";
 import { parseMfaCredentialInput, upsertSavedMfaRecord } from "../utils/mfaVault";
 import { DEFAULT_CODEX_API_BASE_URL, DEFAULT_CODEX_API_PROVIDER_ID, getDefaultApiProviderPresetId, isSameHttpBaseUrl, normalizeHttpBaseUrl, normalizeSponsorApiProviderTemplates, OPENAI_OFFICIAL_PRESET_ID, parseApiModelCatalogText, resolveApiProviderPresetDefaults, type OAuthBindingQuotaReserveFieldErrors, type OAuthBindingTargetKind, type SponsorApiProviderTemplate } from "./codexAccountsControllerModel";
@@ -535,6 +535,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         apiProviderMode: CodexApiProviderMode;
         apiProviderId?: string;
         apiProviderName?: string;
+        apiIntegrationType?: CodexModelProviderIntegrationType;
         apiModelCatalog?: string[];
         apiWireApi?: "responses" | "chat_completions";
         apiSupportsWebsockets?: boolean;
@@ -627,6 +628,10 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
             apiProviderMode: "custom",
             apiProviderId: preset.id,
             apiProviderName: preset.name,
+            apiIntegrationType:
+              preset.id === COCKPIT_TOOLS_API_PROVIDER_ID
+                ? "cockpit_tools"
+                : undefined,
             apiModelCatalog: preset.modelCatalog,
             apiWireApi: resolveCodexProviderCapabilityProfile({
               presetId: preset.id,

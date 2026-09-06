@@ -764,6 +764,7 @@
       "codexAppUiInjectionPoolLabel": "Účty",
       "codexAppUiInjectionWeeklyLabel": "Týden",
       "codexAppUiInjectionFiveHourLabel": "5 h",
+      "codexAppUiInjectionBalanceLabel": "Zůstatek",
       "codexWslConfigDir": "Adresář Codex ve WSL",
       "codexWslConfigDirDesc": "Zadejte adresář .codex ve WSL. Cesty \\\\wsl.localhost\\ jsou podporované.",
       "codexWslConfigDirPlaceholder": "Příklad: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "Fond kvóty",
         "hourlyShort": "5h​",
         "weeklyShort": "Týden",
+        "balance": "Zůstatek",
         "viewFull": "Zobrazit úplné statistiky",
         "modalTitle": "Fond kvóty služby API",
         "empty": "Zatím žádné statistiky kvóty"
@@ -3274,6 +3276,7 @@
         "custom": "Vlastní",
         "endpoint": "Koncový bod poskytovatele",
         "hint": "Kompatibilní Base URL byla vyplněna automaticky. Stále ji můžete upravit ručně.",
+        "cockpitToolsHint": "Nahraďte Base URL adresou hostitele Cockpit Tools v síti LAN, například http://HOST_IP:PORT/v1. Karta účtu automaticky načte /cockpit/quota.",
         "website": "Web",
         "apiKeyPage": "Stránka API klíče",
         "getApiKey": "Získat klíč"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools v LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "Data služby",
         "fields": {
           "status": "Stav",
+          "fiveHourRemainingPercent": "Zbývá za 5 h",
+          "weeklyRemainingPercent": "Zbývá týdně",
+          "accountCount": "Fond účtů",
+          "availableAccountCount": "Dostupné účty",
+          "abnormalAccountCount": "Problémové účty",
+          "cooldownAccountCount": "Účty v čekací době",
+          "stale": "Zastaralá data",
+          "apiKeyBalance": "Zůstatek API_KEY",
           "planName": "Tarif",
           "remaining": "Zbývá",
           "balance": "Zůstatek",

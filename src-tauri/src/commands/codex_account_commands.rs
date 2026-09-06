@@ -1851,6 +1851,82 @@ pub async fn refresh_codex_quotas_batch(
     Ok(success_count as i32)
 }
 
+/// 刷新指定账号的用量：OAuth 读取 Codex 限额，API Key 读取对应供应商余额。
+/// 返回（成功数，实际参与刷新数），供 API 服务账号池等统一入口使用。
+pub async fn refresh_codex_account_usage_batch(
+    app: AppHandle,
+    account_ids: Vec<String>,
+    respect_group_quota_refresh: bool,
+) -> Result<(i32, usize), String> {
+    let mut seen = HashSet::new();
+    let mut oauth_ids = Vec::new();
+    let mut api_key_ids = Vec::new();
+
+    for account_id in account_ids {
+        let account_id = account_id.trim();
+        if account_id.is_empty() || !seen.insert(account_id.to_string()) {
+            continue;
+        }
+        let Some(account) = codex_account::load_account(account_id) else {
+            continue;
+        };
+        if respect_group_quota_refresh
+            && !codex_account::is_quota_refresh_enabled_for_account(account_id)
+        {
+            continue;
+        }
+        if account.is_api_key_auth() {
+            api_key_ids.push(account_id.to_string());
+        } else if codex_quota::supports_quota_refresh(&account) {
+            oauth_ids.push(account_id.to_string());
+        }
+    }
+
+    let total = oauth_ids.len() + api_key_ids.len();
+    if total == 0 {
+        return Err("没有可刷新的 Codex 账号".to_string());
+    }
+
+    let mut success_count = 0usize;
+    let mut last_error = None;
+    if !oauth_ids.is_empty() {
+        let results =
+            codex_quota::refresh_quotas_for_account_ids_with_options(&oauth_ids, false).await?;
+        success_count += results.iter().filter(|(_, result)| result.is_ok()).count();
+        if let Some((_, Err(error))) = results.iter().rev().find(|(_, result)| result.is_err()) {
+            last_error = Some(error.clone());
+        }
+        if results.iter().any(|(_, result)| result.is_ok()) {
+            run_codex_post_refresh_checks(&app).await;
+        }
+    }
+
+    for account_id in api_key_ids {
+        match query_and_persist_codex_api_key_usage(&account_id).await {
+            Ok(()) => success_count += 1,
+            Err(error) => {
+                logger::log_warn(&format!(
+                    "[Codex Quota] API Key 余额刷新失败: account_id={}, error={}",
+                    account_id, error
+                ));
+                last_error = Some(error);
+            }
+        }
+    }
+
+    if success_count == 0 {
+        return Err(last_error.unwrap_or_else(|| "Codex 用量刷新失败".to_string()));
+    }
+    if let Err(error) = codex_local_access::refresh_sidecar_quota_pool_state().await {
+        logger::log_warn(&format!(
+            "[Codex Quota] API 服务额度快照更新失败: {}",
+            error
+        ));
+    }
+    let _ = crate::modules::tray::update_tray_menu(&app);
+    Ok((success_count as i32, total))
+}
+
 async fn save_codex_oauth_tokens(
     tokens: CodexTokens,
     reauth_account_id: Option<&str>,

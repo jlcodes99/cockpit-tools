@@ -837,6 +837,84 @@
     }
 
     #[test]
+    fn state_snapshot_includes_api_key_scoped_accounts_in_pool_health() {
+        let mut collection = test_local_access_collection(vec![
+            "plus-1".to_string(),
+            "plus-2".to_string(),
+        ]);
+        let mut api_key = super::build_local_access_api_key(Some("Scoped API Key"));
+        api_key.inherit_account_pool = Some(false);
+        api_key.account_ids = vec!["api-key-1".to_string()];
+        collection.api_keys = vec![api_key];
+
+        let mut runtime = super::GatewayRuntime::default();
+        runtime.collection = Some(collection);
+        let state = super::build_state_snapshot_inner(&runtime, false);
+
+        assert_eq!(state.member_count, 3);
+        assert_eq!(state.account_health.len(), 3);
+        assert!(state.account_health.iter().all(|item| item.available));
+    }
+
+    #[test]
+    fn api_service_account_ids_include_key_scoped_members() {
+        let mut collection = test_local_access_collection(vec!["plus-1".to_string()]);
+        let mut api_key = super::build_local_access_api_key(Some("Scoped API Key"));
+        api_key.inherit_account_pool = Some(false);
+        api_key.account_ids = vec![
+            "api-key-1".to_string(),
+            "plus-1".to_string(),
+            "api-key-2".to_string(),
+        ];
+        collection.api_keys = vec![api_key];
+
+        assert_eq!(
+            super::effective_api_service_account_ids(&collection),
+            vec![
+                "plus-1".to_string(),
+                "api-key-1".to_string(),
+                "api-key-2".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn sidecar_quota_pool_balance_reads_cached_provider_usage() {
+        let mut account = CodexAccount::new_api_key(
+            "api-key-balance".to_string(),
+            "api-key@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://provider.example".to_string()),
+            Some("custom-provider".to_string()),
+            Some("Custom Provider".to_string()),
+            Vec::new(),
+        );
+        account.quota = Some(CodexQuota {
+            hourly_percentage: 0,
+            hourly_reset_time: None,
+            hourly_window_minutes: None,
+            hourly_window_present: Some(false),
+            weekly_percentage: 0,
+            weekly_reset_time: None,
+            weekly_window_minutes: None,
+            weekly_window_present: Some(false),
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: Some(json!({
+                "provider_usage": {
+                    "mode": "cockpit_tools",
+                    "unit": "%",
+                    "details": [{ "key": "apiKeyBalance", "value": "5.6" }]
+                }
+            })),
+        });
+
+        assert_eq!(super::sidecar_quota_pool_balance_value(&account), Some(5.6));
+    }
+
+    #[test]
     fn sidecar_preparation_stops_after_lifecycle_generation_changes() {
         let collection = test_local_access_collection(vec!["account-1".to_string()]);
         let dir = std::env::temp_dir().join(format!(

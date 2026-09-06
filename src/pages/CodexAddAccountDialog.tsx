@@ -3,7 +3,7 @@ import { RefreshCw, Download, X, Globe, KeyRound, Database, Copy, Check, RotateC
 import { MfaQuickCodeSelect } from "../components/MfaQuickCodeSelect";
 import { CodexModelContextWindowTable } from "../components/codex/CodexModelContextWindowTable";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
-import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, COCKPIT_API_PROVIDER_ID } from "../utils/codexProviderPresets";
+import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, COCKPIT_API_PROVIDER_ID, COCKPIT_TOOLS_API_PROVIDER_ID } from "../utils/codexProviderPresets";
 import type { CodexAccountsViewProps } from "./CodexAccountsView";
 
 /** 渲染 CodexAccountsOverviewPanel 的 expr:showAddModal && 业务面板。 */
@@ -859,6 +859,15 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                 "已自动填写兼容 Base URL，可继续手动调整。",
                               )}
                             </p>
+                            {selectedApiProviderPreset.id ===
+                              COCKPIT_TOOLS_API_PROVIDER_ID && (
+                              <p className="api-provider-hint">
+                                {t(
+                                  "codex.api.provider.cockpitToolsHint",
+                                  "请把 Base URL 改成部署 Cockpit Tools 的局域网地址；例如 http://主机IP:端口/v1。保存后会自动查询 /cockpit/quota。",
+                                )}
+                              </p>
+                            )}
                             <div className="api-provider-links">
                               {selectedApiProviderPreset.website && (
                                 <button

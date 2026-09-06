@@ -26,7 +26,7 @@ import { APIKEY_FUN_PROVIDER_BASE_URL } from "../utils/apikeyFunLinks";
 import { APIKEY_FUN_PREFILL_EVENT, consumeApiKeyFunPrefill, type ApiKeyFunPrefillPayload } from "../utils/apiKeyFunPrefill";
 import { findCodexModelProviderById, findCodexModelProviderByBaseUrl, queryCodexModelProviderUsage, saveCodexModelProviderDetectedIntegrationType, type CodexModelProvider, type CodexModelProviderUsageSummary, upsertCodexModelProviderFromCredential } from "../services/codexModelProviderService";
 import { CODEX_API_KEY_USAGE_REFRESHED_EVENT, readCodexApiKeyUsageCache, writeCodexApiKeyUsageCache, type CodexApiKeyUsageState } from "../services/codexApiKeyUsageRefreshService";
-import { isModelProviderUsageUnavailableError, formatModelProviderUsageMoney, listModelProviderModels, resolveNewApiQuotaSnapshot } from "../services/modelProviderUsageService";
+import { isModelProviderUsageUnavailableError, formatCockpitToolsApiKeyBalance, formatModelProviderUsageMoney, listModelProviderModels, resolveNewApiQuotaSnapshot, syncModelProviderUsageToCodexAccount } from "../services/modelProviderUsageService";
 import { upsertSavedMfaRecord } from "../utils/mfaVault";
 import md5 from "blueimp-md5";
 import { CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY, DEFAULT_CODEX_API_BASE_URL, DEFAULT_CODEX_API_PROVIDER_ID, formatCockpitApiInteger, formatCockpitApiTokenCount, getCockpitApiStatsRecord, getCockpitApiUsageRecord, inferCodexAccountProviderMode, isRelayApiProviderTemplateId, isSameHttpBaseUrl, joinFilePath, maskCodexApiKey, normalizeHttpBaseUrl, normalizePathForCompare, OPENAI_OFFICIAL_PRESET_ID, parseApiModelCatalogText, parseOAuthQuotaReservePercent, persistLastCodexCliWorkingDir, readCockpitApiOptionalNumber, readCockpitApiString, readLastCodexCliWorkingDir, resolveApiKeyUsageMode, sanitizeCodexCliInstanceName, toCockpitApiRecord, type CockpitApiJsonRecord, type CodexCliInstanceDraft, type CodexCliLaunchModalState, type OAuthBindingQuotaReserveFieldErrors } from "./codexAccountsControllerModel";
@@ -2475,7 +2475,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
               website: providerPayload.sponsorTemplate?.website,
               apiKeyUrl: providerPayload.sponsorTemplate?.apiKeyUrl,
               wireApi: providerPayload.sponsorTemplate?.wireApi,
-              integrationType: providerPayload.sponsorTemplate?.integrationType,
+              integrationType:
+                providerPayload.apiIntegrationType ??
+                providerPayload.sponsorTemplate?.integrationType,
             });
             finalProviderPayload = {
               ...providerPayload,
@@ -3095,6 +3097,24 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
   
     useEffect(() => {
       writeCodexApiKeyUsageCache(apiKeyUsageMap);
+      for (const [accountId, state] of Object.entries(apiKeyUsageMap)) {
+        if (
+          state.loading ||
+          state.error ||
+          state.unavailable ||
+          !state.summary ||
+          !state.updatedAt
+        ) {
+          continue;
+        }
+        void syncModelProviderUsageToCodexAccount({
+          accountId,
+          summary: state.summary,
+          updatedAtMs: state.updatedAt,
+        }).catch((error) => {
+          console.warn("[CodexApiKeyUsage] 同步 API 服务余额快照失败", error);
+        });
+      }
     }, [apiKeyUsageMap]);
   
     useEffect(() => {
@@ -3392,6 +3412,10 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             "codex.modelProviders.usage.fields.totalBalance",
             "总余额",
           ),
+          apiKeyBalance: t(
+            "codex.modelProviders.usage.fields.apiKeyBalance",
+            "API_KEY 余额",
+          ),
           grantedBalance: t(
             "codex.modelProviders.usage.fields.grantedBalance",
             "赠金余额",
@@ -3399,6 +3423,26 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           toppedUpBalance: t(
             "codex.modelProviders.usage.fields.toppedUpBalance",
             "充值余额",
+          ),
+          fiveHourRemainingPercent: t(
+            "codex.modelProviders.usage.fields.fiveHourRemainingPercent",
+            "5h 剩余",
+          ),
+          accountCount: t(
+            "codex.modelProviders.usage.fields.accountCount",
+            "账号池",
+          ),
+          availableAccountCount: t(
+            "codex.modelProviders.usage.fields.availableAccountCount",
+            "可用账号",
+          ),
+          abnormalAccountCount: t(
+            "codex.modelProviders.usage.fields.abnormalAccountCount",
+            "异常账号",
+          ),
+          cooldownAccountCount: t(
+            "codex.modelProviders.usage.fields.cooldownAccountCount",
+            "冷却账号",
           ),
         };
         return labels[key] ?? fallback;
@@ -3439,6 +3483,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             return t("codex.modelProviders.usage.booleanTrue", "是");
           if (raw === "false")
             return t("codex.modelProviders.usage.booleanFalse", "否");
+        }
+        if (Number.isFinite(numeric) && item.key === "apiKeyBalance") {
+          return formatCockpitToolsApiKeyBalance(numeric);
         }
         if (
           Number.isFinite(numeric) &&
@@ -3495,6 +3542,17 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         return formatApiKeyUsageDetailValue(detail, summary?.unit);
       },
       [findApiKeyUsageDetail, formatApiKeyUsageDetailValue],
+    );
+
+    const formatCockpitToolsPercent = useCallback(
+      (
+        summary: CodexModelProviderUsageSummary | undefined,
+        key: string,
+      ): string => {
+        const value = formatApiKeyUsageDetailByKey(summary, key);
+        return value === "-" ? value : `${value}%`;
+      },
+      [formatApiKeyUsageDetailByKey],
     );
   
     const renderApiKeyUsagePanel = useCallback(
@@ -3567,6 +3625,103 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
                   {t("common.shared.quota.queryFailed", "配额查询失败")}
                 </div>
               ) : null}
+            </div>
+          );
+        }
+        if (summary && usageMode === "cockpit_tools") {
+          return (
+            <div className={`codex-api-key-usage-panel ${variant} cockpit-tools`}>
+              <div className="codex-api-key-usage-grid">
+                <div>
+                  <span>
+                    {t(
+                      "codex.modelProviders.usage.fields.fiveHourRemainingPercent",
+                      "5h 剩余",
+                    )}
+                  </span>
+                  <strong>
+                    {formatCockpitToolsPercent(
+                      summary,
+                      "fiveHourRemainingPercent",
+                    )}
+                  </strong>
+                </div>
+                <div>
+                  <span>
+                    {t(
+                      "codex.modelProviders.usage.fields.weeklyRemainingPercent",
+                      "周剩余",
+                    )}
+                  </span>
+                  <strong>
+                    {formatCockpitToolsPercent(
+                      summary,
+                      "weeklyRemainingPercent",
+                    )}
+                  </strong>
+                </div>
+                <div>
+                  <span>
+                    {t(
+                      "codex.modelProviders.usage.fields.apiKeyBalance",
+                      "API_KEY 余额",
+                    )}
+                  </span>
+                  <strong>
+                    {formatApiKeyUsageDetailByKey(summary, "apiKeyBalance")}
+                  </strong>
+                </div>
+                <div>
+                  <span>
+                    {t(
+                      "codex.modelProviders.usage.fields.accountCount",
+                      "账号池",
+                    )}
+                  </span>
+                  <strong>
+                    {formatApiKeyUsageDetailByKey(summary, "accountCount")}
+                  </strong>
+                </div>
+                <div>
+                  <span>
+                    {t(
+                      "codex.modelProviders.usage.fields.availableAccountCount",
+                      "可用账号",
+                    )}
+                  </span>
+                  <strong>
+                    {formatApiKeyUsageDetailByKey(
+                      summary,
+                      "availableAccountCount",
+                    )}
+                  </strong>
+                </div>
+                <div>
+                  <span>
+                    {t(
+                      "codex.modelProviders.usage.fields.abnormalAccountCount",
+                      "异常 / 冷却",
+                    )}
+                  </span>
+                  <strong>
+                    {formatApiKeyUsageDetailByKey(
+                      summary,
+                      "abnormalAccountCount",
+                    )}{" "}
+                    /{" "}
+                    {formatApiKeyUsageDetailByKey(
+                      summary,
+                      "cooldownAccountCount",
+                    )}
+                  </strong>
+                </div>
+              </div>
+              <span className="quota-reset">
+                {summary.planName || "Cockpit Tools"}
+                {summary.status === "stale"
+                  ? ` · ${t("codex.modelProviders.usage.fields.stale", "数据较旧")}`
+                  : ""}
+              </span>
             </div>
           );
         }
@@ -3914,6 +4069,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         formatApiKeyUsageDetailLabel,
         formatApiKeyUsageDetailValue,
         formatApiKeyUsageDetailByKey,
+        formatCockpitToolsPercent,
         t,
       ],
     );
@@ -4082,7 +4238,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
               apiKeyUrl: providerPayload.sponsorTemplate?.apiKeyUrl,
               wireApi: providerPayload.apiWireApi,
               supportsWebsockets: providerPayload.apiSupportsWebsockets,
-              integrationType: providerPayload.sponsorTemplate?.integrationType,
+              integrationType:
+                providerPayload.apiIntegrationType ??
+                providerPayload.sponsorTemplate?.integrationType,
             });
             try {
               const usageSummary = await queryCodexModelProviderUsage({

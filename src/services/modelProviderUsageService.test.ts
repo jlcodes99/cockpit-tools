@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildUsageBaseUrlCandidates,
+  formatCockpitToolsApiKeyBalance,
   formatModelProviderUsageMoney,
   resolveNewApiQuotaSnapshot,
+  resolveModelProviderUsageBalance,
+  resolveModelProviderUsageMode,
   type ModelProviderUsageSummary,
 } from "./modelProviderUsageService.ts";
 
@@ -96,4 +99,61 @@ test("new_api quota ignores malformed numeric details", () => {
 
 test("token plan percentages render without currency decimals", () => {
   assert.equal(formatModelProviderUsageMoney(72, "%"), "72%");
+});
+
+test("Cockpit Tools API key balance keeps decimal precision", () => {
+  assert.equal(formatCockpitToolsApiKeyBalance(5.6), "¥5.6");
+  assert.equal(formatCockpitToolsApiKeyBalance(1234.567), "¥1,234.57");
+  assert.equal(formatCockpitToolsApiKeyBalance(5.6, "%"), "¥5.6");
+});
+
+test("provider usage balance matches the API key account card", () => {
+  assert.equal(
+    resolveModelProviderUsageBalance(
+      summary({ mode: "sub2api", remaining: 5.6, unit: "USD" }),
+    ),
+    5.6,
+  );
+  assert.equal(
+    resolveModelProviderUsageBalance(
+      summary({ mode: "token_plan", remaining: 72, unit: "%" }),
+    ),
+    null,
+  );
+  assert.equal(
+    resolveModelProviderUsageBalance(
+      summary({ mode: "cockpit_tools", balance: 5.6, unit: "CNY" }),
+    ),
+    5.6,
+  );
+  assert.equal(
+    resolveModelProviderUsageBalance(
+      summary({
+        mode: "cockpit_tools",
+        unit: "%",
+        details: [
+          { key: "apiKeyBalance", label: "API_KEY balance", value: "5.6" },
+        ],
+      }),
+    ),
+    5.6,
+  );
+});
+
+test("Cockpit Tools pool quota keeps its dedicated usage mode", () => {
+  assert.equal(
+    resolveModelProviderUsageMode(
+      summary({
+        mode: "cockpit_tools",
+        details: [
+          {
+            key: "fiveHourRemainingPercent",
+            label: "5h Remaining",
+            value: "80",
+          },
+        ],
+      }),
+    ),
+    "cockpit_tools",
+  );
 });

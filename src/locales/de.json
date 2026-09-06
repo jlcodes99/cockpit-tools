@@ -768,6 +768,7 @@
       "codexAppUiInjectionPoolLabel": "Konten",
       "codexAppUiInjectionWeeklyLabel": "Woche",
       "codexAppUiInjectionFiveHourLabel": "5 Std.",
+      "codexAppUiInjectionBalanceLabel": "Guthaben",
       "codexWslConfigDir": "WSL-Codex-Verzeichnis",
       "codexWslConfigDirDesc": "Gib das .codex-Verzeichnis in WSL ein. \\\\wsl.localhost\\-Pfade werden unterstützt.",
       "codexWslConfigDirPlaceholder": "Beispiel: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "Kontingentpool",
         "hourlyShort": "5h​",
         "weeklyShort": "Woche",
+        "balance": "Guthaben",
         "viewFull": "Vollständige Statistik anzeigen",
         "modalTitle": "Kontingentpool des API-Dienstes",
         "empty": "Noch keine Kontingentstatistik"
@@ -3274,6 +3276,7 @@
         "custom": "Benutzerdefiniert",
         "endpoint": "Anbieter-Endpunkt",
         "hint": "Eine kompatible Base URL wurde automatisch eingetragen. Sie können sie weiterhin manuell bearbeiten.",
+        "cockpitToolsHint": "Ersetzen Sie die Base URL durch die LAN-Adresse des Cockpit-Tools-Hosts, zum Beispiel http://HOST_IP:PORT/v1. Die Kontokarte fragt /cockpit/quota automatisch ab.",
         "website": "Website​",
         "apiKeyPage": "API-Key-Seite",
         "getApiKey": "Schlüssel holen"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools im LAN"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "Servicedaten",
         "fields": {
           "status": "Zustand",
+          "fiveHourRemainingPercent": "5 Std. verbleibend",
+          "weeklyRemainingPercent": "Wöchentlich verbleibend",
+          "accountCount": "Kontenpool",
+          "availableAccountCount": "Verfügbare Konten",
+          "abnormalAccountCount": "Fehlerhafte Konten",
+          "cooldownAccountCount": "Konten in Abklingzeit",
+          "stale": "Veraltete Daten",
+          "apiKeyBalance": "API_KEY-Guthaben",
           "planName": "Tarif",
           "remaining": "Restguthaben",
           "balance": "Guthaben",

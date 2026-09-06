@@ -709,6 +709,329 @@ pub struct CodexModelProviderUsageSummary {
     pub details: Vec<CodexModelProviderUsageDetail>,
 }
 
+fn apply_codex_api_key_usage_summary(
+    account: &mut CodexAccount,
+    summary: serde_json::Value,
+    updated_at_ms: Option<i64>,
+) -> Result<bool, String> {
+    if !account.is_api_key_auth() {
+        return Err("目标账号不是 Codex API Key 账号".to_string());
+    }
+    if !summary.is_object() {
+        return Err("Codex API Key 用量摘要格式无效".to_string());
+    }
+    let updated_at = updated_at_ms
+        .filter(|value| *value > 0)
+        .map(|value| value / 1000)
+        .unwrap_or_else(now_unix_seconds);
+    if account
+        .usage_updated_at
+        .is_some_and(|current| current > updated_at)
+    {
+        return Ok(false);
+    }
+    let mut raw_data = account
+        .quota
+        .as_ref()
+        .and_then(|quota| quota.raw_data.clone())
+        .unwrap_or_else(|| serde_json::json!({}));
+    if !raw_data.is_object() {
+        raw_data = serde_json::json!({});
+    }
+    let summary_changed = raw_data.get("provider_usage") != Some(&summary);
+    let timestamp_changed = account.usage_updated_at != Some(updated_at);
+    if !summary_changed && !timestamp_changed {
+        return Ok(false);
+    }
+    raw_data
+        .as_object_mut()
+        .expect("provider usage raw data should be an object")
+        .insert("provider_usage".to_string(), summary);
+
+    if let Some(quota) = account.quota.as_mut() {
+        quota.raw_data = Some(raw_data);
+    } else {
+        account.quota = Some(CodexQuota {
+            hourly_percentage: 0,
+            hourly_reset_time: None,
+            hourly_window_minutes: None,
+            hourly_window_present: Some(false),
+            weekly_percentage: 0,
+            weekly_reset_time: None,
+            weekly_window_minutes: None,
+            weekly_window_present: Some(false),
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: Some(raw_data),
+        });
+    }
+    account.quota_error = None;
+    account.usage_updated_at = Some(updated_at);
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn codex_sync_api_key_usage_summary(
+    account_id: String,
+    summary: serde_json::Value,
+    updated_at_ms: Option<i64>,
+) -> Result<(), String> {
+    if persist_codex_api_key_usage_summary(&account_id, summary, updated_at_ms)? {
+        codex_local_access::refresh_sidecar_quota_pool_state().await?;
+    }
+    Ok(())
+}
+
+fn persist_codex_api_key_usage_summary(
+    account_id: &str,
+    summary: serde_json::Value,
+    updated_at_ms: Option<i64>,
+) -> Result<bool, String> {
+    let account_id = account_id.trim();
+    if account_id.is_empty() {
+        return Err("Codex API Key 账号 ID 为空".to_string());
+    }
+    let mut account = codex_account::load_account(account_id)
+        .ok_or_else(|| "未找到 Codex API Key 账号".to_string())?;
+    if !apply_codex_api_key_usage_summary(&mut account, summary, updated_at_ms)? {
+        return Ok(false);
+    }
+    codex_account::save_account(&account)?;
+    Ok(true)
+}
+
+fn normalize_codex_provider_base_url(value: &str) -> String {
+    value.trim().trim_end_matches('/').to_ascii_lowercase()
+}
+
+fn find_codex_provider_for_account(
+    providers: &[serde_json::Value],
+    account: &CodexAccount,
+) -> Option<serde_json::Value> {
+    let provider_id = account
+        .api_provider_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(provider_id) = provider_id {
+        if let Some(provider) = providers.iter().find(|provider| {
+            provider
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                == Some(provider_id)
+        }) {
+            return Some(provider.clone());
+        }
+    }
+
+    let account_base_url = account
+        .api_base_url
+        .as_deref()
+        .map(normalize_codex_provider_base_url)
+        .filter(|value| !value.is_empty())?;
+    providers
+        .iter()
+        .find(|provider| {
+            provider
+                .get("baseUrl")
+                .and_then(serde_json::Value::as_str)
+                .map(normalize_codex_provider_base_url)
+                == Some(account_base_url.clone())
+        })
+        .cloned()
+}
+
+fn codex_provider_usage_base_url_candidates(base_url: &str) -> Result<Vec<String>, String> {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err("PROVIDER_BASE_URL_INVALID".to_string());
+    }
+    let mut parsed = reqwest::Url::parse(trimmed)
+        .map_err(|_| "PROVIDER_BASE_URL_INVALID".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("PROVIDER_BASE_URL_INVALID".to_string());
+    }
+
+    let mut candidates = vec![trimmed.to_string()];
+    if parsed.path().is_empty() || parsed.path() == "/" {
+        parsed.set_path("/v1");
+        parsed.set_query(None);
+        parsed.set_fragment(None);
+        let candidate = parsed.to_string().trim_end_matches('/').to_string();
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+    Ok(candidates)
+}
+
+fn is_codex_provider_usage_unavailable_error(error: &str) -> bool {
+    error.contains("PROVIDER_USAGE_DETECT_FAILED")
+        || error.contains("PROVIDER_USAGE_HTTP_404")
+        || error.contains("PROVIDER_USAGE_TYPE_UNSUPPORTED")
+}
+
+async fn query_codex_provider_usage_with_fallback(
+    base_url: &str,
+    api_key: &str,
+    integration_type: Option<String>,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let mut last_error = None;
+    for candidate in codex_provider_usage_base_url_candidates(base_url)? {
+        match codex_query_model_provider_usage(
+            candidate,
+            api_key.to_string(),
+            integration_type.clone(),
+        )
+        .await
+        {
+            Ok(summary) => return Ok(summary),
+            Err(error) if is_codex_provider_usage_unavailable_error(&error) => {
+                last_error = Some(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| "PROVIDER_BASE_URL_INVALID".to_string()))
+}
+
+async fn save_detected_codex_provider_integration_type(
+    provider_id: Option<&str>,
+    base_url: &str,
+    mode: &str,
+) -> Result<(), String> {
+    if mode != "new_api" && mode != "sub2api" {
+        return Ok(());
+    }
+    let raw = load_codex_model_providers().await?;
+    let mut providers: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|error| format!("解析 Codex 模型供应商失败: {}", error))?;
+    let Some(items) = providers.as_array_mut() else {
+        return Ok(());
+    };
+    let normalized_base_url = normalize_codex_provider_base_url(base_url);
+    let mut changed = false;
+    for provider in items {
+        let id_matches = provider_id.is_some_and(|target_id| {
+            provider
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                == Some(target_id)
+        });
+        let base_matches = provider
+            .get("baseUrl")
+            .and_then(serde_json::Value::as_str)
+            .map(normalize_codex_provider_base_url)
+            == Some(normalized_base_url.clone());
+        if id_matches || base_matches {
+            if provider
+                .get("integrationType")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                != Some(mode)
+            {
+                if let Some(object) = provider.as_object_mut() {
+                    object.insert(
+                        "integrationType".to_string(),
+                        serde_json::Value::String(mode.to_string()),
+                    );
+                    object.insert(
+                        "updatedAt".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(
+                            chrono::Utc::now().timestamp_millis(),
+                        )),
+                    );
+                    changed = true;
+                }
+            }
+            break;
+        }
+    }
+    if changed {
+        let data = serde_json::to_string_pretty(&providers)
+            .map_err(|error| format!("序列化 Codex 模型供应商失败: {}", error))?;
+        save_codex_model_providers(data).await?;
+    }
+    Ok(())
+}
+
+/// 使用账号卡片相同的供应商查询逻辑刷新并持久化 API Key 余额。
+/// API 服务快照由单账号或批量调用者在刷新边界统一更新。
+async fn query_and_persist_codex_api_key_usage(account_id: &str) -> Result<(), String> {
+    let account = codex_account::load_account(account_id)
+        .ok_or_else(|| "未找到 Codex API Key 账号".to_string())?;
+    if !account.is_api_key_auth() {
+        return Err("目标账号不是 Codex API Key 账号".to_string());
+    }
+    let api_key = account
+        .openai_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Codex API Key 为空".to_string())?;
+    let providers_raw = load_codex_model_providers().await?;
+    let providers: Vec<serde_json::Value> =
+        serde_json::from_str(&providers_raw).unwrap_or_default();
+    let provider = find_codex_provider_for_account(&providers, &account);
+    let base_url = provider
+        .as_ref()
+        .and_then(|provider| provider.get("baseUrl"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            account
+                .api_base_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
+        .ok_or_else(|| "Codex API Base URL 为空".to_string())?
+        .to_string();
+    let integration_type = provider
+        .as_ref()
+        .and_then(|provider| provider.get("integrationType"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let summary =
+        query_codex_provider_usage_with_fallback(&base_url, api_key, integration_type).await?;
+    let summary_value = serde_json::to_value(&summary)
+        .map_err(|error| format!("序列化 Codex API Key 用量失败: {}", error))?;
+    persist_codex_api_key_usage_summary(
+        &account.id,
+        summary_value,
+        Some(chrono::Utc::now().timestamp_millis()),
+    )?;
+
+    if let Some(mode) = summary.mode.as_deref() {
+        let provider_id = provider
+            .as_ref()
+            .and_then(|provider| provider.get("id"))
+            .and_then(serde_json::Value::as_str);
+        if let Err(error) =
+            save_detected_codex_provider_integration_type(provider_id, &base_url, mode).await
+        {
+            logger::log_warn(&format!(
+                "[Codex Quota] 供应商用量类型保存失败，不影响本次余额刷新: account_id={}, error={}",
+                account.id, error
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// 刷新单个 API Key 账号，并在成功后更新一次 API 服务快照。
+#[cfg(target_os = "macos")]
+pub async fn refresh_codex_api_key_usage(account_id: &str) -> Result<(), String> {
+    query_and_persist_codex_api_key_usage(account_id).await?;
+    codex_local_access::refresh_sidecar_quota_pool_state().await
+}
+
 fn json_f64_at(value: &serde_json::Value, path: &[&str]) -> Option<f64> {
     let mut current = value;
     for key in path {
@@ -1460,6 +1783,133 @@ fn summarize_new_api_model_provider_usage(
     }
 }
 
+fn summarize_cockpit_tools_quota(
+    quota: &codex_remote_quota::CodexRemoteQuotaSnapshot,
+    latency_ms: u64,
+) -> CodexModelProviderUsageSummary {
+    let mut details = Vec::new();
+
+    push_usage_detail(
+        &mut details,
+        "scope",
+        "Scope",
+        quota.scope.clone(),
+    );
+    push_usage_detail(
+        &mut details,
+        "fiveHourRemainingPercent",
+        "5h Remaining",
+        quota
+            .five_hour_remaining_percent
+            .map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "weeklyRemainingPercent",
+        "Weekly Remaining",
+        quota
+            .weekly_remaining_percent
+            .map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "apiKeyBalance",
+        "API Key Balance",
+        quota.api_key_balance.map(format_usage_number),
+    );
+    push_usage_detail(
+        &mut details,
+        "accountCount",
+        "Account Pool",
+        quota.account_count.map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "availableAccountCount",
+        "Available Accounts",
+        quota
+            .available_account_count
+            .map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "abnormalAccountCount",
+        "Abnormal Accounts",
+        quota
+            .abnormal_account_count
+            .map(|value| value.to_string()),
+    );
+    push_usage_detail(
+        &mut details,
+        "cooldownAccountCount",
+        "Cooldown Accounts",
+        quota
+            .cooldown_account_count
+            .map(|value| value.to_string()),
+    );
+    for plan in &quota.plans {
+        let mut value = plan.count.to_string();
+        if let Some(balance) = plan.balance {
+            value.push_str(&format!(" · 余额 {}", format_usage_number(balance)));
+        }
+        if let Some(percent) = plan.five_hour_remaining_percent {
+            value.push_str(&format!(" · 5h {}%", percent));
+        }
+        if let Some(percent) = plan.weekly_remaining_percent {
+            value.push_str(&format!(" · 周 {}%", percent));
+        }
+        push_usage_detail(
+            &mut details,
+            &format!("plan:{}", plan.plan),
+            &format!("Plan {}", plan.plan),
+            Some(value),
+        );
+    }
+
+    CodexModelProviderUsageSummary {
+        mode: Some("cockpit_tools".to_string()),
+        is_valid: Some(!quota.stale),
+        status: Some(if quota.stale {
+            "stale".to_string()
+        } else {
+            "available".to_string()
+        }),
+        plan_name: Some(
+            quota
+                .scope
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "Cockpit Tools".to_string()),
+        ),
+        remaining: None,
+        balance: quota.api_key_balance,
+        unit: Some("CNY".to_string()),
+        quota_unlimited: None,
+        quota_limit: None,
+        quota_used: None,
+        quota_remaining: None,
+        today_requests: None,
+        today_total_tokens: None,
+        today_cost: None,
+        total_requests: None,
+        total_total_tokens: None,
+        total_cost: None,
+        model_stats_count: quota.plans.len(),
+        latency_ms,
+        details,
+    }
+}
+
+async fn query_cockpit_tools_model_provider_usage(
+    base_url: &str,
+    api_key: &str,
+) -> Result<CodexModelProviderUsageSummary, String> {
+    let started = Instant::now();
+    let quota = codex_remote_quota::query_quota_for_provider(base_url, api_key).await?;
+    let latency_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    Ok(summarize_cockpit_tools_quota(&quota, latency_ms))
+}
+
 #[tauri::command]
 pub async fn codex_test_model_provider_connection(
     base_url: String,
@@ -1751,6 +2201,9 @@ pub async fn codex_query_model_provider_usage(
     let key = api_key.trim();
     if key.is_empty() {
         return Err("MISSING_API_KEY".to_string());
+    }
+    if integration_type.as_deref().map(str::trim) == Some("cockpit_tools") {
+        return query_cockpit_tools_model_provider_usage(base_url.trim(), key).await;
     }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(CODEX_MODEL_PROVIDER_TEST_TIMEOUT_SECS))

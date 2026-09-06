@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   DEEPSEEK_API_BASE_URL,
+  COCKPIT_TOOLS_API_BASE_URL,
+  COCKPIT_TOOLS_API_PROVIDER_ID,
   MINIMAX_API_PROVIDER_ID,
   MINIMAX_EN_API_PROVIDER_ID,
   OPENCODE_GO_API_BASE_URL,
@@ -46,6 +48,14 @@ test("DeepSeek keeps its native Responses default", () => {
   });
 
   assert.equal(profile.wireApi, "responses");
+});
+
+test("Cockpit Tools preset uses the LAN API base URL", () => {
+  const preset = findCodexApiProviderPresetById(COCKPIT_TOOLS_API_PROVIDER_ID);
+
+  assert.ok(preset);
+  assert.equal(preset.baseUrls[0], COCKPIT_TOOLS_API_BASE_URL);
+  assert.equal(preset.isService, true);
 });
 
 test("both MiniMax presets declare image input only for the vision-capable model", () => {

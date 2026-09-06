@@ -762,7 +762,9 @@ fn effective_api_key_account_ids(
     }
 }
 
-fn effective_sidecar_account_ids(collection: &CodexLocalAccessCollection) -> Vec<String> {
+pub(crate) fn effective_api_service_account_ids(
+    collection: &CodexLocalAccessCollection,
+) -> Vec<String> {
     let mut account_ids = collection.account_ids.clone();
     let mut seen: HashSet<String> = account_ids.iter().cloned().collect();
     for api_key in &collection.api_keys {
@@ -873,7 +875,7 @@ pub(crate) fn menu_bar_api_service_quota() -> ApiServiceMenuBarQuota {
     let mut windows: Vec<ApiServicePoolWindowSum> = Vec::new();
     let mut account_count = 0usize;
 
-    for account_id in effective_sidecar_account_ids(&collection) {
+    for account_id in effective_api_service_account_ids(&collection) {
         let Some(account) = codex_account::load_account(&account_id) else {
             continue;
         };
@@ -921,18 +923,18 @@ pub(crate) fn menu_bar_api_service_quota() -> ApiServiceMenuBarQuota {
     }
 }
 
-/// 池内可刷新额度的 OAuth 账号 ID（用于托盘菜单刷新 API 服务额度）。
+/// 池内可刷新用量的账号 ID（OAuth 限额与 API Key 供应商余额）。
 pub(crate) fn api_service_refreshable_account_ids() -> Vec<String> {
     let Ok(Some(collection)) = load_collection_from_disk() else {
         return Vec::new();
     };
-    effective_sidecar_account_ids(&collection)
+    effective_api_service_account_ids(&collection)
         .into_iter()
         .filter(|account_id| {
             codex_account::load_account(account_id)
                 .map(|account| {
-                    !account.is_api_key_auth()
-                        && crate::modules::codex_quota::supports_quota_refresh(&account)
+                    account.is_api_key_auth()
+                        || crate::modules::codex_quota::supports_quota_refresh(&account)
                 })
                 .unwrap_or(false)
         })
@@ -944,7 +946,7 @@ pub(crate) fn api_service_collection_has_accounts() -> bool {
     let Ok(Some(collection)) = load_collection_from_disk() else {
         return false;
     };
-    !effective_sidecar_account_ids(&collection).is_empty()
+    !effective_api_service_account_ids(&collection).is_empty()
 }
 
 fn remove_account_refs_from_collection(
@@ -1429,33 +1431,114 @@ fn sidecar_quota_pool_window_value(
     })
 }
 
+fn sidecar_quota_pool_balance_value(account: &CodexAccount) -> Option<f64> {
+    if !account.is_api_key_auth() {
+        return None;
+    }
+    let raw = account.quota.as_ref()?.raw_data.as_ref()?;
+    let read_number = |value: Option<&Value>| {
+        value.and_then(|item| {
+            item.as_f64()
+                .or_else(|| item.as_str().and_then(|text| text.trim().parse::<f64>().ok()))
+                .filter(|number| number.is_finite())
+        })
+    };
+    let provider_usage = raw.get("provider_usage");
+    let provider_balance = provider_usage.and_then(|usage| {
+        let detail_number = |expected_key: &str| {
+            usage
+                .get("details")
+                .and_then(Value::as_array)
+                .and_then(|details| {
+                    details.iter().find_map(|detail| {
+                        let key = detail.get("key").and_then(Value::as_str)?;
+                        key.eq_ignore_ascii_case(expected_key)
+                            .then(|| read_number(detail.get("value")))
+                            .flatten()
+                    })
+                })
+        };
+        if usage
+            .get("mode")
+            .and_then(Value::as_str)
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("cockpit_tools"))
+        {
+            return read_number(usage.get("balance"))
+                .or_else(|| detail_number("apiKeyBalance"));
+        }
+        if usage
+            .get("unit")
+            .and_then(Value::as_str)
+            .is_some_and(|unit| unit.trim() == "%")
+        {
+            return None;
+        }
+        let total_available = detail_number("totalAvailable");
+        if usage
+            .get("mode")
+            .and_then(Value::as_str)
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("new_api"))
+        {
+            total_available
+                .or_else(|| read_number(usage.get("quotaRemaining")))
+                .or_else(|| read_number(usage.get("remaining")))
+                .or_else(|| read_number(usage.get("balance")))
+        } else {
+            read_number(usage.get("remaining"))
+                .or_else(|| read_number(usage.get("balance")))
+                .or_else(|| read_number(usage.get("quotaRemaining")))
+                .or(total_available)
+        }
+    });
+    let usage = raw
+        .get("usage")
+        .or_else(|| raw.get("profile").and_then(|profile| profile.get("usage")));
+    provider_balance
+        .or_else(|| read_number(usage.and_then(|value| value.get("total_available"))))
+        .or_else(|| read_number(raw.get("total_available")))
+        .or_else(|| read_number(usage.and_then(|value| value.get("balance"))))
+        .or_else(|| read_number(raw.get("balance")))
+}
+
 fn sidecar_quota_pool_state_value(collection: &CodexLocalAccessCollection) -> Value {
     let mut accounts = Map::new();
-    for account_id in effective_sidecar_account_ids(collection) {
+    for account_id in effective_api_service_account_ids(collection) {
         let Some(account) = codex_account::load_account(&account_id) else {
             continue;
         };
-        let Some(quota) = account.quota.as_ref() else {
-            continue;
-        };
-        accounts.insert(
-            account_id,
-            json!({
-                "primary": sidecar_quota_pool_window_value(
+        let mut state = Map::new();
+        if account.is_api_key_auth() {
+            state.insert("authKind".to_string(), json!("api_key"));
+            if let Some(balance) = sidecar_quota_pool_balance_value(&account) {
+                state.insert("balance".to_string(), json!(balance));
+            }
+        }
+        if let Some(quota) = account.quota.as_ref() {
+            state.insert(
+                "primary".to_string(),
+                sidecar_quota_pool_window_value(
                     quota.hourly_percentage,
                     quota.hourly_window_minutes,
                     quota.hourly_window_present,
                     quota.hourly_reset_time,
                 ),
-                "secondary": sidecar_quota_pool_window_value(
+            );
+            state.insert(
+                "secondary".to_string(),
+                sidecar_quota_pool_window_value(
                     quota.weekly_percentage,
                     quota.weekly_window_minutes,
                     quota.weekly_window_present,
                     quota.weekly_reset_time,
                 ),
-                "updatedAt": account.usage_updated_at,
-            }),
-        );
+            );
+        }
+        if account.usage_updated_at.is_some() {
+            state.insert("updatedAt".to_string(), json!(account.usage_updated_at));
+        }
+        if !state.is_empty() {
+            accounts.insert(account_id, Value::Object(state));
+        }
     }
     json!({ "accounts": accounts })
 }
@@ -1478,6 +1561,16 @@ fn write_sidecar_quota_pool_state(
 ) -> Result<PathBuf, String> {
     let base_dir = local_access_sidecar_dir()?;
     write_sidecar_quota_pool_state_in_dir(collection, &base_dir)
+}
+
+pub async fn refresh_sidecar_quota_pool_state() -> Result<(), String> {
+    let collection = gateway_runtime().lock().await.collection.clone();
+    if let Some(collection) = collection {
+        if collection_gateway_mode(&collection) == CodexLocalAccessGatewayMode::Sidecar {
+            write_sidecar_quota_pool_state(&collection)?;
+        }
+    }
+    Ok(())
 }
 
 fn sidecar_account_manifest_value(
@@ -2095,7 +2188,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     let mut expected_auth_files = HashSet::new();
     let metered_feature_patterns =
         metered_feature_model_patterns_for_pool(collection, &account_overrides);
-    for (index, account_id) in effective_sidecar_account_ids(collection)
+    for (index, account_id) in effective_api_service_account_ids(collection)
         .into_iter()
         .enumerate()
     {

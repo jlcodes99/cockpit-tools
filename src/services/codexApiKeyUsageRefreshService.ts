@@ -9,8 +9,11 @@ import {
   listCodexModelProviders,
   queryCodexModelProviderUsage,
   type CodexModelProviderUsageSummary,
-} from './codexModelProviderService';
-import { isModelProviderUsageUnavailableError } from './modelProviderUsageService';
+} from "./codexModelProviderService";
+import {
+  isModelProviderUsageUnavailableError,
+  syncModelProviderUsageToCodexAccount,
+} from "./modelProviderUsageService";
 
 export const CODEX_API_KEY_USAGE_CACHE_KEY = 'agtools.codex.apiKeyUsage.cache.v1';
 export const CODEX_API_KEY_USAGE_REFRESHED_EVENT = 'codex-api-key-usage-refreshed';
@@ -113,7 +116,17 @@ export async function refreshCodexApiKeyUsageForAccounts(
         apiKey,
         integrationType: provider?.integrationType ?? null,
       });
-      updates[account.id] = { loading: false, summary, updatedAt: Date.now() };
+      const updatedAt = Date.now();
+      updates[account.id] = { loading: false, summary, updatedAt };
+      try {
+        await syncModelProviderUsageToCodexAccount({
+          accountId: account.id,
+          summary,
+          updatedAtMs: updatedAt,
+        });
+      } catch (syncError) {
+        console.warn("[CodexApiKeyUsage] 同步 API 服务余额快照失败", syncError);
+      }
     } catch (error) {
       const unavailable = isModelProviderUsageUnavailableError(error);
       updates[account.id] = {

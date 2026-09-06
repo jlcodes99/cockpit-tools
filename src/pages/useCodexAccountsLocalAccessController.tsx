@@ -680,18 +680,25 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       [],
     );
   
+    const localAccessAccountIds = useMemo(() => {
+      const ids = [...(localAccessCollection?.accountIds ?? [])];
+      for (const apiKey of localAccessCollection?.apiKeys ?? []) {
+        ids.push(...(apiKey.accountIds ?? []));
+      }
+      return Array.from(new Set(ids));
+    }, [localAccessCollection?.accountIds, localAccessCollection?.apiKeys]);
     const localAccessAccountIdSet = useMemo(
-      () => new Set(localAccessCollection?.accountIds ?? []),
-      [localAccessCollection?.accountIds],
+      () => new Set(localAccessAccountIds),
+      [localAccessAccountIds],
     );
     const localAccessAccounts = useMemo(
       () =>
-        (localAccessCollection?.accountIds ?? [])
+        localAccessAccountIds
           .map((accountId) =>
             accounts.find((account) => account.id === accountId),
           )
           .filter((account): account is CodexAccount => Boolean(account)),
-      [accounts, localAccessCollection?.accountIds],
+      [accounts, localAccessAccountIds],
     );
     const localAccessQuotaPoolSummary = useMemo(
       () => summarizeCodexQuotaPool(localAccessAccounts),
@@ -726,7 +733,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
             );
         });
         const summary: LocalAccessAccountPoolHealthSummary = {
-          total: localAccessCollection?.accountIds.length ?? 0,
+          total: localAccessAccountIds.length,
           available: 0,
           abnormal: 0,
           cooldown: 0,
@@ -735,7 +742,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
           quotaLimited: 0,
         };
   
-        (localAccessCollection?.accountIds ?? []).forEach((accountId) => {
+        localAccessAccountIds.forEach((accountId) => {
           const account = accountById.get(accountId);
           const health = healthById.get(accountId);
           if (!account) {
@@ -767,7 +774,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
         return summary;
       }, [
         accounts,
-        localAccessCollection?.accountIds,
+        localAccessAccountIds,
         localAccessState?.accountHealth,
         localAccessState?.accountPoolHealth,
       ]);

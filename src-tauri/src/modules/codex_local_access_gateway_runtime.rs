@@ -35,7 +35,7 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
 
     let bind_host = bind_host_for_collection(&collection);
 
-    let preparation_total = effective_sidecar_account_ids(&collection).len();
+    let preparation_total = effective_api_service_account_ids(&collection).len();
     let preparation_guard = GatewayPreparationGuard::begin(preparation_total);
     let launch_config = match prepare_sidecar_launch_config(
         &collection,
@@ -606,8 +606,7 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
         .map(|item| (item.account_id.as_str(), item.email.as_str()))
         .collect();
 
-    collection
-        .account_ids
+    effective_api_service_account_ids(collection)
         .iter()
         .map(|account_id| {
             let health = runtime.account_health.get(account_id);
@@ -891,7 +890,7 @@ fn build_state_snapshot_inner(
     let collection = runtime.collection.clone();
     let member_count = collection
         .as_ref()
-        .map(|item| item.account_ids.len())
+        .map(|item| effective_api_service_account_ids(item).len())
         .unwrap_or(0);
     let api_port_url = collection
         .as_ref()

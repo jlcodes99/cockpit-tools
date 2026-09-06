@@ -768,6 +768,7 @@
       "codexAppUiInjectionPoolLabel": "アカウント",
       "codexAppUiInjectionWeeklyLabel": "週",
       "codexAppUiInjectionFiveHourLabel": "5時間",
+      "codexAppUiInjectionBalanceLabel": "残高",
       "codexWslConfigDir": "WSL Codex ディレクトリ",
       "codexWslConfigDirDesc": "WSL 内の .codex ディレクトリを入力します。\\\\wsl.localhost\\ のパスに対応しています。",
       "codexWslConfigDirPlaceholder": "例: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "クォータプール",
         "hourlyShort": "5h​",
         "weeklyShort": "週",
+        "balance": "残高",
         "viewFull": "完全な統計を表示",
         "modalTitle": "APIサービスのクォータプール",
         "empty": "クォータ統計はまだありません"
@@ -3274,6 +3276,7 @@
         "custom": "カスタム",
         "endpoint": "プロバイダーエンドポイント",
         "hint": "互換性のある Base URL を自動入力しました。必要なら手動で編集できます。",
+        "cockpitToolsHint": "Base URL を Cockpit Tools ホストの LAN アドレス（例: http://HOST_IP:PORT/v1）に置き換えてください。アカウントカードは /cockpit/quota を自動的に照会します。",
         "website": "ウェブサイト",
         "apiKeyPage": "API キーページ",
         "getApiKey": "キーを取得"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools LAN サービス"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "サービスデータ",
         "fields": {
           "status": "状態",
+          "fiveHourRemainingPercent": "5時間の残り",
+          "weeklyRemainingPercent": "週間残り",
+          "accountCount": "アカウントプール",
+          "availableAccountCount": "利用可能なアカウント",
+          "abnormalAccountCount": "異常なアカウント",
+          "cooldownAccountCount": "クールダウン中のアカウント",
+          "stale": "古いデータ",
+          "apiKeyBalance": "API_KEY 残高",
           "planName": "プラン",
           "remaining": "残高",
           "balance": "残高",

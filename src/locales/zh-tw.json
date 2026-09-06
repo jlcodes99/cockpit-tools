@@ -764,6 +764,7 @@
       "codexAppUiInjectionPoolLabel": "帳號",
       "codexAppUiInjectionWeeklyLabel": "週",
       "codexAppUiInjectionFiveHourLabel": "5 小時",
+      "codexAppUiInjectionBalanceLabel": "餘額",
       "codexWslConfigDir": "WSL Codex 目錄",
       "codexWslConfigDirDesc": "填入 WSL 內的 .codex 目錄，支援 \\\\wsl.localhost\\ 路徑。",
       "codexWslConfigDirPlaceholder": "例如：\\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "額度池",
         "hourlyShort": "5h",
         "weeklyShort": "週",
+        "balance": "餘額",
         "viewFull": "查看完整統計",
         "modalTitle": "API 服務額度池",
         "empty": "尚無額度統計"
@@ -2639,6 +2641,7 @@
         "custom": "自訂",
         "endpoint": "供應商端點",
         "hint": "已自動填入相容的 Base URL，你仍可手動編輯。",
+        "cockpitToolsHint": "請將 Base URL 改為 Cockpit Tools 主機的區域網路位址，例如 http://HOST_IP:PORT/v1。帳號卡片會自動查詢 /cockpit/quota。",
         "website": "網站",
         "apiKeyPage": "API Key 頁面",
         "getApiKey": "取得秘鑰"
@@ -2703,6 +2706,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools 區域網路"
         },
         "cockpit_api": {
           "name": "Cockpit Api"
@@ -3626,6 +3632,14 @@
         "rawFields": "服務資料",
         "fields": {
           "status": "狀態",
+          "fiveHourRemainingPercent": "5 小時剩餘",
+          "weeklyRemainingPercent": "週剩餘",
+          "accountCount": "帳號池",
+          "availableAccountCount": "可用帳號",
+          "abnormalAccountCount": "異常帳號",
+          "cooldownAccountCount": "冷卻帳號",
+          "stale": "資料較舊",
+          "apiKeyBalance": "API_KEY 餘額",
           "planName": "訂閱",
           "remaining": "剩餘額度",
           "balance": "餘額",

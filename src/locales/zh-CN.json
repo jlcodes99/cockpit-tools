@@ -972,10 +972,11 @@
       "codexSyncWsl": "同步 Codex 到 WSL",
       "codexSyncWslDesc": "切换默认 Codex 账号后，同时把 auth.json 和 config.toml 写入 WSL 的 Codex 配置目录。",
       "codexAppUiInjection": "显示 API 服务额度",
-      "codexAppUiInjectionDesc": "重启 Codex 实例后，在输入框下方显示 Cockpit Tools API 服务的账号数、周额度和 5h 额度。需保持 Cockpit Tools 在后台运行；完全退出或网络不可用时，额度不会继续刷新。",
+      "codexAppUiInjectionDesc": "重启 Codex 实例后，在输入框下方显示 Cockpit Tools API 服务的账号数、可用账号、周额度、5h 额度和 API_KEY 余额。需保持 Cockpit Tools 在后台运行；完全退出或网络不可用时，额度不会继续刷新。",
       "codexAppUiInjectionPoolLabel": "账号",
       "codexAppUiInjectionWeeklyLabel": "周",
       "codexAppUiInjectionFiveHourLabel": "5h",
+      "codexAppUiInjectionBalanceLabel": "余额",
       "codexWslConfigDir": "WSL Codex 目录",
       "codexWslConfigDirDesc": "填写 WSL 中的 .codex 目录，支持 \\\\wsl.localhost\\ 形式。",
       "codexWslConfigDirPlaceholder": "例如：\\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2749,6 +2750,7 @@
         "title": "额度池",
         "hourlyShort": "5h",
         "weeklyShort": "周",
+        "balance": "余额",
         "viewFull": "查看完整统计",
         "modalTitle": "API 服务额度池",
         "empty": "暂无额度统计"
@@ -2964,6 +2966,7 @@
         "custom": "自定义",
         "endpoint": "供应商端点",
         "hint": "已自动填写兼容 Base URL，可继续手动调整。",
+        "cockpitToolsHint": "请把 Base URL 改成部署 Cockpit Tools 的局域网地址；例如 http://主机IP:端口/v1。保存后会自动查询 /cockpit/quota。",
         "website": "官网",
         "apiKeyPage": "API Key 页面",
         "getApiKey": "获取秘钥"
@@ -2971,6 +2974,9 @@
       "providers": {
         "cockpit_api": {
           "name": "Cockpit Api"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools 局域网"
         },
         "openai_official": {
           "name": "OpenAI Official"
@@ -3336,9 +3342,17 @@
         "rawFields": "服务数据",
         "fields": {
           "status": "状态",
+          "fiveHourRemainingPercent": "5h 剩余",
+          "weeklyRemainingPercent": "周剩余",
+          "accountCount": "账号池",
+          "availableAccountCount": "可用账号",
+          "abnormalAccountCount": "异常账号",
+          "cooldownAccountCount": "冷却账号",
+          "stale": "数据较旧",
           "planName": "订阅",
           "remaining": "剩余额度",
           "balance": "余额",
+          "apiKeyBalance": "API_KEY 余额",
           "todayRequests": "今日请求",
           "todayTokens": "今日 Token",
           "todayCost": "今日消耗",

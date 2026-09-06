@@ -4,7 +4,11 @@ import type { CodexLocalAccessAddressKind, CodexLocalAccessAccountHealth } from 
 import { CODEX_OVERVIEW_FILTER_FIELDS, CODEX_OVERVIEW_FILTER_SCOPE } from "../utils/codexAccountOverview";
 import { findCodexApiProviderPresetById } from "../utils/codexProviderPresets";
 import { normalizeApiKeyFunOfficialUrl, resolveApiKeyFunWireApi } from "../utils/apikeyFunLinks";
-import { type CodexModelProvider, type CodexModelProviderUsageSummary } from "../services/codexModelProviderService";
+import {
+  type CodexModelProvider,
+  type CodexModelProviderIntegrationType,
+  type CodexModelProviderUsageSummary,
+} from "../services/codexModelProviderService";
 import type { Sponsor } from "../types/sponsor";
 import { type MfaRecord } from "../utils/mfaVault";
 import { type MailVerificationCodePreview } from "../utils/mailVerificationCode";
@@ -379,11 +383,18 @@ export function getCockpitApiStatsRecord(
 
 export function resolveApiKeyUsageMode(
   summary?: CodexModelProviderUsageSummary,
-): "new_api" | "sub2api" | "deepseek" | "token_plan" | null {
+):
+  | "new_api"
+  | "sub2api"
+  | "cockpit_tools"
+  | "deepseek"
+  | "token_plan"
+  | null {
   if (!summary) return null;
   if (
     summary.mode === "new_api" ||
     summary.mode === "sub2api" ||
+    summary.mode === "cockpit_tools" ||
     summary.mode === "deepseek" ||
     summary.mode === "token_plan"
   ) {
@@ -590,7 +601,7 @@ export interface SponsorApiProviderTemplate {
   website: string;
   apiKeyUrl: string;
   wireApi?: "responses" | "chat_completions" | null;
-  integrationType?: "sub2api" | "new_api" | null;
+  integrationType?: CodexModelProviderIntegrationType | null;
 }
 
 export function normalizeSponsorApiProviderTemplates(

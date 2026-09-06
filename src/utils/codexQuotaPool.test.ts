@@ -71,22 +71,48 @@ test('keeps legacy 5h and weekly windows when both are present', () => {
   );
 });
 
-test('uses legacy labels when window metadata is unavailable', () => {
+test("shows an API key balance without adding it to OAuth quota windows", () => {
   const summary = summarizeCodexQuotaPool([
-    account(
-      'legacy-api-key',
-      'api_key',
-      quota({ hourly_percentage: 60, weekly_percentage: 25 }),
-    ),
+    {
+      ...account(
+        "legacy-api-key",
+        "api_key",
+        quota({
+          hourly_percentage: 60,
+          weekly_percentage: 25,
+          raw_data: { usage: { total_available: 123.5 } },
+        }),
+      ),
+      auth_mode: "apikey",
+    } as CodexAccount,
   ]);
 
-  assert.deepEqual(
-    summary.byPlan.API_KEY.windows.map(({ label, percentage }) => ({ label, percentage })),
-    [
-      { label: '5h', percentage: 60 },
-      { label: 'Weekly', percentage: 25 },
-    ],
-  );
+  assert.equal(summary.byPlan.API_KEY.count, 1);
+  assert.equal(summary.byPlan.API_KEY.balance, 123.5);
+  assert.deepEqual(summary.byPlan.API_KEY.windows, []);
+});
+
+test("keeps a legacy Cockpit Tools API key balance cached before CNY support", () => {
+  const summary = summarizeCodexQuotaPool([
+    {
+      ...account(
+        "custom-api-key",
+        "api_key",
+        quota({
+          raw_data: {
+            provider_usage: {
+              mode: "cockpit_tools",
+              unit: "%",
+              details: [{ key: "apiKeyBalance", value: "5.6" }],
+            },
+          },
+        }),
+      ),
+      auth_mode: "apikey",
+    } as CodexAccount,
+  ]);
+
+  assert.equal(summary.byPlan.API_KEY.balance, 5.6);
 });
 
 test('preserves a real zero-percent window and omits an account with no quota', () => {
@@ -154,8 +180,8 @@ test('merges equivalent weekly windows across mixed old and new accounts', () =>
   );
 });
 
-test('does not invent 5h windows for weekly-only plus, pro, or API key plans', () => {
-  const accounts = ['plus', 'pro', 'api_key'].map((planType, index) =>
+test("does not invent 5h windows for weekly-only plus or pro plans", () => {
+  const accounts = ["plus", "pro"].map((planType, index) =>
     account(
       `${planType}-${index}`,
       planType,

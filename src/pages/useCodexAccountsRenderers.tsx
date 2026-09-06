@@ -11,7 +11,7 @@ import { CodexSpeedSelect } from "../components/codex/CodexSpeedSelect";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CODEX_API_SERVICE_BIND_ID } from "../types/instance";
 import { COCKPIT_API_BASE_URL } from "../utils/codexProviderPresets";
-import { formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
+import { formatCodexQuotaPoolBalance, formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
 import { resolveNewApiQuotaSnapshot } from "../services/modelProviderUsageService";
 import { CODEX_LOCAL_ACCESS_FALLBACK_API_KEY_MASK, formatCockpitApiInteger, formatCockpitApiTokenCount, getCockpitApiStatsRecord, getCockpitApiUsageRecord, getCodexAccountNoteTitle, hasCodexAccountNoteDetails, isPendingOAuthCodexAccount, isSponsorModelProvider, readCockpitApiNumber, readCockpitApiString, resolveApiKeyUsageMode, toCockpitApiRecord, type CockpitApiJsonRecord } from "./codexAccountsControllerModel";
 import type { useCodexAccountsBaseController } from "./useCodexAccountsBaseController";
@@ -700,10 +700,12 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           account,
           hideRelayQuota,
         );
-        const isSub2ApiUsageAccount =
+        const isDetailedUsageAccount =
           showApiKeyUsagePanel &&
           (apiKeyUsageMode === "sub2api" ||
-            apiKeyUsageProvider?.integrationType === "sub2api");
+            apiKeyUsageMode === "cockpit_tools" ||
+            apiKeyUsageProvider?.integrationType === "sub2api" ||
+            apiKeyUsageProvider?.integrationType === "cockpit_tools");
         const isTokenPlanUsageAccount =
           showApiKeyUsagePanel && apiKeyUsageMode === "token_plan";
         const isQuotaAwareApiKeyAccount =
@@ -712,7 +714,8 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           (apiKeyUsageMode !== null ||
             isDeepSeekAccount(account) ||
             apiKeyUsageProvider?.integrationType === "new_api" ||
-            apiKeyUsageProvider?.integrationType === "sub2api");
+            apiKeyUsageProvider?.integrationType === "sub2api" ||
+            apiKeyUsageProvider?.integrationType === "cockpit_tools");
         const shouldRenderQuotaSection =
           showApiKeyUsagePanel ||
           !isApiKeyAccount ||
@@ -917,7 +920,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   >
                     {apiBaseUrlLine}
                   </span>
-                  {(isSub2ApiUsageAccount || isTokenPlanUsageAccount) && (
+                  {(isDetailedUsageAccount || isTokenPlanUsageAccount) && (
                     <button
                       type="button"
                       className="codex-provider-inline-switch"
@@ -1540,6 +1543,12 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                           {formatCodexQuotaPoolPercent(window.percentage)}
                         </span>
                       ))}
+                      {item.balance != null && (
+                        <span>
+                          {t("codex.localAccess.quotaPool.balance", "余额")}{" "}
+                          {formatCodexQuotaPoolBalance(item.balance)}
+                        </span>
+                      )}
                     </div>
                   ))}
                   {localAccessQuotaHiddenCount > 0 && (
@@ -2101,10 +2110,12 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           account,
           hideRelayQuota,
         );
-        const isSub2ApiUsageAccount =
+        const isDetailedUsageAccount =
           showApiKeyUsagePanel &&
           (apiKeyUsageMode === "sub2api" ||
-            apiKeyUsageProvider?.integrationType === "sub2api");
+            apiKeyUsageMode === "cockpit_tools" ||
+            apiKeyUsageProvider?.integrationType === "sub2api" ||
+            apiKeyUsageProvider?.integrationType === "cockpit_tools");
         const isTokenPlanUsageAccount =
           showApiKeyUsagePanel && apiKeyUsageMode === "token_plan";
         const isQuotaAwareApiKeyAccount =
@@ -2113,7 +2124,8 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           (apiKeyUsageMode !== null ||
             isDeepSeekAccount(account) ||
             apiKeyUsageProvider?.integrationType === "new_api" ||
-            apiKeyUsageProvider?.integrationType === "sub2api");
+            apiKeyUsageProvider?.integrationType === "sub2api" ||
+            apiKeyUsageProvider?.integrationType === "cockpit_tools");
         const displayPlanClass = isSponsorApiKeyAccount
           ? "sponsor-api"
           : isQuotaAwareApiKeyAccount
@@ -2271,7 +2283,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                       >
                         {apiBaseUrlLine}
                       </span>
-                      {(isSub2ApiUsageAccount || isTokenPlanUsageAccount) && (
+                      {(isDetailedUsageAccount || isTokenPlanUsageAccount) && (
                         <button
                           type="button"
                           className="codex-provider-inline-switch"
@@ -2753,8 +2765,15 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
       const provider = resolveUsageProviderForApiKeyAccount(account);
       const usageMode =
         resolveApiKeyUsageMode(summary) ??
-        (provider?.integrationType === "sub2api" ? "sub2api" : null);
+        (provider?.integrationType === "sub2api" ||
+        provider?.integrationType === "cockpit_tools"
+          ? provider.integrationType
+          : null);
       if (!usageMode) return null;
+      const formatCockpitToolsPercent = (key: string) => {
+        const value = formatApiKeyUsageDetailByKey(summary, key);
+        return value === "-" ? value : `${value}%`;
+      };
       const coreDetailKeys =
         usageMode === "new_api"
           ? new Set(["mode", "totalGranted", "totalAvailable", "expiresAt"])
@@ -2767,9 +2786,21 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   "grantedBalance",
                   "toppedUpBalance",
                 ])
-              : usageMode === "token_plan"
-                ? new Set(["mode", "remaining", "planName", "expiresAt"])
-                : new Set<string>();
+              : usageMode === "cockpit_tools"
+                ? new Set([
+                    "mode",
+                    "scope",
+                    "fiveHourRemainingPercent",
+                    "weeklyRemainingPercent",
+                    "apiKeyBalance",
+                    "accountCount",
+                    "availableAccountCount",
+                    "abnormalAccountCount",
+                    "cooldownAccountCount",
+                  ])
+                : usageMode === "token_plan"
+                  ? new Set(["mode", "remaining", "planName", "expiresAt"])
+                  : new Set<string>();
       const details = (summary?.details ?? []).filter(
         (item) => !coreDetailKeys.has(item.key),
       );
@@ -2816,42 +2847,95 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                     : "-",
               },
             ]
-          : usageMode === "token_plan"
+          : usageMode === "cockpit_tools"
             ? [
                 {
-                  key: "remaining",
+                  key: "fiveHourRemainingPercent",
                   label: t(
-                    "codex.modelProviders.usage.fields.remaining",
-                    "Remaining",
+                    "codex.modelProviders.usage.fields.fiveHourRemainingPercent",
+                    "5h 剩余",
                   ),
-                  value: formatApiKeyUsageQuotaValue(
-                    summary,
-                    summary?.quotaRemaining ?? summary?.remaining,
+                  value: formatCockpitToolsPercent(
+                    "fiveHourRemainingPercent",
                   ),
                 },
                 {
-                  key: "planName",
-                  label: t("codex.modelProviders.usage.fields.planName", "Plan"),
-                  value: summary?.planName || "-",
+                  key: "weeklyRemainingPercent",
+                  label: t(
+                    "codex.modelProviders.usage.fields.weeklyRemainingPercent",
+                    "周剩余",
+                  ),
+                  value: formatCockpitToolsPercent(
+                    "weeklyRemainingPercent",
+                  ),
                 },
                 {
-                  key: "expiresAt",
+                  key: "apiKeyBalance",
                   label: t(
-                    "codex.modelProviders.usage.fields.expiresAt",
-                    "Next Reset",
+                    "codex.modelProviders.usage.fields.apiKeyBalance",
+                    "API_KEY 余额",
+                  ),
+                  value: formatApiKeyUsageDetailByKey(summary, "apiKeyBalance"),
+                },
+                {
+                  key: "accountCount",
+                  label: t(
+                    "codex.modelProviders.usage.fields.accountCount",
+                    "账号池",
+                  ),
+                  value: formatApiKeyUsageDetailByKey(summary, "accountCount"),
+                },
+                {
+                  key: "availableAccountCount",
+                  label: t(
+                    "codex.modelProviders.usage.fields.availableAccountCount",
+                    "可用账号",
                   ),
                   value: formatApiKeyUsageDetailByKey(
                     summary,
-                    findApiKeyUsageDetail(summary, "intervalExpiresAt")
-                      ? "intervalExpiresAt"
-                      : findApiKeyUsageDetail(summary, "weeklyExpiresAt")
-                        ? "weeklyExpiresAt"
-                        : "expiresAt",
+                    "availableAccountCount",
                   ),
                 },
               ]
-            : usageMode === "sub2api"
+            : usageMode === "token_plan"
               ? [
+                  {
+                    key: "remaining",
+                    label: t(
+                      "codex.modelProviders.usage.fields.remaining",
+                      "Remaining",
+                    ),
+                    value: formatApiKeyUsageQuotaValue(
+                      summary,
+                      summary?.quotaRemaining ?? summary?.remaining,
+                    ),
+                  },
+                  {
+                    key: "planName",
+                    label: t(
+                      "codex.modelProviders.usage.fields.planName",
+                      "Plan",
+                    ),
+                    value: summary?.planName || "-",
+                  },
+                  {
+                    key: "expiresAt",
+                    label: t(
+                      "codex.modelProviders.usage.fields.expiresAt",
+                      "Next Reset",
+                    ),
+                    value: formatApiKeyUsageDetailByKey(
+                      summary,
+                      findApiKeyUsageDetail(summary, "intervalExpiresAt")
+                        ? "intervalExpiresAt"
+                        : findApiKeyUsageDetail(summary, "weeklyExpiresAt")
+                          ? "weeklyExpiresAt"
+                          : "expiresAt",
+                    ),
+                  },
+                ]
+              : usageMode === "sub2api"
+                ? [
                   {
                     key: "accountBalance",
                     label: t(
@@ -2926,6 +3010,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
       const summaryGridClassName =
         usageMode === "sub2api" ||
         usageMode === "new_api" ||
+        usageMode === "cockpit_tools" ||
         usageMode === "token_plan"
           ? "cockpit-api-summary-grid compact"
           : "cockpit-api-summary-grid";

@@ -507,7 +507,7 @@ fn metered_feature_model_patterns_for_pool(
 ) -> HashMap<String, String> {
     let persisted_accounts = codex_account::list_accounts_checked().ok();
     let mut patterns = HashMap::new();
-    for account_id in effective_sidecar_account_ids(collection) {
+    for account_id in effective_api_service_account_ids(collection) {
         let account = account_overrides.get(&account_id).or_else(|| {
             persisted_accounts
                 .as_ref()

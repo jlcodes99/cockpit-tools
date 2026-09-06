@@ -56,6 +56,7 @@ import {
   incrementCodexPlanFilterCount,
 } from "../utils/codexAccountOverview";
 import {
+  formatCodexQuotaPoolBalance,
   formatCodexQuotaPoolPercent,
   formatCodexQuotaPoolWindowLabel,
   summarizeCodexQuotaPool,
@@ -465,6 +466,7 @@ export function CodexLocalAccessModal({
   const quotaPoolLabels = useMemo(
     () => ({
       weekly: t("codex.localAccess.quotaPool.weeklyShort", "周"),
+      balance: t("codex.localAccess.quotaPool.balance", "余额"),
       title: t("codex.localAccess.quotaPool.title", "额度池"),
     }),
     [t],
@@ -581,12 +583,19 @@ export function CodexLocalAccessModal({
     () => summarizeCodexQuotaPool(localAccessAccounts),
     [localAccessAccounts],
   );
+  const currentQuotaPoolAccountIds = useMemo(() => {
+    const ids = [...(collection?.accountIds ?? [])];
+    for (const apiKey of collection?.apiKeys ?? []) {
+      ids.push(...(apiKey.accountIds ?? []));
+    }
+    return Array.from(new Set(ids));
+  }, [collection?.accountIds, collection?.apiKeys]);
   const currentQuotaPoolSummary = useMemo(() => {
-    const accountIds = new Set(collection?.accountIds ?? []);
+    const accountIds = new Set(currentQuotaPoolAccountIds);
     return summarizeCodexQuotaPool(
       localAccessAccounts.filter((account) => accountIds.has(account.id)),
     );
-  }, [collection?.accountIds, localAccessAccounts]);
+  }, [currentQuotaPoolAccountIds, localAccessAccounts]);
   const accountPoolHealthSummary = useMemo<AccountPoolHealthSummary>(() => {
     const accountById = new Map(
       localAccessAccounts.map((account) => [account.id, account]),
@@ -610,7 +619,7 @@ export function CodexLocalAccessModal({
         .forEach((member) => poolUnavailableAccountIds.add(member.accountId.trim()));
     });
     const summary: AccountPoolHealthSummary = {
-      total: collection?.accountIds.length ?? 0,
+      total: currentQuotaPoolAccountIds.length,
       available: 0,
       abnormal: 0,
       cooldown: 0,
@@ -619,7 +628,7 @@ export function CodexLocalAccessModal({
       quotaLimited: 0,
     };
 
-    (collection?.accountIds ?? []).forEach((accountId) => {
+    currentQuotaPoolAccountIds.forEach((accountId) => {
       const account = accountById.get(accountId);
       const health = healthById.get(accountId);
       if (!account) {
@@ -651,7 +660,7 @@ export function CodexLocalAccessModal({
 
     return summary;
   }, [
-    collection?.accountIds,
+    currentQuotaPoolAccountIds,
     localAccessAccounts,
     state?.accountHealth,
     state?.accountPoolHealth,
@@ -2624,6 +2633,11 @@ export function CodexLocalAccessModal({
                             {formatCodexQuotaPoolPercent(window.percentage)}
                           </span>
                         ))}
+                        {item.balance != null && (
+                          <span className="codex-local-access-quota-pool-value">
+                            {quotaPoolLabels.balance} {formatCodexQuotaPoolBalance(item.balance)}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>

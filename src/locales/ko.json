@@ -768,6 +768,7 @@
       "codexAppUiInjectionPoolLabel": "계정",
       "codexAppUiInjectionWeeklyLabel": "주",
       "codexAppUiInjectionFiveHourLabel": "5시간",
+      "codexAppUiInjectionBalanceLabel": "잔액",
       "codexWslConfigDir": "WSL Codex 디렉터리",
       "codexWslConfigDirDesc": "WSL 안의 .codex 디렉터리를 입력하세요. \\\\wsl.localhost\\ 경로를 지원합니다.",
       "codexWslConfigDirPlaceholder": "예: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "할당량 풀",
         "hourlyShort": "5h​",
         "weeklyShort": "주",
+        "balance": "잔액",
         "viewFull": "전체 통계 보기",
         "modalTitle": "API 서비스 할당량 풀",
         "empty": "할당량 통계가 아직 없습니다"
@@ -3274,6 +3276,7 @@
         "custom": "사용자 지정",
         "endpoint": "공급자 엔드포인트",
         "hint": "호환되는 Base URL이 자동으로 입력되었습니다. 필요하면 수동으로 수정할 수 있습니다.",
+        "cockpitToolsHint": "Base URL을 Cockpit Tools 호스트의 LAN 주소(예: http://HOST_IP:PORT/v1)로 바꾸세요. 계정 카드가 /cockpit/quota를 자동으로 조회합니다.",
         "website": "웹사이트",
         "apiKeyPage": "API 키 페이지",
         "getApiKey": "키 받기"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools LAN 서비스"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "서비스 데이터",
         "fields": {
           "status": "상태",
+          "fiveHourRemainingPercent": "5시간 잔여",
+          "weeklyRemainingPercent": "주간 잔여",
+          "accountCount": "계정 풀",
+          "availableAccountCount": "사용 가능한 계정",
+          "abnormalAccountCount": "비정상 계정",
+          "cooldownAccountCount": "대기 중인 계정",
+          "stale": "오래된 데이터",
+          "apiKeyBalance": "API_KEY 잔액",
           "planName": "구독",
           "remaining": "잔여 한도",
           "balance": "잔액",

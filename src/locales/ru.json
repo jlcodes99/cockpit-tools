@@ -768,6 +768,7 @@
       "codexAppUiInjectionPoolLabel": "Аккаунты",
       "codexAppUiInjectionWeeklyLabel": "Неделя",
       "codexAppUiInjectionFiveHourLabel": "5 ч",
+      "codexAppUiInjectionBalanceLabel": "Баланс",
       "codexWslConfigDir": "Каталог Codex в WSL",
       "codexWslConfigDirDesc": "Укажите каталог .codex внутри WSL. Поддерживаются пути \\\\wsl.localhost\\.",
       "codexWslConfigDirPlaceholder": "Пример: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "Пул квот",
         "hourlyShort": "5h​",
         "weeklyShort": "Неделя",
+        "balance": "Баланс",
         "viewFull": "Показать полную статистику",
         "modalTitle": "Пул квот сервиса API",
         "empty": "Статистики квот пока нет"
@@ -3274,6 +3276,7 @@
         "custom": "Пользовательский",
         "endpoint": "Конечная точка провайдера",
         "hint": "Совместимый Base URL был заполнен автоматически. При необходимости вы можете отредактировать его вручную.",
+        "cockpitToolsHint": "Замените Base URL на LAN-адрес хоста Cockpit Tools, например http://HOST_IP:PORT/v1. Карточка аккаунта автоматически запросит /cockpit/quota.",
         "website": "Сайт",
         "apiKeyPage": "Страница ключа API",
         "getApiKey": "Получить ключ"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools в локальной сети"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "Данные сервиса",
         "fields": {
           "status": "Статус",
+          "fiveHourRemainingPercent": "Осталось за 5 ч",
+          "weeklyRemainingPercent": "Осталось за неделю",
+          "accountCount": "Пул аккаунтов",
+          "availableAccountCount": "Доступные аккаунты",
+          "abnormalAccountCount": "Проблемные аккаунты",
+          "cooldownAccountCount": "Аккаунты на паузе",
+          "stale": "Устаревшие данные",
+          "apiKeyBalance": "Баланс API_KEY",
           "planName": "План",
           "remaining": "Остаток",
           "balance": "Баланс",

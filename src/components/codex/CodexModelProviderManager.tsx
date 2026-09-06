@@ -67,6 +67,7 @@ import {
   testCodexModelProviderChatBatch,
   type CodexModelProvider,
   type CodexModelProviderApiKey,
+  type CodexModelProviderIntegrationType,
   type CodexModelProviderChatTestProgressPayload,
   type CodexModelProviderChatTestRecord,
   type CodexModelProviderChatTestTarget,
@@ -77,7 +78,10 @@ import {
   CODEX_API_KEY_USAGE_REFRESHED_EVENT,
   readCodexApiKeyUsageCache,
 } from "../../services/codexApiKeyUsageRefreshService";
-import { formatModelProviderUsageMoney } from "../../services/modelProviderUsageService";
+import {
+  formatCockpitToolsApiKeyBalance,
+  formatModelProviderUsageMoney,
+} from "../../services/modelProviderUsageService";
 import { useSponsorStore } from "../../stores/useSponsorStore";
 import { useCodexAccountStore } from "../../stores/useCodexAccountStore";
 import type { Sponsor } from "../../types/sponsor";
@@ -364,7 +368,7 @@ interface ProviderFormState {
   wireApi: CodexProviderWireApi;
   supportsWebsockets: boolean;
   enableModePreference: CodexProviderEnableModePreference;
-  integrationType: "sub2api" | "new_api" | "";
+  integrationType: CodexModelProviderIntegrationType | "";
   newApiKeyName: string;
   newApiKey: string;
 }
@@ -406,7 +410,7 @@ interface SponsorProviderTemplate {
   website: string;
   apiKeyUrl: string;
   wireApi?: CodexProviderWireApi | null;
-  integrationType?: "sub2api" | "new_api" | null;
+  integrationType?: CodexModelProviderIntegrationType | null;
 }
 
 interface ProviderPreviewPaths {
@@ -3314,6 +3318,10 @@ export function useCodexModelProviderManagerController({
         isAvailable: t("codex.modelProviders.usage.fields.isAvailable", "余额可用"),
         currency: t("codex.modelProviders.usage.fields.currency", "币种"),
         totalBalance: t("codex.modelProviders.usage.fields.totalBalance", "总余额"),
+        apiKeyBalance: t(
+          "codex.modelProviders.usage.fields.apiKeyBalance",
+          "API_KEY 余额",
+        ),
         grantedBalance: t("codex.modelProviders.usage.fields.grantedBalance", "赠金余额"),
         toppedUpBalance: t("codex.modelProviders.usage.fields.toppedUpBalance", "充值余额"),
       };
@@ -3353,6 +3361,9 @@ export function useCodexModelProviderManagerController({
       ) {
         if (raw === "true") return t("codex.modelProviders.usage.booleanTrue", "是");
         if (raw === "false") return t("codex.modelProviders.usage.booleanFalse", "否");
+      }
+      if (Number.isFinite(numeric) && item.key === "apiKeyBalance") {
+        return formatCockpitToolsApiKeyBalance(numeric, unit ?? undefined);
       }
       if (
         Number.isFinite(numeric) &&

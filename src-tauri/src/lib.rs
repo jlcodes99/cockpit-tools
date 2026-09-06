@@ -911,6 +911,7 @@ pub fn run() {
             commands::codex::codex_cancel_model_provider_chat_test,
             commands::codex::codex_list_model_provider_models,
             commands::codex::codex_query_model_provider_usage,
+            commands::codex::codex_sync_api_key_usage_summary,
             commands::codex::codex_local_access_get_state,
             commands::codex::codex_local_access_save_accounts,
             commands::codex::codex_local_access_append_accounts,

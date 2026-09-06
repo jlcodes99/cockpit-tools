@@ -825,6 +825,7 @@
       "codexAppUiInjectionPoolLabel": "Akun",
       "codexAppUiInjectionWeeklyLabel": "Minggu",
       "codexAppUiInjectionFiveHourLabel": "5 jam",
+      "codexAppUiInjectionBalanceLabel": "Saldo",
       "codexWslConfigDir": "Direktori Codex WSL",
       "codexWslConfigDirDesc": "Masukkan direktori .codex di dalam WSL. Path \\\\wsl.localhost\\ didukung.",
       "codexWslConfigDirPlaceholder": "Contoh: \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2499,6 +2500,7 @@
         "title": "Kumpulan kuota",
         "hourlyShort": "5h​",
         "weeklyShort": "Minggu",
+        "balance": "Saldo",
         "viewFull": "Lihat statistik lengkap",
         "modalTitle": "Kumpulan kuota layanan API",
         "empty": "Belum ada statistik kuota"
@@ -2689,6 +2691,7 @@
         "custom": "Kustom",
         "endpoint": "Endpoint penyedia",
         "hint": "Base URL yang kompatibel sudah diisi otomatis. Anda masih bisa mengubahnya secara manual.",
+        "cockpitToolsHint": "Ganti Base URL dengan alamat LAN host Cockpit Tools, misalnya http://HOST_IP:PORT/v1. Kartu akun akan meminta /cockpit/quota secara otomatis.",
         "website": "Situs web",
         "apiKeyPage": "Halaman API Key",
         "getApiKey": "Dapatkan kunci"
@@ -2753,6 +2756,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools jaringan lokal"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3673,6 +3679,14 @@
         "rawFields": "Data layanan",
         "fields": {
           "status": "Keadaan",
+          "fiveHourRemainingPercent": "Sisa 5 jam",
+          "weeklyRemainingPercent": "Sisa mingguan",
+          "accountCount": "Kumpulan akun",
+          "availableAccountCount": "Akun tersedia",
+          "abnormalAccountCount": "Akun bermasalah",
+          "cooldownAccountCount": "Akun masa tunggu",
+          "stale": "Data lama",
+          "apiKeyBalance": "Saldo API_KEY",
           "planName": "Paket",
           "remaining": "Sisa kuota",
           "balance": "Saldo",

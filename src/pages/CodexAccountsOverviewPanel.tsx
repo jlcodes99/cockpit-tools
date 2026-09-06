@@ -19,7 +19,7 @@ import { AccountTagFilterDropdown } from "../components/AccountTagFilterDropdown
 import { SingleSelectFilterDropdown } from "../components/SingleSelectFilterDropdown";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, COCKPIT_API_PROVIDER_ID } from "../utils/codexProviderPresets";
-import { formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
+import { formatCodexQuotaPoolBalance, formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
 import { getCodexLocalAccessRiskNoticeConfirmLabel } from "../utils/codexLocalAccessRiskNotice";
 import { getMfaOtpToken } from "../utils/mfaVault";
 import type { CodexExportFormat } from "../utils/codexExportFormats";
@@ -2814,6 +2814,19 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                                 </strong>
                               </span>
                             ))}
+                            {item.balance != null && (
+                              <span>
+                                <b>
+                                  {t(
+                                    "codex.localAccess.quotaPool.balance",
+                                    "余额",
+                                  )}
+                                </b>
+                                <strong>
+                                  {formatCodexQuotaPoolBalance(item.balance)}
+                                </strong>
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}

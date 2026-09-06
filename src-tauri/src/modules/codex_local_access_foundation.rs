@@ -1442,7 +1442,7 @@ fn account_uses_codex_fingerprint_convergence(account: &CodexAccount) -> bool {
 
 fn prune_prepared_account_cache(runtime: &mut GatewayRuntime, now: i64) {
     let allowed_account_ids = runtime.collection.as_ref().map(|collection| {
-        effective_sidecar_account_ids(collection)
+        effective_api_service_account_ids(collection)
             .into_iter()
             .collect::<HashSet<_>>()
     });
@@ -1469,7 +1469,7 @@ fn prune_runtime_account_state(runtime: &mut GatewayRuntime) {
         return;
     };
 
-    let allowed_account_ids = effective_sidecar_account_ids(collection)
+    let allowed_account_ids = effective_api_service_account_ids(collection)
         .into_iter()
         .collect::<HashSet<_>>();
 
@@ -1862,7 +1862,7 @@ fn sidecar_account_needs_background_refresh(account: &CodexAccount) -> bool {
 /// 绑定 OAuth 可能只存在于 API Key 或 collection 的绑定字段中，并不一定
 /// 出现在普通账号池 `account_ids` 里；这些账号仍必须接收重新授权后的新 Token。
 fn sidecar_auth_account_ids(collection: &CodexLocalAccessCollection) -> Vec<String> {
-    let mut scoped_account_ids = effective_sidecar_account_ids(collection);
+    let mut scoped_account_ids = effective_api_service_account_ids(collection);
     let mut seen = scoped_account_ids.iter().cloned().collect::<HashSet<_>>();
 
     // API Key 账号自身不持有 OAuth refresh_token；如果它绑定了 OAuth，

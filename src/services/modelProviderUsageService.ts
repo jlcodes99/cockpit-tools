@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
-export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
+export type ModelProviderUsageIntegrationType =
+  "sub2api" | "new_api" | "cockpit_tools";
 export type ModelProviderUsageMode =
   | ModelProviderUsageIntegrationType
   | 'deepseek'
@@ -90,6 +91,28 @@ export function resolveNewApiQuotaSnapshot(
   return { granted, available, expiresAt };
 }
 
+export function resolveModelProviderUsageBalance(
+  summary?: ModelProviderUsageSummary,
+): number | null {
+  if (!summary) return null;
+  if (summary.mode === "cockpit_tools") {
+    return (
+      finiteUsageNumber(summary.balance) ??
+      usageDetailNumber(summary, "apiKeyBalance")
+    );
+  }
+  if (summary.unit?.trim() === "%") return null;
+  if (summary.mode === "new_api") {
+    return resolveNewApiQuotaSnapshot(summary).available;
+  }
+  return (
+    finiteUsageNumber(summary.remaining) ??
+    finiteUsageNumber(summary.balance) ??
+    finiteUsageNumber(summary.quotaRemaining) ??
+    usageDetailNumber(summary, "totalAvailable")
+  );
+}
+
 export function buildUsageBaseUrlCandidates(baseUrl: string): string[] {
   const trimmed = baseUrl.trim();
   if (!trimmed) return [];
@@ -133,6 +156,18 @@ export async function queryModelProviderUsage(input: {
   throw lastError ?? new Error('PROVIDER_BASE_URL_INVALID');
 }
 
+export async function syncModelProviderUsageToCodexAccount(input: {
+  accountId: string;
+  summary: ModelProviderUsageSummary;
+  updatedAtMs?: number;
+}): Promise<void> {
+  await invoke("codex_sync_api_key_usage_summary", {
+    accountId: input.accountId,
+    summary: input.summary,
+    updatedAtMs: input.updatedAtMs ?? null,
+  });
+}
+
 export async function listModelProviderModels(input: {
   baseUrl: string;
   apiKey: string;
@@ -157,10 +192,11 @@ export function resolveModelProviderUsageMode(
 ): ModelProviderUsageMode | null {
   if (!summary) return null;
   if (
-    summary.mode === 'new_api' ||
-    summary.mode === 'sub2api' ||
-    summary.mode === 'deepseek' ||
-    summary.mode === 'token_plan'
+    summary.mode === "new_api" ||
+    summary.mode === "sub2api" ||
+    summary.mode === "cockpit_tools" ||
+    summary.mode === "deepseek" ||
+    summary.mode === "token_plan"
   ) {
     return summary.mode;
   }
@@ -200,6 +236,21 @@ export function formatModelProviderUsageMoney(
   const formatted = value.toFixed(value >= 100 ? 0 : 2);
   if (normalizedUnit === 'USD') return `$${formatted}`;
   if (normalizedUnit === 'CNY') return `¥${formatted}`;
+  return `${formatted} ${normalizedUnit}`;
+}
+
+export function formatCockpitToolsApiKeyBalance(
+  value?: number | null,
+  unit: string = 'CNY',
+): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  const formatted = Math.max(0, value).toLocaleString('en-US', {
+    maximumFractionDigits: 2,
+  });
+  const rawUnit = unit.trim();
+  const normalizedUnit = !rawUnit || rawUnit === '%' ? 'CNY' : rawUnit;
+  if (normalizedUnit === 'CNY') return `¥${formatted}`;
+  if (normalizedUnit === 'USD') return `$${formatted}`;
   return `${formatted} ${normalizedUnit}`;
 }
 

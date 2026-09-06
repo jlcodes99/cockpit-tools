@@ -764,6 +764,7 @@
       "codexAppUiInjectionPoolLabel": "Comptes",
       "codexAppUiInjectionWeeklyLabel": "Semaine",
       "codexAppUiInjectionFiveHourLabel": "5 h",
+      "codexAppUiInjectionBalanceLabel": "Solde",
       "codexWslConfigDir": "Dossier Codex WSL",
       "codexWslConfigDirDesc": "Saisissez le dossier .codex dans WSL. Les chemins \\\\wsl.localhost\\ sont pris en charge.",
       "codexWslConfigDirPlaceholder": "Exemple : \\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\.codex",
@@ -2449,6 +2450,7 @@
         "title": "Pool de quotas",
         "hourlyShort": "5h​",
         "weeklyShort": "Semaine",
+        "balance": "Solde",
         "viewFull": "Voir les stats complètes",
         "modalTitle": "Pool de quotas du service API",
         "empty": "Aucune statistique de quota pour l’instant"
@@ -3274,6 +3276,7 @@
         "custom": "Personnalisé",
         "endpoint": "Point de terminaison du fournisseur",
         "hint": "Une Base URL compatible a été renseignée automatiquement. Vous pouvez toujours la modifier manuellement.",
+        "cockpitToolsHint": "Remplacez la Base URL par l’adresse LAN de l’hôte Cockpit Tools, par exemple http://HOST_IP:PORT/v1. La fiche du compte interrogera automatiquement /cockpit/quota.",
         "website": "Site web",
         "apiKeyPage": "Page de clé API",
         "getApiKey": "Obtenir la clé"
@@ -3338,6 +3341,9 @@
         },
         "siliconflow": {
           "name": "SiliconFlow​"
+        },
+        "cockpit_tools": {
+          "name": "Cockpit Tools sur le réseau local"
         },
         "cockpit_api": {
           "name": "Cockpit Api​"
@@ -3626,6 +3632,14 @@
         "rawFields": "Données du service",
         "fields": {
           "status": "État",
+          "fiveHourRemainingPercent": "Restant sur 5 h",
+          "weeklyRemainingPercent": "Restant hebdomadaire",
+          "accountCount": "Pool de comptes",
+          "availableAccountCount": "Comptes disponibles",
+          "abnormalAccountCount": "Comptes anormaux",
+          "cooldownAccountCount": "Comptes en attente",
+          "stale": "Données anciennes",
+          "apiKeyBalance": "Solde API_KEY",
           "planName": "Forfait",
           "remaining": "Crédit restant",
           "balance": "Solde",

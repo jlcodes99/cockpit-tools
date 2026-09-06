@@ -7,7 +7,7 @@ import { getPlatformLabel } from "../utils/platformMeta";
 import { isCodexApiKeyScopeAccountActive, selectCodexApiKeyScopeAccounts } from "../utils/codexApiKeyAccountScope";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
-import { formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
+import { formatCodexQuotaPoolBalance, formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CodexLocalAccessModal } from "../components/CodexLocalAccessModal";
 import { CodexAccountPoolHealthModal } from "../components/CodexAccountPoolHealthModal";
@@ -772,6 +772,9 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                                 )} ${formatCodexQuotaPoolPercent(window.percentage)}`,
                             )
                             .join(" · ")}`
+                        : ""}
+                      {item.balance != null
+                        ? ` · ${t("codex.localAccess.quotaPool.balance", "余额")} ${formatCodexQuotaPoolBalance(item.balance)}`
                         : ""}
                     </span>
                   ))
