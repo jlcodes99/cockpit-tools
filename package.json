@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "tsx --test",
+    "test": "node scripts/run_ts_tests.cjs",
     "test:release": "node --test scripts/release/*.test.cjs",
     "test:go": "cd sidecars/cockpit-cliproxy && go test ./...",
     "test:codex-api-key-scope": "tsx --test src/utils/codexApiKeyAccountScope.test.ts",
