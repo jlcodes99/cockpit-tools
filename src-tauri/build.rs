@@ -9,6 +9,24 @@ fn link_macos_swift_runtime_rpaths() {
     println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
 }
 
+#[cfg(target_os = "macos")]
+fn link_xcode_27_swift_package_products(package_name: &str) {
+    let configuration = if std::env::var("DEBUG").ok().as_deref() == Some("true") {
+        "Debug"
+    } else {
+        "Release"
+    };
+    let products_dir = PathBuf::from(
+        std::env::var("OUT_DIR").expect("OUT_DIR is required for Swift package linking"),
+    )
+    .join("swift-rs")
+    .join(package_name)
+    .join("out")
+    .join("Products")
+    .join(configuration);
+    println!("cargo:rustc-link-search=native={}", products_dir.display());
+}
+
 fn go_target_from_rust_target(target: &str) -> Option<(&'static str, &'static str)> {
     let goos = if target.contains("windows") {
         "windows"
@@ -173,6 +191,10 @@ fn main() {
         SwiftLinker::new("12.0")
             .with_package("MacosNativeMenuSwift", "native/macos-native-menu")
             .link();
+        // Swift 6.4 / Xcode 27 places static package products under
+        // out/Products/{Debug,Release}; swift-rs 1.0.7 still advertises the
+        // pre-Xcode-27 triple/configuration directory.
+        link_xcode_27_swift_package_products("MacosNativeMenuSwift");
         link_macos_swift_runtime_rpaths();
     }
 
