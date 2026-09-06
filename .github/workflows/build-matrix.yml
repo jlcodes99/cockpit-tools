@@ -84,6 +84,14 @@ jobs:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
+      - name: 🦀 Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 🦀 Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: preflight-core
+
       - name: 📦 Install frontend dependencies
         run: npm install
 
@@ -95,6 +103,9 @@ jobs:
 
       - name: 🐹 Go sidecar tests
         run: npm run test:go
+
+      - name: 🦀 Core Rust tests
+        run: npm run test:rust:core
 
   build:
     name: "🏗️ Build: ${{ matrix.label }}"
@@ -158,10 +169,6 @@ jobs:
         run: |
           cargo test instance_configuration_save --lib
           cargo test quick_config_catalog_only_context_preservation --lib
-
-      - name: 🧪 Test core library
-        if: matrix.label == 'ubuntu-22.04'
-        run: npm run test:rust:core
 
       - name: 🐹 Go setup
         uses: actions/setup-go@v5
