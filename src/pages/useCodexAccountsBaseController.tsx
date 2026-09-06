@@ -893,9 +893,13 @@ export function useCodexAccountsBaseController() {
         return;
       }
       handledBatchImportReopenNonceRef.current = batchImportReopenNonce;
-      if (!batchImportReopenTaskId) return;
+      if (
+        !batchImportReopenTaskId ||
+        batchImportReopenTaskId !== batchImportSessionIdRef.current
+      ) {
+        return;
+      }
       consumeBatchImportReopen();
-      if (batchImportReopenTaskId !== batchImportSessionIdRef.current) return;
       setBatchImportOpen(true);
     }, [
       batchImportReopenNonce,
