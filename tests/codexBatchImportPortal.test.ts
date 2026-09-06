@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 describe("codex batch import portal rendering", () => {
   it("renders the modal overlay through document.body so it opens outside hidden pages", () => {
     const source = readFileSync(
-      `${process.cwd()}/src/pages/CodexAccountsPage.tsx`,
+      `${process.cwd()}/src/pages/CodexAccountsView.tsx`,
       "utf8",
     );
 
@@ -30,11 +30,16 @@ describe("codex batch import portal rendering", () => {
       `${process.cwd()}/src/pages/CodexAccountsPage.tsx`,
       "utf8",
     );
+    const appSource = readFileSync(`${process.cwd()}/src/App.tsx`, "utf8");
     const globalTaskSource = readFileSync(
       `${process.cwd()}/src/components/CodexBatchImportGlobalTask.tsx`,
       "utf8",
     );
 
+    assert.ok(
+      appSource.includes("<CodexBatchImportGlobalTask"),
+      "the global batch import task stack should stay mounted by App",
+    );
     assert.equal(
       pageSource.includes("codex-batch-import-floating-panel"),
       false,
@@ -61,7 +66,7 @@ describe("codex batch import portal rendering", () => {
 
   it("consumes each reopen request once so background progress cannot reopen the dialog", () => {
     const source = readFileSync(
-      `${process.cwd()}/src/pages/CodexAccountsPage.tsx`,
+      `${process.cwd()}/src/pages/useCodexAccountsBaseController.tsx`,
       "utf8",
     );
 
@@ -71,5 +76,11 @@ describe("codex batch import portal rendering", () => {
         "batchImportReopenNonce === handledBatchImportReopenNonceRef.current",
       ),
     );
+    assert.ok(
+      source.includes("publishBatchImportTask({"),
+      "the Accounts controller should publish the active background task",
+    );
+    assert.ok(source.includes("consumeBatchImportReopen();"));
+    assert.ok(source.includes("setBatchImportOpen(true);"));
   });
 });

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Download, Copy, Check, Eye, EyeOff, FileText, FolderOpen } from "lucide-react";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
 import { useCodexInstanceStore } from "../stores/useCodexInstanceStore";
+import { useCodexBatchImportTaskStore } from "../stores/useCodexBatchImportTaskStore";
 import * as codexService from "../services/codexService";
 import * as codexInstanceService from "../services/codexInstanceService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
@@ -678,6 +679,23 @@ export function useCodexAccountsBaseController() {
     >(null);
     const batchImportUnlistenersRef = useRef<UnlistenFn[]>([]);
     const batchImportSessionIdRef = useRef<string | null>(null);
+    const publishBatchImportTask = useCodexBatchImportTaskStore(
+      (state) => state.publish,
+    );
+    const clearBatchImportTask = useCodexBatchImportTaskStore(
+      (state) => state.clear,
+    );
+    const batchImportReopenNonce = useCodexBatchImportTaskStore(
+      (state) => state.reopenNonce,
+    );
+    const batchImportReopenTaskId = useCodexBatchImportTaskStore(
+      (state) => state.reopenTaskId,
+    );
+    const consumeBatchImportReopen = useCodexBatchImportTaskStore(
+      (state) => state.consumeReopen,
+    );
+    const handledBatchImportReopenNonceRef = useRef(0);
+    const publishedBatchImportTaskIdRef = useRef<string | null>(null);
     const batchDeleteRemoveIdsRef = useRef<Set<string>>(new Set());
     const batchDeleteRefreshedCompletedRef = useRef(0);
     const codexAccountsRef = useRef<CodexAccount[]>(store.accounts);
@@ -806,6 +824,8 @@ export function useCodexAccountsBaseController() {
     useEffect(() => cleanupBatchImportListeners, [cleanupBatchImportListeners]);
   
     const resetBatchImportState = useCallback(() => {
+      clearBatchImportTask(batchImportSessionIdRef.current);
+      publishedBatchImportTaskIdRef.current = null;
       cleanupBatchImportListeners();
       batchImportSessionIdRef.current = null;
       setBatchImportOpen(false);
@@ -826,7 +846,62 @@ export function useCodexAccountsBaseController() {
       } catch {
         // ignore storage failures
       }
-    }, [cleanupBatchImportListeners]);
+    }, [cleanupBatchImportListeners, clearBatchImportTask]);
+
+    useEffect(() => {
+      const taskId = batchImportSessionId?.trim() || null;
+      const previousTaskId = publishedBatchImportTaskIdRef.current;
+      if (previousTaskId && previousTaskId !== taskId) {
+        clearBatchImportTask(previousTaskId);
+      }
+      publishedBatchImportTaskIdRef.current = taskId;
+      if (!taskId) return;
+
+      publishBatchImportTask({
+        taskId,
+        sessionId: taskId,
+        busy: batchImportBusy,
+        current:
+          batchImportProgress?.current ?? batchImportPreview?.items.length ?? 0,
+        total: batchImportProgress?.total ?? batchImportPreview?.total ?? 0,
+        phase:
+          batchImportProgress?.phase ??
+          batchImportPreview?.status ??
+          (batchImportBusy ? "scanning" : "ready"),
+        checkQuota: batchImportCheckQuota,
+        hasPreview: Boolean(batchImportPreview),
+        hasResult: Boolean(batchImportResult),
+        open: batchImportOpen,
+      });
+    }, [
+      batchImportBusy,
+      batchImportCheckQuota,
+      batchImportOpen,
+      batchImportPreview,
+      batchImportProgress,
+      batchImportResult,
+      batchImportSessionId,
+      clearBatchImportTask,
+      publishBatchImportTask,
+    ]);
+
+    useEffect(() => {
+      if (
+        batchImportReopenNonce <= 0 ||
+        batchImportReopenNonce === handledBatchImportReopenNonceRef.current
+      ) {
+        return;
+      }
+      handledBatchImportReopenNonceRef.current = batchImportReopenNonce;
+      if (!batchImportReopenTaskId) return;
+      consumeBatchImportReopen();
+      if (batchImportReopenTaskId !== batchImportSessionIdRef.current) return;
+      setBatchImportOpen(true);
+    }, [
+      batchImportReopenNonce,
+      batchImportReopenTaskId,
+      consumeBatchImportReopen,
+    ]);
   
     useEffect(() => {
       let disposed = false;

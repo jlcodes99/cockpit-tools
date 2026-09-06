@@ -21,7 +21,7 @@ test('maps account overview access_token progress to shared launch fields', () =
   });
 });
 
-test('merges id_token and refresh progress into the shared launch protocol', () => {
+test('preserves id_token details and normalizes refresh progress into the shared launch protocol', () => {
   const idToken = mapCodexSwitchProgressToLaunch({
     accountId: 'account-1',
     step: 'idToken',
@@ -40,8 +40,8 @@ test('merges id_token and refresh progress into the shared launch protocol', () 
 
   assert.deepEqual(idToken?.details, {
     accountId: 'account-1',
-    idTokenExpiresAt: 1_800_003_600,
-    idTokenRefreshDue: true,
+    expiresAt: 1_800_003_600,
+    refreshDue: true,
   });
   assert.deepEqual(refresh?.details, {
     accountId: 'account-1',

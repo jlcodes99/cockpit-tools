@@ -7,6 +7,7 @@ const account = (id: string): CodexAccount =>
   ({
     id,
     email: `${id}@example.com`,
+    plan_type: "plus",
     tokens: {
       id_token: "",
       access_token: "",
