@@ -1223,7 +1223,7 @@ export function CodexLaunchPreviewModal({
             </div>
 
             {notice && (
-              <div className="add-status success">
+              <div className="codex-launch-preview-notice">
                 <Save size={14} />
                 <span>{notice}</span>
               </div>
