@@ -782,6 +782,11 @@
       "commonTitle": "Chung",
       "antigravitySettingsTitle": "Cài đặt Antigravity IDE",
       "codexSettingsTitle": "Cài đặt Codex",
+      "codexContextManagement": "Bật experimental_mode = true (quản lý ngữ cảnh thử nghiệm)",
+      "codexContextManagementDesc": "Tắt theo mặc định. Chỉ ghi công tắc quản lý ngữ cảnh thử nghiệm chính thức của Codex cho hồ sơ hiện tại; hãy khởi động lại hoàn toàn Codex để áp dụng. Không thay đổi cửa sổ ngữ cảnh, ngưỡng nén hoặc API Service.",
+      "codexContextManagementLoadFailed": "Không thể đọc công tắc quản lý ngữ cảnh chính thức: {{error}}",
+      "codexContextManagementSaveSuccess": "Đã lưu công tắc quản lý ngữ cảnh chính thức",
+      "codexContextManagementSaveFailed": "Không thể lưu công tắc quản lý ngữ cảnh chính thức: {{error}}",
       "codexOAuthAppVersion": "Phiên bản máy khách OAuth",
       "codexOAuthAppVersionDesc": "Để trống để dùng giá trị mặc định từ xa {{version}}; giá trị nhập vào chỉ ghi đè trường phiên bản trong URL ủy quyền OAuth.",
       "codexOAuthAppVersionPlaceholder": "Để trống để dùng {{version}}",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "Thống kê dùng",
-        "lastRecorded": "Ghi nhận gần nhất"
+        "lastRecorded": "Ghi nhận gần nhất",
+        "trendEmpty": "Không có yêu cầu trong khoảng đã chọn"
       },
       "accountModelMappings": {
         "action": "Bản đồ mô hình",

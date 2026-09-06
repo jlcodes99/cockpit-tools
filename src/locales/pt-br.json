@@ -782,6 +782,11 @@
       "commonTitle": "Geral",
       "antigravitySettingsTitle": "Configurações do Antigravity IDE",
       "codexSettingsTitle": "Configurações do Codex",
+      "codexContextManagement": "Ativar experimental_mode = true (gerenciamento experimental de contexto)",
+      "codexContextManagementDesc": "Desativado por padrão. Escreve apenas a opção experimental oficial de gerenciamento de contexto do Codex para o perfil atual; reinicie o Codex completamente para aplicar. Não altera a janela de contexto, o limite de compactação nem o API Service.",
+      "codexContextManagementLoadFailed": "Falha ao ler a opção oficial de gerenciamento de contexto: {{error}}",
+      "codexContextManagementSaveSuccess": "Opção oficial de gerenciamento de contexto salva",
+      "codexContextManagementSaveFailed": "Falha ao salvar a opção oficial de gerenciamento de contexto: {{error}}",
       "codexOAuthAppVersion": "Versão do cliente OAuth",
       "codexOAuthAppVersionDesc": "Deixe vazio para seguir o padrão remoto {{version}}; um valor preenchido substitui apenas o campo de versão nas URLs de autorização OAuth.",
       "codexOAuthAppVersionPlaceholder": "Deixe vazio para usar {{version}}",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "Estatísticas de uso",
-        "lastRecorded": "Último registro"
+        "lastRecorded": "Último registro",
+        "trendEmpty": "Não há solicitações no intervalo selecionado"
       },
       "accountModelMappings": {
         "action": "Mapa de modelos",

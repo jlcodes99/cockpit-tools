@@ -65,7 +65,10 @@ fn clear_refresh_token_reused_state(account: &mut CodexAccount) -> Result<(), St
         .as_deref()
         .is_some_and(is_refresh_token_reused_error);
     let quota_reused = account.quota_error.as_ref().is_some_and(|error| {
-        error.code.as_deref().is_some_and(is_refresh_token_reused_error)
+        error
+            .code
+            .as_deref()
+            .is_some_and(is_refresh_token_reused_error)
             || is_refresh_token_reused_error(&error.message)
     });
     if !reauth_reused && !quota_reused {
@@ -139,7 +142,10 @@ fn switch_auth_reason_code(reason: &str) -> &'static str {
 pub(crate) fn format_account_switch_error(account_id: &str, error: String) -> String {
     // 统一错误可能经过账号切换、默认实例和 API 服务多层转发；已经带有结构化
     // 授权标记时直接透传，避免重复嵌套并破坏前端解析。
-    if error.trim_start().starts_with(CODEX_SWITCH_AUTH_REQUIRED_PREFIX) {
+    if error
+        .trim_start()
+        .starts_with(CODEX_SWITCH_AUTH_REQUIRED_PREFIX)
+    {
         return error;
     }
     let Some(account) = load_account(account_id) else {
@@ -209,7 +215,11 @@ pub(crate) async fn update_client_auth_observation(
 ) -> Result<(), String> {
     let token_lock = codex_token_lock_for(account_id);
     let _token_guard = token_lock.lock().await;
-    let _file_guard = acquire_codex_token_refresh_file_lock(account_id, "client-auth-observation").await?;
+    let Some(_file_guard) =
+        try_acquire_codex_token_refresh_file_lock(account_id, "client-auth-observation").await?
+    else {
+        return Ok(());
+    };
     let _guard = CODEX_ACCOUNT_MUTATION_LOCK
         .lock()
         .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
@@ -234,8 +244,11 @@ pub(crate) async fn record_client_launch(
 ) -> Result<(), String> {
     let token_lock = codex_token_lock_for(account_id);
     let _token_guard = token_lock.lock().await;
-    let _file_guard =
-        acquire_codex_token_refresh_file_lock(account_id, "client-launch-observation").await?;
+    let Some(_file_guard) =
+        try_acquire_codex_token_refresh_file_lock(account_id, "client-launch-observation").await?
+    else {
+        return Ok(());
+    };
     let _guard = CODEX_ACCOUNT_MUTATION_LOCK
         .lock()
         .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
@@ -252,13 +265,15 @@ pub(crate) async fn record_client_launch(
 /// 这里只清理 CDP 观察字段，不清理 Token Authority 明确写入的
 /// `requires_reauth`/`reauth_reason`，也不修改任何 Token，避免把真实的远端凭据
 /// 失效伪装成正常。客户端观测状态只用于账号卡片展示，用户可随时手动清理。
-pub(crate) async fn clear_client_auth_observation(
-    account_id: &str,
-) -> Result<bool, String> {
+pub(crate) async fn clear_client_auth_observation(account_id: &str) -> Result<bool, String> {
     let token_lock = codex_token_lock_for(account_id);
     let _token_guard = token_lock.lock().await;
-    let _file_guard =
-        acquire_codex_token_refresh_file_lock(account_id, "clear-client-auth-observation").await?;
+    let Some(_file_guard) =
+        try_acquire_codex_token_refresh_file_lock(account_id, "clear-client-auth-observation")
+            .await?
+    else {
+        return Ok(false);
+    };
     let _guard = CODEX_ACCOUNT_MUTATION_LOCK
         .lock()
         .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
@@ -326,10 +341,12 @@ pub(crate) fn account_has_remote_api_auth_rejection(account: &CodexAccount) -> b
         || lower.contains("your authentication token has been invalidated")
     {
         return !refresh_failure
-            && !matches!(code.as_str(), "refresh_token_reused" | "refresh_token_expired");
+            && !matches!(
+                code.as_str(),
+                "refresh_token_reused" | "refresh_token_expired"
+            );
     }
-    !refresh_failure
-        && matches!(code.as_str(), "token_invalidated" | "invalid_token")
+    !refresh_failure && matches!(code.as_str(), "token_invalidated" | "invalid_token")
 }
 
 /// 额度查询只依赖 access_token。官方客户端占用 refresh_token 时，属于内部协调状态，

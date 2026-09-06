@@ -990,6 +990,11 @@
       "commonTitle": "通用",
       "antigravitySettingsTitle": "Antigravity IDE 设置",
       "codexSettingsTitle": "Codex 设置",
+      "codexContextManagement": "开启experimental_mode = true（实验性上下文管理）",
+      "codexContextManagementDesc": "默认关闭。仅写入当前官方 Codex 配置的实验性上下文管理开关，完全重启 Codex 后生效；不修改上下文窗口、压缩阈值或 API 服务。",
+      "codexContextManagementLoadFailed": "读取官方上下文管理开关失败：{{error}}",
+      "codexContextManagementSaveSuccess": "官方上下文管理开关已保存",
+      "codexContextManagementSaveFailed": "保存官方上下文管理开关失败：{{error}}",
       "codexOAuthAppVersion": "OAuth 客户端版本",
       "codexOAuthAppVersionDesc": "留空跟随远端默认值 {{version}}；填写后仅覆盖 OAuth 授权链接中的版本字段。",
       "codexOAuthAppVersionPlaceholder": "留空使用 {{version}}",
@@ -4087,7 +4092,8 @@
       },
       "usage": {
         "title": "用量统计",
-        "lastRecorded": "最近记录"
+        "lastRecorded": "最近记录",
+        "trendEmpty": "所选时间范围暂无请求记录"
       },
       "healthTitle": "服务健康",
       "compat": {

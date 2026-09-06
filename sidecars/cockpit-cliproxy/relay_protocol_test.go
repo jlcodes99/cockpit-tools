@@ -1124,6 +1124,65 @@ func TestRelayServerResetAuthStateClearsSelectedAccountCooldown(t *testing.T) {
 	}
 }
 
+func TestRelayServerDoesNotResetQuotaExhaustedAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	manager := coreauth.NewManager(nil, &coreauth.RoundRobinSelector{}, nil)
+	if _, err := manager.Register(context.Background(), &coreauth.Auth{
+		ID:       "auth-quota.json",
+		Provider: "codex",
+		Metadata: map[string]any{"type": "codex"},
+		ModelStates: map[string]*coreauth.ModelState{
+			"gpt-5.5": {
+				Status:         coreauth.StatusError,
+				Unavailable:    true,
+				NextRetryAfter: time.Now().Add(30 * time.Minute),
+			},
+		},
+	}); err != nil {
+		t.Fatalf("register auth: %v", err)
+	}
+	zero := 0
+	spec := &apiKeySpec{ID: "key_quota", Key: "client-key", Enabled: true, AccountIDs: []string{"account-quota"}}
+	account := &accountSpec{
+		ID:             "account-quota",
+		AuthID:         "auth-quota.json",
+		AuthKind:       "oauth",
+		RemainingQuota: &zero,
+	}
+	m := &manifest{
+		APIKeys:         []apiKeySpec{*spec},
+		Accounts:        []accountSpec{*account},
+		apiKeyByValue:   map[string]*apiKeySpec{"client-key": spec},
+		accountByID:     map[string]*accountSpec{"account-quota": account},
+		accountByAuthID: map[string]*accountSpec{"auth-quota.json": account},
+	}
+	router := (&relayServer{
+		runtime:     &fakeRuntime{},
+		cfg:         &config.Config{},
+		manifest:    m,
+		authManager: manager,
+		policy:      &requestPolicy{manifest: m},
+	}).router()
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/cockpit/auth/reset", strings.NewReader(`{"accountIds":["account-quota"]}`))
+	req.Header.Set("Authorization", "Bearer client-key")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("quota-exhausted account reset status = %d body=%s", w.Code, w.Body.String())
+	}
+	updated, ok := manager.GetByID("auth-quota.json")
+	if !ok || updated == nil || len(updated.ModelStates) != 1 {
+		t.Fatalf("quota-exhausted account was reset unexpectedly: %#v", updated)
+	}
+	modelState := updated.ModelStates["gpt-5.5"]
+	if modelState == nil || !modelState.Unavailable {
+		t.Fatalf("quota-exhausted account model state was reset unexpectedly: %#v", updated)
+	}
+}
+
 func TestRelayServerResetSchedulerStateAcceptsAPIKeyAccountWithoutAuthID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	manager := coreauth.NewManager(nil, &coreauth.RoundRobinSelector{}, nil)

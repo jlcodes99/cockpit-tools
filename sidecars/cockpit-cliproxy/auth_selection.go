@@ -433,6 +433,11 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 	available := make([]*coreauth.Auth, 0, len(auths))
 	quotaReserveReasons := make([]string, 0)
 	for _, auth := range auths {
+		if accountQuotaExhausted(s.manifest, s.accountForAuth(auth), now) && !isCodexReserveModel(model) {
+			selectionStats.unavailableAuths++
+			selectionStats.members = append(selectionStats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "quota_cooldown", "account quota is exhausted; wait for quota reset"))
+			continue
+		}
 		if !authAvailable(auth, model, now) {
 			selectionStats.unavailableAuths++
 			reasonCode, reasonMessage := unavailableAuthDiagnostic(auth, model, now)
@@ -530,6 +535,11 @@ func (s *cockpitSelector) ReportAuthSelectionFailure(ctx context.Context, provid
 	}
 	now := time.Now()
 	for _, auth := range auths {
+		if accountQuotaExhausted(s.manifest, s.accountForAuth(auth), now) && !isCodexReserveModel(model) {
+			stats.unavailableAuths++
+			stats.members = append(stats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "quota_cooldown", "account quota is exhausted; wait for quota reset"))
+			continue
+		}
 		if !authAvailable(auth, model, now) {
 			stats.unavailableAuths++
 			code, message := unavailableAuthDiagnostic(auth, model, now)
@@ -1617,6 +1627,7 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 		selector = &backupAccountSelector{manifest: m, fallback: selector}
 		selector = &quotaReserveSelector{manifest: m, fallback: selector, quota: quota}
 		selector = &modelExclusionSelector{manifest: m, fallback: selector}
+		selector = &quotaCooldownSelector{manifest: m, fallback: selector}
 	}
 	return selector
 }

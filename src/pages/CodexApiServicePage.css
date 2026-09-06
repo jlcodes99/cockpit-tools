@@ -2785,3 +2785,161 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
     height: auto;
   }
 }
+
+/* Studio-inspired visual layer for the Codex service dashboard. The data and
+   service controls stay unchanged; this only establishes the shared card
+   hierarchy used by the usage and management surfaces. */
+.codex-api-service-page {
+  --codex-api-studio-radius: 18px;
+  --codex-api-studio-radius-sm: 14px;
+  --codex-api-studio-card: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  --codex-api-studio-card-soft: color-mix(in srgb, var(--primary) 4%, var(--bg-card));
+  gap: 16px;
+}
+
+.codex-api-service-content {
+  gap: 16px;
+}
+
+.codex-api-service-hero {
+  min-height: 76px;
+  padding: 16px 18px;
+  border-radius: var(--codex-api-studio-radius);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, transparent), transparent 48%),
+    var(--codex-api-studio-card);
+  box-shadow: 0 14px 30px -26px rgba(15, 23, 42, 0.5);
+}
+
+.codex-api-service-title-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-card));
+}
+
+.codex-api-service-title-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.codex-api-service-title-row h1 {
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.codex-api-service-usage-toolbar {
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 1px solid var(--codex-api-border);
+  border-radius: var(--codex-api-studio-radius-sm);
+  background: var(--codex-api-studio-card-soft);
+  box-shadow: 0 10px 24px -24px rgba(15, 23, 42, 0.46);
+}
+
+.codex-api-service-summary-grid {
+  gap: 12px;
+  overflow: visible;
+}
+
+.codex-api-service-summary-card {
+  min-height: 94px;
+  padding: 14px 16px;
+  border-radius: var(--codex-api-studio-radius-sm);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--primary) 6%, transparent), transparent 52%),
+    var(--codex-api-studio-card);
+  box-shadow: 0 10px 24px -24px rgba(15, 23, 42, 0.48);
+}
+
+.codex-api-service-summary-card::before {
+  width: 3px;
+  background: color-mix(in srgb, var(--primary) 42%, transparent);
+}
+
+.codex-api-service-summary-card span {
+  font-size: 11px;
+}
+
+.codex-api-service-summary-card strong {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.codex-api-service-summary-card small {
+  font-size: 11px;
+}
+
+.codex-api-service-summary-card:nth-child(2)::before {
+  background: color-mix(in srgb, #18a874 42%, transparent);
+}
+
+.codex-api-service-summary-card:nth-child(2) strong {
+  color: #0f8b6d;
+}
+
+.codex-api-service-summary-card:nth-child(3)::before {
+  background: color-mix(in srgb, #dc7b22 42%, transparent);
+}
+
+.codex-api-service-summary-card:nth-child(3) strong {
+  color: #b85d0c;
+}
+
+.codex-api-service-summary-card:nth-child(4)::before {
+  background: color-mix(in srgb, #0e9bc4 42%, transparent);
+}
+
+.codex-api-service-summary-card:nth-child(4) strong {
+  color: #087ca0;
+}
+
+.codex-api-service-summary-card:nth-child(5)::before {
+  background: color-mix(in srgb, #8c63d9 42%, transparent);
+}
+
+.codex-api-service-summary-card:nth-child(5) strong {
+  color: #7045bf;
+}
+
+.codex-api-service-panel {
+  padding: 16px;
+  border-radius: var(--codex-api-studio-radius-sm);
+  background: var(--codex-api-studio-card);
+  box-shadow: 0 10px 24px -24px rgba(15, 23, 42, 0.44);
+}
+
+.codex-api-service-panel-head {
+  margin-bottom: 12px;
+}
+
+.codex-api-service-panel-head h2 {
+  font-size: 14px;
+}
+
+@media (max-width: 1180px) {
+  .codex-api-service-summary-grid {
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .codex-api-service-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .codex-api-service-hero-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .codex-api-service-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .codex-api-service-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

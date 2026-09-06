@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	codexUserAgent             = "codex-tui/0.146.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.146.0)"
+	codexUserAgent             = "codex-tui/0.153.4 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.153.4)"
 	codexOriginator            = "codex-tui"
 	codexDefaultImageToolModel = "gpt-image-2"
 	codexResponsesLiteHeader   = "X-OpenAI-Internal-Codex-Responses-Lite"
@@ -358,8 +358,16 @@ func applyCodexHeadersFromSources(r *http.Request, auth *cliproxyauth.Auth, toke
 		r.Header.Set(codexResponsesLiteHeaderName, ginHeaders.Get(codexResponsesLiteHeaderName))
 	}
 
-	cfgUserAgent, _ := codexHeaderDefaults(cfg, auth)
-	ensureHeaderWithConfigPrecedence(r.Header, ginHeaders, "User-Agent", cfgUserAgent, codexUserAgent)
+	isAPIKey := codexAuthUsesAPIKey(auth)
+	if isAPIKey {
+		// API-key passthrough must retain the downstream client's identity. The
+		// OAuth cloaking fallback can make a newer client look like 0.146.0 and
+		// trigger strict_passthrough_client_version_unsupported upstream.
+		ensureHeaderWithPriority(r.Header, ginHeaders, "User-Agent", "", "")
+	} else {
+		cfgUserAgent, _ := codexHeaderDefaults(cfg, auth)
+		ensureHeaderWithConfigPrecedence(r.Header, ginHeaders, "User-Agent", cfgUserAgent, codexUserAgent)
+	}
 
 	if stream {
 		r.Header.Set("Accept", "text/event-stream")
@@ -368,7 +376,7 @@ func applyCodexHeadersFromSources(r *http.Request, auth *cliproxyauth.Auth, toke
 	}
 	r.Header.Set("Connection", "Keep-Alive")
 
-	isAPIKey := codexAuthUsesAPIKey(auth)
+	// isAPIKey is also used for Originator and account binding below.
 	if originator := strings.TrimSpace(ginHeaders.Get("Originator")); originator != "" {
 		r.Header.Set("Originator", originator)
 	} else if !isAPIKey {
@@ -386,11 +394,11 @@ func applyCodexHeadersFromSources(r *http.Request, auth *cliproxyauth.Auth, toke
 		attrs = auth.Attributes
 	}
 	util.ApplyCustomHeadersFromAttrs(r, attrs, ginHeaders)
-	applyCodexCloakingHeaders(r.Header, cfg)
+	applyCodexCloakingHeaders(r.Header, cfg, isAPIKey)
 }
 
-func applyCodexCloakingHeaders(headers http.Header, cfg *config.Config) {
-	if headers == nil || cfg == nil || cfg.Codex.DisableCodexCloaking {
+func applyCodexCloakingHeaders(headers http.Header, cfg *config.Config, isAPIKey bool) {
+	if headers == nil || cfg == nil || cfg.Codex.DisableCodexCloaking || isAPIKey {
 		return
 	}
 	headers.Set("User-Agent", codexUserAgent)

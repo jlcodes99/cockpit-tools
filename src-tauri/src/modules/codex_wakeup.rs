@@ -504,7 +504,7 @@ fn default_reasoning_efforts_for_model(model: &str) -> Vec<String> {
 
 fn default_model_presets() -> Vec<CodexWakeupModelPreset> {
     let items = [
-        ("preset-gpt-6-astra", "GPT-6 Astra", "gpt-6-astra"),
+        ("preset-gpt-6-astra", "6 Astra", "gpt-6-astra"),
         ("preset-gpt-5-6-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
         ("preset-gpt-5-6-terra", "GPT-5.6 Terra", "gpt-5.6-terra"),
         ("preset-gpt-5-6-luna", "GPT-5.6 Luna", "gpt-5.6-luna"),
@@ -3040,7 +3040,7 @@ mod tests {
             tasks: Vec::new(),
             model_presets: vec![
                 model_preset("preset-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
-                model_preset("preset-astra", "GPT-6 Astra", "gpt-6-astra"),
+                model_preset("preset-astra", "6 Astra", "gpt-6-astra"),
             ],
             model_preset_migrations: vec![GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string()],
         };

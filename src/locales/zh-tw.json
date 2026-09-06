@@ -778,6 +778,11 @@
       "commonTitle": "通用",
       "antigravitySettingsTitle": "Antigravity IDE 設定",
       "codexSettingsTitle": "Codex 設定",
+      "codexContextManagement": "啟用experimental_mode = true（實驗性內容管理）",
+      "codexContextManagementDesc": "預設關閉。只寫入目前官方 Codex 設定的實驗性內容管理開關，完全重新啟動 Codex 後生效；不會修改內容視窗、壓縮閾值或 API Service。",
+      "codexContextManagementLoadFailed": "讀取官方內容管理開關失敗：{{error}}",
+      "codexContextManagementSaveSuccess": "官方內容管理開關已儲存",
+      "codexContextManagementSaveFailed": "儲存官方內容管理開關失敗：{{error}}",
       "codexOAuthAppVersion": "OAuth 用戶端版本",
       "codexOAuthAppVersionDesc": "留空以跟隨遠端預設值 {{version}}；填寫後只會覆寫 OAuth 授權網址中的版本欄位。",
       "codexOAuthAppVersionPlaceholder": "留空使用 {{version}}",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "用量統計",
-        "lastRecorded": "最近記錄"
+        "lastRecorded": "最近記錄",
+        "trendEmpty": "所選時間範圍沒有請求記錄"
       },
       "accountModelMappings": {
         "action": "模型對應",

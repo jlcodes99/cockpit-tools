@@ -825,6 +825,11 @@
       "commonTitle": "عام",
       "antigravitySettingsTitle": "إعدادات Antigravity IDE",
       "codexSettingsTitle": "إعدادات Codex",
+      "codexContextManagement": "تفعيل experimental_mode = true (إدارة السياق التجريبية)",
+      "codexContextManagementDesc": "مغلقة افتراضيًا. تكتب فقط مفتاح إدارة السياق التجريبي الرسمي في Codex للملف الحالي؛ أعد تشغيل Codex بالكامل لتطبيقه. لا تغيّر نافذة السياق أو حد الضغط أو API Service.",
+      "codexContextManagementLoadFailed": "تعذّرت قراءة مفتاح إدارة السياق الرسمي: {{error}}",
+      "codexContextManagementSaveSuccess": "تم حفظ مفتاح إدارة السياق الرسمي",
+      "codexContextManagementSaveFailed": "تعذّر حفظ مفتاح إدارة السياق الرسمي: {{error}}",
       "codexOAuthAppVersion": "إصدار عميل OAuth",
       "codexOAuthAppVersionDesc": "اتركه فارغًا لاستخدام الإعداد الافتراضي البعيد {{version}}؛ القيمة المدخلة تستبدل حقل الإصدار في روابط OAuth فقط.",
       "codexOAuthAppVersionPlaceholder": "اتركه فارغًا لاستخدام {{version}}",
@@ -4142,7 +4147,8 @@
       },
       "usage": {
         "title": "إحصاءات الاستخدام",
-        "lastRecorded": "آخر تسجيل"
+        "lastRecorded": "آخر تسجيل",
+        "trendEmpty": "لا توجد طلبات في النطاق المحدد"
       },
       "accountModelMappings": {
         "action": "خريطة النماذج",

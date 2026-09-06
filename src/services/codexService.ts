@@ -53,6 +53,13 @@ export async function getCodexQuickConfig(): Promise<CodexQuickConfig> {
   return await invoke('get_codex_quick_config');
 }
 
+/** 保存官方 Codex 实验性上下文管理开关。 */
+export async function saveCodexContextManagement(
+  experimentalMode: boolean,
+): Promise<CodexQuickConfig> {
+  return await invoke('save_codex_context_management', { experimentalMode });
+}
+
 /** 保存 Codex config.toml 快捷配置 */
 export async function saveCodexQuickConfig(
   modelContextWindow?: number,

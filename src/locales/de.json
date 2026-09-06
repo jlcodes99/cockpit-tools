@@ -782,6 +782,11 @@
       "commonTitle": "Allgemein",
       "antigravitySettingsTitle": "Antigravity IDE-Einstellungen",
       "codexSettingsTitle": "Codex-Einstellungen",
+      "codexContextManagement": "experimental_mode = true aktivieren (experimentelle Kontextverwaltung)",
+      "codexContextManagementDesc": "Standardmäßig deaktiviert. Schreibt nur den offiziellen experimentellen Codex-Schalter für die Kontextverwaltung des aktuellen Profils; zum Anwenden Codex vollständig neu starten. Kontextfenster, Komprimierungsschwelle und API Service bleiben unverändert.",
+      "codexContextManagementLoadFailed": "Offiziellen Schalter für die Kontextverwaltung konnten nicht gelesen werden: {{error}}",
+      "codexContextManagementSaveSuccess": "Offizieller Schalter für die Kontextverwaltung gespeichert",
+      "codexContextManagementSaveFailed": "Offiziellen Schalter für die Kontextverwaltung konnten nicht gespeichert werden: {{error}}",
       "codexOAuthAppVersion": "OAuth-Clientversion",
       "codexOAuthAppVersionDesc": "Leer lassen, um den entfernten Standardwert {{version}} zu verwenden; ein Wert überschreibt nur das Versionsfeld in OAuth-Autorisierungs-URLs.",
       "codexOAuthAppVersionPlaceholder": "Leer lassen für {{version}}",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "Nutzungsstatistik",
-        "lastRecorded": "Zuletzt erfasst"
+        "lastRecorded": "Zuletzt erfasst",
+        "trendEmpty": "Im ausgewählten Zeitraum gibt es keine Anfragen"
       },
       "accountModelMappings": {
         "action": "Modellzuordnung",

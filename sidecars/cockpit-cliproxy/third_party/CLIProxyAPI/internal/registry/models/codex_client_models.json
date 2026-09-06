@@ -975,7 +975,7 @@
       "auto_compact_token_limit": null,
       "comp_hash": "3000",
       "default_reasoning_summary": "none",
-      "display_name": "GPT-6 Astra",
+      "display_name": "6 Astra",
       "description": "Our most capable model, built for the hardest end-to-end work.",
       "default_reasoning_level": "medium",
       "supported_reasoning_levels": [

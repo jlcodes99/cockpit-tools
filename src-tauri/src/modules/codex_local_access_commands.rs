@@ -247,6 +247,7 @@ pub async fn save_local_access_accounts(
     {
         let mut runtime = gateway_runtime().lock().await;
         sync_runtime_collection(&mut runtime, collection);
+        sync_runtime_quota_cooldowns(&mut runtime, &accounts, now_ms());
     }
 
     if should_reload_gateway {
@@ -298,6 +299,7 @@ pub async fn append_local_access_accounts(
         {
             let mut runtime = gateway_runtime().lock().await;
             sync_runtime_collection(&mut runtime, collection);
+            sync_runtime_quota_cooldowns(&mut runtime, &accounts, now_ms());
         }
         if should_reload_gateway {
             trigger_gateway_reload_in_background("导入账号同步加入 API 服务");

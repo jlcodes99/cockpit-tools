@@ -450,9 +450,22 @@ fn clear_runtime_account_health(runtime: &mut GatewayRuntime, account_ids: &[Str
             .iter()
             .any(|account_id| key.starts_with(&format!("{}{}", account_id, COOLDOWN_KEY_SEPARATOR)))
     });
-    // A successful scheduler reset invalidates previous pool-level selection failures.
-    // A subsequent request will recreate the pool issue if no candidate is still usable.
-    runtime.account_pool_health.clear();
+    // Keep pool diagnostics for accounts that were not part of this manual
+    // recovery. Clearing the whole map makes a single-account recovery look
+    // like "recover all" in the health modal.
+    runtime.account_pool_health.retain(|_, health| {
+        if health.account_statuses.is_empty() {
+            // Older Sidecars did not report per-account statuses. There is no
+            // safe way to subtract one member from that aggregate diagnostic;
+            // retain it until the next Sidecar diagnostic refresh instead of
+            // hiding every remaining account.
+            return true;
+        }
+        health
+            .account_statuses
+            .retain(|member| !account_ids.contains(member.account_id.as_str()));
+        !health.account_statuses.is_empty()
+    });
 }
 
 pub async fn recover_local_access_accounts(
@@ -486,8 +499,15 @@ pub async fn recover_local_access_accounts(
         .filter(|account_id| requested.contains(account_id.as_str()))
         .cloned()
         .collect();
+    let selected: Vec<String> = {
+        let runtime = gateway_runtime().lock().await;
+        selected
+            .into_iter()
+            .filter(|account_id| !account_recovery_blocked_by_quota(&runtime, account_id, now_ms()))
+            .collect()
+    };
     if selected.is_empty() {
-        return Err("没有找到可恢复的账号".to_string());
+        return Err("没有找到可恢复的账号：额度已耗尽的账号只能等待额度恢复".to_string());
     }
 
     let client = build_localhost_http_client(Duration::from_secs(10), "账号调度恢复")?;

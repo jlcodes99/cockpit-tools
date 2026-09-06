@@ -778,6 +778,11 @@
       "commonTitle": "Obecné",
       "antigravitySettingsTitle": "Nastavení Antigravity IDE",
       "codexSettingsTitle": "Nastavení Codex",
+      "codexContextManagement": "Zapnout experimental_mode = true (experimentální správa kontextu)",
+      "codexContextManagementDesc": "Ve výchozím nastavení vypnuto. Zapíše pouze oficiální experimentální přepínač správy kontextu Codex pro aktuální profil; změny se projeví po úplném restartu Codexu. Nemění okno kontextu, práh komprese ani API Service.",
+      "codexContextManagementLoadFailed": "Oficiální přepínač správy kontextu se nepodařilo načíst: {{error}}",
+      "codexContextManagementSaveSuccess": "Oficiální přepínač správy kontextu byl uložen",
+      "codexContextManagementSaveFailed": "Oficiální přepínač správy kontextu se nepodařilo uložit: {{error}}",
       "codexOAuthAppVersion": "Verze OAuth klienta",
       "codexOAuthAppVersionDesc": "Ponechte prázdné pro použití vzdálené výchozí hodnoty {{version}}; zadaná hodnota pouze přepíše verzi v autorizačních URL OAuth.",
       "codexOAuthAppVersionPlaceholder": "Ponechte prázdné pro použití {{version}}",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "Statistiky použití",
-        "lastRecorded": "Poslední záznam"
+        "lastRecorded": "Poslední záznam",
+        "trendEmpty": "Ve zvoleném období nejsou žádné požadavky"
       },
       "accountModelMappings": {
         "action": "Mapa modelů",

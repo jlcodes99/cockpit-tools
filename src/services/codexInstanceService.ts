@@ -159,6 +159,16 @@ export async function getCodexInstanceQuickConfig(
   });
 }
 
+export async function saveCodexInstanceContextManagement(
+  instanceId: string,
+  experimentalMode: boolean,
+): Promise<CodexQuickConfig> {
+  return await invoke("codex_save_instance_context_management", {
+    instanceId,
+    experimentalMode,
+  });
+}
+
 export async function saveCodexInstanceQuickConfig(
   instanceId: string,
   modelContextWindow?: number,

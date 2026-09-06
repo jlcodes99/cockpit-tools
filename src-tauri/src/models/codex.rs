@@ -75,6 +75,9 @@ pub struct CodexQuickConfig {
     /// 当前可见模型目录中写入 Codex config.toml 的默认模型；None 表示不强制指定。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub experimental_model_catalog_default_model_id: Option<String>,
+    /// 官方 Codex 实验性上下文管理开关；缺失时严格按官方默认关闭处理。
+    #[serde(default)]
+    pub context_management_experimental_mode: bool,
 }
 
 /// Codex 官方 App 推理速度

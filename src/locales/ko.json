@@ -782,6 +782,11 @@
       "commonTitle": "공통",
       "antigravitySettingsTitle": "Antigravity IDE 설정",
       "codexSettingsTitle": "Codex 설정",
+      "codexContextManagement": "experimental_mode = true 켜기 (실험적 컨텍스트 관리)",
+      "codexContextManagementDesc": "기본값은 꺼짐입니다. 현재 프로필의 공식 Codex 실험적 컨텍스트 관리 스위치만 기록하며, 적용하려면 Codex를 완전히 다시 시작해야 합니다. 컨텍스트 창, 압축 임계값 또는 API Service는 변경하지 않습니다.",
+      "codexContextManagementLoadFailed": "공식 컨텍스트 관리 스위치를 읽지 못했습니다: {{error}}",
+      "codexContextManagementSaveSuccess": "공식 컨텍스트 관리 스위치를 저장했습니다",
+      "codexContextManagementSaveFailed": "공식 컨텍스트 관리 스위치를 저장하지 못했습니다: {{error}}",
       "codexOAuthAppVersion": "OAuth 클라이언트 버전",
       "codexOAuthAppVersionDesc": "비워 두면 원격 기본값 {{version}}을 사용하며, 입력한 값은 OAuth 인증 URL의 버전 필드만 덮어씁니다.",
       "codexOAuthAppVersionPlaceholder": "비워 두면 {{version}} 사용",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "사용 통계",
-        "lastRecorded": "최근 기록"
+        "lastRecorded": "최근 기록",
+        "trendEmpty": "선택한 기간에 요청이 없습니다"
       },
       "accountModelMappings": {
         "action": "모델 맵",

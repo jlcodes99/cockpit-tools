@@ -30,6 +30,8 @@ export interface CodexQuickConfig {
   experimental_model_catalog_conflict?: string;
   experimental_model_catalog_models: CodexExperimentalModelDefinition[];
   experimental_model_catalog_default_model_id?: string | null;
+  /** Official Codex experimental context management; absent/false follows the official default. */
+  context_management_experimental_mode: boolean;
 }
 
 export type CodexAppSpeed = "standard" | "fast";

@@ -754,6 +754,20 @@ pub async fn get_codex_quick_config() -> Result<CodexQuickConfig, String> {
 }
 
 #[tauri::command]
+pub async fn save_codex_context_management(
+    experimental_mode: bool,
+) -> Result<CodexQuickConfig, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_account::save_context_management_for_base_dir(
+            &codex_account::get_codex_home(),
+            experimental_mode,
+        )
+    })
+    .await
+    .map_err(|error| format!("保存 Codex 上下文管理开关后台任务失败: {}", error))?
+}
+
+#[tauri::command]
 pub async fn save_codex_quick_config(
     model_context_window: Option<i64>,
     auto_compact_token_limit: Option<i64>,

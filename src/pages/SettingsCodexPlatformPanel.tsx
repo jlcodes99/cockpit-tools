@@ -1,4 +1,5 @@
 import { AutoSwitchAccountScopeSelector } from '../components/AutoSwitchAccountScopeSelector';
+import { CodexContextManagementControl } from '../components/codex/CodexContextManagementControl';
 import { CodexSshSyncSettingsControl } from '../components/codex/CodexSshSyncSettingsControl';
 import './settings/Settings.css';
 import { RefreshCw } from 'lucide-react';
@@ -258,6 +259,8 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
               </div>
 
               <CodexSshSyncSettingsControl variant="settings" />
+
+              <CodexContextManagementControl variant="settings" />
 
               <div className="settings-row">
                 <div className="row-label">

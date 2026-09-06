@@ -990,6 +990,11 @@
       "commonTitle": "Common",
       "antigravitySettingsTitle": "Antigravity IDE Settings",
       "codexSettingsTitle": "Codex Settings",
+      "codexContextManagement": "Enable experimental_mode = true (experimental context management)",
+      "codexContextManagementDesc": "Off by default. Writes only the official Codex experimental context-management switch for the current profile; fully restart Codex to apply it. It does not change the context window, compaction threshold, or API Service.",
+      "codexContextManagementLoadFailed": "Failed to read the official context-management switch: {{error}}",
+      "codexContextManagementSaveSuccess": "Official context-management switch saved",
+      "codexContextManagementSaveFailed": "Failed to save the official context-management switch: {{error}}",
       "codexOAuthAppVersion": "OAuth client version",
       "codexOAuthAppVersionDesc": "Leave empty to follow the remote default {{version}}; a value only overrides the version field in OAuth authorization URLs.",
       "codexOAuthAppVersionPlaceholder": "Leave empty to use {{version}}",
@@ -4087,7 +4092,8 @@
       },
       "usage": {
         "title": "Usage Stats",
-        "lastRecorded": "Last recorded"
+        "lastRecorded": "Last recorded",
+        "trendEmpty": "No requests in the selected range"
       },
       "healthTitle": "Service Health",
       "compat": {

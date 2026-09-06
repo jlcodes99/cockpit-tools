@@ -839,6 +839,11 @@
       "commonTitle": "Umum",
       "antigravitySettingsTitle": "Pengaturan Antigravity IDE",
       "codexSettingsTitle": "Pengaturan Codex",
+      "codexContextManagement": "Aktifkan experimental_mode = true (manajemen konteks eksperimental)",
+      "codexContextManagementDesc": "Nonaktif secara default. Hanya menulis sakelar manajemen konteks eksperimental resmi Codex untuk profil saat ini; mulai ulang Codex sepenuhnya untuk menerapkannya. Tidak mengubah jendela konteks, ambang kompresi, atau API Service.",
+      "codexContextManagementLoadFailed": "Gagal membaca sakelar manajemen konteks resmi: {{error}}",
+      "codexContextManagementSaveSuccess": "Sakelar manajemen konteks resmi disimpan",
+      "codexContextManagementSaveFailed": "Gagal menyimpan sakelar manajemen konteks resmi: {{error}}",
       "codexOAuthAppVersion": "Versi klien OAuth",
       "codexOAuthAppVersionDesc": "Kosongkan untuk mengikuti nilai default jarak jauh {{version}}; nilai yang diisi hanya mengganti bidang versi pada URL otorisasi OAuth.",
       "codexOAuthAppVersionPlaceholder": "Kosongkan untuk memakai {{version}}",
@@ -4142,7 +4147,8 @@
       },
       "usage": {
         "title": "Statistik pemakaian",
-        "lastRecorded": "Terakhir dicatat"
+        "lastRecorded": "Terakhir dicatat",
+        "trendEmpty": "Tidak ada permintaan pada rentang yang dipilih"
       },
       "accountModelMappings": {
         "action": "Peta model",

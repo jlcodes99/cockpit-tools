@@ -474,9 +474,10 @@ fn codex_token_refresh_file_lock_is_stale(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-async fn acquire_codex_token_refresh_file_lock(
+async fn acquire_codex_token_refresh_file_lock_with_timeout(
     account_id: &str,
     reason: &str,
+    timeout: Duration,
 ) -> Result<CodexTokenRefreshFileLock, String> {
     let path = codex_token_refresh_file_lock_path(account_id);
     let parent = path
@@ -525,9 +526,7 @@ async fn acquire_codex_token_refresh_file_lock(
                     continue;
                 }
 
-                if started.elapsed()
-                    >= Duration::from_secs(CODEX_TOKEN_REFRESH_FILE_LOCK_TIMEOUT_SECONDS)
-                {
+                if started.elapsed() >= timeout {
                     return Err(format!(
                         "等待 Codex Token 刷新锁超时: account_id={}, lock_path={}, reason={}",
                         account_id,
@@ -543,6 +542,41 @@ async fn acquire_codex_token_refresh_file_lock(
                 return Err(format_io_error("创建 Codex Token 刷新锁", &path, &err));
             }
         }
+    }
+}
+
+async fn acquire_codex_token_refresh_file_lock(
+    account_id: &str,
+    reason: &str,
+) -> Result<CodexTokenRefreshFileLock, String> {
+    acquire_codex_token_refresh_file_lock_with_timeout(
+        account_id,
+        reason,
+        Duration::from_secs(CODEX_TOKEN_REFRESH_FILE_LOCK_TIMEOUT_SECONDS),
+    )
+    .await
+}
+
+async fn try_acquire_codex_token_refresh_file_lock(
+    account_id: &str,
+    reason: &str,
+) -> Result<Option<CodexTokenRefreshFileLock>, String> {
+    match acquire_codex_token_refresh_file_lock_with_timeout(
+        account_id,
+        reason,
+        Duration::from_secs(CODEX_TOKEN_REFRESH_FILE_LOCK_FAST_TIMEOUT_SECONDS),
+    )
+    .await
+    {
+        Ok(lock) => Ok(Some(lock)),
+        Err(error) if error.starts_with("等待 Codex Token 刷新锁超时") => {
+            logger::log_warn(&format!(
+                "Codex Token 刷新锁忙，跳过本次非阻塞同步: account_id={}, reason={}",
+                account_id, reason
+            ));
+            Ok(None)
+        }
+        Err(error) => Err(error),
     }
 }
 

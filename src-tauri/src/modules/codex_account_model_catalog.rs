@@ -266,6 +266,8 @@ struct ExperimentalModelCatalogConfig {
 }
 
 const GPT_6_ASTRA_DEFAULT_REPAIR_MIGRATION_ID: &str = "repair-gpt-6-astra-default-model";
+const GPT_6_ASTRA_DISPLAY_NAME_MIGRATION_ID: &str =
+    "rename-gpt-6-astra-display-name-to-6-astra";
 
 fn read_experimental_model_catalog_config(
     base_dir: &Path,
@@ -277,6 +279,183 @@ fn read_experimental_model_catalog_config(
 fn experimental_model_catalog_has_migration(base_dir: &Path, migration_id: &str) -> bool {
     read_experimental_model_catalog_config(base_dir)
         .is_some_and(|config| config.migrations.iter().any(|item| item == migration_id))
+}
+
+fn is_legacy_gpt_6_astra_display_name(value: &serde_json::Value) -> bool {
+    value
+        .as_str()
+        .is_some_and(|name| name.trim().eq_ignore_ascii_case("GPT-6 Astra"))
+}
+
+fn migrate_gpt_6_astra_display_name(
+    base_dir: &Path,
+    doc: &Document,
+) -> Result<bool, String> {
+    let configured_catalog = doc
+        .get(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY)
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let managed_catalog_active = experimental_model_policy_enabled(base_dir)
+        || configured_catalog.is_some_and(|value| {
+            catalog_ref_targets_cockpit_managed_file(value, base_dir)
+        });
+    if !managed_catalog_active {
+        return Ok(false);
+    }
+
+    let config_path = experimental_model_config_path(base_dir);
+    let mut cached_config = None;
+    let mut cached_config_needs_write = false;
+    let mut migration_already_applied = false;
+    if config_path.is_file() {
+        let content = fs::read_to_string(&config_path).map_err(|error| {
+            format!(
+                "读取 Codex 模型配置缓存失败: path={}, error={}",
+                config_path.display(),
+                error
+            )
+        })?;
+        let mut config = serde_json::from_str::<serde_json::Value>(&content).map_err(|error| {
+            format!(
+                "解析 Codex 模型配置缓存失败: path={}, error={}",
+                config_path.display(),
+                error
+            )
+        })?;
+        migration_already_applied = config
+            .get("migrations")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|migrations| {
+                migrations.iter().any(|migration| {
+                    migration.as_str() == Some(GPT_6_ASTRA_DISPLAY_NAME_MIGRATION_ID)
+                })
+            });
+        if !migration_already_applied {
+            if let Some(models) = config.get_mut("models").and_then(serde_json::Value::as_array_mut)
+            {
+                for model in models {
+                    let is_astra = model
+                        .get("model_id")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID));
+                    if is_astra
+                        && model
+                            .get("display_name")
+                            .is_some_and(is_legacy_gpt_6_astra_display_name)
+                    {
+                        model["display_name"] = serde_json::Value::String("6 Astra".to_string());
+                        cached_config_needs_write = true;
+                    }
+                }
+            }
+            if let Some(object) = config.as_object_mut() {
+                let migrations = object
+                    .entry("migrations")
+                    .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+                if let Some(migrations) = migrations.as_array_mut() {
+                    migrations.push(serde_json::Value::String(
+                        GPT_6_ASTRA_DISPLAY_NAME_MIGRATION_ID.to_string(),
+                    ));
+                    cached_config_needs_write = true;
+                }
+            }
+        }
+        cached_config = Some(config);
+    }
+
+    if migration_already_applied {
+        return Ok(false);
+    }
+
+    let catalog_path = experimental_model_catalog_path(base_dir);
+    let mut catalog_changed = false;
+    let mut catalog = None;
+    if catalog_path.is_file() {
+        let content = fs::read_to_string(&catalog_path).map_err(|error| {
+            format!(
+                "读取 Codex 受管模型目录失败: path={}, error={}",
+                catalog_path.display(),
+                error
+            )
+        })?;
+        let mut parsed = serde_json::from_str::<serde_json::Value>(&content).map_err(|error| {
+            format!(
+                "解析 Codex 受管模型目录失败: path={}, error={}",
+                catalog_path.display(),
+                error
+            )
+        })?;
+        if let Some(models) = parsed.get_mut("models").and_then(serde_json::Value::as_array_mut) {
+            for model in models {
+                let is_astra = model
+                    .get("slug")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID));
+                if !is_astra {
+                    continue;
+                }
+                if model
+                    .get("display_name")
+                    .is_some_and(is_legacy_gpt_6_astra_display_name)
+                {
+                    model["display_name"] = serde_json::Value::String("6 Astra".to_string());
+                    catalog_changed = true;
+                }
+                if model
+                    .get("description")
+                    .is_some_and(is_legacy_gpt_6_astra_display_name)
+                {
+                    model["description"] = serde_json::Value::String("6 Astra".to_string());
+                    catalog_changed = true;
+                }
+            }
+        }
+        catalog = Some(parsed);
+    }
+
+    if catalog_changed {
+        let mut content = serde_json::to_string_pretty(
+            catalog
+                .as_ref()
+                .expect("catalog is present when marked changed"),
+        )
+        .map_err(|error| format!("序列化 Codex 受管模型目录失败: {}", error))?;
+        content.push('\n');
+        write_string_atomic(&catalog_path, &content).map_err(|error| {
+            format!(
+                "写入 Codex 受管模型目录迁移失败: path={}, error={}",
+                catalog_path.display(),
+                error
+            )
+        })?;
+        if let Err(error) = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir)
+        {
+            logger::log_warn(&format!(
+                "[Codex实验模型] 清理模型目录缓存失败，继续完成显示名称迁移: {}",
+                error
+            ));
+        }
+    }
+
+    if cached_config_needs_write {
+        let mut content = serde_json::to_string_pretty(
+            cached_config
+                .as_ref()
+                .expect("cached config is present when marked changed"),
+        )
+        .map_err(|error| format!("序列化 Codex 模型配置缓存失败: {}", error))?;
+        content.push('\n');
+        write_string_atomic(&config_path, &content).map_err(|error| {
+            format!(
+                "写入 Codex 模型配置缓存迁移失败: path={}, error={}",
+                config_path.display(),
+                error
+            )
+        })?;
+    }
+
+    Ok(catalog_changed || cached_config_needs_write)
 }
 
 fn prioritize_gpt_6_astra_model_definition(
@@ -462,7 +641,7 @@ fn model_catalog_display_name(model_id: &str, fallback: &str) -> String {
         "gpt-5.6-sol" => "5.6 Sol".to_string(),
         "gpt-5.6-terra" => "5.6 Terra".to_string(),
         "gpt-5.6-luna" => "5.6 Luna".to_string(),
-        GPT_6_ASTRA_MODEL_ID => "GPT-6 Astra".to_string(),
+        GPT_6_ASTRA_MODEL_ID => "6 Astra".to_string(),
         "gpt-5.3-codex" => "5.3 Codex".to_string(),
         "gpt-5.5" => "5.5".to_string(),
         "gpt-5.4" => "5.4".to_string(),
@@ -1110,11 +1289,19 @@ pub fn read_quick_config_from_config_toml(base_dir: &Path) -> Result<CodexQuickC
         crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
             .map_err(|e| format!("解析 config.toml 失败: {}", e))?
     };
+    if let Err(error) = migrate_gpt_6_astra_display_name(base_dir, &doc) {
+        logger::log_warn(&format!(
+            "[Codex实验模型] 迁移 GPT-6 Astra 显示名称失败，继续读取现有配置: {}",
+            error
+        ));
+    }
     let detected_model_context_window =
         read_top_level_int_from_doc(&doc, CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY);
     let detected_auto_compact_token_limit =
         read_top_level_int_from_doc(&doc, CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY)
             .filter(|value| *value > 0);
+    let context_management_experimental_mode =
+        read_context_management_experimental_mode_from_doc(&doc);
     let experimental = inspect_experimental_model_catalog(base_dir, &doc)?;
     let experimental_models = read_experimental_model_definitions(base_dir);
     let experimental_default_model_id =
@@ -1148,6 +1335,7 @@ pub fn read_quick_config_from_config_toml(base_dir: &Path) -> Result<CodexQuickC
         experimental_model_catalog_conflict: experimental.conflict,
         experimental_model_catalog_models: experimental_models,
         experimental_model_catalog_default_model_id: experimental_default_model_id,
+        context_management_experimental_mode,
     })
 }
 

@@ -2907,9 +2907,9 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
 
     #[test]
     fn default_codex_identity_headers_match_official_tui() {
-        assert!(super::DEFAULT_CODEX_USER_AGENT.starts_with("codex-tui/0.146.0"));
+        assert!(super::DEFAULT_CODEX_USER_AGENT.starts_with("codex-tui/0.153.4"));
         assert_eq!(super::DEFAULT_CODEX_ORIGINATOR, "codex-tui");
-        assert!(super::DEFAULT_CODEX_USER_AGENT.contains("(codex-tui; 0.146.0)"));
+        assert!(super::DEFAULT_CODEX_USER_AGENT.contains("(codex-tui; 0.153.4)"));
         assert!(!super::DEFAULT_CODEX_USER_AGENT.contains("codex_cli_rs"));
     }
 

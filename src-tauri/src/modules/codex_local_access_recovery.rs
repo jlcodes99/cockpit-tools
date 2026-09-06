@@ -299,6 +299,13 @@ async fn proxy_request_with_account_pool(
                 continue;
             }
 
+            if account_quota_blocks_dispatch(&account_id, &routing_hint.model_key).await {
+                recoverable_blocked_in_round = true;
+                last_error = "账号额度已耗尽，正在等待额度恢复".to_string();
+                last_error_category = Some("quota_cooldown".to_string());
+                continue;
+            }
+
             if account_id_blocked_by_health(&account_id).await {
                 recoverable_blocked_in_round = true;
                 last_error = "账号连续鉴权或预处理失败，已暂时跳过".to_string();
@@ -1470,6 +1477,11 @@ async fn proxy_websocket_with_account_pool(
                 )
             };
             last_error_category = Some("account_model_disabled".to_string());
+            continue;
+        }
+        if account_quota_blocks_dispatch(&account_id, &routing_hint.model_key).await {
+            last_error = "账号额度已耗尽，正在等待额度恢复".to_string();
+            last_error_category = Some("quota_cooldown".to_string());
             continue;
         }
         if account_id_blocked_by_health(&account_id).await {

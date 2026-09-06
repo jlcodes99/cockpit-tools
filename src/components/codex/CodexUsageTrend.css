@@ -1,0 +1,262 @@
+.codex-usage-trend {
+  min-width: 0;
+  padding: 20px 22px 16px;
+  border: 1px solid var(--codex-api-border, var(--border));
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--primary) 4%, transparent), transparent 36%),
+    var(--codex-api-surface, var(--card));
+  box-shadow: var(--codex-api-shadow, 0 10px 28px -24px rgba(15, 23, 42, 0.42));
+}
+
+.codex-usage-trend__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.codex-usage-trend h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 740;
+  letter-spacing: -0.01em;
+}
+
+.codex-usage-trend__caption {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.codex-usage-trend__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.codex-usage-trend__header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.codex-usage-trend__total {
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.codex-usage-trend__metrics .btn {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.codex-usage-trend__metrics .btn.is-active {
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  background: color-mix(in srgb, var(--primary) 11%, var(--bg-card));
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.codex-usage-trend__chart-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+.codex-usage-trend__chart {
+  display: block;
+  width: 100%;
+  height: 292px;
+  overflow: visible;
+}
+
+.codex-usage-trend__baseline {
+  stroke: var(--codex-api-border, var(--border));
+  stroke-width: 1;
+}
+
+.codex-usage-trend__interaction-layer {
+  fill: transparent;
+  cursor: crosshair;
+  pointer-events: all;
+}
+
+.codex-usage-trend__hover-slice {
+  fill: color-mix(in srgb, var(--primary) 7%, transparent);
+  pointer-events: none;
+}
+
+.codex-usage-trend__hover-line {
+  stroke: color-mix(in srgb, var(--primary) 62%, transparent);
+  stroke-dasharray: 3 4;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.codex-usage-trend__grid {
+  stroke: color-mix(in srgb, var(--border) 48%, transparent);
+  stroke-dasharray: 2 7;
+  stroke-width: 1;
+}
+
+.codex-usage-trend__area {
+  fill: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codex-usage-trend__line {
+  fill: none;
+  stroke: var(--primary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3.5;
+}
+
+.codex-usage-trend__point {
+  fill: var(--codex-api-surface, var(--bg-card));
+  stroke: var(--primary);
+  stroke-width: 2;
+  outline: none;
+}
+
+.codex-usage-trend__point:focus {
+  stroke: var(--ring, var(--primary));
+  stroke-width: 4;
+}
+
+.codex-usage-trend__point.is-hovered {
+  stroke-width: 3;
+  filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--primary) 28%, transparent));
+}
+
+.codex-usage-trend__value-label rect {
+  fill: color-mix(in srgb, var(--primary) 8%, var(--bg-card));
+  stroke: color-mix(in srgb, var(--primary) 36%, var(--border));
+  stroke-width: 1;
+}
+
+.codex-usage-trend__value {
+  fill: var(--primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.codex-usage-trend__axis-label {
+  fill: var(--text-secondary);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.codex-usage-trend__axis-value {
+  fill: var(--text-primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.codex-usage-trend__empty {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.codex-usage-trend__tooltip {
+  position: absolute;
+  top: 12px;
+  z-index: 2;
+  display: grid;
+  width: 184px;
+  gap: 6px;
+  padding: 10px 12px;
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  box-shadow: 0 14px 28px -18px rgba(15, 23, 42, 0.54);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  pointer-events: none;
+}
+
+.codex-usage-trend__tooltip::after {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  background: var(--bg-card);
+  content: "";
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.codex-usage-trend__tooltip > strong {
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.codex-usage-trend__tooltip > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.codex-usage-trend__tooltip b {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .codex-usage-trend {
+    padding: 16px 14px 12px;
+  }
+
+  .codex-usage-trend__header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .codex-usage-trend__metrics {
+    justify-content: flex-start;
+  }
+
+  .codex-usage-trend__header-right {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .codex-usage-trend__chart {
+    height: 246px;
+  }
+
+  .codex-usage-trend__tooltip {
+    top: 8px;
+    width: 168px;
+  }
+}

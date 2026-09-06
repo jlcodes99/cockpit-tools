@@ -11,6 +11,7 @@ import { useEscClose } from '../../hooks/useEscClose';
 import type { CodexExperimentalModelDefinition, CodexQuickConfig } from '../../types/codex';
 import { getCodexExperimentalModelErrorMessage } from '../../utils/codexExperimentalModel';
 import { CodexExperimentalModelEditor } from './CodexExperimentalModelEditor';
+import { CodexContextManagementControl } from './CodexContextManagementControl';
 
 export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
   const { t } = useTranslation();
@@ -184,6 +185,8 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
             <span>{t('codex.modelProviders.quickConfig.configPath', '配置文件')}</span>
             <code>{configPath}</code>
           </div>
+
+          <CodexContextManagementControl variant="settings" />
 
           {loading ? (
             <div className="section-desc">{t('common.loading', '加载中...')}</div>

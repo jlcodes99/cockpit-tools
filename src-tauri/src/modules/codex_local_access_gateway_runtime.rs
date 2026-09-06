@@ -611,7 +611,7 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
         .iter()
         .map(|account_id| {
             let health = runtime.account_health.get(account_id);
-            let cooldowns = runtime
+            let mut cooldowns = runtime
                 .model_cooldowns
                 .iter()
                 .filter_map(|(key, cooldown)| {
@@ -630,6 +630,17 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
                         })
                 })
                 .collect::<Vec<_>>();
+            let quota_cooldown = runtime.account_quota_cooldowns.get(account_id)
+                .filter(|quota| quota.active(now));
+            if let Some(quota) = quota_cooldown {
+                let next_retry_at = quota.reset_at_ms.unwrap_or_default();
+                cooldowns.push(CodexLocalAccessAccountCooldown {
+                    model_id: "*".to_string(),
+                    next_retry_at,
+                    remaining_ms: next_retry_at.saturating_sub(now).max(0),
+                    reason: "quota_exhausted".to_string(),
+                });
+            }
             let image_generation_status = if collection.image_generation_mode
                 == CodexLocalAccessImageGenerationMode::Disabled
             {
@@ -649,6 +660,7 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
                     .unwrap_or_default()
                     .to_string(),
                 available: cooldowns.is_empty()
+                    && quota_cooldown.is_none()
                     && !account_health_blocks_routing(health)
                     && !sidecar_scheduler_blocks_account(health, now),
                 consecutive_failures: health

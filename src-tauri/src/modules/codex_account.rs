@@ -4,6 +4,7 @@
 include!("codex_account_provider.rs");
 include!("codex_account_check.rs");
 include!("codex_account_model_catalog.rs");
+include!("codex_account_context_management.rs");
 include!("codex_account_storage_locks.rs");
 include!("codex_account_token_refresh.rs");
 include!("codex_account_index.rs");

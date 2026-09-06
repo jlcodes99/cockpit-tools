@@ -579,7 +579,7 @@ fn display_name_for_model(model_id: &str) -> String {
         "gpt-5.4-mini" => "GPT-5.4 Mini".to_string(),
         "gpt-5.3-codex" => "GPT-5.3 Codex".to_string(),
         "gpt-5.3-codex-spark" => "GPT-5.3 Codex Spark".to_string(),
-        "gpt-6-astra" => "GPT-6 Astra".to_string(),
+        "gpt-6-astra" => "6 Astra".to_string(),
         "gpt-5.2" => "GPT-5.2".to_string(),
         "gpt-5.2-codex" => "GPT-5.2 Codex".to_string(),
         "gpt-5.1-codex-max" => "GPT-5.1 Codex Max".to_string(),
@@ -1407,7 +1407,7 @@ mod tests {
             .expect("Astra model should be present");
         assert_eq!(
             model.get("display_name").and_then(Value::as_str),
-            Some("GPT-6 Astra")
+            Some("6 Astra")
         );
         assert_eq!(
             model.get("context_window").and_then(Value::as_i64),
@@ -1455,7 +1455,7 @@ mod tests {
         let response = build_codex_client_models_response_with_model_definitions_and_reasoning(&[
             (
                 "gpt-6-astra".to_string(),
-                "GPT-6 Astra".to_string(),
+                "6 Astra".to_string(),
                 Some(vec!["low".to_string(), "ultra".to_string(), "max".to_string()]),
             ),
         ]);

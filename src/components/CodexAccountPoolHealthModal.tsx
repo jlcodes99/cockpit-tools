@@ -84,6 +84,16 @@ function issueKindForHealth(
   return null;
 }
 
+function hasQuotaCooldown(
+  health: CodexLocalAccessAccountHealth | null,
+): boolean {
+  return Boolean(
+    health?.cooldowns.some((cooldown) =>
+      cooldown.reason.trim().toLowerCase().includes("quota"),
+    ) || health?.schedulerReason?.trim().toLowerCase().includes("quota"),
+  );
+}
+
 function formatCooldown(
   cooldown: CodexLocalAccessAccountCooldown,
   t: ReturnType<typeof useTranslation>["t"],
@@ -156,9 +166,10 @@ export function CodexAccountPoolHealthModal({
         return reported;
       }
       // Older sidecars did not send member diagnostics. Keep the account-level
-      // view useful by synthesizing one row per selected account.
+      // view useful by synthesizing one row per selected account. Do not require
+      // the account list to have finished loading: the account ID is enough to
+      // show the failure and invoke recovery.
       return accountIds
-        .filter((accountId) => accountById.has(accountId))
         .map((accountId) => {
           const health = healthById.get(accountId);
           const model = pool.model.trim().toLowerCase();
@@ -245,6 +256,12 @@ export function CodexAccountPoolHealthModal({
       );
     }
     if (issue.kind === "cooldown" && issue.health) {
+      if (hasQuotaCooldown(issue.health)) {
+        return t(
+          "codex.localAccess.accountPoolHealth.dialog.quotaDetail",
+          "账号额度暂时不可用，请等待额度恢复或检查套餐状态",
+        );
+      }
       return issue.health.cooldowns
         .map((cooldown) => formatCooldown(cooldown, t))
         .join(" · ");
@@ -295,6 +312,7 @@ export function CodexAccountPoolHealthModal({
       (issue) =>
         issue.kind !== "missing" &&
         issue.kind !== "quota" &&
+        !hasQuotaCooldown(issue.health) &&
         issue.health?.schedulerReason !== "disabled",
     )
     .map((issue) => issue.accountId);
@@ -319,7 +337,7 @@ export function CodexAccountPoolHealthModal({
       !member.available &&
       code !== "disabled" &&
       code !== "missing" &&
-      !(code.includes("quota") && !code.includes("cooldown")) &&
+      !code.includes("quota") &&
       !["model_excluded", "model_disabled", "image_policy_blocked"].includes(
         code,
       )

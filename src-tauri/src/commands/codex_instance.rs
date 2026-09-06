@@ -2178,6 +2178,19 @@ pub async fn codex_get_instance_quick_config(
 }
 
 #[tauri::command]
+pub async fn codex_save_instance_context_management(
+    instance_id: String,
+    experimental_mode: bool,
+) -> Result<crate::models::codex::CodexQuickConfig, String> {
+    let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_account::save_context_management_for_base_dir(&base_dir, experimental_mode)
+    })
+    .await
+    .map_err(|error| format!("保存 Codex 实例上下文管理开关后台任务失败: {}", error))?
+}
+
+#[tauri::command]
 pub async fn codex_save_instance_quick_config(
     instance_id: String,
     model_context_window: Option<i64>,

@@ -782,6 +782,11 @@
       "commonTitle": "共通",
       "antigravitySettingsTitle": "Antigravity IDE 設定",
       "codexSettingsTitle": "Codex 設定",
+      "codexContextManagement": "experimental_mode = true を有効化（実験的なコンテキスト管理）",
+      "codexContextManagementDesc": "デフォルトではオフです。現在のプロファイルの公式 Codex 実験的コンテキスト管理スイッチだけを書き込みます。適用するには Codex を完全に再起動してください。コンテキストウィンドウ、圧縮しきい値、API Service は変更しません。",
+      "codexContextManagementLoadFailed": "公式コンテキスト管理スイッチを読み込めませんでした：{{error}}",
+      "codexContextManagementSaveSuccess": "公式コンテキスト管理スイッチを保存しました",
+      "codexContextManagementSaveFailed": "公式コンテキスト管理スイッチを保存できませんでした：{{error}}",
       "codexOAuthAppVersion": "OAuth クライアントバージョン",
       "codexOAuthAppVersionDesc": "空欄の場合はリモート既定値 {{version}} を使用します。入力すると OAuth 認証 URL のバージョン項目だけを上書きします。",
       "codexOAuthAppVersionPlaceholder": "空欄で {{version}} を使用",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "使用統計",
-        "lastRecorded": "最終記録"
+        "lastRecorded": "最終記録",
+        "trendEmpty": "選択した期間にリクエストはありません"
       },
       "accountModelMappings": {
         "action": "モデルマップ",

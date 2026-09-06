@@ -782,6 +782,11 @@
       "commonTitle": "Genel",
       "antigravitySettingsTitle": "Antigravity IDE Ayarları",
       "codexSettingsTitle": "Codex Ayarları",
+      "codexContextManagement": "experimental_mode = true ayarını aç (deneysel bağlam yönetimi)",
+      "codexContextManagementDesc": "Varsayılan olarak kapalıdır. Yalnızca mevcut profil için resmi Codex deneysel bağlam yönetimi anahtarını yazar; uygulamak için Codex'i tamamen yeniden başlatın. Bağlam penceresini, sıkıştırma eşiğini veya API Service'i değiştirmez.",
+      "codexContextManagementLoadFailed": "Resmi bağlam yönetimi anahtarı okunamadı: {{error}}",
+      "codexContextManagementSaveSuccess": "Resmi bağlam yönetimi anahtarı kaydedildi",
+      "codexContextManagementSaveFailed": "Resmi bağlam yönetimi anahtarı kaydedilemedi: {{error}}",
       "codexOAuthAppVersion": "OAuth istemci sürümü",
       "codexOAuthAppVersionDesc": "Uzak varsayılan {{version}} değerini kullanmak için boş bırakın; girilen değer yalnızca OAuth yetkilendirme URL’lerindeki sürüm alanını değiştirir.",
       "codexOAuthAppVersionPlaceholder": "{{version}} kullanmak için boş bırakın",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "Kullanım istatistikleri",
-        "lastRecorded": "Son kayıt"
+        "lastRecorded": "Son kayıt",
+        "trendEmpty": "Seçilen aralıkta istek yok"
       },
       "accountModelMappings": {
         "action": "Model haritası",

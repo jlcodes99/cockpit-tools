@@ -7,6 +7,29 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.41] - 2026-09-06
+
+### Changed
+
+- **Align the model-list manager dialog with the Codex model configuration dialog**: use the same desktop width and height limits, and let the model rows fill the available dialog space so the full catalog remains visible and scrollable.
+- **Default usage statistics to the last 7 days**: API Service and session-management usage details now open on the most recent seven days while retaining daily, weekly, monthly, and custom range selection.
+- **Remember the last selected statistics range**: API Service, the service settings dialog, and session usage details now restore the user's daily, weekly, monthly, or custom date selection; preset ranges are recalculated against the current date.
+- **Add a statistics and log-detail refresh action**: the Statistics & Logs panel can now refresh the current range and request details without clearing statistics, resetting filters, or changing the current page.
+- **Add usage trend charts to API Service and session management**: API Service shows a responsive hourly/daily trend for request-log tokens, request count, and estimated cost, while session management shows daily token and request trends from its existing session-log summary.
+- **Unify the visual style of Codex statistics and session management**: use a hero summary, input/cache/output metric cards, rounded gradient trend chart, and session-item layout; add the floating tooltip, vertical indicator, node highlight, and multicolor metric hierarchy; session trends run chronologically, with token badges shown only for positive points that do not collide, while edge labels stay inside the chart without changing data sources or actions.
+
+- **Use the official Astra display label**: show `6 Astra` consistently in the managed model catalog and API Service while keeping the request model ID as `gpt-6-astra`.
+- **Add the official experimental context-management switch (off by default)**: it can be enabled from Codex Settings, Quick Settings, or the current Codex configuration; turning it off removes this experimental setting and returns to the official default behavior. Fully restart Codex after either change; the switch does not alter the context window, compaction threshold, or API Service.
+- **Clarify the experimental switch label**: the UI now shows `Enable experimental_mode = true (experimental context management)`, matching the official configuration item that is written.
+
+### Fixed
+
+- **Put quota-exhausted accounts into API Service cooldown**: when an OAuth account with a confirmed zero regular quota is added to API Service, it immediately enters quota cooldown and is skipped by request routing; manual recovery cannot clear it, and it re-enters routing only after quota recovery.
+- **Fixed single-account recovery clearing every account's health state**: recovering one account from the abnormal-account dialog now clears only that account's scheduler and pool diagnostics while leaving other abnormal accounts visible.
+- **Update Codex client identity fallback and preserve API Key passthrough headers**: OAuth fallback headers now use the current `0.153.4` baseline, while API Key HTTP and WebSocket requests retain the downstream client's `User-Agent` and `Originator` instead of being rewritten to the old `0.146.0` identity.
+- **Automatically recover accounts blocked by Sidecar scheduler state**: API Service now treats `auth_available=false` scheduler cooldowns as recoverable pool failures, so an all-unavailable account pool can enter the automatic recovery path instead of requiring manual reset.
+- **Align injected quota badges with API Service effective windows**: when the weekly quota is exhausted, the CDP-injected 5-hour badge now follows the API Service and reports 0 instead of summing raw account values above 100%.
+
 ## [1.3.40] - 2026-09-05
 
 ### Added
@@ -39,7 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - **Claude Desktop login component uninstall**: the Claude account dialog can now remove the locally downloaded Electron sign-in runtime and unfinished login profiles to free disk space without deleting saved Claude accounts.
-- **GPT-6 Astra model compatibility**: exposes the official `gpt-6-astra` model ID and `GPT-6 Astra` display name across the API Service, account switching, visible-model catalog, wakeup presets, and provider sidecars; it is listed first in those model lists, with the 1.05M context window, `max` reasoning effort, Fast-tier metadata, and local cost estimation. It remains opt-in at selection time and does not change the default model.
+- **6 Astra model compatibility**: exposes the official `gpt-6-astra` model ID and `6 Astra` display name across the API Service, account switching, visible-model catalog, wakeup presets, and provider sidecars; it is listed first in those model lists, with the 1.05M context window, `max` reasoning effort, Fast-tier metadata, and local cost estimation. It remains opt-in at selection time and does not change the default model.
 
 ### Changed
 

@@ -909,6 +909,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         weekly: CodexLocalAccessStatsWindow {
             since: window_starts.week,
@@ -917,6 +919,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         monthly: CodexLocalAccessStatsWindow {
             since: window_starts.month,
@@ -925,6 +929,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         events: Vec::new(),
     }
@@ -984,6 +990,8 @@ fn empty_stats_window(since: i64, updated_at: i64) -> CodexLocalAccessStatsWindo
         accounts: Vec::new(),
         models: Vec::new(),
         api_keys: Vec::new(),
+        trend: Vec::new(),
+        trend_hourly: false,
     }
 }
 

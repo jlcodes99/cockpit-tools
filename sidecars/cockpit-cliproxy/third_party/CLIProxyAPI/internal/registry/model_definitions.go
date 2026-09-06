@@ -174,7 +174,7 @@ func codexBuiltinGPT6AstraModelInfo() *ModelInfo {
 		Created:                   1788480000, // 2026-09-04
 		OwnedBy:                   "openai",
 		Type:                      "openai",
-		DisplayName:               "GPT-6 Astra",
+		DisplayName:               "6 Astra",
 		Version:                   codexBuiltinGPT6AstraModelID,
 		Description:               "Our most capable model, built for the hardest end-to-end work.",
 		ContextLength:             1050000,

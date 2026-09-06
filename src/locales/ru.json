@@ -782,6 +782,11 @@
       "commonTitle": "Общие",
       "antigravitySettingsTitle": "Настройки Antigravity IDE",
       "codexSettingsTitle": "Настройки Codex",
+      "codexContextManagement": "Включить experimental_mode = true (экспериментальное управление контекстом)",
+      "codexContextManagementDesc": "По умолчанию выключено. Записывает только официальный экспериментальный переключатель управления контекстом Codex для текущего профиля; полностью перезапустите Codex для применения. Окно контекста, порог сжатия и API Service не изменяются.",
+      "codexContextManagementLoadFailed": "Не удалось прочитать официальный переключатель управления контекстом: {{error}}",
+      "codexContextManagementSaveSuccess": "Официальный переключатель управления контекстом сохранён",
+      "codexContextManagementSaveFailed": "Не удалось сохранить официальный переключатель управления контекстом: {{error}}",
       "codexOAuthAppVersion": "Версия клиента OAuth",
       "codexOAuthAppVersionDesc": "Оставьте пустым, чтобы использовать удалённое значение по умолчанию {{version}}; указанное значение изменяет только поле версии в URL авторизации OAuth.",
       "codexOAuthAppVersionPlaceholder": "Оставьте пустым для {{version}}",
@@ -4095,7 +4100,8 @@
       },
       "usage": {
         "title": "Статистика использования",
-        "lastRecorded": "Последняя запись"
+        "lastRecorded": "Последняя запись",
+        "trendEmpty": "В выбранном диапазоне нет запросов"
       },
       "accountModelMappings": {
         "action": "Карта моделей",

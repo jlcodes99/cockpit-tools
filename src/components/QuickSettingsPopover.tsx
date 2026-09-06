@@ -71,6 +71,7 @@ import {
   setAccountsOverviewFilterPersistenceEnabled,
 } from '../utils/accountsOverviewFilterPersistence';
 import { CodexSshSyncSettingsControl } from './codex/CodexSshSyncSettingsControl';
+import { CodexContextManagementControl } from './codex/CodexContextManagementControl';
 import { getCodexExperimentalModelErrorMessage } from '../utils/codexExperimentalModel';
 import { CodexExperimentalModelEditor } from './codex/CodexExperimentalModelEditor';
 import { CodexOAuthPolicyModal } from './codex/CodexOAuthPolicyModal';
@@ -2236,6 +2237,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   </>
                 )}
                 <CodexSshSyncSettingsControl variant="quick" />
+                <CodexContextManagementControl variant="quick" active={isOpen && type === 'codex'} />
                 <div className="qs-row" style={{ marginTop: 8 }}>
                   <div className="qs-row-label">
                     <EyeOff size={15} />

@@ -1454,6 +1454,7 @@ fn sidecar_quota_pool_state_value(collection: &CodexLocalAccessCollection) -> Va
                     quota.weekly_reset_time,
                 ),
                 "updatedAt": account.usage_updated_at,
+                "cooldown": account_quota_cooldown(&account, now_ms()),
             }),
         );
     }
@@ -1505,6 +1506,7 @@ fn sidecar_account_manifest_value(
         "upstreamApiKey": account.openai_api_key.as_deref().unwrap_or_default(),
         "planRank": resolve_plan_rank(account),
         "remainingQuota": resolve_remaining_quota(account),
+        "quotaCooldown": account_quota_cooldown(account, now_ms()),
         "subscriptionExpiryMs": resolve_subscription_expiry_ms(account),
         "gptReserveAllowed": account_has_gpt_reserve_entitlement(account),
         "imageGenerationPolicy": match collection.image_generation_account_policies.get(&account.id) {

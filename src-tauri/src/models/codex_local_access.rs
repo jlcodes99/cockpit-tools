@@ -642,6 +642,18 @@ pub struct CodexLocalAccessStatsWindow {
     pub models: Vec<CodexLocalAccessModelStats>,
     #[serde(default)]
     pub api_keys: Vec<CodexLocalAccessApiKeyStats>,
+    #[serde(default)]
+    pub trend: Vec<CodexLocalAccessUsageTrendPoint>,
+    #[serde(default)]
+    pub trend_hourly: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessUsageTrendPoint {
+    pub bucket_start: i64,
+    #[serde(default)]
+    pub usage: CodexLocalAccessUsageStats,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

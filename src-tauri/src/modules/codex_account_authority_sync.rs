@@ -770,11 +770,17 @@ async fn sync_active_official_account_before_switch() -> Result<bool, String> {
     {
         return Ok(false);
     }
+    if !managed_account_tokens_need_refresh(&oauth_account) && !oauth_account.requires_reauth {
+        return Ok(false);
+    }
 
     let lock = codex_token_lock_for(&oauth_account_id);
     let _guard = lock.lock().await;
-    let _file_guard =
-        acquire_codex_token_refresh_file_lock(&oauth_account_id, "switch-current").await?;
+    let Some(_file_guard) =
+        try_acquire_codex_token_refresh_file_lock(&oauth_account_id, "switch-current").await?
+    else {
+        return Ok(false);
+    };
     let changed = sync_account_from_live_authority_sources(&mut oauth_account)?;
     if changed {
         logger::log_info(&format!(

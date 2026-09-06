@@ -1169,11 +1169,15 @@ func TestApplyCodexWebsocketHeadersDefaultsToCodexCloaking(t *testing.T) {
 
 			headers = applyCodexWebsocketHeaders(ctx, headers, tt.auth, tt.token, cfg)
 
-			if got := headers.Get("User-Agent"); got != codexUserAgent {
-				t.Fatalf("User-Agent = %q, want %q", got, codexUserAgent)
+			wantUserAgent, wantOriginator := codexUserAgent, codexOriginator
+			if tt.name == "API key" {
+				wantUserAgent, wantOriginator = "custom-ua", "custom-origin"
 			}
-			if got := headers.Get("Originator"); got != codexOriginator {
-				t.Fatalf("Originator = %q, want %q", got, codexOriginator)
+			if got := headers.Get("User-Agent"); got != wantUserAgent {
+				t.Fatalf("User-Agent = %q, want %q", got, wantUserAgent)
+			}
+			if got := headers.Get("Originator"); got != wantOriginator {
+				t.Fatalf("Originator = %q, want %q", got, wantOriginator)
 			}
 		})
 	}
@@ -1748,11 +1752,11 @@ func TestApplyCodexHeadersDefaultsToCodexCloaking(t *testing.T) {
 
 	applyCodexHeadersFromSources(req, auth, "api-key", false, cfg, ginHeaders)
 
-	if got := req.Header.Get("User-Agent"); got != codexUserAgent {
-		t.Fatalf("User-Agent = %q, want %q", got, codexUserAgent)
+	if got := req.Header.Get("User-Agent"); got != "custom-ua" {
+		t.Fatalf("User-Agent = %q, want custom-ua", got)
 	}
-	if got := req.Header.Get("Originator"); got != codexOriginator {
-		t.Fatalf("Originator = %q, want %q", got, codexOriginator)
+	if got := req.Header.Get("Originator"); got != "custom-origin" {
+		t.Fatalf("Originator = %q, want custom-origin", got)
 	}
 }
 

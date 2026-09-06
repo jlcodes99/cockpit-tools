@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
-import { RefreshCw, RotateCcw } from 'lucide-react';
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Database,
+  DollarSign,
+  RefreshCw,
+  RotateCcw,
+  Send,
+  Zap,
+} from 'lucide-react';
 import { SingleSelectDropdown, type SingleSelectOption } from '../SingleSelectDropdown';
 import * as codexInstanceService from '../../services/codexInstanceService';
 import type {
@@ -18,8 +27,13 @@ import {
   resolveSessionUsageSummaryStatus,
   type SessionUsageSummaryLoadState,
 } from '../../utils/codexSessionUsageFormat';
-
-type UsageRange = '7d' | '30d' | 'month' | 'all';
+import { CodexUsageTrend, type UsageTrendPoint } from './CodexUsageTrend';
+import {
+  normalizeCodexSessionUsageRange,
+  persistCodexSessionUsageRange,
+  readCodexSessionUsageRange,
+  type CodexSessionUsageRange as UsageRange,
+} from '../../utils/codexStatsRangePreference';
 
 function startOfLocalDay(value: Date): Date {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate());
@@ -146,7 +160,8 @@ export function CodexSessionUsageSummary({
   const lang = i18n.resolvedLanguage || i18n.language || 'zh-CN';
   const [report, setReport] = useState<CodexSessionUsageReport | null>(null);
   const [loadState, setLoadState] = useState<SessionUsageSummaryLoadState>('scanning');
-  const query = useMemo(() => buildUsageQuery('30d', ''), []);
+  const [range] = useState<UsageRange>(() => readCodexSessionUsageRange());
+  const query = useMemo(() => buildUsageQuery(range, ''), [range]);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,7 +243,7 @@ export function CodexSessionUsageSummary({
   return (
     <div className="codex-session-usage-summary">
       <div className="codex-session-usage-summary__title">
-        {t('codex.sessionUsage.summary.title', '近 30 天')}
+        {t(`codex.sessionUsage.range.${range}`)}
         {status ? (
           <span
             className={`codex-session-usage-summary__status is-${status}`}
@@ -267,7 +282,7 @@ export function CodexSessionUsagePanel({
   const { t, i18n } = useTranslation();
   const lang = i18n.resolvedLanguage || i18n.language || 'zh-CN';
   const isZh = lang.toLowerCase().startsWith('zh');
-  const [range, setRange] = useState<UsageRange>('30d');
+  const [range, setRange] = useState<UsageRange>(() => readCodexSessionUsageRange());
   const [instanceId, setInstanceId] = useState('');
   const [report, setReport] = useState<CodexSessionUsageReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -394,6 +409,21 @@ export function CodexSessionUsagePanel({
   const totals = report?.totals;
   const hasData = (totals?.requestCount ?? 0) > 0 || (report?.eventCount ?? 0) > 0;
   const lastSyncedLabel = formatRelativeSyncTime(report?.lastSyncedAt, isZh);
+  const sessionTrend = useMemo<UsageTrendPoint[]>(
+    () =>
+      (report?.byDay ?? [])
+        .map((row) => ({
+          bucketStart: new Date(`${row.key}T00:00:00`).getTime(),
+          usage: {
+            totalTokens: row.totalTokens,
+            requestCount: row.requestCount,
+            estimatedCostUsd: 0,
+          },
+        }))
+        .filter((point) => Number.isFinite(point.bucketStart))
+        .sort((left, right) => left.bucketStart - right.bucketStart),
+    [report?.byDay],
+  );
 
   return (
     <div className="codex-session-usage">
@@ -419,7 +449,11 @@ export function CodexSessionUsagePanel({
           <SingleSelectDropdown
             value={range}
             options={rangeOptions}
-            onChange={(value) => setRange(value as UsageRange)}
+            onChange={(value) => {
+              const nextRange = normalizeCodexSessionUsageRange(value);
+              setRange(nextRange);
+              persistCodexSessionUsageRange(nextRange);
+            }}
             ariaLabel={t('codex.sessionUsage.range.label', '时间范围')}
             menuWidth={140}
             menuMaxHeight={220}
@@ -519,45 +553,80 @@ export function CodexSessionUsagePanel({
         </div>
       ) : (
         <>
-          <div className="codex-session-usage__cards">
-            <article>
-              <span>{t('codex.sessionUsage.cards.input', '输入 Tokens')}</span>
+          <section className="codex-session-usage__hero">
+            <div className="codex-session-usage__hero-head">
+              <div className="codex-session-usage__hero-total">
+                <div className="codex-session-usage__hero-icon" aria-hidden="true">
+                  <Zap size={22} />
+                </div>
+                <div>
+                  <span>{t('codex.sessionUsage.cards.total', '合计 Tokens')}</span>
+                  <TokenAmount
+                    value={totals?.totalTokens ?? 0}
+                    lang={lang}
+                    compactDecimals={2}
+                  />
+                </div>
+              </div>
+              <div className="codex-session-usage__hero-side">
+                <span>
+                  <Send size={13} />
+                  {t('codex.sessionUsage.cards.requests', '请求数')}
+                </span>
+                <strong>{formatSessionUsageCount(totals?.requestCount ?? 0)}</strong>
+                <span>
+                  <DollarSign size={13} />
+                  {t('codex.sessionUsage.cards.cost', '估算费用')}
+                </span>
+                <strong>{formatSessionUsageCostUsd(totals?.estimatedCostUsd)}</strong>
+              </div>
+            </div>
+
+            <div className="codex-session-usage__cards">
+            <article className="is-input">
+              <div className="codex-session-usage__card-head">
+                <ArrowDownToLine size={15} aria-hidden="true" />
+                <span>{t('codex.sessionUsage.cards.input', '输入 Tokens')}</span>
+              </div>
               <TokenAmount
                 value={totals?.inputTokens ?? 0}
                 lang={lang}
               />
             </article>
-            <article>
-              <span>{t('codex.sessionUsage.cards.cached', '缓存输入 Tokens')}</span>
+            <article className="is-cache">
+              <div className="codex-session-usage__card-head">
+                <Database size={15} aria-hidden="true" />
+                <span>{t('codex.sessionUsage.cards.cached', '缓存输入 Tokens')}</span>
+              </div>
               <TokenAmount
                 value={totals?.cachedInputTokens ?? 0}
                 lang={lang}
               />
             </article>
-            <article>
-              <span>{t('codex.sessionUsage.cards.output', '输出 Tokens')}</span>
+            <article className="is-output">
+              <div className="codex-session-usage__card-head">
+                <ArrowUpFromLine size={15} aria-hidden="true" />
+                <span>{t('codex.sessionUsage.cards.output', '输出 Tokens')}</span>
+              </div>
               <TokenAmount
                 value={totals?.outputTokens ?? 0}
                 lang={lang}
               />
             </article>
-            <article>
-              <span>{t('codex.sessionUsage.cards.total', '合计 Tokens')}</span>
-              <TokenAmount
-                value={totals?.totalTokens ?? 0}
-                lang={lang}
-                compactDecimals={2}
-              />
-            </article>
-            <article>
-              <span>{t('codex.sessionUsage.cards.requests', '请求数')}</span>
-              <strong>{formatSessionUsageCount(totals?.requestCount ?? 0)}</strong>
-            </article>
-            <article>
-              <span>{t('codex.sessionUsage.cards.cost', '估算费用')}</span>
-              <strong>{formatSessionUsageCostUsd(totals?.estimatedCostUsd)}</strong>
-            </article>
-          </div>
+            </div>
+          </section>
+
+          <CodexUsageTrend
+            points={sessionTrend}
+            metrics={["totalTokens", "requestCount"]}
+            hourly={false}
+            title={t('codex.sessionUsage.title', '会话用量')}
+            emptyLabel={t('codex.sessionUsage.empty.title', '还没有会话用量')}
+            labels={{
+              totalTokens: t('codex.sessionUsage.cards.total', '合计 Tokens'),
+              requestCount: t('codex.sessionUsage.cards.requests', '请求数'),
+            }}
+          />
 
           <div className="codex-session-usage__grids">
             <section>

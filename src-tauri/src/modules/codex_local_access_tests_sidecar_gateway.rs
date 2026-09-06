@@ -33,6 +33,7 @@
             Some("unauthorized")
         );
         assert!(super::sidecar_scheduler_blocks_account(Some(health), now));
+        assert!(super::account_health_blocks_dispatch(Some(health), now));
         assert_eq!(runtime.model_cooldowns.len(), 1);
     }
 
@@ -93,6 +94,7 @@
             Some(health),
             later
         ));
+        assert!(!super::account_health_blocks_dispatch(Some(health), later));
         assert!(runtime.model_cooldowns.is_empty());
     }
 
@@ -155,6 +157,29 @@
     }
 
     #[test]
+    fn manual_recovery_removes_only_selected_pool_member_status() {
+        let mut runtime = super::GatewayRuntime::default();
+        let mut pool = super::RuntimeAccountPoolHealth::default();
+        pool.account_statuses = vec![
+            super::RuntimeAccountPoolMemberHealth {
+                account_id: "account-1".to_string(),
+                ..Default::default()
+            },
+            super::RuntimeAccountPoolMemberHealth {
+                account_id: "account-2".to_string(),
+                ..Default::default()
+            },
+        ];
+        runtime.account_pool_health.insert("key-1".to_string(), pool);
+
+        super::clear_runtime_account_health(&mut runtime, &["account-1".to_string()]);
+
+        let remaining = &runtime.account_pool_health["key-1"].account_statuses;
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].account_id, "account-2");
+    }
+
+    #[test]
     fn manual_recovery_clears_only_selected_runtime_account_health() {
         let mut runtime = super::GatewayRuntime::default();
         runtime.account_health.insert(
@@ -183,7 +208,23 @@
         assert!(!runtime.account_health.contains_key("account-1"));
         assert!(runtime.account_health.contains_key("account-2"));
         assert!(runtime.model_cooldowns.is_empty());
-        assert!(runtime.account_pool_health.is_empty());
+        assert!(runtime.account_pool_health.contains_key("key-1"));
+    }
+
+    #[test]
+    fn quota_exhaustion_blocks_manual_recovery_until_reset() {
+        let mut runtime = super::GatewayRuntime::default();
+        runtime.account_quota_cooldowns.insert(
+            "account-1".to_string(),
+            super::AccountQuotaCooldown {
+                exhausted: true,
+                reset_at_ms: Some(2_000_000),
+                updated_at_ms: 1_000_000,
+            },
+        );
+
+        assert!(super::account_recovery_blocked_by_quota(&runtime, "account-1", 1_500_000));
+        assert!(!super::account_recovery_blocked_by_quota(&runtime, "account-1", 2_000_000));
     }
 
     #[test]

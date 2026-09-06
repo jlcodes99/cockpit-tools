@@ -1926,16 +1926,23 @@ fn query_local_access_stats_window_blocking(
         .prepare(sql.as_str())
         .map_err(|e| format!("准备 API 服务统计查询失败: {}", e))?;
     let mut window = empty_stats_window(start_at, start_at);
+    let hourly_trend = end_at.saturating_sub(start_at) <= 36 * 60 * 60 * 1000;
+    let mut trend = HashMap::new();
     let rows = statement
         .query_map(params![start_at, end_at], usage_event_from_row)
         .map_err(|e| format!("查询 API 服务统计失败: {}", e))?;
     for row in rows {
         let event = row.map_err(|e| format!("解析 API 服务统计失败: {}", e))?;
         apply_usage_event_to_window(&mut window, &event);
+        apply_usage_event_to_trend(&mut trend, &event, hourly_trend);
     }
     sort_usage_accounts(&mut window.accounts);
     sort_usage_models(&mut window.models);
     sort_usage_api_keys(&mut window.api_keys);
+    let mut trend = trend.into_values().collect::<Vec<_>>();
+    trend.sort_by_key(|point| point.bucket_start);
+    window.trend = trend;
+    window.trend_hourly = hourly_trend;
     Ok(window)
 }
 
@@ -2340,6 +2347,57 @@ fn apply_usage_event_to_window(
         event.timestamp,
     );
     window.updated_at = window.updated_at.max(event.timestamp);
+}
+
+fn usage_trend_bucket_start(timestamp: i64, hourly: bool) -> i64 {
+    let local = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(timestamp)
+        .unwrap_or_else(chrono::Utc::now)
+        .with_timezone(&Local);
+    if !hourly {
+        return local_date_start_ms(local.date_naive());
+    }
+    let hour = local
+        .date_naive()
+        .and_hms_opt(local.hour(), 0, 0)
+        .expect("a local hour must be valid");
+    match Local.from_local_datetime(&hour) {
+        LocalResult::Single(value) => value.timestamp_millis(),
+        LocalResult::Ambiguous(first, second) => {
+            first.timestamp_millis().min(second.timestamp_millis())
+        }
+        LocalResult::None => local_date_start_ms(local.date_naive()),
+    }
+}
+
+fn apply_usage_event_to_trend(
+    trend: &mut HashMap<i64, CodexLocalAccessUsageTrendPoint>,
+    event: &CodexLocalAccessUsageEvent,
+    hourly: bool,
+) {
+    let bucket_start = usage_trend_bucket_start(event.timestamp, hourly);
+    let point = trend
+        .entry(bucket_start)
+        .or_insert_with(|| CodexLocalAccessUsageTrendPoint {
+            bucket_start,
+            usage: CodexLocalAccessUsageStats::default(),
+        });
+    let usage = UsageCapture {
+        input_tokens: event.input_tokens,
+        output_tokens: event.output_tokens,
+        total_tokens: event.total_tokens,
+        cached_tokens: event.cached_tokens,
+        reasoning_tokens: event.reasoning_tokens,
+        token_breakdown: event.token_breakdown.clone(),
+    };
+    apply_usage_stats(
+        &mut point.usage,
+        event.request_kind,
+        event.success,
+        Some(event.error_category.as_str()),
+        event.latency_ms,
+        Some(&usage),
+        event.estimated_cost_usd,
+    );
 }
 
 fn ensure_stats_windows_current(stats: &mut CodexLocalAccessStats, now: i64) {

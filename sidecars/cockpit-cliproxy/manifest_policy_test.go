@@ -310,7 +310,7 @@ func TestCodexClientModelsResponsePreservesAstraTemplate(t *testing.T) {
 		t.Fatalf("Astra models response = %#v, want one model", response["models"])
 	}
 	astra := models[0]
-	if got := stringFromAny(astra["display_name"]); got != "GPT-6 Astra" {
+	if got := stringFromAny(astra["display_name"]); got != "6 Astra" {
 		t.Fatalf("Astra display_name = %q", got)
 	}
 	if got := intFromAny(astra["context_window"]); got != 1050000 {
@@ -562,6 +562,26 @@ func TestBuildCockpitQuotaResponseGroupsPlansAndPoolHealth(t *testing.T) {
 	}}, time.Now())
 	if response.AvailableAccountCount != 1 || response.AbnormalAccountCount != 1 || response.CooldownAccountCount != 1 {
 		t.Fatalf("runtime pool health = available %d, abnormal %d, cooldown %d", response.AvailableAccountCount, response.AbnormalAccountCount, response.CooldownAccountCount)
+	}
+}
+
+func TestBuildCockpitQuotaResponseBlocksHourlyWhenWeeklyIsExhausted(t *testing.T) {
+	present := true
+	fiveHourMinutes := int64(300)
+	weeklyMinutes := int64(10080)
+	state := quotaPoolStateFile{Accounts: map[string]quotaPoolAccountState{
+		"account-1": {
+			Primary:   &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(100), WindowMinutes: &fiveHourMinutes},
+			Secondary: &quotaPoolWindowState{Present: &present, RemainingPercent: intPtrForTest(0), WindowMinutes: &weeklyMinutes},
+		},
+	}}
+
+	response := buildCockpitQuotaResponse(&apiKeySpec{AccountIDs: []string{"account-1"}}, state, time.Now())
+	if response.FiveHourRemainingPercent == nil || *response.FiveHourRemainingPercent != 0 {
+		t.Fatalf("five-hour percent = %#v, want 0 when weekly is exhausted", response.FiveHourRemainingPercent)
+	}
+	if response.WeeklyRemainingPercent == nil || *response.WeeklyRemainingPercent != 0 {
+		t.Fatalf("weekly percent = %#v, want 0", response.WeeklyRemainingPercent)
 	}
 }
 
@@ -2985,5 +3005,44 @@ func TestVisibleModelsForMixedRoutingIncludesNamespacedProviderModels(t *testing
 	want := []string{"gpt-5.5", "gpt-reserve", "cpa/gpt-5.5", "cpa/grok-4.6"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("visible models = %#v, want %#v", got, want)
+	}
+}
+
+func TestAccountQuotaExhaustedOnlyBlocksKnownOAuthZeroQuota(t *testing.T) {
+	zero := 0
+	positive := 12
+	if !accountQuotaExhausted(nil, &accountSpec{AuthKind: "oauth", RemainingQuota: &zero}, time.Now()) {
+		t.Fatal("known zero OAuth quota should be exhausted")
+	}
+	if accountQuotaExhausted(nil, &accountSpec{AuthKind: "oauth", RemainingQuota: &positive}, time.Now()) {
+		t.Fatal("positive OAuth quota should remain available")
+	}
+	if accountQuotaExhausted(nil, &accountSpec{AuthKind: "oauth"}, time.Now()) {
+		t.Fatal("unknown OAuth quota should not be treated as exhausted")
+	}
+	if accountQuotaExhausted(nil, &accountSpec{AuthKind: "api_key", RemainingQuota: &zero}, time.Now()) {
+		t.Fatal("API-key accounts must use their own quota policy")
+	}
+}
+
+func TestCockpitSelectorSkipsExhaustedQuotaForRegularModels(t *testing.T) {
+	zero := 0
+	account := &accountSpec{ID: "account-1", AuthKind: "oauth", RemainingQuota: &zero, GPTReserveAllowed: true}
+	auth := &coreauth.Auth{ID: "auth-1", Provider: "codex"}
+	m := &manifest{
+		ModelIDs:       []string{"gpt-5.5", codexReserveModel},
+		Accounts:       []accountSpec{*account},
+		accountByAuthID: map[string]*accountSpec{"auth-1": account},
+	}
+	selector := &cockpitSelector{manifest: m}
+
+	selected, err := selector.Pick(context.Background(), "codex", "gpt-5.5", cliproxyexecutor.Options{}, []*coreauth.Auth{auth})
+	if selected != nil || err == nil {
+		t.Fatalf("regular model should be blocked by zero quota: selected=%v err=%v", selected, err)
+	}
+
+	selected, err = selector.Pick(context.Background(), "codex", codexReserveModel, cliproxyexecutor.Options{}, []*coreauth.Auth{auth})
+	if err != nil || selected != auth {
+		t.Fatalf("reserve model should keep its independent quota path: selected=%v err=%v", selected, err)
 	}
 }

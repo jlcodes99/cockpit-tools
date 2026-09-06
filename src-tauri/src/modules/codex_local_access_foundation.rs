@@ -21,6 +21,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessStats, CodexLocalAccessStatsWindow, CodexLocalAccessTestFailure,
     CodexLocalAccessTestResult, CodexLocalAccessTimeoutPreset, CodexLocalAccessTimeouts,
     CodexLocalAccessUsageEvent, CodexLocalAccessUsageEventPage, CodexLocalAccessUsageStats,
+    CodexLocalAccessUsageTrendPoint,
     CodexTokenBreakdown,
 };
 use crate::models::{CodexInstanceApiRoute, CodexInstanceModelRouting};
@@ -30,7 +31,7 @@ use crate::modules::{
     codex_wakeup, config, logger, process,
 };
 use base64::{engine::general_purpose, Engine as _};
-use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, NaiveDate, TimeZone};
+use chrono::{Datelike, Duration as ChronoDuration, Local, LocalResult, NaiveDate, TimeZone, Timelike};
 use futures_util::{stream, SinkExt, StreamExt};
 use rand::{distributions::Alphanumeric, seq::SliceRandom, Rng};
 use reqwest::header::{HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
@@ -202,7 +203,7 @@ const SIDECAR_READY_TIMEOUT: Duration = Duration::from_secs(15);
 const UPSTREAM_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 const DEFAULT_OPENAI_RESPONSES_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_CODEX_USER_AGENT: &str =
-    "codex-tui/0.146.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.146.0)";
+    "codex-tui/0.153.4 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.153.4)";
 const DEFAULT_CODEX_ORIGINATOR: &str = "codex-tui";
 const CODEX_RESPONSES_WEBSOCKET_BETA_HEADER_VALUE: &str = "responses_websockets=2026-02-06";
 const CODEX_RESPONSES_LITE_HEADER: &str = "x-openai-internal-codex-responses-lite";
@@ -429,6 +430,7 @@ struct GatewayRuntime {
     response_affinity: HashMap<String, ResponseAffinityBinding>,
     model_cooldowns: HashMap<String, AccountModelCooldown>,
     account_health: HashMap<String, RuntimeAccountHealth>,
+    account_quota_cooldowns: HashMap<String, AccountQuotaCooldown>,
     account_pool_health: HashMap<String, RuntimeAccountPoolHealth>,
     prepared_accounts: HashMap<String, CachedPreparedAccount>,
     running: bool,
@@ -1463,6 +1465,7 @@ fn prune_runtime_account_state(runtime: &mut GatewayRuntime) {
             failures.clear();
         }
         runtime.account_health.clear();
+        runtime.account_quota_cooldowns.clear();
         runtime.account_pool_health.clear();
         runtime.model_cooldowns.clear();
         runtime.response_affinity.clear();
@@ -1486,6 +1489,9 @@ fn prune_runtime_account_state(runtime: &mut GatewayRuntime) {
     }
     runtime
         .account_health
+        .retain(|account_id, _| allowed_account_ids.contains(account_id));
+    runtime
+        .account_quota_cooldowns
         .retain(|account_id, _| allowed_account_ids.contains(account_id));
     let allowed_api_key_ids = collection
         .api_keys
@@ -2515,13 +2521,17 @@ fn sidecar_scheduler_blocks_account(health: Option<&RuntimeAccountHealth>, now: 
         .unwrap_or(false)
 }
 
+fn account_health_blocks_dispatch(health: Option<&RuntimeAccountHealth>, now: i64) -> bool {
+    account_health_blocks_routing(health) || sidecar_scheduler_blocks_account(health, now)
+}
+
 async fn account_id_blocked_by_health(account_id: &str) -> bool {
     let account_id = account_id.trim();
     if account_id.is_empty() {
         return false;
     }
     let runtime = gateway_runtime().lock().await;
-    account_health_blocks_routing(runtime.account_health.get(account_id))
+    account_health_blocks_dispatch(runtime.account_health.get(account_id), now_ms())
 }
 
 fn selected_accounts_have_image_generation_capacity(

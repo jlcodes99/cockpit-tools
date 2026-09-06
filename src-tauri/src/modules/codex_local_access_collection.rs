@@ -330,6 +330,8 @@ fn run_collection_account_sanitize_once() -> Result<bool, String> {
         let mut next = base;
         let (changed, _) = sanitize_collection_with_accounts(&mut next, &accounts)?;
         if !changed {
+            let mut runtime = gateway_runtime().blocking_lock();
+            sync_runtime_quota_cooldowns(&mut runtime, &accounts, now_ms());
             return Ok(true);
         }
         next.updated_at = now_ms();
@@ -2087,6 +2089,7 @@ pub async fn reevaluate_bound_oauth_quota_reserve_after_refresh(
     if account_id.is_empty() {
         return;
     }
+    let refreshed_account = refresh_succeeded.then(|| codex_account::load_account(account_id)).flatten();
     if let Ok(mut failures) = bound_oauth_quota_refresh_failures().lock() {
         if refresh_succeeded {
             failures.remove(account_id);
@@ -2108,6 +2111,9 @@ pub async fn reevaluate_bound_oauth_quota_reserve_after_refresh(
             .cloned();
         if collection.is_some() {
             runtime.prepared_accounts.remove(account_id);
+        }
+        if let Some(account) = refreshed_account.as_ref() {
+            sync_runtime_quota_cooldowns(&mut runtime, std::slice::from_ref(account), now_ms());
         }
         (collection, runtime.collection.clone())
     };
