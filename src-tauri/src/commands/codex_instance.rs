@@ -5,7 +5,7 @@ use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
@@ -17,6 +17,18 @@ use crate::models::{
     CodexInstanceModelRouting, DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile,
 };
 use crate::modules;
+
+#[cfg(test)]
+use super::codex_instance_app_exit::idle_codex_profile_dirs_for_app_exit;
+pub use super::codex_instance_app_exit::restore_mixed_model_profiles_for_app_exit;
+use super::codex_instance_model_catalog::{
+    apply_pending_model_catalog, read_pending_model_catalog, save_pending_model_catalog,
+    PENDING_MODEL_CATALOG_FILE,
+};
+use super::codex_instance_routing::{
+    launch_mode_uses_desktop_runtime, model_routing_update_error,
+    validate_instance_model_routing,
+};
 
 pub(crate) const DEFAULT_INSTANCE_ID: &str = "__default__";
 const CODEX_INSTANCE_LAUNCH_PROGRESS_EVENT: &str = "codex:instance-launch-progress";
@@ -58,39 +70,6 @@ fn ensure_codex_instance_start_not_cancelled(instance_id: &str) -> Result<(), St
 
 fn should_skip_launch_step(skip_failed_step: Option<&str>, step: &str) -> bool {
     skip_failed_step.is_some_and(|value| value == step || value == "all")
-}
-
-fn launch_mode_uses_desktop_runtime(launch_mode: &InstanceLaunchMode) -> bool {
-    *launch_mode == InstanceLaunchMode::App
-}
-
-fn validate_instance_model_routing(
-    bind_account_id: Option<&str>,
-    launch_mode: &InstanceLaunchMode,
-    model_routing: Option<&CodexInstanceModelRouting>,
-) -> Result<Option<CodexInstanceModelRouting>, String> {
-    let Some(model_routing) = model_routing.filter(|routing| routing.enabled) else {
-        return Ok(model_routing.cloned());
-    };
-    if !launch_mode_uses_desktop_runtime(launch_mode) {
-        return Err("混合模型路由第一版仅支持桌面版实例".to_string());
-    }
-    let normalized = modules::codex_local_access::validate_mixed_model_routing_config(
-        bind_account_id,
-        model_routing,
-    )?;
-    Ok(Some(normalized))
-}
-
-fn model_routing_update_error(error: String, rollback_errors: Vec<String>) -> String {
-    if rollback_errors.is_empty() {
-        return error;
-    }
-    format!(
-        "{}；恢复原实例配置时仍有错误: {}",
-        error,
-        rollback_errors.join("；")
-    )
 }
 
 #[derive(Debug)]
@@ -708,72 +687,6 @@ fn configured_mixed_model_gateways() -> Result<Vec<ConfiguredMixedModelGateway>,
         });
     }
     Ok(targets)
-}
-
-fn idle_codex_profile_dirs_for_app_exit(
-    default_dir: PathBuf,
-    default_last_pid: Option<u32>,
-    instances: Vec<InstanceProfile>,
-    mut is_running: impl FnMut(Option<u32>, Option<&str>) -> bool,
-) -> Vec<PathBuf> {
-    let mut profiles = Vec::new();
-    if !is_running(default_last_pid, None) {
-        profiles.push(default_dir);
-    }
-    for instance in instances {
-        // Use live process state, not saved routing.enabled: a running profile
-        // may have a disabled configuration saved for its next launch.
-        if !is_running(instance.last_pid, Some(&instance.user_data_dir)) {
-            profiles.push(PathBuf::from(instance.user_data_dir));
-        }
-    }
-    profiles
-}
-
-fn configured_idle_codex_profile_dirs() -> Result<Vec<PathBuf>, String> {
-    let settings = modules::codex_instance::load_default_settings()?;
-    Ok(idle_codex_profile_dirs_for_app_exit(
-        modules::codex_instance::get_default_codex_home()?,
-        settings.last_pid,
-        modules::codex_instance::load_instance_store()?.instances,
-        |last_pid, profile| modules::process::resolve_codex_pid(last_pid, profile).is_some(),
-    ))
-}
-
-pub fn restore_mixed_model_profiles_for_app_exit() {
-    let profiles = match configured_idle_codex_profile_dirs() {
-        Ok(profiles) => profiles,
-        Err(error) => {
-            modules::logger::log_warn(&format!(
-                "[MixedModelRouting] 应用退出前读取实例失败: {}",
-                error
-            ));
-            return;
-        }
-    };
-    for profile_dir in profiles {
-        match modules::codex_local_access::restore_mixed_model_gateway_profile(&profile_dir) {
-            Ok(true) => {
-                if let Err(error) =
-                    modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
-                        &profile_dir,
-                    )
-                {
-                    modules::logger::log_warn(&format!(
-                        "[MixedModelRouting] 应用退出恢复模型目录失败: profile={} error={}",
-                        profile_dir.display(),
-                        error
-                    ));
-                }
-            }
-            Ok(false) => {}
-            Err(error) => modules::logger::log_warn(&format!(
-                "[MixedModelRouting] 应用退出恢复官方配置失败: profile={} error={}",
-                profile_dir.display(),
-                error
-            )),
-        }
-    }
 }
 
 pub fn start_mixed_model_gateway_watchdog(app: AppHandle) {
@@ -2250,66 +2163,6 @@ pub async fn codex_save_instance_model_catalog(
     .map_err(|error| format!("保存 Codex 实例可见模型后台任务失败: {}", error))??;
     modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
     Ok(saved)
-}
-
-const PENDING_MODEL_CATALOG_FILE: &str = ".cockpit-pending-model-catalog.json";
-
-#[derive(Clone, Serialize, Deserialize)]
-struct PendingModelCatalog {
-    enabled: bool,
-    models: Vec<CodexExperimentalModelDefinition>,
-    default_model_id: Option<String>,
-}
-
-impl PendingModelCatalog {
-    fn apply_to_view(&self, config: &mut CodexQuickConfig) {
-        config.experimental_model_catalog_enabled = self.enabled;
-        config.experimental_model_catalog_models = self.models.clone();
-        config.experimental_model_catalog_default_model_id = self.default_model_id.clone();
-    }
-}
-
-fn read_pending_model_catalog(profile: &Path) -> Result<Option<PendingModelCatalog>, String> {
-    match std::fs::read(profile.join(PENDING_MODEL_CATALOG_FILE)) {
-        Ok(bytes) => serde_json::from_slice(&bytes).map(Some)
-            .map_err(|error| format!("读取待生效模型配置失败: {}", error)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(format!("读取待生效模型配置失败: {}", error)),
-    }
-}
-
-fn save_pending_model_catalog(
-    profile: &Path,
-    enabled: bool,
-    models: Vec<CodexExperimentalModelDefinition>,
-    default_model_id: Option<String>,
-) -> Result<CodexQuickConfig, String> {
-    let mut config = modules::codex_account::read_quick_config_from_config_toml(profile)?;
-    if !config.experimental_model_catalog_available {
-        return Err("当前实例不支持受管模型目录".to_string());
-    }
-    let models = if enabled {
-        modules::codex_account::normalize_experimental_model_definitions(models)?
-    } else {
-        models
-    };
-    let default_model_id = default_model_id.filter(|id| {
-        enabled && models.iter().any(|model| model.model_id.eq_ignore_ascii_case(id))
-    });
-    let draft = PendingModelCatalog { enabled, models, default_model_id };
-    let content = serde_json::to_string_pretty(&draft).map_err(|error| error.to_string())?;
-    modules::atomic_write::write_string_atomic(&profile.join(PENDING_MODEL_CATALOG_FILE), &content)?;
-    draft.apply_to_view(&mut config);
-    Ok(config)
-}
-
-fn apply_pending_model_catalog(profile: &Path) -> Result<(), String> {
-    let Some(draft) = read_pending_model_catalog(profile)? else { return Ok(()); };
-    modules::codex_account::save_model_catalog_for_base_dir_preserving_context(
-        profile, draft.enabled, draft.models, draft.default_model_id,
-    )?;
-    modules::atomic_write::remove_file_locked(&profile.join(PENDING_MODEL_CATALOG_FILE))?;
-    Ok(())
 }
 
 /// Save the instance record and its managed model catalog as one compensated transaction.

@@ -545,6 +545,7 @@
         "runningSaveMessage": "Esta instancia de Codex se está ejecutando. Reemplazar el servicio local ahora interrumpirá la conversación actual.\n\nElija «Guardar y reiniciar Codex» para aplicar ahora, o «Guardar para más tarde» para mantener la sesión actual sin cambios.",
         "saveAndRestart": "Guardar y reiniciar Codex",
         "saveForLater": "Guardar para más tarde",
+        "savedForNextLaunch": "Guardado. Se aplicará la próxima vez que inicies Codex desde Cockpit; la sesión actual no cambiará.",
         "restartRollbackFailed": "No se pudo iniciar la nueva ruta y no se pudo reiniciar la configuración original: ",
         "restartRolledBack": "No se pudo iniciar la nueva ruta. Se restauró la configuración original y se reinició Codex: {{error}}"
       }

@@ -545,6 +545,7 @@
         "runningSaveMessage": "Questa istanza di Codex è in esecuzione. Sostituire il servizio locale ora interromperà la conversazione corrente.\n\nScegli «Salva e riavvia Codex» per applicare subito, oppure «Salva per dopo» per mantenere invariata la sessione corrente.",
         "saveAndRestart": "Salva e riavvia Codex",
         "saveForLater": "Salva per dopo",
+        "savedForNextLaunch": "Salvato. La modifica verrà applicata al prossimo avvio di Codex tramite Cockpit; la sessione corrente resterà invariata.",
         "restartRollbackFailed": "Impossibile avviare la nuova route e impossibile riavviare la configurazione originale: ",
         "restartRolledBack": "Impossibile avviare la nuova route. La configurazione originale è stata ripristinata e Codex è stato riavviato: {{error}}"
       }

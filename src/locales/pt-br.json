@@ -545,6 +545,7 @@
         "runningSaveMessage": "Esta instância do Codex está em execução. Substituir o serviço local agora interromperá a conversa atual.\n\nEscolha «Salvar e reiniciar o Codex» para aplicar agora ou «Salvar para depois» para manter a sessão atual inalterada.",
         "saveAndRestart": "Salvar e reiniciar o Codex",
         "saveForLater": "Salvar para depois",
+        "savedForNextLaunch": "Salvo. A alteração será aplicada na próxima vez que você iniciar o Codex pelo Cockpit; a sessão atual permanecerá inalterada.",
         "restartRollbackFailed": "Falha ao iniciar a nova rota e a configuração original não pôde ser reiniciada: ",
         "restartRolledBack": "Falha ao iniciar a nova rota. A configuração original foi restaurada e o Codex foi reiniciado: {{error}}"
       }

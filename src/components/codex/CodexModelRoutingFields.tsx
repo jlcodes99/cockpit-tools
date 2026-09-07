@@ -1079,11 +1079,8 @@ export function CodexModelRoutingModal({
   if (!open) return null;
 
   return createPortal(
-    <div className="modal-overlay codex-model-routing-overlay" onClick={onClose}>
-      <div
-        className="modal codex-model-routing-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="modal-overlay codex-model-routing-overlay">
+      <div className="modal codex-model-routing-modal">
         <div className="modal-header">
           <div>
             <h2>{t("instances.form.modelRouting.modalTitle", "第三方 API 路由配置")}</h2>

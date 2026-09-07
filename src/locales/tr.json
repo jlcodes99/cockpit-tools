@@ -545,6 +545,7 @@
         "runningSaveMessage": "Bu Codex örneği çalışıyor. Yerel hizmeti şimdi değiştirmek mevcut görüşmeyi kesintiye uğratacaktır.\n\nŞimdi uygulamak için «Kaydet ve Codex'i yeniden başlat»ı veya mevcut oturumu değiştirmemek için «Daha sonra kaydet»i seçin.",
         "saveAndRestart": "Kaydet ve Codex'i yeniden başlat",
         "saveForLater": "Daha sonra kaydet",
+        "savedForNextLaunch": "Kaydedildi. Değişiklik, Codex'i bir sonraki kez Cockpit üzerinden başlattığınızda uygulanacak; mevcut oturum değişmeyecek.",
         "restartRollbackFailed": "Yeni rota başlatılamadı ve orijinal yapılandırma yeniden başlatılamadı: ",
         "restartRolledBack": "Yeni rota başlatılamadı. Orijinal yapılandırma geri yüklendi ve Codex yeniden başlatıldı: {{error}}"
       }

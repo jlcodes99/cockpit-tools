@@ -545,6 +545,7 @@
         "runningSaveMessage": "Ta instancja Codex jest uruchomiona. Zastąpienie lokalnej usługi teraz przerwie bieżącą rozmowę.\n\nWybierz „Zapisz i zrestartuj Codex”, aby zastosować teraz, lub „Zapisz na później”, aby zachować bieżącą sesję bez zmian.",
         "saveAndRestart": "Zapisz i zrestartuj Codex",
         "saveForLater": "Zapisz na później",
+        "savedForNextLaunch": "Zapisano. Zmiana zostanie zastosowana przy następnym uruchomieniu Codex przez Cockpit; bieżąca sesja pozostanie bez zmian.",
         "restartRollbackFailed": "Nie udało się uruchomić nowej trasy i nie można zrestartować pierwotnej konfiguracji: ",
         "restartRolledBack": "Nie udało się uruchomić nowej trasy. Przywrócono pierwotną konfigurację i zrestartowano Codex: {{error}}"
       }

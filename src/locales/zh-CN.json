@@ -749,6 +749,7 @@
         "runningSaveMessage": "此 Codex 实例正在运行。立即替换本地服务会中断当前对话。\n\n选择“保存并重启 Codex”立即生效；选择“仅保存，稍后生效”不会影响当前会话。",
         "saveAndRestart": "保存并重启 Codex",
         "saveForLater": "仅保存，稍后生效",
+        "savedForNextLaunch": "已保存，下次通过 Cockpit 启动 Codex 时生效；当前会话保持不变。",
         "restartRollbackFailed": "新路由启动失败，恢复原配置后仍无法启动：",
         "restartRolledBack": "新路由启动失败，已恢复原配置并重新启动 Codex：{{error}}"
       },

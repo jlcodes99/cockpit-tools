@@ -749,6 +749,7 @@
         "runningSaveMessage": "This Codex instance is running. Replacing the local service now will interrupt the current conversation.\n\nChoose Save and restart Codex to apply now, or Save for later to keep the current session unchanged.",
         "saveAndRestart": "Save and restart Codex",
         "saveForLater": "Save for later",
+        "savedForNextLaunch": "Saved. It will take effect the next time you start Codex through Cockpit; the current session remains unchanged.",
         "restartRollbackFailed": "The new route failed to start and the original configuration could not be restarted: ",
         "restartRolledBack": "The new route failed to start. The original configuration was restored and Codex restarted: {{error}}"
       },

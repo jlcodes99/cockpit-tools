@@ -545,6 +545,7 @@
         "runningSaveMessage": "此 Codex 執行個體正在執行。立即取代本地服務會中斷目前對話。\n\n選擇「儲存並重啟 Codex」立即生效；選擇「僅儲存，稍後生效」不會影響目前工作階段。",
         "saveAndRestart": "儲存並重啟 Codex",
         "saveForLater": "僅儲存，稍後生效",
+        "savedForNextLaunch": "已儲存，下次透過 Cockpit 啟動 Codex 時生效；目前工作階段維持不變。",
         "restartRollbackFailed": "新路由啟動失敗，恢復原配置後仍無法啟動：",
         "restartRolledBack": "新路由啟動失敗，已恢復原配置並重新啟動 Codex：{{error}}"
       }

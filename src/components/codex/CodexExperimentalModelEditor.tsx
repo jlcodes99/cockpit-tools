@@ -905,11 +905,11 @@ export function CodexExperimentalModelEditor({
                   handleReorderDragStart(event, model.model_id)
                 }
                 title={t(
-                  "codex.experimentalModelCatalog.models.dragToReorder",
+                  "platformLayout.dragHandleLabel",
                   "拖动排序",
                 )}
                 aria-label={t(
-                  "codex.experimentalModelCatalog.models.dragToReorder",
+                  "platformLayout.dragHandleLabel",
                   "拖动排序",
                 )}
               >
@@ -1324,11 +1324,11 @@ export function CodexExperimentalModelEditor({
                     handleReorderDragStart(event, model.model_id)
                   }
                   title={t(
-                    "codex.experimentalModelCatalog.models.dragToReorder",
+                    "platformLayout.dragHandleLabel",
                     "拖动排序",
                   )}
                   aria-label={t(
-                    "codex.experimentalModelCatalog.models.dragToReorder",
+                    "platformLayout.dragHandleLabel",
                     "拖动排序",
                   )}
                 >

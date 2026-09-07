@@ -545,6 +545,7 @@
         "runningSaveMessage": "Cette instance Codex est en cours d'exécution. Remplacer le service local maintenant interrompra la conversation en cours.\n\nChoisissez « Enregistrer et redémarrer Codex » pour appliquer maintenant, ou « Enregistrer pour plus tard » pour conserver la session actuelle inchangée.",
         "saveAndRestart": "Enregistrer et redémarrer Codex",
         "saveForLater": "Enregistrer pour plus tard",
+        "savedForNextLaunch": "Enregistré. La modification s’appliquera au prochain démarrage de Codex via Cockpit ; la session actuelle reste inchangée.",
         "restartRollbackFailed": "La nouvelle route n'a pas pu démarrer et la configuration d'origine n'a pas pu être redémarrée : ",
         "restartRolledBack": "La nouvelle route n'a pas pu démarrer. La configuration d'origine a été restaurée et Codex a redémarré : {{error}}"
       }

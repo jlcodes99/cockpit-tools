@@ -545,6 +545,7 @@
         "runningSaveMessage": "この Codex インスタンスは実行中です。今すぐローカル サービスを置き換えると、現在の会話が中断されます。\n\n今すぐ適用するには「保存して Codex を再起動」を、現在のセッションを変更しない場合は「保存して後で適用」を選択してください。",
         "saveAndRestart": "保存して Codex を再起動",
         "saveForLater": "保存して後で適用",
+        "savedForNextLaunch": "保存しました。次回 Cockpit から Codex を起動したときに反映され、現在のセッションは変更されません。",
         "restartRollbackFailed": "新しいルートの起動に失敗し、元の設定を再起動できませんでした: ",
         "restartRolledBack": "新しいルートの起動に失敗しました。元の設定が復元され、Codex が再起動されました: {{error}}"
       }

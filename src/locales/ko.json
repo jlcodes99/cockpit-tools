@@ -545,6 +545,7 @@
         "runningSaveMessage": "이 Codex 인스턴스가 실행 중입니다. 지금 로컬 서비스를 교체하면 현재 대화가 중단됩니다.\n\n지금 적용하려면 \"저장 후 Codex 재시작\"을 선택하고, 현재 세션을 유지하려면 \"저장 후 나중에 적용\"을 선택하세요.",
         "saveAndRestart": "저장 후 Codex 재시작",
         "saveForLater": "저장 후 나중에 적용",
+        "savedForNextLaunch": "저장했습니다. 다음에 Cockpit에서 Codex를 시작할 때 적용되며 현재 세션은 변경되지 않습니다.",
         "restartRollbackFailed": "새 경로를 시작하지 못했고 원래 구성을 다시 시작할 수 없습니다: ",
         "restartRolledBack": "새 경로를 시작하지 못했습니다. 원래 구성이 복원되고 Codex가 다시 시작되었습니다: {{error}}"
       }

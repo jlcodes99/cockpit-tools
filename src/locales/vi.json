@@ -545,6 +545,7 @@
         "runningSaveMessage": "Phiên bản Codex này đang chạy. Thay thế dịch vụ cục bộ ngay bây giờ sẽ làm gián đoạn cuộc trò chuyện hiện tại.\n\nChọn «Lưu và khởi động lại Codex» để áp dụng ngay, hoặc «Lưu để dùng sau» để giữ nguyên phiên hiện tại.",
         "saveAndRestart": "Lưu và khởi động lại Codex",
         "saveForLater": "Lưu để dùng sau",
+        "savedForNextLaunch": "Đã lưu. Thay đổi sẽ có hiệu lực vào lần tới khi bạn khởi động Codex qua Cockpit; phiên hiện tại vẫn giữ nguyên.",
         "restartRollbackFailed": "Không thể khởi động tuyến mới và không thể khởi động lại cấu hình gốc: ",
         "restartRolledBack": "Không thể khởi động tuyến mới. Cấu hình gốc đã được khôi phục và Codex đã khởi động lại: {{error}}"
       }

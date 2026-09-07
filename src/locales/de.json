@@ -545,6 +545,7 @@
         "runningSaveMessage": "Diese Codex-Instanz wird ausgeführt. Das Ersetzen des lokalen Dienstes unterbricht die aktuelle Unterhaltung.\n\nWählen Sie „Speichern und Codex neu starten“, um die Änderungen jetzt anzuwenden, oder „Speichern für später“, um die aktuelle Sitzung unverändert beizubehalten.",
         "saveAndRestart": "Speichern und Codex neu starten",
         "saveForLater": "Speichern für später",
+        "savedForNextLaunch": "Gespeichert. Die Änderung wird beim nächsten Start von Codex über Cockpit wirksam; die aktuelle Sitzung bleibt unverändert.",
         "restartRollbackFailed": "Die neue Route konnte nicht gestartet werden und die ursprüngliche Konfiguration konnte nicht neu gestartet werden: ",
         "restartRolledBack": "Die neue Route konnte nicht gestartet werden. Die ursprüngliche Konfiguration wurde wiederhergestellt und Codex neu gestartet: {{error}}"
       }

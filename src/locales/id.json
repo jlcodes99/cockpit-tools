@@ -604,6 +604,7 @@
         "runningSaveMessage": "Instans Codex ini sedang berjalan. Mengganti layanan lokal sekarang akan memutus percakapan saat ini.\n\nPilih «Simpan dan mulai ulang Codex» untuk menerapkan sekarang, atau «Simpan untuk nanti» untuk mempertahankan sesi saat ini.",
         "saveAndRestart": "Simpan dan mulai ulang Codex",
         "saveForLater": "Simpan untuk nanti",
+        "savedForNextLaunch": "Tersimpan. Perubahan akan berlaku saat Codex berikutnya dijalankan melalui Cockpit; sesi saat ini tetap tidak berubah.",
         "restartRollbackFailed": "Rute baru gagal dimulai dan konfigurasi asli tidak dapat dimulai ulang: ",
         "restartRolledBack": "Rute baru gagal dimulai. Konfigurasi asli telah dipulihkan dan Codex dimulai ulang: {{error}}"
       }

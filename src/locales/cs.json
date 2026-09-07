@@ -545,6 +545,7 @@
         "runningSaveMessage": "Tato instance Codexu je spuštěna. Nahrazení místní služby nyní přeruší probíhající konverzaci.\n\nZvolte „Uložit a restartovat Codex“ pro okamžité použití, nebo „Uložit na později“ pro zachování aktuální relace.",
         "saveAndRestart": "Uložit a restartovat Codex",
         "saveForLater": "Uložit na později",
+        "savedForNextLaunch": "Uloženo. Změna se projeví při příštím spuštění Codexu přes Cockpit; aktuální relace zůstane beze změny.",
         "restartRollbackFailed": "Nová trasa se nepodařila spustit a původní konfiguraci nebylo možné restartovat: ",
         "restartRolledBack": "Nová trasa se nepodařila spustit. Byla obnovena původní konfigurace a Codex byl restartován: {{error}}"
       }
