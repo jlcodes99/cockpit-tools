@@ -3563,21 +3563,18 @@ fn handle_tray_event<R: Runtime>(tray: &TrayIcon<R>, event: TrayIconEvent) {
         } => {
             #[cfg(target_os = "macos")]
             {
-                if button == MouseButton::Left {
-                    if let Err(err) =
-                        crate::modules::floating_card_window::show_main_window(tray.app_handle())
-                    {
-                        logger::log_warn(&format!("[Tray] 左键恢复主窗口失败: {}", err));
-                    }
-                    return;
-                }
-
-                if button == MouseButton::Right && button_state == MouseButtonState::Down {
+                // Both mouse buttons should open the native status menu. This makes
+                // the quota view accessible with a trackpad, where a right click
+                // is less discoverable than a regular click.
+                if button_state == MouseButtonState::Down
+                    && matches!(button, MouseButton::Left | MouseButton::Right)
+                {
                     let app = tray.app_handle().clone();
                     let app_for_menu = app.clone();
                     let _ = app.run_on_main_thread(move || {
                         crate::modules::macos_native_menu::toggle_tray_menu(&app_for_menu, _rect);
                     });
+                    return;
                 }
             }
 
