@@ -199,13 +199,21 @@ export interface ProviderAccountBase {
 
 const DEFAULT_SORT_BY = 'created_at';
 const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
-const DEFAULT_VIEW_MODE: ViewMode = 'grid';
+/**
+ * Single source of truth for the account pages' persisted view mode.
+ * `compact` is a legacy value written by older Claude builds and still resolves
+ * to `list`; every other unknown value falls back to the default.
+ */
+export const DEFAULT_VIEW_MODE: ViewMode = 'grid';
+
+export const normalizeViewMode = (value: unknown): ViewMode => {
+  if (value === 'grid' || value === 'list') return value;
+  if (value === 'compact') return 'list';
+  return DEFAULT_VIEW_MODE;
+};
 
 const normalizeSortDirection = (value: string | null): SortDirection =>
   value === 'asc' ? 'asc' : DEFAULT_SORT_DIRECTION;
-
-const normalizeViewMode = (value: string | null): ViewMode =>
-  value === 'list' ? 'list' : DEFAULT_VIEW_MODE;
 
 const FILTER_FIELD_VIEW_MODE = 'view_mode';
 const FILTER_FIELD_FILTER_TYPE = 'filter_type';
