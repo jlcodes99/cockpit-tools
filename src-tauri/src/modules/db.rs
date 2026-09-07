@@ -165,6 +165,7 @@ fn inject_unified_oauth_token(
         .unwrap_or_default();
     let mut topic =
         protobuf::remove_unified_topic_entry(&current_topic, "oauthTokenInfoSentinelKey")?;
+    topic = protobuf::remove_unified_topic_entry(&topic, "authStateWithContextSentinelKey")?;
 
     // 创建 OAuthTokenInfo（二进制）
     let oauth_info = protobuf::create_oauth_info_with_metadata(
