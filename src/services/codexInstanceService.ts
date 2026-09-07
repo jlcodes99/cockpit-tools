@@ -131,7 +131,11 @@ export async function updateInstance(payload: {
     body.bindAccountId = payload.bindAccountId;
   }
   if (payload.modelRouting !== undefined) {
-    body.modelRouting = payload.modelRouting;
+    if (payload.modelRouting === null) {
+      body.clearModelRouting = true;
+    } else {
+      body.modelRouting = payload.modelRouting;
+    }
   }
   if (payload.followLocalAccount !== undefined) {
     body.followLocalAccount = payload.followLocalAccount;
@@ -230,12 +234,16 @@ export async function saveCodexInstanceConfiguration(payload: {
     experimentalModelCatalogDefaultModelId:
       payload.experimentalModelCatalogDefaultModelId ?? null,
   };
+  if (payload.modelRouting === null) {
+    body.clearModelRouting = true;
+  } else if (payload.modelRouting !== undefined) {
+    body.modelRouting = payload.modelRouting;
+  }
   for (const [key, value] of Object.entries({
     name: payload.name,
     workingDir: payload.workingDir,
     extraArgs: payload.extraArgs,
     bindAccountId: payload.bindAccountId,
-    modelRouting: payload.modelRouting,
     followLocalAccount: payload.followLocalAccount,
     launchMode: payload.launchMode,
     appSpeed: payload.appSpeed,

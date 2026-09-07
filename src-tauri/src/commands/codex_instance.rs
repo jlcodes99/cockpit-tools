@@ -82,6 +82,19 @@ fn validate_instance_model_routing(
     Ok(Some(normalized))
 }
 
+fn resolve_model_routing_update(
+    model_routing: Option<Option<CodexInstanceModelRouting>>,
+    clear_model_routing: Option<bool>,
+) -> Result<Option<Option<CodexInstanceModelRouting>>, String> {
+    if clear_model_routing != Some(true) {
+        return Ok(model_routing);
+    }
+    if model_routing.as_ref().is_some_and(Option::is_some) {
+        return Err("不能同时设置并清除混合模型路由".to_string());
+    }
+    Ok(Some(None))
+}
+
 fn model_routing_update_error(error: String, rollback_errors: Vec<String>) -> String {
     if rollback_errors.is_empty() {
         return error;
@@ -1034,6 +1047,25 @@ mod tests {
     }
 
     #[test]
+    fn explicit_model_routing_clear_becomes_a_requested_update() {
+        let update = resolve_model_routing_update(None, Some(true))
+            .expect("explicit clear should be accepted");
+
+        assert!(matches!(update, Some(None)));
+    }
+
+    #[test]
+    fn explicit_model_routing_clear_rejects_a_new_routing_value() {
+        let error = resolve_model_routing_update(
+            Some(Some(CodexInstanceModelRouting::default())),
+            Some(true),
+        )
+        .expect_err("setting and clearing routing together should be rejected");
+
+        assert_eq!(error, "不能同时设置并清除混合模型路由");
+    }
+
+    #[test]
     fn instance_start_guard_rejects_only_duplicate_instance_starts() {
         let first = CodexInstanceStartGuard::acquire("guard-test-a")
             .expect("first start should acquire the instance guard");
@@ -1306,6 +1338,7 @@ mod tests {
             Some(Some(CodexInstanceModelRouting::default())),
             None,
             None,
+            None,
             Some(CodexAppSpeed::Fast),
             None,
             None,
@@ -1396,6 +1429,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             Some(true),
             false,
             test_experimental_models(),
@@ -1466,6 +1500,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             false,
             test_experimental_models(),
             None,
@@ -1502,6 +1537,7 @@ mod tests {
             None,
             None,
             Some(Some(invalid_routing)),
+            None,
             None,
             None,
             None,
@@ -2078,6 +2114,7 @@ pub async fn codex_save_instance_configuration(
     extra_args: Option<String>,
     bind_account_id: Option<Option<String>>,
     model_routing: Option<Option<CodexInstanceModelRouting>>,
+    clear_model_routing: Option<bool>,
     follow_local_account: Option<bool>,
     launch_mode: Option<InstanceLaunchMode>,
     app_speed: Option<CodexAppSpeed>,
@@ -2103,6 +2140,7 @@ pub async fn codex_save_instance_configuration(
         extra_args,
         bind_account_id,
         model_routing,
+        clear_model_routing,
         follow_local_account,
         launch_mode,
         app_speed,
@@ -2489,12 +2527,14 @@ pub async fn codex_update_instance(
     extra_args: Option<String>,
     bind_account_id: Option<Option<String>>,
     model_routing: Option<Option<CodexInstanceModelRouting>>,
+    clear_model_routing: Option<bool>,
     follow_local_account: Option<bool>,
     launch_mode: Option<InstanceLaunchMode>,
     app_speed: Option<CodexAppSpeed>,
     auto_sync_threads: Option<bool>,
     defer_bind_account_application: Option<bool>,
 ) -> Result<CodexInstanceProfileView, String> {
+    let model_routing = resolve_model_routing_update(model_routing, clear_model_routing)?;
     let model_routing_update_requested = model_routing.is_some();
     let app_speed_update_requested = app_speed.is_some();
     let should_apply_bind_account = should_apply_instance_binding_immediately(
