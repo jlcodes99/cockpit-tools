@@ -116,6 +116,10 @@ interface PlatformRefreshDescriptor {
 const STARTUP_AUTO_REFRESH_SETUP_DELAY_MS = 2500;
 const AUTO_REFRESH_TICK_MS = 5_000;
 const AUTO_REFRESH_MAX_CONCURRENT = 1;
+// This refreshes only the active Codex account while account rotation is on.
+// It deliberately bypasses the minutes-based background cadence so a fast
+// Soul Ultra session cannot consume the switch reserve between two polls.
+const CODEX_AUTO_SWITCH_SAFETY_POLL_MS = 10_000;
 const TRAE_CURRENT_ACCOUNT_ID_KEYS = {
   trae: 'agtools.trae.current_account_id',
   trae_solo: 'agtools.trae_solo.current_account_id',
@@ -813,6 +817,29 @@ export function useAutoRefresh() {
               });
             } else {
               console.log(`[AutoRefresh] ${descriptor.label} 当前账号刷新已禁用${descriptor.currentMinutes === -1 ? '（账号级覆盖禁用）' : '（配额自动刷新未开启）'}`);
+            }
+          }
+
+          if (config.codex_auto_switch_enabled) {
+            const codexDescriptor = descriptors.find((descriptor) => descriptor.key === 'codex');
+            if (codexDescriptor) {
+              console.log(
+                `[AutoRefresh] Codex auto-switch safety polling: every ${CODEX_AUTO_SWITCH_SAFETY_POLL_MS / 1000}s (active account only)`,
+              );
+              tasks.push({
+                key: 'safety:codex-auto-switch',
+                label: 'Codex auto-switch safety polling',
+                intervalMs: CODEX_AUTO_SWITCH_SAFETY_POLL_MS,
+                initialDelayMs: AUTO_REFRESH_TICK_MS,
+                shouldSkip: () => codexDescriptor.fullRefreshingRef.current,
+                run: () =>
+                  executeWithGuard(
+                    codexDescriptor.currentRefreshingRef,
+                    codexDescriptor.runCurrentRefresh,
+                    null,
+                    '[AutoRefresh] Codex auto-switch safety polling failed:',
+                  ),
+              });
             }
           }
 

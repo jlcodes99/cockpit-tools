@@ -548,21 +548,17 @@ async fn update_api_key_bound_oauth_account_with_bound(
     account.bound_oauth_account_id = Some(bound_id.clone());
     // 绑定动作也执行客户端级 Token 预检，确保 access_token 不可用时先刷新，
     // 并沿用统一的重新授权错误协议。
-    let bound_oauth_account = match refresh_bound_oauth_account_for_api_key_locked(
-        &account,
-        "api-key-bind",
-        true,
-        false,
-    )
-    .await
-    {
-        Ok(account) => account,
-        Err(error) => {
-            return Err(crate::modules::codex_account::format_account_switch_error(
-                &bound_id, error,
-            ));
-        }
-    };
+    let bound_oauth_account =
+        match refresh_bound_oauth_account_for_api_key_locked(&account, "api-key-bind", true, false)
+            .await
+        {
+            Ok(account) => account,
+            Err(error) => {
+                return Err(crate::modules::codex_account::format_account_switch_error(
+                    &bound_id, error,
+                ));
+            }
+        };
     account.bound_oauth_use_local_gateway = false;
     save_account(&account)?;
 
@@ -1078,22 +1074,50 @@ fn pick_quota_alert_recommendation(
     pick_best_candidate(candidates)
 }
 
-pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, String> {
+// Start persisting a durable local checkpoint before the configured switch
+// threshold. The configured threshold remains the final safety threshold so a
+// user can trade remaining quota for more time to finish naturally.
+const CODEX_AUTO_SWITCH_PREPARE_FLOOR_PERCENT: i32 = 10;
+
+#[derive(Debug, Clone)]
+pub enum CodexAutoSwitchPlan {
+    None,
+    Prepare {
+        current_account_id: String,
+    },
+    Switch {
+        current_account_id: String,
+        target: CodexAccount,
+    },
+}
+
+fn staged_auto_switch_thresholds(configured_threshold: i32) -> (i32, i32) {
+    (
+        configured_threshold.max(CODEX_AUTO_SWITCH_PREPARE_FLOOR_PERCENT),
+        configured_threshold,
+    )
+}
+
+pub fn evaluate_auto_switch_plan() -> Result<CodexAutoSwitchPlan, String> {
     if CODEX_AUTO_SWITCH_IN_PROGRESS.swap(true, Ordering::SeqCst) {
         logger::log_info("[AutoSwitch][Codex] 自动切号进行中，跳过本次检查");
-        return Ok(None);
+        return Ok(CodexAutoSwitchPlan::None);
     }
 
     let result = (|| {
         let cfg = crate::modules::config::get_user_config();
         if !cfg.codex_auto_switch_enabled {
-            return Ok(None);
+            return Ok(CodexAutoSwitchPlan::None);
         }
 
-        let primary_threshold =
+        let configured_primary_threshold =
             normalize_auto_switch_threshold(cfg.codex_auto_switch_primary_threshold);
-        let secondary_threshold =
+        let configured_secondary_threshold =
             normalize_auto_switch_threshold(cfg.codex_auto_switch_secondary_threshold);
+        let (prepare_primary_threshold, final_primary_threshold) =
+            staged_auto_switch_thresholds(configured_primary_threshold);
+        let (prepare_secondary_threshold, final_secondary_threshold) =
+            staged_auto_switch_thresholds(configured_secondary_threshold);
         let account_scope_mode =
             normalize_auto_switch_account_scope_mode(&cfg.codex_auto_switch_account_scope_mode);
 
@@ -1108,35 +1132,55 @@ pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, Strin
                 "[AutoSwitch][Codex] 可监控账号范围为空(scope={})，跳过自动切号",
                 account_scope_mode
             ));
-            return Ok(None);
+            return Ok(CodexAutoSwitchPlan::None);
         }
         let current_id = match resolve_current_account_id(&accounts) {
             Some(id) => id,
-            None => return Ok(None),
+            None => return Ok(CodexAutoSwitchPlan::None),
         };
         if !monitored_account_ids.contains(&current_id) {
             logger::log_info(&format!(
                 "[AutoSwitch][Codex] 当前账号不在监控范围内(current_id={}, scope={})，跳过自动切号",
                 current_id, account_scope_mode
             ));
-            return Ok(None);
+            return Ok(CodexAutoSwitchPlan::None);
         }
 
         let current = match accounts.iter().find(|account| account.id == current_id) {
             Some(account) => account,
-            None => return Ok(None),
+            None => return Ok(CodexAutoSwitchPlan::None),
         };
 
         let current_metrics = extract_quota_metrics(current);
         if current_metrics.is_empty() {
-            return Ok(None);
+            return Ok(CodexAutoSwitchPlan::None);
         }
 
-        let should_switch = current_metrics
-            .iter()
-            .any(|metric| metric_crossed_threshold(metric, primary_threshold, secondary_threshold));
-        if !should_switch {
-            return Ok(None);
+        let must_switch = current_metrics.iter().any(|metric| {
+            metric_crossed_threshold(metric, final_primary_threshold, final_secondary_threshold)
+        });
+        if !must_switch {
+            let should_prepare = current_metrics.iter().any(|metric| {
+                metric_crossed_threshold(
+                    metric,
+                    prepare_primary_threshold,
+                    prepare_secondary_threshold,
+                )
+            });
+            if should_prepare {
+                logger::log_info(&format!(
+                    "[Codex Safe AutoSwitch] arming checkpoint preparation for current_id={} (prepare primary<={}%, secondary<={}%; final primary<={}%, secondary<={}%)",
+                    current_id,
+                    prepare_primary_threshold,
+                    prepare_secondary_threshold,
+                    final_primary_threshold,
+                    final_secondary_threshold
+                ));
+                return Ok(CodexAutoSwitchPlan::Prepare {
+                    current_account_id: current_id,
+                });
+            }
+            return Ok(CodexAutoSwitchPlan::None);
         }
 
         let candidates: Vec<CodexSwitchCandidate> = accounts
@@ -1144,23 +1188,50 @@ pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, Strin
             .filter(|account| monitored_account_ids.contains(&account.id))
             .filter(|account| account.id != current_id)
             .filter_map(|account| {
-                build_switch_candidate(account, primary_threshold, secondary_threshold)
+                build_switch_candidate(
+                    account,
+                    configured_primary_threshold,
+                    configured_secondary_threshold,
+                )
             })
             .collect();
 
         if candidates.is_empty() {
             logger::log_warn(&format!(
-                "[AutoSwitch][Codex] 当前账号命中阈值 (primary<={}%, secondary<={}%)，但没有可切换候选账号",
-                primary_threshold, secondary_threshold
+                "[AutoSwitch][Codex] 当前账号命中最终阈值 (primary<={}%, secondary<={}%)，但没有可切换候选账号",
+                final_primary_threshold, final_secondary_threshold
             ));
-            return Ok(None);
+            return Ok(CodexAutoSwitchPlan::None);
         }
 
-        Ok(pick_best_candidate(candidates))
+        let target = pick_best_candidate(candidates).expect("candidates is not empty");
+        Ok(CodexAutoSwitchPlan::Switch {
+            current_account_id: current_id,
+            target,
+        })
     })();
 
     CODEX_AUTO_SWITCH_IN_PROGRESS.store(false, Ordering::SeqCst);
     result
+}
+
+pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, String> {
+    match evaluate_auto_switch_plan()? {
+        CodexAutoSwitchPlan::Switch { target, .. } => Ok(Some(target)),
+        CodexAutoSwitchPlan::None | CodexAutoSwitchPlan::Prepare { .. } => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod staged_auto_switch_tests {
+    use super::staged_auto_switch_thresholds;
+
+    #[test]
+    fn staged_thresholds_arm_at_ten_percent_and_keep_the_configured_final_limit() {
+        assert_eq!(staged_auto_switch_thresholds(5), (10, 5));
+        assert_eq!(staged_auto_switch_thresholds(20), (20, 20));
+        assert_eq!(staged_auto_switch_thresholds(1), (10, 1));
+    }
 }
 
 pub fn run_quota_alert_if_needed(
