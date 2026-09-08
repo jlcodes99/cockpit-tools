@@ -1934,6 +1934,8 @@ fn build_macos_codex_terminal_launch_plan(
             ),
         )
     } else if is_ghostty {
+        // Ghostty prefixes this with exec, so cd and environment assignments need a shell.
+        let shell_command = format!("/bin/bash -lc '{}'", command.replace('\'', "'\\''"));
         (
             "Ghostty",
             format!(
@@ -1943,7 +1945,7 @@ fn build_macos_codex_terminal_launch_plan(
                     set command of cfg to \"{}\"
                     new window with configuration cfg
                 end tell",
-                escape_applescript(command)
+                escape_applescript(&shell_command)
             ),
         )
     } else if is_terminal_app {
