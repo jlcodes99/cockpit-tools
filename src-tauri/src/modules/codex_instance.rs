@@ -16,6 +16,7 @@ use crate::modules::instance_store;
 
 static CODEX_INSTANCE_STORE_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
+static CODEX_INSTANCE_SAVE_NOTIFY_LOCK: Mutex<()> = Mutex::new(());
 
 const CODEX_INSTANCES_FILE: &str = "codex_instances.json";
 pub const CODEX_API_SERVICE_BIND_ACCOUNT_ID: &str = "__api_service__";
@@ -94,12 +95,21 @@ pub fn load_instance_store() -> Result<InstanceStore, String> {
     let path = instances_path()?;
     let mut store = instance_store::load_instance_store(&path, CODEX_INSTANCES_FILE)?;
     if normalize_managed_instance_dirs(&mut store)? {
-        save_instance_store(&store)?;
+        save_instance_store_raw(&store)?;
     }
     Ok(store)
 }
 
 pub fn save_instance_store(store: &InstanceStore) -> Result<(), String> {
+    let _guard = CODEX_INSTANCE_SAVE_NOTIFY_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    save_instance_store_raw(store)?;
+    crate::commands::codex_instance_gateway_watchdog::instance_store_saved(store);
+    Ok(())
+}
+
+fn save_instance_store_raw(store: &InstanceStore) -> Result<(), String> {
     let path = instances_path()?;
     instance_store::save_instance_store(&path, CODEX_INSTANCES_FILE, store)
 }

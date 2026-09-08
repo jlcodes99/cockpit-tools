@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "Die Aktualisierungswarteschlange ist voll. Bitte später erneut versuchen.",
+      "timeout": "Zeitüberschreitung bei der Kontingentaktualisierung. Bitte erneut versuchen.",
+      "interrupted": "Die Kontingentaktualisierung wurde unerwartet beendet. Bitte erneut versuchen.",
+      "deferred": "Ausstehende Hintergrundaktualisierungen wurden zugunsten der manuellen Aktualisierung verschoben.",
+      "invalidAccountId": "Eine Konto-ID ist erforderlich."
+    },
     "confirm": "Bestätigen",
     "cancel": "Abbrechen",
     "cancelling": "Wird abgebrochen...",

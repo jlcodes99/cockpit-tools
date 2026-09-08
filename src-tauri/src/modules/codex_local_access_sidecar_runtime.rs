@@ -115,6 +115,137 @@ fn sidecar_auto_restart_control() -> &'static Mutex<SidecarAutoRestartControl> {
     SIDECAR_AUTO_RESTART_CONTROL.get_or_init(|| Mutex::new(SidecarAutoRestartControl::default()))
 }
 
+fn sidecar_crash_recovery_control() -> &'static Mutex<SidecarAutoRestartControl> {
+    SIDECAR_CRASH_RECOVERY_CONTROL.get_or_init(|| Mutex::new(SidecarAutoRestartControl::default()))
+}
+
+fn reset_sidecar_restart_window_if_expired(control: &mut SidecarAutoRestartControl, now: Instant) {
+    if control
+        .window_started_at
+        .is_none_or(|started_at| now.duration_since(started_at) >= SIDECAR_AUTO_RESTART_WINDOW)
+    {
+        control.window_started_at = Some(now);
+        control.last_started_at = None;
+        control.attempts = 0;
+    }
+}
+
+fn sidecar_crash_recovery_allowed(
+    collection_enabled: bool,
+    running: bool,
+    expected_generation: u64,
+    current_generation: u64,
+    stop_requests: usize,
+) -> bool {
+    collection_enabled
+        && !running
+        && stop_requests == 0
+        && expected_generation == current_generation
+}
+
+async fn gateway_sidecar_crash_recovery_is_allowed(expected_generation: u64) -> bool {
+    if GATEWAY_STOP_REQUESTS.load(Ordering::SeqCst) > 0
+        || gateway_lifecycle_generation_changed(expected_generation)
+    {
+        return false;
+    }
+    let runtime = gateway_runtime().lock().await;
+    sidecar_crash_recovery_allowed(
+        runtime
+            .collection
+            .as_ref()
+            .map(|collection| collection.enabled)
+            .unwrap_or(false),
+        runtime.running,
+        expected_generation,
+        current_gateway_lifecycle_generation(),
+        GATEWAY_STOP_REQUESTS.load(Ordering::SeqCst),
+    )
+}
+
+fn schedule_sidecar_crash_recovery(process_exit: SidecarProcessExit) {
+    let now = Instant::now();
+    let initial_delay = {
+        let Ok(mut control) = sidecar_crash_recovery_control().lock() else {
+            logger::log_codex_api_warn(
+                "[CodexLocalAccess] Sidecar 崩溃恢复控制锁不可用，跳过本次恢复",
+            );
+            return;
+        };
+        reset_sidecar_restart_window_if_expired(&mut control, now);
+        if control.in_flight || control.attempts >= SIDECAR_AUTO_RESTART_MAX_ATTEMPTS {
+            return;
+        }
+        control.in_flight = true;
+        control
+            .last_started_at
+            .and_then(|started_at| {
+                SIDECAR_CRASH_RECOVERY_MIN_INTERVAL.checked_sub(now.duration_since(started_at))
+            })
+            .unwrap_or_default()
+    };
+
+    tauri::async_runtime::spawn(async move {
+        if !initial_delay.is_zero() {
+            tokio::time::sleep(initial_delay).await;
+        }
+
+        let mut recovered = false;
+        loop {
+            if !gateway_sidecar_crash_recovery_is_allowed(process_exit.generation).await {
+                break;
+            }
+
+            let attempt = {
+                let Ok(mut control) = sidecar_crash_recovery_control().lock() else {
+                    break;
+                };
+                let now = Instant::now();
+                reset_sidecar_restart_window_if_expired(&mut control, now);
+                if control.attempts >= SIDECAR_AUTO_RESTART_MAX_ATTEMPTS {
+                    break;
+                }
+                control.attempts = control.attempts.saturating_add(1);
+                control.last_started_at = Some(now);
+                control.attempts
+            };
+
+            logger::log_codex_api_warn(&format!(
+                "[CodexLocalAccess] API 服务 sidecar 异常退出，开始后台恢复: pid={}, generation={}, attempt={}, reason={}",
+                process_exit.pid, process_exit.generation, attempt, process_exit.message
+            ));
+            match ensure_gateway_matches_runtime().await {
+                Ok(()) if gateway_runtime().lock().await.running => {
+                    logger::log_codex_api_info(
+                        "[CodexLocalAccess] API 服务 sidecar 已自动恢复，账号、API Key 和端口配置保持不变",
+                    );
+                    recovered = true;
+                    break;
+                }
+                Ok(()) => logger::log_codex_api_warn(
+                    "[CodexLocalAccess] API 服务 sidecar 恢复未进入运行态，将按限制重试",
+                ),
+                Err(error) => logger::log_codex_api_warn(&format!(
+                    "[CodexLocalAccess] API 服务 sidecar 自动恢复失败: attempt={}, error={}",
+                    attempt, error
+                )),
+            }
+
+            tokio::time::sleep(SIDECAR_CRASH_RECOVERY_MIN_INTERVAL).await;
+        }
+
+        if let Ok(mut control) = sidecar_crash_recovery_control().lock() {
+            control.in_flight = false;
+        }
+        if !recovered && gateway_sidecar_crash_recovery_is_allowed(process_exit.generation).await {
+            logger::log_codex_api_warn(
+                "[CodexLocalAccess] API 服务 sidecar 自动恢复已达到限制，保留错误状态等待用户处理",
+            );
+        }
+        emit_local_access_state_updated();
+    });
+}
+
 fn schedule_sidecar_auto_restart(event: &SidecarUsageEvent) {
     if !sidecar_usage_event_should_auto_restart(event) {
         return;
@@ -433,7 +564,11 @@ async fn sync_sidecar_scheduler_state(event: &SidecarAuthResultEvent) {
     apply_sidecar_scheduler_state(&mut runtime, event, now);
 }
 
-fn clear_runtime_account_health(runtime: &mut GatewayRuntime, account_ids: &[String]) {
+fn clear_runtime_account_health(
+    runtime: &mut GatewayRuntime,
+    account_ids: &[String],
+    clear_aggregate_pool_health: bool,
+) {
     let account_ids: HashSet<&str> = account_ids
         .iter()
         .map(String::as_str)
@@ -456,10 +591,10 @@ fn clear_runtime_account_health(runtime: &mut GatewayRuntime, account_ids: &[Str
     runtime.account_pool_health.retain(|_, health| {
         if health.account_statuses.is_empty() {
             // Older Sidecars did not report per-account statuses. There is no
-            // safe way to subtract one member from that aggregate diagnostic;
-            // retain it until the next Sidecar diagnostic refresh instead of
-            // hiding every remaining account.
-            return true;
+            // safe way to subtract one member from that aggregate diagnostic.
+            // A full recovery covers every collection member, so the stale
+            // aggregate can be removed without hiding unrelated failures.
+            return !clear_aggregate_pool_health;
         }
         health
             .account_statuses
@@ -544,7 +679,7 @@ async fn restore_removed_local_access_accounts(account_ids: &[String]) {
         }
     }
     let mut runtime = gateway_runtime().lock().await;
-    clear_runtime_account_health(&mut runtime, &account_ids);
+    clear_runtime_account_health(&mut runtime, &account_ids, false);
     clear_runtime_quota_cooldowns(&mut runtime, &account_ids);
 }
 
@@ -583,12 +718,20 @@ pub async fn recover_local_access_accounts(
         return Err("没有找到可恢复的账号".to_string());
     }
 
-    let reset_account_ids =
-        request_sidecar_reset_scheduler(&collection, port, &selected).await?;
+    let reset_account_ids = request_sidecar_reset_scheduler(&collection, port, &selected).await?;
+    let reset_account_id_set = reset_account_ids.iter().collect::<HashSet<_>>();
+    let recovered_entire_collection = selected.len() == collection.account_ids.len()
+        && selected
+            .iter()
+            .all(|account_id| reset_account_id_set.contains(account_id));
 
     let mut runtime = gateway_runtime().lock().await;
     let now = now_ms();
-    clear_runtime_account_health(&mut runtime, &reset_account_ids);
+    clear_runtime_account_health(
+        &mut runtime,
+        &reset_account_ids,
+        recovered_entire_collection,
+    );
     mark_quota_cooldowns_recovered(&mut runtime, &reset_account_ids, now);
     Ok(build_fresh_state_snapshot(&mut runtime))
 }

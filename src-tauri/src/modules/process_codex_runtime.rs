@@ -1273,15 +1273,159 @@ pub fn find_pids_by_port(port: u16) -> Result<Vec<u32>, String> {
         }
     }
 
-    Ok(pids.into_iter().collect())
+    let mut pids = pids.into_iter().collect::<Vec<_>>();
+    pids.sort_unstable();
+    Ok(pids)
 }
 
 pub fn is_port_in_use(port: u16) -> Result<bool, String> {
     Ok(!find_pids_by_port(port)?.is_empty())
 }
 
-pub fn kill_port_processes(port: u16) -> Result<usize, String> {
+fn process_command_line_for_pid(pid: u32) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "command="])
+            .output()
+            .map_err(|error| format!("读取 pid {} 命令行失败: {}", pid, error))?;
+        if !output.status.success() {
+            return Err(format!("读取 pid {} 命令行失败: {}", pid, output.status));
+        }
+        let command_line = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if command_line.is_empty() {
+            return Err(format!("pid {} 命令行为空", pid));
+        }
+        return Ok(command_line);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let raw = std::fs::read(format!("/proc/{}/cmdline", pid))
+            .map_err(|error| format!("读取 pid {} 命令行失败: {}", pid, error))?;
+        let command_line = String::from_utf8_lossy(&raw).replace('\0', " ");
+        let command_line = command_line.trim().to_string();
+        if command_line.is_empty() {
+            return Err(format!("pid {} 命令行为空", pid));
+        }
+        return Ok(command_line);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing()
+                .with_exe(UpdateKind::Always)
+                .with_cmd(UpdateKind::Always),
+        );
+        let process = system
+            .process(Pid::from(pid as usize))
+            .ok_or_else(|| format!("pid {} 已退出", pid))?;
+        let command_line = process
+            .cmd()
+            .iter()
+            .map(|value| value.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        if command_line.trim().is_empty() {
+            return Err(format!("pid {} 命令行为空", pid));
+        }
+        return Ok(command_line);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        let _ = pid;
+        Err("当前系统不支持读取进程命令行".to_string())
+    }
+}
+
+fn normalized_process_argument(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches(|character| character == '\'' || character == '"')
+        .replace('\\', "/")
+        .to_ascii_lowercase()
+}
+
+fn command_line_parent_pid(command_line: &str) -> Option<u32> {
+    let marker_index = command_line.find("--parent-pid")?;
+    let suffix = command_line[marker_index + "--parent-pid".len()..].trim_start_matches(
+        |character: char| {
+            character.is_whitespace() || character == '=' || character == '\'' || character == '"'
+        },
+    );
+    let digits = suffix
+        .chars()
+        .take_while(|character| character.is_ascii_digit())
+        .collect::<String>();
+    (!digits.is_empty())
+        .then(|| digits.parse::<u32>().ok())
+        .flatten()
+}
+
+fn managed_sidecar_command_matches(
+    command_line: &str,
+    binary_name: &str,
+    config_path: &Path,
+) -> bool {
+    let normalized = normalized_process_argument(command_line);
+    let binary_name = normalized_process_argument(binary_name);
+    let config_path = normalized_process_argument(config_path.to_string_lossy().as_ref());
+    normalized.contains(&binary_name)
+        && normalized.contains("--config")
+        && normalized.contains(&config_path)
+}
+
+fn managed_sidecar_parent_allows_cleanup(
+    parent_pid: Option<u32>,
+    current_parent_pid: u32,
+    parent_running: bool,
+) -> bool {
+    parent_pid == Some(current_parent_pid)
+        || parent_pid.is_some_and(|parent_pid| parent_pid > 0 && !parent_running)
+}
+
+/// Stops only the sidecar attached to this Cockpit process, or an orphan whose
+/// recorded parent has already exited. A sidecar owned by another live Cockpit
+/// instance is deliberately left untouched so concurrent app copies cannot
+/// interrupt each other's API service.
+pub fn kill_managed_sidecar_port_processes(
+    port: u16,
+    binary_name: &str,
+    config_path: &Path,
+    current_parent_pid: u32,
+) -> Result<usize, String> {
     let pids = find_pids_by_port(port)?;
+    for pid in &pids {
+        let command_line = process_command_line_for_pid(*pid)?;
+        let parent_pid = command_line_parent_pid(&command_line);
+        let matching_sidecar =
+            managed_sidecar_command_matches(&command_line, binary_name, config_path);
+        let parent_running = parent_pid.is_some_and(is_pid_running);
+        let owned_or_orphaned = managed_sidecar_parent_allows_cleanup(
+            parent_pid,
+            current_parent_pid,
+            parent_running,
+        );
+        if !matching_sidecar || !owned_or_orphaned {
+            return Err(format!(
+                "端口 {} 由其他运行中的进程占用，已保留该进程: pid={}, parent_pid={}",
+                port,
+                pid,
+                parent_pid
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "unknown".to_string())
+            ));
+        }
+    }
+    kill_processes_by_pid(&pids)
+}
+
+fn kill_processes_by_pid(pids: &[u32]) -> Result<usize, String> {
     if pids.is_empty() {
         return Ok(0);
     }
@@ -1292,7 +1436,7 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        for pid in &pids {
+        for pid in pids {
             if *pid == 0 || !is_pid_running(*pid) {
                 cleaned += 1;
                 continue;
@@ -1329,7 +1473,7 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
-        for pid in &pids {
+        for pid in pids {
             if *pid == 0 || !is_pid_running(*pid) {
                 cleaned += 1;
                 continue;
@@ -1382,4 +1526,9 @@ pub fn kill_port_processes(port: u16) -> Result<usize, String> {
     }
 
     Ok(cleaned)
+}
+
+pub fn kill_port_processes(port: u16) -> Result<usize, String> {
+    let pids = find_pids_by_port(port)?;
+    kill_processes_by_pid(&pids)
 }

@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "La coda di aggiornamento è piena. Riprova tra poco.",
+      "timeout": "Tempo scaduto per l’aggiornamento della quota. Riprova.",
+      "interrupted": "L’aggiornamento della quota è terminato in modo imprevisto. Riprova.",
+      "deferred": "Gli aggiornamenti in background in attesa sono stati rimandati per dare priorità all’aggiornamento manuale.",
+      "invalidAccountId": "È richiesto un ID account."
+    },
     "confirm": "Conferma",
     "cancel": "Annulla",
     "cancelling": "Annullamento...",

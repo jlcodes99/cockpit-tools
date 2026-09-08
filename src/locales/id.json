@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "Antrean pembaruan penuh. Coba lagi sebentar.",
+      "timeout": "Pembaruan kuota kehabisan waktu. Silakan coba lagi.",
+      "interrupted": "Pembaruan kuota berhenti secara tak terduga. Silakan coba lagi.",
+      "deferred": "Pembaruan latar belakang yang menunggu ditunda untuk mendahulukan pembaruan manual.",
+      "invalidAccountId": "ID akun wajib diisi."
+    },
     "confirm": "Konfirmasi",
     "cancel": "Batal",
     "cancelling": "Membatalkan...",

@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "Fronta aktualizací je plná. Zkuste to za chvíli.",
+      "timeout": "Vypršel čas pro aktualizaci kvóty. Zkuste to znovu.",
+      "interrupted": "Aktualizace kvóty neočekávaně skončila. Zkuste to znovu.",
+      "deferred": "Čekající aktualizace na pozadí byly odloženy ve prospěch ruční aktualizace.",
+      "invalidAccountId": "Je vyžadováno ID účtu."
+    },
     "confirm": "Potvrdit",
     "cancel": "Zrušit",
     "cancelling": "Rušení...",

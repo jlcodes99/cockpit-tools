@@ -59,6 +59,87 @@ mod legacy_platform_adapter_cleanup_tests {
     }
 }
 
+#[cfg(test)]
+mod managed_sidecar_port_cleanup_tests {
+    use super::{
+        command_line_parent_pid, managed_sidecar_command_matches,
+        managed_sidecar_parent_allows_cleanup, normalized_process_argument,
+    };
+    use std::path::Path;
+
+    #[test]
+    fn parses_sidecar_parent_pid_forms() {
+        assert_eq!(
+            command_line_parent_pid("cockpit-cliproxy --parent-pid 1805"),
+            Some(1805)
+        );
+        assert_eq!(
+            command_line_parent_pid("cockpit-cliproxy --parent-pid=64680 --config x"),
+            Some(64680)
+        );
+        assert_eq!(command_line_parent_pid("cockpit-cliproxy"), None);
+    }
+
+    #[test]
+    fn requires_expected_sidecar_binary_and_config_path() {
+        let config =
+            Path::new("/Users/demo/.antigravity_cockpit/codex_local_access_sidecar/config.json");
+        let command = "/Applications/Cockpit Tools.app/Contents/MacOS/cockpit-cliproxy --config /Users/demo/.antigravity_cockpit/codex_local_access_sidecar/config.json --parent-pid 1805";
+        assert!(managed_sidecar_command_matches(
+            command,
+            "cockpit-cliproxy",
+            config
+        ));
+        assert!(!managed_sidecar_command_matches(
+            command,
+            "cockpit-cliproxy",
+            Path::new("/Users/demo/another/config.json")
+        ));
+        assert!(!managed_sidecar_command_matches(
+            "python server.py --config /Users/demo/.antigravity_cockpit/codex_local_access_sidecar/config.json",
+            "cockpit-cliproxy",
+            config
+        ));
+    }
+
+    #[test]
+    fn normalizes_windows_process_arguments() {
+        assert_eq!(
+            normalized_process_argument(
+                r#""C:\Program Files\Cockpit Tools\cockpit-cliproxy.exe""#
+            ),
+            "c:/program files/cockpit tools/cockpit-cliproxy.exe"
+        );
+    }
+
+    #[test]
+    fn cleanup_rejects_live_siblings_and_detached_sidecars() {
+        assert!(managed_sidecar_parent_allows_cleanup(
+            Some(1805),
+            1805,
+            true
+        ));
+        assert!(managed_sidecar_parent_allows_cleanup(
+            Some(1804),
+            1805,
+            false
+        ));
+        assert!(!managed_sidecar_parent_allows_cleanup(
+            Some(1804),
+            1805,
+            true
+        ));
+        assert!(!managed_sidecar_parent_allows_cleanup(
+            Some(0),
+            1805,
+            false
+        ));
+        assert!(!managed_sidecar_parent_allows_cleanup(
+            None, 1805, false
+        ));
+    }
+}
+
 #[cfg(all(test, target_os = "macos"))]
 mod qoder_macos_process_tests {
     use super::is_qoder_macos_main_process_command_line;

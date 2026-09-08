@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "A fila de atualização está cheia. Tente novamente em instantes.",
+      "timeout": "A atualização da cota excedeu o tempo limite. Tente novamente.",
+      "interrupted": "A atualização da cota terminou inesperadamente. Tente novamente.",
+      "deferred": "As atualizações pendentes em segundo plano foram adiadas para priorizar a atualização manual.",
+      "invalidAccountId": "O ID da conta é obrigatório."
+    },
     "confirm": "Confirmar",
     "cancel": "Cancelar",
     "cancelling": "Cancelando...",

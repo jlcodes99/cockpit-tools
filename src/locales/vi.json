@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "Hàng đợi làm mới đã đầy. Vui lòng thử lại sau.",
+      "timeout": "Làm mới hạn mức đã hết thời gian chờ. Vui lòng thử lại.",
+      "interrupted": "Làm mới hạn mức kết thúc bất ngờ. Vui lòng thử lại.",
+      "deferred": "Các lượt làm mới nền đang chờ đã được hoãn để ưu tiên làm mới thủ công.",
+      "invalidAccountId": "Cần có ID tài khoản."
+    },
     "confirm": "Xác nhận",
     "cancel": "Hủy",
     "cancelling": "Đang hủy...",

@@ -450,12 +450,13 @@ export async function refreshAllCodexQuotas(): Promise<number> {
 /** 按 ID 列表限流并发刷新配额（分组/本地访问批量）；后端统一限流并只做一次 tray 更新 */
 export async function refreshCodexQuotasBatch(
   accountIds: string[],
-  options?: { respectGroupQuotaRefresh?: boolean },
+  options?: { respectGroupQuotaRefresh?: boolean; background?: boolean },
 ): Promise<number> {
   return await invoke('refresh_codex_quotas_batch', {
     accountIds,
     // 缺省 true：遵守分组「额度刷新」开关；显式刷新分组时传 false
     respectGroupQuotaRefresh: options?.respectGroupQuotaRefresh ?? true,
+    background: options?.background ?? false,
   });
 }
 

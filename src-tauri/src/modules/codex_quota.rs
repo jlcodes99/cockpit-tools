@@ -1744,6 +1744,18 @@ async fn refresh_account_quota_with_runtime_snapshot(
 }
 
 pub async fn refresh_account_quota(account_id: &str) -> Result<CodexQuota, String> {
+    crate::modules::codex_quota_refresh_scheduler::refresh_account(account_id, None).await
+}
+
+pub async fn refresh_account_quota_background(account_id: &str) -> Result<CodexQuota, String> {
+    crate::modules::codex_quota_refresh_scheduler::refresh_account_background(account_id, None)
+        .await
+}
+
+pub(crate) async fn refresh_account_quota_unqueued(
+    account_id: &str,
+    runtime_snapshot: Option<&codex_account::CodexQuotaRuntimeSnapshot>,
+) -> Result<CodexQuota, String> {
     let account = codex_account::load_account(account_id)
         .ok_or_else(|| format!("账号不存在: {}", account_id))?;
     if account.is_api_key_auth()
@@ -1752,6 +1764,9 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<CodexQuota, Strin
     {
         let runtime_snapshot = codex_account::CodexQuotaRuntimeSnapshot::empty();
         return refresh_account_quota_with_runtime_snapshot(account_id, &runtime_snapshot).await;
+    }
+    if let Some(runtime_snapshot) = runtime_snapshot {
+        return refresh_account_quota_with_runtime_snapshot(account_id, runtime_snapshot).await;
     }
     let runtime_snapshot = codex_account::CodexQuotaRuntimeSnapshot::capture().await?;
     refresh_account_quota_with_runtime_snapshot(account_id, &runtime_snapshot).await
@@ -1894,8 +1909,6 @@ pub async fn refresh_account_subscription_info(
     }
 }
 
-const CODEX_QUOTA_REFRESH_MAX_CONCURRENT: usize = 5;
-
 fn attach_runtime_snapshot_to_account_ids(
     account_ids: Vec<String>,
     runtime_snapshot: Arc<codex_account::CodexQuotaRuntimeSnapshot>,
@@ -1924,6 +1937,20 @@ pub async fn refresh_quotas_for_account_ids_with_options(
         account_ids,
         respect_group_quota_refresh,
         None,
+        crate::modules::codex_quota_refresh_scheduler::RefreshPriority::Manual,
+    )
+    .await
+}
+
+pub async fn refresh_quotas_for_account_ids_in_background(
+    account_ids: &[String],
+    respect_group_quota_refresh: bool,
+) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
+    refresh_quotas_for_account_ids_with_options_and_runtime_snapshot(
+        account_ids,
+        respect_group_quota_refresh,
+        None,
+        crate::modules::codex_quota_refresh_scheduler::RefreshPriority::Background,
     )
     .await
 }
@@ -1932,10 +1959,15 @@ async fn refresh_quotas_for_account_ids_with_options_and_runtime_snapshot(
     account_ids: &[String],
     respect_group_quota_refresh: bool,
     runtime_snapshot: Option<Arc<codex_account::CodexQuotaRuntimeSnapshot>>,
+    priority: crate::modules::codex_quota_refresh_scheduler::RefreshPriority,
 ) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
-    use futures::future::join_all;
+    use futures_util::StreamExt;
     use std::collections::HashSet;
-    use tokio::sync::Semaphore;
+
+    let background_epoch = crate::modules::codex_quota_refresh_scheduler::background_epoch();
+    if priority == crate::modules::codex_quota_refresh_scheduler::RefreshPriority::Manual {
+        crate::modules::codex_quota_refresh_scheduler::cancel_queued_background_refreshes(None);
+    }
 
     if account_ids.is_empty() {
         return Ok(Vec::new());
@@ -1982,48 +2014,49 @@ async fn refresh_quotas_for_account_ids_with_options_and_runtime_snapshot(
         }
         None => Arc::new(codex_account::CodexQuotaRuntimeSnapshot::empty()),
     };
-    let semaphore = Arc::new(Semaphore::new(CODEX_QUOTA_REFRESH_MAX_CONCURRENT));
-    let tasks: Vec<_> = attach_runtime_snapshot_to_account_ids(unique_ids, runtime_snapshot)
-        .into_iter()
-        .map(|(account_id, runtime_snapshot)| {
-            let semaphore = semaphore.clone();
-            async move {
-                let _permit = semaphore
-                    .acquire_owned()
-                    .await
-                    .map_err(|e| format!("获取 Codex 刷新并发许可失败: {}", e))?;
-                let result =
-                    refresh_account_quota_with_runtime_snapshot(&account_id, &runtime_snapshot)
-                        .await;
-                Ok::<(String, Result<CodexQuota, String>), String>((account_id, result))
-            }
-        })
-        .collect();
-
-    let mut results = Vec::with_capacity(tasks.len());
-    for task in join_all(tasks).await {
-        match task {
-            Ok(item) => results.push(item),
-            Err(err) => return Err(err),
-        }
-    }
-    Ok(results)
+    let requests = futures_util::stream::iter(attach_runtime_snapshot_to_account_ids(
+        unique_ids,
+        runtime_snapshot,
+    ))
+    .map(|(account_id, runtime_snapshot)| async move {
+        let result = crate::modules::codex_quota_refresh_scheduler::refresh_account_with_priority(
+            &account_id,
+            Some(runtime_snapshot),
+            priority,
+            Some(background_epoch),
+        )
+        .await;
+        (account_id, result)
+    })
+    .buffered(4)
+    .collect::<Vec<_>>()
+    .await;
+    Ok(requests)
 }
 
 /// 刷新所有账号配额（自动跳过分组「不刷新」账号）
 pub async fn refresh_all_quotas() -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
-    refresh_all_quotas_with_options(false).await
+    refresh_all_quotas_with_options(
+        false,
+        crate::modules::codex_quota_refresh_scheduler::RefreshPriority::Manual,
+    )
+    .await
 }
 
 /// 后台自动刷新所有账号配额；运行中的 OAuth 账号由官方 app-server 自己维护凭据，
 /// 避免外部轮换 refresh_token 后让已运行进程进入 Auth/relogin。
 pub async fn refresh_all_quotas_for_background(
 ) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
-    refresh_all_quotas_with_options(true).await
+    refresh_all_quotas_with_options(
+        true,
+        crate::modules::codex_quota_refresh_scheduler::RefreshPriority::Background,
+    )
+    .await
 }
 
 async fn refresh_all_quotas_with_options(
     skip_running_oauth_accounts: bool,
+    priority: crate::modules::codex_quota_refresh_scheduler::RefreshPriority,
 ) -> Result<Vec<(String, Result<CodexQuota, String>)>, String> {
     let disabled = codex_account::load_quota_refresh_disabled_account_ids();
     let runtime_snapshot = if skip_running_oauth_accounts {
@@ -2062,6 +2095,7 @@ async fn refresh_all_quotas_with_options(
         &account_ids,
         false,
         runtime_snapshot,
+        priority,
     )
     .await
 }

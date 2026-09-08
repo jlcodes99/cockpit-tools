@@ -2041,7 +2041,7 @@ async fn refresh_bound_oauth_quota_if_due(reason: &'static str, min_interval: Du
         control.last_started_at = Some(Instant::now());
     }
 
-    let result = codex_quota::refresh_account_quota(&account_id).await;
+    let result = codex_quota::refresh_account_quota_background(&account_id).await;
     {
         let mut control = bound_oauth_quota_refresh_control().lock().await;
         control.in_flight = false;
@@ -2143,28 +2143,42 @@ pub async fn reevaluate_bound_oauth_quota_reserve_after_refresh(
     }
 }
 
-fn refresh_gateway_process_status(runtime: &mut GatewayRuntime) {
+fn refresh_gateway_process_status(runtime: &mut GatewayRuntime) -> Option<SidecarProcessExit> {
     if !runtime.running {
-        return;
+        return None;
     }
     let Some(child) = runtime.sidecar_child.as_mut() else {
-        return;
+        return None;
     };
+    let pid = child.id().unwrap_or_default();
+    let generation = runtime
+        .sidecar_generation
+        .unwrap_or_else(current_gateway_lifecycle_generation);
     let message = match child.try_wait() {
         Ok(Some(status)) => Some(format!("API 服务 sidecar 已退出: {}", status)),
         Ok(None) => None,
-        Err(error) => Some(format!("检查 API 服务 sidecar 状态失败: {}", error)),
+        Err(error) => {
+            let message = format!("检查 API 服务 sidecar 状态失败: {}", error);
+            log_gateway_mode_warn(CodexLocalAccessGatewayMode::Sidecar, &message);
+            return None;
+        }
     };
     let Some(message) = message else {
-        return;
+        return None;
     };
     log_gateway_mode_warn(CodexLocalAccessGatewayMode::Sidecar, &message);
     runtime.running = false;
     runtime.actual_port = None;
     runtime.actual_bind_host = None;
     runtime.sidecar_config_fingerprint = None;
-    runtime.last_error = Some(message);
+    runtime.last_error = Some(message.clone());
+    runtime.sidecar_generation = None;
     runtime.sidecar_child = None;
+    Some(SidecarProcessExit {
+        pid,
+        generation,
+        message,
+    })
 }
 
 fn is_retryable_sidecar_bind_error(error: &str) -> bool {

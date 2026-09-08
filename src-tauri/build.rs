@@ -166,6 +166,13 @@ fn build_cockpit_cliproxy_sidecar() {
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    // Build-script cfg describes the host, not the binary being linked. Reserve
+    // 8 MiB for the Windows MSVC host application even when cross-compiling.
+    // Scope the flag to the application binary, not the library or sidecars.
+    let target = std::env::var("TARGET").expect("TARGET is required");
+    if target.ends_with("-windows-msvc") {
+        println!("cargo:rustc-link-arg-bin=cockpit-tools=/STACK:8388608");
+    }
     build_cockpit_cliproxy_sidecar();
 
     #[cfg(target_os = "macos")]

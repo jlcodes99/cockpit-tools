@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "Yenileme kuyruğu dolu. Biraz sonra tekrar deneyin.",
+      "timeout": "Kota yenilemesi zaman aşımına uğradı. Tekrar deneyin.",
+      "interrupted": "Kota yenilemesi beklenmedik şekilde sona erdi. Tekrar deneyin.",
+      "deferred": "Bekleyen arka plan yenilemeleri, elle yenilemeye öncelik vermek için ertelendi.",
+      "invalidAccountId": "Hesap kimliği gereklidir."
+    },
     "confirm": "Onayla",
     "cancel": "İptal",
     "cancelling": "İptal ediliyor...",

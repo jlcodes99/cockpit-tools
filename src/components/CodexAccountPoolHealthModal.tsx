@@ -157,6 +157,7 @@ export function CodexAccountPoolHealthModal({
     () => new Set(),
   );
   const [recoveringAll, setRecoveringAll] = useState(false);
+  const [recoverySuccess, setRecoverySuccess] = useState<string | null>(null);
   const recoveryInFlightRef = useRef(false);
   const poolMemberStatuses = useMemo(() => {
     const healthById = new Map(
@@ -368,6 +369,7 @@ export function CodexAccountPoolHealthModal({
     }
     recoveryInFlightRef.current = true;
     setRecoveryError(null);
+    setRecoverySuccess(null);
     setRecoveringAccountIds(new Set(normalizedAccountIds));
     setRecoveringAll(source === "all");
     try {
@@ -376,6 +378,12 @@ export function CodexAccountPoolHealthModal({
       } else {
         await onRecoverAll(normalizedAccountIds);
       }
+      setRecoverySuccess(
+        t("codex.localAccess.accountPoolHealth.recoverSuccess", {
+          count: normalizedAccountIds.length,
+          defaultValue: "已提交 {{count}} 个账号的恢复操作",
+        }),
+      );
     } catch (error) {
       setRecoveryError(String(error).replace(/^Error:\s*/, ""));
     } finally {
@@ -386,6 +394,7 @@ export function CodexAccountPoolHealthModal({
   };
   const handleClose = () => {
     setRecoveryError(null);
+    setRecoverySuccess(null);
     onClose();
   };
 
@@ -430,6 +439,16 @@ export function CodexAccountPoolHealthModal({
             message={recoveryError}
             scrollKey={recoveryErrorScrollKey}
           />
+          {recoverySuccess && (
+            <div
+              className="codex-account-pool-health-success"
+              role="status"
+              aria-live="polite"
+            >
+              <ShieldCheck size={15} />
+              <span>{recoverySuccess}</span>
+            </div>
+          )}
           {poolMemberAccountIds.size === 0 && issues.length === 0 ? (
             <div className="codex-account-pool-health-empty">
               <ShieldCheck size={24} />

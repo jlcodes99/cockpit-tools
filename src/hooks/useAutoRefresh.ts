@@ -489,6 +489,7 @@ export function useAutoRefresh() {
                   if (inheritIds.length > 0) {
                     await codexService.refreshCodexQuotasBatch(inheritIds, {
                       respectGroupQuotaRefresh: true,
+                      background: true,
                     });
                   }
                 } finally {
@@ -840,6 +841,7 @@ export function useAutoRefresh() {
                       // 自定义分组任务目标明确，不因「不刷新」外的策略再过滤
                       await codexService.refreshCodexQuotasBatch(uniqueIds, {
                         respectGroupQuotaRefresh: false,
+                        background: true,
                       });
                     } finally {
                       await fetchCodexAccounts();

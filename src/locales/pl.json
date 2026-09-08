@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "Kolejka odświeżania jest pełna. Spróbuj za chwilę.",
+      "timeout": "Upłynął czas odświeżania limitu. Spróbuj ponownie.",
+      "interrupted": "Odświeżanie limitu zakończyło się nieoczekiwanie. Spróbuj ponownie.",
+      "deferred": "Oczekujące odświeżenia w tle zostały odłożone, aby nadać priorytet ręcznemu odświeżaniu.",
+      "invalidAccountId": "Identyfikator konta jest wymagany."
+    },
     "confirm": "Potwierdź",
     "cancel": "Anuluj",
     "cancelling": "Anulowanie...",

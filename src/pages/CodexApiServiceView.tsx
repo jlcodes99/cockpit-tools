@@ -514,43 +514,47 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
           </div>
         )}
 
-        <section className="codex-api-service-usage-toolbar">
-          <div className="codex-api-service-usage-context">
-            <Activity size={16} />
-            <div>
-              <strong>
-                {t("codex.apiService.usage.title", "Usage Stats")}
-              </strong>
-              <span>
-                {selectedStatsRangeTitle}
-                {stats?.updatedAt
-                  ? ` · ${t("codex.apiService.usage.lastRecorded", "Last recorded")} ${formatDateTime(stats.updatedAt)}`
-                  : ""}
-              </span>
-            </div>
-          </div>
-          <CodexStatsRangePicker
-            value={statsRange}
-            range={statsTimeRange}
-            onPresetChange={handleStatsPresetChange}
-            onCustomApply={handleCustomStatsRangeApply}
-            disabled={busy}
-            error={statsRangeError}
-            compact
-          />
-        </section>
+        {activeTab === "logs" && (
+          <>
+            <section className="codex-api-service-usage-toolbar">
+              <div className="codex-api-service-usage-context">
+                <Activity size={16} />
+                <div>
+                  <strong>
+                    {t("codex.apiService.usage.title", "Usage Stats")}
+                  </strong>
+                  <span>
+                    {selectedStatsRangeTitle}
+                    {stats?.updatedAt
+                      ? ` · ${t("codex.apiService.usage.lastRecorded", "Last recorded")} ${formatDateTime(stats.updatedAt)}`
+                      : ""}
+                  </span>
+                </div>
+              </div>
+              <CodexStatsRangePicker
+                value={statsRange}
+                range={statsTimeRange}
+                onPresetChange={handleStatsPresetChange}
+                onCustomApply={handleCustomStatsRangeApply}
+                disabled={busy}
+                error={statsRangeError}
+                compact
+              />
+            </section>
 
-        <section className="codex-api-service-summary-grid">
-          {summaryCards.map((item) => (
-            <div key={item.key} className="codex-api-service-summary-card">
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              <small>{item.detail}</small>
-            </div>
-          ))}
-        </section>
+            <section className="codex-api-service-summary-grid">
+              {summaryCards.map((item) => (
+                <div key={item.key} className="codex-api-service-summary-card">
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <small>{item.detail}</small>
+                </div>
+              ))}
+            </section>
 
-        <CodexUsageTrend statsWindow={selectedStatsWindow} />
+            <CodexUsageTrend statsWindow={selectedStatsWindow} />
+          </>
+        )}
 
         {activeTab === "overview" && (
           <div className="codex-api-service-grid two">

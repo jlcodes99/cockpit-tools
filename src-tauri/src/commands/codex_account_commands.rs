@@ -1178,7 +1178,11 @@ pub async fn switch_codex_account(
     if is_reauth_handoff {
         let quota_account_id = account.id.clone();
         tokio::spawn(async move {
-            if let Err(error) = codex_quota::refresh_account_quota(&quota_account_id).await {
+            if let Err(error) = Box::pin(codex_quota::refresh_account_quota_background(
+                &quota_account_id,
+            ))
+            .await
+            {
                 logger::log_warn(&format!(
                     "重新授权切号完成后刷新配额失败: account_id={}, error={}",
                     quota_account_id, error
@@ -1444,7 +1448,7 @@ async fn run_codex_post_refresh_checks(app: &AppHandle) {
     match codex_account::pick_auto_switch_target_if_needed() {
         Ok(Some(target)) => {
             let target_id = target.id.clone();
-            // Keep the full account-switch future out of every quota-refresh command's state.
+            // Keep the large switch state machine out of the post-refresh Future.
             match Box::pin(switch_codex_account(
                 app.clone(),
                 target_id.clone(),
@@ -1645,7 +1649,7 @@ async fn refresh_imported_codex_accounts(
         }
 
         attempted = true;
-        match codex_quota::refresh_account_quota(&account.id).await {
+        match Box::pin(codex_quota::refresh_account_quota(&account.id)).await {
             Ok(_) => {
                 success_count += 1;
             }
@@ -1661,7 +1665,7 @@ async fn refresh_imported_codex_accounts(
     }
 
     if success_count > 0 {
-        run_codex_post_refresh_checks(app).await;
+        Box::pin(run_codex_post_refresh_checks(app)).await;
     }
     if attempted || !result.is_empty() {
         let _ = crate::modules::tray::update_tray_menu(app);
@@ -1778,9 +1782,12 @@ pub async fn confirm_codex_batch_import(
 /// 刷新单个账号配额
 #[tauri::command]
 pub async fn refresh_codex_quota(app: AppHandle, account_id: String) -> Result<CodexQuota, String> {
+    // Box child Futures before awaiting them: boxing only the outer spawned IPC
+    // task still constructs/moves its large inline state machine on the stack.
+    // Keep the async command signature so Tauri uses its existing async wrapper.
     let result = Box::pin(codex_quota::refresh_account_quota(&account_id)).await;
     if result.is_ok() {
-        run_codex_post_refresh_checks(&app).await;
+        Box::pin(run_codex_post_refresh_checks(&app)).await;
         let _ = crate::modules::tray::update_tray_menu(&app);
     }
     result
@@ -1827,10 +1834,9 @@ pub async fn refresh_current_codex_quota(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    // Tauri moves this future through its release IPC dispatcher on the Windows UI stack.
     let result = Box::pin(codex_quota::refresh_account_quota(&account.id)).await;
     if result.is_ok() {
-        run_codex_post_refresh_checks(&app).await;
+        Box::pin(run_codex_post_refresh_checks(&app)).await;
         let _ = crate::modules::tray::update_tray_menu(&app);
         Ok(())
     } else {
@@ -1846,7 +1852,7 @@ pub async fn refresh_all_codex_quotas(app: AppHandle) -> Result<i32, String> {
     let results = Box::pin(codex_quota::refresh_all_quotas()).await?;
     let success_count = results.iter().filter(|(_, r)| r.is_ok()).count();
     if success_count > 0 {
-        run_codex_post_refresh_checks(&app).await;
+        Box::pin(run_codex_post_refresh_checks(&app)).await;
     }
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(success_count as i32)
@@ -1862,16 +1868,25 @@ pub async fn refresh_codex_quotas_batch(
     app: AppHandle,
     account_ids: Vec<String>,
     respect_group_quota_refresh: Option<bool>,
+    background: Option<bool>,
 ) -> Result<i32, String> {
     let respect = respect_group_quota_refresh.unwrap_or(true);
-    let results = Box::pin(codex_quota::refresh_quotas_for_account_ids_with_options(
-        &account_ids,
-        respect,
-    ))
-    .await?;
+    let results = if background.unwrap_or(false) {
+        Box::pin(codex_quota::refresh_quotas_for_account_ids_in_background(
+            &account_ids,
+            respect,
+        ))
+        .await?
+    } else {
+        Box::pin(codex_quota::refresh_quotas_for_account_ids_with_options(
+            &account_ids,
+            respect,
+        ))
+        .await?
+    };
     let success_count = results.iter().filter(|(_, r)| r.is_ok()).count();
     if success_count > 0 {
-        run_codex_post_refresh_checks(&app).await;
+        Box::pin(run_codex_post_refresh_checks(&app)).await;
     }
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(success_count as i32)
@@ -2481,3 +2496,7 @@ pub async fn restore_codex_active_takeover_if_enabled(app: AppHandle) -> Result<
 }
 
 // ─── Codex 账号分组持久化 ────────────────────────────────────────────
+
+#[cfg(test)]
+#[path = "codex_quota_future_tests.rs"]
+mod codex_quota_future_tests;

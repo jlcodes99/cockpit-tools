@@ -1331,11 +1331,14 @@ pub async fn kill_local_access_port_processes() -> Result<CodexLocalAccessPortCl
 
     stop_gateway().await;
 
-    let killed_count = match process::kill_port_processes(collection.port) {
+    let config_path = sidecar_config_path(&local_access_sidecar_dir()?);
+    let cleanup_result =
+        cleanup_managed_sidecar_port_processes(collection.port, config_path).await?;
+    let killed_count = match cleanup_result {
         Ok(count) => count as u32,
         Err(error) => {
             logger::log_codex_api_warn(&format!(
-                "[CodexLocalAccess] 清理旧端口进程失败，将继续尝试启动并准备随机端口兜底: port={}, error={}",
+                "[CodexLocalAccess] 未清理非本实例端口进程，将继续尝试启动并准备随机端口兜底: port={}, error={}",
                 collection.port, error
             ));
             0

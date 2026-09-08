@@ -211,8 +211,13 @@ async fn refresh_codex_api_service_pool_for_menu(app: AppHandle) -> Result<i32, 
     if target_ids.is_empty() {
         return Err("API 服务账号池暂无可刷新的额度".to_string());
     }
-    let success_count =
-        commands::codex::refresh_codex_quotas_batch(app.clone(), target_ids, Some(true)).await?;
+    let success_count = commands::codex::refresh_codex_quotas_batch(
+        app.clone(),
+        target_ids,
+        Some(true),
+        Some(false),
+    )
+    .await?;
     if success_count <= 0 {
         return Err("API 服务账号池额度刷新失败".to_string());
     }

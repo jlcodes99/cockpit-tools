@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "La file d’actualisation est pleine. Réessayez dans un instant.",
+      "timeout": "L’actualisation du quota a expiré. Veuillez réessayer.",
+      "interrupted": "L’actualisation du quota s’est arrêtée de façon inattendue. Veuillez réessayer.",
+      "deferred": "Les actualisations en arrière-plan en attente ont été différées au profit de l’actualisation manuelle.",
+      "invalidAccountId": "Un identifiant de compte est requis."
+    },
     "confirm": "Confirmer",
     "cancel": "Annuler",
     "cancelling": "Annulation...",

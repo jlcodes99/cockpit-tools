@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "重新整理佇列忙碌，請稍後再試。",
+      "timeout": "額度重新整理等候或執行逾時，請重試。",
+      "interrupted": "額度重新整理意外結束，請重試。",
+      "deferred": "本輪尚未開始的背景重新整理已延後，優先處理手動重新整理。",
+      "invalidAccountId": "帳號 ID 不可為空。"
+    },
     "confirm": "確認",
     "cancel": "取消",
     "cancelling": "正在取消...",

@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "새로고침 대기열이 가득 찼습니다. 잠시 후 다시 시도하세요.",
+      "timeout": "할당량 새로고침 시간이 초과되었습니다. 다시 시도하세요.",
+      "interrupted": "할당량 새로고침이 예기치 않게 종료되었습니다. 다시 시도하세요.",
+      "deferred": "수동 새로고침을 우선 처리하기 위해 대기 중인 백그라운드 새로고침을 미뤘습니다.",
+      "invalidAccountId": "계정 ID가 필요합니다."
+    },
     "confirm": "확인",
     "cancel": "취소",
     "cancelling": "취소 중...",

@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "The refresh queue is full. Try again shortly.",
+      "timeout": "Quota refresh timed out. Please retry.",
+      "interrupted": "Quota refresh ended unexpectedly. Please retry.",
+      "deferred": "Pending background refreshes were deferred for manual refresh.",
+      "invalidAccountId": "An account ID is required."
+    },
     "confirm": "Confirm",
     "cancel": "Cancel",
     "cancelling": "Cancelling...",

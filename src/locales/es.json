@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "La cola de actualización está llena. Inténtalo en unos momentos.",
+      "timeout": "Se agotó el tiempo de actualización de la cuota. Inténtalo de nuevo.",
+      "interrupted": "La actualización de la cuota terminó inesperadamente. Inténtalo de nuevo.",
+      "deferred": "Las actualizaciones pendientes en segundo plano se aplazaron para priorizar la actualización manual.",
+      "invalidAccountId": "Se requiere un ID de cuenta."
+    },
     "confirm": "Confirmar",
     "cancel": "Cancelar",
     "cancelling": "Cancelando...",

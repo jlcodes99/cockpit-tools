@@ -11,6 +11,8 @@ pub mod codebuddy_session;
 pub mod codex;
 pub mod codex_instance;
 mod codex_instance_app_exit;
+pub(crate) mod codex_instance_gateway_watchdog;
+mod codex_instance_gateway_watchdog_state;
 mod codex_instance_model_catalog;
 mod codex_instance_routing;
 pub mod cursor;

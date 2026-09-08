@@ -2635,11 +2635,11 @@ pub fn has_running_persisted_mixed_model_gateway() -> bool {
         .ok()
         .zip(crate::modules::codex_instance::get_default_codex_home().ok())
         .is_some_and(|(settings, profile_dir)| {
-            crate::modules::process::resolve_codex_pid(settings.last_pid, None).is_some()
-                && persisted_mixed_model_gateway_endpoint(&profile_dir)
+            persisted_mixed_model_gateway_endpoint(&profile_dir)
                     .ok()
                     .flatten()
                     .is_some()
+                && crate::modules::process::resolve_codex_pid(settings.last_pid, None).is_some()
         });
     if default_running {
         return true;
@@ -2648,6 +2648,8 @@ pub fn has_running_persisted_mixed_model_gateway() -> bool {
         .ok()
         .is_some_and(|store| {
             store.instances.into_iter().any(|instance| {
+                if persisted_mixed_model_gateway_endpoint(Path::new(&instance.user_data_dir))
+                    .ok().flatten().is_none() { return false; }
                 let running = crate::modules::process::resolve_codex_pid(
                     instance.last_pid,
                     Some(&instance.user_data_dir),
@@ -2670,7 +2672,9 @@ async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoin
         if let Ok(profile_dir) = crate::modules::codex_instance::get_default_codex_home() {
             configured_profiles.insert(normalize_profile_dir_key(&profile_dir), profile_dir.clone());
         }
-        if crate::modules::process::resolve_codex_pid(default_settings.last_pid, None).is_some() {
+        if crate::modules::codex_instance::get_default_codex_home().ok()
+            .is_some_and(|dir| persisted_mixed_model_gateway_endpoint(&dir).ok().flatten().is_some())
+            && crate::modules::process::resolve_codex_pid(default_settings.last_pid, None).is_some() {
             if let Ok(profile_dir) = crate::modules::codex_instance::get_default_codex_home() {
                 preserve_mixed_profiles.insert(normalize_profile_dir_key(&profile_dir));
             }
@@ -2683,7 +2687,8 @@ async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoin
                 normalize_profile_dir_key(&profile_dir),
                 profile_dir,
             );
-            let running = crate::modules::process::resolve_codex_pid(
+            let running = persisted_mixed_model_gateway_endpoint(Path::new(&instance.user_data_dir))
+                .ok().flatten().is_some() && crate::modules::process::resolve_codex_pid(
                 instance.last_pid,
                 Some(&instance.user_data_dir),
             )
@@ -2868,6 +2873,28 @@ pub async fn ensure_mixed_model_gateway_for_dir(
     oauth_account_id: &str,
     routing: &CodexInstanceModelRouting,
 ) -> Result<(), String> {
+    ensure_mixed_model_gateway_for_dir_if_current(profile_dir, oauth_account_id, routing, || true).await
+}
+
+pub(crate) async fn fallback_mixed_model_gateway_if_current(
+    profile_dir: &Path,
+    is_current: impl Fn() -> bool,
+) -> Result<(), String> {
+    let _guard = provider_gateway_lifecycle_lock().lock().await;
+    if !is_current() { return Ok(()); }
+    stop_provider_gateways_for_profile_locked(profile_dir).await;
+    if !is_current() { return Ok(()); }
+    restore_mixed_model_gateway_profile(profile_dir)?;
+    cleanup_provider_gateway_profile_model_overrides(profile_dir)
+}
+
+pub(crate) async fn ensure_mixed_model_gateway_for_dir_if_current(
+    profile_dir: &Path,
+    oauth_account_id: &str,
+    routing: &CodexInstanceModelRouting,
+    is_current: impl Fn() -> bool,
+) -> Result<(), String> {
+    if !routing.enabled || !is_current() { return Ok(()); }
     let oauth_account_id = oauth_account_id.trim();
     if oauth_account_id.is_empty() {
         return Err("混合模型路由缺少 OAuth 订阅账号".to_string());
@@ -2876,9 +2903,11 @@ pub async fn ensure_mixed_model_gateway_for_dir(
     let oauth_account = validate_local_access_bound_oauth_account(oauth_account_id)?;
     let routing = validate_mixed_model_routing_config(Some(oauth_account_id), routing)?;
     let _guard = provider_gateway_lifecycle_lock().lock().await;
+    if !is_current() { return Ok(()); }
     let (collection, key) =
         build_mixed_model_gateway_collection_for_profile(profile_dir, &oauth_account, &routing)?;
     stop_provider_gateways_for_profile_locked(profile_dir).await;
+    if !is_current() { return Ok(()); }
     let runtime_key = provider_gateway_runtime_key(profile_dir, MIXED_MODEL_ROUTING_RUNTIME_ID);
 
     let sidecar_dir = provider_gateway_sidecar_dir(profile_dir, MIXED_MODEL_ROUTING_RUNTIME_ID)
@@ -2901,10 +2930,12 @@ pub async fn ensure_mixed_model_gateway_for_dir(
         Ok(config) => config,
         Err(error) => return Err(mixed_model_start_error_with_rollback(profile_dir, error)),
     };
+    if !is_current() { return Ok(()); }
     if probe_sidecar_ready_once(&collection, Duration::from_millis(250))
         .await
         .is_ok()
     {
+        if !is_current() { return Ok(()); }
         let killed = process::kill_port_processes(collection.port)
             .map_err(|error| mixed_model_start_error_with_rollback(profile_dir, error))?;
         if killed > 0 {
@@ -2918,11 +2949,17 @@ pub async fn ensure_mixed_model_gateway_for_dir(
             .map_err(|error| mixed_model_start_error_with_rollback(profile_dir, error))?;
     }
 
+    if !is_current() { return Ok(()); }
     let (child, task, bind_host) =
         match spawn_provider_gateway_sidecar(&collection, &launch_config, true).await {
             Ok(runtime) => runtime,
             Err(error) => return Err(mixed_model_start_error_with_rollback(profile_dir, error)),
         };
+
+    if !is_current() {
+        stop_spawned_provider_gateway_sidecar(child, task, &bind_host, collection.port).await;
+        return Ok(());
+    }
 
     let activation_snapshot =
         match capture_mixed_model_profile_activation_snapshot(profile_dir, &key) {
@@ -2952,6 +2989,12 @@ pub async fn ensure_mixed_model_gateway_for_dir(
     }
 
     let mut runtimes = provider_gateway_runtime_store().lock().await;
+    if !is_current() {
+        drop(runtimes);
+        stop_spawned_provider_gateway_sidecar(child, task, &bind_host, collection.port).await;
+        rollback_mixed_model_profile_after_start_failure(profile_dir, Some(activation_snapshot))?;
+        return Ok(());
+    }
     runtimes.insert(
         runtime_key,
         ProviderGatewayRuntime {

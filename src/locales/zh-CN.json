@@ -1,5 +1,12 @@
 {
   "common": {
+    "quotaRefreshScheduler": {
+      "busy": "刷新队列繁忙，请稍后重试。",
+      "timeout": "额度刷新等待或执行超时，请重试。",
+      "interrupted": "额度刷新意外结束，请重试。",
+      "deferred": "本轮未开始的后台刷新已让位给手动刷新。",
+      "invalidAccountId": "账号 ID 不能为空。"
+    },
     "confirm": "确认",
     "cancel": "取消",
     "cancelling": "正在取消...",

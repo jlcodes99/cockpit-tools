@@ -283,6 +283,7 @@ static BOUND_OAUTH_QUOTA_REFRESH_FAILURES: OnceLock<Mutex<HashSet<String>>> = On
 static BOUND_OAUTH_QUOTA_REFRESH_CONTROL: OnceLock<TokioMutex<BoundOauthQuotaRefreshControl>> =
     OnceLock::new();
 static SIDECAR_AUTO_RESTART_CONTROL: OnceLock<Mutex<SidecarAutoRestartControl>> = OnceLock::new();
+static SIDECAR_CRASH_RECOVERY_CONTROL: OnceLock<Mutex<SidecarAutoRestartControl>> = OnceLock::new();
 static BOUND_OAUTH_QUOTA_MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 static CODEX_CLIENT_POLICY_SYNC_RUNNING: AtomicBool = AtomicBool::new(false);
 static MODEL_PROVIDER_CHAT_TEST_CANCELLATION: OnceLock<ModelProviderChatTestCancellationState> =
@@ -293,6 +294,8 @@ pub const MODEL_PROVIDER_CHAT_TEST_CANCELLED_ERROR: &str = "MODEL_PROVIDER_CHAT_
 const SIDECAR_AUTO_RESTART_MIN_INTERVAL: Duration = Duration::from_secs(30);
 const SIDECAR_AUTO_RESTART_WINDOW: Duration = Duration::from_secs(10 * 60);
 const SIDECAR_AUTO_RESTART_MAX_ATTEMPTS: u8 = 3;
+const SIDECAR_CRASH_RECOVERY_MIN_INTERVAL: Duration = Duration::from_secs(3);
+const SIDECAR_PROCESS_MONITOR_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Default)]
 struct SidecarAutoRestartControl {
@@ -300,6 +303,13 @@ struct SidecarAutoRestartControl {
     window_started_at: Option<Instant>,
     last_started_at: Option<Instant>,
     attempts: u8,
+}
+
+#[derive(Debug, Clone)]
+struct SidecarProcessExit {
+    pid: u32,
+    generation: u64,
+    message: String,
 }
 
 #[derive(Default)]
@@ -442,6 +452,8 @@ struct GatewayRuntime {
     last_error: Option<String>,
     shutdown_sender: Option<watch::Sender<bool>>,
     task: Option<tokio::task::JoinHandle<()>>,
+    sidecar_monitor_task: Option<tokio::task::JoinHandle<()>>,
+    sidecar_generation: Option<u64>,
     sidecar_child: Option<Child>,
 }
 

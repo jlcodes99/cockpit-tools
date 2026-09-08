@@ -2723,9 +2723,13 @@ async fn refresh_api_service_quota_pool(app: &AppHandle) -> Result<(i32, usize),
         return Err("API 服务账号池暂无可刷新的额度".to_string());
     }
     let total = target_ids.len();
-    let success_count =
-        crate::commands::codex::refresh_codex_quotas_batch(app.clone(), target_ids, Some(true))
-            .await?;
+    let success_count = crate::commands::codex::refresh_codex_quotas_batch(
+        app.clone(),
+        target_ids,
+        Some(true),
+        Some(false),
+    )
+    .await?;
     if success_count <= 0 {
         return Err("API 服务账号池额度刷新失败".to_string());
     }

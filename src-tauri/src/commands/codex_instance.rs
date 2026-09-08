@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 use std::process::Command;
@@ -7,7 +7,6 @@ use std::time::Instant;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::models::codex::{
@@ -300,7 +299,7 @@ fn is_profile_initialized(user_data_dir: &str) -> bool {
     modules::instance::is_profile_initialized(Path::new(user_data_dir))
 }
 
-fn resolve_default_account_id(settings: &DefaultInstanceSettings) -> Option<String> {
+pub(super) fn resolve_default_account_id(settings: &DefaultInstanceSettings) -> Option<String> {
     if settings.follow_local_account {
         resolve_local_account_id()
     } else {
@@ -638,203 +637,7 @@ async fn apply_bound_account_to_initialized_profile(
     Ok(())
 }
 
-#[derive(Clone)]
-struct ConfiguredMixedModelGateway {
-    profile_dir: PathBuf,
-    oauth_account_id: String,
-    routing: CodexInstanceModelRouting,
-    codex_running: bool,
-}
-
-fn configured_mixed_model_gateways() -> Result<Vec<ConfiguredMixedModelGateway>, String> {
-    let mut targets = Vec::new();
-    let default_settings = modules::codex_instance::load_default_settings()?;
-    if let (Some(routing), Some(oauth_account_id)) = (
-        default_settings
-            .model_routing
-            .clone()
-            .filter(|routing| routing.enabled),
-        resolve_default_account_id(&default_settings),
-    ) {
-        let profile_dir = modules::codex_instance::get_default_codex_home()?;
-        if is_profile_initialized(&profile_dir.to_string_lossy()) {
-            targets.push(ConfiguredMixedModelGateway {
-                profile_dir,
-                oauth_account_id,
-                routing,
-                codex_running: modules::process::resolve_codex_pid(default_settings.last_pid, None)
-                    .is_some(),
-            });
-        }
-    }
-
-    for instance in modules::codex_instance::load_instance_store()?.instances {
-        let Some(routing) = instance.model_routing.filter(|routing| routing.enabled) else {
-            continue;
-        };
-        let Some(oauth_account_id) = instance.bind_account_id else {
-            continue;
-        };
-        if !is_profile_initialized(&instance.user_data_dir) {
-            continue;
-        }
-        let codex_running =
-            modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
-                .is_some();
-        targets.push(ConfiguredMixedModelGateway {
-            profile_dir: PathBuf::from(instance.user_data_dir),
-            oauth_account_id,
-            routing,
-            codex_running,
-        });
-    }
-    Ok(targets)
-}
-
-pub fn start_mixed_model_gateway_watchdog(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        let mut consecutive_failures: HashMap<String, (String, u8)> = HashMap::new();
-        let mut suppressed_profiles: HashMap<String, String> = HashMap::new();
-        loop {
-            if modules::app_lifecycle::is_shutdown_started() {
-                break;
-            }
-            match configured_mixed_model_gateways() {
-                Ok(targets) => {
-                    for target in targets {
-                        let profile_key = target.profile_dir.to_string_lossy().to_string();
-                        let routing_signature =
-                            serde_json::to_string(&(&target.oauth_account_id, &target.routing))
-                                .unwrap_or_default();
-                        if suppressed_profiles
-                            .get(&profile_key)
-                            .is_some_and(|signature| signature == &routing_signature)
-                        {
-                            if modules::codex_local_access::mixed_model_gateway_runtime_is_healthy(
-                                &target.profile_dir,
-                            )
-                            .await
-                            {
-                                suppressed_profiles.remove(&profile_key);
-                                consecutive_failures.remove(&profile_key);
-                            } else {
-                                continue;
-                            }
-                        } else {
-                            if suppressed_profiles.remove(&profile_key).is_some() {
-                                consecutive_failures.remove(&profile_key);
-                            }
-                        }
-                        let profile_is_active =
-                            modules::codex_local_access::profile_uses_mixed_model_gateway(
-                                &target.profile_dir,
-                            )
-                            .unwrap_or(false);
-                        if target.codex_running && !profile_is_active {
-                            continue;
-                        }
-                        let runtime_healthy =
-                            modules::codex_local_access::mixed_model_gateway_runtime_is_healthy(
-                                &target.profile_dir,
-                            )
-                            .await;
-                        let runtime_managed = target.codex_running
-                            || modules::codex_local_access::mixed_model_gateway_runtime_is_managed(
-                                &target.profile_dir,
-                            )
-                            .await;
-                        if runtime_healthy && runtime_managed {
-                            consecutive_failures.remove(&profile_key);
-                            continue;
-                        }
-
-                        let result =
-                            modules::codex_local_access::ensure_mixed_model_gateway_for_dir(
-                                &target.profile_dir,
-                                &target.oauth_account_id,
-                                &target.routing,
-                            )
-                            .await;
-                        match result {
-                            Ok(()) => {
-                                consecutive_failures.remove(&profile_key);
-                                modules::logger::log_info(&format!(
-                                    "[MixedModelRouting] 本地服务已恢复: profile={}",
-                                    target.profile_dir.display()
-                                ));
-                            }
-                            Err(error) => {
-                                let failure_state = consecutive_failures
-                                    .entry(profile_key.clone())
-                                    .or_insert_with(|| (routing_signature.clone(), 0));
-                                if failure_state.0 != routing_signature {
-                                    *failure_state = (routing_signature.clone(), 0);
-                                }
-                                failure_state.1 = failure_state.1.saturating_add(1);
-                                let failures = failure_state.1;
-                                modules::logger::log_warn(&format!(
-                                    "[MixedModelRouting] 本地服务恢复失败: profile={} attempt={} error={}",
-                                    target.profile_dir.display(),
-                                    failures,
-                                    error
-                                ));
-                                if failures >= 3 {
-                                    modules::codex_local_access::stop_provider_gateways_for_profile(
-                                        &target.profile_dir,
-                                    )
-                                    .await;
-                                    let rollback_error = modules::codex_local_access::restore_mixed_model_gateway_profile(
-                                        &target.profile_dir,
-                                    )
-                                    .and_then(|_| {
-                                        modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
-                                            &target.profile_dir,
-                                        )
-                                    })
-                                    .err();
-                                    let rollback_failed = rollback_error.is_some();
-                                    suppressed_profiles
-                                        .insert(profile_key.clone(), routing_signature);
-                                    let _ = app.emit(
-                                        "codex:mixed-model-routing-unavailable",
-                                        serde_json::json!({
-                                            "profileDir": profile_key,
-                                            "error": error,
-                                            "rollbackError": rollback_error,
-                                            "fallback": "official",
-                                        }),
-                                    );
-                                    let body = if rollback_failed {
-                                        "本地分流服务连续恢复失败，且自动恢复官方配置未完全成功。请打开 Cockpit Tools 检查。"
-                                    } else {
-                                        "本地分流服务连续恢复失败，已回退官方配置。请重新启动 Codex 后继续使用。"
-                                    };
-                                    if let Err(notification_error) = app
-                                        .notification()
-                                        .builder()
-                                        .title("Codex 本地分流服务不可用")
-                                        .body(body)
-                                        .show()
-                                    {
-                                        modules::logger::log_warn(&format!(
-                                            "[MixedModelRouting] 系统通知发送失败: {}",
-                                            notification_error
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(error) => modules::logger::log_warn(&format!(
-                    "[MixedModelRouting] 读取待恢复实例失败: {}",
-                    error
-                )),
-            }
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-        }
-    });
-}
+pub use super::codex_instance_gateway_watchdog::start_mixed_model_gateway_watchdog;
 
 async fn created_instance_view_after_binding<F, Fut>(
     instance: InstanceProfile,
@@ -1332,14 +1135,14 @@ mod tests {
             profile("stopped", true, 13),
         ];
         let idle = idle_codex_profile_dirs_for_app_exit(
-            PathBuf::from("/test/default"),
+            Some(PathBuf::from("/test/default")),
             Some(10),
             profiles.clone(),
             |pid, _| matches!(pid, Some(10 | 11 | 12)),
         );
         assert_eq!(idle, vec![PathBuf::from("/test/stopped")]);
         let all_idle = idle_codex_profile_dirs_for_app_exit(
-            PathBuf::from("/test/default"),
+            Some(PathBuf::from("/test/default")),
             Some(10),
             profiles,
             |_, _| false,

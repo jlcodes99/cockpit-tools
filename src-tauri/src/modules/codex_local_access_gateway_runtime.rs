@@ -3,7 +3,7 @@
 async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
     let (collection, running, actual_port, actual_bind_host, actual_fingerprint, stale_task) = {
         let mut runtime = gateway_runtime().lock().await;
-        refresh_gateway_process_status(&mut runtime);
+        let _ = refresh_gateway_process_status(&mut runtime);
         let stale_task = if !runtime.running {
             runtime.task.take()
         } else {
@@ -91,7 +91,12 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
         .await
         .is_ok()
     {
-        match process::kill_port_processes(collection.port) {
+        let cleanup_result = cleanup_managed_sidecar_port_processes(
+            collection.port,
+            launch_config.config_path.clone(),
+        )
+        .await?;
+        match cleanup_result {
             Ok(count) if count > 0 => {
                 log_gateway_mode_info(
                     CodexLocalAccessGatewayMode::Sidecar,
@@ -103,7 +108,10 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
             }
             Ok(_) => {}
             Err(error) => {
-                let message = format!("停止旧 API 服务 sidecar 失败: {}", error);
+                let message = format!(
+                    "listen tcp {}:{}: bind: address already in use; 为避免中断其他运行中的服务，未清理端口进程: {}",
+                    bind_host, collection.port, error
+                );
                 let mut runtime = gateway_runtime().lock().await;
                 runtime.running = false;
                 runtime.actual_port = None;
@@ -272,6 +280,13 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
 
     let port = collection.port;
     let bind_host = bind_host.to_string();
+    let Some(sidecar_pid) = child.id() else {
+        let _ = child.kill().await;
+        task.abort();
+        let _ = task.await;
+        return Err("API 服务 sidecar 启动后未返回进程 ID".to_string());
+    };
+    let sidecar_generation = preparation_guard.generation;
     log_sidecar_proxy_signature(&launch_config.proxy_signature);
     logger::log_codex_api_info(&format!(
         "[CodexLocalAccess][sidecar] API 服务 sidecar 已启动: bin={} bind={}:{} base={}",
@@ -289,8 +304,93 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
     runtime.last_error = None;
     runtime.shutdown_sender = None;
     runtime.task = Some(task);
+    runtime.sidecar_generation = Some(sidecar_generation);
     runtime.sidecar_child = Some(child);
+    drop(runtime);
+
+    let monitor_task = tokio::spawn(monitor_gateway_sidecar_process(
+        sidecar_pid,
+        sidecar_generation,
+    ));
+    let mut runtime = gateway_runtime().lock().await;
+    let still_current = runtime.running
+        && runtime.sidecar_generation == Some(sidecar_generation)
+        && runtime.sidecar_child.as_ref().and_then(Child::id) == Some(sidecar_pid);
+    if still_current {
+        if let Some(previous_monitor) = runtime.sidecar_monitor_task.replace(monitor_task) {
+            previous_monitor.abort();
+        }
+    } else {
+        monitor_task.abort();
+    }
     Ok(())
+}
+
+async fn cleanup_managed_sidecar_port_processes(
+    port: u16,
+    config_path: PathBuf,
+) -> Result<Result<usize, String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        process::kill_managed_sidecar_port_processes(
+            port,
+            CODEX_LOCAL_ACCESS_SIDECAR_BIN_NAME,
+            &config_path,
+            std::process::id(),
+        )
+    })
+    .await
+    .map_err(|error| format!("listen tcp 127.0.0.1:{}: bind: 检查旧 API 服务 sidecar 任务失败: {}", port, error))
+}
+
+fn gateway_sidecar_monitor_matches(
+    running: bool,
+    active_pid: Option<u32>,
+    active_generation: Option<u64>,
+    expected_pid: u32,
+    expected_generation: u64,
+    current_generation: u64,
+    stop_requests: usize,
+) -> bool {
+    running
+        && stop_requests == 0
+        && current_generation == expected_generation
+        && active_generation == Some(expected_generation)
+        && active_pid == Some(expected_pid)
+}
+
+async fn monitor_gateway_sidecar_process(expected_pid: u32, expected_generation: u64) {
+    loop {
+        let process_exit = {
+            let mut runtime = gateway_runtime().lock().await;
+            let active_pid = runtime.sidecar_child.as_ref().and_then(Child::id);
+            if !gateway_sidecar_monitor_matches(
+                runtime.running,
+                active_pid,
+                runtime.sidecar_generation,
+                expected_pid,
+                expected_generation,
+                current_gateway_lifecycle_generation(),
+                GATEWAY_STOP_REQUESTS.load(Ordering::SeqCst),
+            ) {
+                return;
+            }
+            let process_exit = refresh_gateway_process_status(&mut runtime);
+            if process_exit.is_some() {
+                // The output-drain task may already be complete. Dropping its
+                // handle is non-blocking and lets the recovery path start now.
+                runtime.task.take();
+                runtime.sidecar_monitor_task.take();
+            }
+            process_exit
+        };
+
+        if let Some(process_exit) = process_exit {
+            emit_local_access_state_updated();
+            schedule_sidecar_crash_recovery(process_exit);
+            return;
+        }
+        tokio::time::sleep(SIDECAR_PROCESS_MONITOR_INTERVAL).await;
+    }
 }
 
 async fn stop_gateway_sidecar_child(child: &mut Child) -> Result<(), String> {
@@ -334,6 +434,60 @@ async fn stop_gateway_sidecar_child(child: &mut Child) -> Result<(), String> {
     }
 }
 
+#[cfg(test)]
+mod gateway_sidecar_lifecycle_tests {
+    use super::{gateway_sidecar_monitor_matches, sidecar_crash_recovery_allowed};
+
+    #[test]
+    fn monitor_only_matches_the_current_running_generation() {
+        assert!(gateway_sidecar_monitor_matches(
+            true,
+            Some(4200),
+            Some(7),
+            4200,
+            7,
+            7,
+            0,
+        ));
+        assert!(!gateway_sidecar_monitor_matches(
+            true,
+            Some(4201),
+            Some(7),
+            4200,
+            7,
+            7,
+            0,
+        ));
+        assert!(!gateway_sidecar_monitor_matches(
+            true,
+            Some(4200),
+            Some(8),
+            4200,
+            7,
+            8,
+            0,
+        ));
+        assert!(!gateway_sidecar_monitor_matches(
+            true,
+            Some(4200),
+            Some(7),
+            4200,
+            7,
+            7,
+            1,
+        ));
+    }
+
+    #[test]
+    fn recovery_stops_for_user_stop_disable_or_new_generation() {
+        assert!(sidecar_crash_recovery_allowed(true, false, 4, 4, 0));
+        assert!(!sidecar_crash_recovery_allowed(false, false, 4, 4, 0));
+        assert!(!sidecar_crash_recovery_allowed(true, true, 4, 4, 0));
+        assert!(!sidecar_crash_recovery_allowed(true, false, 4, 5, 0));
+        assert!(!sidecar_crash_recovery_allowed(true, false, 4, 4, 1));
+    }
+}
+
 async fn stop_gateway() -> Option<GatewayBindEndpoint> {
     let _stop_request_guard = GatewayStopRequestGuard::begin();
     advance_gateway_lifecycle_generation();
@@ -342,7 +496,7 @@ async fn stop_gateway() -> Option<GatewayBindEndpoint> {
 }
 
 async fn stop_gateway_locked() -> Option<GatewayBindEndpoint> {
-    let (shutdown_sender, task, child, endpoint) = {
+    let (shutdown_sender, task, monitor_task, child, endpoint) = {
         let mut runtime = gateway_runtime().lock().await;
         let endpoint = runtime
             .actual_port
@@ -352,9 +506,11 @@ async fn stop_gateway_locked() -> Option<GatewayBindEndpoint> {
         runtime.actual_port = None;
         runtime.actual_bind_host = None;
         runtime.sidecar_config_fingerprint = None;
+        runtime.sidecar_generation = None;
         (
             runtime.shutdown_sender.take(),
             runtime.task.take(),
+            runtime.sidecar_monitor_task.take(),
             runtime.sidecar_child.take(),
             endpoint,
         )
@@ -362,6 +518,10 @@ async fn stop_gateway_locked() -> Option<GatewayBindEndpoint> {
 
     if let Some(sender) = shutdown_sender {
         let _ = sender.send(true);
+    }
+    if let Some(monitor_task) = monitor_task {
+        monitor_task.abort();
+        let _ = monitor_task.await;
     }
     if let Some(mut child) = child {
         if let Err(error) = stop_gateway_sidecar_child(&mut child).await {
@@ -1020,7 +1180,7 @@ fn build_fresh_state_snapshot(runtime: &mut GatewayRuntime) -> CodexLocalAccessS
 async fn snapshot_state() -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
     let mut runtime = gateway_runtime().lock().await;
-    refresh_gateway_process_status(&mut runtime);
+    let process_exit = refresh_gateway_process_status(&mut runtime);
     if runtime
         .last_error
         .as_deref()
@@ -1032,7 +1192,12 @@ async fn snapshot_state() -> Result<CodexLocalAccessState, String> {
     {
         runtime.last_error = None;
     }
-    Ok(build_fresh_state_snapshot(&mut runtime))
+    let state = build_fresh_state_snapshot(&mut runtime);
+    drop(runtime);
+    if let Some(process_exit) = process_exit {
+        schedule_sidecar_crash_recovery(process_exit);
+    }
+    Ok(state)
 }
 
 async fn snapshot_state_without_gateway_reload() -> Result<CodexLocalAccessState, String> {
