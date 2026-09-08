@@ -618,6 +618,9 @@ fn show_main_window_internal<R: Runtime>(app: &AppHandle<R>) -> Result<bool, Str
 
     window.show().map_err(|err| err.to_string())?;
     window.unminimize().map_err(|err| err.to_string())?;
+    if !created {
+        main_window_state::request_main_window_viewport_refresh();
+    }
 
     if let Err(err) = window.set_focus() {
         logger::log_warn(&format!("[Window] WebView 主窗口聚焦失败: {}", err));
