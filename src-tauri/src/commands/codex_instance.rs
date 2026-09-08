@@ -1128,11 +1128,82 @@ mod tests {
 
         assert_eq!(plan.program, "osascript");
         assert_eq!(plan.terminal_name, "Ghostty");
+        assert_eq!(plan.display_command, "Ghostty → codex --version");
         assert_eq!(plan.args.len(), 2);
         assert_eq!(plan.args[0], "-e");
         assert!(plan.args[1].contains("tell application \"Ghostty\""));
         assert!(plan.args[1].contains("new surface configuration"));
-        assert!(plan.args[1].contains("set command of cfg to \"codex --version\""));
+        assert!(plan.args[1].contains("set command of cfg to \"/bin/bash -lc 'codex --version'\""));
+    }
+
+    #[cfg(unix)]
+    fn run_ghostty_launch_command(command: &str) -> std::process::Output {
+        let plan = build_macos_codex_terminal_launch_plan(command, "Ghostty").unwrap();
+        let literal = plan.args[1]
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("set command of cfg to "))
+            .expect("Ghostty surface command");
+        let mut chars = literal
+            .strip_prefix('"')
+            .unwrap()
+            .strip_suffix('"')
+            .unwrap()
+            .chars();
+        let mut surface_command = String::new();
+        while let Some(ch) = chars.next() {
+            surface_command.push(if ch == '\\' {
+                match chars.next().expect("complete AppleScript escape") {
+                    'n' => '\n',
+                    escaped => escaped,
+                }
+            } else {
+                ch
+            });
+        }
+
+        // Ghostty's macOS launcher prefixes the surface command with exec -l.
+        std::process::Command::new("/bin/bash")
+            .args(["--noprofile", "--norc", "-c"])
+            .arg(format!("exec -l {}", surface_command))
+            .output()
+            .expect("run Ghostty's shell entry point")
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn macos_ghostty_runs_working_directory_and_environment_setup() {
+        let output = run_ghostty_launch_command(
+            r#"cd / && GHOSTTY_LAUNCH_TEST='profile with spaces' /bin/sh -c 'printf "%s|%s" "$PWD" "$GHOSTTY_LAUNCH_TEST"'"#,
+        );
+
+        assert!(output.status.success(), "{:?}", output);
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            "/|profile with spaces",
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn macos_ghostty_preserves_quotes_and_literal_shell_characters() {
+        let output = run_ghostty_launch_command(
+            r#"GHOSTTY_LAUNCH_TEST='用户 / O'"'"'Brien "quoted" $HOME `uname` \n' /usr/bin/printenv GHOSTTY_LAUNCH_TEST"#,
+        );
+
+        assert!(output.status.success(), "{:?}", output);
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            "用户 / O'Brien \"quoted\" $HOME `uname` \\n\n",
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn macos_ghostty_does_not_launch_after_failed_directory_change() {
+        let output = run_ghostty_launch_command("cd /dev/null/invalid && printf unexpected");
+
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
     }
 
     #[test]
