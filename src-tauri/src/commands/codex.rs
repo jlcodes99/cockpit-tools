@@ -37,3 +37,7 @@ use tauri_plugin_opener::OpenerExt;
 include!("codex_account_commands.rs");
 include!("codex_model_provider_commands.rs");
 include!("codex_local_access_commands.rs");
+
+#[cfg(test)]
+#[path = "codex_quota_refresh_tests.rs"]
+mod quota_refresh_tests;

@@ -1444,7 +1444,15 @@ async fn run_codex_post_refresh_checks(app: &AppHandle) {
     match codex_account::pick_auto_switch_target_if_needed() {
         Ok(Some(target)) => {
             let target_id = target.id.clone();
-            match switch_codex_account(app.clone(), target_id.clone(), None, None, None).await
+            // Keep the full account-switch future out of every quota-refresh command's state.
+            match Box::pin(switch_codex_account(
+                app.clone(),
+                target_id.clone(),
+                None,
+                None,
+                None,
+            ))
+            .await
             {
                 Ok(switched_account) => {
                     logger::log_info(&format!(
@@ -1770,7 +1778,7 @@ pub async fn confirm_codex_batch_import(
 /// 刷新单个账号配额
 #[tauri::command]
 pub async fn refresh_codex_quota(app: AppHandle, account_id: String) -> Result<CodexQuota, String> {
-    let result = codex_quota::refresh_account_quota(&account_id).await;
+    let result = Box::pin(codex_quota::refresh_account_quota(&account_id)).await;
     if result.is_ok() {
         run_codex_post_refresh_checks(&app).await;
         let _ = crate::modules::tray::update_tray_menu(&app);
@@ -1819,7 +1827,8 @@ pub async fn refresh_current_codex_quota(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let result = codex_quota::refresh_account_quota(&account.id).await;
+    // Tauri moves this future through its release IPC dispatcher on the Windows UI stack.
+    let result = Box::pin(codex_quota::refresh_account_quota(&account.id)).await;
     if result.is_ok() {
         run_codex_post_refresh_checks(&app).await;
         let _ = crate::modules::tray::update_tray_menu(&app);
@@ -1834,7 +1843,7 @@ pub async fn refresh_current_codex_quota(app: AppHandle) -> Result<(), String> {
 /// 刷新所有账号配额
 #[tauri::command]
 pub async fn refresh_all_codex_quotas(app: AppHandle) -> Result<i32, String> {
-    let results = codex_quota::refresh_all_quotas().await?;
+    let results = Box::pin(codex_quota::refresh_all_quotas()).await?;
     let success_count = results.iter().filter(|(_, r)| r.is_ok()).count();
     if success_count > 0 {
         run_codex_post_refresh_checks(&app).await;
@@ -1855,8 +1864,11 @@ pub async fn refresh_codex_quotas_batch(
     respect_group_quota_refresh: Option<bool>,
 ) -> Result<i32, String> {
     let respect = respect_group_quota_refresh.unwrap_or(true);
-    let results =
-        codex_quota::refresh_quotas_for_account_ids_with_options(&account_ids, respect).await?;
+    let results = Box::pin(codex_quota::refresh_quotas_for_account_ids_with_options(
+        &account_ids,
+        respect,
+    ))
+    .await?;
     let success_count = results.iter().filter(|(_, r)| r.is_ok()).count();
     if success_count > 0 {
         run_codex_post_refresh_checks(&app).await;
