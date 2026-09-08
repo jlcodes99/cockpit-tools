@@ -176,6 +176,19 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		eventData := bytes.TrimSpace(line[5:])
 		eventData = helps.RestoreCodexMultiAgentV2Response(eventData, optimizeMultiAgentV2)
 		eventType := gjson.GetBytes(eventData, "type").String()
+		if eventType == "response.done" {
+			// A done event can also describe a failed or incomplete response.
+			status := gjson.GetBytes(eventData, "response.status").String()
+			switch status {
+			case "completed":
+				eventData = normalizeCodexWebsocketCompletion(eventData)
+			case "failed", "incomplete":
+				eventData, _ = sjson.SetBytes(eventData, "type", "response."+status)
+			default:
+				continue
+			}
+			eventType = gjson.GetBytes(eventData, "type").String()
+		}
 
 		if streamErr, terminalBody, ok := codexTerminalFailureErr(eventData); ok {
 			if errClearReplay := clearCodexReasoningReplayOnInvalidSignature(ctx, replayScope, streamErr.StatusCode(), terminalBody); errClearReplay != nil {
