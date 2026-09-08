@@ -67,7 +67,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  background: linear-gradient(135deg, #f97316 0%, #ef4444 100%);
+  background: var(--warning-strong);
   color: white;
   font-size: 11px;
   font-weight: 700;
@@ -534,7 +534,7 @@
 }
 
 .installed-version-badge.is-missing .installed-version-dot {
-  background: #f59e0b;
+  background: var(--warning);
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
 }
 

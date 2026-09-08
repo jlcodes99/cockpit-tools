@@ -164,7 +164,7 @@
 .codex-batch-import-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #2563eb, #0ea5e9);
+  background: var(--primary);
   transition: width 180ms ease;
 }
 
@@ -306,7 +306,7 @@
 }
 
 .codex-batch-import-check-toggle input:checked + .codex-batch-import-check-switch {
-  background: #2563eb;
+  background: var(--primary);
 }
 
 .codex-batch-import-check-toggle input:checked + .codex-batch-import-check-switch::after {
