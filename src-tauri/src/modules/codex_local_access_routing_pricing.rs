@@ -88,8 +88,22 @@ fn normalize_auth_file_plan_type(plan_type: Option<&str>) -> Option<&'static str
     }
 }
 
-fn resolve_plan_rank(account: &CodexAccount) -> Option<i32> {
+fn resolve_effective_plan_key(account: &CodexAccount) -> String {
     let plan_key = normalize_plan_key(account.plan_type.as_deref());
+    if plan_key == "free" || account.is_api_key_auth() || account.is_agent_identity_auth() {
+        return plan_key;
+    }
+    if let Some(expiry_ms) = resolve_subscription_expiry_ms(account) {
+        let now = chrono::Utc::now().timestamp_millis();
+        if expiry_ms <= now {
+            return "free".to_string();
+        }
+    }
+    plan_key
+}
+
+fn resolve_plan_rank(account: &CodexAccount) -> Option<i32> {
+    let plan_key = resolve_effective_plan_key(account);
     let auth_file_plan_type = normalize_auth_file_plan_type(account.auth_file_plan_type.as_deref())
         .or_else(|| normalize_auth_file_plan_type(account.plan_type.as_deref()));
 
