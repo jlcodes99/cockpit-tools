@@ -361,6 +361,15 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         qoder_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.qoder_app_path,
         ),
+        qoder_app_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.qoder_app_app_path,
+        ),
+        qoder_cn_ide_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.qoder_cn_ide_app_path,
+        ),
+        qoder_cn_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.qoder_cn_app_path,
+        ),
         zcode_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.zcode_app_path,
         ),

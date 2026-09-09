@@ -221,9 +221,18 @@ pub struct UserConfig {
     /// CodeBuddy CN 启动路径（为空则使用默认路径）
     #[serde(default = "default_codebuddy_cn_app_path")]
     pub codebuddy_cn_app_path: String,
-    /// Qoder 启动路径（为空则使用默认路径）
+    /// Qoder 启动路径（国际版 IDE，为空则使用默认路径）
     #[serde(default = "default_qoder_app_path")]
     pub qoder_app_path: String,
+    /// Qoder 国际版 App / Launcher 启动路径
+    #[serde(default = "default_qoder_app_path")]
+    pub qoder_app_app_path: String,
+    /// Qoder 国内版 IDE 启动路径
+    #[serde(default = "default_qoder_app_path")]
+    pub qoder_cn_ide_app_path: String,
+    /// Qoder 国内版 App 启动路径
+    #[serde(default = "default_qoder_app_path")]
+    pub qoder_cn_app_path: String,
     /// Trae 启动路径（为空则使用默认路径）
     #[serde(default = "default_trae_app_path")]
     pub trae_app_path: String,
@@ -846,6 +855,9 @@ impl Default for UserConfig {
             codebuddy_share_sessions_on_switch: default_codebuddy_share_sessions_on_switch(),
             codebuddy_cn_app_path: default_codebuddy_cn_app_path(),
             qoder_app_path: default_qoder_app_path(),
+            qoder_app_app_path: default_qoder_app_path(),
+            qoder_cn_ide_app_path: default_qoder_app_path(),
+            qoder_cn_app_path: default_qoder_app_path(),
             trae_app_path: default_trae_app_path(),
             trae_solo_app_path: default_trae_app_path(),
             trae_cn_app_path: default_trae_app_path(),
@@ -1658,6 +1670,30 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             Some(trimmed)
         }
     });
+
+    // 自动感知探测 Qoder 4 个渠道的安装路径
+    let mut qoder_paths_detected = false;
+    let qoder_probes = [
+        (crate::modules::qoder_channel::QoderChannel::QoderIde, &mut config.qoder_app_path),
+        (crate::modules::qoder_channel::QoderChannel::QoderApp, &mut config.qoder_app_app_path),
+        (crate::modules::qoder_channel::QoderChannel::QoderCnIde, &mut config.qoder_cn_ide_app_path),
+        (crate::modules::qoder_channel::QoderChannel::QoderCnApp, &mut config.qoder_cn_app_path),
+    ];
+    for (channel, path_ref) in qoder_probes {
+        let is_missing = path_ref.trim().is_empty() || !std::path::Path::new(path_ref.trim()).exists();
+        if is_missing {
+            if let Some(detected) = channel.detect_installed_exe() {
+                let detected_str = detected.to_string_lossy().to_string();
+                if *path_ref != detected_str {
+                    *path_ref = detected_str;
+                    qoder_paths_detected = true;
+                }
+            }
+        }
+    }
+    if qoder_paths_detected {
+        let _ = persist_user_config(&config);
+    }
 
     Ok(config)
 }

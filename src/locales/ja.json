@@ -334,7 +334,12 @@
     "apiRelay": "リレー",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "スポンサー",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "このグループのデフォルトプラットフォームに設定",
     "removeFromGroup": "グループから削除",
     "sidebarSelectedUnlimited": "選択済み ({count})",
-    "tipWithGroupsUnlimited": "選択したプラットフォームとグループを手動で並べ替える"
+    "tipWithGroupsUnlimited": "選択したプラットフォームとグループを手動で並べ替える",
+    "sidebarLimitReached": "サイドバーの表示数が上限（{{max}}個）に達しました。他のプラットフォームのチェックを外してください"
   },
   "privacy": {
     "hideSensitive": "メールを隠す",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "通常アカウントのみ：オフでメール先頭を非表示。Codex API サービス / API Key は API ラベルを維持",
       "menuBarQuotaConfirmEnable": "有効にする",
       "codexHideRelayQuota": "中継クォータを隠す",
-      "codexHideRelayQuotaDesc": "オンにすると、Codex アカウント一覧で中継 / New API 系の残高パネルを非表示にし、表示の重なりを減らします。"
+      "codexHideRelayQuotaDesc": "オンにすると、Codex アカウント一覧で中継 / New API 系の残高パネルを非表示にし、表示の重なりを減らします。",
+      "qoderAppAppPath": "Qoder 起動パス",
+      "qoderCnIdeAppPath": "Qoder CN IDE 起動パス",
+      "qoderCnAppPath": "Qoder CN 起動パス"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "{{count}} 件のアカウントの復旧を要求しました",
         "dialog": {
           "title": "アカウントの異常",
-      "description": "各アカウントをモデル、利用不可の理由、実行可能な復旧操作とともに表示します。",
+          "description": "各アカウントをモデル、利用不可の理由、実行可能な復旧操作とともに表示します。",
           "noIssues": "アカウントに異常はありません",
           "unscopedApiKey": "現在の API Key",
           "poolUnavailable": "プールに利用可能なアカウントがありません",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "TRAE SOLO CN パス",
       "title": "TRAE SOLO CN 設定"
+    },
+    "qoderApp": {
+      "title": "Qoder 設定",
+      "appPath": "Qoder パス"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE 設定",
+      "appPath": "Qoder CN IDE パス"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN 設定",
+      "appPath": "Qoder CN パス"
     }
   },
   "quotaAlert": {

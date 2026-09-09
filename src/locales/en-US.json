@@ -367,7 +367,12 @@
       "restart": "Restart",
       "installing": "Installing"
     },
-    "qoder": "Qoder",
+    "qoder": "Qoder IDE",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN",
     "trae": "Trae",
     "traeSolo": "TRAE SOLO",
     "traeCn": "Trae CN",
@@ -549,6 +554,7 @@
     "title": "Platform Layout",
     "sidebarSelected": "Sidebar selected {{count}}/{{max}}",
     "sidebarSelectedUnlimited": "Sidebar selected {{count}}",
+    "sidebarLimitReached": "Sidebar display limit reached ({{max}}). Please uncheck other platforms first.",
     "reset": "Reset to default",
     "tip": "Drag to reorder. Up to three platforms can be shown in the sidebar. If only one is selected, only one is shown.",
     "tipWithGroups": "Drag to reorder. Up to {{max}} entries can appear in the sidebar. Group children do not have sidebar/dashboard toggles and are only used for tray visibility and default-platform switching.",
@@ -1133,9 +1139,12 @@
       "codebuddyCnSettingsTitle": "CodeBuddy CN Settings",
       "zcodeAppPath": "ZCode Launch Path",
       "zcodeAppPathDesc": "Leave blank to use the default path",
-      "qoderAppPath": "Qoder App Path",
+      "qoderAppPath": "Qoder IDE Launch Path",
       "qoderAppPathDesc": "Leave blank to use the default path",
       "qoderAppPathPlaceholder": "Default path",
+      "qoderAppAppPath": "Qoder Launch Path",
+      "qoderCnIdeAppPath": "Qoder CN IDE Launch Path",
+      "qoderCnAppPath": "Qoder CN Launch Path",
       "zcodeAutoRefresh": "ZCode Auto Refresh",
       "zcodeAutoRefreshDesc": "Background quota refresh interval",
       "qoderAutoRefresh": "Qoder Auto Refresh",
@@ -2381,8 +2390,8 @@
       "modelConfigDialogDescription": "Configure visible models, reasoning levels, context windows, and compact limits for each model.",
       "applyModelConfig": "Apply settings",
       "defaultModel": "Default model",
-      "repairCompleted": "Session visibility repair completed"
-      ,"forceRefreshTitle": "Force-refresh Token",
+      "repairCompleted": "Session visibility repair completed",
+      "forceRefreshTitle": "Force-refresh Token",
       "forceRefreshReady": "OAuth tokens can be refreshed manually",
       "forceRefreshDescription": "Use refresh_token to obtain new access_token and id_token values. This may rotate the current refresh token.",
       "forceRefreshUnavailable": "Unavailable for this account type",
@@ -4923,8 +4932,20 @@
       "openCodexConfigFailed": "Failed to open Codex config.toml: {{error}}"
     },
     "qoder": {
+      "title": "Qoder IDE Settings",
+      "appPath": "Qoder IDE Launch Path"
+    },
+    "qoderApp": {
       "title": "Qoder Settings",
-      "appPath": "Qoder Path"
+      "appPath": "Qoder Launch Path"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE Settings",
+      "appPath": "Qoder CN IDE Launch Path"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN Settings",
+      "appPath": "Qoder CN Launch Path"
     },
     "zcode": {
       "title": "ZCode Settings",

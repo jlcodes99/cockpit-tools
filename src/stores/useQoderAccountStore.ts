@@ -1,5 +1,6 @@
 import {
   QoderAccount,
+  QoderChannel,
   getQoderAccountDisplayEmail,
   getQoderPlanBadge,
   getQoderUsage,
@@ -8,30 +9,50 @@ import * as qoderService from '../services/qoderService';
 import { getProviderCurrentAccountId } from '../services/providerCurrentAccountService';
 import { createProviderAccountStore } from './createProviderAccountStore';
 
-const QODER_ACCOUNTS_CACHE_KEY = 'agtools.qoder.accounts.cache';
-const QODER_CURRENT_ACCOUNT_ID_KEY = 'agtools.qoder.current_account_id';
+function createChannelStore(channel: QoderChannel) {
+  const cacheKey = `agtools.${channel}.accounts.cache`;
+  const currentKey = `agtools.${channel}.current_account_id`;
 
-export const useQoderAccountStore = createProviderAccountStore<QoderAccount>(
-  QODER_ACCOUNTS_CACHE_KEY,
-  {
-    listAccounts: qoderService.listQoderAccounts,
-    deleteAccount: qoderService.deleteQoderAccount,
-    deleteAccounts: qoderService.deleteQoderAccounts,
-    injectAccount: qoderService.injectQoderAccount,
-    refreshToken: qoderService.refreshQoderToken,
-    refreshAllTokens: qoderService.refreshAllQoderTokens,
-    importFromJson: qoderService.importQoderFromJson,
-    exportAccounts: qoderService.exportQoderAccounts,
-    updateAccountTags: qoderService.updateQoderAccountTags,
-  },
-  {
-    getDisplayEmail: getQoderAccountDisplayEmail,
-    getPlanBadge: getQoderPlanBadge,
-    getUsage: getQoderUsage,
-  },
-  {
-    platformId: 'qoder',
-    currentAccountIdKey: QODER_CURRENT_ACCOUNT_ID_KEY,
-    resolveCurrentAccountId: () => getProviderCurrentAccountId('qoder'),
-  },
-);
+  return createProviderAccountStore<QoderAccount>(
+    cacheKey,
+    {
+      listAccounts: () => qoderService.listQoderChannelAccounts(channel),
+      deleteAccount: (accountId: string) => qoderService.deleteQoderChannelAccount(channel, accountId),
+      deleteAccounts: (accountIds: string[]) => qoderService.deleteQoderChannelAccounts(channel, accountIds),
+      injectAccount: (accountId: string) => qoderService.injectQoderChannelAccount(channel, accountId),
+      refreshToken: (accountId: string) => qoderService.refreshQoderToken(accountId, channel),
+      refreshAllTokens: qoderService.refreshAllQoderTokens,
+      importFromJson: (jsonContent: string) => qoderService.importQoderChannelFromJson(channel, jsonContent),
+      exportAccounts: (accountIds: string[]) => qoderService.exportQoderChannelAccounts(channel, accountIds),
+      updateAccountTags: (accountId: string, tags: string[]) =>
+        qoderService.updateQoderChannelAccountTags(channel, accountId, tags),
+    },
+    {
+      getDisplayEmail: getQoderAccountDisplayEmail,
+      getPlanBadge: getQoderPlanBadge,
+      getUsage: getQoderUsage,
+    },
+    {
+      platformId: channel,
+      currentAccountIdKey: currentKey,
+      resolveCurrentAccountId: () => getProviderCurrentAccountId(channel),
+    },
+  );
+}
+
+export const qoderChannelStores: Record<QoderChannel, ReturnType<typeof createChannelStore>> = {
+  qoder: createChannelStore('qoder'),
+  qoder_app: createChannelStore('qoder_app'),
+  qoder_cn_ide: createChannelStore('qoder_cn_ide'),
+  qoder_cn_app: createChannelStore('qoder_cn_app'),
+};
+
+export const useQoderAccountStore = qoderChannelStores.qoder;
+export const useQoderAppAccountStore = qoderChannelStores.qoder_app;
+export const useQoderCnIdeAccountStore = qoderChannelStores.qoder_cn_ide;
+export const useQoderCnAppAccountStore = qoderChannelStores.qoder_cn_app;
+
+export function useQoderChannelAccountStore(channel: QoderChannel = 'qoder') {
+  const store = qoderChannelStores[channel] || qoderChannelStores.qoder;
+  return store();
+}

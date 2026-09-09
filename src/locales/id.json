@@ -381,7 +381,12 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -433,7 +438,8 @@
     "customIconDeleteConfirm": "Hapus ikon kustom ini?",
     "editChildPlatform": "Edit platform anak",
     "setAsDefaultInGroup": "Tetapkan sebagai platform bawaan dalam grup ini",
-    "removeFromGroup": "Keluarkan dari grup"
+    "removeFromGroup": "Keluarkan dari grup",
+    "sidebarLimitReached": "Batas tampilan bilah sisi tercapai ({{max}}). Harap hapus centang platform lain terlebih dahulu."
   },
   "privacy": {
     "hideSensitive": "Sembunyikan email",
@@ -1055,7 +1061,10 @@
       "menuBarAccountPrefixDesc": "Hanya akun normal: mati menyembunyikan awalan email. Layanan API Codex / API Key tetap menampilkan label API",
       "menuBarQuotaConfirmEnable": "Aktifkan",
       "codexHideRelayQuota": "Sembunyikan kuota relay",
-      "codexHideRelayQuotaDesc": "Menyembunyikan panel kuota relay / New API di ringkasan akun Codex."
+      "codexHideRelayQuotaDesc": "Menyembunyikan panel kuota relay / New API di ringkasan akun Codex.",
+      "qoderAppAppPath": "Path Aplikasi Qoder",
+      "qoderCnIdeAppPath": "Path Aplikasi Qoder CN IDE",
+      "qoderCnAppPath": "Path Aplikasi Qoder CN"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -2667,7 +2676,7 @@
         "recoverSuccess": "Pemulihan diminta untuk {{count}} akun",
         "dialog": {
           "title": "Masalah Akun",
-      "description": "Setiap akun ditampilkan bersama model, alasan tidak tersedia, dan tindakan pemulihan yang tersedia.",
+          "description": "Setiap akun ditampilkan bersama model, alasan tidak tersedia, dan tindakan pemulihan yang tersedia.",
           "noIssues": "Tidak ada masalah akun",
           "unscopedApiKey": "API Key saat ini",
           "poolUnavailable": "Tidak ada akun pool yang tersedia",
@@ -4809,6 +4818,18 @@
     "traeSoloCn": {
       "appPath": "Path TRAE SOLO CN",
       "title": "Pengaturan TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "Qoder Settings​",
+      "appPath": "Qoder Path​"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE Settings​",
+      "appPath": "Qoder CN IDE Path​"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN Settings​",
+      "appPath": "Qoder CN Path​"
     }
   },
   "quotaAlert": {

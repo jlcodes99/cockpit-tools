@@ -528,6 +528,21 @@ pub fn run() {
             // Restore last main-window size/position before optional startup minimize (#948 / #1132).
             if let Some(main) = app.get_webview_window("main") {
                 modules::main_window_state::restore_to_window(&main);
+                let config = modules::config::get_user_config();
+                if !config.startup_minimized {
+                    if let Err(err) = main.show() {
+                        logger::log_warn(&format!("[Window] 启动显示主窗口失败: {}", err));
+                    }
+                    let _ = main.unminimize();
+                    let _ = main.set_focus();
+                    #[cfg(target_os = "windows")]
+                    if let Ok(hwnd) = main.hwnd() {
+                        let raw = hwnd.0 as isize;
+                        std::thread::spawn(move || {
+                            let _ = crate::modules::process::focus_window_by_hwnd(raw);
+                        });
+                    }
+                }
             }
 
             apply_startup_minimized(&app.handle());
@@ -1115,20 +1130,29 @@ pub fn run() {
             commands::codebuddy_cn_instance::codebuddy_cn_close_all_instances,
             // Qoder Commands
             commands::qoder::list_qoder_accounts,
+            commands::qoder::list_qoder_channel_accounts,
             commands::qoder::delete_qoder_account,
+            commands::qoder::delete_qoder_channel_account,
             commands::qoder::delete_qoder_accounts,
+            commands::qoder::delete_qoder_channel_accounts,
             commands::qoder::import_qoder_from_json,
+            commands::qoder::import_qoder_channel_from_json,
             commands::qoder::import_qoder_from_local,
+            commands::qoder::import_qoder_channel_from_local,
             commands::qoder::qoder_oauth_login_start,
             commands::qoder::qoder_oauth_login_peek,
             commands::qoder::qoder_oauth_login_complete,
             commands::qoder::qoder_oauth_login_cancel,
             commands::qoder::export_qoder_accounts,
+            commands::qoder::export_qoder_channel_accounts,
             commands::qoder::refresh_qoder_token,
             commands::qoder::refresh_all_qoder_tokens,
             commands::qoder::inject_qoder_account,
+            commands::qoder::inject_qoder_channel_account,
             commands::qoder::update_qoder_account_tags,
+            commands::qoder::update_qoder_channel_account_tags,
             commands::qoder::get_qoder_accounts_index_path,
+            commands::qoder::get_qoder_channel_accounts_index_path,
             // Zed Commands
             commands::zed::list_zed_accounts,
             commands::zed::delete_zed_account,
@@ -1366,12 +1390,17 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         match &event {
-            RunEvent::ExitRequested { api, .. } => {
-                if modules::floating_card_window::should_keep_alive_after_main_window_destroyed()
-                    && !modules::app_lifecycle::is_shutdown_started()
-                {
+            RunEvent::ExitRequested { api, code, .. } => {
+                let exit_requested = modules::floating_card_window::is_app_exit_requested();
+                let shutdown_started = modules::app_lifecycle::is_shutdown_started();
+                modules::logger::log_info(&format!(
+                    "[Lifecycle] 收到 ExitRequested: code={:?}, exit_requested={}, shutdown_started={}",
+                    code, exit_requested, shutdown_started
+                ));
+
+                if !exit_requested && !shutdown_started {
                     api.prevent_exit();
-                    modules::logger::log_info("[Window] 主窗口已销毁，应用继续在托盘运行");
+                    modules::logger::log_info("[Window] 托盘常驻保护生效，已阻止应用退出");
                 } else {
                     let first_shutdown = modules::app_lifecycle::begin_shutdown();
                     if first_shutdown {

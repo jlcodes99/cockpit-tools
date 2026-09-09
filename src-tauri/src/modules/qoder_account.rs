@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::models::qoder::{QoderAccount, QoderAccountIndex};
+use crate::modules::qoder_channel::{QoderChannel, QoderCredentialKind};
 use crate::modules::{account, logger};
 
 const ACCOUNTS_INDEX_FILE: &str = "qoder_accounts.json";
@@ -106,21 +107,34 @@ fn get_data_dir() -> Result<PathBuf, String> {
     account::get_data_dir()
 }
 
-fn get_accounts_dir() -> Result<PathBuf, String> {
+pub fn get_accounts_dir_for_channel(channel: QoderChannel) -> Result<PathBuf, String> {
     let base = get_data_dir()?;
-    let dir = base.join(ACCOUNTS_DIR);
+    let dir = base.join(channel.accounts_dir_name());
     if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| format!("创建 Qoder 账号目录失败: {}", e))?;
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("创建 {} 账号目录失败: {}", channel.display_name(), e))?;
     }
     Ok(dir)
 }
 
+fn get_accounts_dir() -> Result<PathBuf, String> {
+    get_accounts_dir_for_channel(QoderChannel::QoderIde)
+}
+
+pub fn get_accounts_index_path_for_channel(channel: QoderChannel) -> Result<PathBuf, String> {
+    Ok(get_data_dir()?.join(channel.accounts_index_filename()))
+}
+
 fn get_accounts_index_path() -> Result<PathBuf, String> {
-    Ok(get_data_dir()?.join(ACCOUNTS_INDEX_FILE))
+    get_accounts_index_path_for_channel(QoderChannel::QoderIde)
+}
+
+pub fn accounts_index_path_string_for_channel(channel: QoderChannel) -> Result<String, String> {
+    Ok(get_accounts_index_path_for_channel(channel)?.to_string_lossy().to_string())
 }
 
 pub fn accounts_index_path_string() -> Result<String, String> {
-    Ok(get_accounts_index_path()?.to_string_lossy().to_string())
+    accounts_index_path_string_for_channel(QoderChannel::QoderIde)
 }
 
 fn normalize_account_id(account_id: &str) -> Result<String, String> {
@@ -143,13 +157,20 @@ fn normalize_account_id(account_id: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-fn resolve_account_file_path(account_id: &str) -> Result<PathBuf, String> {
+pub fn resolve_account_file_path_for_channel(
+    channel: QoderChannel,
+    account_id: &str,
+) -> Result<PathBuf, String> {
     let normalized = normalize_account_id(account_id)?;
-    Ok(get_accounts_dir()?.join(format!("{}.json", normalized)))
+    Ok(get_accounts_dir_for_channel(channel)?.join(format!("{}.json", normalized)))
 }
 
-pub fn load_account(account_id: &str) -> Option<QoderAccount> {
-    let account_path = resolve_account_file_path(account_id).ok()?;
+fn resolve_account_file_path(account_id: &str) -> Result<PathBuf, String> {
+    resolve_account_file_path_for_channel(QoderChannel::QoderIde, account_id)
+}
+
+pub fn load_account_for_channel(channel: QoderChannel, account_id: &str) -> Option<QoderAccount> {
+    let account_path = resolve_account_file_path_for_channel(channel, account_id).ok()?;
     if !account_path.exists() {
         return None;
     }
@@ -158,8 +179,85 @@ pub fn load_account(account_id: &str) -> Option<QoderAccount> {
         &account_path,
         &content,
     ) {
-        Ok((account, needs_rotation)) => {
-            if needs_rotation {
+        Ok((mut account, needs_rotation)) => {
+            let mut healed = false;
+            let snapshot = QoderSnapshot {
+                user_info_raw: account.auth_user_info_raw.clone(),
+                user_plan_raw: account.auth_user_plan_raw.clone(),
+                credit_usage_raw: account.auth_credit_usage_raw.clone(),
+            };
+
+            if account.display_name.is_none() {
+                if let Some(name) = extract_snapshot_display_name(&snapshot) {
+                    crate::modules::logger::log_warn(&format!(
+                        "[Qoder Account Heal] 字段自愈: channel={}, account_id={}, field_name=display_name, old_value=None, new_value={}",
+                        channel.as_str(),
+                        account.id,
+                        name
+                    ));
+                    account.display_name = Some(name);
+                    healed = true;
+                }
+            }
+
+            if account.email == "unknown@qoder.local"
+                || account.email.starts_with("unknown@")
+                || account.email.trim().is_empty()
+            {
+                let old_email = account.email.clone();
+                let new_email = if let Some(real_email) = extract_snapshot_email(&snapshot) {
+                    Some(real_email)
+                } else if let Some(ref name) = account.display_name {
+                    if name.contains('@') {
+                        Some(name.to_lowercase())
+                    } else {
+                        Some(format!("{}@qoder.cn", name.to_lowercase()))
+                    }
+                } else if let Some(ref uid) = account.user_id {
+                    Some(format!("uid_{}@qoder.cn", sanitize_account_id_component(uid).to_lowercase()))
+                } else {
+                    None
+                };
+
+                if let Some(ne) = new_email {
+                    crate::modules::logger::log_warn(&format!(
+                        "[Qoder Account Heal] 字段自愈: channel={}, account_id={}, field_name=email, old_value={}, new_value={}",
+                        channel.as_str(),
+                        account.id,
+                        old_email,
+                        ne
+                    ));
+                    account.email = ne;
+                    healed = true;
+                }
+            }
+
+            if account.plan_type.is_none() {
+                let new_plan = if let Some(plan) = extract_snapshot_plan_type(&snapshot) {
+                    Some(plan)
+                } else if channel.is_cn() || account.email.ends_with(".cn") {
+                    Some("Free".to_string())
+                } else {
+                    None
+                };
+
+                if let Some(plan) = new_plan {
+                    crate::modules::logger::log_warn(&format!(
+                        "[Qoder Account Heal] 字段自愈: channel={}, account_id={}, field_name=plan_type, old_value=None, new_value={}",
+                        channel.as_str(),
+                        account.id,
+                        plan
+                    ));
+                    account.plan_type = Some(plan);
+                    healed = true;
+                }
+            }
+
+            if healed {
+                let _ = save_account_file_for_channel(channel, &account);
+            }
+
+            if needs_rotation && !healed {
                 let account_for_rewrite = account.clone();
                 crate::modules::deferred_account_rewrite::schedule_account_rewrite_if_unchanged(
                     "qoder",
@@ -176,53 +274,87 @@ pub fn load_account(account_id: &str) -> Option<QoderAccount> {
             }
             Some(account)
         }
-        Err(_) => None,
+        Err(err) => {
+            crate::modules::logger::log_warn(&format!(
+                "[Qoder Account] 解密或加载账号文件失败: channel={}, path={}, error={}",
+                channel.as_str(),
+                account_path.display(),
+                err
+            ));
+            None
+        }
     }
 }
 
-fn save_account_file(account: &QoderAccount) -> Result<(), String> {
-    let path = resolve_account_file_path(account.id.as_str())?;
-    let content = crate::modules::secure_account_storage::serialize_account_file("qoder", account)?;
+pub fn find_account_channel(account_id: &str) -> Option<(QoderChannel, QoderAccount)> {
+    for &channel in &QoderChannel::ALL {
+        if let Some(account) = load_account_for_channel(channel, account_id) {
+            return Some((channel, account));
+        }
+    }
+    None
+}
+
+pub fn load_account(account_id: &str) -> Option<QoderAccount> {
+    find_account_channel(account_id).map(|(_, account)| account)
+}
+
+pub fn save_account_file_for_channel(
+    channel: QoderChannel,
+    account: &QoderAccount,
+) -> Result<(), String> {
+    let path = resolve_account_file_path_for_channel(channel, account.id.as_str())?;
+    let content =
+        crate::modules::secure_account_storage::serialize_account_file("qoder", account)?;
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
-fn delete_account_file(account_id: &str) -> Result<(), String> {
-    let path = resolve_account_file_path(account_id)?;
+fn save_account_file(account: &QoderAccount) -> Result<(), String> {
+    save_account_file_for_channel(QoderChannel::QoderIde, account)
+}
+
+fn delete_account_file_for_channel(channel: QoderChannel, account_id: &str) -> Result<(), String> {
+    let path = resolve_account_file_path_for_channel(channel, account_id)?;
     if path.exists() {
-        crate::modules::atomic_write::remove_file_locked(&path)
-            .map_err(|e| format!("删除账号文件失败: {}", e))?;
+        fs::remove_file(path).map_err(|e| format!("删除账号文件失败: {}", e))?;
     }
     Ok(())
 }
 
-fn load_account_index() -> QoderAccountIndex {
-    let path = match get_accounts_index_path() {
+fn delete_account_file(account_id: &str) -> Result<(), String> {
+    delete_account_file_for_channel(QoderChannel::QoderIde, account_id)
+}
+
+fn load_account_index_for_channel(channel: QoderChannel) -> QoderAccountIndex {
+    let path = match get_accounts_index_path_for_channel(channel) {
         Ok(p) => p,
         Err(_) => return QoderAccountIndex::new(),
     };
     if !path.exists() {
-        return repair_account_index_from_details("索引文件不存在")
+        return repair_account_index_from_details_for_channel(channel, "索引文件不存在")
             .unwrap_or_else(QoderAccountIndex::new);
     }
     match fs::read_to_string(&path) {
         Ok(content) if content.trim().is_empty() => {
-            repair_account_index_from_details("索引文件为空").unwrap_or_else(QoderAccountIndex::new)
+            repair_account_index_from_details_for_channel(channel, "索引文件为空")
+                .unwrap_or_else(QoderAccountIndex::new)
         }
         Ok(content) => match crate::modules::atomic_write::parse_json_with_auto_restore::<
             QoderAccountIndex,
         >(&path, &content)
         {
             Ok(index) if !index.accounts.is_empty() => index,
-            Ok(_) => repair_account_index_from_details("索引账号列表为空")
+            Ok(_) => repair_account_index_from_details_for_channel(channel, "索引账号列表为空")
                 .unwrap_or_else(QoderAccountIndex::new),
             Err(err) => {
                 logger::log_warn(&format!(
-                    "[Qoder Account] 账号索引解析失败，尝试按详情文件自动修复: path={}, error={}",
+                    "[{}] 账号索引解析失败，尝试按详情文件自动修复: path={}, error={}",
+                    channel.display_name(),
                     path.display(),
                     err
                 ));
-                repair_account_index_from_details("索引文件损坏")
+                repair_account_index_from_details_for_channel(channel, "索引文件损坏")
                     .unwrap_or_else(QoderAccountIndex::new)
             }
         },
@@ -230,10 +362,16 @@ fn load_account_index() -> QoderAccountIndex {
     }
 }
 
-fn load_account_index_checked() -> Result<QoderAccountIndex, String> {
-    let path = get_accounts_index_path()?;
+fn load_account_index() -> QoderAccountIndex {
+    load_account_index_for_channel(QoderChannel::QoderIde)
+}
+
+fn load_account_index_checked_for_channel(
+    channel: QoderChannel,
+) -> Result<QoderAccountIndex, String> {
+    let path = get_accounts_index_path_for_channel(channel)?;
     if !path.exists() {
-        if let Some(index) = repair_account_index_from_details("索引文件不存在") {
+        if let Some(index) = repair_account_index_from_details_for_channel(channel, "索引文件不存在") {
             return Ok(index);
         }
         return Ok(QoderAccountIndex::new());
@@ -242,7 +380,9 @@ fn load_account_index_checked() -> Result<QoderAccountIndex, String> {
     let content = match fs::read_to_string(&path) {
         Ok(content) => content,
         Err(err) => {
-            if let Some(index) = repair_account_index_from_details("索引文件读取失败") {
+            if let Some(index) =
+                repair_account_index_from_details_for_channel(channel, "索引文件读取失败")
+            {
                 return Ok(index);
             }
             return Err(format!("读取账号索引失败: {}", err));
@@ -250,7 +390,7 @@ fn load_account_index_checked() -> Result<QoderAccountIndex, String> {
     };
 
     if content.trim().is_empty() {
-        if let Some(index) = repair_account_index_from_details("索引文件为空") {
+        if let Some(index) = repair_account_index_from_details_for_channel(channel, "索引文件为空") {
             return Ok(index);
         }
         return Ok(QoderAccountIndex::new());
@@ -261,17 +401,19 @@ fn load_account_index_checked() -> Result<QoderAccountIndex, String> {
     ) {
         Ok(index) if !index.accounts.is_empty() => Ok(index),
         Ok(index) => {
-            if let Some(repaired) = repair_account_index_from_details("索引账号列表为空") {
+            if let Some(repaired) =
+                repair_account_index_from_details_for_channel(channel, "索引账号列表为空")
+            {
                 return Ok(repaired);
             }
             Ok(index)
         }
         Err(err) => {
-            if let Some(index) = repair_account_index_from_details("索引文件损坏") {
+            if let Some(index) = repair_account_index_from_details_for_channel(channel, "索引文件损坏") {
                 return Ok(index);
             }
             Err(crate::error::file_corrupted_error(
-                ACCOUNTS_INDEX_FILE,
+                channel.accounts_index_filename(),
                 &path.to_string_lossy(),
                 &err.to_string(),
             ))
@@ -279,20 +421,34 @@ fn load_account_index_checked() -> Result<QoderAccountIndex, String> {
     }
 }
 
-fn save_account_index(index: &QoderAccountIndex) -> Result<(), String> {
-    let path = get_accounts_index_path()?;
+fn load_account_index_checked() -> Result<QoderAccountIndex, String> {
+    load_account_index_checked_for_channel(QoderChannel::QoderIde)
+}
+
+fn save_account_index_for_channel(
+    channel: QoderChannel,
+    index: &QoderAccountIndex,
+) -> Result<(), String> {
+    let path = get_accounts_index_path_for_channel(channel)?;
     let content =
         serde_json::to_string_pretty(index).map_err(|e| format!("序列化账号索引失败: {}", e))?;
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("写入账号索引失败: {}", e))
 }
 
-fn repair_account_index_from_details(reason: &str) -> Option<QoderAccountIndex> {
-    let index_path = get_accounts_index_path().ok()?;
-    let accounts_dir = get_accounts_dir().ok()?;
+fn save_account_index(index: &QoderAccountIndex) -> Result<(), String> {
+    save_account_index_for_channel(QoderChannel::QoderIde, index)
+}
+
+fn repair_account_index_from_details_for_channel(
+    channel: QoderChannel,
+    reason: &str,
+) -> Option<QoderAccountIndex> {
+    let index_path = get_accounts_index_path_for_channel(channel).ok()?;
+    let accounts_dir = get_accounts_dir_for_channel(channel).ok()?;
     let mut accounts = crate::modules::account_index_repair::load_accounts_from_details(
         &accounts_dir,
-        |account_id| load_account(account_id),
+        |account_id| load_account_for_channel(channel, account_id),
     )
     .ok()?;
 
@@ -313,16 +469,18 @@ fn repair_account_index_from_details(reason: &str) -> Option<QoderAccountIndex> 
     let backup_path = crate::modules::account_index_repair::backup_existing_index(&index_path)
         .unwrap_or_else(|err| {
             logger::log_warn(&format!(
-                "[Qoder Account] 自动修复前备份索引失败，继续尝试重建: path={}, error={}",
+                "[{}] 自动修复前备份索引失败，继续尝试重建: path={}, error={}",
+                channel.display_name(),
                 index_path.display(),
                 err
             ));
             None
         });
 
-    if let Err(err) = save_account_index(&index) {
+    if let Err(err) = save_account_index_for_channel(channel, &index) {
         logger::log_warn(&format!(
-            "[Qoder Account] 自动修复索引保存失败，将以内存结果继续运行: reason={}, recovered_accounts={}, error={}",
+            "[{}] 自动修复索引保存失败，将以内存结果继续运行: reason={}, recovered_accounts={}, error={}",
+            channel.display_name(),
             reason,
             index.accounts.len(),
             err
@@ -330,7 +488,8 @@ fn repair_account_index_from_details(reason: &str) -> Option<QoderAccountIndex> 
     }
 
     logger::log_warn(&format!(
-        "[Qoder Account] 检测到账号索引异常，已根据详情文件自动重建: reason={}, recovered_accounts={}, backup_path={}",
+        "[{}] 检测到账号索引异常，已根据详情文件自动重建: reason={}, recovered_accounts={}, backup_path={}",
+        channel.display_name(),
         reason,
         index.accounts.len(),
         backup_path
@@ -342,6 +501,10 @@ fn repair_account_index_from_details(reason: &str) -> Option<QoderAccountIndex> 
     Some(index)
 }
 
+fn repair_account_index_from_details(reason: &str) -> Option<QoderAccountIndex> {
+    repair_account_index_from_details_for_channel(QoderChannel::QoderIde, reason)
+}
+
 fn refresh_summary(index: &mut QoderAccountIndex, account: &QoderAccount) {
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
         *summary = account.summary();
@@ -350,22 +513,30 @@ fn refresh_summary(index: &mut QoderAccountIndex, account: &QoderAccount) {
     index.accounts.push(account.summary());
 }
 
-fn upsert_account_record(account: QoderAccount) -> Result<QoderAccount, String> {
+pub fn upsert_account_record_for_channel(
+    channel: QoderChannel,
+    account: QoderAccount,
+) -> Result<QoderAccount, String> {
     let _lock = QODER_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Qoder 账号锁失败".to_string())?;
-    let mut index = load_account_index();
-    save_account_file(&account)?;
+    let mut index = load_account_index_for_channel(channel);
+    save_account_file_for_channel(channel, &account)?;
     refresh_summary(&mut index, &account);
-    save_account_index(&index)?;
+    save_account_index_for_channel(channel, &index)?;
     Ok(account)
 }
 
-pub fn update_quota_query_error(
+fn upsert_account_record(account: QoderAccount) -> Result<QoderAccount, String> {
+    upsert_account_record_for_channel(QoderChannel::QoderIde, account)
+}
+
+pub fn update_quota_query_error_for_channel(
+    channel: QoderChannel,
     account_id: &str,
     message: Option<String>,
 ) -> Result<Option<QoderAccount>, String> {
-    let Some(mut account) = load_account(account_id) else {
+    let Some(mut account) = load_account_for_channel(channel, account_id) else {
         return Ok(None);
     };
     account.quota_query_last_error = message;
@@ -373,43 +544,103 @@ pub fn update_quota_query_error(
         .quota_query_last_error
         .as_ref()
         .map(|_| chrono::Utc::now().timestamp_millis());
-    let updated = upsert_account_record(account)?;
+    let updated = upsert_account_record_for_channel(channel, account)?;
     Ok(Some(updated))
 }
 
-fn list_accounts_from_index(index: &QoderAccountIndex) -> Vec<QoderAccount> {
+pub fn update_quota_query_error(
+    account_id: &str,
+    message: Option<String>,
+) -> Result<Option<QoderAccount>, String> {
+    if let Some((channel, _)) = find_account_channel(account_id) {
+        update_quota_query_error_for_channel(channel, account_id, message)
+    } else {
+        Ok(None)
+    }
+}
+
+fn list_accounts_from_index_for_channel(
+    channel: QoderChannel,
+    index: &QoderAccountIndex,
+) -> Vec<QoderAccount> {
     let mut accounts = Vec::new();
+    let mut need_save_index = false;
+    let mut updated_index = index.clone();
+
     for summary in &index.accounts {
-        if let Some(account) = load_account(&summary.id) {
+        if let Some(account) = load_account_for_channel(channel, &summary.id) {
+            if summary.email != account.email
+                || summary.display_name != account.display_name
+                || summary.plan_type != account.plan_type
+            {
+                need_save_index = true;
+                crate::modules::logger::log_warn(&format!(
+                    "[Qoder Account Heal] Index 摘要同步自愈: channel={}, account_id={}, email: {:?} -> {:?}, display_name: {:?} -> {:?}, plan_type: {:?} -> {:?}",
+                    channel.as_str(),
+                    account.id,
+                    summary.email,
+                    account.email,
+                    summary.display_name,
+                    account.display_name,
+                    summary.plan_type,
+                    account.plan_type
+                ));
+                if let Some(item) = updated_index.accounts.iter_mut().find(|a| a.id == account.id) {
+                    *item = account.summary();
+                }
+            }
             accounts.push(account);
         }
+    }
+    if need_save_index {
+        if let Ok(path) = get_accounts_index_path_for_channel(channel) {
+            crate::modules::logger::log_info(&format!(
+                "[Qoder Account Heal] 回写已自愈的 Index 成功: channel={}, path={}",
+                channel.as_str(),
+                path.display()
+            ));
+        }
+        let _ = save_account_index_for_channel(channel, &updated_index);
     }
     accounts.sort_by(|a, b| b.last_used.cmp(&a.last_used));
     accounts
 }
 
+pub fn list_accounts_for_channel(channel: QoderChannel) -> Vec<QoderAccount> {
+    let index = load_account_index_for_channel(channel);
+    list_accounts_from_index_for_channel(channel, &index)
+}
+
+pub fn list_accounts_checked_for_channel(
+    channel: QoderChannel,
+) -> Result<Vec<QoderAccount>, String> {
+    let index = load_account_index_checked_for_channel(channel)?;
+    Ok(list_accounts_from_index_for_channel(channel, &index))
+}
+
 pub fn list_accounts() -> Vec<QoderAccount> {
-    let index = load_account_index();
-    list_accounts_from_index(&index)
+    list_accounts_for_channel(QoderChannel::QoderIde)
 }
 
 pub fn list_accounts_checked() -> Result<Vec<QoderAccount>, String> {
-    let index = load_account_index_checked()?;
-    Ok(list_accounts_from_index(&index))
+    list_accounts_checked_for_channel(QoderChannel::QoderIde)
 }
 
-pub fn remove_account(account_id: &str) -> Result<(), String> {
+pub fn remove_account_for_channel(channel: QoderChannel, account_id: &str) -> Result<(), String> {
     let _lock = QODER_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Qoder 账号锁失败".to_string())?;
-    let mut index = load_account_index();
+    let mut index = load_account_index_for_channel(channel);
     index.accounts.retain(|item| item.id != account_id);
-    save_account_index(&index)?;
-    delete_account_file(account_id)?;
+    save_account_index_for_channel(channel, &index)?;
+    delete_account_file_for_channel(channel, account_id)?;
     Ok(())
 }
 
-pub fn remove_accounts(account_ids: &[String]) -> Result<(), String> {
+pub fn remove_accounts_for_channel(
+    channel: QoderChannel,
+    account_ids: &[String],
+) -> Result<(), String> {
     let target: HashSet<String> = account_ids
         .iter()
         .map(|id| id.trim().to_string())
@@ -422,13 +653,21 @@ pub fn remove_accounts(account_ids: &[String]) -> Result<(), String> {
     let _lock = QODER_ACCOUNT_INDEX_LOCK
         .lock()
         .map_err(|_| "获取 Qoder 账号锁失败".to_string())?;
-    let mut index = load_account_index();
+    let mut index = load_account_index_for_channel(channel);
     index.accounts.retain(|item| !target.contains(&item.id));
-    save_account_index(&index)?;
+    save_account_index_for_channel(channel, &index)?;
     for id in target {
-        delete_account_file(&id)?;
+        delete_account_file_for_channel(channel, &id)?;
     }
     Ok(())
+}
+
+pub fn remove_account(account_id: &str) -> Result<(), String> {
+    remove_account_for_channel(QoderChannel::QoderIde, account_id)
+}
+
+pub fn remove_accounts(account_ids: &[String]) -> Result<(), String> {
+    remove_accounts_for_channel(QoderChannel::QoderIde, account_ids)
 }
 
 fn parse_json_or_string(raw: &str) -> Value {
@@ -864,16 +1103,49 @@ fn normalize_tags(tags: Vec<String>) -> Option<Vec<String>> {
 
 fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>) -> QoderAccount {
     let now = now_ts();
-    let email = extract_snapshot_email(&snapshot)
-        .or_else(|| existing.and_then(|item| normalize_email(Some(item.email.as_str()))))
-        .unwrap_or_else(|| "unknown@qoder.local".to_string());
-    let user_id = extract_snapshot_user_id(&snapshot)
-        .or_else(|| existing.and_then(|item| item.user_id.clone()));
-    let generated_id = generate_account_id(&snapshot, user_id.as_deref(), Some(email.as_str()));
     let display_name = extract_snapshot_display_name(&snapshot)
         .or_else(|| existing.and_then(|item| item.display_name.clone()));
+    let user_id = extract_snapshot_user_id(&snapshot)
+        .or_else(|| existing.and_then(|item| item.user_id.clone()));
     let plan_type = extract_snapshot_plan_type(&snapshot)
-        .or_else(|| existing.and_then(|item| item.plan_type.clone()));
+        .or_else(|| existing.and_then(|item| item.plan_type.clone()))
+        .or_else(|| {
+            if display_name.as_deref().map(|n| n.contains("aliyun")).unwrap_or(false)
+                || user_id.as_deref().map(|u| u.starts_with("aliyun-")).unwrap_or(false)
+            {
+                Some("Free".to_string())
+            } else {
+                None
+            }
+        });
+
+    let email = extract_snapshot_email(&snapshot)
+        .or_else(|| {
+            existing.and_then(|item| {
+                if item.email == "unknown@qoder.local" || item.email.starts_with("unknown@") {
+                    None
+                } else {
+                    normalize_email(Some(item.email.as_str()))
+                }
+            })
+        })
+        .or_else(|| {
+            display_name.as_deref().map(|name| {
+                if name.contains('@') {
+                    name.to_lowercase()
+                } else {
+                    format!("{}@qoder.cn", name.to_lowercase())
+                }
+            })
+        })
+        .or_else(|| {
+            user_id.as_deref().map(|uid| {
+                format!("uid_{}@qoder.cn", sanitize_account_id_component(uid).to_lowercase())
+            })
+        })
+        .unwrap_or_else(|| "unknown@qoder.local".to_string());
+
+    let generated_id = generate_account_id(&snapshot, user_id.as_deref(), Some(email.as_str()));
     let (credits_used, credits_total, credits_remaining, credits_usage_percent) =
         extract_snapshot_credits(&snapshot);
 
@@ -919,6 +1191,20 @@ fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>)
     }
 }
 
+pub fn merge_account_snapshot(
+    existing: QoderAccount,
+    user_info_raw: Option<Value>,
+    user_plan_raw: Option<Value>,
+    credit_usage_raw: Option<Value>,
+) -> QoderAccount {
+    let snapshot = QoderSnapshot {
+        user_info_raw,
+        user_plan_raw,
+        credit_usage_raw,
+    };
+    snapshot_to_account(snapshot, Some(&existing))
+}
+
 fn find_existing_account_for_snapshot(
     snapshot: &QoderSnapshot,
     accounts: &[QoderAccount],
@@ -956,11 +1242,34 @@ fn read_snapshot_from_state_db_path(db_path: &Path) -> Result<Option<QoderSnapsh
     }
 }
 
-fn merge_snapshot(snapshot: QoderSnapshot) -> Result<QoderAccount, String> {
-    let accounts = list_accounts();
+fn merge_snapshot_for_channel(
+    channel: QoderChannel,
+    snapshot: QoderSnapshot,
+) -> Result<QoderAccount, String> {
+    let accounts = list_accounts_for_channel(channel);
     let existing = find_existing_account_for_snapshot(&snapshot, &accounts);
     let account = snapshot_to_account(snapshot, existing.as_ref());
-    upsert_account_record(account)
+    upsert_account_record_for_channel(channel, account)
+}
+
+fn merge_snapshot(snapshot: QoderSnapshot) -> Result<QoderAccount, String> {
+    merge_snapshot_for_channel(QoderChannel::QoderIde, snapshot)
+}
+
+pub fn upsert_account_from_snapshot_for_channel(
+    channel: QoderChannel,
+    user_info_raw: Value,
+    user_plan_raw: Option<Value>,
+    credit_usage_raw: Option<Value>,
+) -> Result<QoderAccount, String> {
+    merge_snapshot_for_channel(
+        channel,
+        QoderSnapshot {
+            user_info_raw: Some(user_info_raw),
+            user_plan_raw,
+            credit_usage_raw,
+        },
+    )
 }
 
 pub fn upsert_account_from_snapshot(
@@ -968,11 +1277,12 @@ pub fn upsert_account_from_snapshot(
     user_plan_raw: Option<Value>,
     credit_usage_raw: Option<Value>,
 ) -> Result<QoderAccount, String> {
-    merge_snapshot(QoderSnapshot {
-        user_info_raw: Some(user_info_raw),
+    upsert_account_from_snapshot_for_channel(
+        QoderChannel::QoderIde,
+        user_info_raw,
         user_plan_raw,
         credit_usage_raw,
-    })
+    )
 }
 
 pub fn get_default_qoder_state_db_path() -> Option<PathBuf> {
@@ -1031,26 +1341,58 @@ fn ensure_default_state_db_path() -> Result<PathBuf, String> {
     ensure_state_db_path_for_user_data_dir(&data_root.to_string_lossy())
 }
 
-pub fn import_from_local() -> Result<Option<QoderAccount>, String> {
-    let db_path = ensure_default_state_db_path()?;
-    let Some(snapshot) = read_snapshot_from_state_db_path(&db_path)? else {
-        return Ok(None);
-    };
-    let account = merge_snapshot(snapshot)?;
-    logger::log_info(&format!(
-        "[Qoder Account] 从本地导入成功: id={}, email={}, db={}",
-        account.id,
-        account.email,
-        db_path.to_string_lossy()
-    ));
-    Ok(Some(account))
+pub fn import_from_local_channel(channel: QoderChannel) -> Result<Option<QoderAccount>, String> {
+    match channel.credential_kind() {
+        QoderCredentialKind::StateVscdb => {
+            let data_dir = channel.default_user_data_dir()?;
+            let db_path = ensure_state_db_path_for_user_data_dir(&data_dir.to_string_lossy())?;
+            let Some(snapshot) = read_snapshot_from_state_db_path(&db_path)? else {
+                return Ok(None);
+            };
+            let account = merge_snapshot_for_channel(channel, snapshot)?;
+            logger::log_info(&format!(
+                "[Qoder Account] 从本地 {} (state.vscdb) 导入成功: id={}, email={}, db={}",
+                channel.display_name(),
+                account.id,
+                account.email,
+                db_path.to_string_lossy()
+            ));
+            Ok(Some(account))
+        }
+        QoderCredentialKind::AuthV1Dat => {
+            let data_dir = channel.default_user_data_dir()?;
+            let Some(app_auth) = crate::modules::qoder_app_auth::read_qoder_app_auth(&data_dir)? else {
+                return Ok(None);
+            };
+
+            let user = app_auth.get("user");
+            let user_info_raw = Some(app_auth.clone());
+            let user_plan_raw = user
+                .and_then(|u| u.get("tier"))
+                .and_then(|t| t.as_str())
+                .map(|t| serde_json::json!({ "plan": t, "tier": t }));
+
+            let snapshot = QoderSnapshot {
+                user_info_raw,
+                user_plan_raw,
+                credit_usage_raw: None,
+            };
+
+            let account = merge_snapshot_for_channel(channel, snapshot)?;
+            logger::log_info(&format!(
+                "[Qoder Account] 从本地 {} (auth.v1.dat) 导入成功: id={}, email={}, path={}",
+                channel.display_name(),
+                account.id,
+                account.email,
+                data_dir.display()
+            ));
+            Ok(Some(account))
+        }
+    }
 }
 
-pub(crate) fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<String> {
-    crate::modules::provider_current_state::resolve_existing_current_account_id(
-        "qoder",
-        accounts.iter().map(|account| account.id.as_str()),
-    )
+pub fn import_from_local() -> Result<Option<QoderAccount>, String> {
+    import_from_local_channel(QoderChannel::QoderIde)
 }
 
 fn serialize_raw_or_fallback(raw: &Option<Value>, fallback: Value) -> Result<String, String> {
@@ -1138,22 +1480,24 @@ fn verify_injected_account_matches(db_path: &Path, account: &QoderAccount) -> Re
     ))
 }
 
-pub fn inject_to_qoder(account_id: &str) -> Result<(), String> {
-    let db_path = ensure_default_state_db_path()?;
-    inject_to_qoder_at_path(&db_path, account_id)
+pub fn resolve_current_account_id_for_channel(
+    channel: QoderChannel,
+    accounts: &[QoderAccount],
+) -> Option<String> {
+    crate::modules::provider_current_state::resolve_existing_current_account_id(
+        channel.provider_key(),
+        accounts.iter().map(|account| account.id.as_str()),
+    )
 }
 
-pub fn inject_to_qoder_for_user_data_dir(
-    user_data_dir: &str,
-    account_id: &str,
+pub fn resolve_current_account_id(accounts: &[QoderAccount]) -> Option<String> {
+    resolve_current_account_id_for_channel(QoderChannel::QoderIde, accounts)
+}
+
+pub fn inject_account_to_state_db_at_path(
+    db_path: &Path,
+    account: &QoderAccount,
 ) -> Result<(), String> {
-    let db_path = ensure_state_db_path_for_user_data_dir(user_data_dir)?;
-    inject_to_qoder_at_path(&db_path, account_id)
-}
-
-pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), String> {
-    let account =
-        load_account(account_id).ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("创建 Qoder state.vscdb 目录失败: {}", e))?;
@@ -1161,15 +1505,15 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
 
     let user_info_json = serialize_raw_or_fallback(
         &account.auth_user_info_raw,
-        build_user_info_fallback(&account),
+        build_user_info_fallback(account),
     )?;
     let user_plan_json = serialize_raw_or_fallback(
         &account.auth_user_plan_raw,
-        build_user_plan_fallback(&account),
+        build_user_plan_fallback(account),
     )?;
     let credit_usage_json = serialize_raw_or_fallback(
         &account.auth_credit_usage_raw,
-        build_credit_usage_fallback(&account),
+        build_credit_usage_fallback(account),
     )?;
 
     crate::modules::vscode_inject::inject_secret_to_state_db_for_qoder(
@@ -1191,7 +1535,95 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
     verify_state_db_key_exists(db_path, QODER_SECRET_USER_INFO_KEY)?;
     verify_state_db_key_exists(db_path, QODER_SECRET_USER_PLAN_KEY)?;
     verify_state_db_key_exists(db_path, QODER_SECRET_CREDIT_USAGE_KEY)?;
-    verify_injected_account_matches(db_path, &account)?;
+    verify_injected_account_matches(db_path, account)?;
+
+    Ok(())
+}
+
+pub fn inject_to_qoder_channel_with_account(
+    channel: QoderChannel,
+    account_id: &str,
+) -> Result<(), String> {
+    let account = load_account_for_channel(channel, account_id)
+        .or_else(|| load_account(account_id))
+        .ok_or_else(|| format!("{} 账号不存在: {}", channel.display_name(), account_id))?;
+
+    match channel.credential_kind() {
+        QoderCredentialKind::StateVscdb => {
+            let data_dir = channel.default_user_data_dir()?;
+            let db_path = ensure_state_db_path_for_user_data_dir(&data_dir.to_string_lossy())?;
+            inject_account_to_state_db_at_path(&db_path, &account)?;
+        }
+        QoderCredentialKind::AuthV1Dat => {
+            let data_dir = channel.default_user_data_dir()?;
+            let auth_json = crate::modules::qoder_app_auth::build_app_auth_value(&account);
+            crate::modules::qoder_app_auth::write_qoder_app_auth(&data_dir, &auth_json)?;
+        }
+    }
+
+    let mut updated = account.clone();
+    updated.last_used = now_ts();
+    let _ = upsert_account_record_for_channel(channel, updated);
+
+    logger::log_info(&format!(
+        "[Qoder Inject] 成功注入账号到 {}: account_id={}, email={}",
+        channel.display_name(),
+        account.id,
+        account.email
+    ));
+    Ok(())
+}
+
+pub fn inject_to_qoder(account_id: &str) -> Result<(), String> {
+    inject_to_qoder_channel_with_account(QoderChannel::QoderIde, account_id)
+}
+
+pub fn inject_to_qoder_channel_for_user_data_dir(
+    channel: QoderChannel,
+    user_data_dir: &str,
+    account_id: &str,
+) -> Result<(), String> {
+    let account = load_account_for_channel(channel, account_id)
+        .or_else(|| load_account(account_id))
+        .ok_or_else(|| format!("{} 账号不存在: {}", channel.display_name(), account_id))?;
+
+    match channel.credential_kind() {
+        QoderCredentialKind::StateVscdb => {
+            let db_path = ensure_state_db_path_for_user_data_dir(user_data_dir)?;
+            inject_account_to_state_db_at_path(&db_path, &account)?;
+        }
+        QoderCredentialKind::AuthV1Dat => {
+            let data_dir = PathBuf::from(user_data_dir);
+            let auth_json = crate::modules::qoder_app_auth::build_app_auth_value(&account);
+            crate::modules::qoder_app_auth::write_qoder_app_auth(&data_dir, &auth_json)?;
+        }
+    }
+
+    let mut updated = account.clone();
+    updated.last_used = now_ts();
+    let _ = upsert_account_record_for_channel(channel, updated);
+
+    logger::log_info(&format!(
+        "[Qoder Inject] 成功注入实例账号到 {}: account_id={}, email={}, dir={}",
+        channel.display_name(),
+        account.id,
+        account.email,
+        user_data_dir
+    ));
+    Ok(())
+}
+
+pub fn inject_to_qoder_for_user_data_dir(
+    user_data_dir: &str,
+    account_id: &str,
+) -> Result<(), String> {
+    inject_to_qoder_channel_for_user_data_dir(QoderChannel::QoderIde, user_data_dir, account_id)
+}
+
+pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), String> {
+    let account =
+        load_account(account_id).ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
+    inject_account_to_state_db_at_path(db_path, &account)?;
 
     let mut updated = account.clone();
     updated.last_used = now_ts();
@@ -1206,12 +1638,20 @@ pub fn inject_to_qoder_at_path(db_path: &Path, account_id: &str) -> Result<(), S
     Ok(())
 }
 
-pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<QoderAccount, String> {
-    let mut account =
-        load_account(account_id).ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
+pub fn update_account_tags_for_channel(
+    channel: QoderChannel,
+    account_id: &str,
+    tags: Vec<String>,
+) -> Result<QoderAccount, String> {
+    let mut account = load_account_for_channel(channel, account_id)
+        .ok_or_else(|| format!("{} 账号不存在: {}", channel.display_name(), account_id))?;
     account.tags = normalize_tags(tags);
     account.last_used = now_ts();
-    upsert_account_record(account)
+    upsert_account_record_for_channel(channel, account)
+}
+
+pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<QoderAccount, String> {
+    update_account_tags_for_channel(QoderChannel::QoderIde, account_id, tags)
 }
 
 fn normalize_imported_account(mut account: QoderAccount) -> QoderAccount {
@@ -1229,11 +1669,53 @@ fn normalize_imported_account(mut account: QoderAccount) -> QoderAccount {
             Some(account.email.as_str()),
         );
     }
-    account.email = normalize_email(Some(account.email.as_str()))
-        .unwrap_or_else(|| "unknown@qoder.local".to_string());
     account.user_id = normalize_non_empty(account.user_id.as_deref());
     account.display_name = normalize_non_empty(account.display_name.as_deref());
+    if account.display_name.is_none() {
+        let snapshot = QoderSnapshot {
+            user_info_raw: account.auth_user_info_raw.clone(),
+            user_plan_raw: account.auth_user_plan_raw.clone(),
+            credit_usage_raw: account.auth_credit_usage_raw.clone(),
+        };
+        account.display_name = extract_snapshot_display_name(&snapshot);
+    }
+
+    if account.email.trim().is_empty()
+        || account.email == "unknown@qoder.local"
+        || account.email.starts_with("unknown@")
+    {
+        if let Some(ref name) = account.display_name {
+            if name.contains('@') {
+                account.email = name.to_lowercase();
+            } else {
+                account.email = format!("{}@qoder.cn", name.to_lowercase());
+            }
+        } else if let Some(ref uid) = account.user_id {
+            account.email = format!("uid_{}@qoder.cn", sanitize_account_id_component(uid).to_lowercase());
+        } else {
+            account.email = "unknown@qoder.local".to_string();
+        }
+    } else {
+        account.email = normalize_email(Some(account.email.as_str()))
+            .unwrap_or_else(|| "unknown@qoder.local".to_string());
+    }
     account.plan_type = normalize_non_empty(account.plan_type.as_deref());
+    if account.plan_type.is_none() {
+        let snapshot = QoderSnapshot {
+            user_info_raw: account.auth_user_info_raw.clone(),
+            user_plan_raw: account.auth_user_plan_raw.clone(),
+            credit_usage_raw: account.auth_credit_usage_raw.clone(),
+        };
+        account.plan_type = extract_snapshot_plan_type(&snapshot).or_else(|| {
+            if account.email.ends_with(".cn")
+                || account.display_name.as_deref().map(|n| n.contains("aliyun")).unwrap_or(false)
+            {
+                Some("Free".to_string())
+            } else {
+                None
+            }
+        });
+    }
     account.tags = normalize_tags(account.tags.unwrap_or_default());
     account.quota_query_last_error = normalize_non_empty(account.quota_query_last_error.as_deref());
     if account.created_at <= 0 {
@@ -1283,7 +1765,10 @@ fn parse_import_item(item: &Value) -> Result<QoderAccount, String> {
     Ok(snapshot_to_account(snapshot, None))
 }
 
-pub fn import_from_json(json_content: &str) -> Result<Vec<QoderAccount>, String> {
+pub fn import_from_json_for_channel(
+    channel: QoderChannel,
+    json_content: &str,
+) -> Result<Vec<QoderAccount>, String> {
     let parsed: Value =
         serde_json::from_str(json_content).map_err(|e| format!("JSON 解析失败: {}", e))?;
     let items: Vec<Value> = match parsed {
@@ -1305,15 +1790,22 @@ pub fn import_from_json(json_content: &str) -> Result<Vec<QoderAccount>, String>
     let mut imported = Vec::new();
     for item in items {
         let account = parse_import_item(&item)?;
-        let saved = upsert_account_record(account)?;
+        let saved = upsert_account_record_for_channel(channel, account)?;
         imported.push(saved);
     }
 
     Ok(imported)
 }
 
-pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
-    let accounts = list_accounts();
+pub fn import_from_json(json_content: &str) -> Result<Vec<QoderAccount>, String> {
+    import_from_json_for_channel(QoderChannel::QoderIde, json_content)
+}
+
+pub fn export_accounts_for_channel(
+    channel: QoderChannel,
+    account_ids: &[String],
+) -> Result<String, String> {
+    let accounts = list_accounts_for_channel(channel);
     let selected: Vec<QoderAccount> = if account_ids.is_empty() {
         accounts
     } else {
@@ -1329,4 +1821,8 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
     };
 
     serde_json::to_string_pretty(&selected).map_err(|e| format!("序列化导出 JSON 失败: {}", e))
+}
+
+pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
+    export_accounts_for_channel(QoderChannel::QoderIde, account_ids)
 }

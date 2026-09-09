@@ -1306,7 +1306,16 @@ export function PlatformLayoutModal({
                     </div>
 
                     <div className="platform-layout-controls-grid" onClick={(event) => event.stopPropagation()}>
-                      <label className={`platform-layout-toggle ${sidebarDisabled ? 'is-disabled' : ''}`}>
+                      <label
+                        className={`platform-layout-toggle ${sidebarDisabled ? 'is-disabled' : ''}`}
+                        title={
+                          sidebarDisabled
+                            ? t('platformLayout.sidebarLimitReached', '侧边栏显示已达上限（{{max}}个），请先取消勾选其他平台', {
+                                max: sidebarSelectionLimit,
+                              })
+                            : undefined
+                        }
+                      >
                         <input
                           type="checkbox"
                           checked={selected}

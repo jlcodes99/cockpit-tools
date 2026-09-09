@@ -16,6 +16,9 @@ const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'codebuddy',
   'codebuddy_cn',
   'qoder',
+  'qoder_app',
+  'qoder_cn_ide',
+  'qoder_cn_app',
   'zcode',
   'trae',
   'trae_solo',
@@ -27,8 +30,10 @@ const DEFAULT_CODEBUDDY_GROUP_ID = 'codebuddy-suite';
 const DEFAULT_ANTIGRAVITY_GROUP_ID = 'antigravity-suite';
 const DEFAULT_TRAE_GROUP_ID = 'trae-suite';
 const DEFAULT_CODEX_GROUP_ID = 'codex-suite';
+const DEFAULT_QODER_GROUP_ID = 'qoder-suite';
 const TRAE_SUITE_PLATFORM_IDS: PlatformId[] = ['trae', 'trae_solo', 'trae_cn', 'trae_solo_cn'];
 const CODEX_SUITE_PLATFORM_IDS: PlatformId[] = ['codex', 'codex_api_service'];
+const QODER_SUITE_PLATFORM_IDS: PlatformId[] = ['qoder', 'qoder_app', 'qoder_cn_ide', 'qoder_cn_app'];
 
 const PLATFORM_ENTRY_PREFIX = 'platform:';
 const GROUP_ENTRY_PREFIX = 'group:';
@@ -287,6 +292,7 @@ function createDefaultTraeSuiteGroup(): PlatformLayoutGroup {
   };
 }
 
+
 function createDefaultCodexSuiteGroup(): PlatformLayoutGroup {
   return {
     id: DEFAULT_CODEX_GROUP_ID,
@@ -419,57 +425,103 @@ function normalizeGroupId(raw: unknown, index: number): string {
   return `group-${index + 1}`;
 }
 
+function getCanonicalPlatformName(platformId: PlatformId): string | null {
+  switch (platformId) {
+    case 'qoder':
+      return 'Qoder IDE';
+    case 'qoder_app':
+      return 'Qoder';
+    case 'qoder_cn_ide':
+      return 'Qoder CN IDE';
+    case 'qoder_cn_app':
+      return 'Qoder CN';
+    case 'antigravity':
+      return 'Antigravity';
+    case 'antigravity_ide':
+      return 'Antigravity IDE';
+    case 'codebuddy_cn':
+      return 'CodeBuddy CN';
+    case 'github-copilot':
+      return 'GitHub Copilot';
+    case 'zed':
+      return 'Zed';
+    case 'claude_manager':
+      return 'Claude';
+    case 'codex_api_service':
+      return 'Codex API';
+    case 'workbuddy':
+      return 'WorkBuddy';
+    case 'zcode':
+      return 'ZCode';
+    case 'trae':
+      return 'Trae';
+    case 'trae_solo':
+      return 'TRAE SOLO';
+    case 'trae_cn':
+      return 'Trae CN';
+    case 'trae_solo_cn':
+      return 'TRAE SOLO CN';
+    case 'grok':
+      return 'Grok CLI';
+    default:
+      return null;
+  }
+}
+
+function isLegacyOrGeneratedPlatformGroupName(rawName: string, platformId: PlatformId): boolean {
+  const trimmed = rawName.trim();
+  const lower = trimmed.toLowerCase();
+  const cleaned = lower.replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+  const pidCleaned = platformId.toLowerCase().replace(/[-_]/g, ' ').trim();
+
+  if (lower === `platform-${platformId}` || lower === `platform_${platformId}` || cleaned === `platform ${pidCleaned}`) {
+    return true;
+  }
+
+  if (platformId === 'qoder') {
+    return lower === 'qoder' || lower === 'qoder ide' || cleaned === 'qoder ide' || lower === 'qoder_ide';
+  }
+  if (platformId === 'qoder_app') {
+    return (
+      lower === 'qoder_app' ||
+      cleaned === 'qoder app' ||
+      lower === 'qoder' ||
+      cleaned === 'qoder'
+    );
+  }
+  if (platformId === 'qoder_cn_ide') {
+    return (
+      lower === 'qoder_cn_ide' ||
+      cleaned === 'qoder cn ide' ||
+      cleaned === 'qoder cn' ||
+      lower === 'qoder_cn'
+    );
+  }
+  if (platformId === 'qoder_cn_app') {
+    return (
+      lower === 'qoder_cn_app' ||
+      cleaned === 'qoder cn app' ||
+      cleaned === 'qoder cn' ||
+      lower === 'qoder_cn'
+    );
+  }
+
+  return false;
+}
+
 function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string {
+  const canonical = getCanonicalPlatformName(fallbackPlatform);
   if (typeof raw === 'string') {
     const name = raw.trim();
     if (name) {
+      if (canonical && isLegacyOrGeneratedPlatformGroupName(name, fallbackPlatform)) {
+        return canonical;
+      }
       return name;
     }
   }
-  if (fallbackPlatform === 'antigravity') {
-    return 'Antigravity';
-  }
-  if (fallbackPlatform === 'antigravity_ide') {
-    return 'Antigravity IDE';
-  }
-  if (fallbackPlatform === 'codebuddy_cn') {
-    return 'CodeBuddy CN';
-  }
-  if (fallbackPlatform === 'github-copilot') {
-    return 'GitHub Copilot';
-  }
-  if (fallbackPlatform === 'zed') {
-    return 'Zed';
-  }
-  if (fallbackPlatform === 'claude_manager') {
-    return 'Claude';
-  }
-  if (fallbackPlatform === 'codex_api_service') {
-    return 'Codex API';
-  }
-  if (fallbackPlatform === 'workbuddy') {
-    return 'WorkBuddy';
-  }
-  if (fallbackPlatform === 'qoder') {
-    return 'Qoder';
-  }
-  if (fallbackPlatform === 'zcode') {
-    return 'ZCode';
-  }
-  if (fallbackPlatform === 'trae') {
-    return 'Trae';
-  }
-  if (fallbackPlatform === 'trae_solo') {
-    return 'TRAE SOLO';
-  }
-  if (fallbackPlatform === 'trae_cn') {
-    return 'Trae CN';
-  }
-  if (fallbackPlatform === 'trae_solo_cn') {
-    return 'TRAE SOLO CN';
-  }
-  if (fallbackPlatform === 'grok') {
-    return 'Grok CLI';
+  if (canonical) {
+    return canonical;
   }
   return fallbackPlatform.charAt(0).toUpperCase() + fallbackPlatform.slice(1);
 }
@@ -531,6 +583,18 @@ function normalizeGroupChildName(raw: unknown, platformId: PlatformId): string |
   }
   if (platformId === 'claude_manager' && (value === 'Claude' || value === 'Claude CLI')) {
     return 'Claude';
+  }
+  if (platformId === 'qoder' && (value === 'Qoder' || value === 'Qoder IDE')) {
+    return 'Qoder IDE';
+  }
+  if (platformId === 'qoder_app' && (value === 'Qoder_app' || value === 'Qoder App' || value === 'Qoder')) {
+    return 'Qoder';
+  }
+  if (platformId === 'qoder_cn_ide' && (value === 'Qoder_cn_ide' || value === 'Qoder CN IDE')) {
+    return 'Qoder CN IDE';
+  }
+  if (platformId === 'qoder_cn_app' && (value === 'Qoder_cn_app' || value === 'Qoder CN App' || value === 'Qoder CN')) {
+    return 'Qoder CN';
   }
   return value;
 }
@@ -731,6 +795,24 @@ function normalizePlatformGroups(
     }
   }
 
+  // 彻底分离 Qoder：解散任何预置或历史 qoder-suite 套件分组，使 4 个 Qoder 程序作为独立的平铺一等公民平台存在
+  const qoderSuiteIndex = result.findIndex(
+    (group) => group.id === DEFAULT_QODER_GROUP_ID || (group.name === 'Qoder' && group.platformIds.includes('qoder')),
+  );
+  if (qoderSuiteIndex >= 0) {
+    const removedGroup = result.splice(qoderSuiteIndex, 1)[0];
+    for (const pid of removedGroup.platformIds) {
+      usedPlatformIds.delete(pid);
+    }
+  }
+  for (const qId of QODER_SUITE_PLATFORM_IDS) {
+    const groupWithQoder = result.find((group) => group.platformIds.includes(qId));
+    if (groupWithQoder && groupWithQoder.platformIds.length > 1) {
+      groupWithQoder.platformIds = groupWithQoder.platformIds.filter((id) => id !== qId);
+      usedPlatformIds.delete(qId);
+    }
+  }
+
   for (const platformId of ALL_PLATFORM_IDS) {
     if (usedPlatformIds.has(platformId)) {
       continue;
@@ -911,6 +993,16 @@ function normalizeEntryVisibilityList(
   const entries: PlatformLayoutEntryId[] = [];
   for (const item of rawEntryIds) {
     if (typeof item !== 'string') continue;
+    if (item === 'group-qoder-suite' || item === 'qoder-suite') {
+      for (const qId of QODER_SUITE_PLATFORM_IDS) {
+        const qEntry = resolveEntryIdForPlatform(qId, groups);
+        if (orderSet.has(qEntry) && !seen.has(qEntry)) {
+          seen.add(qEntry);
+          entries.push(qEntry);
+        }
+      }
+      continue;
+    }
     let entryId = item as PlatformLayoutEntryId;
     if (!orderSet.has(entryId) && item.startsWith('platform:')) {
       const platformId = item.slice('platform:'.length);

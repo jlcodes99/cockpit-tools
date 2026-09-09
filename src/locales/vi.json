@@ -334,7 +334,12 @@
     "apiRelay": "Trạm chuyển",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Nhà tài trợ",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "Đặt làm nền tảng mặc định trong nhóm này",
     "removeFromGroup": "Xóa khỏi nhóm",
     "sidebarSelectedUnlimited": "Đã chọn ({count})",
-    "tipWithGroupsUnlimited": "Sắp xếp thủ công các nền tảng và nhóm đã chọn"
+    "tipWithGroupsUnlimited": "Sắp xếp thủ công các nền tảng và nhóm đã chọn",
+    "sidebarLimitReached": "Đã đạt giới hạn hiển thị thanh bên ({{max}}). Vui lòng bỏ chọn các nền tảng khác trước."
   },
   "privacy": {
     "hideSensitive": "Ẩn email",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "Chỉ tài khoản thường: tắt sẽ ẩn tiền tố email. Dịch vụ API Codex / API Key vẫn hiện nhãn API",
       "menuBarQuotaConfirmEnable": "Bật",
       "codexHideRelayQuota": "Ẩn hạn mức relay",
-      "codexHideRelayQuotaDesc": "Ẩn bảng hạn mức relay / New API trên tổng quan tài khoản Codex."
+      "codexHideRelayQuotaDesc": "Ẩn bảng hạn mức relay / New API trên tổng quan tài khoản Codex.",
+      "qoderAppAppPath": "Đường dẫn ứng dụng Qoder",
+      "qoderCnIdeAppPath": "Đường dẫn ứng dụng Qoder CN IDE",
+      "qoderCnAppPath": "Đường dẫn ứng dụng Qoder CN"
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "Đã yêu cầu khôi phục {{count}} tài khoản",
         "dialog": {
           "title": "Lỗi tài khoản",
-      "description": "Mỗi tài khoản được hiển thị cùng model, lý do không khả dụng và thao tác khôi phục nếu có.",
+          "description": "Mỗi tài khoản được hiển thị cùng model, lý do không khả dụng và thao tác khôi phục nếu có.",
           "noIssues": "Tài khoản không có lỗi",
           "unscopedApiKey": "API Key hiện tại",
           "poolUnavailable": "Không có tài khoản khả dụng trong nhóm",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "Đường dẫn TRAE SOLO CN",
       "title": "Cài đặt TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "Cài đặt Qoder",
+      "appPath": "Đường dẫn Qoder"
+    },
+    "qoderCnIde": {
+      "title": "Cài đặt Qoder CN IDE",
+      "appPath": "Đường dẫn Qoder CN IDE"
+    },
+    "qoderCnApp": {
+      "title": "Cài đặt Qoder CN",
+      "appPath": "Đường dẫn Qoder CN"
     }
   },
   "quotaAlert": {

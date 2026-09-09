@@ -334,7 +334,12 @@
     "apiRelay": "중계소",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "스폰서",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "이 그룹의 기본 플랫폼으로 설정",
     "removeFromGroup": "그룹에서 제거",
     "sidebarSelectedUnlimited": "선택됨 ({count})",
-    "tipWithGroupsUnlimited": "선택한 플랫폼 및 그룹을 수동으로 정렬합니다"
+    "tipWithGroupsUnlimited": "선택한 플랫폼 및 그룹을 수동으로 정렬합니다",
+    "sidebarLimitReached": "사이드바 표시가 최대치({{max}}개)에 도달했습니다. 다른 플랫폼을 먼저 선택 해제해주세요"
   },
   "privacy": {
     "hideSensitive": "이메일 숨기기",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "일반 계정만: 끄면 이메일 접두사 숨김. Codex API 서비스 / API Key는 API 라벨 유지",
       "menuBarQuotaConfirmEnable": "사용",
       "codexHideRelayQuota": "중계 한도 숨기기",
-      "codexHideRelayQuotaDesc": "켜면 Codex 계정 개요에서 중계/New API 잔액 패널을 숨겨 겹침을 줄입니다."
+      "codexHideRelayQuotaDesc": "켜면 Codex 계정 개요에서 중계/New API 잔액 패널을 숨겨 겹침을 줄입니다.",
+      "qoderAppAppPath": "Qoder 앱 경로",
+      "qoderCnIdeAppPath": "Qoder CN IDE 앱 경로",
+      "qoderCnAppPath": "Qoder CN 앱 경로"
     },
     "network": {
       "apiTitle": "반중력 조종석 API",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "{{count}}개 계정 복구를 요청했습니다",
         "dialog": {
           "title": "계정 이상",
-      "description": "각 계정에 모델, 사용할 수 없는 이유와 가능한 복구 작업을 함께 표시합니다.",
+          "description": "각 계정에 모델, 사용할 수 없는 이유와 가능한 복구 작업을 함께 표시합니다.",
           "noIssues": "계정에 이상이 없습니다",
           "unscopedApiKey": "현재 API Key",
           "poolUnavailable": "풀에 사용 가능한 계정이 없습니다",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "TRAE SOLO CN 경로",
       "title": "TRAE SOLO CN 설정"
+    },
+    "qoderApp": {
+      "title": "Qoder 설정",
+      "appPath": "Qoder 경로"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE 설정",
+      "appPath": "Qoder CN IDE 경로"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN 설정",
+      "appPath": "Qoder CN 경로"
     }
   },
   "quotaAlert": {

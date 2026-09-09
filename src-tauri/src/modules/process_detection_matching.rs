@@ -1280,6 +1280,21 @@ fn resolve_qoder_target_and_fallback(user_data_dir: Option<&str>) -> Option<(Str
     )
 }
 
+fn resolve_qoder_target_and_fallback_for_channel(
+    user_data_dir: Option<&str>,
+    channel: crate::modules::qoder_channel::QoderChannel,
+) -> Option<(String, bool)> {
+    let default_dir = channel
+        .default_user_data_dir()
+        .ok()
+        .map(|p| p.to_string_lossy().to_string());
+    build_user_data_dir_match_target(
+        user_data_dir,
+        default_dir,
+        !strict_process_detect_enabled(),
+    )
+}
+
 fn resolve_trae_target_and_fallback(user_data_dir: Option<&str>) -> Option<(String, bool)> {
     resolve_trae_target_and_fallback_for_platform(
         user_data_dir,
@@ -1570,6 +1585,17 @@ pub fn resolve_qoder_pid_from_entries(
 pub fn resolve_qoder_pid(last_pid: Option<u32>, user_data_dir: Option<&str>) -> Option<u32> {
     let entries = collect_qoder_process_entries();
     resolve_qoder_pid_from_entries(last_pid, user_data_dir, &entries)
+}
+
+pub fn resolve_qoder_pid_for_channel(
+    last_pid: Option<u32>,
+    user_data_dir: Option<&str>,
+    channel: crate::modules::qoder_channel::QoderChannel,
+) -> Option<u32> {
+    let entries = collect_qoder_channel_process_entries(channel);
+    let (target, allow_none_for_target) =
+        resolve_qoder_target_and_fallback_for_channel(user_data_dir, channel)?;
+    resolve_pid_from_entries_by_user_data_dir(last_pid, &target, allow_none_for_target, &entries)
 }
 
 pub fn resolve_trae_pid_from_entries(
@@ -3052,51 +3078,73 @@ pub fn resolve_codebuddy_cn_pid(last_pid: Option<u32>, user_data_dir: Option<&st
     resolve_codebuddy_cn_pid_from_entries(last_pid, user_data_dir, &entries)
 }
 
-pub fn collect_qoder_process_entries() -> Vec<(u32, Option<String>)> {
-    let expected_launch = resolve_expected_qoder_launch_path_for_match();
-    if expected_launch.is_none() {
+pub fn collect_qoder_channel_process_entries(
+    channel: crate::modules::qoder_channel::QoderChannel,
+) -> Vec<(u32, Option<String>)> {
+    let launch_path = match resolve_qoder_launch_path_for_channel(channel) {
+        Ok(p) => p,
+        Err(_) => match resolve_qoder_launch_path() {
+            Ok(p) => p,
+            Err(_) => return Vec::new(),
+        },
+    };
+    let normalized = normalize_path_for_compare(launch_path.to_string_lossy().as_ref());
+    if normalized.is_empty() {
         return Vec::new();
     }
 
     #[cfg(target_os = "windows")]
     {
-        let expected = expected_launch
-            .as_deref()
-            .expect("expected launch path must exist");
-        let entries =
-            collect_named_electron_process_entries_from_powershell(expected, "Qoder.exe", "Qoder");
-        if !entries.is_empty() {
-            return entries;
+        let mut all_entries = Vec::new();
+        for exe_name in channel.expected_exe_names() {
+            let entries = collect_named_electron_process_entries_from_powershell(
+                &normalized,
+                exe_name,
+                channel.display_name(),
+            );
+            all_entries.extend(entries);
         }
-        crate::modules::logger::log_warn(
-            "[Qoder Probe] PowerShell returned empty; fallback to sysinfo probe",
-        );
-        return collect_named_electron_process_entries_from_sysinfo_fallback(
-            expected,
-            "qoder",
-            "Qoder.exe",
-            "Qoder",
-        );
+        if !all_entries.is_empty() {
+            return all_entries;
+        }
+        for exe_name in channel.expected_exe_names() {
+            let fallback = collect_named_electron_process_entries_from_sysinfo_fallback(
+                &normalized,
+                channel.provider_key(),
+                exe_name,
+                channel.display_name(),
+            );
+            all_entries.extend(fallback);
+        }
+        all_entries
     }
 
     #[cfg(target_os = "macos")]
     {
         let entries = collect_qoder_process_entries_macos();
-        if !entries.is_empty() {
-            return filter_entries_by_expected_launch_path("Qoder", entries, expected_launch);
-        }
-        return Vec::new();
+        filter_entries_by_expected_launch_path(channel.display_name(), entries, Some(normalized))
     }
 
     #[cfg(target_os = "linux")]
     {
         let entries = collect_named_electron_process_entries_from_proc("qoder");
-        if !entries.is_empty() {
-            return filter_entries_by_expected_launch_path("Qoder", entries, expected_launch);
-        }
-        return Vec::new();
+        filter_entries_by_expected_launch_path(channel.display_name(), entries, Some(normalized))
     }
 }
+
+pub fn collect_qoder_process_entries() -> Vec<(u32, Option<String>)> {
+    let mut all = Vec::new();
+    let mut seen_pids = std::collections::HashSet::new();
+    for channel in crate::modules::qoder_channel::QoderChannel::ALL {
+        for (pid, dir) in collect_qoder_channel_process_entries(channel) {
+            if seen_pids.insert(pid) {
+                all.push((pid, dir));
+            }
+        }
+    }
+    all
+}
+
 
 pub fn collect_trae_process_entries() -> Vec<(u32, Option<String>)> {
     collect_trae_process_entries_for_platform(crate::modules::trae_account::TraePlatformKind::Trae)

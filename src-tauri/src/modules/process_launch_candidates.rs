@@ -812,13 +812,46 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             ],
             supports_multi_instance: true,
         }),
-        "qoder" => Some(WindowsAppLaunchSignature {
-            label: "Qoder",
-            exe_names: &["Qoder.exe"],
+        "qoder" | "qoder_ide" => Some(WindowsAppLaunchSignature {
+            label: "Qoder IDE",
+            exe_names: &["Qoder IDE.exe", "Qoder.exe"],
             command_names: &["qoder"],
             protocol_names: &["qoder"],
-            display_keywords: &["qoder"],
-            common_paths: &["Qoder\\Qoder.exe"],
+            display_keywords: &["qoder ide", "qoder"],
+            common_paths: &["Qoder IDE\\Qoder IDE.exe", "Qoder\\Qoder.exe"],
+            supports_multi_instance: true,
+        }),
+        "qoder_app" => Some(WindowsAppLaunchSignature {
+            label: "Qoder",
+            exe_names: &["Qoder.exe", "Qoder Launcher.exe"],
+            command_names: &["qoder"],
+            protocol_names: &["qoder"],
+            display_keywords: &["qoder launcher", "qoder app", "qoder"],
+            common_paths: &[
+                "Qoder\\Qoder\\Qoder.exe",
+                "Qoder\\Qoder Launcher\\Qoder Launcher.exe",
+            ],
+            supports_multi_instance: true,
+        }),
+        "qoder_cn_ide" => Some(WindowsAppLaunchSignature {
+            label: "Qoder CN IDE",
+            exe_names: &["Qoder CN IDE.exe", "Qoder.exe"],
+            command_names: &["qoder"],
+            protocol_names: &["qoder"],
+            display_keywords: &["qoder cn ide", "qoder cn"],
+            common_paths: &["Qoder CN IDE\\Qoder CN IDE.exe"],
+            supports_multi_instance: true,
+        }),
+        "qoder_cn_app" => Some(WindowsAppLaunchSignature {
+            label: "Qoder CN",
+            exe_names: &["Qoder CN.exe", "Qoder Launcher.exe"],
+            command_names: &["qoder"],
+            protocol_names: &["qoder"],
+            display_keywords: &["qoder cn", "qoder cn app"],
+            common_paths: &[
+                "Qoder CN\\Qoder CN\\Qoder CN.exe",
+                "Qoder CN\\Qoder Launcher.exe",
+            ],
             supports_multi_instance: true,
         }),
         "zcode" => Some(WindowsAppLaunchSignature {
@@ -1152,6 +1185,21 @@ fn scan_windows_app_launch_targets(
             signature,
             "running_process",
         );
+    }
+
+    // 补充 Qoder 各渠道已安装的静态候选路径（磁盘存在即可命中，无需应用先运行）
+    if let Ok(channel) = crate::modules::qoder_channel::QoderChannel::parse(Some(app)) {
+        for candidate_exe in channel.default_exe_candidates() {
+            if candidate_exe.is_file() {
+                push_app_launch_candidate(
+                    &mut candidates,
+                    &mut seen,
+                    &candidate_exe,
+                    signature,
+                    "installed_app",
+                );
+            }
+        }
     }
 
     candidates.sort_by_key(|candidate| {
@@ -1799,7 +1847,10 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
             "opencode" => &mut current.opencode_app_path,
             "codebuddy" => &mut current.codebuddy_app_path,
             "codebuddy_cn" => &mut current.codebuddy_cn_app_path,
-            "qoder" => &mut current.qoder_app_path,
+            "qoder" | "qoder_ide" => &mut current.qoder_app_path,
+            "qoder_app" => &mut current.qoder_app_app_path,
+            "qoder_cn_ide" => &mut current.qoder_cn_ide_app_path,
+            "qoder_cn_app" => &mut current.qoder_cn_app_path,
             "zcode" => &mut current.zcode_app_path,
             "trae" => &mut current.trae_app_path,
             "trae_solo" => &mut current.trae_solo_app_path,

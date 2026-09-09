@@ -188,14 +188,17 @@ function parseQuotaBucket(raw: unknown, fallback?: Partial<QoderQuotaBucket>): Q
   );
   const total = firstFiniteNumber(
     getNestedValue(raw, ['total']),
+    getNestedValue(raw, ['cap']),
     getNestedValue(raw, ['quota']),
     getNestedValue(raw, ['limit']),
     fallback?.total,
   );
   const remaining = firstFiniteNumber(
     getNestedValue(raw, ['remaining']),
-    getNestedValue(raw, ['available']),
     getNestedValue(raw, ['left']),
+    typeof getNestedValue(raw, ['available']) === 'number'
+      ? getNestedValue(raw, ['available'])
+      : null,
     fallback?.remaining,
     total != null && used != null ? total - used : null,
   );
@@ -231,10 +234,23 @@ function getRawPlanTag(account: QoderAccount): string | null {
     getNestedValue(account.auth_credit_usage_raw, ['tierName']),
     getNestedValue(account.auth_credit_usage_raw, ['planTierName']),
     account.plan_type,
+    account.display_name?.includes('aliyun') || account.email?.endsWith('.cn') ? 'Free' : null,
   );
 }
 
 export function getQoderAccountDisplayEmail(account: QoderAccount): string {
+  const isUnknownEmail =
+    !account.email ||
+    account.email === 'unknown@qoder.local' ||
+    account.email.startsWith('unknown@');
+  if (isUnknownEmail) {
+    return (
+      account.display_name ||
+      account.user_id ||
+      account.email ||
+      account.id
+    );
+  }
   return (
     account.email ||
     account.display_name ||
@@ -269,9 +285,17 @@ export function getQoderSubscriptionInfo(account: QoderAccount): QoderSubscripti
       getNestedValue(account.auth_credit_usage_raw, ['addOnQuota']),
       getNestedValue(account.auth_credit_usage_raw, ['addonQuota']),
       getNestedValue(account.auth_credit_usage_raw, ['add_on_quota']),
+      getNestedValue(account.auth_credit_usage_raw, ['orgResourcePackage']),
+      getNestedValue(account.auth_credit_usage_raw, ['organizationResourcePackage']),
+      getNestedValue(account.auth_credit_usage_raw, ['resourcePackage']),
+      getNestedValue(account.auth_credit_usage_raw, ['sharedCreditPackage']),
       getNestedValue(account.auth_user_plan_raw, ['addOnQuota']),
       getNestedValue(account.auth_user_plan_raw, ['addonQuota']),
       getNestedValue(account.auth_user_plan_raw, ['add_on_quota']),
+      getNestedValue(account.auth_user_plan_raw, ['orgResourcePackage']),
+      getNestedValue(account.auth_user_plan_raw, ['organizationResourcePackage']),
+      getNestedValue(account.auth_user_plan_raw, ['resourcePackage']),
+      getNestedValue(account.auth_user_plan_raw, ['sharedCreditPackage']),
     ),
   );
   const sharedCreditPackageRaw = firstRecord(
@@ -412,3 +436,59 @@ export function getQoderUsageOverview(account: QoderAccount): QoderUsageOverview
 export function hasQoderQuotaData(account: QoderAccount): boolean {
   return account.auth_credit_usage_raw != null;
 }
+
+export type QoderChannel = 'qoder' | 'qoder_app' | 'qoder_cn_ide' | 'qoder_cn_app';
+export type QoderPlatformId = QoderChannel;
+
+export function isQoderPlatformId(platformId: string): platformId is QoderPlatformId {
+  return (
+    platformId === 'qoder' ||
+    platformId === 'qoder_app' ||
+    platformId === 'qoder_cn_ide' ||
+    platformId === 'qoder_cn_app'
+  );
+}
+
+export interface QoderChannelConfig {
+  id: QoderChannel;
+  name: string;
+  nameZh: string;
+  kind: 'ide' | 'app';
+  isCn: boolean;
+  desc: string;
+}
+
+export const QODER_CHANNELS: QoderChannelConfig[] = [
+  {
+    id: 'qoder',
+    name: 'Qoder IDE',
+    nameZh: 'Qoder IDE (国际版)',
+    kind: 'ide',
+    isCn: false,
+    desc: 'VSCode 内核 IDE，存储位于 %APPDATA%\\Qoder',
+  },
+  {
+    id: 'qoder_app',
+    name: 'Qoder',
+    nameZh: 'Qoder (国际版 App)',
+    kind: 'app',
+    isCn: false,
+    desc: 'Qoder Launcher / App，存储位于 %APPDATA%\\com.qoder.app.stable',
+  },
+  {
+    id: 'qoder_cn_ide',
+    name: 'Qoder CN IDE',
+    nameZh: 'Qoder CN IDE (国内版)',
+    kind: 'ide',
+    isCn: true,
+    desc: '国内版 IDE，存储位于 %APPDATA%\\QoderCN',
+  },
+  {
+    id: 'qoder_cn_app',
+    name: 'Qoder CN',
+    nameZh: 'Qoder CN (国内版 App)',
+    kind: 'app',
+    isCn: true,
+    desc: '国内版 App，存储位于 %APPDATA%\\com.qodercn.app.stable',
+  },
+];

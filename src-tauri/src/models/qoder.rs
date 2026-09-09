@@ -44,6 +44,8 @@ pub struct QoderAccountSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
@@ -89,6 +91,7 @@ impl QoderAccount {
             id: self.id.clone(),
             email: self.email.clone(),
             user_id: self.user_id.clone(),
+            display_name: self.display_name.clone(),
             plan_type: self.plan_type.clone(),
             tags: self.tags.clone(),
             created_at: self.created_at,

@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { PlatformInstancesContent } from '../components/platform/PlatformInstancesContent';
-import { useQoderInstanceStore } from '../stores/useQoderInstanceStore';
-import { useQoderAccountStore } from '../stores/useQoderAccountStore';
-import type { QoderAccount } from '../types/qoder';
+import { QODER_INSTANCE_STORES } from '../stores/useQoderInstanceStore';
+import { useQoderChannelAccountStore } from '../stores/useQoderAccountStore';
+import type { QoderAccount, QoderPlatformId } from '../types/qoder';
 import {
   getQoderAccountDisplayEmail,
   getQoderPlanBadge,
@@ -11,16 +11,19 @@ import {
 import { usePlatformRuntimeSupport } from '../hooks/usePlatformRuntimeSupport';
 
 interface QoderInstancesContentProps {
+  platformId?: QoderPlatformId;
   accountsForSelect?: QoderAccount[];
 }
 
 export function QoderInstancesContent({
+  platformId = 'qoder',
   accountsForSelect,
 }: QoderInstancesContentProps = {}) {
   const { t } = useTranslation();
-  const instanceStore = useQoderInstanceStore();
-  const { accounts: storeAccounts, fetchAccounts } = useQoderAccountStore();
-  const accounts = accountsForSelect ?? storeAccounts;
+  const instanceStore = QODER_INSTANCE_STORES[platformId]();
+  const accountStore = useQoderChannelAccountStore(platformId);
+  const accounts = accountsForSelect ?? accountStore.accounts;
+  const fetchAccounts = accountStore.fetchAccounts;
   const isSupportedPlatform = usePlatformRuntimeSupport('desktop');
 
   const renderQoderQuotaPreview = (account: QoderAccount) => {
@@ -64,7 +67,7 @@ export function QoderInstancesContent({
       getAccountSearchText={(account) =>
         `${getQoderAccountDisplayEmail(account)} ${getQoderPlanBadge(account)}`
       }
-      appType="qoder"
+      appType={platformId}
       isSupported={isSupportedPlatform}
       unsupportedTitleKey="common.shared.instances.unsupported.title"
       unsupportedTitleDefault="暂不支持当前系统"
@@ -73,3 +76,12 @@ export function QoderInstancesContent({
     />
   );
 }
+
+export function QoderInstancesPage({ platformId = 'qoder' }: { platformId?: QoderPlatformId } = {}) {
+  return (
+    <div className="ghcp-instances-page">
+      <QoderInstancesContent platformId={platformId} />
+    </div>
+  );
+}
+

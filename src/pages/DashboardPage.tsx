@@ -10,7 +10,12 @@ import { useGrokAccountStore } from '../stores/useGrokAccountStore';
 import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
-import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import {
+  useQoderAccountStore,
+  useQoderAppAccountStore,
+  useQoderCnIdeAccountStore,
+  useQoderCnAppAccountStore,
+} from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
@@ -40,6 +45,7 @@ import {
 } from '../types/codebuddy';
 import {
   QoderAccount,
+  QoderPlatformId,
   getQoderSubscriptionInfo,
 } from '../types/qoder';
 import type { ZcodeAccount } from '../types/zcode';
@@ -334,6 +340,15 @@ export function DashboardPage({
         case 'qoder':
           await useQoderAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
+        case 'qoder_app':
+          await useQoderAppAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
+        case 'qoder_cn_ide':
+          await useQoderCnIdeAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
+        case 'qoder_cn_app':
+          await useQoderCnAppAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
         case 'zcode':
           await useZcodeAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
@@ -510,8 +525,22 @@ export function DashboardPage({
     accounts: qoderAccounts,
     currentAccountId: qoderCurrentId,
     fetchAccounts: fetchQoderAccounts,
-    switchAccount: switchQoderAccount,
   } = useQoderAccountStore();
+
+  const {
+    accounts: qoderAppAccounts,
+    fetchAccounts: fetchQoderAppAccounts,
+  } = useQoderAppAccountStore();
+
+  const {
+    accounts: qoderCnIdeAccounts,
+    fetchAccounts: fetchQoderCnIdeAccounts,
+  } = useQoderCnIdeAccountStore();
+
+  const {
+    accounts: qoderCnAppAccounts,
+    fetchAccounts: fetchQoderCnAppAccounts,
+  } = useQoderCnAppAccountStore();
 
   const {
     accounts: zcodeAccounts,
@@ -621,6 +650,9 @@ export function DashboardPage({
       fetchCodebuddyAccounts,
       fetchCodebuddyCnAccounts,
       fetchQoderAccounts,
+      fetchQoderAppAccounts,
+      fetchQoderCnIdeAccounts,
+      fetchQoderCnAppAccounts,
       fetchZcodeAccounts,
       fetchTraeAccounts,
       fetchWorkbuddyAccounts,
@@ -701,6 +733,9 @@ export function DashboardPage({
         codebuddyAccounts.length +
         codebuddyCnAccounts.length +
         qoderAccounts.length +
+        qoderAppAccounts.length +
+        qoderCnIdeAccounts.length +
+        qoderCnAppAccounts.length +
         zcodeAccounts.length +
         traeAccounts.length +
         workbuddyAccounts.length,
@@ -715,6 +750,9 @@ export function DashboardPage({
       codebuddy: codebuddyAccounts.length,
       codebuddy_cn: codebuddyCnAccounts.length,
       qoder: qoderAccounts.length,
+      qoder_app: qoderAppAccounts.length,
+      qoder_cn_ide: qoderCnIdeAccounts.length,
+      qoder_cn_app: qoderCnAppAccounts.length,
       zcode: zcodeAccounts.length,
       trae: traeAccountsByPlatform.trae.length,
       trae_solo: traeAccountsByPlatform.trae_solo.length,
@@ -722,7 +760,7 @@ export function DashboardPage({
       trae_solo_cn: traeAccountsByPlatform.trae_solo_cn.length,
       workbuddy: workbuddyAccounts.length,
     };
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, traeAccounts, traeAccountsByPlatform, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, qoderAppAccounts, qoderCnIdeAccounts, qoderCnAppAccounts, zcodeAccounts, traeAccounts, traeAccountsByPlatform, workbuddyAccounts]);
 
   const dashboardAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -738,6 +776,9 @@ export function DashboardPage({
       ...codebuddyAccounts,
       ...codebuddyCnAccounts,
       ...qoderAccounts,
+      ...qoderAppAccounts,
+      ...qoderCnIdeAccounts,
+      ...qoderCnAppAccounts,
       ...zcodeAccounts,
       ...traeAccounts,
       ...workbuddyAccounts,
@@ -750,7 +791,7 @@ export function DashboardPage({
       }
     }
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, zcodeAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, claudeAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, grokAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, qoderAppAccounts, qoderCnIdeAccounts, qoderCnAppAccounts, zcodeAccounts, traeAccounts, workbuddyAccounts]);
 
 
   // Refresh States
@@ -1303,11 +1344,17 @@ export function DashboardPage({
     }
   };
 
-  const handleRefreshQoder = async (accountId: string) => {
+  const handleRefreshQoder = async (accountId: string, platformId: QoderPlatformId = 'qoder') => {
     if (refreshing.has(accountId)) return;
     setRefreshing((prev) => new Set(prev).add(accountId));
     try {
-      await useQoderAccountStore.getState().refreshToken(accountId);
+      const storeMap: Record<QoderPlatformId, typeof useQoderAccountStore> = {
+        qoder: useQoderAccountStore,
+        qoder_app: useQoderAppAccountStore,
+        qoder_cn_ide: useQoderCnIdeAccountStore,
+        qoder_cn_app: useQoderCnAppAccountStore,
+      };
+      await storeMap[platformId].getState().refreshToken(accountId);
     } catch (error) {
       console.error('Refresh failed:', error);
     } finally {
@@ -1493,11 +1540,17 @@ export function DashboardPage({
     }
   };
 
-  const handleSwitchQoder = async (accountId: string) => {
+  const handleSwitchQoder = async (accountId: string, platformId: QoderPlatformId = 'qoder') => {
     if (switching.has(accountId)) return;
     setSwitching((prev) => new Set(prev).add(accountId));
     try {
-      await switchQoderAccount(accountId);
+      const storeMap: Record<QoderPlatformId, typeof useQoderAccountStore> = {
+        qoder: useQoderAccountStore,
+        qoder_app: useQoderAppAccountStore,
+        qoder_cn_ide: useQoderCnIdeAccountStore,
+        qoder_cn_app: useQoderCnAppAccountStore,
+      };
+      await storeMap[platformId].getState().switchAccount(accountId);
     } catch (error) {
       console.error('Switch failed:', error);
     } finally {
@@ -2602,17 +2655,17 @@ export function DashboardPage({
     });
   };
 
-  const renderQoderAccountContent = (account: QoderAccount | null) => {
+  const renderQoderAccountContent = (account: QoderAccount | null, platformId: QoderPlatformId = 'qoder') => {
     if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
 
     const presentation = buildQoderAccountPresentation(account, t);
     return renderUnifiedAccountCard({
       presentation,
-      onRefresh: () => handleRefreshQoder(account.id),
-      onSwitch: () => handleSwitchQoder(account.id),
+      onRefresh: () => handleRefreshQoder(account.id, platformId),
+      onSwitch: () => handleSwitchQoder(account.id, platformId),
       isRefreshing: refreshing.has(account.id),
       isSwitching: switching.has(account.id),
-      onEditTags: () => setTagModalState({ accountId: account.id, platform: 'qoder', tags: account.tags || [] }),
+      onEditTags: () => setTagModalState({ accountId: account.id, platform: platformId, tags: account.tags || [] }),
     });
   };
 
@@ -2673,6 +2726,9 @@ export function DashboardPage({
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
+    qoder_app: stats.qoder_app,
+    qoder_cn_ide: stats.qoder_cn_ide,
+    qoder_cn_app: stats.qoder_cn_app,
     zcode: stats.zcode,
     trae: stats.trae,
     trae_solo: stats.trae_solo,

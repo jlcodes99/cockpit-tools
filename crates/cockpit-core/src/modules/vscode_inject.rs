@@ -150,7 +150,7 @@ fn get_local_state_path(data_root: &Path) -> Result<PathBuf, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn get_windows_encryption_key(data_root: Option<&Path>) -> Result<Vec<u8>, String> {
+pub(crate) fn get_windows_encryption_key(data_root: Option<&Path>) -> Result<Vec<u8>, String> {
     let owned_root;
     let root = if let Some(path) = data_root {
         path
@@ -225,7 +225,7 @@ fn dpapi_decrypt(encrypted: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn decrypt_windows_gcm_v10(key: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, String> {
+pub(crate) fn decrypt_windows_gcm_v10(key: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, String> {
     if encrypted.len() < 31 {
         return Err("Encrypted data too short".to_string());
     }
@@ -248,7 +248,7 @@ fn decrypt_windows_gcm_v10(key: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, Stri
 }
 
 #[cfg(target_os = "windows")]
-fn encrypt_windows_gcm_v10(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, String> {
+pub(crate) fn encrypt_windows_gcm_v10(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, String> {
     let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
     let ciphertext = cipher
@@ -1328,6 +1328,8 @@ fn inject_secret_to_state_db_with_mode(
         rusqlite::params![db_key, buffer_str],
     )
     .map_err(|e| format!("Failed to write to state.vscdb: {}", e))?;
+
+    let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
 
     Ok(())
 }

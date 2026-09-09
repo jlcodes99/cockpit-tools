@@ -334,7 +334,12 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "Imposta come piattaforma predefinita di questo gruppo",
     "removeFromGroup": "Rimuovi dal gruppo",
     "sidebarSelectedUnlimited": "Selezionato ({count})",
-    "tipWithGroupsUnlimited": "Ordina manualmente le piattaforme e i gruppi selezionati"
+    "tipWithGroupsUnlimited": "Ordina manualmente le piattaforme e i gruppi selezionati",
+    "sidebarLimitReached": "Limite barra laterale raggiunto ({{max}}). Deseleziona prima altre piattaforme."
   },
   "privacy": {
     "hideSensitive": "Nascondi email",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "Solo account normali: disattivo nasconde il prefisso e-mail. Servizio API Codex / API Key mostrano ancora API",
       "menuBarQuotaConfirmEnable": "Attiva",
       "codexHideRelayQuota": "Nascondi quota relay",
-      "codexHideRelayQuotaDesc": "Nasconde i pannelli quota relay / New API nella panoramica account Codex."
+      "codexHideRelayQuotaDesc": "Nasconde i pannelli quota relay / New API nella panoramica account Codex.",
+      "qoderAppAppPath": "Percorso app Qoder",
+      "qoderCnIdeAppPath": "Percorso app Qoder CN IDE",
+      "qoderCnAppPath": "Percorso app Qoder CN"
     },
     "network": {
       "apiTitle": "API della cabina di pilotaggio antigravità",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "Ripristino richiesto per {{count}} account",
         "dialog": {
           "title": "Problemi account",
-      "description": "Ogni account mostra il modello, il motivo dell’indisponibilità e l’azione di ripristino disponibile.",
+          "description": "Ogni account mostra il modello, il motivo dell’indisponibilità e l’azione di ripristino disponibile.",
           "noIssues": "Nessun problema negli account",
           "unscopedApiKey": "API Key corrente",
           "poolUnavailable": "Nessun account disponibile nel pool",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "Percorso TRAE SOLO CN",
       "title": "Impostazioni TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "Impostazioni Qoder",
+      "appPath": "Percorso Qoder"
+    },
+    "qoderCnIde": {
+      "title": "Impostazioni Qoder CN IDE",
+      "appPath": "Percorso Qoder CN IDE"
+    },
+    "qoderCnApp": {
+      "title": "Impostazioni Qoder CN",
+      "appPath": "Percorso Qoder CN"
     }
   },
   "quotaAlert": {

@@ -20,6 +20,9 @@ pub const PLATFORM_GROK: &str = "grok";
 pub const PLATFORM_CODEBUDDY: &str = "codebuddy";
 pub const PLATFORM_CODEBUDDY_CN: &str = "codebuddy_cn";
 pub const PLATFORM_QODER: &str = "qoder";
+pub const PLATFORM_QODER_APP: &str = "qoder_app";
+pub const PLATFORM_QODER_CN_IDE: &str = "qoder_cn_ide";
+pub const PLATFORM_QODER_CN_APP: &str = "qoder_cn_app";
 pub const PLATFORM_ZCODE: &str = "zcode";
 pub const PLATFORM_TRAE: &str = "trae";
 pub const PLATFORM_TRAE_SOLO: &str = "trae_solo";
@@ -27,7 +30,7 @@ pub const PLATFORM_TRAE_CN: &str = "trae_cn";
 pub const PLATFORM_TRAE_SOLO_CN: &str = "trae_solo_cn";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 21] = [
     PLATFORM_CLAUDE_MANAGER,
     PLATFORM_CODEX,
     PLATFORM_ANTIGRAVITY,
@@ -40,6 +43,9 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
     PLATFORM_CODEBUDDY,
     PLATFORM_CODEBUDDY_CN,
     PLATFORM_QODER,
+    PLATFORM_QODER_APP,
+    PLATFORM_QODER_CN_IDE,
+    PLATFORM_QODER_CN_APP,
     PLATFORM_ZCODE,
     PLATFORM_TRAE,
     PLATFORM_TRAE_SOLO,
@@ -53,6 +59,7 @@ pub const SORT_MODE_MANUAL: &str = "manual";
 
 const DEFAULT_CODEBUDDY_GROUP_ID: &str = "codebuddy-suite";
 const DEFAULT_TRAE_GROUP_ID: &str = "trae-suite";
+const DEFAULT_QODER_GROUP_ID: &str = "qoder-suite";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -362,6 +369,8 @@ fn normalize_platform_groups(groups: &[TrayLayoutGroup]) -> Vec<TrayLayoutGroup>
             used_group_ids.insert(group_id);
         }
     }
+
+    normalized.retain(|group| group.id != DEFAULT_QODER_GROUP_ID);
 
     normalized
 }
