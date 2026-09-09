@@ -1449,20 +1449,8 @@ fn detect_qoder_exec_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
-            candidates.push(
-                std::path::PathBuf::from(&local_appdata)
-                    .join("Programs")
-                    .join("Qoder")
-                    .join("Qoder.exe"),
-            );
-        }
-        if let Ok(program_files) = std::env::var("PROGRAMFILES") {
-            candidates.push(
-                std::path::PathBuf::from(program_files)
-                    .join("Qoder")
-                    .join("Qoder.exe"),
-            );
+        for channel in crate::modules::qoder_channel::QoderChannel::ALL {
+            candidates.extend(channel.default_exe_candidates());
         }
         for candidate in candidates {
             if candidate.exists() {
@@ -2992,30 +2980,62 @@ fn resolve_codebuddy_cn_launch_path() -> Result<std::path::PathBuf, String> {
     Err(app_path_missing_error("codebuddy_cn"))
 }
 
-fn resolve_qoder_launch_path() -> Result<std::path::PathBuf, String> {
-    if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().qoder_app_path)) {
-        if let Some(exec) = resolve_qoder_macos_exec_path(&custom) {
-            return Ok(exec);
+pub fn resolve_qoder_launch_path_for_channel(
+    channel: crate::modules::qoder_channel::QoderChannel,
+) -> Result<std::path::PathBuf, String> {
+    if channel == crate::modules::qoder_channel::QoderChannel::QoderIde {
+        if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().qoder_app_path)) {
+            if let Some(exec) = resolve_qoder_macos_exec_path(&custom) {
+                return Ok(exec);
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let p = std::path::PathBuf::from(&custom);
+                if p.exists() {
+                    return Ok(p);
+                }
+            }
+            return Err(app_path_missing_error(channel.provider_key()));
         }
-        return Err(app_path_missing_error("qoder"));
     }
 
-    if let Some(detected) = detect_qoder_exec_path() {
-        let detected_str = detected.to_string_lossy();
+    for candidate in channel.default_exe_candidates() {
+        let detected_str = candidate.to_string_lossy();
         if let Some(exec) = resolve_qoder_macos_exec_path(&detected_str) {
             return Ok(exec);
         }
         #[cfg(target_os = "macos")]
-        if detected.is_file() {
-            return Ok(detected);
+        if candidate.is_file() {
+            return Ok(candidate);
         }
         #[cfg(not(target_os = "macos"))]
-        if detected.exists() {
-            return Ok(detected);
+        if candidate.exists() {
+            return Ok(candidate);
         }
     }
 
-    Err(app_path_missing_error("qoder"))
+    Err(app_path_missing_error(channel.provider_key()))
+}
+
+pub fn resolve_qoder_launch_path() -> Result<std::path::PathBuf, String> {
+    resolve_qoder_launch_path_for_channel(crate::modules::qoder_channel::QoderChannel::QoderIde)
+        .or_else(|_| {
+            if let Some(detected) = detect_qoder_exec_path() {
+                let detected_str = detected.to_string_lossy();
+                if let Some(exec) = resolve_qoder_macos_exec_path(&detected_str) {
+                    return Ok(exec);
+                }
+                #[cfg(target_os = "macos")]
+                if detected.is_file() {
+                    return Ok(detected);
+                }
+                #[cfg(not(target_os = "macos"))]
+                if detected.exists() {
+                    return Ok(detected);
+                }
+            }
+            Err(app_path_missing_error("qoder"))
+        })
 }
 
 pub fn resolve_zcode_launch_path() -> Result<std::path::PathBuf, String> {
@@ -3291,13 +3311,33 @@ fn detect_and_save_app_path_raw(app: &str, force: bool) -> Option<String> {
                 return Some(config::get_user_config().codebuddy_cn_app_path);
             }
         }
-        "qoder" => {
-            if !force && !current.qoder_app_path.trim().is_empty() {
-                return Some(current.qoder_app_path);
+        "qoder" | "qoder_ide" | "qoder_app" | "qoder_cn_ide" | "qoder_cn_app" => {
+            let channel = match app {
+                "qoder_app" => crate::modules::qoder_channel::QoderChannel::QoderApp,
+                "qoder_cn_ide" => crate::modules::qoder_channel::QoderChannel::QoderCnIde,
+                "qoder_cn_app" => crate::modules::qoder_channel::QoderChannel::QoderCnApp,
+                _ => crate::modules::qoder_channel::QoderChannel::QoderIde,
+            };
+            let configured = match channel {
+                crate::modules::qoder_channel::QoderChannel::QoderIde => current.qoder_app_path.clone(),
+                crate::modules::qoder_channel::QoderChannel::QoderApp => current.qoder_app_app_path.clone(),
+                crate::modules::qoder_channel::QoderChannel::QoderCnIde => current.qoder_cn_ide_app_path.clone(),
+                crate::modules::qoder_channel::QoderChannel::QoderCnApp => current.qoder_cn_app_path.clone(),
+            };
+            let configured_exists = !configured.trim().is_empty() && std::path::Path::new(configured.trim()).exists();
+            if !force && configured_exists {
+                return Some(configured);
             }
-            if let Some(detected) = detect_qoder_exec_path() {
-                update_app_path_in_config("qoder", &detected, &current.qoder_app_path);
-                return Some(config::get_user_config().qoder_app_path);
+            if let Some(detected) = channel.detect_installed_exe() {
+                update_app_path_in_config(app, &detected, &configured);
+                let refreshed = config::get_user_config();
+                let refreshed_val = match channel {
+                    crate::modules::qoder_channel::QoderChannel::QoderIde => refreshed.qoder_app_path,
+                    crate::modules::qoder_channel::QoderChannel::QoderApp => refreshed.qoder_app_app_path,
+                    crate::modules::qoder_channel::QoderChannel::QoderCnIde => refreshed.qoder_cn_ide_app_path,
+                    crate::modules::qoder_channel::QoderChannel::QoderCnApp => refreshed.qoder_cn_app_path,
+                };
+                return Some(refreshed_val);
             }
         }
         "zcode" => {

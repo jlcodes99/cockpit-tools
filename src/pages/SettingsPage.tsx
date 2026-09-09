@@ -62,7 +62,12 @@ import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
-import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import {
+  useQoderAccountStore,
+  useQoderAppAccountStore,
+  useQoderCnIdeAccountStore,
+  useQoderCnAppAccountStore,
+} from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
@@ -177,6 +182,9 @@ interface GeneralConfig {
   codebuddy_cn_app_path: string;
   codebuddy_cn_share_sessions_on_switch: boolean;
   qoder_app_path: string;
+  qoder_app_app_path: string;
+  qoder_cn_ide_app_path: string;
+  qoder_cn_app_path: string;
   zcode_app_path: string;
   trae_app_path: string;
   trae_solo_app_path: string;
@@ -275,6 +283,9 @@ type AppPathTarget =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_app'
+  | 'qoder_cn_ide'
+  | 'qoder_cn_app'
   | 'zcode'
   | 'trae'
   | 'trae_solo'
@@ -316,13 +327,16 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   codebuddy: 10,
   codebuddy_cn: 11,
   qoder: 12,
-  zcode: 13,
-  trae: 14,
-  trae_solo: 15,
-  trae_cn: 16,
-  trae_solo_cn: 17,
-  workbuddy: 18,
-  zed: 19,
+  qoder_app: 13,
+  qoder_cn_ide: 14,
+  qoder_cn_app: 15,
+  zcode: 16,
+  trae: 17,
+  trae_solo: 18,
+  trae_cn: 19,
+  trae_solo_cn: 20,
+  workbuddy: 21,
+  zed: 22,
 };
 type ConfigUpdatedEventDetail = {
   source?: string;
@@ -578,6 +592,9 @@ export function useSettingsPageController() {
   const [codebuddyCnAppPath, setCodebuddyCnAppPath] = useState('');
   const [codebuddyCnShareSessionsOnSwitch, setCodebuddyCnShareSessionsOnSwitch] = useState(false);
   const [qoderAppPath, setQoderAppPath] = useState('');
+  const [qoderAppAppPath, setQoderAppAppPath] = useState('');
+  const [qoderCnIdeAppPath, setQoderCnIdeAppPath] = useState('');
+  const [qoderCnAppPath, setQoderCnAppPath] = useState('');
   const [zcodeAppPath, setZcodeAppPath] = useState('');
   const [traeAppPath, setTraeAppPath] = useState('');
   const [traeSoloAppPath, setTraeSoloAppPath] = useState('');
@@ -1124,6 +1141,9 @@ export function useSettingsPageController() {
       codebuddy_cn_app_path: codebuddyCnAppPath,
       codebuddy_cn_share_sessions_on_switch: codebuddyCnShareSessionsOnSwitch,
       qoder_app_path: qoderAppPath,
+      qoder_app_app_path: qoderAppAppPath,
+      qoder_cn_ide_app_path: qoderCnIdeAppPath,
+      qoder_cn_app_path: qoderCnAppPath,
       zcode_app_path: zcodeAppPath,
       trae_app_path: traeAppPath,
       trae_solo_app_path: traeSoloAppPath,
@@ -1712,6 +1732,9 @@ export function useSettingsPageController() {
       setCodebuddyCnAppPath(config.codebuddy_cn_app_path || '');
       setCodebuddyCnShareSessionsOnSwitch(config.codebuddy_cn_share_sessions_on_switch ?? false);
       setQoderAppPath(config.qoder_app_path || '');
+      setQoderAppAppPath(config.qoder_app_app_path || '');
+      setQoderCnIdeAppPath(config.qoder_cn_ide_app_path || '');
+      setQoderCnAppPath(config.qoder_cn_app_path || '');
       setZcodeAppPath(config.zcode_app_path || '');
       setTraeAppPath(config.trae_app_path || '');
       setTraeSoloAppPath(config.trae_solo_app_path || '');
@@ -2065,6 +2088,12 @@ export function useSettingsPageController() {
       setCodebuddyCnAppPath(path);
     } else if (target === 'qoder') {
       setQoderAppPath(path);
+    } else if (target === 'qoder_app') {
+      setQoderAppAppPath(path);
+    } else if (target === 'qoder_cn_ide') {
+      setQoderCnIdeAppPath(path);
+    } else if (target === 'qoder_cn_app') {
+      setQoderCnAppPath(path);
     } else if (target === 'zcode') {
       setZcodeAppPath(path);
     } else if (isTraeAppPathTarget(target)) {
@@ -2101,7 +2130,13 @@ export function useSettingsPageController() {
       case 'codebuddy_cn':
         return 'CodeBuddy CN';
       case 'qoder':
+        return 'Qoder IDE';
+      case 'qoder_app':
         return 'Qoder';
+      case 'qoder_cn_ide':
+        return 'Qoder CN IDE';
+      case 'qoder_cn_app':
+        return 'Qoder CN';
       case 'zcode':
         return 'ZCode';
       case 'trae':
@@ -2394,6 +2429,9 @@ export function useSettingsPageController() {
       case 'workbuddy':
         return parseRefresh(workbuddyAutoRefresh) > 0;
       case 'qoder':
+      case 'qoder_app':
+      case 'qoder_cn_ide':
+      case 'qoder_cn_app':
         return parseRefresh(qoderAutoRefresh) > 0;
       case 'zcode':
         return parseRefresh(zcodeAutoRefresh) > 0;
@@ -2551,6 +2589,12 @@ export function useSettingsPageController() {
         return getProviderAccounts(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail);
       case 'qoder':
         return getProviderAccounts(useQoderAccountStore, getQoderAccountDisplayEmail);
+      case 'qoder_app':
+        return getProviderAccounts(useQoderAppAccountStore, getQoderAccountDisplayEmail);
+      case 'qoder_cn_ide':
+        return getProviderAccounts(useQoderCnIdeAccountStore, getQoderAccountDisplayEmail);
+      case 'qoder_cn_app':
+        return getProviderAccounts(useQoderCnAppAccountStore, getQoderAccountDisplayEmail);
       case 'zcode':
         return getProviderAccounts(useZcodeAccountStore, getZcodeAccountDisplayEmail);
       case 'trae':
@@ -3380,6 +3424,9 @@ export function useSettingsPageController() {
     openMenuBarQuotaModal,
     platformSettingsOrder,
     qoderAppPath,
+    qoderAppAppPath,
+    qoderCnIdeAppPath,
+    qoderCnAppPath,
     qoderAutoRefresh,
     qoderAutoRefreshCustomMode,
     qoderAutoRefreshIsPreset,
@@ -3518,6 +3565,9 @@ export function useSettingsPageController() {
     setOpencodeAuthOverwriteOnSwitch,
     setOpencodeSyncOnSwitch,
     setQoderAppPath,
+    setQoderAppAppPath,
+    setQoderCnIdeAppPath,
+    setQoderCnAppPath,
     setQoderAutoRefresh,
     setQoderAutoRefreshCustomMode,
     setQoderQuotaAlertEnabled,

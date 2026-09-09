@@ -367,7 +367,12 @@
       "restart": "重启",
       "installing": "安装中"
     },
-    "qoder": "Qoder",
+    "qoder": "Qoder IDE",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN",
     "trae": "Trae",
     "traeSolo": "TRAE SOLO",
     "traeCn": "Trae CN",
@@ -549,6 +554,7 @@
     "title": "平台布局",
     "sidebarSelected": "侧边栏已选择 {{count}}/{{max}}",
     "sidebarSelectedUnlimited": "侧边栏已选择 {{count}}",
+    "sidebarLimitReached": "侧边栏显示已达上限（{{max}}个），请先取消勾选其他平台",
     "reset": "恢复默认",
     "tip": "拖拽可排序；最多选择三个平台显示在侧边栏。若只选择一个，侧边栏只显示一个。",
     "tipWithGroups": "拖拽可排序；最多选择 {{max}} 个入口显示在侧边栏。分组子级不参与侧边栏/仪表盘开关，仅用于菜单栏与默认平台切换。",
@@ -1133,9 +1139,12 @@
       "codebuddyCnSettingsTitle": "CodeBuddy CN 设置",
       "zcodeAppPath": "ZCode 启动路径",
       "zcodeAppPathDesc": "留空则使用默认路径",
-      "qoderAppPath": "Qoder 启动路径",
+      "qoderAppPath": "Qoder IDE 启动路径",
       "qoderAppPathDesc": "留空则使用默认路径",
       "qoderAppPathPlaceholder": "默认路径",
+      "qoderAppAppPath": "Qoder 启动路径",
+      "qoderCnIdeAppPath": "Qoder CN IDE 启动路径",
+      "qoderCnAppPath": "Qoder CN 启动路径",
       "zcodeAutoRefresh": "ZCode 自动刷新",
       "zcodeAutoRefreshDesc": "后台配额刷新间隔",
       "qoderAutoRefresh": "Qoder 自动刷新配额",
@@ -4923,8 +4932,20 @@
       "openCodexConfigFailed": "打开 Codex config.toml 失败：{{error}}"
     },
     "qoder": {
+      "title": "Qoder IDE 设置",
+      "appPath": "Qoder IDE 启动路径"
+    },
+    "qoderApp": {
       "title": "Qoder 设置",
-      "appPath": "Qoder 路径"
+      "appPath": "Qoder 启动路径"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE 设置",
+      "appPath": "Qoder CN IDE 启动路径"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN 设置",
+      "appPath": "Qoder CN 启动路径"
     },
     "zcode": {
       "title": "ZCode 设置",

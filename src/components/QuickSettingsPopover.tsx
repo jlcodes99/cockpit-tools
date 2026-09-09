@@ -127,6 +127,9 @@ interface GeneralConfig {
   codebuddy_cn_app_path: string;
   codebuddy_cn_share_sessions_on_switch: boolean;
   qoder_app_path: string;
+  qoder_app_app_path?: string;
+  qoder_cn_ide_app_path?: string;
+  qoder_cn_app_path?: string;
   zcode_app_path: string;
   trae_app_path: string;
   trae_solo_app_path: string;
@@ -220,6 +223,9 @@ export type QuickSettingsType =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_app'
+  | 'qoder_cn_ide'
+  | 'qoder_cn_app'
   | 'zcode'
   | 'trae'
   | 'trae_solo'
@@ -240,6 +246,9 @@ type AppPathTarget =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_app'
+  | 'qoder_cn_ide'
+  | 'qoder_cn_app'
   | 'zcode'
   | 'trae'
   | 'trae_solo'
@@ -321,6 +330,12 @@ const getAppPathKeyForTarget = (target: AppPathTarget): keyof GeneralConfig => {
       return 'codebuddy_cn_app_path';
     case 'qoder':
       return 'qoder_app_path';
+    case 'qoder_app':
+      return 'qoder_app_app_path';
+    case 'qoder_cn_ide':
+      return 'qoder_cn_ide_app_path';
+    case 'qoder_cn_app':
+      return 'qoder_cn_app_path';
     case 'zcode':
       return 'zcode_app_path';
     case 'trae':
@@ -371,6 +386,12 @@ const getCurrentAccountRefreshPlatformForType = (
       return 'codebuddy_cn';
     case 'qoder':
       return 'qoder';
+    case 'qoder_app':
+      return 'qoder_app';
+    case 'qoder_cn_ide':
+      return 'qoder_cn_ide';
+    case 'qoder_cn_app':
+      return 'qoder_cn_app';
     case 'zcode':
       return 'zcode';
     case 'trae':
@@ -413,6 +434,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
   const [config, setConfig] = useState<GeneralConfig | null>(null);
   const [pathDetecting, setPathDetecting] = useState(false);
   const [appLaunchCandidates, setAppLaunchCandidates] = useState<AppLaunchCandidate[]>([]);
+  const [activeScanTarget, setActiveScanTarget] = useState<AppPathTarget | null>(null);
   const [openingCodexConfig, setOpeningCodexConfig] = useState(false);
   const [codexModelManagementConfig, setCodexModelManagementConfig] =
     useState<CodexQuickConfig | null>(null);
@@ -810,7 +832,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'grok': return 'grok_auto_refresh_minutes';
       case 'codebuddy': return 'codebuddy_auto_refresh_minutes';
       case 'codebuddy_cn': return 'codebuddy_cn_auto_refresh_minutes';
-      case 'qoder': return 'qoder_auto_refresh_minutes';
+      case 'qoder':
+      case 'qoder_app':
+      case 'qoder_cn_ide':
+      case 'qoder_cn_app': return 'qoder_auto_refresh_minutes';
       case 'zcode': return 'zcode_auto_refresh_minutes';
       case 'trae': return 'trae_auto_refresh_minutes';
       case 'trae_solo': return 'trae_solo_auto_refresh_minutes';
@@ -866,6 +891,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       if (!path || !config) return;
 
       setAppLaunchCandidates([]);
+      setActiveScanTarget(null);
       saveConfig({ [getAppPathKeyForTarget(target)]: path });
     } catch (err) {
       console.error('Failed to pick path:', err);
@@ -878,6 +904,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
   const handleResetAppPath = async (target: AppPathTarget) => {
     if (pathDetecting) return;
+    setActiveScanTarget(target);
     if (isWindows) {
       setPathDetecting(true);
       setError(null);
@@ -910,6 +937,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
     try {
       const detected = await invoke<string | null>('detect_app_path', { app: target, force: true });
       setAppLaunchCandidates([]);
+      setActiveScanTarget(null);
       saveConfig({ [getAppPathKeyForTarget(target)]: detected || '' });
     } catch (err) {
       console.error('Failed to reset path:', err);
@@ -924,7 +952,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
 
   const handleSelectAppLaunchCandidate = (candidate: AppLaunchCandidate) => {
     setError(null);
-    saveConfig({ [getAppPathKeyForTarget(getAppTarget())]: candidate.target });
+    const target = activeScanTarget || getAppTarget();
+    saveConfig({ [getAppPathKeyForTarget(target)]: candidate.target });
+    setAppLaunchCandidates([]);
+    setActiveScanTarget(null);
   };
 
   const handlePickCodexSpecifiedAppPath = async () => {
@@ -981,7 +1012,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         case 'codebuddy_cn':
           return 'CodeBuddy CN';
         case 'qoder':
+          return 'Qoder IDE';
+        case 'qoder_app':
           return 'Qoder';
+        case 'qoder_cn_ide':
+          return 'Qoder CN IDE';
+        case 'qoder_cn_app':
+          return 'Qoder CN';
         case 'zcode':
           return 'ZCode';
         case 'trae':
@@ -1058,6 +1095,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'codebuddy_cn':
         return 'codebuddy_cn_quota_alert_enabled';
       case 'qoder':
+      case 'qoder_app':
+      case 'qoder_cn_ide':
+      case 'qoder_cn_app':
         return 'qoder_quota_alert_enabled';
       case 'trae':
         return 'trae_quota_alert_enabled';
@@ -1097,6 +1137,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'codebuddy_cn':
         return 'codebuddy_cn_quota_alert_threshold';
       case 'qoder':
+      case 'qoder_app':
+      case 'qoder_cn_ide':
+      case 'qoder_cn_app':
         return 'qoder_quota_alert_threshold';
       case 'trae':
         return 'trae_quota_alert_threshold';
@@ -1138,6 +1181,9 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'codebuddy_cn':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'qoder':
+      case 'qoder_app':
+      case 'qoder_cn_ide':
+      case 'qoder_cn_app':
         return t('quickSettings.refreshInterval', '配额自动刷新');
       case 'zcode':
         return t('quickSettings.refreshInterval', '配额自动刷新');
@@ -1181,6 +1227,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return config.codebuddy_cn_app_path;
       case 'qoder':
         return config.qoder_app_path;
+      case 'qoder_app':
+        return config.qoder_app_app_path || '';
+      case 'qoder_cn_ide':
+        return config.qoder_cn_ide_app_path || '';
+      case 'qoder_cn_app':
+        return config.qoder_cn_app_path || '';
       case 'zcode':
         return config.zcode_app_path || '';
       case 'trae':
@@ -1223,7 +1275,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
       case 'codebuddy_cn':
         return t('quickSettings.codebuddyCn.appPath', 'CodeBuddy CN 路径');
       case 'qoder':
-        return t('quickSettings.qoder.appPath', 'Qoder 路径');
+        return t('quickSettings.qoder.appPath', 'Qoder IDE 启动路径');
+      case 'qoder_app':
+        return t('quickSettings.qoderApp.appPath', 'Qoder 启动路径');
+      case 'qoder_cn_ide':
+        return t('quickSettings.qoderCnIde.appPath', 'Qoder CN IDE 启动路径');
+      case 'qoder_cn_app':
+        return t('quickSettings.qoderCnApp.appPath', 'Qoder CN 启动路径');
       case 'zcode':
         return t('quickSettings.zcode.appPath', 'ZCode 启动路径');
       case 'trae':
@@ -1265,6 +1323,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
         return 'codebuddy_cn';
       case 'qoder':
         return 'qoder';
+      case 'qoder_app':
+        return 'qoder_app';
+      case 'qoder_cn_ide':
+        return 'qoder_cn_ide';
+      case 'qoder_cn_app':
+        return 'qoder_cn_app';
       case 'zcode':
         return 'zcode';
       case 'trae':
@@ -2443,71 +2507,81 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   </>
                 )}
                 {config && (type !== 'antigravity' || antigravityLaunchOnSwitch) && (
-	                <div className="qs-path-control">
-                  <input
-                    type="text"
-                    className="qs-path-input"
-                    value={getAppPath()}
-                    placeholder={
-                      type === 'claude'
-                        ? t(
-                            'quickSettings.claude.appTargetPlaceholder',
-                            'Claude.exe 路径或 shell:AppsFolder\\...',
-                          )
-                        : t('settings.general.codexAppPathPlaceholder', '默认路径')
-                    }
-                    onChange={(e) => {
-                      setAppLaunchCandidates([]);
-                      saveConfig({ [getAppPathKeyForTarget(getAppTarget())]: e.target.value });
-                    }}
-                  />
-                  <div className="qs-path-actions">
-                    {type === 'zcode' && (
+                  <div className="qs-path-control">
+                    <input
+                      type="text"
+                      className="qs-path-input"
+                      value={getAppPath()}
+                      placeholder={
+                        type === 'claude'
+                          ? t(
+                              'quickSettings.claude.appTargetPlaceholder',
+                              'Claude.exe 路径或 shell:AppsFolder\\...',
+                            )
+                          : type === 'qoder'
+                            ? 'C:\\Program Files\\Qoder IDE\\Qoder IDE.exe'
+                            : type === 'qoder_app'
+                              ? 'C:\\Program Files\\Qoder\\Qoder\\Qoder.exe'
+                              : type === 'qoder_cn_ide'
+                                ? 'C:\\Program Files\\Qoder CN IDE\\Qoder CN IDE.exe'
+                                : type === 'qoder_cn_app'
+                                  ? 'C:\\Program Files\\Qoder CN\\Qoder CN\\Qoder CN.exe'
+                                  : t('settings.general.codexAppPathPlaceholder', '默认路径')
+                      }
+                      onChange={(e) => {
+                        setAppLaunchCandidates([]);
+                        setActiveScanTarget(null);
+                        saveConfig({ [getAppPathKeyForTarget(getAppTarget())]: e.target.value });
+                      }}
+                    />
+                    <div className="qs-path-actions">
+                      {type === 'zcode' && (
+                        <button
+                          className="qs-btn"
+                          onClick={() => {
+                            setAppLaunchCandidates([]);
+                            setActiveScanTarget(null);
+                            saveConfig({ zcode_app_path: '' });
+                          }}
+                          disabled={pathDetecting || !getAppPath().trim()}
+                          title={t('common.clear', '清除')}
+                        >
+                          {t('common.clear', '清除')}
+                        </button>
+                      )}
                       <button
                         className="qs-btn"
-                        onClick={() => {
-                          setAppLaunchCandidates([]);
-                          saveConfig({ zcode_app_path: '' });
-                        }}
-                        disabled={pathDetecting || !getAppPath().trim()}
-                        title={t('common.clear', '清除')}
+                        onClick={() => handlePickAppPath(getAppTarget())}
+                        disabled={pathDetecting}
+                        title={t('settings.general.codexPathSelect', '选择')}
                       >
-                        {t('common.clear', '清除')}
+                        {t('settings.general.codexPathSelect', '选择')}
                       </button>
-                    )}
-                    <button
-                      className="qs-btn"
-                      onClick={() => handlePickAppPath(getAppTarget())}
-                      disabled={pathDetecting}
-                      title={t('settings.general.codexPathSelect', '选择')}
-                    >
-                      {t('settings.general.codexPathSelect', '选择')}
-                    </button>
-                    <button
-                      className="qs-btn"
-                      onClick={() => handleResetAppPath(getAppTarget())}
-                      disabled={pathDetecting}
-                      title={
-                        pathDetecting
-                          ? t('common.loading', '加载中...')
-                          : isWindows
-                            ? t('appPath.missing.scanApps', '检测运行中应用')
-                            : t('settings.general.codexPathReset', '恢复默认')
-                      }
-                    >
-                      {isWindows ? (
-                        pathDetecting
-                          ? t('common.loading', '加载中...')
-                          : t('appPath.missing.scanApps', '检测运行中应用')
-                      ) : (
-                        <RefreshCw size={12} className={pathDetecting ? 'spin' : undefined} />
-                      )}
-                    </button>
-	                  </div>
-	                </div>
+                      <button
+                        className="qs-btn"
+                        onClick={() => handleResetAppPath(getAppTarget())}
+                        disabled={pathDetecting}
+                        title={
+                          pathDetecting
+                            ? t('common.loading', '加载中...')
+                            : isWindows
+                              ? t('appPath.missing.scanApps', '检测运行中应用')
+                              : t('settings.general.codexPathReset', '恢复默认')
+                        }
+                      >
+                        {isWindows ? (
+                          pathDetecting
+                            ? t('common.loading', '加载中...')
+                            : t('appPath.missing.scanApps', '检测运行中应用')
+                        ) : (
+                          <RefreshCw size={12} className={pathDetecting ? 'spin' : undefined} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 )}
 
-	                {isWindows && config && (
+                {isWindows && config && (
                   <>
                     {appLaunchCandidates.length > 0 && (
                       <div className="qs-claude-candidate-list">
@@ -2516,7 +2590,12 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                             key={`${candidate.target_type}:${candidate.target}`}
                             type="button"
                             className={`qs-claude-candidate-item${
-                              getAppPath().trim() === candidate.target ? ' selected' : ''
+                              (activeScanTarget
+                                ? (config ? (config[getAppPathKeyForTarget(activeScanTarget)] as string || '') : '')
+                                : getAppPath()
+                              ).trim() === candidate.target
+                                ? ' selected'
+                                : ''
                             }`}
                             onClick={() => handleSelectAppLaunchCandidate(candidate)}
                           >

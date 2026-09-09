@@ -200,8 +200,14 @@ pub struct GeneralConfig {
     pub codebuddy_cn_app_path: String,
     /// 切换 CodeBuddy CN 账号时是否在本机账号间合并本地会话
     pub codebuddy_cn_share_sessions_on_switch: bool,
-    /// Qoder 启动路径（为空则使用默认路径）
+    /// Qoder 启动路径（国际版 IDE，为空则使用默认路径）
     pub qoder_app_path: String,
+    /// Qoder 国际版 App / Launcher 启动路径
+    pub qoder_app_app_path: String,
+    /// Qoder 国内版 IDE 启动路径
+    pub qoder_cn_ide_app_path: String,
+    /// Qoder 国内版 App 启动路径
+    pub qoder_cn_app_path: String,
     /// ZCode 启动路径（为空则使用默认路径）
     pub zcode_app_path: String,
     /// Trae 启动路径（为空则使用默认路径）
@@ -1192,6 +1198,9 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codebuddy_cn_app_path"
             | "codebuddy_cn_share_sessions_on_switch"
             | "qoder_app_path"
+            | "qoder_app_app_path"
+            | "qoder_cn_ide_app_path"
+            | "qoder_cn_app_path"
             | "zcode_app_path"
             | "trae_app_path"
             | "trae_solo_app_path"
@@ -1371,6 +1380,9 @@ fn apply_general_config_updates(
     normalize_app_path_field!("codebuddy_app_path", codebuddy_app_path);
     normalize_app_path_field!("codebuddy_cn_app_path", codebuddy_cn_app_path);
     normalize_app_path_field!("qoder_app_path", qoder_app_path);
+    normalize_app_path_field!("qoder_app_app_path", qoder_app_app_path);
+    normalize_app_path_field!("qoder_cn_ide_app_path", qoder_cn_ide_app_path);
+    normalize_app_path_field!("qoder_cn_app_path", qoder_cn_app_path);
     normalize_app_path_field!("zcode_app_path", zcode_app_path);
     normalize_app_path_field!("trae_app_path", trae_app_path);
     normalize_app_path_field!("trae_solo_app_path", trae_solo_app_path);

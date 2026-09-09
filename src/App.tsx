@@ -215,6 +215,9 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'codebuddy',
   'codebuddy-cn',
   'qoder',
+  'qoder-app',
+  'qoder-cn',
+  'qoder-cn-app',
   'zcode',
   'trae',
   'trae-solo',
@@ -250,7 +253,10 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   grok: ['grok'],
   codebuddy: ['codebuddy'],
   'codebuddy-cn': ['codebuddy-cn'],
-  qoder: ['qoder'],
+  qoder: ['qoder', 'qoder-suite'],
+  'qoder-app': ['qoder-app', 'qoder-suite'],
+  'qoder-cn': ['qoder-cn', 'qoder-suite'],
+  'qoder-cn-app': ['qoder-cn-app', 'qoder-suite'],
   zcode: ['zcode'],
   trae: ['trae', 'trae-suite'],
   'trae-solo': ['trae-solo', 'trae-suite'],
@@ -395,6 +401,9 @@ type AppPathMissingDetail = {
     | 'codebuddy'
     | 'codebuddy_cn'
     | 'qoder'
+    | 'qoder_app'
+    | 'qoder_cn_ide'
+    | 'qoder_cn_app'
     | 'trae'
     | 'trae_solo'
     | 'trae_cn'
@@ -426,6 +435,10 @@ const WAKEUP_FORCE_DISABLE_MIGRATION_KEY = 'agtools.wakeup.migration.force_disab
 
 function isTraePlatformApp(app: string): app is 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn' {
   return app === 'trae' || app === 'trae_solo' || app === 'trae_cn' || app === 'trae_solo_cn';
+}
+
+function isQoderPlatformApp(app: string): app is 'qoder' | 'qoder_app' | 'qoder_cn_ide' | 'qoder_cn_app' {
+  return app === 'qoder' || app === 'qoder_app' || app === 'qoder_cn_ide' || app === 'qoder_cn_app';
 }
 
 type TraePlatformApp = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
@@ -596,6 +609,12 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
     case 'codebuddy_cn':
       return 'codebuddy_cn';
     case 'qoder':
+    case 'qoder-app':
+    case 'qoder_app':
+    case 'qoder-cn':
+    case 'qoder_cn_ide':
+    case 'qoder-cn-app':
+    case 'qoder_cn_app':
       return 'qoder';
     case 'trae':
     case 'trae-solo':
@@ -3186,7 +3205,7 @@ function MainApp() {
         detail.app !== 'cursor' &&
         detail.app !== 'codebuddy' &&
         detail.app !== 'codebuddy_cn' &&
-        detail.app !== 'qoder' &&
+        !isQoderPlatformApp(detail.app) &&
         !isTraePlatformApp(detail.app) &&
         detail.app !== 'workbuddy' &&
         detail.app !== 'zed'
@@ -3836,7 +3855,7 @@ function MainApp() {
                                       ? t('settings.general.codebuddyPathReset', '重置默认')
                                     : appPathMissing.app === 'codebuddy_cn'
                                       ? t('settings.general.codebuddyPathReset', '重置默认')
-                                    : appPathMissing.app === 'qoder'
+                                    : isQoderPlatformApp(appPathMissing.app)
                                       ? t('settings.general.qoderPathReset', '重置默认')
                                     : isTraePlatformApp(appPathMissing.app)
                                       ? t('settings.general.traePathReset', '重置默认')
@@ -4047,7 +4066,16 @@ function MainApp() {
             <CodebuddyCnAccountsPage />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'qoder'}>
-            <QoderAccountsPage />
+            <QoderAccountsPage platformId="qoder" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'qoder-app'}>
+            <QoderAccountsPage platformId="qoder_app" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'qoder-cn'}>
+            <QoderAccountsPage platformId="qoder_cn_ide" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'qoder-cn-app'}>
+            <QoderAccountsPage platformId="qoder_cn_app" />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'zcode'}>
             <ZcodeAccountsPage />

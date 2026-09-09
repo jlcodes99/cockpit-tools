@@ -1720,7 +1720,7 @@ fn build_qoder_display_info(lang: &str) -> AccountDisplayInfo {
         json_nested(&account.auth_credit_usage_raw, &["tier_name"]),
         json_nested(&account.auth_credit_usage_raw, &["tierName"]),
         json_nested(&account.auth_credit_usage_raw, &["planTierName"]),
-        account.plan_type.as_deref().map(|s| s.to_string()),
+        account.plan_type.clone(),
     ]);
     if let Some(ref tag) = plan_tag {
         quota_lines.push(format!("Plan: {}", tag));
@@ -1752,48 +1752,48 @@ fn build_qoder_display_info(lang: &str) -> AccountDisplayInfo {
         &user_quota,
     ));
 
-    // Parse addOnQuota
+    // Parse addOnQuota (including enterprise orgResourcePackage)
     let addon_quota = parse_qoder_quota_bucket(
         &[
             json_nested_obj(&account.auth_credit_usage_raw, &["addOnQuota"]),
             json_nested_obj(&account.auth_credit_usage_raw, &["addonQuota"]),
             json_nested_obj(&account.auth_credit_usage_raw, &["add_on_quota"]),
+            json_nested_obj(&account.auth_credit_usage_raw, &["orgResourcePackage"]),
+            json_nested_obj(&account.auth_credit_usage_raw, &["organizationResourcePackage"]),
+            json_nested_obj(&account.auth_credit_usage_raw, &["sharedCreditPackage"]),
+            json_nested_obj(&account.auth_credit_usage_raw, &["resourcePackage"]),
             json_nested_obj(&account.auth_user_plan_raw, &["addOnQuota"]),
             json_nested_obj(&account.auth_user_plan_raw, &["addonQuota"]),
             json_nested_obj(&account.auth_user_plan_raw, &["add_on_quota"]),
+            json_nested_obj(&account.auth_user_plan_raw, &["orgResourcePackage"]),
+            json_nested_obj(&account.auth_user_plan_raw, &["organizationResourcePackage"]),
         ],
         None,
     );
 
-    let addon_label = if lang == "zh" || lang == "zh-CN" {
-        "附加 Credits"
-    } else {
-        "Add-on Credits"
-    };
-    quota_lines.push(format_qoder_quota_line(
-        lang,
-        addon_label,
-        &None,
-        &addon_quota,
-    ));
+    let has_addon = addon_quota.total.unwrap_or(0.0) > 0.0
+        || addon_quota.used.unwrap_or(0.0) > 0.0
+        || addon_quota.percentage.is_some();
 
-    // Parse shared credit package
+    if has_addon {
+        let addon_label = if lang == "zh" || lang == "zh-CN" {
+            "附加 Credits"
+        } else {
+            "Add-on Credits"
+        };
+        quota_lines.push(format_qoder_quota_line(
+            lang,
+            addon_label,
+            &None,
+            &addon_quota,
+        ));
+    }
+
+    // Parse independent shared credit package
     let shared_used = json_first_f64(&[
         json_nested_f64(
             &account.auth_credit_usage_raw,
             &["orgResourcePackage", "used"],
-        ),
-        json_nested_f64(
-            &account.auth_credit_usage_raw,
-            &["orgResourcePackage", "usage"],
-        ),
-        json_nested_f64(
-            &account.auth_credit_usage_raw,
-            &["orgResourcePackage", "consumed"],
-        ),
-        json_nested_f64(
-            &account.auth_credit_usage_raw,
-            &["orgResourcePackage", "count"],
         ),
         json_nested_f64(
             &account.auth_credit_usage_raw,
@@ -1806,15 +1806,20 @@ fn build_qoder_display_info(lang: &str) -> AccountDisplayInfo {
         json_nested_f64(&account.auth_credit_usage_raw, &["resourcePackage", "used"]),
         json_nested_f64(&account.auth_user_plan_raw, &["orgResourcePackage", "used"]),
     ]);
-    let shared_label = if lang == "zh" || lang == "zh-CN" {
-        "共享资源包"
-    } else {
-        "Shared Package"
-    };
-    if let Some(used) = shared_used {
-        quota_lines.push(format!("{}: {:.0}", shared_label, used));
-    } else {
-        quota_lines.push(format!("{}: --", shared_label));
+
+    let show_shared = shared_used.map_or(false, |u| {
+        u > 0.0 && (!has_addon || addon_quota.used != Some(u))
+    });
+
+    if show_shared {
+        let shared_label = if lang == "zh" || lang == "zh-CN" {
+            "共享资源包"
+        } else {
+            "Shared Package"
+        };
+        if let Some(used) = shared_used {
+            quota_lines.push(format!("{}: {:.0}", shared_label, used));
+        }
     }
 
     let display_email = first_non_empty(&[
@@ -1943,6 +1948,7 @@ fn parse_qoder_quota_bucket(
         .and_then(|r| {
             json_first_f64(&[
                 r.get("total").and_then(json_as_f64),
+                r.get("cap").and_then(json_as_f64),
                 r.get("quota").and_then(json_as_f64),
                 r.get("limit").and_then(json_as_f64),
             ])
@@ -3894,5 +3900,29 @@ fn get_text(key: &str, lang: &str) -> String {
         ("no_platform_selected", _) => "No tray platforms selected".to_string(),
 
         _ => key.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_parse_qoder_enterprise_org_resource_package() {
+        let org_pkg = json!({
+            "available": true,
+            "cap": 14000,
+            "percentage": 0,
+            "remaining": 14000,
+            "unit": "credits",
+            "used": 0
+        });
+
+        let bucket = parse_qoder_quota_bucket(&[Some(org_pkg)], None);
+
+        assert_eq!(bucket.used, Some(0.0));
+        assert_eq!(bucket.total, Some(14000.0));
+        assert_eq!(bucket.percentage, Some(0.0));
     }
 }

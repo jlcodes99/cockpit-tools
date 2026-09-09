@@ -51,7 +51,12 @@ import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { usePlatformLayoutStore } from '../stores/usePlatformLayoutStore';
 import { useRemoteConfigStore } from '../stores/useRemoteConfigStore';
 import { applyReducedMotion } from '../utils/reducedMotion';
-import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import {
+  useQoderAccountStore,
+  useQoderAppAccountStore,
+  useQoderCnIdeAccountStore,
+  useQoderCnAppAccountStore,
+} from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
@@ -68,7 +73,12 @@ import { useGitHubCopilotInstanceStore } from '../stores/useGitHubCopilotInstanc
 import type { InstanceStoreState } from '../stores/createInstanceStore';
 import { useInstanceStore } from '../stores/useInstanceStore';
 import { useKiroInstanceStore } from '../stores/useKiroInstanceStore';
-import { useQoderInstanceStore } from '../stores/useQoderInstanceStore';
+import {
+  useQoderInstanceStore,
+  useQoderAppInstanceStore,
+  useQoderCnIdeInstanceStore,
+  useQoderCnAppInstanceStore,
+} from '../stores/useQoderInstanceStore';
 import {
   useTraeCnInstanceStore,
   useTraeInstanceStore,
@@ -216,6 +226,12 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useCodebuddyCnInstanceStore.getState();
     case 'qoder':
       return useQoderInstanceStore.getState();
+    case 'qoder_app':
+      return useQoderAppInstanceStore.getState();
+    case 'qoder_cn_ide':
+      return useQoderCnIdeInstanceStore.getState();
+    case 'qoder_cn_app':
+      return useQoderCnAppInstanceStore.getState();
     case 'trae':
       return useTraeInstanceStore.getState();
     case 'trae_solo':
@@ -287,6 +303,18 @@ export function FloatingCardWindow() {
     accounts: qoderAccounts,
     currentAccountId: qoderCurrentId,
   } = useQoderAccountStore();
+  const {
+    accounts: qoderAppAccounts,
+    currentAccountId: qoderAppCurrentId,
+  } = useQoderAppAccountStore();
+  const {
+    accounts: qoderCnIdeAccounts,
+    currentAccountId: qoderCnIdeCurrentId,
+  } = useQoderCnIdeAccountStore();
+  const {
+    accounts: qoderCnAppAccounts,
+    currentAccountId: qoderCnAppCurrentId,
+  } = useQoderCnAppAccountStore();
   const {
     accounts: zcodeAccounts,
     currentAccountId: zcodeCurrentId,
@@ -513,6 +541,15 @@ export function FloatingCardWindow() {
           break;
         case 'qoder':
           await useQoderAccountStore.getState().fetchAccounts();
+          break;
+        case 'qoder_app':
+          await useQoderAppAccountStore.getState().fetchAccounts();
+          break;
+        case 'qoder_cn_ide':
+          await useQoderCnIdeAccountStore.getState().fetchAccounts();
+          break;
+        case 'qoder_cn_app':
+          await useQoderCnAppAccountStore.getState().fetchAccounts();
           break;
         case 'zcode':
           await useZcodeAccountStore.getState().fetchAccounts();
@@ -812,6 +849,18 @@ export function FloatingCardWindow() {
     () => resolveCurrentAccountById(qoderAccounts, qoderCurrentId),
     [qoderAccounts, qoderCurrentId],
   );
+  const qoderAppCurrent = useMemo(
+    () => resolveCurrentAccountById(qoderAppAccounts, qoderAppCurrentId),
+    [qoderAppAccounts, qoderAppCurrentId],
+  );
+  const qoderCnIdeCurrent = useMemo(
+    () => resolveCurrentAccountById(qoderCnIdeAccounts, qoderCnIdeCurrentId),
+    [qoderCnIdeAccounts, qoderCnIdeCurrentId],
+  );
+  const qoderCnAppCurrent = useMemo(
+    () => resolveCurrentAccountById(qoderCnAppAccounts, qoderCnAppCurrentId),
+    [qoderCnAppAccounts, qoderCnAppCurrentId],
+  );
   const zcodeCurrent = useMemo(
     () => resolveCurrentAccountById(zcodeAccounts, zcodeCurrentId),
     [zcodeAccounts, zcodeCurrentId],
@@ -891,6 +940,21 @@ export function FloatingCardWindow() {
         return {
           accounts: qoderAccounts,
           actualCurrentAccount: qoderCurrent,
+        };
+      case 'qoder_app':
+        return {
+          accounts: qoderAppAccounts,
+          actualCurrentAccount: qoderAppCurrent,
+        };
+      case 'qoder_cn_ide':
+        return {
+          accounts: qoderCnIdeAccounts,
+          actualCurrentAccount: qoderCnIdeCurrent,
+        };
+      case 'qoder_cn_app':
+        return {
+          accounts: qoderCnAppAccounts,
+          actualCurrentAccount: qoderCnAppCurrent,
         };
       case 'trae':
       case 'trae_solo':
@@ -994,6 +1058,12 @@ export function FloatingCardWindow() {
         return getRecommendedCodebuddyCnAccount(codebuddyCnAccounts, effectiveCurrentId);
       case 'qoder':
         return getRecommendedQoderAccount(qoderAccounts, effectiveCurrentId);
+      case 'qoder_app':
+        return getRecommendedQoderAccount(qoderAppAccounts, effectiveCurrentId);
+      case 'qoder_cn_ide':
+        return getRecommendedQoderAccount(qoderCnIdeAccounts, effectiveCurrentId);
+      case 'qoder_cn_app':
+        return getRecommendedQoderAccount(qoderCnAppAccounts, effectiveCurrentId);
       case 'zcode':
         return getRecommendedZcodeAccount(zcodeAccounts, effectiveCurrentId);
       case 'trae':
@@ -1092,6 +1162,9 @@ export function FloatingCardWindow() {
       case 'codebuddy_cn':
         return buildCodebuddyAccountPresentation(viewedAccount as typeof codebuddyCnAccounts[number], t);
       case 'qoder':
+      case 'qoder_app':
+      case 'qoder_cn_ide':
+      case 'qoder_cn_app':
         return buildQoderAccountPresentation(viewedAccount as typeof qoderAccounts[number], t);
       case 'trae':
       case 'trae_solo':
@@ -1200,6 +1273,15 @@ export function FloatingCardWindow() {
             break;
           case 'qoder':
             await useQoderAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 'qoder_app':
+            await useQoderAppAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 'qoder_cn_ide':
+            await useQoderCnIdeAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 'qoder_cn_app':
+            await useQoderCnAppAccountStore.getState().refreshToken(viewedAccount.id);
             break;
           case 'zcode':
             await useZcodeAccountStore.getState().refreshToken(viewedAccount.id);
@@ -1330,6 +1412,15 @@ export function FloatingCardWindow() {
             break;
           case 'qoder':
             await useQoderAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'qoder_app':
+            await useQoderAppAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'qoder_cn_ide':
+            await useQoderCnIdeAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'qoder_cn_app':
+            await useQoderCnAppAccountStore.getState().switchAccount(viewedAccount.id);
             break;
           case 'zcode':
             await useZcodeAccountStore.getState().switchAccount(viewedAccount.id);

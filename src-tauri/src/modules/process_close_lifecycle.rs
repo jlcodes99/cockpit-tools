@@ -104,15 +104,18 @@ pub fn close_antigravity_legacy_instances(
     )
 }
 
-fn close_user_data_dir_scoped_instances(
+fn close_user_data_dir_scoped_instances<F>(
     log_prefix: &str,
     process_display_name: &str,
     failure_message: &str,
     user_data_dirs: &[String],
     timeout_secs: u64,
     default_dir: Option<String>,
-    collect_entries: fn() -> Vec<(u32, Option<String>)>,
-) -> Result<(), String> {
+    collect_entries: F,
+) -> Result<(), String>
+where
+    F: Fn() -> Vec<(u32, Option<String>)> + Copy,
+{
     crate::modules::logger::log_info(&format!(
         "[{}] default_dir={}",
         log_prefix,
@@ -121,6 +124,7 @@ fn close_user_data_dir_scoped_instances(
             .map(|value| summarize_text_for_process_log(value, 96))
             .unwrap_or_else(|| "-".to_string())
     ));
+    let default_dir_ref = default_dir.as_deref();
     close_managed_instances_common(
         log_prefix,
         &format!("Closing {} instances...", process_display_name),
@@ -131,11 +135,11 @@ fn close_user_data_dir_scoped_instances(
         user_data_dirs,
         timeout_secs,
         collect_entries,
-        |entries, target_dirs| {
-            select_main_pids_by_target_dirs(entries, target_dirs, default_dir.as_deref())
+        move |entries, target_dirs| {
+            select_main_pids_by_target_dirs(entries, target_dirs, default_dir_ref)
         },
-        |target_dirs| {
-            filter_entries_by_target_dirs(collect_entries(), target_dirs, default_dir.as_deref())
+        move |target_dirs| {
+            filter_entries_by_target_dirs(collect_entries(), target_dirs, default_dir_ref)
         },
         None,
         None,
@@ -191,6 +195,32 @@ pub fn close_qoder_instances(user_data_dirs: &[String], timeout_secs: u64) -> Re
         timeout_secs,
         default_dir,
         collect_qoder_process_entries,
+    )
+}
+
+pub fn close_qoder_channel_instances(
+    channel: crate::modules::qoder_channel::QoderChannel,
+    user_data_dirs: &[String],
+    timeout_secs: u64,
+) -> Result<(), String> {
+    let default_dir = channel
+        .default_user_data_dir()
+        .ok()
+        .map(|value| normalize_path_for_compare(&value.to_string_lossy()))
+        .filter(|value| !value.is_empty());
+
+    let channel_title = channel.display_name();
+    close_user_data_dir_scoped_instances(
+        &format!("{} Close", channel_title),
+        channel_title,
+        &format!(
+            "Unable to close managed {} instances; please close them manually and retry",
+            channel_title
+        ),
+        user_data_dirs,
+        timeout_secs,
+        default_dir,
+        move || collect_qoder_channel_process_entries(channel),
     )
 }
 
