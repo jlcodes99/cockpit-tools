@@ -418,3 +418,21 @@ fn malformed_codex_index_fails_without_repairing_or_exposing_secrets() {
     assert_eq!(fs::read_to_string(index_path).unwrap(), malformed);
     fs::remove_dir_all(data_dir).expect("test data directory should be removable");
 }
+
+#[test]
+fn malformed_codex_instance_store_fails_without_repairing_or_exposing_secrets() {
+    let data_dir = isolated_data_dir();
+    let store_path = data_dir.join("codex_instances.json");
+    let malformed = "{\"access_token\":\"must-not-leak\"";
+    fs::write(&store_path, malformed).expect("malformed instance store should be written");
+
+    let (stdout, stderr, status) =
+        run_cli_in_data_dir(&["--json", "instances", "codex"], &data_dir);
+
+    assert!(!status.success());
+    assert!(stdout.is_empty());
+    assert!(!stderr.contains("must-not-leak"));
+    assert_eq!(fs::read_to_string(&store_path).unwrap(), malformed);
+    assert!(!data_dir.join("codex_instances.json.invalid-json").exists());
+    fs::remove_dir_all(data_dir).expect("test data directory should be removable");
+}

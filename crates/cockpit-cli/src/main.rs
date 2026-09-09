@@ -229,7 +229,7 @@ fn list_instances(platform: Platform, json: bool) -> Result<()> {
         );
     }
 
-    let store = codex_instance::load_instance_store().map_err(anyhow::Error::msg)?;
+    let store = codex_instance::load_instance_store_read_only().map_err(anyhow::Error::msg)?;
     let default_dir = codex_instance::get_default_codex_home().map_err(anyhow::Error::msg)?;
     let mut displays = store
         .instances
