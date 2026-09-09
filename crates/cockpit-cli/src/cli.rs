@@ -32,6 +32,20 @@ pub enum Commands {
         /// The platform.
         #[arg(ignore_case = true)]
         platform: Platform,
+        /// Optional account ID or email for a single-account snapshot.
+        account: Option<String>,
+    },
+    /// Show the current account for a platform.
+    Current {
+        /// The platform.
+        #[arg(ignore_case = true)]
+        platform: Platform,
+    },
+    /// List persisted instances for a platform.
+    Instances {
+        /// The platform.
+        #[arg(ignore_case = true)]
+        platform: Platform,
     },
 }
 
@@ -40,6 +54,7 @@ pub enum Platform {
     Cursor,
     #[value(alias = "github-copilot", alias = "github_copilot")]
     Copilot,
+    Codex,
 }
 
 impl Platform {
@@ -47,6 +62,7 @@ impl Platform {
         match self {
             Self::Cursor => "cursor",
             Self::Copilot => "copilot",
+            Self::Codex => "codex",
         }
     }
 }

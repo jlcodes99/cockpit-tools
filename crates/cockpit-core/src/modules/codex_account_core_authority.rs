@@ -299,6 +299,17 @@ pub fn get_current_account() -> Option<CodexAccount> {
     Some(account)
 }
 
+/// 读取当前账号，不修复索引、同步网络数据或写回本地 Codex auth 状态。
+pub fn get_current_account_read_only() -> Result<Option<CodexAccount>, String> {
+    let index = load_account_index_without_repair()?;
+    let Some(current_id) = index.current_account_id else {
+        return Ok(None);
+    };
+    load_account_detail_without_side_effects(&current_id)
+        .map(Some)
+        .ok_or_else(|| format!("当前账号详情不存在: {}", current_id))
+}
+
 fn mark_codex_auth_type(value: &mut serde_json::Value) {
     if let Some(obj) = value.as_object_mut() {
         obj.insert(
