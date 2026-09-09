@@ -590,7 +590,8 @@
     "customIconDeleteConfirm": "Delete this custom icon?",
     "editChildPlatform": "Edit child platform",
     "setAsDefaultInGroup": "Set as the default platform in this group",
-    "removeFromGroup": "Remove from group"
+    "removeFromGroup": "Remove from group",
+    "sidebarLimitReached": "Sidebar display limit reached ({{max}}). Please uncheck other platforms first."
   },
   "privacy": {
     "hideSensitive": "Hide emails",
@@ -2389,8 +2390,8 @@
       "modelConfigDialogDescription": "Configure visible models, reasoning levels, context windows, and compact limits for each model.",
       "applyModelConfig": "Apply settings",
       "defaultModel": "Default model",
-      "repairCompleted": "Session visibility repair completed"
-      ,"forceRefreshTitle": "Force-refresh Token",
+      "repairCompleted": "Session visibility repair completed",
+      "forceRefreshTitle": "Force-refresh Token",
       "forceRefreshReady": "OAuth tokens can be refreshed manually",
       "forceRefreshDescription": "Use refresh_token to obtain new access_token and id_token values. This may rotate the current refresh token.",
       "forceRefreshUnavailable": "Unavailable for this account type",

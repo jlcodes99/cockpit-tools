@@ -334,7 +334,12 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsorzy",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "Ustaw jako domyślną platformę w tej grupie",
     "removeFromGroup": "Usuń z grupy",
     "sidebarSelectedUnlimited": "Wybrano ({count})",
-    "tipWithGroupsUnlimited": "Ręczne sortowanie wybranych platform i grup"
+    "tipWithGroupsUnlimited": "Ręczne sortowanie wybranych platform i grup",
+    "sidebarLimitReached": "Osiągnięto limit paska bocznego ({{max}}). Odznacz najpierw inne platformy."
   },
   "privacy": {
     "hideSensitive": "Ukryj e-maile",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "Tylko zwykłe konta: wył. ukrywa prefiks e-mail. Usługa API Codex / API Key nadal pokazuje API",
       "menuBarQuotaConfirmEnable": "Włącz",
       "codexHideRelayQuota": "Ukryj limit relay",
-      "codexHideRelayQuotaDesc": "Ukrywa panele limitu relay / New API w przeglądzie kont Codex."
+      "codexHideRelayQuotaDesc": "Ukrywa panele limitu relay / New API w przeglądzie kont Codex.",
+      "qoderAppAppPath": "Ścieżka aplikacji Qoder",
+      "qoderCnIdeAppPath": "Ścieżka aplikacji Qoder CN IDE",
+      "qoderCnAppPath": "Ścieżka aplikacji Qoder CN"
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "Zażądano przywrócenia {{count}} kont(a)",
         "dialog": {
           "title": "Problemy kont",
-      "description": "Każde konto jest pokazane z modelem, powodem niedostępności i dostępną opcją przywrócenia.",
+          "description": "Każde konto jest pokazane z modelem, powodem niedostępności i dostępną opcją przywrócenia.",
           "noIssues": "Brak problemów z kontami",
           "unscopedApiKey": "Bieżący API Key",
           "poolUnavailable": "Brak dostępnego konta w puli",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "Ścieżka TRAE SOLO CN",
       "title": "Ustawienia TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "Ustawienia Qoder",
+      "appPath": "Ścieżka Qoder"
+    },
+    "qoderCnIde": {
+      "title": "Ustawienia Qoder CN IDE",
+      "appPath": "Ścieżka Qoder CN IDE"
+    },
+    "qoderCnApp": {
+      "title": "Ustawienia Qoder CN",
+      "appPath": "Ścieżka Qoder CN"
     }
   },
   "quotaAlert": {

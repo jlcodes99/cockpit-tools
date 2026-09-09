@@ -334,7 +334,12 @@
     "apiRelay": "中轉站",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "贊助商",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "設為群組內預設平台",
     "removeFromGroup": "移出群組",
     "sidebarSelectedUnlimited": "已選 ({count})",
-    "tipWithGroupsUnlimited": "手動排序已選擇的平台和分組"
+    "tipWithGroupsUnlimited": "手動排序已選擇的平台和分組",
+    "sidebarLimitReached": "側邊欄顯示已達上限（{{max}}個），請先取消勾選其他平台"
   },
   "privacy": {
     "hideSensitive": "隱藏電子郵件",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "僅一般帳號：關閉後不顯示信箱前綴。Codex API 服務 / API Key 仍會顯示 API 標籤",
       "menuBarQuotaConfirmEnable": "啟用",
       "codexHideRelayQuota": "隱藏中轉站額度",
-      "codexHideRelayQuotaDesc": "開啟後，Codex 帳號總覽隱藏中轉 / New API 類額度面板，減輕列表重疊與視覺干擾。"
+      "codexHideRelayQuotaDesc": "開啟後，Codex 帳號總覽隱藏中轉 / New API 類額度面板，減輕列表重疊與視覺干擾。",
+      "qoderAppAppPath": "Qoder 啟動路徑",
+      "qoderCnIdeAppPath": "Qoder CN IDE 啟動路徑",
+      "qoderCnAppPath": "Qoder CN 啟動路徑"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "已提交 {{count}} 個帳號的恢復操作",
         "dialog": {
           "title": "帳號異常",
-      "description": "以下狀態按帳號顯示，包含對應模型、無法使用原因及可執行的復原操作。",
+          "description": "以下狀態按帳號顯示，包含對應模型、無法使用原因及可執行的復原操作。",
           "noIssues": "目前沒有異常帳號",
           "unscopedApiKey": "目前 API Key",
           "poolUnavailable": "帳號池無可用帳號",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "TRAE SOLO CN 路徑",
       "title": "TRAE SOLO CN 設定"
+    },
+    "qoderApp": {
+      "title": "Qoder 設定",
+      "appPath": "Qoder 啟動路徑"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE 設定",
+      "appPath": "Qoder CN IDE 啟動路徑"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN 設定",
+      "appPath": "Qoder CN 啟動路徑"
     }
   },
   "quotaAlert": {

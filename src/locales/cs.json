@@ -334,7 +334,12 @@
     "apiRelay": "API relay",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponzoři",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "Nastavit jako výchozí platformu v této skupině",
     "removeFromGroup": "Odebrat ze skupiny",
     "sidebarSelectedUnlimited": "Vybráno ({count})",
-    "tipWithGroupsUnlimited": "Ruční seřazení vybraných platforem a skupin"
+    "tipWithGroupsUnlimited": "Ruční seřazení vybraných platforem a skupin",
+    "sidebarLimitReached": "Byl dosažen limit postranního panelu ({{max}}). Nejprve zrušte zaškrtnutí ostatních platforem."
   },
   "privacy": {
     "hideSensitive": "Skrýt e-maily",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "Jen běžné účty: vypnuto skryje prefix e-mailu. Codex API služba / API Key stále ukazují API",
       "menuBarQuotaConfirmEnable": "Zapnout",
       "codexHideRelayQuota": "Skrýt kvótu relay",
-      "codexHideRelayQuotaDesc": "Skryje panely kvóty relay / New API v přehledu účtů Codex."
+      "codexHideRelayQuotaDesc": "Skryje panely kvóty relay / New API v přehledu účtů Codex.",
+      "qoderAppAppPath": "Cesta k aplikaci Qoder",
+      "qoderCnIdeAppPath": "Cesta k aplikaci Qoder CN IDE",
+      "qoderCnAppPath": "Cesta k aplikaci Qoder CN"
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "Obnova vyžádána pro {{count}} účtů",
         "dialog": {
           "title": "Problémy účtů",
-      "description": "Každý účet je zobrazen s modelem, důvodem nedostupnosti a dostupnou akcí obnovení.",
+          "description": "Každý účet je zobrazen s modelem, důvodem nedostupnosti a dostupnou akcí obnovení.",
           "noIssues": "Účty jsou bez problémů",
           "unscopedApiKey": "Aktuální API Key",
           "poolUnavailable": "Ve fondu není dostupný účet",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "Cesta TRAE SOLO CN",
       "title": "Nastavení TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "Nastavení Qoder",
+      "appPath": "Cesta Qoder"
+    },
+    "qoderCnIde": {
+      "title": "Nastavení Qoder CN IDE",
+      "appPath": "Cesta Qoder CN IDE"
+    },
+    "qoderCnApp": {
+      "title": "Nastavení Qoder CN",
+      "appPath": "Cesta Qoder CN"
     }
   },
   "quotaAlert": {

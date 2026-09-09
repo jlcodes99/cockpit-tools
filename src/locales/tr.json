@@ -334,7 +334,12 @@
     "apiRelay": "Aktarım",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsorlar",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "Bu grupta varsayılan platform olarak ayarla",
     "removeFromGroup": "Gruptan kaldır",
     "sidebarSelectedUnlimited": "Seçilen ({count})",
-    "tipWithGroupsUnlimited": "Seçili platformları ve grupları manuel olarak sıralayın"
+    "tipWithGroupsUnlimited": "Seçili platformları ve grupları manuel olarak sıralayın",
+    "sidebarLimitReached": "Kenar çubuğu görüntüleme sınırına ulaşıldı ({{max}}). Lütfen önce diğer platformların işaretini kaldırın."
   },
   "privacy": {
     "hideSensitive": "E-postaları gizle",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "Yalnızca normal hesaplar: kapalı e-posta önekini gizler. Codex API hizmeti / API Key yine API etiketini gösterir",
       "menuBarQuotaConfirmEnable": "Etkinleştir",
       "codexHideRelayQuota": "Relay kotasını gizle",
-      "codexHideRelayQuotaDesc": "Codex hesap özetinde relay / New API kota panellerini gizler."
+      "codexHideRelayQuotaDesc": "Codex hesap özetinde relay / New API kota panellerini gizler.",
+      "qoderAppAppPath": "Qoder Uygulama Yolu",
+      "qoderCnIdeAppPath": "Qoder CN IDE Uygulama Yolu",
+      "qoderCnAppPath": "Qoder CN Uygulama Yolu"
     },
     "network": {
       "apiTitle": "Yerçekimine Karşı Kokpit API'si",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "{{count}} hesap için kurtarma istendi",
         "dialog": {
           "title": "Hesap Sorunları",
-      "description": "Her hesap model, kullanılamama nedeni ve varsa kurtarma işlemiyle birlikte gösterilir.",
+          "description": "Her hesap model, kullanılamama nedeni ve varsa kurtarma işlemiyle birlikte gösterilir.",
           "noIssues": "Hesaplarda sorun yok",
           "unscopedApiKey": "Geçerli API Key",
           "poolUnavailable": "Havuzda kullanılabilir hesap yok",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "TRAE SOLO CN Yolu",
       "title": "TRAE SOLO CN Ayarları"
+    },
+    "qoderApp": {
+      "title": "Qoder Ayarları",
+      "appPath": "Qoder Yolu"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE Ayarları",
+      "appPath": "Qoder CN IDE Yolu"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN Ayarları",
+      "appPath": "Qoder CN Yolu"
     }
   },
   "quotaAlert": {

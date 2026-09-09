@@ -381,7 +381,12 @@
     "apiRelay": "الترحيل",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "الرعاة",
@@ -433,7 +438,8 @@
     "setAsDefaultInGroup": "تعيينها كمنصة افتراضية في هذه المجموعة",
     "removeFromGroup": "إزالة من المجموعة",
     "sidebarSelectedUnlimited": "محدد ({count})",
-    "tipWithGroupsUnlimited": "فرز المنصات والمجموعات المحددة يدوياً"
+    "tipWithGroupsUnlimited": "فرز المنصات والمجموعات المحددة يدوياً",
+    "sidebarLimitReached": "تم الوصول إلى الحد الأقصى للشريط الجانبي ({{max}}). يرجى إلغاء تحديد المنصات الأخرى أولاً."
   },
   "privacy": {
     "hideSensitive": "إخفاء البريد الإلكتروني",
@@ -1055,7 +1061,10 @@
       "menuBarAccountPrefixDesc": "للحسابات العادية فقط: عند الإيقاف تُخفى بادئة البريد. خدمة API لـ Codex / مفتاح API ما زالا يعرضان تسمية API",
       "menuBarQuotaConfirmEnable": "تفعيل",
       "codexHideRelayQuota": "إخفاء حصة الترحيل",
-      "codexHideRelayQuotaDesc": "يخفي لوحات حصة الترحيل / New API في نظرة حسابات Codex."
+      "codexHideRelayQuotaDesc": "يخفي لوحات حصة الترحيل / New API في نظرة حسابات Codex.",
+      "qoderAppAppPath": "مسار تطبيق Qoder",
+      "qoderCnIdeAppPath": "مسار تطبيق Qoder CN IDE",
+      "qoderCnAppPath": "مسار تطبيق Qoder CN"
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -2664,7 +2673,7 @@
         "recoverSuccess": "طُلبت الاستعادة لـ {{count}} حساب",
         "dialog": {
           "title": "مشكلات الحسابات",
-      "description": "تُعرض الحالة لكل حساب مع النموذج وسبب عدم التوفر وإجراء الاستعادة المتاح.",
+          "description": "تُعرض الحالة لكل حساب مع النموذج وسبب عدم التوفر وإجراء الاستعادة المتاح.",
           "noIssues": "لا توجد مشاكل في الحسابات",
           "unscopedApiKey": "مفتاح API الحالي",
           "poolUnavailable": "لا يوجد حساب متاح في المجموعة",
@@ -4703,6 +4712,18 @@
     "traeSoloCn": {
       "appPath": "مسار TRAE SOLO CN",
       "title": "إعدادات TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "إعدادات Qoder",
+      "appPath": "مسار Qoder"
+    },
+    "qoderCnIde": {
+      "title": "إعدادات Qoder CN IDE",
+      "appPath": "مسار Qoder CN IDE"
+    },
+    "qoderCnApp": {
+      "title": "إعدادات Qoder CN",
+      "appPath": "مسار Qoder CN"
     }
   },
   "quotaAlert": {

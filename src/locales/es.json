@@ -334,7 +334,12 @@
     "apiRelay": "Relé",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Patrocinadores",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "Establecer como plataforma predeterminada de este grupo",
     "removeFromGroup": "Quitar del grupo",
     "sidebarSelectedUnlimited": "Seleccionado ({count})",
-    "tipWithGroupsUnlimited": "Ordene manualmente las plataformas y grupos seleccionados"
+    "tipWithGroupsUnlimited": "Ordene manualmente las plataformas y grupos seleccionados",
+    "sidebarLimitReached": "Se alcanzó el límite de la barra lateral ({{max}}). Desmarque otras plataformas primero."
   },
   "privacy": {
     "hideSensitive": "Ocultar correos",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "Solo cuentas normales: desactivado oculta el prefijo de correo. El servicio API de Codex / API Key siguen mostrando API",
       "menuBarQuotaConfirmEnable": "Activar",
       "codexHideRelayQuota": "Ocultar cuota relay",
-      "codexHideRelayQuotaDesc": "Oculta los paneles de cuota relay / New API en la vista de cuentas Codex."
+      "codexHideRelayQuotaDesc": "Oculta los paneles de cuota relay / New API en la vista de cuentas Codex.",
+      "qoderAppAppPath": "Ruta de la aplicación Qoder",
+      "qoderCnIdeAppPath": "Ruta de la aplicación Qoder CN IDE",
+      "qoderCnAppPath": "Ruta de la aplicación Qoder CN"
     },
     "network": {
       "apiTitle": "API de cabina antigravedad",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "Recuperación solicitada para {{count}} cuenta(s)",
         "dialog": {
           "title": "Problemas de cuentas",
-      "description": "Cada cuenta se muestra con su modelo, motivo de indisponibilidad y acción de recuperación disponible.",
+          "description": "Cada cuenta se muestra con su modelo, motivo de indisponibilidad y acción de recuperación disponible.",
           "noIssues": "No hay problemas de cuentas",
           "unscopedApiKey": "API Key actual",
           "poolUnavailable": "No hay cuentas disponibles en el grupo",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "Ruta de TRAE SOLO CN",
       "title": "Configuración de TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "Configuración de Qoder",
+      "appPath": "Ruta de Qoder"
+    },
+    "qoderCnIde": {
+      "title": "Configuración de Qoder CN IDE",
+      "appPath": "Ruta de Qoder CN IDE"
+    },
+    "qoderCnApp": {
+      "title": "Configuración de Qoder CN",
+      "appPath": "Ruta de Qoder CN"
     }
   },
   "quotaAlert": {

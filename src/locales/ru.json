@@ -334,7 +334,12 @@
     "apiRelay": "Релей",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Спонсоры",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "Сделать платформой по умолчанию в этой группе",
     "removeFromGroup": "Удалить из группы",
     "sidebarSelectedUnlimited": "Выбрано ({count})",
-    "tipWithGroupsUnlimited": "Сортировать выбранные платформы и группы вручную"
+    "tipWithGroupsUnlimited": "Сортировать выбранные платформы и группы вручную",
+    "sidebarLimitReached": "Достигнут лимит боковой панели ({{max}}). Сначала снимите выбор с других платформ."
   },
   "privacy": {
     "hideSensitive": "Скрыть e-mail",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "Только обычные аккаунты: выкл. скрывает префикс почты. API-сервис Codex / API Key по-прежнему показывают API",
       "menuBarQuotaConfirmEnable": "Включить",
       "codexHideRelayQuota": "Скрыть квоту ретранслятора",
-      "codexHideRelayQuotaDesc": "Скрывает панели квоты ретранслятора / New API в обзоре аккаунтов Codex."
+      "codexHideRelayQuotaDesc": "Скрывает панели квоты ретранслятора / New API в обзоре аккаунтов Codex.",
+      "qoderAppAppPath": "Путь приложения Qoder",
+      "qoderCnIdeAppPath": "Путь приложения Qoder CN IDE",
+      "qoderCnAppPath": "Путь приложения Qoder CN"
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "Запрошено восстановление {{count}} аккаунт(ов)",
         "dialog": {
           "title": "Проблемы аккаунтов",
-      "description": "Для каждого аккаунта показываются модель, причина недоступности и доступное действие восстановления.",
+          "description": "Для каждого аккаунта показываются модель, причина недоступности и доступное действие восстановления.",
           "noIssues": "Проблем с аккаунтами нет",
           "unscopedApiKey": "Текущий API Key",
           "poolUnavailable": "В пуле нет доступного аккаунта",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "Путь TRAE SOLO CN",
       "title": "Настройки TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "Настройки Qoder",
+      "appPath": "Путь Qoder"
+    },
+    "qoderCnIde": {
+      "title": "Настройки Qoder CN IDE",
+      "appPath": "Путь Qoder CN IDE"
+    },
+    "qoderCnApp": {
+      "title": "Настройки Qoder CN",
+      "appPath": "Путь Qoder CN"
     }
   },
   "quotaAlert": {

@@ -334,7 +334,12 @@
     "apiRelay": "API-Relay",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Sponsoren",
@@ -386,7 +391,8 @@
     "setAsDefaultInGroup": "Als Standardplattform in dieser Gruppe festlegen",
     "removeFromGroup": "Aus Gruppe entfernen",
     "sidebarSelectedUnlimited": "Ausgewählt ({count})",
-    "tipWithGroupsUnlimited": "Ausgewählte Plattformen und Gruppen manuell sortieren"
+    "tipWithGroupsUnlimited": "Ausgewählte Plattformen und Gruppen manuell sortieren",
+    "sidebarLimitReached": "Seitenleistenanzeige hat das Limit erreicht ({{max}}). Bitte deaktivieren Sie zuerst andere Plattformen."
   },
   "privacy": {
     "hideSensitive": "E-Mails ausblenden",
@@ -1008,7 +1014,10 @@
       "menuBarAccountPrefixDesc": "Nur normale Konten: Aus blendet das E-Mail-Präfix aus. Codex-API-Dienst / API-Key behalten das API-Label",
       "menuBarQuotaConfirmEnable": "Aktivieren",
       "codexHideRelayQuota": "Relay-Kontingent ausblenden",
-      "codexHideRelayQuotaDesc": "Blendet Relay-/New-API-Kontingenttafeln in der Codex-Kontoübersicht aus."
+      "codexHideRelayQuotaDesc": "Blendet Relay-/New-API-Kontingenttafeln in der Codex-Kontoübersicht aus.",
+      "qoderAppAppPath": "Qoder App-Pfad",
+      "qoderCnIdeAppPath": "Qoder CN IDE App-Pfad",
+      "qoderCnAppPath": "Qoder CN App-Pfad"
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -2617,7 +2626,7 @@
         "recoverSuccess": "Wiederherstellung für {{count}} Konto/Konten angefordert",
         "dialog": {
           "title": "Kontoprobleme",
-      "description": "Jedes Konto wird mit Modell, Grund der Nichtverfügbarkeit und möglicher Wiederherstellung angezeigt.",
+          "description": "Jedes Konto wird mit Modell, Grund der Nichtverfügbarkeit und möglicher Wiederherstellung angezeigt.",
           "noIssues": "Keine Kontoprobleme",
           "unscopedApiKey": "Aktueller API Key",
           "poolUnavailable": "Kein verfügbares Pool-Konto",
@@ -4656,6 +4665,18 @@
     "traeSoloCn": {
       "appPath": "TRAE SOLO CN Pfad",
       "title": "TRAE SOLO CN-Einstellungen"
+    },
+    "qoderApp": {
+      "title": "Qoder-Einstellungen",
+      "appPath": "Qoder-Pfad"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE-Einstellungen",
+      "appPath": "Qoder CN IDE-Pfad"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN-Einstellungen",
+      "appPath": "Qoder CN-Pfad"
     }
   },
   "quotaAlert": {

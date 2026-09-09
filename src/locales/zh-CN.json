@@ -2390,8 +2390,8 @@
       "modelConfigDialogDescription": "为每个模型配置可见性、推理强度、上下文窗口和压缩阈值。",
       "applyModelConfig": "应用配置",
       "defaultModel": "默认模型",
-      "repairCompleted": "会话可见性修复完成"
-      ,"forceRefreshTitle": "强制刷新 Token",
+      "repairCompleted": "会话可见性修复完成",
+      "forceRefreshTitle": "强制刷新 Token",
       "forceRefreshReady": "可手动刷新 OAuth Token",
       "forceRefreshDescription": "使用 refresh_token 获取新的 access_token 和 id_token；当前 refresh_token 可能会被轮换。",
       "forceRefreshUnavailable": "当前账号类型不可用",
