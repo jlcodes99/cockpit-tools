@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 swift-rs = { version = "1.0.7", features = ["build"] }
 
 [dependencies]
+cockpit-core = { path = "../crates/cockpit-core" }
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "unstable"] }
 # Reuse Tauri's web engine without its IPC bridge for untrusted generated HTML.
 wry = { version = "0.54", default-features = false, features = ["os-webview"] }

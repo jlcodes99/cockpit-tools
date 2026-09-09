@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use cockpit_core::models::codex::{
@@ -10,6 +11,8 @@ use cockpit_core::models::codex::{
 use cockpit_core::models::{
     DefaultInstanceSettings, InstanceLaunchMode, InstanceProfile, InstanceStore,
 };
+
+static SECURE_STORAGE_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn isolated_data_dir() -> PathBuf {
     let suffix = SystemTime::now()
@@ -201,6 +204,41 @@ fn write_codex_accounts(data_dir: &Path, accounts: &[CodexAccount], current_id: 
     }
 }
 
+fn write_encrypted_codex_accounts(
+    data_dir: &Path,
+    accounts: &[CodexAccount],
+    current_id: Option<&str>,
+) {
+    let _guard = SECURE_STORAGE_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let previous_data_dir = std::env::var_os("COCKPIT_TOOLS_DATA_DIR");
+    std::env::set_var("COCKPIT_TOOLS_DATA_DIR", data_dir);
+    let encrypted = accounts
+        .iter()
+        .map(|account| {
+            cockpit_core::modules::secure_account_storage::serialize_account_file("codex", account)
+                .expect("Codex account should be encrypted")
+        })
+        .collect::<Vec<_>>();
+    if let Some(previous_data_dir) = previous_data_dir {
+        std::env::set_var("COCKPIT_TOOLS_DATA_DIR", previous_data_dir);
+    } else {
+        std::env::remove_var("COCKPIT_TOOLS_DATA_DIR");
+    }
+
+    write_codex_accounts(data_dir, accounts, current_id);
+    for (account, content) in accounts.iter().zip(encrypted) {
+        fs::write(
+            data_dir
+                .join("codex_accounts")
+                .join(format!("{}.json", account.id)),
+            content,
+        )
+        .expect("encrypted Codex account should be written");
+    }
+}
+
 #[test]
 fn empty_codex_account_list_is_read_only_and_machine_readable() {
     let data_dir = isolated_data_dir();
@@ -343,6 +381,56 @@ fn codex_current_and_quota_use_cached_data_without_auth_mutation() {
     assert_eq!(selected["data"].as_array().unwrap().len(), 1);
     assert_eq!(selected["data"][0]["id"], "current");
 
+    fs::remove_dir_all(data_dir).expect("test data directory should be removable");
+}
+
+#[test]
+fn encrypted_codex_accounts_are_readable_without_rewrite() {
+    let data_dir = isolated_data_dir();
+    let account = codex_account("encrypted", "encrypted@example.com");
+    write_encrypted_codex_accounts(&data_dir, std::slice::from_ref(&account), Some("encrypted"));
+    let account_path = data_dir.join("codex_accounts/encrypted.json");
+    let key_path = data_dir.join("secure-account-storage.key");
+    let account_before = fs::read(&account_path).expect("encrypted account should be readable");
+    let key_before = fs::read(&key_path).expect("secure storage key should be readable");
+
+    let (list_stdout, list_stderr, list_status) =
+        run_cli_in_data_dir(&["--json", "list", "codex"], &data_dir);
+    let list: serde_json::Value = serde_json::from_str(&list_stdout).expect("list should be JSON");
+    assert!(list_status.success());
+    assert!(list_stderr.is_empty());
+    assert_eq!(list["data"].as_array().unwrap().len(), 1);
+    assert_eq!(list["data"][0]["status"], "ready");
+
+    let (current_stdout, current_stderr, current_status) =
+        run_cli_in_data_dir(&["--json", "current", "codex"], &data_dir);
+    let current: serde_json::Value =
+        serde_json::from_str(&current_stdout).expect("current should be JSON");
+    assert!(current_status.success());
+    assert!(current_stderr.is_empty());
+    assert_eq!(current["data"]["id"], "encrypted");
+
+    let (quota_stdout, quota_stderr, quota_status) =
+        run_cli_in_data_dir(&["--json", "quota", "codex"], &data_dir);
+    let quota: serde_json::Value =
+        serde_json::from_str(&quota_stdout).expect("quota should be JSON");
+    assert!(quota_status.success());
+    assert!(quota_stderr.is_empty());
+    assert_eq!(quota["data"][0]["quota"]["hourly_percentage"], 32);
+
+    for secret_name in [
+        "openai_api_key",
+        "access_token",
+        "refresh_token",
+        "agent_private_key",
+        "raw_data",
+    ] {
+        assert!(!list_stdout.contains(secret_name));
+        assert!(!current_stdout.contains(secret_name));
+        assert!(!quota_stdout.contains(secret_name));
+    }
+    assert_eq!(fs::read(&account_path).unwrap(), account_before);
+    assert_eq!(fs::read(&key_path).unwrap(), key_before);
     fs::remove_dir_all(data_dir).expect("test data directory should be removable");
 }
 

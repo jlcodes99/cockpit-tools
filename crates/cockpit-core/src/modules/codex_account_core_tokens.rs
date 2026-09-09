@@ -622,17 +622,17 @@ pub fn load_account(account_id: &str) -> Option<CodexAccount> {
         return None;
     }
 
-    match fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).ok(),
-        Err(_) => None,
-    }
+    let content = fs::read_to_string(&path).ok()?;
+    crate::modules::secure_account_storage::deserialize_account_file(&path, &content)
+        .ok()
+        .map(|(account, _)| account)
 }
 
 /// 保存单个账号详情
 pub fn save_account(account: &CodexAccount) -> Result<(), String> {
     let path = get_accounts_dir().join(format!("{}.json", &account.id));
     let content =
-        serde_json::to_string_pretty(account).map_err(|e| format!("序列化失败: {}", e))?;
+        crate::modules::secure_account_storage::serialize_account_file("codex", account)?;
     write_string_atomic(&path, &content).map_err(|e| format!("写入账号详情失败: {}", e))?;
     Ok(())
 }

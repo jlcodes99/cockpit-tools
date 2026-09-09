@@ -811,6 +811,7 @@ dependencies = [
  "base64 0.22.1",
  "cbc",
  "chrono",
+ "cockpit-core",
  "crypto_box",
  "dirs 5.0.1",
  "ed25519-dalek",

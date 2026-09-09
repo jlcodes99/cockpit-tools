@@ -1046,10 +1046,16 @@ pub fn sync_global_proxy_env(config: &UserConfig) {
 
 /// 获取数据目录路径
 pub fn get_data_dir() -> Result<PathBuf, String> {
-    if let Ok(raw) = std::env::var(DATA_DIR_ENV) {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty() {
-            return Ok(PathBuf::from(trimmed));
+    for variable in [
+        "COCKPIT_TOOLS_TEST_DATA_DIR",
+        "COCKPIT_TEST_DATA_DIR",
+        DATA_DIR_ENV,
+    ] {
+        if let Ok(raw) = std::env::var(variable) {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                return Ok(PathBuf::from(trimmed));
+            }
         }
     }
 
