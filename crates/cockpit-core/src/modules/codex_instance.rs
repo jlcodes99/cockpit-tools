@@ -57,6 +57,26 @@ pub fn load_instance_store() -> Result<InstanceStore, String> {
     instance_store::load_instance_store(&path, CODEX_INSTANCES_FILE)
 }
 
+/// Loads the persisted Codex instances without repairing or quarantining the file.
+///
+/// Read-only consumers must not mutate the shared store merely by inspecting it.
+pub fn load_instance_store_read_only() -> Result<InstanceStore, String> {
+    let data_dir = modules::config::get_data_dir()?;
+    let path = data_dir.join(CODEX_INSTANCES_FILE);
+
+    if !path.exists() {
+        return Ok(InstanceStore::new());
+    }
+
+    let content =
+        fs::read_to_string(&path).map_err(|error| format!("读取实例配置失败: {}", error))?;
+    if content.trim().is_empty() {
+        return Ok(InstanceStore::new());
+    }
+
+    serde_json::from_str(&content).map_err(|error| format!("解析实例配置失败: {}", error))
+}
+
 pub fn save_instance_store(store: &InstanceStore) -> Result<(), String> {
     let path = instances_path()?;
     instance_store::save_instance_store(&path, CODEX_INSTANCES_FILE, store)

@@ -13,5 +13,4 @@ serde_json.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 chrono.workspace = true
-colored = "2.1"
 tabled = "0.15"

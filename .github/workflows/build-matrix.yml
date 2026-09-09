@@ -132,6 +132,10 @@ jobs:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
+      - name: 🧪 Test Cockpit core and CLI
+        if: matrix.label == 'macos-aarch64' || matrix.label == 'ubuntu-22.04' || matrix.label == 'windows-latest'
+        run: cargo test -p cockpit-core -p cockpit-cli --all-targets
+
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:

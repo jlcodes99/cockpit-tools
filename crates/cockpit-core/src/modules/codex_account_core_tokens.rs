@@ -12,6 +12,9 @@ fn get_accounts_storage_path() -> PathBuf {
     data_dir.join("codex_accounts.json")
 }
 
+const CODEX_ACCOUNTS_FILE_NAME: &str = "codex_accounts.json";
+const CODEX_ACCOUNTS_DIR_NAME: &str = "codex_accounts";
+
 /// 获取账号详情存储目录（统一使用 ~/.antigravity_cockpit/codex_accounts/）
 fn get_accounts_dir() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
@@ -619,17 +622,17 @@ pub fn load_account(account_id: &str) -> Option<CodexAccount> {
         return None;
     }
 
-    match fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).ok(),
-        Err(_) => None,
-    }
+    let content = fs::read_to_string(&path).ok()?;
+    crate::modules::secure_account_storage::deserialize_account_file(&path, &content)
+        .ok()
+        .map(|(account, _)| account)
 }
 
 /// 保存单个账号详情
 pub fn save_account(account: &CodexAccount) -> Result<(), String> {
     let path = get_accounts_dir().join(format!("{}.json", &account.id));
     let content =
-        serde_json::to_string_pretty(account).map_err(|e| format!("序列化失败: {}", e))?;
+        crate::modules::secure_account_storage::serialize_account_file("codex", account)?;
     write_string_atomic(&path, &content).map_err(|e| format!("写入账号详情失败: {}", e))?;
     Ok(())
 }
@@ -660,6 +663,57 @@ pub fn list_accounts_checked() -> Result<Vec<CodexAccount>, String> {
         .iter()
         .filter_map(|summary| load_account(&summary.id))
         .collect())
+}
+
+fn load_account_index_without_repair() -> Result<CodexAccountIndex, String> {
+    let data_dir = crate::modules::config::get_data_dir()?;
+    let path = data_dir.join(CODEX_ACCOUNTS_FILE_NAME);
+    if !path.is_file() {
+        return Ok(CodexAccountIndex::new());
+    }
+
+    let content = fs::read_to_string(&path)
+        .map_err(|error| format!("读取账号索引失败: {}", error))?;
+    if content.trim().is_empty() {
+        return Ok(CodexAccountIndex::new());
+    }
+
+    serde_json::from_str(&content).map_err(|error| format!("解析账号索引失败: {}", error))
+}
+
+fn load_account_detail_without_side_effects(account_id: &str) -> Option<CodexAccount> {
+    let data_dir = crate::modules::config::get_data_dir().ok()?;
+    let path = data_dir
+        .join(CODEX_ACCOUNTS_DIR_NAME)
+        .join(format!("{account_id}.json"));
+    if !path.is_file() {
+        return None;
+    }
+
+    let content = fs::read_to_string(&path).ok()?;
+    crate::modules::secure_account_storage::deserialize_account_file_read_only(&path, &content).ok()
+}
+
+/// 读取账号及其缓存元数据，不修复索引、不刷新网络数据，也不写入认证状态。
+pub fn list_accounts_read_only() -> Result<Vec<CodexAccount>, String> {
+    let index = load_account_index_without_repair()?;
+    Ok(index
+        .accounts
+        .iter()
+        .filter_map(|summary| load_account_detail_without_side_effects(&summary.id))
+        .collect())
+}
+
+/// Разрешить ID или email аккаунта без изменения account store.
+pub fn resolve_account_read_only(selector: &str) -> Result<Option<CodexAccount>, String> {
+    let selector = selector.trim();
+    if selector.is_empty() {
+        return Err("Идентификатор или email аккаунта не может быть пустым".to_string());
+    }
+
+    Ok(list_accounts_read_only()?
+        .into_iter()
+        .find(|account| account.id == selector || account.email.eq_ignore_ascii_case(selector)))
 }
 
 /// 刷新账号资料（团队名/结构）

@@ -51,7 +51,10 @@ pub mod qoder_instance;
 pub mod qoder_oauth;
 pub mod quota;
 pub mod quota_cache;
+pub mod secure_account_storage;
 // pub mod sync_settings;
+#[cfg(test)]
+pub mod test_support;
 pub mod trae_account;
 pub mod trae_instance;
 pub mod trae_oauth;

@@ -19,10 +19,7 @@
     use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexTokens};
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use std::fs;
-    use std::sync::{LazyLock, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    static TEST_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     fn make_temp_dir(prefix: &str) -> std::path::PathBuf {
         let unique = SystemTime::now()
@@ -91,7 +88,9 @@
 
     #[test]
     fn test_env_guard_isolates_and_restores_cockpit_data_dir() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let previous_data_dir = std::env::var_os("COCKPIT_TOOLS_DATA_DIR");
         let isolated_data_dir = {
             let env = TestEnvGuard::new("codex-core-data-dir-guard-test");
@@ -416,7 +415,9 @@
 
     #[test]
     fn force_refresh_keeps_access_token_only_accounts_usable() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let _env = TestEnvGuard::new("codex-core-access-token-only-refresh-test");
         let mut tokens = make_codex_tokens(
             "demo@example.com",
@@ -438,7 +439,9 @@
 
     #[test]
     fn stale_missing_refresh_token_reauth_is_cleared() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let _env = TestEnvGuard::new("codex-core-access-token-only-reauth-clear-test");
         let mut tokens = make_codex_tokens(
             "demo@example.com",
@@ -659,7 +662,9 @@
 
     #[test]
     fn upsert_access_token_only_account_uses_access_claims() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let _env = TestEnvGuard::new("codex-access-token-import-test");
         let access_token = make_jwt(serde_json::json!({
             "email": "access@example.com",
@@ -706,7 +711,9 @@
 
     #[test]
     fn upsert_auth_tokens_with_empty_id_token_uses_access_token() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let _env = TestEnvGuard::new("codex-auth-file-access-token-import-test");
         let access_token = make_jwt(serde_json::json!({
             "email": "auth-access@example.com",
@@ -738,7 +745,9 @@
 
     #[test]
     fn upsert_reuses_legacy_email_only_account_when_identity_appears() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let _env = TestEnvGuard::new("codex-core-legacy-email-only-dedupe-test");
         let email = "legacy@example.com";
         let account_id = "acc-legacy";
@@ -789,7 +798,9 @@
 
     #[test]
     fn reauth_updates_explicit_target_account_even_when_identity_changes() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let _env = TestEnvGuard::new("codex-core-explicit-reauth-target-test");
         let email = "reauth@example.com";
         let existing = upsert_account(make_codex_tokens(
@@ -816,7 +827,9 @@
 
     #[test]
     fn reauth_removes_generated_duplicate_for_target_identity() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let _env = TestEnvGuard::new("codex-core-explicit-reauth-dedupe-test");
         let email = "reauth-duplicate@example.com";
         let existing = upsert_account(make_codex_tokens(
@@ -846,7 +859,9 @@
 
     #[test]
     fn current_account_does_not_sync_tokens_from_official_store() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let env = TestEnvGuard::new("codex-current-account-sync-test");
 
         let stored = seed_oauth_account(make_codex_tokens(
@@ -883,7 +898,9 @@
 
     #[test]
     fn sync_account_from_auth_dir_updates_store_for_managed_home() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let env = TestEnvGuard::new("codex-auth-dir-sync-test");
 
         let stored = seed_oauth_account(make_codex_tokens(
@@ -920,7 +937,9 @@
 
     #[test]
     fn managed_projection_sync_requires_projection_marker() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let env = TestEnvGuard::new("codex-managed-projection-sync-test");
 
         let stored = seed_oauth_account(make_codex_tokens(
@@ -1201,7 +1220,9 @@ requires_openai_auth = false
 
     #[test]
     fn api_key_import_preserves_relay_pair_and_provider_identity() {
-        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
         let env = TestEnvGuard::new("codex-core-api-key-import-projection-test");
         let account = CodexAccount::new_api_key(
             "portable-relay".to_string(),
