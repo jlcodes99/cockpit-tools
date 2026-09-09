@@ -4,6 +4,7 @@ use chrono::{TimeZone, Utc};
 use serde_json::Value;
 
 use crate::models::qoder::QoderAccount;
+#[cfg(target_os = "windows")]
 use crate::modules::logger;
 
 const AUTH_V1_FILENAME: &str = "auth.v1.dat";
@@ -179,6 +180,7 @@ pub fn write_qoder_app_auth(data_dir: &Path, auth_json: &Value) -> Result<(), St
 
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = (data_dir, auth_json);
         Err("Qoder App 凭据写入仅支持 Windows 系统".to_string())
     }
 }
