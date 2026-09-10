@@ -1515,6 +1515,23 @@ export function getCodexQuotaWindows(
   ];
 }
 
+/** 获取账号主周配额窗口的重置时间，不包含模型专项额度窗口。 */
+export function getCodexWeeklyResetTime(
+  quota: CodexQuota | undefined,
+): number | undefined {
+  const WEEK_MINUTES = 7 * 24 * 60;
+  const weeklyWindow = getCodexQuotaWindows(quota).find((window) => {
+    if (typeof window.windowMinutes === "number") {
+      return window.windowMinutes >= WEEK_MINUTES - 1;
+    }
+    return window.id === "secondary";
+  });
+  const resetTime = weeklyWindow?.resetTime;
+  return typeof resetTime === "number" && Number.isFinite(resetTime) && resetTime > 0
+    ? resetTime
+    : undefined;
+}
+
 /** 格式化重置时间显示（相对时间 + 绝对时间） */
 export function formatCodexResetTime(
   resetTime: number | undefined,
