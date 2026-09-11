@@ -5,6 +5,7 @@ import {
   getCodexAdditionalQuotaWindows,
   getCodexQuotaWindowLabel,
   getCodexMonthlyCreditUsage,
+  getCodexWeeklyResetTime,
   type CodexQuota,
 } from "./codex.ts";
 
@@ -39,6 +40,31 @@ test("uses 5h / Weekly / N Week window labels", () => {
   assert.equal(getCodexQuotaWindowLabel(50_400, "weekly"), "5 Week");
   assert.equal(getCodexQuotaWindowLabel(undefined, "weekly"), "Weekly");
   assert.equal(getCodexQuotaWindowLabel(undefined, "hourly"), "5h");
+});
+
+test("resolves the account-level weekly reset from either main window", () => {
+  assert.equal(
+    getCodexWeeklyResetTime({
+      hourly_percentage: 75,
+      weekly_percentage: 40,
+      hourly_window_present: true,
+      hourly_window_minutes: 10_080,
+      hourly_reset_time: 1_790_000_000,
+      weekly_window_present: false,
+    }),
+    1_790_000_000,
+  );
+  assert.equal(
+    getCodexWeeklyResetTime({
+      hourly_percentage: 75,
+      weekly_percentage: 40,
+      hourly_window_minutes: 300,
+      hourly_reset_time: 1_790_000_000,
+      weekly_window_minutes: 10_080,
+      weekly_reset_time: 1_790_500_000,
+    }),
+    1_790_500_000,
+  );
 });
 
 test("keeps upstream Spark-specific quota windows for the account card", () => {

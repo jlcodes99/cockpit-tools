@@ -1,7 +1,7 @@
 import { useEffect, type ReactElement } from "react";
 import { RefreshCw, Upload, Trash2, X, Power, Database, Copy, Check, Play, RotateCw, CircleAlert, Info, Calendar, Tag, Eye, EyeOff, FileText, ExternalLink, Pencil, FolderOpen, FolderPlus, ChevronRight, LogOut, Wrench, Terminal, Link2 } from "lucide-react";
 import { isCodexGroupQuotaRefreshInherit, resolveCodexGroupQuotaAutoRefreshMinutes } from "../services/codexAccountGroupService";
-import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
+import { formatCodexResetTime, formatCodexResetTimeAbsolute, getCodexWeeklyResetTime, isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
 import { isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { CodexQuotaMiniRows } from "../components/codex/CodexQuotaMiniRows";
 import { CodexTeamQuotaHistory } from "../components/codex/CodexTeamQuotaHistory";
@@ -751,6 +751,13 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           refreshingSubscriptionAccountId === account.id ||
           refreshing === account.id;
         const resetCreditControls = renderResetCreditControls(account);
+        const weeklyResetTime = getCodexWeeklyResetTime(account.quota);
+        const weeklyResetTimeText = formatCodexResetTimeAbsolute(weeklyResetTime);
+        const weeklyResetTimeTitle = weeklyResetTime
+          ? t("common.shared.quota.resetAt", {
+              time: formatCodexResetTime(weeklyResetTime, t),
+            })
+          : "";
         return (
           <div
             key={groupKey ? `${groupKey}-${account.id}` : account.id}
@@ -830,7 +837,8 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               isInLocalAccess ||
               canAddToLocalAccess ||
               (!isApiKeyAccount && hasCodexAccountNoteDetails(account)) ||
-              resetCreditControls) && (
+              resetCreditControls ||
+              weeklyResetTimeText) && (
               <div className="account-sub-line">
                 {meta.accountContextText && (
                   <span
@@ -877,6 +885,20 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                 )}
                 {!isApiKeyAccount && renderAccountNoteButton(account)}
                 {resetCreditControls}
+                {weeklyResetTimeText && (
+                  <span
+                    className="codex-weekly-reset-summary"
+                    title={weeklyResetTimeTitle}
+                  >
+                    <Calendar size={12} />
+                    <span>{t("codex.quota.weekly", "周配额")}</span>
+                    <strong>
+                      {t("common.shared.quota.resetAt", {
+                        time: weeklyResetTimeText,
+                      })}
+                    </strong>
+                  </span>
+                )}
               </div>
             )}
             {!isApiKeyAccount && (
