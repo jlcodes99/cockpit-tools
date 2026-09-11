@@ -418,6 +418,9 @@
     10px 0 28px -20px rgba(15, 23, 42, 0.35),
     0 1px 0 rgba(255, 255, 255, 0.55) inset;
 }
+[data-theme="dark"] .side-nav.side-nav-classic {
+  box-shadow: none;
+}
 
 .side-nav.side-nav-classic .side-nav-update-entry {
   position: static;
@@ -504,9 +507,13 @@
 }
 
 .side-nav.side-nav-classic .nav-item.active {
-  background: var(--primary);
+  background: color-mix(in srgb, var(--primary) 25%, transparent);
   color: var(--text-primary);
+  fill: currentColor;
   box-shadow: none;
+}
+[data-theme="dark"] .side-nav.side-nav-classic .nav-item.active {
+  background: color-mix(in srgb, var(--primary) 50%, transparent);
 }
 
 .side-nav.side-nav-classic .nav-item .tooltip {
