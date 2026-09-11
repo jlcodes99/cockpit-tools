@@ -1093,7 +1093,7 @@ export function TraeAccountsPage({ platformId = 'trae' }: TraeAccountsPageProps)
                 <div className="quota-empty">{t('common.shared.quota.noData', '暂无配额数据')}</div>
               )}
             </td>
-            <td>{formatDate(account.last_used || account.created_at)}</td>
+            <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
             <td className="sticky-action-cell table-action-cell">
               <div className="action-buttons">
                 <button

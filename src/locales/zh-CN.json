@@ -1596,7 +1596,7 @@
       "gcpTos": "GCP ToS 账号",
       "gcpTosTitle": "GCP ToS 账号"
     },
-    "lastSwitchTime": "最后切换",
+    "lastSwitchTime": "切换时间",
     "neverSwitched": "从未切换",
     "columns": {
       "email": "邮箱",

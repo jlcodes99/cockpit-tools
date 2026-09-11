@@ -87,6 +87,7 @@ import {
 } from './services/workbuddyAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
+import { initLocalTimeZone } from './utils/localTimeZone';
 import { isCodexInstanceAccountConflict } from './utils/codexInstanceLaunchConflict';
 import {
   applyWebviewUiScale,
@@ -1062,6 +1063,7 @@ function MainApp() {
     };
 
     void syncLanguageFromConfig();
+    void initLocalTimeZone();
     window.addEventListener('config-updated', syncLanguageFromConfig);
     return () => {
       disposed = true;

@@ -441,6 +441,14 @@ pub fn load_account(account_id: &str) -> Option<ClaudeAccount> {
     load_account_file(account_id)
 }
 
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("Account not found: {}", account_id))?;
+    account.last_used = now_ts();
+    save_account_and_index(account)?;
+    Ok(())
+}
+
 pub fn list_accounts() -> Vec<ClaudeAccount> {
     list_accounts_checked().unwrap_or_default()
 }

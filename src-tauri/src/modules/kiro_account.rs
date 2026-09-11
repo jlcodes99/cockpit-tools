@@ -762,7 +762,6 @@ fn apply_payload(account: &mut KiroAccount, payload: KiroOAuthCompletePayload) {
     account.kiro_usage_raw = payload.kiro_usage_raw;
     account.status = payload.status;
     account.status_reason = payload.status_reason;
-    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: KiroOAuthCompletePayload) -> Result<KiroAccount, String> {
@@ -886,7 +885,6 @@ async fn refresh_account_token_once(account_id: &str) -> Result<KiroAccount, Str
         account.quota_query_last_error = Some("未获取到有效配额数据".to_string());
         account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
     }
-    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;

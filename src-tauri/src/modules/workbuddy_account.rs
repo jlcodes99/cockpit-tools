@@ -634,7 +634,6 @@ fn apply_payload(account: &mut WorkbuddyAccount, payload: WorkbuddyOAuthComplete
     }
     account.status = payload.status;
     account.status_reason = payload.status_reason;
-    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: WorkbuddyOAuthCompletePayload) -> Result<WorkbuddyAccount, String> {
@@ -754,7 +753,6 @@ async fn refresh_account_token_once(account_id: &str) -> Result<WorkbuddyAccount
     if usage_refreshed {
         account.usage_updated_at = Some(refreshed_at);
     }
-    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;

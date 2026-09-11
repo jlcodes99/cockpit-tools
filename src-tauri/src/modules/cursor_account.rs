@@ -824,7 +824,6 @@ fn apply_payload(
     }
     account.status = payload.status;
     account.status_reason = payload.status_reason;
-    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, String> {
@@ -1825,7 +1824,6 @@ async fn refresh_account_async_once(account_id: &str) -> Result<CursorAccount, S
     if usage_refreshed {
         account.usage_updated_at = Some(refreshed_at);
     }
-    account.last_used = refreshed_at;
     let updated = account.clone();
     upsert_account_record(account)?;
     logger::log_info(&format!(

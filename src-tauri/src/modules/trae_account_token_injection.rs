@@ -2433,7 +2433,6 @@ async fn refresh_quota_snapshot(
         account.quota_query_last_error = Some(quota_query_errors.join(" | "));
         account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
     }
-    account.last_used = refreshed_at;
 }
 
 async fn refresh_account_async_once(account_id: &str) -> Result<TraeAccount, String> {

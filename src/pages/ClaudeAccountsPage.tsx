@@ -3229,7 +3229,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                             </td>
                             <td>{isProviderAccount ? null : renderPlanControl(account)}</td>
                             <td>{isProviderAccount ? renderApiKeyStatsPanel(account) : renderQuotaSummary(account, 'table')}</td>
-                            <td>{formatDate(account.last_used || account.created_at)}</td>
+                            <td>{account.last_used > 0 ? formatDate(account.last_used) : '—'}</td>
                             <td className="sticky-action-cell table-action-cell">
                               {renderAccountActions(account, 'table')}
                             </td>

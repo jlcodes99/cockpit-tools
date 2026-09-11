@@ -690,7 +690,6 @@ fn apply_payload(account: &mut WindsurfAccount, payload: WindsurfOAuthCompletePa
     account.windsurf_user_status = payload.windsurf_user_status;
     account.windsurf_plan_status = payload.windsurf_plan_status;
     account.windsurf_auth_status_raw = payload.windsurf_auth_status_raw;
-    account.last_used = now_ts();
 }
 
 fn value_has_number_like(value: &Value) -> bool {
@@ -969,7 +968,6 @@ async fn refresh_account_token_once(account_id: &str) -> Result<WindsurfAccount,
         account.quota_query_last_error = Some("未获取到有效配额快照，已保留旧配额缓存".to_string());
         account.quota_query_last_error_at = Some(chrono::Utc::now().timestamp_millis());
     }
-    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;

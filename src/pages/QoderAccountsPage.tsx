@@ -89,6 +89,7 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
+import { getLocalOffsetMinutes } from '../utils/localTimeZone';
 
 const QODER_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.qoder.flow_notice_collapsed';
 const QODER_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('qoder');
@@ -166,13 +167,17 @@ function formatNumber(value: number | null | undefined): string {
 }
 
 function formatDateTime(value: number): string {
-  const date = new Date(value * 1000);
+  // 用系统真实时区偏移把 UTC 时间戳平移到本地墙上时间，再以 UTC 渲染，
+  // 绕开 WebView 默认/ICU 时区库回退 UTC 的问题（#时区）。
+  const offsetMin = getLocalOffsetMinutes();
+  const date = new Date(value * 1000 + offsetMin * 60000);
   return date.toLocaleString(undefined, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
   });
 }
 
@@ -1744,7 +1749,7 @@ export function QoderAccountsPage() {
                 {quota.resetText && <div className="quota-reset qoder-table-reset">{quota.resetText}</div>}
               </div>
             </td>
-            <td>{formatDateTime(account.last_used || account.created_at)}</td>
+            <td>{account.last_used > 0 ? formatDateTime(account.last_used) : '—'}</td>
             <td>
               <div className="action-buttons">
                 <button

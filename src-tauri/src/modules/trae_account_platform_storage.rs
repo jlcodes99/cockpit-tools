@@ -1245,7 +1245,6 @@ fn apply_payload(account: &mut TraeAccount, payload: TraeImportPayload) {
     account.trae_usertag_raw = normalize_non_empty(payload.trae_usertag_raw.as_deref());
     account.status = normalize_non_empty(payload.status.as_deref());
     account.status_reason = normalize_non_empty(payload.status_reason.as_deref());
-    account.last_used = now_ts();
 }
 
 fn is_runtime_preserved_auth_key(key: &str) -> bool {

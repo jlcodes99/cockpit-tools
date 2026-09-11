@@ -286,6 +286,10 @@ pub async fn inject_codebuddy_cn_to_vscode(
 
     let account = codebuddy_cn_account::load_account(&account_id)
         .ok_or_else(|| format!("CodeBuddy CN account not found: {}", account_id))?;
+    logger::log_info(&format!(
+        "[CN DIAG] inject_codebuddy_cn_to_vscode: loaded account_id={}",
+        account_id
+    ));
 
     if let Err(err) = crate::modules::codebuddy_cn_instance::update_default_settings(
         Some(Some(account_id.clone())),

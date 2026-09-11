@@ -403,7 +403,6 @@ async fn refresh_account_token_once(account_id: &str) -> Result<GitHubCopilotAcc
     account.quota_query_last_error_at = None;
     let refreshed_at = now_ts();
     account.usage_updated_at = Some(refreshed_at);
-    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;

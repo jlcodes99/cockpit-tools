@@ -116,6 +116,10 @@ pub fn touch_last_used(account_id: &str) -> Result<(), String> {
         .ok_or_else(|| format!("CodeBuddy CN account not found: {}", account_id))?;
     account.last_used = now_ts();
     save_account_file(&account)?;
+    logger::log_info(&format!(
+        "[CN DIAG] touch_last_used: account_id={} -> last_used={}",
+        account_id, account.last_used
+    ));
     Ok(())
 }
 
@@ -659,8 +663,6 @@ fn apply_payload(account: &mut CodebuddyAccount, payload: CodebuddyOAuthComplete
     if payload.checkin_rewards.is_some() {
         account.checkin_rewards = payload.checkin_rewards.clone();
     }
-
-    account.last_used = now_ts();
 }
 
 pub fn upsert_account(payload: CodebuddyOAuthCompletePayload) -> Result<CodebuddyAccount, String> {
@@ -782,7 +784,6 @@ async fn refresh_account_token_once(account_id: &str) -> Result<CodebuddyAccount
     if usage_refreshed {
         account.usage_updated_at = Some(refreshed_at);
     }
-    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;
