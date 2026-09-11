@@ -225,7 +225,7 @@
 }
 
 .nav-brand {
-  margin-bottom: 0px; 
+  margin-bottom: 0px;
 }
 
 .brand-logo {
@@ -469,9 +469,24 @@
   color: var(--text-primary);
   letter-spacing: 0.01em;
   min-width: 0;
+  max-width: 140px;
+  flex: 0 1 auto;
+  opacity: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: opacity 0.18s ease, max-width 0.2s ease;
+}
+
+.side-nav-brand-title.is-collapsed {
+  /* 脫離 flex 流：避免 max-width 收縮中間態把 logo 擠偏；直接藏到殼外並瞬隱 */
+  position: absolute;
+  left: 100%;
+  max-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: none;
 }
 
 .side-nav.side-nav-classic .nav-items {
@@ -496,6 +511,16 @@
   gap: var(--side-nav-classic-nav-item-gap-scaled);
   padding: 0 var(--side-nav-classic-nav-item-padding-inline-scaled);
   border-radius: var(--side-nav-classic-nav-item-radius-scaled);
+  /* 只保留顏色類過渡，width/padding 跟宿主瞬切，避免背景先過窄再恢復 */
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+
+.side-nav.side-nav-classic .nav-item > svg,
+.side-nav.side-nav-classic .nav-item > img,
+.side-nav.side-nav-classic .nav-item .nav-item-icon,
+.side-nav.side-nav-classic .nav-item .side-nav-group-icon {
+  flex: 0 0 auto;
 }
 
 .side-nav.side-nav-classic .nav-item:hover {
@@ -517,11 +542,30 @@
   display: inline-flex;
   align-items: center;
   min-width: 0;
+  max-width: 120px;
+  flex: 0 1 auto;
+  opacity: 1;
+  transform: none;
   font-size: var(--side-nav-classic-nav-item-text-size-scaled);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: opacity 0.18s ease, max-width 0.2s ease, transform 0.2s ease;
+}
+
+.side-nav.side-nav-classic .nav-item-text.is-collapsed {
+  /* 脫離 flex 流：盒子已瞬切 44px，文字若仍在流內做 max-width 動畫會撐開內容、
+     把圖標擠到邊緣；改為絕對定位藏到框外並瞬隱，圖標每幀保持居中 */
+  position: absolute;
+  left: 100%;
+  top: auto;
+  transform: none;
+  max-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: none;
 }
 
 .nav-bottom-actions {
@@ -665,10 +709,7 @@
 
 .side-nav.side-nav-classic.side-nav-classic-collapsed .side-nav-brand-main {
   flex: 0 0 auto;
-}
-
-.side-nav.side-nav-classic.side-nav-classic-collapsed .side-nav-brand-title {
-  display: none;
+  gap: 0;
 }
 
 .side-nav.side-nav-classic.side-nav-classic-collapsed .nav-items {
@@ -680,6 +721,7 @@
   width: var(--side-nav-classic-collapsed-item-width-scaled);
   padding: 0;
   justify-content: center;
+  gap: 0;
 }
 
 .side-nav.side-nav-classic.side-nav-classic-collapsed .nav-bottom-actions {
