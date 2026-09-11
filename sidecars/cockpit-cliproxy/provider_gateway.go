@@ -21,6 +21,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	multiagentv2 "github.com/router-for-me/CLIProxyAPI/v7/internal/client/codex/optimize-multi-agent-v2"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 
 	responsesconverter "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/openai/openai/responses"
@@ -206,7 +207,10 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 	if wireAPI == "chat_completions" {
 		switch {
 		case sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse):
-			upstreamBody = responsesconverter.ConvertOpenAIResponsesRequestToOpenAIChatCompletions(upstreamModel, body, stream)
+			// Provider gateways bypass the executor's Codex input normalization.
+			// Preserve delegated tasks before the generic chat translator drops agent_message items.
+			chatInput := multiagentv2.RewriteCodexMultiAgentV2Input(relayContext(c), c.Request.Header, body, s.cfg)
+			upstreamBody = responsesconverter.ConvertOpenAIResponsesRequestToOpenAIChatCompletions(upstreamModel, chatInput, stream)
 		case sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAI):
 			upstreamBody = rewriteProviderGatewayBodyModel(body, upstreamModel)
 		case sourceFormatEqual(sourceFormat, sdktranslator.FormatClaude), sourceFormatEqual(sourceFormat, sdktranslator.FormatGemini):
