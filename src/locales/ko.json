@@ -1041,6 +1041,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "외부 네트워크 허용",
       "externalNetworkDesc": "끄면 WebDAV, OpenRouter 사용량, 공지, 자동 업데이트 확인을 차단합니다(로컬 기능은 유지).",
       "webdavAllowedDomains": "WebDAV 도메인 허용 목록",

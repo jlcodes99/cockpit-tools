@@ -80,7 +80,7 @@ pub struct UserConfig {
     /// 应用主题
     #[serde(default = "default_theme")]
     pub theme: String,
-    /// 主题色套件：default / nord / tokyo-night / catppuccin / gruvbox / everforest
+    /// 主题色套件：default / nord / tokyo-night / catppuccin / gruvbox / everforest / oled
     #[serde(default = "default_theme_color")]
     pub theme_color: String,
     /// 是否允许受控外连：当前闸 WebDAV 同步与 OpenRouter 用量刷新（非全局网络 kill switch）
@@ -687,7 +687,7 @@ pub fn normalize_theme_color(raw: &str) -> String {
                 v
             }
         }
-        "catppuccin" | "gruvbox" | "everforest" | "ayu" | "one-dark" | "onedark" => {
+        "catppuccin" | "gruvbox" | "everforest" | "oled" | "ayu" | "one-dark" | "onedark" => {
             if v == "onedark" {
                 "one-dark".to_string()
             } else {
@@ -2506,6 +2506,7 @@ mod tests {
     fn normalize_theme_color_maps_aliases() {
         assert_eq!(super::normalize_theme_color("TokyoNight"), "tokyo-night");
         assert_eq!(super::normalize_theme_color("onedark"), "one-dark");
+        assert_eq!(super::normalize_theme_color("OLED"), "oled");
         assert_eq!(super::normalize_theme_color("nope"), "default");
     }
     use super::{acquire_config_file_lock, patch_runtime_state, RuntimeState, UserConfig};

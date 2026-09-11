@@ -1041,6 +1041,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "Разрешить внешнюю сеть",
       "externalNetworkDesc": "Выкл.: блокирует WebDAV, usage OpenRouter, объявления и автопроверку обновлений (локальное работает).",
       "webdavAllowedDomains": "Белый список WebDAV",

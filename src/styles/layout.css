@@ -225,7 +225,7 @@
 }
 
 .nav-brand {
-  margin-bottom: 0px; 
+  margin-bottom: 0px;
 }
 
 .brand-logo {
@@ -504,8 +504,8 @@
 }
 
 .side-nav.side-nav-classic .nav-item.active {
-  background: rgba(37, 99, 235, 0.12);
-  color: var(--primary);
+  background: var(--primary);
+  color: var(--text-primary);
   box-shadow: none;
 }
 

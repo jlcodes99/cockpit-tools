@@ -126,6 +126,26 @@
   --bg-secondary: light-dark(#ffffff, #343f44);
   --text-primary: light-dark(#0f172a, #d3c6aa);
 }
+[data-theme-color="oled"] {
+  /* True black/white pack: primary/accent inherit the base blue/teal.
+     Borders/shadows keep base values (light borders separate pure surfaces). */
+  --bg-primary: light-dark(#ffffff, #000000);
+  --bg-secondary: light-dark(#ffffff, #000000);
+  --bg-tertiary: light-dark(#ffffff, #000000);
+  --bg-card: light-dark(#ffffff, #000000);
+  --bg-hover: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.08));
+  --text-primary: light-dark(#000000, #ffffff);
+  --text-secondary: light-dark(#3f3f3f, #a3a3a3);
+  --text-muted: #737373;
+  /* Flatten the body backdrop too, otherwise dark stays blue-black gradient */
+  --body-bg-start: light-dark(#ffffff, #000000);
+  --body-bg-end: light-dark(#ffffff, #000000);
+  --body-glow-1: transparent;
+  --body-glow-2: transparent;
+
+  --border: light-dark(#adb4a8, #757d72);
+  --border-light: light-dark(#adb4a8, #757d72);
+}
 
 * {
   box-sizing: border-box;

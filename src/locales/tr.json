@@ -1041,6 +1041,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "Harici ağa izin ver",
       "externalNetworkDesc": "Kapalı: WebDAV, OpenRouter kullanımı, duyurular ve otomatik güncelleme kontrolünü engeller (yerel sürer).",
       "webdavAllowedDomains": "WebDAV alan adı listesi",

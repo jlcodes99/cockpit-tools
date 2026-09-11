@@ -1041,6 +1041,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "允許外連",
       "externalNetworkDesc": "關閉後阻斷 WebDAV 同步、OpenRouter 用量刷新、遠端公告與自動更新檢查（不影響本機功能）",
       "webdavAllowedDomains": "WebDAV 網域白名單",
