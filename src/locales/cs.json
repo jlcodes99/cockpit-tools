@@ -1041,6 +1041,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "Povolit externí síť",
       "externalNetworkDesc": "Vypnuto: blokuje WebDAV, usage OpenRouter, oznámení a auto-kontrolu aktualizací (lokální běží).",
       "webdavAllowedDomains": "Whitelist domén WebDAV",

@@ -1234,6 +1234,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "Allow external network",
       "externalNetworkDesc": "When off, blocks WebDAV, OpenRouter usage refresh, remote announcements, and auto update checks (local features keep working).",
       "webdavAllowedDomains": "WebDAV domain allowlist",

@@ -1234,6 +1234,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "允许外连",
       "externalNetworkDesc": "关闭后阻断 WebDAV 同步、OpenRouter 用量刷新、远端公告与自动更新检查（不影响本地功能）",
       "webdavAllowedDomains": "WebDAV 域名白名单",

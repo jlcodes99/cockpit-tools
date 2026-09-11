@@ -1088,6 +1088,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "Izinkan jaringan eksternal",
       "externalNetworkDesc": "Mati: memblokir WebDAV, usage OpenRouter, pengumuman, dan cek pembaruan (fitur lokal tetap).",
       "webdavAllowedDomains": "Daftar domain WebDAV",
