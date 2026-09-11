@@ -865,6 +865,16 @@ export function PlatformLayoutModal({
     && entries.every(isDashboardEntryVisible);
   const trayBulkEnabled = MENU_VISIBLE_PLATFORM_IDS.every((platformId) => traySet.has(platformId));
 
+  const handleBulkEnable = (enabled: boolean) => {
+    entries.forEach((entry) => {
+      if (entry.type === 'api-relay') {
+        return;
+      }
+      setHiddenEntry(entry.id as PlatformLayoutEntryId, !enabled);
+    });
+  };
+  const allEnabled = entries.length > 0 && entries.every((entry) => entry.type === 'api-relay' || !entry.hidden);
+
   const openCreateGroupEditor = () => {
     const firstPlatform = MENU_VISIBLE_PLATFORM_IDS[0] ?? 'codebuddy';
 
@@ -1222,6 +1232,24 @@ export function PlatformLayoutModal({
                   <span>{t('platformLayout.trayToggle', '菜单栏显示')}</span>
                 </label>
               </div>
+              <div className="platform-layout-bulk-cell platform-layout-bulk-enable">
+                <label className="platform-layout-bulk-toggle" title={t('platformLayout.disabledHint', '禁用后该平台入口将隐藏且所有自动活动停止')}>
+                  <input
+                    type="checkbox"
+                    checked={allEnabled}
+                    onChange={() => handleBulkEnable(!allEnabled)}
+                  />
+                  <span>{t('platformLayout.enabledToggle', '启用')}</span>
+                </label>
+                <div className="platform-layout-bulk-enable-actions">
+                  <button type="button" className="btn btn-link" onClick={() => handleBulkEnable(true)}>
+                    {t('platformLayout.enableAll', '全部启用')}
+                  </button>
+                  <button type="button" className="btn btn-link" onClick={() => handleBulkEnable(false)}>
+                    {t('platformLayout.disableAll', '全部禁用')}
+                  </button>
+                </div>
+              </div>
               <div className="platform-layout-bulk-cell is-edit-column" />
             </div>
           </div>
@@ -1342,6 +1370,24 @@ export function PlatformLayoutModal({
                       >
                         {entry.label}
                       </span>
+
+                      <label
+                        className={`platform-layout-enable-toggle ${entry.hidden ? 'is-disabled' : ''}`}
+                        title={t('platformLayout.disabledHint', '禁用后该平台入口将隐藏且所有自动活动停止')}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!entry.hidden}
+                          onChange={(event) => {
+                            if (isApiRelayEntry) {
+                              return;
+                            }
+                            setHiddenEntry(entry.id as PlatformLayoutEntryId, !event.target.checked);
+                          }}
+                        />
+                        <span>{t('platformLayout.enabledToggle', '启用')}</span>
+                      </label>
                     </div>
 
                     <div className="platform-layout-controls-grid" onClick={(event) => event.stopPropagation()}>

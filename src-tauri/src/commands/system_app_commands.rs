@@ -23,6 +23,7 @@ pub fn save_tray_platform_layout(
     tray_platform_ids: Vec<String>,
     ordered_entry_ids: Option<Vec<String>>,
     platform_groups: Option<Vec<modules::tray_layout::TrayLayoutGroup>>,
+    hidden_platform_ids: Vec<String>,
 ) -> Result<(), String> {
     modules::tray_layout::save_tray_layout(
         sort_mode,
@@ -30,6 +31,7 @@ pub fn save_tray_platform_layout(
         tray_platform_ids,
         ordered_entry_ids,
         platform_groups,
+        hidden_platform_ids,
     )?;
     modules::tray::update_tray_menu(&app)?;
     Ok(())

@@ -9,6 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 ## [Unreleased]
 
+### Added
+
+- **Platform layout "Enable/Disable" switch**: each platform entry in the layout editor now has a single Enable/Disable toggle. Disabling a platform hides its entry everywhere (sidebar, dashboard, tray) and stops all of its automated activity (auto-refresh, token keep-alive, quota refresh, auto-switch).
+- **Backend awareness of disabled platforms**: the disabled (hidden) platform set is persisted through `save_tray_platform_layout` and stored in the tray layout config, so backend tasks can skip hidden platforms.
+
+### Changed
+
+- **Hidden means inactive**: an entry hidden in the platform layout no longer participates in any automated background activity; hiding an entry and disabling it are now the same action.
+
 ## [1.3.48] - 2026-09-11
 
 ### Changed

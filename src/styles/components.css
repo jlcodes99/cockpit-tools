@@ -2265,6 +2265,45 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   pointer-events: none;
 }
 
+.platform-layout-enable-toggle {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-left: 10px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.platform-layout-enable-toggle.is-disabled {
+  color: var(--text-secondary);
+  background: transparent;
+  font-weight: 500;
+}
+
+.platform-layout-bulk-enable {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.platform-layout-bulk-enable-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.platform-layout-bulk-enable-actions .btn-link {
+  font-size: 11px;
+  padding: 0;
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+
 .platform-layout-toggle input[type="checkbox"],
 .platform-layout-bulk-toggle input[type="checkbox"],
 .platform-layout-child-picker-item input[type="checkbox"] {

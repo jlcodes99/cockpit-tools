@@ -1114,7 +1114,12 @@ function toTrayGroupPayload(groups: PlatformLayoutGroup[]) {
 function syncTrayLayoutToBackend(
   state: Pick<
     PlatformLayoutState,
-    'orderedPlatformIds' | 'trayPlatformIds' | 'traySortMode' | 'orderedEntryIds' | 'platformGroups'
+    | 'orderedPlatformIds'
+    | 'trayPlatformIds'
+    | 'traySortMode'
+    | 'orderedEntryIds'
+    | 'platformGroups'
+    | 'hiddenPlatformIds'
   >,
 ) {
   invoke('save_tray_platform_layout', {
@@ -1123,6 +1128,7 @@ function syncTrayLayoutToBackend(
     trayPlatformIds: state.trayPlatformIds,
     orderedEntryIds: state.orderedEntryIds,
     platformGroups: toTrayGroupPayload(state.platformGroups),
+    hiddenPlatformIds: state.hiddenPlatformIds,
   }).catch((error) => {
     console.error('同步托盘平台布局失败:', error);
   });
@@ -1131,7 +1137,12 @@ function syncTrayLayoutToBackend(
 function scheduleTrayLayoutSync(
   state: Pick<
     PlatformLayoutState,
-    'orderedPlatformIds' | 'trayPlatformIds' | 'traySortMode' | 'orderedEntryIds' | 'platformGroups'
+    | 'orderedPlatformIds'
+    | 'trayPlatformIds'
+    | 'traySortMode'
+    | 'orderedEntryIds'
+    | 'platformGroups'
+    | 'hiddenPlatformIds'
   >,
 ) {
   if (typeof window === 'undefined') {
@@ -1847,6 +1858,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
       traySortMode: state.traySortMode,
       orderedEntryIds: state.orderedEntryIds,
       platformGroups: state.platformGroups,
+      hiddenPlatformIds: state.hiddenPlatformIds,
     });
   },
 

@@ -77,6 +77,8 @@ pub struct TrayLayoutConfig {
     pub ordered_entry_ids: Vec<String>,
     #[serde(default = "default_platform_groups")]
     pub platform_groups: Vec<TrayLayoutGroup>,
+    #[serde(default)]
+    pub hidden_platform_ids: Vec<String>,
 }
 
 fn default_sort_mode() -> String {
@@ -132,6 +134,7 @@ impl Default for TrayLayoutConfig {
             tray_platform_ids: default_tray_platforms(),
             ordered_entry_ids: default_ordered_entries(),
             platform_groups: default_platform_groups(),
+            hidden_platform_ids: vec![],
         }
     }
 }
@@ -496,6 +499,7 @@ fn normalize_config(
         ),
         ordered_entry_ids,
         platform_groups,
+        hidden_platform_ids: config.hidden_platform_ids.clone(),
     }
 }
 
@@ -547,6 +551,7 @@ pub fn save_tray_layout(
     tray_platform_ids: Vec<String>,
     ordered_entry_ids: Option<Vec<String>>,
     platform_groups: Option<Vec<TrayLayoutGroup>>,
+    hidden_platform_ids: Vec<String>,
 ) -> Result<TrayLayoutConfig, String> {
     let normalized = normalize_config(
         TrayLayoutConfig {
@@ -555,6 +560,7 @@ pub fn save_tray_layout(
             tray_platform_ids,
             ordered_entry_ids: ordered_entry_ids.unwrap_or_default(),
             platform_groups: platform_groups.unwrap_or_else(default_platform_groups),
+            hidden_platform_ids,
         },
         false,
     );
