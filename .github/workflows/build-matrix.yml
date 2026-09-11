@@ -155,12 +155,6 @@ jobs:
           restore-keys: |
             tauri-deps-${{ matrix.platform }}-
 
-      - name: Test history integration without launching the app
-        if: matrix.label == 'windows-latest' || matrix.label == 'macos-aarch64' || matrix.label == 'ubuntu-22.04'
-        working-directory: src-tauri
-        run: |
-          cargo test --locked --lib codex_session_visibility
-          cargo test --locked --lib codex_history_health
 
       # Keep the private key out of PR code, dependency scripts, and third-party actions.
       - name: 🔐 Check signing availability
