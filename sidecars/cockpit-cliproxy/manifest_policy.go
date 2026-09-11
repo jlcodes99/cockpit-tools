@@ -720,14 +720,15 @@ func (t *requestUsageTracker) finalize(requestID string, input usageFinalizeInpu
 	if strings.TrimSpace(payload.RequestKind) == "" {
 		payload.RequestKind = strings.TrimSpace(input.requestKind)
 	}
-	if selectedOK {
+	// Token usage belongs to the attempt that reported it, not the last account
+	// selected for this downstream request. Async callbacks and retries may differ.
+	canUseSelected := len(records) == 0 ||
+		(strings.TrimSpace(payload.AccountID) == "" && strings.TrimSpace(payload.AuthID) != "" &&
+			strings.EqualFold(strings.TrimSpace(payload.AuthID), strings.TrimSpace(selected.AuthID)))
+	if selectedOK && canUseSelected {
 		payload.AccountID = selected.AccountID
 		payload.AccountEmail = selected.AccountEmail
 		payload.AuthID = selected.AuthID
-	} else {
-		payload.AccountID = ""
-		payload.AccountEmail = ""
-		payload.AuthID = ""
 	}
 	if input.status > 0 {
 		payload.Status = input.status

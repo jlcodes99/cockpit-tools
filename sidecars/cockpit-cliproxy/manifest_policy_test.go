@@ -2602,7 +2602,7 @@ func TestRequestUsageTrackerFinalizesWithSelectedAccount(t *testing.T) {
 	}
 }
 
-func TestRequestUsageTrackerSelectedAccountOverridesUsageAccount(t *testing.T) {
+func TestRequestUsageTrackerUsageAccountOverridesLaterSelection(t *testing.T) {
 	tracker := newRequestUsageTracker()
 	tracker.recordSelectedAccount("req-usage", &accountSpec{
 		ID:    "account-selected",
@@ -2626,8 +2626,8 @@ func TestRequestUsageTrackerSelectedAccountOverridesUsageAccount(t *testing.T) {
 	if !ok {
 		t.Fatal("expected finalized usage payload")
 	}
-	if payload.AccountID != "account-selected" || payload.AccountEmail != "selected@example.com" || payload.AuthID != "auth-selected" {
-		t.Fatalf("selected account metadata should win, got %#v", payload)
+	if payload.AccountID != "account-usage" || payload.AccountEmail != "usage@example.com" || payload.AuthID != "auth-usage" {
+		t.Fatalf("usage account metadata must stay with its tokens, got %#v", payload)
 	}
 }
 
