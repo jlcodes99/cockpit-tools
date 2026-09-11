@@ -374,9 +374,11 @@ export function PlatformLayoutModal({
     apiRelaySidebarVisible,
     apiRelayDashboardVisible,
     apiRelayEntryOrder,
+    disabledPlatformIds,
     reorderGroupPlatforms,
     setLayoutEntryOrder,
     setHiddenEntry,
+    setDisabledPlatform,
     setSidebarEntry,
     setTrayPlatform,
     setApiRelaySidebarVisible,
@@ -865,15 +867,17 @@ export function PlatformLayoutModal({
     && entries.every(isDashboardEntryVisible);
   const trayBulkEnabled = MENU_VISIBLE_PLATFORM_IDS.every((platformId) => traySet.has(platformId));
 
+  const disabledSet = useMemo(() => new Set<string>(disabledPlatformIds), [disabledPlatformIds]);
+
   const handleBulkEnable = (enabled: boolean) => {
     entries.forEach((entry) => {
       if (entry.type === 'api-relay') {
         return;
       }
-      setHiddenEntry(entry.id as PlatformLayoutEntryId, !enabled);
+      setDisabledPlatform(entry.id as PlatformId, !enabled);
     });
   };
-  const allEnabled = entries.length > 0 && entries.every((entry) => entry.type === 'api-relay' || !entry.hidden);
+  const allEnabled = entries.length > 0 && entries.every((entry) => entry.type === 'api-relay' || !disabledSet.has(entry.id));
 
   const openCreateGroupEditor = () => {
     const firstPlatform = MENU_VISIBLE_PLATFORM_IDS[0] ?? 'codebuddy';
@@ -1233,7 +1237,7 @@ export function PlatformLayoutModal({
                 </label>
               </div>
               <div className="platform-layout-bulk-cell platform-layout-bulk-enable">
-                <label className="platform-layout-bulk-toggle" title={t('platformLayout.disabledHint', '禁用后该平台入口将隐藏且所有自动活动停止')}>
+                <label className="platform-layout-bulk-toggle" title={t('platformLayout.disabledHint', '禁用后该平台的所有自动活动将停止')}>
                   <input
                     type="checkbox"
                     checked={allEnabled}
@@ -1372,18 +1376,18 @@ export function PlatformLayoutModal({
                       </span>
 
                       <label
-                        className={`platform-layout-enable-toggle ${entry.hidden ? 'is-disabled' : ''}`}
-                        title={t('platformLayout.disabledHint', '禁用后该平台入口将隐藏且所有自动活动停止')}
+                        className={`platform-layout-enable-toggle ${disabledSet.has(entry.id) ? 'is-disabled' : ''}`}
+                        title={t('platformLayout.disabledHint', '禁用后该平台的所有自动活动将停止')}
                         onClick={(event) => event.stopPropagation()}
                       >
                         <input
                           type="checkbox"
-                          checked={!entry.hidden}
+                          checked={!disabledSet.has(entry.id)}
                           onChange={(event) => {
                             if (isApiRelayEntry) {
                               return;
                             }
-                            setHiddenEntry(entry.id as PlatformLayoutEntryId, !event.target.checked);
+                            setDisabledPlatform(entry.id as PlatformId, !event.target.checked);
                           }}
                         />
                         <span>{t('platformLayout.enabledToggle', '启用')}</span>

@@ -79,6 +79,9 @@ pub struct TrayLayoutConfig {
     pub platform_groups: Vec<TrayLayoutGroup>,
     #[serde(default)]
     pub hidden_platform_ids: Vec<String>,
+    /// 被用户禁用的平台：隐藏只影响显示，禁用才停止后台自动活动。
+    #[serde(default)]
+    pub disabled_platform_ids: Vec<String>,
 }
 
 fn default_sort_mode() -> String {
@@ -135,6 +138,7 @@ impl Default for TrayLayoutConfig {
             ordered_entry_ids: default_ordered_entries(),
             platform_groups: default_platform_groups(),
             hidden_platform_ids: vec![],
+            disabled_platform_ids: vec![],
         }
     }
 }
@@ -500,7 +504,24 @@ fn normalize_config(
         ordered_entry_ids,
         platform_groups,
         hidden_platform_ids: config.hidden_platform_ids.clone(),
+        disabled_platform_ids: config.disabled_platform_ids.clone(),
     }
+}
+
+/// 平台是否在「平台布局」中被用户禁用。
+///
+/// 后台自动活动（token 保活、账号扫描等）统一用这个入口判断是否跳过某平台。
+/// 注意「隐藏」只影响显示，这里判断的是「禁用」集合，两者正交。
+pub fn is_platform_enabled(platform_id: &str) -> bool {
+    let disabled = load_tray_layout().disabled_platform_ids;
+    if disabled.is_empty() {
+        return true;
+    }
+    let Some(normalized) = normalize_platform_id(platform_id) else {
+        // 未知平台 ID 不做禁用判断，避免误停后台任务
+        return true;
+    };
+    !disabled.iter().any(|id| normalize_platform_id(id) == Some(normalized))
 }
 
 pub fn load_tray_layout() -> TrayLayoutConfig {
@@ -551,8 +572,22 @@ pub fn save_tray_layout(
     tray_platform_ids: Vec<String>,
     ordered_entry_ids: Option<Vec<String>>,
     platform_groups: Option<Vec<TrayLayoutGroup>>,
-    hidden_platform_ids: Vec<String>,
+    hidden_platform_ids: Option<Vec<String>>,
+    disabled_platform_ids: Option<Vec<String>>,
 ) -> Result<TrayLayoutConfig, String> {
+    // 旧版前端不传这些字段：保留已落盘的值，而不是清空它
+    let existing = if hidden_platform_ids.is_none() || disabled_platform_ids.is_none() {
+        Some(load_tray_layout())
+    } else {
+        None
+    };
+    let hidden_platform_ids = hidden_platform_ids
+        .or_else(|| existing.as_ref().map(|config| config.hidden_platform_ids.clone()))
+        .unwrap_or_default();
+    let disabled_platform_ids = disabled_platform_ids
+        .or_else(|| existing.as_ref().map(|config| config.disabled_platform_ids.clone()))
+        .unwrap_or_default();
+
     let normalized = normalize_config(
         TrayLayoutConfig {
             sort_mode,
@@ -561,6 +596,7 @@ pub fn save_tray_layout(
             ordered_entry_ids: ordered_entry_ids.unwrap_or_default(),
             platform_groups: platform_groups.unwrap_or_else(default_platform_groups),
             hidden_platform_ids,
+            disabled_platform_ids,
         },
         false,
     );

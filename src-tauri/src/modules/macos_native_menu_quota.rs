@@ -275,7 +275,13 @@
 
     fn visible_platforms() -> Vec<PlatformId> {
         let layout = modules::tray_layout::load_tray_layout();
-        let visible = sanitize_platform_list(&layout.tray_platform_ids);
+        // 与 tray.rs 保持一致：平台布局中被禁用（隐藏）的平台不出现在 macOS 原生菜单中
+        let visible: Vec<PlatformId> = sanitize_platform_list(&layout.tray_platform_ids)
+            .into_iter()
+            .filter(|platform| {
+                modules::tray_layout::is_platform_enabled(&platform.to_string())
+            })
+            .collect();
         let visible_set: HashSet<PlatformId> = visible.iter().copied().collect();
 
         let mut groups_by_id: HashMap<String, modules::tray_layout::TrayLayoutGroup> =

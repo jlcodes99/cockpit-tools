@@ -175,6 +175,11 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = bool>,
 {
+    // 平台在「平台布局」中被禁用时不参与任何 token 保活活动
+    if !crate::modules::tray_layout::is_platform_enabled(platform) {
+        return false;
+    }
+
     if !allow_platform_scan(platform) {
         return false;
     }

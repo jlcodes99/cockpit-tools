@@ -623,7 +623,7 @@
     "sidebarToggle": "Show in sidebar",
     "dashboardToggle": "Show in dashboard",
     "enabledToggle": "Enabled",
-    "disabledHint": "When disabled, the platform entry is hidden and all automated activity stops",
+    "disabledHint": "When disabled, all automated activity for this platform stops (entry visibility is controlled separately by the Dashboard toggle)",
     "enableAll": "Enable all",
     "disableAll": "Disable all",
     "trayToggle": "Show in tray",

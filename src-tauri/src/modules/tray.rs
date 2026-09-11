@@ -645,10 +645,11 @@ fn build_platform_group_submenu<R: Runtime>(
 fn resolve_tray_entries() -> Vec<TrayMenuEntry> {
     let layout = crate::modules::tray_layout::load_tray_layout();
     let visible = sanitize_platform_list(&layout.tray_platform_ids);
-    // 平台布局中被禁用（隐藏）的平台不出现在托盘菜单中，也不触发其账号读取/修复
+    // 被隐藏或被禁用的平台都不出现在托盘菜单中，也不触发其账号读取/修复
     let hidden_set: HashSet<PlatformId> = layout
         .hidden_platform_ids
         .iter()
+        .chain(layout.disabled_platform_ids.iter())
         .filter_map(|p| PlatformId::from_str(p.trim()))
         .collect();
     let visible = visible
