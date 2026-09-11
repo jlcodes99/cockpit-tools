@@ -1596,6 +1596,8 @@
       "gcpTos": "GCP ToS",
       "gcpTosTitle": "GCP ToS account"
     },
+    "lastSwitchTime": "Last switch",
+    "neverSwitched": "Never switched",
     "columns": {
       "email": "Email",
       "subscription": "Subscription",

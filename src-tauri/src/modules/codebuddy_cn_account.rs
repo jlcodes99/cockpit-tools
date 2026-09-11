@@ -109,6 +109,16 @@ fn save_account_file(account: &CodebuddyAccount) -> Result<(), String> {
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
+// Records the last switch time for a CodeBuddy CN account (used by the
+// inject/switch command). ponytail: O(n) load+save of a single account file.
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("CodeBuddy CN account not found: {}", account_id))?;
+    account.last_used = now_ts();
+    save_account_file(&account)?;
+    Ok(())
+}
+
 fn delete_account_file(account_id: &str) -> Result<(), String> {
     let path = resolve_account_file_path(account_id)?;
     if path.exists() {
@@ -1145,6 +1155,7 @@ fn parse_local_access_token(value: &Value) -> Option<String> {
         _ => None,
     }
 }
+
 
 fn normalize_local_codebuddy_cn_token(token: &str) -> Option<String> {
     let trimmed = token.trim();

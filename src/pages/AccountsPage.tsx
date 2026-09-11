@@ -23,6 +23,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { AccountLastUsed } from '../components/AccountLastUsed'
 import { useAccountStore } from '../stores/useAccountStore'
 import * as accountService from '../services/accountService'
 import { Account } from '../types/account'
@@ -3239,7 +3240,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
             </div>
           )}
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.created_at)}</span>
+            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               {isPendingAntigravityAccount(account) && (
                 <button
@@ -3572,6 +3573,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                 {maskAccountText(account.email)}
               </span>
             </span>
+            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className={styles.quotas}>
               {groupQuotas.length > 0 ? (
                 groupQuotas.map((gq) => (
@@ -3880,6 +3882,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
               </div>
             </div>
           </td>
+          <td>{formatDate(account.last_used || account.created_at)}</td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
               {isPendingAntigravityAccount(account) && (
@@ -3990,6 +3993,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
             </th>
             <th style={{ width: 220 }}>{t('accounts.columns.email')}</th>
             <th>{t('accounts.columns.quota')}</th>
+            <th>{t('accounts.columns.lastUsed')}</th>
             <th className="sticky-action-header table-action-header">
               {t('accounts.columns.actions')}
             </th>

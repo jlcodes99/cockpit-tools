@@ -4,6 +4,7 @@ import {
   Copy, Check, RotateCw, LayoutGrid, List, Search,
   Tag, Play, Eye, EyeOff, CircleAlert, ChevronDown,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import * as codebuddyService from '../services/codebuddyService';
 import { TagEditModal } from '../components/TagEditModal';
@@ -532,7 +533,7 @@ export function CodebuddyAccountsPage() {
             {renderQuotaQuerySection(account, 'card')}
           </div>
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.created_at)}</span>
+            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               <button className="card-action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting}
                 title={t('common.shared.switchAccount', '切换账号')}>

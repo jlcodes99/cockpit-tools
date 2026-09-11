@@ -194,6 +194,8 @@ pub async fn inject_cursor_account(app: AppHandle, account_id: String) -> Result
     let account = cursor_account::load_account(&account_id)
         .ok_or_else(|| format!("Cursor account not found: {}", account_id))?;
 
+    cursor_account::touch_last_used(&account_id)?;
+
     cursor_account::inject_to_cursor(&account_id)?;
     crate::modules::provider_current_state::set_current_account_id(
         "cursor",

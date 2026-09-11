@@ -188,6 +188,15 @@
   background: transparent;
 }
 
+.account-last-used {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.account-last-used svg {
+  flex-shrink: 0;
+}
+
 /* Minimalist Action Bar - No Background */
 .card-actions {
   display: flex;

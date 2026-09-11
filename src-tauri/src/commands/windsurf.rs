@@ -340,6 +340,7 @@ pub async fn inject_windsurf_to_vscode(
     ));
     let account = windsurf_account::load_account(&account_id)
         .ok_or_else(|| format!("Windsurf account not found: {}", account_id))?;
+    windsurf_account::touch_last_used(&account_id)?;
     logger::log_info(&format!(
         "[Windsurf Switch] 目标账号信息: login={}, email={}",
         account.github_login,

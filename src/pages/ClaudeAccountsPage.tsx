@@ -35,6 +35,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -3134,7 +3135,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                           renderQuotaSummary(account, 'card')
                         )}
                         <div className="codex-card-bottom">
-                          <span className="card-date">{formatDate(account.created_at)}</span>
+                          <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
                           <div className="card-footer">
                             {renderAccountActions(account, 'card')}
                           </div>
@@ -3228,7 +3229,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                             </td>
                             <td>{isProviderAccount ? null : renderPlanControl(account)}</td>
                             <td>{isProviderAccount ? renderApiKeyStatsPanel(account) : renderQuotaSummary(account, 'table')}</td>
-                            <td>{formatDate(account.created_at)}</td>
+                            <td>{formatDate(account.last_used || account.created_at)}</td>
                             <td className="sticky-action-cell table-action-cell">
                               {renderAccountActions(account, 'table')}
                             </td>

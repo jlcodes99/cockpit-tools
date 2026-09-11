@@ -1318,6 +1318,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
             console.error(`[${platformKey}] onInjectSuccess callback failed:`, callbackError);
           }
         }
+        await fetchAccounts();
       } catch (e: unknown) {
         const retrySwitch = async () => {
           await injectFn(accountId);
@@ -1365,6 +1366,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
     accounts,
     config,
     dataService.injectToVSCode,
+    fetchAccounts,
     maskAccountText,
     platformId,
     platformKey,

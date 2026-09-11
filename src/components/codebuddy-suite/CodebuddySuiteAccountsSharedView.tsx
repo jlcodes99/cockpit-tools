@@ -56,6 +56,7 @@ import {
 import { KNOWN_PLAN_FILTERS } from "./CodebuddySuiteConfig";
 import { DosageNotifyUsageStatus } from "../platform/DosageNotifyUsageStatus";
 import { CodeBuddyQuotaCategoryList } from "../codebuddy/CodeBuddyQuotaCategoryList";
+import { AccountLastUsed } from "../AccountLastUsed";
 import {
   MultiSelectFilterDropdown,
   type MultiSelectFilterOption,
@@ -723,7 +724,7 @@ export function CodebuddySuiteAccountsSharedView<
             {renderQuotaQuerySection(account, "card")}
           </div>
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.created_at)}</span>
+            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               <button
                 className="card-action-btn success"
@@ -837,6 +838,9 @@ export function CodebuddySuiteAccountsSharedView<
             <div className={platformConfig.tableUsageClassName}>
               {renderQuotaQuerySection(account, "table")}
             </div>
+          </td>
+          <td>
+            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
           </td>
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
@@ -1248,6 +1252,7 @@ export function CodebuddySuiteAccountsSharedView<
                   {t("common.shared.columns.plan", "套餐")}
                 </th>
                 <th>{t("instances.labels.quota", "配额")}</th>
+                <th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>
                 <th className="sticky-action-header table-action-header">
                   {t("common.shared.columns.actions", "操作")}
                 </th>
@@ -1293,6 +1298,7 @@ export function CodebuddySuiteAccountsSharedView<
                   {t("common.shared.columns.plan", "套餐")}
                 </th>
                 <th>{t("instances.labels.quota", "配额")}</th>
+                <th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>
                 <th className="sticky-action-header table-action-header">
                   {t("common.shared.columns.actions", "操作")}
                 </th>

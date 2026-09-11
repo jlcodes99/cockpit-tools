@@ -24,6 +24,7 @@ import {
   X,
   Check,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { confirm as confirmDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useTranslation } from 'react-i18next';
@@ -1606,9 +1607,7 @@ export function QoderAccountsPage() {
             {renderQuotaSection(account)}
 
             <div className="card-footer">
-              <span className="card-date qoder-card-created-at" title={createdAtText}>
-                {updatedText}
-              </span>
+              <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDateTime} />
               <div className="card-actions">
                 <button
                   className="card-action-btn success"
@@ -1745,7 +1744,7 @@ export function QoderAccountsPage() {
                 {quota.resetText && <div className="quota-reset qoder-table-reset">{quota.resetText}</div>}
               </div>
             </td>
-            <td>{formatDateTime(account.created_at)}</td>
+            <td>{formatDateTime(account.last_used || account.created_at)}</td>
             <td>
               <div className="action-buttons">
                 <button
