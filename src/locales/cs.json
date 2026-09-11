@@ -397,7 +397,8 @@
     "apiRelay": "API relay",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Sponzoři",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "Obnova vyžádána pro {{count}} účtů",
         "dialog": {
           "title": "Problémy účtů",
-      "description": "Každý účet je zobrazen s modelem, důvodem nedostupnosti a dostupnou akcí obnovení.",
+          "description": "Každý účet je zobrazen s modelem, důvodem nedostupnosti a dostupnou akcí obnovení.",
           "noIssues": "Účty jsou bez problémů",
           "unscopedApiKey": "Aktuální API Key",
           "poolUnavailable": "Ve fondu není dostupný účet",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Správa klíčů OpenCode Go/Zen a filtr podle tier."
+  },
+  "codebuddyCli": {
+    "search": "Hledat účty (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "Pokyny pro správu účtu CodeBuddy CLI (kliknutím rozbalíte/sbalíte)",
+      "desc": "Přepnutí účtu zapíše přihlašovací údaje vybraného účtu do oficiálního ověřovacího souboru CodeBuddy CLI (zpracováno lokálně v prostém textu).",
+      "permission": "Rozsah oprávnění: Čtení/zápis ověřovacího souboru CodeBuddy CLI (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Rozsah sítě: Obnovení tokenu vyžaduje připojení ke službě WorkBuddy. Žádné místní klíče ani přihlašovací údaje se neodesílají."
+    },
+    "noAccounts": "Nejsou k dispozici žádné účty. Nejprve přidejte účet (sdílený systém účtů).",
+    "addAccount": "Přidat účet CodeBuddy CLI",
+    "oauthDesc": "Kliknutím na tlačítko níže otevřete autorizační stránku WorkBuddy v prohlížeči (sdílený systém účtů s CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Autorizovat pouze přihlášení do IDE",
+        "item1": "Dokončete OAuth v prohlížeči a přidejte účet pro přepínání CodeBuddy CLI.",
+        "item2": "Data kvóty balíčku prostředků se po autorizaci automaticky obnoví.",
+        "item3": "Karty účtů zobrazují výši kvóty, průběh a čas obnovení/vypršení platnosti podle balíčku prostředků."
+      }
+    },
+    "oauthUrlInputPlaceholder": "Autorizační adresu URL můžete zadat ručně",
+    "oauthWaiting": "Čekání na autorizaci...",
+    "tokenDesc": "Vložte access token WorkBuddy:",
+    "import": {
+      "localDesc": "Importovat data účtu z místního klienta CodeBuddy CLI nebo souboru JSON.",
+      "localClient": "Importovat z místního CodeBuddy CLI"
+    },
+    "switchRestartHint": "Přepnutí dokončeno. Spuštěné procesy CodeBuddy CLI je nutné restartovat, aby se projevily (nová okna terminálu se projeví automaticky)."
   }
 }

@@ -14,6 +14,7 @@ import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useCodebuddyCliAccountStore } from '../stores/useCodebuddyCliAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
 import { useSponsorStore } from '../stores/useSponsorStore';
 import { useRemoteConfigStore } from '../stores/useRemoteConfigStore';
@@ -174,6 +175,45 @@ function pickRecommendedTraeAccount(accounts: TraeAccount[], currentId?: string 
     const usedPercent = usage.usedPercent ?? 101;
     return {
       remaining: 100 - usedPercent,
+      freshness: account.last_used || account.created_at || 0,
+    };
+  };
+
+  return others.reduce((best, candidate) => {
+    const bestScore = getScore(best);
+    const candidateScore = getScore(candidate);
+    if (candidateScore.remaining !== bestScore.remaining) {
+      return candidateScore.remaining > bestScore.remaining ? candidate : best;
+    }
+    return candidateScore.freshness > bestScore.freshness ? candidate : best;
+  });
+}
+
+function pickRecommendedWorkbuddyAccount(
+  accounts: WorkbuddyAccount[],
+  currentId: string | null | undefined,
+): WorkbuddyAccount | null {
+  if (accounts.length <= 1) return null;
+  const others = accounts.filter((a) => a.id !== currentId);
+  if (others.length === 0) return null;
+
+  const getScore = (account: WorkbuddyAccount) => {
+    const model = getWorkbuddyOfficialQuotaModel(account);
+    // 只使用基础包进行计算，不包含加量包
+    const baseResources = model.resources.filter(r => r.total > 0 || r.remain > 0);
+
+    // 计算平均剩余百分比（剩余越多越好）
+    let avgRemainPercent = -1;
+    if (baseResources.length > 0) {
+      const totalRemainPercent = baseResources.reduce((sum, r) => {
+        const pct = r.remainPercent ?? (r.total > 0 ? Math.max(0, (r.remain / r.total) * 100) : 0);
+        return sum + pct;
+      }, 0);
+      avgRemainPercent = totalRemainPercent / baseResources.length;
+    }
+
+    return {
+      remaining: avgRemainPercent, // 剩余百分比越高越好
       freshness: account.last_used || account.created_at || 0,
     };
   };
@@ -564,6 +604,14 @@ export function DashboardPage({
     switchAccount: switchWorkbuddyAccount,
   } = useWorkbuddyAccountStore();
 
+  // CodeBuddy CLI 与 WorkBuddy 共用同一账号库，展示数据取 WorkBuddy 列表，
+  // 当前账号/切号走 codebuddy_cli 自己的状态。
+  const {
+    currentAccountId: codebuddyCliCurrentId,
+    fetchAccounts: fetchCodebuddyCliAccounts,
+    switchAccount: switchCodebuddyCliAccount,
+  } = useCodebuddyCliAccountStore();
+
   const {
     accounts: zedAccounts,
     currentAccountId: zedCurrentId,
@@ -624,6 +672,7 @@ export function DashboardPage({
       fetchZcodeAccounts,
       fetchTraeAccounts,
       fetchWorkbuddyAccounts,
+      fetchCodebuddyCliAccounts,
     ];
 
     const loadDeferredPlatforms = () => {
@@ -782,6 +831,7 @@ export function DashboardPage({
     zcode: boolean;
     trae: boolean;
     workbuddy: boolean;
+    codebuddyCli: boolean;
   }>({
     ag: false,
     codex: false,
@@ -797,6 +847,7 @@ export function DashboardPage({
     zcode: false,
     trae: false,
     workbuddy: false,
+    codebuddyCli: false,
   });
 
   // Refresh Handlers
@@ -1559,6 +1610,39 @@ export function DashboardPage({
     }
   };
 
+  const handleRefreshCodebuddyCliCard = async () => {
+    if (cardRefreshing.codebuddyCli) return;
+    setCardRefreshing((prev) => ({ ...prev, codebuddyCli: true }));
+    const idsToRefresh = Array.from(new Set([codebuddyCliCurrent?.id, codebuddyCliRecommended?.id].filter(Boolean))) as string[];
+    try {
+      for (const id of idsToRefresh) {
+        await useWorkbuddyAccountStore.getState().refreshToken(id);
+      }
+    } catch (error) {
+      console.error('Failed to refresh CodeBuddy CLI card:', error);
+    } finally {
+      setCardRefreshing((prev) => ({ ...prev, codebuddyCli: false }));
+    }
+  };
+
+  const handleSwitchCodebuddyCli = async (accountId: string) => {
+    if (switching.has(accountId)) return;
+    setSwitching((prev) => new Set(prev).add(accountId));
+    try {
+      await switchCodebuddyCliAccount(accountId);
+      // 切号写入 CLI 认证文件后刷新共用账号池，同步配额/到期数据
+      await fetchWorkbuddyAccounts();
+    } catch (error) {
+      console.error('Switch failed:', error);
+    } finally {
+      setSwitching((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
   // Antigravity Recommendation Logic
   const agRecommended = useMemo(() => {
     if (agAccounts.length <= 1) return null;
@@ -2027,42 +2111,20 @@ export function DashboardPage({
     return pickRecommendedTraeAccount(traeAccountsByPlatform[platformId], getTraeCurrentForPlatform(platformId)?.id);
   };
 
-  const workbuddyRecommended = useMemo(() => {
-    if (workbuddyAccounts.length <= 1) return null;
-    const currentId = workbuddyCurrent?.id;
-    const others = workbuddyAccounts.filter((a) => a.id !== currentId);
-    if (others.length === 0) return null;
+  const workbuddyRecommended = useMemo(
+    () => pickRecommendedWorkbuddyAccount(workbuddyAccounts, workbuddyCurrent?.id),
+    [workbuddyAccounts, workbuddyCurrent?.id],
+  );
 
-    const getScore = (account: WorkbuddyAccount) => {
-      const model = getWorkbuddyOfficialQuotaModel(account);
-      // 只使用基础包进行计算，不包含加量包
-      const baseResources = model.resources.filter(r => r.total > 0 || r.remain > 0);
+  const codebuddyCliCurrent = useMemo(
+    () => resolveDashboardCurrentAccount(workbuddyAccounts, codebuddyCliCurrentId),
+    [workbuddyAccounts, codebuddyCliCurrentId],
+  );
 
-      // 计算平均剩余百分比（剩余越多越好）
-      let avgRemainPercent = -1;
-      if (baseResources.length > 0) {
-        const totalRemainPercent = baseResources.reduce((sum, r) => {
-          const pct = r.remainPercent ?? (r.total > 0 ? Math.max(0, (r.remain / r.total) * 100) : 0);
-          return sum + pct;
-        }, 0);
-        avgRemainPercent = totalRemainPercent / baseResources.length;
-      }
-
-      return {
-        remaining: avgRemainPercent, // 剩余百分比越高越好
-        freshness: account.last_used || account.created_at || 0,
-      };
-    };
-
-    return others.reduce((best, candidate) => {
-      const bestScore = getScore(best);
-      const candidateScore = getScore(candidate);
-      if (candidateScore.remaining !== bestScore.remaining) {
-        return candidateScore.remaining > bestScore.remaining ? candidate : best;
-      }
-      return candidateScore.freshness > bestScore.freshness ? candidate : best;
-    });
-  }, [workbuddyAccounts, workbuddyCurrent?.id]);
+  const codebuddyCliRecommended = useMemo(
+    () => pickRecommendedWorkbuddyAccount(workbuddyAccounts, codebuddyCliCurrent?.id),
+    [workbuddyAccounts, codebuddyCliCurrent?.id],
+  );
 
   const zedRecommended = useMemo(() => {
     if (zedAccounts.length <= 1) return null;
@@ -2658,6 +2720,20 @@ export function DashboardPage({
     });
   };
 
+  const renderCodebuddyCliAccountContent = (account: WorkbuddyAccount | null) => {
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+
+    const presentation = buildWorkbuddyAccountPresentation(account, t);
+    return renderUnifiedAccountCard({
+      presentation,
+      onRefresh: () => handleRefreshWorkbuddy(account.id),
+      onSwitch: () => handleSwitchCodebuddyCli(account.id),
+      isRefreshing: refreshing.has(account.id),
+      isSwitching: switching.has(account.id),
+      onEditTags: () => setTagModalState({ accountId: account.id, platform: 'workbuddy', tags: account.tags || [] }),
+    });
+  };
+
   const platformCounts: Record<PlatformId, number> = {
     antigravity: stats.antigravity,
     antigravity_ide: stats.antigravity,
@@ -2672,6 +2748,7 @@ export function DashboardPage({
     grok: stats.grok,
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
+    codebuddy_cli: stats.workbuddy,
     qoder: stats.qoder,
     zcode: stats.zcode,
     trae: stats.trae,
@@ -3427,6 +3504,53 @@ export function DashboardPage({
           </div>
 
           <button className="card-footer-action" onClick={() => navigateToPlatform(platformId)}>
+            {t('dashboard.viewAllAccounts', '查看所有账号')}
+          </button>
+        </div>
+      );
+    }
+
+    if (platformId === 'codebuddy_cli') {
+      return (
+        <div className="main-card windsurf-card" key={platformId}>
+          <div className="main-card-header">
+            <div className="header-title">
+              <CodebuddyIcon style={{ width: 18, height: 18 }} />
+              <h3>{getPlatformLabel(platformId, t)}</h3>
+            </div>
+            <div className="header-action-group">
+              <button
+                className="header-action-btn"
+                onClick={handleRefreshCodebuddyCliCard}
+                disabled={cardRefreshing.codebuddyCli}
+                title={t('common.refresh', '刷新')}
+              >
+                <RotateCw size={14} className={cardRefreshing.codebuddyCli ? 'loading-spinner' : ''} />
+                <span>{t('common.refresh', '刷新')}</span>
+              </button>
+              {renderHideCardButton(platformId)}
+            </div>
+          </div>
+
+          <div className="split-content">
+            <div className="split-half current-half">
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '当前账户')}</span>
+              {renderCodebuddyCliAccountContent(codebuddyCliCurrent)}
+            </div>
+
+            <div className="split-divider"></div>
+
+            <div className="split-half recommend-half">
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              {codebuddyCliRecommended ? (
+                renderCodebuddyCliAccountContent(codebuddyCliRecommended)
+              ) : (
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+              )}
+            </div>
+          </div>
+
+          <button className="card-footer-action" onClick={() => onNavigate('codebuddy-cli')}>
             {t('dashboard.viewAllAccounts', '查看所有账号')}
           </button>
         </div>

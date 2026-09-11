@@ -397,7 +397,8 @@
     "apiRelay": "Relé API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Patrocinadores",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "Recuperação solicitada para {{count}} conta(s)",
         "dialog": {
           "title": "Problemas de contas",
-      "description": "Cada conta é exibida com o modelo, o motivo da indisponibilidade e a ação de recuperação disponível.",
+          "description": "Cada conta é exibida com o modelo, o motivo da indisponibilidade e a ação de recuperação disponível.",
           "noIssues": "Nenhum problema de contas",
           "unscopedApiKey": "API Key atual",
           "poolUnavailable": "Nenhuma conta disponível no pool",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gerencie chaves OpenCode Go/Zen e filtre por nível."
+  },
+  "codebuddyCli": {
+    "search": "Pesquisar contas (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "Instruções de gerenciamento de conta do CodeBuddy CLI (clique para expandir/recolher)",
+      "desc": "A troca de conta grava as credenciais da conta selecionada no arquivo oficial de autenticação do CodeBuddy CLI (processado localmente em texto simples).",
+      "permission": "Escopo de permissão: Leitura/gravação do arquivo de autenticação do CodeBuddy CLI (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Escopo de rede: A atualização do token conecta-se ao serviço WorkBuddy. Nenhuma chave ou credencial local é enviada."
+    },
+    "noAccounts": "Nenhuma conta disponível. Adicione uma conta primeiro (sistema de contas compartilhado).",
+    "addAccount": "Adicionar conta CodeBuddy CLI",
+    "oauthDesc": "Clique no botão abaixo para abrir a página de autorização do WorkBuddy no seu navegador (sistema de contas compartilhado com o CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Autorizar apenas login na IDE",
+        "item1": "Conclua o OAuth no navegador para adicionar a conta e usá-la na alternância do CodeBuddy CLI.",
+        "item2": "Os dados de cota do pacote de recursos serão atualizados automaticamente após a autorização.",
+        "item3": "Os cartões de conta exibem a cota, o progresso e o tempo de atualização/expiração por pacote de recursos."
+      }
+    },
+    "oauthUrlInputPlaceholder": "Você pode inserir um URL de autorização manualmente",
+    "oauthWaiting": "Aguardando autorização...",
+    "tokenDesc": "Colar o access token do WorkBuddy:",
+    "import": {
+      "localDesc": "Importar dados da conta do cliente local do CodeBuddy CLI ou de um arquivo JSON.",
+      "localClient": "Importar do CodeBuddy CLI local"
+    },
+    "switchRestartHint": "Troca concluída. Os processos em execução do CodeBuddy CLI devem ser reiniciados para entrar em vigor (novas janelas do terminal entram em vigor automaticamente)."
   }
 }

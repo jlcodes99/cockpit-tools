@@ -1083,6 +1083,9 @@ pub fn run() {
             commands::workbuddy::get_workbuddy_accounts_index_path,
             commands::workbuddy::inject_workbuddy_to_vscode,
             commands::workbuddy::sync_workbuddy_to_codebuddy_cn,
+            // CodeBuddy CLI Commands
+            commands::codebuddy_cli::inject_workbuddy_to_codebuddy_cli,
+            commands::codebuddy_cli::import_codebuddy_cli_from_local,
             commands::workbuddy::get_checkin_status_workbuddy,
             commands::workbuddy::checkin_workbuddy,
             // WorkBuddy WebView (网页会话) Commands

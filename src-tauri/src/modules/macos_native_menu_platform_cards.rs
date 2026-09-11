@@ -688,6 +688,7 @@
             PlatformId::Codebuddy => build_codebuddy_cards(lang),
             PlatformId::CodebuddyCn => build_codebuddy_cn_cards(lang),
             PlatformId::Workbuddy => build_workbuddy_cards(lang),
+            PlatformId::CodebuddyCli => build_codebuddy_cli_cards(lang),
             PlatformId::Zed => build_zed_cards(lang),
         }
     }
@@ -2116,8 +2117,22 @@
     }
 
     fn build_workbuddy_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        build_workbuddy_family_cards(lang, modules::workbuddy_account::resolve_current_account_id)
+    }
+
+    fn build_codebuddy_cli_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        build_workbuddy_family_cards(
+            lang,
+            modules::workbuddy_account::resolve_codebuddy_cli_current_account_id,
+        )
+    }
+
+    fn build_workbuddy_family_cards(
+        lang: &str,
+        resolve_current_id: fn(&[crate::models::workbuddy::WorkbuddyAccount]) -> Option<String>,
+    ) -> (Vec<AccountCard>, Option<String>, Option<String>) {
         let mut accounts = modules::workbuddy_account::list_accounts();
-        let current_id = modules::workbuddy_account::resolve_current_account_id(&accounts);
+        let current_id = resolve_current_id(&accounts);
         accounts
             .sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
         let cards = accounts

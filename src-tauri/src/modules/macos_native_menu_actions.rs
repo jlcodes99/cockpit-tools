@@ -356,6 +356,14 @@ fn spawn_refresh(platform: PlatformId, account_id: Option<String>) {
             (PlatformId::Workbuddy, None) => {
                 commands::workbuddy::refresh_all_workbuddy_tokens(app.clone()).await
             }
+            (PlatformId::CodebuddyCli, Some(account_id)) => {
+                commands::workbuddy::refresh_workbuddy_token(app.clone(), account_id)
+                    .await
+                    .map(|_| 0)
+            }
+            (PlatformId::CodebuddyCli, None) => {
+                commands::workbuddy::refresh_all_workbuddy_tokens(app.clone()).await
+            }
             (PlatformId::Zed, Some(account_id)) => {
                 commands::zed::refresh_zed_token(app.clone(), account_id)
                     .await
@@ -451,6 +459,11 @@ fn spawn_switch_account(platform: PlatformId, account_id: String) {
             .map(|_| ()),
             PlatformId::Workbuddy => {
                 commands::workbuddy::inject_workbuddy_to_vscode(app, account_id)
+                    .await
+                    .map(|_| ())
+            }
+            PlatformId::CodebuddyCli => {
+                commands::codebuddy_cli::inject_workbuddy_to_codebuddy_cli(app, account_id)
                     .await
                     .map(|_| ())
             }

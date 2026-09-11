@@ -444,7 +444,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Sponsor",
@@ -2685,7 +2686,7 @@
         "recoverSuccess": "Pemulihan diminta untuk {{count}} akun",
         "dialog": {
           "title": "Masalah Akun",
-      "description": "Setiap akun ditampilkan bersama model, alasan tidak tersedia, dan tindakan pemulihan yang tersedia.",
+          "description": "Setiap akun ditampilkan bersama model, alasan tidak tersedia, dan tindakan pemulihan yang tersedia.",
           "noIssues": "Tidak ada masalah akun",
           "unscopedApiKey": "API Key saat ini",
           "poolUnavailable": "Tidak ada akun pool yang tersedia",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Kelola key OpenCode Go/Zen dan filter per tier."
+  },
+  "codebuddyCli": {
+    "search": "Cari akun (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "Petunjuk Pengelolaan Akun CodeBuddy CLI (klik untuk memperluas/menciutkan)",
+      "desc": "Beralih akun menulis kredensial akun yang dipilih ke dalam file autentikasi resmi CodeBuddy CLI (diproses secara lokal dalam teks biasa).",
+      "permission": "Cakupan izin: Membaca/menulis file autentikasi CodeBuddy CLI (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Cakupan jaringan: Penyegaran token terhubung ke layanan WorkBuddy. Tidak ada kunci lokal atau kredensial yang diunggah."
+    },
+    "noAccounts": "Tidak ada akun yang tersedia. Silakan tambahkan akun terlebih dahulu (sistem akun bersama).",
+    "addAccount": "Tambah Akun CodeBuddy CLI",
+    "oauthDesc": "Klik tombol di bawah untuk membuka halaman otorisasi WorkBuddy di browser Anda (sistem akun bersama dengan CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Hanya otorisasi info login IDE",
+        "item1": "Selesaikan OAuth di browser untuk menambahkan akun untuk peralihan CodeBuddy CLI.",
+        "item2": "Data kuota paket sumber daya akan diperbarui secara otomatis setelah otorisasi.",
+        "item3": "Kartu akun menampilkan jumlah kuota, progres, dan waktu penyegaran/kedaluwarsa berdasarkan paket sumber daya."
+      }
+    },
+    "oauthUrlInputPlaceholder": "Anda dapat memasukkan URL otorisasi secara manual",
+    "oauthWaiting": "Menunggu otorisasi...",
+    "tokenDesc": "Tempel access token WorkBuddy:",
+    "import": {
+      "localDesc": "Impor data akun dari klien CodeBuddy CLI lokal atau file JSON.",
+      "localClient": "Impor dari CodeBuddy CLI lokal"
+    },
+    "switchRestartHint": "Peralihan selesai. Proses CodeBuddy CLI yang sedang berjalan harus dimulai ulang agar berlaku (jendela terminal baru akan berlaku secara otomatis)."
   }
 }

@@ -397,7 +397,8 @@
     "apiRelay": "Aktarım",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Sponsorlar",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "{{count}} hesap için kurtarma istendi",
         "dialog": {
           "title": "Hesap Sorunları",
-      "description": "Her hesap model, kullanılamama nedeni ve varsa kurtarma işlemiyle birlikte gösterilir.",
+          "description": "Her hesap model, kullanılamama nedeni ve varsa kurtarma işlemiyle birlikte gösterilir.",
           "noIssues": "Hesaplarda sorun yok",
           "unscopedApiKey": "Geçerli API Key",
           "poolUnavailable": "Havuzda kullanılabilir hesap yok",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen anahtarlarını yönetin ve kademeye göre süzün."
+  },
+  "codebuddyCli": {
+    "search": "Hesapları ara (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "CodeBuddy CLI Hesap Yönetimi Talimatları (genişletmek/daraltmak için tıklayın)",
+      "desc": "Hesap değiştirmek, seçilen hesabın kimlik bilgilerini resmi CodeBuddy CLI kimlik doğrulama dosyasına yazar (yerel olarak düz metin halinde işlenir).",
+      "permission": "İzin kapsamı: CodeBuddy CLI kimlik doğrulama dosyasını okuma/yazma (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Ağ kapsamı: Belirteç yenileme WorkBuddy hizmetine bağlanır. Yerel anahtarlar veya kimlik bilgileri karşıya yüklenmez."
+    },
+    "noAccounts": "Kullanılabilir hesap yok. Lütfen önce bir hesap ekleyin (ortak hesap sistemi).",
+    "addAccount": "CodeBuddy CLI Hesabı Ekle",
+    "oauthDesc": "Tarayıcınızda WorkBuddy yetkilendirme sayfasını açmak için aşağıdaki düğmeye tıklayın (CodeBuddy CLI ile ortak hesap sistemi).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Yalnızca IDE oturum açma bilgilerini yetkilendir",
+        "item1": "CodeBuddy CLI geçişi için hesabı eklemek üzere tarayıcıda OAuth'u tamamlayın.",
+        "item2": "Kaynak paketi kota verileri yetkilendirmeden sonra otomatik olarak yenilenecektir.",
+        "item3": "Hesap kartları, kaynak paketine göre kota miktarını, ilerlemeyi ve yenileme/son kullanma süresini gösterir."
+      }
+    },
+    "oauthUrlInputPlaceholder": "Bir yetkilendirme URL'sini manuel olarak girebilirsiniz",
+    "oauthWaiting": "Yetkilendirme bekleniyor...",
+    "tokenDesc": "WorkBuddy access token'ını yapıştırın:",
+    "import": {
+      "localDesc": "Hesap verilerini yerel CodeBuddy CLI istemcisinden veya bir JSON dosyasından içe aktarın.",
+      "localClient": "Yerel CodeBuddy CLI'dan İçe Aktar"
+    },
+    "switchRestartHint": "Geçiş tamamlandı. Çalışan CodeBuddy CLI işlemlerinin etkili olması için yeniden başlatılması gerekir (yeni terminal pencereleri otomatik olarak etkili olur)."
   }
 }

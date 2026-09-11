@@ -12,6 +12,7 @@ import { useGrokAccountStore } from '../stores/useGrokAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useCodebuddyCliAccountStore } from '../stores/useCodebuddyCliAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
@@ -198,6 +199,7 @@ function getCurrentAccountEmails(): Record<CurrentAccountRefreshPlatform, string
     codebuddy: getProviderEmail(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail),
     codebuddy_cn: getProviderEmail(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail),
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),
+    codebuddy_cli: getProviderEmail(useCodebuddyCliAccountStore, getWorkbuddyAccountDisplayEmail),
     qoder: getProviderEmail(useQoderAccountStore, getQoderAccountDisplayEmail),
     zcode: getProviderEmail(useZcodeAccountStore, getZcodeAccountDisplayEmail),
     trae: getTraeProviderEmail('trae'),
@@ -276,6 +278,8 @@ export function useAutoRefresh() {
   const codebuddyCnCurrentRefreshingRef = useRef(false);
   const workbuddyRefreshingRef = useRef(false);
   const workbuddyCurrentRefreshingRef = useRef(false);
+  const codebuddyCliRefreshingRef = useRef(false);
+  const codebuddyCliCurrentRefreshingRef = useRef(false);
   const qoderRefreshingRef = useRef(false);
   const qoderCurrentRefreshingRef = useRef(false);
   const zcodeRefreshingRef = useRef(false);
@@ -662,6 +666,21 @@ export function useAutoRefresh() {
               },
             },
             {
+              key: 'codebuddy_cli',
+              label: 'CodeBuddy CLI',
+              intervalMinutes: config.workbuddy_auto_refresh_minutes,
+              currentMinutes: resolveCurrentMinutes('codebuddy_cli', currentAccountEmails.codebuddy_cli, currentRefreshMinutesMap),
+              fullRefreshingRef: codebuddyCliRefreshingRef,
+              currentRefreshingRef: codebuddyCliCurrentRefreshingRef,
+              runFullRefresh: async () => {},
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(
+                  useCodebuddyCliAccountStore.getState().fetchCurrentAccountId,
+                  useCodebuddyCliAccountStore.getState().refreshToken,
+                );
+              },
+            },
+            {
               key: 'qoder',
               label: 'Qoder',
               intervalMinutes: config.qoder_auto_refresh_minutes,
@@ -779,7 +798,7 @@ export function useAutoRefresh() {
 
           const tasks: AutoRefreshSchedulerTask[] = [];
           for (const descriptor of descriptors) {
-            if (descriptor.intervalMinutes > 0) {
+            if (descriptor.intervalMinutes > 0 && descriptor.key !== 'codebuddy_cli') {
               console.log(`[AutoRefresh] ${descriptor.label} 已启用: 每 ${descriptor.intervalMinutes} 分钟`);
               tasks.push({
                 key: `full:${descriptor.key}`,

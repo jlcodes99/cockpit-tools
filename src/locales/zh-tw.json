@@ -397,7 +397,8 @@
     "apiRelay": "中轉站",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "贊助商",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "已提交 {{count}} 個帳號的恢復操作",
         "dialog": {
           "title": "帳號異常",
-      "description": "以下狀態按帳號顯示，包含對應模型、無法使用原因及可執行的復原操作。",
+          "description": "以下狀態按帳號顯示，包含對應模型、無法使用原因及可執行的復原操作。",
           "noIssues": "目前沒有異常帳號",
           "unscopedApiKey": "目前 API Key",
           "poolUnavailable": "帳號池無可用帳號",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 檔 API Key，並按檔位篩選列表。金鑰保存在本機應用資料目錄。"
+  },
+  "codebuddyCli": {
+    "search": "搜尋帳號（CodeBuddy CLI）...",
+    "flowNotice": {
+      "title": "CodeBuddy CLI 帳號管理說明（點擊展開/收起）",
+      "desc": "切換帳號將把選中帳號的登入態寫入 CodeBuddy CLI 官方認證檔案（本機明文處理）。",
+      "permission": "權限範圍：讀寫 CodeBuddy CLI 認證檔案（%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth）。",
+      "network": "網路範圍：Token 重新整理需連網請求 WorkBuddy 服務。不上傳本機金鑰或憑證。"
+    },
+    "noAccounts": "暫無帳號，請先在 WorkBuddy 頁面新增帳號（同一帳號體系）",
+    "addAccount": "新增 CodeBuddy CLI 帳號",
+    "oauthDesc": "點擊下方按鈕將在瀏覽器中開啟 WorkBuddy 授權頁面（與 CodeBuddy CLI 同一帳號體系）。",
+    "oauthFeature": {
+      "oauth": {
+        "title": "僅授權 IDE 登入資訊",
+        "item1": "在瀏覽器完成 OAuth 後即可新增帳號並用於 CodeBuddy CLI 切換。",
+        "item2": "授權完成後會自動重新整理資源包配額資料。",
+        "item3": "帳號卡片將按資源包展示額度、進度和重新整理/到期時間。"
+      }
+    },
+    "oauthUrlInputPlaceholder": "可手動輸入授權地址",
+    "oauthWaiting": "等待授權完成...",
+    "tokenDesc": "貼上 WorkBuddy 的 access token：",
+    "import": {
+      "localDesc": "支援從本機 CodeBuddy CLI 用戶端或 JSON 檔案匯入帳號資料。",
+      "localClient": "從本機 CodeBuddy CLI 匯入"
+    },
+    "switchRestartHint": "切換完成。執行中的 CodeBuddy CLI 需重啟後生效（新開啟的終端機視窗會自動生效）。"
   }
 }

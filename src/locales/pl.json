@@ -397,7 +397,8 @@
     "apiRelay": "Relay API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Sponsorzy",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "Zażądano przywrócenia {{count}} kont(a)",
         "dialog": {
           "title": "Problemy kont",
-      "description": "Każde konto jest pokazane z modelem, powodem niedostępności i dostępną opcją przywrócenia.",
+          "description": "Każde konto jest pokazane z modelem, powodem niedostępności i dostępną opcją przywrócenia.",
           "noIssues": "Brak problemów z kontami",
           "unscopedApiKey": "Bieżący API Key",
           "poolUnavailable": "Brak dostępnego konta w puli",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Zarządzaj kluczami OpenCode Go/Zen i filtruj po tier."
+  },
+  "codebuddyCli": {
+    "search": "Szukaj kont (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "Instrukcje zarządzania kontem CodeBuddy CLI (kliknij, aby rozwinąć/zwinąć)",
+      "desc": "Przełączenie konta zapisuje dane uwierzytelniające wybranego konta w oficjalnym pliku uwierzytelniania CodeBuddy CLI (przetwarzane lokalnie w postaci zwykłego tekstu).",
+      "permission": "Zakres uprawnień: Odczyt/zapis pliku uwierzytelniania CodeBuddy CLI (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Zakres sieciowy: Odświeżanie tokena łączy się z usługą WorkBuddy. Żadne lokalne klucze ani poświadczenia nie są przesyłane."
+    },
+    "noAccounts": "Brak dostępnych kont. Najpierw dodaj konto (wspólny system kont).",
+    "addAccount": "Dodaj konto CodeBuddy CLI",
+    "oauthDesc": "Kliknij poniższy przycisk, aby otworzyć stronę autoryzacji WorkBuddy w przeglądarce (wspólny system kont z CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Autoryzuj tylko logowanie do IDE",
+        "item1": "Dokończ OAuth w przeglądarce, aby dodać konto do przełączania CodeBuddy CLI.",
+        "item2": "Dane limitu pakietu zasobów zostaną automatycznie odświeżone po autoryzacji.",
+        "item3": "Karty kont pokazują limit, postęp oraz czas odświeżenia/wygaśnięcia według pakietu zasobów."
+      }
+    },
+    "oauthUrlInputPlaceholder": "Możesz wprowadzić adres URL autoryzacji ręcznie",
+    "oauthWaiting": "Oczekiwanie na autoryzację...",
+    "tokenDesc": "Wklej access token WorkBuddy:",
+    "import": {
+      "localDesc": "Importuj dane konta z lokalnego klienta CodeBuddy CLI lub pliku JSON.",
+      "localClient": "Importuj z lokalnego CodeBuddy CLI"
+    },
+    "switchRestartHint": "Przełączanie zakończone. Uruchomione procesy CodeBuddy CLI muszą zostać zrestartowane, aby zaczęły działać (nowe okna terminala zaczną działać automatycznie)."
   }
 }

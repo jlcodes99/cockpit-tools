@@ -397,7 +397,8 @@
     "apiRelay": "API-Relay",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Sponsoren",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "Wiederherstellung für {{count}} Konto/Konten angefordert",
         "dialog": {
           "title": "Kontoprobleme",
-      "description": "Jedes Konto wird mit Modell, Grund der Nichtverfügbarkeit und möglicher Wiederherstellung angezeigt.",
+          "description": "Jedes Konto wird mit Modell, Grund der Nichtverfügbarkeit und möglicher Wiederherstellung angezeigt.",
           "noIssues": "Keine Kontoprobleme",
           "unscopedApiKey": "Aktueller API Key",
           "poolUnavailable": "Kein verfügbares Pool-Konto",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen API-Keys verwalten und nach Stufe filtern."
+  },
+  "codebuddyCli": {
+    "search": "Konten durchsuchen (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "Hinweise zur CodeBuddy CLI-Kontoverwaltung (Klicken zum Ein-/Ausklappen)",
+      "desc": "Beim Wechseln des Kontos werden die Anmeldeinformationen des ausgewählten Kontos in die offizielle CodeBuddy CLI-Authentifizierungsdatei geschrieben (lokal im Klartext verarbeitet).",
+      "permission": "Berechtigungsumfang: Lesen/Schreiben der CodeBuddy CLI-Authentifizierungsdatei (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Netzwerkumfang: Für die Token-Aktualisierung ist eine Verbindung zum WorkBuddy-Dienst erforderlich. Es werden keine lokalen Schlüssel oder Anmeldeinformationen hochgeladen."
+    },
+    "noAccounts": "Keine Konten verfügbar. Bitte fügen Sie zuerst ein Konto hinzu (gemeinsames Kontosystem).",
+    "addAccount": "CodeBuddy CLI-Konto hinzufügen",
+    "oauthDesc": "Klicken Sie auf die Schaltfläche unten, um die WorkBuddy-Autorisierungsseite im Browser zu öffnen (gemeinsames Kontosystem mit CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Nur IDE-Anmeldeinformationen autorisieren",
+        "item1": "Schließen Sie das OAuth im Browser ab, um das Konto für den CodeBuddy CLI-Wechsel hinzuzufügen.",
+        "item2": "Kontingentdaten des Ressourcenpakets werden nach der Autorisierung automatisch aktualisiert.",
+        "item3": "Kontokarten zeigen Kontingentbetrag, Fortschritt und Aktualisierungs-/Ablaufzeit nach Ressourcenpaket an."
+      }
+    },
+    "oauthUrlInputPlaceholder": "Sie können die Autorisierungs-URL manuell eingeben",
+    "oauthWaiting": "Warten auf Autorisierung...",
+    "tokenDesc": "WorkBuddy access token einfügen:",
+    "import": {
+      "localDesc": "Kontodaten aus dem lokalen CodeBuddy CLI-Client oder einer JSON-Datei importieren.",
+      "localClient": "Aus lokaler CodeBuddy CLI importieren"
+    },
+    "switchRestartHint": "Wechsel abgeschlossen. Laufende CodeBuddy CLI-Prozesse müssen neu gestartet werden, um wirksam zu werden (neue Terminalfenster werden automatisch wirksam)."
   }
 }

@@ -397,7 +397,8 @@
     "apiRelay": "중계소",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "스폰서",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "{{count}}개 계정 복구를 요청했습니다",
         "dialog": {
           "title": "계정 이상",
-      "description": "각 계정에 모델, 사용할 수 없는 이유와 가능한 복구 작업을 함께 표시합니다.",
+          "description": "각 계정에 모델, 사용할 수 없는 이유와 가능한 복구 작업을 함께 표시합니다.",
           "noIssues": "계정에 이상이 없습니다",
           "unscopedApiKey": "현재 API Key",
           "poolUnavailable": "풀에 사용 가능한 계정이 없습니다",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen API 키를 관리하고 티어로 필터합니다."
+  },
+  "codebuddyCli": {
+    "search": "계정 검색 (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "CodeBuddy CLI 계정 관리 안내 (클릭하여 펼치기/접기)",
+      "desc": "계정을 전환하면 선택한 계정의 로그인 상태가 CodeBuddy CLI 공식 인증 파일에 기록됩니다 (로컬 평문 처리).",
+      "permission": "권한 범위: CodeBuddy CLI 인증 파일 읽기/쓰기 (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "네트워크 범위: 토큰 갱신을 위해 WorkBuddy 서비스에 연결해야 합니다. 로컬 키나 자격 증명은 업로드되지 않습니다."
+    },
+    "noAccounts": "사용 가능한 계정이 없습니다. 먼저 계정을 추가하세요 (동일한 계정 체계).",
+    "addAccount": "CodeBuddy CLI 계정 추가",
+    "oauthDesc": "아래 버튼을 클릭하면 브라우저에서 WorkBuddy 인증 페이지가 열립니다 (CodeBuddy CLI와 동일한 계정 체계).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "IDE 로그인 정보만 인증",
+        "item1": "브라우저에서 OAuth를 완료하면 계정이 추가되어 CodeBuddy CLI 전환에 사용할 수 있습니다.",
+        "item2": "인증 완료 후 리소스 패키지 할당량 데이터가 자동으로 갱신됩니다.",
+        "item3": "계정 카드에는 리소스 패키지별 할당량, 진행률 및 갱신/만료 시간이 표시됩니다."
+      }
+    },
+    "oauthUrlInputPlaceholder": "인증 URL을 직접 입력할 수 있습니다",
+    "oauthWaiting": "인증 대기 중...",
+    "tokenDesc": "WorkBuddy access token 붙여넣기:",
+    "import": {
+      "localDesc": "로컬 CodeBuddy CLI 클라이언트 또는 JSON 파일에서 계정 데이터를 가져옵니다.",
+      "localClient": "로컬 CodeBuddy CLI에서 가져오기"
+    },
+    "switchRestartHint": "전환이 완료되었습니다. 실행 중인 CodeBuddy CLI는 재시작해야 적용됩니다 (새 터미널 창에는 자동으로 적용됨)."
   }
 }

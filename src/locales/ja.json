@@ -397,7 +397,8 @@
     "apiRelay": "リレー",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "スポンサー",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "{{count}} 件のアカウントの復旧を要求しました",
         "dialog": {
           "title": "アカウントの異常",
-      "description": "各アカウントをモデル、利用不可の理由、実行可能な復旧操作とともに表示します。",
+          "description": "各アカウントをモデル、利用不可の理由、実行可能な復旧操作とともに表示します。",
           "noIssues": "アカウントに異常はありません",
           "unscopedApiKey": "現在の API Key",
           "poolUnavailable": "プールに利用可能なアカウントがありません",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode の Go/Zen API キーを管理し、ティアで絞り込みます。"
+  },
+  "codebuddyCli": {
+    "search": "アカウントを検索（CodeBuddy CLI）...",
+    "flowNotice": {
+      "title": "CodeBuddy CLI アカウント管理の説明（クリックで展開/折りたたみ）",
+      "desc": "アカウントを切り替えると、選択したアカウントの認証情報が CodeBuddy CLI 公式認証ファイルに書き込まれます（ローカル平文処理）。",
+      "permission": "権限範囲: CodeBuddy CLI 認証ファイル（%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth）の読み書き。",
+      "network": "ネットワーク範囲: トークン更新には WorkBuddy サービスへの接続が必要です。ローカルキーや資格情報はアップロードされません。"
+    },
+    "noAccounts": "利用可能なアカウントがありません。まずアカウントを追加してください（同一アカウント体系）。",
+    "addAccount": "CodeBuddy CLI アカウントを追加",
+    "oauthDesc": "下のボタンをクリックすると、ブラウザで WorkBuddy の認証ページが開きます（CodeBuddy CLI と同一アカウント体系）。",
+    "oauthFeature": {
+      "oauth": {
+        "title": "IDE ログイン情報のみ認証",
+        "item1": "ブラウザで OAuth を完了すると、アカウントが追加され CodeBuddy CLI の切り替えに使用できます。",
+        "item2": "認証完了後、リソースパックのクォータデータが自動的に更新されます。",
+        "item3": "アカウントカードには、リソースパックごとにクォータ残量、進捗状況、更新/有効期限が表示されます。"
+      }
+    },
+    "oauthUrlInputPlaceholder": "認証URLを手動で入力できます",
+    "oauthWaiting": "認証を待機中...",
+    "tokenDesc": "WorkBuddy の access token を貼り付け:",
+    "import": {
+      "localDesc": "ローカルの CodeBuddy CLI または JSON ファイルからアカウントデータをインポートします。",
+      "localClient": "ローカルの CodeBuddy CLI からインポート"
+    },
+    "switchRestartHint": "切り替えが完了しました。実行中の CodeBuddy CLI は再起動後に反映されます（新しいターミナルウィンドウには自動的に反映されます）。"
   }
 }

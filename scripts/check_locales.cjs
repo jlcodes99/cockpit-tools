@@ -151,6 +151,7 @@ function isAllowedEnglishReuse(key, value) {
   const allowedBrandKeys = new Set([
     'nav.codebuddy',
     'nav.codebuddyCn',
+    'nav.codebuddyCli',
     'nav.claude',
     'nav.gemini',
     'nav.qoder',
@@ -171,6 +172,7 @@ function isAllowedEnglishReuse(key, value) {
     'Codex',
     'Claude',
     'CodeBuddy',
+    'CodeBuddy CLI',
     'WorkBuddy',
     'GitHub Copilot',
     'Kiro',

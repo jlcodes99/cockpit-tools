@@ -4,6 +4,7 @@ pub mod antigravity_legacy_instance;
 pub mod claude;
 pub mod claude_instance;
 pub mod codebuddy;
+pub mod codebuddy_cli;
 pub mod codebuddy_cn;
 pub mod codebuddy_cn_instance;
 pub mod codebuddy_instance;

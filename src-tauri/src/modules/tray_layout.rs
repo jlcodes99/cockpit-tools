@@ -26,8 +26,9 @@ pub const PLATFORM_TRAE_SOLO: &str = "trae_solo";
 pub const PLATFORM_TRAE_CN: &str = "trae_cn";
 pub const PLATFORM_TRAE_SOLO_CN: &str = "trae_solo_cn";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
+pub const PLATFORM_CODEBUDDY_CLI: &str = "codebuddy_cli";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 19] = [
     PLATFORM_CLAUDE_MANAGER,
     PLATFORM_CODEX,
     PLATFORM_ANTIGRAVITY,
@@ -46,6 +47,7 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
     PLATFORM_TRAE_CN,
     PLATFORM_TRAE_SOLO_CN,
     PLATFORM_WORKBUDDY,
+    PLATFORM_CODEBUDDY_CLI,
 ];
 
 pub const SORT_MODE_AUTO: &str = "auto";
@@ -103,6 +105,7 @@ fn default_platform_groups() -> Vec<TrayLayoutGroup> {
                 PLATFORM_CODEBUDDY.to_string(),
                 PLATFORM_CODEBUDDY_CN.to_string(),
                 PLATFORM_WORKBUDDY.to_string(),
+                PLATFORM_CODEBUDDY_CLI.to_string(),
             ],
             default_platform_id: PLATFORM_CODEBUDDY.to_string(),
         },

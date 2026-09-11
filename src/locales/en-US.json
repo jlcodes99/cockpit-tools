@@ -444,7 +444,8 @@
     "2faManager": "2FA",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Sponsors",
@@ -2398,8 +2399,8 @@
       "modelConfigDialogDescription": "Configure visible models, reasoning levels, context windows, and compact limits for each model.",
       "applyModelConfig": "Apply settings",
       "defaultModel": "Default model",
-      "repairCompleted": "Session visibility repair completed"
-      ,"forceRefreshTitle": "Force-refresh Token",
+      "repairCompleted": "Session visibility repair completed",
+      "forceRefreshTitle": "Force-refresh Token",
       "forceRefreshReady": "OAuth tokens can be refreshed manually",
       "forceRefreshDescription": "Use refresh_token to obtain new access_token and id_token values. This may rotate the current refresh token.",
       "forceRefreshUnavailable": "Unavailable for this account type",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Manage OpenCode Go/Zen API keys and filter by tier. Keys stay in local app data."
+  },
+  "codebuddyCli": {
+    "search": "Search accounts (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "CodeBuddy CLI Account Instructions (click to expand/collapse)",
+      "desc": "Switching accounts writes the selected account credentials into the official CodeBuddy CLI auth file (processed locally in plaintext).",
+      "permission": "Permission scope: Read/write CodeBuddy CLI auth file (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Network scope: Token refresh connects to WorkBuddy service. No local secrets or credentials are uploaded."
+    },
+    "noAccounts": "No accounts available. Please add an account first (shared account system).",
+    "addAccount": "Add CodeBuddy CLI Account",
+    "oauthDesc": "Click the button below to open the WorkBuddy authorization page in your browser (shared account system with CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "IDE sign-in only",
+        "item1": "Complete OAuth in your browser to add the account for CodeBuddy CLI switching.",
+        "item2": "Resource-package quota data will refresh automatically after authorization.",
+        "item3": "Account cards show quota amount, progress, and refresh/expiry time by resource package."
+      }
+    },
+    "oauthUrlInputPlaceholder": "You can enter an authorization URL manually",
+    "oauthWaiting": "Waiting for authorization...",
+    "tokenDesc": "Paste WorkBuddy access token:",
+    "import": {
+      "localDesc": "Import account data from local CodeBuddy CLI client or a JSON file.",
+      "localClient": "Import from local CodeBuddy CLI"
+    },
+    "switchRestartHint": "Switch completed. Running CodeBuddy CLI processes must be restarted to take effect (new terminal windows take effect automatically)."
   }
 }

@@ -18,6 +18,9 @@ const ACCOUNTS_INDEX_FILE: &str = "workbuddy_accounts.json";
 const ACCOUNTS_DIR: &str = "workbuddy_accounts";
 const WORKBUDDY_QUOTA_ALERT_COOLDOWN_SECONDS: i64 = 10 * 60;
 const WORKBUDDY_AUTH_FILE_NAME: &str = "workbuddy-desktop.info";
+/// CodeBuddy CLI（@tencent-ai/codebuddy-code）官方认证文件名，与 WorkBuddy 桌面端同目录。
+/// 文件名来自 CLI 包内 product.json 的 authentication.id（Tencent-Cloud.coding-copilot）。
+pub const CODEBUDDY_CLI_AUTH_FILE_NAME: &str = "Tencent-Cloud.coding-copilot.info";
 
 lazy_static::lazy_static! {
     static ref WORKBUDDY_ACCOUNT_INDEX_LOCK: Mutex<()> = Mutex::new(());
@@ -1089,6 +1092,10 @@ pub fn get_default_workbuddy_auth_file_path() -> Option<PathBuf> {
     get_workbuddy_shared_auth_dir().map(|dir| dir.join(WORKBUDDY_AUTH_FILE_NAME))
 }
 
+pub fn get_codebuddy_cli_auth_file_path() -> Option<PathBuf> {
+    get_workbuddy_shared_auth_dir().map(|dir| dir.join(CODEBUDDY_CLI_AUTH_FILE_NAME))
+}
+
 fn workbuddy_logout_marker_path(auth_file: &Path) -> PathBuf {
     PathBuf::from(format!("{}.logged-out", auth_file.to_string_lossy()))
 }
@@ -1575,8 +1582,11 @@ fn contains_encrypted_wrapper(value: &Value) -> bool {
     }
 }
 
-pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayload>, String> {
-    let auth_file = match get_default_workbuddy_auth_file_path() {
+fn import_payload_from_auth_file(
+    auth_file: Option<PathBuf>,
+    label: &str,
+) -> Result<Option<WorkbuddyOAuthCompletePayload>, String> {
+    let auth_file = match auth_file {
         Some(path) => path,
         None => return Ok(None),
     };
@@ -1585,7 +1595,7 @@ pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayloa
     }
 
     let secret = fs::read_to_string(&auth_file)
-        .map_err(|e| format!("读取本机 WorkBuddy 登录信息失败: {}", e))?;
+        .map_err(|e| format!("读取本机 {} 登录信息失败: {}", label, e))?;
 
     let parsed_json = serde_json::from_str::<Value>(&secret).ok();
     let token_candidate = parsed_json
@@ -1601,26 +1611,41 @@ pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayloa
         });
 
     let Some(raw_token) = token_candidate else {
-        return Err("本地 WorkBuddy 登录信息解析失败: 未找到 access token".to_string());
+        return Err(format!("本地 {} 登录信息解析失败: 未找到 access token", label));
     };
 
     let Some((uid_from_token, normalized_token)) = extract_local_workbuddy_token_parts(&raw_token)
     else {
-        return Err("本地 WorkBuddy 登录信息解析失败: access token 无效".to_string());
+        return Err(format!("本地 {} 登录信息解析失败: access token 无效", label));
     };
     // 回退：新版 JWT token 无法从前缀得到 uid，改从 sub 声明提取。
     let uid_from_token = uid_from_token.or_else(|| extract_uid_from_jwt(&raw_token));
     let Some(access_token) = normalize_local_workbuddy_token(&normalized_token) else {
-        return Err("本地 WorkBuddy 登录信息解析失败: access token 为空".to_string());
+        return Err(format!("本地 {} 登录信息解析失败: access token 为空", label));
     };
 
     let payload = build_local_import_payload(access_token, parsed_json, uid_from_token);
     Ok(Some(payload))
 }
 
-pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(), String> {
-    let auth_file = get_default_workbuddy_auth_file_path()
-        .ok_or_else(|| "无法定位默认 WorkBuddy 登录信息路径".to_string())?;
+pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayload>, String> {
+    import_payload_from_auth_file(get_default_workbuddy_auth_file_path(), "WorkBuddy")
+}
+
+/// 读取 CodeBuddy CLI 官方认证文件中的当前登录账号（与 WorkBuddy 同一账号体系、同一文件格式）。
+pub fn import_codebuddy_cli_payload_from_local(
+) -> Result<Option<WorkbuddyOAuthCompletePayload>, String> {
+    import_payload_from_auth_file(get_codebuddy_cli_auth_file_path(), "CodeBuddy CLI")
+}
+
+/// 将账号 session 原子写入指定的认证文件（.info 格式，含 .bak 备份与 .logged-out 标记清理）。
+/// 写后读回校验 accessToken，确保落盘的是目标账号。
+/// 覆盖前检测官方加密字段，并以 hash 比对防止覆盖期间官方客户端并发更新。
+fn write_session_to_auth_file(
+    account: &WorkbuddyAccount,
+    auth_file: &Path,
+    label: &str,
+) -> Result<(), String> {
     if let Some(raw) = account.auth_raw.as_ref() {
         if contains_encrypted_wrapper(raw) {
             return Err(
@@ -1629,15 +1654,15 @@ pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(),
             );
         }
     }
-    let marker_path = workbuddy_logout_marker_path(&auth_file);
+    let marker_path = workbuddy_logout_marker_path(auth_file);
     let marker_hash_before: Option<[u8; 32]> = fs::read(&marker_path)
         .ok()
         .map(|bytes| Sha256::digest(&bytes).into());
     if auth_file.exists() {
         let existing =
-            fs::read(&auth_file).map_err(|e| format!("读取现有 WorkBuddy 登录信息失败: {}", e))?;
+            fs::read(auth_file).map_err(|e| format!("读取现有 {} 登录信息失败: {}", label, e))?;
         let existing_json: Value = serde_json::from_slice(&existing)
-            .map_err(|e| format!("现有 WorkBuddy 登录信息不是有效 JSON，已停止覆盖: {}", e))?;
+            .map_err(|e| format!("现有 {} 登录信息不是有效 JSON，已停止覆盖: {}", label, e))?;
         if contains_encrypted_wrapper(&existing_json) {
             return Err(
                 "当前 WorkBuddy 登录文件包含官方加密字段，未取得官方密钥，已停止覆盖以避免破坏登录状态"
@@ -1646,7 +1671,7 @@ pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(),
         }
         let expected_hash: [u8; 32] = Sha256::digest(&existing).into();
         let written = crate::modules::atomic_write::write_string_atomic_if_hash_matches(
-            &auth_file,
+            auth_file,
             expected_hash,
             || {
                 let session =
@@ -1655,7 +1680,7 @@ pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(),
                     .map_err(|e| format!("序列化登录信息失败: {}", e))
             },
         )
-        .map_err(|e| format!("写入 WorkBuddy 登录信息失败: {}", e))?;
+        .map_err(|e| format!("写入 {} 登录信息失败: {}", label, e))?;
         if !written {
             return Err(
                 "WorkBuddy 登录信息在切号期间被官方客户端更新，已停止覆盖，请重试".to_string(),
@@ -1665,27 +1690,28 @@ pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(),
         let session = build_default_client_auth_session(account);
         let content = serde_json::to_string_pretty(&session)
             .map_err(|e| format!("序列化登录信息失败: {}", e))?;
-        crate::modules::atomic_write::write_string_atomic(&auth_file, &content)
-            .map_err(|e| format!("写入 WorkBuddy 登录信息失败: {}", e))?;
+        crate::modules::atomic_write::write_string_atomic(auth_file, &content)
+            .map_err(|e| format!("写入 {} 登录信息失败: {}", label, e))?;
     }
 
     if let Some(expected_hash) = marker_hash_before {
         let _ =
             crate::modules::atomic_write::remove_file_if_hash_matches(&marker_path, expected_hash)
-                .map_err(|e| format!("清理 WorkBuddy 登出标记失败: {}", e))?;
+                .map_err(|e| format!("清理 {} 登出标记失败: {}", label, e))?;
     }
 
-    let written = fs::read_to_string(&auth_file)
-        .map_err(|e| format!("校验 WorkBuddy 登录信息失败: {}", e))?;
+    let written = fs::read_to_string(auth_file)
+        .map_err(|e| format!("校验 {} 登录信息失败: {}", label, e))?;
     let written_json: Value = serde_json::from_str(&written)
-        .map_err(|e| format!("校验 WorkBuddy 登录信息 JSON 失败: {}", e))?;
+        .map_err(|e| format!("校验 {} 登录信息 JSON 失败: {}", label, e))?;
     let written_token = written_json
         .get("auth")
         .and_then(|auth| auth.get("accessToken"))
         .and_then(|value| value.as_str());
     if written_token != Some(account.access_token.as_str()) {
         return Err(format!(
-            "校验 WorkBuddy 登录信息失败，未写入目标账号: {}",
+            "校验 {} 登录信息失败，未写入目标账号: {}",
+            label,
             auth_file.display()
         ));
     }
@@ -1696,6 +1722,18 @@ pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(),
     }
 
     Ok(())
+}
+
+pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(), String> {
+    let auth_file = get_default_workbuddy_auth_file_path()
+        .ok_or_else(|| "无法定位默认 WorkBuddy 登录信息路径".to_string())?;
+    write_session_to_auth_file(account, &auth_file, "WorkBuddy")
+}
+
+pub fn write_account_to_codebuddy_cli(account: &WorkbuddyAccount) -> Result<(), String> {
+    let auth_file = get_codebuddy_cli_auth_file_path()
+        .ok_or_else(|| "无法定位默认 CodeBuddy CLI 登录信息路径".to_string())?;
+    write_session_to_auth_file(account, &auth_file, "CodeBuddy CLI")
 }
 
 pub fn sync_account_to_default_client(account_id: &str) -> Result<(), String> {
@@ -1736,6 +1774,46 @@ pub(crate) fn resolve_current_account_id(accounts: &[WorkbuddyAccount]) -> Optio
 
     crate::modules::provider_current_state::resolve_existing_current_account_id(
         "workbuddy",
+        accounts.iter().map(|account| account.id.as_str()),
+    )
+}
+
+/// 解析 CodeBuddy CLI 当前账号：优先比对 CLI 官方认证文件中的登录身份，
+/// 回退到内部记录的 codebuddy_cli 当前账号。
+pub(crate) fn resolve_codebuddy_cli_current_account_id(
+    accounts: &[WorkbuddyAccount],
+) -> Option<String> {
+    match import_codebuddy_cli_payload_from_local() {
+        Ok(Some(payload)) => {
+            let incoming_uid = normalize_identity(payload.uid.as_deref());
+            let incoming_email = normalize_email_identity(Some(payload.email.as_str()));
+
+            if let Some(account_id) = accounts
+                .iter()
+                .find(|account| {
+                    let existing_uid = normalize_identity(account.uid.as_deref());
+                    let existing_email = normalize_email_identity(Some(account.email.as_str()));
+                    account_matches_payload_identity(
+                        existing_uid.as_ref(),
+                        existing_email.as_ref(),
+                        incoming_uid.as_ref(),
+                        incoming_email.as_ref(),
+                    )
+                })
+                .map(|account| account.id.clone())
+            {
+                return Some(account_id);
+            }
+        }
+        Ok(None) => {}
+        Err(err) => logger::log_warn(&format!(
+            "[CodeBuddy CLI] 读取 CLI 登录信息当前账号失败，回退内部当前账号: {}",
+            err
+        )),
+    }
+
+    crate::modules::provider_current_state::resolve_existing_current_account_id(
+        "codebuddy_cli",
         accounts.iter().map(|account| account.id.as_str()),
     )
 }

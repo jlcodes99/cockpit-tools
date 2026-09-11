@@ -397,7 +397,8 @@
     "apiRelay": "Relais",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Sponsors​",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "Rétablissement demandé pour {{count}} compte(s)",
         "dialog": {
           "title": "Problèmes de comptes",
-      "description": "Chaque compte affiche son modèle, la raison de son indisponibilité et l’action de récupération disponible.",
+          "description": "Chaque compte affiche son modèle, la raison de son indisponibilité et l’action de récupération disponible.",
           "noIssues": "Aucun problème de comptes",
           "unscopedApiKey": "API Key actuelle",
           "poolUnavailable": "Aucun compte disponible dans le pool",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gérer les clés OpenCode Go/Zen et filtrer par niveau."
+  },
+  "codebuddyCli": {
+    "search": "Rechercher des comptes (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "Instructions de gestion du compte CodeBuddy CLI (cliquer pour développer/réduire)",
+      "desc": "Changer de compte écrit les informations d'identification du compte sélectionné dans le fichier d'authentification officiel de CodeBuddy CLI (traité localement en texte brut).",
+      "permission": "Étendue des autorisations : lecture/écriture du fichier d'authentification CodeBuddy CLI (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Étendue réseau : L'actualisation du jeton se connecte au service WorkBuddy. Aucune clé ou information d'identification locale n'est téléversée."
+    },
+    "noAccounts": "Aucun compte disponible. Veuillez d'abord ajouter un compte (système de compte partagé).",
+    "addAccount": "Ajouter un compte CodeBuddy CLI",
+    "oauthDesc": "Cliquez sur le bouton ci-dessous pour ouvrir la page d'autorisation WorkBuddy dans votre navigateur (système de compte partagé avec CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Autoriser uniquement la connexion IDE",
+        "item1": "Terminez l'authentification OAuth dans votre navigateur pour ajouter le compte et basculer dans CodeBuddy CLI.",
+        "item2": "Les données de quota du package de ressources seront actualisées automatiquement après autorisation.",
+        "item3": "Les cartes de compte affichent le montant du quota, la progression et l'heure d'actualisation/d'expiration par package de ressources."
+      }
+    },
+    "oauthUrlInputPlaceholder": "Vous pouvez saisir manuellement une URL d'autorisation",
+    "oauthWaiting": "En attente d'autorisation...",
+    "tokenDesc": "Coller le jeton d'accès (access token) WorkBuddy :",
+    "import": {
+      "localDesc": "Importer les données de compte depuis le client local CodeBuddy CLI ou un fichier JSON.",
+      "localClient": "Importer depuis CodeBuddy CLI local"
+    },
+    "switchRestartHint": "Basculement terminé. Les processus CodeBuddy CLI en cours d'exécution doivent être redémarrés pour prendre effet (les nouvelles fenêtres de terminal prennent effet automatiquement)."
   }
 }

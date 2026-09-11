@@ -444,7 +444,8 @@
     "apiRelay": "الترحيل",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "الرعاة",
@@ -2682,7 +2683,7 @@
         "recoverSuccess": "طُلبت الاستعادة لـ {{count}} حساب",
         "dialog": {
           "title": "مشكلات الحسابات",
-      "description": "تُعرض الحالة لكل حساب مع النموذج وسبب عدم التوفر وإجراء الاستعادة المتاح.",
+          "description": "تُعرض الحالة لكل حساب مع النموذج وسبب عدم التوفر وإجراء الاستعادة المتاح.",
           "noIssues": "لا توجد مشاكل في الحسابات",
           "unscopedApiKey": "مفتاح API الحالي",
           "poolUnavailable": "لا يوجد حساب متاح في المجموعة",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "إدارة مفاتيح OpenCode Go/Zen والتصفية حسب المستوى."
+  },
+  "codebuddyCli": {
+    "search": "البحث عن الحسابات (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "تعليمات إدارة حساب CodeBuddy CLI (انقر للتوسيع/الطي)",
+      "desc": "يؤدي تبديل الحساب إلى كتابة بيانات اعتماد الحساب المحدد في ملف مصادقة CodeBuddy CLI الرسمي (تتم معالجته محليًا بنص عادي).",
+      "permission": "نطاق الأذونات: قراءة/كتابة ملف مصادقة CodeBuddy CLI (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "نطاق الشبكة: يتصل تحديث الرمز المميز بخدمة WorkBuddy. لا يتم تحميل أي مفاتيح أو بيانات اعتماد محلية."
+    },
+    "noAccounts": "لا توجد حسابات متاحة. يُرجى إضافة حساب أولاً (نظام حسابات مشترك).",
+    "addAccount": "إضافة حساب CodeBuddy CLI",
+    "oauthDesc": "انقر فوق الزر أدناه لفتح صفحة تخويل WorkBuddy في متصفحك (نظام حسابات مشترك مع CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "تخويل معلومات تسجيل الدخول إلى IDE فقط",
+        "item1": "أكمل OAuth في المتصفح لإضافة الحساب واستخدامه لتبديل CodeBuddy CLI.",
+        "item2": "سيتم تحديث بيانات حصة حزمة الموارد تلقائيًا بعد التخويل.",
+        "item3": "تعرض بطاقات الحساب مقدار الحصة والتقدم ووقت التحديث/انتهاء الصلاحية حسب حزمة الموارد."
+      }
+    },
+    "oauthUrlInputPlaceholder": "يمكنك إدخال عنوان URL للتخويل يدويًا",
+    "oauthWaiting": "في انتظار التخويل...",
+    "tokenDesc": "الصق access token لـ WorkBuddy:",
+    "import": {
+      "localDesc": "استيراد بيانات الحساب من عميل CodeBuddy CLI المحلي أو ملف JSON.",
+      "localClient": "استيراد من CodeBuddy CLI المحلي"
+    },
+    "switchRestartHint": "اكتمل التبديل. يجب إعادة تشغيل عمليات CodeBuddy CLI قيد التشغيل لتصبح نافذة المفعول (تسري نوافذ الطرفية الجديدة تلقائيًا)."
   }
 }

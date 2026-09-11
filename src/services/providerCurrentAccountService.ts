@@ -8,6 +8,7 @@ export type ProviderCurrentPlatform =
   | 'claude_code_account'
   | 'codebuddy'
   | 'codebuddy_cn'
+  | 'codebuddy_cli'
   | 'qoder'
   | 'trae'
   | 'trae_solo'

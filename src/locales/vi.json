@@ -397,7 +397,8 @@
     "apiRelay": "Trạm chuyển",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "codebuddyCli": "CodeBuddy CLI"
   },
   "sponsors": {
     "pageTitle": "Nhà tài trợ",
@@ -2635,7 +2636,7 @@
         "recoverSuccess": "Đã yêu cầu khôi phục {{count}} tài khoản",
         "dialog": {
           "title": "Lỗi tài khoản",
-      "description": "Mỗi tài khoản được hiển thị cùng model, lý do không khả dụng và thao tác khôi phục nếu có.",
+          "description": "Mỗi tài khoản được hiển thị cùng model, lý do không khả dụng và thao tác khôi phục nếu có.",
           "noIssues": "Tài khoản không có lỗi",
           "unscopedApiKey": "API Key hiện tại",
           "poolUnavailable": "Không có tài khoản khả dụng trong nhóm",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Quản lý key OpenCode Go/Zen và lọc theo tier."
+  },
+  "codebuddyCli": {
+    "search": "Tìm kiếm tài khoản (CodeBuddy CLI)...",
+    "flowNotice": {
+      "title": "Hướng dẫn quản lý tài khoản CodeBuddy CLI (nhấp để mở rộng/thu gọn)",
+      "desc": "Chuyển đổi tài khoản sẽ ghi thông tin đăng nhập của tài khoản đã chọn vào tệp xác thực chính thức của CodeBuddy CLI (xử lý cục bộ dưới dạng văn bản thuần túy).",
+      "permission": "Phạm vi quyền hạn: Đọc/ghi tệp xác thực CodeBuddy CLI (%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth).",
+      "network": "Phạm vi mạng: Làm mới mã thông báo kết nối với dịch vụ WorkBuddy. Không tải lên khóa hoặc thông tin đăng nhập cục bộ."
+    },
+    "noAccounts": "Không có tài khoản nào. Vui lòng thêm tài khoản trước (hệ thống tài khoản dùng chung).",
+    "addAccount": "Thêm tài khoản CodeBuddy CLI",
+    "oauthDesc": "Nhấp vào nút bên dưới để mở trang ủy quyền WorkBuddy trong trình duyệt của bạn (hệ thống tài khoản dùng chung với CodeBuddy CLI).",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Chỉ ủy quyền thông tin đăng nhập IDE",
+        "item1": "Hoàn tất OAuth trong trình duyệt để thêm tài khoản dùng cho việc chuyển đổi CodeBuddy CLI.",
+        "item2": "Dữ liệu hạn mức gói tài nguyên sẽ tự động làm mới sau khi ủy quyền.",
+        "item3": "Thẻ tài khoản hiển thị số lượng hạn mức, tiến trình và thời gian làm mới/hết hạn theo gói tài nguyên."
+      }
+    },
+    "oauthUrlInputPlaceholder": "Bạn có thể nhập URL ủy quyền theo cách thủ công",
+    "oauthWaiting": "Đang chờ ủy quyền...",
+    "tokenDesc": "Dán access token của WorkBuddy:",
+    "import": {
+      "localDesc": "Nhập dữ liệu tài khoản từ ứng dụng CodeBuddy CLI cục bộ hoặc tệp JSON.",
+      "localClient": "Nhập từ CodeBuddy CLI cục bộ"
+    },
+    "switchRestartHint": "Chuyển đổi hoàn tất. Các tiến trình CodeBuddy CLI đang chạy cần được khởi động lại để có hiệu lực (cửa sổ terminal mới sẽ tự động có hiệu lực)."
   }
 }

@@ -436,6 +436,7 @@
     "traeCn": "Trae CN",
     "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
+    "codebuddyCli": "CodeBuddy CLI",
     "switchClassicLayoutEntry": "切换到经典布局",
     "switchClassicLayoutTitle": "切换至经典侧边栏布局",
     "switchClassicLayoutDesc": "经典布局将展示完整平台导航，并支持可折叠侧边栏。你可在“设置 > 通用 > 侧边栏布局”中随时切换回原始布局。",
@@ -2398,8 +2399,8 @@
       "modelConfigDialogDescription": "为每个模型配置可见性、推理强度、上下文窗口和压缩阈值。",
       "applyModelConfig": "应用配置",
       "defaultModel": "默认模型",
-      "repairCompleted": "会话可见性修复完成"
-      ,"forceRefreshTitle": "强制刷新 Token",
+      "repairCompleted": "会话可见性修复完成",
+      "forceRefreshTitle": "强制刷新 Token",
       "forceRefreshReady": "可手动刷新 OAuth Token",
       "forceRefreshDescription": "使用 refresh_token 获取新的 access_token 和 id_token；当前 refresh_token 可能会被轮换。",
       "forceRefreshUnavailable": "当前账号类型不可用",
@@ -6400,5 +6401,33 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 档 API Key，并按档位筛选列表。密钥保存在本机应用数据目录。"
+  },
+  "codebuddyCli": {
+    "search": "搜索账号（CodeBuddy CLI）...",
+    "flowNotice": {
+      "title": "CodeBuddy CLI 账号管理说明（点击展开/收起）",
+      "desc": "切换账号将把选中账号的登录态写入 CodeBuddy CLI 官方认证文件（本地明文处理）。",
+      "permission": "权限范围：读写 CodeBuddy CLI 认证文件（%LOCALAPPDATA%/CodeBuddyExtension/Data/Public/auth）。",
+      "network": "网络范围：Token 刷新需联网请求 WorkBuddy 服务。不上传本地密钥或凭证。"
+    },
+    "noAccounts": "暂无账号，请先在 WorkBuddy 页面添加账号（同一账号体系）",
+    "addAccount": "添加 CodeBuddy CLI 账号",
+    "oauthDesc": "点击下方按钮将在浏览器中打开 WorkBuddy 授权页面（与 CodeBuddy CLI 同一账号体系）。",
+    "oauthFeature": {
+      "oauth": {
+        "title": "仅授权 IDE 登录信息",
+        "item1": "在浏览器完成 OAuth 后即可添加账号并用于 CodeBuddy CLI 切换。",
+        "item2": "授权完成后会自动刷新资源包配额数据。",
+        "item3": "账号卡片将按资源包展示额度、进度和刷新/到期时间。"
+      }
+    },
+    "oauthUrlInputPlaceholder": "可手动输入授权地址",
+    "oauthWaiting": "等待授权完成...",
+    "tokenDesc": "粘贴 WorkBuddy 的 access token：",
+    "import": {
+      "localDesc": "支持从本机 CodeBuddy CLI 客户端或 JSON 文件导入账号数据。",
+      "localClient": "从本机 CodeBuddy CLI 导入"
+    },
+    "switchRestartHint": "切换完成。运行中的 CodeBuddy CLI 需重启后生效（新开的终端窗口会自动生效）。"
   }
 }

@@ -316,7 +316,7 @@ function defaultPlatformGroups(): PlatformLayoutGroup[] {
     {
       id: DEFAULT_CODEBUDDY_GROUP_ID,
       name: 'CodeBuddy',
-      platformIds: ['codebuddy', 'codebuddy_cn', 'workbuddy'],
+      platformIds: ['codebuddy', 'codebuddy_cn', 'codebuddy_cli', 'workbuddy'],
       defaultPlatformId: 'codebuddy',
       iconKind: 'platform',
       iconPlatformId: 'codebuddy',
@@ -450,6 +450,12 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   if (fallbackPlatform === 'workbuddy') {
     return 'WorkBuddy';
   }
+  if (fallbackPlatform === 'codebuddy') {
+    return 'CodeBuddy';
+  }
+  if (fallbackPlatform === 'codebuddy_cli') {
+    return 'CodeBuddy CLI';
+  }
   if (fallbackPlatform === 'qoder') {
     return 'Qoder';
   }
@@ -481,6 +487,18 @@ function normalizeAntigravitySuiteGroupName(name: string, platformIds: PlatformI
     && (name === 'Antigravity IDE' || name === 'Antigravity')
   ) {
     return 'Antigravity';
+  }
+  return name;
+}
+
+/** 一次性修复：旧版本为 codebuddy_cli 自动生成的单平台分组名是大写下划线混排（如 Codebuddy_cli）。 */
+function normalizeLegacyCodebuddyCliGroupName(name: string, platformIds: PlatformId[]): string {
+  if (
+    platformIds.length === 1
+    && platformIds[0] === 'codebuddy_cli'
+    && (name === 'Codebuddy_cli' || name === 'codebuddy_cli')
+  ) {
+    return 'CodeBuddy CLI';
   }
   return name;
 }
@@ -528,6 +546,9 @@ function normalizeGroupChildName(raw: unknown, platformId: PlatformId): string |
   }
   if (platformId === 'antigravity_ide' && value === 'Antigravity') {
     return 'Antigravity IDE';
+  }
+  if (platformId === 'codebuddy_cli' && (value === 'Codebuddy_cli' || value === 'codebuddy_cli')) {
+    return 'CodeBuddy CLI';
   }
   if (platformId === 'claude_manager' && (value === 'Claude' || value === 'Claude CLI')) {
     return 'Claude';
@@ -636,8 +657,11 @@ function normalizePlatformGroups(
 
     result.push({
       id: groupId,
-      name: normalizeAntigravitySuiteGroupName(
-        normalizeGroupName(record.name, defaultPlatformId),
+      name: normalizeLegacyCodebuddyCliGroupName(
+        normalizeAntigravitySuiteGroupName(
+          normalizeGroupName(record.name, defaultPlatformId),
+          platformIds,
+        ),
         platformIds,
       ),
       platformIds,
