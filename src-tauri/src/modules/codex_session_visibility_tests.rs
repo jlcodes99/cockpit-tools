@@ -1,6 +1,141 @@
 // Codex Session Visibility 测试：跨实例修复、SQLite 迁移和备份恢复。
 // 测试作为原 tests 模块内容被 include，super 引用保持不变。
 use super::*;
+#[test]
+fn automatic_history_scan_does_not_block_launch_on_oversized_rollout() {
+    let dir = make_temp_dir("history-auto-large");
+    let relative = Path::new("sessions/rollout-large.jsonl");
+    let path = write_quick_repair_rollout_reference(&dir, "large", relative,
+        b"{\"type\":\"session_meta\",\"ordinal\":0,\"payload\":{\"id\":\"large\",\"history_mode\":\"paginated\",\"model_provider\":\"synthetic-provider\"}}\n");
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_len(129 * 1024 * 1024)
+        .unwrap();
+    let options = CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
+        CodexSessionVisibilityAutoRepairMode::Current,
+    )
+    .with_dry_run(true);
+    assert!(!options.history_preflight);
+    let result = repair_session_visibility_for_instances_with_options(
+        options,
+        None,
+        None,
+        RepairTargetSelection::default(),
+        vec![CodexSyncInstance {
+            id: "test-large".into(),
+            name: "large".into(),
+            data_dir: dir.clone(),
+            last_pid: None,
+        }],
+    )
+    .unwrap();
+    assert_eq!(result.updated_sqlite_row_count, 1);
+    assert_eq!(fs::metadata(&path).unwrap().len(), 129 * 1024 * 1024);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn automatic_repair_never_plans_rollout_replacement() {
+    let options = CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
+        CodexSessionVisibilityAutoRepairMode::Current,
+    );
+    assert!(!options.repair_rollout);
+    assert!(!options.repair_referenced_rollouts);
+    assert!(!options.history_preflight);
+}
+
+#[test]
+fn unsafe_header_refuses_without_mutation_in_auto_or_manual_mode() {
+    let dir = make_temp_dir("history-auto-long-provider");
+    let path = write_quick_repair_rollout_reference(&dir, "short", Path::new("sessions/rollout-short.jsonl"),
+        b"{\"type\":\"session_meta\",\"ordinal\":0,\"payload\":{\"id\":\"short\",\"history_mode\":\"paginated\",\"model_provider\":\"a\"}}\n");
+    let before = fs::read(&path).unwrap();
+    let auto = CodexSessionVisibilityRepairOptions::for_auto_repair_mode(
+        CodexSessionVisibilityAutoRepairMode::Current,
+    );
+    assert!(collect_referenced_rollout_provider_changes(
+        &dir,
+        "much-longer-provider",
+        auto,
+        &RepairTargetSelection::default()
+    )
+    .is_err());
+    let manual = repair_options(CodexSessionVisibilityRepairMode::Quick);
+    assert!(collect_referenced_rollout_provider_changes(
+        &dir,
+        "much-longer-provider",
+        manual,
+        &RepairTargetSelection::default()
+    )
+    .is_err());
+    assert_eq!(fs::read(path).unwrap(), before);
+    fs::remove_dir_all(dir).unwrap();
+}
+#[test]
+#[ignore = "explicitly installed synthetic fixture only"]
+fn installed_synthetic_fixture_preview_has_targets() {
+    let home =
+        PathBuf::from(std::env::var("COCKPIT_SYNTHETIC_FIXTURE_HOME").expect("fixture home"));
+    assert_eq!(
+        fs::read_to_string(home.join(".synthetic-history-fixture")).unwrap(),
+        "synthetic-only-v1\n"
+    );
+    let home = home.canonicalize().unwrap();
+    assert!(
+        home.starts_with(std::env::temp_dir().canonicalize().unwrap())
+            || home.starts_with("/private/tmp")
+    );
+    let db =
+        Connection::open_with_flags(home.join(STATE_DB_FILE), OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
+    let (tid, rollout): (String, String) = db
+        .query_row("SELECT id,rollout_path FROM threads", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap();
+    let rollout = PathBuf::from(rollout);
+    assert!(rollout.canonicalize().unwrap().starts_with(&home));
+    let files = [
+        rollout,
+        home.join(STATE_DB_FILE),
+        home.join("thread_history_1.sqlite"),
+        home.join(SESSION_INDEX_FILE),
+    ];
+    let before: Vec<_> = files.iter().map(|file| fs::read(file).unwrap()).collect();
+    let selection =
+        RepairTargetSelection::from_inputs(Some("openai".into()), Some(vec![tid.clone()]), None)
+            .unwrap();
+    let summary = repair_session_visibility_for_instances_with_options(
+        repair_options(CodexSessionVisibilityRepairMode::Quick).with_dry_run(true),
+        None,
+        None,
+        selection,
+        vec![CodexSyncInstance {
+            id: "synthetic-preview".into(),
+            name: "Synthetic preview".into(),
+            data_dir: home.clone(),
+            last_pid: None,
+        }],
+    )
+    .unwrap();
+    assert!(summary.changed_rollout_file_count > 0, "no rollout targets");
+    assert!(summary.updated_sqlite_row_count > 0, "no SQLite targets");
+    let health = modules::codex_history_health::inspect_thread(&home, &tid).unwrap();
+    assert!(!health.blocks_rewrite());
+    assert_eq!(
+        before,
+        files
+            .iter()
+            .map(|file| fs::read(file).unwrap())
+            .collect::<Vec<_>>()
+    );
+    println!(
+        "PREVIEW_OK rollout_targets={} sqlite_targets={} records={}",
+        summary.changed_rollout_file_count, summary.updated_sqlite_row_count, health.records
+    );
+}
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn make_temp_dir(prefix: &str) -> PathBuf {
@@ -812,7 +947,7 @@ use super::*;
         assert_eq!(options.mode, CodexSessionVisibilityRepairMode::Quick);
         assert_eq!(options.sqlite_scope, SqliteRepairScope::OfficialStateDbs);
         assert!(!options.repair_rollout);
-        assert!(options.repair_referenced_rollouts);
+        assert!(!options.repair_referenced_rollouts);
         assert!(!options.rewrite_all_session_meta);
         assert!(!options.repair_session_index);
         assert!(!options.rebuild_metadata);
@@ -1242,7 +1377,7 @@ use super::*;
         assert_eq!(read_provider(&target_db, "target-thread"), "relay");
         assert!(fs::read_to_string(&target_rollout)
             .expect("read target rollout")
-            .contains("\"model_provider\":\"relay\""));
+            .contains("\"model_provider\":\"openai\""));
 
         assert_eq!(read_provider(&other_db, "other-thread"), "other-provider");
         assert_eq!(

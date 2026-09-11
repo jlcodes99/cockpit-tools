@@ -1,0 +1,15 @@
+.codex-history-health { border-top: 1px solid var(--border-color, #ddd); padding-top: 16px; margin-top: 16px; font: inherit; }
+.codex-history-health-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.codex-history-health h3 { margin: 0; font-size: 14px; }
+.codex-history-health-heading { min-width: 0; flex: 1 1 200px; }
+.codex-history-health-heading h3 { margin-top: 6px; overflow-wrap: anywhere; line-height: 1.5; }
+.codex-history-health-heading > span { font-size: 12px; opacity: .7; }
+.codex-history-health-summary { margin: 14px 0; line-height: 1.6; }
+.codex-history-health-details { margin-top: 14px; }
+.codex-history-health-details summary { cursor: pointer; font-size: 12px; }
+.codex-history-health dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.codex-history-health dt { font-size: 12px; opacity: .75; }
+.codex-history-health dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.codex-history-health p, .codex-history-health li { font-size: 13px; overflow-wrap: anywhere; }
+.codex-history-health code { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .codex-history-health dl { grid-template-columns: minmax(0, 1fr); } }

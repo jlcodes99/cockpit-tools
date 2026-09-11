@@ -2242,6 +2242,34 @@ pub async fn codex_list_session_visibility_repair_instances(
 }
 
 #[tauri::command]
+pub async fn codex_check_session_history_health(
+    instance_id: String,
+    thread_id: String,
+) -> Result<modules::codex_history_health::HistoryHealth, String> {
+    let data_dir = modules::codex_session_visibility::resolve_session_visibility_instance_data_dir(
+        &instance_id,
+    )?;
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_history_health::inspect_thread(&data_dir, &thread_id)
+    })
+    .await
+    .map_err(|error| format!("检查 Codex 历史投影失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn codex_create_history_recovery_copy(
+    instance_id: String,
+    thread_id: String,
+    expected_hash: String,
+) -> Result<modules::codex_history_health::RecoveryCopy, String> {
+    let data_dir = modules::codex_session_visibility::resolve_session_visibility_instance_data_dir(&instance_id)?;
+    let output_root = modules::account::get_data_dir()?.join("history-recovery-candidates");
+    tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_history_health::create_recovery_copy(&data_dir, &thread_id, &expected_hash, &output_root)
+    }).await.map_err(|_| "history_recovery_task_failed".to_string())?
+}
+
+#[tauri::command]
 pub async fn codex_list_sessions_across_instances(
     title_query: Option<String>,
     content_query: Option<String>,

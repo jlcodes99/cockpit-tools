@@ -1,0 +1,23 @@
+name: History platform tests
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src-tauri/src/modules/codex_history_health.rs'
+      - 'src-tauri/src/modules/codex_rollout_byte_layout.rs'
+      - 'tests/history-projection/native-harness/**'
+      - '.github/workflows/history-platform-tests.yml'
+permissions:
+  contents: read
+jobs:
+  history:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test production history modules without application startup
+        run: cargo test --manifest-path tests/history-projection/native-harness/Cargo.toml --locked

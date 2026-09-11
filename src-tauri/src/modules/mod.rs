@@ -40,6 +40,7 @@ pub mod codex_session_file_time;
 pub mod codex_session_manager;
 pub mod codex_session_usage;
 pub mod codex_session_visibility;
+pub mod codex_history_health;
 pub mod codex_speed;
 pub mod codex_ssh;
 pub mod codex_thread_sync;

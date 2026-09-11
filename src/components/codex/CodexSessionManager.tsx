@@ -2409,6 +2409,7 @@ export function CodexSessionManager() {
       <CodexSessionVisibilityRepairModal
         open={showRepairVisibilityModal}
         selectedSessionIds={selectedIds}
+        selectedSessionTitle={selectedIds.length === 1 ? sessions.find((session) => session.sessionId === selectedIds[0])?.title : undefined}
         totalSessionCount={allSessionIds.length}
         onClose={() => setShowRepairVisibilityModal(false)}
         onRunningChange={setRepairingVisibility}
