@@ -386,16 +386,6 @@ function normalizeSidebar(sidebar: PlatformId[], hidden: PlatformId[]): Platform
   return sanitizePlatformIds(sidebar).filter((id) => !hidden.includes(id));
 }
 
-/// 启用的平台集合与「隐藏」正交：隐藏只影响显示，禁用才停止自动活动。
-function normalizeDisabled(disabled: PlatformId[], groups: PlatformLayoutGroup[]): PlatformId[] {
-  // 分组条目禁用等价于组内所有平台禁用，展开成平台级集合便于统一判断
-  const expanded = disabled.flatMap((id) => {
-    const group = groups.find((item) => item.id === id);
-    return group ? group.platformIds : [id];
-  });
-  return sanitizePlatformIds(expanded);
-}
-
 function normalizeTray(
   tray: PlatformId[],
   rawOrder: PlatformId[] = [],
@@ -1242,7 +1232,9 @@ function normalizeStateData(
   return {
     orderedPlatformIds,
     hiddenPlatformIds,
-    disabledPlatformIds: normalizeDisabled(raw.disabledPlatformIds ?? [], platformGroups),
+    // 禁用集合与「隐藏」正交：隐藏只影响显示，禁用才停止自动活动。
+    // 只接受裸平台 ID，调用方需先用 parsePlatformEntryId 从 `platform:xxx` 解析。
+    disabledPlatformIds: sanitizePlatformIds(raw.disabledPlatformIds ?? []),
     sidebarPlatformIds,
     trayPlatformIds: normalizeTray(
       raw.trayPlatformIds,

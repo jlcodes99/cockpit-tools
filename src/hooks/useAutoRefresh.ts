@@ -786,7 +786,7 @@ export function useAutoRefresh() {
                 key: `full:${descriptor.key}`,
                 label: `${descriptor.label} 全量刷新`,
                 intervalMs: minutesToMs(descriptor.intervalMinutes),
-                // 平台被禁用（在平台布局中隐藏）时跳过一切活动
+                // 平台被禁用时跳过一切活动（隐藏只影响显示）
                 shouldSkip: () => isPlatformDisabled(descriptor.key),
                 run: () =>
                   executeWithGuard(
@@ -837,7 +837,7 @@ export function useAutoRefresh() {
               key: `full:codex-group:${minutes}`,
               label: `Codex 分组自定义刷新 (${minutes}m)`,
               intervalMs: minutesToMs(minutes),
-              // 平台被禁用（在平台布局中隐藏）时跳过一切活动
+              // 平台被禁用时跳过一切活动（隐藏只影响显示）
               shouldSkip: () => isPlatformDisabled('codex'),
               run: () =>
                 executeWithGuard(

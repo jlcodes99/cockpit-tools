@@ -86,6 +86,7 @@ import { useEscClose } from '../hooks/useEscClose';
 import './settings/Settings.css';
 import { RefreshCw } from 'lucide-react';
 import { SettingsPageView } from "./SettingsPageView";
+import { PlatformSettingsSection } from "./settings/PlatformSettingsSection";
 
 
 
@@ -3001,7 +3002,7 @@ export function useSettingsPageController() {
     const displayName = getTraeAppDisplayName(target);
 
     return (
-      <div style={{ order }}>
+      <PlatformSettingsSection platformId={target} order={order}>
         <div className="group-title">{t(titleKey, titleDefault)}</div>
         <div className="settings-group">
           {renderPlatformAutoRefreshRow({
@@ -3029,7 +3030,7 @@ export function useSettingsPageController() {
             isPreset: quotaAlertThresholdIsPreset,
           })}
         </div>
-      </div>
+      </PlatformSettingsSection>
     );
   };
 
