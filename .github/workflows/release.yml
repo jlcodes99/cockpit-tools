@@ -829,11 +829,16 @@ jobs:
           set -euo pipefail
           TAG="v${VERSION}"
           IS_DRAFT="$(gh release view "${TAG}" --json isDraft --jq '.isDraft')"
-          if [ "${IS_DRAFT}" != "true" ]; then
-            echo "Release ${TAG} is already public; refusing an ambiguous re-publish."
+          if [ "${IS_DRAFT}" = "true" ]; then
+            gh release edit "${TAG}" --draft=false --prerelease=false --latest
+          elif [ "${IS_DRAFT}" = "false" ]; then
+            # Re-running this job after public verification failed must reach
+            # verification again without changing the already public release.
+            echo "Release ${TAG} is already public; continuing to verification."
+          else
+            echo "Unexpected draft state for release ${TAG}: ${IS_DRAFT}"
             exit 1
           fi
-          gh release edit "${TAG}" --draft=false --prerelease=false --latest
 
       - name: 🔍 Verify complete published updater state
         shell: bash
