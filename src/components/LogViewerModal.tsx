@@ -104,10 +104,47 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
     return date.toLocaleString();
   }, [snapshot?.modified_at_ms]);
 
+  const [contentFilter, setContentFilter] = useState<string>('');
+  const [useRegex, setUseRegex] = useState<boolean>(false);
+
   const displayedContent = useMemo(
     () => filterLogContent(visibleRawContent, levelFilter),
     [levelFilter, visibleRawContent],
   );
+
+  const contentFilterError = useMemo(() => {
+    if (!useRegex || !contentFilter.trim()) {
+      return '';
+    }
+    try {
+      // eslint-disable-next-line no-new
+      new RegExp(contentFilter, 'i');
+      return '';
+    } catch (err) {
+      return String(err);
+    }
+  }, [useRegex, contentFilter]);
+
+  const filteredContent = useMemo(() => {
+    const pattern = contentFilter.trim();
+    if (!pattern) {
+      return displayedContent;
+    }
+
+    let predicate: (line: string) => boolean;
+    if (useRegex) {
+      if (contentFilterError) {
+        return displayedContent;
+      }
+      const re = new RegExp(pattern, 'i');
+      predicate = (line) => re.test(line);
+    } else {
+      const lower = pattern.toLowerCase();
+      predicate = (line) => line.toLowerCase().includes(lower);
+    }
+
+    return displayedContent.split('\n').filter(predicate).join('\n');
+  }, [displayedContent, contentFilter, useRegex, contentFilterError]);
 
   const applyLineLimit = useCallback(() => {
     const parsed = Number.parseInt(lineLimitDraft.trim(), 10);
@@ -188,7 +225,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
       return;
     }
     view.scrollTop = view.scrollHeight;
-  }, [displayedContent, open]);
+  }, [filteredContent, open]);
 
   if (!open) {
     return null;
@@ -196,9 +233,9 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
   const activeFileName = selectedFileName || snapshot?.log_file_name || '';
   const hasFilteredOutContent =
-    levelFilter !== 'ALL' &&
+    (levelFilter !== 'ALL' || contentFilter.trim().length > 0) &&
     visibleRawContent.trim().length > 0 &&
-    displayedContent.trim().length === 0;
+    filteredContent.trim().length === 0;
 
   const handleClearOutput = () => {
     clearMarkerRef.current = rawContent;
@@ -208,7 +245,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
   const handleCopyLogs = async () => {
     try {
-      await navigator.clipboard.writeText(displayedContent);
+      await navigator.clipboard.writeText(filteredContent);
       setCopied(true);
       window.setTimeout(() => setCopied(false), FEEDBACK_DURATION_MS);
     } catch (err) {
@@ -303,6 +340,39 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
                   <ChevronDown size={14} />
                 </div>
               </div>
+              <div className="log-viewer-filter-wrap log-viewer-content-filter-wrap">
+                <input
+                  className={`log-viewer-content-filter-input${
+                    contentFilterError ? ' has-error' : ''
+                  }`}
+                  type="text"
+                  value={contentFilter}
+                  placeholder={t('logViewer.contentFilterPlaceholder', '按内容过滤（支持正则）')}
+                  onChange={(event) => setContentFilter(event.target.value)}
+                  aria-label={t('logViewer.contentFilterLabel', '内容过滤')}
+                />
+                <label className="log-viewer-regex-toggle">
+                  <input
+                    type="checkbox"
+                    checked={useRegex}
+                    onChange={(event) => setUseRegex(event.target.checked)}
+                  />
+                  <span>{t('logViewer.regex', '正则')}</span>
+                </label>
+                {contentFilter ? (
+                  <button
+                    type="button"
+                    className="log-viewer-content-filter-clear"
+                    onClick={() => setContentFilter('')}
+                    aria-label={t('common.clear', '清除')}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+              {contentFilterError ? (
+                <div className="log-viewer-content-filter-error">{contentFilterError}</div>
+              ) : null}
               <div className="log-viewer-line-limit-wrap">
                 <span className="log-viewer-line-limit-label">
                   {t('pagination.perPage', { count: lineLimit, defaultValue: '{{count}} / page' })}
@@ -334,10 +404,10 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
               shouldStickToBottomRef.current = bottomDistance <= 24;
             }}
           >
-            {loading && !displayedContent ? (
+            {loading && !filteredContent ? (
               <div className="log-viewer-placeholder">{t('common.loading', '加载中...')}</div>
-            ) : displayedContent ? (
-              <pre>{displayedContent}</pre>
+            ) : filteredContent ? (
+              <pre>{filteredContent}</pre>
             ) : (
               <div className="log-viewer-placeholder">
                 {hasFilteredOutContent
