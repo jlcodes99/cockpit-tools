@@ -412,6 +412,11 @@ pub async fn run_workbuddy_auto_checkin_cycle_if_needed(
     }
     let _guard = CheckinGuard;
 
+    // 平台在「平台布局」中被禁用时，跳过自动签到（手动触发不受影响）
+    if !force && !crate::modules::tray_layout::is_platform_enabled("workbuddy") {
+        return Ok("platform_disabled".to_string());
+    }
+
     let mut config = get_config_checked()?;
     if !config.enabled && !force {
         return Ok("disabled".to_string());
