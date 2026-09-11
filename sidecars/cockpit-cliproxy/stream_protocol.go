@@ -11,6 +11,9 @@ import (
 	"io"
 
 	"net/http"
+
+	"crypto/rand"
+	"encoding/hex"
 	"net/url"
 
 	"strings"
@@ -190,6 +193,64 @@ func buildExecutorRequest(c *gin.Context, body []byte, model string, sourceForma
 		Metadata:        metadata,
 	}
 	return req, opts
+}
+
+// ensureOpenCodeSessionHeader preserves a caller supplied session and otherwise
+// derives one from the stable client session identity, with an opaque fallback.
+func ensureOpenCodeSessionHeader(headers http.Header) {
+	ensureOpenCodeSessionHeaderForBody(headers, nil)
+}
+
+func ensureOpenCodeSessionHeaderForBody(headers http.Header, body []byte) {
+	if headers == nil {
+		return
+	}
+	if supplied := strings.TrimSpace(headers.Get("X-OpenCode-Session")); isSafeOpenCodeSessionValue(supplied) {
+		headers.Set("X-OpenCode-Session", supplied)
+		return
+	}
+	identity := strings.TrimSpace(headers.Get("X-Session-ID"))
+	if identity == "" {
+		identity = strings.TrimSpace(headers.Get("Session-Id"))
+	}
+	if identity == "" {
+		identity = strings.TrimSpace(headers.Get("X-Client-Request-Id"))
+	}
+	if identity == "" && len(body) > 0 {
+		var payload map[string]any
+		if json.Unmarshal(body, &payload) == nil {
+			for _, key := range []string{"conversation_id", "session_id", "previous_response_id"} {
+				if value, ok := payload[key].(string); ok && strings.TrimSpace(value) != "" {
+					identity = strings.TrimSpace(value)
+					break
+				}
+			}
+		}
+	}
+	if identity == "" {
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err == nil {
+			identity = "cockpit-" + hex.EncodeToString(b)
+		} else {
+			identity = "cockpit-session"
+		}
+	}
+	if !isSafeOpenCodeSessionValue(identity) {
+		identity = "cockpit-session"
+	}
+	headers.Set("X-OpenCode-Session", identity)
+}
+
+func isSafeOpenCodeSessionValue(value string) bool {
+	if value == "" || strings.ContainsAny(value, "\r\n") {
+		return false
+	}
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func writeAPIError(c *gin.Context, status int, message, code string) {

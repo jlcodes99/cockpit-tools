@@ -238,6 +238,12 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		req.Header.Set("Accept", "text/event-stream")
 	}
 	copyProviderGatewayDiagnosticHeaders(req.Header, c.Request.Header)
+	if isOpenCodeGoEndpoint(gateway.BaseURL) {
+		if supplied := c.Request.Header.Get("X-OpenCode-Session"); supplied != "" {
+			req.Header.Set("X-OpenCode-Session", supplied)
+		}
+		ensureOpenCodeSessionHeaderForBody(req.Header, body)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -320,6 +326,15 @@ func rewriteProviderGatewayBodyModel(body []byte, model string) []byte {
 		return body
 	}
 	return next
+}
+
+func isOpenCodeGoEndpoint(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return strings.Contains(host, "opencode")
 }
 
 func copyProviderGatewayDiagnosticHeaders(dst http.Header, src http.Header) {
