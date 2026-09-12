@@ -69,7 +69,7 @@ pub fn inject_token_to_path(
     )
 }
 
-/// 推导账号的 is_gcp_tos 属性（优先使用 token 中的显式字段，若缺失则通过配额层级做静态推断兜底）
+/// 推导账号的 is_gcp_tos 属性（优先使用 token 中的显式字段，若缺失则通过配额层级返回的 is_gcp_tos 判定）
 pub fn resolve_account_is_gcp_tos(account: &Account) -> Option<bool> {
     if let Some(is_gcp_tos) = account.token.is_gcp_tos {
         return Some(is_gcp_tos);
@@ -78,33 +78,25 @@ pub fn resolve_account_is_gcp_tos(account: &Account) -> Option<bool> {
         if let Some(is_gcp_tos) = quota.is_gcp_tos {
             return Some(is_gcp_tos);
         }
-        if quota.tier_id.as_deref() == Some("standard-tier")
-            || quota.subscription_tier.as_deref() == Some("standard-tier")
-        {
-            return Some(true);
-        }
     }
     None
 }
 
-/// 推导账号的 project_id 属性（优先 token，其次 quota，若属于 GCP ToS 账号则兜底为 "aicode-consumers"）
+/// 推导账号的 project_id 属性（优先 token，其次 quota；无合法项目则返回 None，严格过滤无效的 aicode-consumers）
 pub fn resolve_account_project_id(account: &Account) -> Option<String> {
     if let Some(ref project_id) = account.token.project_id {
         let trimmed = project_id.trim();
-        if !trimmed.is_empty() {
+        if !trimmed.is_empty() && trimmed != "aicode-consumers" {
             return Some(trimmed.to_string());
         }
     }
     if let Some(ref quota) = account.quota {
         if let Some(ref project_id) = quota.project_id {
             let trimmed = project_id.trim();
-            if !trimmed.is_empty() {
+            if !trimmed.is_empty() && trimmed != "aicode-consumers" {
                 return Some(trimmed.to_string());
             }
         }
-    }
-    if resolve_account_is_gcp_tos(account) == Some(true) {
-        return Some("aicode-consumers".to_string());
     }
     None
 }
@@ -341,12 +333,12 @@ mod tests {
         let mut quota_tier = QuotaData::new();
         quota_tier.tier_id = Some("standard-tier".to_string());
         let acc_tier = make_test_account(None, Some(quota_tier));
-        assert_eq!(resolve_account_is_gcp_tos(&acc_tier), Some(true));
+        assert_eq!(resolve_account_is_gcp_tos(&acc_tier), None);
 
         let mut quota_sub = QuotaData::new();
         quota_sub.subscription_tier = Some("standard-tier".to_string());
         let acc_sub = make_test_account(None, Some(quota_sub));
-        assert_eq!(resolve_account_is_gcp_tos(&acc_sub), Some(true));
+        assert_eq!(resolve_account_is_gcp_tos(&acc_sub), None);
 
         let mut quota_free = QuotaData::new();
         quota_free.tier_id = Some("free-tier".to_string());
@@ -373,14 +365,16 @@ mod tests {
             Some("quota-project".to_string())
         );
 
-        // 3. GCP ToS 账号自动兜底 aicode-consumers
-        let acc_tos = make_test_account(Some(true), None);
-        assert_eq!(
-            resolve_account_project_id(&acc_tos),
-            Some("aicode-consumers".to_string())
-        );
+        // 3. 过滤历史脏数据 aicode-consumers
+        let mut acc_dirty = make_test_account(Some(true), None);
+        acc_dirty.token.project_id = Some("aicode-consumers".to_string());
+        assert_eq!(resolve_account_project_id(&acc_dirty), None);
 
-        // 4. 普通非 GCP ToS 个人账号返回 None
+        // 4. GCP ToS 账号若无真实项目 ID 也返回 None，绝不凭空捏造假项目
+        let acc_tos = make_test_account(Some(true), None);
+        assert_eq!(resolve_account_project_id(&acc_tos), None);
+
+        // 5. 普通非 GCP ToS 个人账号返回 None
         let acc_personal = make_test_account(Some(false), None);
         assert_eq!(resolve_account_project_id(&acc_personal), None);
     }

@@ -398,7 +398,25 @@ pub fn load_account(account_id: &str) -> Result<Account, String> {
     let content =
         fs::read_to_string(&account_path).map_err(|e| format!("读取账号数据失败: {}", e))?;
 
-    deserialize_account_from_storage(&account_path, &content)
+    let mut account = deserialize_account_from_storage(&account_path, &content)?;
+    if account.token.project_id.as_deref() == Some("aicode-consumers") {
+        account.token.project_id = None;
+    }
+    if let Some(ref mut q) = account.quota {
+        if q.project_id.as_deref() == Some("aicode-consumers") {
+            q.project_id = None;
+        }
+    }
+    // 若账号没有真实 project_id，清洗掉历史残留的 is_gcp_tos 假标记
+    if account.token.project_id.is_none() {
+        account.token.is_gcp_tos = None;
+    }
+    if let Some(ref mut q) = account.quota {
+        if q.project_id.is_none() {
+            q.is_gcp_tos = None;
+        }
+    }
+    Ok(account)
 }
 
 /// 保存账号数据
@@ -2015,11 +2033,25 @@ pub async fn fetch_quota_with_fresh_token(
                 if account.token.is_gcp_tos != Some(gcp_tos) {
                     account.token.is_gcp_tos = Some(gcp_tos);
                 }
+            } else if account.token.is_gcp_tos == Some(true) {
+                // 若配额不再标识 GCP ToS，重置先前误标的状态
+                account.token.is_gcp_tos = None;
+            }
+            // 清理历史残留的 aicode-consumers 脏数据
+            if account.token.project_id.as_deref() == Some("aicode-consumers") {
+                account.token.project_id = None;
             }
             if let Some(ref project_id) = payload.quota.project_id {
-                if account.token.project_id.as_deref() != Some(project_id.as_str()) {
-                    account.token.project_id = Some(project_id.clone());
+                let trimmed = project_id.trim();
+                if trimmed != "aicode-consumers" && !trimmed.is_empty() {
+                    if account.token.project_id.as_deref() != Some(trimmed) {
+                        account.token.project_id = Some(trimmed.to_string());
+                    }
+                } else {
+                    account.token.project_id = None;
                 }
+            } else {
+                account.token.project_id = None;
             }
             account.quota_error = payload.error.map(|err| QuotaErrorInfo {
                 code: err.code,
