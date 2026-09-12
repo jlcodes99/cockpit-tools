@@ -1342,8 +1342,30 @@ func (s *cockpitSelector) rotatedIndex(account *accountSpec, start int) int {
 }
 
 type usagePlugin struct {
-	manifest *manifest
-	tracker  *requestUsageTracker
+	manifest           *manifest
+	tracker            *requestUsageTracker
+	defaultServiceTier string
+}
+
+func usageServiceTier(record coreusage.Record, ctx context.Context, fallback string) string {
+	for _, candidate := range []string{
+		record.ServiceTier,
+		record.RequestServiceTier,
+		record.ResponseServiceTier,
+	} {
+		raw := strings.ToLower(strings.TrimSpace(candidate))
+		if raw == "" || raw == "default" || raw == "auto" {
+			continue
+		}
+		if normalized := normalizedUsageServiceTier(candidate); normalized != "" {
+			return normalized
+		}
+		return ""
+	}
+	if normalized := normalizedUsageServiceTier(coreusage.ServiceTierFromContext(ctx)); normalized != "" {
+		return normalized
+	}
+	return normalizedUsageServiceTier(fallback)
 }
 
 func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) {
@@ -1376,6 +1398,7 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 	}
 	status := record.Fail.StatusCode
 	success := !record.Failed
+	serviceTier := usageServiceTier(record, ctx, p.defaultServiceTier)
 	payload := usagePayload{
 		Type:             "usage",
 		RequestID:        internallogging.GetRequestID(ctx),
@@ -1389,7 +1412,7 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 		APIKeyLabel:      stringFromAPIKey(spec, "label"),
 		ClientInstanceID: clientInstanceIDFromContext(ctx),
 		RequestKind:      requestKind,
-		ServiceTier:      normalizedUsageServiceTier(record.ServiceTier),
+		ServiceTier:      serviceTier,
 		ReasoningEffort:  strings.TrimSpace(record.ReasoningEffort),
 		Success:          success,
 		Status:           status,

@@ -32,6 +32,33 @@ type responsesTerminalEventTestError struct {
 	event []byte
 }
 
+func TestUsageServiceTierFallbacks(t *testing.T) {
+	if got := usageServiceTier(coreusage.Record{RequestServiceTier: "priority"}, context.Background(), ""); got != "priority" {
+		t.Fatalf("request service tier fallback = %q, want priority", got)
+	}
+	ctx := coreusage.WithServiceTier(context.Background(), "priority")
+	if got := usageServiceTier(coreusage.Record{}, ctx, ""); got != "priority" {
+		t.Fatalf("context service tier fallback = %q, want priority", got)
+	}
+	if got := usageServiceTier(coreusage.Record{ResponseServiceTier: "priority"}, context.Background(), ""); got != "priority" {
+		t.Fatalf("response service tier fallback = %q, want priority", got)
+	}
+	if got := usageServiceTier(coreusage.Record{ServiceTier: "standard"}, context.Background(), "priority"); got != "" {
+		t.Fatalf("explicit standard service tier = %q, want empty", got)
+	}
+}
+
+func TestDefaultUsageServiceTierFromConfig(t *testing.T) {
+	cfg := &config.Config{
+		Payload: config.PayloadConfig{
+			Default: []config.PayloadRule{{Params: map[string]any{"service_tier": "priority"}}},
+		},
+	}
+	if got := defaultUsageServiceTier(cfg); got != "priority" {
+		t.Fatalf("default config service tier = %q, want priority", got)
+	}
+}
+
 func TestImageGenerationAllowedForAccountPolicy(t *testing.T) {
 	apiKey := &accountSpec{AuthKind: "api_key", ImageGenerationPolicy: "inherit"}
 	if imageGenerationAllowedForAccount(apiKey) {
