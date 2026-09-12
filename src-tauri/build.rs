@@ -159,7 +159,10 @@ fn build_cockpit_cliproxy_sidecar() {
         panic!("unsupported sidecar build target: {target}");
     };
     build_go_sidecar(&sidecar_dir, &output_dir, &target, goos, goarch);
-    if cfg!(target_os = "macos") && target.contains("apple-darwin") {
+    if cfg!(target_os = "macos")
+        && target.contains("apple-darwin")
+        && std::env::var("COCKPIT_SKIP_CLIPROXY_BUILD").ok().as_deref() != Some("1")
+    {
         build_macos_universal_sidecar(&sidecar_dir, &output_dir);
     }
 }
