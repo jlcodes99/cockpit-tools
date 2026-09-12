@@ -88,6 +88,20 @@ func normalizeCockpitLocale(locale string) string {
 	return locale
 }
 
+func defaultUsageServiceTier(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	for _, rule := range cfg.Payload.Default {
+		if tier, ok := rule.Params["service_tier"].(string); ok {
+			if normalized := normalizedUsageServiceTier(tier); normalized != "" {
+				return normalized
+			}
+		}
+	}
+	return ""
+}
+
 func main() {
 	ignoreBrokenPipeSignal()
 	configPath := flag.String("config", "", "CLIProxyAPI config file")
@@ -163,7 +177,11 @@ func main() {
 	m.quotaCooldowns.start(ctx, emitter)
 	monitorParentProcess(ctx, *parentPID, cancel, emitter)
 
-	coreusage.RegisterPlugin(&usagePlugin{manifest: m, tracker: usageTracker})
+	coreusage.RegisterPlugin(&usagePlugin{
+		manifest:           m,
+		tracker:            usageTracker,
+		defaultServiceTier: defaultUsageServiceTier(cfg),
+	})
 
 	runtime, err := newSidecarRuntime(ctx, absConfigPath, cfg, m, coreManager)
 	if err != nil {
