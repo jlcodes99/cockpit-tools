@@ -291,6 +291,7 @@ pub async fn inject_codebuddy_to_vscode(
         "codebuddy",
         Some(account_id.as_str()),
     )?;
+    codebuddy_account::touch_last_used(&account_id)?;
 
     let launch_warning =
         match crate::commands::codebuddy_instance::codebuddy_switch_default_account_and_start()

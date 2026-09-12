@@ -11,6 +11,7 @@ import './settings/Settings.css';
 import { Save, FolderOpen, AlertCircle, RefreshCw } from 'lucide-react';
 import type { SettingsPageViewProps } from "./SettingsPageView";
 import { SettingsCodexPlatformPanel } from "./SettingsCodexPlatformPanel";
+import { useUiConfigStore } from "../stores/useUiConfigStore";
 
 
 /** 渲染 SettingsPageView 的 activeTab === 'general' 业务面板。 */
@@ -375,6 +376,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     zedQuotaAlertThresholdCustomMode,
     zedQuotaAlertThresholdIsPreset,
   } = props;
+
+  const { timeDisplayMode, setTimeDisplayMode } = useUiConfigStore();
   return (
           <>
           {(generalLoadFailed || updateSettingsLoadFailed) && (
@@ -578,6 +581,23 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     />
                     <span className="slider"></span>
                   </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">{t('settings.general.timeDisplayMode', '时间显示')}</div>
+                  <div className="row-desc">{t('settings.general.timeDisplayModeDesc', '账号卡片与列表中的时间区域显示内容（默认切换时间）')}</div>
+                </div>
+                <div className="row-control">
+                  <select
+                    className="settings-select"
+                    value={timeDisplayMode}
+                    onChange={(e) => setTimeDisplayMode(e.target.value as "switch" | "refresh")}
+                  >
+                    <option value="switch">{t('accounts.lastSwitchTime', '切换时间')}</option>
+                    <option value="refresh">{t('accounts.refreshTime', '刷新时间')}</option>
+                  </select>
                 </div>
               </div>
 

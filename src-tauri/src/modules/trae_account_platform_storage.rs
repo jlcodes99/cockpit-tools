@@ -478,6 +478,15 @@ fn save_account_file(account: &TraeAccount) -> Result<(), String> {
         .map_err(|e| format!("保存 Trae 账号失败: {}", e))
 }
 
+// ponytail: 切号时记录 last_used。O(n) load+save 单个账号文件。
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("Trae account not found: {}", account_id))?;
+    account.last_used = now_ts();
+    save_account_file(&account)?;
+    Ok(())
+}
+
 fn delete_account_file(account_id: &str) -> Result<(), String> {
     let path = resolve_account_file_path(account_id)?;
     if path.exists() {
@@ -1236,7 +1245,6 @@ fn apply_payload(account: &mut TraeAccount, payload: TraeImportPayload) {
     account.trae_usertag_raw = normalize_non_empty(payload.trae_usertag_raw.as_deref());
     account.status = normalize_non_empty(payload.status.as_deref());
     account.status_reason = normalize_non_empty(payload.status_reason.as_deref());
-    account.last_used = now_ts();
 }
 
 fn is_runtime_preserved_auth_key(key: &str) -> bool {

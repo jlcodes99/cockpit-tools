@@ -25,6 +25,7 @@ import {
   Lock,
   BookOpen,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import * as cursorService from '../services/cursorService';
 import { TagEditModal } from '../components/TagEditModal';
@@ -745,7 +746,7 @@ export function CursorAccountsPage() {
           </div>
 
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.created_at)}</span>
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               <button className="card-action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting || isBanned}
                 title={isBanned ? t('accounts.status.forbidden_msg') : t('cursor.injectToCursor', '切换到 Cursor')}>

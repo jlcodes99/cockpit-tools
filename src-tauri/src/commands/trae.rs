@@ -447,6 +447,7 @@ pub async fn inject_trae_account(
         }
     };
 
+    trae_account::touch_last_used(&account_id)?;
     let _ = crate::modules::tray::update_tray_menu(&app);
     let refresh_note = refresh_warning
         .as_ref()

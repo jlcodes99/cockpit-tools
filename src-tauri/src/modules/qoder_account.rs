@@ -915,7 +915,8 @@ fn snapshot_to_account(snapshot: QoderSnapshot, existing: Option<&QoderAccount>)
             .credit_usage_raw
             .or_else(|| existing.and_then(|item| item.auth_credit_usage_raw.clone())),
         created_at: existing.map(|item| item.created_at).unwrap_or(now),
-        last_used: now,
+        // 扫描/合并已有账号时保留真实切号时间，仅在全新导入时回退到 now
+        last_used: existing.map(|item| item.last_used).unwrap_or(now),
     }
 }
 

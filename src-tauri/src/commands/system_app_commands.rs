@@ -495,3 +495,16 @@ pub fn save_user_memory_list(
 ) -> Result<modules::user_memory::UserMemory, String> {
     modules::user_memory::save_user_memory_list(&id, items)
 }
+
+/// 返回操作系统真实时区相对 UTC 的偏移（分钟），如 `+08:00` -> `480`。
+///
+/// WebView 的 `Intl` 默认时区在部分环境会解析成 `UTC`，且部分 webview 的 ICU
+/// 时区库无法解析 IANA 名称（如 `Asia/Shanghai`）而再次静默回退 UTC，导致时间
+/// 偏移 N 小时。因此直接由 Rust 侧用 `chrono::Local` 读取 OS 真实偏移（与日志
+/// 本地时间一致），前端以 `UTC + offset` 方式渲染，彻底绕开 webview 时区库。
+/// ponytail: 仅在启动时取一次并缓存到前端，单一事实源；DST 边界的极旧时间戳
+/// 可能偏差 1 小时（用“当前”偏移近似），对“最近切换时间”无影响。
+#[tauri::command]
+pub fn get_local_timezone() -> i64 {
+    chrono::Local::now().offset().local_minus_utc() as i64 / 60
+}

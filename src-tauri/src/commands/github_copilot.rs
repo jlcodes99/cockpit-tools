@@ -180,6 +180,7 @@ pub async fn inject_github_copilot_to_vscode(
     logger::log_info(&format!("开始切换 GitHub Copilot 账号: {}", account_id));
     let account = github_copilot_account::load_account(&account_id)
         .ok_or_else(|| format!("GitHub Copilot account not found: {}", account_id))?;
+    github_copilot_account::touch_last_used(&account_id)?;
     logger::log_info(&format!(
         "正在切换到 GitHub Copilot 账号: {} (ID: {})",
         account.github_login, account.id

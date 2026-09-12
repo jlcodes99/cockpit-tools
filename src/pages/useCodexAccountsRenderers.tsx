@@ -1,5 +1,6 @@
 import { useEffect, type ReactElement } from "react";
 import { RefreshCw, Upload, Trash2, X, Power, Database, Copy, Check, Play, RotateCw, CircleAlert, Info, Calendar, Tag, Eye, EyeOff, FileText, ExternalLink, Pencil, FolderOpen, FolderPlus, ChevronRight, LogOut, Wrench, Terminal, Link2 } from "lucide-react";
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { isCodexGroupQuotaRefreshInherit, resolveCodexGroupQuotaAutoRefreshMinutes } from "../services/codexAccountGroupService";
 import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
 import { isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
@@ -374,6 +375,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             >
               {maskAccountText(presentation.displayName)}
             </span>
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             {!isApiKeyAccount &&
               !refreshTokenReusedState &&
               (account.requires_reauth || serverRevokedReauth) && (
@@ -1065,7 +1067,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               </div>
             )}
             <div className="codex-card-bottom">
-              <span className="card-date">{formatDate(account.created_at)}</span>
+              <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
               {renderAccountSpeedSelect(account)}
               <div className="card-footer">
                 <div className="card-actions">

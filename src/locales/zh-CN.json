@@ -998,6 +998,8 @@
       "startupMinimizedDesc": "应用启动完成后自动最小化主窗口，可从 Dock、任务栏或托盘恢复",
       "rememberMainWindowState": "记住主窗口位置和大小",
       "rememberMainWindowStateDesc": "重启或从托盘重新打开时恢复主窗口位置和大小；默认关闭",
+      "timeDisplayMode": "时间显示",
+      "timeDisplayModeDesc": "账号卡片与列表中的时间区域显示内容（默认切换时间）",
       "minimizeBehavior": "窗口最小化行为（仅 macOS）",
       "minimizeBehaviorDesc": "选择最小化窗口时保留在程序坞和菜单栏，或仅保留在菜单栏",
       "minimizeBehaviorDockAndTray": "程序坞 + 菜单栏（推荐默认）",
@@ -1599,6 +1601,12 @@
       "gcpTos": "GCP ToS 账号",
       "gcpTosTitle": "GCP ToS 账号"
     },
+    "lastSwitchTime": "切换时间",
+    "neverSwitched": "从未切换",
+    "refreshTime": "刷新时间",
+    "refreshTimeFull": "刷新时间：{{time}}",
+    "lastSwitchTimeFull": "切换时间：{{time}}",
+    "toggleTimeMode": "切换显示切换时间 / 刷新时间",
     "columns": {
       "email": "邮箱",
       "subscription": "订阅类型",

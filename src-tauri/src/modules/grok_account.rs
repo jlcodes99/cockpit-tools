@@ -2612,7 +2612,6 @@ async fn refresh_account_inner(
         account.quota_query_last_error = None;
         account.quota_query_last_error_at = None;
         account.usage_updated_at = Some(now_ms());
-        account.last_used = now_ms();
         save_account_locked(&account)?;
         return Ok(GrokAccountView::from(&account));
     }
