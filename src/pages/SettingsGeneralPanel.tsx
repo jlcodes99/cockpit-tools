@@ -11,6 +11,7 @@ import './settings/Settings.css';
 import { Save, FolderOpen, AlertCircle, RefreshCw } from 'lucide-react';
 import type { SettingsPageViewProps } from "./SettingsPageView";
 import { SettingsCodexPlatformPanel } from "./SettingsCodexPlatformPanel";
+import { useUiConfigStore } from "../stores/useUiConfigStore";
 
 
 /** 渲染 SettingsPageView 的 activeTab === 'general' 业务面板。 */
@@ -375,6 +376,8 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     zedQuotaAlertThresholdCustomMode,
     zedQuotaAlertThresholdIsPreset,
   } = props;
+
+  const { showSwitchTime, setShowSwitchTime, showRefreshTime, setShowRefreshTime } = useUiConfigStore();
   return (
           <>
           {(generalLoadFailed || updateSettingsLoadFailed) && (
@@ -575,6 +578,40 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       type="checkbox"
                       checked={rememberMainWindowState}
                       onChange={(event) => setRememberMainWindowState(event.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">{t('settings.general.showSwitchTime', '显示切换时间')}</div>
+                  <div className="row-desc">{t('settings.general.showSwitchTimeDesc', '在账号卡片与列表中显示「最后切换」时间')}</div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={showSwitchTime}
+                      onChange={(event) => setShowSwitchTime(event.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">{t('settings.general.showRefreshTime', '显示刷新时间')}</div>
+                  <div className="row-desc">{t('settings.general.showRefreshTimeDesc', '在配额信息中显示「下次刷新时间 / 上次成功」等刷新时间')}</div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={showRefreshTime}
+                      onChange={(event) => setShowRefreshTime(event.target.checked)}
                     />
                     <span className="slider"></span>
                   </label>

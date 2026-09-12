@@ -5,6 +5,7 @@ import {
   Tag, Play, Eye, EyeOff, CircleAlert, ChevronDown,
 } from 'lucide-react';
 import { AccountLastUsed } from '../components/AccountLastUsed';
+import { useUiConfigStore } from '../stores/useUiConfigStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import * as codebuddyService from '../services/codebuddyService';
 import { TagEditModal } from '../components/TagEditModal';
@@ -77,6 +78,7 @@ function getQuotaClassByRemainPercent(remainPercent: number | null): string {
 }
 
 export function CodebuddyAccountsPage() {
+  const showRefreshTime = useUiConfigStore((s) => s.showRefreshTime);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
     readAccountsOverviewFilterPersistenceEnabled(CODEBUDDY_FILTER_PERSISTENCE_SCOPE)
@@ -346,17 +348,21 @@ export function CodebuddyAccountsPage() {
     const primaryTimeText = formatQuotaDateTime(isBase ? resource.refreshAt : resource.expireAt);
     if (primaryTimeText) {
       return isBase
-        ? t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: primaryTimeText })
+        ? showRefreshTime
+          ? t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: primaryTimeText })
+          : null
         : t('codebuddy.quotaQuery.expireAt', '到期时间：{{time}}', { time: primaryTimeText });
     }
     const fallbackTimeText = formatQuotaDateTime(isBase ? resource.expireAt : resource.refreshAt);
     if (fallbackTimeText) {
       return isBase
         ? t('codebuddy.quotaQuery.expireAt', '到期时间：{{time}}', { time: fallbackTimeText })
-        : t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: fallbackTimeText });
+        : showRefreshTime
+          ? t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: fallbackTimeText })
+          : null;
     }
     return null;
-  }, [formatQuotaDateTime, t]);
+  }, [formatQuotaDateTime, t, showRefreshTime]);
 
   const resolveResourcePackageTitle = useCallback((resource: CodebuddyOfficialQuotaResource, isExtra: boolean) => {
     if (isExtra || resource.packageCode === CB_PACKAGE_CODE.extra) {
@@ -480,7 +486,7 @@ export function CodebuddyAccountsPage() {
               <CircleAlert size={14} />
               <div className="quota-cache-warning-content">
                 <span className="quota-cache-warning-title">{cachedWarningText}</span>
-                {updatedAtText && (
+                {showRefreshTime && updatedAtText && (
                   <span className="quota-cache-warning-time">
                     {t('common.shared.quota.lastSuccessfulQuery', '上次成功：{{time}}', {
                       time: updatedAtText,

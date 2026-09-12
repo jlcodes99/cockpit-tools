@@ -57,6 +57,7 @@ import { KNOWN_PLAN_FILTERS } from "./CodebuddySuiteConfig";
 import { DosageNotifyUsageStatus } from "../platform/DosageNotifyUsageStatus";
 import { CodeBuddyQuotaCategoryList } from "../codebuddy/CodeBuddyQuotaCategoryList";
 import { AccountLastUsed } from "../AccountLastUsed";
+import { useUiConfigStore } from "../../stores/useUiConfigStore";
 import {
   MultiSelectFilterDropdown,
   type MultiSelectFilterOption,
@@ -218,6 +219,9 @@ export function CodebuddySuiteAccountsSharedView<
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
+
+  const showSwitchTime = useUiConfigStore((s) => s.showSwitchTime);
+  const showRefreshTime = useUiConfigStore((s) => s.showRefreshTime);
 
   const {
     t,
@@ -627,7 +631,7 @@ export function CodebuddySuiteAccountsSharedView<
                 <CircleAlert size={14} />
                 <div className="quota-cache-warning-content">
                   <span className="quota-cache-warning-title">{cachedWarningText}</span>
-                  {updatedAtText && (
+                  {showRefreshTime && updatedAtText && (
                     <span className="quota-cache-warning-time">
                       {t("common.shared.quota.lastSuccessfulQuery", "上次成功：{{time}}", {
                         time: updatedAtText,
@@ -839,9 +843,11 @@ export function CodebuddySuiteAccountsSharedView<
               {renderQuotaQuerySection(account, "table")}
             </div>
           </td>
+          {showSwitchTime && (
           <td>
             <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
           </td>
+          )}
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
               <button
@@ -1252,7 +1258,7 @@ export function CodebuddySuiteAccountsSharedView<
                   {t("common.shared.columns.plan", "套餐")}
                 </th>
                 <th>{t("instances.labels.quota", "配额")}</th>
-                <th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>
+                {showSwitchTime && (<th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>)}
                 <th className="sticky-action-header table-action-header">
                   {t("common.shared.columns.actions", "操作")}
                 </th>
@@ -1263,7 +1269,7 @@ export function CodebuddySuiteAccountsSharedView<
                 ({ groupKey, items, totalCount }) => (
                   <Fragment key={groupKey}>
                     <tr className="tag-group-row">
-                      <td colSpan={5}>
+                      <td colSpan={showSwitchTime ? 5 : 4}>
                         <div className="tag-group-header">
                           <span className="tag-group-title">
                             {resolveGroupLabel(groupKey)}
@@ -1298,7 +1304,7 @@ export function CodebuddySuiteAccountsSharedView<
                   {t("common.shared.columns.plan", "套餐")}
                 </th>
                 <th>{t("instances.labels.quota", "配额")}</th>
-                <th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>
+                {showSwitchTime && (<th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>)}
                 <th className="sticky-action-header table-action-header">
                   {t("common.shared.columns.actions", "操作")}
                 </th>

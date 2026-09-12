@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Clock } from 'lucide-react';
+import { useUiConfigStore } from '../stores/useUiConfigStore';
 
 interface AccountLastUsedProps {
   lastUsed: number;
@@ -12,6 +13,10 @@ interface AccountLastUsedProps {
 // every platform because every account model records last_used on switch.
 export function AccountLastUsed({ lastUsed, createdAt, formatDate }: AccountLastUsedProps) {
   const { t } = useTranslation();
+  const showSwitchTime = useUiConfigStore((s) => s.showSwitchTime);
+
+  if (!showSwitchTime) return null;
+
   const ts = lastUsed && lastUsed > 0 ? lastUsed : createdAt;
   if (!ts || ts <= 0) return null;
   const switched = lastUsed && lastUsed > 0;
