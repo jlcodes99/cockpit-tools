@@ -375,6 +375,43 @@ export interface CodexSessionVisibilityRepairInstanceList {
   instances: CodexSessionVisibilityRepairInstanceOption[];
 }
 
+export interface CodexHistoryIssue {
+  code: string;
+  line?: number | null;
+  blocksRewrite: boolean;
+}
+
+export interface CodexHistoryHealth {
+  threadId?: string | null;
+  sourceSha256: string;
+  rolloutBytes: number;
+  records: number;
+  cursorOffset?: number | null;
+  cursorOrdinal?: number | null;
+  inheritedHistoryEnd?: number | null;
+  projectedTurns?: number | null;
+  projectedItems?: number | null;
+  recoveryPlan?: CodexHistoryRecoveryPlan | null;
+  issues: CodexHistoryIssue[];
+}
+
+export interface CodexHistoryRecoveryPlan {
+  kind: string;
+  fromOffset: number;
+  toOffset: number;
+  nextOrdinal: number;
+  skippedLines: number;
+  skippedKinds: string[];
+  sourceSha256: string;
+}
+
+export interface CodexHistoryRecoveryCopy {
+  directory: string;
+  threadId: string;
+  plan: CodexHistoryRecoveryPlan;
+  status: 'candidate_not_applied';
+}
+
 export interface CodexSessionVisibilityRepairRequestOptions {
   mode?: CodexSessionVisibilityRepairMode;
   dryRun?: boolean;

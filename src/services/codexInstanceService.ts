@@ -5,6 +5,8 @@ import type {
   CodexSessionVisibilityRepairProviderList,
   CodexSessionVisibilityRepairRequestOptions,
   CodexSessionVisibilityRepairSummary,
+  CodexHistoryHealth,
+  CodexHistoryRecoveryCopy,
   CodexInstanceThreadSyncSummary,
   CodexInstanceTargetThreadSyncSummary,
   CodexSessionRecord,
@@ -352,6 +354,20 @@ export async function repairSessionVisibilityAcrossInstances(
 
 export async function listSessionVisibilityRepairInstances(): Promise<CodexSessionVisibilityRepairInstanceList> {
   return await invoke("codex_list_session_visibility_repair_instances");
+}
+
+export async function checkSessionHistoryHealth(
+  instanceId: string,
+  threadId: string,
+): Promise<CodexHistoryHealth> {
+  return await invoke("codex_check_session_history_health", {
+    instanceId,
+    threadId,
+  });
+}
+
+export async function createHistoryRecoveryCopy(instanceId: string, threadId: string, expectedHash: string): Promise<CodexHistoryRecoveryCopy> {
+  return await invoke("codex_create_history_recovery_copy", { instanceId, threadId, expectedHash });
 }
 
 export async function listSessionVisibilityRepairProviders(): Promise<CodexSessionVisibilityRepairProviderList> {

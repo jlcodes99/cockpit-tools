@@ -1329,6 +1329,8 @@ pub fn run() {
             commands::codex_instance::codex_repair_session_visibility_across_instances,
             commands::codex_instance::codex_list_session_visibility_repair_providers,
             commands::codex_instance::codex_list_session_visibility_repair_instances,
+            commands::codex_instance::codex_check_session_history_health,
+            commands::codex_instance::codex_create_history_recovery_copy,
             commands::codex_instance::codex_list_sessions_across_instances,
             commands::codex_instance::codex_get_session_token_stats_across_instances,
             commands::codex_instance::codex_query_session_usage,

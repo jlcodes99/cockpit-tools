@@ -218,6 +218,7 @@ struct CodexSessionVisibilityRepairOptions {
     normalize_global_state: bool,
     require_stopped_instances: bool,
     sidebar_visible_only: bool,
+    history_preflight: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -322,6 +323,7 @@ impl CodexSessionVisibilityRepairOptions {
             normalize_global_state: false,
             require_stopped_instances: false,
             sidebar_visible_only: true,
+            history_preflight: true,
         }
     }
 
@@ -342,6 +344,7 @@ impl CodexSessionVisibilityRepairOptions {
             normalize_global_state: true,
             require_stopped_instances: true,
             sidebar_visible_only: false,
+            history_preflight: true,
         }
     }
 
@@ -354,7 +357,13 @@ impl CodexSessionVisibilityRepairOptions {
 
     fn for_auto_repair_mode(mode: CodexSessionVisibilityAutoRepairMode) -> Self {
         let _ = mode;
-        Self::official_state_db_only(CodexSessionVisibilityRepairMode::Quick)
+        let mut options = Self::official_state_db_only(CodexSessionVisibilityRepairMode::Quick);
+        // Startup/account-switch runs must not replace a rollout while an app-server may still
+        // hold the old file. Explicit history repair remains available through the UI.
+        options.repair_rollout = false;
+        options.repair_referenced_rollouts = false;
+        options.history_preflight = false;
+        options
     }
 
     fn with_dry_run(mut self, dry_run: bool) -> Self {
@@ -689,23 +698,58 @@ fn repair_session_visibility_for_instances_with_options(
                     .or_insert(0usize) += count;
             }
         }
-        let rollout_changes = if options.repair_rollout {
+        let rollout_changes_result = if options.repair_rollout {
             collect_rollout_provider_changes(
                 &instance.data_dir,
                 &target_provider,
                 options,
                 &selection,
-            )?
+            )
         } else if options.repair_referenced_rollouts {
             collect_referenced_rollout_provider_changes(
                 &instance.data_dir,
                 &target_provider,
                 options,
                 &selection,
-            )?
+            )
         } else {
-            Vec::new()
+            Ok(Vec::new())
         };
+        let rollout_changes = match rollout_changes_result {
+            Ok(changes) => changes,
+            Err(error) if !options.history_preflight => {
+                skipped_rollout_file_count += 1;
+                modules::logger::log_warn(&format!(
+                    "[Codex History] 自动会话修复跳过实例，未修改 rollout 或 SQLite: instance_id={}, reason={}",
+                    instance.id, error
+                ));
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        // Never apply an explicit provider rewrite over already-inconsistent history.
+        // This is a read-only precondition, not a projection recovery operation.
+        for change in &rollout_changes {
+            if options.history_preflight && change.updated_content.is_some() {
+                let health = modules::codex_history_health::inspect(
+                    &change.absolute_path,
+                    &instance.data_dir.join("thread_history_1.sqlite"),
+                )?;
+                if health.blocks_rewrite() {
+                    return Err(format!(
+                        "history_health_blocked: {} ({})",
+                        instance.id,
+                        health
+                            .issues
+                            .iter()
+                            .filter(|issue| issue.blocks_rewrite)
+                            .map(|issue| issue.code)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+            }
+        }
         let sqlite_scan = count_sqlite_rows_to_update_for_options(
             &instance.data_dir,
             &target_provider,
@@ -761,12 +805,17 @@ fn repair_session_visibility_for_instances_with_options(
             || global_state_entries_to_update > 0;
 
         if instance_has_planned_changes
-            && running
-            && options.require_stopped_instances
-            && !options.dry_run
+            && rollout_byte_layout::must_stop_before_repair(
+                running,
+                options.require_stopped_instances,
+                rollout_changes
+                    .iter()
+                    .any(|change| change.updated_content.is_some()),
+                options.dry_run,
+            )
         {
             return Err(format!(
-                "{} 正在运行；完整历史会话修复需要先完全退出对应 Codex App/ChatGPT 实例，避免会话文件或 SQLite 在修复过程中继续变化",
+                "{} 正在运行；改写历史会话需要先完全退出对应 Codex App/ChatGPT 实例，避免替换仍在写入的 rollout 或使历史索引失效",
                 instance.name
             ));
         }
@@ -1590,4 +1639,3 @@ fn build_dry_run_summary_message(
         running_suffix
     )
 }
-

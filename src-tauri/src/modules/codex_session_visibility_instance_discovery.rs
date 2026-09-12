@@ -27,6 +27,14 @@ fn collect_instances() -> Result<Vec<CodexSyncInstance>, String> {
     Ok(instances)
 }
 
+pub fn resolve_session_visibility_instance_data_dir(instance_id: &str) -> Result<PathBuf, String> {
+    collect_instances()?
+        .into_iter()
+        .find(|instance| instance.id == instance_id)
+        .map(|instance| instance.data_dir)
+        .ok_or_else(|| format!("未找到 Codex 实例: {}", instance_id))
+}
+
 fn is_instance_running(
     instance: &CodexSyncInstance,
     process_entries: &[(u32, Option<String>)],
@@ -355,14 +363,15 @@ fn collect_referenced_rollout_provider_changes(
         if !rollout_path.exists() || !is_plain_rollout_file(&rollout_path) {
             continue;
         }
-        let rewrite = if options.rewrite_all_session_meta {
+        let rewrite_result = if options.rewrite_all_session_meta {
             let Some(content) = read_rollout_text(&rollout_path)? else {
                 continue;
             };
-            rewrite_rollout_session_meta_providers(&content, target_provider)?
+            rewrite_rollout_session_meta_providers(&content, target_provider)
         } else {
-            rewrite_rollout_first_session_meta_provider(&rollout_path, target_provider)?
+            rewrite_rollout_first_session_meta_provider(&rollout_path, target_provider)
         };
+        let rewrite = rewrite_result?;
         if rewrite.session_meta_count == 0 || !rewrite.rewrite_needed {
             continue;
         }
@@ -542,6 +551,11 @@ fn rewrite_rollout_session_meta_providers(
     target_provider: &str,
 ) -> Result<RolloutProviderRewrite, String> {
     let mut rewrite = RolloutProviderRewrite::default();
+    let preserve_offsets = content
+        .lines()
+        .next()
+        .and_then(parse_session_meta_record)
+        .is_some_and(|record| session_meta_uses_indexed_history(&record));
     let mut next_content = String::new();
     for segment in content.split_inclusive('\n') {
         let (line, line_ending) = split_line_ending(segment);
@@ -584,6 +598,10 @@ fn rewrite_rollout_session_meta_providers(
                         );
                         next_line = serde_json::to_string(&record)
                             .map_err(|error| format!("序列化 session_meta 失败: {}", error))?;
+                        if preserve_offsets || session_meta_uses_indexed_history(&record) {
+                            next_line =
+                                rollout_byte_layout::preserve_line_byte_len(line, next_line)?;
+                        }
                         rewrite.rewrite_needed = true;
                     }
                 }
@@ -643,8 +661,12 @@ fn rewrite_rollout_first_session_meta_provider(
         "model_provider".to_string(),
         JsonValue::String(target_provider.to_string()),
     );
-    let updated_first_line = serde_json::to_string(&record)
+    let mut updated_first_line = serde_json::to_string(&record)
         .map_err(|error| format!("序列化 session_meta 失败: {}", error))?;
+    if session_meta_uses_indexed_history(&record) {
+        updated_first_line =
+            rollout_byte_layout::preserve_line_byte_len(&first_line, updated_first_line)?;
+    }
     Ok(RolloutProviderRewrite {
         updated_content: Some(RolloutProviderUpdate::FirstLine(updated_first_line)),
         rewrite_needed: true,
@@ -653,6 +675,15 @@ fn rewrite_rollout_first_session_meta_provider(
         non_root_agent,
         providers,
     })
+}
+
+fn session_meta_uses_indexed_history(record: &JsonValue) -> bool {
+    record.get("ordinal").is_some()
+        || record
+            .get("payload")
+            .and_then(|payload| payload.get("history_mode"))
+            .and_then(JsonValue::as_str)
+            .is_some_and(|mode| mode != "legacy")
 }
 
 fn source_value_marks_non_root_agent(source: &JsonValue) -> bool {
@@ -967,4 +998,3 @@ fn normalized_global_state_entries(
     }
     normalized
 }
-
