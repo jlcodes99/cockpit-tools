@@ -118,7 +118,7 @@ export function InstancesPage({ onNavigate }: InstancesPageProps) {
           const presentation = buildAntigravityAccountPresentation(account, displayGroups, t);
           return `${presentation.displayName} ${presentation.planLabel} ${account.name ?? ''}`;
         }}
-        appType={runtimeTarget}
+        appType={runtimeTarget === 'antigravity' ? 'antigravity' : 'antigravity_ide'}
       />
     </div>
   );

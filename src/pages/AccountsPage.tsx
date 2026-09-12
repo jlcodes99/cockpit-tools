@@ -21,6 +21,7 @@ import {
   LogOut,
   Pencil,
   FileText,
+  Terminal,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAccountStore } from '../stores/useAccountStore'
@@ -356,6 +357,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const [refreshingAll, setRefreshingAll] = useState(false)
   const [wakeupRunning, setWakeupRunning] = useState(false)
   const [switching, setSwitching] = useState<string | null>(null)
+  const [runningCli, setRunningCli] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [refreshWarnings, setRefreshWarnings] = useState<
     Record<string, { kind: 'auth' | 'error'; message: string }>
@@ -2035,6 +2037,55 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setSwitching(null)
   }
 
+  const handleRunCli = async (accountId: string) => {
+    setMessage(null)
+    const targetAccount = accounts.find((account) => account.id === accountId)
+    if (isPendingAntigravityAccount(targetAccount)) {
+      if (targetAccount) openPendingOAuthAccount(targetAccount)
+      return
+    }
+    setRunningCli(accountId)
+    try {
+      const res = await accountService.runAntigravityCli(accountId)
+      await fetchCurrentAccount('antigravity_cli')
+      setMessage({
+        text: t('accounts.cli.launched', {
+          defaultValue: '已切换为 {{email}} 并启动 Antigravity CLI',
+          email: maskAccountText(res.email),
+        }),
+      })
+    } catch (e) {
+      const raw = String(e)
+      if (raw.includes('CLI_NOT_INSTALLED')) {
+        setMessage({
+          text: t('accounts.cli.notInstalled', {
+            defaultValue: '未检测到 agy 命令，请先安装 Antigravity CLI 并将其加入系统 PATH',
+          }),
+          tone: 'error',
+        })
+      } else if (raw.includes('CLI_LAUNCH_FAILED')) {
+        await fetchCurrentAccount('antigravity_cli')
+        setMessage({
+          text: t('accounts.cli.launchFailed', {
+            defaultValue: '账号凭据已切换，但启动 agy 终端失败：{{error}}',
+            error: raw.replace(/^.*CLI_LAUNCH_FAILED:\s*/, ''),
+          }),
+          tone: 'error',
+        })
+      } else {
+        setMessage({
+          text: t('accounts.cli.runFailed', {
+            defaultValue: '启动 Antigravity CLI 失败：{{error}}',
+            error: raw,
+          }),
+          tone: 'error',
+        })
+      }
+    } finally {
+      setRunningCli(null)
+    }
+  }
+
   const loadSwitchHistory = useCallback(async () => {
     setSwitchHistoryLoading(true)
     try {
@@ -3287,10 +3338,25 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
               >
                 <FileText size={14} />
               </button>
+              {antigravityRuntimeTarget === 'antigravity_cli' && (
+                <button
+                  className="card-action-btn success"
+                  onClick={() => void handleRunCli(account.id)}
+                  disabled={Boolean(switching || runningCli)}
+                  title={t('accounts.cli.run', '运行 Antigravity CLI')}
+                  aria-label={t('accounts.cli.run', '运行 Antigravity CLI')}
+                >
+                  {runningCli === account.id ? (
+                    <RefreshCw size={14} className="loading-spinner" />
+                  ) : (
+                    <Terminal size={14} />
+                  )}
+                </button>
+              )}
               <button
                 className={`card-action-btn ${!isCurrent ? 'success' : ''}`}
                 onClick={() => handleSwitch(account.id)}
-                disabled={!!switching}
+                disabled={Boolean(switching || runningCli)}
                 title={
                   isCurrent
                     ? t('accounts.actions.switch')
@@ -3608,6 +3674,25 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
               <FileText size={12} />
               <span>{hasAntigravityAccountNoteDetails(account) ? t('accounts.accountNote.short', '账号备注') : t('accounts.accountNote.addShort', '加备注')}</span>
             </button>
+            {antigravityRuntimeTarget === 'antigravity_cli' && (
+              <button
+                type="button"
+                className={styles.switchBtn}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void handleRunCli(account.id)
+                }}
+                disabled={Boolean(isSwitching || runningCli)}
+                title={t('accounts.cli.run', '运行 Antigravity CLI')}
+                aria-label={t('accounts.cli.run', '运行 Antigravity CLI')}
+              >
+                {runningCli === account.id ? (
+                  <RefreshCw size={12} className="loading-spinner" />
+                ) : (
+                  <Terminal size={12} />
+                )}
+              </button>
+            )}
             <button
               type="button"
               className={styles.switchBtn}
@@ -3615,7 +3700,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                 e.stopPropagation()
                 handleSwitch(account.id)
               }}
-              disabled={isSwitching}
+              disabled={Boolean(isSwitching || runningCli)}
               title={
                 isCurrent
                   ? t('accounts.actions.switch')
@@ -3923,10 +4008,25 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
               >
                 <FileText size={16} />
               </button>
+              {antigravityRuntimeTarget === 'antigravity_cli' && (
+                <button
+                  className="action-btn success"
+                  onClick={() => void handleRunCli(account.id)}
+                  disabled={Boolean(switching || runningCli)}
+                  title={t('accounts.cli.run', '运行 Antigravity CLI')}
+                  aria-label={t('accounts.cli.run', '运行 Antigravity CLI')}
+                >
+                  {runningCli === account.id ? (
+                    <div className="loading-spinner" style={{ width: 14, height: 14 }} />
+                  ) : (
+                    <Terminal size={16} />
+                  )}
+                </button>
+              )}
               <button
                 className={`action-btn ${!isCurrent ? 'success' : ''}`}
                 onClick={() => handleSwitch(account.id)}
-                disabled={!!switching}
+                disabled={Boolean(switching || runningCli)}
                 title={
                   isCurrent
                     ? t('accounts.actions.switch')

@@ -302,11 +302,14 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   trae_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   trae_solo_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
+  antigravity_cli: async () =>
+    (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
 };
 
 const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unknown[]>) | undefined> = {
   antigravity: accountService.importFromJson,
   antigravity_ide: accountService.importFromJson,
+  antigravity_cli: accountService.importFromJson,
   codex: codexService.importCodexFromJson,
   codex_api_service: undefined,
   claude_manager: claudeService.importClaudeFromJson,

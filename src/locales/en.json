@@ -1746,10 +1746,19 @@
       "viewError": "View error",
       "switch": "Switch account",
       "switchTo": "Switch to this account",
+      "run": "Run",
+      "runCli": "Run Antigravity CLI",
       "delete": "Delete",
       "deleteSelected": "Delete Selected",
       "export": "Export",
       "refreshAll": "Refresh All"
+    },
+    "cli": {
+      "run": "Run Antigravity CLI",
+      "launched": "Switched to {{email}} and launched Antigravity CLI",
+      "notInstalled": "agy binary not found. Please install Antigravity CLI and add it to your PATH.",
+      "launchFailed": "Credentials switched, but failed to launch agy: {{error}}",
+      "runFailed": "Failed to run Antigravity CLI: {{error}}"
     },
     "switchHistory": {
       "title": "Switch History",

@@ -303,13 +303,14 @@ function defaultPlatformGroups(): PlatformLayoutGroup[] {
     {
       id: DEFAULT_ANTIGRAVITY_GROUP_ID,
       name: 'Antigravity',
-      platformIds: ['antigravity', 'antigravity_ide'],
+      platformIds: ['antigravity', 'antigravity_ide', 'antigravity_cli'],
       defaultPlatformId: 'antigravity_ide',
       iconKind: 'platform',
       iconPlatformId: 'antigravity_ide',
       childConfigs: [
         { platformId: 'antigravity', name: 'Antigravity' },
         { platformId: 'antigravity_ide', name: 'Antigravity IDE' },
+        { platformId: 'antigravity_cli', name: 'Antigravity CLI' },
       ],
     },
     createDefaultCodexSuiteGroup(),
@@ -669,6 +670,21 @@ function normalizePlatformGroups(
         antigravityGroup.platformIds,
       );
       usedPlatformIds.add('antigravity_ide');
+    }
+  }
+
+  if (!usedPlatformIds.has('antigravity_cli')) {
+    const antigravityGroup = result.find((group) => group.platformIds.includes('antigravity'));
+    if (antigravityGroup) {
+      antigravityGroup.platformIds = [...antigravityGroup.platformIds, 'antigravity_cli'];
+      antigravityGroup.childConfigs = normalizeGroupChildConfigs(
+        [
+          ...(antigravityGroup.childConfigs ?? []),
+          { platformId: 'antigravity_cli', name: 'Antigravity CLI' },
+        ],
+        antigravityGroup.platformIds,
+      );
+      usedPlatformIds.add('antigravity_cli');
     }
   }
 

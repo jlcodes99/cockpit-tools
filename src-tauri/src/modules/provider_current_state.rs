@@ -44,6 +44,7 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
         "trae_solo_cn" | "trae-solo-cn" => Ok("trae_solo_cn"),
         "workbuddy" => Ok("workbuddy"),
         "github_copilot" | "github-copilot" | "ghcp" => Ok("github_copilot"),
+        "antigravity_cli" | "antigravity-cli" | "agy" => Ok("antigravity_cli"),
         other => Err(format!("不支持的平台: {}", other)),
     }
 }

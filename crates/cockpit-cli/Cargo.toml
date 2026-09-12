@@ -7,6 +7,7 @@ license = "CC-BY-NC-SA-4.0"
 
 [dependencies]
 cockpit-core = { path = "../cockpit-core" }
+cockpit-tools = { path = "../../src-tauri" }
 clap = { version = "4.5", features = ["derive", "env"] }
 serde.workspace = true
 serde_json.workspace = true

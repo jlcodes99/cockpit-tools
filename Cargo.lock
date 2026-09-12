@@ -742,6 +742,7 @@ dependencies = [
  "chrono",
  "clap",
  "cockpit-core",
+ "cockpit-tools",
  "colored",
  "serde",
  "serde_json",

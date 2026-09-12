@@ -202,3 +202,37 @@ export async function fetchAccountNoteMailUrl(
 export async function syncCurrentFromClient(): Promise<string | null> {
     return await invoke('sync_current_from_client');
 }
+
+export interface AntigravityCliStatus {
+    installed: boolean;
+    executable_path?: string | null;
+    version?: string | null;
+    auth_backend: string;
+    current_account_id?: string | null;
+    current_email?: string | null;
+    diagnostic?: string | null;
+}
+
+export interface AntigravityCliRunOptions {
+    cwd?: string;
+    args?: string[];
+    terminal?: string;
+}
+
+export interface AntigravityCliRunResult {
+    pid?: number;
+    executable_path: string;
+    account_id: string;
+    email: string;
+}
+
+export async function getAntigravityCliStatus(): Promise<AntigravityCliStatus> {
+    return await invoke('get_antigravity_cli_status');
+}
+
+export async function runAntigravityCli(
+    accountId: string,
+    options?: AntigravityCliRunOptions,
+): Promise<AntigravityCliRunResult> {
+    return await invoke('run_antigravity_cli', { accountId, options: options ?? null });
+}

@@ -789,6 +789,7 @@ fn normalize_antigravity_metadata_target(target: Option<&str>) -> Option<&'stati
     match target.unwrap_or("").trim().to_ascii_lowercase().as_str() {
         "antigravity" => Some("antigravity"),
         "antigravity_ide" | "antigravity-ide" | "ide" => Some("antigravity_ide"),
+        "antigravity_cli" | "antigravity-cli" | "cli" | "agy" => Some("antigravity_cli"),
         _ => None,
     }
 }
@@ -1022,6 +1023,20 @@ fn resolve_antigravity_installed_version_info_for_target_with_mode(
     target: Option<&str>,
     scan_mode: AntigravityVersionScanMode,
 ) -> Option<AntigravityInstalledVersionInfo> {
+    if normalize_antigravity_metadata_target(target) == Some("antigravity_cli") {
+        if let Some(bin) = crate::modules::antigravity_cli::detect_agy_binary() {
+            let version = crate::modules::antigravity_cli::detect_agy_version(&bin)
+                .unwrap_or_else(|| "unknown".to_string());
+            return Some(AntigravityInstalledVersionInfo {
+                product_name: "Antigravity CLI".to_string(),
+                version,
+                app_path: bin.to_string_lossy().to_string(),
+                source: "agy-cli".to_string(),
+            });
+        }
+        return None;
+    }
+
     for root in antigravity_metadata_candidates(target, scan_mode) {
         if let Some(info) = read_antigravity_product_json_metadata(&root) {
             return Some(info);

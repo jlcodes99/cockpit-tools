@@ -1,8 +1,8 @@
 mod commands;
 pub mod error;
-mod models;
-mod modules;
-mod utils;
+pub mod models;
+pub mod modules;
+pub mod utils;
 
 use modules::config::CloseWindowBehavior;
 use modules::logger;
@@ -636,6 +636,8 @@ pub fn run() {
             commands::account::refresh_all_quotas,
             commands::account::refresh_current_quota,
             commands::account::switch_account,
+            commands::account::get_antigravity_cli_status,
+            commands::account::run_antigravity_cli,
             commands::account::load_antigravity_switch_history,
             commands::account::clear_antigravity_switch_history,
             commands::account::update_account_tags,

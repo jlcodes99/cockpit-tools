@@ -1746,10 +1746,19 @@
       "viewError": "查看错误",
       "switch": "切换账号",
       "switchTo": "切换到此账号",
+      "run": "运行",
+      "runCli": "运行 Antigravity CLI",
       "delete": "删除",
       "deleteSelected": "删除选中",
       "export": "导出",
       "refreshAll": "刷新全部"
+    },
+    "cli": {
+      "run": "运行 Antigravity CLI",
+      "launched": "已切换为 {{email}} 并启动 Antigravity CLI",
+      "notInstalled": "未检测到 agy 命令，请先安装 Antigravity CLI 并将其加入系统 PATH",
+      "launchFailed": "账号凭据已切换，但启动 agy 终端失败：{{error}}",
+      "runFailed": "启动 Antigravity CLI 失败：{{error}}"
     },
     "switchHistory": {
       "title": "切换记录",
