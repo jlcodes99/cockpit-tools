@@ -375,7 +375,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             >
               {maskAccountText(presentation.displayName)}
             </span>
-            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             {!isApiKeyAccount &&
               !refreshTokenReusedState &&
               (account.requires_reauth || serverRevokedReauth) && (
@@ -1067,7 +1067,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               </div>
             )}
             <div className="codex-card-bottom">
-              <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+              <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
               {renderAccountSpeedSelect(account)}
               <div className="card-footer">
                 <div className="card-actions">

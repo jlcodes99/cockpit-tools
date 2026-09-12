@@ -197,6 +197,24 @@
   flex-shrink: 0;
 }
 
+.account-last-used .alu-select {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: auto;
+}
+.account-last-used .alu-select:focus {
+  outline: none;
+  border-color: var(--accent-color, #3b82f6);
+  border-radius: 4px;
+}
+
 /* Minimalist Action Bar - No Background */
 .card-actions {
   display: flex;

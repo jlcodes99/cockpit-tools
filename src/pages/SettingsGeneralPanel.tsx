@@ -377,7 +377,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     zedQuotaAlertThresholdIsPreset,
   } = props;
 
-  const { showSwitchTime, setShowSwitchTime, showRefreshTime, setShowRefreshTime } = useUiConfigStore();
+  const { timeDisplayMode, setTimeDisplayMode } = useUiConfigStore();
   return (
           <>
           {(generalLoadFailed || updateSettingsLoadFailed) && (
@@ -586,35 +586,18 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
 
               <div className="settings-row">
                 <div className="row-label">
-                  <div className="row-title">{t('settings.general.showSwitchTime', '显示切换时间')}</div>
-                  <div className="row-desc">{t('settings.general.showSwitchTimeDesc', '在账号卡片与列表中显示「最后切换」时间')}</div>
+                  <div className="row-title">{t('settings.general.timeDisplayMode', '时间显示')}</div>
+                  <div className="row-desc">{t('settings.general.timeDisplayModeDesc', '账号卡片与列表中的时间区域显示内容（默认切换时间）')}</div>
                 </div>
                 <div className="row-control">
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={showSwitchTime}
-                      onChange={(event) => setShowSwitchTime(event.target.checked)}
-                    />
-                    <span className="slider"></span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="settings-row">
-                <div className="row-label">
-                  <div className="row-title">{t('settings.general.showRefreshTime', '显示刷新时间')}</div>
-                  <div className="row-desc">{t('settings.general.showRefreshTimeDesc', '在配额信息中显示「下次刷新时间 / 上次成功」等刷新时间')}</div>
-                </div>
-                <div className="row-control">
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={showRefreshTime}
-                      onChange={(event) => setShowRefreshTime(event.target.checked)}
-                    />
-                    <span className="slider"></span>
-                  </label>
+                  <select
+                    className="settings-select"
+                    value={timeDisplayMode}
+                    onChange={(e) => setTimeDisplayMode(e.target.value as "switch" | "refresh")}
+                  >
+                    <option value="switch">{t('accounts.lastSwitchTime', '切换时间')}</option>
+                    <option value="refresh">{t('accounts.refreshTime', '刷新时间')}</option>
+                  </select>
                 </div>
               </div>
 

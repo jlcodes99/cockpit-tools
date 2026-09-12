@@ -220,8 +220,7 @@ export function CodebuddySuiteAccountsSharedView<
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
 
-  const showSwitchTime = useUiConfigStore((s) => s.showSwitchTime);
-  const showRefreshTime = useUiConfigStore((s) => s.showRefreshTime);
+  const timeDisplayMode = useUiConfigStore((s) => s.timeDisplayMode);
 
   const {
     t,
@@ -631,7 +630,7 @@ export function CodebuddySuiteAccountsSharedView<
                 <CircleAlert size={14} />
                 <div className="quota-cache-warning-content">
                   <span className="quota-cache-warning-title">{cachedWarningText}</span>
-                  {showRefreshTime && updatedAtText && (
+                  {timeDisplayMode === "refresh" && updatedAtText && (
                     <span className="quota-cache-warning-time">
                       {t("common.shared.quota.lastSuccessfulQuery", "上次成功：{{time}}", {
                         time: updatedAtText,
@@ -728,7 +727,13 @@ export function CodebuddySuiteAccountsSharedView<
             {renderQuotaQuerySection(account, "card")}
           </div>
           <div className="card-footer">
-            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+            <AccountLastUsed
+              accountId={account.id}
+              lastUsed={account.last_used}
+              createdAt={account.created_at}
+              formatDate={formatDate}
+              refreshAt={getAccountQuotaUpdatedAtMs(account)}
+            />
             <div className="card-actions">
               <button
                 className="card-action-btn success"
@@ -843,11 +848,15 @@ export function CodebuddySuiteAccountsSharedView<
               {renderQuotaQuerySection(account, "table")}
             </div>
           </td>
-          {showSwitchTime && (
           <td>
-            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+            <AccountLastUsed
+              accountId={account.id}
+              lastUsed={account.last_used}
+              createdAt={account.created_at}
+              formatDate={formatDate}
+              refreshAt={getAccountQuotaUpdatedAtMs(account)}
+            />
           </td>
-          )}
           <td className="sticky-action-cell table-action-cell">
             <div className="action-buttons">
               <button
@@ -1258,7 +1267,7 @@ export function CodebuddySuiteAccountsSharedView<
                   {t("common.shared.columns.plan", "套餐")}
                 </th>
                 <th>{t("instances.labels.quota", "配额")}</th>
-                {showSwitchTime && (<th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>)}
+                <th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>
                 <th className="sticky-action-header table-action-header">
                   {t("common.shared.columns.actions", "操作")}
                 </th>
@@ -1269,7 +1278,7 @@ export function CodebuddySuiteAccountsSharedView<
                 ({ groupKey, items, totalCount }) => (
                   <Fragment key={groupKey}>
                     <tr className="tag-group-row">
-                      <td colSpan={showSwitchTime ? 5 : 4}>
+                      <td colSpan={5}>
                         <div className="tag-group-header">
                           <span className="tag-group-title">
                             {resolveGroupLabel(groupKey)}
@@ -1304,7 +1313,7 @@ export function CodebuddySuiteAccountsSharedView<
                   {t("common.shared.columns.plan", "套餐")}
                 </th>
                 <th>{t("instances.labels.quota", "配额")}</th>
-                {showSwitchTime && (<th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>)}
+                <th style={{ width: 140 }}>{t("accounts.lastSwitchTime", "最后切换")}</th>
                 <th className="sticky-action-header table-action-header">
                   {t("common.shared.columns.actions", "操作")}
                 </th>

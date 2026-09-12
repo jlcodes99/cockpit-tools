@@ -3135,7 +3135,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                           renderQuotaSummary(account, 'card')
                         )}
                         <div className="codex-card-bottom">
-                          <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+                          <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
                           <div className="card-footer">
                             {renderAccountActions(account, 'card')}
                           </div>

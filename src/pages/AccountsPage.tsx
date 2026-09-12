@@ -3245,7 +3245,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
             </div>
           )}
           <div className="card-footer">
-            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               {isPendingAntigravityAccount(account) && (
                 <button
@@ -3578,7 +3578,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                 {maskAccountText(account.email)}
               </span>
             </span>
-            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className={styles.quotas}>
               {groupQuotas.length > 0 ? (
                 groupQuotas.map((gq) => (

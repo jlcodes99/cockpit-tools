@@ -717,7 +717,7 @@ export function KiroAccountsPage() {
           </div>
 
           <div className="card-footer">
-            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               <button className="card-action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting || isBanned}
                 title={isBanned ? t('accounts.status.forbidden_msg') : t('kiro.injectToVSCode', '切换到 Kiro')}>

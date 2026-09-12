@@ -78,7 +78,7 @@ function getQuotaClassByRemainPercent(remainPercent: number | null): string {
 }
 
 export function CodebuddyAccountsPage() {
-  const showRefreshTime = useUiConfigStore((s) => s.showRefreshTime);
+  const timeDisplayMode = useUiConfigStore((s) => s.timeDisplayMode);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
     readAccountsOverviewFilterPersistenceEnabled(CODEBUDDY_FILTER_PERSISTENCE_SCOPE)
@@ -348,7 +348,7 @@ export function CodebuddyAccountsPage() {
     const primaryTimeText = formatQuotaDateTime(isBase ? resource.refreshAt : resource.expireAt);
     if (primaryTimeText) {
       return isBase
-        ? showRefreshTime
+        ? timeDisplayMode === "refresh"
           ? t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: primaryTimeText })
           : null
         : t('codebuddy.quotaQuery.expireAt', '到期时间：{{time}}', { time: primaryTimeText });
@@ -357,12 +357,12 @@ export function CodebuddyAccountsPage() {
     if (fallbackTimeText) {
       return isBase
         ? t('codebuddy.quotaQuery.expireAt', '到期时间：{{time}}', { time: fallbackTimeText })
-        : showRefreshTime
+        : timeDisplayMode === "refresh"
           ? t('codebuddy.quotaQuery.updatedAt', '下次刷新时间：{{time}}', { time: fallbackTimeText })
           : null;
     }
     return null;
-  }, [formatQuotaDateTime, t, showRefreshTime]);
+  }, [formatQuotaDateTime, t, timeDisplayMode === "refresh"]);
 
   const resolveResourcePackageTitle = useCallback((resource: CodebuddyOfficialQuotaResource, isExtra: boolean) => {
     if (isExtra || resource.packageCode === CB_PACKAGE_CODE.extra) {
@@ -486,7 +486,7 @@ export function CodebuddyAccountsPage() {
               <CircleAlert size={14} />
               <div className="quota-cache-warning-content">
                 <span className="quota-cache-warning-title">{cachedWarningText}</span>
-                {showRefreshTime && updatedAtText && (
+                {timeDisplayMode === "refresh" && updatedAtText && (
                   <span className="quota-cache-warning-time">
                     {t('common.shared.quota.lastSuccessfulQuery', '上次成功：{{time}}', {
                       time: updatedAtText,
@@ -539,7 +539,13 @@ export function CodebuddyAccountsPage() {
             {renderQuotaQuerySection(account, 'card')}
           </div>
           <div className="card-footer">
-            <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
+            <AccountLastUsed
+              accountId={account.id}
+              lastUsed={account.last_used}
+              createdAt={account.created_at}
+              formatDate={formatDate}
+              refreshAt={getCodebuddyOfficialQuotaModel(account).updatedAt}
+            />
             <div className="card-actions">
               <button className="card-action-btn success" onClick={() => handleInjectToVSCode?.(account.id)} disabled={!!injecting}
                 title={t('common.shared.switchAccount', '切换账号')}>

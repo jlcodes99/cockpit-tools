@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from "react";
-import { RefreshCw, RotateCw } from "lucide-react";;
+import { RefreshCw, RotateCw } from "lucide-react";
 import * as codexService from "../services/codexService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { type CodexAccountGroup } from "../services/codexAccountGroupService";

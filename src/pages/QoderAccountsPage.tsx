@@ -1612,7 +1612,7 @@ export function QoderAccountsPage() {
             {renderQuotaSection(account)}
 
             <div className="card-footer">
-              <AccountLastUsed lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDateTime} />
+              <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDateTime} />
               <div className="card-actions">
                 <button
                   className="card-action-btn success"
