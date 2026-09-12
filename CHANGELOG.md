@@ -22,6 +22,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Preserve the selected DeepSeek thinking level**: switching accounts or starting an instance no longer resets the reasoning effort to `high`, so the `low` / `high` / `max` level chosen in Codex is preserved.
 - **Narrow the scope of CDP injection changes**: model list detection now requires real model descriptors, so queue, thread, and other generic arrays are left untouched, and the default model is written back only when the user explicitly switches models, which reduces backend writes during a running turn. The injected script also no longer throws at the end of every run because of a removed constant, restoring model-switch state reporting over CDP.
 
+### Added
+
+- **Platform layout "Enable/Disable" switch**: each platform entry in the layout editor now has an Enable/Disable toggle, plus bulk "Enable all" / "Disable all" actions. Disabling a platform stops all of its automated activity (auto-refresh, token keep-alive, tray account reads) without affecting whether its entry is displayed. Platforms grouped under Antigravity, the Codex suite, CodeBuddy, and the Trae suite expose the same toggle on each child row once the group is expanded.
+- **Backend awareness of disabled platforms**: the disabled platform set is persisted through `save_tray_platform_layout` and stored in the tray layout config, so backend tasks can skip disabled platforms.
+
+### Changed
+
+- **Hiding and disabling are now separate concerns**: hiding a platform entry only controls its visibility (sidebar, dashboard, tray), while disabling it stops background automated activity. Previously hiding an entry also stopped its automated activity, which made it impossible to reduce visual clutter without losing background refreshes.
+- **Disabled platforms are hidden in App Settings**: a platform disabled in the platform layout no longer renders its App Settings section (auto-refresh, quota alerts, launch path, etc.), avoiding configuration of a platform whose background activity has stopped. Re-enabling it restores the section.
+- **Backward-compatible layout payload**: `save_tray_platform_layout` now treats the hidden and disabled platform sets as optional and preserves the previously persisted values when they are omitted, so older frontends keep working.
+
 ## [1.3.48] - 2026-09-11
 
 ### Changed

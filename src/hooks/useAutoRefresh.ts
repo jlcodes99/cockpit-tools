@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useAccountStore } from '../stores/useAccountStore';
+import { isPlatformDisabled } from '../stores/usePlatformLayoutStore';
 import { useCodexAccountStore } from '../stores/useCodexAccountStore';
 import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useGitHubCopilotAccountStore } from '../stores/useGitHubCopilotAccountStore';
@@ -785,6 +786,8 @@ export function useAutoRefresh() {
                 key: `full:${descriptor.key}`,
                 label: `${descriptor.label} 全量刷新`,
                 intervalMs: minutesToMs(descriptor.intervalMinutes),
+                // 平台被禁用时跳过一切活动（隐藏只影响显示）
+                shouldSkip: () => isPlatformDisabled(descriptor.key),
                 run: () =>
                   executeWithGuard(
                     descriptor.fullRefreshingRef,
@@ -803,7 +806,8 @@ export function useAutoRefresh() {
                 key: `current:${descriptor.key}`,
                 label: `${descriptor.label} 当前账号刷新`,
                 intervalMs: minutesToMs(descriptor.currentMinutes),
-                shouldSkip: () => descriptor.fullRefreshingRef.current,
+                shouldSkip: () =>
+                  descriptor.fullRefreshingRef.current || isPlatformDisabled(descriptor.key),
                 run: () =>
                   executeWithGuard(
                     descriptor.currentRefreshingRef,
@@ -833,6 +837,8 @@ export function useAutoRefresh() {
               key: `full:codex-group:${minutes}`,
               label: `Codex 分组自定义刷新 (${minutes}m)`,
               intervalMs: minutesToMs(minutes),
+              // 平台被禁用时跳过一切活动（隐藏只影响显示）
+              shouldSkip: () => isPlatformDisabled('codex'),
               run: () =>
                 executeWithGuard(
                   codexRefreshingRef,

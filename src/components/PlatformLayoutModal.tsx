@@ -37,6 +37,7 @@ import {
   resolveEntryPlatformIds,
   resolveGroupChildIcon,
   resolveGroupChildName,
+  makePlatformEntryId,
   usePlatformLayoutStore,
 } from '../stores/usePlatformLayoutStore';
 import { CLASSIC_SIDEBAR_ENTRY_LIMIT, ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLayoutStore } from '../stores/useSideNavLayoutStore';
@@ -374,9 +375,11 @@ export function PlatformLayoutModal({
     apiRelaySidebarVisible,
     apiRelayDashboardVisible,
     apiRelayEntryOrder,
+    disabledPlatformIds,
     reorderGroupPlatforms,
     setLayoutEntryOrder,
     setHiddenEntry,
+    setDisabledPlatform,
     setSidebarEntry,
     setTrayPlatform,
     setApiRelaySidebarVisible,
@@ -865,6 +868,29 @@ export function PlatformLayoutModal({
     && entries.every(isDashboardEntryVisible);
   const trayBulkEnabled = MENU_VISIBLE_PLATFORM_IDS.every((platformId) => traySet.has(platformId));
 
+  // store 里存的是裸平台 ID，这里的 entry.id 带 `platform:` 前缀，需要对齐形态
+  const disabledSet = useMemo(
+    () => new Set<string>(disabledPlatformIds.map((id) => makePlatformEntryId(id))),
+    [disabledPlatformIds],
+  );
+
+  // 批量操作必须覆盖分组内的子平台，否则 entries 全是 group 类型时等于空循环
+  const handleBulkEnable = (enabled: boolean) => {
+    for (const entry of entries) {
+      if (entry.type === 'api-relay') continue;
+      for (const platformId of entry.platformIds) {
+        setDisabledPlatform(platformId, !enabled);
+      }
+    }
+  };
+  const allEnabled =
+    entries.length > 0 &&
+    entries.every(
+      (entry) =>
+        entry.type === 'api-relay' ||
+        entry.platformIds.every((id) => !disabledSet.has(makePlatformEntryId(id))),
+    );
+
   const openCreateGroupEditor = () => {
     const firstPlatform = MENU_VISIBLE_PLATFORM_IDS[0] ?? 'codebuddy';
 
@@ -1192,6 +1218,25 @@ export function PlatformLayoutModal({
               </button>
             </div>
             <div className="platform-layout-bulk-header-right">
+              {/* 与行内控制区列顺序保持一致：启用 → 侧边栏 → 仪表盘 → 菜单栏 */}
+              <div className="platform-layout-bulk-cell platform-layout-bulk-enable">
+                <label className="platform-layout-bulk-toggle" title={t('platformLayout.disabledHint', '禁用后该平台的所有自动活动将停止')}>
+                  <input
+                    type="checkbox"
+                    checked={allEnabled}
+                    onChange={() => handleBulkEnable(!allEnabled)}
+                  />
+                  <span>{t('platformLayout.enabledToggle', '启用')}</span>
+                </label>
+                <div className="platform-layout-bulk-enable-actions">
+                  <button type="button" className="btn btn-link" onClick={() => handleBulkEnable(true)}>
+                    {t('platformLayout.enableAll', '全启')}
+                  </button>
+                  <button type="button" className="btn btn-link" onClick={() => handleBulkEnable(false)}>
+                    {t('platformLayout.disableAll', '全禁')}
+                  </button>
+                </div>
+              </div>
               <div className="platform-layout-bulk-cell">
                 <label className="platform-layout-bulk-toggle">
                   <input
@@ -1199,7 +1244,7 @@ export function PlatformLayoutModal({
                     checked={sidebarBulkEnabled}
                     onChange={() => handleBulkSidebar(!sidebarBulkEnabled)}
                   />
-                  <span>{t('platformLayout.sidebarToggle', '侧边栏显示')}</span>
+                  <span>{t('platformLayout.sidebarToggle', '侧边栏')}</span>
                 </label>
               </div>
               <div className="platform-layout-bulk-cell">
@@ -1209,7 +1254,7 @@ export function PlatformLayoutModal({
                     checked={dashboardBulkEnabled}
                     onChange={() => handleBulkDashboard(!dashboardBulkEnabled)}
                   />
-                  <span>{t('platformLayout.dashboardToggle', '仪表盘显示')}</span>
+                  <span>{t('platformLayout.dashboardToggle', '仪表盘')}</span>
                 </label>
               </div>
               <div className="platform-layout-bulk-cell">
@@ -1252,6 +1297,12 @@ export function PlatformLayoutModal({
                   : entry.defaultPlatformId
                     ? traySet.has(entry.defaultPlatformId)
                     : false;
+              // 分组整组启用状态：组内所有平台都启用时才勾选
+              const groupAllEnabled =
+                isGroup &&
+                entry.platformIds.every(
+                  (platformId) => !disabledSet.has(makePlatformEntryId(platformId)),
+                );
 
               const rowClass = [
                 'platform-layout-row',
@@ -1342,9 +1393,49 @@ export function PlatformLayoutModal({
                       >
                         {entry.label}
                       </span>
+
                     </div>
 
                     <div className="platform-layout-controls-grid" onClick={(event) => event.stopPropagation()}>
+                      {/* 启用排在最前：它是影响面最大的动作（会停止一切后台活动） */}
+                      {entry.type === 'platform' && (
+                        <label
+                          className={`platform-layout-toggle ${disabledSet.has(entry.id) ? 'is-disabled' : ''}`}
+                          title={t('platformLayout.disabledHint', '禁用后该平台的所有自动活动将停止，且其在应用设置中的配置项一并隐藏')}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!disabledSet.has(entry.id)}
+                            onChange={(event) => {
+                              const platformId = parsePlatformEntryId(entry.id);
+                              if (!platformId) {
+                                return;
+                              }
+                              setDisabledPlatform(platformId, !event.target.checked);
+                            }}
+                          />
+                          <span>{t('platformLayout.enabledToggle', '启用')}</span>
+                        </label>
+                      )}
+
+                      {isGroup && (
+                        <label
+                          className={`platform-layout-toggle ${groupAllEnabled ? '' : 'is-disabled'}`}
+                          title={t('platformLayout.groupEnabledHint', '批量启用/禁用该分组内的所有平台')}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={groupAllEnabled}
+                            onChange={() =>
+                              entry.platformIds.forEach((platformId) =>
+                                setDisabledPlatform(platformId, groupAllEnabled),
+                              )
+                            }
+                          />
+                          <span>{t('platformLayout.enabledToggle', '启用')}</span>
+                        </label>
+                      )}
+
                       <label className={`platform-layout-toggle ${sidebarDisabled ? 'is-disabled' : ''}`}>
                         <input
                           type="checkbox"
@@ -1547,6 +1638,19 @@ export function PlatformLayoutModal({
                             </div>
 
                             <div className="platform-layout-controls-grid is-child-grid">
+                              <label
+                                className={`platform-layout-toggle ${disabledSet.has(makePlatformEntryId(platformId)) ? 'is-disabled' : ''}`}
+                                title={t('platformLayout.disabledHint', '禁用后该平台的所有自动活动将停止，且其在应用设置中的配置项一并隐藏')}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!disabledSet.has(makePlatformEntryId(platformId))}
+                                  onChange={(event) =>
+                                    setDisabledPlatform(platformId, !event.target.checked)
+                                  }
+                                />
+                                <span>{t('platformLayout.enabledToggle', '启用')}</span>
+                              </label>
                               <label className="platform-layout-toggle">
                                 <input
                                   type="checkbox"

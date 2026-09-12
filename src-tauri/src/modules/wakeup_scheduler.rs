@@ -898,6 +898,11 @@ async fn run_scheduler_once(app: &AppHandle) {
         return;
     }
 
+    // 平台在「平台布局」中被禁用时不执行唤醒任务
+    if !crate::modules::tray_layout::is_platform_enabled("antigravity") {
+        return;
+    }
+
     let now = Local::now();
 
     for task in snapshot.tasks.iter() {

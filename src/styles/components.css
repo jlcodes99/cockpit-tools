@@ -2018,7 +2018,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 
 .platform-layout-bulk-header-right {
   display: grid;
-  grid-template-columns: max-content max-content max-content 32px;
+  /* 侧边栏 / 仪表盘 / 菜单栏 / 启用 四个开关 + 编辑列 */
+  grid-template-columns: max-content max-content max-content max-content 32px;
   align-items: center;
   justify-content: end;
   gap: 10px;
@@ -2198,7 +2199,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   margin-left: auto;
   min-width: 0;
   display: grid;
-  grid-template-columns: max-content max-content max-content 32px;
+  /* 侧边栏 / 仪表盘 / 菜单栏 / 启用（仅分组）+ 编辑按钮 */
+  grid-template-columns: max-content max-content max-content max-content 32px;
   align-items: center;
   justify-content: end;
   gap: 10px;
@@ -2206,7 +2208,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 }
 
 .platform-layout-controls-grid.is-child-grid {
-  grid-template-columns: max-content max-content 32px 32px;
+  /* 启用 / 默认平台 / 菜单栏显示 + 编辑、删除两个图标按钮 */
+  grid-template-columns: max-content max-content max-content 32px 32px;
   gap: 8px;
   opacity: 0.95;
 }
@@ -2263,6 +2266,25 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 
 .platform-layout-toggle.is-disabled input {
   pointer-events: none;
+}
+
+.platform-layout-bulk-enable {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.platform-layout-bulk-enable-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.platform-layout-bulk-enable-actions .btn-link {
+  font-size: 11px;
+  padding: 0;
+  color: var(--text-secondary);
+  text-decoration: underline;
 }
 
 .platform-layout-toggle input[type="checkbox"],
@@ -2724,7 +2746,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 @media (max-width: 1100px) {
   .platform-layout-bulk-header-right,
   .platform-layout-controls-grid {
-    grid-template-columns: max-content max-content max-content 30px;
+    grid-template-columns: max-content max-content max-content max-content 30px;
   }
 }
 
@@ -2746,7 +2768,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   .platform-layout-controls-grid {
     width: 100%;
     min-width: 0;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     justify-content: stretch;
   }
 
