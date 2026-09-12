@@ -686,7 +686,8 @@
         sidecar_auth_account_is_scoped, sidecar_auth_file_name, sidecar_auth_json_for_account,
         sidecar_auths_dir, sidecar_client_api_keys, sidecar_codex_api_key_auth_id,
         sidecar_codex_key_config_value, sidecar_config_fingerprint,
-        sidecar_local_account_usable_for_start, sidecar_payload_default_service_tier,
+        sidecar_local_account_usable_for_start, sidecar_payload_config,
+        sidecar_payload_default_service_tier,
         sidecar_quota_reserve_snapshot_value, sidecar_routing_strategy_value, sidecar_stable_id,
         sidecar_usage_event_is_client_canceled, sidecar_usage_event_should_auto_restart,
         now_ms, stats_snapshot_without_events, supported_codex_model_ids,
@@ -1454,6 +1455,41 @@
         // standard/default should not force an explicit upstream field.
         assert!(sidecar_payload_default_service_tier(Some("standard")).is_none());
         assert!(sidecar_payload_default_service_tier(Some("default")).is_none());
+    }
+
+    #[test]
+    fn sidecar_payload_config_filters_generic_response_item_ids_at_standard_speed() {
+        let payload = sidecar_payload_config(None);
+        assert!(payload.get("default").is_none());
+        assert_eq!(
+            payload.get("filter"),
+            Some(&json!([{
+                "models": [{
+                    "name": "*",
+                    "protocol": "codex",
+                    "from-protocol": "responses"
+                }],
+                "params": ["input.#(id%\"item_*\")#.id"]
+            }]))
+        );
+    }
+
+    #[test]
+    fn sidecar_payload_config_preserves_fast_service_tier_default() {
+        let payload = sidecar_payload_config(Some("priority"));
+        assert_eq!(
+            payload
+                .pointer("/default/0/params/service_tier")
+                .and_then(Value::as_str),
+            Some("priority")
+        );
+        assert_eq!(
+            payload
+                .get("filter")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(1)
+        );
     }
 
     #[test]

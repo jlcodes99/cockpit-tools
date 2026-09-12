@@ -2267,9 +2267,10 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             "beta-features": CODEX_RESPONSES_WEBSOCKET_BETA_HEADER_VALUE,
         }),
     );
-    if let Some(payload) = sidecar_payload_default_service_tier(default_service_tier) {
-        config.insert("payload".to_string(), payload);
-    }
+    config.insert(
+        "payload".to_string(),
+        sidecar_payload_config(default_service_tier),
+    );
 
     let config_path = sidecar_config_path(&base_dir);
     let manifest_path = sidecar_manifest_path(&base_dir);

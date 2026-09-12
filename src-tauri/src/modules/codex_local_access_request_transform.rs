@@ -1183,6 +1183,24 @@ fn sidecar_payload_default_service_tier(default_service_tier: Option<&str>) -> O
     Some(Value::Object(payload))
 }
 
+fn sidecar_payload_config(default_service_tier: Option<&str>) -> Value {
+    let mut payload = sidecar_payload_default_service_tier(default_service_tier)
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    payload.insert(
+        "filter".to_string(),
+        json!([{
+            "models": [{
+                "name": "*",
+                "protocol": "codex",
+                "from-protocol": "responses",
+            }],
+            "params": ["input.#(id%\"item_*\")#.id"],
+        }]),
+    );
+    Value::Object(payload)
+}
+
 fn prepare_gateway_request_with_default_service_tier(
     mut request: ParsedRequest,
     default_service_tier: Option<&str>,
