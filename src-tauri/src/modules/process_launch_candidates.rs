@@ -1593,6 +1593,31 @@ fn managed_proxy_env_pairs() -> Vec<(&'static str, String)> {
         crate::modules::logger::log_warn("[Proxy] 全局代理已启用，但代理地址为空，跳过注入");
     }
 
+    // no_proxy / NO_PROXY only make sense when a proxy is actually in play. When no managed
+    // proxy is configured and the current process carries no proxy variable either, injecting
+    // only the bypass list is harmful: Antigravity IDE then fails to open its HTTPS channel to
+    // the local language server (renderer reports "Failed to fetch", the LS never receives any
+    // chat request, and the Agent panel silently drops the first message). A manually launched
+    // IDE receives none of these variables and always works, so the managed launch must stay
+    // byte-for-byte identical to a manual launch in that case.
+    let inherited_proxy_present = [
+        "http_proxy",
+        "https_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "all_proxy",
+        "ALL_PROXY",
+    ]
+    .iter()
+    .any(|key| {
+        std::env::var(key)
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false)
+    });
+    if pairs.is_empty() && !inherited_proxy_present {
+        return pairs;
+    }
+
     let no_proxy_seed = [
         std::env::var("no_proxy").unwrap_or_default(),
         std::env::var("NO_PROXY").unwrap_or_default(),
