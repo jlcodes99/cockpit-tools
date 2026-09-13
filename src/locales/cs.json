@@ -362,6 +362,8 @@
     "selectAll": "Vybrat vše"
   },
   "nav": {
+    "workbuddy": "WorkBuddy",
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "Účty",
     "wakeup": "Úlohy probuzení",

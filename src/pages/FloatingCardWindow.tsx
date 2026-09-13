@@ -198,6 +198,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useCodexInstanceStore.getState();
     case 'codex_api_service':
       return null;
+    case 'workbuddy_ai':
+      return null;
     case 'claude_manager':
       return useClaudeInstanceStore.getState();
     case 'github-copilot':

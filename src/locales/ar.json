@@ -409,6 +409,8 @@
     "lockedPlatform": "المنصة مقفلة بواسطة المثيل"
   },
   "nav": {
+    "workbuddy": "WorkBuddy",
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "إدارة الحسابات",
     "wakeup": "مهام الاستيقاظ",

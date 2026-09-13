@@ -9,6 +9,7 @@ import {
 } from './accountTransferService';
 import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
 import * as claudeService from './claudeService';
+import * as workbuddyAiService from './workbuddyAiService';
 import { getGroupSettings, GroupSettings, saveGroupSettings } from './groupService';
 import {
   AccountGroup,
@@ -302,6 +303,8 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   trae_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   trae_solo_cn: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   workbuddy: async () => (await workbuddyService.listWorkbuddyAccounts()) as unknown as TransferAccountRecord[],
+  workbuddy_ai: async () =>
+    (await workbuddyAiService.listWorkbuddyAiAccounts()) as unknown as TransferAccountRecord[],
 };
 
 const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unknown[]>) | undefined> = {
@@ -325,6 +328,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   trae_cn: traeService.importTraeFromJson,
   trae_solo_cn: traeService.importTraeFromJson,
   workbuddy: workbuddyService.importWorkbuddyFromJson,
+  workbuddy_ai: workbuddyAiService.importWorkbuddyAiFromJson,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

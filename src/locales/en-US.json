@@ -439,6 +439,8 @@
     "traeCn": "Trae CN",
     "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
+    "workbuddy": "WorkBuddy",
+    "workbuddyAi": "WorkBuddy AI",
     "switchClassicLayoutEntry": "Switch to classic layout",
     "switchClassicLayoutTitle": "Switch to the classic sidebar layout",
     "switchClassicLayoutDesc": "The classic layout shows the full platform navigation and supports sidebar collapsing. You can switch back anytime in Settings > General > Sidebar Layout.",

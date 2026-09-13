@@ -22,6 +22,7 @@ const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'trae_cn',
   'trae_solo_cn',
   'workbuddy',
+  'workbuddy_ai',
 ];
 const DEFAULT_CODEBUDDY_GROUP_ID = 'codebuddy-suite';
 const DEFAULT_ANTIGRAVITY_GROUP_ID = 'antigravity-suite';
@@ -316,7 +317,7 @@ function defaultPlatformGroups(): PlatformLayoutGroup[] {
     {
       id: DEFAULT_CODEBUDDY_GROUP_ID,
       name: 'CodeBuddy',
-      platformIds: ['codebuddy', 'codebuddy_cn', 'workbuddy'],
+      platformIds: ['codebuddy', 'codebuddy_cn', 'workbuddy', 'workbuddy_ai'],
       defaultPlatformId: 'codebuddy',
       iconKind: 'platform',
       iconPlatformId: 'codebuddy',
@@ -449,6 +450,9 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   }
   if (fallbackPlatform === 'workbuddy') {
     return 'WorkBuddy';
+  }
+  if (fallbackPlatform === 'workbuddy_ai') {
+    return 'WorkBuddy AI';
   }
   if (fallbackPlatform === 'qoder') {
     return 'Qoder';

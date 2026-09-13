@@ -152,6 +152,9 @@ const TraeAccountsPage = lazy(() =>
 const WorkbuddyAccountsPage = lazy(() =>
   import('./pages/WorkbuddyAccountsPage').then((module) => ({ default: module.WorkbuddyAccountsPage })),
 );
+const WorkbuddyAiAccountsPage = lazy(() =>
+  import('./pages/WorkbuddyAiAccountsPage').then((module) => ({ default: module.WorkbuddyAiAccountsPage })),
+);
 const ZedAccountsPage = lazy(() =>
   import('./pages/ZedAccountsPage').then((module) => ({ default: module.ZedAccountsPage })),
 );;
@@ -222,6 +225,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'trae-cn',
   'trae-solo-cn',
   'workbuddy',
+  'workbuddy-ai',
   'zed',
   'instances',
   'wakeup',
@@ -258,6 +262,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   'trae-cn': ['trae-cn', 'trae-suite'],
   'trae-solo-cn': ['trae-solo-cn', 'trae-suite'],
   workbuddy: ['workbuddy'],
+  'workbuddy-ai': ['workbuddy_ai'],
 };
 
 function normalizePromoTarget(value: string): string {
@@ -4079,6 +4084,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'workbuddy'}>
             <WorkbuddyAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'workbuddy-ai'}>
+            <WorkbuddyAiAccountsPage />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'zed'}>
             <ZedAccountsPage />
