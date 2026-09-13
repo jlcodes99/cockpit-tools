@@ -1773,11 +1773,11 @@ pub(crate) fn resolve_current_account_id(accounts: &[WorkbuddyAccount]) -> Optio
     let current_id = get_current_account_id()?;
     if accounts
         .iter()
-        .any(|account| account.id.as_str() == current_id.as_deref().unwrap_or_default())
+        .any(|account| account.id.as_str() == current_id.as_str())
     {
-        current_id
+        Some(current_id)
     } else {
-        if current_id.is_some() {
+        if !current_id.is_empty() {
             let _ = set_current_account_id(None);
         }
         None
