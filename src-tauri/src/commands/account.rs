@@ -506,6 +506,12 @@ async fn switch_account_legacy_antigravity(
         }
     }
 
+    if modules::config::get_user_config().antigravity_sync_cli_on_switch {
+        if let Err(e) = modules::antigravity_credential::write_antigravity_cli_credential(&account) {
+            modules::logger::log_warn(&format!("[Antigravity] 同步 Antigravity CLI 凭据失败: {}", e));
+        }
+    }
+
     modules::logger::log_info("正在启动 Antigravity 默认实例...");
     let default_settings = modules::antigravity_legacy_instance::load_default_settings()?;
     let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
