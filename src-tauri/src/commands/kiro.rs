@@ -192,6 +192,8 @@ pub async fn inject_kiro_to_vscode(app: AppHandle, account_id: String) -> Result
     let account = kiro_account::load_account(&account_id)
         .ok_or_else(|| format!("Kiro account not found: {}", account_id))?;
 
+    kiro_account::touch_last_used(&account_id)?;
+
     if let Err(err) = crate::modules::kiro_instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,

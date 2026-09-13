@@ -497,7 +497,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
                 }
               : null,
           tags: account.tags,
-          footerText: formatDate(account.created_at),
+          footerText: account.last_used > 0 ? formatDate(account.last_used) : '—',
         };
       },
       [

@@ -159,6 +159,7 @@ pub async fn inject_zed_account(app: AppHandle, account_id: String) -> Result<St
     ));
 
     let account = zed_account::inject_account(&account_id)?;
+    zed_account::touch_last_used(&account_id)?;
     let restart_result = zed_instance::restart_default_session();
     let _ = crate::modules::tray::update_tray_menu(&app);
 

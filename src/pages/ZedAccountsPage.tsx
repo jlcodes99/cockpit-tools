@@ -24,6 +24,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { AccountLastUsed } from '../components/AccountLastUsed';
 import { useTranslation } from 'react-i18next';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
@@ -818,7 +819,7 @@ export function ZedAccountsPage() {
           {renderPlanDetails(cycleDisplay)}
 
           <div className="card-footer">
-            <span className="card-date">{formatDate(account.last_used || account.created_at)}</span>
+            <AccountLastUsed accountId={account.id} lastUsed={account.last_used} createdAt={account.created_at} formatDate={formatDate} />
             <div className="card-actions">
               <button
                 className="card-action-btn success"

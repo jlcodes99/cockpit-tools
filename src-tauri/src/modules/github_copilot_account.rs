@@ -90,6 +90,15 @@ fn save_account_file(account: &GitHubCopilotAccount) -> Result<(), String> {
         .map_err(|e| format!("保存账号失败: {}", e))
 }
 
+// ponytail: 切号时记录 last_used。O(n) load+save 单个账号文件。
+pub fn touch_last_used(account_id: &str) -> Result<(), String> {
+    let mut account = load_account(account_id)
+        .ok_or_else(|| format!("GitHub Copilot account not found: {}", account_id))?;
+    account.last_used = now_ts();
+    save_account_file(&account)?;
+    Ok(())
+}
+
 fn persist_quota_query_error(account_id: &str, message: &str) {
     let Some(mut account) = load_account_file(account_id) else {
         return;
@@ -394,7 +403,6 @@ async fn refresh_account_token_once(account_id: &str) -> Result<GitHubCopilotAcc
     account.quota_query_last_error_at = None;
     let refreshed_at = now_ts();
     account.usage_updated_at = Some(refreshed_at);
-    account.last_used = refreshed_at;
 
     let updated = account.clone();
     upsert_account_record(account)?;

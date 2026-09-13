@@ -998,6 +998,8 @@
       "startupMinimizedDesc": "Automatically minimize the main window after the app finishes launching; restore it from the Dock, taskbar, or tray",
       "rememberMainWindowState": "Remember main window position and size",
       "rememberMainWindowStateDesc": "Restore the main window position and size after restart or tray reopen; off by default",
+      "timeDisplayMode": "Time display",
+      "timeDisplayModeDesc": "What to show in the time area of account cards/lists (default: switch time)",
       "minimizeBehavior": "Window minimize behavior (macOS only)",
       "minimizeBehaviorDesc": "Choose whether minimizing keeps the window in the Dock and menu bar, or only in the menu bar",
       "minimizeBehaviorDockAndTray": "Dock + Menu Bar (Recommended)",
@@ -1599,6 +1601,12 @@
       "gcpTos": "GCP ToS",
       "gcpTosTitle": "GCP ToS account"
     },
+    "lastSwitchTime": "Switch time",
+    "neverSwitched": "Never switched",
+    "refreshTime": "Refresh time",
+    "refreshTimeFull": "Refresh time: {{time}}",
+    "lastSwitchTimeFull": "Switch time: {{time}}",
+    "toggleTimeMode": "Toggle switch / refresh time",
     "columns": {
       "email": "Email",
       "subscription": "Subscription",
