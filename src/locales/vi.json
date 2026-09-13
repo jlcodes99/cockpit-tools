@@ -362,6 +362,8 @@
     "selectAll": "Chọn tất cả"
   },
   "nav": {
+    "workbuddy": "WorkBuddy",
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "Quản lý tài khoản",
     "wakeup": "Wakeup Tasks​",

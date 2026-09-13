@@ -409,6 +409,8 @@
     }
   },
   "nav": {
+    "workbuddy": "WorkBuddy",
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "Akun",
     "wakeup": "Tugas Bangun",

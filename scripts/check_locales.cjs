@@ -172,6 +172,7 @@ function isAllowedEnglishReuse(key, value) {
     'Claude',
     'CodeBuddy',
     'WorkBuddy',
+    'WorkBuddy AI',
     'GitHub Copilot',
     'Kiro',
     'Alipay',

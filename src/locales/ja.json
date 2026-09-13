@@ -362,6 +362,8 @@
     "selectAll": "すべて選択"
   },
   "nav": {
+    "workbuddy": "WorkBuddy",
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "アカウント管理",
     "wakeup": "ウェイクアップタスク",

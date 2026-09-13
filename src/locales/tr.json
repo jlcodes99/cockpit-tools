@@ -362,6 +362,8 @@
     "selectAll": "Tümünü Seç"
   },
   "nav": {
+    "workbuddy": "WorkBuddy",
+    "workbuddyAi": "WorkBuddy AI",
     "overview": "Antigravity IDE​",
     "accounts": "Hesaplar",
     "wakeup": "Uyandırma Görevleri",
