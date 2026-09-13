@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "Oui",
       "imageGenSwitchNo": "Non",
       "imageGenTitle": "Activer la génération d'images GPT",
+      "oauthBindingHint": "Après la liaison, le démarrage est identique à celui d’un compte normal et toutes les capacités OAuth (compression à distance, contrôle du navigateur, divers plugins, etc.) sont disponibles ; les conversations passent toujours par le fournisseur de la clé API actuelle.",
+      "oauthBindingChange": "Changer",
       "title": "Aperçu du lancement de Codex",
       "description": "Configurez et vérifiez d’abord ; le client ne change qu’après avoir choisi Basculer ou Démarrer.",
       "notApplied": "Pas encore appliqué",

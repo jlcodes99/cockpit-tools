@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "Evet",
       "imageGenSwitchNo": "Hayır",
       "imageGenTitle": "GPT görsel üretimini etkinleştir",
+      "oauthBindingHint": "Bağladıktan sonra başlatma normal bir hesapla tamamen aynıdır ve tüm OAuth özellikleri (uzaktan sıkıştırma, tarayıcı denetimi, çeşitli eklentiler vb.) kullanılabilir; görüşmeler yine geçerli API Key sağlayıcısı üzerinden yürür.",
+      "oauthBindingChange": "Değiştir",
       "title": "Codex Başlatma Önizlemesi",
       "description": "Önce yapılandırın ve denetleyin; istemci yalnızca Değiştir veya Başlat seçildikten sonra değişir.",
       "notApplied": "Henüz uygulanmadı",

@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "はい",
       "imageGenSwitchNo": "いいえ",
       "imageGenTitle": "GPT 画像生成を有効化",
+      "oauthBindingHint": "バインド後は通常アカウントとまったく同じように起動でき、OAuth のすべての機能（リモート圧縮、ブラウザ操作、各種プラグインなど）を利用できます。会話は引き続き現在の API Key プロバイダーが処理します。",
+      "oauthBindingChange": "変更",
       "title": "Codex 起動プレビュー",
       "description": "先に設定と確認を行い、「切替」または「起動」を選んだ後にだけクライアントを変更します。",
       "notApplied": "未適用",

@@ -2248,6 +2248,8 @@
       "imageGenSwitchYes": "Ya",
       "imageGenSwitchNo": "Tidak",
       "imageGenTitle": "Aktifkan pembuatan gambar GPT",
+      "oauthBindingHint": "Setelah ditautkan, peluncuran sama persis seperti akun biasa dan semua kemampuan OAuth (kompresi jarak jauh, kontrol browser, berbagai plugin, dll.) tersedia; percakapan tetap diproses oleh penyedia API Key saat ini.",
+      "oauthBindingChange": "Ganti",
       "title": "Pratinjau Peluncuran Codex",
       "description": "Periksa pengaturan terlebih dahulu; klien baru berubah setelah Anda memilih ganti atau mulai.",
       "notApplied": "Belum diterapkan",

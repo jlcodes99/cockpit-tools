@@ -701,6 +701,44 @@ fn log_launch_credential_change(
     ));
 }
 
+/// 启动前清理第三方推理历史：仅当绑定的是普通（官方直连）账号时需要。
+/// 走网关的绑定在请求转发时已有请求级清洗，不必改动历史。
+async fn sanitize_session_history_for_launch(data_dir: &Path, bind_account_id: Option<&str>) {
+    let bind_kind = bind_account_id.and_then(launch_credential_kind_for_bind_account_id);
+    if bind_kind.as_deref() != Some("account") {
+        return;
+    }
+    let data_dir = data_dir.to_path_buf();
+    let started = Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        modules::codex_session_history_sanitize::sanitize_official_incompatible_reasoning_history(
+            &data_dir,
+        )
+    })
+    .await;
+    match result {
+        Ok(Ok(summary)) => {
+            if summary.changed_anything() {
+                modules::logger::log_info(&format!(
+                    "[Codex History Sanitize] 启动前清理第三方推理历史完成: databases={}, updated_items={}, changed_threads={}, elapsed_ms={}",
+                    summary.database_count,
+                    summary.updated_item_count,
+                    summary.changed_thread_count,
+                    started.elapsed().as_millis()
+                ));
+            }
+        }
+        Ok(Err(error)) => modules::logger::log_warn(&format!(
+            "[Codex History Sanitize] 启动前清理第三方推理历史失败: error={}",
+            error
+        )),
+        Err(error) => modules::logger::log_warn(&format!(
+            "[Codex History Sanitize] 等待会话历史清理任务失败: error={}",
+            error
+        )),
+    }
+}
+
 async fn repair_session_visibility_for_selected_instance(
     instance_id: &str,
     instance_name: &str,
@@ -3194,6 +3232,14 @@ async fn codex_start_instance_internal(
             flow_started.elapsed().as_millis()
         ));
 
+        let history_sanitize_started = Instant::now();
+        sanitize_session_history_for_launch(&default_dir, default_bind_account_id.as_deref()).await;
+        modules::logger::log_info(&format!(
+            "[Codex Start] default session history sanitize phase finished: elapsed_ms={}, total_ms={}",
+            history_sanitize_started.elapsed().as_millis(),
+            flow_started.elapsed().as_millis()
+        ));
+
         if default_settings.launch_mode == InstanceLaunchMode::Cli {
             let cli_prepare_started = Instant::now();
             let context = resolve_instance_launch_context(DEFAULT_INSTANCE_ID)?;
@@ -3492,6 +3538,15 @@ async fn codex_start_instance_internal(
         "[Codex Start] instance session visibility repair phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
         instance.id,
         visibility_repair_started.elapsed().as_millis(),
+        flow_started.elapsed().as_millis()
+    ));
+
+    let history_sanitize_started = Instant::now();
+    sanitize_session_history_for_launch(instance_dir, instance.bind_account_id.as_deref()).await;
+    modules::logger::log_info(&format!(
+        "[Codex Start] instance session history sanitize phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
+        instance.id,
+        history_sanitize_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
 

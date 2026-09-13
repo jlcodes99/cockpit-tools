@@ -6,6 +6,7 @@ import {
   CircleAlert,
   ImagePlus,
   KeyRound,
+  Link2,
   Play,
   RefreshCw,
   Route,
@@ -136,10 +137,22 @@ export interface CodexLaunchPreviewLaunchOptions {
   imageGenerationAccountIds?: string[];
 }
 
+/** 启动预览里的 OAuth 绑定状态（仅 API Key 账号展示）。 */
+export interface CodexLaunchPreviewOAuthBinding {
+  /** 已绑定的 OAuth 账号展示名；未绑定时为 null。 */
+  boundAccountLabel?: string | null;
+  /** 绑定的 OAuth 账号需要重新授权。 */
+  needsReauth?: boolean;
+  reauthDescription?: string | null;
+}
+
 interface CodexLaunchPreviewModalProps {
   account?: CodexAccount | null;
   accountLabel: string;
   accountMetaLabel?: string;
+  oauthBinding?: CodexLaunchPreviewOAuthBinding | null;
+  onBindOAuth?: () => void;
+  onReauthorizeOAuth?: () => void;
   summary?: CodexLaunchPreviewSummary;
   actions?: CodexLaunchPreviewAction[];
   instanceId?: string;
@@ -170,6 +183,9 @@ export function CodexLaunchPreviewModal({
   account,
   accountLabel,
   accountMetaLabel,
+  oauthBinding,
+  onBindOAuth,
+  onReauthorizeOAuth,
   summary,
   actions,
   instanceId = DEFAULT_CODEX_INSTANCE_ID,
@@ -1536,6 +1552,64 @@ export function CodexLaunchPreviewModal({
                   >
                     {t("nav.settings")}
                   </button>
+                </section>
+              )}
+              {oauthBinding && account && isCodexApiKeyAccount(account) && (
+                <section className="codex-launch-preview-tool-row">
+                  <div className="codex-launch-preview-tool-icon">
+                    <Link2 size={16} />
+                  </div>
+                  <div className="codex-launch-preview-tool-copy">
+                    <h3>{t("codex.api.oauthBinding.label", "OAuth 绑定")}</h3>
+                    <p>
+                      {t(
+                        "codex.launchPreview.oauthBindingHint",
+                        "绑定后启动与普通账号没有任何差异，可使用 OAuth 的全部能力（远端压缩，浏览器操作，各类插件等）；对话仍由当前 API Key 供应商处理。",
+                      )}
+                    </p>
+                    <div className="codex-launch-preview-tool-meta">
+                      <span>
+                        {oauthBinding.boundAccountLabel ||
+                          t("codex.api.oauthBinding.unbound", "未绑定")}
+                      </span>
+                      {oauthBinding.needsReauth && (
+                        <span
+                          className="codex-status-pill quota-error"
+                          title={oauthBinding.reauthDescription || undefined}
+                        >
+                          <CircleAlert size={12} />
+                          {t("codex.authError.badge", "授权异常")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="codex-launch-preview-tool-controls">
+                    {oauthBinding.needsReauth && onReauthorizeOAuth && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm codex-launch-preview-tool-action"
+                        onClick={onReauthorizeOAuth}
+                        disabled={busy}
+                      >
+                        {t("common.reauthorize", "重新授权")}
+                      </button>
+                    )}
+                    {onBindOAuth && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm codex-launch-preview-tool-action"
+                        onClick={onBindOAuth}
+                        disabled={busy}
+                      >
+                        {oauthBinding.boundAccountLabel
+                          ? t(
+                              "codex.launchPreview.oauthBindingChange",
+                              "更换",
+                            )
+                          : t("codex.api.oauthBinding.action", "绑定 OAuth")}
+                      </button>
+                    )}
+                  </div>
                 </section>
               )}
               {!isDeepSeekSubject && (

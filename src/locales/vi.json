@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "Có",
       "imageGenSwitchNo": "Không",
       "imageGenTitle": "Bật tạo ảnh GPT",
+      "oauthBindingHint": "Sau khi liên kết, việc khởi chạy giống hệt tài khoản thường và mọi khả năng OAuth (nén từ xa, điều khiển trình duyệt, các loại plugin, v.v.) đều khả dụng; hội thoại vẫn do nhà cung cấp API Key hiện tại xử lý.",
+      "oauthBindingChange": "Đổi",
       "title": "Xem trước khi khởi động Codex",
       "description": "Hãy cấu hình và kiểm tra trước; ứng dụng chỉ thay đổi sau khi bạn chọn Chuyển hoặc Khởi động.",
       "notApplied": "Chưa áp dụng",

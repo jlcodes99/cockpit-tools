@@ -64,6 +64,7 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 		body = ensureImageGenerationTool(body, baseModel, auth, opts.Headers)
 	}
 	body, useFullResponses := normalizeCodexResponsesLiteRequest(body, opts.Headers, auth, true)
+	body = normalizeNonOfficialCodexReasoningItems(ctx, "codex websockets executor", body)
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex websockets executor", body)
 	body = normalizeCodexWebsocketParallelToolCalls(body, opts.Headers)
 	body = helps.NormalizeCodexToolSchemas(body)

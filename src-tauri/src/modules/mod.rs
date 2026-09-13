@@ -38,6 +38,7 @@ pub mod codex_protocol;
 pub mod codex_quota;
 pub(crate) mod codex_quota_refresh_scheduler;
 pub mod codex_session_file_time;
+pub mod codex_session_history_sanitize;
 pub mod codex_session_manager;
 pub mod codex_session_usage;
 pub mod codex_session_visibility;

@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "Ja",
       "imageGenSwitchNo": "Nein",
       "imageGenTitle": "GPT-Bildgenerierung aktivieren",
+      "oauthBindingHint": "Nach dem Binden startet das Konto genau wie ein normales Konto und alle OAuth-Funktionen (Remote-Kompression, Browser-Steuerung, verschiedene Plugins usw.) stehen zur Verfügung; Gespräche laufen weiterhin über den aktuellen API-Key-Anbieter.",
+      "oauthBindingChange": "Ändern",
       "title": "Codex-Startvorschau",
       "description": "Zuerst konfigurieren und prüfen; der Client ändert sich erst nach „Wechseln“ oder „Starten“.",
       "notApplied": "Noch nicht angewendet",

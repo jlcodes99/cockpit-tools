@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "Tak",
       "imageGenSwitchNo": "Nie",
       "imageGenTitle": "Włącz generowanie obrazów GPT",
+      "oauthBindingHint": "Po powiązaniu uruchamianie wygląda tak samo jak w przypadku zwykłego konta i dostępne są wszystkie funkcje OAuth (zdalna kompresja, sterowanie przeglądarką, różne wtyczki itd.); rozmowy nadal obsługuje bieżący dostawca klucza API.",
+      "oauthBindingChange": "Zmień",
       "title": "Podgląd uruchomienia Codex",
       "description": "Najpierw sprawdź ustawienia; klient zmieni się dopiero po wybraniu przełączenia lub uruchomienia.",
       "notApplied": "Jeszcze nie zastosowano",

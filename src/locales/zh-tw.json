@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "是",
       "imageGenSwitchNo": "否",
       "imageGenTitle": "啟用 GPT 生圖",
+      "oauthBindingHint": "綁定後啟動與一般帳號沒有任何差異，可使用 OAuth 的全部能力（遠端壓縮，瀏覽器操作，各類外掛等）；對話仍由目前的 API Key 供應商處理。",
+      "oauthBindingChange": "更換",
       "title": "Codex 啟動預覽",
       "description": "先設定與檢查；只有點擊切換或啟動後才會修改客戶端狀態。",
       "notApplied": "尚未套用",

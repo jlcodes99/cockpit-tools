@@ -2400,6 +2400,8 @@
       "imageGenSwitchYes": "Yes",
       "imageGenSwitchNo": "No",
       "imageGenTitle": "Enable GPT image generation",
+      "oauthBindingHint": "After binding, launching is identical to a normal account and all OAuth capabilities are available (remote compaction, browser control, plugins, and more); conversations still run on the current API Key provider.",
+      "oauthBindingChange": "Change",
       "title": "Codex Launch Preview",
       "description": "Configure and inspect first; the client changes only after you choose Switch or Start.",
       "notApplied": "Not applied yet",

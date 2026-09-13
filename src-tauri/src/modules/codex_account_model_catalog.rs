@@ -2347,14 +2347,7 @@ fn write_deepseek_official_responses_runtime_to_dir(
     doc["model"] = value(selected_model.as_str());
     let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
     crate::modules::codex_account::apply_deepseek_reasoning_effort(&mut doc);
-    crate::modules::codex_account::apply_deepseek_compaction_fallback(&mut doc, base_dir);
-    if doc
-        .get("model_reasoning_summary")
-        .and_then(|item| item.as_str())
-        .is_some()
-    {
-        let _ = doc.remove("model_reasoning_summary");
-    }
+    crate::modules::codex_account::apply_deepseek_config_overrides(&mut doc, base_dir);
     doc[CODEX_CONFIG_MODEL_PROVIDER_KEY] = value(DEEPSEEK_PROVIDER_ID);
     doc[CODEX_CONFIG_MODEL_CATALOG_JSON_KEY] = value(CODEX_MANAGED_MODEL_CATALOG_FILE);
     doc["preferred_auth_method"] = value("apikey");

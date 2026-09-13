@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "예",
       "imageGenSwitchNo": "아니요",
       "imageGenTitle": "GPT 이미지 생성 사용",
+      "oauthBindingHint": "바인딩 후에는 일반 계정과 완전히 동일하게 실행되며 OAuth의 모든 기능(원격 압축, 브라우저 제어, 각종 플러그인 등)을 사용할 수 있습니다. 대화는 계속 현재 API Key 공급자가 처리합니다.",
+      "oauthBindingChange": "변경",
       "title": "Codex 시작 미리보기",
       "description": "먼저 설정하고 확인하세요. 전환 또는 시작을 누른 뒤에만 클라이언트 상태가 변경됩니다.",
       "notApplied": "아직 적용되지 않음",

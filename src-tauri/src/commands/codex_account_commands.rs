@@ -669,6 +669,43 @@ fn repair_codex_session_visibility_after_credential_kind_change(
     ));
 }
 
+/// 切到官方直连账号时，清理历史里第三方（DeepSeek 等）留下的 reasoning 项，
+/// 避免官方后端因 `reasoning.content` 非空拒绝整段请求（普通回合与自动压缩都会失败）。
+async fn sanitize_session_history_after_codex_switch(account: &CodexAccount) {
+    if crate::modules::codex_local_access::account_requires_provider_gateway(account) {
+        return;
+    }
+    let data_dir = codex_account::get_codex_home();
+    let started = Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::modules::codex_session_history_sanitize::sanitize_official_incompatible_reasoning_history(
+            &data_dir,
+        )
+    })
+    .await;
+    match result {
+        Ok(Ok(summary)) => {
+            if summary.changed_anything() {
+                logger::log_info(&format!(
+                    "[Codex History Sanitize] 切号后清理第三方推理历史完成: databases={}, updated_items={}, changed_threads={}, elapsed_ms={}",
+                    summary.database_count,
+                    summary.updated_item_count,
+                    summary.changed_thread_count,
+                    started.elapsed().as_millis()
+                ));
+            }
+        }
+        Ok(Err(error)) => logger::log_warn(&format!(
+            "[Codex History Sanitize] 切号后清理第三方推理历史失败: error={}",
+            error
+        )),
+        Err(error) => logger::log_warn(&format!(
+            "[Codex History Sanitize] 等待会话历史清理任务失败: error={}",
+            error
+        )),
+    }
+}
+
 fn restart_codex_specified_app_if_enabled(user_config: &config::UserConfig) {
     if !user_config.codex_restart_specified_app_on_switch {
         logger::log_info("已关闭切换 Codex 时自动重启指定应用");
@@ -1235,6 +1272,15 @@ pub async fn switch_codex_account(
         "[Codex Switch][Backend] session visibility repair stage finished: account_id={}, elapsed_ms={}, total_ms={}",
         account_id,
         repair_started.elapsed().as_millis(),
+        flow_started.elapsed().as_millis()
+    ));
+
+    let history_sanitize_started = Instant::now();
+    sanitize_session_history_after_codex_switch(&account).await;
+    logger::log_info(&format!(
+        "[Codex Switch][Backend] session history sanitize stage finished: account_id={}, elapsed_ms={}, total_ms={}",
+        account_id,
+        history_sanitize_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
 

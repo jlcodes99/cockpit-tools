@@ -2201,6 +2201,8 @@
       "imageGenSwitchYes": "Ano",
       "imageGenSwitchNo": "Ne",
       "imageGenTitle": "Zapnout generování obrázků GPT",
+      "oauthBindingHint": "Po propojení probíhá spuštění stejně jako u běžného účtu a jsou dostupné všechny funkce OAuth (vzdálená komprese, ovládání prohlížeče, různá rozšíření atd.); konverzace stále zpracovává současný poskytovatel API Key.",
+      "oauthBindingChange": "Změnit",
       "title": "Náhled spuštění Codexu",
       "description": "Nejprve zkontrolujte nastavení; klient se změní až po volbě přepnutí nebo spuštění.",
       "notApplied": "Dosud nepoužito",

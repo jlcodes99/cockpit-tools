@@ -2402,6 +2402,8 @@
       "imageGenSwitchYes": "是",
       "imageGenSwitchNo": "否",
       "imageGenTitle": "启用 GPT 生图",
+      "oauthBindingHint": "绑定后启动与普通账号没有任何差异，可使用 OAuth 的全部能力（远端压缩，浏览器操作，各类插件等）；对话仍由当前 API Key 供应商处理。",
+      "oauthBindingChange": "更换",
       "title": "Codex 启动预览",
       "description": "先配置和检查；只有点击切换或启动后才会修改客户端状态。",
       "notApplied": "尚未应用",
