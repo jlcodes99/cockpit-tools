@@ -14,6 +14,7 @@ export type ProviderCurrentPlatform =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'workbuddy_ai'
   | 'github_copilot'
   | 'zed';
 

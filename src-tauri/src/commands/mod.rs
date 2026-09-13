@@ -43,6 +43,7 @@ pub mod wakeup;
 pub mod windsurf;
 pub mod windsurf_instance;
 pub mod workbuddy;
+pub mod workbuddy_ai;
 pub mod workbuddy_instance;
 pub mod zcode;
 pub mod zcode_instance;

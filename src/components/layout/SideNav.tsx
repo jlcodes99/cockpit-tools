@@ -78,6 +78,7 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   'trae-cn': 'trae_cn',
   'trae-solo-cn': 'trae_solo_cn',
   workbuddy: 'workbuddy',
+  'workbuddy-ai': 'workbuddy_ai',
 };
 
 const APP_DISPLAY_NAME =

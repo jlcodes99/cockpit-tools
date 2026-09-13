@@ -78,6 +78,7 @@ const IMPORT_TARGET_PAGES: ReadonlySet<Page> = new Set<Page>([
   'trae-cn',
   'trae-solo-cn',
   'workbuddy',
+  'workbuddy-ai',
   'zed',
 ]);
 
@@ -108,6 +109,8 @@ const PROVIDER_ALIAS_MAP: Record<string, PlatformId> = {
   trae_solo_cn: 'trae_solo_cn',
   traesolocn: 'trae_solo_cn',
   workbuddy: 'workbuddy',
+  workbuddy_ai: 'workbuddy_ai',
+  workbuddyai: 'workbuddy_ai',
 };
 
 let pendingExternalProviderImport: ExternalProviderImportPayload | null = null;

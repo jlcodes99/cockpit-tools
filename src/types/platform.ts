@@ -20,7 +20,8 @@ export type PlatformId =
   | 'trae_solo'
   | 'trae_cn'
   | 'trae_solo_cn'
-  | 'workbuddy';
+  | 'workbuddy'
+  | 'workbuddy_ai';
 
 export const ALL_PLATFORM_IDS: PlatformId[] = [
   'claude_manager',
@@ -43,6 +44,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'trae_cn',
   'trae_solo_cn',
   'workbuddy',
+  'workbuddy_ai',
 ];
 
 /** Platforms that do not own account lists (service / feature pages). */
@@ -83,4 +85,5 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   trae_cn: 'trae-cn',
   trae_solo_cn: 'trae-solo-cn',
   workbuddy: 'workbuddy',
+  workbuddy_ai: 'workbuddy-ai',
 };

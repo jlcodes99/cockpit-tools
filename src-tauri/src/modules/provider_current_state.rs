@@ -43,6 +43,7 @@ fn normalize_platform(platform: &str) -> Result<&'static str, String> {
         "trae_cn" | "trae-cn" => Ok("trae_cn"),
         "trae_solo_cn" | "trae-solo-cn" => Ok("trae_solo_cn"),
         "workbuddy" => Ok("workbuddy"),
+        "workbuddy_ai" | "workbuddy-ai" => Ok("workbuddy_ai"),
         "github_copilot" | "github-copilot" | "ghcp" => Ok("github_copilot"),
         other => Err(format!("不支持的平台: {}", other)),
     }
@@ -180,6 +181,13 @@ mod tests {
         assert_eq!(
             get_current_account_id("codebuddy_cn").expect("get cn canonical"),
             Some("cn-account".to_string())
+        );
+
+        set_current_account_id("workbuddy-ai", Some("workbuddy-ai-account"))
+            .expect("set WorkBuddy AI alias");
+        assert_eq!(
+            get_current_account_id("workbuddy_ai").expect("get WorkBuddy AI canonical"),
+            Some("workbuddy-ai-account".to_string())
         );
 
         set_current_account_id("trae-solo", Some("solo-account")).expect("set trae solo alias");
