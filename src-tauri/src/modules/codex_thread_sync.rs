@@ -602,14 +602,12 @@ fn sync_thread_plan_to_instance(
     workspace_snapshots: &[ThreadSnapshot],
 ) -> Result<ThreadSyncWriteResult, String> {
     let backup_dir = backup_instance_files(&target.data_dir)?;
-    let target_provider =
-        modules::codex_session_visibility::read_history_visibility_provider_for_dir(
-            &target.data_dir,
-        )?;
 
     for item in plan_items {
-        let target_rollout_path = copy_rollout_file_for_plan(item, &target.data_dir, &backup_dir)?;
-        rewrite_rollout_provider_for_target(&target_rollout_path, &target_provider)?;
+        // rollout 文件保持字节原样复制：目标实例的会话可见性修复
+        // 会在 state DB / session_index 层完成 Provider 归一化，
+        // 不再原地改写 session_meta（避免破坏 Codex 分页历史的字节偏移游标）。
+        copy_rollout_file_for_plan(item, &target.data_dir, &backup_dir)?;
     }
 
     let mut metadata_rebuild_failed = false;
@@ -1435,55 +1433,6 @@ fn sanitize_file_name(value: &str) -> String {
         .collect()
 }
 
-fn rewrite_rollout_provider_for_target(
-    rollout_path: &Path,
-    target_provider: &str,
-) -> Result<(), String> {
-    let original_modified_at = modules::codex_session_file_time::read_modified_time(rollout_path);
-    let content = fs::read_to_string(rollout_path).map_err(|error| {
-        format!(
-            "读取目标 rollout 文件失败 ({}): {}",
-            rollout_path.display(),
-            error
-        )
-    })?;
-    let Some(newline_index) = content.find('\n') else {
-        return Ok(());
-    };
-    let first_line = &content[..newline_index];
-    let rest = &content[newline_index..];
-    let Ok(mut parsed) = serde_json::from_str::<JsonValue>(first_line) else {
-        return Ok(());
-    };
-    if parsed.get("type").and_then(JsonValue::as_str) != Some("session_meta") {
-        return Ok(());
-    }
-    let Some(payload) = parsed.get_mut("payload").and_then(JsonValue::as_object_mut) else {
-        return Ok(());
-    };
-    if payload.get("model_provider").and_then(JsonValue::as_str) == Some(target_provider) {
-        return Ok(());
-    }
-
-    payload.insert(
-        "model_provider".to_string(),
-        JsonValue::String(target_provider.to_string()),
-    );
-    let updated_first_line = serde_json::to_string(&parsed)
-        .map_err(|error| format!("序列化 rollout provider 元数据失败: {}", error))?;
-    let updated_content = format!("{}{}", updated_first_line, rest);
-    modules::atomic_write::write_string_atomic(rollout_path, &updated_content).map_err(
-        |error| {
-            format!(
-                "写入目标 rollout provider 元数据失败 ({}): {}",
-                rollout_path.display(),
-                error
-            )
-        },
-    )?;
-    modules::codex_session_file_time::restore_modified_time(rollout_path, original_modified_at)
-}
-
 fn format_timestamp(timestamp: i64) -> Option<String> {
     if timestamp > 1_000_000_000_000 {
         chrono::DateTime::<Utc>::from_timestamp_millis(timestamp)
@@ -1573,30 +1522,65 @@ mod tests {
     }
 
     #[test]
-    fn provider_rewrite_preserves_rollout_modified_time() {
-        let temp_dir = make_temp_dir("codex-thread-sync-mtime-provider-test");
-        let rollout_path = temp_dir.join("rollout-test.jsonl");
-        fs::write(
-            &rollout_path,
-            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"s1\",\"model_provider\":\"old\"}}\n{\"type\":\"event\"}\n",
-        )
-        .expect("write rollout");
-        let original_modified_at = UNIX_EPOCH + Duration::from_secs(1_720_000_000);
+    fn copied_rollout_keeps_original_provider_bytes() {
+        let temp_dir = make_temp_dir("codex-thread-sync-copy-bytes-test");
+        let source_root = temp_dir.join("source");
+        let target_root = temp_dir.join("target");
+        let rollout_dir = source_root
+            .join("sessions")
+            .join("2026")
+            .join("05")
+            .join("23");
+        fs::create_dir_all(&rollout_dir).expect("create source rollout dir");
+        let rollout_path = rollout_dir.join("rollout-test.jsonl");
+        let original_content = "{\"type\":\"session_meta\",\"payload\":{\"id\":\"s1\",\"model_provider\":\"old\"}}\n{\"type\":\"event\"}\n";
+        fs::write(&rollout_path, original_content).expect("write source rollout");
+        let source_modified_at = UNIX_EPOCH + Duration::from_secs(1_710_000_000);
         fs::File::open(&rollout_path)
-            .expect("open rollout")
-            .set_modified(original_modified_at)
-            .expect("set rollout mtime");
+            .expect("open source rollout")
+            .set_modified(source_modified_at)
+            .expect("set source mtime");
 
-        rewrite_rollout_provider_for_target(&rollout_path, "relay").expect("rewrite provider");
+        let snapshot = ThreadSnapshot {
+            id: "s1".to_string(),
+            rollout_path: rollout_path.clone(),
+            rollout_actual_modified_at: Some(source_modified_at),
+            rollout_modified_at: Some(source_modified_at),
+            merged_rollout_content: None,
+            session_index_entry: json!({"id":"s1"}),
+            workspace_root: None,
+            source_root: source_root.clone(),
+            freshness: ThreadFreshness {
+                activity_ms: 0,
+                rollout_len: 0,
+                rollout_modified_ms: 0,
+            },
+        };
+        let backup_dir = temp_dir.join("backup");
+        fs::create_dir_all(&backup_dir).expect("create backup dir");
+        let item = ThreadSyncPlanItem {
+            snapshot,
+            existing_rollout_path: None,
+            is_update: false,
+        };
 
-        let content = fs::read_to_string(&rollout_path).expect("read rollout");
-        assert!(content.contains("\"model_provider\":\"relay\""));
+        // 同步复制必须字节级保持 rollout 原样；Provider 归一化只发生在状态库层。
+        let target_path =
+            copy_rollout_file_for_plan(&item, &target_root, &backup_dir).expect("copy rollout");
+
         assert_eq!(
-            fs::metadata(&rollout_path)
-                .expect("rollout metadata")
+            fs::read_to_string(&target_path).expect("read copied rollout"),
+            original_content
+        );
+        assert!(fs::read_to_string(&target_path)
+            .expect("read copied rollout")
+            .contains("\"model_provider\":\"old\""));
+        assert_eq!(
+            fs::metadata(&target_path)
+                .expect("target metadata")
                 .modified()
-                .expect("rollout mtime"),
-            original_modified_at
+                .expect("target mtime"),
+            source_modified_at
         );
         fs::remove_dir_all(&temp_dir).expect("cleanup temp dir");
     }
