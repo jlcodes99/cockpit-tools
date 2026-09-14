@@ -613,7 +613,7 @@ use super::*;
     }
 
     #[test]
-    fn quick_repair_updates_rollouts_referenced_by_official_state_dbs() {
+    fn quick_repair_preserves_rollout_bytes_for_referenced_sessions() {
         let data_dir = make_temp_dir("codex-session-quick-referenced-rollout-test");
         let sqlite_dir = data_dir.join(SQLITE_DIR_NAME);
         fs::create_dir_all(&sqlite_dir).expect("create sqlite dir");
@@ -665,8 +665,8 @@ use super::*;
         let rollout_changes =
             collect_referenced_rollout_provider_changes(&data_dir, "relay", options, &selection)
                 .expect("collect referenced rollout changes");
-        assert_eq!(rollout_changes.len(), 1);
-        assert_eq!(rollout_changes[0].absolute_path, referenced_rollout);
+        // rollout 不再改写内容：只有 mtime 需要校正时才会产生变更条目。
+        assert!(rollout_changes.is_empty());
 
         let repaired = repair_single_instance(
             &data_dir,
@@ -681,10 +681,11 @@ use super::*;
         .expect("quick repair");
         assert_eq!(repaired.updated_sqlite_rows, 1);
 
-        let referenced_content =
-            fs::read_to_string(&referenced_rollout).expect("read referenced rollout");
-        assert!(referenced_content.contains("\"model_provider\":\"relay\""));
-        assert!(referenced_content.contains("\"model_provider\":\"old-later\""));
+        // Provider 归一化只发生在 state DB；rollout 文件保持字节原样。
+        assert_eq!(
+            fs::read_to_string(&referenced_rollout).expect("read referenced rollout"),
+            old_line
+        );
         assert_eq!(
             fs::read_to_string(&unreferenced_rollout).expect("read unreferenced rollout"),
             unreferenced_line
@@ -746,7 +747,6 @@ use super::*;
         assert_eq!(options.sqlite_scope, SqliteRepairScope::AllSessionDbs);
         assert!(options.repair_rollout);
         assert!(!options.repair_referenced_rollouts);
-        assert!(options.rewrite_all_session_meta);
         assert!(options.collect_rollout_thread_facts);
         assert!(options.repair_local_thread_catalog);
         assert!(options.normalize_global_state);
@@ -758,11 +758,13 @@ use super::*;
         let rollout_changes =
             collect_rollout_provider_changes(&data_dir, "relay", options, &selection)
                 .expect("collect deep rollout changes");
-        assert_eq!(rollout_changes.len(), 1);
+        // rollout 不再改写内容：fixture 中 mtime 与内容推导时间一致，无需校正。
+        assert!(rollout_changes.is_empty());
         let scan = count_sqlite_rows_to_update_for_options(&data_dir, "relay", options, &selection)
             .expect("scan compatibility sqlite");
         assert_eq!(scan.rows_to_update, 2);
 
+        let referenced_rollout_before = fs::read(&referenced_rollout).expect("read rollout before");
         let repaired = repair_single_instance(
             &data_dir,
             "relay",
@@ -796,10 +798,97 @@ use super::*;
             .expect("read unrelated provider");
         assert_eq!(unrelated_provider, "relay");
 
-        let referenced_content =
-            fs::read_to_string(&referenced_rollout).expect("read deep repaired rollout");
-        assert!(referenced_content.contains("\"model_provider\":\"relay\""));
-        assert!(!referenced_content.contains("old-later"));
+        // Provider 归一化只发生在 state DB；rollout 文件（含后续 session_meta 行）保持字节原样。
+        assert_eq!(
+            fs::read(&referenced_rollout).expect("read deep repaired rollout"),
+            referenced_rollout_before
+        );
+
+        fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn deep_repair_normalizes_rollout_mtime_without_touching_bytes() {
+        let data_dir = make_temp_dir("codex-session-deep-rollout-mtime-test");
+        let sqlite_dir = data_dir.join(SQLITE_DIR_NAME);
+        fs::create_dir_all(&sqlite_dir).expect("create sqlite dir");
+        let official_db_path = sqlite_dir.join(OFFICIAL_STATE_DB_FILE);
+        let connection = Connection::open(&official_db_path).expect("open sqlite");
+        connection
+            .execute(
+                "CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    rollout_path TEXT,
+                    model_provider TEXT,
+                    has_user_event INTEGER,
+                    first_user_message TEXT,
+                    thread_source TEXT
+                )",
+                [],
+            )
+            .expect("create threads table");
+
+        let rollout_dir = data_dir.join("sessions").join("2026").join("06").join("18");
+        fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+        let rollout_path = rollout_dir.join("rollout-thread-1.jsonl");
+        let rollout_relative = rollout_path
+            .strip_prefix(&data_dir)
+            .expect("relative rollout")
+            .to_string_lossy()
+            .replace('\\', "/");
+        connection
+            .execute(
+                "INSERT INTO threads (id, rollout_path, model_provider, has_user_event, first_user_message, thread_source)
+                 VALUES ('thread-1', ?1, 'old', 0, 'hello', '')",
+                [rollout_relative.as_str()],
+            )
+            .expect("insert thread");
+        drop(connection);
+
+        let rollout_content = concat!(
+            "{\"timestamp\":\"2026-06-01T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"old\"}}\n",
+            "{\"timestamp\":\"2026-06-02T03:04:05Z\",\"type\":\"event_msg\",\"payload\":{\"message\":\"hi\"}}\n"
+        );
+        fs::write(&rollout_path, rollout_content).expect("write rollout");
+        let stale_modified_at = UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000);
+        fs::File::open(&rollout_path)
+            .expect("open rollout")
+            .set_modified(stale_modified_at)
+            .expect("set stale rollout mtime");
+
+        let options = repair_options(CodexSessionVisibilityRepairMode::Deep);
+        let selection = RepairTargetSelection::default();
+        let rollout_changes =
+            collect_rollout_provider_changes(&data_dir, "relay", options, &selection)
+                .expect("collect deep rollout changes");
+        // 内容时间戳推导出的权威时间与过期 mtime 不一致 → 需要校正 mtime。
+        assert_eq!(rollout_changes.len(), 1);
+        assert_eq!(rollout_changes[0].absolute_path, rollout_path);
+
+        let repaired = repair_single_instance(
+            &data_dir,
+            "relay",
+            &rollout_changes,
+            true,
+            false,
+            false,
+            options,
+            &selection,
+        )
+        .expect("deep repair");
+        assert_eq!(repaired.updated_sqlite_rows, 1);
+        assert_eq!(repaired.skipped_rollout_files, 0);
+
+        // 字节内容保持原样，只有 mtime 被对齐。
+        assert_eq!(
+            fs::read_to_string(&rollout_path).expect("read rollout after repair"),
+            rollout_content
+        );
+        let repaired_modified_at = fs::metadata(&rollout_path)
+            .expect("rollout metadata")
+            .modified()
+            .expect("rollout mtime");
+        assert_ne!(repaired_modified_at, stale_modified_at);
 
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
@@ -813,7 +902,6 @@ use super::*;
         assert_eq!(options.sqlite_scope, SqliteRepairScope::OfficialStateDbs);
         assert!(!options.repair_rollout);
         assert!(options.repair_referenced_rollouts);
-        assert!(!options.rewrite_all_session_meta);
         assert!(!options.repair_session_index);
         assert!(!options.rebuild_metadata);
     }
@@ -1046,7 +1134,9 @@ use super::*;
             &selection,
         )
         .expect("collect rollout changes");
-        assert_eq!(changes.len(), 1);
+        // rollout 字节不再改写，只剩时间校正：fixture 没有 session_index /
+        // 行内 timestamp，权威时间回退到文件自身 mtime，因此无需计划任何变更。
+        assert!(changes.is_empty());
 
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
@@ -1112,7 +1202,8 @@ use super::*;
 
         assert_eq!(summary.instance_count, 1);
         assert_eq!(summary.mutated_instance_count, 1);
-        assert_eq!(summary.changed_rollout_file_count, 1);
+        // rollout 内容不再改写；dry-run 预览中不再出现会话文件写入。
+        assert_eq!(summary.changed_rollout_file_count, 0);
         assert_eq!(summary.updated_sqlite_row_count, 1);
         assert!(summary.backup_dirs.is_empty());
         assert_eq!(summary.items.len(), 1);
@@ -1229,6 +1320,7 @@ use super::*;
         let (other_db, other_rollout) =
             write_fixture(&other_dir, "other-thread", "openai", "other-provider");
         let other_rollout_before = fs::read(&other_rollout).expect("read other rollout before");
+        let target_rollout_before = fs::read(&target_rollout).expect("read target rollout before");
 
         let first = repair_session_visibility_quick_for_instance(
             "target-instance",
@@ -1240,9 +1332,11 @@ use super::*;
         assert_eq!(first.mutated_instance_count, 1);
         assert_eq!(first.items[0].instance_id, "target-instance");
         assert_eq!(read_provider(&target_db, "target-thread"), "relay");
-        assert!(fs::read_to_string(&target_rollout)
-            .expect("read target rollout")
-            .contains("\"model_provider\":\"relay\""));
+        // Provider 归一化只发生在 state DB；rollout 文件保持字节原样。
+        assert_eq!(
+            fs::read(&target_rollout).expect("read target rollout"),
+            target_rollout_before
+        );
 
         assert_eq!(read_provider(&other_db, "other-thread"), "other-provider");
         assert_eq!(
@@ -1280,9 +1374,10 @@ use super::*;
         .expect("repair target after provider switch");
         assert_eq!(switched_back.mutated_instance_count, 1);
         assert_eq!(read_provider(&target_db, "target-thread"), "openai");
-        assert!(fs::read_to_string(&target_rollout)
-            .expect("read switched-back rollout")
-            .contains("\"model_provider\":\"openai\""));
+        assert_eq!(
+            fs::read(&target_rollout).expect("read switched-back rollout"),
+            target_rollout_before
+        );
 
         fs::remove_dir_all(&target_dir).expect("cleanup target dir");
         fs::remove_dir_all(&other_dir).expect("cleanup other dir");
