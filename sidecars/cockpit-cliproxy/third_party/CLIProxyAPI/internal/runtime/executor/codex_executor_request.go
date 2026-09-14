@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -698,11 +699,32 @@ func ensureImageGenerationTool(body []byte, baseModel string, auth *cliproxyauth
 }
 
 func normalizeCodexParallelToolCalls(body []byte, headers http.Header) []byte {
+	return normalizeCodexParallelToolCallsForProvider(body, headers, "")
+}
+
+func normalizeCodexParallelToolCallsForProvider(body []byte, headers http.Header, upstreamBaseURL string) []byte {
 	if isCodexResponsesLiteRequest(body, headers) {
 		body = helps.SetBoolIfDifferent(body, "parallel_tool_calls", false)
 		return body
 	}
+	if isDeepSeekUpstream(upstreamBaseURL) {
+		// DeepSeek Responses currently accepts the field, but Codex can emit several
+		// tool calls in one assistant batch. The local app-server may start the next
+		// sampling request before every output is committed, which poisons the thread
+		// with an orphaned function_call. Serializing tool calls is a safe provider-
+		// scoped mitigation until that app-server race is fixed upstream.
+		return helps.SetBoolIfDifferent(body, "parallel_tool_calls", false)
+	}
 	return normalizeCodexParallelToolCallsForTools(body)
+}
+
+func isDeepSeekUpstream(baseURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "api.deepseek.com"
 }
 
 func normalizeCodexParallelToolCallsForTools(body []byte) []byte {

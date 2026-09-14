@@ -63,3 +63,24 @@ func TestNormalizeCodexParallelToolCalls_ResponsesLiteHeaderForcesFalse(t *testi
 		t.Fatalf("responses-lite parallel_tool_calls should be false: %s", string(out))
 	}
 }
+
+func TestNormalizeCodexParallelToolCallsForProvider_DeepSeekForcesFalse(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4-mini","tools":[{"type":"function","name":"lookup"}],"parallel_tool_calls":true,"input":"hi"}`)
+
+	out := normalizeCodexParallelToolCallsForProvider(body, nil, "https://api.deepseek.com")
+
+	parallelToolCalls := gjson.GetBytes(out, "parallel_tool_calls")
+	if !parallelToolCalls.Exists() || parallelToolCalls.Bool() {
+		t.Fatalf("DeepSeek parallel_tool_calls should be false: %s", string(out))
+	}
+}
+
+func TestNormalizeCodexParallelToolCallsForProvider_OtherProviderPreservesTrue(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4","tools":[{"type":"function","name":"lookup"}],"parallel_tool_calls":true,"input":"hi"}`)
+
+	out := normalizeCodexParallelToolCallsForProvider(body, nil, "https://api.example.com")
+
+	if !gjson.GetBytes(out, "parallel_tool_calls").Bool() {
+		t.Fatalf("non-DeepSeek parallel_tool_calls should be preserved: %s", string(out))
+	}
+}
