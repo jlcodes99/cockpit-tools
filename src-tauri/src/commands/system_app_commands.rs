@@ -52,7 +52,10 @@ pub fn set_app_path(app: String, path: String) -> Result<(), String> {
             "cursor" => current.cursor_app_path = normalized_path,
             "codebuddy" => current.codebuddy_app_path = normalized_path,
             "codebuddy_cn" => current.codebuddy_cn_app_path = normalized_path,
-            "qoder" => current.qoder_app_path = normalized_path,
+            "qoder" | "qoder_ide" => current.qoder_app_path = normalized_path,
+            "qoder_app" => current.qoder_app_app_path = normalized_path,
+            "qoder_cn_ide" => current.qoder_cn_ide_app_path = normalized_path,
+            "qoder_cn_app" => current.qoder_cn_app_path = normalized_path,
             "zcode" => current.zcode_app_path = normalized_path,
             "trae" => current.trae_app_path = normalized_path,
             "trae_solo" => current.trae_solo_app_path = normalized_path,
@@ -128,7 +131,7 @@ pub fn detect_app_path(app: String, force: Option<bool>) -> Result<Option<String
         "cursor" => Ok(modules::cursor_instance::detect_and_save_cursor_launch_path(force)),
         "claude" => Ok(modules::claude_instance::detect_and_save_claude_launch_path(force)),
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "zed" | "vscode"
-        | "codebuddy" | "codebuddy_cn" | "qoder" | "zcode" | "trae" | "trae_solo" | "trae_cn"
+        | "codebuddy" | "codebuddy_cn" | "qoder" | "qoder_ide" | "qoder_app" | "qoder_cn_ide" | "qoder_cn_app" | "zcode" | "trae" | "trae_solo" | "trae_cn"
         | "trae_solo_cn" | "opencode" | "workbuddy" => Ok(
             modules::process::detect_and_save_app_path(app.as_str(), force),
         ),
@@ -183,6 +186,7 @@ pub async fn scan_app_launch_targets(
     match app.as_str() {
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "claude"
         | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn" | "qoder"
+        | "qoder_ide" | "qoder_app" | "qoder_cn_ide" | "qoder_cn_app"
         | "zcode" | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy" | "zed"
         | "opencode" => {}
         _ => return Err("未知应用类型".to_string()),

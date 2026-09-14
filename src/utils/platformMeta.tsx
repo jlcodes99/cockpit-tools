@@ -11,7 +11,7 @@ import { KiroIcon } from '../components/icons/KiroIcon';
 import { CursorIcon } from '../components/icons/CursorIcon';
 import { GrokIcon } from '../components/icons/GrokIcon';
 import { CodebuddyIcon } from '../components/icons/CodebuddyIcon';
-import { QoderIcon } from '../components/icons/QoderIcon';
+import { QoderAppIcon, QoderCnAppIcon, QoderCnIdeIcon, QoderIcon } from '../components/icons/QoderIcon';
 import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../components/icons/TraeIcon';
 import { WorkbuddyIcon } from '../components/icons/WorkbuddyIcon';
 import { ZedIcon } from '../components/icons/ZedIcon';
@@ -45,7 +45,13 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
     case 'codebuddy_cn':
       return _t('nav.codebuddyCn', 'CodeBuddy CN');
     case 'qoder':
-      return _t('nav.qoder', 'Qoder');
+      return _t('nav.qoderIde', _t('nav.qoder', 'Qoder IDE'));
+    case 'qoder_app':
+      return _t('nav.qoderApp', 'Qoder');
+    case 'qoder_cn_ide':
+      return _t('nav.qoderCnIde', 'Qoder CN IDE');
+    case 'qoder_cn_app':
+      return _t('nav.qoderCnApp', 'Qoder CN');
     case 'zcode':
       return 'ZCode';
     case 'trae':
@@ -93,6 +99,12 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <CodebuddyIcon style={{ width: size, height: size }} />;
     case 'qoder':
       return <QoderIcon style={{ width: size, height: size }} />;
+    case 'qoder_app':
+      return <QoderAppIcon style={{ width: size, height: size }} />;
+    case 'qoder_cn_ide':
+      return <QoderCnIdeIcon style={{ width: size, height: size }} />;
+    case 'qoder_cn_app':
+      return <QoderCnAppIcon style={{ width: size, height: size }} />;
     case 'zcode':
       return <ZcodeIcon size={size} />;
     case 'trae':

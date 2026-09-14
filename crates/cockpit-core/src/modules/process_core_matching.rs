@@ -459,13 +459,32 @@ pub fn detect_and_save_app_path(app: &str, force: bool) -> Option<String> {
                 return Some(config::get_user_config().codebuddy_cn_app_path);
             }
         }
-        "qoder" => {
-            if !force && !current.qoder_app_path.trim().is_empty() {
-                return Some(current.qoder_app_path);
+        "qoder" | "qoder_ide" | "qoder_app" | "qoder_cn_ide" | "qoder_cn_app" => {
+            let channel = match app {
+                "qoder_app" => crate::modules::qoder_channel::QoderChannel::QoderApp,
+                "qoder_cn_ide" => crate::modules::qoder_channel::QoderChannel::QoderCnIde,
+                "qoder_cn_app" => crate::modules::qoder_channel::QoderChannel::QoderCnApp,
+                _ => crate::modules::qoder_channel::QoderChannel::QoderIde,
+            };
+            let configured = match channel {
+                crate::modules::qoder_channel::QoderChannel::QoderIde => current.qoder_app_path.clone(),
+                crate::modules::qoder_channel::QoderChannel::QoderApp => current.qoder_app_app_path.clone(),
+                crate::modules::qoder_channel::QoderChannel::QoderCnIde => current.qoder_cn_ide_app_path.clone(),
+                crate::modules::qoder_channel::QoderChannel::QoderCnApp => current.qoder_cn_app_path.clone(),
+            };
+            if !force && !configured.trim().is_empty() {
+                return Some(configured);
             }
-            if let Some(detected) = detect_qoder_exec_path() {
-                update_app_path_in_config("qoder", &detected, &current.qoder_app_path);
-                return Some(config::get_user_config().qoder_app_path);
+            if let Some(detected) = channel.detect_installed_exe() {
+                update_app_path_in_config(app, &detected, &configured);
+                let refreshed = config::get_user_config();
+                let refreshed_val = match channel {
+                    crate::modules::qoder_channel::QoderChannel::QoderIde => refreshed.qoder_app_path,
+                    crate::modules::qoder_channel::QoderChannel::QoderApp => refreshed.qoder_app_app_path,
+                    crate::modules::qoder_channel::QoderChannel::QoderCnIde => refreshed.qoder_cn_ide_app_path,
+                    crate::modules::qoder_channel::QoderChannel::QoderCnApp => refreshed.qoder_cn_app_path,
+                };
+                return Some(refreshed_val);
             }
         }
         "trae" => {

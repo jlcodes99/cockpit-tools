@@ -436,7 +436,12 @@
       "restart": "Restart",
       "installing": "Installing"
     },
-    "qoder": "Qoder",
+    "qoder": "Qoder IDE",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN",
     "trae": "Trae",
     "traeSolo": "TRAE SOLO",
     "traeCn": "Trae CN",
@@ -654,7 +659,8 @@
     "customIconDeleteConfirm": "Delete this custom icon?",
     "editChildPlatform": "Edit child platform",
     "setAsDefaultInGroup": "Set as the default platform in this group",
-    "removeFromGroup": "Remove from group"
+    "removeFromGroup": "Remove from group",
+    "sidebarLimitReached": "Sidebar display limit reached ({{max}}). Please uncheck other platforms first."
   },
   "privacy": {
     "hideSensitive": "Hide emails",
@@ -1190,9 +1196,12 @@
       "codebuddyCnSettingsTitle": "CodeBuddy CN Settings",
       "zcodeAppPath": "ZCode Launch Path",
       "zcodeAppPathDesc": "Leave blank to use the default path",
-      "qoderAppPath": "Qoder App Path",
+      "qoderAppPath": "Qoder IDE Launch Path",
       "qoderAppPathDesc": "Leave blank to use the default path",
       "qoderAppPathPlaceholder": "Default path",
+      "qoderAppAppPath": "Qoder Launch Path",
+      "qoderCnIdeAppPath": "Qoder CN IDE Launch Path",
+      "qoderCnAppPath": "Qoder CN Launch Path",
       "zcodeAutoRefresh": "ZCode Auto Refresh",
       "zcodeAutoRefreshDesc": "Background quota refresh interval",
       "qoderAutoRefresh": "Qoder Auto Refresh",
@@ -5037,8 +5046,20 @@
       "openCodexConfigFailed": "Failed to open Codex config.toml: {{error}}"
     },
     "qoder": {
+      "title": "Qoder IDE Settings",
+      "appPath": "Qoder IDE Launch Path"
+    },
+    "qoderApp": {
       "title": "Qoder Settings",
-      "appPath": "Qoder Path"
+      "appPath": "Qoder Launch Path"
+    },
+    "qoderCnIde": {
+      "title": "Qoder CN IDE Settings",
+      "appPath": "Qoder CN IDE Launch Path"
+    },
+    "qoderCnApp": {
+      "title": "Qoder CN Settings",
+      "appPath": "Qoder CN Launch Path"
     },
     "zcode": {
       "title": "ZCode Settings",

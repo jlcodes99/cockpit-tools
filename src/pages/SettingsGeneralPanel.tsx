@@ -136,6 +136,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     openMenuBarQuotaModal,
     platformSettingsOrder,
     qoderAppPath,
+    qoderAppAppPath,
+    qoderCnIdeAppPath,
+    qoderCnAppPath,
     qoderAutoRefresh,
     qoderAutoRefreshCustomMode,
     qoderAutoRefreshIsPreset,
@@ -231,6 +234,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     setLanguage,
     setMenuBarQuotaEnabled,
     setQoderAppPath,
+    setQoderAppAppPath,
+    setQoderCnIdeAppPath,
+    setQoderCnAppPath,
     setQoderAutoRefresh,
     setQoderAutoRefreshCustomMode,
     setQoderQuotaAlertEnabled,
@@ -1035,7 +1041,10 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     <option value="grok">Grok CLI</option>
                     <option value="codebuddy">{t('nav.codebuddy', 'CodeBuddy')}</option>
                     <option value="codebuddy-cn">{t('nav.codebuddyCn', 'CodeBuddy CN')}</option>
-                    <option value="qoder">{t('nav.qoder', 'Qoder')}</option>
+                    <option value="qoder">{t('nav.qoder', 'Qoder IDE')}</option>
+                    <option value="qoder-app">{t('nav.qoderApp', 'Qoder')}</option>
+                    <option value="qoder-cn">{t('nav.qoderCn', 'Qoder CN IDE')}</option>
+                    <option value="qoder-cn-app">{t('nav.qoderCnApp', 'Qoder CN')}</option>
                     <option value="zcode">ZCode</option>
                     <option value="trae">{t('nav.trae', 'Trae')}</option>
                     <option value="trae-solo">{t('nav.traeSolo', 'TRAE SOLO')}</option>
@@ -2719,7 +2728,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               </div>
 
               <div style={{ order: platformSettingsOrder.qoder }}>
-                <div className="group-title">{t('quickSettings.qoder.title', 'Qoder 设置')}</div>
+                <div className="group-title">{t('quickSettings.qoder.title', 'Qoder IDE 设置')}</div>
                 <div className="settings-group">
                   <div className="settings-row">
                     <div className="row-label">
@@ -2794,7 +2803,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
 
                   <div className="settings-row">
                     <div className="row-label">
-                      <div className="row-title">{t('settings.general.qoderAppPath', 'Qoder 启动路径')}</div>
+                      <div className="row-title">{t('settings.general.qoderAppPath', 'Qoder IDE 启动路径')}</div>
                       <div className="row-desc">{t('settings.general.qoderAppPathDesc', '留空则使用默认路径')}</div>
                     </div>
                     <div className="row-control row-control--grow">
@@ -2803,7 +2812,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                           type="text"
                           className="settings-input settings-input--path"
                           value={qoderAppPath}
-                          placeholder={t('settings.general.qoderAppPathPlaceholder', '默认路径')}
+                          placeholder="C:\Program Files\Qoder IDE\Qoder IDE.exe"
                           onChange={(e) => setQoderAppPath(e.target.value)}
                         />
                         <button
@@ -2906,6 +2915,132 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div style={{ order: platformSettingsOrder.qoder_app }}>
+                <div className="group-title">{t('quickSettings.qoderApp.title', 'Qoder 设置')}</div>
+                <div className="settings-group">
+                  {renderCurrentAccountRefreshRow('qoder_app')}
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('settings.general.qoderAppAppPath', 'Qoder 启动路径')}</div>
+                      <div className="row-desc">{t('settings.general.qoderAppPathDesc', '留空则使用默认路径')}</div>
+                    </div>
+                    <div className="row-control row-control--grow">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                        <input
+                          type="text"
+                          className="settings-input settings-input--path"
+                          value={qoderAppAppPath}
+                          placeholder="C:\Program Files\Qoder\Qoder\Qoder.exe"
+                          onChange={(e) => setQoderAppAppPath(e.target.value)}
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handlePickAppPath('qoder_app')}
+                          disabled={isAppPathResetDetecting('qoder_app')}
+                        >
+                          {t('settings.general.qoderPathSelect', '选择')}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleResetAppPath('qoder_app')}
+                          disabled={isAppPathResetDetecting('qoder_app')}
+                        >
+                          <RefreshCw size={16} className={isAppPathResetDetecting('qoder_app') ? 'spin' : undefined} />
+                          {isAppPathResetDetecting('qoder_app')
+                            ? t('common.loading', '加载中...')
+                            : getResetLabelByTarget('qoder_app')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ order: platformSettingsOrder.qoder_cn_ide }}>
+                <div className="group-title">{t('quickSettings.qoderCnIde.title', 'Qoder CN IDE 设置')}</div>
+                <div className="settings-group">
+                  {renderCurrentAccountRefreshRow('qoder_cn_ide')}
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('settings.general.qoderCnIdeAppPath', 'Qoder CN IDE 启动路径')}</div>
+                      <div className="row-desc">{t('settings.general.qoderAppPathDesc', '留空则使用默认路径')}</div>
+                    </div>
+                    <div className="row-control row-control--grow">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                        <input
+                          type="text"
+                          className="settings-input settings-input--path"
+                          value={qoderCnIdeAppPath}
+                          placeholder="C:\Program Files\Qoder CN IDE\Qoder CN IDE.exe"
+                          onChange={(e) => setQoderCnIdeAppPath(e.target.value)}
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handlePickAppPath('qoder_cn_ide')}
+                          disabled={isAppPathResetDetecting('qoder_cn_ide')}
+                        >
+                          {t('settings.general.qoderPathSelect', '选择')}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleResetAppPath('qoder_cn_ide')}
+                          disabled={isAppPathResetDetecting('qoder_cn_ide')}
+                        >
+                          <RefreshCw size={16} className={isAppPathResetDetecting('qoder_cn_ide') ? 'spin' : undefined} />
+                          {isAppPathResetDetecting('qoder_cn_ide')
+                            ? t('common.loading', '加载中...')
+                            : getResetLabelByTarget('qoder_cn_ide')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ order: platformSettingsOrder.qoder_cn_app }}>
+                <div className="group-title">{t('quickSettings.qoderCnApp.title', 'Qoder CN 设置')}</div>
+                <div className="settings-group">
+                  {renderCurrentAccountRefreshRow('qoder_cn_app')}
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('settings.general.qoderCnAppPath', 'Qoder CN 启动路径')}</div>
+                      <div className="row-desc">{t('settings.general.qoderAppPathDesc', '留空则使用默认路径')}</div>
+                    </div>
+                    <div className="row-control row-control--grow">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                        <input
+                          type="text"
+                          className="settings-input settings-input--path"
+                          value={qoderCnAppPath}
+                          placeholder="C:\Program Files\Qoder CN\Qoder CN\Qoder CN.exe"
+                          onChange={(e) => setQoderCnAppPath(e.target.value)}
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handlePickAppPath('qoder_cn_app')}
+                          disabled={isAppPathResetDetecting('qoder_cn_app')}
+                        >
+                          {t('settings.general.qoderPathSelect', '选择')}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleResetAppPath('qoder_cn_app')}
+                          disabled={isAppPathResetDetecting('qoder_cn_app')}
+                        >
+                          <RefreshCw size={16} className={isAppPathResetDetecting('qoder_cn_app') ? 'spin' : undefined} />
+                          {isAppPathResetDetecting('qoder_cn_app')
+                            ? t('common.loading', '加载中...')
+                            : getResetLabelByTarget('qoder_cn_app')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

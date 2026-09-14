@@ -296,6 +296,12 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   codebuddy_cn: async () =>
     (await codebuddyCnService.listCodebuddyCnAccounts()) as unknown as TransferAccountRecord[],
   qoder: async () => (await qoderService.listQoderAccounts()) as unknown as TransferAccountRecord[],
+  qoder_app: async () =>
+    (await qoderService.listQoderChannelAccounts('qoder_app')) as unknown as TransferAccountRecord[],
+  qoder_cn_ide: async () =>
+    (await qoderService.listQoderChannelAccounts('qoder_cn_ide')) as unknown as TransferAccountRecord[],
+  qoder_cn_app: async () =>
+    (await qoderService.listQoderChannelAccounts('qoder_cn_app')) as unknown as TransferAccountRecord[],
   zcode: async () => (await zcodeService.listZcodeAccounts()) as unknown as TransferAccountRecord[],
   trae: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
   trae_solo: async () => (await traeService.listTraeAccounts()) as unknown as TransferAccountRecord[],
@@ -319,6 +325,9 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   codebuddy: codebuddyService.importCodebuddyFromJson,
   codebuddy_cn: codebuddyCnService.importCodebuddyCnFromJson,
   qoder: qoderService.importQoderFromJson,
+  qoder_app: (content) => qoderService.importQoderChannelFromJson('qoder_app', content),
+  qoder_cn_ide: (content) => qoderService.importQoderChannelFromJson('qoder_cn_ide', content),
+  qoder_cn_app: (content) => qoderService.importQoderChannelFromJson('qoder_cn_app', content),
   zcode: zcodeService.importZcodeFromJson,
   trae: traeService.importTraeFromJson,
   trae_solo: traeService.importTraeFromJson,
@@ -487,6 +496,9 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
         normalizeString(account.user_id) ?? normalizeString(account.principal_id) ?? undefined;
       break;
     case 'qoder':
+    case 'qoder_app':
+    case 'qoder_cn_ide':
+    case 'qoder_cn_app':
     case 'trae':
     case 'trae_solo':
     case 'trae_cn':
@@ -567,6 +579,9 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
       addStringScore(ref.email, account.email, 10);
       break;
     case 'qoder':
+    case 'qoder_app':
+    case 'qoder_cn_ide':
+    case 'qoder_cn_app':
     case 'trae':
     case 'trae_solo':
     case 'trae_cn':

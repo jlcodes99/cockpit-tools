@@ -26,9 +26,17 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
             let accounts = crate::modules::codebuddy_cn_account::list_accounts();
             Ok(crate::modules::codebuddy_cn_account::resolve_current_account_id(&accounts))
         }
-        "qoder" => {
+        "qoder" | "qoder_ide" => {
             let accounts = crate::modules::qoder_account::list_accounts();
             Ok(crate::modules::qoder_account::resolve_current_account_id(
+                &accounts,
+            ))
+        }
+        "qoder_app" | "qoder_cn_ide" | "qoder_cn_app" => {
+            let channel = crate::modules::qoder_channel::QoderChannel::parse(Some(platform))?;
+            let accounts = crate::modules::qoder_account::list_accounts_for_channel(channel);
+            Ok(crate::modules::qoder_account::resolve_current_account_id_for_channel(
+                channel,
                 &accounts,
             ))
         }

@@ -8,7 +8,7 @@ import { KiroIcon } from '../icons/KiroIcon';
 import { CursorIcon } from '../icons/CursorIcon';
 import { GrokIcon } from '../icons/GrokIcon';
 import { CodebuddyIcon } from '../icons/CodebuddyIcon';
-import { QoderIcon } from '../icons/QoderIcon';
+import { QoderAppIcon, QoderCnAppIcon, QoderCnIdeIcon, QoderIcon } from '../icons/QoderIcon';
 import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../icons/TraeIcon';
 import { WorkbuddyIcon } from '../icons/WorkbuddyIcon';
 import { ZedIcon } from '../icons/ZedIcon';
@@ -42,6 +42,9 @@ export type PlatformOverviewHeaderId =
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
+  | 'qoder_app'
+  | 'qoder_cn_ide'
+  | 'qoder_cn_app'
   | 'zcode'
   | 'trae'
   | 'trae_solo'
@@ -109,8 +112,20 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
     overviewIcon: <CodebuddyIcon className="tab-icon" />,
   },
   qoder: {
-    platformLabel: 'Qoder',
+    platformLabel: 'Qoder IDE',
     overviewIcon: <QoderIcon className="tab-icon" />,
+  },
+  qoder_app: {
+    platformLabel: 'Qoder',
+    overviewIcon: <QoderAppIcon className="tab-icon" />,
+  },
+  qoder_cn_ide: {
+    platformLabel: 'Qoder CN IDE',
+    overviewIcon: <QoderCnIdeIcon className="tab-icon" />,
+  },
+  qoder_cn_app: {
+    platformLabel: 'Qoder CN',
+    overviewIcon: <QoderCnAppIcon className="tab-icon" />,
   },
   zcode: {
     platformLabel: 'ZCode',

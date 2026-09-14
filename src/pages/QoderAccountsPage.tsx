@@ -43,10 +43,11 @@ import {
   PlatformOverviewTabsHeader,
 } from '../components/platform/PlatformOverviewTabsHeader';
 import { QoderInstancesContent } from './QoderInstancesPage';
-import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import { useQoderAccountStore, useQoderChannelAccountStore } from '../stores/useQoderAccountStore';
 import * as qoderService from '../services/qoderService';
 import {
   QoderAccount,
+  QoderPlatformId,
   getQoderAccountDisplayEmail,
   getQoderPlanBadge,
   getQoderSubscriptionInfo,
@@ -89,8 +90,55 @@ import {
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
 
-const QODER_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.qoder.flow_notice_collapsed';
-const QODER_FILTER_PERSISTENCE_SCOPE = normalizeAccountsOverviewScope('qoder');
+interface QoderAccountsPageProps {
+  platformId?: QoderPlatformId;
+}
+
+const QODER_PLATFORM_CONFIG: Record<
+  QoderPlatformId,
+  {
+    platformKey: string;
+    currentAccountIdKey: string;
+    flowNoticeCollapsedKey: string;
+    exportFilePrefix: string;
+    nameZh: string;
+    nameEn: string;
+  }
+> = {
+  qoder: {
+    platformKey: 'qoder',
+    currentAccountIdKey: 'agtools.qoder.current_account_id',
+    flowNoticeCollapsedKey: 'agtools.qoder.flow_notice_collapsed',
+    exportFilePrefix: 'qoder_accounts',
+    nameZh: 'Qoder IDE',
+    nameEn: 'Qoder IDE',
+  },
+  qoder_app: {
+    platformKey: 'qoder_app',
+    currentAccountIdKey: 'agtools.qoder_app.current_account_id',
+    flowNoticeCollapsedKey: 'agtools.qoder_app.flow_notice_collapsed',
+    exportFilePrefix: 'qoder_app_accounts',
+    nameZh: 'Qoder',
+    nameEn: 'Qoder',
+  },
+  qoder_cn_ide: {
+    platformKey: 'qoder_cn_ide',
+    currentAccountIdKey: 'agtools.qoder_cn_ide.current_account_id',
+    flowNoticeCollapsedKey: 'agtools.qoder_cn_ide.flow_notice_collapsed',
+    exportFilePrefix: 'qoder_cn_ide_accounts',
+    nameZh: 'Qoder CN IDE',
+    nameEn: 'Qoder CN IDE',
+  },
+  qoder_cn_app: {
+    platformKey: 'qoder_cn_app',
+    currentAccountIdKey: 'agtools.qoder_cn_app.current_account_id',
+    flowNoticeCollapsedKey: 'agtools.qoder_cn_app.flow_notice_collapsed',
+    exportFilePrefix: 'qoder_cn_app_accounts',
+    nameZh: 'Qoder CN',
+    nameEn: 'Qoder CN',
+  },
+};
+
 const QODER_FILTER_FIELD_VIEW_MODE = 'view_mode';
 const QODER_FILTER_FIELD_SORT_BY = 'sort_by';
 const QODER_FILTER_FIELD_SORT_DIRECTION = 'sort_direction';
@@ -245,11 +293,15 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutCode: str
   });
 }
 
-export function QoderAccountsPage() {
+export function QoderAccountsPage({ platformId = 'qoder' }: QoderAccountsPageProps = {}) {
+  const effectivePlatformId: QoderPlatformId = platformId;
+  const config = QODER_PLATFORM_CONFIG[effectivePlatformId] || QODER_PLATFORM_CONFIG.qoder;
+  const filterPersistenceScope = normalizeAccountsOverviewScope(effectivePlatformId);
   const { t } = useTranslation();
-  const store = useQoderAccountStore();
+  const store = useQoderChannelAccountStore(effectivePlatformId);
+
   const initialFilterPersistenceEnabled =
-    readAccountsOverviewFilterPersistenceEnabled(QODER_FILTER_PERSISTENCE_SCOPE);
+    readAccountsOverviewFilterPersistenceEnabled(filterPersistenceScope);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<PlatformOverviewTab>('overview');
   const [filterPersistenceEnabled, setFilterPersistenceEnabled] = useState<boolean>(
@@ -259,7 +311,7 @@ export function QoderAccountsPage() {
     initialFilterPersistenceEnabled
       ? normalizeQoderViewMode(
           readAccountsOverviewFilterField<unknown>(
-            QODER_FILTER_PERSISTENCE_SCOPE,
+            filterPersistenceScope,
             QODER_FILTER_FIELD_VIEW_MODE,
             'grid',
           ),
@@ -270,7 +322,7 @@ export function QoderAccountsPage() {
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
     initialFilterPersistenceEnabled
       ? readAccountsOverviewFilterStringArray(
-          QODER_FILTER_PERSISTENCE_SCOPE,
+          filterPersistenceScope,
           QODER_FILTER_FIELD_FILTER_TYPES,
         )
       : [],
@@ -279,7 +331,7 @@ export function QoderAccountsPage() {
     initialFilterPersistenceEnabled
       ? normalizeQoderSortBy(
           readAccountsOverviewFilterField<unknown>(
-            QODER_FILTER_PERSISTENCE_SCOPE,
+            filterPersistenceScope,
             QODER_FILTER_FIELD_SORT_BY,
             'created_at',
           ),
@@ -290,7 +342,7 @@ export function QoderAccountsPage() {
     initialFilterPersistenceEnabled
       ? normalizeQoderSortDirection(
           readAccountsOverviewFilterField<unknown>(
-            QODER_FILTER_PERSISTENCE_SCOPE,
+            filterPersistenceScope,
             QODER_FILTER_FIELD_SORT_DIRECTION,
             'desc',
           ),
@@ -325,7 +377,7 @@ export function QoderAccountsPage() {
   const [tagFilter, setTagFilter] = useState<string[]>(() =>
     initialFilterPersistenceEnabled
       ? readAccountsOverviewFilterStringArray(
-          QODER_FILTER_PERSISTENCE_SCOPE,
+          filterPersistenceScope,
           QODER_FILTER_FIELD_TAG_FILTER,
         )
       : [],
@@ -342,7 +394,7 @@ export function QoderAccountsPage() {
     initialFilterPersistenceEnabled
       ? Boolean(
           readAccountsOverviewFilterField<unknown>(
-            QODER_FILTER_PERSISTENCE_SCOPE,
+            filterPersistenceScope,
             QODER_FILTER_FIELD_GROUP_BY_TAG,
             false,
           ),
@@ -350,7 +402,7 @@ export function QoderAccountsPage() {
       : false,
   );
   const [isFlowNoticeCollapsed, setIsFlowNoticeCollapsed] = useState<boolean>(() =>
-    readBooleanStorage(QODER_FLOW_NOTICE_COLLAPSED_KEY, false),
+    readBooleanStorage(config.flowNoticeCollapsedKey, false),
   );
   const [privacyModeEnabled, setPrivacyModeEnabled] = useState<boolean>(() =>
     isPrivacyModeEnabledByDefault(),
@@ -359,7 +411,7 @@ export function QoderAccountsPage() {
   useEffect(() => {
     const handleFilterPersistenceChanged = (event: Event) => {
       const detail = (event as CustomEvent<AccountsOverviewFilterPersistenceChangedDetail>).detail;
-      if (!detail || detail.scope !== QODER_FILTER_PERSISTENCE_SCOPE) {
+      if (!detail || detail.scope !== filterPersistenceScope) {
         return;
       }
       setFilterPersistenceEnabled(Boolean(detail.enabled));
@@ -374,97 +426,97 @@ export function QoderAccountsPage() {
         handleFilterPersistenceChanged as EventListener,
       );
     };
-  }, []);
+  }, [filterPersistenceScope]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(
-        QODER_FILTER_PERSISTENCE_SCOPE,
+        filterPersistenceScope,
         QODER_FILTER_FIELD_VIEW_MODE,
       );
       return;
     }
     writeAccountsOverviewFilterField(
-      QODER_FILTER_PERSISTENCE_SCOPE,
+      filterPersistenceScope,
       QODER_FILTER_FIELD_VIEW_MODE,
       viewMode,
     );
-  }, [filterPersistenceEnabled, viewMode]);
+  }, [filterPersistenceEnabled, filterPersistenceScope, viewMode]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(
-        QODER_FILTER_PERSISTENCE_SCOPE,
+        filterPersistenceScope,
         QODER_FILTER_FIELD_SORT_BY,
       );
       return;
     }
     writeAccountsOverviewFilterField(
-      QODER_FILTER_PERSISTENCE_SCOPE,
+      filterPersistenceScope,
       QODER_FILTER_FIELD_SORT_BY,
       sortBy,
     );
-  }, [filterPersistenceEnabled, sortBy]);
+  }, [filterPersistenceEnabled, filterPersistenceScope, sortBy]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(
-        QODER_FILTER_PERSISTENCE_SCOPE,
+        filterPersistenceScope,
         QODER_FILTER_FIELD_SORT_DIRECTION,
       );
       return;
     }
     writeAccountsOverviewFilterField(
-      QODER_FILTER_PERSISTENCE_SCOPE,
+      filterPersistenceScope,
       QODER_FILTER_FIELD_SORT_DIRECTION,
       sortDirection,
     );
-  }, [filterPersistenceEnabled, sortDirection]);
+  }, [filterPersistenceEnabled, filterPersistenceScope, sortDirection]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(
-        QODER_FILTER_PERSISTENCE_SCOPE,
+        filterPersistenceScope,
         QODER_FILTER_FIELD_FILTER_TYPES,
       );
       return;
     }
     writeAccountsOverviewFilterField(
-      QODER_FILTER_PERSISTENCE_SCOPE,
+      filterPersistenceScope,
       QODER_FILTER_FIELD_FILTER_TYPES,
       filterTypes,
     );
-  }, [filterPersistenceEnabled, filterTypes]);
+  }, [filterPersistenceEnabled, filterPersistenceScope, filterTypes]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(
-        QODER_FILTER_PERSISTENCE_SCOPE,
+        filterPersistenceScope,
         QODER_FILTER_FIELD_TAG_FILTER,
       );
       return;
     }
     writeAccountsOverviewFilterField(
-      QODER_FILTER_PERSISTENCE_SCOPE,
+      filterPersistenceScope,
       QODER_FILTER_FIELD_TAG_FILTER,
       tagFilter,
     );
-  }, [filterPersistenceEnabled, tagFilter]);
+  }, [filterPersistenceEnabled, filterPersistenceScope, tagFilter]);
 
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(
-        QODER_FILTER_PERSISTENCE_SCOPE,
+        filterPersistenceScope,
         QODER_FILTER_FIELD_GROUP_BY_TAG,
       );
       return;
     }
     writeAccountsOverviewFilterField(
-      QODER_FILTER_PERSISTENCE_SCOPE,
+      filterPersistenceScope,
       QODER_FILTER_FIELD_GROUP_BY_TAG,
       groupByTag,
     );
-  }, [filterPersistenceEnabled, groupByTag]);
+  }, [filterPersistenceEnabled, filterPersistenceScope, groupByTag]);
 
   useEffect(() => {
     if (!store.error) return;
@@ -504,8 +556,8 @@ export function QoderAccountsPage() {
   const fetchAccounts = store.fetchAccounts;
 
   const exportModal = useExportJsonModal({
-    exportFilePrefix: 'qoder_accounts',
-    exportJsonByIds: qoderService.exportQoderAccounts,
+    exportFilePrefix: `${effectivePlatformId}_accounts`,
+    exportJsonByIds: (ids) => qoderService.exportQoderChannelAccounts(effectivePlatformId, ids),
     onError: (error) =>
       setMessage({
         tone: 'error',
@@ -540,13 +592,13 @@ export function QoderAccountsPage() {
   }, []);
 
   const consumeExternalProviderImport = useCallback(() => {
-    const request = consumeQueuedExternalProviderImportForPlatform('qoder');
+    const request = consumeQueuedExternalProviderImportForPlatform(effectivePlatformId);
     if (!request) return;
     openAddModal('token');
     setTokenInput(request.token);
     setAddStatus('idle');
     setAddMessage(null);
-  }, [openAddModal]);
+  }, [effectivePlatformId, openAddModal]);
 
   useEffect(() => {
     const handleExternalImportEvent = () => {
@@ -577,8 +629,7 @@ export function QoderAccountsPage() {
 
   useEffect(() => {
     void fetchAccounts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchAccounts, effectivePlatformId]);
 
   const currentAccountId = store.currentAccountId;
 
@@ -1005,17 +1056,17 @@ export function QoderAccountsPage() {
     setAddStatus('loading');
     setAddMessage(null);
     try {
-      await qoderService.importQoderFromLocal();
+      await qoderService.importQoderChannelFromLocal(effectivePlatformId);
       await store.fetchAccounts();
       await new Promise((resolve) => setTimeout(resolve, 180));
       await store.fetchAccounts();
       setAddStatus('success');
-      setAddMessage(t('qoder.import.localSuccess', '已从本机 Qoder 导入账号。'));
+      setAddMessage(t('qoder.import.localSuccess', '已从本机导入账号。'));
     } catch (error) {
       setAddStatus('error');
       setAddMessage(t('qoder.import.localFailed', '本机导入失败：{{error}}', { error: String(error) }));
     }
-  }, [addStatus, store, t]);
+  }, [effectivePlatformId, addStatus, store, t]);
 
   const handleImportJsonFile = useCallback(
     async (file: File) => {
@@ -1456,34 +1507,54 @@ export function QoderAccountsPage() {
         };
       };
 
-      return {
-        planTag: subscription.planTag,
-        planClass: resolveQoderPlanBadgeClass(subscription.planTag),
-        items: [
-          buildQuotaItem(
-            'included',
-            t('qoder.usageOverview.includedCredits', '套餐内 Credits'),
-            subscription.userQuota.used,
-            subscription.userQuota.total,
-            subscription.userQuota.percentage,
-          ),
+      const items: QoderQuotaDisplayItem[] = [
+        buildQuotaItem(
+          'included',
+          t('qoder.usageOverview.includedCredits', '套餐内 Credits'),
+          subscription.userQuota.used,
+          subscription.userQuota.total,
+          subscription.userQuota.percentage,
+        ),
+      ];
+
+      const hasAddOn =
+        (subscription.addOnQuota.total ?? 0) > 0 ||
+        (subscription.addOnQuota.used ?? 0) > 0 ||
+        (subscription.addOnQuota.remaining ?? 0) > 0;
+
+      if (hasAddOn) {
+        items.push(
           buildQuotaItem(
             'creditPackage',
-            t('common.shared.columns.creditPackage', 'Credit Package'),
+            t('common.shared.columns.creditPackage', '附加 Credits'),
             subscription.addOnQuota.used,
             subscription.addOnQuota.total,
             subscription.addOnQuota.percentage,
           ),
-          {
-            key: 'sharedCreditPackage',
-            label: t('common.shared.columns.sharedCreditPackage', 'Shared Credit Package'),
-            normalizedPercent: 0,
-            quotaClass: 'high',
-            percentageText: null,
-            valueText: formatQuotaValue(subscription.sharedCreditPackageUsed),
-            showProgress: false,
-          },
-        ],
+        );
+      }
+
+      const hasIndependentShared =
+        subscription.sharedCreditPackageUsed != null &&
+        subscription.sharedCreditPackageUsed > 0 &&
+        (!hasAddOn || subscription.sharedCreditPackageUsed !== subscription.addOnQuota.used);
+
+      if (hasIndependentShared) {
+        items.push({
+          key: 'sharedCreditPackage',
+          label: t('common.shared.columns.sharedCreditPackage', 'Shared Credit Package'),
+          normalizedPercent: 0,
+          quotaClass: 'high',
+          percentageText: null,
+          valueText: formatQuotaValue(subscription.sharedCreditPackageUsed),
+          showProgress: false,
+        });
+      }
+
+      return {
+        planTag: subscription.planTag,
+        planClass: resolveQoderPlanBadgeClass(subscription.planTag),
+        items,
         resetText:
           resetAt != null
             ? t('trae.quota.resetAt', {
@@ -1896,10 +1967,10 @@ export function QoderAccountsPage() {
 
   return (
     <div className="ghcp-accounts-page qoder-accounts-page">
-      <PlatformOverviewTabsHeader platform="qoder" active={activeTab} onTabChange={setActiveTab} />
+      <PlatformOverviewTabsHeader platform={effectivePlatformId} active={activeTab} onTabChange={setActiveTab} />
 
       {activeTab === 'instances' ? (
-        <QoderInstancesContent accountsForSelect={filteredAccounts} />
+        <QoderInstancesContent platformId={effectivePlatformId} accountsForSelect={filteredAccounts} />
       ) : (
         <>
           <div className={`ghcp-flow-notice ${isFlowNoticeCollapsed ? 'collapsed' : ''}`} role="note" aria-live="polite">
@@ -1909,7 +1980,7 @@ export function QoderAccountsPage() {
               onClick={() =>
                 setIsFlowNoticeCollapsed((prev) => {
                   const next = !prev;
-                  writeBooleanStorage(QODER_FLOW_NOTICE_COLLAPSED_KEY, next);
+                  writeBooleanStorage(config.flowNoticeCollapsedKey, next);
                   return next;
                 })
               }
@@ -1917,7 +1988,9 @@ export function QoderAccountsPage() {
             >
               <div className="ghcp-flow-notice-title">
                 <CircleAlert size={16} />
-                <span>{t('qoder.flowNotice.title', 'Qoder 账号接入说明（点击展开/收起）')}</span>
+                <span>
+                  {t('qoder.flowNotice.title', 'Qoder 账号接入说明（点击展开/收起）')} - 当前产品：{config.nameZh} ({config.nameEn})
+                </span>
               </div>
               <ChevronDown size={16} className={`ghcp-flow-notice-arrow ${isFlowNoticeCollapsed ? 'collapsed' : ''}`} />
             </button>
@@ -2118,7 +2191,7 @@ export function QoderAccountsPage() {
               >
                 <Upload size={14} />
               </button>
-              <QuickSettingsPopover type="qoder" />
+              <QuickSettingsPopover type={effectivePlatformId} />
             </div>
           </div>
 

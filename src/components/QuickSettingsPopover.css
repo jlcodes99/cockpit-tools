@@ -327,6 +327,24 @@
   flex-shrink: 0;
 }
 
+.qs-qoder-paths-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qs-qoder-path-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qs-qoder-path-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .qs-claude-scan-roots {
   display: flex;
   flex-direction: column;

@@ -154,6 +154,11 @@ function isAllowedEnglishReuse(key, value) {
     'nav.claude',
     'nav.gemini',
     'nav.qoder',
+    'nav.qoderIde',
+    'nav.qoderApp',
+    'nav.qoderCn',
+    'nav.qoderCnIde',
+    'nav.qoderCnApp',
   ]);
 
   if (allowedBrandKeys.has(key)) {

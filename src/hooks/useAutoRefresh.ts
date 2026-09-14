@@ -12,7 +12,12 @@ import { useGrokAccountStore } from '../stores/useGrokAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
-import { useQoderAccountStore } from '../stores/useQoderAccountStore';
+import {
+  useQoderAccountStore,
+  useQoderAppAccountStore,
+  useQoderCnIdeAccountStore,
+  useQoderCnAppAccountStore,
+} from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
@@ -199,6 +204,9 @@ function getCurrentAccountEmails(): Record<CurrentAccountRefreshPlatform, string
     codebuddy_cn: getProviderEmail(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail),
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),
     qoder: getProviderEmail(useQoderAccountStore, getQoderAccountDisplayEmail),
+    qoder_app: getProviderEmail(useQoderAppAccountStore, getQoderAccountDisplayEmail),
+    qoder_cn_ide: getProviderEmail(useQoderCnIdeAccountStore, getQoderAccountDisplayEmail),
+    qoder_cn_app: getProviderEmail(useQoderCnAppAccountStore, getQoderAccountDisplayEmail),
     zcode: getProviderEmail(useZcodeAccountStore, getZcodeAccountDisplayEmail),
     trae: getTraeProviderEmail('trae'),
     trae_solo: getTraeProviderEmail('trae_solo'),
