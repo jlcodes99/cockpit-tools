@@ -1047,6 +1047,7 @@
       "themeColorCatppuccin": "Catppuccin",
       "themeColorGruvbox": "Gruvbox",
       "themeColorEverforest": "Everforest",
+      "themeColorOled": "OLED",
       "externalNetwork": "Consenti rete esterna",
       "externalNetworkDesc": "Disattivo: blocca WebDAV, uso OpenRouter, annunci e controlli aggiornamento (il locale continua).",
       "webdavAllowedDomains": "Whitelist domini WebDAV",
