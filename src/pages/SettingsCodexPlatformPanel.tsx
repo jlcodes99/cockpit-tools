@@ -5,6 +5,7 @@ import './settings/Settings.css';
 import { RefreshCw } from 'lucide-react';
 import type { SettingsPageViewProps } from "./SettingsPageView";
 import { useRemoteConfigStore } from '../stores/useRemoteConfigStore';
+import { PlatformSettingsSection } from "./settings/PlatformSettingsSection";
 
 /** 渲染 SettingsGeneralPanel 的 jsx:platformSettingsOrder.codex 业务面板。 */
 export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
@@ -81,7 +82,7 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
   const remoteCodexOAuthAppVersion = useRemoteConfigStore(
     (state) => state.state.codexOAuthAppVersion,
   );
-  return <div style={{ order: platformSettingsOrder.codex }}>
+  return <PlatformSettingsSection platformId={'codex'} order={platformSettingsOrder.codex}>
                 <div className="group-title">{t('settings.general.codexSettingsTitle', 'Codex 设置')}</div>
                 <div className="settings-group">
               <div className="settings-row">
@@ -685,5 +686,5 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
               </div>
             </div>
 
-              </div>;
+              </PlatformSettingsSection>;
 }

@@ -1849,6 +1849,11 @@ async fn run_auto_switch_if_needed_inner() -> Result<Option<Account>, String> {
 }
 
 pub async fn run_auto_switch_if_needed() -> Result<Option<Account>, String> {
+    // 平台在「平台布局」中被禁用时不自动切号
+    if !crate::modules::tray_layout::is_platform_enabled("antigravity") {
+        return Ok(None);
+    }
+
     if AUTO_SWITCH_IN_PROGRESS.swap(true, Ordering::SeqCst) {
         modules::logger::log_info("[AutoSwitch] 自动切号进行中，跳过本次检查");
         return Ok(None);
