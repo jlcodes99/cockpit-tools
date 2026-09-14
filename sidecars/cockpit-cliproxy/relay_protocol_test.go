@@ -47,7 +47,7 @@ func TestProviderGatewayNormalizeToolCallPairingInjectsMissingOutput(t *testing.
 		`{"type":"message","role":"user","content":[{"type":"input_text","text":"next"}]}` +
 		`]}`)
 
-	got, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	got, placeholders, synthesized, _, _ := providerGatewayNormalizeToolCallPairing(deepseek, body)
 	if placeholders != 1 || synthesized != 0 {
 		t.Fatalf("expected one placeholder and no synthesized call, got placeholders=%d synthesized=%d", placeholders, synthesized)
 	}
@@ -72,7 +72,7 @@ func TestProviderGatewayNormalizeToolCallPairingSynthesizesCallForStandaloneOutp
 		`{"type":"function_call_output","id":"fco_01a052c0","name":"automation_update","namespace":"codex_app","output":"Automation: heartbeat"}` +
 		`]}`)
 
-	got, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	got, placeholders, synthesized, _, _ := providerGatewayNormalizeToolCallPairing(deepseek, body)
 	if placeholders != 0 || synthesized != 1 {
 		t.Fatalf("expected one synthesized call, got placeholders=%d synthesized=%d", placeholders, synthesized)
 	}
@@ -94,7 +94,7 @@ func TestProviderGatewayNormalizeToolCallPairingLeavesOtherProvidersUntouched(t 
 		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}` +
 		`]}`)
 
-	got, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(&providerGatewaySpec{BaseURL: "https://api.example.com"}, body)
+	got, placeholders, synthesized, _, _ := providerGatewayNormalizeToolCallPairing(&providerGatewaySpec{BaseURL: "https://api.example.com"}, body)
 	if placeholders != 0 || synthesized != 0 {
 		t.Fatalf("non-DeepSeek gateways should be untouched, got placeholders=%d synthesized=%d", placeholders, synthesized)
 	}
@@ -110,7 +110,7 @@ func TestProviderGatewayNormalizeToolCallPairingKeepsCompleteRequestsIdentical(t
 		`{"type":"function_call_output","call_id":"call_a","output":"ok"}` +
 		`]}`)
 
-	got, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	got, placeholders, synthesized, _, _ := providerGatewayNormalizeToolCallPairing(deepseek, body)
 	if placeholders != 0 || synthesized != 0 {
 		t.Fatalf("complete requests need no repair, got placeholders=%d synthesized=%d", placeholders, synthesized)
 	}
@@ -2624,4 +2624,199 @@ func TestSidecarRuntimeDoesNotSelectAccountWithExcludedModel(t *testing.T) {
 	if info := findModelInfoForTest(blockedModels, "gpt-5.4"); info == nil {
 		t.Fatal("blocked auth lost a non-excluded model")
 	}
+}
+
+// Adjacency normalization -----------------------------------------------------------------
+//
+// DeepSeek's stateless /responses implementation verifies tool-call pairing positionally: a
+// function_call must be immediately followed by its matching function_call_output. Codex can
+// legitimately record an unrelated message between the two (a tool hook's developer message is
+// written before the tool output reaches conversation history), and DeepSeek then rejects the
+// whole request with `No tool output found for tool call ...`, leaving the thread unusable.
+// Pairing repair alone does not help: the items exist, they are merely ordered illegally.
+
+func TestProviderGatewayNormalizeToolCallPairingMovesOutputAdjacentToItsCall(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := deepseekInputBody(
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":"go"}]}`,
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"message","role":"developer","content":[{"type":"input_text","text":"Bash reported an error"}]}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"boom"}`,
+	)
+
+	got, placeholders, synthesized, relocated, err := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	if err != nil {
+		t.Fatalf("unexpected pairing error: %v", err)
+	}
+	if placeholders != 0 || synthesized != 0 || relocated != 1 {
+		t.Fatalf("expected one relocated output, got placeholders=%d synthesized=%d relocated=%d", placeholders, synthesized, relocated)
+	}
+	items := gjson.GetBytes(got, "input").Array()
+	if len(items) != 4 {
+		t.Fatalf("no item should be dropped or added: %s", string(got))
+	}
+	assertToolPairAdjacentInTest(t, items)
+	if items[0].Get("type").String() != "message" || items[3].Get("type").String() != "message" {
+		t.Fatalf("unpaired messages must survive in order: %s", string(got))
+	}
+	if items[0].Get("content").Array()[0].Get("text").String() != "go" {
+		t.Fatalf("the leading message should keep its place: %s", string(got))
+	}
+	if items[3].Get("content").Array()[0].Get("text").String() != "Bash reported an error" {
+		t.Fatalf("the displaced message should follow the repaired pair: %s", string(got))
+	}
+}
+
+func TestProviderGatewayNormalizeToolCallPairingKeepsAdjacentRequestsIdentical(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := deepseekInputBody(
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"ok"}`,
+		`{"type":"function_call","call_id":"call_b","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call_output","call_id":"call_b","output":"ok"}`,
+	)
+
+	got, _, _, relocated, err := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	if err != nil {
+		t.Fatalf("unexpected pairing error: %v", err)
+	}
+	if relocated != 0 {
+		t.Fatalf("adjacent pairs need no relocation, got relocated=%d", relocated)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("adjacent body should be byte-identical: %s", string(got))
+	}
+}
+
+func TestProviderGatewayNormalizeToolCallPairingMovesDisplacedBatchOutputs(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := deepseekInputBody(
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call","call_id":"call_b","name":"exec_command","arguments":"{}"}`,
+		`{"type":"message","role":"developer","content":[{"type":"input_text","text":"ctx"}]}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"A"}`,
+		`{"type":"function_call_output","call_id":"call_b","output":"B"}`,
+	)
+
+	got, _, _, relocated, err := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	if err != nil {
+		t.Fatalf("unexpected pairing error: %v", err)
+	}
+	if relocated != 2 {
+		t.Fatalf("both outputs were displaced, got relocated=%d: %s", relocated, string(got))
+	}
+	items := gjson.GetBytes(got, "input").Array()
+	assertToolPairAdjacentInTest(t, items)
+	if items[len(items)-1].Get("type").String() != "message" {
+		t.Fatalf("the displaced message should settle after the repaired batch: %s", string(got))
+	}
+}
+
+func TestProviderGatewayNormalizeToolCallPairingMovesOnlyDisplacedOutputs(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := deepseekInputBody(
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"A"}`,
+		`{"type":"function_call","call_id":"call_b","name":"exec_command","arguments":"{}"}`,
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":"wrap up"}]}`,
+		`{"type":"function_call_output","call_id":"call_b","output":"B"}`,
+	)
+
+	got, _, _, relocated, err := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	if err != nil {
+		t.Fatalf("unexpected pairing error: %v", err)
+	}
+	if relocated != 1 {
+		t.Fatalf("only the second output was displaced, got relocated=%d: %s", relocated, string(got))
+	}
+	items := gjson.GetBytes(got, "input").Array()
+	assertToolPairAdjacentInTest(t, items)
+	// call_a stays at 0/1; call_b keeps 2/3 because its pair only shifts the message.
+	if indexOfCallIDInTest(items, "call_a") != 0 || indexOfCallIDInTest(items, "call_b") != 2 {
+		t.Fatalf("undisplaced pairs must keep their positions: %s", string(got))
+	}
+	if last := items[len(items)-1]; last.Get("type").String() != "message" {
+		t.Fatalf("the displaced message should settle after the repaired pair: %s", string(got))
+	}
+}
+
+func TestProviderGatewayNormalizeToolCallPairingMovesCustomToolOutputAdjacent(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := deepseekInputBody(
+		`{"type":"custom_tool_call","call_id":"call_patch","name":"apply_patch","input":"*** Begin Patch"}`,
+		`{"type":"message","role":"developer","content":[{"type":"input_text","text":"ctx"}]}`,
+		`{"type":"custom_tool_call_output","call_id":"call_patch","output":"done"}`,
+	)
+
+	got, _, _, relocated, err := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	if err != nil {
+		t.Fatalf("unexpected pairing error: %v", err)
+	}
+	if relocated != 1 {
+		t.Fatalf("custom tool pairs share the same invariant, got relocated=%d: %s", relocated, string(got))
+	}
+	assertToolPairAdjacentInTest(t, gjson.GetBytes(got, "input").Array())
+}
+
+func TestProviderGatewayNormalizeToolCallPairingLeavesDisplacedOutputsForOtherProviders(t *testing.T) {
+	body := deepseekInputBody(
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"message","role":"developer","content":[{"type":"input_text","text":"ctx"}]}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"ok"}`,
+	)
+
+	got, placeholders, synthesized, relocated, err := providerGatewayNormalizeToolCallPairing(
+		&providerGatewaySpec{BaseURL: "https://api.example.com"}, body)
+	if err != nil {
+		t.Fatalf("unexpected pairing error: %v", err)
+	}
+	if placeholders != 0 || synthesized != 0 || relocated != 0 {
+		t.Fatalf("non-DeepSeek gateways must stay untouched, got %d/%d/%d", placeholders, synthesized, relocated)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("non-DeepSeek body must be byte-identical: %s", string(got))
+	}
+}
+
+func deepseekInputBody(items ...string) []byte {
+	return []byte(`{"model":"gpt-5.4-mini","input":[` + strings.Join(items, ",") + `]}`)
+}
+
+func assertToolPairAdjacentInTest(t *testing.T, items []gjson.Result) {
+	t.Helper()
+	for index, item := range items {
+		itemType := item.Get("type").String()
+		if itemType != "function_call" && itemType != "custom_tool_call" {
+			continue
+		}
+		callID := item.Get("call_id").String()
+		if index+1 >= len(items) {
+			t.Fatalf("call %s has no following item: %s", callID, itemsToStringInTest(items))
+		}
+		next := items[index+1]
+		nextType := next.Get("type").String()
+		if nextType != "function_call_output" && nextType != "custom_tool_call_output" {
+			t.Fatalf("call %s is followed by %s instead of its output: %s", callID, nextType, itemsToStringInTest(items))
+		}
+		if next.Get("call_id").String() != callID {
+			t.Fatalf("call %s is followed by an output for another call: %s", callID, itemsToStringInTest(items))
+		}
+	}
+}
+
+func indexOfCallIDInTest(items []gjson.Result, callID string) int {
+	for index, item := range items {
+		if item.Get("call_id").String() == callID {
+			return index
+		}
+	}
+	return -1
+}
+
+func itemsToStringInTest(items []gjson.Result) string {
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		parts = append(parts, fmt.Sprintf("%s(%s)", item.Get("type").String(), item.Get("call_id").String()))
+	}
+	return strings.Join(parts, " ")
 }

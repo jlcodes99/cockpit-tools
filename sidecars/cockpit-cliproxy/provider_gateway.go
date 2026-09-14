@@ -207,8 +207,21 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		}
 	}
 	if wireAPI == "responses" {
-		normalized, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(gateway, body)
-		if placeholders > 0 || synthesized > 0 {
+		normalized, placeholders, synthesized, relocated, orderErr := providerGatewayNormalizeToolCallPairing(gateway, body)
+		if orderErr != nil {
+			if s.emitter != nil {
+				s.emitter.emit(requestDiagnosticPayload{
+					Type:         "provider_gateway_tool_call_pairing_error",
+					RequestID:    internallogging.GetRequestID(c.Request.Context()),
+					Method:       c.Request.Method,
+					Path:         requestPath(c.Request),
+					RequestKind:  requestKindFromPath(requestPath(c.Request)),
+					Model:        upstreamModel,
+					Transport:    diagnosticTransport(c.Request),
+					ErrorMessage: orderErr.Error(),
+				})
+			}
+		} else if placeholders > 0 || synthesized > 0 || relocated > 0 {
 			body = normalized
 			if s.emitter != nil {
 				s.emitter.emit(requestDiagnosticPayload{
@@ -219,7 +232,7 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 					RequestKind:  requestKindFromPath(requestPath(c.Request)),
 					Model:        upstreamModel,
 					Transport:    diagnosticTransport(c.Request),
-					ErrorMessage: fmt.Sprintf("injected %d placeholder tool output(s), synthesized %d tool call(s)", placeholders, synthesized),
+					ErrorMessage: fmt.Sprintf("injected %d placeholder tool output(s), synthesized %d tool call(s), relocated %d displaced tool output(s)", placeholders, synthesized, relocated),
 				})
 			}
 		}
@@ -357,14 +370,15 @@ const providerGatewayToolCallOutputPlaceholder = "tool result unavailable: the l
 // with `No tool output found ...` and leaves the in-memory thread unusable. Injecting the
 // missing output (or the call that an injected standalone output never had) keeps the
 // request valid and stops the thread from wedging.
-func providerGatewayNormalizeToolCallPairing(gateway *providerGatewaySpec, body []byte) ([]byte, int, int) {
+func providerGatewayNormalizeToolCallPairing(gateway *providerGatewaySpec, body []byte) ([]byte, int, int, int, error) {
 	if !providerGatewayRepairsToolCallPairing(gateway) {
-		return body, 0, 0
+		return body, 0, 0, 0, nil
 	}
 	input := gjson.GetBytes(body, "input")
 	if !input.IsArray() || len(input.Array()) == 0 {
-		return body, 0, 0
+		return body, 0, 0, 0, nil
 	}
+	needsOrdering := providerGatewayToolCallOrderNeedsRepair(input)
 
 	type callSlot struct {
 		index int
@@ -396,11 +410,12 @@ func providerGatewayNormalizeToolCallPairing(gateway *providerGatewaySpec, body 
 		}
 	}
 
-	// Exhaustive pairing means every live call already has an output, so there is nothing
-	// to repair and the request is forwarded byte-for-byte. Requests without any call still
-	// fall through so standalone injected outputs get their missing call.
-	if len(answers) > 0 && len(calls) == len(answers) {
-		return body, 0, 0
+	// Exhaustive pairing means every live call already has an output and, when the pairs are
+	// also adjacent, there is nothing to repair: the request is forwarded byte-for-byte.
+	// Requests without any call still fall through so standalone injected outputs get their
+	// missing call.
+	if len(answers) > 0 && len(calls) == len(answers) && !needsOrdering {
+		return body, 0, 0, 0, nil
 	}
 
 	orphanAnswers := make(map[int]struct{})
@@ -457,9 +472,238 @@ func providerGatewayNormalizeToolCallPairing(gateway *providerGatewaySpec, body 
 
 	updated, err := sjson.SetRawBytes(body, "input", rebuilt)
 	if err != nil {
-		return body, 0, 0
+		return body, 0, 0, 0, nil
 	}
-	return updated, placeholderCount, len(orphanAnswers)
+	if !needsOrdering {
+		return updated, placeholderCount, len(orphanAnswers), 0, nil
+	}
+	ordered, relocated, ok := providerGatewayOrderToolCallPairs(updated)
+	if !ok {
+		return body, 0, 0, 0, fmt.Errorf(
+			"provider gateway cannot normalize the tool call order for this request; the transcript contains tool items without a call_id or a tool call without a matching output",
+		)
+	}
+	return ordered, placeholderCount, len(orphanAnswers), relocated, nil
+}
+
+// providerGatewayOrderToolCallPairs restores the positional invariant DeepSeek verifies: every
+// tool call must be immediately followed by its own output.
+//
+// Codex breaks that ordering on a normal path. A tool hook (PostToolUse) records its developer
+// message as soon as the tool returns, which can be before the tool's output item reaches
+// conversation history, so the transcript ends up as
+//
+//	function_call -> message -> function_call_output
+//
+// DeepSeek validates adjacency per request and answers `No tool output found for tool call ...`
+// for the whole request, which wedges the thread until it is unloaded. The pairing repair above
+// does not cover this: the items exist, they are merely ordered illegally.
+//
+// The rewrite is deterministic and lossless. Each live call is paired with its output, a run of
+// consecutive calls keeps its relative order, and every other item keeps its position relative
+// to those pairs. Only an output that is not already in place moves, and it moves forward to sit
+// directly behind its call.
+func providerGatewayOrderToolCallPairs(body []byte) ([]byte, int, bool) {
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return body, 0, true
+	}
+	items := input.Array()
+	if len(items) < 2 {
+		return body, 0, true
+	}
+	if !providerGatewayToolCallOrderNeedsRepair(input) {
+		return body, 0, true
+	}
+
+	// The upstream pairs a call with the next item that carries the same call_id, so the rebuilt
+	// transcript has to put that token directly behind its call. Two position facts decide the
+	// whole rewrite, and both are computed up front so the rebuild stays a single pass:
+	//
+	//   firstCall[id] / firstOutput[id]  where the call and its answer first appear
+	//   relocated                        answers that did not follow their call in the original
+	//
+	// An answer that is already in place stays where it is; an answer displaced by a later call
+	// or an intervening message is emitted behind its call, and anything that sat in between
+	// follows it. Items the model does not need to re-read in order keep their relative order.
+	firstCall := make(map[string]int)
+	firstOutput := make(map[string]int)
+	relocated := 0
+	for index, item := range items {
+		itemType := item.Get("type").String()
+		switch {
+		case providerGatewayIsToolCallItem(itemType):
+			callID := strings.TrimSpace(item.Get("call_id").String())
+			if callID == "" {
+				return body, 0, false
+			}
+			if _, seen := firstCall[callID]; !seen {
+				firstCall[callID] = index
+			}
+		case providerGatewayIsToolCallOutputItem(itemType):
+			callID := strings.TrimSpace(item.Get("call_id").String())
+			if callID == "" {
+				return body, 0, false
+			}
+			if _, seen := firstOutput[callID]; !seen {
+				firstOutput[callID] = index
+			}
+		}
+	}
+	for callID, outputIndex := range firstOutput {
+		if callIndex, ok := firstCall[callID]; !ok || callIndex != outputIndex-1 {
+			relocated++
+		}
+	}
+
+	ordered := make([]gjson.Result, 0, len(items))
+	callIndex := make(map[string]int)     // position of each call's item inside ordered
+	waiting := make(map[string]struct{})  // calls emitted so far whose answer has not been placed
+	answered := make(map[string]struct{}) // calls whose answer is in place
+	takeCall := func(callID string) {
+		delete(answered, callID)
+		waiting[callID] = struct{}{}
+	}
+	placeAnswer := func(callID string, item gjson.Result) {
+		position, ok := callIndex[callID]
+		if !ok {
+			return
+		}
+		ordered = append(ordered, gjson.Result{})
+		copy(ordered[position+2:], ordered[position+1:])
+		ordered[position+1] = item
+		delete(waiting, callID)
+		answered[callID] = struct{}{}
+		for id, slot := range callIndex {
+			if slot > position {
+				callIndex[id] = slot + 1
+			}
+		}
+	}
+	for index, item := range items {
+		itemType := item.Get("type").String()
+		if providerGatewayIsToolCallItem(itemType) {
+			callID := strings.TrimSpace(item.Get("call_id").String())
+			callIndex[callID] = len(ordered)
+			ordered = append(ordered, item)
+			if outputIndex, ok := firstOutput[callID]; !ok || outputIndex > index {
+				takeCall(callID)
+			} else {
+				answered[callID] = struct{}{}
+			}
+			continue
+		}
+		if providerGatewayIsToolCallOutputItem(itemType) {
+			callID := strings.TrimSpace(item.Get("call_id").String())
+			if _, done := answered[callID]; done {
+				// A duplicate answer cannot sit next to its call any more, so it is dropped: the
+				// alternative is a transcript the upstream rejects outright.
+				continue
+			}
+			if _, owed := waiting[callID]; owed {
+				placeAnswer(callID, item)
+				continue
+			}
+			if firstOutput[callID] != index {
+				continue
+			}
+			if _, hasCall := firstCall[callID]; hasCall {
+				continue
+			}
+			// An answer with no call in this request keeps its place; the pairing repair above
+			// already gave it a matching call when the upstream requires one.
+			ordered = append(ordered, item)
+			continue
+		}
+		ordered = append(ordered, item)
+	}
+
+	rebuilt := make([]byte, 0, len(body))
+	rebuilt = append(rebuilt, '[')
+	for index, item := range ordered {
+		if index > 0 {
+			rebuilt = append(rebuilt, ',')
+		}
+		rebuilt = append(rebuilt, item.Raw...)
+	}
+	rebuilt = append(rebuilt, ']')
+
+	updated, err := sjson.SetRawBytes(body, "input", rebuilt)
+	if err != nil {
+		return body, 0, false
+	}
+	if !providerGatewayToolCallPairsAdjacent(gjson.GetBytes(updated, "input")) {
+		return body, 0, false
+	}
+	return updated, relocated, true
+}
+
+// providerGatewayToolCallOrderNeedsRepair reports whether any tool call is answered by
+// something other than its own output, which is the positional rule DeepSeek enforces.
+func providerGatewayToolCallOrderNeedsRepair(input gjson.Result) bool {
+	if !input.IsArray() {
+		return false
+	}
+	items := input.Array()
+	for index, item := range items {
+		if !providerGatewayIsToolCallItem(item.Get("type").String()) {
+			continue
+		}
+		callID := strings.TrimSpace(item.Get("call_id").String())
+		if callID == "" {
+			continue
+		}
+		if index+1 >= len(items) {
+			// No output recorded in this request; the pairing repair handles that case.
+			continue
+		}
+		next := items[index+1]
+		if !providerGatewayIsToolCallOutputItem(next.Get("type").String()) ||
+			strings.TrimSpace(next.Get("call_id").String()) != callID {
+			return true
+		}
+	}
+	return false
+}
+
+// providerGatewayToolCallPairsAdjacent is the post-condition of providerGatewayOrderToolCallPairs.
+func providerGatewayToolCallPairsAdjacent(input gjson.Result) bool {
+	if !input.IsArray() {
+		return false
+	}
+	items := input.Array()
+	answered := make(map[string]struct{})
+	for _, item := range items {
+		if !providerGatewayIsToolCallOutputItem(item.Get("type").String()) {
+			continue
+		}
+		if callID := strings.TrimSpace(item.Get("call_id").String()); callID != "" {
+			answered[callID] = struct{}{}
+		}
+	}
+	for index, item := range items {
+		if !providerGatewayIsToolCallItem(item.Get("type").String()) {
+			continue
+		}
+		callID := strings.TrimSpace(item.Get("call_id").String())
+		if callID == "" {
+			return false
+		}
+		// A call whose result is genuinely absent from the request cannot be paired here; the
+		// pairing repair decides what to do with it, so adjacency does not apply.
+		if _, hasAnswer := answered[callID]; !hasAnswer {
+			continue
+		}
+		if index+1 >= len(items) {
+			return false
+		}
+		next := items[index+1]
+		if !providerGatewayIsToolCallOutputItem(next.Get("type").String()) ||
+			strings.TrimSpace(next.Get("call_id").String()) != callID {
+			return false
+		}
+	}
+	return true
 }
 
 func providerGatewayIsToolCallItem(itemType string) bool {
