@@ -79,7 +79,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	}
 	body = normalizeNonOfficialCodexReasoningItems(ctx, "codex executor", body)
 	body = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "codex executor", body)
-	body = normalizeCodexParallelToolCalls(body, opts.Headers)
+	body = normalizeCodexParallelToolCallsForProvider(body, opts.Headers, baseURL)
 	body = helps.NormalizeCodexToolSchemas(body)
 	body, useFullResponses := normalizeCodexResponsesLiteRequest(body, opts.Headers, auth, true)
 	body, optimizeMultiAgentV2 := helps.OptimizeCodexMultiAgentV2RequestForAuth(ctx, opts.Headers, body, e.cfg, auth, baseModel)

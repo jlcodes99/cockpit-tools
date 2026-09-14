@@ -26,6 +26,8 @@ import (
 
 	responsesconverter "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/openai/openai/responses"
 
+	"github.com/tidwall/sjson"
+
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	cliproxysession "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/session"
 
@@ -203,6 +205,12 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 			}
 		}
 	}
+	if wireAPI == "responses" && providerGatewayShouldSerializeToolCalls(gateway) {
+		// DeepSeek Responses accepts parallel_tool_calls, but serializing calls avoids
+		// the Codex app-server race where the next sampling request can overtake the
+		// final function_call_output from a parallel batch and poison the thread.
+		body, _ = sjson.SetBytes(body, "parallel_tool_calls", false)
+	}
 	upstreamPath := "/v1/responses"
 	upstreamBody := rewriteProviderGatewayBodyModel(body, upstreamModel)
 	if wireAPI == "chat_completions" {
@@ -308,6 +316,17 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		contentType = "application/json"
 	}
 	c.Data(http.StatusOK, contentType, payload)
+}
+
+func providerGatewayShouldSerializeToolCalls(gateway *providerGatewaySpec) bool {
+	if gateway == nil {
+		return false
+	}
+	parsed, err := url.Parse(strings.TrimSpace(gateway.BaseURL))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Hostname(), "api.deepseek.com")
 }
 
 func isOpenCodeGoGateway(rawURL string) bool {

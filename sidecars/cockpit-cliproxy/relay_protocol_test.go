@@ -26,6 +26,15 @@ import (
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 )
 
+func TestProviderGatewayDeepSeekSerializesToolCalls(t *testing.T) {
+	if !providerGatewayShouldSerializeToolCalls(&providerGatewaySpec{BaseURL: "https://api.deepseek.com"}) {
+		t.Fatal("DeepSeek provider gateway should serialize tool calls")
+	}
+	if providerGatewayShouldSerializeToolCalls(&providerGatewaySpec{BaseURL: "https://api.example.com"}) {
+		t.Fatal("other provider gateways should preserve parallel tool calls")
+	}
+}
+
 func TestRelayServerExecutesNonStreamingRequestThroughRuntime(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	runtime := &fakeRuntime{
