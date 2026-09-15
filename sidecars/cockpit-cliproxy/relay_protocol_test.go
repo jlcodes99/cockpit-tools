@@ -24,7 +24,134 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
+
+	"github.com/tidwall/gjson"
 )
+
+func deepseekInputBody(items ...string) []byte {
+	return []byte(`{"model":"gpt-5.4-mini","input":[` + strings.Join(items, ",") + `]}`)
+}
+
+func assertToolPairAdjacentInTest(t *testing.T, items []gjson.Result) {
+	t.Helper()
+	for index, item := range items {
+		itemType := item.Get("type").String()
+		if itemType != "function_call" && itemType != "custom_tool_call" {
+			continue
+		}
+		callID := item.Get("call_id").String()
+		if index+1 >= len(items) {
+			t.Fatalf("call %s has no following item: %s", callID, itemsToStringInTest(items))
+		}
+		next := items[index+1]
+		nextType := next.Get("type").String()
+		if nextType != "function_call_output" && nextType != "custom_tool_call_output" {
+			t.Fatalf("call %s is followed by %s instead of its output: %s", callID, nextType, itemsToStringInTest(items))
+		}
+		if next.Get("call_id").String() != callID {
+			t.Fatalf("call %s is followed by an output for another call: %s", callID, itemsToStringInTest(items))
+		}
+	}
+}
+
+func itemsToStringInTest(items []gjson.Result) string {
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		parts = append(parts, fmt.Sprintf("%s(%s)", item.Get("type").String(), item.Get("call_id").String()))
+	}
+	return strings.Join(parts, " ")
+}
+
+func TestProviderGatewayDeepSeekRepairsToolCallPairing(t *testing.T) {
+	if !providerGatewayRepairsToolCallPairing(&providerGatewaySpec{BaseURL: "https://api.deepseek.com"}) {
+		t.Fatal("DeepSeek provider gateway should repair tool call pairing")
+	}
+	if providerGatewayRepairsToolCallPairing(&providerGatewaySpec{BaseURL: "https://api.example.com"}) {
+		t.Fatal("other provider gateways should keep their current behavior")
+	}
+}
+
+func TestProviderGatewayNormalizeToolCallPairingInjectsMissingOutput(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := []byte(`{"model":"gpt-5.4-mini","input":[` +
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":"go"}]},` +
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"},` +
+		`{"type":"function_call_output","call_id":"call_a","output":"ok"},` +
+		`{"type":"function_call","call_id":"call_b","name":"exec_command","arguments":"{}"},` +
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":"next"}]}` +
+		`]}`)
+
+	got, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	if placeholders != 1 || synthesized != 0 {
+		t.Fatalf("expected one placeholder and no synthesized call, got placeholders=%d synthesized=%d", placeholders, synthesized)
+	}
+	items := gjson.GetBytes(got, "input").Array()
+	if len(items) != 6 {
+		t.Fatalf("expected the missing output to be appended, got %d items: %s", len(items), string(got))
+	}
+	if items[4].Get("type").String() != "function_call_output" || items[4].Get("call_id").String() != "call_b" {
+		t.Fatalf("placeholder should be inserted right after its call: %s", string(got))
+	}
+	if !strings.Contains(items[4].Get("output").String(), "tool result unavailable") {
+		t.Fatalf("placeholder output should be an explicit failure: %s", string(got))
+	}
+	if items[5].Get("type").String() != "message" {
+		t.Fatalf("later items should keep their order: %s", string(got))
+	}
+}
+
+func TestProviderGatewayNormalizeToolCallPairingSynthesizesCallForStandaloneOutput(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := []byte(`{"model":"gpt-5.4-mini","input":[` +
+		`{"type":"function_call_output","id":"fco_01a052c0","name":"automation_update","namespace":"codex_app","output":"Automation: heartbeat"}` +
+		`]}`)
+
+	got, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	if placeholders != 0 || synthesized != 1 {
+		t.Fatalf("expected one synthesized call, got placeholders=%d synthesized=%d", placeholders, synthesized)
+	}
+	items := gjson.GetBytes(got, "input").Array()
+	if len(items) != 2 {
+		t.Fatalf("expected a call/output pair, got %d items: %s", len(items), string(got))
+	}
+	callID := items[0].Get("call_id").String()
+	if items[0].Get("type").String() != "function_call" || items[0].Get("name").String() != "automation_update" {
+		t.Fatalf("synthesized call should carry the injected tool identity: %s", string(got))
+	}
+	if callID == "" || items[1].Get("call_id").String() != callID {
+		t.Fatalf("the pair must share one call_id: %s", string(got))
+	}
+}
+
+func TestProviderGatewayNormalizeToolCallPairingLeavesOtherProvidersUntouched(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4-mini","input":[` +
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}` +
+		`]}`)
+
+	got, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(&providerGatewaySpec{BaseURL: "https://api.example.com"}, body)
+	if placeholders != 0 || synthesized != 0 {
+		t.Fatalf("non-DeepSeek gateways should be untouched, got placeholders=%d synthesized=%d", placeholders, synthesized)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("non-DeepSeek body should be byte-identical: %s", string(got))
+	}
+}
+
+func TestProviderGatewayNormalizeToolCallPairingKeepsCompleteRequestsIdentical(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := []byte(`{"model":"gpt-5.4-mini","input":[` +
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"},` +
+		`{"type":"function_call_output","call_id":"call_a","output":"ok"}` +
+		`]}`)
+
+	got, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(deepseek, body)
+	if placeholders != 0 || synthesized != 0 {
+		t.Fatalf("complete requests need no repair, got placeholders=%d synthesized=%d", placeholders, synthesized)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("complete body should be byte-identical: %s", string(got))
+	}
+}
 
 func TestRelayServerExecutesNonStreamingRequestThroughRuntime(t *testing.T) {
 	gin.SetMode(gin.TestMode)

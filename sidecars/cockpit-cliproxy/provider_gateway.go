@@ -203,6 +203,24 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 			}
 		}
 	}
+	if wireAPI == "responses" {
+		normalized, placeholders, synthesized := providerGatewayNormalizeToolCallPairing(gateway, body)
+		if placeholders > 0 || synthesized > 0 {
+			body = normalized
+			if s.emitter != nil {
+				s.emitter.emit(requestDiagnosticPayload{
+					Type:         "provider_gateway_tool_call_pairing_repaired",
+					RequestID:    internallogging.GetRequestID(c.Request.Context()),
+					Method:       c.Request.Method,
+					Path:         requestPath(c.Request),
+					RequestKind:  requestKindFromPath(requestPath(c.Request)),
+					Model:        upstreamModel,
+					Transport:    diagnosticTransport(c.Request),
+					ErrorMessage: fmt.Sprintf("injected %d placeholder tool output(s), synthesized %d tool call(s)", placeholders, synthesized),
+				})
+			}
+		}
+	}
 	upstreamPath := "/v1/responses"
 	upstreamBody := rewriteProviderGatewayBodyModel(body, upstreamModel)
 	if wireAPI == "chat_completions" {
