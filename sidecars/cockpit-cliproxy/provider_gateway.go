@@ -203,6 +203,28 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 			}
 		}
 	}
+	if wireAPI == "responses" {
+		ordered, relocated, orderOK := providerGatewayOrderToolCallPairs(body)
+		if !orderOK {
+			writeAPIError(c, http.StatusBadRequest, "provider gateway cannot reorder tool call outputs for this request", "invalid_request")
+			return
+		}
+		if relocated > 0 {
+			body = ordered
+			if s.emitter != nil {
+				s.emitter.emit(requestDiagnosticPayload{
+					Type:         "provider_gateway_tool_call_outputs_relocated",
+					RequestID:    internallogging.GetRequestID(c.Request.Context()),
+					Method:       c.Request.Method,
+					Path:         requestPath(c.Request),
+					RequestKind:  requestKindFromPath(requestPath(c.Request)),
+					Model:        upstreamModel,
+					Transport:    diagnosticTransport(c.Request),
+					ErrorMessage: fmt.Sprintf("relocated %d displaced tool output(s)", relocated),
+				})
+			}
+		}
+	}
 	upstreamPath := "/v1/responses"
 	upstreamBody := rewriteProviderGatewayBodyModel(body, upstreamModel)
 	if wireAPI == "chat_completions" {
