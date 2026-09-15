@@ -24,8 +24,154 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
+
+	"github.com/tidwall/gjson"
 )
 
+func deepseekInputBody(items ...string) []byte {
+	return []byte(`{"model":"gpt-5.4-mini","input":[` + strings.Join(items, ",") + `]}`)
+}
+
+func assertToolPairAdjacentInTest(t *testing.T, items []gjson.Result) {
+	t.Helper()
+	for index, item := range items {
+		itemType := item.Get("type").String()
+		if itemType != "function_call" && itemType != "custom_tool_call" {
+			continue
+		}
+		callID := item.Get("call_id").String()
+		if index+1 >= len(items) {
+			t.Fatalf("call %s has no following item: %s", callID, itemsToStringInTest(items))
+		}
+		next := items[index+1]
+		nextType := next.Get("type").String()
+		if nextType != "function_call_output" && nextType != "custom_tool_call_output" {
+			t.Fatalf("call %s is followed by %s instead of its output: %s", callID, nextType, itemsToStringInTest(items))
+		}
+		if next.Get("call_id").String() != callID {
+			t.Fatalf("call %s is followed by an output for another call: %s", callID, itemsToStringInTest(items))
+		}
+	}
+}
+
+func itemsToStringInTest(items []gjson.Result) string {
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		parts = append(parts, fmt.Sprintf("%s(%s)", item.Get("type").String(), item.Get("call_id").String()))
+	}
+	return strings.Join(parts, " ")
+}
+
+func indexOfCallIDInTest(items []gjson.Result, callID string) int {
+	for index, item := range items {
+		if item.Get("call_id").String() == callID {
+			return index
+		}
+	}
+	return -1
+}
+
+func TestProviderGatewayOrderMovesOutputAdjacentToItsCall(t *testing.T) {
+	body := deepseekInputBody(
+		`{"type":"message","role":"user","content":[{"type":"input_text","text":"go"}]}`,
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"message","role":"developer","content":[{"type":"input_text","text":"Bash reported an error"}]}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"boom"}`,
+	)
+
+	got, relocated, ok := providerGatewayOrderToolCallPairs(body)
+	if !ok {
+		t.Fatal("ordering must succeed")
+	}
+	if relocated != 1 {
+		t.Fatalf("expected one relocated output, got %d: %s", relocated, string(got))
+	}
+	items := gjson.GetBytes(got, "input").Array()
+	if len(items) != 4 {
+		t.Fatalf("no item may be added or dropped: %s", string(got))
+	}
+	assertToolPairAdjacentInTest(t, items)
+	if items[0].Get("content").Array()[0].Get("text").String() != "go" {
+		t.Fatalf("the leading message must keep its place: %s", string(got))
+	}
+	if items[3].Get("content").Array()[0].Get("text").String() != "Bash reported an error" {
+		t.Fatalf("the hook message must survive after the repaired pair: %s", string(got))
+	}
+}
+
+func TestProviderGatewayOrderKeepsAdjacentRequestsIdentical(t *testing.T) {
+	body := deepseekInputBody(
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"ok"}`,
+		`{"type":"function_call","call_id":"call_b","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call_output","call_id":"call_b","output":"ok"}`,
+	)
+
+	got, relocated, ok := providerGatewayOrderToolCallPairs(body)
+	if !ok || relocated != 0 {
+		t.Fatalf("legal order needs no rewrite, got relocated=%d ok=%v", relocated, ok)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("legal body must be byte-identical: %s", string(got))
+	}
+}
+
+func TestProviderGatewayOrderMovesDisplacedBatchOutputs(t *testing.T) {
+	body := deepseekInputBody(
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call","call_id":"call_b","name":"exec_command","arguments":"{}"}`,
+		`{"type":"message","role":"developer","content":[{"type":"input_text","text":"ctx"}]}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"A"}`,
+		`{"type":"function_call_output","call_id":"call_b","output":"B"}`,
+	)
+
+	got, relocated, ok := providerGatewayOrderToolCallPairs(body)
+	if !ok {
+		t.Fatal("ordering must succeed for a displaced batch")
+	}
+	if relocated != 2 {
+		t.Fatalf("both outputs move forward past the hook message, got %d: %s", relocated, string(got))
+	}
+	items := gjson.GetBytes(got, "input").Array()
+	assertToolPairAdjacentInTest(t, items)
+	if len(items) != 5 {
+		t.Fatalf("no item may be added or dropped: %s", string(got))
+	}
+}
+
+func TestProviderGatewayOrderMovesOnlyDisplacedOutputs(t *testing.T) {
+	body := deepseekInputBody(
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"A"}`,
+		`{"type":"function_call","call_id":"call_b","name":"exec_command","arguments":"{}"}`,
+		`{"type":"message","role":"developer","content":[{"type":"input_text","text":"ctx"}]}`,
+		`{"type":"function_call_output","call_id":"call_b","output":"B"}`,
+	)
+
+	got, relocated, ok := providerGatewayOrderToolCallPairs(body)
+	if !ok || relocated != 1 {
+		t.Fatalf("exactly one output is displaced, got relocated=%d ok=%v: %s", relocated, ok, string(got))
+	}
+	items := gjson.GetBytes(got, "input").Array()
+	assertToolPairAdjacentInTest(t, items)
+	if indexOfCallIDInTest(items, "call_a") != 0 || indexOfCallIDInTest(items, "call_b") != 2 {
+		t.Fatalf("undisplaced pairs must keep their positions: %s", string(got))
+	}
+}
+
+func TestProviderGatewayOrderMovesCustomToolOutputAdjacent(t *testing.T) {
+	body := deepseekInputBody(
+		`{"type":"custom_tool_call","call_id":"call_patch","name":"apply_patch","input":"*** Begin Patch"}`,
+		`{"type":"message","role":"developer","content":[{"type":"input_text","text":"ctx"}]}`,
+		`{"type":"custom_tool_call_output","call_id":"call_patch","output":"done"}`,
+	)
+
+	got, relocated, ok := providerGatewayOrderToolCallPairs(body)
+	if !ok || relocated != 1 {
+		t.Fatalf("custom tool pairs share the invariant, got relocated=%d ok=%v: %s", relocated, ok, string(got))
+	}
+	assertToolPairAdjacentInTest(t, gjson.GetBytes(got, "input").Array())
+}
 func TestRelayServerExecutesNonStreamingRequestThroughRuntime(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	runtime := &fakeRuntime{
