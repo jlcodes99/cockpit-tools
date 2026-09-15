@@ -203,6 +203,9 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 			}
 		}
 	}
+	if wireAPI == "responses" {
+		body, _ = providerGatewayRestoreReasoningText(gateway, body)
+	}
 	upstreamPath := "/v1/responses"
 	upstreamBody := rewriteProviderGatewayBodyModel(body, upstreamModel)
 	if wireAPI == "chat_completions" {

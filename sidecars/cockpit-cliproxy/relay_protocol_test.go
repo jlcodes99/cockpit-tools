@@ -24,8 +24,86 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
+
+	"github.com/tidwall/gjson"
 )
 
+func deepseekInputBody(items ...string) []byte {
+	return []byte(`{"model":"gpt-5.4-mini","input":[` + strings.Join(items, ",") + `]}`)
+}
+
+func assertToolPairAdjacentInTest(t *testing.T, items []gjson.Result) {
+	t.Helper()
+	for index, item := range items {
+		itemType := item.Get("type").String()
+		if itemType != "function_call" && itemType != "custom_tool_call" {
+			continue
+		}
+		callID := item.Get("call_id").String()
+		if index+1 >= len(items) {
+			t.Fatalf("call %s has no following item: %s", callID, itemsToStringInTest(items))
+		}
+		next := items[index+1]
+		nextType := next.Get("type").String()
+		if nextType != "function_call_output" && nextType != "custom_tool_call_output" {
+			t.Fatalf("call %s is followed by %s instead of its output: %s", callID, nextType, itemsToStringInTest(items))
+		}
+		if next.Get("call_id").String() != callID {
+			t.Fatalf("call %s is followed by an output for another call: %s", callID, itemsToStringInTest(items))
+		}
+	}
+}
+
+func itemsToStringInTest(items []gjson.Result) string {
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		parts = append(parts, fmt.Sprintf("%s(%s)", item.Get("type").String(), item.Get("call_id").String()))
+	}
+	return strings.Join(parts, " ")
+}
+
+func TestProviderGatewayRestoreReasoningTextMovesSummaryBack(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := deepseekInputBody(
+		`{"type":"reasoning","id":"r1","summary":[{"type":"summary_text","text":"need to run pwd"}],"content":[]}`,
+		`{"type":"function_call","call_id":"call_a","name":"exec_command","arguments":"{}"}`,
+		`{"type":"function_call_output","call_id":"call_a","output":"/tmp"}`,
+	)
+
+	got, restored := providerGatewayRestoreReasoningText(deepseek, body)
+	if restored != 1 {
+		t.Fatalf("expected one restored reasoning item, got %d", restored)
+	}
+	if partType := gjson.GetBytes(got, "input.0.content.0.type").String(); partType != "reasoning_text" {
+		t.Fatalf("content part type = %q: %s", partType, string(got))
+	}
+	if text := gjson.GetBytes(got, "input.0.content.0.text").String(); text != "need to run pwd" {
+		t.Fatalf("content text = %q: %s", text, string(got))
+	}
+}
+
+func TestProviderGatewayRestoreReasoningTextKeepsExistingContent(t *testing.T) {
+	deepseek := &providerGatewaySpec{BaseURL: "https://api.deepseek.com"}
+	body := deepseekInputBody(
+		`{"type":"reasoning","id":"r1","summary":[{"type":"summary_text","text":"s"}],"content":[{"type":"reasoning_text","text":"kept"}]}`,
+	)
+
+	got, restored := providerGatewayRestoreReasoningText(deepseek, body)
+	if restored != 0 || string(got) != string(body) {
+		t.Fatalf("existing reasoning content must be untouched: %s", string(got))
+	}
+}
+
+func TestProviderGatewayRestoreReasoningTextIgnoresOtherProviders(t *testing.T) {
+	body := deepseekInputBody(
+		`{"type":"reasoning","id":"r1","summary":[{"type":"summary_text","text":"s"}],"content":[]}`,
+	)
+
+	got, restored := providerGatewayRestoreReasoningText(&providerGatewaySpec{BaseURL: "https://api.example.com"}, body)
+	if restored != 0 || string(got) != string(body) {
+		t.Fatalf("non-DeepSeek gateways must be untouched: %s", string(got))
+	}
+}
 func TestRelayServerExecutesNonStreamingRequestThroughRuntime(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	runtime := &fakeRuntime{
