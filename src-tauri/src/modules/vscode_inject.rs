@@ -529,7 +529,7 @@ fn run_command_get_trimmed(program: &str, args: &[&str]) -> Option<String> {
 }
 
 #[cfg(target_os = "linux")]
-fn get_linux_v11_key(mode: SafeStorageReadMode) -> Option<[u8; 16]> {
+fn get_linux_keyring_password(mode: SafeStorageReadMode) -> Option<String> {
     let app_names: &[&str] = match mode {
         SafeStorageReadMode::CodeBuddyOnly => &["CodeBuddy", "codebuddy"],
         SafeStorageReadMode::CodeBuddyCnOnly => &[
@@ -557,11 +557,18 @@ fn get_linux_v11_key(mode: SafeStorageReadMode) -> Option<[u8; 16]> {
         if let Some(password) =
             run_command_get_trimmed("secret-tool", &["lookup", "application", app])
         {
-            return Some(pbkdf2_sha1_key(&password, 1));
+            return Some(password);
         }
     }
 
     None
+}
+
+#[cfg(target_os = "linux")]
+fn get_linux_v11_key(mode: SafeStorageReadMode) -> [u8; 16] {
+    get_linux_keyring_password(mode)
+        .map(|password| pbkdf2_sha1_key(&password, 1))
+        .unwrap_or(LINUX_EMPTY_KEY)
 }
 
 fn decrypt_secret_payload_with_mode(
@@ -590,13 +597,23 @@ fn decrypt_secret_payload_with_mode(
     {
         match detect_prefix(encrypted) {
             Some("v11") => {
-                let key = get_linux_v11_key(mode).ok_or(
-                    "Cannot load Linux secret storage key for VS Code (v11 payload)".to_string(),
-                )?;
-                match decrypt_cbc_prefixed(encrypted, V11_PREFIX, &key) {
-                    Ok(value) => Ok(value),
-                    Err(_) => decrypt_cbc_prefixed(encrypted, V11_PREFIX, &LINUX_EMPTY_KEY),
+                let mut keys = Vec::with_capacity(2);
+                if let Some(password) = get_linux_keyring_password(mode) {
+                    keys.push(pbkdf2_sha1_key(&password, 1));
                 }
+                keys.push(LINUX_EMPTY_KEY);
+
+                let mut last_err = String::from("no candidate keys");
+                for key in &keys {
+                    match decrypt_cbc_prefixed(encrypted, V11_PREFIX, key) {
+                        Ok(value) => return Ok(value),
+                        Err(err) => last_err = err,
+                    }
+                }
+                Err(format!(
+                    "Cannot decrypt Linux v11 payload with any known key: {}",
+                    last_err
+                ))
             }
             Some("v10") => match decrypt_cbc_prefixed(encrypted, V10_PREFIX, &LINUX_V10_KEY) {
                 Ok(value) => Ok(value),
@@ -662,16 +679,14 @@ fn encrypt_secret_payload_with_mode(
         let _ = data_root;
         let target_prefix = if let Some(prefix) = preferred_prefix {
             prefix
-        } else if get_linux_v11_key(mode).is_some() {
+        } else if get_linux_keyring_password(mode).is_some() {
             "v11"
         } else {
             "v10"
         };
 
         if target_prefix == "v11" {
-            let key = get_linux_v11_key(mode).ok_or(
-                "Cannot load Linux secret storage key for VS Code (v11 payload)".to_string(),
-            )?;
+            let key = get_linux_v11_key(mode);
             return encrypt_cbc_prefixed(V11_PREFIX, &key, plaintext);
         }
 
