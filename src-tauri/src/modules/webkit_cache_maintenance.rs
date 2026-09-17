@@ -41,6 +41,14 @@ fn find_localstorage_dbs(root: &std::path::Path) -> Vec<PathBuf> {
 ///
 /// Running this at startup keeps the WAL from accumulating over time.
 pub fn checkpoint_webkit_localstorage() {
+    // This legacy path belongs to production, never to a test-data override.
+    if crate::modules::account::is_dev_profile()
+        || ["COCKPIT_TOOLS_TEST_DATA_DIR", "COCKPIT_TEST_DATA_DIR", "COCKPIT_TOOLS_DATA_DIR"]
+            .iter()
+            .any(|key| std::env::var(key).is_ok_and(|value| !value.trim().is_empty()))
+    {
+        return;
+    }
     let Some(root) = webkit_data_root() else {
         return;
     };
