@@ -107,6 +107,27 @@ func TestManager_ShouldRetryAfterError_RetriesLocalRoundWithoutCooldown(t *testi
 	}
 }
 
+func TestManager_ShouldRetryAfterError_RetriesStatuslessConnectionLifecycleFailure(t *testing.T) {
+	manager := NewManager(nil, nil, nil)
+	manager.SetRetryConfig(1, 5*time.Second, 1)
+	model := "gpt-lifecycle-retry-" + uuid.NewString()
+	authID := "lifecycle-retry-" + uuid.NewString()
+	registry.GetGlobalRegistry().RegisterClient(authID, "codex", []*registry.ModelInfo{{ID: model}})
+	t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(authID) })
+	if _, err := manager.Register(context.Background(), &Auth{ID: authID, Provider: "codex"}); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	err := errors.New(`Post "https://chatgpt.com/backend-api/codex/responses": utls: TLS handshake: EOF`)
+	wait, retry := manager.shouldRetryAfterError(err, 0, []string{"codex"}, model, 5*time.Second)
+	if !retry || wait != 0 {
+		t.Fatalf("first lifecycle retry = (%v, %t), want (0, true)", wait, retry)
+	}
+	if wait, retry = manager.shouldRetryAfterError(err, 1, []string{"codex"}, model, 5*time.Second); retry || wait != 0 {
+		t.Fatalf("retry after configured round = (%v, %t), want (0, false)", wait, retry)
+	}
+}
+
 func TestManager_ShouldRetryAfterError_DoesNotWaitWhenAnotherCredentialIsAvailable(t *testing.T) {
 	m := NewManager(nil, nil, nil)
 	m.SetRetryConfig(1, time.Minute, 1)

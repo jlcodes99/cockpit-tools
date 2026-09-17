@@ -1224,10 +1224,17 @@ func (m *Manager) shouldRetryAfterErrorWithAttempted(ctx context.Context, opts c
 		return 0, false
 	}
 	status := statusCodeFromError(err)
+	// Dial, DNS, TLS, EOF, and connection-reset failures commonly have no HTTP
+	// status because the request never reached a complete response. Treat them as
+	// retry-round eligible without changing the error returned to the caller.
+	connectionLifecycle := status == 0 && isConnectionLifecycleError(err)
+	if connectionLifecycle {
+		status = http.StatusServiceUnavailable
+	}
 	if status == http.StatusOK {
 		return 0, false
 	}
-	if isRequestInvalidError(err) || isRequestStopError(err) {
+	if (!connectionLifecycle && isRequestInvalidError(err)) || isRequestStopError(err) {
 		return 0, false
 	}
 	if m.HomeEnabled() {
@@ -1568,7 +1575,13 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 	if len(candidates) == 0 {
 		m.mu.RUnlock()
 		var err error = &Error{Code: "auth_not_found", Message: "no auth available"}
-		err = reportAuthSelectionFailure(ctx, selector, provider, model, nil, err)
+		// An empty candidate list after this request already tried credentials is
+		// request-local exhaustion, not a persistent account-pool outage. Reporting
+		// it as a pool failure makes hosts show a false "account unavailable" state
+		// after an otherwise transient network error.
+		if len(tried) == 0 {
+			err = reportAuthSelectionFailure(ctx, selector, provider, model, nil, err)
+		}
 		return nil, nil, err
 	}
 	available, selectorAuths, errAvailable := m.availableAuthsForSelector(selector, candidates, provider, model, time.Now())
@@ -1904,7 +1917,13 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 	if len(candidates) == 0 {
 		m.mu.RUnlock()
 		var err error = &Error{Code: "auth_not_found", Message: "no auth available"}
-		err = reportAuthSelectionFailure(ctx, selector, "mixed", model, nil, err)
+		// Do not publish an account-pool diagnostic when candidates are empty only
+		// because every eligible credential was already attempted by this request.
+		// The upstream error remains the terminal result and a later request can use
+		// the same credential again without requiring manual recovery in the host UI.
+		if len(tried) == 0 {
+			err = reportAuthSelectionFailure(ctx, selector, "mixed", model, nil, err)
+		}
 		return nil, nil, "", err
 	}
 	available, selectorAuths, errAvailable := m.availableAuthsForSelector(selector, candidates, "mixed", model, time.Now())
