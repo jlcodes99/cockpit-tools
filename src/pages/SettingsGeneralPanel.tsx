@@ -280,6 +280,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     setWindsurfQuotaAlertEnabled,
     setWindsurfQuotaAlertThreshold,
     setWindsurfQuotaAlertThresholdCustomMode,
+    setWorkbuddyAiAppPath,
     setWorkbuddyAppPath,
     setWorkbuddyAutoRefresh,
     setWorkbuddyAutoRefreshCustomMode,
@@ -353,6 +354,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     windsurfQuotaAlertThreshold,
     windsurfQuotaAlertThresholdCustomMode,
     windsurfQuotaAlertThresholdIsPreset,
+    workbuddyAiAppPath,
     workbuddyAppPath,
     workbuddyAutoRefresh,
     workbuddyAutoRefreshCustomMode,
@@ -3430,6 +3432,41 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                           {isAppPathResetDetecting('workbuddy')
                             ? t('common.loading', '加载中...')
                             : getResetLabelByTarget('workbuddy')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('settings.general.workbuddyAiAppPath', 'WorkBuddy AI 启动路径')}</div>
+                      <div className="row-desc">{t('settings.general.workbuddyAiAppPathDesc', '留空则使用默认路径')}</div>
+                    </div>
+                    <div className="row-control row-control--grow">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                        <input
+                          type="text"
+                          className="settings-input settings-input--path"
+                          value={workbuddyAiAppPath}
+                          placeholder={t('settings.general.workbuddyAiAppPathPlaceholder', '默认路径')}
+                          onChange={(e) => setWorkbuddyAiAppPath(e.target.value)}
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handlePickAppPath('workbuddy_ai')}
+                          disabled={isAppPathResetDetecting('workbuddy_ai')}
+                        >
+                          {t('settings.general.workbuddyPathSelect', '选择')}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleResetAppPath('workbuddy_ai')}
+                          disabled={isAppPathResetDetecting('workbuddy_ai')}
+                        >
+                          <RefreshCw size={16} className={isAppPathResetDetecting('workbuddy_ai') ? 'spin' : undefined} />
+                          {isAppPathResetDetecting('workbuddy_ai')
+                            ? t('common.loading', '加载中...')
+                            : getResetLabelByTarget('workbuddy_ai')}
                         </button>
                       </div>
                     </div>

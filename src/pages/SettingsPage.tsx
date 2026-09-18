@@ -190,6 +190,7 @@ interface GeneralConfig {
   trae_solo_app_scan_roots: string;
   trae_cn_app_scan_roots: string;
   trae_solo_cn_app_scan_roots: string;
+  workbuddy_ai_app_path: string;
   workbuddy_app_path: string;
   workbuddy_share_sessions_on_switch: boolean;
   zed_app_path: string;
@@ -281,6 +282,7 @@ type AppPathTarget =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'workbuddy_ai'
   | 'zed';
 
 type TraeAppPathTarget = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
@@ -584,6 +586,7 @@ export function useSettingsPageController() {
   const [traeSoloAppPath, setTraeSoloAppPath] = useState('');
   const [traeCnAppPath, setTraeCnAppPath] = useState('');
   const [traeSoloCnAppPath, setTraeSoloCnAppPath] = useState('');
+  const [workbuddyAiAppPath, setWorkbuddyAiAppPath] = useState('');
   const [workbuddyAppPath, setWorkbuddyAppPath] = useState('');
   const [workbuddyShareSessionsOnSwitch, setWorkbuddyShareSessionsOnSwitch] = useState(false);
   const [zedAppPath, setZedAppPath] = useState('');
@@ -1139,6 +1142,7 @@ export function useSettingsPageController() {
       trae_solo_app_scan_roots: traeSoloAppScanRoots,
       trae_cn_app_scan_roots: traeCnAppScanRoots,
       trae_solo_cn_app_scan_roots: traeSoloCnAppScanRoots,
+      workbuddy_ai_app_path: workbuddyAiAppPath,
       workbuddy_app_path: workbuddyAppPath,
       workbuddy_share_sessions_on_switch: workbuddyShareSessionsOnSwitch,
       zed_app_path: zedAppPath,
@@ -1372,6 +1376,7 @@ export function useSettingsPageController() {
     traeSoloAppScanRoots,
     traeCnAppScanRoots,
     traeSoloCnAppScanRoots,
+    workbuddyAiAppPath,
     workbuddyAppPath,
     workbuddyShareSessionsOnSwitch,
     zedAppPath,
@@ -1724,6 +1729,7 @@ export function useSettingsPageController() {
       setTraeSoloCnAppScanRoots(config.trae_solo_cn_app_scan_roots || '');
       setTraeLaunchCandidatesTarget('trae');
       setTraeLaunchCandidates([]);
+      setWorkbuddyAiAppPath(config.workbuddy_ai_app_path || '');
       setWorkbuddyAppPath(config.workbuddy_app_path || '');
       setWorkbuddyShareSessionsOnSwitch(config.workbuddy_share_sessions_on_switch ?? false);
       setZedAppPath(config.zed_app_path || '');
@@ -2072,6 +2078,8 @@ export function useSettingsPageController() {
       setTraeAppPathValue(target, path);
       setTraeLaunchCandidatesTarget(target);
       setTraeLaunchCandidates([]);
+    } else if (target === 'workbuddy_ai') {
+      setWorkbuddyAiAppPath(path);
     } else if (target === 'workbuddy') {
       setWorkbuddyAppPath(path);
     } else if (target === 'zed') {
@@ -2112,6 +2120,8 @@ export function useSettingsPageController() {
         return getTraeAppDisplayName(target);
       case 'workbuddy':
         return 'WorkBuddy';
+      case 'workbuddy_ai':
+        return 'WorkBuddy AI';
       case 'zed':
         return 'Zed';
       case 'opencode':
@@ -2152,6 +2162,9 @@ export function useSettingsPageController() {
     }
     if (target === 'workbuddy') {
       return t('settings.general.workbuddyPathReset', '重置默认');
+    }
+    if (target === 'workbuddy_ai') {
+      return t('settings.general.workbuddyAiPathReset', '重置默认');
     }
     if (target === 'zed') {
       return t('settings.general.zedPathReset', '重置默认');
@@ -3571,6 +3584,7 @@ export function useSettingsPageController() {
     setWindsurfQuotaAlertEnabled,
     setWindsurfQuotaAlertThreshold,
     setWindsurfQuotaAlertThresholdCustomMode,
+    setWorkbuddyAiAppPath,
     setWorkbuddyAppPath,
     setWorkbuddyAutoRefresh,
     setWorkbuddyAutoRefreshCustomMode,
@@ -3649,6 +3663,7 @@ export function useSettingsPageController() {
     windsurfQuotaAlertThreshold,
     windsurfQuotaAlertThresholdCustomMode,
     windsurfQuotaAlertThresholdIsPreset,
+    workbuddyAiAppPath,
     workbuddyAppPath,
     workbuddyAutoRefresh,
     workbuddyAutoRefreshCustomMode,

@@ -6,7 +6,8 @@ use crate::modules::logger;
 
 const WORKBUDDY_API_ENDPOINT: &str = "https://www.workbuddy.ai";
 const WORKBUDDY_API_PREFIX: &str = "/v2/plugin";
-const WORKBUDDY_PLATFORM: &str = "workbuddy";
+// 海外发行版的应用平台标识为 workbuddy-ai（国内版才是 workbuddy）。
+const WORKBUDDY_PLATFORM: &str = "workbuddy-ai";
 // WorkBuddy AI 与国际版 CodeBuddy 共用同一网关校验。
 const WORKBUDDY_HTTP_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
                   (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36";
@@ -221,9 +222,9 @@ async fn start_login_with_platform(platform: &str) -> Result<WorkbuddyOAuthStart
 
     let login_id = generate_login_id();
     let login_session_id = uuid::Uuid::new_v4().to_string();
-    let configured_path = crate::modules::config::get_user_config().workbuddy_app_path;
+    let configured_path = crate::modules::config::get_user_config().workbuddy_ai_app_path;
     let version = tokio::task::spawn_blocking(move || {
-        crate::modules::client_version::detect_client_version("WorkBuddy", Some(&configured_path))
+        crate::modules::client_version::detect_client_version("WorkBuddyAI", Some(&configured_path))
     })
     .await
     .ok()

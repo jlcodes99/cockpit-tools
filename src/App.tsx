@@ -385,6 +385,7 @@ interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
   trae_solo_app_scan_roots: string;
   trae_cn_app_scan_roots: string;
   trae_solo_cn_app_scan_roots: string;
+  workbuddy_ai_app_path: string;
   workbuddy_app_path: string;
   zed_app_path: string;
 }

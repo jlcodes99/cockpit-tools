@@ -385,6 +385,9 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         workbuddy_app_path: modules::process::normalize_windows_user_facing_path(
             &user_config.workbuddy_app_path,
         ),
+        workbuddy_ai_app_path: modules::process::normalize_windows_user_facing_path(
+            &user_config.workbuddy_ai_app_path,
+        ),
         workbuddy_share_sessions_on_switch: user_config.workbuddy_share_sessions_on_switch,
         opencode_sync_on_switch: user_config.opencode_sync_on_switch,
         opencode_auth_overwrite_on_switch: user_config.opencode_auth_overwrite_on_switch,

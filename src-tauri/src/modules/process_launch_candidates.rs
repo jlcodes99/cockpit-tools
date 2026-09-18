@@ -887,6 +887,15 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             common_paths: &["WorkBuddy\\WorkBuddy.exe"],
             supports_multi_instance: true,
         }),
+        "workbuddy_ai" => Some(WindowsAppLaunchSignature {
+            label: "WorkBuddy AI",
+            exe_names: &["WorkBuddyAI.exe"],
+            command_names: &["workbuddyai"],
+            protocol_names: &["workbuddy-ai"],
+            display_keywords: &["workbuddyai", "workbuddy ai"],
+            common_paths: &["WorkBuddyAI\\WorkBuddyAI.exe"],
+            supports_multi_instance: true,
+        }),
         "zed" => Some(WindowsAppLaunchSignature {
             label: "Zed",
             exe_names: &["Zed.exe", "zed.exe"],
@@ -1806,6 +1815,7 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
             "trae_cn" => &mut current.trae_cn_app_path,
             "trae_solo_cn" => &mut current.trae_solo_cn_app_path,
             "workbuddy" => &mut current.workbuddy_app_path,
+            "workbuddy_ai" => &mut current.workbuddy_ai_app_path,
             _ => return Ok(()),
         };
         if app_path_matches_snapshot(configured_path, expected_current)

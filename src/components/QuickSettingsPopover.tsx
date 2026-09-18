@@ -135,6 +135,7 @@ interface GeneralConfig {
   trae_solo_app_scan_roots: string;
   trae_cn_app_scan_roots: string;
   trae_solo_cn_app_scan_roots: string;
+  workbuddy_ai_app_path: string;
   workbuddy_app_path: string;
   workbuddy_share_sessions_on_switch: boolean;
   zed_app_path: string;

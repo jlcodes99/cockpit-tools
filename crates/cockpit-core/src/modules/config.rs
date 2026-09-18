@@ -245,6 +245,9 @@ pub struct UserConfig {
     /// WorkBuddy 启动路径（为空则使用默认路径）
     #[serde(default = "default_workbuddy_app_path")]
     pub workbuddy_app_path: String,
+    /// WorkBuddy AI（海外版）启动路径（为空则使用默认路径）
+    #[serde(default = "default_workbuddy_ai_app_path")]
+    pub workbuddy_ai_app_path: String,
     /// 切换 WorkBuddy 账号时是否在本机账号间合并本地会话
     #[serde(default = "default_workbuddy_share_sessions_on_switch")]
     pub workbuddy_share_sessions_on_switch: bool,
@@ -633,6 +636,10 @@ fn default_trae_app_scan_roots() -> String {
 fn default_workbuddy_app_path() -> String {
     String::new()
 }
+
+fn default_workbuddy_ai_app_path() -> String {
+    String::new()
+}
 fn default_workbuddy_share_sessions_on_switch() -> bool {
     false
 }
@@ -855,6 +862,7 @@ impl Default for UserConfig {
             trae_cn_app_scan_roots: default_trae_app_scan_roots(),
             trae_solo_cn_app_scan_roots: default_trae_app_scan_roots(),
             workbuddy_app_path: default_workbuddy_app_path(),
+            workbuddy_ai_app_path: default_workbuddy_ai_app_path(),
             workbuddy_share_sessions_on_switch: default_workbuddy_share_sessions_on_switch(),
             opencode_sync_on_switch: default_opencode_sync_on_switch(),
             opencode_auth_overwrite_on_switch: default_opencode_auth_overwrite_on_switch(),

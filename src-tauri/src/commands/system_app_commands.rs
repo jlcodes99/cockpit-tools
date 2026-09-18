@@ -59,6 +59,9 @@ pub fn set_app_path(app: String, path: String) -> Result<(), String> {
             "trae_cn" => current.trae_cn_app_path = normalized_path,
             "trae_solo_cn" => current.trae_solo_cn_app_path = normalized_path,
             "workbuddy" => current.workbuddy_app_path = normalized_path,
+            "workbuddy_ai" | "workbuddy-ai" => {
+                current.workbuddy_ai_app_path = normalized_path;
+            }
             "opencode" => current.opencode_app_path = normalized_path,
             _ => return Err("未知应用类型".to_string()),
         }
@@ -92,7 +95,7 @@ pub fn set_trae_app_scan_roots(app: Option<String>, scan_roots: String) -> Resul
             "trae_solo" => current.trae_solo_app_scan_roots = normalized,
             "trae_cn" => current.trae_cn_app_scan_roots = normalized,
             "trae_solo_cn" => current.trae_solo_cn_app_scan_roots = normalized,
-            _ => return Err("鏈煡搴旂敤绫诲瀷".to_string()),
+            _ => return Err("未知应用类型".to_string()),
         }
         Ok(())
     })?;
@@ -129,7 +132,7 @@ pub fn detect_app_path(app: String, force: Option<bool>) -> Result<Option<String
         "claude" => Ok(modules::claude_instance::detect_and_save_claude_launch_path(force)),
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "zed" | "vscode"
         | "codebuddy" | "codebuddy_cn" | "qoder" | "zcode" | "trae" | "trae_solo" | "trae_cn"
-        | "trae_solo_cn" | "opencode" | "workbuddy" => Ok(
+        | "trae_solo_cn" | "opencode" | "workbuddy" | "workbuddy_ai" => Ok(
             modules::process::detect_and_save_app_path(app.as_str(), force),
         ),
         _ => Err("未知应用类型".to_string()),
@@ -183,7 +186,8 @@ pub async fn scan_app_launch_targets(
     match app.as_str() {
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "claude"
         | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn" | "qoder"
-        | "zcode" | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy" | "zed"
+        | "zcode" | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy"
+        | "workbuddy_ai" | "zed"
         | "opencode" => {}
         _ => return Err("未知应用类型".to_string()),
     }

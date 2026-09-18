@@ -218,6 +218,8 @@ pub struct GeneralConfig {
     pub trae_solo_cn_app_scan_roots: String,
     /// WorkBuddy 启动路径（为空则使用默认路径）
     pub workbuddy_app_path: String,
+    /// WorkBuddy AI（海外版）启动路径（为空则使用默认路径）
+    pub workbuddy_ai_app_path: String,
     /// 切换 WorkBuddy 账号时是否在本机账号间合并本地会话
     pub workbuddy_share_sessions_on_switch: bool,
     /// 切换 Codex 时是否自动重启 OpenCode
@@ -1203,6 +1205,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "trae_cn_app_scan_roots"
             | "trae_solo_cn_app_scan_roots"
             | "workbuddy_app_path"
+            | "workbuddy_ai_app_path"
             | "workbuddy_share_sessions_on_switch"
             | "opencode_sync_on_switch"
             | "opencode_auth_overwrite_on_switch"
@@ -1378,6 +1381,7 @@ fn apply_general_config_updates(
     trim_string_field!("trae_cn_app_scan_roots", trae_cn_app_scan_roots);
     trim_string_field!("trae_solo_cn_app_scan_roots", trae_solo_cn_app_scan_roots);
     normalize_app_path_field!("workbuddy_app_path", workbuddy_app_path);
+    normalize_app_path_field!("workbuddy_ai_app_path", workbuddy_ai_app_path);
 
     if updates.contains_key("auto_switch_scope_mode") {
         let normalized = next.auto_switch_scope_mode.trim();

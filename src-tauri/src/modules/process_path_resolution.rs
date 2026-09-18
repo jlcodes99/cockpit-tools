@@ -1732,6 +1732,65 @@ fn detect_trae_exec_path_for_platform(
     None
 }
 
+fn detect_workbuddy_ai_exec_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let candidates = [
+            "/Applications/WorkBuddy AI.app/Contents/MacOS/WorkBuddyAI",
+            "/Applications/WorkBuddy AI.app/Contents/MacOS/Electron",
+            "/Applications/WorkBuddy AI.app",
+        ];
+        for candidate in candidates {
+            let path = std::path::PathBuf::from(candidate);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+            candidates.push(
+                std::path::PathBuf::from(&local_appdata)
+                    .join("Programs")
+                    .join("WorkBuddyAI")
+                    .join("WorkBuddyAI.exe"),
+            );
+        }
+        if let Ok(program_files) = std::env::var("PROGRAMFILES") {
+            candidates.push(
+                std::path::PathBuf::from(program_files)
+                    .join("WorkBuddyAI")
+                    .join("WorkBuddyAI.exe"),
+            );
+        }
+        for candidate in candidates {
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let candidates = [
+            "/usr/bin/workbuddy-ai",
+            "/usr/local/bin/workbuddy-ai",
+            "/opt/workbuddy-ai/workbuddy-ai",
+        ];
+        for candidate in candidates {
+            let path = std::path::PathBuf::from(candidate);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+
+    None
+}
+
 fn detect_workbuddy_exec_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "macos")]
     {
@@ -3344,6 +3403,19 @@ fn detect_and_save_app_path_raw(app: &str, force: bool) -> Option<String> {
             if let Some(detected) = detect_workbuddy_exec_path() {
                 update_app_path_in_config("workbuddy", &detected, &current.workbuddy_app_path);
                 return Some(config::get_user_config().workbuddy_app_path);
+            }
+        }
+        "workbuddy_ai" => {
+            if !force && !current.workbuddy_ai_app_path.trim().is_empty() {
+                return Some(current.workbuddy_ai_app_path);
+            }
+            if let Some(detected) = detect_workbuddy_ai_exec_path() {
+                update_app_path_in_config(
+                    "workbuddy_ai",
+                    &detected,
+                    &current.workbuddy_ai_app_path,
+                );
+                return Some(config::get_user_config().workbuddy_ai_app_path);
             }
         }
         _ => {}
