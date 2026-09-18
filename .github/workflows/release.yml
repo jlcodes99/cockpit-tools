@@ -143,13 +143,13 @@ jobs:
             # First release: platform jobs will replace this placeholder with
             # the complete manifest after all installer assets are uploaded.
             cat > legacy-latest.json <<'JSON'
-{
-  "version": "0.0.0",
-  "notes": "",
-  "pub_date": "1970-01-01T00:00:00.000Z",
-  "platforms": {}
-}
-JSON
+          {
+            "version": "0.0.0",
+            "notes": "",
+            "pub_date": "1970-01-01T00:00:00.000Z",
+            "platforms": {}
+          }
+          JSON
             echo "No previous published release found; staging a first-release placeholder latest.json"
           fi
 
