@@ -976,6 +976,11 @@ fn pick_quota_alert_recommendation(
 }
 
 pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, String> {
+    // 平台在「平台布局」中被禁用时不自动切号
+    if !crate::modules::tray_layout::is_platform_enabled("codex") {
+        return Ok(None);
+    }
+
     if CODEX_AUTO_SWITCH_IN_PROGRESS.swap(true, Ordering::SeqCst) {
         logger::log_info("[AutoSwitch][Codex] 自动切号进行中，跳过本次检查");
         return Ok(None);
