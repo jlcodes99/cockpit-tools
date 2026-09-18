@@ -12,6 +12,7 @@ import {
   isCodexPendingOAuthAccount,
 } from '../types/codex';
 import * as codexService from '../services/codexService';
+import { listCodexAccountsWithModelProviders } from '../services/codexModelProviderService';
 import { removeAccountIdsFromAllCodexGroups } from '../services/codexAccountGroupService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
 
@@ -177,11 +178,18 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     const requestId = ++fetchCodexAccountsSeq;
     set({ loading: true, error: null });
     try {
-      const accounts = await codexService.listCodexAccounts();
+      const { accounts, failedProviders } = await listCodexAccountsWithModelProviders();
       if (requestId !== fetchCodexAccountsSeq) {
         return;
       }
-      set({ accounts, accountsLoaded: true, loading: false });
+      set({
+        accounts,
+        accountsLoaded: true,
+        loading: false,
+        error: failedProviders.length > 0
+          ? `Could not import API Key accounts: ${failedProviders.join(', ')}`
+          : null,
+      });
       persistCodexAccountsCache(accounts);
       void get().hydrateAccountProfilesIfNeeded(accounts.map((account) => account.id));
     } catch (e) {

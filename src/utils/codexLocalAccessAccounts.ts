@@ -46,6 +46,7 @@ export type CodexLocalAccessAccountIneligibleReason =
   | "pending_oauth"
   | "web_session_quota_only";
 
+
 export function isCodexChatCompletionsApiKeyAccount(account: CodexAccount): boolean {
   if (!isCodexApiKeyAccount(account)) {
     return false;

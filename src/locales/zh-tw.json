@@ -364,7 +364,11 @@
     "deleteTagWarning": "確定要從所有帳號刪除此標籤嗎？",
     "expand": "展開",
     "processing": "處理中...",
-    "selectAll": "全選"
+    "selectAll": "全選",
+    "clear": "清除",
+    "unknown": "未知",
+    "syncing": "同步中...",
+    "clearAll": "全部取消"
   },
   "nav": {
     "overview": "Antigravity IDE",
@@ -1068,7 +1072,17 @@
       "menuBarAccountPrefixDesc": "僅一般帳號：關閉後不顯示信箱前綴。Codex API 服務 / API Key 仍會顯示 API 標籤",
       "menuBarQuotaConfirmEnable": "啟用",
       "codexHideRelayQuota": "隱藏中轉站額度",
-      "codexHideRelayQuotaDesc": "開啟後，Codex 帳號總覽隱藏中轉 / New API 類額度面板，減輕列表重疊與視覺干擾。"
+      "codexHideRelayQuotaDesc": "開啟後，Codex 帳號總覽隱藏中轉 / New API 類額度面板，減輕列表重疊與視覺干擾。",
+      "accountLevelRefreshTitle": "帳號級重新整理設定",
+      "accountLevelRefreshDesc": "為不同帳號設定不同的自動重新整理間隔，覆蓋平台級預設值。",
+      "accountLevelRefreshSummary": "展開設定",
+      "accountLevelRefreshSummaryActive": "已設定 {{count}} 個帳號",
+      "accountLevelRefreshInherit": "繼承平台設定",
+      "accountLevelRefreshDisabled": "停用",
+      "codexAutoRestoreTakeoverOnLaunch": "啟動時自動恢復 Codex 代理接管",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "工具啟動時自動恢復上次的可見模型與代理接管，保持 1M 上下文且無需手動切換",
+      "errorReporting": "遙測診斷",
+      "errorReportingDesc": "預設開啟，僅用於排查啟動和介面問題；關閉後不會提交遙測事件。回報前會去識別化，不傳送帳號密碼、Token、2FA 金鑰、手機號碼等機敏資訊。"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -1382,7 +1396,8 @@
       "windowsApp": "微軟商店",
       "defaultOnly": "僅適用於預設桌面端；應用多開請選擇真實 Claude.exe。",
       "claudeScanEmpty": "未掃描到 Claude Desktop，請手動選擇 Claude.exe 或調整掃描範圍。",
-      "claudeTargetPlaceholder": "Claude.exe 路徑或 shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe 路徑或 shell:AppsFolder\\...",
+      "scanEmptyGeneric": "未偵測到執行中的 {{app}}，請先啟動應用後重試，或手動選擇路徑。"
     },
     "modal": {
       "desc": "找不到 {{app}} 的應用程式路徑，請立即設定以繼續。"
@@ -1392,7 +1407,9 @@
     "title": "帳號管理",
     "subtitle": "管理您的 Antigravity IDE 帳號清單。",
     "total": "共 {{count}} 個帳號",
-    "search": "搜尋帳號...",
+    "search": {
+      "placeholder": "搜尋帳號..."
+    },
     "addAccount": "新增帳號",
     "refreshAll": "全部重新整理",
     "export": "匯出",
@@ -2039,7 +2056,11 @@
     "stopApiServiceFailed": "無法關閉 API 服務，請先停用後重試。",
     "stopApiServiceFailedContinue": "API 服務未正常關閉，將繼續重新啟動...",
     "skipThisVersion": "跳過此版本",
-    "skipFailed": "跳過此更新失敗：{{error}}"
+    "skipFailed": "跳過此更新失敗：{{error}}",
+    "syncAndBuild": "同步並觸發構建 (my-custom)",
+    "syncing": "正在同步與測試...",
+    "syncSuccess": "已成功同步並在 GitHub 上觸發構建！",
+    "openGitHubActions": "打開 GitHub Actions"
   },
   "closeDialog": {
     "title": "關閉視窗",
@@ -2058,6 +2079,18 @@
     "other_group": "其他模型"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "此 API 金鑰不屬於已登入的 Ainipy 帳號。",
+      "balance": "餘額 (tokens)",
+      "today": "今日用量 (tokens)",
+      "total": "總用量 (tokens)",
+      "waiting": "正在等待 Ainipy 登入…",
+      "connect": "連接 Ainipy 網站",
+      "hint": "請登入此卡對應的 Ainipy 帳號。關閉應用程式後需重新登入。",
+      "cancelled": "已取消 Ainipy 登入。",
+      "timeout": "登入逾時，請重試。",
+      "failed": "無法同步 Ainipy，請重試。"
+    },
     "teamHistory": {
       "title": "原 Team 席位額度（本機快照）",
       "unknown": "沒有歷史重設時間",
@@ -2735,7 +2768,10 @@
         "fetchCredentialsRequired": "請先填寫 API Key 和 Base URL。",
         "fetchEmpty": "上游未回傳可用模型，已保留目前清單。",
         "fetchFailed": "取得上游模型失敗：{{error}}",
-        "syncRequiresModels": "同步到 Codex 前請先取得或填寫模型清單。"
+        "syncRequiresModels": "同步到 Codex 前請先取得或填寫模型清單。",
+        "contextWindowInvalid": "上下文視窗必須是大於 0 的整數",
+        "contextWindowPlaceholder": "留空=預設",
+        "restartHint": "模型目錄已更新。若 Codex 正在執行，請重啟後生效。"
       },
       "actions": {
         "addAndSwitch": "新增並切換"
@@ -4516,6 +4552,11 @@
       "stopConfirmDescription": "混合模型路由閘道會同時停用該實例的混合模型路由（渠道設定保留）；其他閘道關閉後可隨時按「重新啟動」恢復。",
       "stopFailed": "關閉閘道失敗：{{error}}",
       "restartFailed": "重新啟動閘道失敗：{{error}}"
+    },
+    "cli": {
+      "quickLaunch": "CLI 快速啟動",
+      "selectWorkingDir": "選擇 Codex CLI 工作目錄",
+      "launchSuccess": "已啟動 Codex CLI"
     }
   },
   "githubCopilot": {
@@ -5457,6 +5498,12 @@
       "desc": "掃描本機 CodeBuddy 資料目錄中的會話相關 JSON/JSONL 檔案，可開啟所在位置。",
       "empty": "未找到會話檔案",
       "open": "開啟位置"
+    },
+    "quotaCategory": {
+      "base": "基礎體驗包",
+      "activity": "活動贈送包",
+      "extra": "加量包",
+      "other": "其他"
     }
   },
   "qoder": {
@@ -6163,7 +6210,8 @@
       "claudeShort": "Claude CLI"
     },
     "prefill": {
-      "claudeDesktopReady": "已帶入 APIKEY.FUN 設定，請確認後加入 Claude。"
+      "claudeDesktopReady": "已帶入 APIKEY.FUN 設定，請確認後加入 Claude。",
+      "codexReady": "已帶入 APIKEY.FUN 設定，請確認後新增到 Codex。"
     },
     "copyKey": "複製金鑰",
     "clearKey": "清除輸入"
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 檔 API Key，並按檔位篩選列表。金鑰保存在本機應用資料目錄。"
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "時間未知",
+      "minutesAgo": "{{count}} 分鐘前",
+      "hoursAgo": "{{count}} 小時前",
+      "daysAgo": "{{count}} 天前",
+      "weeksAgo": "{{count}} 週前"
+    }
   }
 }

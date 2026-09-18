@@ -364,7 +364,11 @@
     "deleteTagWarning": "هل أنت متأكد من حذف هذا الوسم من جميع الحسابات؟",
     "expand": "توسيع",
     "processing": "جارٍ المعالجة...",
-    "selectAll": "تحديد الكل"
+    "selectAll": "تحديد الكل",
+    "clear": "مسح",
+    "unknown": "غير معروف",
+    "syncing": "جارٍ المزامنة...",
+    "clearAll": "مسح الكل"
   },
   "floatingCard": {
     "selectPlatform": "تبديل المنصة",
@@ -1115,7 +1119,17 @@
       "menuBarAccountPrefixDesc": "للحسابات العادية فقط: عند الإيقاف تُخفى بادئة البريد. خدمة API لـ Codex / مفتاح API ما زالا يعرضان تسمية API",
       "menuBarQuotaConfirmEnable": "تفعيل",
       "codexHideRelayQuota": "إخفاء حصة الترحيل",
-      "codexHideRelayQuotaDesc": "يخفي لوحات حصة الترحيل / New API في نظرة حسابات Codex."
+      "codexHideRelayQuotaDesc": "يخفي لوحات حصة الترحيل / New API في نظرة حسابات Codex.",
+      "accountLevelRefreshTitle": "تكوين التحديث على مستوى الحساب",
+      "accountLevelRefreshDesc": "تعيين فترات زمنية مختلفة للتحديث التلقائي لحسابات مختلفة لتجاوز القيم الافتراضية للنظام.",
+      "accountLevelRefreshSummary": "توسيع التكوين",
+      "accountLevelRefreshSummaryActive": "تم تكوين {{count}} حساب",
+      "accountLevelRefreshInherit": "وراثة إعدادات النظام الأساسي",
+      "accountLevelRefreshDisabled": "تعطيل",
+      "codexAutoRestoreTakeoverOnLaunch": "استعادة استيلاء وكيل Codex تلقائيًا عند بدء التشغيل",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "استعادة النماذج المرئية السابقة واستيلاء الوكيل تلقائيًا عند بدء تشغيل الأداة، مما يحافظ على سياق 1M دون تبديل يدوي.",
+      "errorReporting": "تشخيص القياس عن بُعد",
+      "errorReportingDesc": "ممكّن افتراضيًا، يُستخدم فقط لتشخيص مشكلات بدء التشغيل والواجهة؛ عند التعطيل لن يتم إرسال أحداث. يتم تنقيح البيانات قبل الإبلاغ، ولا يتم تحميل كلمات المرور أو الرموز أو مفاتيح 2FA أو أرقام الهواتف أبدًا."
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -1429,7 +1443,8 @@
       "windowsApp": "تطبيق Microsoft Store",
       "defaultOnly": "لسطح المكتب الافتراضي فقط؛ اختر Claude.exe الحقيقي للملفات متعددة المثيلات.",
       "claudeScanEmpty": "لم يتم العثور على هدف Claude Desktop. اختر Claude.exe يدويا أو عدل نطاقات الفحص.",
-      "claudeTargetPlaceholder": "مسار Claude.exe أو shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "مسار Claude.exe أو shell:AppsFolder\\...",
+      "scanEmptyGeneric": "لم يتم اكتشاف تشغيل {{app}}. يرجى تشغيل التطبيق أولاً ثم إعادة المحاولة، أو تحديد المسار يدويًا."
     },
     "modal": {
       "desc": "لم يتم العثور على مسار تطبيق {{app}}. يرجى الضبط الآن للمتابعة."
@@ -1439,7 +1454,9 @@
     "title": "إدارة الحسابات",
     "subtitle": "إدارة قائمة حسابات Antigravity IDE الخاصة بك.",
     "total": "إجمالي {{count}} حسابات",
-    "search": "البحث عن حساب...",
+    "search": {
+      "placeholder": "البحث عن الحسابات..."
+    },
     "addAccount": "إضافة حساب",
     "refreshAll": "تحديث الكل",
     "export": "تصدير",
@@ -2086,7 +2103,11 @@
     "stopApiServiceFailed": "تعذّر إيقاف خدمة API. عطّلها أولًا ثم أعد المحاولة.",
     "stopApiServiceFailedContinue": "لم تتوقف خدمة API بشكل صحيح. ستتم متابعة إعادة التشغيل...",
     "skipThisVersion": "تخطي هذا الإصدار",
-    "skipFailed": "تعذر تخطي هذا التحديث: {{error}}"
+    "skipFailed": "تعذر تخطي هذا التحديث: {{error}}",
+    "syncAndBuild": "مزامنة وبدء البناء (my-custom)",
+    "syncing": "جارٍ المزامنة والاختبار...",
+    "syncSuccess": "تمت المزامنة وبدء البناء بنجاح على GitHub!",
+    "openGitHubActions": "فتح GitHub Actions"
   },
   "closeDialog": {
     "title": "إغلاق النافذة",
@@ -2105,6 +2126,18 @@
     "other_group": "نماذج أخرى"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "مفتاح API هذا لا ينتمي إلى حساب Ainipy الذي تم تسجيل الدخول إليه.",
+      "balance": "الرصيد (الرموز)",
+      "today": "المستخدم اليوم (الرموز)",
+      "total": "إجمالي المستخدم (الرموز)",
+      "waiting": "في انتظار تسجيل الدخول إلى Ainipy…",
+      "connect": "الاتصال بموقع Ainipy",
+      "hint": "قم بتسجيل الدخول إلى حساب Ainipy المطابق لهذه البطاقة. يرجى تسجيل الدخول مجدداً بعد إغلاق التطبيق.",
+      "cancelled": "تم إلغاء تسجيل الدخول إلى Ainipy.",
+      "timeout": "انتهت مهلة تسجيل الدخول. يُرجى المحاولة مرة أخرى.",
+      "failed": "تعذر مزامنة Ainipy. يُرجى المحاولة مرة أخرى."
+    },
     "teamHistory": {
       "title": "حصة Team السابقة (لقطة محلية)",
       "unknown": "لا يوجد وقت إعادة ضبط سابق",
@@ -3461,7 +3494,10 @@
         "fetchCredentialsRequired": "أدخل API Key وBase URL أولًا.",
         "fetchEmpty": "لم يُرجع المزوّد أي نماذج. تم الاحتفاظ بالقائمة الحالية.",
         "fetchFailed": "تعذر جلب نماذج المزوّد: {{error}}",
-        "syncRequiresModels": "اجلب نموذجًا واحدًا على الأقل أو أدخله قبل المزامنة مع Codex."
+        "syncRequiresModels": "اجلب نموذجًا واحدًا على الأقل أو أدخله قبل المزامنة مع Codex.",
+        "contextWindowInvalid": "يجب أن تكون نافذة السياق عددًا صحيحًا أكبر من 0",
+        "contextWindowPlaceholder": "فارغ = افتراضي",
+        "restartHint": "تم تحديث كتالوج النماذج. إذا كان Codex قيد التشغيل، يرجى إعادة تشغيله لتطبيق التغييرات."
       },
       "actions": {
         "addAndSwitch": "إضافة وتبديل"
@@ -4563,6 +4599,11 @@
       "stopConfirmDescription": "إيقاف بوابة التوجيه المختلط يوقف أيضًا التوجيه المختلط لهذه النسخة (يبقى إعداد القنوات محفوظًا)، ويمكن تشغيل البوابات الأخرى بزر «إعادة التشغيل».",
       "stopFailed": "تعذّر إيقاف البوابة: {{error}}",
       "restartFailed": "تعذّر إعادة تشغيل البوابة: {{error}}"
+    },
+    "cli": {
+      "quickLaunch": "التشغيل السريع لـ CLI",
+      "selectWorkingDir": "حدد دليل عمل Codex CLI",
+      "launchSuccess": "تم تشغيل Codex CLI"
     }
   },
   "githubCopilot": {
@@ -5504,6 +5545,12 @@
       "desc": "ملفات الجلسة المحلية — مسح محلي وفتح الموقع.",
       "empty": "لا ملفات جلسة",
       "open": "فتح الموقع"
+    },
+    "quotaCategory": {
+      "base": "الباقة الأساسية",
+      "activity": "باقة ترويجية",
+      "extra": "باقة إضافية",
+      "other": "أخرى"
     }
   },
   "qoder": {
@@ -6163,7 +6210,8 @@
       "claudeShort": "Claude CLI"
     },
     "prefill": {
-      "claudeDesktopReady": "تمت تعبئة إعدادات APIKEY.FUN. أكّد الإضافة إلى Claude."
+      "claudeDesktopReady": "تمت تعبئة إعدادات APIKEY.FUN. أكّد الإضافة إلى Claude.",
+      "codexReady": "تم استيراد تكوين APIKEY.FUN. يرجى التأكيد والإضافة إلى Codex."
     },
     "copyKey": "Copy Key​",
     "clearKey": "Clear input​"
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "إدارة مفاتيح OpenCode Go/Zen والتصفية حسب المستوى."
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "وقت غير معروف",
+      "minutesAgo": "منذ {{count}} دقيقة",
+      "hoursAgo": "منذ {{count}} ساعة",
+      "daysAgo": "منذ {{count}} يوم",
+      "weeksAgo": "منذ {{count}} أسبوع"
+    }
   }
 }

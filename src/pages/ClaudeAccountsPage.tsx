@@ -61,6 +61,7 @@ import {
   queryModelProviderUsage,
   type ModelProviderUsageSummary,
 } from '../services/modelProviderUsageService';
+import { buildApiKeyFunProviderBaseUrl } from '../utils/apikeyFunLinks';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
 import { isPrivacyModeEnabledByDefault, maskSensitiveValue, persistPrivacyModeEnabled } from '../utils/privacy';
 import * as claudeService from '../services/claudeService';
@@ -2261,9 +2262,14 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
 
       try {
         const summary = await queryModelProviderUsage({
-          baseUrl,
+          baseUrl: isClaudeApiKeyFunAccount(account)
+            ? buildApiKeyFunProviderBaseUrl(baseUrl)
+            : baseUrl,
           apiKey,
-          integrationType: null,
+          // APIKEY.FAN exposes the Sub2API-compatible usage endpoint at
+          // /v1/usage. Skipping protocol probing avoids an unnecessary
+          // billing-endpoint request before the real quota query.
+          integrationType: isClaudeApiKeyFunAccount(account) ? 'sub2api' : null,
         });
         setApiKeyUsageMap((previous) =>
           setClaudeApiKeyUsageStateForAccount(previous, account, {
@@ -2303,6 +2309,33 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
     },
     [t],
   );
+
+  useEffect(() => {
+    if (activeSubPlatform !== 'cli') return;
+
+    currentSubPlatformAccounts.forEach((account) => {
+      // Keep the automatic request scoped to the APIKEY.FAN Claude CLI
+      // integration. Other API providers retain their manual-refresh flow.
+      if (
+        normalizeClaudeAuthMode(account.auth_mode) !== 'api_key' ||
+        !isClaudeApiKeyFunAccount(account)
+      ) {
+        return;
+      }
+
+      const usageState = getClaudeApiKeyUsageState(apiKeyUsageMap, account);
+      // Retry a legacy "usage unavailable" cache once using the known
+      // APIKEY.FAN Sub2API contract introduced above.
+      if (usageState?.loading || (usageState?.updatedAt && !usageState.unavailable)) return;
+
+      void refreshClaudeApiKeyUsage(account);
+    });
+  }, [
+    activeSubPlatform,
+    apiKeyUsageMap,
+    currentSubPlatformAccounts,
+    refreshClaudeApiKeyUsage,
+  ]);
 
   const handleRefresh = async (accountId: string) => {
     const targetAccount = useClaudeAccountStore

@@ -23,6 +23,9 @@ import {
   type ModelProviderUsageSummary,
 } from './modelProviderUsageService';
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
+import { reconcileCodexModelProviderOverview } from '../utils/codexModelProviderOverviewSync';
+import { buildCodexModelProviderAccountSnapshot } from '../utils/codexModelProviderAccountSync';
+import { addCodexAccountWithApiKey, listCodexAccounts } from './codexService';
 
 export interface CodexModelProviderApiKey {
   id: string;
@@ -30,6 +33,8 @@ export interface CodexModelProviderApiKey {
   apiKey: string;
   createdAt: number;
   updatedAt: number;
+  /** Remembers an imported card, including after the user deletes that card. */
+  overviewAccountId?: string;
 }
 
 export interface CodexModelProvider {
@@ -366,6 +371,9 @@ function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[]
       id: String((item as { id?: unknown }).id ?? createApiKeyId()),
       name: sanitizeName(String((item as { name?: unknown }).name ?? '')),
       apiKey: rawKey,
+      overviewAccountId: typeof (item as { overviewAccountId?: unknown }).overviewAccountId === 'string'
+        ? (item as { overviewAccountId: string }).overviewAccountId.trim() || undefined
+        : undefined,
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
     });
@@ -509,10 +517,63 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   return cloneProviders(cachedProviders);
 }
 
-async function writeProviders(providers: CodexModelProvider[]): Promise<void> {
+let providerWriteQueue: Promise<unknown> = Promise.resolve();
+
+function serializeProviderWrite<T>(write: () => Promise<T>): Promise<T> {
+  const pending = providerWriteQueue.then(write, write);
+  providerWriteQueue = pending.catch(() => {});
+  return pending;
+}
+
+function writeProviders(providers: CodexModelProvider[]): Promise<void> {
   const next = cloneProviders(providers);
-  cachedProviders = next;
-  await saveProvidersToDisk(next);
+  return serializeProviderWrite(async () => {
+    // A form may have been opened before the first overview import completed.
+    for (const provider of next) {
+      for (const key of provider.apiKeys) {
+        key.overviewAccountId ??= cachedProviders?.find((item) => item.id === provider.id)
+          ?.apiKeys.find((item) => item.id === key.id)?.overviewAccountId;
+      }
+    }
+    await saveProvidersToDisk(next);
+    cachedProviders = next;
+  });
+}
+
+let overviewSyncInFlight: Promise<Awaited<ReturnType<typeof reconcileCodexModelProviderOverview>>> | null = null;
+
+/** Populate existing installations as well as newly saved provider credentials. */
+export function listCodexAccountsWithModelProviders() {
+  if (overviewSyncInFlight) return overviewSyncInFlight;
+  overviewSyncInFlight = (async () => {
+    const accounts = await listCodexAccounts();
+    const providers = await ensureProvidersLoaded();
+    return reconcileCodexModelProviderOverview(providers, accounts, {
+      createAccount: async (provider, key) => {
+        const snapshot = buildCodexModelProviderAccountSnapshot(provider, key.name);
+        return addCodexAccountWithApiKey(
+          key.apiKey.trim(), snapshot.apiBaseUrl,
+          snapshot.apiProviderId === 'openai_official' ? 'openai_builtin' : 'custom',
+          snapshot.apiProviderId, snapshot.apiProviderName, snapshot.apiModelCatalog,
+          snapshot.apiSupportsVision, snapshot.apiModelVisionSupport,
+          snapshot.apiVisionRoutingModel, snapshot.accountName, snapshot.apiWireApi,
+          snapshot.apiSupportsWebsockets, undefined, snapshot.apiModelContextWindows,
+        );
+      },
+      rememberAccount: async (provider, key, accountId) => {
+        await serializeProviderWrite(async () => {
+          const latest = await ensureProvidersLoaded();
+          const savedKey = latest.find((item) => item.id === provider.id)?.apiKeys
+            .find((item) => item.id === key.id && item.apiKey.trim() === key.apiKey.trim());
+          if (!savedKey || savedKey.overviewAccountId === accountId) return;
+          savedKey.overviewAccountId = accountId;
+          await saveProvidersToDisk(latest);
+          cachedProviders = latest;
+        });
+      },
+    });
+  })().finally(() => { overviewSyncInFlight = null; });
+  return overviewSyncInFlight;
 }
 
 export async function listCodexModelProviders(): Promise<CodexModelProvider[]> {

@@ -37,5 +37,6 @@ use tauri_plugin_opener::OpenerExt;
 // 各片段中的公开命令仍由本模块统一导出，调用方无需改变。
 include!("codex_account_commands.rs");
 include!("codex_model_provider_commands.rs");
+include!("codex_ainipy_usage_commands.rs");
 include!("codex_local_access_commands.rs");
 include!("codex_temp_login_commands.rs");

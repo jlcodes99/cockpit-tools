@@ -2223,7 +2223,7 @@ export function useSettingsPageController() {
         } else {
           const message = t(
             'appPath.missing.scanEmptyGeneric',
-            '未检测到正在运行的 {{app}}，请先启动应用后重试，或手动选择路径。',
+            'No running {{app}} detected. Please launch the app first and try again, or select the path manually.',
             { app: getAppPathDisplayName(target) },
           );
           if (target === 'codex') {
@@ -2616,12 +2616,12 @@ export function useSettingsPageController() {
       <div className="settings-row">
         <div className="row-label">
           <div className="row-title">
-            {t('settings.general.accountLevelRefreshTitle', '账号级刷新配置')}
+            {t('settings.general.accountLevelRefreshTitle', 'Account-level Refresh Settings')}
           </div>
           <div className="row-desc">
             {t(
               'settings.general.accountLevelRefreshDesc',
-              '为不同账号设置不同的自动刷新间隔，覆盖平台级默认值。',
+              'Set different auto-refresh intervals for different accounts, overriding platform-level defaults.',
             )}
           </div>
         </div>
@@ -2629,10 +2629,10 @@ export function useSettingsPageController() {
           <details>
             <summary style={{ cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' }}>
               {hasAnyOverride
-                ? t('settings.general.accountLevelRefreshSummaryActive', '已配置 {{count}} 个账号', {
+                ? t('settings.general.accountLevelRefreshSummaryActive', '{{count}} account(s) configured', {
                     count: Object.keys(platformOverrides).length,
                   })
-                : t('settings.general.accountLevelRefreshSummary', '展开配置')}
+                : t('settings.general.accountLevelRefreshSummary', 'Expand configuration')}
             </summary>
             <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {accounts.map((account) => {
@@ -2715,10 +2715,10 @@ export function useSettingsPageController() {
                         }
                       >
                         <option value="inherit">
-                          {t('settings.general.accountLevelRefreshInherit', '继承平台设置')}
+                          {t('settings.general.accountLevelRefreshInherit', 'Inherit platform settings')}
                         </option>
                         <option value="-1">
-                          {t('settings.general.accountLevelRefreshDisabled', '禁用')}
+                          {t('settings.general.accountLevelRefreshDisabled', 'Disabled')}
                         </option>
                         <option value="1">1 {t('settings.general.minutes')}</option>
                         <option value="2">2 {t('settings.general.minutes')}</option>

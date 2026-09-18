@@ -33,28 +33,26 @@ test("includes a valid OAuth account that is outside the default service pool", 
   );
 });
 
-test("keeps provider-gateway accounts selectable and preserves a persisted fixed scope", () => {
+test("excludes ineligible accounts but keeps a persisted fixed scope visible", () => {
   const selected = selectCodexApiKeyScopeAccounts({
     restrictFreeAccounts: true,
-    scopedAccountIds: ["provider-gateway-account"],
+    scopedAccountIds: ["ineligible-account"],
     accounts: [
       oauthAccount("pro-account", "pro"),
       {
-        id: "provider-gateway-account",
-        auth_mode: "apikey",
-        api_wire_api: "chat_completions",
-        plan_type: "API_KEY",
+        id: "ineligible-account",
+        auth_mode: "web_session",
       } as CodexAccount,
     ],
   });
 
   assert.deepEqual(
     selected.map((account) => account.id),
-    ["pro-account", "provider-gateway-account"],
+    ["pro-account", "ineligible-account"],
   );
 });
 
-test("includes a provider account inferred from its upstream URL", () => {
+test("includes generic api key provider accounts in scope selection", () => {
   const selected = selectCodexApiKeyScopeAccounts({
     restrictFreeAccounts: true,
     scopedAccountIds: [],
@@ -72,6 +70,26 @@ test("includes a provider account inferred from its upstream URL", () => {
   assert.deepEqual(
     selected.map((account) => account.id),
     ["pro-account", "provider-gateway-account"],
+  );
+});
+
+test("excludes ineligible accounts when not scoped", () => {
+  const selected = selectCodexApiKeyScopeAccounts({
+    restrictFreeAccounts: true,
+    scopedAccountIds: [],
+    accounts: [
+      oauthAccount("pro-account", "pro"),
+      {
+        id: "web-session-account",
+        auth_mode: "web_session",
+      } as CodexAccount,
+      oauthAccount("free-account", "free"),
+    ],
+  });
+
+  assert.deepEqual(
+    selected.map((account) => account.id),
+    ["pro-account"],
   );
 });
 

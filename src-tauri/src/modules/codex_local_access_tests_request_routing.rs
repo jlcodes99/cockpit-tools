@@ -3036,6 +3036,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         account.api_wire_api = Some("chat_completions".to_string());
 
         assert!(is_local_access_eligible_account(&account, false));
+        assert_eq!(local_access_ineligible_reason(&account, false), None);
     }
 
     #[test]

@@ -16,13 +16,13 @@
 .codex-accounts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
+  gap: 16px;
 }
 
 .codex-group-entry-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
+  gap: 16px;
 }
 
 .codex-overview-selection-bar {
@@ -252,8 +252,17 @@
 }
 
 .codex-local-access-header {
+  display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.codex-local-access-header .folder-inline-info {
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .codex-local-access-summary-trigger {
@@ -292,6 +301,7 @@
   font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .codex-local-access-title-mode-select .single-select-dropdown-trigger {
@@ -481,7 +491,8 @@
   justify-content: flex-end;
   gap: 6px;
   margin-left: auto;
-  flex-shrink: 0;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .codex-local-access-gateway-switch {
@@ -591,9 +602,9 @@
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 0 10px;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid rgba(37, 99, 235, 0.26);
   background: rgba(37, 99, 235, 0.12);
@@ -604,6 +615,14 @@
   line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.codex-local-access-instance-gateways span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .codex-local-access-instance-gateways:hover:not(:disabled) {

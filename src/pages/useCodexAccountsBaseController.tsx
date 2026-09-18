@@ -708,6 +708,14 @@ export function useCodexAccountsBaseController() {
     );
     const fetchCodexAccounts = store.fetchAccounts;
     const fetchCodexCurrentAccount = store.fetchCurrentAccount;
+    const previousOverviewTab = useRef(activeTab);
+
+    useEffect(() => {
+      if (activeTab === "overview" && previousOverviewTab.current !== "overview") {
+        void fetchCodexAccounts();
+      }
+      previousOverviewTab.current = activeTab;
+    }, [activeTab, fetchCodexAccounts]);
   
     useEffect(() => {
       codexAccountsRef.current = store.accounts;

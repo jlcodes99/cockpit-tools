@@ -379,12 +379,13 @@ export function getCockpitApiStatsRecord(
 
 export function resolveApiKeyUsageMode(
   summary?: CodexModelProviderUsageSummary,
-): "new_api" | "sub2api" | "deepseek" | "token_plan" | null {
+): "new_api" | "sub2api" | "deepseek" | "token_plan" | "ainipy" | null {
   if (!summary) return null;
   if (
     summary.mode === "new_api" ||
     summary.mode === "sub2api" ||
     summary.mode === "deepseek" ||
+    summary.mode === "ainipy" ||
     summary.mode === "token_plan"
   ) {
     return summary.mode;

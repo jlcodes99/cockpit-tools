@@ -606,6 +606,39 @@ pub fn collect_codex_process_entries() -> Vec<(u32, Option<String>)> {
 }
 
 #[cfg(target_os = "windows")]
+fn extract_windowsapps_pkg_name(path: &str) -> Option<&str> {
+    let after = path.split("\\windowsapps\\").nth(1)?;
+    let pkg_dir = after.split('\\').next()?;
+    let pkg_name = pkg_dir.split('_').next()?;
+    Some(pkg_name)
+}
+
+#[cfg(target_os = "windows")]
+fn is_matching_codex_windows_exe(actual: &str, expected: &str) -> bool {
+    if actual == expected {
+        return true;
+    }
+    if actual.contains("\\windowsapps\\") && expected.contains("\\windowsapps\\") {
+        let actual_file = std::path::Path::new(actual)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
+        let expected_file = std::path::Path::new(expected)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
+        if !actual_file.is_empty() && actual_file.eq_ignore_ascii_case(expected_file) {
+            if let (Some(p1), Some(p2)) = (extract_windowsapps_pkg_name(actual), extract_windowsapps_pkg_name(expected)) {
+                if p1.eq_ignore_ascii_case(p2) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "windows")]
 fn collect_codex_process_entries_from_powershell(
     expected_exe_path: &str,
 ) -> Vec<(u32, Option<String>)> {
@@ -647,6 +680,21 @@ function Get-ExePathFromCmdLine([string]$cmdline) {{
 }}
 $expected = Normalize-ExePath $expectedRaw
 if ([string]::IsNullOrWhiteSpace($expected)) {{ exit 0 }}
+function Test-CodexExeMatch($exe, $expected) {{
+  if ($exe -eq $expected) {{ return $true }}
+  if ($exe -like '*\windowsapps\*' -and $expected -like '*\windowsapps\*') {{
+    $exeName1 = [System.IO.Path]::GetFileName($exe)
+    $exeName2 = [System.IO.Path]::GetFileName($expected)
+    if ($exeName1 -and ($exeName1.ToLowerInvariant() -eq $exeName2.ToLowerInvariant())) {{
+      $pkg1 = ($exe -split '\\windowsapps\\')[1].Split('_')[0].ToLowerInvariant()
+      $pkg2 = ($expected -split '\\windowsapps\\')[1].Split('_')[0].ToLowerInvariant()
+      if ($pkg1 -and $pkg2 -and ($pkg1 -eq $pkg2)) {{
+        return $true
+      }}
+    }}
+  }}
+  return $false
+}}
 Get-CimInstance Win32_Process |
   Where-Object {{
     if (-not ($processNames -contains $_.Name)) {{
@@ -654,7 +702,7 @@ Get-CimInstance Win32_Process |
     }} else {{
       $exe = Normalize-ExePath $_.ExecutablePath
       if (-not $exe) {{ $exe = Normalize-ExePath (Get-ExePathFromCmdLine $_.CommandLine) }}
-      $exe -eq $expected
+      Test-CodexExeMatch $exe $expected
     }}
   }} |
   ForEach-Object {{ "$($_.ProcessId)|$($_.ParentProcessId)|$($_.CommandLine)" }}"#
@@ -768,7 +816,8 @@ fn collect_codex_process_entries_from_sysinfo_fallback(
             continue;
         }
         let (resolved_exe, _) = resolve_windows_process_exe_for_match(process);
-        if resolved_exe.as_deref() != Some(expected.as_str()) {
+        let resolved_exe_str = resolved_exe.as_deref().unwrap_or("");
+        if !is_matching_codex_windows_exe(resolved_exe_str, &expected) {
             continue;
         }
 

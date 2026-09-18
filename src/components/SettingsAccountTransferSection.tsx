@@ -595,20 +595,26 @@ export function SettingsAccountTransferSection({
   );
 
   const loadAutoBackupState = useCallback(
-    async (silent = false) => {
+    async (silent = false, forceFull = false) => {
       if (!silent) {
         setBackupLoading(true);
       }
       try {
-        const [settings, files, usage] = await Promise.all([
-          getAutoBackupSettings(),
-          listAutoBackupFiles(),
-          getBackupUsage(),
-        ]);
-        setBackupSettings(settings);
-        setBackupFiles(files);
-        setBackupUsage(usage);
-        setBackupRetentionInput(String(settings.retention_days));
+        if (directoryEntryOnly && !showBackupManagerModal && !forceFull) {
+          const settings = await getAutoBackupSettings();
+          setBackupSettings(settings);
+          setBackupRetentionInput(String(settings.retention_days));
+        } else {
+          const [settings, files, usage] = await Promise.all([
+            getAutoBackupSettings(),
+            listAutoBackupFiles(),
+            getBackupUsage(),
+          ]);
+          setBackupSettings(settings);
+          setBackupFiles(files);
+          setBackupUsage(usage);
+          setBackupRetentionInput(String(settings.retention_days));
+        }
       } catch (error) {
         setBackupFeedback({
           tone: 'error',
@@ -622,7 +628,7 @@ export function SettingsAccountTransferSection({
         }
       }
     },
-    [t],
+    [directoryEntryOnly, showBackupManagerModal, t],
   );
 
   useEffect(() => {
@@ -664,7 +670,7 @@ export function SettingsAccountTransferSection({
   const openBackupManagerModal = useCallback(() => {
     setBackupFeedback(null);
     setShowBackupManagerModal(true);
-    void loadAutoBackupState();
+    void loadAutoBackupState(false, true);
   }, [loadAutoBackupState]);
 
   const persistAutoBackupSettings = useCallback(
@@ -1990,6 +1996,7 @@ export function SettingsAccountTransferSection({
                     </button>
                   </div>
                   <div className="settings-backup-path">{backupSettings?.directory_path ?? '-'}</div>
+                  {backupFeedbackNode}
                 </div>
 
                 <div className="settings-backup-manager-card">
@@ -2248,8 +2255,6 @@ export function SettingsAccountTransferSection({
                     )}
                   </div>
                 </div>
-
-                {backupFeedbackNode}
 
                 <div className="settings-transfer-modal-actions">
                   <button

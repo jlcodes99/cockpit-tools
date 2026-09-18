@@ -226,16 +226,31 @@ fn normalize_comparison_path(path: &Path) -> PathBuf {
 
     #[cfg(target_os = "windows")]
     {
-        return PathBuf::from(
-            normalized
-                .to_string_lossy()
-                .replace('/', "\\")
-                .to_lowercase(),
-        );
+        let mut s = normalized.to_string_lossy().replace('/', "\\");
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            s = stripped.to_string();
+        }
+        return PathBuf::from(s.to_lowercase());
     }
 
     #[cfg(not(target_os = "windows"))]
     normalized
+}
+
+pub fn is_backup_file_name(file_name: &str) -> bool {
+    let trimmed = file_name.trim();
+    if trimmed.is_empty() || trimmed.contains('/') || trimmed.contains('\\') {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let matches_suffix = lower.ends_with(".json") || lower.ends_with(".zip");
+    if !matches_suffix {
+        return false;
+    }
+    lower.starts_with("cockpit_")
+        || lower.starts_with("auto-backup")
+        || lower.starts_with("auto_backup")
+        || lower.contains("backup")
 }
 
 fn validate_backup_target(target_directory: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -244,13 +259,6 @@ fn validate_backup_target(target_directory: &str) -> Result<(PathBuf, PathBuf), 
         return Err("备份目录必须是非空绝对路径".to_string());
     }
     let current = get_backup_root_dir()?;
-    let current_cmp = normalize_comparison_path(&current);
-    let target_cmp = normalize_comparison_path(&target);
-    if target_cmp != current_cmp
-        && (target_cmp.starts_with(&current_cmp) || current_cmp.starts_with(&target_cmp))
-    {
-        return Err("新旧备份目录不能互相嵌套".to_string());
-    }
     Ok((current, target))
 }
 
@@ -299,9 +307,22 @@ fn collect_migration_tree(
             .map_err(|error| format!("读取备份迁移目录失败({}): {}", current.display(), error))?
         {
             let entry = entry.map_err(|error| format!("读取备份迁移项失败: {}", error))?;
+            let entry_path = entry.path();
+            if current == root && default_source == "managed" {
+                let Some(name) = entry_path.file_name().and_then(|value| value.to_str()) else {
+                    continue;
+                };
+                if entry_path.is_dir() {
+                    if name != BEHAVIOR_DIR_NAME && name != "legacy" {
+                        continue;
+                    }
+                } else if !is_backup_file_name(name) {
+                    continue;
+                }
+            }
             collect_migration_tree(
                 root,
-                &entry.path(),
+                &entry_path,
                 target_prefix,
                 default_source,
                 cancellable,
@@ -364,11 +385,30 @@ fn build_migration_manifest(
             return Ok(());
         }
         let root_cmp = normalize_comparison_path(&root);
-        if target_cmp.starts_with(&root_cmp) || root_cmp.starts_with(&target_cmp) {
+        let managed_current_root = source == "managed"
+            && root_cmp == normalize_comparison_path(&current_root);
+        if !managed_current_root
+            && (target_cmp.starts_with(&root_cmp) || root_cmp.starts_with(&target_cmp))
+        {
             return Err(format!(
                 "新备份目录不能与历史备份目录互相嵌套: {}",
                 root.display()
             ));
+        }
+        if managed_current_root && target_cmp.starts_with(&root_cmp) {
+            // The managed root is intentionally scanned with a top-level allow-list below, so
+            // moving it into a regular child folder is safe. Never allow a destination inside
+            // the directories that contain behavior/legacy snapshots, however: those paths are
+            // cleaned after migration and would overlap the destination itself.
+            for reserved_name in [BEHAVIOR_DIR_NAME, "legacy"] {
+                let reserved_cmp = normalize_comparison_path(&root.join(reserved_name));
+                if target_cmp.starts_with(&reserved_cmp) {
+                    return Err(format!(
+                        "新备份目录不能位于受保护的备份目录内: {}",
+                        root.join(reserved_name).display()
+                    ));
+                }
+            }
         }
         collect_migration_tree(
             &root,
@@ -379,7 +419,18 @@ fn build_migration_manifest(
             &mut files,
             &mut destinations,
         )?;
-        push_cleanup_path(&mut cleanup_paths, &mut cleanup_seen, root);
+        if source != "managed" {
+            push_cleanup_path(&mut cleanup_paths, &mut cleanup_seen, root);
+        } else {
+            let behavior_dir = root.join(BEHAVIOR_DIR_NAME);
+            if behavior_dir.exists() {
+                push_cleanup_path(&mut cleanup_paths, &mut cleanup_seen, behavior_dir);
+            }
+            let legacy_dir = root.join("legacy");
+            if legacy_dir.exists() {
+                push_cleanup_path(&mut cleanup_paths, &mut cleanup_seen, legacy_dir);
+            }
+        }
         Ok(())
     };
 
@@ -1209,8 +1260,16 @@ fn scan_managed_root(root: &Path, map: &mut HashMap<String, UsageAccumulator>) {
                 let source = category.file_name().to_string_lossy().to_string();
                 scan_tree(&category.path(), &source, map, 0);
             }
-        } else {
-            scan_tree(&path, "scheduled", map, 0);
+        } else if path.is_file() {
+            if let Some(file_name) = name {
+                if is_backup_file_name(file_name) {
+                    if let Ok(metadata) = fs::symlink_metadata(&path) {
+                        if !metadata.file_type().is_symlink() {
+                            add_usage_file(map, "scheduled", &path, metadata.len());
+                        }
+                    }
+                }
+            }
         }
     }
 }

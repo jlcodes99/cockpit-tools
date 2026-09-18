@@ -971,6 +971,7 @@ pub fn run() {
             commands::update::update_log,
             commands::update::get_update_runtime_info,
             commands::update::install_linux_update,
+            commands::custom_updater::sync_and_trigger_custom_build,
             // Announcement Commands
             commands::announcement::announcement_get_state,
             commands::announcement::announcement_mark_as_read,
@@ -1083,6 +1084,7 @@ pub fn run() {
             commands::codex::codex_cancel_model_provider_chat_test,
             commands::codex::codex_list_model_provider_models,
             commands::codex::codex_query_model_provider_usage,
+            commands::codex::codex_login_ainipy_usage,
             commands::codex::codex_local_access_get_state,
             commands::codex::codex_list_instance_gateways,
             commands::codex::codex_stop_instance_gateway,

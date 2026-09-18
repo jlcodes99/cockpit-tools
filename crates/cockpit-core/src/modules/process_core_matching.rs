@@ -377,16 +377,48 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
 
 #[cfg(not(target_os = "macos"))]
 fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
-    if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().codex_app_path)) {
+    let configured_path = config::get_user_config().codex_app_path;
+    if let Some(custom) = normalize_custom_path(Some(&configured_path)) {
+        #[cfg(target_os = "windows")]
+        if let Some(migrated) = migrate_legacy_codex_launch_path(&custom) {
+            return Ok(migrated);
+        }
         if let Some(exec) = resolve_macos_exec_path(&custom, "Codex") {
             return Ok(exec);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let custom_path = std::path::Path::new(&custom);
+            if is_windowsapps_launch_path(custom_path) {
+                if custom_path.exists() {
+                    return Ok(custom_path.to_path_buf());
+                }
+                if let Some(detected) = detect_codex_exec_path() {
+                    update_app_path_in_config("codex", &detected, &configured_path);
+                    return Ok(detected);
+                }
+            } else if custom_path.exists() {
+                return Ok(custom_path.to_path_buf());
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let custom_path = std::path::Path::new(&custom);
+            if custom_path.exists() {
+                return Ok(custom_path.to_path_buf());
+            }
+        }
+        if let Some(detected) = detect_codex_exec_path() {
+            update_app_path_in_config("codex", &detected, &configured_path);
+            return Ok(detected);
         }
         return Err(app_path_missing_error("codex"));
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         if let Some(detected) = detect_codex_exec_path() {
+            update_app_path_in_config("codex", &detected, &configured_path);
             return Ok(detected);
         }
     }

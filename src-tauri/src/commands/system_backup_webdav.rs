@@ -341,6 +341,11 @@ fn backup_json_from_path(path: &Path) -> Result<String, String> {
             }
         },
         Some("zip") => {
+            if let Ok(metadata) = fs::metadata(path) {
+                if metadata.len() > 50 * 1024 * 1024 {
+                    return Err("自动备份压缩包过大".to_string());
+                }
+            }
             let bytes = fs::read(path).map_err(|err| format!("读取自动备份压缩包失败: {}", err))?;
             backup_json_from_zip_bytes(&bytes)
         }
@@ -617,8 +622,7 @@ pub fn copy_auto_backup_file(file_name: String, target_path: String) -> Result<S
     Ok(target.to_string_lossy().to_string())
 }
 
-#[tauri::command]
-pub fn list_auto_backup_files() -> Result<Vec<AutoBackupFileEntry>, String> {
+fn list_auto_backup_files_internal() -> Result<Vec<AutoBackupFileEntry>, String> {
     let dir = get_auto_backup_dir_path()?;
     if !dir.exists() {
         return Ok(Vec::new());
@@ -650,7 +654,7 @@ pub fn list_auto_backup_files() -> Result<Vec<AutoBackupFileEntry>, String> {
 
     for path in paths {
         let file_name = match path.file_name().and_then(|name| name.to_str()) {
-            Some(name) if name.ends_with(".json") || name.ends_with(".zip") => name.to_string(),
+            Some(name) if modules::backup_storage::is_backup_file_name(name) => name.to_string(),
             _ => continue,
         };
         if file_name.ends_with(".zip") {
@@ -709,6 +713,13 @@ pub fn list_auto_backup_files() -> Result<Vec<AutoBackupFileEntry>, String> {
     });
 
     Ok(files)
+}
+
+#[tauri::command]
+pub async fn list_auto_backup_files() -> Result<Vec<AutoBackupFileEntry>, String> {
+    tauri::async_runtime::spawn_blocking(list_auto_backup_files_internal)
+        .await
+        .map_err(|err| format!("读取自动备份文件列表失败: {}", err))?
 }
 
 #[tauri::command]
@@ -782,8 +793,10 @@ pub fn open_auto_backup_dir() -> Result<(), String> {
 
 /// 获取定时备份与行为备份的空间占用明细。
 #[tauri::command]
-pub fn get_backup_usage() -> Result<modules::backup_storage::BackupUsageSummary, String> {
-    modules::backup_storage::get_backup_usage()
+pub async fn get_backup_usage() -> Result<modules::backup_storage::BackupUsageSummary, String> {
+    tauri::async_runtime::spawn_blocking(modules::backup_storage::get_backup_usage)
+        .await
+        .map_err(|error| format!("获取备份用量失败: {}", error))?
 }
 
 /// 修改本地备份根目录；迁移选项由前端在确认后传入。

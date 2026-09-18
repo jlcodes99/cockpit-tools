@@ -1717,29 +1717,20 @@ function Get-ExePathFromCmdLine([string]$cmdline) {{
 }}
 $expected = Normalize-ExePath $expectedRaw
 if ([string]::IsNullOrWhiteSpace($expected)) {{ exit 0 }}
-function Get-WindowsAppsFamily([string]$path) {{
-  if (-not $path) {{ return $null }}
-  $lower = $path.ToLowerInvariant()
-  $marker = '\windowsapps\'
-  $at = $lower.IndexOf($marker)
-  if ($at -lt 0) {{ return $null }}
-  $after = $lower.Substring($at + $marker.Length)
-  $packageDir = ($after -split '\\')[0]
-  $family = ($packageDir -split '_')[0]
-  if ([string]::IsNullOrWhiteSpace($family)) {{ return $null }}
-  return $family
-}}
-function Test-CodexExeMatch([string]$exe, [string]$expected) {{
-  if (-not $exe -or -not $expected) {{ return $false }}
+function Test-CodexExeMatch($exe, $expected) {{
   if ($exe -eq $expected) {{ return $true }}
-  $exeFamily = Get-WindowsAppsFamily $exe
-  $expectedFamily = Get-WindowsAppsFamily $expected
-  if (-not $exeFamily -or -not $expectedFamily) {{ return $false }}
-  if ($exeFamily -ne $expectedFamily) {{ return $false }}
-  $exeFile = Split-Path -Leaf $exe
-  $expectedFile = Split-Path -Leaf $expected
-  if (-not $exeFile) {{ return $false }}
-  return ($exeFile.ToLowerInvariant() -eq $expectedFile.ToLowerInvariant())
+  if ($exe -like '*\windowsapps\*' -and $expected -like '*\windowsapps\*') {{
+    $exeName1 = [System.IO.Path]::GetFileName($exe)
+    $exeName2 = [System.IO.Path]::GetFileName($expected)
+    if ($exeName1 -and ($exeName1.ToLowerInvariant() -eq $exeName2.ToLowerInvariant())) {{
+      $pkg1 = ($exe -split '\\windowsapps\\')[1].Split('_')[0].ToLowerInvariant()
+      $pkg2 = ($expected -split '\\windowsapps\\')[1].Split('_')[0].ToLowerInvariant()
+      if ($pkg1 -and $pkg2 -and ($pkg1 -eq $pkg2)) {{
+        return $true
+      }}
+    }}
+  }}
+  return $false
 }}
 Get-CimInstance Win32_Process |
   Where-Object {{
@@ -1915,8 +1906,8 @@ fn collect_codex_process_entries_from_sysinfo_fallback(
             continue;
         }
         let (resolved_exe, _) = resolve_windows_process_exe_for_match(process);
-        let resolved_exe = resolved_exe.unwrap_or_default();
-        if !is_matching_codex_windows_exe(&resolved_exe, &expected) {
+        let resolved_exe_str = resolved_exe.as_deref().unwrap_or("");
+        if !is_matching_codex_windows_exe(resolved_exe_str, &expected) {
             continue;
         }
 
@@ -1978,8 +1969,8 @@ fn collect_codex_main_process_pids_from_sysinfo_fast(expected_exe_path: &str) ->
             continue;
         }
         let (resolved_exe, _) = resolve_windows_process_exe_for_match(process);
-        let resolved_exe = resolved_exe.unwrap_or_default();
-        if !is_matching_codex_windows_exe(&resolved_exe, &expected) {
+        let resolved_exe_str = resolved_exe.as_deref().unwrap_or("");
+        if !is_matching_codex_windows_exe(resolved_exe_str, &expected) {
             continue;
         }
 

@@ -123,7 +123,11 @@ export function buildCodexModelProviderAccountSnapshot(
 ): CodexModelProviderAccountSnapshot {
   const presetId = resolveCodexApiProviderPresetId(provider.baseUrl);
   const isOpenAI = presetId === "openai_official";
-  const wireApi = provider.wireApi ?? "responses";
+  const wireApi = resolveCodexProviderCapabilityProfile({
+    presetId,
+    baseUrl: provider.baseUrl,
+    wireApi: provider.wireApi,
+  }).wireApi;
 
   return {
     apiBaseUrl: provider.baseUrl,

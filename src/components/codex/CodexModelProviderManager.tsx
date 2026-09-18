@@ -245,6 +245,8 @@ const CODEX_PROVIDER_CUSTOM_SORT_ORDER_KEY =
 const CODEX_PROVIDER_CUSTOM_SORT_ACTIVE_KEY =
   "agtools.codex.modelProviders.custom_sort_active.v1";
 const PROVIDER_USAGE_CACHE_KEY = "agtools.codex.modelProviders.usage.cache.v1";
+const CODEX_PROVIDER_SELECTED_API_KEY_KEY =
+  "agtools.codex.modelProviders.selectedApiKey.v1";
 
 type ProviderUsageState = {
   loading: boolean;
@@ -252,7 +254,39 @@ type ProviderUsageState = {
   error?: string;
   unavailable?: boolean;
   updatedAt?: number;
+  apiKeyId?: string;
 };
+
+function readCodexProviderSelectedApiKeyMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(CODEX_PROVIDER_SELECTED_API_KEY_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const next: Record<string, string> = {};
+    for (const [providerId, keyId] of Object.entries(parsed)) {
+      if (typeof keyId === "string" && keyId.trim().length > 0) {
+        next[providerId] = keyId.trim();
+      }
+    }
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function writeCodexProviderSelectedApiKeyMap(
+  map: Record<string, string>,
+): void {
+  try {
+    localStorage.setItem(
+      CODEX_PROVIDER_SELECTED_API_KEY_KEY,
+      JSON.stringify(map),
+    );
+  } catch {
+    // ignore persistence failures
+  }
+}
 
 function readProviderUsageCache(): Record<string, ProviderUsageState> {
   try {
@@ -268,6 +302,7 @@ function readProviderUsageCache(): Record<string, ProviderUsageState> {
         error?: string;
         unavailable?: boolean;
         updatedAt?: number;
+        apiKeyId?: string;
       };
       next[providerId] = {
         loading: false,
@@ -278,6 +313,7 @@ function readProviderUsageCache(): Record<string, ProviderUsageState> {
           typeof item.updatedAt === "number" && Number.isFinite(item.updatedAt)
             ? item.updatedAt
             : undefined,
+        apiKeyId: typeof item.apiKeyId === "string" ? item.apiKeyId : undefined,
       };
     });
     return next;
@@ -299,6 +335,7 @@ function writeProviderUsageCache(value: Record<string, ProviderUsageState>): voi
               error: item.error,
               unavailable: item.unavailable === true,
               updatedAt: item.updatedAt,
+              apiKeyId: item.apiKeyId,
             },
           ]),
         ),
@@ -317,15 +354,31 @@ function getAccountUsageForProviderApiKey(
   const normalizedProviderBaseUrl = normalizeCodexModelProviderBaseUrl(
     provider.baseUrl,
   );
-  if (!normalizedProviderBaseUrl || !apiKey.apiKey.trim()) return null;
+  const keySecret = apiKey.apiKey.trim();
+  if (!keySecret) return null;
 
-  const matchedAccount = accounts.find(
-    (account) =>
-      isCodexApiKeyAccount(account) &&
-      account.openai_api_key?.trim() === apiKey.apiKey.trim() &&
-      normalizeCodexModelProviderBaseUrl(account.api_base_url ?? "") ===
-        normalizedProviderBaseUrl,
-  );
+  const isDeepSeekProvider =
+    provider.id.toLowerCase() === "deepseek" ||
+    provider.baseUrl.toLowerCase().includes("api.deepseek.com");
+
+  const matchedAccount = accounts.find((account) => {
+    if (!isCodexApiKeyAccount(account)) return false;
+    if (account.openai_api_key?.trim() !== keySecret) return false;
+    if (apiKey.overviewAccountId && account.id === apiKey.overviewAccountId) {
+      return true;
+    }
+    if (account.api_provider_id === provider.id) {
+      return true;
+    }
+    if (isDeepSeekProvider && isDeepSeekAccount(account)) {
+      return true;
+    }
+    if (!normalizedProviderBaseUrl) return false;
+    const normalizedAccountBaseUrl = normalizeCodexModelProviderBaseUrl(
+      account.api_base_url ?? "",
+    );
+    return normalizedAccountBaseUrl === normalizedProviderBaseUrl;
+  });
   if (!matchedAccount) return null;
 
   const accountUsage = readCodexApiKeyUsageCache()[matchedAccount.id];
@@ -336,6 +389,7 @@ function getAccountUsageForProviderApiKey(
     error: accountUsage.error,
     unavailable: accountUsage.unavailable,
     updatedAt: accountUsage.updatedAt,
+    apiKeyId: apiKey.id,
   };
 }
 
@@ -664,7 +718,7 @@ export function useCodexModelProviderManagerController({
   const [providerDetailId, setProviderDetailId] = useState<string | null>(null);
   const [selectedProviderApiKeyMap, setSelectedProviderApiKeyMap] = useState<
     Record<string, string>
-  >({});
+  >(() => readCodexProviderSelectedApiKeyMap());
   const [apiKeyPickerProviderId, setApiKeyPickerProviderId] = useState<
     string | null
   >(null);
@@ -1039,6 +1093,10 @@ export function useCodexModelProviderManagerController({
   }, [providerUsageMap]);
 
   useEffect(() => {
+    writeCodexProviderSelectedApiKeyMap(selectedProviderApiKeyMap);
+  }, [selectedProviderApiKeyMap]);
+
+  useEffect(() => {
     if (providers.length === 0) {
       return;
     }
@@ -1246,14 +1304,41 @@ export function useCodexModelProviderManagerController({
 
   const getSelectedProviderApiKey = useCallback(
     (provider: CodexModelProvider): CodexModelProviderApiKey | null => {
+      if (!provider.apiKeys || provider.apiKeys.length === 0) return null;
+
       const selectedId = selectedProviderApiKeyMap[provider.id];
       if (selectedId) {
         const matched = provider.apiKeys.find((item) => item.id === selectedId);
         if (matched) return matched;
       }
+
+      if (currentAccount?.openai_api_key?.trim()) {
+        const matched = provider.apiKeys.find(
+          (item) => item.apiKey.trim() === currentAccount.openai_api_key?.trim(),
+        );
+        if (matched) return matched;
+      }
+
+      const activeAccountKeys = new Set(
+        accounts
+          .filter(isCodexApiKeyAccount)
+          .map((a) => a.openai_api_key?.trim())
+          .filter(Boolean),
+      );
+      const matchedActive = provider.apiKeys.find((item) =>
+        activeAccountKeys.has(item.apiKey.trim()),
+      );
+      if (matchedActive) return matchedActive;
+
+      const accountIds = new Set(accounts.map((a) => a.id));
+      const matchedOverview = provider.apiKeys.find(
+        (item) => item.overviewAccountId && accountIds.has(item.overviewAccountId),
+      );
+      if (matchedOverview) return matchedOverview;
+
       return provider.apiKeys[0] ?? null;
     },
-    [selectedProviderApiKeyMap],
+    [accounts, currentAccount?.openai_api_key, selectedProviderApiKeyMap],
   );
 
   const syncProviderUsageFromAccountCache = useCallback(() => {
@@ -1269,13 +1354,30 @@ export function useCodexModelProviderManagerController({
           apiKey,
           accounts,
         );
-        if (!accountUsage) continue;
-
         const existing = previous[provider.id];
-        if ((existing?.updatedAt ?? 0) > (accountUsage.updatedAt ?? 0)) {
+
+        if (!accountUsage) {
+          if (existing?.apiKeyId && existing.apiKeyId !== apiKey.id) {
+            next[provider.id] = {
+              loading: false,
+              summary: undefined,
+              error: undefined,
+              unavailable: false,
+              apiKeyId: apiKey.id,
+            };
+            changed = true;
+          }
+          continue;
+        }
+
+        if (
+          existing?.apiKeyId === apiKey.id &&
+          (existing?.updatedAt ?? 0) > (accountUsage.updatedAt ?? 0)
+        ) {
           continue;
         }
         if (
+          existing?.apiKeyId === apiKey.id &&
           existing?.summary === accountUsage.summary &&
           existing?.error === accountUsage.error &&
           existing?.unavailable === accountUsage.unavailable &&
@@ -1283,7 +1385,10 @@ export function useCodexModelProviderManagerController({
         ) {
           continue;
         }
-        next[provider.id] = accountUsage;
+        next[provider.id] = {
+          ...accountUsage,
+          apiKeyId: apiKey.id,
+        };
         changed = true;
       }
 
@@ -1568,7 +1673,7 @@ export function useCodexModelProviderManagerController({
   const getInstanceName = useCallback(
     (instance: InstanceProfile | null): string => {
       if (!instance || instance.id === DEFAULT_INSTANCE_ID) {
-        return t("codex.modelProviders.instance.default", "默认实例");
+        return t("instances.defaultName", "默认实例");
       }
       return instance.name;
     },
@@ -1593,7 +1698,7 @@ export function useCodexModelProviderManagerController({
     if (!options.some((item) => item.value === DEFAULT_INSTANCE_ID)) {
       options.unshift({
         value: DEFAULT_INSTANCE_ID,
-        label: t("codex.modelProviders.instance.default", "默认实例"),
+        label: t("instances.defaultName", "默认实例"),
       });
     }
     return options;
@@ -3277,6 +3382,7 @@ export function useCodexModelProviderManagerController({
           loading: true,
           error: undefined,
           unavailable: false,
+          apiKeyId: apiKey.id,
         },
       }));
       try {
@@ -3294,7 +3400,7 @@ export function useCodexModelProviderManagerController({
         }
         setProviderUsageMap((previous) => ({
           ...previous,
-          [provider.id]: { loading: false, summary, updatedAt: Date.now() },
+          [provider.id]: { loading: false, summary, updatedAt: Date.now(), apiKeyId: apiKey.id },
         }));
       } catch (err) {
         const errorMessage = parseServiceError(err);
@@ -3302,16 +3408,26 @@ export function useCodexModelProviderManagerController({
           errorMessage.includes("PROVIDER_USAGE_DETECT_FAILED") ||
           errorMessage.includes("PROVIDER_USAGE_HTTP_404") ||
           errorMessage.includes("PROVIDER_USAGE_TYPE_UNSUPPORTED");
-        setProviderUsageMap((previous) => ({
-          ...previous,
-          [provider.id]: {
-            loading: false,
-            summary: previous[provider.id]?.summary,
-            error: unavailable ? undefined : errorMessage,
-            unavailable,
-            updatedAt: Date.now(),
-          },
-        }));
+        const isAuthError =
+          errorMessage.includes("401") ||
+          errorMessage.toLowerCase().includes("unauthorized") ||
+          errorMessage.toLowerCase().includes("invalid api key");
+        setProviderUsageMap((previous) => {
+          const prev = previous[provider.id];
+          const keepSummary =
+            !isAuthError && prev?.apiKeyId === apiKey.id ? prev.summary : undefined;
+          return {
+            ...previous,
+            [provider.id]: {
+              loading: false,
+              summary: keepSummary,
+              error: unavailable ? undefined : errorMessage,
+              unavailable,
+              updatedAt: Date.now(),
+              apiKeyId: apiKey.id,
+            },
+          };
+        });
       }
     },
     [parseServiceError, reloadProviders],
@@ -3552,7 +3668,7 @@ export function useCodexModelProviderManagerController({
         (item) => item.value === providerLaunchPreview.instanceId,
       )?.label ||
       getInstanceName(resolveInstanceById(providerLaunchPreview.instanceId))
-    : t("codex.modelProviders.instance.default", "默认实例");
+    : t("instances.defaultName", "默认实例");
 
   /** 启动预览里的 OAuth 绑定状态（仅 API Key 账号展示）。 */
   const providerLaunchOAuthBinding = useMemo(() => {

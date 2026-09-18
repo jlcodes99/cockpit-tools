@@ -364,7 +364,11 @@
     "deleteTagWarning": "Apakah Anda yakin ingin menghapus tag ini dari semua akun?",
     "expand": "Perluas",
     "processing": "Memproses...",
-    "selectAll": "Pilih Semua"
+    "selectAll": "Pilih Semua",
+    "clear": "Hapus",
+    "unknown": "Tidak diketahui",
+    "syncing": "Menyinkronkan...",
+    "clearAll": "Hapus semua"
   },
   "floatingCard": {
     "selectPlatform": "Ganti platform",
@@ -1115,7 +1119,17 @@
       "menuBarAccountPrefixDesc": "Hanya akun normal: mati menyembunyikan awalan email. Layanan API Codex / API Key tetap menampilkan label API",
       "menuBarQuotaConfirmEnable": "Aktifkan",
       "codexHideRelayQuota": "Sembunyikan kuota relay",
-      "codexHideRelayQuotaDesc": "Menyembunyikan panel kuota relay / New API di ringkasan akun Codex."
+      "codexHideRelayQuotaDesc": "Menyembunyikan panel kuota relay / New API di ringkasan akun Codex.",
+      "accountLevelRefreshTitle": "Konfigurasi pembaruan tingkat akun",
+      "accountLevelRefreshDesc": "Tetapkan interval pembaruan otomatis yang berbeda untuk akun yang berbeda, mengesampingkan default tingkat platform.",
+      "accountLevelRefreshSummary": "Buka konfigurasi",
+      "accountLevelRefreshSummaryActive": "{{count}} akun terkonfigurasi",
+      "accountLevelRefreshInherit": "Ikuti setelan platform",
+      "accountLevelRefreshDisabled": "Dinonaktifkan",
+      "codexAutoRestoreTakeoverOnLaunch": "Pulihkan pengambilalihan proksi Codex secara otomatis saat peluncuran",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Secara otomatis memulihkan model yang terlihat dan pengambilalihan proksi sebelumnya saat alat diluncurkan, mempertahankan konteks 1M tanpa peralihan manual.",
+      "errorReporting": "Diagnostik telemetri",
+      "errorReportingDesc": "Diaktifkan secara default, hanya digunakan untuk mendiagnosis masalah startup dan UI; dinonaktifkan tidak akan mengirim peristiwa. Data disanitasi sebelum dikirim; kata sandi, token, kunci 2FA, atau nomor telepon tidak pernah diunggah."
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -1429,7 +1443,8 @@
       "windowsApp": "Aplikasi Microsoft Store",
       "defaultOnly": "Hanya desktop default; pilih Claude.exe asli untuk profil multi-instans.",
       "claudeScanEmpty": "Target Claude Desktop tidak ditemukan. Pilih Claude.exe secara manual atau sesuaikan cakupan pindai.",
-      "claudeTargetPlaceholder": "Jalur Claude.exe atau shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Jalur Claude.exe atau shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Tidak ada {{app}} yang berjalan terdeteksi. Silakan jalankan aplikasi terlebih dahulu dan coba lagi, atau pilih jalur secara manual."
     },
     "modal": {
       "desc": "Path aplikasi {{app}} tidak ditemukan. Silakan konfigurasi sekarang untuk melanjutkan."
@@ -1439,7 +1454,9 @@
     "title": "Akun",
     "subtitle": "Kelola daftar akun Antigravity IDE Anda.",
     "total": "{{count}} akun",
-    "search": "Cari akun...",
+    "search": {
+      "placeholder": "Cari akun..."
+    },
     "addAccount": "Tambah Akun",
     "refreshAll": "Segarkan Semua",
     "export": "Ekspor",
@@ -2086,7 +2103,11 @@
     "restartRequiredAfterInstall": "Pembaruan terpasang. Mulai ulang aplikasi secara manual untuk menyelesaikan peralihan.",
     "stoppingApiService": "Menghentikan layanan API...",
     "stopApiServiceFailed": "Layanan API tidak dapat dihentikan. Nonaktifkan dulu, lalu coba lagi.",
-    "stopApiServiceFailedContinue": "Layanan API tidak berhenti dengan benar. Tetap melanjutkan mulai ulang..."
+    "stopApiServiceFailedContinue": "Layanan API tidak berhenti dengan benar. Tetap melanjutkan mulai ulang...",
+    "syncAndBuild": "Sinkronisasi & Bangun (my-custom)",
+    "syncing": "Menyinkronkan & menguji...",
+    "syncSuccess": "Berhasil disinkronkan dan build dipicu di GitHub!",
+    "openGitHubActions": "Buka GitHub Actions"
   },
   "closeDialog": {
     "title": "Tutup Jendela",
@@ -2105,6 +2126,18 @@
     "other_group": "Model Lainnya"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "Kunci API ini bukan milik akun Ainipy yang sedang masuk.",
+      "balance": "Saldo (token)",
+      "today": "Digunakan hari ini (token)",
+      "total": "Total digunakan (token)",
+      "waiting": "Menunggu login Ainipy…",
+      "connect": "Hubungkan situs Ainipy",
+      "hint": "Masuk ke akun Ainipy untuk kartu ini. Masuk kembali setelah menutup aplikasi.",
+      "cancelled": "Login Ainipy dibatalkan.",
+      "timeout": "Waktu login habis. Silakan coba lagi.",
+      "failed": "Gagal menyinkronkan Ainipy. Silakan coba lagi."
+    },
     "teamHistory": {
       "title": "Kuota Team sebelumnya (snapshot lokal)",
       "unknown": "Tidak ada waktu reset sebelumnya",
@@ -2785,7 +2818,10 @@
         "fetchCredentialsRequired": "Masukkan API Key dan Base URL terlebih dahulu.",
         "fetchEmpty": "Penyedia tidak mengembalikan model. Daftar saat ini tetap dipertahankan.",
         "fetchFailed": "Gagal mengambil model penyedia: {{error}}",
-        "syncRequiresModels": "Ambil atau masukkan setidaknya satu model sebelum menyinkronkan ke Codex."
+        "syncRequiresModels": "Ambil atau masukkan setidaknya satu model sebelum menyinkronkan ke Codex.",
+        "contextWindowInvalid": "Jendela konteks harus berupa bilangan bulat lebih dari 0",
+        "contextWindowPlaceholder": "Kosong = Default",
+        "restartHint": "Katalog model diperbarui. Jika Codex sedang berjalan, silakan mulai ulang untuk menerapkan perubahan."
       },
       "actions": {
         "addAndSwitch": "Tambah dan alihkan"
@@ -4563,6 +4599,11 @@
       "stopConfirmDescription": "Menghentikan gateway perutean campuran juga menonaktifkan perutean campuran instance tersebut (konfigurasi kanal tetap disimpan); gateway lain dapat dijalankan lagi dengan “Mulai ulang”.",
       "stopFailed": "Gagal menghentikan gateway: {{error}}",
       "restartFailed": "Gagal memulai ulang gateway: {{error}}"
+    },
+    "cli": {
+      "quickLaunch": "Peluncuran Cepat CLI",
+      "selectWorkingDir": "Pilih Direktori Kerja Codex CLI",
+      "launchSuccess": "Codex CLI diluncurkan"
     }
   },
   "codebuddy": {
@@ -4669,6 +4710,12 @@
       "desc": "File sesi lokal — Pindai lokal dan buka lokasi.",
       "empty": "File sesi tidak ditemukan",
       "open": "Buka lokasi"
+    },
+    "quotaCategory": {
+      "base": "Paket dasar",
+      "activity": "Paket promosi",
+      "extra": "Paket tambahan",
+      "other": "Lainnya"
     }
   },
   "githubCopilot": {
@@ -6163,7 +6210,8 @@
       "claudeShort": "Claude CLI"
     },
     "prefill": {
-      "claudeDesktopReady": "Konfigurasi APIKEY.FUN sudah terisi. Konfirmasi untuk menambahkannya ke Claude."
+      "claudeDesktopReady": "Konfigurasi APIKEY.FUN sudah terisi. Konfirmasi untuk menambahkannya ke Claude.",
+      "codexReady": "Konfigurasi APIKEY.FUN diimpor. Harap konfirmasi lalu tambahkan ke Codex."
     },
     "copyKey": "Copy Key​",
     "clearKey": "Clear input​"
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Kelola key OpenCode Go/Zen dan filter per tier."
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "Waktu tidak diketahui",
+      "minutesAgo": "{{count}} mnt lalu",
+      "hoursAgo": "{{count}} jam lalu",
+      "daysAgo": "{{count}} hari lalu",
+      "weeksAgo": "{{count}} minggu lalu"
+    }
   }
 }

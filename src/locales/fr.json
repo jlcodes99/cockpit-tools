@@ -364,7 +364,11 @@
     "deleteTagWarning": "Voulez-vous vraiment supprimer ce tag de tous les comptes ?",
     "expand": "Développer",
     "processing": "Traitement en cours...",
-    "selectAll": "Tout sélectionner"
+    "selectAll": "Tout sélectionner",
+    "clear": "Effacer",
+    "unknown": "Inconnu",
+    "syncing": "Synchronisation...",
+    "clearAll": "Tout effacer"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1068,7 +1072,17 @@
       "menuBarAccountPrefixDesc": "Comptes normaux uniquement : désactivé masque le préfixe e-mail. Service API Codex / clé API gardent le libellé API",
       "menuBarQuotaConfirmEnable": "Activer",
       "codexHideRelayQuota": "Masquer le quota relais",
-      "codexHideRelayQuotaDesc": "Masque les panneaux de quota relais / New API dans l’aperçu des comptes Codex."
+      "codexHideRelayQuotaDesc": "Masque les panneaux de quota relais / New API dans l’aperçu des comptes Codex.",
+      "accountLevelRefreshTitle": "Configuration de l'actualisation au niveau du compte",
+      "accountLevelRefreshDesc": "Définissez différents intervalles d'actualisation automatique pour différents comptes, en remplaçant les valeurs par défaut de la plateforme.",
+      "accountLevelRefreshSummary": "Développer la configuration",
+      "accountLevelRefreshSummaryActive": "{{count}} compte(s) configuré(s)",
+      "accountLevelRefreshInherit": "Hériter des paramètres de la plateforme",
+      "accountLevelRefreshDisabled": "Désactivé",
+      "codexAutoRestoreTakeoverOnLaunch": "Restaurer automatiquement la prise en charge du proxy Codex au démarrage",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Restaure automatiquement les modèles visibles et la prise en charge du proxy précédents au démarrage de l'outil, préservant ainsi le contexte 1M sans basculement manuel.",
+      "errorReporting": "Diagnostic télémétrique",
+      "errorReportingDesc": "Activé par défaut, utilisé uniquement pour diagnostiquer les problèmes de démarrage et d'interface ; désactivé, aucun événement n'est soumis. Les données sont anonymisées avant transmission ; aucun mot de passe, jeton, clé 2FA ou numéro de téléphone n'est envoyé."
     },
     "network": {
       "apiTitle": "API du cockpit antigravité",
@@ -1382,7 +1396,8 @@
       "windowsApp": "Appli Microsoft Store",
       "defaultOnly": "Profil bureau par défaut uniquement ; choisissez le vrai Claude.exe pour les instances multiples.",
       "claudeScanEmpty": "Aucune cible Claude Desktop trouvée. Choisissez Claude.exe manuellement ou ajustez les dossiers à analyser.",
-      "claudeTargetPlaceholder": "Chemin Claude.exe ou shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Chemin Claude.exe ou shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Aucune instance en cours d'exécution de {{app}} détectée. Veuillez d'abord lancer l'application et réessayer, ou sélectionner le chemin manuellement."
     },
     "modal": {
       "desc": "Le chemin de l'application {{app}} est introuvable. Veuillez le configurer maintenant pour continuer."
@@ -1392,7 +1407,9 @@
     "title": "Gestion des comptes",
     "subtitle": "Gérez votre liste de comptes Antigravity IDE.",
     "total": "{{count}} comptes",
-    "search": "Rechercher des comptes...",
+    "search": {
+      "placeholder": "Rechercher des comptes..."
+    },
     "addAccount": "Ajouter un compte",
     "refreshAll": "Tout actualiser",
     "export": "Exporter",
@@ -2039,7 +2056,11 @@
     "stopApiServiceFailed": "Impossible d’arrêter le service API. Désactivez-le d’abord, puis réessayez.",
     "stopApiServiceFailedContinue": "Le service API ne s’est pas arrêté correctement. Redémarrage quand même...",
     "skipThisVersion": "Ignorer cette version",
-    "skipFailed": "Impossible d'ignorer cette mise à jour : {{error}}"
+    "skipFailed": "Impossible d'ignorer cette mise à jour : {{error}}",
+    "syncAndBuild": "Synchroniser et compiler (my-custom)",
+    "syncing": "Synchronisation et tests en cours...",
+    "syncSuccess": "Synchronisé et build déclenché avec succès sur GitHub !",
+    "openGitHubActions": "Ouvrir GitHub Actions"
   },
   "closeDialog": {
     "title": "Fermer la fenêtre",
@@ -2058,6 +2079,18 @@
     "other_group": "Autres modèles"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "Cette clé API n'appartient pas au compte Ainipy connecté.",
+      "balance": "Solde (jetons)",
+      "today": "Utilisé aujourd'hui (jetons)",
+      "total": "Total utilisé (jetons)",
+      "waiting": "En attente de connexion à Ainipy…",
+      "connect": "Connecter le site Ainipy",
+      "hint": "Connectez-vous au compte Ainipy correspondant à cette carte. Reconnectez-vous après avoir fermé l'application.",
+      "cancelled": "Connexion à Ainipy annulée.",
+      "timeout": "Délai d'attente dépassé. Veuillez réessayer.",
+      "failed": "Impossible de synchroniser Ainipy. Veuillez réessayer."
+    },
     "teamHistory": {
       "title": "Quota Team précédent (instantané local)",
       "unknown": "Aucune heure de réinitialisation antérieure",
@@ -3414,7 +3447,10 @@
         "fetchCredentialsRequired": "Saisissez d’abord l’API Key et la Base URL.",
         "fetchEmpty": "Le fournisseur n’a renvoyé aucun modèle. La liste actuelle a été conservée.",
         "fetchFailed": "Impossible de récupérer les modèles du fournisseur : {{error}}",
-        "syncRequiresModels": "Récupérez ou saisissez au moins un modèle avant la synchronisation avec Codex."
+        "syncRequiresModels": "Récupérez ou saisissez au moins un modèle avant la synchronisation avec Codex.",
+        "contextWindowInvalid": "La fenêtre de contexte doit être un entier supérieur à 0",
+        "contextWindowPlaceholder": "Vide = Par défaut",
+        "restartHint": "Catalogue de modèles mis à jour. Si Codex est en cours d'exécution, veuillez redémarrer pour appliquer."
       },
       "actions": {
         "addAndSwitch": "Ajouter et basculer"
@@ -4516,6 +4552,11 @@
       "stopConfirmDescription": "Arrêter une passerelle de routage multi-modèles désactive aussi le routage multi-modèles de cette instance (la configuration des canaux est conservée) ; les autres passerelles peuvent être relancées avec « Redémarrer ».",
       "stopFailed": "Échec de l'arrêt de la passerelle : {{error}}",
       "restartFailed": "Échec du redémarrage de la passerelle : {{error}}"
+    },
+    "cli": {
+      "quickLaunch": "Lancement rapide CLI",
+      "selectWorkingDir": "Sélectionner le répertoire de travail Codex CLI",
+      "launchSuccess": "Codex CLI lancé"
     }
   },
   "githubCopilot": {
@@ -5457,6 +5498,12 @@
       "desc": "Fichiers de session locaux — Analyse locale et ouverture de l’emplacement.",
       "empty": "Aucun fichier de session",
       "open": "Ouvrir l’emplacement"
+    },
+    "quotaCategory": {
+      "base": "Forfait de base",
+      "activity": "Forfait promotionnel",
+      "extra": "Forfait supplémentaire",
+      "other": "Autre"
     }
   },
   "qoder": {
@@ -6163,7 +6210,8 @@
       "claudeShort": "Claude CLI"
     },
     "prefill": {
-      "claudeDesktopReady": "La configuration APIKEY.FUN est remplie. Confirmez l'ajout à Claude."
+      "claudeDesktopReady": "La configuration APIKEY.FUN est remplie. Confirmez l'ajout à Claude.",
+      "codexReady": "Configuration APIKEY.FUN importée. Veuillez confirmer et ajouter à Codex."
     },
     "copyKey": "Copy Key​",
     "clearKey": "Clear input​"
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gérer les clés OpenCode Go/Zen et filtrer par niveau."
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "Heure inconnue",
+      "minutesAgo": "Il y a {{count}} min",
+      "hoursAgo": "Il y a {{count}} h",
+      "daysAgo": "Il y a {{count}} j",
+      "weeksAgo": "Il y a {{count}} sem"
+    }
   }
 }

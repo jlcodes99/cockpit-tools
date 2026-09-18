@@ -1,4 +1,9 @@
 import type { CodexAccount } from "../types/codex";
+import { isAinipyBaseUrl } from "./ainipy.ts";
+
+export function isAinipyAccount(account: Pick<CodexAccount, 'api_base_url'>): boolean {
+  return isAinipyBaseUrl(account.api_base_url);
+}
 import {
   buildCodexProviderGatewayBindId,
   CODEX_PROVIDER_GATEWAY_BIND_PREFIX,
@@ -104,6 +109,7 @@ export function isCodexApiKeyUsageQueryEligible(
     !isCodexNewApiAccount(account) &&
     (!isCodexChatCompletionsApiKeyAccount(account) ||
       isDeepSeekAccount(account) ||
+      isAinipyAccount(account) ||
       tokenPlan) &&
     Boolean(account.openai_api_key?.trim())
   );
@@ -118,10 +124,11 @@ export function shouldShowCodexApiKeyUsagePanel(
   }
   const deepseek = isDeepSeekAccount(account);
   const tokenPlan = isCodexTokenPlanAccount(account);
-  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek && !tokenPlan) {
+  const ainipy = isAinipyAccount(account);
+  if (isCodexChatCompletionsApiKeyAccount(account) && !deepseek && !tokenPlan && !ainipy) {
     return false;
   }
-  return !hideRelayQuota || deepseek || tokenPlan;
+  return !hideRelayQuota || deepseek || tokenPlan || ainipy;
 }
 
 export function isDeepSeekResponsesAccount(

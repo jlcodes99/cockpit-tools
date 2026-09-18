@@ -364,7 +364,11 @@
     "deleteTagWarning": "¿Estás seguro de querer eliminar esta etiqueta de todas las cuentas?",
     "expand": "Expandir",
     "processing": "Procesando...",
-    "selectAll": "Seleccionar todo"
+    "selectAll": "Seleccionar todo",
+    "clear": "Limpiar",
+    "unknown": "Desconocido",
+    "syncing": "Sincronizando...",
+    "clearAll": "Borrar todo"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1068,7 +1072,17 @@
       "menuBarAccountPrefixDesc": "Solo cuentas normales: desactivado oculta el prefijo de correo. El servicio API de Codex / API Key siguen mostrando API",
       "menuBarQuotaConfirmEnable": "Activar",
       "codexHideRelayQuota": "Ocultar cuota relay",
-      "codexHideRelayQuotaDesc": "Oculta los paneles de cuota relay / New API en la vista de cuentas Codex."
+      "codexHideRelayQuotaDesc": "Oculta los paneles de cuota relay / New API en la vista de cuentas Codex.",
+      "accountLevelRefreshTitle": "Configuración de actualización a nivel de cuenta",
+      "accountLevelRefreshDesc": "Establezca diferentes intervalos de actualización automática para diferentes cuentas, anulando los valores predeterminados de la plataforma.",
+      "accountLevelRefreshSummary": "Expandir configuración",
+      "accountLevelRefreshSummaryActive": "{{count}} cuenta(s) configurada(s)",
+      "accountLevelRefreshInherit": "Heredar configuración de plataforma",
+      "accountLevelRefreshDisabled": "Desactivado",
+      "codexAutoRestoreTakeoverOnLaunch": "Restaurar automáticamente el control del proxy de Codex al iniciar",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Restaura automáticamente los modelos visibles y la toma de control del proxy anteriores al iniciar la herramienta, manteniendo el contexto de 1M sin cambio manual.",
+      "errorReporting": "Diagnóstico de telemetría",
+      "errorReportingDesc": "Habilitado de forma predeterminada, solo para diagnosticar problemas de inicio e interfaz; desactivado no enviará eventos. Los datos se anonimizan antes de enviar; no se suben contraseñas, tokens, claves 2FA ni teléfonos."
     },
     "network": {
       "apiTitle": "API de cabina antigravedad",
@@ -1382,7 +1396,8 @@
       "windowsApp": "App de Microsoft Store",
       "defaultOnly": "Solo para el escritorio predeterminado; elige el Claude.exe real para instancias múltiples.",
       "claudeScanEmpty": "No se encontró ningún destino de Claude Desktop. Elige Claude.exe manualmente o ajusta las rutas de escaneo.",
-      "claudeTargetPlaceholder": "Ruta de Claude.exe o shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Ruta de Claude.exe o shell:AppsFolder\\...",
+      "scanEmptyGeneric": "No se detectó {{app}} en ejecución. Inicie la aplicación primero e inténtelo de nuevo, o seleccione la ruta manualmente."
     },
     "modal": {
       "desc": "No se encontró la ruta de la aplicación {{app}}. Configúrela ahora para continuar."
@@ -1392,7 +1407,9 @@
     "title": "Gestión de Cuentas",
     "subtitle": "Gestiona tu lista de cuentas de Antigravity IDE.",
     "total": "{{count}} cuentas",
-    "search": "Buscar cuentas...",
+    "search": {
+      "placeholder": "Buscar cuentas..."
+    },
     "addAccount": "Añadir Cuenta",
     "refreshAll": "Actualizar Todo",
     "export": "Exportar",
@@ -2039,7 +2056,11 @@
     "stopApiServiceFailed": "No se pudo detener el servicio API. Desactívalo primero e inténtalo de nuevo.",
     "stopApiServiceFailedContinue": "El servicio API no se cerró correctamente. Reiniciando de todos modos...",
     "skipThisVersion": "Omitir esta versión",
-    "skipFailed": "No se pudo omitir esta actualización: {{error}}"
+    "skipFailed": "No se pudo omitir esta actualización: {{error}}",
+    "syncAndBuild": "Sincronizar y compilar (my-custom)",
+    "syncing": "Sincronizando y probando...",
+    "syncSuccess": "¡Sincronizado y compilación iniciada con éxito en GitHub!",
+    "openGitHubActions": "Abrir GitHub Actions"
   },
   "closeDialog": {
     "title": "Cerrar ventana",
@@ -2058,6 +2079,18 @@
     "other_group": "Otros modelos"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "Esta clave API no pertenece a la cuenta de Ainipy conectada.",
+      "balance": "Saldo (tokens)",
+      "today": "Usado hoy (tokens)",
+      "total": "Total usado (tokens)",
+      "waiting": "Esperando inicio de sesión en Ainipy…",
+      "connect": "Conectar sitio web de Ainipy",
+      "hint": "Inicie sesión en la cuenta de Ainipy correspondiente a esta tarjeta. Vuelva a iniciar sesión tras cerrar la aplicación.",
+      "cancelled": "Inicio de sesión en Ainipy cancelado.",
+      "timeout": "Tiempo de espera agotado. Por favor inténtelo de nuevo.",
+      "failed": "No se pudo sincronizar Ainipy. Por favor inténtelo de nuevo."
+    },
     "teamHistory": {
       "title": "Cuota Team anterior (instantánea local)",
       "unknown": "No hay una hora de restablecimiento anterior",
@@ -3414,7 +3447,10 @@
         "fetchCredentialsRequired": "Introduce primero la API Key y la Base URL.",
         "fetchEmpty": "El proveedor no devolvió modelos. Se conservó la lista actual.",
         "fetchFailed": "No se pudieron obtener los modelos del proveedor: {{error}}",
-        "syncRequiresModels": "Obtén o introduce al menos un modelo antes de sincronizar con Codex."
+        "syncRequiresModels": "Obtén o introduce al menos un modelo antes de sincronizar con Codex.",
+        "contextWindowInvalid": "La ventana de contexto debe ser un entero mayor que 0",
+        "contextWindowPlaceholder": "Vacío = Predeterminado",
+        "restartHint": "Catálogo de modelos actualizado. Si Codex se está ejecutando, reinícielo para aplicar los cambios."
       },
       "actions": {
         "addAndSwitch": "Añadir y cambiar"
@@ -4516,6 +4552,11 @@
       "stopConfirmDescription": "Detener una puerta de enlace de enrutado mixto también desactiva el enrutado mixto de esa instancia (la configuración de canales se conserva); las demás puertas se pueden volver a iniciar con «Reiniciar».",
       "stopFailed": "No se pudo detener la puerta de enlace: {{error}}",
       "restartFailed": "No se pudo reiniciar la puerta de enlace: {{error}}"
+    },
+    "cli": {
+      "quickLaunch": "Inicio rápido de CLI",
+      "selectWorkingDir": "Seleccionar directorio de trabajo de Codex CLI",
+      "launchSuccess": "Codex CLI iniciado"
     }
   },
   "githubCopilot": {
@@ -5457,6 +5498,12 @@
       "desc": "Archivos de sesión locales — Escaneo local y apertura de ubicación.",
       "empty": "Sin archivos de sesión",
       "open": "Abrir ubicación"
+    },
+    "quotaCategory": {
+      "base": "Paquete básico",
+      "activity": "Paquete promocional",
+      "extra": "Paquete adicional",
+      "other": "Otro"
     }
   },
   "qoder": {
@@ -6163,7 +6210,8 @@
       "claudeShort": "Claude CLI"
     },
     "prefill": {
-      "claudeDesktopReady": "La configuración de APIKEY.FUN está rellenada. Confirma para añadirla a Claude."
+      "claudeDesktopReady": "La configuración de APIKEY.FUN está rellenada. Confirma para añadirla a Claude.",
+      "codexReady": "Configuración de APIKEY.FUN importada. Confirme y agregue a Codex."
     },
     "copyKey": "Copy Key​",
     "clearKey": "Clear input​"
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gestiona claves OpenCode Go/Zen y filtra por nivel."
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "Hora desconocida",
+      "minutesAgo": "Hace {{count}} min",
+      "hoursAgo": "Hace {{count}} h",
+      "daysAgo": "Hace {{count}} días",
+      "weeksAgo": "Hace {{count}} semanas"
+    }
   }
 }

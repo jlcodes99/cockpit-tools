@@ -1995,6 +1995,110 @@ function MainApp() {
     writeUpdateLog('info', `用户取消统一更新下载: version=${version || 'unknown'}`);
   }, [closeUpdaterHandle, updateAction.state, updateAction.version, writeUpdateLog]);
 
+  const runCustomRepoSync = useCallback(async (expectedVersion: string) => {
+    const taskId = Date.now();
+    updateDownloadTaskIdRef.current = taskId;
+    updateCancelRequestedRef.current = false;
+    updateDownloadOwnerRef.current = 'shared';
+    setUpdateRetryStatus(t('update_notification.syncing', 'Syncing & testing...'));
+    setUpdateDownloadError('');
+    setUpdateErrorDetails('');
+    setUpdateAction({
+      state: 'downloading',
+      version: expectedVersion,
+      progress: 5,
+      requiresInstall: false,
+    });
+    writeUpdateLog('info', `Bắt đầu đồng bộ Git tùy biến: version=${expectedVersion}`);
+
+    let unlisten: UnlistenFn | null = null;
+    try {
+      unlisten = await listen<{
+        step: number;
+        total: number;
+        title: string;
+        status: string;
+        detail: string;
+      }>('custom-sync-progress', (event) => {
+        if (updateCancelRequestedRef.current || updateDownloadTaskIdRef.current !== taskId) {
+          return;
+        }
+        const { step, total, title } = event.payload;
+        const progressPct = Math.min(95, Math.round((step / total) * 100));
+        setUpdateAction((prev) => ({
+          ...prev,
+          progress: progressPct,
+        }));
+        setUpdateRetryStatus(title);
+      });
+
+      const report = await invoke<{
+        success: boolean;
+        message: string;
+        current_step: number;
+        total_steps: number;
+        logs: string;
+      }>('sync_and_trigger_custom_build', { repoPath: null });
+
+      if (updateCancelRequestedRef.current || updateDownloadTaskIdRef.current !== taskId) {
+        throw createUpdaterCanceledError();
+      }
+
+      if (!report.success) {
+        setUpdateRetryStatus('');
+        setUpdateDownloadError(report.message || 'Đồng bộ thất bại');
+        setUpdateErrorDetails(report.logs || '');
+        setUpdateAction({
+          state: 'available',
+          version: expectedVersion,
+          progress: 0,
+          requiresInstall: false,
+        });
+        return;
+      }
+
+      setUpdateAction({
+        state: 'ready',
+        version: expectedVersion,
+        progress: 100,
+        requiresInstall: false,
+      });
+      setUpdateRetryStatus(t('update_notification.syncSuccess', 'Synced and triggered build successfully on GitHub!'));
+      writeUpdateLog('info', `Đồng bộ hoàn tất: version=${expectedVersion}`);
+
+      try {
+        const { openUrl } = await import('@tauri-apps/plugin-opener');
+        await openUrl('https://github.com/HoangVung/cockpit-tools/actions');
+      } catch (err) {
+        console.warn('[App] Failed to open GitHub Actions URL:', err);
+      }
+    } catch (error) {
+      if (isUpdaterCanceledError(error)) {
+        writeUpdateLog('info', `Hủy đồng bộ: version=${expectedVersion}`);
+        return;
+      }
+      const compactError = sanitizeUpdaterErrorMessage(error);
+      console.error('[App] Custom sync failed:', error);
+      writeUpdateLog('error', `Đồng bộ thất bại: version=${expectedVersion}, error=${compactError}`);
+      setUpdateRetryStatus('');
+      setUpdateDownloadError(t('update_notification.autoUpdateFailed', 'Auto-update failed. You can download manually.'));
+      setUpdateErrorDetails(compactError);
+      setUpdateAction({
+        state: 'available',
+        version: expectedVersion,
+        progress: 0,
+        requiresInstall: false,
+      });
+    } finally {
+      if (unlisten) {
+        unlisten();
+      }
+      if (updateDownloadTaskIdRef.current === taskId && updateDownloadOwnerRef.current === 'shared') {
+        updateDownloadOwnerRef.current = 'none';
+      }
+    }
+  }, [createUpdaterCanceledError, isUpdaterCanceledError, t, writeUpdateLog]);
+
   const handleUpdatePrimaryAction = useCallback(async () => {
     if (updateAction.state === 'downloading') {
       openUpdateNotificationDetails();
@@ -2006,11 +2110,10 @@ function MainApp() {
 
     if (updateAction.state === 'ready') {
       try {
-        await handleApplyPendingUpdate();
+        const { openUrl } = await import('@tauri-apps/plugin-opener');
+        await openUrl('https://github.com/HoangVung/cockpit-tools/actions');
       } catch (error) {
-        console.error('[App] Update restart failed:', error);
-        writeUpdateLog('error', `更新重启失败: error=${sanitizeUpdaterErrorMessage(error)}`);
-        openUpdateNotificationDetails();
+        console.error('[App] Failed to open actions URL:', error);
       }
       return;
     }
@@ -2019,22 +2122,24 @@ function MainApp() {
       return;
     }
 
+    if (false as boolean) {
+      void handleApplyPendingUpdate;
+      void runLinuxManagedUpdate;
+      void runSharedUpdateDownload;
+    }
+
     const expectedVersion = updateAction.version;
     try {
-      if (isLinuxManagedUpdate) {
-        await runLinuxManagedUpdate(expectedVersion);
-      } else {
-        await runSharedUpdateDownload(expectedVersion);
-      }
+      await runCustomRepoSync(expectedVersion);
     } catch (error) {
-      console.error('[App] Update download failed:', error);
-      writeUpdateLog('error', `更新下载失败: error=${sanitizeUpdaterErrorMessage(error)}`);
+      console.error('[App] Custom repo sync failed:', error);
+      writeUpdateLog('error', `Custom repo sync failed: error=${sanitizeUpdaterErrorMessage(error)}`);
       openUpdateNotificationDetails();
     }
   }, [
     handleApplyPendingUpdate,
-    isLinuxManagedUpdate,
     openUpdateNotificationDetails,
+    runCustomRepoSync,
     runLinuxManagedUpdate,
     runSharedUpdateDownload,
     updateAction,

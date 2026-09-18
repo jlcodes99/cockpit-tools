@@ -364,7 +364,11 @@
     "deleteTagWarning": "すべてのアカウントからタグを削除してもよろしいですか？",
     "expand": "展開",
     "processing": "処理中...",
-    "selectAll": "すべて選択"
+    "selectAll": "すべて選択",
+    "clear": "クリア",
+    "unknown": "不明",
+    "syncing": "同期中...",
+    "clearAll": "すべてクリア"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1068,7 +1072,17 @@
       "menuBarAccountPrefixDesc": "通常アカウントのみ：オフでメール先頭を非表示。Codex API サービス / API Key は API ラベルを維持",
       "menuBarQuotaConfirmEnable": "有効にする",
       "codexHideRelayQuota": "中継クォータを隠す",
-      "codexHideRelayQuotaDesc": "オンにすると、Codex アカウント一覧で中継 / New API 系の残高パネルを非表示にし、表示の重なりを減らします。"
+      "codexHideRelayQuotaDesc": "オンにすると、Codex アカウント一覧で中継 / New API 系の残高パネルを非表示にし、表示の重なりを減らします。",
+      "accountLevelRefreshTitle": "アカウントレベルの更新設定",
+      "accountLevelRefreshDesc": "アカウントごとに異なる自動更新間隔を設定し、プラットフォームのデフォルト値を上書きします。",
+      "accountLevelRefreshSummary": "設定を展開",
+      "accountLevelRefreshSummaryActive": "{{count}} 件のアカウントを設定済み",
+      "accountLevelRefreshInherit": "プラットフォーム設定を継承",
+      "accountLevelRefreshDisabled": "無効",
+      "codexAutoRestoreTakeoverOnLaunch": "起動時にCodexプロキシ引き継ぎを自動復元",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "ツール起動時に前回の可視モデルとプロキシ引き継ぎを自動復元し、手動切り替えなしで1Mコンテキストを維持します。",
+      "errorReporting": "テレメトリ診断",
+      "errorReportingDesc": "デフォルトで有効。起動時やUIの問題を診断するためにのみ使用されます。無効にするとイベントは送信されません。送信前に機密解除され、パスワード、トークン、2FAキー、電話番号などはアップロードされません。"
     },
     "network": {
       "apiTitle": "反重力コックピット API",
@@ -1382,7 +1396,8 @@
       "windowsApp": "Microsoft Store アプリ",
       "defaultOnly": "既定のデスクトップ用のみ。複数インスタンスには実際の Claude.exe を選択してください。",
       "claudeScanEmpty": "Claude Desktop ターゲットが見つかりません。Claude.exe を手動で選ぶか、スキャン範囲を調整してください。",
-      "claudeTargetPlaceholder": "Claude.exe のパスまたは shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe のパスまたは shell:AppsFolder\\...",
+      "scanEmptyGeneric": "実行中の {{app}} が検出されませんでした。先にアプリを起動してから再試行するか、手動でパスを選択してください。"
     },
     "modal": {
       "desc": "{{app}} のアプリパスが見つかりません。続行するには今すぐ設定してください。"
@@ -1392,7 +1407,9 @@
     "title": "アカウント管理",
     "subtitle": "Antigravity IDE アカウントの一覧を管理します。",
     "total": "合計 {{count}} 個のアカウント",
-    "search": "アカウントを検索...",
+    "search": {
+      "placeholder": "アカウントを検索..."
+    },
     "addAccount": "アカウントを追加",
     "refreshAll": "すべて更新",
     "export": "エクスポート",
@@ -2039,7 +2056,11 @@
     "stopApiServiceFailed": "API サービスを停止できませんでした。先に無効化してから再試行してください。",
     "stopApiServiceFailedContinue": "API サービスは正常に停止しませんでした。再起動を続行します...",
     "skipThisVersion": "このバージョンをスキップ",
-    "skipFailed": "この更新をスキップできませんでした: {{error}}"
+    "skipFailed": "この更新をスキップできませんでした: {{error}}",
+    "syncAndBuild": "同期してビルドを開始 (my-custom)",
+    "syncing": "同期とテストを実行中...",
+    "syncSuccess": "同期が完了し、GitHub 上でビルドが正常に開始されました！",
+    "openGitHubActions": "GitHub Actions を開く"
   },
   "closeDialog": {
     "title": "ウィンドウを閉じる",
@@ -2058,6 +2079,18 @@
     "other_group": "その他のモデル"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "この API キーはログイン中の Ainipy アカウントのものではありません。",
+      "balance": "残高 (トークン)",
+      "today": "本日の使用量 (トークン)",
+      "total": "合計使用量 (トークン)",
+      "waiting": "Ainipy ログインを待機中…",
+      "connect": "Ainipy ウェブサイトに接続",
+      "hint": "このカードに対応する Ainipy アカウントにログインしてください。アプリ終了後は再ログインが必要です。",
+      "cancelled": "Ainipy ログインがキャンセルされました。",
+      "timeout": "ログインがタイムアウトしました。もう一度お試しください。",
+      "failed": "Ainipy を同期できませんでした。もう一度お試しください。"
+    },
     "teamHistory": {
       "title": "以前の Team クォータ（ローカルスナップショット）",
       "unknown": "過去のリセット時刻はありません",
@@ -3414,7 +3447,10 @@
         "fetchCredentialsRequired": "先に API Key と Base URL を入力してください。",
         "fetchEmpty": "プロバイダーからモデルが返されませんでした。現在の一覧を保持します。",
         "fetchFailed": "プロバイダーのモデルを取得できませんでした：{{error}}",
-        "syncRequiresModels": "Codex に同期する前に、モデルを 1 件以上取得または入力してください。"
+        "syncRequiresModels": "Codex に同期する前に、モデルを 1 件以上取得または入力してください。",
+        "contextWindowInvalid": "コンテキストウィンドウは0より大きい整数である必要があります",
+        "contextWindowPlaceholder": "空欄=デフォルト",
+        "restartHint": "モデルカタログが更新されました。Codexが実行中の場合は再起動して適用してください。"
       },
       "actions": {
         "addAndSwitch": "追加して切り替える"
@@ -4516,6 +4552,11 @@
       "stopConfirmDescription": "混在モデルルーティングのゲートウェイを停止すると、そのインスタンスの混在モデルルーティングも無効になります（チャネル設定は保持されます）。その他のゲートウェイは「再起動」で復帰できます。",
       "stopFailed": "ゲートウェイの停止に失敗しました：{{error}}",
       "restartFailed": "ゲートウェイの再起動に失敗しました：{{error}}"
+    },
+    "cli": {
+      "quickLaunch": "CLIクイック起動",
+      "selectWorkingDir": "Codex CLI作業ディレクトリを選択",
+      "launchSuccess": "Codex CLIを起動しました"
     }
   },
   "githubCopilot": {
@@ -5457,6 +5498,12 @@
       "desc": "ローカルセッション — ローカルデータからスキャンして場所を開きます。",
       "empty": "セッションファイルが見つかりません",
       "open": "場所を開く"
+    },
+    "quotaCategory": {
+      "base": "基本パッケージ",
+      "activity": "プロモーションパッケージ",
+      "extra": "追加パッケージ",
+      "other": "その他"
     }
   },
   "qoder": {
@@ -6163,7 +6210,8 @@
       "claudeShort": "Claude CLI"
     },
     "prefill": {
-      "claudeDesktopReady": "APIKEY.FUN の設定を入力しました。Claude への追加を確認してください。"
+      "claudeDesktopReady": "APIKEY.FUN の設定を入力しました。Claude への追加を確認してください。",
+      "codexReady": "APIKEY.FUN設定を取り込みました。確認後にCodexへ追加してください。"
     },
     "copyKey": "Copy Key​",
     "clearKey": "Clear input​"
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode の Go/Zen API キーを管理し、ティアで絞り込みます。"
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "時間不明",
+      "minutesAgo": "{{count}}分前",
+      "hoursAgo": "{{count}}時間前",
+      "daysAgo": "{{count}}日前",
+      "weeksAgo": "{{count}}週間前"
+    }
   }
 }

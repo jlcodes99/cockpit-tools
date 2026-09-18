@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildUsageBaseUrlCandidates,
   formatModelProviderUsageMoney,
+  queryModelProviderUsage,
   resolveNewApiQuotaSnapshot,
   type ModelProviderUsageSummary,
 } from "./modelProviderUsageService.ts";
@@ -96,4 +97,55 @@ test("new_api quota ignores malformed numeric details", () => {
 
 test("token plan percentages render without currency decimals", () => {
   assert.equal(formatModelProviderUsageMoney(72, "%"), "72%");
+});
+
+test("queryModelProviderUsage retries next candidate when encountering parse error on root URL", async () => {
+  const attemptedUrls: string[] = [];
+  const originalWindow = globalThis.window;
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      __TAURI_INTERNALS__: {
+        invoke: async (command: string, args: Record<string, unknown>) => {
+          if (command === "codex_query_model_provider_usage") {
+            const url = String(args.baseUrl);
+            attemptedUrls.push(url);
+            if (url === "https://api.apikey.fan") {
+              throw new Error("PROVIDER_USAGE_PARSE_FAILED: expected value at line 1 column 1");
+            }
+            if (url === "https://api.apikey.fan/v1") {
+              return summary({
+                mode: "sub2api",
+                remaining: 50,
+                unit: "USD",
+              });
+            }
+          }
+          throw new Error(`Unexpected command: ${command}`);
+        },
+      },
+    },
+  });
+
+  try {
+    const result = await queryModelProviderUsage({
+      baseUrl: "https://api.apikey.fan",
+      apiKey: "sk-test",
+      integrationType: "sub2api",
+    });
+    assert.deepEqual(attemptedUrls, [
+      "https://api.apikey.fan",
+      "https://api.apikey.fan/v1",
+    ]);
+    assert.equal(result.remaining, 50);
+  } finally {
+    if (originalWindow) {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: originalWindow,
+      });
+    } else {
+      delete (globalThis as Record<string, unknown>).window;
+    }
+  }
 });

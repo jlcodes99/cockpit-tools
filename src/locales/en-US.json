@@ -364,7 +364,11 @@
     "deleteTagWarning": "Are you sure you want to delete this tag from all accounts?",
     "expand": "Expand",
     "processing": "Processing...",
-    "selectAll": "Select All"
+    "selectAll": "Select All",
+    "clear": "Clear",
+    "unknown": "Unknown",
+    "syncing": "Syncing...",
+    "clearAll": "Clear All"
   },
   "floatingCard": {
     "selectPlatform": "Switch platform",
@@ -613,7 +617,8 @@
       "claudeShort": "Claude"
     },
     "prefill": {
-      "claudeDesktopReady": "APIKEY.FUN settings are filled in. Confirm to add them to Claude."
+      "claudeDesktopReady": "APIKEY.FUN settings are filled in. Confirm to add them to Claude.",
+      "codexReady": "APIKEY.FUN configuration imported. Please confirm and add to Codex."
     }
   },
   "platformLayout": {
@@ -1261,7 +1266,17 @@
       "menuBarAccountPrefixDesc": "Normal accounts only: when off, hide email prefix. Codex API Service / API Key still show the API label",
       "menuBarQuotaConfirmEnable": "Enable",
       "codexHideRelayQuota": "Hide relay quota",
-      "codexHideRelayQuotaDesc": "When on, Codex account overview hides mid-relay / New API style balance panels to reduce clutter."
+      "codexHideRelayQuotaDesc": "When on, Codex account overview hides mid-relay / New API style balance panels to reduce clutter.",
+      "accountLevelRefreshTitle": "Account-level Refresh Settings",
+      "accountLevelRefreshDesc": "Set different auto-refresh intervals for different accounts, overriding platform-level defaults.",
+      "accountLevelRefreshSummary": "Expand configuration",
+      "accountLevelRefreshSummaryActive": "{{count}} account(s) configured",
+      "accountLevelRefreshInherit": "Inherit platform settings",
+      "accountLevelRefreshDisabled": "Disabled",
+      "codexAutoRestoreTakeoverOnLaunch": "Auto-restore Codex proxy takeover on launch",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Automatically restores previously visible models and proxy takeover on launch, preserving 1M context without manual switching.",
+      "errorReporting": "Telemetry Diagnostics",
+      "errorReportingDesc": "Enabled by default, used only to diagnose startup and UI issues; disabled won't submit telemetry events. Data is sanitized before reporting, never uploading passwords, tokens, 2FA keys, or phone numbers."
     },
     "tabs": {
       "general": "General",
@@ -1581,7 +1596,8 @@
       "windowsApp": "Microsoft Store",
       "defaultOnly": "Default desktop only; choose the real Claude.exe for multi-instance profiles.",
       "claudeScanEmpty": "No Claude Desktop target was found. Choose Claude.exe manually or adjust the scan roots.",
-      "claudeTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\...",
+      "scanEmptyGeneric": "No running {{app}} detected. Please launch the app first and try again, or select the path manually."
     },
     "modal": {
       "desc": "The app path for {{app}} was not found. Please configure it now to continue."
@@ -1591,7 +1607,9 @@
     "title": "Account",
     "subtitle": "Manage your Antigravity IDE account list.",
     "total": "{{count}} accounts",
-    "search": "Search accounts...",
+    "search": {
+      "placeholder": "Search accounts..."
+    },
     "addAccount": "Add Account",
     "refreshAll": "Refresh All",
     "export": "Export",
@@ -2238,7 +2256,11 @@
     "restartRequiredAfterInstall": "The update is installed. Restart the app manually to finish switching.",
     "stoppingApiService": "Stopping API service...",
     "stopApiServiceFailed": "Couldn't stop the API service. Disable it first and try again.",
-    "stopApiServiceFailedContinue": "The API service did not stop cleanly. Restarting anyway..."
+    "stopApiServiceFailedContinue": "The API service did not stop cleanly. Restarting anyway...",
+    "syncAndBuild": "Sync & Trigger Build (my-custom)",
+    "syncing": "Syncing & testing...",
+    "syncSuccess": "Synced and triggered build successfully on GitHub!",
+    "openGitHubActions": "Open GitHub Actions"
   },
   "closeDialog": {
     "title": "Close Window",
@@ -2257,6 +2279,18 @@
     "other_group": "Other Models"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "This API key does not belong to the signed-in Ainipy account.",
+      "balance": "Balance (tokens)",
+      "today": "Used today (tokens)",
+      "total": "Total used (tokens)",
+      "waiting": "Waiting for Ainipy login…",
+      "connect": "Connect Ainipy website",
+      "hint": "Sign in to the Ainipy account for this card. Sign in again after closing the app.",
+      "cancelled": "Ainipy login cancelled.",
+      "timeout": "Login timed out. Please try again.",
+      "failed": "Unable to sync Ainipy. Please try again."
+    },
     "teamHistory": {
       "title": "Previous Team quota (local snapshot)",
       "unknown": "No historical reset time",
@@ -3060,7 +3094,10 @@
         "fetchCredentialsRequired": "Enter the API Key and Base URL first.",
         "fetchEmpty": "The provider returned no models. The current list was kept.",
         "fetchFailed": "Failed to fetch provider models: {{error}}",
-        "syncRequiresModels": "Fetch or enter at least one model before syncing to Codex."
+        "syncRequiresModels": "Fetch or enter at least one model before syncing to Codex.",
+        "contextWindowInvalid": "Context window must be an integer greater than 0",
+        "contextWindowPlaceholder": "Blank = Default",
+        "restartHint": "Model catalog updated. If Codex is running, please restart it to apply changes."
       },
       "actions": {
         "addAndSwitch": "Add and Switch"
@@ -3662,7 +3699,7 @@
       "dateTime": "{{date}} {{time}}"
     },
     "subscription": {
-      "label": "Subscription validity",
+      "label": "Validity",
       "column": "Subscription info",
       "unknown": "No subscription info",
       "missingDetail": "No subscription info",
@@ -4690,8 +4727,8 @@
       "hideRelayQuota": "Hide relay quota"
     },
     "instanceGateways": {
-      "entry": "Instance gateways",
-      "entryCount": "Instance gateways {{count}}",
+      "entry": "Gateways",
+      "entryCount": "Gateways {{count}}",
       "issueCount": "{{count}} abnormal",
       "title": "Instance gateways",
       "subtitle": "Local gateways started with Codex instances",
@@ -4715,6 +4752,11 @@
       "stopConfirmDescription": "Stopping a mixed model routing gateway also turns off that instance's mixed model routing (channel configuration is kept); other gateways can be started again with Restart.",
       "stopFailed": "Failed to stop the gateway: {{error}}",
       "restartFailed": "Failed to start the gateway: {{error}}"
+    },
+    "cli": {
+      "quickLaunch": "CLI Quick Launch",
+      "selectWorkingDir": "Select Codex CLI Working Directory",
+      "launchSuccess": "Codex CLI launched"
     }
   },
   "codebuddy": {
@@ -4821,6 +4863,12 @@
       "desc": "Scan local CodeBuddy data paths for session JSON/JSONL files and open their location.",
       "empty": "No session files found",
       "open": "Open location"
+    },
+    "quotaCategory": {
+      "base": "Base Tier",
+      "activity": "Promotional Tier",
+      "extra": "Add-on Tier",
+      "other": "Other"
     }
   },
   "githubCopilot": {
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Manage OpenCode Go/Zen API keys and filter by tier. Keys stay in local app data."
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "Unknown time",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago",
+      "weeksAgo": "{{count}}w ago"
+    }
   }
 }

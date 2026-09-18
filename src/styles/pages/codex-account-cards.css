@@ -4,7 +4,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 16px 14px;
+  padding: 16px 12px;
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(10px);
   transition: all 0.25s ease;
@@ -69,7 +69,7 @@
 .codex-account-card .card-top {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .codex-account-card .card-select {
@@ -88,7 +88,8 @@
   min-width: 0;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   background: transparent;
   overflow: hidden;
@@ -114,7 +115,7 @@
 
 .codex-account-card .current-tag {
   flex-shrink: 0;
-  padding: 3px 10px;
+  padding: 2px 8px;
   background: var(--success);
   color: white;
   font-size: 11px;
@@ -130,12 +131,12 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  padding: 4px 10px;
+  padding: 3px 8px;
   font-size: 11px;
   font-weight: 600;
   border-radius: var(--radius-full);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
   line-height: 1;
   white-space: nowrap;
 }
@@ -409,9 +410,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   min-width: 0;
-  padding: 9px 11px;
+  padding: 8px 10px;
   border: 1px solid rgba(100, 116, 139, 0.18);
   border-radius: 8px;
   background: rgba(100, 116, 139, 0.06);
@@ -422,6 +424,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex-shrink: 0;
   font-size: 12px;
   font-weight: 700;
   color: var(--text-secondary);
@@ -470,8 +473,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .codex-accounts-page .codex-subscription-footer-date {

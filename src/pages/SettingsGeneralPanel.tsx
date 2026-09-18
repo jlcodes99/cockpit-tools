@@ -930,12 +930,12 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">
-                    {t('settings.general.errorReporting', '遥测诊断')}
+                    {t('settings.general.errorReporting', 'Telemetry Diagnostics')}
                   </div>
                   <div className="row-desc">
                     {t(
                       'settings.general.errorReportingDesc',
-                      '默认开启，仅用于排查启动和界面问题；关闭后不会提交遥测事件。上报前会脱敏，不上传账号密码、Token、2FA 秘钥、手机号等敏感信息。',
+                      "Enabled by default, used only to diagnose startup and UI issues; disabled won't submit telemetry events. Data is sanitized before reporting, never uploading passwords, tokens, 2FA keys, or phone numbers.",
                     )}
                   </div>
                 </div>
@@ -3002,7 +3002,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                           onClick={() => setZcodeAppPath('')}
                           disabled={isAppPathResetDetecting('zcode') || !zcodeAppPath.trim()}
                         >
-                          {t('common.clear', '清除')}
+                          {t('common.clear', 'Clear')}
                         </button>
                         <button
                           className="btn btn-secondary"

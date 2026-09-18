@@ -95,6 +95,16 @@ function formatRelativeSyncTime(value: number | null | undefined, isZh: boolean)
   return isZh ? `${days} 天前` : `${days}d ago`;
 }
 
+function isDefaultInstance(id?: string, name?: string): boolean {
+  return (
+    id === '__default__' ||
+    id === 'default' ||
+    name === '默认实例' ||
+    name === 'Default Instance' ||
+    name === 'Default instance'
+  );
+}
+
 function UsageBreakdownTable({
   rows,
   emptyLabel,
@@ -126,24 +136,29 @@ function UsageBreakdownTable({
               <td colSpan={6}>{emptyLabel}</td>
             </tr>
           ) : (
-            rows.map((row) => (
-              <tr key={row.key || row.label}>
-                <td title={row.label || row.key}>{row.label || row.key || '—'}</td>
-                <td>
-                  <TokenAmount value={row.inputTokens} lang={lang} />
-                </td>
-                <td>
-                  <TokenAmount value={row.cachedInputTokens} lang={lang} />
-                </td>
-                <td>
-                  <TokenAmount value={row.outputTokens} lang={lang} />
-                </td>
-                <td>
-                  <TokenAmount value={row.totalTokens} lang={lang} />
-                </td>
-                <td>{formatSessionUsageCount(row.requestCount)}</td>
-              </tr>
-            ))
+            rows.map((row) => {
+              const displayLabel = isDefaultInstance(row.key, row.label)
+                ? t('instances.defaultName', '默认实例')
+                : row.label || row.key || '—';
+              return (
+                <tr key={row.key || row.label}>
+                  <td title={displayLabel}>{displayLabel}</td>
+                  <td>
+                    <TokenAmount value={row.inputTokens} lang={lang} />
+                  </td>
+                  <td>
+                    <TokenAmount value={row.cachedInputTokens} lang={lang} />
+                  </td>
+                  <td>
+                    <TokenAmount value={row.outputTokens} lang={lang} />
+                  </td>
+                  <td>
+                    <TokenAmount value={row.totalTokens} lang={lang} />
+                  </td>
+                  <td>{formatSessionUsageCount(row.requestCount)}</td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>
@@ -400,7 +415,9 @@ export function CodexSessionUsagePanel({
       { value: '', label: t('codex.sessionUsage.instance.all', '全部实例') },
       ...(report?.instances ?? []).map((instance) => ({
         value: instance.id,
-        label: instance.name || instance.id,
+        label: isDefaultInstance(instance.id, instance.name)
+          ? t('instances.defaultName', '默认实例')
+          : instance.name || instance.id,
       })),
     ],
     [report?.instances, t],

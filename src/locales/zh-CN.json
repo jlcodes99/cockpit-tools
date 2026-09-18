@@ -364,7 +364,11 @@
     "deleteTagWarning": "确定要从所有账号中移除标签 ",
     "expand": "展开",
     "processing": "处理中...",
-    "selectAll": "全选"
+    "selectAll": "全选",
+    "clear": "清除",
+    "unknown": "未知",
+    "syncing": "同步中...",
+    "clearAll": "全部取消"
   },
   "floatingCard": {
     "selectPlatform": "切换平台",
@@ -613,7 +617,8 @@
       "claudeShort": "Claude CLI"
     },
     "prefill": {
-      "claudeDesktopReady": "已带入 APIKEY.FUN 配置，请确认后添加到 Claude。"
+      "claudeDesktopReady": "已带入 APIKEY.FUN 配置，请确认后添加到 Claude。",
+      "codexReady": "已带入 APIKEY.FUN 配置，请确认后添加到 Codex。"
     }
   },
   "platformLayout": {
@@ -1261,7 +1266,17 @@
       "menuBarAccountPrefixDesc": "仅普通账号：关闭后不显示邮箱前缀。Codex API 服务 / API Key 仍会显示 API 标签",
       "menuBarQuotaConfirmEnable": "启用",
       "codexHideRelayQuota": "隐藏中转站额度",
-      "codexHideRelayQuotaDesc": "开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。"
+      "codexHideRelayQuotaDesc": "开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。",
+      "accountLevelRefreshTitle": "账号级刷新配置",
+      "accountLevelRefreshDesc": "为不同账号设置不同的自动刷新间隔，覆盖平台级默认值。",
+      "accountLevelRefreshSummary": "展开配置",
+      "accountLevelRefreshSummaryActive": "已配置 {{count}} 个账号",
+      "accountLevelRefreshInherit": "继承平台设置",
+      "accountLevelRefreshDisabled": "禁用",
+      "codexAutoRestoreTakeoverOnLaunch": "启动时自动恢复 Codex 代理接管",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "工具启动时自动恢复上次的可见模型与代理接管，保持 1M 上下文且无需手动切换",
+      "errorReporting": "遥测诊断",
+      "errorReportingDesc": "默认开启，仅用于排查启动和界面问题；关闭后不会提交遥测事件。上报前会脱敏，不上传账号密码、Token、2FA 秘钥、手机号等敏感信息。"
     },
     "tabs": {
       "general": "通用",
@@ -1584,14 +1599,17 @@
       "windowsApp": "微软商店",
       "defaultOnly": "仅适用于默认桌面端；应用多开请选择真实 Claude.exe。",
       "claudeScanEmpty": "未扫描到 Claude Desktop，请手动选择 Claude.exe 或调整扫描范围。",
-      "claudeTargetPlaceholder": "Claude.exe 路径或 shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe 路径或 shell:AppsFolder\\...",
+      "scanEmptyGeneric": "未检测到正在运行的 {{app}}，请先启动应用后重试，或手动选择路径。"
     }
   },
   "accounts": {
     "title": "账号管理",
     "subtitle": "管理你的 Antigravity IDE 账号列表。",
     "total": "共 {{count}} 个账号",
-    "search": "搜索账号...",
+    "search": {
+      "placeholder": "搜索账号..."
+    },
     "addAccount": "添加账号",
     "refreshAll": "刷新全部",
     "export": "导出",
@@ -2238,7 +2256,11 @@
     "restartRequiredAfterInstall": "更新已安装，请手动重启应用完成切换。",
     "stoppingApiService": "正在关闭 API 服务...",
     "stopApiServiceFailed": "无法关闭 API 服务，请先停用后重试。",
-    "stopApiServiceFailedContinue": "API 服务未正常关闭，将继续重启..."
+    "stopApiServiceFailedContinue": "API 服务未正常关闭，将继续重启...",
+    "syncAndBuild": "同步并触发构建 (my-custom)",
+    "syncing": "正在同步与测试...",
+    "syncSuccess": "已成功同步并在 GitHub 上触发构建！",
+    "openGitHubActions": "打开 GitHub Actions"
   },
   "closeDialog": {
     "title": "关闭窗口",
@@ -2257,6 +2279,18 @@
     "other_group": "其他模型"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "该 API 密钥不属于已登录的 Ainipy 账号。",
+      "balance": "余额 (tokens)",
+      "today": "今日用量 (tokens)",
+      "total": "总用量 (tokens)",
+      "waiting": "正在等待 Ainipy 登录…",
+      "connect": "连接 Ainipy 网站",
+      "hint": "请登录此卡对应的 Ainipy 账号。关闭应用后需重新登录。",
+      "cancelled": "已取消 Ainipy 登录。",
+      "timeout": "登录超时，请重试。",
+      "failed": "无法同步 Ainipy，请重试。"
+    },
     "teamHistory": {
       "title": "原 Team 席位额度（本地快照）",
       "unknown": "暂无历史重置时间",
@@ -3060,7 +3094,10 @@
         "fetchCredentialsRequired": "请先填写 API Key 和 Base URL。",
         "fetchEmpty": "上游未返回可用模型，已保留当前列表。",
         "fetchFailed": "获取上游模型失败：{{error}}",
-        "syncRequiresModels": "同步到 Codex 前请先获取或填写模型列表。"
+        "syncRequiresModels": "同步到 Codex 前请先获取或填写模型列表。",
+        "contextWindowInvalid": "上下文窗口必须是大于 0 的整数",
+        "contextWindowPlaceholder": "留空=默认",
+        "restartHint": "模型目录已更新。若 Codex 正在运行，请重启后生效。"
       },
       "actions": {
         "addAndSwitch": "添加并切换"
@@ -4715,6 +4752,11 @@
       "stopConfirmDescription": "混合模型路由网关会同时停用该实例的混合模型路由（渠道配置保留）；其他网关关闭后可在需要时点击“重启”。",
       "stopFailed": "关闭网关失败：{{error}}",
       "restartFailed": "重启网关失败：{{error}}"
+    },
+    "cli": {
+      "quickLaunch": "CLI 快速启动",
+      "selectWorkingDir": "选择 Codex CLI 工作目录",
+      "launchSuccess": "已启动 Codex CLI"
     }
   },
   "codebuddy": {
@@ -4821,6 +4863,12 @@
       "desc": "扫描本机 CodeBuddy 数据目录中的会话相关 JSON/JSONL 文件，可打开所在位置。",
       "empty": "未找到会话文件",
       "open": "打开位置"
+    },
+    "quotaCategory": {
+      "base": "基础体验包",
+      "activity": "活动赠送包",
+      "extra": "加量包",
+      "other": "其他"
     }
   },
   "githubCopilot": {
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 档 API Key，并按档位筛选列表。密钥保存在本机应用数据目录。"
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "时间未知",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前",
+      "weeksAgo": "{{count}} 周前"
+    }
   }
 }

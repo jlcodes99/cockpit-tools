@@ -350,13 +350,13 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                   <div className="row-title">
                     {t(
                       'settings.general.codexAutoRestoreTakeoverOnLaunch',
-                      '启动时自动恢复 Codex 代理接管',
+                      'Auto-restore Codex proxy takeover on launch',
                     )}
                   </div>
                   <div className="row-desc">
                     {t(
                       'settings.general.codexAutoRestoreTakeoverOnLaunchDesc',
-                      '工具启动时自动恢复上次的可见模型与代理接管，保持 1M 上下文且无需手动切换',
+                      'Automatically restores previously visible models and proxy takeover on launch, preserving 1M context without manual switching.',
                     )}
                   </div>
                 </div>

@@ -16,6 +16,7 @@ pub(crate) mod codex_instance_gateway_watchdog;
 mod codex_instance_gateway_watchdog_state;
 mod codex_instance_model_catalog;
 mod codex_instance_routing;
+pub mod custom_updater;
 pub mod cursor;
 pub mod cursor_instance;
 pub mod data_transfer;

@@ -259,7 +259,7 @@ export function CodexSessionVisibilityRepairModal({
     () =>
       repairInstances.map((instance) => {
         const name = instance.isDefault
-          ? t("codex.sessionManager.repairModal.defaultInstance", "默认实例")
+          ? t("instances.defaultName", "默认实例")
           : instance.name || instance.id;
         const runningLabel = instance.running
           ? ` · ${t("codex.sessionManager.repairModal.runningInstance", "运行中")}`

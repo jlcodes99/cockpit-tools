@@ -364,7 +364,11 @@
     "deleteTagWarning": "Opravdu chcete odstranit tento štítek ze všech účtů?",
     "expand": "Rozbalit",
     "processing": "Zpracovávám...",
-    "selectAll": "Vybrat vše"
+    "selectAll": "Vybrat vše",
+    "clear": "Vymazat",
+    "unknown": "Neznámý",
+    "syncing": "Synchronizace...",
+    "clearAll": "Vymazat vše"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1068,7 +1072,17 @@
       "menuBarAccountPrefixDesc": "Jen běžné účty: vypnuto skryje prefix e-mailu. Codex API služba / API Key stále ukazují API",
       "menuBarQuotaConfirmEnable": "Zapnout",
       "codexHideRelayQuota": "Skrýt kvótu relay",
-      "codexHideRelayQuotaDesc": "Skryje panely kvóty relay / New API v přehledu účtů Codex."
+      "codexHideRelayQuotaDesc": "Skryje panely kvóty relay / New API v přehledu účtů Codex.",
+      "accountLevelRefreshTitle": "Konfigurace obnovení na úrovni účtu",
+      "accountLevelRefreshDesc": "Nastavení různých intervalů automatického obnovení pro jednotlivé účty, které přepíší výchozí hodnoty platformy.",
+      "accountLevelRefreshSummary": "Rozbalit konfiguraci",
+      "accountLevelRefreshSummaryActive": "Nakonfigurováno {{count}} účtů",
+      "accountLevelRefreshInherit": "Převzít nastavení platformy",
+      "accountLevelRefreshDisabled": "Zakázáno",
+      "codexAutoRestoreTakeoverOnLaunch": "Při spuštění automaticky obnovit převzetí proxy Codex",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Při spuštění nástroje automaticky obnoví dříve viditelné modely a převzetí proxy, čímž zachová kontext 1M bez ručního přepínání.",
+      "errorReporting": "Telemetrická diagnostika",
+      "errorReportingDesc": "Ve výchozím nastavení povoleno, slouží pouze k diagnostice problémů při spuštění a v rozhraní; při vypnutí se události neodesílají. Data jsou před odesláním anonymizována; hesla, tokeny, klíče 2FA ani telefonní čísla se nenahrávají."
     },
     "network": {
       "apiTitle": "Antigravity Cockpit API​",
@@ -1382,7 +1396,8 @@
       "windowsApp": "Aplikace Microsoft Store",
       "defaultOnly": "Pouze výchozí desktop; pro více instancí vyberte skutečný Claude.exe.",
       "claudeScanEmpty": "Nebyl nalezen žádný cíl Claude Desktop. Vyberte Claude.exe ručně nebo upravte rozsah skenování.",
-      "claudeTargetPlaceholder": "Cesta Claude.exe nebo shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Cesta Claude.exe nebo shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Nebyla zjištěna žádná spuštěná aplikace {{app}}. Nejprve aplikaci spusťte a zkuste to znovu, nebo vyberte cestu ručně."
     },
     "modal": {
       "desc": "Cesta k aplikaci {{app}} nebyla nalezena. Nastavte ji nyní pro pokračování."
@@ -1392,7 +1407,9 @@
     "title": "Správa účtů",
     "subtitle": "Spravujte svůj seznam účtů Antigravity IDE.",
     "total": "Počet účtů: {{count}}",
-    "search": "Hledat účty...",
+    "search": {
+      "placeholder": "Hledat účty..."
+    },
     "addAccount": "Přidat účet",
     "refreshAll": "Obnovit vše",
     "export": "Exportovat",
@@ -2039,7 +2056,11 @@
     "stopApiServiceFailed": "Službu API se nepodařilo zastavit. Nejprve ji zakažte a zkuste to znovu.",
     "stopApiServiceFailedContinue": "Služba API se neukončila korektně. Přesto pokračuje restart...",
     "skipThisVersion": "Přeskočit tuto verzi",
-    "skipFailed": "Tuto aktualizaci se nepodařilo přeskočit: {{error}}"
+    "skipFailed": "Tuto aktualizaci se nepodařilo přeskočit: {{error}}",
+    "syncAndBuild": "Synchronizovat a sestavit (my-custom)",
+    "syncing": "Synchronizace a testování...",
+    "syncSuccess": "Synchronizace proběhla úspěšně a sestavení bylo spuštěno na GitHubu!",
+    "openGitHubActions": "Otevřít GitHub Actions"
   },
   "closeDialog": {
     "title": "Zavřít okno",
@@ -2058,6 +2079,18 @@
     "other_group": "Ostatní modely"
   },
   "codex": {
+    "ainipy": {
+      "mismatch": "Tento klíč API nepatří k přihlášenému účtu Ainipy.",
+      "balance": "Zůstatek (tokeny)",
+      "today": "Dnes využito (tokeny)",
+      "total": "Celkem využito (tokeny)",
+      "waiting": "Čekání na přihlášení k Ainipy…",
+      "connect": "Připojit web Ainipy",
+      "hint": "Přihlaste se k účtu Ainipy pro tuto kartu. Po zavření aplikace je nutné se znovu přihlásit.",
+      "cancelled": "Přihlášení k Ainipy bylo zrušeno.",
+      "timeout": "Časový limit přihlášení vypršel. Zkuste to prosím znovu.",
+      "failed": "Nepodařilo se synchronizovat Ainipy. Zkuste to prosím znovu."
+    },
     "teamHistory": {
       "title": "Předchozí kvóta Team (místní snímek)",
       "unknown": "Historický čas obnovení není k dispozici",
@@ -3414,7 +3447,10 @@
         "fetchCredentialsRequired": "Nejprve zadejte API Key a Base URL.",
         "fetchEmpty": "Poskytovatel nevrátil žádné modely. Aktuální seznam zůstal zachován.",
         "fetchFailed": "Načtení modelů poskytovatele se nezdařilo: {{error}}",
-        "syncRequiresModels": "Před synchronizací do Codexu načtěte nebo zadejte alespoň jeden model."
+        "syncRequiresModels": "Před synchronizací do Codexu načtěte nebo zadejte alespoň jeden model.",
+        "contextWindowInvalid": "Kontextové okno musí být celé číslo větší než 0",
+        "contextWindowPlaceholder": "Prázdné = Výchozí",
+        "restartHint": "Katalog modelů byl aktualizován. Pokud Codex běží, restartujte jej pro použití změn."
       },
       "actions": {
         "addAndSwitch": "Přidat a přepnout"
@@ -4516,6 +4552,11 @@
       "stopConfirmDescription": "Zastavením brány smíšeného směrování se vypne i smíšené směrování této instance (konfigurace kanálů zůstává); ostatní brány lze spustit tlačítkem „Restartovat“.",
       "stopFailed": "Bránu se nepodařilo zastavit: {{error}}",
       "restartFailed": "Bránu se nepodařilo restartovat: {{error}}"
+    },
+    "cli": {
+      "quickLaunch": "Rychlé spuštění CLI",
+      "selectWorkingDir": "Vyberte pracovní adresář Codex CLI",
+      "launchSuccess": "Codex CLI spuštěno"
     }
   },
   "githubCopilot": {
@@ -5457,6 +5498,12 @@
       "desc": "Lokální soubory relací — Lokální sken a otevření umístění.",
       "empty": "Soubory relací nenalezeny",
       "open": "Otevřít umístění"
+    },
+    "quotaCategory": {
+      "base": "Základní balíček",
+      "activity": "Promo balíček",
+      "extra": "Přídavný balíček",
+      "other": "Jiné"
     }
   },
   "qoder": {
@@ -6163,7 +6210,8 @@
       "claudeShort": "Claude CLI"
     },
     "prefill": {
-      "claudeDesktopReady": "Nastavení APIKEY.FUN je vyplněno. Potvrďte přidání do Claude."
+      "claudeDesktopReady": "Nastavení APIKEY.FUN je vyplněno. Potvrďte přidání do Claude.",
+      "codexReady": "Konfigurace APIKEY.FUN byla importována. Potvrďte a přidejte do Codexu."
     },
     "copyKey": "Copy Key​",
     "clearKey": "Clear input​"
@@ -6537,5 +6585,14 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Správa klíčů OpenCode Go/Zen a filtr podle tier."
+  },
+  "sessionManager": {
+    "time": {
+      "unknown": "Neznámý čas",
+      "minutesAgo": "Před {{count}} min",
+      "hoursAgo": "Před {{count}} hod",
+      "daysAgo": "Před {{count}} dny",
+      "weeksAgo": "Před {{count}} týdny"
+    }
   }
 }

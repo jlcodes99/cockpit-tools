@@ -2497,8 +2497,20 @@ fn find_codex_windows_app_main_exe(app_dir: &std::path::Path) -> Option<std::pat
 }
 
 #[cfg(target_os = "windows")]
+fn codex_store_package_priority(dir_name: &str) -> u8 {
+    let lower = dir_name.to_ascii_lowercase();
+    if lower.starts_with("openai.codex_") || lower.starts_with("openai.chatgpt_") {
+        2
+    } else if lower.starts_with("openai.chatgpt-desktop_") {
+        1
+    } else {
+        0
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn detect_codex_exec_path_by_windowsapps_scan() -> Option<std::path::PathBuf> {
-    let mut best: Option<(Vec<u32>, std::path::PathBuf)> = None;
+    let mut best: Option<(u8, Vec<u32>, std::path::PathBuf)> = None;
 
     for drive in b'A'..=b'Z' {
         let drive_letter = drive as char;
@@ -2536,19 +2548,22 @@ fn detect_codex_exec_path_by_windowsapps_scan() -> Option<std::path::PathBuf> {
                 None => continue,
             };
 
+            let priority = codex_store_package_priority(&dir_name);
             let replace = match &best {
                 None => true,
-                Some((best_version, _)) => {
-                    compare_windows_store_version(&version, best_version).is_gt()
+                Some((best_priority, best_version, _)) => {
+                    priority > *best_priority
+                        || (priority == *best_priority
+                            && compare_windows_store_version(&version, best_version).is_gt())
                 }
             };
             if replace {
-                best = Some((version, candidate));
+                best = Some((priority, version, candidate));
             }
         }
     }
 
-    if let Some((_, path)) = best {
+    if let Some((_, _, path)) = best {
         crate::modules::logger::log_info(&format!(
             "[Path Detect] codex windowsapps scan hit: {}",
             path.to_string_lossy()
@@ -2560,11 +2575,57 @@ fn detect_codex_exec_path_by_windowsapps_scan() -> Option<std::path::PathBuf> {
 }
 
 #[cfg(target_os = "windows")]
+fn detect_codex_exec_path_by_app_user_model_id(app_user_model_id: &str) -> Option<std::path::PathBuf> {
+    let family = app_user_model_id.split('!').next()?.trim();
+    if family.is_empty() {
+        return None;
+    }
+    let escaped_family = escape_powershell_single_quoted(family);
+    let script = format!(
+        r#"$pkg = Get-AppxPackage | Where-Object {{ $_.PackageFamilyName -eq '{escaped_family}' }} | Select-Object -First 1
+if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.InstallLocation)) {{
+  Write-Output ([string]$pkg.InstallLocation.Trim())
+}}"#
+    );
+    let output = powershell_output_with_timeout(&["-Command", &script], WINDOWS_PROCESS_PROBE_TIMEOUT).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let install_location = line.trim().trim_matches('"');
+        if install_location.is_empty() {
+            continue;
+        }
+        let install_path = std::path::PathBuf::from(install_location);
+        if let Some(candidate) = find_codex_windows_app_main_exe(&install_path.join("app")) {
+            if candidate.exists() {
+                crate::modules::logger::log_info(&format!(
+                    "[Path Detect] codex app_user_model_id install hit: {}",
+                    candidate.to_string_lossy()
+                ));
+                return Some(candidate);
+            }
+        }
+        if let Some(candidate) = find_codex_windows_app_main_exe(&install_path) {
+            if candidate.exists() {
+                crate::modules::logger::log_info(&format!(
+                    "[Path Detect] codex app_user_model_id install hit: {}",
+                    candidate.to_string_lossy()
+                ));
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
 fn detect_codex_exec_path_by_appx_install_location() -> Option<std::path::PathBuf> {
-    let script = r#"$names = @('OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop', 'OpenAI.Codex')
+    let script = r#"$names = @('OpenAI.Codex', 'OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop')
 $pkg = $names |
   ForEach-Object { Get-AppxPackage -Name $_ -ErrorAction SilentlyContinue } |
-  Sort-Object -Property Version -Descending |
+  Sort-Object @{ Expression = { if ($_.Name -like '*ChatGPT-Desktop*' -or $_.PackageFamilyName -like '*ChatGPT-Desktop*') { 1 } else { 0 } } }, @{ Expression = { try { [version]$_.Version } catch { [version]'0.0.0.0' } }; Descending = $true } |
   Select-Object -First 1
 if (-not $pkg) {
   $pkg = Get-AppxPackage |
@@ -2574,7 +2635,7 @@ if (-not $pkg) {
       $_.PackageFamilyName -like 'OpenAI.ChatGPT*' -or
       $_.PackageFamilyName -like 'OpenAI.Codex*'
     } |
-  Sort-Object -Property Version -Descending |
+  Sort-Object @{ Expression = { if ($_.Name -like '*ChatGPT-Desktop*' -or $_.PackageFamilyName -like '*ChatGPT-Desktop*') { 1 } else { 0 } } }, @{ Expression = { try { [version]$_.Version } catch { [version]'0.0.0.0' } }; Descending = $true } |
   Select-Object -First 1
 }
 if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.InstallLocation)) {
@@ -2617,7 +2678,7 @@ fn detect_codex_store_app_user_model_id_by_startapps() -> Option<String> {
     $_.Name -like 'ChatGPT*' -or
     $_.Name -like 'Codex*'
   } |
-  Sort-Object @{ Expression = { if ($_.AppID -like 'OpenAI.ChatGPT*' -or $_.Name -like 'ChatGPT*') { 0 } else { 1 } } }, Name |
+  Sort-Object @{ Expression = { if ($_.AppID -like '*ChatGPT-Desktop*' -or $_.Name -like '*Classic*') { 1 } else { 0 } } }, Name |
   Select-Object -First 1
 if ($entry -and -not [string]::IsNullOrWhiteSpace($entry.AppID)) {
   Write-Output ([string]$entry.AppID.Trim())
@@ -2640,10 +2701,10 @@ if ($entry -and -not [string]::IsNullOrWhiteSpace($entry.AppID)) {
 
 #[cfg(target_os = "windows")]
 fn detect_codex_store_app_user_model_id_by_appx_fallback() -> Option<String> {
-    let script = r#"$names = @('OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop', 'OpenAI.Codex')
+    let script = r#"$names = @('OpenAI.Codex', 'OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop')
 $pkg = $names |
   ForEach-Object { Get-AppxPackage -Name $_ -ErrorAction SilentlyContinue } |
-  Sort-Object -Property Version -Descending |
+  Sort-Object @{ Expression = { if ($_.Name -like '*ChatGPT-Desktop*' -or $_.PackageFamilyName -like '*ChatGPT-Desktop*') { 1 } else { 0 } } }, @{ Expression = { try { [version]$_.Version } catch { [version]'0.0.0.0' } }; Descending = $true } |
   Select-Object -First 1
 if (-not $pkg) {
   $pkg = Get-AppxPackage |
@@ -2653,11 +2714,12 @@ if (-not $pkg) {
       $_.PackageFamilyName -like 'OpenAI.ChatGPT*' -or
       $_.PackageFamilyName -like 'OpenAI.Codex*'
     } |
-  Sort-Object -Property Version -Descending |
+  Sort-Object @{ Expression = { if ($_.Name -like '*ChatGPT-Desktop*' -or $_.PackageFamilyName -like '*ChatGPT-Desktop*') { 1 } else { 0 } } }, @{ Expression = { try { [version]$_.Version } catch { [version]'0.0.0.0' } }; Descending = $true } |
   Select-Object -First 1
 }
 if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.PackageFamilyName)) {
-  Write-Output ([string]($pkg.PackageFamilyName.Trim() + '!App'))
+  $suffix = if ($pkg.Name -like '*ChatGPT-Desktop*') { '!ChatGPT' } else { '!App' };
+  Write-Output ([string]($pkg.PackageFamilyName.Trim() + $suffix))
 }"#;
 
     let output = powershell_output(&["-Command", script]).ok()?;
@@ -2744,6 +2806,11 @@ fn detect_codex_exec_path() -> Option<std::path::PathBuf> {
 
     #[cfg(target_os = "windows")]
     {
+        if let Some(app_user_model_id) = detect_codex_store_app_user_model_id() {
+            if let Some(path) = detect_codex_exec_path_by_app_user_model_id(&app_user_model_id) {
+                return Some(path);
+            }
+        }
         if let Some(path) = detect_codex_exec_path_by_windowsapps_scan() {
             return Some(path);
         }
@@ -2763,6 +2830,24 @@ fn normalized_macos_codex_path_text(path: &Path) -> String {
         .to_ascii_lowercase()
 }
 
+#[cfg(any(test, target_os = "windows"))]
+fn is_legacy_codex_store_launch_path(path: &Path) -> bool {
+    let normalized = path
+        .to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase();
+    (normalized.ends_with("\\codex.exe") && normalized.contains("\\windowsapps\\openai.codex_"))
+        || normalized.contains("\\windowsapps\\openai.chatgpt-desktop_")
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn is_chatgpt_windows_launch_path(path: &Path) -> bool {
+    path.to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase()
+        .ends_with("\\chatgpt.exe")
+}
+
 #[cfg(any(test, target_os = "macos"))]
 fn is_official_legacy_codex_macos_path(path: &Path) -> bool {
     matches!(
@@ -2779,14 +2864,57 @@ fn is_official_chatgpt_macos_path(path: &Path) -> bool {
     )
 }
 
-#[cfg(any(test, target_os = "macos"))]
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
 fn should_migrate_legacy_codex_launch_path(current: &Path, detected: &Path) -> bool {
-    is_official_legacy_codex_macos_path(current) && is_official_chatgpt_macos_path(detected)
+    let mut should_migrate = false;
+
+    #[cfg(any(test, target_os = "windows"))]
+    {
+        let current_norm = current
+            .to_string_lossy()
+            .replace('/', "\\")
+            .to_ascii_lowercase();
+        let detected_norm = detected
+            .to_string_lossy()
+            .replace('/', "\\")
+            .to_ascii_lowercase();
+        should_migrate |= is_legacy_codex_store_launch_path(current)
+            && is_chatgpt_windows_launch_path(detected)
+            && current_norm != detected_norm;
+    }
+
+    #[cfg(any(test, target_os = "macos"))]
+    {
+        should_migrate |= is_official_legacy_codex_macos_path(current)
+            && is_official_chatgpt_macos_path(detected);
+    }
+
+    should_migrate
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+fn should_probe_legacy_codex_launch_path(current: &Path) -> bool {
+    let mut should_probe = false;
+
+    #[cfg(any(test, target_os = "windows"))]
+    {
+        should_probe |= is_legacy_codex_store_launch_path(current);
+    }
+
+    #[cfg(any(test, target_os = "macos"))]
+    {
+        should_probe |= is_official_legacy_codex_macos_path(current);
+    }
+
+    should_probe
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn migrate_legacy_codex_launch_path(custom_path: &str) -> Option<std::path::PathBuf> {
     let current_path = std::path::PathBuf::from(custom_path);
+    if !should_probe_legacy_codex_launch_path(&current_path) {
+        return None;
+    }
     let detected = detect_codex_exec_path()?;
     if !should_migrate_legacy_codex_launch_path(&current_path, &detected) {
         return None;

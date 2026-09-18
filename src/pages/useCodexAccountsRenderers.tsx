@@ -2962,7 +2962,15 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                       ),
                     },
                   ]
-                : [];
+                : usageMode === "ainipy"
+                  ? [
+                      { key: "balance", label: t("codex.ainipy.balance", "Balance (tokens)"), value: summary?.balance },
+                      { key: "todayTokens", label: t("codex.ainipy.today", "Used today (tokens)"), value: summary?.todayTotalTokens },
+                      { key: "totalTokens", label: t("codex.ainipy.total", "Total used (tokens)"), value: summary?.totalTotalTokens },
+                    ].map((item) => ({ ...item, value: typeof item.value === "number"
+                      ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Math.floor(item.value))
+                      : "-" }))
+                  : [];
       const summaryGridClassName =
         usageMode === "sub2api" ||
         usageMode === "new_api" ||

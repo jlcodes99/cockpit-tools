@@ -47,7 +47,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   updateInfo = null,
   checking = false,
   onClose,
-  onRestartUpdate,
+  onRestartUpdate: _onRestartUpdate,
   actionState = 'hidden',
   actionVersion = null,
   actionProgress = 0,
@@ -64,7 +64,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   useEscClose(true, onClose);
 
   const [showErrorDetails, setShowErrorDetails] = useState(false);
-  const [isRestarting, setIsRestarting] = useState(false);
+  const [isRestarting] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
 
   const handleTriggerUpdate = useCallback(async () => {
@@ -73,21 +73,6 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
     }
     await onPrimaryAction();
   }, [onPrimaryAction]);
-
-  const handleRestartNow = useCallback(async () => {
-    setIsRestarting(true);
-    try {
-      if (onRestartUpdate) {
-        await onRestartUpdate();
-      } else {
-        const { relaunch } = await import('@tauri-apps/plugin-process');
-        await relaunch();
-      }
-    } catch (error) {
-      console.error('Failed to relaunch after update:', error);
-      setIsRestarting(false);
-    }
-  }, [onRestartUpdate]);
 
   const handleRetryDownload = useCallback(() => {
     setShowErrorDetails(false);
@@ -286,7 +271,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
                 )}
               </div>
               <span className="update-progress-text">
-                {t('update_notification.downloading', 'Downloading...')} {clampedProgress}%
+                {t('update_notification.syncing', 'Syncing & testing...')} {clampedProgress}%
               </span>
             </div>
           )}
@@ -302,9 +287,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
             <div className="update-status update-status-success">
               <Check size={16} />
               <span>
-                {t('update_notification.silentReady', {
-                  version: updateInfo.latest_version,
-                })}
+                {t('update_notification.syncSuccess', 'Synced and triggered build successfully on GitHub!')}
               </span>
             </div>
           )}
@@ -389,9 +372,14 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
               {t('update_notification.restarting', 'Restarting...')}
             </button>
           ) : isDownloaded ? (
-            <button className="btn btn-primary" onClick={handleRestartNow}>
-              <RefreshCw size={16} />
-              {t('update_notification.restartNow', 'Restart')}
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                void openUrl('https://github.com/HoangVung/cockpit-tools/actions');
+              }}
+            >
+              <Sparkles size={16} />
+              {t('update_notification.openGitHubActions', 'Open GitHub Actions')}
             </button>
           ) : (
             <button
@@ -402,12 +390,12 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
               {isDownloading ? (
                 <>
                   <RefreshCw size={16} className="spin" />
-                  {t('update_notification.downloading', 'Downloading...')}
+                  {t('update_notification.syncing', 'Syncing & testing...')}
                 </>
               ) : (
                 <>
-                  <Download size={16} />
-                  {t('update_notification.updateNow', 'Update Now')}
+                  <RefreshCw size={16} />
+                  {t('update_notification.syncAndBuild', 'Sync & Trigger Build (my-custom)')}
                 </>
               )}
             </button>

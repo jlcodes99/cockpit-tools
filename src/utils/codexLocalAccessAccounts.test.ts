@@ -142,6 +142,26 @@ test("DeepSeek Responses accounts can join API service", () => {
   );
 });
 
+test("Chat Completions API Key accounts can join API service", () => {
+  const chatApiKey = account({
+    id: "ainipy",
+    auth_mode: "apikey",
+    api_provider_id: "ainipy",
+    api_base_url: "https://api.ainipy.com/v1",
+    api_wire_api: "chat_completions",
+  });
+  assert.equal(
+    getCodexLocalAccessAccountIneligibleReason(chatApiKey, false),
+    null,
+  );
+  assert.equal(isCodexLocalAccessEligibleAccount(chatApiKey, false), true);
+  assert.equal(canAddCodexAccountToLocalAccess(chatApiKey, new Set(), false), true);
+  assert.deepEqual(
+    resolveImportedCodexAccountIdsForLocalAccess([chatApiKey], true, false),
+    ["ainipy"],
+  );
+});
+
 test("Web Session imports never join API service even when sync-all is enabled", () => {
   const regular = account({ id: "regular" });
   const webSession = account({

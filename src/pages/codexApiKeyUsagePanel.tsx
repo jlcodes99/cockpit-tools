@@ -1,4 +1,6 @@
 import type { ReactElement } from "react";
+import { isAinipyBaseUrl } from "../utils/ainipy";
+import { AinipyUsagePanel } from "../components/model-provider/AinipyUsagePanel";
 import type { TFunction } from "i18next";
 import { Database } from "lucide-react";
 import { isCodexChatCompletionsApiKeyAccount, type CodexAccount } from "../types/codex";
@@ -60,6 +62,10 @@ export function renderCodexApiKeyUsagePanel({
   formatApiKeyUsageDetailByKey,
   findApiKeyUsageDetail,
 }: CodexApiKeyUsagePanelOptions): ReactElement {
+  const ainipyBaseUrl = provider?.baseUrl.trim() || account.api_base_url?.trim() || '';
+  if (isAinipyBaseUrl(ainipyBaseUrl)) {
+    return <AinipyUsagePanel account={account} baseUrl={ainipyBaseUrl} usageState={usageState} variant={variant} />;
+  }
   if (
     isCodexChatCompletionsApiKeyAccount(account) &&
     !isDeepSeekAccount(account) &&

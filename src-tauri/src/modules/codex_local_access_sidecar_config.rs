@@ -369,15 +369,15 @@ fn write_string_atomic_if_changed(path: &Path, content: &str) -> Result<bool, St
     Ok(true)
 }
 
-fn harden_sidecar_auth_file_permissions(path: &Path) -> Result<(), String> {
+fn harden_sidecar_auth_file_permissions(_path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).map_err(
+        std::fs::set_permissions(_path, std::fs::Permissions::from_mode(0o600)).map_err(
             |error| {
                 format!(
                     "设置 API 服务 sidecar 认证文件权限失败: path={}, error={}",
-                    path.display(),
+                    _path.display(),
                     error
                 )
             },

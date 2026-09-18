@@ -33,12 +33,12 @@ export function formatSessionUsageTokensShort(
   if (normalizedLang.startsWith("zh") || normalizedLang.startsWith("ja")) {
     if (value >= 1e8) return `${(value / 1e8).toFixed(2)} 亿`;
     if (value >= 1e4) return `${(value / 1e4).toFixed(decimals)} 万`;
-    return value.toLocaleString();
+    return value.toLocaleString(normalizedLang.startsWith("ja") ? "ja-JP" : "zh-CN");
   }
   if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
   if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
   if (value >= 1e3) return `${(value / 1e3).toFixed(decimals)}K`;
-  return value.toLocaleString();
+  return value.toLocaleString("en-US");
 }
 
 export function formatSessionUsageCostUsd(value: number | null | undefined): string {
