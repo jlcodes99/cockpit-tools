@@ -3,7 +3,28 @@ import { describe, it } from "node:test";
 import {
   getUpdaterReleaseHighlightLines,
   prependUpdaterReleaseHighlights,
+  resolveUpdaterDownloadUrl,
 } from "../src/utils/updaterReleaseNotes.ts";
+
+describe("independent updater download links", () => {
+  const base = "https://github.com/xiaolong2438/cockpit-tools/releases";
+
+  it("uses the fork for release and latest fallbacks", () => {
+    assert.equal(resolveUpdaterDownloadUrl("1.3.52"), `${base}/tag/v1.3.52`);
+    assert.equal(resolveUpdaterDownloadUrl(" v1.3.52 "), `${base}/tag/v1.3.52`);
+    assert.equal(resolveUpdaterDownloadUrl("  "), `${base}/latest`);
+  });
+
+  it("keeps manifest download URLs ahead of the fallback", () => {
+    assert.equal(resolveUpdaterDownloadUrl("1.3.52", {
+      html_url: `${base}/tag/v1.3.52`,
+      url: "https://example.com/setup.exe",
+    }), `${base}/tag/v1.3.52`);
+    assert.equal(resolveUpdaterDownloadUrl("1.3.52", {
+      url: "https://example.com/setup.exe",
+    }), "https://example.com/setup.exe");
+  });
+});
 
 describe("updater release highlights", () => {
   it("prepends the three Chinese highlights for version 1.3.1", () => {

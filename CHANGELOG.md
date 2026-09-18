@@ -7,6 +7,19 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.52] - 2026-09-19
+
+### Added
+
+- Independent signed updates for the xiaolong2438 fork, with a dedicated public key and release endpoints. Install this version manually once to switch from upstream updates; subsequent fork releases use the new update channel.
+- Dedicated WorkBuddy AI launch path, separate from the domestic WorkBuddy client, including settings, executable detection and OAuth client identification.
+
+### Fixed
+
+- Manual update download links now use this fork's releases. Homebrew PR automation is opt-in for forks and is not required for signed updater releases.
+- First-release staging no longer requires a previous updater manifest; corrected the workflow YAML indentation.
+- Corrected the garbled unknown-application error message.
+
 ## [1.3.51] - 2026-09-13
 
 ### Added

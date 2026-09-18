@@ -36,6 +36,19 @@ jobs:
         with:
           node-version: 20
 
+      - name: Validate updater signing configuration
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "::error::Missing TAURI_SIGNING_PRIVATE_KEY repository secret. Configure updater signing before releasing."
+            exit 1
+          fi
+          node -e 'const c = require("./src-tauri/tauri.conf.json"); const u = c.plugins.updater; const base = "https://github.com/" + process.env.GITHUB_REPOSITORY + "/releases/"; if (!u.pubkey || !c.bundle.createUpdaterArtifacts || !u.endpoints.length || !u.endpoints.every(url => url.startsWith(base))) { throw new Error("Updater key, artifacts or repository endpoints are misconfigured"); } console.log("Updater public configuration matches this repository");'
+
       - name: 📖 Read app version
         id: app_version
         shell: bash
@@ -281,6 +294,7 @@ jobs:
           shopt -s nullglob
           ASSETS=(release-assets/*)
           test "${#ASSETS[@]}" -gt 0
+          node scripts/release/verify_updater_signatures.cjs --assets-dir release-assets --config src-tauri/tauri.conf.json
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} Windows assets"
 
@@ -418,6 +432,7 @@ jobs:
           shopt -s nullglob
           ASSETS=(release-assets/*)
           test "${#ASSETS[@]}" -gt 0
+          node scripts/release/verify_updater_signatures.cjs --assets-dir release-assets --config src-tauri/tauri.conf.json
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} macOS Apple Silicon assets"
 
@@ -535,6 +550,7 @@ jobs:
           shopt -s nullglob
           ASSETS=(release-assets/*)
           test "${#ASSETS[@]}" -gt 0
+          node scripts/release/verify_updater_signatures.cjs --assets-dir release-assets --config src-tauri/tauri.conf.json
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} macOS Intel assets"
 
@@ -647,6 +663,7 @@ jobs:
           shopt -s nullglob
           ASSETS=(release-assets/*)
           test "${#ASSETS[@]}" -gt 0
+          node scripts/release/verify_updater_signatures.cjs --assets-dir release-assets --config src-tauri/tauri.conf.json
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} macOS Universal assets"
 
@@ -750,6 +767,7 @@ jobs:
           shopt -s nullglob
           ASSETS=(release-assets/*)
           test "${#ASSETS[@]}" -gt 0
+          node scripts/release/verify_updater_signatures.cjs --assets-dir release-assets --config src-tauri/tauri.conf.json
           gh release upload "${TAG}" "${ASSETS[@]}" --clobber
           echo "Uploaded ${#ASSETS[@]} Linux assets"
 
@@ -837,6 +855,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          node scripts/release/verify_updater_signatures.cjs --assets-dir release-assets --config src-tauri/tauri.conf.json
           node scripts/release/build_merged_latest_json.cjs \
             --version "${VERSION}" \
             --repo "${GITHUB_REPOSITORY}" \
@@ -930,6 +949,8 @@ jobs:
           gh release upload "v${VERSION}" SHA256SUMS.txt --clobber
 
   update-homebrew-cask:
+    # Fork updater releases do not require Homebrew PR/auto-merge permissions.
+    if: ${{ github.repository == 'jlcodes99/cockpit-tools' || vars.ENABLE_HOMEBREW_RELEASE == 'true' }}
     name: 🍺 Update Homebrew Cask
     needs:
       - prepare-release

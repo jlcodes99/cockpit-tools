@@ -5,7 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const DEFAULT_REPO = 'jlcodes99/cockpit-tools';
+const DEFAULT_REPO = 'xiaolong2438/cockpit-tools';
 const DEFAULT_CASK_PATH = 'Casks/cockpit-tools.rb';
 const DEFAULT_TARGET = 'universal-apple-darwin';
 const DEFAULT_RELEASE_ASSET_PREFIX = 'Cockpit.Tools';
@@ -24,7 +24,7 @@ function printHelp() {
   console.log('  --generate-notes        Use GitHub generated release notes when creating release');
   console.log('  --notes-file <path>     Pass release notes file to gh release create');
   console.log('  --tag <tag>             Override release tag (default: v<package.json.version>)');
-  console.log('  --repo <owner/repo>     GitHub repo for release (default: jlcodes99/cockpit-tools)');
+  console.log('  --repo <owner/repo>     GitHub repo for release (default: xiaolong2438/cockpit-tools)');
   console.log('  --cask <path>           Homebrew cask file path (default: Casks/cockpit-tools.rb)');
   console.log('  --asset-path <path>     Use an existing universal .dmg instead of default output path');
   console.log('  -h, --help              Show this help');
