@@ -129,19 +129,29 @@ jobs:
               --json tagName,isDraft,isPrerelease \
               --jq "[.[] | select(.isDraft == false and .isPrerelease == false and .tagName != \"${GITHUB_REF_NAME}\")][0].tagName // \"\""
           )"
-          if [ -z "${PREVIOUS_TAG}" ]; then
-            echo "No previous published release was found; refusing to stage without a legacy updater manifest."
-            exit 1
-          fi
 
-          mkdir -p previous-release
-          gh release download "${PREVIOUS_TAG}" \
-            --pattern "latest.json" \
-            --dir previous-release \
-            --clobber
-          test -s previous-release/latest.json
-          cp previous-release/latest.json legacy-latest.json
-          echo "Preserved legacy latest.json from ${PREVIOUS_TAG}"
+          if [ -n "${PREVIOUS_TAG}" ]; then
+            mkdir -p previous-release
+            gh release download "${PREVIOUS_TAG}" \
+              --pattern "latest.json" \
+              --dir previous-release \
+              --clobber
+            test -s previous-release/latest.json
+            cp previous-release/latest.json legacy-latest.json
+            echo "Preserved legacy latest.json from ${PREVIOUS_TAG}"
+          else
+            # First release: platform jobs will replace this placeholder with
+            # the complete manifest after all installer assets are uploaded.
+            cat > legacy-latest.json <<'JSON'
+{
+  "version": "0.0.0",
+  "notes": "",
+  "pub_date": "1970-01-01T00:00:00.000Z",
+  "platforms": {}
+}
+JSON
+            echo "No previous published release found; staging a first-release placeholder latest.json"
+          fi
 
       # Publish the release early (with previous complete latest.json) so parallel
       # platform jobs can verify assets via public tag download URLs without
