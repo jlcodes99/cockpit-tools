@@ -7,6 +7,18 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.53] - 2026-09-19
+
+### Fixed
+
+- **Isolated WorkBuddy AI account authorization**: open each authorization in a fresh Chrome/Edge temporary profile and private window instead of reusing everyday browser cookies. The domestic WorkBuddy flow is unchanged.
+- **Authorization window lifecycle**: close the owned window and attempt to clean its temporary data on completion, cancellation, expiry or session replacement, without closing everyday browser windows. Report missing supported browsers explicitly.
+- **Reject stale account imports**: validate the current session before saving credentials so cancelled or superseded requests cannot import an account.
+
+### Update notes
+
+- Reuses the independent signing key and update endpoints from v1.3.52. Users on this fork's v1.3.52 can upgrade through the in-app update check; older clients still using upstream updates must first install a fork release manually.
+
 ## [1.3.52] - 2026-09-19
 
 ### Added
