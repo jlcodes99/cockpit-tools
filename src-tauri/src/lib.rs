@@ -1097,6 +1097,7 @@ pub fn run() {
             commands::workbuddy_ai::refresh_workbuddy_ai_token,
             commands::workbuddy_ai::refresh_all_workbuddy_ai_tokens,
             commands::workbuddy_ai::workbuddy_ai_oauth_login_start,
+            commands::workbuddy_ai::workbuddy_ai_oauth_open_fresh_browser,
             commands::workbuddy_ai::workbuddy_ai_oauth_login_complete,
             commands::workbuddy_ai::workbuddy_ai_oauth_login_cancel,
             commands::workbuddy_ai::add_workbuddy_ai_account_with_token,
@@ -1416,6 +1417,7 @@ pub fn run() {
                 }
             }
             RunEvent::Exit => {
+                modules::workbuddy_ai_auth_browser::shutdown();
                 let first_shutdown = modules::app_lifecycle::begin_shutdown();
                 if first_shutdown {
                     commands::codex_instance::restore_mixed_model_profiles_for_app_exit();

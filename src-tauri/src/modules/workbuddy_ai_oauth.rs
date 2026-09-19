@@ -21,6 +21,8 @@ struct PendingOAuthState {
     login_id: String,
     expires_at: i64,
     state: String,
+    auth_url: String,
+    browser_generation: Option<String>,
     cancelled: bool,
 }
 
@@ -172,6 +174,19 @@ pub fn clear_pending_oauth_login(login_id: &str) -> Result<(), String> {
     clear_pending_login(login_id)
 }
 
+/// Serialize the final account write with cancellation/session replacement.
+/// Never commit an old network response after another login became current.
+pub fn commit_login<T>(login_id: &str, commit: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    let mut pending = PENDING_OAUTH_STATE.lock().map_err(|_| "获取锁失败".to_string())?;
+    let state = pending.as_ref().ok_or_else(|| "授权会话已结束".to_string())?;
+    if state.login_id != login_id || state.cancelled || now_timestamp() >= state.expires_at {
+        return Err("授权会话已取消、过期或被替换，请重新添加账号".to_string());
+    }
+    let result = commit();
+    *pending = None;
+    result
+}
+
 async fn start_login_with_platform(platform: &str) -> Result<WorkbuddyOAuthStartResponse, String> {
     let client = build_client()?;
     let url = format!(
@@ -249,6 +264,8 @@ async fn start_login_with_platform(platform: &str) -> Result<WorkbuddyOAuthStart
             login_id: login_id.clone(),
             expires_at: now_timestamp() + OAUTH_TIMEOUT_SECONDS as i64,
             state: state.clone(),
+            auth_url: verification_uri.clone(),
+            browser_generation: None,
             cancelled: false,
         });
     }
@@ -264,6 +281,43 @@ async fn start_login_with_platform(platform: &str) -> Result<WorkbuddyOAuthStart
         verification_uri_complete: Some(verification_uri),
         expires_in: OAUTH_TIMEOUT_SECONDS,
         interval_seconds: OAUTH_POLL_INTERVAL_MS / 1000 + 1,
+    })
+}
+
+fn validate_browser_request(state: &PendingOAuthState, auth_url: &str, now: i64) -> Result<(), String> {
+    if state.cancelled || now >= state.expires_at {
+        return Err("授权会话已取消或过期，请重新添加账号".to_string());
+    }
+    if state.auth_url != auth_url {
+        return Err("授权链接与当前会话不匹配，请重新获取授权链接".to_string());
+    }
+    let parsed = url::Url::parse(auth_url).map_err(|_| "授权链接无效".to_string())?;
+    if parsed.scheme() != "https" || parsed.host_str().is_none()
+        || !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("授权链接必须是有效的 HTTPS 地址".to_string());
+    }
+    Ok(())
+}
+
+/// Only the exact URL issued for the active AI session may open a browser.
+/// Each click supersedes the previous isolated window, never the user's browser.
+pub fn open_fresh_auth_browser(auth_url: &str) -> Result<(), String> {
+    let generation = uuid::Uuid::new_v4().to_string();
+    let login_id = {
+        let mut pending = PENDING_OAUTH_STATE.lock().map_err(|_| "获取锁失败".to_string())?;
+        let state = pending.as_mut().ok_or_else(|| "没有待处理的授权会话".to_string())?;
+        validate_browser_request(state, auth_url, now_timestamp())?;
+        state.browser_generation = Some(generation.clone());
+        state.login_id.clone()
+    };
+    crate::modules::workbuddy_ai_auth_browser::open_fresh(auth_url, move || {
+        PENDING_OAUTH_STATE.lock().ok().and_then(|pending| {
+            pending.as_ref().map(|state| {
+                state.login_id == login_id && !state.cancelled
+                    && now_timestamp() < state.expires_at
+                    && state.browser_generation.as_deref() == Some(generation.as_str())
+            })
+        }).unwrap_or(false)
     })
 }
 
@@ -408,10 +462,7 @@ pub async fn complete_login(login_id: &str) -> Result<WorkbuddyOAuthCompletePayl
         }
 
         if now_timestamp() - start > OAUTH_TIMEOUT_SECONDS as i64 {
-            let mut pending = PENDING_OAUTH_STATE
-                .lock()
-                .map_err(|_| "获取锁失败".to_string())?;
-            *pending = None;
+            clear_pending_login(login_id)?;
             return Err("登录超时".to_string());
         }
 
@@ -1306,6 +1357,45 @@ pub async fn build_payload_from_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_requires_exact_active_https_session() {
+        let mut state = PendingOAuthState {
+            login_id: "test-login".to_string(),
+            expires_at: 100,
+            state: "test-state".to_string(),
+            auth_url: "https://www.workbuddy.ai/login?state=test-state".to_string(),
+            browser_generation: None,
+            cancelled: false,
+        };
+        assert!(validate_browser_request(&state, &state.auth_url, 99).is_ok());
+        assert!(validate_browser_request(&state, &state.auth_url, 100).is_err());
+        assert!(validate_browser_request(&state, "https://www.workbuddy.ai/login?state=other", 99).is_err());
+        state.cancelled = true;
+        assert!(validate_browser_request(&state, &state.auth_url, 99).is_err());
+        state.cancelled = false;
+        state.auth_url = "file:///C:/Windows/test".to_string();
+        assert!(validate_browser_request(&state, &state.auth_url, 99).is_err());
+        state.auth_url = "https://user:pass@www.workbuddy.ai/login".to_string();
+        assert!(validate_browser_request(&state, &state.auth_url, 99).is_err());
+    }
+
+    #[test]
+    fn expired_old_login_does_not_clear_new_login() {
+        let mut pending = PENDING_OAUTH_STATE.lock().unwrap();
+        *pending = Some(PendingOAuthState {
+            login_id: "new-login".to_string(), expires_at: i64::MAX,
+            state: "new-state".to_string(), auth_url: "https://www.workbuddy.ai/login".to_string(),
+            browser_generation: None, cancelled: false,
+        });
+        drop(pending);
+        clear_pending_login("old-login").unwrap();
+        assert!(commit_login("old-login", || -> Result<(), String> {
+            panic!("stale login must not write an account");
+        }).is_err());
+        assert_eq!(PENDING_OAUTH_STATE.lock().unwrap().as_ref().unwrap().login_id, "new-login");
+        clear_pending_login("new-login").unwrap();
+    }
 
     #[test]
     fn auth_url_contains_detected_version_and_login_session() {

@@ -194,6 +194,13 @@ pub async fn workbuddy_ai_oauth_login_start() -> Result<WorkbuddyOAuthStartRespo
 }
 
 #[tauri::command]
+pub async fn workbuddy_ai_oauth_open_fresh_browser(auth_url: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || workbuddy_ai_oauth::open_fresh_auth_browser(&auth_url))
+        .await
+        .map_err(|_| "启动独立授权浏览器任务失败".to_string())?
+}
+
+#[tauri::command]
 pub async fn workbuddy_ai_oauth_login_complete(
     app: AppHandle,
     login_id: String,
@@ -205,7 +212,9 @@ pub async fn workbuddy_ai_oauth_login_complete(
 
     let result: Result<WorkbuddyAccount, String> = async {
         let payload = workbuddy_ai_oauth::complete_login(&login_id).await?;
-        let mut account = workbuddy_ai_account::upsert_account(payload)?;
+        let mut account = workbuddy_ai_oauth::commit_login(&login_id, || {
+            workbuddy_ai_account::upsert_account(payload)
+        })?;
         account = refresh_workbuddy_ai_account_after_login(account).await;
         Ok(account)
     }

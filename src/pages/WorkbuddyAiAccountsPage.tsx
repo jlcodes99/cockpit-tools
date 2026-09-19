@@ -36,7 +36,7 @@ const workbuddyAiPlatformConfig: CodebuddySuiteAccountsPlatformConfig<WorkbuddyA
   addAccountTitleKey: 'workbuddyAi.addAccount',
   addAccountTitleDefault: 'Add WorkBuddy AI account',
   oauthDescKey: 'workbuddyAi.oauthDesc',
-  oauthDescDefault: 'Open the WorkBuddy AI authorization page in your browser.',
+  oauthDescDefault: '每次在独立的 Chrome / Edge 未登录窗口中授权，不影响日常浏览器的登录状态。授权完成或取消后，该窗口将自动关闭。',
   oauthFeatureCardClassName: 'workbuddy-ai-oauth-feature-card',
   oauthFeatureTitleKey: 'workbuddyAi.oauthFeature.oauth.title',
   oauthFeatureTitleDefault: 'WorkBuddy AI OAuth',
@@ -92,6 +92,7 @@ export function WorkbuddyAiAccountsPage() {
       startLogin: workbuddyAiService.startWorkbuddyAiOAuthLogin,
       completeLogin: workbuddyAiService.completeWorkbuddyAiOAuthLogin,
       cancelLogin: workbuddyAiService.cancelWorkbuddyAiOAuthLogin,
+      openAuthUrl: workbuddyAiService.openWorkbuddyAiOAuthFreshBrowser,
     },
     dataService: {
       importFromJson: workbuddyAiService.importWorkbuddyAiFromJson,

@@ -38,6 +38,10 @@ export async function startWorkbuddyAiOAuthLogin(): Promise<WorkbuddyOAuthLoginS
   return await invoke('workbuddy_ai_oauth_login_start');
 }
 
+export async function openWorkbuddyAiOAuthFreshBrowser(authUrl: string): Promise<void> {
+  await invoke('workbuddy_ai_oauth_open_fresh_browser', { authUrl });
+}
+
 export async function completeWorkbuddyAiOAuthLogin(loginId: string): Promise<WorkbuddyAccount> {
   return await invoke('workbuddy_ai_oauth_login_complete', { loginId });
 }
