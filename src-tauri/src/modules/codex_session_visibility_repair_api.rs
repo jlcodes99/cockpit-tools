@@ -189,16 +189,9 @@ struct CodexSyncInstance {
 struct RolloutProviderChange {
     relative_path: PathBuf,
     absolute_path: PathBuf,
-    updated_content: Option<RolloutProviderUpdate>,
     target_modified_at: Option<SystemTime>,
     source_modified_at: Option<SystemTime>,
     source_size: u64,
-}
-
-#[derive(Debug, Clone)]
-enum RolloutProviderUpdate {
-    FullContent(String),
-    FirstLine(String),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -207,7 +200,6 @@ struct CodexSessionVisibilityRepairOptions {
     dry_run: bool,
     repair_rollout: bool,
     repair_referenced_rollouts: bool,
-    rewrite_all_session_meta: bool,
     sqlite_scope: SqliteRepairScope,
     repair_sqlite_timestamps: bool,
     collect_rollout_thread_facts: bool,
@@ -311,7 +303,6 @@ impl CodexSessionVisibilityRepairOptions {
             dry_run: false,
             repair_rollout: false,
             repair_referenced_rollouts: true,
-            rewrite_all_session_meta: matches!(mode, CodexSessionVisibilityRepairMode::Deep),
             sqlite_scope: SqliteRepairScope::OfficialStateDbs,
             repair_sqlite_timestamps: false,
             collect_rollout_thread_facts: false,
@@ -331,7 +322,6 @@ impl CodexSessionVisibilityRepairOptions {
             dry_run: false,
             repair_rollout: true,
             repair_referenced_rollouts: false,
-            rewrite_all_session_meta: true,
             sqlite_scope: SqliteRepairScope::AllSessionDbs,
             repair_sqlite_timestamps: false,
             collect_rollout_thread_facts: true,
@@ -859,7 +849,7 @@ fn repair_session_visibility_for_instances_with_options(
         );
         let backup_dir = backup_instance_files(
             &instance.data_dir,
-            &rollout_changes,
+            &[],
             sqlite_rows_to_update > 0
                 || sqlite_timestamp_rows_to_update > 0
                 || catalog_scan.total() > 0,
@@ -1376,7 +1366,7 @@ fn repair_single_instance_with_progress(
             rollout_total,
             Some(instance),
         );
-        if !rewrite_rollout_provider(change)? {
+        if !normalize_rollout_timestamp(change)? {
             skipped_rollout_files += 1;
         }
     }
@@ -1507,7 +1497,7 @@ fn build_summary_message(
     };
 
     format!(
-        "已为 {} 个实例修复历史会话：校正 {} 个会话文件，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}{}{}",
+        "已为 {} 个实例修复历史会话：校正 {} 个会话文件时间，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}{}{}",
         mutated_instance_count,
         changed_rollout_file_count,
         updated_sqlite_row_count,
@@ -1578,7 +1568,7 @@ fn build_dry_run_summary_message(
     };
 
     format!(
-        "预览将为 {} 个实例修复历史会话：校正 {} 个会话文件，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}",
+        "预览将为 {} 个实例修复历史会话：校正 {} 个会话文件时间，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}",
         mutated_instance_count,
         changed_rollout_file_count,
         updated_sqlite_row_count,

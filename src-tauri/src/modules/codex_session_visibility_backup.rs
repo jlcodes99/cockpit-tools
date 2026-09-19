@@ -17,7 +17,9 @@ fn format_sqlite_write_error(path: &Path, error: &rusqlite::Error) -> String {
     )
 }
 
-fn rewrite_rollout_provider(change: &RolloutProviderChange) -> Result<bool, String> {
+// rollout 文件内容保持原样（字节级 append-only 契约，见 scan_rollout_session_meta_providers 注释），
+// 这里只把修改时间对齐到 session_index / 会话记录推导出的权威时间。
+fn normalize_rollout_timestamp(change: &RolloutProviderChange) -> Result<bool, String> {
     let metadata = match fs::metadata(&change.absolute_path) {
         Ok(metadata) => metadata,
         Err(error) => {
@@ -42,38 +44,20 @@ fn rewrite_rollout_provider(change: &RolloutProviderChange) -> Result<bool, Stri
         ));
         return Ok(false);
     }
-    let original_modified_at =
-        modules::codex_session_file_time::read_modified_time(&change.absolute_path);
-    if let Some(updated_content) = change.updated_content.as_ref() {
-        match updated_content {
-            RolloutProviderUpdate::FullContent(content) => {
-                write_bytes_atomic(&change.absolute_path, content.as_bytes())?;
-            }
-            RolloutProviderUpdate::FirstLine(line) => {
-                rewrite_rollout_first_line(&change.absolute_path, line)?;
-            }
-        }
+    let Some(target_modified_at) = change.target_modified_at else {
+        return Ok(false);
+    };
+    if modules::codex_session_file_time::same_modified_time_millis(
+        current_modified_at,
+        Some(target_modified_at),
+    ) {
+        return Ok(false);
     }
     modules::codex_session_file_time::restore_modified_time(
         &change.absolute_path,
-        change.target_modified_at.or(original_modified_at),
+        Some(target_modified_at),
     )?;
     Ok(true)
-}
-
-fn rewrite_rollout_first_line(path: &Path, updated_first_line: &str) -> Result<(), String> {
-    let content = fs::read_to_string(path)
-        .map_err(|error| format!("读取 rollout 文件失败 ({}): {}", path.display(), error))?;
-    let (first_segment, rest) = match content.find('\n') {
-        Some(index) => (&content[..index + 1], &content[index + 1..]),
-        None => (content.as_str(), ""),
-    };
-    let (_, separator) = split_line_ending(first_segment);
-    let mut output = String::new();
-    output.push_str(updated_first_line);
-    output.push_str(separator);
-    output.push_str(rest);
-    write_bytes_atomic(path, output.as_bytes())
 }
 
 fn write_bytes_atomic(path: &Path, content: &[u8]) -> Result<(), String> {
