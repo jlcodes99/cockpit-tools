@@ -39,7 +39,11 @@ pub struct QuotaCloudCodeContext {
 impl QuotaCloudCodeContext {
     pub fn from_token(token: &TokenData) -> Self {
         Self {
-            preferred_project_id: token.project_id.clone(),
+            preferred_project_id: token
+                .project_id
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty() && s != "aicode-consumers"),
             is_gcp_tos: token.is_gcp_tos.unwrap_or(false),
         }
     }
@@ -256,7 +260,7 @@ fn resolve_cloud_code_base_url(ctx: &QuotaCloudCodeContext) -> String {
         return override_url;
     }
 
-    if ctx.is_gcp_tos {
+    if ctx.is_gcp_tos && ctx.preferred_project_id.is_some() {
         return CLOUD_CODE_PROD_BASE_URL.to_string();
     }
 
@@ -662,7 +666,7 @@ pub async fn fetch_project_metadata_with_context(
     let mut allowed_tiers: Vec<AllowedTier> = Vec::new();
     let mut last_error: Option<String> = None;
     let mut credits: Vec<CreditInfo> = Vec::new();
-    let mut resolved_is_gcp_tos: Option<bool> = if ctx.is_gcp_tos { Some(true) } else { None };
+    let mut resolved_is_gcp_tos: Option<bool> = None;
     let base_url = resolve_cloud_code_base_url(ctx);
     let ua = load_code_assist_user_agent();
     let x_goog_api_client = load_code_assist_x_goog_api_client();
@@ -716,7 +720,7 @@ pub async fn fetch_project_metadata_with_context(
                                     subscription_tier =
                                         paid_tier_id.clone().or(current_tier_id.clone());
 
-                                    // 从 currentTier / allowedTiers 中解析 usesGcpTos
+                                    // 从 currentTier / allowedTiers 中解析 usesGcpTos（严格遵循 Google 返回的真实字段）
                                     let detected_gcp_tos = data
                                         .current_tier
                                         .as_ref()
@@ -728,16 +732,6 @@ pub async fn fetch_project_metadata_with_context(
                                                     .find(|t| t.is_default.unwrap_or(false))
                                                     .and_then(|t| t.uses_gcp_tos)
                                             })
-                                        })
-                                        .or_else(|| {
-                                            // standard-tier 订阅必定属于 GCP ToS 体系
-                                            if current_tier_id.as_deref() == Some("standard-tier")
-                                                || paid_tier_id.as_deref() == Some("standard-tier")
-                                            {
-                                                Some(true)
-                                            } else {
-                                                None
-                                            }
                                         });
                                     if detected_gcp_tos.is_some() {
                                         resolved_is_gcp_tos = detected_gcp_tos;
@@ -795,8 +789,11 @@ pub async fn fetch_project_metadata_with_context(
                                         );
                                     }
 
-                                    let response_project_id =
-                                        data.project.as_ref().and_then(extract_project_id);
+                                    let response_project_id = data
+                                        .project
+                                        .as_ref()
+                                        .and_then(extract_project_id)
+                                        .filter(|id| !id.trim().is_empty() && id.trim() != "aicode-consumers");
                                     if let Some(project_id) = response_project_id.clone() {
                                         return ProjectMetadataResult {
                                             project_id: Some(project_id),
@@ -826,7 +823,10 @@ pub async fn fetch_project_metadata_with_context(
                                         .await
                                         {
                                             Ok(project_id) => {
-                                                if let Some(project_id) = project_id {
+                                                let clean_project_id = project_id.filter(|id| {
+                                                    !id.trim().is_empty() && id.trim() != "aicode-consumers"
+                                                });
+                                                if let Some(project_id) = clean_project_id {
                                                     return ProjectMetadataResult {
                                                         project_id: Some(project_id),
                                                         subscription_tier,
@@ -1057,18 +1057,28 @@ pub async fn fetch_quota_with_context(
 
     let base_url = resolve_cloud_code_base_url(ctx);
     let meta = fetch_project_metadata_with_context(access_token, email, ctx).await;
-    let resolved_project_id = meta.project_id;
+    let resolved_project_id = meta
+        .project_id
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty() && id != "aicode-consumers");
     let subscription_tier = meta.subscription_tier;
     let credits = meta.credits;
     let is_gcp_tos = meta.is_gcp_tos;
     let effective_project_id = resolved_project_id
         .clone()
-        .or_else(|| ctx.preferred_project_id.clone());
+        .or_else(|| ctx.preferred_project_id.clone())
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty() && id != "aicode-consumers");
 
     // 保留缓存，但缓存命中前仍先执行与 Antigravity IDE.app 对齐的项目识别流程。
     if !skip_cache {
         if let Some(record) = read_api_cache("authorized", email) {
-            if is_api_cache_valid(&record) {
+            let is_dirty_cache = record
+                .project_id
+                .as_deref()
+                .map(|p| p.trim() == "aicode-consumers")
+                .unwrap_or(false);
+            if !is_dirty_cache && is_api_cache_valid(&record) {
                 crate::modules::logger::log_info(&format!(
                     "[QuotaApiCache] Using api cache for {} (age: {}s)",
                     email,
@@ -1104,6 +1114,7 @@ pub async fn fetch_quota_with_context(
     let client = create_client();
     let payload = effective_project_id
         .as_ref()
+        .filter(|id| !id.trim().is_empty() && id.trim() != "aicode-consumers")
         .map(|id| json!({ "project": id }))
         .unwrap_or_else(|| json!({}));
     let cloud_code_user_agent = build_cloud_code_user_agent();
