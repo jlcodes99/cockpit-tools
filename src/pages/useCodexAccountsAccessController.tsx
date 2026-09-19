@@ -580,6 +580,24 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         launchPreviewAccount
       );
     }, [accounts, launchPreviewAccount]);
+
+    /** 收起启动预览并把账号交给 CLI 启动弹框。 */
+    const enterCodexCliLaunch = useCallback(
+      (account: CodexAccount) => {
+        const presentation = buildCodexAccountPresentation(account, t);
+        setPendingCliLaunchTarget({
+          accountId: account.id,
+          accountLabel:
+            presentation.displayName || account.email || account.id,
+          bindAccountId: isDeepSeekAccount(account)
+            ? resolveDeepSeekBindAccountId(account)
+            : account.id,
+        });
+        setLaunchPreviewCliIntent(false);
+        setLaunchPreviewAccount(null);
+      },
+      [t],
+    );
   
     const launchPreviewInstanceOptions = useMemo(() => {
       const values = codexInstanceStore.instances
@@ -673,17 +691,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           );
         }
         if (launchPreviewCliIntent) {
-          const presentation = buildCodexAccountPresentation(launchAccount, t);
-          setPendingCliLaunchTarget({
-            accountId: launchAccount.id,
-            accountLabel:
-              presentation.displayName || launchAccount.email || launchAccount.id,
-            bindAccountId: isDeepSeekAccount(launchAccount)
-              ? resolveDeepSeekBindAccountId(launchAccount)
-              : launchAccount.id,
-          });
-          setLaunchPreviewCliIntent(false);
-          setLaunchPreviewAccount(null);
+          enterCodexCliLaunch(launchAccount);
           return true;
         }
         if (launchPreviewInstanceId !== DEFAULT_CODEX_INSTANCE_ID) {
@@ -740,6 +748,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       [
         launchPreviewCliIntent,
         codexInstanceStore,
+        enterCodexCliLaunch,
         executeCodexAccountSwitch,
         activeLaunchPreviewAccount,
         launchPreviewInstanceId,
@@ -1176,6 +1185,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           ),
           tone: "error",
         });
+        return;
+      }
+      // 该账号的启动预览已经打开时（预览内也有 CLI 快速启动入口），再设置一次同样的预览状态
+      // 不会产生任何界面变化，点击会完全没有反馈，因此直接进入 CLI 启动。
+      if (launchPreviewAccount?.id === account.id) {
+        enterCodexCliLaunch(account);
         return;
       }
       // CLI 快速启动也先走启动预览，确认后再进入 CLI 启动；DeepSeek 账号在确认时选择接入方式与模型。
