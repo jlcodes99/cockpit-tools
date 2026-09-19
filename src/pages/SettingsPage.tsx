@@ -62,6 +62,7 @@ import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useCodebuddyCliAccountStore } from '../stores/useCodebuddyCliAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
@@ -323,6 +324,7 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   trae_solo_cn: 17,
   workbuddy: 18,
   zed: 19,
+  codebuddy_cli: 20,
 };
 type ConfigUpdatedEventDetail = {
   source?: string;
@@ -2393,6 +2395,8 @@ export function useSettingsPageController() {
         return parseRefresh(codebuddyCnAutoRefresh) > 0;
       case 'workbuddy':
         return parseRefresh(workbuddyAutoRefresh) > 0;
+      case 'codebuddy_cli':
+        return parseRefresh(workbuddyAutoRefresh) > 0;
       case 'qoder':
         return parseRefresh(qoderAutoRefresh) > 0;
       case 'zcode':
@@ -2549,6 +2553,8 @@ export function useSettingsPageController() {
         return getProviderAccounts(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail);
       case 'workbuddy':
         return getProviderAccounts(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail);
+      case 'codebuddy_cli':
+        return getProviderAccounts(useCodebuddyCliAccountStore, getWorkbuddyAccountDisplayEmail);
       case 'qoder':
         return getProviderAccounts(useQoderAccountStore, getQoderAccountDisplayEmail);
       case 'zcode':

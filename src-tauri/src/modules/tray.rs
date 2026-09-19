@@ -189,10 +189,11 @@ pub(crate) enum PlatformId {
     TraeCn,
     TraeSoloCn,
     Workbuddy,
+    CodebuddyCli,
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 18] {
+    pub(crate) fn default_order() -> [Self; 19] {
         [
             Self::Claude,
             Self::Codex,
@@ -212,6 +213,7 @@ impl PlatformId {
             Self::TraeCn,
             Self::TraeSoloCn,
             Self::Workbuddy,
+            Self::CodebuddyCli,
         ]
     }
 
@@ -235,6 +237,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_TRAE_CN => Some(Self::TraeCn),
             crate::modules::tray_layout::PLATFORM_TRAE_SOLO_CN => Some(Self::TraeSoloCn),
             crate::modules::tray_layout::PLATFORM_WORKBUDDY => Some(Self::Workbuddy),
+            crate::modules::tray_layout::PLATFORM_CODEBUDDY_CLI => Some(Self::CodebuddyCli),
             _ => None,
         }
     }
@@ -259,6 +262,7 @@ impl PlatformId {
             Self::TraeCn => crate::modules::tray_layout::PLATFORM_TRAE_CN,
             Self::TraeSoloCn => crate::modules::tray_layout::PLATFORM_TRAE_SOLO_CN,
             Self::Workbuddy => crate::modules::tray_layout::PLATFORM_WORKBUDDY,
+            Self::CodebuddyCli => crate::modules::tray_layout::PLATFORM_CODEBUDDY_CLI,
         }
     }
 
@@ -282,6 +286,7 @@ impl PlatformId {
             Self::TraeCn => "Trae CN",
             Self::TraeSoloCn => "TRAE SOLO CN",
             Self::Workbuddy => "WorkBuddy",
+            Self::CodebuddyCli => "CodeBuddy CLI",
         }
     }
 
@@ -305,6 +310,7 @@ impl PlatformId {
             Self::TraeCn => "trae-cn",
             Self::TraeSoloCn => "trae-solo-cn",
             Self::Workbuddy => "workbuddy",
+            Self::CodebuddyCli => "codebuddy-cli",
         }
     }
 }
@@ -832,6 +838,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
             build_trae_display_info(lang, platform)
         }
         PlatformId::Workbuddy => build_workbuddy_display_info(lang),
+        PlatformId::CodebuddyCli => build_codebuddy_cli_display_info(lang),
     }
 }
 
@@ -1405,6 +1412,12 @@ fn build_workbuddy_display_info(lang: &str) -> AccountDisplayInfo {
 }
 
 #[cfg(not(target_os = "macos"))]
+fn build_codebuddy_cli_display_info(lang: &str) -> AccountDisplayInfo {
+    let accounts = crate::modules::workbuddy_account::list_accounts();
+    build_workbuddy_family_display_info(lang, resolve_codebuddy_cli_current_account(&accounts))
+}
+
+#[cfg(not(target_os = "macos"))]
 fn build_zed_display_info(lang: &str) -> AccountDisplayInfo {
     let accounts = crate::modules::zed_account::list_accounts();
     let current_id = crate::modules::zed_account::resolve_current_account_id();
@@ -1668,6 +1681,18 @@ fn resolve_workbuddy_current_account(
     accounts: &[crate::models::workbuddy::WorkbuddyAccount],
 ) -> Option<crate::models::workbuddy::WorkbuddyAccount> {
     crate::modules::workbuddy_account::resolve_current_account_id(accounts).and_then(|account_id| {
+        accounts
+            .iter()
+            .find(|account| account.id == account_id)
+            .cloned()
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn resolve_codebuddy_cli_current_account(
+    accounts: &[crate::models::workbuddy::WorkbuddyAccount],
+) -> Option<crate::models::workbuddy::WorkbuddyAccount> {
+    crate::modules::workbuddy_account::resolve_codebuddy_cli_current_account_id(accounts).and_then(|account_id| {
         accounts
             .iter()
             .find(|account| account.id == account_id)

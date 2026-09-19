@@ -56,6 +56,7 @@ import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useCodebuddyCliAccountStore } from '../stores/useCodebuddyCliAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
 import { useCodebuddyCnInstanceStore } from '../stores/useCodebuddyCnInstanceStore';
 import { useAntigravityLegacyInstanceStore } from '../stores/useAntigravityLegacyInstanceStore';
@@ -226,6 +227,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useTraeSoloCnInstanceStore.getState();
     case 'workbuddy':
       return useWorkbuddyInstanceStore.getState();
+    case 'codebuddy_cli':
+      return null;
     case 'zcode':
       return useZcodeInstanceStore.getState();
     case 'zed':
@@ -299,6 +302,10 @@ export function FloatingCardWindow() {
     accounts: workbuddyAccounts,
     currentAccountId: workbuddyCurrentId,
   } = useWorkbuddyAccountStore();
+  const {
+    accounts: codebuddyCliAccounts,
+    currentAccountId: codebuddyCliCurrentId,
+  } = useCodebuddyCliAccountStore();
   const {
     accounts: zedAccounts,
     currentAccountId: zedCurrentId,
@@ -525,6 +532,10 @@ export function FloatingCardWindow() {
           break;
         case 'workbuddy':
           await useWorkbuddyAccountStore.getState().fetchAccounts();
+          break;
+        case 'codebuddy_cli':
+          await useCodebuddyCliAccountStore.getState().fetchAccounts();
+          await useCodebuddyCliAccountStore.getState().fetchCurrentAccountId();
           break;
         case 'zed':
           await useZedAccountStore.getState().fetchAccounts();
@@ -824,6 +835,10 @@ export function FloatingCardWindow() {
     () => resolveCurrentAccountById(workbuddyAccounts, workbuddyCurrentId),
     [workbuddyAccounts, workbuddyCurrentId],
   );
+  const codebuddyCliCurrent = useMemo(
+    () => resolveCurrentAccountById(codebuddyCliAccounts, codebuddyCliCurrentId),
+    [codebuddyCliAccounts, codebuddyCliCurrentId],
+  );
   const zedCurrent = useMemo(
     () => resolveCurrentAccountById(zedAccounts, zedCurrentId),
     [zedAccounts, zedCurrentId],
@@ -905,6 +920,11 @@ export function FloatingCardWindow() {
           accounts: workbuddyAccounts,
           actualCurrentAccount: workbuddyCurrent,
         };
+      case 'codebuddy_cli':
+        return {
+          accounts: codebuddyCliAccounts,
+          actualCurrentAccount: codebuddyCliCurrent,
+        };
       case 'zed':
         return {
           accounts: zedAccounts,
@@ -930,6 +950,8 @@ export function FloatingCardWindow() {
     codebuddyCnAccounts,
     codebuddyCnCurrent,
     codebuddyCurrent,
+    codebuddyCliAccounts,
+    codebuddyCliCurrent,
     codexAccounts,
     codexCurrent,
     cursorAccounts,
@@ -1003,6 +1025,8 @@ export function FloatingCardWindow() {
         return getRecommendedTraeAccount(traeAccounts, effectiveCurrentId);
       case 'workbuddy':
         return getRecommendedWorkbuddyAccount(workbuddyAccounts, effectiveCurrentId);
+      case 'codebuddy_cli':
+        return getRecommendedWorkbuddyAccount(codebuddyCliAccounts, effectiveCurrentId);
       case 'zed':
         return getRecommendedZedAccount(zedAccounts, effectiveCurrentId);
       default:
@@ -1013,6 +1037,7 @@ export function FloatingCardWindow() {
     claudeAccounts,
     codebuddyAccounts,
     codebuddyCnAccounts,
+    codebuddyCliAccounts,
     codexAccounts,
     currentAccount?.id,
     cursorAccounts,
@@ -1100,6 +1125,8 @@ export function FloatingCardWindow() {
         return buildTraeAccountPresentation(viewedAccount as typeof traeAccounts[number], t);
       case 'workbuddy':
         return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t);
+      case 'codebuddy_cli':
+        return buildWorkbuddyAccountPresentation(viewedAccount as typeof codebuddyCliAccounts[number], t);
       case 'zed':
         return buildZedAccountPresentation(viewedAccount as typeof zedAccounts[number], t);
       case 'zcode':
@@ -1112,6 +1139,7 @@ export function FloatingCardWindow() {
     claudeAccounts,
     codebuddyAccounts,
     codebuddyCnAccounts,
+    codebuddyCliAccounts,
     codexAccounts,
     cursorAccounts,
     displayGroups,
@@ -1212,6 +1240,9 @@ export function FloatingCardWindow() {
             break;
           case 'workbuddy':
             await useWorkbuddyAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 'codebuddy_cli':
+            await useCodebuddyCliAccountStore.getState().refreshToken(viewedAccount.id);
             break;
           case 'zed':
             await useZedAccountStore.getState().refreshToken(viewedAccount.id);
@@ -1345,6 +1376,9 @@ export function FloatingCardWindow() {
             break;
           case 'workbuddy':
             await useWorkbuddyAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'codebuddy_cli':
+            await useCodebuddyCliAccountStore.getState().switchAccount(viewedAccount.id);
             break;
           case 'zed':
             await useZedAccountStore.getState().switchAccount(viewedAccount.id);
