@@ -5,6 +5,8 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+use std::process::Command;
 use std::sync::Mutex;
 
 use crate::models::cursor::{CursorAccount, CursorAccountIndex, CursorImportPayload};
@@ -1113,6 +1115,188 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
     serde_json::to_string_pretty(&accounts).map_err(|e| format!("序列化失败: {}", e))
 }
 
+const CURSOR_CLI_KEYCHAIN_ACCOUNT: &str = "cursor-user";
+const CURSOR_CLI_ACCESS_TOKEN_SERVICE: &str = "cursor-access-token";
+const CURSOR_CLI_REFRESH_TOKEN_SERVICE: &str = "cursor-refresh-token";
+
+#[cfg(target_os = "macos")]
+fn write_cursor_cli_keychain_value(service: &str, value: &str) -> Result<(), String> {
+    let output = Command::new("security")
+        .args([
+            "add-generic-password",
+            "-a",
+            CURSOR_CLI_KEYCHAIN_ACCOUNT,
+            "-s",
+            service,
+            "-w",
+            value,
+            "-U",
+        ])
+        .output()
+        .map_err(|error| format!("执行 macOS Keychain 写入失败: {}", error))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "写入 Cursor CLI Keychain 失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn delete_cursor_cli_keychain_value(service: &str) -> Result<(), String> {
+    let output = Command::new("security")
+        .args([
+            "delete-generic-password",
+            "-a",
+            CURSOR_CLI_KEYCHAIN_ACCOUNT,
+            "-s",
+            service,
+        ])
+        .output()
+        .map_err(|error| format!("执行 macOS Keychain 删除失败: {}", error))?;
+    if output.status.success()
+        || String::from_utf8_lossy(&output.stderr).contains("could not be found")
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "删除 Cursor CLI Keychain 凭据失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn write_cursor_cli_keychain_value(service: &str, value: &str) -> Result<(), String> {
+    let mut child = Command::new("secret-tool")
+        .args([
+            "store",
+            "--label",
+            "Cursor CLI",
+            "service",
+            service,
+            "account",
+            CURSOR_CLI_KEYCHAIN_ACCOUNT,
+        ])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("执行 Linux Secret Service 写入失败: {}", error))?;
+    if let Some(stdin) = child.stdin.as_mut() {
+        use std::io::Write;
+        stdin
+            .write_all(value.as_bytes())
+            .map_err(|error| format!("写入 Linux Secret Service 失败: {}", error))?;
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("等待 Linux Secret Service 写入失败: {}", error))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "写入 Cursor CLI Secret Service 失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn delete_cursor_cli_keychain_value(service: &str) -> Result<(), String> {
+    let output = Command::new("secret-tool")
+        .args([
+            "clear",
+            "service",
+            service,
+            "account",
+            CURSOR_CLI_KEYCHAIN_ACCOUNT,
+        ])
+        .output()
+        .map_err(|error| format!("执行 Linux Secret Service 删除失败: {}", error))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "删除 Cursor CLI Secret Service 凭据失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn write_cursor_cli_keychain_value(service: &str, value: &str) -> Result<(), String> {
+    let target = format!("{}:{}", service, CURSOR_CLI_KEYCHAIN_ACCOUNT);
+    let output = Command::new("cmdkey")
+        .args([
+            &format!("/generic:{}", target),
+            &format!("/user:{}", CURSOR_CLI_KEYCHAIN_ACCOUNT),
+            &format!("/pass:{}", value),
+        ])
+        .output()
+        .map_err(|error| format!("执行 Windows Credential Manager 写入失败: {}", error))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "写入 Cursor CLI Credential Manager 失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn delete_cursor_cli_keychain_value(service: &str) -> Result<(), String> {
+    let target = format!("{}:{}", service, CURSOR_CLI_KEYCHAIN_ACCOUNT);
+    let output = Command::new("cmdkey")
+        .args([&format!("/delete:{}", target)])
+        .output()
+        .map_err(|error| format!("执行 Windows Credential Manager 删除失败: {}", error))?;
+    if output.status.success()
+        || String::from_utf8_lossy(&output.stdout).contains("not found")
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "删除 Cursor CLI Credential Manager 凭据失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn sync_cursor_cli_credentials(_account: &CursorAccount) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+fn sync_cursor_cli_credentials(account: &CursorAccount) -> Result<(), String> {
+    if account.access_token.trim().is_empty() {
+        return Err("Cursor 账号缺少 access token，无法同步 CLI 登录状态".to_string());
+    }
+
+    write_cursor_cli_keychain_value(
+        CURSOR_CLI_ACCESS_TOKEN_SERVICE,
+        account.access_token.trim(),
+    )?;
+
+    match account
+        .refresh_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(refresh_token) => write_cursor_cli_keychain_value(
+            CURSOR_CLI_REFRESH_TOKEN_SERVICE,
+            refresh_token,
+        ),
+        None => {
+            delete_cursor_cli_keychain_value(CURSOR_CLI_REFRESH_TOKEN_SERVICE)?;
+            Ok(())
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Local import (read from Cursor's state.vscdb)
 // ---------------------------------------------------------------------------
@@ -1286,6 +1470,7 @@ pub fn inject_to_cursor(account_id: &str) -> Result<(), String> {
 
     upsert_vscdb_item(&conn, "cursor.accessToken", &account.access_token)?;
     upsert_vscdb_item(&conn, "cursor.email", &account.email)?;
+    sync_cursor_cli_credentials(&account)?;
 
     logger::log_info(&format!(
         "[Cursor Account] 注入成功: id={}, email={}",
