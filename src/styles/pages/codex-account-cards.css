@@ -934,6 +934,36 @@
   min-width: 0;
 }
 
+.codex-account-card .codex-weekly-reset-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--success) 28%, var(--border-light));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--success) 7%, var(--bg-secondary));
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.codex-account-card .codex-weekly-reset-summary svg {
+  flex: 0 0 auto;
+  color: var(--success);
+}
+
+.codex-account-card .codex-weekly-reset-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--success) 76%, var(--text-primary));
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+
 .codex-reset-credit-main {
   display: flex;
   align-items: center;
