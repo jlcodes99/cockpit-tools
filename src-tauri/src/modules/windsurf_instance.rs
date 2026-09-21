@@ -75,6 +75,12 @@ const LINUX_V10_KEY: [u8; 16] = [
     0xfd, 0x62, 0x1f, 0xe5, 0xa2, 0xb4, 0x02, 0x53, 0x9d, 0xfa, 0x14, 0x7c, 0xa9, 0x27, 0x27, 0x78,
 ];
 
+// PBKDF2-HMAC-SHA1(1 iteration, key = "", salt = "saltysalt")
+#[cfg(target_os = "linux")]
+const LINUX_EMPTY_KEY: [u8; 16] = [
+    0xd0, 0xd0, 0xec, 0x9c, 0x7d, 0x77, 0xd4, 0x3a, 0xc5, 0x41, 0x87, 0xfa, 0x48, 0x18, 0xd1, 0x7f,
+];
+
 fn normalize_non_empty_text(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -420,16 +426,23 @@ fn run_command_get_trimmed(program: &str, args: &[&str]) -> Option<String> {
 }
 
 #[cfg(target_os = "linux")]
-fn get_linux_v11_key() -> Option<[u8; 16]> {
+fn get_linux_keyring_password() -> Option<String> {
     let app_names = ["devin", "Devin", "windsurf", "Windsurf"];
     for app in app_names {
         if let Some(password) =
             run_command_get_trimmed("secret-tool", &["lookup", "application", app])
         {
-            return Some(pbkdf2_sha1_key(&password, 1));
+            return Some(password);
         }
     }
     None
+}
+
+#[cfg(target_os = "linux")]
+fn get_linux_v11_key() -> [u8; 16] {
+    get_linux_keyring_password()
+        .map(|password| pbkdf2_sha1_key(&password, 1))
+        .unwrap_or(LINUX_EMPTY_KEY)
 }
 
 fn encrypt_secret_payload(
@@ -459,15 +472,14 @@ fn encrypt_secret_payload(
     {
         let target_prefix = if let Some(prefix) = preferred_prefix {
             prefix
-        } else if get_linux_v11_key().is_some() {
+        } else if get_linux_keyring_password().is_some() {
             "v11"
         } else {
             "v10"
         };
 
         if target_prefix == "v11" {
-            let key = get_linux_v11_key()
-                .ok_or("无法读取 Linux Secret Service 密钥（v11）".to_string())?;
+            let key = get_linux_v11_key();
             return encrypt_cbc_prefixed(V11_PREFIX, &key, plaintext);
         }
 
