@@ -49,3 +49,34 @@ func TestManagerReportsAvailabilityFailureAndUsesReportedError(t *testing.T) {
 		t.Fatalf("reporter candidates = %#v, want registered auth", selector.candidates)
 	}
 }
+
+func TestManagerDoesNotReportTriedCredentialExhaustionAsPoolFailure(t *testing.T) {
+	const model = "gpt-tried-exhaustion"
+	selector := &selectionFailureReportingSelector{Selector: &RoundRobinSelector{}}
+	manager := NewManager(nil, selector, nil)
+	manager.RegisterExecutor(schedulerTestExecutor{provider: "codex"})
+	_, err := manager.Register(context.Background(), &Auth{
+		ID:       "codex-tried-auth",
+		Provider: "codex",
+		Status:   StatusActive,
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	registerSchedulerModels(t, "codex", model, "codex-tried-auth")
+
+	tried := map[string]struct{}{"codex-tried-auth": {}}
+	_, _, _, err = manager.pickNextMixedLegacy(
+		context.Background(),
+		[]string{"codex"},
+		model,
+		cliproxyexecutor.Options{},
+		tried,
+	)
+	if err == nil || !strings.Contains(err.Error(), "no auth available") {
+		t.Fatalf("pickNextMixedLegacy() error = %v, want request-local exhaustion", err)
+	}
+	if selector.called {
+		t.Fatal("request-local tried credential exhaustion was reported as a persistent pool failure")
+	}
+}
