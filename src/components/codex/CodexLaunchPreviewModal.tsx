@@ -369,18 +369,19 @@ export function CodexLaunchPreviewModal({
     executing !== null;
   const configBusy = busy || checkingConfig || !configReady;
   const requestClose = useCallback(() => {
+    // Explicit close buttons belong to this preview, even when another overlay
+    // is mounted behind it. Invalidate pending work before React unmounts it.
+    configSession.current += 1;
+    onClose();
+  }, [onClose]);
+  const requestEscClose = useCallback(() => {
     const hasStackedModal = Array.from(
       document.querySelectorAll<HTMLElement>(".modal-overlay"),
     ).some(
       (element) => !element.classList.contains("codex-launch-preview-overlay"),
     );
-    if (!hasStackedModal) {
-      // Invalidate pending read-before-write work synchronously, before React
-      // commits the unmount and runs passive-effect cleanup.
-      configSession.current += 1;
-      onClose();
-    }
-  }, [onClose]);
+    if (!hasStackedModal) requestClose();
+  }, [requestClose]);
   useEscClose(
     !busy &&
       !repairOpen &&
@@ -390,7 +391,7 @@ export function CodexLaunchPreviewModal({
       !imageGenPickerOpen &&
       !imageGenModeSwitchOpen &&
       !manualRefreshResult,
-    requestClose,
+    requestEscClose,
   );
   useEscClose(deepSeekAccessModeDialogOpen, () =>
     setDeepSeekAccessModeDialogOpen(false),
