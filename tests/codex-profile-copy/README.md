@@ -23,3 +23,45 @@ before publishing the target directory.
 These tests exercise profile initialization. They do not validate a desktop UI,
 perform a model request, repair existing profiles, or cover the separate manual
 session-copy and all-instance synchronization commands.
+
+## Optional macOS runtime acceptance
+
+Use an installed desktop Codex runtime that supports paginated history:
+
+```sh
+cargo build --manifest-path tests/codex-profile-copy/Cargo.toml --locked --example copy_profile
+python3 tests/codex-profile-copy/runtime_acceptance.py \
+  --codex /Applications/ChatGPT.app/Contents/Resources/codex \
+  --copy-helper tests/codex-profile-copy/target/debug/examples/copy_profile \
+  --work-dir /tmp/cockpit-profile-copy-acceptance
+```
+
+The work directory must be new or empty. The script creates a genuine runtime
+schema, a folderless project, and synthetic parent/forked histories. Turns are
+interrupted with networking disabled by macOS Seatbelt; no real model response
+is requested from an accessible provider. The runtime is launched with the
+`Codex Desktop` originator, a fake
+home, and a disposable `CODEX_HOME`. Reads and writes to the user's home are
+blocked except for the test directory and compiled helper directory. Control
+probes verify file read/write denial and network denial against a working local
+HTTP server.
+
+It checks byte-preserving copying, legacy project membership, paginated reads,
+resume and restart with the source unavailable, and isolation from later source
+turns. A raw directory-copy control reports its runtime result. A deliberately
+truncated ancestor reproduces `cutoff byte offset is past the source rollout`,
+and the production copy helper must reject it without publishing the target.
+Results and runtime stderr logs remain in the disposable work directory.
+
+A separate Tauri-library integration test in `codex_instance.rs` calls the real
+`create_instance` default-copy entry point and checks instance registration,
+history relocation, and folderless project membership. Run it with:
+
+```sh
+cargo test -p cockpit-tools --lib codex_profile_copy --locked
+```
+
+On upstream `d4f1dbf`, the macOS test build needs two unrelated Windows test-cfg
+corrections in `process_path_resolution.rs` before that command can compile.
+Local validation applied those corrections temporarily and restored the file;
+they are not part of this change. The standalone harness has no such dependency.
