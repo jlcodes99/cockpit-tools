@@ -44,21 +44,46 @@ pub fn copy_profile(source: &Path, target: &Path) -> Result<(), String> {
     if target.starts_with(&source) || source.starts_with(&target) {
         return Err("来源与目标实例目录不能重叠".to_string());
     }
-    if target.exists()
-        && (!target.is_dir()
+    let target_permissions = if target.exists() {
+        if !target.is_dir()
             || fs::read_dir(&target)
                 .map_err(|e| e.to_string())?
                 .next()
-                .is_some())
-    {
-        return Err("复制来源实例需要目标目录为空".to_string());
-    }
+                .is_some()
+        {
+            return Err("复制来源实例需要目标目录为空".to_string());
+        }
+        Some(
+            fs::metadata(&target)
+                .map_err(|e| e.to_string())?
+                .permissions(),
+        )
+    } else {
+        None
+    };
     let staging = target.with_file_name(format!(".codex-profile-copy-{}", uuid::Uuid::new_v4()));
+    // The sibling staging directory is not protected by the target's permissions.
+    // Restrict it at creation, before any profile data can be copied into it.
+    #[cfg(unix)]
+    let created = {
+        use std::os::unix::fs::DirBuilderExt;
+        fs::DirBuilder::new().mode(0o700).create(&staging)
+    };
+    #[cfg(not(unix))]
+    let created = fs::create_dir(&staging);
+    // Do not clean up a path we did not successfully create.
+    created.map_err(|e| format!("创建实例临时目录失败: {e}"))?;
     let result = (|| {
         copy_tree(&source, &staging)?;
         relocate_metadata(&source, &source_alias, &absolute_target, &staging)?;
         validate_lineage(&staging)?;
         validate_projection_cursors(&staging, &absolute_target)?;
+        // Preserve the existing target's mode when replacing its directory.
+        // A newly created Unix target retains the private staging permissions.
+        if let Some(permissions) = target_permissions {
+            fs::set_permissions(&staging, permissions)
+                .map_err(|e| format!("保留目标实例目录权限失败: {e}"))?;
+        }
         // Removing an empty pre-existing directory also fails if another writer used it.
         if target.exists() {
             fs::remove_dir(&target).map_err(|e| format!("目标实例目录已被使用: {e}"))?;
@@ -66,6 +91,13 @@ pub fn copy_profile(source: &Path, target: &Path) -> Result<(), String> {
         fs::rename(&staging, &target).map_err(|e| format!("发布实例副本失败: {e}"))
     })();
     if result.is_err() {
+        // A target such as 0500 may have made staging non-writable before a
+        // failed publish. Restore owner access so its contents can be removed.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&staging, fs::Permissions::from_mode(0o700));
+        }
         let _ = fs::remove_dir_all(&staging);
     }
     result.map_err(|e| {

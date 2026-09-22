@@ -20,6 +20,13 @@ multiple history segments and archived ancestors, directory aliases, conflicting
 target directories, and rejecting incomplete history or projection snapshots
 before publishing the target directory.
 
+On Unix, staging is created with mode `0700` before copying any profile data.
+An existing empty target's permission bits are restored immediately before
+publication; a new target keeps `0700`. Regression cases cover existing targets
+with modes `0700`, `0750`, and `0500`, observe staging while a SQLite lock holds
+the copy in progress, and check cleanup after validation and publication failures.
+This preserves Unix permission bits, not ownership, group identity, or ACLs.
+
 These tests exercise profile initialization. They do not validate a desktop UI,
 perform a model request, repair existing profiles, or cover the separate manual
 session-copy and all-instance synchronization commands.

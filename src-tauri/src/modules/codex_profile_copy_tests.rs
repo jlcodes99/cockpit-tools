@@ -176,6 +176,99 @@ fn sqlite_snapshot_includes_committed_wal_rows() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn preserves_existing_target_directory_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    for mode in [0o700, 0o750, 0o500] {
+        let f = Fixture::new();
+        fs::create_dir(&f.target).unwrap();
+        fs::set_permissions(&f.target, fs::Permissions::from_mode(mode)).unwrap();
+        let result = copy_profile(&f.source, &f.target);
+        let copied_mode = fs::metadata(&f.target).unwrap().permissions().mode() & 0o777;
+        // Restore owner write permission so the read-only fixture can be removed.
+        fs::set_permissions(&f.target, fs::Permissions::from_mode(0o700)).unwrap();
+        result.unwrap();
+        assert_eq!(copied_mode, mode);
+        assert!(f.target.join(STATE_DB).is_file());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn new_target_directory_is_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    fs::set_permissions(&f.source, fs::Permissions::from_mode(0o755)).unwrap();
+    copy_profile(&f.source, &f.target).unwrap();
+    assert_eq!(
+        fs::metadata(&f.target).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn staging_directory_is_private_and_cleaned_up_on_publish_failure() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::Instant;
+
+    for (mode, conflict) in [(0o755, false), (0o500, true)] {
+        let f = Fixture::new();
+        // Even a shared target must have private staging. A read-only target
+        // additionally exercises cleanup if another writer prevents publishing.
+        fs::create_dir(&f.target).unwrap();
+        fs::set_permissions(&f.target, fs::Permissions::from_mode(mode)).unwrap();
+        let db = Connection::open(f.source.join(STATE_DB)).unwrap();
+        db.execute_batch("BEGIN EXCLUSIVE").unwrap();
+        let (observed_mode, result) = std::thread::scope(|scope| {
+            let copy = scope.spawn(|| copy_profile(&f.source, &f.target));
+            let deadline = Instant::now() + Duration::from_secs(4);
+            let observed = loop {
+                let staging = fs::read_dir(&f.dir).unwrap().find_map(|entry| {
+                    let entry = entry.unwrap();
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with(".codex-profile-copy-")
+                        .then(|| entry.path())
+                });
+                if let Some(staging) = staging {
+                    break Some(fs::metadata(staging).unwrap().permissions().mode() & 0o777);
+                }
+                if copy.is_finished() || Instant::now() >= deadline {
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            };
+            if conflict {
+                fs::set_permissions(&f.target, fs::Permissions::from_mode(0o700)).unwrap();
+                fs::write(f.target.join("keep"), b"another writer").unwrap();
+                fs::set_permissions(&f.target, fs::Permissions::from_mode(mode)).unwrap();
+            }
+            // Always release the lock and join before asserting the copy result.
+            db.execute_batch("ROLLBACK").unwrap();
+            (observed, copy.join().unwrap())
+        });
+        let final_mode = fs::metadata(&f.target).unwrap().permissions().mode() & 0o777;
+        fs::set_permissions(&f.target, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(observed_mode, Some(0o700));
+        assert_eq!(final_mode, mode);
+        if conflict {
+            assert!(result.unwrap_err().contains("目标实例目录已被使用"));
+            assert_eq!(fs::read(f.target.join("keep")).unwrap(), b"another writer");
+            assert_eq!(fs::read_dir(&f.target).unwrap().count(), 1);
+        } else {
+            result.unwrap();
+        }
+        assert_eq!(
+            fs::read_dir(&f.dir).unwrap().count(),
+            2,
+            "no staging remains"
+        );
+    }
+}
+
 #[test]
 fn rejects_truncated_parent_before_publishing_target() {
     let f = Fixture::new();
@@ -185,9 +278,22 @@ fn rejects_truncated_parent_before_publishing_target() {
     )
     .unwrap();
     fs::create_dir(&f.target).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&f.target, fs::Permissions::from_mode(0o700)).unwrap();
+    }
     let error = copy_profile(&f.source, &f.target).unwrap_err();
     assert!(error.contains("字节边界超出"), "{error}");
     assert!(fs::read_dir(&f.target).unwrap().next().is_none());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&f.target).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
     assert_eq!(
         fs::read_dir(&f.dir).unwrap().count(),
         2,
