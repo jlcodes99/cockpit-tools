@@ -953,7 +953,7 @@ pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, 
             return Err("未找到复制来源目录，请先确保来源实例已初始化".to_string());
         }
 
-        instance_store::copy_dir_recursive(&source_dir, &user_dir_path)?;
+        modules::codex_profile_copy::copy_profile(&source_dir, &user_dir_path)?;
     }
 
     ensure_instance_shared_skills(&user_dir_path)?;

@@ -1,0 +1,15 @@
+[package]
+name = "cockpit-codex-profile-copy-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde_json = "1"
+uuid = { version = "1.10", features = ["v4"] }
+
+[lib]
+path = "../../src-tauri/src/modules/codex_profile_copy.rs"

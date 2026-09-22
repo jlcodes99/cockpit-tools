@@ -173,6 +173,10 @@ jobs:
         with:
           key: ${{ matrix.platform }}-${{ matrix.label }}
 
+      - name: 🧪 Test Codex profile copies
+        if: matrix.label == 'macos-aarch64' || matrix.label == 'ubuntu-22.04' || matrix.label == 'windows-latest'
+        run: cargo test --manifest-path tests/codex-profile-copy/Cargo.toml --locked
+
       - name: 🧪 Test Codex context preservation
         if: matrix.label == 'ubuntu-22.04'
         working-directory: src-tauri
