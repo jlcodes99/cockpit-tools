@@ -1280,7 +1280,15 @@ fn append_qoder_rows(rows: &mut Vec<ReportRow>) {
             rows,
             &account_name,
             &roots,
-            &[&["addOnQuota"], &["addonQuota"], &["add_on_quota"]],
+            &[
+                &["addOnQuota"],
+                &["addonQuota"],
+                &["add_on_quota"],
+                &["orgResourcePackage"],
+                &["organizationResourcePackage"],
+                &["resourcePackage"],
+                &["sharedCreditPackage"],
+            ],
             "Add-on quota",
             &reset,
             account.plan_type.as_deref().unwrap_or(""),
@@ -1354,7 +1362,7 @@ fn push_qoder_bucket_row(
             ));
             total = total.or(pick_first_number(
                 bucket,
-                &[&["total"], &["quota"], &["limit"]],
+                &[&["total"], &["cap"], &["quota"], &["limit"]],
             ));
             remaining = remaining.or(pick_first_number(
                 bucket,

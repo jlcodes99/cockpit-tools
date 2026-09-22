@@ -405,7 +405,12 @@
     "apiRelay": "Relé API",
     "claude": "Claude",
     "openrouter": "OpenRouter",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "qoderIde": "Qoder IDE",
+    "qoderApp": "Qoder",
+    "qoderCn": "Qoder CN",
+    "qoderCnIde": "Qoder CN IDE",
+    "qoderCnApp": "Qoder CN"
   },
   "sponsors": {
     "pageTitle": "Patrocinadores",
@@ -457,7 +462,8 @@
     "setAsDefaultInGroup": "Definir como plataforma padrão deste grupo",
     "removeFromGroup": "Remover do grupo",
     "sidebarSelectedUnlimited": "Selecionado ({count})",
-    "tipWithGroupsUnlimited": "Classifique manualmente as plataformas e grupos selecionados"
+    "tipWithGroupsUnlimited": "Classifique manualmente as plataformas e grupos selecionados",
+    "sidebarLimitReached": "Limite de exibição na barra lateral atingido ({{max}}). Desmarque outras plataformas primeiro."
   },
   "privacy": {
     "hideSensitive": "Ocultar e-mails",
@@ -1068,7 +1074,10 @@
       "menuBarAccountPrefixDesc": "Só contas normais: desligado oculta o prefixo do e-mail. Serviço API do Codex / API Key ainda mostram API",
       "menuBarQuotaConfirmEnable": "Ativar",
       "codexHideRelayQuota": "Ocultar cota relay",
-      "codexHideRelayQuotaDesc": "Oculta painéis de cota relay / New API na visão de contas Codex."
+      "codexHideRelayQuotaDesc": "Oculta painéis de cota relay / New API na visão de contas Codex.",
+      "qoderAppAppPath": "Caminho do aplicativo Qoder",
+      "qoderCnIdeAppPath": "Caminho do aplicativo Qoder CN IDE",
+      "qoderCnAppPath": "Caminho do aplicativo Qoder CN"
     },
     "network": {
       "apiTitle": "API de cockpit antigravidade",
@@ -4811,6 +4820,18 @@
     "traeSoloCn": {
       "appPath": "Caminho do TRAE SOLO CN",
       "title": "Configurações do TRAE SOLO CN"
+    },
+    "qoderApp": {
+      "title": "Configuracoes do Qoder",
+      "appPath": "Caminho do Qoder"
+    },
+    "qoderCnIde": {
+      "title": "Configuracoes do Qoder CN IDE",
+      "appPath": "Caminho do Qoder CN IDE"
+    },
+    "qoderCnApp": {
+      "title": "Configuracoes do Qoder CN",
+      "appPath": "Caminho do Qoder CN"
     }
   },
   "quotaAlert": {

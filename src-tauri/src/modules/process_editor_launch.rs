@@ -926,7 +926,8 @@ pub fn start_workbuddy_default_with_args_with_new_window(
     }
 }
 
-pub fn start_qoder_with_args_with_new_window(
+pub fn start_qoder_channel_with_args_with_new_window(
+    channel: crate::modules::qoder_channel::QoderChannel,
     user_data_dir: &str,
     extra_args: &[String],
     use_new_window: bool,
@@ -937,9 +938,10 @@ pub fn start_qoder_with_args_with_new_window(
         if target.is_empty() {
             return Err("实例目录为空，无法启动".to_string());
         }
-        let launch_path = resolve_qoder_launch_path()?;
+        let launch_path = resolve_qoder_launch_path_for_channel(channel)
+            .or_else(|_| resolve_qoder_launch_path())?;
         let app_root = resolve_macos_app_root_from_launch_path(&launch_path)
-            .ok_or_else(|| app_path_missing_error("qoder"))?;
+            .ok_or_else(|| app_path_missing_error(channel.provider_key()))?;
 
         let mut args: Vec<String> = Vec::new();
         args.push("--user-data-dir".to_string());
@@ -957,18 +959,19 @@ pub fn start_qoder_with_args_with_new_window(
         }
 
         let open_pid = spawn_open_app_with_options(&app_root, &args, true)
-            .map_err(|e| format!("启动 Qoder 失败: {}", e))?;
-        crate::modules::logger::log_info("Qoder 启动命令已发送（open -n -a）");
+            .map_err(|e| format!("启动 {} 失败: {}", channel.display_name(), e))?;
+        crate::modules::logger::log_info(&format!("{} 启动命令已发送（open -n -a）", channel.display_name()));
         let probe_started = Instant::now();
         let timeout = Duration::from_secs(6);
         while probe_started.elapsed() < timeout {
-            if let Some(resolved_pid) = resolve_qoder_pid(None, Some(target)) {
+            if let Some(resolved_pid) = resolve_qoder_pid_for_channel(None, Some(target), channel) {
                 return Ok(resolved_pid);
             }
             thread::sleep(Duration::from_millis(200));
         }
         crate::modules::logger::log_warn(&format!(
-            "[Qoder Start] 启动后 6s 内未匹配到实例 PID，回退 open pid={}",
+            "[{} Start] 启动后 6s 内未匹配到实例 PID，回退 open pid={}",
+            channel.display_name(),
             open_pid
         ));
         return Ok(open_pid);
@@ -982,7 +985,8 @@ pub fn start_qoder_with_args_with_new_window(
         if target.is_empty() {
             return Err("实例目录为空，无法启动".to_string());
         }
-        let launch_path = resolve_qoder_launch_path()?;
+        let launch_path = resolve_qoder_launch_path_for_channel(channel)
+            .or_else(|_| resolve_qoder_launch_path())?;
 
         let mut cmd = Command::new(&launch_path);
         apply_managed_proxy_env_to_command(&mut cmd);
@@ -995,10 +999,12 @@ pub fn start_qoder_with_args_with_new_window(
             cmd.creation_flags(0x08000000);
         }
         cmd.arg("--user-data-dir").arg(target);
-        if use_new_window {
-            cmd.arg("--new-window");
-        } else {
-            cmd.arg("--reuse-window");
+        if channel.credential_kind() == crate::modules::qoder_channel::QoderCredentialKind::StateVscdb {
+            if use_new_window {
+                cmd.arg("--new-window");
+            } else {
+                cmd.arg("--reuse-window");
+            }
         }
         for arg in extra_args {
             let trimmed = arg.trim();
@@ -1007,9 +1013,9 @@ pub fn start_qoder_with_args_with_new_window(
             }
         }
 
-        let child =
-            spawn_command_with_trace(&mut cmd).map_err(|e| format!("启动 Qoder 失败: {}", e))?;
-        crate::modules::logger::log_info("Qoder 启动命令已发送");
+        let child = spawn_command_with_trace(&mut cmd)
+            .map_err(|e| format!("启动 {} 失败: {}", channel.display_name(), e))?;
+        crate::modules::logger::log_info(&format!("{} 启动命令已发送: pid={}", channel.display_name(), child.id()));
         return Ok(child.id());
     }
 
@@ -1019,7 +1025,8 @@ pub fn start_qoder_with_args_with_new_window(
         if target.is_empty() {
             return Err("实例目录为空，无法启动".to_string());
         }
-        let launch_path = resolve_qoder_launch_path()?;
+        let launch_path = resolve_qoder_launch_path_for_channel(channel)
+            .or_else(|_| resolve_qoder_launch_path())?;
 
         let mut cmd = Command::new(&launch_path);
         apply_managed_proxy_env_to_command(&mut cmd);
@@ -1041,16 +1048,30 @@ pub fn start_qoder_with_args_with_new_window(
             }
         }
 
-        let child = spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 Qoder 失败: {}", e))?;
-        crate::modules::logger::log_info("Qoder 启动命令已发送");
+        let child = spawn_detached_unix(&mut cmd)
+            .map_err(|e| format!("启动 {} 失败: {}", channel.display_name(), e))?;
+        crate::modules::logger::log_info(&format!("{} 启动命令已发送", channel.display_name()));
         return Ok(child.id());
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        let _ = (user_data_dir, extra_args, use_new_window);
+        let _ = (channel, user_data_dir, extra_args, use_new_window);
         Err("Qoder 应用多开仅支持 macOS、Windows 和 Linux".to_string())
     }
+}
+
+pub fn start_qoder_with_args_with_new_window(
+    user_data_dir: &str,
+    extra_args: &[String],
+    use_new_window: bool,
+) -> Result<u32, String> {
+    start_qoder_channel_with_args_with_new_window(
+        crate::modules::qoder_channel::QoderChannel::QoderIde,
+        user_data_dir,
+        extra_args,
+        use_new_window,
+    )
 }
 
 pub fn start_qoder_default_with_args_with_new_window(
@@ -1156,6 +1177,53 @@ pub fn start_qoder_default_with_args_with_new_window(
     {
         let _ = (extra_args, use_new_window);
         Err("Qoder 应用多开仅支持 macOS、Windows 和 Linux".to_string())
+    }
+}
+
+pub fn start_qoder_channel_default_with_args(
+    channel: crate::modules::qoder_channel::QoderChannel,
+    extra_args: &[String],
+    use_new_window: bool,
+) -> Result<u32, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let launch_path = resolve_qoder_launch_path_for_channel(channel)
+            .or_else(|_| resolve_qoder_launch_path())?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if should_detach_child() {
+            cmd.creation_flags(0x08000000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        } else {
+            cmd.creation_flags(0x08000000);
+        }
+        if channel.credential_kind() == crate::modules::qoder_channel::QoderCredentialKind::StateVscdb {
+            if use_new_window {
+                cmd.arg("--new-window");
+            } else {
+                cmd.arg("--reuse-window");
+            }
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        let child = spawn_command_with_trace(&mut cmd)
+            .map_err(|e| format!("启动 {} 失败: {}", channel.display_name(), e))?;
+        crate::modules::logger::log_info(&format!("{} 默认实例启动命令已发送", channel.display_name()));
+        return Ok(child.id());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = channel;
+        start_qoder_default_with_args_with_new_window(extra_args, use_new_window)
     }
 }
 

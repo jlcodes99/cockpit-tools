@@ -1491,7 +1491,15 @@ export function buildQoderAccountPresentation(
     });
   }
 
-  if (subscription.sharedCreditPackageUsed != null) {
+  const hasAddOn =
+    (subscription.addOnQuota.total ?? 0) > 0 ||
+    (subscription.addOnQuota.remaining ?? 0) > 0;
+
+  if (
+    subscription.sharedCreditPackageUsed != null &&
+    subscription.sharedCreditPackageUsed > 0 &&
+    (!hasAddOn || subscription.sharedCreditPackageUsed !== subscription.addOnQuota.used)
+  ) {
     quotaItems.push({
       key: "shared_credit_package",
       label: t(

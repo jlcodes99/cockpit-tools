@@ -12,15 +12,19 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::models::qoder::{QoderAccount, QoderOAuthStartResponse};
+use crate::modules::qoder_channel::QoderChannel;
 use crate::modules::{config, logger, qoder_account, qoder_instance};
 
 const OAUTH_TIMEOUT_SECONDS: i64 = 600;
 const OAUTH_POLL_INTERVAL_MS: u64 = 1000;
 const DEFAULT_LOGIN_BASE_URL: &str = "https://qoder.com/device/selectAccounts";
-const DEFAULT_OPENAPI_BASE_URL: &str = "https://openapi.qoder.sh";
+pub const DEFAULT_GLOBAL_OPENAPI_BASE_URL: &str = "https://openapi.qoder.sh";
+pub const DEFAULT_CN_OPENAPI_BASE_URL: &str = "https://openapi.qoder.com.cn";
+pub const DEFAULT_OPENAPI_BASE_URL: &str = DEFAULT_GLOBAL_OPENAPI_BASE_URL;
 const QODER_IDE_REDIRECT_URI: &str = "qoder://aicoding.aicoding-agent/login-success";
 const QODER_DEVICE_LOGIN_CHALLENGE_METHOD: &str = "S256";
 const DEVICE_TOKEN_POLL_PATH: &str = "/api/v1/deviceToken/poll";
+const DEVICE_TOKEN_REFRESH_PATH: &str = "/api/v1/deviceToken/refresh";
 const USER_INFO_PATH: &str = "/api/v1/userinfo";
 const USER_STATUS_PATH: &str = "/api/v3/user/status";
 const DATA_POLICY_PATH: &str = "/api/v2/config/getDataPolicy";
@@ -740,52 +744,242 @@ fn extract_access_token_from_account(account: &QoderAccount) -> Option<String> {
     None
 }
 
-fn ensure_refresh_identity_consistent(
-    target: &QoderAccount,
-    user_status: &Value,
-) -> Result<(), String> {
-    let target_user_id = target
-        .user_id
-        .as_deref()
-        .and_then(|value| normalize_non_empty(Some(value)));
-    let status_user_id = user_status
-        .get("id")
-        .and_then(|value| value.as_str())
-        .and_then(|value| normalize_non_empty(Some(value)));
-
-    if let (Some(target_uid), Some(status_uid)) = (target_user_id.as_ref(), status_user_id.as_ref())
-    {
-        if !target_uid.eq_ignore_ascii_case(status_uid) {
-            return Err(format!(
-                "官方接口返回账号与目标账号不一致: target_user_id={}, actual_user_id={}",
-                target_uid, status_uid
-            ));
+fn extract_refresh_token_from_account(account: &QoderAccount) -> Option<String> {
+    let user_info = account.auth_user_info_raw.as_ref()?;
+    let candidate_paths: &[&[&str]] = &[
+        &["refreshToken"],
+        &["refresh_token"],
+        &["securityRefreshToken"],
+        &["data", "refreshToken"],
+        &["data", "refresh_token"],
+        &["result", "refreshToken"],
+        &["result", "refresh_token"],
+    ];
+    for path in candidate_paths {
+        if let Some(value) = get_string_at_path(user_info, path) {
+            return Some(value);
         }
-    } else {
-        let target_email =
-            normalize_non_empty(Some(target.email.as_str())).map(|value| value.to_lowercase());
-        let status_email = user_status
-            .get("email")
-            .and_then(|value| value.as_str())
-            .and_then(|value| normalize_non_empty(Some(value)))
-            .map(|value| value.to_lowercase());
-        if let (Some(left), Some(right)) = (target_email.as_ref(), status_email.as_ref()) {
-            if left != right {
-                return Err(format!(
-                    "官方接口返回账号与目标账号不一致: target_email={}, actual_email={}",
-                    left, right
-                ));
-            }
+    }
+    None
+}
+
+fn is_unauthorized_error(err: &str) -> bool {
+    err.contains("401")
+        || err.contains("403")
+        || err.contains("Unauthorized")
+        || err.contains("UNAUTHORIZED")
+}
+
+#[derive(Debug, Clone)]
+struct RefreshedTokenInfo {
+    access_token: String,
+    refresh_token: String,
+    expires_at: Option<String>,
+    refresh_token_expires_at: Option<String>,
+}
+
+async fn request_device_token_refresh(
+    client: &reqwest::Client,
+    openapi_base_url: &str,
+    refresh_token: &str,
+    access_token: Option<&str>,
+    machine_info: Option<&QoderMachineInfo>,
+) -> Result<RefreshedTokenInfo, String> {
+    use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
+
+    let mut headers = HeaderMap::new();
+    if let Ok(value) = HeaderValue::from_str("application/json") {
+        headers.insert(ACCEPT, value.clone());
+        headers.insert(CONTENT_TYPE, value);
+    }
+    if let Some(tok) = access_token {
+        if let Ok(value) = HeaderValue::from_str(&format!("Bearer {}", tok)) {
+            headers.insert(AUTHORIZATION, value);
+        }
+    }
+    if let Some(version) = machine_info
+        .and_then(|v| v.cosy_version.clone())
+        .or_else(detect_qoder_product_version)
+    {
+        if let Ok(value) = HeaderValue::from_str(&version) {
+            headers.insert("Cosy-Version", value);
+        }
+    }
+    if let Some(machine_token) = machine_info
+        .map(|v| v.token.as_str())
+        .and_then(|v| normalize_non_empty(Some(v)))
+    {
+        if let Ok(value) = HeaderValue::from_str(&machine_token) {
+            headers.insert("Cosy-MachineToken", value);
         }
     }
 
-    Ok(())
+    let body = serde_json::json!({
+        "refresh_token": refresh_token,
+        "refreshToken": refresh_token,
+    });
+
+    let url = format!("{}{}", openapi_base_url, DEVICE_TOKEN_REFRESH_PATH);
+    let resp = client
+        .post(&url)
+        .headers(headers)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("请求 Token 刷新接口网络失败 ({}): {}", url, e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body_text = resp.text().await.unwrap_or_default();
+        let is_unauthorized = status == reqwest::StatusCode::UNAUTHORIZED
+            || (status == reqwest::StatusCode::BAD_REQUEST
+                && (body_text.contains("invalid refresh_token")
+                    || body_text.contains("invalid_grant")
+                    || body_text.contains("User not authenticated")));
+        if is_unauthorized {
+            return Err("登录凭据已完全失效（阿里专网会话超时），请在 Qoder 中重新登录".to_string());
+        }
+        return Err(format!(
+            "Token 刷新失败 (status={}, body={})",
+            status, body_text
+        ));
+    }
+
+    let payload: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("解析 Token 刷新响应失败: {}", e))?;
+
+    let candidate_tokens: &[&[&str]] = &[
+        &["token"],
+        &["device_token"],
+        &["accessToken"],
+        &["access_token"],
+        &["data", "token"],
+        &["data", "device_token"],
+        &["data", "accessToken"],
+        &["result", "token"],
+    ];
+    let candidate_refresh: &[&[&str]] = &[
+        &["refresh_token"],
+        &["refreshToken"],
+        &["data", "refresh_token"],
+        &["data", "refreshToken"],
+        &["result", "refresh_token"],
+    ];
+
+    let new_token = candidate_tokens
+        .iter()
+        .find_map(|path| get_string_at_path(&payload, path))
+        .ok_or_else(|| "Token 刷新响应未包含有效 access token".to_string())?;
+
+    let new_refresh_token = candidate_refresh
+        .iter()
+        .find_map(|path| get_string_at_path(&payload, path))
+        .unwrap_or_else(|| refresh_token.to_string());
+
+    let expires_at = get_string_at_path(&payload, &["expires_at"])
+        .or_else(|| get_string_at_path(&payload, &["data", "expires_at"]))
+        .and_then(|v| parse_expire_timestamp_ms(Some(&v)));
+
+    let refresh_token_expires_at = get_string_at_path(&payload, &["refresh_token_expires_at"])
+        .or_else(|| get_string_at_path(&payload, &["data", "refresh_token_expires_at"]))
+        .and_then(|v| parse_expire_timestamp_ms(Some(&v)));
+
+    Ok(RefreshedTokenInfo {
+        access_token: new_token,
+        refresh_token: new_refresh_token,
+        expires_at,
+        refresh_token_expires_at,
+    })
+}
+
+fn update_account_token_info(
+    account: &mut QoderAccount,
+    refreshed_info: &RefreshedTokenInfo,
+) {
+    let mut user_info = account
+        .auth_user_info_raw
+        .clone()
+        .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+    if !user_info.is_object() {
+        user_info = Value::Object(serde_json::Map::new());
+    }
+    if let Some(map) = user_info.as_object_mut() {
+        map.insert("token".to_string(), Value::String(refreshed_info.access_token.clone()));
+        map.insert("refreshToken".to_string(), Value::String(refreshed_info.refresh_token.clone()));
+        map.insert("refresh_token".to_string(), Value::String(refreshed_info.refresh_token.clone()));
+        if let Some(expires_at) = refreshed_info.expires_at.as_ref() {
+            map.insert("expireTime".to_string(), Value::String(expires_at.clone()));
+            map.insert("expiresAt".to_string(), Value::String(expires_at.clone()));
+        }
+        if let Some(rt_expires_at) = refreshed_info.refresh_token_expires_at.as_ref() {
+            map.insert("refreshTokenExpireTime".to_string(), Value::String(rt_expires_at.clone()));
+            map.insert("refreshTokenExpiresAt".to_string(), Value::String(rt_expires_at.clone()));
+        }
+    }
+    account.auth_user_info_raw = Some(user_info);
+}
+
+pub fn is_cn_account(target: &QoderAccount, channel: Option<QoderChannel>) -> bool {
+    // 1. 若显式指定为国内渠道，毫无疑问是国内
+    if let Some(ch) = channel {
+        if ch.is_cn() {
+            return true;
+        }
+    }
+
+    // 2. 特别注意：阿里巴巴集团员工的 SAML 企业组织账号（如 @qoder.alibaba-inc.com、@qoderwork.alibaba-inc.com）
+    // 走的是 Qoder Global 全球统一服务体系（由新加坡节点 openapi.qoder.sh 服务，source=sso.saml.organization），
+    // 绝非国内阿里云公有云，绝不能误判为 CN！
+    let email = target.email.to_lowercase();
+    if email.contains("alibaba-inc.com") {
+        return false;
+    }
+
+    // 3. 账号特征审查：国内版灵码 / 阿里云专属域名与特征
+    if email.contains("qoder.cn")
+        || email.ends_with(".cn")
+        || email.contains("aliyun")
+        || email.contains("alipay")
+        || email.contains("taobao")
+    {
+        return true;
+    }
+
+    if let Some(ref uid) = target.user_id {
+        let u = uid.to_lowercase();
+        if u.starts_with("aliyun-") {
+            return true;
+        }
+    }
+
+    if let Some(ref name) = target.display_name {
+        let n = name.to_lowercase();
+        if n.starts_with("aliyun-") {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn get_candidate_openapi_base_urls(
+    target: &QoderAccount,
+    channel: Option<QoderChannel>,
+) -> Vec<&'static str> {
+    if is_cn_account(target, channel) {
+        vec![DEFAULT_CN_OPENAPI_BASE_URL, DEFAULT_GLOBAL_OPENAPI_BASE_URL]
+    } else {
+        vec![DEFAULT_GLOBAL_OPENAPI_BASE_URL, DEFAULT_CN_OPENAPI_BASE_URL]
+    }
 }
 
 fn build_refresh_user_info_raw(
     target: &QoderAccount,
     access_token: &str,
-    user_status: &Value,
+    user_info_fetched: Option<&Value>,
+    user_status: Option<&Value>,
     data_policy: Option<&Value>,
 ) -> Value {
     let mut user_info = target
@@ -825,27 +1019,34 @@ fn build_refresh_user_info_raw(
                 map.insert("name".to_string(), Value::String(display_name));
             }
         }
+        if let Some(fetched) = user_info_fetched {
+            copy_optional_field(fetched, map, "name", "name");
+            copy_optional_field(fetched, map, "email", "email");
+            copy_optional_field(fetched, map, "avatarUrl", "avatarUrl");
+            copy_optional_field(fetched, map, "avatar_url", "avatarUrl");
+            copy_optional_field(fetched, map, "userTag", "userTag");
+            copy_optional_field(fetched, map, "user_tag", "userTag");
+        }
     }
 
-    merge_user_status_into_user_info(&mut user_info, user_status, data_policy);
+    if let Some(status) = user_status {
+        merge_user_status_into_user_info(&mut user_info, status, data_policy);
+    }
     user_info
 }
 
-async fn fetch_qoder_user_status_bundle_with_machine_info(
-    client: &reqwest::Client,
-    openapi_base_url: &str,
-    token: &str,
-    machine_info: Option<&QoderMachineInfo>,
-) -> Result<(Value, Option<Value>), String> {
-    fetch_qoder_user_status_bundle(client, openapi_base_url, token, machine_info).await
-}
-
-async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAccount, String> {
-    let target = qoder_account::load_account(account_id)
-        .ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?;
-
-    let access_token = extract_access_token_from_account(&target)
-        .ok_or_else(|| "Qoder 账号缺少 access token，请重新登录后再刷新".to_string())?;
+pub async fn refresh_account_from_openapi_for_channel(
+    channel: Option<QoderChannel>,
+    account_id: &str,
+) -> Result<QoderAccount, String> {
+    let (ch, mut target) = if let Some(ch) = channel {
+        let acc = qoder_account::load_account_for_channel(ch, account_id)
+            .ok_or_else(|| format!("{} 账号不存在: {}", ch.display_name(), account_id))?;
+        (ch, acc)
+    } else {
+        qoder_account::find_account_channel(account_id)
+            .ok_or_else(|| format!("Qoder 账号不存在: {}", account_id))?
+    };
 
     let client = build_reqwest_client()?;
     let machine_info = match read_qoder_machine_info_cache() {
@@ -859,107 +1060,167 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
         }
     };
 
-    let (user_status, data_policy) = fetch_qoder_user_status_bundle_with_machine_info(
-        &client,
-        DEFAULT_OPENAPI_BASE_URL,
-        &access_token,
-        machine_info.as_ref(),
-    )
-    .await?;
+    let mut current_access_token = extract_access_token_from_account(&target);
+    let refresh_token = extract_refresh_token_from_account(&target);
 
-    ensure_refresh_identity_consistent(&target, &user_status)?;
-
-    let user_info_raw =
-        build_refresh_user_info_raw(&target, &access_token, &user_status, data_policy.as_ref());
-
-    let user_plan_raw = match fetch_qoder_user_plan(
-        &client,
-        DEFAULT_OPENAPI_BASE_URL,
-        &access_token,
-        machine_info.as_ref(),
-    )
-    .await
-    {
-        Ok(value) => Some(value),
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Qoder Refresh] 获取 /api/v2/user/plan 失败，将沿用本地缓存: {}",
-                err
-            ));
-            target.auth_user_plan_raw.clone()
-        }
-    };
-
-    let mut quota_query_error: Option<String> = None;
-    let credit_usage_raw = match fetch_qoder_credit_usage(
-        &client,
-        DEFAULT_OPENAPI_BASE_URL,
-        &access_token,
-        machine_info.as_ref(),
-    )
-    .await
-    {
-        Ok(value) => Some(value),
-        Err(err) => {
-            logger::log_warn(&format!(
-                "[Qoder Refresh] 获取 /api/v2/quota/usage 失败，将沿用本地缓存: {}",
-                err
-            ));
-            quota_query_error = Some(err.clone());
-            target.auth_credit_usage_raw.clone()
-        }
-    };
-
-    let refreshed = qoder_account::upsert_account_from_snapshot(
-        user_info_raw,
-        user_plan_raw,
-        credit_usage_raw,
-    )?;
-    let refreshed = if refreshed.id == target.id {
-        qoder_account::update_quota_query_error(&refreshed.id, quota_query_error)?
-            .unwrap_or(refreshed)
-    } else {
-        refreshed
-    };
-    if refreshed.id != target.id {
-        return Err(format!(
-            "刷新结果账号不一致: target_id={}, actual_id={}",
-            target.id, refreshed.id
-        ));
+    if current_access_token.is_none() && refresh_token.is_none() {
+        return Err("Qoder 账号缺少凭据 (token 与 refreshToken 均为空)，请重新登录".to_string());
     }
-    Ok(refreshed)
+
+    let candidate_base_urls = get_candidate_openapi_base_urls(&target, Some(ch));
+    let mut last_error = String::new();
+
+    for base_url in candidate_base_urls {
+        let mut active_token = current_access_token.clone();
+
+        // 1. 若当前没有 access_token 但有 refresh_token，直接在当前节点先刷新
+        if active_token.is_none() {
+            if let Some(ref rt) = refresh_token {
+                match request_device_token_refresh(&client, base_url, rt, current_access_token.as_deref(), machine_info.as_ref()).await {
+                    Ok(info) => {
+                        update_account_token_info(&mut target, &info);
+                        let _ = qoder_account::save_account_file_for_channel(ch, &target);
+                        active_token = Some(info.access_token.clone());
+                        current_access_token = Some(info.access_token);
+                    }
+                    Err(err) => {
+                        last_error = format!("{} 换新 Token 失败: {}", base_url, err);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        let Some(ref tok) = active_token else {
+            continue;
+        };
+
+        // 2. 尝试请求额度配额 /api/v2/quota/usage
+        let credit_res = fetch_qoder_credit_usage(&client, base_url, tok, machine_info.as_ref()).await;
+        let final_token = match credit_res {
+            Ok(credit_val) => (tok.clone(), Some(credit_val)),
+            Err(ref err) if is_unauthorized_error(err) => {
+                // 401 Unauthorized！立即使用 refresh_token 换新！
+                if let Some(ref rt) = refresh_token {
+                    logger::log_info(&format!(
+                        "[Qoder Refresh] 请求配额遇到 401，尝试使用 refresh_token 在 {} 自动换新...",
+                        base_url
+                    ));
+                    match request_device_token_refresh(&client, base_url, rt, Some(tok), machine_info.as_ref()).await {
+                        Ok(info) => {
+                            update_account_token_info(&mut target, &info);
+                            let _ = qoder_account::save_account_file_for_channel(ch, &target);
+                            let new_tok = info.access_token;
+                            current_access_token = Some(new_tok.clone());
+                            // 用新 token 重试请求配额
+                            match fetch_qoder_credit_usage(&client, base_url, &new_tok, machine_info.as_ref()).await {
+                                Ok(new_credit) => (new_tok, Some(new_credit)),
+                                Err(retry_err) => {
+                                    last_error = format!("换新 Token 后请求配额仍失败: {}", retry_err);
+                                    continue;
+                                }
+                            }
+                        }
+                        Err(ref_err) => {
+                            last_error = format!("{} 换新 Token 失败: {}", base_url, ref_err);
+                            continue;
+                        }
+                    }
+                } else {
+                    last_error = format!("{} 凭据已失效且未找到 refresh_token，请重新登录", base_url);
+                    continue;
+                }
+            }
+            Err(other_err) => {
+                last_error = format!("{} 请求配额失败: {}", base_url, other_err);
+                continue;
+            }
+        };
+
+        let (access_token_ok, credit_usage_raw) = final_token;
+
+        // 3. 请求用户套餐 user/plan
+        let user_plan_raw = match fetch_qoder_user_plan(&client, base_url, &access_token_ok, machine_info.as_ref()).await {
+            Ok(val) => Some(val),
+            Err(err) => {
+                logger::log_warn(&format!("[Qoder Refresh] 获取 /api/v2/user/plan 失败，沿用本地缓存: {}", err));
+                target.auth_user_plan_raw.clone()
+            }
+        };
+
+        // 4. 请求用户信息 userinfo
+        let user_info_fetched = fetch_qoder_user_info(&client, base_url, &access_token_ok, machine_info.as_ref()).await.ok();
+
+        // 5. 请求状态探针 user/status（非强制！若失败完全不阻断）
+        let (user_status, data_policy) = match fetch_qoder_user_status_bundle(&client, base_url, &access_token_ok, machine_info.as_ref()).await {
+            Ok(bundle) => (Some(bundle.0), bundle.1),
+            Err(err) => {
+                logger::log_warn(&format!("[Qoder Refresh] 获取 /api/v3/user/status 状态探针失败（已降级容错）: {}", err));
+                (None, None)
+            }
+        };
+
+        let user_info_raw = build_refresh_user_info_raw(
+            &target,
+            &access_token_ok,
+            user_info_fetched.as_ref(),
+            user_status.as_ref(),
+            data_policy.as_ref(),
+        );
+
+        let mut refreshed = qoder_account::merge_account_snapshot(
+            target.clone(),
+            Some(user_info_raw),
+            user_plan_raw,
+            credit_usage_raw,
+        );
+        refreshed.quota_query_last_error = None;
+        refreshed.quota_query_last_error_at = None;
+        let saved = qoder_account::upsert_account_record_for_channel(ch, refreshed)?;
+        return Ok(saved);
+    }
+
+    let final_err = if last_error.is_empty() {
+        "刷新 Qoder 额度失败，请检查网络或重新登录".to_string()
+    } else {
+        last_error
+    };
+    let _ = qoder_account::update_quota_query_error_for_channel(ch, account_id, Some(final_err.clone()));
+    Err(final_err)
 }
 
 pub async fn refresh_account_from_openapi(account_id: &str) -> Result<QoderAccount, String> {
-    let result = refresh_account_from_openapi_once(account_id).await;
-    if let Err(err) = &result {
-        let _ = qoder_account::update_quota_query_error(account_id, Some(err.clone()));
-    }
-    result
+    refresh_account_from_openapi_for_channel(None, account_id).await
 }
 
-pub async fn refresh_all_accounts_from_openapi() -> Result<i32, String> {
-    let accounts = qoder_account::list_accounts();
+pub async fn refresh_all_accounts_for_channel(channel: QoderChannel) -> Result<i32, String> {
+    let accounts = qoder_account::list_accounts_for_channel(channel);
     if accounts.is_empty() {
         return Ok(0);
     }
-
-    let mut success_count: i32 = 0;
+    let mut success_count = 0;
     for account in accounts {
-        match refresh_account_from_openapi(&account.id).await {
-            Ok(_) => {
-                success_count += 1;
-            }
+        match refresh_account_from_openapi_for_channel(Some(channel), &account.id).await {
+            Ok(_) => success_count += 1,
             Err(err) => {
                 logger::log_warn(&format!(
-                    "[Qoder Refresh] 批量刷新失败: account_id={}, email={}, error={}",
-                    account.id, account.email, err
+                    "[Qoder Refresh] [{}] 批量刷新失败: account_id={}, email={}, error={}",
+                    channel.as_str(), account.id, account.email, err
                 ));
             }
         }
     }
-
     Ok(success_count)
+}
+
+pub async fn refresh_all_accounts_from_openapi() -> Result<i32, String> {
+    let mut total_success = 0;
+    for &ch in &QoderChannel::ALL {
+        if let Ok(count) = refresh_all_accounts_for_channel(ch).await {
+            total_success += count;
+        }
+    }
+    Ok(total_success)
 }
 
 fn clear_pending_if_matches(login_id: &str) {

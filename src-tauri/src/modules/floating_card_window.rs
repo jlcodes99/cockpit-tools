@@ -537,6 +537,10 @@ pub fn request_app_exit() {
     APP_EXIT_REQUESTED.store(true, Ordering::SeqCst);
 }
 
+pub fn is_app_exit_requested() -> bool {
+    APP_EXIT_REQUESTED.load(Ordering::SeqCst)
+}
+
 pub fn should_keep_alive_after_main_window_destroyed() -> bool {
     MAIN_WINDOW_DESTROYED_TO_TRAY.load(Ordering::SeqCst)
         && !APP_EXIT_REQUESTED.load(Ordering::SeqCst)

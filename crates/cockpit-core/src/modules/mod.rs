@@ -47,6 +47,8 @@ pub mod oauth_pending_state;
 // pub mod opencode_auth;
 pub mod process;
 pub mod qoder_account;
+pub mod qoder_app_auth;
+pub mod qoder_channel;
 pub mod qoder_instance;
 pub mod qoder_oauth;
 pub mod quota;

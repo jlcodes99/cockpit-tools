@@ -451,6 +451,7 @@
                 let total = raw
                     .and_then(|value| {
                         json_path(Some(value), &["total"])
+                            .or_else(|| json_path(Some(value), &["cap"]))
                             .or_else(|| json_path(Some(value), &["quota"]))
                             .or_else(|| json_path(Some(value), &["limit"]))
                             .and_then(parse_json_number)
@@ -459,7 +460,6 @@
                 let remaining = raw
                     .and_then(|value| {
                         json_path(Some(value), &["remaining"])
-                            .or_else(|| json_path(Some(value), &["available"]))
                             .or_else(|| json_path(Some(value), &["left"]))
                             .and_then(parse_json_number)
                     })
@@ -510,9 +510,14 @@
                 json_path(account.auth_credit_usage_raw.as_ref(), &["addOnQuota"]),
                 json_path(account.auth_credit_usage_raw.as_ref(), &["addonQuota"]),
                 json_path(account.auth_credit_usage_raw.as_ref(), &["add_on_quota"]),
+                json_path(account.auth_credit_usage_raw.as_ref(), &["orgResourcePackage"]),
+                json_path(account.auth_credit_usage_raw.as_ref(), &["organizationResourcePackage"]),
+                json_path(account.auth_credit_usage_raw.as_ref(), &["resourcePackage"]),
+                json_path(account.auth_credit_usage_raw.as_ref(), &["sharedCreditPackage"]),
                 json_path(account.auth_user_plan_raw.as_ref(), &["addOnQuota"]),
                 json_path(account.auth_user_plan_raw.as_ref(), &["addonQuota"]),
                 json_path(account.auth_user_plan_raw.as_ref(), &["add_on_quota"]),
+                json_path(account.auth_user_plan_raw.as_ref(), &["orgResourcePackage"]),
             ],
             QoderQuotaBucket::default(),
         );

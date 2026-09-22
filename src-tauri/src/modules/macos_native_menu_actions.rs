@@ -317,7 +317,7 @@ fn spawn_refresh(platform: PlatformId, account_id: Option<String>) {
                 commands::codebuddy_cn::refresh_all_codebuddy_cn_tokens(app.clone()).await
             }
             (PlatformId::Qoder, Some(account_id)) => {
-                commands::qoder::refresh_qoder_token(app.clone(), account_id)
+                commands::qoder::refresh_qoder_token(app.clone(), account_id, None)
                     .await
                     .map(|_| 0)
             }
