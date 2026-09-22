@@ -412,6 +412,65 @@ fn rejects_overlapping_directories_without_changing_source() {
 
 #[cfg(unix)]
 #[test]
+fn rejects_aliased_overlap_before_creating_source_directories() {
+    use std::os::unix::fs::symlink;
+    let f = Fixture::new();
+    let alias = f.dir.join("source-alias");
+    symlink(&f.source, &alias).unwrap();
+    let files = [
+        f.source.join(STATE_DB),
+        f.source.join(GLOBAL_STATE),
+        f.root_rollout.clone(),
+        f.child_rollout.clone(),
+    ];
+    let before: Vec<_> = files.iter().map(|path| fs::read(path).unwrap()).collect();
+    let error = copy_profile(&f.source, &alias.join("new-parent/deeper/target")).unwrap_err();
+    assert!(error.contains("不能重叠"), "{error}");
+    assert!(!f.source.join("new-parent").exists());
+    for (path, bytes) in files.iter().zip(before) {
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn rejects_unresolved_parent_traversal_before_creating_directories() {
+    for suffix in [
+        "missing/../source/new-parent/target",
+        "missing/../safe/target",
+    ] {
+        let f = Fixture::new();
+        assert!(copy_profile(&f.source, &f.dir.join(suffix)).is_err());
+        assert!(!f.source.join("new-parent").exists());
+        assert!(!f.dir.join("missing").exists());
+        assert!(!f.dir.join("safe").exists());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn rejects_dangling_parent_alias_without_changing_source() {
+    use std::os::unix::fs::symlink;
+    let f = Fixture::new();
+    let alias = f.dir.join("dangling-alias");
+    symlink(f.source.join("missing"), &alias).unwrap();
+    assert!(copy_profile(&f.source, &alias.join("nested/target")).is_err());
+    assert!(!f.source.join("missing").exists());
+    assert!(fs::symlink_metadata(&alias).unwrap().is_symlink());
+}
+
+#[test]
+fn supports_nonoverlapping_nested_destination_parents() {
+    for suffix in ["new-parent/deeper/target", "existing/../target"] {
+        let f = Fixture::new();
+        fs::create_dir(f.dir.join("existing")).unwrap();
+        let target = f.dir.join(suffix);
+        copy_profile(&f.source, &target).unwrap();
+        assert!(target.join(STATE_DB).is_file());
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn supports_source_directory_alias_and_preserves_database_permissions() {
     use std::os::unix::fs::{symlink, PermissionsExt};
     let f = Fixture::new();
@@ -472,6 +531,30 @@ fn keeps_destination_host_identity_when_parent_is_an_alias() {
     symlink(&real_parent, &alias_parent).unwrap();
     let target = alias_parent.join("new-instance");
     copy_profile(&f.source, &target).unwrap();
+    let state = read_state(&target).unwrap();
+    assert!(state[HOST_MAPS[0]]
+        .get(format!("local:{}", target.display()))
+        .is_some());
+    let copied = Connection::open(target.join(STATE_DB)).unwrap();
+    let rollout: String = copied
+        .query_row("SELECT rollout_path FROM threads", [], |r| r.get(0))
+        .unwrap();
+    assert!(Path::new(&rollout).starts_with(&target));
+    assert!(Path::new(&rollout).is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn keeps_destination_host_identity_when_new_parents_follow_an_alias() {
+    use std::os::unix::fs::symlink;
+    let f = Fixture::new();
+    let real_parent = f.dir.join("real-parent");
+    let alias_parent = f.dir.join("alias-parent");
+    fs::create_dir(&real_parent).unwrap();
+    symlink(&real_parent, &alias_parent).unwrap();
+    let target = alias_parent.join("new-parent/deeper/new-instance");
+    copy_profile(&f.source, &target).unwrap();
+    assert!(real_parent.join("new-parent/deeper/new-instance").is_dir());
     let state = read_state(&target).unwrap();
     assert!(state[HOST_MAPS[0]]
         .get(format!("local:{}", target.display()))

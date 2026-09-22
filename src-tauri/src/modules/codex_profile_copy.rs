@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -36,6 +36,7 @@ pub fn copy_profile(source: &Path, target: &Path) -> Result<(), String> {
     }
     let target = absolute_target.as_path();
     let parent = target.parent().ok_or("目标实例目录没有父目录")?;
+    validate_target_parent_before_creation(&source, parent)?;
     fs::create_dir_all(parent).map_err(|e| format!("创建实例父目录失败: {e}"))?;
     let target = parent
         .canonicalize()
@@ -103,6 +104,37 @@ pub fn copy_profile(source: &Path, target: &Path) -> Result<(), String> {
     result.map_err(|e| {
         format!("复制 Codex 实例失败，未发布副本: {e}；若来源实例正在运行，请关闭后重试")
     })
+}
+
+fn validate_target_parent_before_creation(source: &Path, parent: &Path) -> Result<(), String> {
+    for ancestor in parent.ancestors() {
+        match fs::symlink_metadata(ancestor) {
+            Ok(_) => {
+                // Resolve aliases before mkdir can write into the source. A
+                // dangling link must fail here, not be treated as a missing directory.
+                let resolved = ancestor.canonicalize().map_err(|e| e.to_string())?;
+                if resolved.starts_with(source) {
+                    return Err("来源与目标实例目录不能重叠".to_string());
+                }
+                let missing = parent.strip_prefix(ancestor).map_err(|e| e.to_string())?;
+                // Normalizing missing/../source would hide directories that
+                // create_dir_all may create while traversing that path.
+                if missing
+                    .components()
+                    .any(|part| part == Component::ParentDir)
+                {
+                    return Err(
+                        "目标父目录包含尚未创建的路径和 ..，请先创建父目录或使用不含 .. 的路径"
+                            .to_string(),
+                    );
+                }
+                return Ok(());
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Err("无法解析目标实例父目录".to_string())
 }
 
 fn is_database(path: &Path) -> bool {
