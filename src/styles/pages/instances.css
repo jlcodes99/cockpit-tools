@@ -431,37 +431,9 @@
 
 .instances-list.instances-list-codex .instances-list-header > div:nth-child(7),
 .instances-list.instances-list-codex .instance-item > div:nth-child(7) {
+  /* Scroll actions with the other columns so narrow lists never cover account,
+     speed, or PID content. The row supplies the normal and hover background. */
   width: 100%;
-}
-
-.instances-list.instances-list-codex .instances-list-header > div:nth-child(7) {
-  position: sticky;
-  right: 0;
-  z-index: 20;
-  background: var(--bg-tertiary);
-  box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.12);
-  align-self: stretch;
-  margin-top: -14px;
-  margin-bottom: -14px;
-  padding-top: 14px;
-  padding-bottom: 14px;
-}
-
-.instances-list.instances-list-codex .instance-item > div:nth-child(7) {
-  position: sticky;
-  right: 0;
-  z-index: 10;
-  background: var(--bg-secondary);
-  box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.12);
-  align-self: stretch;
-  margin-top: -12px;
-  margin-bottom: -12px;
-  padding-top: 12px;
-  padding-bottom: 12px;
-}
-
-.instances-list.instances-list-codex .instance-item:hover > div:nth-child(7) {
-  background: var(--bg-hover);
 }
 
 .instances-list.instances-list-no-pid .instances-list-header > div:nth-child(5),
@@ -1901,19 +1873,6 @@
 [data-theme="dark"] .instances-list.instances-list-codex .instance-item:nth-child(even) > div:nth-child(6),
 [data-theme="dark"] .instances-list.instances-list-codex .instance-item:hover > div:nth-child(6) {
   background: transparent;
-}
-
-[data-theme="dark"] .instances-list.instances-list-codex .instances-list-header > div:nth-child(7) {
-  background: rgb(15, 23, 42);
-}
-
-[data-theme="dark"] .instances-list.instances-list-codex .instance-item > div:nth-child(7),
-[data-theme="dark"] .instances-list.instances-list-codex .instance-item:nth-child(even) > div:nth-child(7) {
-  background: rgb(14, 22, 41);
-}
-
-[data-theme="dark"] .instances-list.instances-list-codex .instance-item:hover > div:nth-child(7) {
-  background: rgb(23, 42, 79);
 }
 
 [data-theme="dark"] .instance-account-disabled {
