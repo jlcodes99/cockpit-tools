@@ -576,6 +576,11 @@
   color: #15803d;
 }
 
+.codex-local-access-status.warning {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
 .codex-local-access-status.stopped {
   background: rgba(248, 113, 113, 0.14);
   color: #b91c1c;
@@ -1818,6 +1823,10 @@
 
 [data-theme="dark"] .codex-local-access-status.running {
   color: #86efac;
+}
+
+[data-theme="dark"] .codex-local-access-status.warning {
+  color: #fbbf24;
 }
 
 [data-theme="dark"] .codex-local-access-status.stopped {

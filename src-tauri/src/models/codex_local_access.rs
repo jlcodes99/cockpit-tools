@@ -933,6 +933,10 @@ pub struct CodexLocalAccessProfileAttachment {
 pub struct CodexLocalAccessState {
     pub collection: Option<CodexLocalAccessCollection>,
     pub running: bool,
+    /// The sidecar can remain alive after the public API entry is disabled so
+    /// host-internal wakeup/Pelican requests can continue to use the same
+    /// scheduler. This is separate from collection.enabled by design.
+    pub internal_required: bool,
     pub preparing: bool,
     pub preparation_total: usize,
     pub preparation_completed: usize,

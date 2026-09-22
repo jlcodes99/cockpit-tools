@@ -1437,46 +1437,94 @@ pub async fn update_local_access_port(port: u16) -> Result<CodexLocalAccessState
     snapshot_state().await
 }
 
+fn finish_local_access_disable(
+    gateway_result: Result<(), String>,
+    restore_profiles: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let restore_result = restore_profiles();
+    match (gateway_result, restore_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(stop_error), Ok(())) => Err(stop_error),
+        (Ok(()), Err(restore_error)) => Err(restore_error),
+        (Err(stop_error), Err(restore_error)) => Err(format!(
+            "{}; 恢复 Codex 配置时也失败: {}",
+            stop_error, restore_error
+        )),
+    }
+}
+
 pub async fn set_local_access_enabled(enabled: bool) -> Result<CodexLocalAccessState, String> {
-    if enabled {
-        advance_gateway_lifecycle_generation();
-        ensure_runtime_loaded().await?;
-    } else {
-        ensure_runtime_loaded_without_start().await?;
-    }
-
-    let maybe_collection = {
-        let runtime = gateway_runtime().lock().await;
-        runtime.collection.clone()
-    };
-
-    let Some(mut collection) = maybe_collection else {
-        return Err("本地接入集合尚未创建".to_string());
-    };
-
-    collection.enabled = enabled;
-    collection.updated_at = now_ms();
-    save_collection_to_disk(&collection)?;
-    let next_collection = collection.clone();
-
-    {
-        let mut runtime = gateway_runtime().lock().await;
-        sync_runtime_collection(&mut runtime, collection);
-    }
-
-    if enabled {
-        ensure_gateway_matches_runtime().await?;
-        ensure_local_access_profile_takeovers(&next_collection).await?;
-        snapshot_state().await
-    } else {
-        if internal_api_service_required() {
-            ensure_gateway_matches_runtime().await?;
+    let mut result = async {
+        if enabled {
+            advance_gateway_lifecycle_generation();
+            ensure_runtime_loaded().await?;
         } else {
-            stop_gateway().await;
+            ensure_runtime_loaded_without_start().await?;
         }
-        restore_takeover_profiles_after_disable(&next_collection)?;
-        snapshot_state_without_gateway_reload().await
+
+        let _internal_request_guard = if enabled {
+            None
+        } else {
+            Some(
+                INTERNAL_REQUEST_GATE
+                    .clone()
+                    .try_acquire_many_owned(INTERNAL_REQUEST_CONCURRENCY as u32)
+                    .map_err(|_| {
+                        "鹈鹕测试或账号唤醒正在运行，请等待任务完成或先取消任务后再停用 API 服务"
+                            .to_string()
+                    })?,
+            )
+        };
+
+        let maybe_collection = {
+            let runtime = gateway_runtime().lock().await;
+            runtime.collection.clone()
+        };
+
+        let mut collection = maybe_collection.ok_or_else(|| "本地接入集合尚未创建".to_string())?;
+        collection.enabled = enabled;
+        collection.updated_at = now_ms();
+        save_collection_to_disk(&collection)?;
+        let next_collection = collection.clone();
+
+        {
+            let mut runtime = gateway_runtime().lock().await;
+            sync_runtime_collection(&mut runtime, collection);
+        }
+
+        if enabled {
+            ensure_gateway_matches_runtime().await?;
+            ensure_local_access_profile_takeovers(&next_collection).await?;
+            snapshot_state().await
+        } else {
+            let gateway_result = if internal_api_service_required() {
+                ensure_gateway_matches_runtime().await
+            } else {
+                stop_gateway_and_wait_for_release(
+                    bind_host_for_collection(&next_collection),
+                    next_collection.port,
+                )
+                .await
+            };
+            finish_local_access_disable(gateway_result, || {
+                restore_takeover_profiles_after_disable(&next_collection)
+            })?;
+            snapshot_state_without_gateway_reload().await
+        }
     }
+    .await;
+
+    let mut runtime = gateway_runtime().lock().await;
+    match &mut result {
+        Ok(state) => {
+            runtime.last_error = None;
+            state.last_error = None;
+        }
+        Err(error) => runtime.last_error = Some(error.clone()),
+    }
+    drop(runtime);
+    emit_local_access_state_updated();
+    result
 }
 
 pub async fn restore_local_access_gateway() {

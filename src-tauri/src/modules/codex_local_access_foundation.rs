@@ -69,6 +69,9 @@ use tokio::time::{timeout, Duration};
 const INTERNAL_REQUEST_CONCURRENCY: usize = 6;
 static INTERNAL_REQUEST_GATE: std::sync::LazyLock<Arc<Semaphore>> =
     std::sync::LazyLock::new(|| Arc::new(Semaphore::new(INTERNAL_REQUEST_CONCURRENCY)));
+// The account set is a sidecar configuration cache. This counter is the
+// cancellation-safe source of truth for current host-internal work.
+static INTERNAL_ACTIVE_REQUESTS: AtomicUsize = AtomicUsize::new(0);
 static INTERNAL_ACCOUNT_GATES: std::sync::LazyLock<Mutex<HashMap<String, Arc<Semaphore>>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 static INTERNAL_API_ACCOUNT_IDS: std::sync::LazyLock<Mutex<HashSet<String>>> =
@@ -109,7 +112,7 @@ fn internal_api_account_ids() -> Vec<String> {
 }
 
 fn internal_api_service_required() -> bool {
-    !internal_api_account_ids().is_empty()
+    INTERNAL_ACTIVE_REQUESTS.load(Ordering::SeqCst) > 0
 }
 
 /// API 服务 sidecar 的运行条件：对外入口被启用，或者宿主内部调度仍需要它。
@@ -123,9 +126,30 @@ fn local_access_gateway_should_run(collection: &CodexLocalAccessCollection) -> b
 /// All host-triggered Codex requests share this scheduler. The account permit
 /// prevents a wakeup and a Pelican run from concurrently refreshing/consuming
 /// the same account while the global permit bounds total background pressure.
+pub(crate) struct InternalRequestPermit {
+    global: Option<OwnedSemaphorePermit>,
+    account: Option<OwnedSemaphorePermit>,
+}
+
+impl Drop for InternalRequestPermit {
+    fn drop(&mut self) {
+        let last_internal_request =
+            INTERNAL_ACTIVE_REQUESTS.fetch_sub(1, Ordering::SeqCst) == 1;
+        self.account.take();
+        self.global.take();
+        if last_internal_request {
+            schedule_disabled_gateway_cleanup();
+        }
+    }
+}
+
 pub(crate) async fn acquire_internal_request_permit(
     account_id: &str,
-) -> Result<(OwnedSemaphorePermit, OwnedSemaphorePermit), String> {
+) -> Result<InternalRequestPermit, String> {
+    let account_id = account_id.trim();
+    if account_id.is_empty() {
+        return Err("Codex API 内部请求缺少目标账号".to_string());
+    }
     let global = INTERNAL_REQUEST_GATE
         .clone()
         .acquire_owned()
@@ -136,7 +160,7 @@ pub(crate) async fn acquire_internal_request_permit(
             .lock()
             .map_err(|_| "Codex API 账号并发锁不可用".to_string())?;
         gates
-            .entry(account_id.trim().to_string())
+            .entry(account_id.to_string())
             .or_insert_with(|| Arc::new(Semaphore::new(1)))
             .clone()
     };
@@ -144,7 +168,11 @@ pub(crate) async fn acquire_internal_request_permit(
         .acquire_owned()
         .await
         .map_err(|_| "Codex API 账号请求调度器已停止".to_string())?;
-    Ok((global, account))
+    INTERNAL_ACTIVE_REQUESTS.fetch_add(1, Ordering::SeqCst);
+    Ok(InternalRequestPermit {
+        global: Some(global),
+        account: Some(account),
+    })
 }
 
 /// 统一承接宿主内部发起的 Codex 模型请求。

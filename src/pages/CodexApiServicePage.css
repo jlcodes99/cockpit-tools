@@ -132,6 +132,7 @@
 }
 
 .codex-api-service-status.stopped,
+.codex-api-service-status.warning,
 .codex-api-service-message.warning {
   border-color: color-mix(in srgb, var(--warning) 28%, transparent);
   background: color-mix(in srgb, var(--warning) 12%, transparent);
@@ -2502,6 +2503,7 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
 }
 
 [data-theme="dark"] .codex-api-service-status.stopped,
+[data-theme="dark"] .codex-api-service-status.warning,
 [data-theme="dark"] .codex-api-service-message.warning {
   color: #fbbf24;
 }

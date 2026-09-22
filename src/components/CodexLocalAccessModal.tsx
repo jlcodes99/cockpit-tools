@@ -72,6 +72,10 @@ import {
   resolveCodexLocalAccessInitialAccountIds,
 } from "../utils/codexLocalAccessAccounts";
 import { isBlockingCodexAccountQuotaError } from "../utils/codexQuotaError";
+import {
+  resolveCodexLocalAccessRuntimeStatus,
+  resolveCodexLocalAccessStatusBadgeTone,
+} from "../utils/codexLocalAccessStatus";
 import { AccountTagFilterDropdown } from "./AccountTagFilterDropdown";
 import { CodexAccountPoolHealthModal } from "./CodexAccountPoolHealthModal";
 import {
@@ -386,6 +390,21 @@ export function CodexLocalAccessModal({
   sidecarRestarting,
 }: CodexLocalAccessModalProps) {
   const { t } = useTranslation();
+  const localAccessStatus = resolveCodexLocalAccessRuntimeStatus(
+    state?.collection,
+    state,
+  );
+  const localAccessStatusText =
+    localAccessStatus === "internal"
+      ? [
+          t("codex.localAccess.statusDisabled", "已停用"),
+          t("codex.localAccess.internalSchedulerLabel", "内部调度"),
+        ].join(" · ")
+      : localAccessStatus === "running"
+        ? t("codex.localAccess.statusRunning", "运行中")
+        : localAccessStatus === "stopped"
+          ? t("codex.localAccess.statusStopped", "未运行")
+          : t("codex.localAccess.statusDisabled", "已停用");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterTypes, setFilterTypes] = useState<string[]>([]);
@@ -2414,14 +2433,10 @@ export function CodexLocalAccessModal({
                   <div className="codex-local-access-header-badges">
                     <span
                       className={`codex-local-access-status ${
-                        collection?.enabled && state?.running ? "running" : "stopped"
+                        resolveCodexLocalAccessStatusBadgeTone(localAccessStatus)
                       }`}
                     >
-                      {collection?.enabled
-                        ? state?.running
-                          ? t("codex.localAccess.statusRunning", "运行中")
-                          : t("codex.localAccess.statusStopped", "未运行")
-                        : t("codex.localAccess.statusDisabled", "已停用")}
+                      {localAccessStatusText}
                     </span>
                     <span className="codex-local-access-subtle-badge">
                       {accessScopeBadge}

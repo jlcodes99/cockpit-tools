@@ -19,6 +19,7 @@ import type { CodexAccount } from "../types/codex";
 import { CODEX_API_SERVICE_BIND_ID } from "../types/instance";
 import { createCodexOverviewAccountComparator, filterAndSortCodexOverviewAccounts } from "../utils/codexAccountOverview";
 import { buildPaginatedGroups, buildPaginationPageSizeStorageKey, isEveryIdSelected, usePagination } from "../hooks/usePagination";
+import { resolveCodexLocalAccessRuntimeStatus } from "../utils/codexLocalAccessStatus";
 import { formatCockpitApiInteger, formatCockpitApiTokenCount, getCodexAccountNoteTitle, isPendingOAuthCodexAccount, resolveApiKeyUsageMode, shouldAutoHideBatchDeleteJob } from "./codexAccountsControllerModel";
 import type { useCodexAccountsBaseController } from "./useCodexAccountsBaseController";
 import type { useCodexAccountsOAuthController } from "./useCodexAccountsOAuthController";
@@ -814,11 +815,21 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
       useCallback((): CodexLaunchPreviewSummary => {
         const collection = localAccessCollection;
         const totals = localAccessState?.stats.weekly.totals;
-        const statusLabel = localAccessState?.running
-          ? t("codex.localAccess.statusRunning", "运行中")
-          : collection?.enabled
-            ? t("codex.localAccess.statusStopped", "未运行")
-            : t("codex.localAccess.statusDisabled", "已停用");
+        const status = resolveCodexLocalAccessRuntimeStatus(
+          collection,
+          localAccessState,
+        );
+        const statusLabel =
+          status === "internal"
+            ? [
+                t("codex.localAccess.statusDisabled", "已停用"),
+                t("codex.localAccess.internalSchedulerLabel", "内部调度"),
+              ].join(" · ")
+            : status === "running"
+              ? t("codex.localAccess.statusRunning", "运行中")
+              : status === "stopped"
+                ? t("codex.localAccess.statusStopped", "未运行")
+                : t("codex.localAccess.statusDisabled", "已停用");
         const scopeLabel =
           collection?.accessScope === "lan"
             ? t("codex.localAccess.accessScopeLanShort", "本机+局域网")
@@ -852,11 +863,14 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
             },
           )}`,
           statusLabel,
-          statusTone: localAccessState?.running
-            ? "success"
-            : collection?.enabled
-              ? "neutral"
-              : "warning",
+          statusTone:
+            status === "running"
+              ? "success"
+              : status === "internal"
+                ? "warning"
+                : status === "stopped"
+                  ? "neutral"
+                  : "warning",
           facts: [
             {
               label: t("codex.localAccess.memberTitle", "集合成员"),
@@ -914,6 +928,10 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
       (): CodexLaunchPreviewAction[] => {
         if (!localAccessCollection) return [];
         const baseUrl = resolveLocalAccessBaseUrl() || "-";
+        const localAccessRuntimeStatus = resolveCodexLocalAccessRuntimeStatus(
+          localAccessCollection,
+          localAccessState,
+        );
         const apiServiceSpeedDescription = CODEX_SPEED_DESCRIPTION[apiServiceAppSpeed] ??
           CODEX_SPEED_DESCRIPTION.standard;
         const actions: CodexLaunchPreviewAction[] = [
@@ -1007,9 +1025,17 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
             label: localAccessCollection.enabled
               ? t("codex.localAccess.disableService", "停用服务")
               : t("codex.localAccess.enableService", "启用服务"),
-            description: localAccessState?.running
-              ? t("codex.localAccess.statusRunning", "运行中")
-              : t("codex.localAccess.statusStopped", "未运行"),
+            description:
+              localAccessRuntimeStatus === "internal"
+                ? [
+                    t("codex.localAccess.statusDisabled", "已停用"),
+                    t("codex.localAccess.internalSchedulerLabel", "内部调度"),
+                  ].join(" · ")
+                : localAccessRuntimeStatus === "running"
+                  ? t("codex.localAccess.statusRunning", "运行中")
+                  : localAccessRuntimeStatus === "stopped"
+                    ? t("codex.localAccess.statusStopped", "未运行")
+                    : t("codex.localAccess.statusDisabled", "已停用"),
             actionLabel: localAccessCollection.enabled
               ? t("codex.localAccess.disableService", "停用服务")
               : t("codex.localAccess.enableService", "启用服务"),

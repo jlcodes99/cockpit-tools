@@ -1,6 +1,8 @@
 // Codex Local Access 测试：宿主内部请求（定时/手动唤醒、鹈鹕测试）统一走 API 服务 sidecar。
 // 覆盖内部 API Key 清单、账号范围、并发闸门，以及与对外入口开关解耦的生命周期判断。
 const INTERNAL_SERVICE_TEST_ACCOUNT_ID: &str = "internal-service-test-account";
+static INTERNAL_GATE_TEST_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
+    std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 fn internal_service_test_account() -> crate::models::codex::CodexAccount {
     crate::models::codex::CodexAccount::new(
@@ -98,10 +100,12 @@ fn internal_accounts_join_the_api_service_account_scope() {
     );
 }
 
-#[test]
-fn disabled_api_service_still_runs_for_internal_requests() {
-    super::register_internal_api_account(INTERNAL_SERVICE_TEST_ACCOUNT_ID)
-        .expect("register internal API account");
+#[tokio::test]
+async fn disabled_api_service_still_runs_for_internal_requests() {
+    let _test_guard = INTERNAL_GATE_TEST_LOCK.lock().await;
+    let _permit = super::acquire_internal_request_permit(INTERNAL_SERVICE_TEST_ACCOUNT_ID)
+        .await
+        .expect("internal request permit");
     let mut collection = test_local_access_collection(Vec::new());
     collection.enabled = false;
 
@@ -111,8 +115,33 @@ fn disabled_api_service_still_runs_for_internal_requests() {
     );
 }
 
+#[test]
+fn failed_sidecar_stop_still_attempts_profile_restore() {
+    let mut restore_attempted = false;
+    let result = super::finish_local_access_disable(Err("port still bound".to_string()), || {
+        restore_attempted = true;
+        Ok(())
+    });
+
+    assert!(restore_attempted);
+    assert_eq!(result, Err("port still bound".to_string()));
+}
+
+#[test]
+fn disable_preserves_stop_and_profile_restore_errors() {
+    let result = super::finish_local_access_disable(Err("sidecar stop failed".to_string()), || {
+        Err("profile restore failed".to_string())
+    });
+
+    assert_eq!(
+        result,
+        Err("sidecar stop failed; 恢复 Codex 配置时也失败: profile restore failed".to_string())
+    );
+}
+
 #[tokio::test]
 async fn internal_requests_serialize_per_account() {
+    let _test_guard = INTERNAL_GATE_TEST_LOCK.lock().await;
     let account_id = "internal-scheduler-account-a";
     let other_account_id = "internal-scheduler-account-b";
 
@@ -143,6 +172,35 @@ async fn internal_requests_serialize_per_account() {
     )
     .await;
     assert!(released.is_ok(), "请求结束后必须释放账号闸门");
+}
+
+#[tokio::test]
+async fn internal_request_permit_tracks_activity_and_blocks_shutdown() {
+    let _test_guard = INTERNAL_GATE_TEST_LOCK.lock().await;
+    let account_id = "internal-scheduler-active-account";
+    let permit = super::acquire_internal_request_permit(account_id)
+        .await
+        .expect("internal request permit");
+
+    assert_eq!(
+        super::INTERNAL_ACTIVE_REQUESTS.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
+    assert!(super::INTERNAL_REQUEST_GATE
+        .clone()
+        .try_acquire_many_owned(super::INTERNAL_REQUEST_CONCURRENCY as u32)
+        .is_err());
+
+    drop(permit);
+    assert_eq!(
+        super::INTERNAL_ACTIVE_REQUESTS.load(std::sync::atomic::Ordering::SeqCst),
+        0
+    );
+    let shutdown_guard = super::INTERNAL_REQUEST_GATE
+        .clone()
+        .try_acquire_many_owned(super::INTERNAL_REQUEST_CONCURRENCY as u32)
+        .expect("idle scheduler should allow shutdown guard");
+    drop(shutdown_guard);
 }
 
 /// 内部请求必须落在 sidecar 真正注册的 `/v1/*` 路由上。

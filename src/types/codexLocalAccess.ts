@@ -402,6 +402,8 @@ export interface CodexLocalAccessQuotaReserveStatus {
 export interface CodexLocalAccessState {
   collection: CodexLocalAccessCollection | null;
   running: boolean;
+  /** True when host-internal wakeup/Pelican requests keep the sidecar alive. */
+  internalRequired: boolean;
   preparing: boolean;
   preparationTotal: number;
   preparationCompleted: number;

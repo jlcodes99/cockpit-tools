@@ -495,6 +495,66 @@ async fn stop_gateway() -> Option<GatewayBindEndpoint> {
     stop_gateway_locked().await
 }
 
+async fn stop_gateway_and_wait_for_release(bind_host: &str, port: u16) -> Result<(), String> {
+    let stopped_endpoint = stop_gateway().await;
+    let (bind_host, port) = stopped_endpoint
+        .map(|endpoint| (endpoint.bind_host, endpoint.port))
+        .unwrap_or_else(|| (bind_host.to_string(), port));
+    wait_for_gateway_port_release(&bind_host, port).await
+}
+
+async fn stop_gateway_after_internal_requests() -> Result<(), String> {
+    let _lifecycle_guard = gateway_lifecycle_lock().lock().await;
+    let endpoint = {
+        let runtime = gateway_runtime().lock().await;
+        runtime.collection.as_ref().and_then(|collection| {
+            (!collection.enabled && runtime.running).then(|| {
+                (
+                    bind_host_for_collection(collection).to_string(),
+                    collection.port,
+                )
+            })
+        })
+    };
+    let Some((fallback_bind_host, fallback_port)) = endpoint else {
+        return Ok(());
+    };
+    let _stop_request_guard = GatewayStopRequestGuard::begin();
+    advance_gateway_lifecycle_generation();
+    let stopped_endpoint = stop_gateway_locked().await;
+    let (bind_host, port) = stopped_endpoint
+        .map(|endpoint| (endpoint.bind_host, endpoint.port))
+        .unwrap_or((fallback_bind_host, fallback_port));
+    wait_for_gateway_port_release(&bind_host, port).await
+}
+
+#[cfg(not(test))]
+fn schedule_disabled_gateway_cleanup() {
+    tauri::async_runtime::spawn(async {
+        let Ok(_idle_guard) = INTERNAL_REQUEST_GATE
+            .clone()
+            .try_acquire_many_owned(INTERNAL_REQUEST_CONCURRENCY as u32)
+        else {
+            return;
+        };
+        if internal_api_service_required() {
+            return;
+        }
+        if let Err(error) = stop_gateway_after_internal_requests().await {
+            let mut runtime = gateway_runtime().lock().await;
+            runtime.last_error = Some(error.clone());
+            logger::log_codex_api_warn(&format!(
+                "[CodexLocalAccess] 内部请求结束后停止 API 服务失败: {}",
+                error
+            ));
+        }
+        emit_local_access_state_updated();
+    });
+}
+
+#[cfg(test)]
+fn schedule_disabled_gateway_cleanup() {}
+
 async fn stop_gateway_locked() -> Option<GatewayBindEndpoint> {
     let (shutdown_sender, task, monitor_task, child, endpoint) = {
         let mut runtime = gateway_runtime().lock().await;
@@ -1142,6 +1202,7 @@ fn build_state_snapshot_inner(
     CodexLocalAccessState {
         collection,
         running: runtime.running,
+        internal_required: internal_api_service_required(),
         preparing: service_enabled && GATEWAY_PREPARING.load(Ordering::SeqCst),
         preparation_total: GATEWAY_PREPARATION_TOTAL.load(Ordering::SeqCst),
         preparation_completed: GATEWAY_PREPARATION_COMPLETED.load(Ordering::SeqCst),
