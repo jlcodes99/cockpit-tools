@@ -22,8 +22,8 @@ const CODEX_TURN_STATE_REASON_ABNORMAL: &str = "turnStateAbnormal";
 const CODEX_TURN_STATE_REASON_MISSING: &str = "turnStateMissing";
 const CODEX_TURN_STATE_REASON_SUSPECTED: &str = "turnStateSuspected";
 
-/// 正常长度：292 / 332。
-const CODEX_TURN_STATE_NORMAL_LENGTHS: [i64; 2] = [292, 332];
+/// 正常长度：292 / 332 / 780。
+const CODEX_TURN_STATE_NORMAL_LENGTHS: [i64; 3] = [292, 332, 780];
 /// 312 视为疑似风控信号。
 const CODEX_TURN_STATE_SUSPECTED_LENGTH: i64 = 312;
 const CODEX_TURN_STATE_PREFIX: &str = "gAAAAA";
@@ -289,7 +289,7 @@ fn derive_codex_account_turn_state_status(
         observations: observations.to_vec(),
     };
 
-    // 只看最近一次观测：312 → 疑似风控；292/332 → 正常；其它长度/缺失 → 异常（不升级为疑似风控）。
+    // 只看最近一次观测：312 → 疑似风控；292/332/780 → 正常；其它长度/缺失 → 异常（不升级为疑似风控）。
     let latest_class = normalize_turn_state_class(Some(latest.class.as_str()))
         .unwrap_or(CODEX_TURN_STATE_CLASS_ABNORMAL);
     if latest_class != CODEX_TURN_STATE_CLASS_NORMAL {

@@ -23,7 +23,7 @@ const (
 	// TurnStateHeaderName 是上游返回的 turn state 响应头。
 	TurnStateHeaderName = "x-codex-turn-state"
 
-	// 292/332 为正常长度；312 直接作为「疑似风控」信号；其它长度或缺失视为异常。
+	// 292/332/780 为正常长度；312 直接作为「疑似风控」信号；其它长度或缺失视为异常。
 	TurnStateClassNormal    = "normal"
 	TurnStateClassSuspected = "suspected"
 	TurnStateClassAbnormal  = "abnormal"
@@ -40,7 +40,7 @@ func ClassifyTurnStateValue(value string) (int, string) {
 	switch length {
 	case 0:
 		return 0, TurnStateClassMissing
-	case 292, 332:
+	case 292, 332, 780:
 		return length, TurnStateClassNormal
 	case 312:
 		return length, TurnStateClassSuspected

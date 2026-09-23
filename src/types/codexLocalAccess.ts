@@ -536,7 +536,7 @@ export interface CodexInstanceGatewayView {
   lastError: string | null;
 }
 
-/** normal=292/332；suspected=312；abnormal=其它长度；missing=未返回 state。 */
+/** normal=292/332/780；suspected=312；abnormal=其它长度；missing=未返回 state。 */
 export type CodexTurnStateClass = "normal" | "suspected" | "abnormal" | "missing";
 
 export type CodexAccountTurnStateStatusKind =

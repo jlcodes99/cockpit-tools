@@ -3710,7 +3710,7 @@
       "reasonAbnormal": "Unexpected state length",
       "reasonMissing": "Response carried no state",
       "openCheckTitle": "Click to open the risk check",
-      "logHint": "Upstream x-codex-turn-state: 312 counts as suspected risk, 292/332 stay normal.",
+      "logHint": "Upstream x-codex-turn-state: 312 counts as suspected risk, 292/332/780 stay normal.",
       "logSuspectedWithLength": "Suspected risk · state {{length}}",
       "reasonSuspected": "state is 312",
       "stateLengthAbnormal": "state {{length}} (abnormal)"

@@ -20,6 +20,7 @@ func TestClassifyTurnStateValueMatchesRelayBaseline(t *testing.T) {
 		{"blank", "   ", 0, TurnStateClassMissing},
 		{"normal-292", strings.Repeat("x", 292), 292, TurnStateClassNormal},
 		{"normal-332", strings.Repeat("x", 332), 332, TurnStateClassNormal},
+		{"normal-780", strings.Repeat("x", 780), 780, TurnStateClassNormal},
 		{"suspected-312", strings.Repeat("x", 312), 312, TurnStateClassSuspected},
 		{"abnormal-short", strings.Repeat("x", 200), 200, TurnStateClassAbnormal},
 		{"trimmed", " " + strings.Repeat("x", 332) + " ", 332, TurnStateClassNormal},

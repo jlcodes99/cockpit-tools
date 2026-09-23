@@ -2446,7 +2446,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                       event.turnStateLength > 0
                         ? event.turnStateLength
                         : null;
-                    // 只看 state：312 即疑似风控，292/332 正常，其它长度按异常展示。
+                    // 只看 state：312 即疑似风控，292/332/780 正常，其它长度按异常展示。
                     const turnStateSuspected = turnStateClass === "suspected";
                     const turnStateLabel = turnStateSuspected
                       ? turnStateLength !== null
@@ -2580,7 +2580,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                               className={`codex-api-service-pill ${turnStateSuspected ? "error" : "muted"}`}
                               title={t(
                                 "codex.turnState.logHint",
-                                "上游 x-codex-turn-state：312 视为疑似风控，292/332 正常。",
+                                "上游 x-codex-turn-state：312 视为疑似风控，292/332/780 正常。",
                               )}
                             >
                               {turnStateLabel}
