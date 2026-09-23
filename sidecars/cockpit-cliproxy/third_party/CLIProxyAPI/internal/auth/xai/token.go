@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/misc"
-	log "github.com/sirupsen/logrus"
 )
 
 // TokenStorage stores xAI OAuth credentials on disk.
@@ -51,19 +50,12 @@ func (ts *TokenStorage) SaveTokenToFile(authFilePath string) error {
 		return fmt.Errorf("xai token storage: merge metadata: %w", errMerge)
 	}
 
-	file, err := os.Create(authFilePath)
+	raw, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return fmt.Errorf("xai token storage: create token file: %w", err)
+		return fmt.Errorf("xai token storage: marshal token data: %w", err)
 	}
-	defer func() {
-		if errClose := file.Close(); errClose != nil {
-			log.Errorf("xai token storage: close token file error: %v", errClose)
-		}
-	}()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	if err = encoder.Encode(data); err != nil {
+	raw = append(raw, '\n')
+	if err = misc.WriteFileAtomic(authFilePath, raw, 0o600); err != nil {
 		return fmt.Errorf("xai token storage: write token file: %w", err)
 	}
 	return nil

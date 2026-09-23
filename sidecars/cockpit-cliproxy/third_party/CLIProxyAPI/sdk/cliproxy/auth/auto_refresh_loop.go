@@ -22,6 +22,11 @@ type authAutoRefreshLoop struct {
 
 	wakeCh chan struct{}
 	jobs   chan string
+
+	// done is closed when run (and all its workers) have fully exited. It lets
+	// StopAutoRefresh wait for in-flight refresh writes to finish instead of
+	// racing them against callers that tear down storage right after stopping.
+	done chan struct{}
 }
 
 func newAuthAutoRefreshLoop(manager *Manager, interval time.Duration, concurrency int) *authAutoRefreshLoop {
@@ -43,6 +48,7 @@ func newAuthAutoRefreshLoop(manager *Manager, interval time.Duration, concurrenc
 		dirty:       make(map[string]struct{}),
 		wakeCh:      make(chan struct{}, 1),
 		jobs:        make(chan string, jobBuffer),
+		done:        make(chan struct{}),
 	}
 }
 
@@ -63,16 +69,43 @@ func (l *authAutoRefreshLoop) run(ctx context.Context) {
 	if l == nil || l.manager == nil {
 		return
 	}
+	defer close(l.done)
 
 	workers := l.concurrency
 	if workers <= 0 {
 		workers = refreshMaxConcurrency
 	}
+	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
-		go l.worker(ctx)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.worker(ctx)
+		}()
 	}
 
 	l.loop(ctx)
+	// Wait for in-flight workers so refresh writes cannot land after the
+	// loop's context is cancelled and callers have begun tearing down storage.
+	wg.Wait()
+}
+
+// wait blocks until the refresh loop and its workers have exited, bounded by
+// timeout so a hung refresh cannot stall shutdown forever.
+func (l *authAutoRefreshLoop) wait(timeout time.Duration) {
+	if l == nil || l.done == nil {
+		return
+	}
+	if timeout <= 0 {
+		<-l.done
+		return
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-l.done:
+	case <-timer.C:
+	}
 }
 
 func (l *authAutoRefreshLoop) worker(ctx context.Context) {

@@ -60,7 +60,7 @@ func (s *Service) StartRuntime(ctx context.Context) error {
 		s.hooks.OnAfterStart(s)
 	}
 	if s.coreManager != nil {
-		s.coreManager.StartAutoRefresh(context.Background(), 15*time.Minute)
+		s.coreManager.StartAutoRefresh(ctx, 15*time.Minute)
 	}
 	<-ctx.Done()
 	return ctx.Err()

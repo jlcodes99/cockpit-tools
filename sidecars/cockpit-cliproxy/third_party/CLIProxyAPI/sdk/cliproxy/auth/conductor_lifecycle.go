@@ -386,6 +386,11 @@ func (m *Manager) persist(ctx context.Context, auth *Auth) error {
 	if m.store == nil || auth == nil {
 		return nil
 	}
+	// A cancelled caller (e.g., the auto-refresh loop during shutdown) must not
+	// start a new durable write; the store may already be tearing down.
+	if ctx != nil && ctx.Err() != nil {
+		return nil
+	}
 	if errWeight := ValidateAuthWeight(auth); errWeight != nil {
 		return fmt.Errorf("persist auth: %w", errWeight)
 	}
