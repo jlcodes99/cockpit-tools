@@ -2959,7 +2959,7 @@
       "reasonAbnormal": "state 長度異常",
       "reasonMissing": "回應未回傳 state",
       "openCheckTitle": "點擊開啟風控檢測",
-      "logHint": "上游 x-codex-turn-state：312 視為疑似風控，292/332 正常。",
+      "logHint": "上游 x-codex-turn-state：312 視為疑似風控，292/332/780 正常。",
       "logSuspectedWithLength": "疑似風控 · state {{length}}",
       "reasonSuspected": "state 為 312",
       "stateLengthAbnormal": "state {{length}}（異常）"

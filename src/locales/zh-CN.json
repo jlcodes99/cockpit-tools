@@ -3710,7 +3710,7 @@
       "reasonAbnormal": "state 长度异常",
       "reasonMissing": "响应未返回 state",
       "openCheckTitle": "点击打开风控检测",
-      "logHint": "上游 x-codex-turn-state：312 视为疑似风控，292/332 正常。",
+      "logHint": "上游 x-codex-turn-state：312 视为疑似风控，292/332/780 正常。",
       "logSuspectedWithLength": "疑似风控 · state {{length}}",
       "reasonSuspected": "state 为 312",
       "stateLengthAbnormal": "state {{length}}（异常）"

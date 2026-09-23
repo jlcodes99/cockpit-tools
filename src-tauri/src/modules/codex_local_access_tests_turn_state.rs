@@ -28,7 +28,7 @@ fn turn_state_header_classification_matches_relay_baseline() {
         super::observe_turn_state_header_value(Some("   ")),
         (Some(0), super::CODEX_TURN_STATE_CLASS_ABNORMAL)
     );
-    for length in [292_usize, 332] {
+    for length in [292_usize, 332, 780] {
         let value = format!("{}{}", "gAAAAA", "x".repeat(length - 6));
         assert_eq!(
             super::observe_turn_state_header_value(Some(value.as_str())),
@@ -93,7 +93,7 @@ fn single_suspected_state_marks_account_suspected() {
         Some(super::CODEX_TURN_STATE_REASON_SUSPECTED)
     );
 
-    // 任何一次 292/332 都会摘除疑似标记。
+    // 任何一次 292/332/780 都会摘除疑似标记。
     let recovered = super::derive_codex_account_turn_state_status(
         "acc-1",
         &[
