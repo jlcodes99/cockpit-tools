@@ -229,3 +229,27 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* CodeBuddy CLI 页面：切号后「重启生效」提示条 */
+.codebuddy-cli-restart-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--accent, #4f8cff);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent, #4f8cff) 10%, transparent);
+  font-size: 13px;
+}
+.codebuddy-cli-restart-hint button {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: inherit;
+}

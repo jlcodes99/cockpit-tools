@@ -46,6 +46,10 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
             let accounts = crate::modules::workbuddy_account::list_accounts();
             Ok(crate::modules::workbuddy_account::resolve_current_account_id(&accounts))
         }
+        "codebuddy_cli" | "codebuddy-cli" => {
+            let accounts = crate::modules::workbuddy_account::list_accounts();
+            Ok(crate::modules::workbuddy_account::resolve_codebuddy_cli_current_account_id(&accounts))
+        }
         "github_copilot" | "github-copilot" | "ghcp" => {
             let accounts = crate::modules::github_copilot_account::list_accounts();
             Ok(crate::modules::github_copilot_account::resolve_current_account_id(&accounts))
@@ -124,6 +128,8 @@ mod tests {
             "trae_cn",
             "trae_solo_cn",
             "workbuddy",
+            "codebuddy_cli",
+            "codebuddy-cli",
             "github_copilot",
             "github-copilot",
             "ghcp",

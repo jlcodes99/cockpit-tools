@@ -16,6 +16,9 @@ const ACCOUNTS_DIR: &str = "workbuddy_accounts";
 const WORKBUDDY_QUOTA_ALERT_COOLDOWN_SECONDS: i64 = 10 * 60;
 const WORKBUDDY_SECRET_EXTENSION_ID: &str = "tencent-cloud.coding-copilot";
 const WORKBUDDY_SECRET_KEY: &str = "planning-genie.new.accessTokencn";
+/// CodeBuddy CLI（@tencent-ai/codebuddy-code）官方认证文件名，与 WorkBuddy 桌面端同目录。
+/// 文件名来自 CLI 包内 product.json 的 authentication.id（Tencent-Cloud.coding-copilot）。
+pub const CODEBUDDY_CLI_AUTH_FILE_NAME: &str = "Tencent-Cloud.coding-copilot.info";
 
 lazy_static::lazy_static! {
     static ref WORKBUDDY_ACCOUNT_INDEX_LOCK: Mutex<()> = Mutex::new(());
@@ -1007,6 +1010,52 @@ pub fn get_default_workbuddy_data_dir() -> Option<PathBuf> {
 pub fn get_default_workbuddy_state_db_path() -> Option<PathBuf> {
     get_default_workbuddy_data_dir()
         .map(|d| d.join("User").join("globalStorage").join("state.vscdb"))
+}
+
+pub fn get_workbuddy_shared_auth_dir() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    #[cfg(target_os = "macos")]
+    {
+        return Some(
+            home.join("Library")
+                .join("Application Support")
+                .join("CodeBuddyExtension")
+                .join("Data")
+                .join("Public")
+                .join("auth"),
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return Some(
+            home.join("AppData")
+                .join("Local")
+                .join("CodeBuddyExtension")
+                .join("Data")
+                .join("Public")
+                .join("auth"),
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return Some(
+            home.join(".local")
+                .join("share")
+                .join("CodeBuddyExtension")
+                .join("Data")
+                .join("Public")
+                .join("auth"),
+        );
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+pub fn get_codebuddy_cli_auth_file_path() -> Option<PathBuf> {
+    get_workbuddy_shared_auth_dir().map(|dir| dir.join(CODEBUDDY_CLI_AUTH_FILE_NAME))
 }
 
 fn parse_local_access_token(value: &Value) -> Option<String> {
