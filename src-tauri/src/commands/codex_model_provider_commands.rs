@@ -1368,6 +1368,41 @@ fn push_usage_detail(
     });
 }
 
+/// new-api 站点内部按「配额单位」记账，默认 `QuotaPerUnit = 500000` 折合 1 个货币单位。
+/// `/api/usage/token/` 的 `data.display` 是服务端已经折算好、并且带币种的金额；
+/// 而 `data.total_granted` / `total_available` / `total_used` 仍是未折算的原始配额，
+/// 直接把它们当金额展示会放大约 50 万倍，并被误标成 USD。因此金额一律优先取 `display`。
+const NEW_API_QUOTA_PER_UNIT: f64 = 500_000.0;
+/// new-api 用该哨兵值表示「无限额度」，而不是真实金额。
+const NEW_API_UNLIMITED_SENTINEL: f64 = 100_000_000.0;
+
+#[derive(Default)]
+struct NewApiDisplayQuota {
+    total: Option<f64>,
+    used: Option<f64>,
+    remaining: Option<f64>,
+    unit: Option<String>,
+}
+
+fn new_api_display_quota(token_data: &serde_json::Value) -> NewApiDisplayQuota {
+    let Some(display) = token_data.get("display") else {
+        return NewApiDisplayQuota::default();
+    };
+    NewApiDisplayQuota {
+        total: json_f64_at(display, &["total"]),
+        used: json_f64_at(display, &["used"]),
+        remaining: json_f64_at(display, &["remaining"]),
+        unit: json_string_at(display, &["unit"])
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty()),
+    }
+}
+
+/// 仅在响应缺少 `display` 时兜底：按 new-api 默认的 `QuotaPerUnit` 折算。
+fn new_api_quota_to_currency(value: f64) -> f64 {
+    value / NEW_API_QUOTA_PER_UNIT
+}
+
 fn summarize_new_api_model_provider_usage(
     subscription: &serde_json::Value,
     usage: &serde_json::Value,
@@ -1377,8 +1412,8 @@ fn summarize_new_api_model_provider_usage(
     let raw_quota_limit = json_f64_at(subscription, &["hard_limit_usd"])
         .or_else(|| json_f64_at(subscription, &["soft_limit_usd"]))
         .or_else(|| json_f64_at(subscription, &["system_hard_limit_usd"]));
-    let quota_used = json_f64_at(usage, &["total_usage"]).map(|value| value / 100.0);
     let token_data = token_usage.and_then(|value| value.get("data"));
+    let display = token_data.map(new_api_display_quota).unwrap_or_default();
     let quota_unlimited = token_data
         .and_then(|value| json_bool_at(value, &["unlimited_quota"]))
         .unwrap_or_else(|| {
@@ -1388,39 +1423,60 @@ fn summarize_new_api_model_provider_usage(
             matches!(
                 (hard, soft, system),
                 (Some(h), Some(s), Some(sys))
-                    if (h - 100_000_000.0).abs() < f64::EPSILON
-                        && (s - 100_000_000.0).abs() < f64::EPSILON
-                        && (sys - 100_000_000.0).abs() < f64::EPSILON
+                    if (h - NEW_API_UNLIMITED_SENTINEL).abs() < f64::EPSILON
+                        && (s - NEW_API_UNLIMITED_SENTINEL).abs() < f64::EPSILON
+                        && (sys - NEW_API_UNLIMITED_SENTINEL).abs() < f64::EPSILON
             )
         });
+    // 金额统一采用服务端折算好的 display；缺失时退回原始字段，保持旧行为。
+    let quota_used = display
+        .used
+        .or_else(|| json_f64_at(usage, &["total_usage"]).map(|value| value / 100.0));
     let quota_limit = if quota_unlimited {
         None
     } else {
-        raw_quota_limit
+        display.total.or(raw_quota_limit)
     };
-    let quota_remaining = match (quota_limit, quota_used) {
-        (Some(limit), Some(used)) => Some((limit - used).max(0.0)),
-        _ => None,
+    let quota_remaining = match display.remaining {
+        Some(remaining) => Some(remaining),
+        None => match (quota_limit, quota_used) {
+            (Some(limit), Some(used)) => Some((limit - used).max(0.0)),
+            _ => None,
+        },
     };
+    let total_granted = display.total.or_else(|| {
+        token_data
+            .and_then(|value| json_f64_at(value, &["total_granted"]))
+            .map(new_api_quota_to_currency)
+    });
+    let total_available = display.remaining.or_else(|| {
+        token_data
+            .and_then(|value| json_f64_at(value, &["total_available"]))
+            .map(new_api_quota_to_currency)
+    });
+    let unit = display.unit.unwrap_or_else(|| "USD".to_string());
     let mut details = Vec::new();
-    push_usage_detail(
-        &mut details,
-        "hardLimitUsd",
-        "Hard Limit USD",
-        json_f64_at(subscription, &["hard_limit_usd"]).map(format_usage_number),
-    );
-    push_usage_detail(
-        &mut details,
-        "softLimitUsd",
-        "Soft Limit USD",
-        json_f64_at(subscription, &["soft_limit_usd"]).map(format_usage_number),
-    );
-    push_usage_detail(
-        &mut details,
-        "systemHardLimitUsd",
-        "System Hard Limit USD",
-        json_f64_at(subscription, &["system_hard_limit_usd"]).map(format_usage_number),
-    );
+    // 无限额度时这三个字段是 new-api 的哨兵值（100000000），不是真实金额，不作为额度展示。
+    if !quota_unlimited {
+        push_usage_detail(
+            &mut details,
+            "hardLimitUsd",
+            "Hard Limit USD",
+            json_f64_at(subscription, &["hard_limit_usd"]).map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            "softLimitUsd",
+            "Soft Limit USD",
+            json_f64_at(subscription, &["soft_limit_usd"]).map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            "systemHardLimitUsd",
+            "System Hard Limit USD",
+            json_f64_at(subscription, &["system_hard_limit_usd"]).map(format_usage_number),
+        );
+    }
     push_usage_detail(
         &mut details,
         "accessUntil",
@@ -1438,13 +1494,13 @@ fn summarize_new_api_model_provider_usage(
             &mut details,
             "totalGranted",
             "Total Granted",
-            json_f64_at(token_data, &["total_granted"]).map(format_usage_number),
+            total_granted.map(format_usage_number),
         );
         push_usage_detail(
             &mut details,
             "totalAvailable",
             "Total Available",
-            json_f64_at(token_data, &["total_available"]).map(format_usage_number),
+            total_available.map(format_usage_number),
         );
         push_usage_detail(
             &mut details,
@@ -1463,7 +1519,7 @@ fn summarize_new_api_model_provider_usage(
         &mut details,
         "totalUsage",
         "Total Usage",
-        json_f64_at(usage, &["total_usage"]).map(format_usage_number),
+        quota_used.map(format_usage_number),
     );
 
     CodexModelProviderUsageSummary {
@@ -1473,7 +1529,7 @@ fn summarize_new_api_model_provider_usage(
         plan_name: None,
         remaining: quota_remaining,
         balance: None,
-        unit: Some("USD".to_string()),
+        unit: Some(unit),
         quota_unlimited: Some(quota_unlimited),
         quota_limit,
         quota_used,
@@ -2029,4 +2085,111 @@ async fn query_sub2api_model_provider_usage(
     let parsed = serde_json::from_str::<serde_json::Value>(&text)
         .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
     Ok(summarize_model_provider_usage(&parsed, latency_ms))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn detail_value<'a>(
+        summary: &'a CodexModelProviderUsageSummary,
+        key: &str,
+    ) -> Option<&'a str> {
+        summary
+            .details
+            .iter()
+            .find(|detail| detail.key == key)
+            .map(|detail| detail.value.as_str())
+    }
+
+    /// 无限额度的 new-api 站点：金额必须取服务端折算好的 `display`，
+    /// 不能直接用未折算的 `total_granted` / `total_available`（会放大约 50 万倍）。
+    #[test]
+    fn new_api_usage_prefers_server_converted_display_amounts() {
+        let subscription = serde_json::json!({
+            "object": "billing_subscription",
+            "hard_limit_usd": 100_000_000.0,
+            "soft_limit_usd": 100_000_000.0,
+            "system_hard_limit_usd": 100_000_000.0
+        });
+        let usage = serde_json::json!({ "object": "list", "total_usage": 43643.63 });
+        let token_usage = serde_json::json!({
+            "code": true,
+            "data": {
+                "object": "token_usage",
+                "name": "codex",
+                "unlimited_quota": true,
+                "total_granted": 242_103_297i64,
+                "total_used": 219_502_247i64,
+                "total_available": 22_601_050i64,
+                "expires_at": 0,
+                "display": {
+                    "remaining": 45.2021,
+                    "total": 484.206594,
+                    "used": 439.004494,
+                    "unit": "CNY"
+                }
+            }
+        });
+
+        let summary =
+            summarize_new_api_model_provider_usage(&subscription, &usage, Some(&token_usage), 12);
+
+        assert_eq!(summary.unit.as_deref(), Some("CNY"));
+        assert_eq!(summary.quota_used, Some(439.004494));
+        assert_eq!(summary.quota_remaining, Some(45.2021));
+        assert_eq!(detail_value(&summary, "totalGranted"), Some("484.2066"));
+        assert_eq!(detail_value(&summary, "totalAvailable"), Some("45.2021"));
+        // 哨兵值不应作为金额出现在详情里。
+        assert!(summary.quota_unlimited.unwrap_or(false));
+        assert_eq!(detail_value(&summary, "hardLimitUsd"), None);
+        assert_eq!(detail_value(&summary, "softLimitUsd"), None);
+        assert_eq!(detail_value(&summary, "systemHardLimitUsd"), None);
+    }
+
+    /// 缺少 `display` 时按默认 `QuotaPerUnit` 折算，并保持旧的 USD 口径。
+    #[test]
+    fn new_api_usage_falls_back_to_quota_per_unit_without_display() {
+        let subscription = serde_json::json!({ "hard_limit_usd": 1000.0 });
+        let usage = serde_json::json!({ "total_usage": 12_345.0 });
+        let token_usage = serde_json::json!({
+            "data": {
+                "total_granted": 242_103_297i64,
+                "total_available": 22_601_050i64
+            }
+        });
+
+        let summary =
+            summarize_new_api_model_provider_usage(&subscription, &usage, Some(&token_usage), 7);
+
+        assert_eq!(summary.unit.as_deref(), Some("USD"));
+        assert_eq!(summary.quota_used, Some(123.45));
+        assert_eq!(summary.quota_limit, Some(1000.0));
+        let remaining = summary.quota_remaining.expect("quota remaining");
+        assert!((remaining - 876.55).abs() < 1e-6, "remaining = {remaining}");
+        assert_eq!(detail_value(&summary, "totalGranted"), Some("484.2066"));
+        assert_eq!(detail_value(&summary, "totalAvailable"), Some("45.2021"));
+        assert_eq!(detail_value(&summary, "hardLimitUsd"), Some("1000"));
+    }
+
+    /// 只在 `unlimited_quota` 缺失时，才用三个哨兵值推断「无限额度」。
+    #[test]
+    fn new_api_usage_detects_unlimited_from_sentinel_limits() {
+        let subscription = serde_json::json!({
+            "hard_limit_usd": 100_000_000.0,
+            "soft_limit_usd": 100_000_000.0,
+            "system_hard_limit_usd": 100_000_000.0
+        });
+        let usage = serde_json::json!({});
+        let token_usage = serde_json::json!({ "data": {} });
+
+        let summary =
+            summarize_new_api_model_provider_usage(&subscription, &usage, Some(&token_usage), 3);
+
+        assert_eq!(summary.quota_unlimited, Some(true));
+        assert_eq!(summary.quota_limit, None);
+        assert_eq!(detail_value(&summary, "hardLimitUsd"), None);
+        assert_eq!(detail_value(&summary, "softLimitUsd"), None);
+        assert_eq!(detail_value(&summary, "systemHardLimitUsd"), None);
+    }
 }
