@@ -1118,7 +1118,7 @@ pub fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
             candidates.push(base.join("antigravity-ide.exe"));
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if !is_wsl_unc_candidate(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
