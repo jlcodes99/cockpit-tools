@@ -97,6 +97,24 @@
         fs::remove_dir_all(profile_dir).expect("cleanup fixture");
     }
 
+    #[tokio::test]
+    async fn mixed_realtime_takeover_synchronizes_stale_local_sideband_port() {
+        let profile_dir = make_temp_dir("mixed-realtime-local-sync");
+        let collection = realtime_mixed_test_collection();
+        let stale_local = "experimental_realtime_ws_base_url = \"http://localhost:64905/v1\"\n";
+        fs::write(profile_dir.join(CODEX_PROFILE_CONFIG_FILE), stale_local).expect("write stale local");
+        write_local_access_profile_takeover(&profile_dir, &collection, None, true)
+            .await
+            .expect("write mixed takeover");
+        let config = fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read config");
+        let expected = super::build_collection_base_url(&collection);
+        assert_eq!(
+            config.parse::<Document>().expect("parse")["experimental_realtime_ws_base_url"].as_str(),
+            Some(expected.as_str())
+        );
+        fs::remove_dir_all(profile_dir).expect("cleanup fixture");
+    }
+
     #[test]
     fn mixed_realtime_cleanup_restores_backup_and_preserves_later_user_edits() {
         let base = "http://localhost:14998/v1";

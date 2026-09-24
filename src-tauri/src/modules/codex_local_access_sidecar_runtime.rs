@@ -1955,9 +1955,18 @@ fn write_mixed_model_realtime_sideband_override(
         .map_err(|error| format!("解析 Codex 语音接管配置失败: {}", error))?;
     // WebRTC sideband ignores model provider.base_url by default but reuses its
     // bearer. Keep call creation and sideband on the same gateway/account.
-    // An explicit user override is outside Cockpit's ownership.
-    if doc.get("experimental_realtime_ws_base_url").is_some() {
-        return Ok(());
+    // An explicit user override (to a remote service) is outside Cockpit's ownership,
+    // but a managed local sidecar port must be synchronized on restart.
+    if let Some(existing) = doc
+        .get("experimental_realtime_ws_base_url")
+        .and_then(|item| item.as_str())
+    {
+        let is_local = url::Url::parse(existing).ok().is_some_and(|u| {
+            matches!(u.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+        });
+        if !is_local {
+            return Ok(());
+        }
     }
     doc["experimental_realtime_ws_base_url"] = value(build_collection_base_url(collection));
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);

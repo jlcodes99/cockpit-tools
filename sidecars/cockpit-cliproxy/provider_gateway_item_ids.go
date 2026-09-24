@@ -143,10 +143,13 @@ func (r *providerGatewayItemIDRewriter) rewriteItemAtPath(payload []byte, path, 
 	originalID := strings.TrimSpace(item.Get("id").String())
 	callID := strings.TrimSpace(item.Get("call_id").String())
 	normalized := r.normalizeID(prefix, originalID, callID, fallback)
-	if normalized == "" || normalized == originalID {
+	if normalized == "" {
 		return payload
 	}
 	r.remember(originalID, normalized)
+	if normalized == originalID {
+		return payload
+	}
 	updated, err := sjson.SetBytes(payload, path+".id", normalized)
 	if err != nil {
 		return payload
