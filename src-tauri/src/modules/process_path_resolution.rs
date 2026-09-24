@@ -1118,7 +1118,7 @@ pub fn detect_antigravity_exec_path() -> Option<std::path::PathBuf> {
             candidates.push(base.join("antigravity-ide.exe"));
         }
         for candidate in candidates {
-            if !is_wsl_unc_candidate(&candidate.to_string_lossy()) && candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1181,7 +1181,7 @@ pub fn detect_antigravity_legacy_exec_path() -> Option<std::path::PathBuf> {
             candidates.push(base.join("Electron.exe"));
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1257,7 +1257,7 @@ fn detect_vscode_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1335,7 +1335,7 @@ fn detect_codebuddy_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1406,7 +1406,7 @@ fn detect_codebuddy_cn_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1465,7 +1465,7 @@ fn detect_qoder_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1512,7 +1512,9 @@ fn detect_zcode_exec_path() -> Option<std::path::PathBuf> {
                 candidates.push(std::path::PathBuf::from(root).join("ZCode/ZCode.exe"));
             }
         }
-        if let Some(path) = candidates.into_iter().find(|path| path.is_file()) {
+        if let Some(path) = candidates.into_iter().find(|path| {
+            can_probe_passive_windows_path(&path.to_string_lossy()) && path.is_file()
+        }) {
             return Some(path);
         }
         if let Some(path) = detect_windows_exec_path_by_signatures(
@@ -1586,7 +1588,7 @@ fn detect_zed_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -1693,7 +1695,10 @@ fn detect_trae_exec_path_for_platform(
             }
         }
         for candidate in candidates {
-            if candidate.exists() && windows_trae_candidate_matches_platform(&candidate, platform) {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy())
+                && candidate.exists()
+                && windows_trae_candidate_matches_platform(&candidate, platform)
+            {
                 return Some(candidate);
             }
         }
@@ -1767,7 +1772,7 @@ fn detect_workbuddy_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }
@@ -2990,7 +2995,7 @@ fn detect_opencode_exec_path() -> Option<std::path::PathBuf> {
             );
         }
         for candidate in candidates {
-            if candidate.exists() {
+            if can_probe_passive_windows_path(&candidate.to_string_lossy()) && candidate.exists() {
                 return Some(candidate);
             }
         }

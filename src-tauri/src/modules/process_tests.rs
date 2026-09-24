@@ -3,16 +3,17 @@
 #[cfg(all(test, target_os = "windows"))]
 mod windows_passive_exec_scan_tests {
     use super::{
-        build_windows_exec_path_scan_script, is_wsl_unc_candidate,
-        normalize_windows_candidate_path, parse_windows_exec_candidates, powershell_quote,
-        WINDOWS_EXEC_CANDIDATE_FUNCTIONS,
+        build_windows_exec_path_scan_script, parse_windows_exec_candidates, powershell_quote,
+        running_wsl_output_contains_distro, wsl_unc_distro, WINDOWS_EXEC_CANDIDATE_FUNCTIONS,
     };
     use std::process::Command;
 
     #[test]
-    fn wsl_shortcut_target_is_skipped_before_existence_check() {
+    fn stopped_wsl_shortcut_target_is_skipped_before_existence_check() {
         let script = format!(
             r#"$visited = @()
+$global:wslQueries = 0
+function wsl.exe {{ param($a, $b, $c) $global:wslQueries++; $global:LASTEXITCODE = 0; return @() }}
 function Test-Path([string]$LiteralPath) {{
   $script:visited += "VISIT:$LiteralPath"
   return $true
@@ -28,6 +29,7 @@ Emit-Candidate 'C:\Program Files\Antigravity IDE\Antigravity IDE.exe'
 Emit-Candidate '\\server\share\Antigravity IDE.exe'
 Emit-Candidate '\\wsl.localhost.example\share\Antigravity IDE.exe'
 $visited
+"WSL_QUERIES:$global:wslQueries"
 "#
         );
         let output = Command::new("powershell.exe")
@@ -40,28 +42,94 @@ $visited
             String::from_utf8_lossy(&output.stderr)
         );
         let lines = String::from_utf8_lossy(&output.stdout);
-        assert!(!lines.contains(r"VISIT:\\wsl.localhost"), "{lines}");
+        assert!(!lines.contains(r"VISIT:\\wsl.localhost\"), "{lines}");
         assert!(!lines.contains(r"VISIT:\\WSL$"), "{lines}");
         assert!(!lines.contains(r"VISIT:\\?\"), "{lines}");
         assert!(lines.contains("VISIT:C:\\Program Files"), "{lines}");
         assert!(lines.contains(r"VISIT:\\server\share"), "{lines}");
         assert!(lines.contains(r"VISIT:\\wsl.localhost.example"), "{lines}");
+        assert!(lines.contains("WSL_QUERIES:1"), "{lines}");
     }
 
     #[test]
-    fn rust_candidate_parser_rejects_wsl_before_path_lookup() {
+    fn running_wsl_shortcut_target_is_checked() {
+        let script = format!(
+            r#"$global:wslQueries = 0
+$script:visited = @()
+function wsl.exe {{ param($a, $b, $c) $global:wslQueries++; $global:LASTEXITCODE = 0; return 'Ubuntu-22.04' }}
+function Test-Path([string]$LiteralPath) {{ $script:visited += "VISIT:$LiteralPath"; return $true }}
+{WINDOWS_EXEC_CANDIDATE_FUNCTIONS}
+Emit-Candidate '\\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe'
+Emit-Candidate '\\WSL$\Other-Distro\Antigravity IDE.exe'
+$visited
+"WSL_QUERIES:$global:wslQueries"
+"#
+        );
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let lines = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            lines.contains(r"VISIT:\\wsl.localhost\Ubuntu-22.04"),
+            "{lines}"
+        );
+        assert!(!lines.contains(r"VISIT:\\WSL$\Other-Distro"), "{lines}");
+        assert!(lines.contains("WSL_QUERIES:1"), "{lines}");
+    }
+
+    #[test]
+    fn failed_wsl_status_query_skips_target() {
+        let script = format!(
+            r#"function wsl.exe {{ param($a, $b, $c) $global:LASTEXITCODE = 1; return 'Ubuntu-22.04' }}
+function Test-Path([string]$LiteralPath) {{ Write-Output "VISIT:$LiteralPath"; return $true }}
+{WINDOWS_EXEC_CANDIDATE_FUNCTIONS}
+Emit-Candidate '\\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe'
+"#
+        );
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let lines = String::from_utf8_lossy(&output.stdout);
+        assert!(!lines.contains("VISIT:"), "{lines}");
+    }
+
+    #[test]
+    fn wsl_unc_paths_identify_target_distro_without_accessing_it() {
         for path in [
             r"\\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe",
             r"\\WSL$\Ubuntu-22.04\Antigravity IDE.exe",
             r"\\?\UNC\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe",
             r"\\?\unc\WSL$\Ubuntu-22.04\Antigravity IDE.exe",
         ] {
-            assert!(is_wsl_unc_candidate(path), "{path}");
-            assert!(normalize_windows_candidate_path(path).is_none(), "{path}");
+            assert_eq!(
+                wsl_unc_distro(path).as_deref(),
+                Some("ubuntu-22.04"),
+                "{path}"
+            );
         }
-        assert!(!is_wsl_unc_candidate(r"C:\Program Files\Antigravity IDE.exe"));
-        assert!(!is_wsl_unc_candidate(r"\\server\share\Antigravity IDE.exe"));
-        assert!(!is_wsl_unc_candidate(r"\\wsl.localhost.example\share\app.exe"));
+        assert!(wsl_unc_distro(r"C:\Program Files\Antigravity IDE.exe").is_none());
+        assert!(wsl_unc_distro(r"\\server\share\Antigravity IDE.exe").is_none());
+        assert!(wsl_unc_distro(r"\\wsl.localhost.example\share\app.exe").is_none());
+    }
+
+    #[test]
+    fn running_distro_status_requires_exact_name_in_utf16_output() {
+        let bytes: Vec<u8> = "Ubuntu-22.04\0\r\nDebian\0\r\n"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        assert!(running_wsl_output_contains_distro(&bytes, "ubuntu-22.04"));
+        assert!(running_wsl_output_contains_distro(&bytes, "Debian"));
+        assert!(!running_wsl_output_contains_distro(&bytes, "Ubuntu"));
+        assert!(!running_wsl_output_contains_distro(&bytes, ""));
+        assert!(!running_wsl_output_contains_distro(
+            &bytes[..bytes.len() - 1],
+            "Debian"
+        ));
     }
 
     #[test]
