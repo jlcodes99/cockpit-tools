@@ -202,3 +202,7 @@ export async function fetchAccountNoteMailUrl(
 export async function syncCurrentFromClient(): Promise<string | null> {
     return await invoke('sync_current_from_client');
 }
+
+export async function deduplicateAccounts(): Promise<number> {
+    return await invoke<number>('deduplicate_accounts');
+}

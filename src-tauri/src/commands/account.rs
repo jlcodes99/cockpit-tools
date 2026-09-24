@@ -203,6 +203,15 @@ pub async fn add_account(refresh_token: String) -> Result<models::Account, Strin
 }
 
 #[tauri::command]
+pub async fn deduplicate_accounts() -> Result<usize, String> {
+    let count = modules::account::deduplicate_accounts()?;
+    if count > 0 {
+        modules::websocket::broadcast_data_changed("accounts_deduplicated");
+    }
+    Ok(count)
+}
+
+#[tauri::command]
 pub fn create_pending_oauth_account(
     email: String,
     note: Option<String>,
@@ -811,6 +820,45 @@ pub async fn save_account_groups(data: String) -> Result<(), String> {
     let path = dir.join(GROUPS_FILE);
     modules::atomic_write::write_string_atomic(&path, &data)
         .map_err(|e| format!("Failed to write groups: {}", e))
+}
+
+fn resolve_platform_groups_filename(platform: &str) -> String {
+    let lower = platform.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "antigravity" | "gemini" => GROUPS_FILE.to_string(),
+        "codex" => "codex_account_groups.json".to_string(),
+        "claude" => "claude_manager_account_groups.json".to_string(),
+        other => {
+            let sanitized: String = other
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+                .collect();
+            format!("{}_account_groups.json", sanitized)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn load_platform_account_groups(platform: String) -> Result<String, String> {
+    let filename = resolve_platform_groups_filename(&platform);
+    let path = modules::account::get_data_dir()?.join(filename);
+    if !path.exists() {
+        return Ok("[]".to_string());
+    }
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read platform groups for {}: {}", platform, e))
+}
+
+#[tauri::command]
+pub async fn save_platform_account_groups(platform: String, data: String) -> Result<(), String> {
+    validate_account_groups_payload(&data)?;
+    let dir = modules::account::get_data_dir()?;
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+    }
+    let filename = resolve_platform_groups_filename(&platform);
+    let path = dir.join(filename);
+    modules::atomic_write::write_string_atomic(&path, &data)
+        .map_err(|e| format!("Failed to write platform groups for {}: {}", platform, e))
 }
 
 #[cfg(test)]

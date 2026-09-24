@@ -12,6 +12,7 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import {
   CB_PACKAGE_CODE,
   CodebuddyAccount,
@@ -154,6 +155,8 @@ export function CodebuddyAccountsPage() {
     currentAccountId, formatDate, normalizeTag,
   } = page;
 
+  const grouping = usePlatformAccountGroups('codebuddy', () => toggleSelectAll(Array.from(selected)));
+
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD);
@@ -238,6 +241,9 @@ export function CodebuddyAccountsPage() {
 
   const filteredAccounts = useMemo(() => {
     let result = [...accounts];
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((account) =>
@@ -268,7 +274,7 @@ export function CodebuddyAccountsPage() {
       return sortDirection === 'desc' ? diff : -diff;
     });
     return result;
-  }, [accounts, currentAccountId, searchQuery, filterTypes, isAbnormalAccount, resolvePlanKey, tagFilter, normalizeTag, sortBy, sortDirection]);
+  }, [accounts, grouping.activeGroupId, grouping.filterAccountsByGroup, currentAccountId, searchQuery, filterTypes, isAbnormalAccount, resolvePlanKey, tagFilter, normalizeTag, sortBy, sortDirection]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
@@ -695,13 +701,16 @@ export function CodebuddyAccountsPage() {
         </div>
       </div>
 
-      {filteredAccounts.length > 0 && (
+      {(accounts.length > 0 || grouping.groups.length > 0) && (
         <AccountSelectionToolbar
           selectedCount={selected.size}
           allSelected={isAllPaginatedSelected}
           disabled={paginatedIds.length === 0}
           onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
           onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          grouping={grouping}
+          accounts={accounts}
+          selectedIds={Array.from(selected)}
           actions={(
             <button
               className="btn btn-danger icon-only"

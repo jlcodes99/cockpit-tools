@@ -3,7 +3,7 @@
    ============================================ */
 
 .account-group-modal {
-  max-width: 480px;
+  max-width: 560px;
 }
 
 .account-group-modal .modal-body {
@@ -68,6 +68,44 @@
 
 .group-modal-item:hover {
   border-color: var(--border-hover);
+}
+
+.group-modal-item.is-dragging {
+  opacity: 0.45;
+  border-style: dashed;
+  border-color: var(--primary);
+  background: var(--bg-hover);
+}
+
+.group-modal-item.drop-target {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.group-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  color: var(--text-muted);
+  cursor: grab;
+  border-radius: 6px;
+  opacity: 0.55;
+  transition: opacity 0.15s, color 0.15s, background-color 0.15s;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.group-drag-handle:hover {
+  opacity: 1;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.group-drag-handle:active {
+  cursor: grabbing;
 }
 
 .group-modal-item-main {
@@ -263,10 +301,35 @@ body.theme-light .group-modal-item-meta {
   border-color: var(--border);
 }
 
+.group-modal-item .group-action-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .group-modal-item .group-action-btn.danger:hover {
   background: rgba(239, 68, 68, 0.1);
   color: var(--danger);
   border-color: rgba(239, 68, 68, 0.3);
+}
+
+.group-modal-item .group-action-btn.add-btn {
+  width: auto;
+  height: 28px;
+  padding: 0 10px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  color: var(--primary);
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.group-modal-item .group-action-btn.add-btn:hover {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: var(--primary);
 }
 
 /* 重命名编辑 */

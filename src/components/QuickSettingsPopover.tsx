@@ -12,6 +12,7 @@ import {
   Zap,
   X,
   EyeOff,
+  Users,
 } from 'lucide-react';
 import { useEscClose } from '../hooks/useEscClose';
 import * as accountService from '../services/accountService';
@@ -151,6 +152,7 @@ interface GeneralConfig {
   codex_local_access_entry_visible: boolean;
   codex_hide_relay_quota?: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
+  antigravity_auto_merge_duplicates?: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
   auto_switch_credits_enabled: boolean;
@@ -2500,6 +2502,46 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ─── Antigravity: Auto-merge duplicate accounts ─── */}
+            {type === 'antigravity' && config && (
+              <div className="qs-section">
+                <div className="qs-section-header">
+                  <Users size={15} />
+                  <span>{t('quickSettings.antigravity.accountMergeTitle', '账号合并')}</span>
+                </div>
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <span>
+                      {t(
+                        'settings.general.antigravityAutoMergeDuplicates',
+                        '自动合并同邮箱账号',
+                      )}
+                    </span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(config.antigravity_auto_merge_duplicates)}
+                        onChange={(event) =>
+                          saveConfig({
+                            antigravity_auto_merge_duplicates: event.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t(
+                    'settings.general.antigravityAutoMergeDuplicatesDesc',
+                    '检测到同邮箱的重复账号时自动合并资料并去重；默认关闭',
+                  )}
+                </div>
               </div>
             )}
 

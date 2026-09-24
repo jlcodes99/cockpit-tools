@@ -233,6 +233,7 @@ interface GeneralConfig {
   codex_hide_relay_quota?: boolean;
   top_right_ad_visible?: boolean;
   antigravity_dual_switch_no_restart_enabled: boolean;
+  antigravity_auto_merge_duplicates?: boolean;
   auto_switch_enabled: boolean;
   auto_switch_threshold: number;
   auto_switch_credits_enabled?: boolean;
@@ -667,6 +668,7 @@ export function useSettingsPageController() {
   const [codexHideRelayQuota, setCodexHideRelayQuota] = useState(false);
   const [topRightAdVisible, setTopRightAdVisible] = useState(true);
   const [antigravityDualSwitchNoRestartEnabled, setAntigravityDualSwitchNoRestartEnabled] = useState(false);
+  const [antigravityAutoMergeDuplicates, setAntigravityAutoMergeDuplicates] = useState(false);
   const [autoSwitchEnabled, setAutoSwitchEnabled] = useState(false);
   const [autoSwitchThreshold, setAutoSwitchThreshold] = useState('20');
   const [autoSwitchCreditsEnabled, setAutoSwitchCreditsEnabled] = useState(false);
@@ -1153,6 +1155,7 @@ export function useSettingsPageController() {
       codex_hide_relay_quota: codexHideRelayQuota,
       top_right_ad_visible: topRightAdVisible,
       antigravity_dual_switch_no_restart_enabled: antigravityDualSwitchNoRestartEnabled,
+      antigravity_auto_merge_duplicates: antigravityAutoMergeDuplicates,
       auto_switch_enabled: autoSwitchEnabled,
       auto_switch_threshold: Number.isNaN(parsedAutoSwitchThreshold)
         ? 20
@@ -1385,6 +1388,7 @@ export function useSettingsPageController() {
     codexHideRelayQuota,
     topRightAdVisible,
     antigravityDualSwitchNoRestartEnabled,
+    antigravityAutoMergeDuplicates,
     autoSwitchEnabled,
     autoSwitchThreshold,
     autoSwitchCreditsEnabled,
@@ -1772,6 +1776,9 @@ export function useSettingsPageController() {
       setTopRightAdVisible(config.top_right_ad_visible ?? true);
       setAntigravityDualSwitchNoRestartEnabled(
         config.antigravity_dual_switch_no_restart_enabled ?? false
+      );
+      setAntigravityAutoMergeDuplicates(
+        config.antigravity_auto_merge_duplicates ?? false
       );
       setAutoSwitchEnabled(config.auto_switch_enabled ?? false);
       setAutoSwitchThreshold(String(config.auto_switch_threshold ?? 20));
@@ -3208,6 +3215,7 @@ export function useSettingsPageController() {
     actualPort,
     antigravityAccountGroups,
     antigravityAppPath,
+    antigravityAutoMergeDuplicates,
     antigravityDualSwitchNoRestartEnabled,
     antigravityLaunchOnSwitch,
     antigravityScopeAccounts,
@@ -3417,6 +3425,7 @@ export function useSettingsPageController() {
     saveGrokCliPath,
     setActiveTab,
     setAntigravityAppPath,
+    setAntigravityAutoMergeDuplicates,
     setAntigravityDualSwitchNoRestartEnabled,
     setAntigravityLaunchOnSwitch,
     setAppAutoLaunchEnabled,

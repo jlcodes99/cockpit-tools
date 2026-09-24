@@ -63,6 +63,7 @@ export function AntigravityQuotaSection({ items, isList = false, t }: Props) {
 
   const bucketKeys = new Set(['claude:5h', 'claude:weekly', 'gemini:5h', 'gemini:weekly']);
   const hasBuckets = items.some((item) => bucketKeys.has(item.key));
+  const hasAny5h = items.some((item) => item.key.endsWith(':5h'));
   return (
     <>
       {items.some((item) => item.stale) && (
@@ -73,10 +74,10 @@ export function AntigravityQuotaSection({ items, isList = false, t }: Props) {
       {hasBuckets && ['claude', 'gemini'].map((family) => (
         <div key={family} className="quota-column">
           <div className="quota-column-title">{family === 'claude' ? 'Claude' : 'Gemini'}</div>
-          {renderBar(`${family}:5h`, '5h', items.find((item) => item.key === `${family}:5h`))}
+          {hasAny5h && renderBar(`${family}:5h`, '5h', items.find((item) => item.key === `${family}:5h`))}
           {renderBar(
             `${family}:weekly`,
-            t('common.quota.weeklyWindow'),
+            'Weekly',
             items.find((item) => item.key === `${family}:weekly`),
           )}
         </div>

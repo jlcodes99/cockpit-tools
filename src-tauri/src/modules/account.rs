@@ -787,6 +787,175 @@ pub fn upsert_account(
     add_account(email, name, token)
 }
 
+/// 存量同邮箱重复账号合并（后面的覆盖前面的）
+pub fn deduplicate_accounts() -> Result<usize, String> {
+    let _lock = ACCOUNT_INDEX_LOCK
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+    let mut index = load_account_index()?;
+    let accounts_dir = get_accounts_dir()?;
+
+    // 按邮箱分组（保持索引顺序）
+    let mut email_groups: std::collections::HashMap<String, Vec<AccountSummary>> =
+        std::collections::HashMap::new();
+    for summary in &index.accounts {
+        let key = summary.email.trim().to_lowercase();
+        if !key.is_empty() {
+            email_groups.entry(key).or_default().push(summary.clone());
+        }
+    }
+
+    let mut removed_count = 0;
+    let mut accounts_to_remove: HashSet<String> = HashSet::new();
+    let mut id_replacements: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    for (_email, group) in email_groups {
+        if group.len() <= 1 {
+            continue;
+        }
+
+        // “后面的覆盖前面的”：列表中后面的条目作为目标保留账号
+        let target_summary = group.last().unwrap();
+        let target_id = target_summary.id.clone();
+
+        let mut target_account = match load_account(&target_id) {
+            Ok(acc) => acc,
+            Err(_) => continue,
+        };
+
+        let mut group_earlier_ids = Vec::new();
+        for earlier_summary in &group[..group.len() - 1] {
+            let earlier_id = earlier_summary.id.clone();
+            if earlier_id == target_id {
+                continue;
+            }
+
+            if let Ok(earlier_account) = load_account(&earlier_id) {
+                // 如果后面账号处于 pending 且无 token，而前面账号有 token，继承有效 token
+                if target_account.pending_oauth && !earlier_account.pending_oauth {
+                    target_account.token = earlier_account.token;
+                    target_account.pending_oauth = false;
+                }
+                // 继承补充缺失的资料字段
+                if target_account.notes.is_none() && earlier_account.notes.is_some() {
+                    target_account.notes = earlier_account.notes;
+                }
+                if target_account.two_factor_secret.is_none()
+                    && earlier_account.two_factor_secret.is_some()
+                {
+                    target_account.two_factor_secret = earlier_account.two_factor_secret;
+                }
+                if target_account.account_password.is_none()
+                    && earlier_account.account_password.is_some()
+                {
+                    target_account.account_password = earlier_account.account_password;
+                }
+                if target_account.phone_number.is_none()
+                    && earlier_account.phone_number.is_some()
+                {
+                    target_account.phone_number = earlier_account.phone_number;
+                }
+                if target_account.mail_url.is_none() && earlier_account.mail_url.is_some() {
+                    target_account.mail_url = earlier_account.mail_url;
+                }
+                if target_account.aux_email.is_none() && earlier_account.aux_email.is_some() {
+                    target_account.aux_email = earlier_account.aux_email;
+                }
+                if target_account.quota.is_none() && earlier_account.quota.is_some() {
+                    target_account.quota = earlier_account.quota;
+                }
+                // 合并标签
+                for tag in earlier_account.tags {
+                    if !target_account.tags.contains(&tag) {
+                        target_account.tags.push(tag);
+                    }
+                }
+            }
+
+            group_earlier_ids.push(earlier_id);
+        }
+
+        // 先持久化合并后的目标账号，确保落盘成功
+        save_account(&target_account)?;
+
+        // 仅在目标账号落盘成功后，再清理历史多余旧文件，避免数据丢失
+        for earlier_id in group_earlier_ids {
+            id_replacements.insert(earlier_id.clone(), target_id.clone());
+            accounts_to_remove.insert(earlier_id.clone());
+            let file_path = accounts_dir.join(format!("{}.json", earlier_id));
+            if file_path.exists() {
+                let _ = fs::remove_file(file_path);
+            }
+            removed_count += 1;
+        }
+    }
+
+    if removed_count > 0 {
+        index
+            .accounts
+            .retain(|s| !accounts_to_remove.contains(&s.id));
+        if let Some(ref current_id) = index.current_account_id {
+            if let Some(replacement) = id_replacements.get(current_id) {
+                index.current_account_id = Some(replacement.clone());
+            }
+        }
+        save_account_index(&index)?;
+
+        // 同步更新分组配置中的账号引用
+        let groups_path = get_data_dir()?.join("account_groups.json");
+        if groups_path.exists() {
+            if let Ok(content) = fs::read_to_string(&groups_path) {
+                if let Ok(mut groups) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(arr) = groups.as_array_mut() {
+                        let mut modified = false;
+                        for group in arr {
+                            if let Some(ids) =
+                                group.get_mut("accountIds").and_then(|v| v.as_array_mut())
+                            {
+                                let mut new_ids: Vec<serde_json::Value> = Vec::new();
+                                let mut seen = std::collections::HashSet::new();
+                                for id_val in ids.iter() {
+                                    if let Some(id_str) = id_val.as_str() {
+                                        let final_id = id_replacements
+                                            .get(id_str)
+                                            .map(|s| s.as_str())
+                                            .unwrap_or(id_str);
+                                        if seen.insert(final_id.to_string()) {
+                                            new_ids.push(serde_json::Value::String(
+                                                final_id.to_string(),
+                                            ));
+                                        }
+                                        if final_id != id_str {
+                                            modified = true;
+                                        }
+                                    }
+                                }
+                                *ids = new_ids;
+                            }
+                        }
+                        if modified {
+                            if let Ok(serialized) = serde_json::to_string_pretty(&groups) {
+                                let _ = crate::modules::atomic_write::write_string_atomic(
+                                    &groups_path,
+                                    &serialized,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        modules::logger::log_info(&format!(
+            "存量账号去重完成，已自动合并清理 {} 个重复账号",
+            removed_count
+        ));
+    }
+
+    Ok(removed_count)
+}
+
 /// 删除账号
 pub fn delete_account(account_id: &str) -> Result<(), String> {
     let _lock = ACCOUNT_INDEX_LOCK

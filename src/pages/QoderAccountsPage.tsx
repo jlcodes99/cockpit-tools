@@ -33,6 +33,7 @@ import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorM
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
@@ -298,6 +299,7 @@ export function QoderAccountsPage() {
       : 'desc',
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const grouping = usePlatformAccountGroups('qoder', () => setSelected(new Set()));
   const [showAddModal, setShowAddModal] = useState(false);
   const [addTab, setAddTab] = useState<'oauth' | 'token' | 'import'>('import');
 
@@ -755,9 +757,13 @@ export function QoderAccountsPage() {
       );
     }
 
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
+
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, searchQuery, tagFilter]);
+  }, [accounts, compareAccountsBySort, filterTypes, grouping, isAbnormalAccount, searchQuery, tagFilter]);
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, QoderAccount[]]>;
@@ -2122,13 +2128,16 @@ export function QoderAccountsPage() {
             </div>
           </div>
 
-          {filteredAccounts.length > 0 && (
+          {(accounts.length > 0 || grouping.groups.length > 0) && (
             <AccountSelectionToolbar
               selectedCount={selected.size}
               allSelected={allSelected}
               disabled={paginatedIds.length === 0}
               onToggleSelectAll={toggleSelectAll}
               onClearSelection={() => setSelected(new Set())}
+              grouping={grouping}
+              accounts={accounts}
+              selectedIds={Array.from(selected)}
               actions={(
                 <button
                   className="btn btn-danger icon-only"

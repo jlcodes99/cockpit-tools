@@ -401,6 +401,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         top_right_ad_visible: user_config.top_right_ad_visible,
         antigravity_dual_switch_no_restart_enabled: user_config
             .antigravity_dual_switch_no_restart_enabled,
+        antigravity_auto_merge_duplicates: user_config.antigravity_auto_merge_duplicates,
         auto_switch_enabled: user_config.auto_switch_enabled,
         auto_switch_threshold: user_config.auto_switch_threshold,
         auto_switch_credits_enabled: user_config.auto_switch_credits_enabled,
