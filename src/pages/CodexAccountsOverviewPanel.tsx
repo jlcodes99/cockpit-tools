@@ -241,10 +241,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     openFullQuotaWakeupTestModal,
     overviewAccounts,
     overviewCurrentAccountId,
-    overviewFilterChips,
     overviewLayoutMode,
-    overviewTotalCount,
-    overviewVisibleCount,
     page,
     paginatedAccounts,
     paginatedGroupedAccounts,
@@ -332,7 +329,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     showLocalAccessHideConfirm,
     showLocalAccessModal,
     showLocalAccessQuotaStatsModal,
-    showOverviewFilterBanner,
     showOverviewSelectionBar,
     showTagFilter,
     showTagModal,
@@ -593,47 +589,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
               <QuickSettingsPopover type="codex" />
             </div>
           </div>
-
-          {(showOverviewFilterBanner || hasActiveOverviewFilters) && (
-            <div
-              className={`codex-overview-filter-banner${
-                showOverviewFilterBanner ? " is-active" : ""
-              }`}
-              role="status"
-            >
-              <div className="codex-overview-filter-banner-main">
-                <span className="codex-overview-filter-banner-count">
-                  {t("codex.filters.visibleOfTotal", {
-                    visible: overviewVisibleCount,
-                    total: overviewTotalCount,
-                    defaultValue: "显示 {{visible}} / 共 {{total}}",
-                  })}
-                </span>
-                {showOverviewFilterBanner && (
-                  <span className="codex-overview-filter-banner-text">
-                    {t("codex.filters.activeBanner", {
-                      visible: overviewVisibleCount,
-                      total: overviewTotalCount,
-                      defaultValue:
-                        "当前筛选仅显示 {{visible}}/{{total}} 个账号",
-                    })}
-                  </span>
-                )}
-                {overviewFilterChips.length > 0 && (
-                  <span className="codex-overview-filter-banner-chips">
-                    {overviewFilterChips.join(" · ")}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary codex-overview-filter-clear-btn"
-                onClick={clearAllOverviewFilters}
-              >
-                {t("codex.filters.clearAll", "清除筛选")}
-              </button>
-            </div>
-          )}
 
           {(accounts.length > 0 || codexGroups.length > 0) && (
             <div className="codex-overview-selection-bar account-selection-toolbar has-middle">
