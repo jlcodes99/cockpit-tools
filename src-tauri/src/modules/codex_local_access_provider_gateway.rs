@@ -948,12 +948,54 @@ pub(crate) fn decorate_account_catalog_context_windows(
     account: &CodexAccount,
     default_window: Option<i64>,
 ) -> Result<String, String> {
-    decorate_catalog_context_windows(
+    let content = decorate_catalog_context_windows(
         catalog_json,
         slots,
         &account.api_model_context_windows,
         default_window,
-    )
+    )?;
+    let Some(key_config) = model_provider_key_config_for_account(account) else {
+        return Ok(content);
+    };
+    let Some(limits) = key_config
+        .get("modelAutoCompactTokenLimits")
+        .and_then(Value::as_object)
+    else {
+        return Ok(content);
+    };
+    apply_auto_compact_limits_to_catalog(&content, slots, limits)
+}
+
+fn apply_auto_compact_limits_to_catalog(
+    content: &str,
+    slots: &[ProviderGatewayModelSlot],
+    limits: &serde_json::Map<String, Value>,
+) -> Result<String, String> {
+    let mut catalog: Value = serde_json::from_str(&content)
+        .map_err(|error| format!("解析账号模型目录失败: {}", error))?;
+    let explicit_limits: HashMap<String, i64> = limits.iter()
+        .filter_map(|(name, value)| value.as_i64().map(|value| (name.clone(), value)))
+        .collect();
+    if let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) {
+        for model in models {
+            let slug = model.get("slug").and_then(Value::as_str).unwrap_or_default();
+            let slot = slots.iter().find(|slot| slot.client_model.eq_ignore_ascii_case(slug));
+            let limit = slot
+                .and_then(|slot| lookup_explicit_catalog_context_window(slot, &explicit_limits))
+                .or_else(|| limits.iter().find_map(|(name, value)|
+                    name.eq_ignore_ascii_case(slug).then(|| value.as_i64()).flatten()));
+            let window = model.get("context_window").and_then(Value::as_i64);
+            if let (Some(limit), Some(window), Some(object)) =
+                (limit, window, model.as_object_mut())
+            {
+                if limit > 0 && limit < window {
+                    object.insert("auto_compact_token_limit".to_string(), json!(limit));
+                }
+            }
+        }
+    }
+    serde_json::to_string_pretty(&catalog)
+        .map_err(|error| format!("序列化账号模型目录失败: {}", error))
 }
 
 pub(crate) fn read_toml_model_context_window(doc: &Document) -> Option<i64> {
@@ -1405,6 +1447,35 @@ struct CodexModelProviderVisionEntry {
 }
 
 const CODEX_MODEL_PROVIDERS_FILE: &str = "codex_model_providers.json";
+
+/// A key's capabilities are matched by both endpoint and credential. The endpoint alone
+/// deliberately never selects model settings.
+pub(crate) fn model_provider_key_config_for_account(account: &CodexAccount) -> Option<Value> {
+    let path = account::get_data_dir().ok()?.join(CODEX_MODEL_PROVIDERS_FILE);
+    let content = fs::read_to_string(path).ok()?;
+    let providers: Value = serde_json::from_str(&content).ok()?;
+    select_model_provider_key_config(&providers, account)
+}
+
+fn select_model_provider_key_config(providers: &Value, account: &CodexAccount) -> Option<Value> {
+    let api_key = account.openai_api_key.as_deref()?.trim();
+    let base_url = normalize_provider_vision_base_url(account.api_base_url.as_deref()?)?;
+    providers.as_array()?.iter().find_map(|provider| {
+        let provider_url = provider.get("baseUrl").and_then(Value::as_str)
+            .and_then(normalize_provider_vision_base_url)?;
+        if provider_url != base_url { return None; }
+        provider.get("apiKeys")?.as_array()?.iter()
+            .find(|key| key.get("apiKey").and_then(Value::as_str).is_some_and(|value| value.trim() == api_key))
+            .cloned()
+    })
+}
+
+pub(crate) fn model_provider_key_compaction_mode(account: &CodexAccount) -> Option<String> {
+    model_provider_key_config_for_account(account)?
+        .get("compactionMode")?.as_str()
+        .filter(|mode| matches!(*mode, "remote" | "local"))
+        .map(str::to_string)
+}
 
 fn normalize_provider_vision_base_url(value: &str) -> Option<String> {
     let trimmed = value.trim().trim_end_matches('/').to_ascii_lowercase();
@@ -3399,6 +3470,7 @@ pub async fn ensure_provider_gateway_for_dir(
     // 实例绑定的是没有 GPT 能力的供应商账号（例如 Grok）时，压缩同样只能走本地流程，
     // 否则远端压缩会带着旧模型 ID 发出去，压缩结果与当前选择的模型无关。
     if !collection_pool_provides_gpt_models(&collection)
+        && model_provider_key_compaction_mode(&account).as_deref() != Some("remote")
         && crate::modules::codex_account::ensure_local_compaction_fallback_for_dir(profile_dir)?
     {
         logger::log_codex_api_info(&format!(

@@ -858,6 +858,31 @@ fn parse_codex_account_compat(
     Ok(Some(account))
 }
 
+fn apply_model_provider_key_settings(account: &mut CodexAccount) {
+    if !account.is_api_key_auth() {
+        return;
+    }
+    if let Some(key_config) = crate::modules::codex_local_access::model_provider_key_config_for_account(account) {
+        if let Some(models) = key_config.get("modelCatalog").and_then(serde_json::Value::as_array) {
+            account.api_model_catalog = normalize_api_model_catalog(models.iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_string)
+                .collect());
+            account.api_sync_model_catalog_to_codex = !account.api_model_catalog.is_empty();
+            let windows = key_config.get("modelContextWindows")
+                .and_then(serde_json::Value::as_object)
+                .map(|values| values.iter()
+                    .filter_map(|(model, value)| value.as_i64().map(|value| (model.clone(), value)))
+                    .collect())
+                .unwrap_or_default();
+            account.api_model_context_windows = normalize_api_model_context_windows(
+                windows, &account.api_model_catalog, &account.api_model_mappings,
+            );
+            let _ = enforce_deepseek_responses_account(account);
+        }
+    }
+}
+
 /// 读取单个账号详情
 pub fn load_account(account_id: &str) -> Option<CodexAccount> {
     load_account_with_summary(account_id, None).ok().flatten()
@@ -954,6 +979,7 @@ fn load_account_with_summary(
                 },
             );
         }
+        apply_model_provider_key_settings(&mut account);
         return Ok(Some(account));
     }
 
@@ -983,6 +1009,7 @@ fn load_account_with_summary(
         },
     );
 
+    apply_model_provider_key_settings(&mut account);
     Ok(Some(account))
 }
 

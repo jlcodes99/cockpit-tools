@@ -2243,6 +2243,7 @@ pub async fn sync_codex_api_key_provider_accounts(
     api_model_vision_support: Option<std::collections::HashMap<String, bool>>,
     api_vision_routing_model: Option<String>,
     api_model_context_windows: Option<std::collections::HashMap<String, i64>>,
+    api_sync_model_catalog_to_codex: Option<bool>,
 ) -> Result<usize, String> {
     tauri::async_runtime::spawn_blocking(move || {
         codex_account::sync_api_key_provider_accounts(
@@ -2258,6 +2259,7 @@ pub async fn sync_codex_api_key_provider_accounts(
             api_model_vision_support.unwrap_or_default(),
             api_vision_routing_model,
             api_model_context_windows,
+            api_sync_model_catalog_to_codex,
         )
     })
     .await

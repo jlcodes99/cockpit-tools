@@ -27,6 +27,64 @@ fn provider_vision_test_account(
 }
 
 #[test]
+fn same_endpoint_selects_model_settings_by_api_key() {
+    let providers = serde_json::json!([{
+        "baseUrl": "https://relay.example.com/v1",
+        "apiKeys": [
+            {"apiKey": "key-oai", "modelCatalog": ["gpt-6-sol"], "compactionMode": "remote"},
+            {"apiKey": "key-third", "modelCatalog": ["deepseek-v4", "kimi-k3"], "compactionMode": "local"}
+        ]
+    }]);
+    let mut account = provider_vision_test_account(
+        "provider-1", "https://relay.example.com/v1", &[], false, &[],
+    );
+    account.openai_api_key = Some("key-oai".to_string());
+    let oai = super::select_model_provider_key_config(&providers, &account).unwrap();
+    assert_eq!(oai["modelCatalog"], serde_json::json!(["gpt-6-sol"]));
+    account.openai_api_key = Some("key-third".to_string());
+    let third = super::select_model_provider_key_config(&providers, &account).unwrap();
+    assert_eq!(third["modelCatalog"], serde_json::json!(["deepseek-v4", "kimi-k3"]));
+    account.openai_api_key = Some("unknown".to_string());
+    assert!(super::select_model_provider_key_config(&providers, &account).is_none());
+}
+
+#[test]
+fn auto_compact_limits_apply_only_to_the_selected_catalog() {
+    let catalog = r#"{"models":[{"slug":"model-x","context_window":256000}]}"#;
+    let local_limits = serde_json::json!({"model-x": 220000});
+    let remote_limits = serde_json::json!({"model-x": 90000});
+    let local = super::apply_auto_compact_limits_to_catalog(
+        catalog, &[], local_limits.as_object().unwrap(),
+    ).unwrap();
+    let remote = super::apply_auto_compact_limits_to_catalog(
+        catalog, &[], remote_limits.as_object().unwrap(),
+    ).unwrap();
+    let local: serde_json::Value = serde_json::from_str(&local).unwrap();
+    let remote: serde_json::Value = serde_json::from_str(&remote).unwrap();
+    assert_eq!(local["models"][0]["auto_compact_token_limit"], 220000);
+    assert_eq!(remote["models"][0]["auto_compact_token_limit"], 90000);
+}
+
+#[test]
+fn explicit_key_window_overrides_shared_one_million_fallback() {
+    let slot = super::ProviderGatewayModelSlot {
+        client_model: "model-x".to_string(),
+        upstream_model: "model-x".to_string(),
+    };
+    let windows = std::collections::HashMap::from([("model-x".to_string(), 200_000)]);
+    let catalog = r#"{"models":[{"slug":"model-x","context_window":1000000}]}"#;
+    let decorated = super::decorate_catalog_context_windows(
+        catalog,
+        &[slot],
+        &windows,
+        Some(1_000_000),
+    ).unwrap();
+    let decorated: serde_json::Value = serde_json::from_str(&decorated).unwrap();
+    assert_eq!(decorated["models"][0]["context_window"], 200_000);
+    assert_eq!(decorated["models"][0]["max_context_window"], 200_000);
+}
+
+#[test]
 fn provider_vision_flag_fills_missing_model_capabilities() {
     let models = vec!["openai/gpt-5.6-sol".to_string()];
     let account = provider_vision_test_account(

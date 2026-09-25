@@ -2306,6 +2306,71 @@ fn sync_api_key_model_catalog_to_dir(
     Ok(true)
 }
 
+const API_KEY_COMPACTION_BACKUP_FILE: &str = "cockpit-api-key-compaction.json";
+
+fn restore_api_key_compaction_for_dir(base_dir: &Path) -> Result<(), String> {
+    let backup_path = base_dir.join(API_KEY_COMPACTION_BACKUP_FILE);
+    let Ok(content) = fs::read_to_string(&backup_path) else {
+        return Ok(());
+    };
+    let backup: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|error| format!("解析 API Key 压缩配置备份失败: {}", error))?;
+    let config_path = get_config_toml_path(base_dir);
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
+        .map_err(|error| format!("解析 config.toml 失败: {}", error))?;
+    if doc.get("features").and_then(|item| item.as_table()).is_none() {
+        doc["features"] = toml_edit::table();
+    }
+    if let Some(table) = doc["features"].as_table_mut() {
+        for name in ["remote_compaction_v2", "token_budget"] {
+            match backup.get(name).and_then(serde_json::Value::as_bool) {
+                Some(value) => table[name] = toml_edit::value(value),
+                None => { table.remove(name); },
+            }
+        }
+    }
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
+        .map_err(|error| format!("还原 API Key 压缩配置失败: {}", error))?;
+    fs::remove_file(backup_path).map_err(|error| format!("清理 API Key 压缩配置备份失败: {}", error))?;
+    Ok(())
+}
+
+fn apply_api_key_compaction_for_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+    let Some(mode) = crate::modules::codex_local_access::model_provider_key_compaction_mode(account) else {
+        return Ok(());
+    };
+    let config_path = get_config_toml_path(base_dir);
+    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
+        .map_err(|error| format!("解析 config.toml 失败: {}", error))?;
+    let backup = serde_json::json!({
+        "remote_compaction_v2": doc.get("features").and_then(|item| item.as_table())
+            .and_then(|table| table.get("remote_compaction_v2")).and_then(|item| item.as_bool()),
+        "token_budget": doc.get("features").and_then(|item| item.as_table())
+            .and_then(|table| table.get("token_budget")).and_then(|item| item.as_bool()),
+    });
+    let backup_content = serde_json::to_string_pretty(&backup)
+        .map_err(|error| format!("序列化 API Key 压缩配置备份失败: {}", error))?;
+    write_string_atomic(&base_dir.join(API_KEY_COMPACTION_BACKUP_FILE), &backup_content)
+        .map_err(|error| format!("备份 API Key 压缩配置失败: {}", error))?;
+    if mode == "local" {
+        apply_local_compaction_fallback(&mut doc);
+    } else {
+        if doc.get("features").and_then(|item| item.as_table()).is_none() {
+            doc["features"] = toml_edit::table();
+        }
+        doc["features"]["remote_compaction_v2"] = toml_edit::value(true);
+        if let Some(table) = doc["features"].as_table_mut() {
+            table.remove("token_budget");
+        }
+    }
+    let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+    crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
+        .map_err(|error| format!("保存 API Key 压缩方式失败: {}", error))
+}
+
 fn sync_or_cleanup_account_model_catalog_for_dir(
     base_dir: &Path,
     account: &CodexAccount,
@@ -2357,7 +2422,9 @@ fn sync_or_cleanup_managed_model_catalog_for_dir(
     // 「模型管理」只服务于订阅账号：既不能覆盖这类账号写入的目录，也不能被它们清掉，
     // 否则会出现「切到第三方账号后看不到自己的模型」以及用户模型清单被丢弃。
     if account.is_api_key_auth() {
-        return sync_or_cleanup_account_model_catalog_for_dir(base_dir, account);
+        sync_or_cleanup_account_model_catalog_for_dir(base_dir, account)?;
+        apply_api_key_compaction_for_dir(base_dir, account)?;
+        return Ok(());
     }
     let preserve_experimental_policy =
         read_quick_config_from_config_toml(base_dir)?.experimental_model_catalog_enabled;

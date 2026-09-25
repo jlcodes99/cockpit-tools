@@ -1,6 +1,24 @@
 // Codex 账号测试：Quick config, provider validation and index repair behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
     #[test]
+    fn api_key_compaction_restore_recovers_previous_profile_settings() {
+        let base_dir = make_temp_dir("codex-api-key-compaction-restore");
+        fs::write(
+            base_dir.join("config.toml"),
+            "[features]\nremote_compaction_v2 = false\ntoken_budget = true\n",
+        ).expect("write profile");
+        fs::write(
+            base_dir.join(super::API_KEY_COMPACTION_BACKUP_FILE),
+            r#"{"remote_compaction_v2":true,"token_budget":null}"#,
+        ).expect("write backup");
+        super::restore_api_key_compaction_for_dir(&base_dir).expect("restore compaction");
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("remote_compaction_v2 = true"));
+        assert!(!config.contains("token_budget"));
+        assert!(!base_dir.join(super::API_KEY_COMPACTION_BACKUP_FILE).exists());
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+    #[test]
     fn managed_catalog_lists_reserve_without_changing_defaults_and_cleans_up_when_disabled() {
         let base_dir = make_temp_dir("codex-reserve-managed-catalog");
         fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")

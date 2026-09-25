@@ -823,6 +823,7 @@ pub(crate) fn write_prepared_account_bundle_to_dir(
     account: &CodexAccount,
 ) -> Result<(), String> {
     let account = resolve_account_for_bundle_write(base_dir, account)?;
+    restore_api_key_compaction_for_dir(base_dir)?;
     write_auth_file_to_dir(base_dir, &account)?;
     write_managed_projection_to_dir(base_dir, &account)?;
     sync_or_cleanup_managed_model_catalog_for_dir(base_dir, &account)?;
