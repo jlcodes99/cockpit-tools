@@ -32,6 +32,7 @@
     "prompt": "测试消息",
     "accounts": "测试账号",
     "accountHelp": "测试会发送消息并消耗各账号额度；API Key 与仅网页会话账号不参与。",
+    "apiServiceNotice": "鹈鹕测试会通过本机 API 服务发送请求。服务未运行时，开始测试会自动启动后台进程，但不会打开公开 API 入口。",
     "emptyAccounts": "暂无可测试账号",
     "start": "开始测试",
     "history": "测试记录",

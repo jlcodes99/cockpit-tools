@@ -32,6 +32,7 @@
     "prompt": "Polecenie testu",
     "accounts": "Testowane konta",
     "accountHelp": "Testy wysyłają polecenia i zużywają limit każdego konta. Konta z kluczem API lub wyłącznie sesją internetową są wykluczone.",
+    "apiServiceNotice": "Testy Pelican wysyłają żądania przez lokalną usługę API. Jeśli usługa nie działa, rozpoczęcie testu automatycznie uruchomi proces w tle bez włączania publicznego dostępu do API.",
     "emptyAccounts": "Brak odpowiednich kont",
     "start": "Rozpocznij test",
     "history": "Historia testów",

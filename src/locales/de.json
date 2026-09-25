@@ -32,6 +32,7 @@
     "prompt": "Test-Prompt",
     "accounts": "Testkonten",
     "accountHelp": "Tests senden Prompts und verbrauchen das Kontingent jedes Kontos. API-Schlüssel und Konten mit reiner Websitzung sind ausgeschlossen.",
+    "apiServiceNotice": "Pelican-Tests senden Anfragen über den lokalen API-Dienst. Läuft der Dienst nicht, startet der Test den Hintergrundprozess automatisch, ohne den öffentlichen API-Zugang zu aktivieren.",
     "emptyAccounts": "Keine geeigneten Konten",
     "start": "Test starten",
     "history": "Testverlauf",

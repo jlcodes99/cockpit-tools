@@ -32,6 +32,7 @@
     "prompt": "Instrução do teste",
     "accounts": "Contas do teste",
     "accountHelp": "Os testes enviam instruções e consomem a cota de cada conta. Contas com chave API ou apenas sessão web não participam.",
+    "apiServiceNotice": "Os testes do Pelican enviam solicitações pelo serviço de API local. Se ele não estiver em execução, iniciar o teste abrirá automaticamente o processo em segundo plano sem habilitar o acesso público à API.",
     "emptyAccounts": "Nenhuma conta apta",
     "start": "Iniciar teste",
     "history": "Histórico",

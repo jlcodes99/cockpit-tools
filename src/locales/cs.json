@@ -32,6 +32,7 @@
     "prompt": "Zadání testu",
     "accounts": "Testované účty",
     "accountHelp": "Testy odesílají zadání a čerpají kvótu jednotlivých účtů. Účty s klíčem API nebo pouze webovou relací jsou vyloučeny.",
+    "apiServiceNotice": "Testy Pelican odesílají požadavky přes místní službu API. Pokud služba neběží, spuštění testu automaticky spustí proces na pozadí, ale nezapne veřejný přístup k API.",
     "emptyAccounts": "Žádné vhodné účty",
     "start": "Spustit test",
     "history": "Historie testů",

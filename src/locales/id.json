@@ -32,6 +32,7 @@
     "prompt": "Perintah uji",
     "accounts": "Akun uji",
     "accountHelp": "Pengujian mengirim perintah dan menggunakan kuota tiap akun. Akun dengan kunci API atau hanya sesi web tidak disertakan.",
+    "apiServiceNotice": "Pengujian Pelican mengirim permintaan melalui layanan API lokal. Jika layanan belum berjalan, memulai pengujian akan menjalankan proses latar belakangnya secara otomatis tanpa mengaktifkan akses API publik.",
     "emptyAccounts": "Tidak ada akun yang sesuai",
     "start": "Mulai uji",
     "history": "Riwayat uji",

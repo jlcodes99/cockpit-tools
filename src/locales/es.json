@@ -32,6 +32,7 @@
     "prompt": "Instrucción",
     "accounts": "Cuentas de prueba",
     "accountHelp": "Las pruebas envían instrucciones y consumen la cuota de cada cuenta. Se excluyen las cuentas con clave API o solo sesión web.",
+    "apiServiceNotice": "Las pruebas de Pelican envían solicitudes mediante el servicio de API local. Si no está en ejecución, al iniciar la prueba se abrirá automáticamente el proceso en segundo plano sin habilitar el acceso público a la API.",
     "emptyAccounts": "Sin cuentas aptas",
     "start": "Iniciar prueba",
     "history": "Historial",

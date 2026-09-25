@@ -32,6 +32,7 @@
     "prompt": "Lời nhắc thử",
     "accounts": "Tài khoản thử",
     "accountHelp": "Các lần thử gửi lời nhắc và dùng hạn mức của từng tài khoản. Không áp dụng cho tài khoản dùng khóa API hoặc chỉ có phiên web.",
+    "apiServiceNotice": "Bài kiểm thử Pelican gửi yêu cầu qua dịch vụ API cục bộ. Nếu dịch vụ chưa chạy, việc bắt đầu kiểm thử sẽ tự động khởi động tiến trình nền mà không bật quyền truy cập API công khai.",
     "emptyAccounts": "Không có tài khoản phù hợp",
     "start": "Bắt đầu thử",
     "history": "Lịch sử thử",

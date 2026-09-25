@@ -114,6 +114,7 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
     </div>
     {fieldError === 'accounts' && <span className="pelican-field-error" role="alert">{t('pelican.selectAccounts')}</span>}
     <p className="pelican-muted">{t('pelican.accountHelp')}</p>
+    <p className="pelican-muted">{t('pelican.apiServiceNotice')}</p>
     <ModalErrorMessage message={error.message} scrollKey={error.scrollKey} />
     <div className="pelican-actions"><button className="btn btn-primary" type="submit" disabled={busy}>{t(busy ? 'common.loading' : 'pelican.start')}</button></div>
   </form>;

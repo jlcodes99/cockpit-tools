@@ -32,6 +32,7 @@
     "prompt": "Consigne du test",
     "accounts": "Comptes testés",
     "accountHelp": "Les tests envoient des consignes et consomment le quota de chaque compte. Les comptes à clé API ou avec uniquement une session web sont exclus.",
+    "apiServiceNotice": "Les tests Pelican envoient leurs requêtes via le service API local. S’il n’est pas actif, le démarrage du test lance automatiquement son processus en arrière-plan sans activer l’accès public à l’API.",
     "emptyAccounts": "Aucun compte éligible",
     "start": "Lancer le test",
     "history": "Historique",

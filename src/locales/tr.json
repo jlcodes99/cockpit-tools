@@ -32,6 +32,7 @@
     "prompt": "Test istemi",
     "accounts": "Test hesapları",
     "accountHelp": "Testler istem gönderir ve her hesabın kotasını tüketir. API anahtarlı ve yalnızca web oturumlu hesaplar dahil edilmez.",
+    "apiServiceNotice": "Pelican testleri istekleri yerel API hizmeti üzerinden gönderir. Hizmet çalışmıyorsa test başlatıldığında arka plan işlemi otomatik olarak çalıştırılır; genel API erişimi etkinleştirilmez.",
     "emptyAccounts": "Uygun hesap yok",
     "start": "Testi başlat",
     "history": "Test geçmişi",

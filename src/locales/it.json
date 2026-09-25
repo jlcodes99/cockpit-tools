@@ -32,6 +32,7 @@
     "prompt": "Richiesta del test",
     "accounts": "Account di prova",
     "accountHelp": "I test inviano richieste e consumano la quota di ogni account. Sono esclusi gli account con chiave API o con sola sessione web.",
+    "apiServiceNotice": "I test Pelican inviano le richieste tramite il servizio API locale. Se il servizio non è in esecuzione, l’avvio del test avvia automaticamente il processo in background senza abilitare l’accesso API pubblico.",
     "emptyAccounts": "Nessun account idoneo",
     "start": "Avvia test",
     "history": "Cronologia test",

@@ -32,6 +32,7 @@
     "prompt": "測試訊息",
     "accounts": "測試帳號",
     "accountHelp": "測試會傳送訊息並消耗各帳號額度；API Key 與僅網頁工作階段的帳號不參與。",
+    "apiServiceNotice": "Pelican 測試會透過本機 API 服務傳送請求。服務未執行時，開始測試會自動啟動背景程序，但不會開啟公開 API 入口。",
     "emptyAccounts": "暫無可測試帳號",
     "start": "開始測試",
     "history": "測試紀錄",

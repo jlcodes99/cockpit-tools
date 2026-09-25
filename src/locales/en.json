@@ -32,6 +32,7 @@
     "prompt": "Test prompt",
     "accounts": "Test accounts",
     "accountHelp": "Tests send prompts and consume each account’s quota. API key and web-session-only accounts are excluded.",
+    "apiServiceNotice": "Pelican tests send requests through the local API service. If it is not running, starting a test launches its background process automatically without enabling public API access.",
     "emptyAccounts": "No eligible accounts",
     "start": "Start test",
     "history": "Test history",
