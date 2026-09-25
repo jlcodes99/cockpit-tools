@@ -16,12 +16,12 @@ const provider: CodexModelProvider = {
   modelContextWindows: { 'legacy-shared': 128_000 },
   supportsWebsockets: false,
   apiKeys: [
-    { id: 'oai-key', name: 'kfjie', apiKey: 'oai-secret',
+    { id: 'oai-key', name: 'openai-key', apiKey: 'oai-secret',
       modelCatalog: ['gpt-6-sol'],
       modelContextWindows: { 'gpt-6-sol': 1_000_000 },
       modelAutoCompactTokenLimits: { 'gpt-6-sol': 900_000 },
       compactionMode: 'remote', createdAt: 1, updatedAt: 1 },
-    { id: 'third-party-key', name: 'kfjie-3', apiKey: 'third-party-secret',
+    { id: 'third-party-key', name: 'partner-key', apiKey: 'third-party-secret',
       modelCatalog: ['deepseek-v4', 'kimi-k3'],
       modelContextWindows: { 'deepseek-v4': 128_000, 'kimi-k3': 256_000 },
       modelAutoCompactTokenLimits: { 'deepseek-v4': 110_000, 'kimi-k3': 220_000 },
@@ -45,8 +45,8 @@ test('same endpoint keeps each key model catalog, context and compaction setting
 });
 
 test('account projections select the credential, not the shared base URL', () => {
-  const oai = buildCodexModelProviderAccountSnapshot(provider, 'kfjie', 'oai-secret');
-  const thirdParty = buildCodexModelProviderAccountSnapshot(provider, 'kfjie-3', 'third-party-secret');
+  const oai = buildCodexModelProviderAccountSnapshot(provider, 'openai-key', 'oai-secret');
+  const thirdParty = buildCodexModelProviderAccountSnapshot(provider, 'partner-key', 'third-party-secret');
   assert.deepEqual(oai.apiModelCatalog, ['gpt-6-sol']);
   assert.deepEqual(thirdParty.apiModelCatalog, ['deepseek-v4', 'kimi-k3']);
   assert.deepEqual(oai.apiModelContextWindows, { 'gpt-6-sol': 1_000_000 });
@@ -63,8 +63,8 @@ test('the same model id can have a different window under each key', () => {
   sharedModel.apiKeys[0].modelContextWindows = { 'model-x': 200_000 };
   sharedModel.apiKeys[1].modelCatalog = ['model-x'];
   sharedModel.apiKeys[1].modelContextWindows = { 'model-x': 1_000_000 };
-  const first = buildCodexModelProviderAccountSnapshot(sharedModel, 'kfjie', 'oai-secret');
-  const second = buildCodexModelProviderAccountSnapshot(sharedModel, 'kfjie-3', 'third-party-secret');
+  const first = buildCodexModelProviderAccountSnapshot(sharedModel, 'openai-key', 'oai-secret');
+  const second = buildCodexModelProviderAccountSnapshot(sharedModel, 'partner-key', 'third-party-secret');
   assert.equal(first.apiModelContextWindows?.['model-x'], 200_000);
   assert.equal(second.apiModelContextWindows?.['model-x'], 1_000_000);
 });
