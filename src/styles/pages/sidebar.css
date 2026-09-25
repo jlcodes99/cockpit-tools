@@ -1,7 +1,7 @@
 /* ============================================
    New Sidebar Layout
    ============================================ */
-   
+
 .app-container.with-sidebar {
   flex-direction: row; /* 水平布局 */
   padding: 0;
@@ -61,11 +61,14 @@
 }
 
 .nav-item.active {
-  background: rgba(29, 78, 216, 0.08); /* Primary light */
-  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 25%, transparent);
+  color: var(--text-primary);
+  fill: currentColor;
   font-weight: 600;
 }
-
+[data-theme="dark"] .nav-item.active {
+  background: color-mix(in srgb, var(--primary) 50%, transparent);
+}
 .sidebar-footer {
   margin-top: auto;
   padding-top: 20px;

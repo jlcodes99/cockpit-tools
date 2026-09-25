@@ -1093,6 +1093,9 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                     <option value="everforest">
                       {t('settings.general.themeColorEverforest', 'Everforest')}
                     </option>
+                    <option value="oled">
+                      {t('settings.general.themeColorOled', 'OLED')}
+                    </option>
                   </select>
                 </div>
               </div>
