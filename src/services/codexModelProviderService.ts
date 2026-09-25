@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { CodexAccount } from '../types/codex';
+import type { CodexAccount, CodexExperimentalModelDefinition } from '../types/codex';
 import type {
   CodexProviderEnableModePreference,
   CodexProviderWireApi,
@@ -29,6 +29,13 @@ export interface CodexModelProviderApiKey {
   id: string;
   name: string;
   apiKey: string;
+  /** An explicit empty catalog is valid and does not inherit the provider default. */
+  modelCatalog?: string[];
+  modelContextWindows?: Record<string, number>;
+  modelAutoCompactTokenLimits?: Record<string, number>;
+  compactionMode?: 'auto' | 'remote' | 'local';
+  modelDefinitions?: CodexExperimentalModelDefinition[];
+  defaultModelId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -132,6 +139,39 @@ function normalizeModelCatalog(value: unknown): string[] | undefined {
     models.push(model);
   }
   return models.length > 0 ? models : undefined;
+}
+
+function normalizeCompactionMode(value: unknown): CodexModelProviderApiKey['compactionMode'] {
+  return value === 'auto' || value === 'remote' || value === 'local' ? value : undefined;
+}
+
+export function resolveCodexModelProviderKeyModels(
+  provider: CodexModelProvider,
+  apiKey: CodexModelProviderApiKey | null | undefined,
+) {
+  const modelCatalog = apiKey?.modelCatalog ?? provider.modelCatalog ?? [];
+  return {
+    modelCatalog,
+    modelContextWindows: apiKey?.modelCatalog !== undefined
+      ? apiKey.modelContextWindows ?? {}
+      : provider.modelContextWindows ?? {},
+    modelAutoCompactTokenLimits: apiKey?.modelAutoCompactTokenLimits ?? {},
+    compactionMode: apiKey?.compactionMode ?? 'auto',
+    modelDefinitions: apiKey?.modelDefinitions,
+    defaultModelId: apiKey?.defaultModelId,
+  } as const;
+}
+
+export function snapshotLegacyCodexModelProviderKeys(provider: CodexModelProvider): boolean {
+  let changed = false;
+  for (const apiKey of provider.apiKeys) {
+    if (apiKey.modelCatalog !== undefined) continue;
+    apiKey.modelCatalog = [...(provider.modelCatalog ?? [])];
+    apiKey.modelContextWindows = { ...(provider.modelContextWindows ?? {}) };
+    apiKey.updatedAt = Date.now();
+    changed = true;
+  }
+  return changed;
 }
 
 export function normalizeModelContextWindows(
@@ -352,7 +392,16 @@ function cloneProviders(providers: CodexModelProvider[]): CodexModelProvider[] {
         )
       : undefined,
     visionRoutingModel: sanitizeName(provider.visionRoutingModel ?? '') || undefined,
-    apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })),
+    apiKeys: provider.apiKeys.map((apiKey) => ({
+      ...apiKey,
+      modelCatalog: apiKey.modelCatalog ? [...apiKey.modelCatalog] : undefined,
+      modelContextWindows: apiKey.modelContextWindows ? { ...apiKey.modelContextWindows } : undefined,
+      modelAutoCompactTokenLimits: apiKey.modelAutoCompactTokenLimits
+        ? { ...apiKey.modelAutoCompactTokenLimits } : undefined,
+      modelDefinitions: apiKey.modelDefinitions?.map((model) => ({ ...model,
+        reasoning_efforts: model.reasoning_efforts ? [...model.reasoning_efforts] : undefined,
+      })),
+    })),
   }));
 }
 
@@ -367,6 +416,23 @@ function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[]
       id: String((item as { id?: unknown }).id ?? createApiKeyId()),
       name: sanitizeName(String((item as { name?: unknown }).name ?? '')),
       apiKey: rawKey,
+      modelCatalog: hasOwnProperty(item, 'modelCatalog')
+        ? normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ?? []
+        : undefined,
+      modelContextWindows: normalizeModelContextWindows(
+        (item as { modelContextWindows?: unknown }).modelContextWindows,
+        normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ?? [],
+      ),
+      modelAutoCompactTokenLimits: normalizeModelContextWindows(
+        (item as { modelAutoCompactTokenLimits?: unknown }).modelAutoCompactTokenLimits,
+        normalizeModelCatalog((item as { modelCatalog?: unknown }).modelCatalog) ?? [],
+      ),
+      compactionMode: normalizeCompactionMode((item as { compactionMode?: unknown }).compactionMode),
+      modelDefinitions: Array.isArray((item as { modelDefinitions?: unknown }).modelDefinitions)
+        ? (item as { modelDefinitions: CodexExperimentalModelDefinition[] }).modelDefinitions
+            .filter((model) => model && typeof model.model_id === 'string')
+        : undefined,
+      defaultModelId: sanitizeName(String((item as { defaultModelId?: unknown }).defaultModelId ?? '')) || undefined,
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
     });
@@ -495,8 +561,10 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   loaded = migration.providers;
   let migratedDeepSeek = false;
   let migratedLegacyVision = false;
+  let migratedKeyModels = false;
   for (const provider of loaded) {
     migratedDeepSeek = enforceDeepSeekProvider(provider) || migratedDeepSeek;
+    migratedKeyModels = snapshotLegacyCodexModelProviderKeys(provider) || migratedKeyModels;
     // 旧版本的供应商级识图开关展开成逐模型能力，避免网关把图片当 text-only 丢弃。
     if (expandLegacyProviderVisionCapabilities(provider)) {
       provider.updatedAt = Date.now();
@@ -508,6 +576,7 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
     migration.changed ||
     migratedDeepSeek ||
     migratedLegacyVision ||
+    migratedKeyModels ||
     loadResult.removedImageGenerationSetting ||
     loadResult.migratedSupportsWebsockets
   ) {
@@ -555,6 +624,13 @@ export async function mergeCodexModelProviderApiKeysFromAccounts(
         id: createApiKeyId(),
         name: sanitizeName(account.account_name ?? ''),
         apiKey,
+        modelCatalog: account.api_model_catalog?.length
+          ? [...account.api_model_catalog]
+          : [...(provider.modelCatalog ?? [])],
+        modelContextWindows: account.api_model_context_windows &&
+          Object.keys(account.api_model_context_windows).length
+          ? { ...account.api_model_context_windows }
+          : { ...(provider.modelContextWindows ?? {}) },
         createdAt: now,
         updatedAt: now,
       });
@@ -610,9 +686,51 @@ function ensureApiKeyOnProvider(
     id: createApiKeyId(),
     name: sanitizeName(apiKeyName ?? ''),
     apiKey: normalized,
+    modelCatalog: [...(provider.modelCatalog ?? [])],
+    modelContextWindows: { ...(provider.modelContextWindows ?? {}) },
     createdAt: now,
     updatedAt: now,
   });
+}
+
+export async function updateCodexModelProviderApiKeyModels(
+  providerId: string,
+  apiKeyId: string,
+  input: {
+    modelCatalog: string[];
+    modelContextWindows?: Record<string, number>;
+    modelAutoCompactTokenLimits?: Record<string, number>;
+    compactionMode?: 'auto' | 'remote' | 'local';
+    modelDefinitions?: CodexExperimentalModelDefinition[];
+    defaultModelId?: string | null;
+  },
+): Promise<CodexModelProvider> {
+  const providers = await ensureProvidersLoaded();
+  const provider = providers.find((item) => item.id === providerId);
+  if (!provider) throw new Error('PROVIDER_NOT_FOUND');
+  const apiKey = provider.apiKeys.find((item) => item.id === apiKeyId);
+  if (!apiKey) throw new Error('API_KEY_NOT_FOUND');
+  const catalog = normalizeModelCatalog(input.modelCatalog) ?? [];
+  const windows = normalizeModelContextWindows(input.modelContextWindows, catalog);
+  const limits = normalizeModelContextWindows(input.modelAutoCompactTokenLimits, catalog);
+  for (const [model, limit] of Object.entries(limits ?? {})) {
+    const window = windows?.[model];
+    if (!window || limit >= window) throw new Error('MODEL_COMPACT_LIMIT_INVALID');
+  }
+  apiKey.modelCatalog = catalog;
+  apiKey.modelContextWindows = windows;
+  apiKey.modelAutoCompactTokenLimits = limits;
+  apiKey.compactionMode = normalizeCompactionMode(input.compactionMode) ?? 'auto';
+  if (input.modelDefinitions !== undefined) {
+    apiKey.modelDefinitions = input.modelDefinitions.map((model) => ({ ...model }));
+  }
+  if (input.defaultModelId !== undefined) {
+    apiKey.defaultModelId = input.defaultModelId || undefined;
+  }
+  apiKey.updatedAt = Date.now();
+  provider.updatedAt = apiKey.updatedAt;
+  await writeProviders(providers);
+  return cloneProviders([provider])[0];
 }
 
 export async function createCodexModelProvider(input: {
@@ -678,6 +796,11 @@ export async function createCodexModelProvider(input: {
   enforceDeepSeekProvider(provider);
   if (input.initialApiKey) {
     ensureApiKeyOnProvider(provider, input.initialApiKey, input.initialApiKeyName);
+    const initialKey = provider.apiKeys.find((item) => item.apiKey === sanitizeApiKey(input.initialApiKey!));
+    if (initialKey) {
+      initialKey.modelCatalog = [...(provider.modelCatalog ?? [])];
+      initialKey.modelContextWindows = { ...(provider.modelContextWindows ?? {}) };
+    }
   }
   providers.push(provider);
   await writeProviders(providers);
@@ -1057,20 +1180,18 @@ export async function upsertCodexModelProviderFromCredential(
     ensureApiKeyOnProvider(provider, apiKey, input.apiKeyName);
   }
   provider.baseUrl = apiBaseUrl;
-  provider.modelCatalog =
-    normalizeModelCatalog(input.modelCatalog) ??
-    provider.modelCatalog ??
-    presetModelCatalogForBaseUrl(apiBaseUrl);
-  if (input.modelContextWindows !== undefined) {
-    provider.modelContextWindows = normalizeModelContextWindows(
-      input.modelContextWindows,
-      provider.modelCatalog ?? [],
-    );
-  } else {
-    provider.modelContextWindows = normalizeModelContextWindows(
-      provider.modelContextWindows,
-      provider.modelCatalog ?? [],
-    );
+  // Credential edits belong to this key. A matching URL does not imply matching models.
+  const selectedKey = provider.apiKeys.find((item) => item.apiKey === apiKey);
+  if (selectedKey) {
+    if (input.modelCatalog !== undefined) {
+      selectedKey.modelCatalog = normalizeModelCatalog(input.modelCatalog) ?? [];
+    }
+    if (input.modelContextWindows !== undefined) {
+      selectedKey.modelContextWindows = normalizeModelContextWindows(
+        input.modelContextWindows,
+        selectedKey.modelCatalog ?? provider.modelCatalog ?? [],
+      );
+    }
   }
   if (input.supportsVision !== undefined) {
     provider.supportsVision = input.supportsVision === true;

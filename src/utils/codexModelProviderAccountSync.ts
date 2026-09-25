@@ -3,7 +3,7 @@ import type {
   CodexApiProviderMode,
   CodexProviderWireApi,
 } from "../types/codex";
-import type { CodexModelProvider } from "../services/codexModelProviderService";
+import { resolveCodexModelProviderKeyModels, type CodexModelProvider } from "../services/codexModelProviderService";
 import {
   CODEX_API_PROVIDER_CUSTOM_ID,
   resolveCodexApiProviderPresetId,
@@ -14,6 +14,7 @@ import { resolveCodexModelProviderAccountName } from "./codexModelProviderAccoun
 export interface CodexModelProviderReference {
   id: string;
   baseUrl: string;
+  apiKeys?: Array<{ apiKey: string }>;
 }
 
 export interface CodexModelProviderAccountSnapshot {
@@ -62,9 +63,16 @@ export function mergeCodexModelProviderCredentialInput(
       (item) => item.apiKey.trim() === fallback.apiKey.trim(),
     )?.name ?? fallback.apiKeyName,
     sourceTag: provider?.sourceTag ?? fallback.sourceTag,
-    modelCatalog: fallback.modelCatalog ?? provider?.modelCatalog,
-    modelContextWindows:
-      fallback.modelContextWindows ?? provider?.modelContextWindows,
+    modelCatalog: fallback.modelCatalog ?? (provider
+      ? resolveCodexModelProviderKeyModels(provider, provider.apiKeys.find(
+          (item) => item.apiKey.trim() === fallback.apiKey.trim(),
+        )).modelCatalog
+      : undefined),
+    modelContextWindows: fallback.modelContextWindows ?? (provider
+      ? resolveCodexModelProviderKeyModels(provider, provider.apiKeys.find(
+          (item) => item.apiKey.trim() === fallback.apiKey.trim(),
+        )).modelContextWindows
+      : undefined),
     supportsVision: provider?.supportsVision ?? fallback.supportsVision,
     modelCapabilities: provider?.modelCapabilities ?? fallback.modelCapabilities,
     visionRoutingModel:
@@ -106,6 +114,9 @@ export function findCodexAccountsReferencingModelProvider(
     .filter((account) => {
       if ((account.auth_mode ?? "").toLowerCase() !== "apikey") return false;
       if (!account.openai_api_key?.trim()) return false;
+      if (provider.apiKeys && !provider.apiKeys.some((key) =>
+        key.apiKey.trim() === account.openai_api_key?.trim(),
+      )) return false;
 
       const matchesId =
         providerId.length > 0 && account.api_provider_id?.trim() === providerId;
@@ -120,10 +131,18 @@ export function findCodexAccountsReferencingModelProvider(
 export function buildCodexModelProviderAccountSnapshot(
   provider: CodexModelProvider,
   apiKeyName?: string | null,
+  apiKeyValue?: string | null,
 ): CodexModelProviderAccountSnapshot {
   const presetId = resolveCodexApiProviderPresetId(provider.baseUrl);
   const isOpenAI = presetId === "openai_official";
   const wireApi = provider.wireApi ?? "responses";
+  const selectedKey = provider.apiKeys.find((item) =>
+    apiKeyValue ? item.apiKey.trim() === apiKeyValue.trim() : item.name === apiKeyName,
+  );
+  if (apiKeyValue && !selectedKey) {
+    throw new Error('API_KEY_NOT_FOUND');
+  }
+  const keyModels = resolveCodexModelProviderKeyModels(provider, selectedKey);
 
   return {
     apiBaseUrl: provider.baseUrl,
@@ -131,8 +150,8 @@ export function buildCodexModelProviderAccountSnapshot(
     apiProviderId:
       presetId === CODEX_API_PROVIDER_CUSTOM_ID ? provider.id : presetId,
     apiProviderName: provider.name,
-    apiModelCatalog: provider.modelCatalog,
-    apiModelContextWindows: provider.modelContextWindows,
+    apiModelCatalog: keyModels.modelCatalog,
+    apiModelContextWindows: keyModels.modelContextWindows,
     apiWireApi: wireApi,
     apiSupportsWebsockets:
       !isOpenAI && wireApi === "responses" && provider.supportsWebsockets === true,
