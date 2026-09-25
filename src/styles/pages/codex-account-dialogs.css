@@ -3381,6 +3381,32 @@
   border-color: color-mix(in srgb, var(--primary) 20%, var(--border-light));
 }
 
+.codex-provider-key-row.is-editing {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.codex-provider-key-edit-fields {
+  display: grid;
+  min-width: 0;
+  width: 100%;
+  gap: 8px;
+}
+
+.codex-provider-key-edit-fields > label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codex-provider-key-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .codex-provider-key-list.inline .codex-provider-key-row {
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);

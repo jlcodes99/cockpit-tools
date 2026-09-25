@@ -2293,6 +2293,7 @@
     },
     "title": "Codex 账号管理",
     "contextOverride": {
+      "apiKeyHint": "此处是实例全局覆盖。当前 Key 的逐模型上下文请在“模型管理”中设置。",
       "title": "上下文管理",
       "description": "模型列表、排序、默认模型和推理强度跟随官方；仅手动设置时覆盖上下文。",
       "dialogDescription": "对当前 Codex 实例的所有账号生效，切号后保持不变；可选择跟随官方、预设或自定义。",
@@ -3262,6 +3263,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "管理此 Key 模型",
+      "discardKeyChanges": "当前 Key 有未保存的模型修改，切换后将丢弃。继续切换？",
+      "discardKeyChangesTitle": "切换 API Key",
+      "keyModelHint": "每把 API Key 使用独立的模型目录、上下文和压缩配置。",
+      "keyNotFound": "当前 API Key 尚未加入模型供应商管理。",
+      "compactLimit": "自动压缩阈值",
+      "compactionMode": "压缩方式",
+      "compactionAuto": "自动",
+      "compactionRemote": "远程压缩",
+      "compactionLocal": "本地压缩",
       "keyModels": {
         "title": "Key 模型配置",
         "override": "独立配置",

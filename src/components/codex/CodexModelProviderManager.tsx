@@ -67,8 +67,10 @@ import {
   mergeCodexModelProviderApiKeysFromAccounts,
   normalizeCodexModelProviderBaseUrl,
   removeApiKeyFromCodexModelProvider,
+  resolveCodexModelProviderKeyModels,
   renameApiKeyOnCodexModelProvider,
   updateApiKeyOnCodexModelProvider,
+  updateCodexModelProviderApiKeyModels,
   queryCodexModelProviderUsage,
   saveCodexModelProviderDetectedIntegrationType,
   testCodexModelProviderConnection,
@@ -125,7 +127,7 @@ import {
   resolveCodexModelProviderAccountName,
   shouldSyncCodexModelProviderAccountName,
 } from "../../utils/codexModelProviderAccountName";
-import { findCodexAccountsReferencingModelProvider } from "../../utils/codexModelProviderAccountSync";
+import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider } from "../../utils/codexModelProviderAccountSync";
 import { providerModelDefaultsToVisionInput } from "../../utils/codexModelProviderVision";
 import { CodexModelProviderManagerView } from "./CodexModelProviderManagerView";
 
@@ -413,6 +415,10 @@ interface EditingApiKeyState {
   originalApiKey: string;
   apiKey: string;
   name: string;
+  modelCatalogText: string;
+  modelContextWindowsDraft: Record<string, string>;
+  modelAutoCompactDraft: Record<string, string>;
+  compactionMode: 'auto' | 'remote' | 'local';
 }
 
 const EMPTY_FORM: ProviderFormState = {
@@ -1346,7 +1352,7 @@ export function useCodexModelProviderManagerController({
     const models: string[] = [];
     for (const provider of providers) {
       if (!batchTestSelectedProviderIds.has(provider.id)) continue;
-      for (const raw of provider.modelCatalog ?? []) {
+      for (const raw of resolveCodexModelProviderKeyModels(provider, getSelectedProviderApiKey(provider)).modelCatalog) {
         const model = raw.trim();
         if (!model || isImageGenerationModelId(model)) continue;
         const key = model.toLowerCase();
@@ -1370,7 +1376,7 @@ export function useCodexModelProviderManagerController({
         label: t("codex.modelProviders.batchTest.modelCustom", "自定义模型…"),
       },
     ];
-  }, [batchTestSelectedProviderIds, providers, t]);
+  }, [batchTestSelectedProviderIds, getSelectedProviderApiKey, providers, t]);
 
   const resolvedBatchTestModel = useMemo(() => {
     if (batchTestModelId === "__custom__") {
@@ -1495,7 +1501,7 @@ export function useCodexModelProviderManagerController({
         apiKeyName: apiKey.name || provider.name,
         apiKey: apiKey.apiKey,
         wireApi: resolveProviderWireApi(provider),
-        modelCatalog: provider.modelCatalog ?? [],
+        modelCatalog: resolveCodexModelProviderKeyModels(provider, apiKey).modelCatalog,
       };
     },
     [getSelectedProviderApiKey],
@@ -2399,36 +2405,13 @@ export function useCodexModelProviderManagerController({
           accounts,
         );
         if (linkedAccountIds.length > 0) {
-          const presetId = resolveCodexApiProviderPresetId(savedProvider.baseUrl);
-          const isOpenAIOfficial = presetId === "openai_official";
-          const wireApi = resolveProviderWireApi(savedProvider);
-          const updatedAccountCount = await syncCodexApiKeyProviderAccounts({
-            accountIds: linkedAccountIds,
-            apiBaseUrl: savedProvider.baseUrl,
-            apiProviderMode: isOpenAIOfficial ? "openai_builtin" : "custom",
-            apiProviderId:
-              presetId === CODEX_API_PROVIDER_CUSTOM_ID
-                ? savedProvider.id
-                : presetId,
-            apiProviderName: savedProvider.name,
-            apiModelCatalog: savedProvider.modelCatalog,
-            apiModelContextWindows: savedProvider.modelContextWindows,
-            apiWireApi: wireApi,
-            apiSupportsWebsockets:
-              !isOpenAIOfficial &&
-              wireApi === "responses" &&
-              savedProvider.supportsWebsockets === true,
-            apiSupportsVision: savedProvider.supportsVision === true,
-            apiModelVisionSupport: Object.fromEntries(
-              Object.entries(savedProvider.modelCapabilities ?? {}).map(
-                ([model, capability]) => [
-                  model,
-                  capability.supportsVision === true,
-                ],
-              ),
-            ),
-            apiVisionRoutingModel: savedProvider.visionRoutingModel,
-          });
+          let updatedAccountCount = 0;
+          for (const account of accounts.filter((item) => linkedAccountIds.includes(item.id))) {
+            updatedAccountCount += await syncCodexApiKeyProviderAccounts({
+              accountIds: [account.id],
+              ...buildCodexModelProviderAccountSnapshot(savedProvider, undefined, account.openai_api_key),
+            });
+          }
           if (updatedAccountCount > 0) {
             await emitAccountsChanged({
               platformId: "codex",
@@ -2541,14 +2524,33 @@ export function useCodexModelProviderManagerController({
       });
       return;
     }
+    const modelCatalog = parseModelCatalogText(editingApiKey.modelCatalogText);
+    const windows = parseContextWindowDrafts(editingApiKey.modelContextWindowsDraft, modelCatalog);
+    const limits = parseContextWindowDrafts(editingApiKey.modelAutoCompactDraft, modelCatalog);
+    if (!windows.ok || !limits.ok || Object.entries(limits.windows).some(
+      ([model, limit]) => !windows.windows[model] || limit >= windows.windows[model],
+    )) {
+      setNotice({ tone: 'error', text: t('codex.api.modelCatalog.contextWindowInvalid', '上下文与压缩阈值必须是有效整数，且压缩阈值小于上下文') });
+      return;
+    }
 
     setSaving(true);
     try {
-      const savedProvider = await updateApiKeyOnCodexModelProvider(
+      await updateApiKeyOnCodexModelProvider(
         provider.id,
         editingApiKey.apiKeyId,
         nextApiKey,
         editingApiKey.name,
+      );
+      const savedProvider = await updateCodexModelProviderApiKeyModels(
+        provider.id,
+        editingApiKey.apiKeyId,
+        {
+          modelCatalog,
+          modelContextWindows: windows.windows,
+          modelAutoCompactTokenLimits: limits.windows,
+          compactionMode: editingApiKey.compactionMode,
+        },
       );
       const previousApiKey = editingApiKey.originalApiKey.trim();
       const normalizedProviderBaseUrl = normalizeCodexModelProviderBaseUrl(
@@ -2575,7 +2577,7 @@ export function useCodexModelProviderManagerController({
           apiProviderMode,
           apiProviderId,
           savedProvider.name,
-          savedProvider.modelCatalog,
+          modelCatalog,
           savedProvider.supportsVision === true,
           Object.fromEntries(
             Object.entries(savedProvider.modelCapabilities ?? {}).map(
@@ -2587,9 +2589,9 @@ export function useCodexModelProviderManagerController({
           !isOpenAIOfficial &&
             wireApi === "responses" &&
             savedProvider.supportsWebsockets === true,
-          account.api_sync_model_catalog_to_codex,
+          true,
           account.account_name,
-          account.api_model_context_windows,
+          windows.windows,
         );
       }
       await reloadProviders();
@@ -3082,13 +3084,14 @@ export function useCodexModelProviderManagerController({
         const presetId = resolveCodexApiProviderPresetId(provider.baseUrl);
         const isOpenAIOfficial = presetId === "openai_official";
         const wireApi = resolveProviderWireApi(provider);
+        const keyModels = resolveCodexModelProviderKeyModels(provider, apiKey);
         const account = await addCodexAccountWithApiKey(
           apiKey.apiKey,
           provider.baseUrl,
           isOpenAIOfficial ? "openai_builtin" : "custom",
           presetId === CODEX_API_PROVIDER_CUSTOM_ID ? provider.id : presetId,
           provider.name,
-          provider.modelCatalog,
+          keyModels.modelCatalog,
           provider.supportsVision === true,
           Object.fromEntries(
             Object.entries(provider.modelCapabilities ?? {}).map(([model, capability]) => [
@@ -3100,8 +3103,8 @@ export function useCodexModelProviderManagerController({
           undefined,
           wireApi,
           provider.supportsWebsockets,
-          undefined,
-          provider.modelContextWindows,
+          true,
+          keyModels.modelContextWindows,
         );
         await updateCodexApiKeyBoundOAuthAccount(
           account.id,

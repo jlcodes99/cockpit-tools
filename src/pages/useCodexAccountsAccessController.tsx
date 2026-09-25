@@ -33,7 +33,7 @@ import { resolveCodexModelProviderAccountName } from "../utils/codexModelProvide
 import { CODEX_API_PROVIDER_CUSTOM_ID, COCKPIT_API_PROVIDER_ID, findCodexApiProviderPresetById, resolveCodexApiProviderPresetId } from "../utils/codexProviderPresets";
 import { APIKEY_FUN_PROVIDER_BASE_URL } from "../utils/apikeyFunLinks";
 import { APIKEY_FUN_PREFILL_EVENT, consumeApiKeyFunPrefill, type ApiKeyFunPrefillPayload } from "../utils/apiKeyFunPrefill";
-import { findCodexModelProviderById, findCodexModelProviderByBaseUrl, queryCodexModelProviderUsage, saveCodexModelProviderDetectedIntegrationType, type CodexModelProvider, upsertCodexModelProviderFromCredential } from "../services/codexModelProviderService";
+import { findCodexModelProviderById, findCodexModelProviderByBaseUrl, queryCodexModelProviderUsage, resolveCodexModelProviderKeyModels, saveCodexModelProviderDetectedIntegrationType, type CodexModelProvider, upsertCodexModelProviderFromCredential } from "../services/codexModelProviderService";
 import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, mergeCodexModelProviderCredentialInput } from "../utils/codexModelProviderAccountSync";
 import { CODEX_API_KEY_USAGE_REFRESHED_EVENT, readCodexApiKeyUsageCache, writeCodexApiKeyUsageCache, type CodexApiKeyUsageState } from "../services/codexApiKeyUsageRefreshService";
 import { isModelProviderUsageUnavailableError, listModelProviderModels } from "../services/modelProviderUsageService";
@@ -2096,7 +2096,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         const provider = managedProviders.find((item) => item.id === providerId);
         if (!provider) return;
         setApiBaseUrlInput(provider.baseUrl);
-        const effective = provider;
+        const effective = resolveCodexModelProviderKeyModels(provider, provider.apiKeys[0]);
         setApiModelCatalogInput((effective.modelCatalog ?? []).join("\n"));
         setApiModelContextWindowsInput(
           contextWindowDraftsFromRecord(
@@ -2135,7 +2135,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           (item) => item.id === apiKeyId,
         );
         if (key) {
-          const effective = selectedManagedProvider!;
+          const effective = resolveCodexModelProviderKeyModels(selectedManagedProvider!, key);
           setApiModelCatalogInput((effective.modelCatalog ?? []).join("\n"));
           setApiModelContextWindowsInput(contextWindowDraftsFromRecord(effective.modelContextWindows, effective.modelCatalog ?? []));
           setApiKeyInput(key.apiKey);
@@ -2336,7 +2336,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         const provider = managedProviders.find((item) => item.id === providerId);
         if (!provider) return;
         setEditingApiBaseUrlCredentialsValue(provider.baseUrl);
-        const effective = provider;
+        const effective = resolveCodexModelProviderKeyModels(provider, provider.apiKeys[0]);
         setEditingApiModelCatalogInput((effective.modelCatalog ?? []).join("\n"));
         setEditingApiModelContextWindowsInput(
           contextWindowDraftsFromRecord(
@@ -2374,7 +2374,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           (item) => item.id === apiKeyId,
         );
         if (key) {
-          const effective = selectedEditingManagedProvider!;
+          const effective = resolveCodexModelProviderKeyModels(selectedEditingManagedProvider!, key);
           setEditingApiModelCatalogInput((effective.modelCatalog ?? []).join("\n"));
           setEditingApiModelContextWindowsInput(contextWindowDraftsFromRecord(effective.modelContextWindows, effective.modelCatalog ?? []));
           setEditingApiKeyCredentialsValue(key.apiKey);
@@ -2519,7 +2519,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setQuickSwitchSubmitting(true);
       setQuickSwitchError(null);
       try {
-        const effective = selectedQuickSwitchProvider;
+        const effective = resolveCodexModelProviderKeyModels(
+          selectedQuickSwitchProvider, selectedQuickSwitchApiKey,
+        );
         await updateApiKeyCredentials(
           quickSwitchAccount.id,
           selectedQuickSwitchApiKey.apiKey,
@@ -2528,16 +2530,16 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           selectedQuickSwitchProvider.id,
           selectedQuickSwitchProvider.name,
           effective.modelCatalog,
-          effective.supportsVision,
+          selectedQuickSwitchProvider.supportsVision,
           Object.fromEntries(
             Object.entries(
-              effective.modelCapabilities ?? {},
+              selectedQuickSwitchProvider.modelCapabilities ?? {},
             ).map(([model, capability]) => [
               model,
               capability.supportsVision === true,
             ]),
           ),
-          effective.visionRoutingModel,
+          selectedQuickSwitchProvider.visionRoutingModel,
           selectedQuickSwitchProvider.wireApi ?? undefined,
           selectedQuickSwitchProvider.supportsWebsockets,
           quickSwitchAccount.api_sync_model_catalog_to_codex === true,
@@ -2674,7 +2676,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             }));
             finalProviderPayload = {
               ...providerPayload,
-              ...buildCodexModelProviderAccountSnapshot(savedProvider, selectedManagedProviderApiKey?.name),
+              ...buildCodexModelProviderAccountSnapshot(savedProvider, selectedManagedProviderApiKey?.name, validation.apiKey),
               accountName: providerPayload.accountName || savedProvider.name,
             };
             try {
@@ -3474,7 +3476,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
         const canonicalBaseUrl = matchedProvider?.baseUrl.trim() || initialBaseUrl;
         const canonicalApiKey = matchedProviderKey?.apiKey.trim() || initialApiKey;
-        const effective = matchedProvider ?? null;
+        const effective = matchedProvider && matchedProviderKey
+          ? resolveCodexModelProviderKeyModels(matchedProvider, matchedProviderKey)
+          : null;
         const canonicalModelCatalog = effective?.modelCatalog ?? account.api_model_catalog ?? [];
         const canonicalContextWindows = effective?.modelContextWindows ?? account.api_model_context_windows;
 
@@ -3633,6 +3637,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           ? buildCodexModelProviderAccountSnapshot(
               accountProvider,
               selectedEditingManagedProviderApiKey?.name,
+              validation.apiKey,
             )
           : {
               ...providerPayload,
@@ -3673,7 +3678,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             const key = accountProvider.apiKeys.find((item) => item.apiKey.trim() === linked.openai_api_key?.trim());
             updatedAccountCount += await codexService.syncCodexApiKeyProviderAccounts({
               accountIds: [linkedId],
-              ...buildCodexModelProviderAccountSnapshot(accountProvider, key?.name),
+              ...buildCodexModelProviderAccountSnapshot(accountProvider, key?.name, linked.openai_api_key),
             });
           }
           if (updatedAccountCount > 0) {

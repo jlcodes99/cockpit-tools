@@ -2293,6 +2293,7 @@
     },
     "title": "Codex Account",
     "contextOverride": {
+      "apiKeyHint": "This overrides the whole instance. Set context per model for this key in Model Management.",
       "title": "Context management",
       "description": "Models, ordering, the default model, and reasoning levels follow the official catalog. Context is overridden only when you set it manually.",
       "dialogDescription": "This setting applies to every account in the current Codex instance and stays unchanged when accounts switch. Choose official settings, a preset, or Custom context.",
@@ -3262,6 +3263,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Manage this key's models",
+      "discardKeyChanges": "Changes to this key have not been saved. Discard them and switch keys?",
+      "discardKeyChangesTitle": "Switch API key",
+      "keyModelHint": "Each API key has its own model catalog, context and compaction settings.",
+      "keyNotFound": "This API key is not in Model Providers yet.",
+      "compactLimit": "Auto compact limit",
+      "compactionMode": "Compaction mode",
+      "compactionAuto": "Auto",
+      "compactionRemote": "Remote",
+      "compactionLocal": "Local",
       "keyModels": {
         "title": "Key models",
         "override": "Override",

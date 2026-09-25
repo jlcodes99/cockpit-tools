@@ -6,6 +6,7 @@ import { AccountTagFilterDropdown } from "../AccountTagFilterDropdown";
 import { PaginationControls } from "../PaginationControls";
 import { CodexModelContextWindowTable } from "./CodexModelContextWindowTable";
 import { resolveNewApiQuotaSnapshot } from "../../services/modelProviderUsageService";
+import { resolveCodexModelProviderKeyModels } from "../../services/codexModelProviderService";
 import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, DEEPSEEK_API_PROVIDER_ID, resolveCodexApiProviderPresetId } from "../../utils/codexProviderPresets";
 import { normalizeApiKeyFunOfficialUrl } from "../../utils/apikeyFunLinks";
 import { getCodexSubscriptionPresentation } from "../../types/codex";
@@ -2135,6 +2136,46 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                                     autoComplete="off"
                                     disabled={saving}
                                   />
+                                  <label>{t('codex.modelProviders.fields.modelCatalog', '此 API Key 的模型目录')}</label>
+                                  <textarea
+                                    className="form-input"
+                                    rows={4}
+                                    value={editingApiKey.modelCatalogText}
+                                    onChange={(event) => setEditingApiKey((current) => current
+                                      ? { ...current, modelCatalogText: event.target.value } : current)}
+                                    disabled={saving}
+                                  />
+                                  <CodexModelContextWindowTable
+                                    models={parseModelCatalogText(editingApiKey.modelCatalogText)}
+                                    drafts={editingApiKey.modelContextWindowsDraft}
+                                    onChange={(model, value) => setEditingApiKey((current) => current
+                                      ? { ...current, modelContextWindowsDraft: {
+                                          ...current.modelContextWindowsDraft, [model]: value,
+                                        } } : current)}
+                                    disabled={saving}
+                                  />
+                                  {parseModelCatalogText(editingApiKey.modelCatalogText).map((model) => (
+                                    <label key={model}>
+                                      {model} · {t('codex.modelProviders.compactLimit', '自动压缩阈值')}
+                                      <input className="form-input" type="number" min="1"
+                                        value={editingApiKey.modelAutoCompactDraft[model] ?? ''}
+                                        onChange={(event) => setEditingApiKey((current) => current
+                                          ? { ...current, modelAutoCompactDraft: {
+                                              ...current.modelAutoCompactDraft, [model]: event.target.value,
+                                            } } : current)} disabled={saving} />
+                                    </label>
+                                  ))}
+                                  <label>
+                                    {t('codex.modelProviders.compactionMode', '压缩方式')}
+                                    <select className="form-input" value={editingApiKey.compactionMode}
+                                      onChange={(event) => setEditingApiKey((current) => current
+                                        ? { ...current, compactionMode: event.target.value as 'auto' | 'remote' | 'local' } : current)}
+                                      disabled={saving}>
+                                      <option value="auto">{t('codex.modelProviders.compactionAuto', '自动')}</option>
+                                      <option value="remote">{t('codex.modelProviders.compactionRemote', '远程')}</option>
+                                      <option value="local">{t('codex.modelProviders.compactionLocal', '本地')}</option>
+                                    </select>
+                                  </label>
                                 </div>
                                 <div className="codex-provider-key-edit-actions">
                                   <button
@@ -2181,6 +2222,14 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                                 originalApiKey: item.apiKey,
                                 apiKey: item.apiKey,
                                 name: item.name,
+                                modelCatalogText: resolveCodexModelProviderKeyModels(currentEditingProvider, item).modelCatalog.join('\n'),
+                                modelContextWindowsDraft: Object.fromEntries(Object.entries(
+                                  resolveCodexModelProviderKeyModels(currentEditingProvider, item).modelContextWindows,
+                                ).map(([model, value]) => [model, String(value)])),
+                                modelAutoCompactDraft: Object.fromEntries(Object.entries(
+                                  resolveCodexModelProviderKeyModels(currentEditingProvider, item).modelAutoCompactTokenLimits,
+                                ).map(([model, value]) => [model, String(value)])),
+                                compactionMode: resolveCodexModelProviderKeyModels(currentEditingProvider, item).compactionMode,
                               })
                             }
                             disabled={saving}
@@ -2918,8 +2967,8 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
             key: "modelCatalog",
             label: t("codex.modelProviders.modelCatalog", "模型"),
             value:
-              (provider.modelCatalog?.length ?? 0) > 0
-                ? (provider.modelCatalog ?? []).join(", ")
+              provider.apiKeys.length > 0
+                ? provider.apiKeys.map((key) => `${key.name || key.id}: ${resolveCodexModelProviderKeyModels(provider, key).modelCatalog.length}`).join(', ')
                 : t("codex.modelProviders.modelCatalogEmpty", "未配置模型目录"),
             rawKey: "modelCatalog",
           },

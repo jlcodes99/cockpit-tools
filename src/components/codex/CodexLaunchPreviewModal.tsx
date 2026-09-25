@@ -56,7 +56,16 @@ import {
   syncExperimentalModelsWithRouting,
   toggleRouteModelInRoutes,
 } from "./CodexModelRoutingFields";
-import { forceRefreshCodexTokens } from "../../services/codexService";
+import { forceRefreshCodexTokens, syncCodexApiKeyProviderAccounts } from "../../services/codexService";
+import {
+  listCodexModelProviders,
+  normalizeCodexModelProviderBaseUrl,
+  resolveCodexModelProviderKeyModels,
+  updateCodexModelProviderApiKeyModels,
+  type CodexModelProvider,
+  type CodexModelProviderApiKey,
+} from "../../services/codexModelProviderService";
+import { buildCodexModelProviderAccountSnapshot } from "../../utils/codexModelProviderAccountSync";
 import { requestCodexOpenAddAccount } from "../../utils/codexAddAccountRequest";
 import { areCodexModelRoutingsEqual, resolveRoutingCatalog } from "../../utils/codexModelRoutingValue";
 import {
@@ -105,6 +114,23 @@ import { CodexSessionVisibilityRepairModal } from "./CodexSessionVisibilityRepai
 import "./CodexLaunchPreviewModal.css";
 
 export const DEFAULT_CODEX_INSTANCE_ID = "__default__";
+
+function definitionsForProviderKey(
+  provider: CodexModelProvider,
+  apiKey: CodexModelProviderApiKey,
+): CodexExperimentalModelDefinition[] {
+  const config = resolveCodexModelProviderKeyModels(provider, apiKey);
+  return config.modelCatalog.map((modelId) => {
+    const saved = config.modelDefinitions?.find((model) => model.model_id === modelId);
+    return {
+      model_id: modelId,
+      display_name: saved?.display_name || modelId,
+      reasoning_efforts: saved?.reasoning_efforts,
+      context_window: config.modelContextWindows[modelId],
+      auto_compact_token_limit: config.modelAutoCompactTokenLimits[modelId],
+    };
+  });
+}
 
 export interface CodexLaunchPreviewFact {
   label: string;
@@ -241,6 +267,9 @@ export function CodexLaunchPreviewModal({
   const [executing, setExecuting] = useState<"switch" | "launch" | null>(null);
   const [repairOpen, setRepairOpen] = useState(false);
   const [modelConfigOpen, setModelConfigOpen] = useState(false);
+  const [modelKeyProvider, setModelKeyProvider] = useState<CodexModelProvider | null>(null);
+  const [modelKeyId, setModelKeyId] = useState<string | null>(null);
+  const [modelKeyCompactionMode, setModelKeyCompactionMode] = useState<'auto' | 'remote' | 'local'>('auto');
   const [contextConfigOpen, setContextConfigOpen] = useState(false);
   const [forceRefreshing, setForceRefreshing] = useState(false);
   const [manualRefreshResult, setManualRefreshResult] = useState<{
@@ -1109,7 +1138,30 @@ export function CodexLaunchPreviewModal({
     );
 
   const openModelConfig = useCallback(async () => {
-    if (configBusy || unavailable) return;
+    if (configBusy || (unavailable && !(account && isCodexApiKeyAccount(account)))) return;
+    if (account && isCodexApiKeyAccount(account)) {
+      const providers = await listCodexModelProviders();
+      const accountBaseUrl = normalizeCodexModelProviderBaseUrl(account.api_base_url ?? '');
+      const provider = providers.find((item) =>
+        normalizeCodexModelProviderBaseUrl(item.baseUrl) === accountBaseUrl &&
+        item.apiKeys.some((key) => key.apiKey === account.openai_api_key),
+      );
+      const apiKey = provider?.apiKeys.find((item) => item.apiKey === account.openai_api_key);
+      if (!provider || !apiKey) {
+        setError(t('codex.modelProviders.keyNotFound', '当前 API Key 尚未加入模型供应商管理'));
+        return;
+      }
+      setModelConfigSnapshot({ enabled: catalogEnabled, models, defaultModelId });
+      setModelKeyProvider(provider);
+      setModelKeyId(apiKey.id);
+      setModelKeyCompactionMode(apiKey.compactionMode ?? 'auto');
+      setModels(definitionsForProviderKey(provider, apiKey));
+      setDefaultModelId(apiKey.defaultModelId ?? resolveCodexModelProviderKeyModels(provider, apiKey).modelCatalog[0] ?? null);
+      setNotice(null);
+      setError(null);
+      setModelConfigOpen(true);
+      return;
+    }
     // 混合模型路由需要实例自己的可见模型清单，但不应替用户开启「模型管理」：
     // 这种情况下只打开编辑器维护路由模型，开关状态保持不变。
     if (!catalogEnabled && !routingEnabled) {
@@ -1143,6 +1195,7 @@ export function CodexLaunchPreviewModal({
   }, [
     configBusy,
     catalogEnabled,
+    account,
     defaultModelId,
     models,
     routingEnabled,
@@ -1180,10 +1233,48 @@ export function CodexLaunchPreviewModal({
   );
 
   const closeModelConfig = useCallback(
-    (apply: boolean) => {
+    async (apply: boolean) => {
+      if (apply && modelKeyProvider && modelKeyId) {
+        const catalog = models.map((model) => model.model_id);
+        const windows = Object.fromEntries(models.filter((model) => model.context_window)
+          .map((model) => [model.model_id, model.context_window!]));
+        const limits = Object.fromEntries(models.filter((model) => model.auto_compact_token_limit)
+          .map((model) => [model.model_id, model.auto_compact_token_limit!]));
+        try {
+          setSaving(true);
+          const savedProvider = await updateCodexModelProviderApiKeyModels(
+            modelKeyProvider.id, modelKeyId,
+            { modelCatalog: catalog, modelContextWindows: windows,
+              modelAutoCompactTokenLimits: limits, modelDefinitions: models,
+              defaultModelId, compactionMode: modelKeyCompactionMode },
+          );
+          const selectedKey = savedProvider.apiKeys.find((key) => key.id === modelKeyId);
+          if (selectedKey) {
+            for (const linked of accounts.filter((item) =>
+              item.openai_api_key === selectedKey.apiKey &&
+              normalizeCodexModelProviderBaseUrl(item.api_base_url ?? '') ===
+                normalizeCodexModelProviderBaseUrl(savedProvider.baseUrl),
+            )) {
+              await syncCodexApiKeyProviderAccounts({
+                accountIds: [linked.id],
+                ...buildCodexModelProviderAccountSnapshot(savedProvider, selectedKey.name, selectedKey.apiKey),
+                apiSyncModelCatalogToCodex: true,
+              });
+            }
+          }
+          setModelKeyProvider(savedProvider);
+          await fetchAccounts();
+          setNotice(t('codex.api.modelCatalog.restartHint', '模型目录已更新，重启 Codex 后生效'));
+        } catch (saveError) {
+          setError(String(saveError).replace(/^Error:\s*/, ''));
+          return;
+        } finally {
+          setSaving(false);
+        }
+      }
       if (apply) {
         // 混合模型路由下这里只应用路由模型改动，不替用户打开「模型管理」。
-        if (!routingEnabled) {
+        if (!routingEnabled && !modelKeyProvider) {
           setCatalogEnabled(true);
         }
       } else if (modelConfigSnapshot) {
@@ -1191,11 +1282,18 @@ export function CodexLaunchPreviewModal({
         setModels(modelConfigSnapshot.models);
         setDefaultModelId(modelConfigSnapshot.defaultModelId);
       }
+      if (modelKeyProvider && modelConfigSnapshot) {
+        setCatalogEnabled(modelConfigSnapshot.enabled);
+        setModels(modelConfigSnapshot.models);
+        setDefaultModelId(modelConfigSnapshot.defaultModelId);
+      }
+      setModelKeyProvider(null);
+      setModelKeyId(null);
       setModelConfigSnapshot(null);
       setModelConfigOpen(false);
       setModelsError(null);
     },
-    [modelConfigSnapshot, routingEnabled],
+    [accounts, defaultModelId, fetchAccounts, modelConfigSnapshot, modelKeyCompactionMode, modelKeyId, modelKeyProvider, models, routingEnabled, setError, t],
   );
 
   const openContextConfig = useCallback(() => {
@@ -1998,10 +2096,12 @@ export function CodexLaunchPreviewModal({
                     {t("codex.contextOverride.title", "上下文管理")}
                   </h3>
                   <p>
-                    {t(
-                      "codex.contextOverride.dialogDescription",
-                      "对当前 Codex 实例的所有账号生效，切号后保持不变；可选择跟随官方、预设或自定义。",
-                    )}
+                    {isApiKeySubject
+                      ? t('codex.contextOverride.apiKeyHint', '此处是实例全局覆盖。当前 Key 的逐模型上下文请在“模型管理”中设置。')
+                      : t(
+                          "codex.contextOverride.dialogDescription",
+                          "对当前 Codex 实例的所有账号生效，切号后保持不变；可选择跟随官方、预设或自定义。",
+                        )}
                   </p>
                   <div className="codex-launch-preview-tool-meta">
                     <span className={contextOverrideEnabled ? "is-enabled" : ""}>
@@ -2044,14 +2144,16 @@ export function CodexLaunchPreviewModal({
                   <div className="codex-launch-preview-tool-copy">
                     <h3>{t("codex.modelManagement.title", "模型管理")}</h3>
                     <p>
-                      {catalogEnabled
+                      {isApiKeySubject
+                        ? t('codex.modelProviders.keyModelHint', '每把 API Key 使用独立的模型目录和上下文配置。')
+                        : catalogEnabled
                         ? t("codex.modelManagement.enabledDescription")
                         : t(
                             "codex.modelManagement.disabledDescription",
                             "默认关闭；关闭时模型列表、顺序、默认模型和推理强度均跟随官方。",
                           )}
                     </p>
-                    {routingEnabled && (
+                    {routingEnabled && !isApiKeySubject && (
                       <p>
                         {t(
                           "codex.modelManagement.routingManagedHint",
@@ -2060,36 +2162,39 @@ export function CodexLaunchPreviewModal({
                       </p>
                     )}
                     <div className="codex-launch-preview-tool-meta">
-                      <span className={catalogEnabled ? "is-enabled" : ""}>
+                      <span className={catalogEnabled || isApiKeySubject ? "is-enabled" : ""}>
                         {loading
                           ? t("common.loading", "加载中...")
-                          : catalogEnabled
+                          : isApiKeySubject
+                            ? (account?.account_name || t('codex.modelProviders.keyModelHint', '当前 API Key'))
+                            : catalogEnabled
                             ? t("codex.modelManagement.enabled", "已开启")
                             : t("codex.modelManagement.disabled", "跟随官方")}
                       </span>
-                      {catalogEnabled && (
+                      {catalogEnabled && !isApiKeySubject && (
                         <span>
                           {t("codex.launchPreview.defaultModel", "默认模型")}：
                           {defaultModelLabel}
                         </span>
                       )}
-                      {models.length > 0 && (
+                      {(isApiKeySubject ? (account?.api_model_catalog?.length ?? 0) : models.length) > 0 && (
                         <span>
                           {t("codex.api.modelCatalog.count", {
-                            count: models.length,
+                            count: isApiKeySubject ? (account?.api_model_catalog?.length ?? 0) : models.length,
                             defaultValue: "{{count}} 个模型",
                           })}
                         </span>
                       )}
                     </div>
-                    {!loading && models.length > 0 && (
+                    {!loading && (isApiKeySubject ? (account?.api_model_catalog?.length ?? 0) : models.length) > 0 && (
                       <div className="codex-launch-preview-model-chips">
-                        {models.slice(0, 6).map((model) => (
+                        {(isApiKeySubject ? (account?.api_model_catalog ?? []).map((modelId) => ({ model_id: modelId, display_name: modelId })) : models).slice(0, 6).map((model) => (
                           <span key={model.model_id} title={model.model_id}>
                             {model.display_name || model.model_id}
                           </span>
                         ))}
-                        {models.length > 6 && <span>+{models.length - 6}</span>}
+                        {(isApiKeySubject ? (account?.api_model_catalog?.length ?? 0) : models.length) > 6 &&
+                          <span>+{(isApiKeySubject ? (account?.api_model_catalog?.length ?? 0) : models.length) - 6}</span>}
                       </div>
                     )}
                   </div>
@@ -2097,9 +2202,11 @@ export function CodexLaunchPreviewModal({
                     type="button"
                     className="btn btn-outline btn-sm codex-launch-preview-tool-action"
                     onClick={() => void openModelConfig()}
-                    disabled={configBusy || Boolean(unavailable)}
+                    disabled={configBusy || (Boolean(unavailable) && !isApiKeySubject)}
                   >
-                    {catalogEnabled
+                    {isApiKeySubject
+                      ? t('codex.modelProviders.manageKeyModels', '管理此 Key 模型')
+                      : catalogEnabled
                       ? t("codex.modelManagement.manage", "管理模型")
                       : t("codex.modelManagement.enable", "开启模型管理")}
                   </button>
@@ -2478,7 +2585,9 @@ export function CodexLaunchPreviewModal({
               <div>
                 <h2>{t("codex.modelManagement.title", "模型管理")}</h2>
                 <p>
-                  {routingEnabled && !catalogEnabled
+                  {modelKeyProvider
+                    ? t('codex.modelProviders.keyModelHint', '模型目录和上下文按 API Key 单独保存；切换 Key 后会载入对应配置。')
+                    : routingEnabled && !catalogEnabled
                     ? t(
                         "codex.modelManagement.routingManagedHint",
                         "混合模型路由只在实例运行时临时使用这份模型目录，停止后自动恢复；它不会改动这里的开关状态。",
@@ -2497,20 +2606,65 @@ export function CodexLaunchPreviewModal({
               </button>
             </div>
             <div className="modal-body">
+              {modelKeyProvider && (
+                <div className="form-group">
+                  <label htmlFor="codex-model-key-select">API Key</label>
+                  <select id="codex-model-key-select" className="form-input" value={modelKeyId ?? ''}
+                    onChange={(event) => {
+                      const key = modelKeyProvider.apiKeys.find((item) => item.id === event.target.value);
+                      if (!key) return;
+                      const currentKey = modelKeyProvider.apiKeys.find((item) => item.id === modelKeyId);
+                      const currentModels = currentKey ? definitionsForProviderKey(modelKeyProvider, currentKey) : [];
+                      const changed = currentKey && (
+                        JSON.stringify(models) !== JSON.stringify(currentModels) ||
+                        defaultModelId !== (currentKey.defaultModelId ?? resolveCodexModelProviderKeyModels(modelKeyProvider, currentKey).modelCatalog[0] ?? null) ||
+                        modelKeyCompactionMode !== (currentKey.compactionMode ?? 'auto')
+                      );
+                      void (async () => {
+                        if (changed && !await confirmDialog(
+                          t('codex.modelProviders.discardKeyChanges', '当前 Key 有未保存的模型修改，切换后将丢弃。继续切换？'),
+                          { title: t('codex.modelProviders.discardKeyChangesTitle', '切换 API Key'),
+                            okLabel: t('common.confirm', '继续'), cancelLabel: t('common.cancel', '取消') },
+                        )) return;
+                        setModelKeyId(key.id);
+                        setModelKeyCompactionMode(key.compactionMode ?? 'auto');
+                        setModels(definitionsForProviderKey(modelKeyProvider, key));
+                        setDefaultModelId(key.defaultModelId ?? resolveCodexModelProviderKeyModels(modelKeyProvider, key).modelCatalog[0] ?? null);
+                      })();
+                    }} disabled={configBusy}>
+                    {modelKeyProvider.apiKeys.map((key) => (
+                      <option key={key.id} value={key.id}>
+                        {key.name || key.id} · {resolveCodexModelProviderKeyModels(modelKeyProvider, key).modelCatalog.length} {t('codex.modelProviders.modelCatalog', '模型')}
+                      </option>
+                    ))}
+                  </select>
+                  <label htmlFor="codex-model-key-compaction">{t('codex.modelProviders.compactionMode', '压缩方式')}</label>
+                  <select id="codex-model-key-compaction" className="form-input"
+                    value={modelKeyCompactionMode}
+                    onChange={(event) => setModelKeyCompactionMode(event.target.value as 'auto' | 'remote' | 'local')}
+                    disabled={configBusy}>
+                    <option value="auto">{t('codex.modelProviders.compactionAuto', '自动')}</option>
+                    <option value="remote">{t('codex.modelProviders.compactionRemote', '远程')}</option>
+                    <option value="local">{t('codex.modelProviders.compactionLocal', '本地')}</option>
+                  </select>
+                </div>
+              )}
               <ModalErrorMessage
-                message={catalogEnabled ? modelsError : null}
+                message={catalogEnabled || modelKeyProvider ? modelsError : null}
                 scrollKey={errorScrollKey}
               />
               <CodexExperimentalModelEditor
                 models={models}
                 defaultModelId={defaultModelId}
-                resetModels={loadedConfig?.experimental_model_catalog_reset_models}
-                resetDefaultModelId={
-                  loadedConfig?.experimental_model_catalog_reset_default_model_id ?? null
-                }
+                resetModels={modelKeyProvider && modelKeyId
+                  ? definitionsForProviderKey(modelKeyProvider, modelKeyProvider.apiKeys.find((key) => key.id === modelKeyId)!)
+                  : loadedConfig?.experimental_model_catalog_reset_models}
+                resetDefaultModelId={modelKeyProvider && modelKeyId
+                  ? modelKeyProvider.apiKeys.find((key) => key.id === modelKeyId)?.defaultModelId ?? null
+                  : loadedConfig?.experimental_model_catalog_reset_default_model_id ?? null}
                 mode="inline"
-                availableChannels={availableChannels}
-                resolveModelSource={resolveModelSource}
+                availableChannels={modelKeyProvider ? [] : availableChannels}
+                resolveModelSource={modelKeyProvider ? undefined : resolveModelSource}
                 onChange={(nextModels) => {
                   setModels(nextModels);
                   setNotice(null);
@@ -2523,20 +2677,24 @@ export function CodexLaunchPreviewModal({
                 }}
                 onValidationChange={setModelsError}
                 onModelRemoved={(removedId) => {
-                  setRoutingRoutes((prevRoutes) =>
-                    toggleRouteModelInRoutes(prevRoutes, removedId, accounts, "remove"),
-                  );
+                  if (!modelKeyProvider) {
+                    setRoutingRoutes((prevRoutes) =>
+                      toggleRouteModelInRoutes(prevRoutes, removedId, accounts, "remove"),
+                    );
+                  }
                 }}
                 onModelAdded={(addedId) => {
-                  setRoutingRoutes((prevRoutes) =>
-                    toggleRouteModelInRoutes(prevRoutes, addedId, accounts, "add"),
-                  );
+                  if (!modelKeyProvider) {
+                    setRoutingRoutes((prevRoutes) =>
+                      toggleRouteModelInRoutes(prevRoutes, addedId, accounts, "add"),
+                    );
+                  }
                 }}
                 disabled={configBusy}
               />
             </div>
             <div className="modal-footer">
-              {catalogEnabled && (
+              {catalogEnabled && !modelKeyProvider && (
                 <button
                   type="button"
                   className="btn btn-outline"
@@ -2563,7 +2721,7 @@ export function CodexLaunchPreviewModal({
                 type="button"
                 className="btn btn-primary"
                 onClick={() => closeModelConfig(true)}
-                disabled={configBusy || (catalogEnabled && Boolean(modelsError))}
+                disabled={configBusy || ((catalogEnabled || Boolean(modelKeyProvider)) && Boolean(modelsError))}
               >
                 {t("codex.launchPreview.applyModelConfig")}
               </button>
