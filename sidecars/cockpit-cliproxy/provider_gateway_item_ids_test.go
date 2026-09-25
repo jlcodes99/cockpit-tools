@@ -155,3 +155,21 @@ func TestProviderGatewayItemIDRewriterLeavesOtherPayloadsUntouched(t *testing.T)
 		t.Fatalf("[DONE] frame changed: %s", got)
 	}
 }
+
+func TestProviderGatewayItemIDRewriterPreservesPrePrefixedIDAcrossStreamEvents(t *testing.T) {
+	rewriter := newProviderGatewayItemIDRewriter()
+	added := []byte(`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"msg_openrouter_123","type":"message","role":"assistant","content":[]}}`)
+	done := []byte(`data: {"type":"response.output_item.done","output_index":0,"item":{"id":"msg_openrouter_123","type":"message","role":"assistant","content":[{"type":"text","text":"hello"}]}}`)
+
+	gotAdded := rewriter.RewriteSSEFrame(added)
+	idAdded := framePayload(t, gotAdded, "item.id").String()
+	if idAdded != "msg_openrouter_123" {
+		t.Fatalf("added id = %q, want %q", idAdded, "msg_openrouter_123")
+	}
+
+	gotDone := rewriter.RewriteSSEFrame(done)
+	idDone := framePayload(t, gotDone, "item.id").String()
+	if idDone != "msg_openrouter_123" {
+		t.Fatalf("done id = %q, want same id %q; got frame=%s", idDone, "msg_openrouter_123", gotDone)
+	}
+}

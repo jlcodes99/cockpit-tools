@@ -169,13 +169,18 @@ fn maintain_local_access_profile(
     {
         provider["supports_websockets"] = value(supports_websockets);
     }
-    if old_base != next_base
-        && doc
+    if old_base != next_base {
+        if let Some(existing) = doc
             .get("experimental_realtime_ws_base_url")
             .and_then(|item| item.as_str())
-            == Some(old_base.as_str())
-    {
-        doc["experimental_realtime_ws_base_url"] = value(next_base);
+        {
+            let is_local = url::Url::parse(existing).ok().is_some_and(|u| {
+                matches!(u.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+            });
+            if is_local {
+                doc["experimental_realtime_ws_base_url"] = value(next_base);
+            }
+        }
     }
     let config = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     let original_config =
