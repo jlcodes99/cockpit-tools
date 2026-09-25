@@ -18,6 +18,7 @@ import type {
   CodexSessionVisibilityRepairSummary,
 } from "../../types/codex";
 import { formatCodexSessionVisibilityRepairMessage } from "../../utils/codexSessionVisibility";
+import { CodexHistoryHealthPanel } from "./CodexHistoryHealthPanel";
 
 type RepairStatus = "idle" | "previewing" | "previewed" | "running" | "success";
 type RepairScope = "all" | "selected";
@@ -30,6 +31,7 @@ interface CodexSessionVisibilityRepairModalProps {
   open: boolean;
   description?: ReactNode;
   selectedSessionIds?: string[];
+  selectedSessionTitle?: string;
   totalSessionCount?: number;
   onClose: () => void;
   onRepaired?: (
@@ -204,6 +206,7 @@ export function CodexSessionVisibilityRepairModal({
   open,
   description,
   selectedSessionIds = [],
+  selectedSessionTitle,
   totalSessionCount = 0,
   onClose,
   onRepaired,
@@ -908,6 +911,9 @@ export function CodexSessionVisibilityRepairModal({
               <Search size={14} />
               <span>{result}</span>
             </div>
+          )}
+          {uniqueSelectedSessionIds.length === 1 && (
+            <CodexHistoryHealthPanel instanceId={selectedInstanceId} threadId={uniqueSelectedSessionIds[0]} threadTitle={selectedSessionTitle} disabled={running} />
           )}
           {encryptedContentWarningVisible && (
             <div className="codex-api-switch-notice-repair-status is-warning">
