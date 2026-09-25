@@ -723,10 +723,13 @@
 }
 
 .mini-progress-track {
-  flex: 1;
-  height: 3px; /* Adjusted to 3px */
+  /* `flex: 1` (flex-basis: 0%) collapses the height to 0 inside
+     `.mini-quota-row-stacked` (flex-direction: column), hiding the bar. */
+  flex: none;
+  height: 4px;
+  margin-top: 4px;
   background: var(--bg-tertiary);
-  border-radius: 1.5px;
+  border-radius: 2px;
   overflow: hidden;
 }
 
