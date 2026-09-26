@@ -783,7 +783,9 @@ export function CodexLaunchPreviewModal({
           experimentalModelCatalogDefaultModelId: nextCatalog.defaultModelId,
         });
         saved = result.quickConfig;
-        setLoadedInstanceKey(codexLaunchPreviewInstanceConfigKey(result.instance));
+        if (session === configSession.current) {
+          setLoadedInstanceKey(codexLaunchPreviewInstanceConfigKey(result.instance));
+        }
         useCodexInstanceStore.setState({
           instances: useCodexInstanceStore.getState().instances.map((item) =>
             item.id === result.instance.id ? result.instance : item),
@@ -799,6 +801,9 @@ export function CodexLaunchPreviewModal({
         );
       }
       rememberCodexLaunchPreviewConfig(instanceId, saved);
+      // A dispatched write may finish after Close. Keep shared snapshots current,
+      // but do not revive the dismissed preview or continue its launch/switch.
+      if (session !== configSession.current) return false;
       applyLoadedConfig(saved);
       setRoutingRoutes(normalizedRoutingRoutes);
       setNotice(routingDirty
@@ -866,8 +871,9 @@ export function CodexLaunchPreviewModal({
   const handleExecute = useCallback(
     async (launchAfterSwitch: boolean) => {
       if (configBusy) return;
+      const session = configSession.current;
       const saved = await persistDraft();
-      if (!saved) return;
+      if (!saved || session !== configSession.current) return;
       setExecuting(launchAfterSwitch ? "launch" : "switch");
       setNotice(null);
       setError(null);
@@ -1170,9 +1176,10 @@ export function CodexLaunchPreviewModal({
       ) {
         return;
       }
+      const session = configSession.current;
       if (configReady) {
         const saved = await persistDraft();
-        if (!saved) return;
+        if (!saved || session !== configSession.current) return;
       }
       setChangingInstance(true);
       setNotice(null);
@@ -1300,6 +1307,7 @@ export function CodexLaunchPreviewModal({
         defaultModelId,
       );
       rememberCodexLaunchPreviewConfig(instanceId, saved);
+      if (session !== configSession.current) return;
       applyLoadedConfig(saved);
       setContextConfigSnapshot(null);
       setContextConfigOpen(false);
