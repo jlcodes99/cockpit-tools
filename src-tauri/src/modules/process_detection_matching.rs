@@ -1347,10 +1347,13 @@ fn get_managed_codex_windows_app_user_data_dir(codex_home: &str) -> Option<Strin
 #[cfg(target_os = "windows")]
 fn get_default_codex_windows_app_user_data_dirs(default_codex_home: &str) -> HashSet<String> {
     let mut dirs = HashSet::new();
-    if let Some(app_dir) = get_default_codex_windows_app_user_data_dir() {
-        let normalized = normalize_path_for_compare(&app_dir);
-        if !normalized.is_empty() {
-            dirs.insert(normalized);
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let base = std::path::PathBuf::from(appdata).join("Codex");
+        for app_dir in [base.clone(), base.join("web").join("Codex")] {
+            let normalized = normalize_path_for_compare(&app_dir.to_string_lossy());
+            if !normalized.is_empty() {
+                dirs.insert(normalized);
+            }
         }
     }
     if let Some(app_dir) = get_managed_codex_windows_app_user_data_dir(default_codex_home) {

@@ -1682,7 +1682,7 @@ fn collect_codex_process_entries_from_powershell(
     let mut entries: Vec<(u32, Option<String>)> = Vec::new();
     let expected = escape_powershell_single_quoted(expected_exe_path);
     let script = format!(
-        r#"$processNames=@('ChatGPT.exe','Codex.exe');
+        r#"$processNames=@('ChatGPT.exe');
 $expectedRaw='{expected}';
 function Normalize-ExePath([string]$path) {{
   if ([string]::IsNullOrWhiteSpace($path)) {{ return $null }}
@@ -1799,6 +1799,9 @@ Get-CimInstance Win32_Process |
         };
         let parent_pid = parent_pid_str.parse::<u32>().ok();
         let lower = cmdline.to_lowercase();
+        if lower.trim().is_empty() {
+            continue;
+        }
         let dir = extract_user_data_dir_from_command_line(cmdline);
         if !lower.is_empty()
             && (is_helper_command_line(&lower) || lower.contains("crashpad_handler"))
@@ -1907,11 +1910,7 @@ fn collect_codex_process_entries_from_sysinfo_fallback(
             .and_then(|value| value.to_str())
             .unwrap_or("")
             .to_lowercase();
-        if name != "codex.exe"
-            && name != "chatgpt.exe"
-            && !exe_path.ends_with("\\codex.exe")
-            && !exe_path.ends_with("\\chatgpt.exe")
-        {
+        if name != "chatgpt.exe" && !exe_path.ends_with("\\chatgpt.exe") {
             continue;
         }
         let (resolved_exe, _) = resolve_windows_process_exe_for_match(process);
@@ -1926,6 +1925,9 @@ fn collect_codex_process_entries_from_sysinfo_fallback(
             .map(|arg| arg.to_string_lossy().to_lowercase())
             .collect::<Vec<String>>()
             .join(" ");
+        if args_line.trim().is_empty() {
+            continue;
+        }
         let dir = extract_user_data_dir(process.cmd());
         if !args_line.is_empty()
             && (is_helper_command_line(&args_line) || args_line.contains("crashpad_handler"))
@@ -1951,13 +1953,15 @@ fn collect_codex_process_entries_from_sysinfo_fallback(
 }
 
 #[cfg(target_os = "windows")]
-fn collect_codex_main_process_pids_from_sysinfo_fast(expected_exe_path: &str) -> Vec<u32> {
+fn collect_codex_main_process_entries_from_sysinfo_fast(
+    expected_exe_path: &str,
+) -> Vec<(u32, Option<String>)> {
     let expected = normalize_path_for_compare(expected_exe_path);
     if expected.is_empty() {
         return Vec::new();
     }
 
-    let mut pids = Vec::new();
+    let mut entries = Vec::new();
     let mut system = System::new();
     system.refresh_processes_specifics(
         sysinfo::ProcessesToUpdate::All,
@@ -1974,7 +1978,7 @@ fn collect_codex_main_process_pids_from_sysinfo_fast(expected_exe_path: &str) ->
         }
 
         let name = process.name().to_string_lossy().to_ascii_lowercase();
-        if name != "codex.exe" && name != "chatgpt.exe" {
+        if name != "chatgpt.exe" {
             continue;
         }
         let (resolved_exe, _) = resolve_windows_process_exe_for_match(process);
@@ -1989,6 +1993,9 @@ fn collect_codex_main_process_pids_from_sysinfo_fast(expected_exe_path: &str) ->
             .map(|arg| arg.to_string_lossy().to_ascii_lowercase())
             .collect::<Vec<String>>()
             .join(" ");
+        if args_line.trim().is_empty() {
+            continue;
+        }
         if !args_line.is_empty()
             && (is_helper_command_line(&args_line)
                 || args_line.contains("crashpad_handler")
@@ -1997,71 +2004,64 @@ fn collect_codex_main_process_pids_from_sysinfo_fast(expected_exe_path: &str) ->
             continue;
         }
 
-        pids.push(pid_u32);
+        entries.push((pid_u32, extract_user_data_dir(process.cmd())));
     }
-    pids.sort();
-    pids.dedup();
-    pids
+    entries.sort_by_key(|(pid, _)| *pid);
+    entries.dedup_by(|a, b| a.0 == b.0);
+    entries
 }
 
 #[cfg(target_os = "windows")]
-fn pick_started_codex_pid(pids: Vec<u32>, before_pids: &HashSet<u32>) -> Option<u32> {
-    let new_pids: Vec<u32> = pids
-        .iter()
-        .copied()
-        .filter(|pid| !before_pids.contains(pid))
-        .collect();
-    if let Some(pid) = pick_preferred_pid(new_pids) {
-        return Some(pid);
-    }
-    if before_pids.is_empty() {
-        return pick_preferred_pid(pids);
-    }
-    None
+fn codex_process_started_at_or_after(pid: u32, min_epoch_secs: u64) -> Option<bool> {
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing(),
+    );
+    let process = system.process(Pid::from(pid as usize))?;
+    Some(process.start_time() >= min_epoch_secs)
 }
 
 #[cfg(target_os = "windows")]
-fn wait_for_codex_default_start_pid_fast(
-    expected_exe_path: &str,
-    before_pids: &HashSet<u32>,
-    timeout: Duration,
-) -> Option<u32> {
-    let started = Instant::now();
-    let mut last_full_probe_at: Option<Instant> = None;
-    while started.elapsed() < timeout {
-        let fast_pids = collect_codex_main_process_pids_from_sysinfo_fast(expected_exe_path);
-        if let Some(pid) = pick_started_codex_pid(fast_pids, before_pids) {
-            crate::modules::logger::log_info(&format!(
-                "[Codex Start] fast pid probe matched pid={}, elapsed_ms={}",
-                pid,
-                started.elapsed().as_millis()
-            ));
-            return Some(pid);
-        }
-
-        if started.elapsed() >= Duration::from_secs(2)
-            && last_full_probe_at
-                .map(|last| last.elapsed() >= Duration::from_secs(2))
-                .unwrap_or(true)
-        {
-            last_full_probe_at = Some(Instant::now());
-            let full_pids = collect_codex_process_entries()
-                .into_iter()
-                .map(|(pid, _)| pid)
-                .collect::<Vec<u32>>();
-            if let Some(pid) = pick_started_codex_pid(full_pids, before_pids) {
-                crate::modules::logger::log_info(&format!(
-                    "[Codex Start] fallback full pid probe matched pid={}, elapsed_ms={}",
-                    pid,
-                    started.elapsed().as_millis()
-                ));
-                return Some(pid);
+fn merge_codex_process_entries(
+    primary: Vec<(u32, Option<String>)>,
+    fallback: Vec<(u32, Option<String>)>,
+) -> Vec<(u32, Option<String>)> {
+    let mut by_pid: HashMap<u32, Option<String>> = HashMap::new();
+    for (pid, dir) in primary.into_iter().chain(fallback) {
+        match by_pid.get_mut(&pid) {
+            Some(existing) => {
+                if existing.is_none() && dir.is_some() {
+                    *existing = dir;
+                }
+            }
+            None => {
+                by_pid.insert(pid, dir);
             }
         }
-
-        thread::sleep(Duration::from_millis(120));
     }
-    None
+    let mut entries = by_pid.into_iter().collect::<Vec<_>>();
+    entries.sort_by_key(|(pid, _)| *pid);
+    entries
+}
+
+#[cfg(target_os = "windows")]
+fn collect_codex_process_entries_complete() -> Vec<(u32, Option<String>)> {
+    let launch_path = match resolve_codex_launch_path() {
+        Ok(path) => path,
+        Err(err) => {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Probe] 启动路径未配置或无效，跳过完整 PID 匹配: {}",
+                err
+            ));
+            return Vec::new();
+        }
+    };
+    let expected = launch_path.to_string_lossy().to_string();
+    let powershell_entries = collect_codex_process_entries_from_powershell(&expected);
+    let sysinfo_entries = collect_codex_process_entries_from_sysinfo_fallback(&expected);
+    merge_codex_process_entries(powershell_entries, sysinfo_entries)
 }
 
 #[cfg(target_os = "windows")]

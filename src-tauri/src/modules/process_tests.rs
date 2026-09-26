@@ -444,8 +444,8 @@ mod codex_path_migration_tests {
 
     #[test]
     fn scan_rejects_codex_keyword_helper_executables() {
-        let exe_names = HashSet::from(["chatgpt.exe".to_string(), "codex.exe".to_string()]);
-        let keywords = vec!["chatgpt".to_string(), "codex".to_string()];
+        let exe_names = HashSet::from(["chatgpt.exe".to_string()]);
+        let keywords = vec!["chatgpt".to_string()];
 
         assert!(score_windows_candidate(
             Path::new("C:/Tools/CodexHelper.exe"),
@@ -534,13 +534,13 @@ mod tests {
     }
 
     #[test]
-    fn codex_signature_accepts_chatgpt_and_legacy_codex_executables() {
+    fn codex_signature_accepts_only_chatgpt_gui_executable() {
         let signature = windows_app_launch_signature("codex").expect("codex signature must exist");
         assert!(signature
             .exe_names
             .iter()
             .any(|name| name.eq_ignore_ascii_case("ChatGPT.exe")));
-        assert!(signature
+        assert!(!signature
             .exe_names
             .iter()
             .any(|name| name.eq_ignore_ascii_case("Codex.exe")));
@@ -560,6 +560,13 @@ mod tests {
             "codex",
             Path::new(
                 r"C:\Program Files\WindowsApps\OpenAI.Codex_26.707.9564.0_x64__2p2nqsd0c76g0\app\resources\codex.exe"
+            ),
+            signature,
+        ));
+        assert!(!running_app_candidate_matches(
+            "codex",
+            Path::new(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex_26.707.9564.0_x64__2p2nqsd0c76g0\app\Codex.exe"
             ),
             signature,
         ));
@@ -612,6 +619,67 @@ mod tests {
             solo_cn,
             TraePlatformKind::TraeSolo
         ));
+    }
+}
+
+#[cfg(test)]
+mod codex_windows_default_instance_tests {
+    use super::{
+        filter_codex_windows_default_process_entries, is_codex_windows_default_process_dir,
+        next_codex_default_start_candidate,
+    };
+    use std::collections::HashSet;
+
+    const DEFAULT_APP_DIR: &str = r"C:\Users\me\AppData\Roaming\Codex\web\Codex";
+    const MANAGED_APP_DIR: &str =
+        r"C:\Users\me\AppData\Roaming\.antigravity_cockpit\instances\codex-app-data\5184";
+
+    #[test]
+    fn classifies_default_processes_without_mixing_managed_instances() {
+        let default_dirs = HashSet::from([DEFAULT_APP_DIR.to_ascii_lowercase()]);
+        assert!(is_codex_windows_default_process_dir(None, &default_dirs));
+        assert!(is_codex_windows_default_process_dir(
+            Some(DEFAULT_APP_DIR),
+            &default_dirs
+        ));
+        assert!(!is_codex_windows_default_process_dir(
+            Some(MANAGED_APP_DIR),
+            &default_dirs
+        ));
+
+        let entries = vec![(4584, None), (5184, Some(MANAGED_APP_DIR.to_string()))];
+        let filtered = filter_codex_windows_default_process_entries(&entries, &default_dirs);
+        assert_eq!(filtered, vec![(4584, None)]);
+    }
+
+    #[test]
+    fn rejects_start_result_while_old_default_pid_is_still_present() {
+        let before = HashSet::from([4584]);
+        assert_eq!(
+            next_codex_default_start_candidate(&[4584], &before, None, 0),
+            (None, 0)
+        );
+        assert_eq!(
+            next_codex_default_start_candidate(&[4584, 18500], &before, None, 0),
+            (None, 0)
+        );
+        assert_eq!(
+            next_codex_default_start_candidate(&[18500], &before, None, 0),
+            (Some(18500), 1)
+        );
+    }
+
+    #[test]
+    fn requires_the_new_default_pid_to_remain_stable() {
+        let before = HashSet::from([4584]);
+        let (pid, streak) = next_codex_default_start_candidate(&[18500], &before, Some(18500), 1);
+        assert_eq!((pid, streak), (Some(18500), 2));
+        let (pid, streak) = next_codex_default_start_candidate(&[18500], &before, Some(18500), 2);
+        assert_eq!((pid, streak), (Some(18500), 3));
+        let (pid, streak) = next_codex_default_start_candidate(&[], &before, Some(18500), 3);
+        assert_eq!((pid, streak), (None, 0));
+        let (pid, streak) = next_codex_default_start_candidate(&[18500], &before, None, 0);
+        assert_eq!((pid, streak), (Some(18500), 1));
     }
 }
 

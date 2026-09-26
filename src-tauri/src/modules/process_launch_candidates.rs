@@ -653,9 +653,9 @@ fn score_windows_candidate(
         return Some(score);
     }
 
-    // The legacy Codex and current ChatGPT clients share this scanner. Do not
-    // accept helper executables whose paths merely contain one of those names.
-    if exe_names_lower.contains("chatgpt.exe") && exe_names_lower.contains("codex.exe") {
+    // The ChatGPT scanner must not accept helper executables whose paths merely
+    // contain "chatgpt" or the old "codex" GUI name.
+    if exe_names_lower.contains("chatgpt.exe") {
         return None;
     }
 
@@ -789,17 +789,12 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             supports_multi_instance: true,
         }),
         "codex" => Some(WindowsAppLaunchSignature {
-            label: "ChatGPT / Codex",
-            exe_names: &["ChatGPT.exe", "Codex.exe"],
+            label: "ChatGPT",
+            exe_names: &["ChatGPT.exe"],
             command_names: &["chatgpt", "codex"],
             protocol_names: &["chatgpt", "codex"],
-            display_keywords: &["chatgpt", "codex", "openai chatgpt", "openai codex"],
-            common_paths: &[
-                "ChatGPT\\ChatGPT.exe",
-                "OpenAI ChatGPT\\ChatGPT.exe",
-                "Codex\\Codex.exe",
-                "OpenAI Codex\\Codex.exe",
-            ],
+            display_keywords: &["chatgpt", "openai chatgpt"],
+            common_paths: &["ChatGPT\\ChatGPT.exe", "OpenAI ChatGPT\\ChatGPT.exe"],
             supports_multi_instance: true,
         }),
         "claude" => Some(WindowsAppLaunchSignature {
