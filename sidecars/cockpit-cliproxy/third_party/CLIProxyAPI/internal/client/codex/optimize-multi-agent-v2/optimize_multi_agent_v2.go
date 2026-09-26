@@ -790,6 +790,34 @@ func rewriteCodexAgentMessageInput(payload []byte) []byte {
 		if errSet != nil {
 			return payload
 		}
+		// Agent routing metadata is not part of a standard Responses message.
+		// Preserve it as text, rather than forwarding unknown top-level fields.
+		metadata := make(map[string]json.RawMessage)
+		for _, key := range []string{"author", "recipient", "id", "internal_chat_message_metadata_passthrough"} {
+			if value := item.Get(key); value.Exists() {
+				metadata[key] = json.RawMessage(value.Raw)
+				updated, errSet = sjson.DeleteBytes(updated, itemPath+"."+key)
+				if errSet != nil {
+					return payload
+				}
+			}
+		}
+		if len(metadata) > 0 {
+			encoded, err := json.Marshal(metadata)
+			if err != nil {
+				return payload
+			}
+			content := gjson.GetBytes(updated, itemPath+".content")
+			if !content.IsArray() {
+				return payload
+			}
+			updated, errSet = sjson.SetBytes(updated, itemPath+".content.-1", map[string]string{
+				"type": "input_text", "text": "Agent routing metadata: " + string(encoded),
+			})
+			if errSet != nil {
+				return payload
+			}
+		}
 	}
 	return updated
 }

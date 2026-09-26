@@ -80,13 +80,19 @@ func TestProviderGatewayOptimizesCodexMultiAgentV2RequestAndRestoresResponse(t *
 	}
 	var agentMessage gjson.Result
 	for _, item := range gjson.Get(forwarded, "input").Array() {
-		if item.Get("type").String() == "message" && item.Get("recipient").String() == "root" {
+		if item.Get("type").String() == "message" && item.Get("content.0.text").String() == "child task text" {
 			agentMessage = item
 			break
 		}
 	}
 	if !agentMessage.Exists() {
 		t.Fatalf("agent_message must be converted into a portable message item; body=%s", forwarded)
+	}
+	if agentMessage.Get("author").Exists() || agentMessage.Get("recipient").Exists() {
+		t.Fatalf("private routing fields must not reach strict Responses upstream: %s", forwarded)
+	}
+	if got := agentMessage.Get("content.1.text").String(); got != `Agent routing metadata: {"author":{"role":"user"},"recipient":"root"}` {
+		t.Fatalf("routing metadata must be preserved in content: %q", got)
 	}
 	if got := agentMessage.Get("content.0.type").String(); got != "input_text" {
 		t.Fatalf("agent_message content.0.type = %q, want input_text; body=%s", got, forwarded)

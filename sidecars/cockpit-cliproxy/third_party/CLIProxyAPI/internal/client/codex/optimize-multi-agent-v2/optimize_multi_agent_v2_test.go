@@ -501,11 +501,14 @@ func TestRewriteCodexMultiAgentV2InputRewritesAgentMessage(t *testing.T) {
 	if encrypted := gjson.GetBytes(got, "input.0.content.1.encrypted_content"); encrypted.Exists() {
 		t.Fatalf("content[1].encrypted_content was preserved: %s", got)
 	}
-	if author := gjson.GetBytes(got, "input.0.author").String(); author != "/root" {
-		t.Fatalf("author = %q, want /root", author)
+	for _, field := range []string{"author", "recipient", "id", "internal_chat_message_metadata_passthrough"} {
+		if gjson.GetBytes(got, "input.0."+field).Exists() {
+			t.Fatalf("private field %s must not reach standard Responses upstream: %s", field, got)
+		}
 	}
-	if turnID := gjson.GetBytes(got, "input.0.internal_chat_message_metadata_passthrough.turn_id").String(); turnID != "019f92ae-7eae-7371-957e-8f6f734edddc" {
-		t.Fatalf("turn_id = %q", turnID)
+	metadata := strings.TrimPrefix(gjson.GetBytes(got, "input.0.content.2.text").String(), "Agent routing metadata: ")
+	if gjson.Get(metadata, "author").String() != "/root" || gjson.Get(metadata, "internal_chat_message_metadata_passthrough.turn_id").String() != "019f92ae-7eae-7371-957e-8f6f734edddc" {
+		t.Fatalf("routing metadata lost: %s", metadata)
 	}
 }
 
