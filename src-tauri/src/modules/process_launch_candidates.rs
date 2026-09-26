@@ -592,6 +592,64 @@ fn powershell_array_literal(values: &[&str]) -> String {
 }
 
 #[cfg(target_os = "windows")]
+fn wsl_unc_distro(path: &str) -> Option<String> {
+    let normalized = path.replace('/', "\\").to_ascii_lowercase();
+    let unc = normalized
+        .strip_prefix(r"\\?\unc\")
+        .map(|rest| format!(r"\\{rest}"))
+        .unwrap_or(normalized);
+    [r"\\wsl.localhost", r"\\wsl$"].iter().find_map(|host| {
+        if unc == *host {
+            Some(String::new())
+        } else {
+            unc.strip_prefix(&format!(r"{host}\"))
+                .map(|rest| rest.split('\\').next().unwrap_or("").to_string())
+        }
+    })
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn can_probe_passive_windows_path(path: &str) -> bool {
+    use std::os::windows::process::CommandExt;
+
+    let Some(distro) = wsl_unc_distro(path) else {
+        return true;
+    };
+    let mut command = Command::new("wsl.exe");
+    command.args(["--list", "--running", "--quiet"]);
+    command.creation_flags(CREATE_NO_WINDOW);
+    let Ok(output) = crate::modules::process_timeout::output_with_timeout(
+        &mut command,
+        WINDOWS_PROCESS_PROBE_TIMEOUT,
+    ) else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    running_wsl_output_contains_distro(&output.stdout, &distro)
+}
+
+#[cfg(target_os = "windows")]
+fn running_wsl_output_contains_distro(stdout: &[u8], distro: &str) -> bool {
+    if distro.is_empty() || stdout.len() % 2 != 0 {
+        return false;
+    }
+    let names = stdout
+        .chunks_exact(2)
+        .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
+        .collect::<Vec<_>>();
+    String::from_utf16(&names)
+        .map(|text| {
+            text.trim_start_matches('\u{feff}').lines().any(|name| {
+                name.trim_matches(|c: char| c.is_whitespace() || c == '\0')
+                    .eq_ignore_ascii_case(distro)
+            })
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
 fn normalize_windows_candidate_path(raw: &str) -> Option<std::path::PathBuf> {
     let text = raw.trim();
     if text.is_empty() {
@@ -610,7 +668,7 @@ fn normalize_windows_candidate_path(raw: &str) -> Option<std::path::PathBuf> {
         .trim_end_matches(',')
         .trim()
         .to_string();
-    if normalized.is_empty() {
+    if normalized.is_empty() || !can_probe_passive_windows_path(&normalized) {
         return None;
     }
 
@@ -1343,7 +1401,9 @@ fn detect_vscode_exec_path_by_registry() -> Option<std::path::PathBuf> {
             }
             if let Some(path_root) = reg_query_value(&key, "Path") {
                 let candidate = std::path::PathBuf::from(path_root).join(exe);
-                if candidate.exists() {
+                if can_probe_passive_windows_path(&candidate.to_string_lossy())
+                    && candidate.exists()
+                {
                     crate::modules::logger::log_info(&format!(
                         "[Path Detect] vscode registry hit: {}",
                         candidate.to_string_lossy()
@@ -1408,7 +1468,9 @@ fn detect_vscode_exec_path_by_registry() -> Option<std::path::PathBuf> {
             if let Some(install_root) = reg_query_value(&key, "InstallLocation") {
                 for exe in exe_names {
                     let candidate = std::path::PathBuf::from(&install_root).join(exe);
-                    if candidate.exists() {
+                    if can_probe_passive_windows_path(&candidate.to_string_lossy())
+                        && candidate.exists()
+                    {
                         crate::modules::logger::log_info(&format!(
                             "[Path Detect] vscode registry hit: {}",
                             candidate.to_string_lossy()
@@ -1424,6 +1486,63 @@ fn detect_vscode_exec_path_by_registry() -> Option<std::path::PathBuf> {
 }
 
 #[cfg(target_os = "windows")]
+const WINDOWS_EXEC_CANDIDATE_FUNCTIONS: &str = r#"
+function Normalize-Candidate([string]$raw) {
+  if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+  $text = $raw.Trim()
+  if ($text -match '(?i)(?<p>[A-Za-z]:\\.+?\.exe)') {
+    $text = $matches['p']
+  }
+  $text = $text.Trim().Trim('"').Trim("'")
+  if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+  return $text
+}
+
+function Test-WslCandidate([string]$candidate) {
+  $path = $candidate.Replace('/', '\')
+  if ($path.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
+    $path = '\\' + $path.Substring(8)
+  }
+  foreach ($hostName in @('\\wsl.localhost', '\\wsl$')) {
+    if ($path.Equals($hostName, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $path.StartsWith(($hostName + '\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function Test-RunningWslCandidate([string]$candidate) {
+  if (-not (Test-WslCandidate $candidate)) { return $true }
+  $path = $candidate.Replace('/', '\')
+  if ($path.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
+    $path = '\\' + $path.Substring(8)
+  }
+  $parts = $path.Split('\')
+  if ($parts.Length -lt 4 -or [string]::IsNullOrWhiteSpace($parts[3])) { return $false }
+  if (-not $script:wslStatusQueried) {
+    $script:wslStatusQueried = $true
+    $script:wslRunningNames = @(wsl.exe --list --running --quiet 2>$null)
+    $script:wslStatusReady = ($LASTEXITCODE -eq 0)
+  }
+  if (-not $script:wslStatusReady) { return $false }
+  foreach ($name in $script:wslRunningNames) {
+    if (($name -replace "`0", '').Trim().Equals($parts[3], [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function Emit-Candidate([string]$raw) {
+  $candidate = Normalize-Candidate $raw
+  if ([string]::IsNullOrWhiteSpace($candidate)) { return }
+  if (-not (Test-RunningWslCandidate $candidate)) { return }
+  if (Test-Path -LiteralPath $candidate) { Write-Output $candidate }
+}
+"#;
+
+#[cfg(target_os = "windows")]
 pub fn detect_windows_exec_path_by_signatures(
     app_label: &str,
     exe_names: &[&str],
@@ -1435,35 +1554,63 @@ pub fn detect_windows_exec_path_by_signatures(
         return None;
     }
 
+    let script = build_windows_exec_path_scan_script(
+        exe_names,
+        command_names,
+        protocol_names,
+        display_keywords,
+    );
+
+    let output =
+        match powershell_output_with_timeout(&["-Command", &script], WINDOWS_PROCESS_PROBE_TIMEOUT)
+        {
+            Ok(value) => value,
+            Err(err) => {
+                crate::modules::logger::log_warn(&format!(
+                    "[Path Detect] {} PowerShell detect failed: {}",
+                    app_label, err
+                ));
+                return None;
+            }
+        };
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        crate::modules::logger::log_warn(&format!(
+            "[Path Detect] {} PowerShell command failed(-Command): status={}, stdout_head={}, stderr_head={}",
+            app_label,
+            output.status,
+            stdout.chars().take(400).collect::<String>(),
+            stderr.chars().take(400).collect::<String>()
+        ));
+        return None;
+    }
+
+    parse_windows_exec_candidates(app_label, exe_names, display_keywords, output)
+}
+
+#[cfg(target_os = "windows")]
+fn build_windows_exec_path_scan_script(
+    exe_names: &[&str],
+    command_names: &[&str],
+    protocol_names: &[&str],
+    display_keywords: &[&str],
+) -> String {
+
     let exe_array = powershell_array_literal(exe_names);
     let command_array = powershell_array_literal(command_names);
     let protocol_array = powershell_array_literal(protocol_names);
     let keyword_array = powershell_array_literal(display_keywords);
+    let candidate_functions = WINDOWS_EXEC_CANDIDATE_FUNCTIONS;
 
-    let script = format!(
+    format!(
         r#"$ErrorActionPreference='SilentlyContinue'
 Write-Output 'STAGE:BEGIN'
 $exeNames=@({exe_array})
 $commandNames=@({command_array})
 $protocolNames=@({protocol_array})
 $keywords=@({keyword_array})
-
-function Normalize-Candidate([string]$raw) {{
-  if ([string]::IsNullOrWhiteSpace($raw)) {{ return $null }}
-  $text = $raw.Trim()
-  if ($text -match '(?i)(?<p>[A-Za-z]:\\.+?\.exe)') {{
-    $text = $matches['p']
-  }}
-  $text = $text.Trim().Trim('"').Trim("'")
-  if ([string]::IsNullOrWhiteSpace($text)) {{ return $null }}
-  return $text
-}}
-
-function Emit-Candidate([string]$raw) {{
-  $candidate = Normalize-Candidate $raw
-  if ([string]::IsNullOrWhiteSpace($candidate)) {{ return }}
-  if (Test-Path -LiteralPath $candidate) {{ Write-Output $candidate }}
-}}
+{candidate_functions}
 
 Write-Output 'STAGE:APP_PATHS'
 $appPathRoots=@(
@@ -1535,7 +1682,7 @@ $shell = $null
 try {{ $shell = New-Object -ComObject WScript.Shell }} catch {{}}
 if ($shell) {{
   foreach ($root in $shortcutRoots) {{
-    if (-not (Test-Path -LiteralPath $root)) {{ continue }}
+    if (-not (Test-RunningWslCandidate $root) -or -not (Test-Path -LiteralPath $root)) {{ continue }}
     Get-ChildItem -Path $root -Filter *.lnk -Recurse -ErrorAction SilentlyContinue | ForEach-Object {{
       try {{
         $shortcut = $shell.CreateShortcut($_.FullName)
@@ -1557,34 +1704,7 @@ foreach ($commandName in $commandNames) {{
 Write-Output 'STAGE:END'
 exit 0
 "#
-    );
-
-    let output =
-        match powershell_output_with_timeout(&["-Command", &script], WINDOWS_PROCESS_PROBE_TIMEOUT)
-        {
-            Ok(value) => value,
-            Err(err) => {
-                crate::modules::logger::log_warn(&format!(
-                    "[Path Detect] {} PowerShell detect failed: {}",
-                    app_label, err
-                ));
-                return None;
-            }
-        };
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        crate::modules::logger::log_warn(&format!(
-            "[Path Detect] {} PowerShell command failed(-Command): status={}, stdout_head={}, stderr_head={}",
-            app_label,
-            output.status,
-            stdout.chars().take(400).collect::<String>(),
-            stderr.chars().take(400).collect::<String>()
-        ));
-        return None;
-    }
-
-    parse_windows_exec_candidates(app_label, exe_names, display_keywords, output)
+    )
 }
 
 fn should_detach_child() -> bool {
