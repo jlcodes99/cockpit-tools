@@ -415,7 +415,27 @@ export async function moveAccountsBetweenCodexGroups(
   await assignAccountsToCodexGroup(toGroupId, accountIds);
 }
 
+/** 手动重排分组顺序并持久化 */
+export async function reorderCodexGroups(orderedGroupIds: string[]): Promise<CodexAccountGroup[]> {
+  const groups = await loadGroups();
+  const groupMap = new Map(groups.map((g) => [g.id, g]));
+  const reordered: CodexAccountGroup[] = [];
+  for (const id of orderedGroupIds) {
+    const g = groupMap.get(id);
+    if (g) {
+      reordered.push(g);
+      groupMap.delete(id);
+    }
+  }
+  for (const remaining of groupMap.values()) {
+    reordered.push(remaining);
+  }
+  await saveGroups(reordered);
+  return cloneGroups(reordered);
+}
+
 /** 使缓存失效，下次 getCodexAccountGroups 时重新从磁盘读取 */
 export function invalidateCodexGroupCache(): void {
   cachedGroups = null;
 }
+

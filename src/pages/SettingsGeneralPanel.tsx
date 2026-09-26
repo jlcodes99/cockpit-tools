@@ -18,6 +18,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
   const {
     antigravityAccountGroups,
     antigravityAppPath,
+    antigravityAutoMergeDuplicates,
     antigravityDualSwitchNoRestartEnabled,
     antigravityLaunchOnSwitch,
     antigravityScopeAccounts,
@@ -159,6 +160,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     sanitizeNumberInput,
     saveGrokCliPath,
     setAntigravityAppPath,
+    setAntigravityAutoMergeDuplicates,
     setAntigravityDualSwitchNoRestartEnabled,
     setAntigravityLaunchOnSwitch,
     setAppAutoLaunchEnabled,
@@ -1255,6 +1257,35 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                       type="checkbox"
                       checked={antigravityLaunchOnSwitch}
                       onChange={(e) => setAntigravityLaunchOnSwitch(e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">
+                    {t(
+                      'settings.general.antigravityAutoMergeDuplicates',
+                      '自动合并同邮箱账号',
+                    )}
+                  </div>
+                  <div className="row-desc">
+                    {t(
+                      'settings.general.antigravityAutoMergeDuplicatesDesc',
+                      '检测到同邮箱的重复账号时自动合并资料并去重；默认关闭',
+                    )}
+                  </div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={antigravityAutoMergeDuplicates}
+                      onChange={(e) =>
+                        setAntigravityAutoMergeDuplicates(e.target.checked)
+                      }
                     />
                     <span className="slider"></span>
                   </label>

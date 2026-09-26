@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { Plus, RefreshCw, Upload, Trash2, Rocket, X, Globe, KeyRound, Database, Plug, Copy, Check, LayoutGrid, List, Search, CircleAlert, Info, RotateCw, History, ArrowDownWideNarrow, ArrowUp, ArrowDown, Wrench, Rows3, GripVertical, Eye, EyeOff, BookOpen, FileUp, ExternalLink, FolderOpen, FolderPlus, ChevronRight, LogOut, FileText, ChevronDown } from 'lucide-react';
+import { Plus, RefreshCw, Upload, Trash2, Rocket, X, Globe, KeyRound, Database, Plug, Copy, Check, LayoutGrid, List, Search, CircleAlert, Info, RotateCw, History, ArrowDownWideNarrow, ArrowUp, ArrowDown, Wrench, Rows3, GripVertical, Eye, EyeOff, BookOpen, FileUp, ExternalLink, FolderOpen, FolderPlus, FileText, ChevronDown } from 'lucide-react';
 import * as accountService from '../services/accountService';
 import { getAntigravityTierBadge, getQuotaClass, formatResetTimeDisplay } from '../utils/account';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -7,8 +7,6 @@ import { TagEditModal } from '../components/TagEditModal';
 import { ExportJsonModal } from '../components/ExportJsonModal';
 import { PaginationControls } from '../components/PaginationControls';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
-import { AccountGroupModal, AddToGroupModal } from '../components/AccountGroupModal';
-import { GroupAccountPickerModal } from '../components/GroupAccountPickerModal';
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { ANTIGRAVITY_RESET_SORT_PREFIX } from '../utils/antigravityAccountSort';
@@ -26,7 +24,7 @@ export type AccountsOverviewViewProps = ReturnType<typeof useAccountsPageControl
 /** 渲染 AccountsPage 的界面；业务状态与动作统一由 Controller 提供。 */
 export function AccountsOverviewView(props: AccountsOverviewViewProps) {
   const {
-    accountGroups,
+    grouping,
     accountNoteCopiedKey,
     accountNoteError,
     accountNoteErrorScrollKey,
@@ -41,8 +39,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     accounts,
     activeAccountNoteEmail,
     activeAccountNoteForm,
-    activeGroup,
-    activeGroupId,
     addMessage,
     addStatus,
     addTab,
@@ -59,7 +55,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     closeAddModal,
     confirmClearSwitchHistory,
     confirmDelete,
-    confirmDeleteGroup,
     confirmDeleteTag,
     copyAccountNoteValue,
     currentAccount,
@@ -69,10 +64,13 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     deleteConfirmError,
     deleteConfirmErrorScrollKey,
     deleting,
-    deletingGroup,
     deletingTag,
     displayGroups,
     draggedCustomSortAccountId,
+    duplicateMergeCount,
+    duplicateMergeModalOpen,
+    duplicateMergeRemember,
+    duplicateMerging,
     editingAccountNoteAccount,
     exportAccountIdsRef,
     exporting,
@@ -91,18 +89,11 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     formatSwitchHistoryStage,
     formatSwitchHistoryTrigger,
     getQuotaDisplayItems,
-    getVerificationBadge,
-    groupAccountPickerGroup,
-    groupAccountPickerGroupId,
     groupByTag,
-    groupDeleteConfirm,
-    groupDeleteError,
-    groupDeleteErrorScrollKey,
-    groupQuickAddGroup,
-    groupQuickAddGroupId,
-    handleAssignAccountsToGroup,
     handleBatchDelete,
+    handleCancelDuplicateMerge,
     handleClearSwitchHistory,
+    handleConfirmDuplicateMerge,
     handleCopyOauthUrl,
     handleCustomSortDragMove,
     handleCustomSortDragStart,
@@ -117,7 +108,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     handlePendingOAuthStart,
     handleRefresh,
     handleRefreshAll,
-    handleRemoveFromGroup,
     handleSaveAccountNote,
     handleSavePendingOAuthAccount,
     handleSaveTags,
@@ -157,7 +147,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     privacyModeEnabled,
     refreshing,
     refreshingAll,
-    reloadAccountGroups,
     renderCompactView,
     renderErrorMessage,
     renderGridView,
@@ -173,16 +162,12 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     setAccountNoteMfaPickerOpen,
     setAccountNotePasswordVisible,
     setAccountNoteSecretVisible,
-    setActiveGroupId,
     setAddTab,
     setDeleteConfirm,
     setDeleteConfirmError,
+    setDuplicateMergeRemember,
     setFileCorruptedError,
-    setGroupAccountPickerGroupId,
     setGroupByTag,
-    setGroupDeleteConfirm,
-    setGroupDeleteError,
-    setGroupQuickAddGroupId,
     setIncludeExportSensitiveNotes,
     setMessage,
     setOauthCallbackInput,
@@ -191,8 +176,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     setSavedMfaRecords,
     setSearchQuery,
     setSelected,
-    setShowAccountGroupModal,
-    setShowAddToGroupModal,
     setShowCustomSortModal,
     setShowErrorModal,
     setShowQuotaModal,
@@ -204,9 +187,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     setTagDeleteConfirm,
     setTagDeleteConfirmError,
     setTokenInput,
-    showAccountGroupModal,
     showAddModal,
-    showAddToGroupModal,
     showCustomSortModal,
     showErrorModal,
     showQuotaModal,
@@ -238,6 +219,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     viewMode,
     wakeupRunning,
   } = props;
+
   return (
     <>
       <main className="main-content accounts-page">
@@ -247,67 +229,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
           onOpenManual={() => onNavigate?.('manual')}
           subtitle={t('overview.subtitle')}
         />
-
-        {/* 面包屑：进入分组后显示 */}
-        {activeGroup && (
-          <div className="folder-breadcrumb">
-            <button
-              className="breadcrumb-back"
-              onClick={() => {
-                setActiveGroupId(null)
-                setSelected(new Set())
-              }}
-            >
-              <FolderOpen size={14} />
-              {t('accounts.groups.allGroups')}
-            </button>
-            <ChevronRight size={14} className="breadcrumb-sep" />
-            <span className="breadcrumb-current">
-              {activeGroup.name}
-              <span className="breadcrumb-count">({filteredAccounts.length})</span>
-            </span>
-            {selected.size > 0 && (
-              <>
-                <button
-                  className="btn btn-secondary breadcrumb-remove-btn"
-                  onClick={() => setGroupQuickAddGroupId(activeGroup.id)}
-                  title={t('accounts.groups.addAccounts')}
-                >
-                  <FolderPlus size={14} />
-                  {t('accounts.groups.addAccounts')}
-                </button>
-                <button
-                  className="btn btn-secondary breadcrumb-remove-btn"
-                  onClick={() => setShowAddToGroupModal(true)}
-                  title={t('accounts.groups.moveToGroup')}
-                >
-                  <FolderPlus size={14} />
-                  {t('accounts.groups.moveToGroup')} ({selected.size})
-                </button>
-                <button
-                  className="btn btn-secondary breadcrumb-remove-btn"
-                  onClick={handleRemoveFromGroup}
-                  title={t('accounts.groups.removeFromGroup')}
-                >
-                  <LogOut size={14} />
-                  {t('accounts.groups.removeFromGroup')} ({selected.size})
-                </button>
-              </>
-            )}
-            {selected.size === 0 && (
-              <button
-                className="btn btn-secondary breadcrumb-remove-btn"
-                onClick={() => setGroupQuickAddGroupId(activeGroup.id)}
-                title={t('accounts.groups.addAccounts')}
-              >
-                <FolderPlus size={14} />
-                {t('accounts.groups.addAccounts')}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* 分组文件夹已嵌入到 accounts-grid 内，此处不再单独显示 */}
 
         {/* 工具栏 */}
         <div className="toolbar">
@@ -495,10 +416,10 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
             >
               <Upload size={14} />
             </button>
-            {!activeGroupId && (
+            {!grouping.activeGroupId && (
               <button
                 className="btn btn-secondary icon-only"
-                onClick={() => setShowAccountGroupModal(true)}
+                onClick={() => grouping.setShowManageModal(true)}
                 title={t('accounts.groups.manageTitle')}
                 aria-label={t('accounts.groups.manageTitle')}
               >
@@ -509,13 +430,16 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
           </div>
         </div>
 
-        {filteredAccounts.length > 0 && (
+        {(accounts.length > 0 || grouping.groups.length > 0) && (
           <AccountSelectionToolbar
             selectedCount={selected.size}
             allSelected={allPaginatedSelected}
             disabled={paginatedIds.length === 0}
             onToggleSelectAll={toggleSelectAll}
             onClearSelection={() => setSelected(new Set())}
+            grouping={grouping}
+            accounts={accounts}
+            selectedIds={Array.from(selected)}
             actions={(
               <>
                 <button
@@ -530,14 +454,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                   ) : (
                     <Rocket size={14} />
                   )}
-                </button>
-                <button
-                  className="btn btn-secondary icon-only"
-                  onClick={() => setShowAddToGroupModal(true)}
-                  title={t('accounts.groups.addToGroup')}
-                  aria-label={t('accounts.groups.addToGroup')}
-                >
-                  <FolderPlus size={14} />
                 </button>
                 <button
                   className="btn btn-danger icon-only"
@@ -1402,56 +1318,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
         </div>
       )}
 
-      {groupDeleteConfirm && (
-        <div
-          className="modal-overlay"
-        >
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{t('accounts.groups.deleteTitle')}</h2>
-              <button
-                className="modal-close"
-                onClick={() => {
-                  if (deletingGroup) return
-                  setGroupDeleteConfirm(null)
-                  setGroupDeleteError(null)
-                }}
-                aria-label={t('common.close', '关闭')}
-              >
-                <X />
-              </button>
-            </div>
-            <div className="modal-body">
-              <ModalErrorMessage message={groupDeleteError} scrollKey={groupDeleteErrorScrollKey} />
-              <p>
-                {t('accounts.groups.deleteConfirm', {
-                  name: groupDeleteConfirm.name,
-                })}
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  setGroupDeleteConfirm(null)
-                  setGroupDeleteError(null)
-                }}
-                disabled={deletingGroup}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={confirmDeleteGroup}
-                disabled={deletingGroup}
-              >
-                {t('common.delete')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {tagDeleteConfirm && (
         <div
           className="modal-overlay"
@@ -1498,6 +1364,88 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 disabled={deletingTag}
               >
                 {deletingTag ? '处理中...' : t('common.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {duplicateMergeModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => !duplicateMerging && handleCancelDuplicateMerge()}
+        >
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2>{t('accounts.duplicateMergeModal.title', '检测到同邮箱重复账号')}</h2>
+              <button
+                className="modal-close"
+                onClick={handleCancelDuplicateMerge}
+                disabled={duplicateMerging}
+                aria-label={t('common.close', '关闭')}
+              >
+                <X />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '12px', fontSize: '14px', lineHeight: 1.6, color: 'var(--text-primary)' }}>
+                {t(
+                  'accounts.duplicateMergeModal.desc',
+                  '检测到当前列表中存在 {{count}} 个同邮箱的重复账号卡片。是否自动合并同邮箱账号？',
+                  { count: duplicateMergeCount }
+                )}
+              </p>
+              <div
+                style={{
+                  background: 'var(--bg-secondary)',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  marginBottom: '16px',
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.6,
+                }}
+              >
+                <div>• {t('accounts.duplicateMergeModal.point1', '保留最新的有效授权凭据，并自动整合补充备注、标签等信息')}</div>
+                <div>• {t('accounts.duplicateMergeModal.point2', '合并成功后自动清理历史多余卡片，保持列表整洁')}</div>
+                <div>• {t('accounts.duplicateMergeModal.point3', '此开关可随时在「设置 - Antigravity IDE 设置」中修改')}</div>
+              </div>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={duplicateMergeRemember}
+                  onChange={(e) => setDuplicateMergeRemember(e.target.checked)}
+                  disabled={duplicateMerging}
+                />
+                <span>{t('accounts.duplicateMergeModal.remember', '记住我的选择（以后自动合并）')}</span>
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={handleCancelDuplicateMerge}
+                disabled={duplicateMerging}
+              >
+                {t('accounts.duplicateMergeModal.cancel', '暂不合并')}
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleConfirmDuplicateMerge}
+                disabled={duplicateMerging}
+              >
+                {duplicateMerging
+                  ? t('common.loading', '合并中...')
+                  : t('accounts.duplicateMergeModal.confirm', '确认合并')}
               </button>
             </div>
           </div>
@@ -2099,53 +2047,6 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
         </div>,
         document.body
       )}
-
-      {/* 账号分组管理弹窗 */}
-      <AccountGroupModal
-        isOpen={showAccountGroupModal}
-        onClose={() => setShowAccountGroupModal(false)}
-        onGroupsChanged={reloadAccountGroups}
-      />
-
-      {/* 添加到分组弹窗 */}
-      <AddToGroupModal
-        isOpen={showAddToGroupModal}
-        onClose={() => setShowAddToGroupModal(false)}
-        accountIds={Array.from(selected)}
-        sourceGroupId={activeGroupId || undefined}
-        onAdded={async () => {
-          await reloadAccountGroups()
-          setSelected(new Set())
-        }}
-      />
-
-      <GroupAccountPickerModal
-        isOpen={!!groupAccountPickerGroupId}
-        targetGroup={groupAccountPickerGroup}
-        accounts={accounts}
-        accountGroups={accountGroups}
-        verificationStatusMap={verificationStatusMap}
-        getVerificationBadge={getVerificationBadge}
-        maskAccountText={maskAccountText}
-        onClose={() => setGroupAccountPickerGroupId(null)}
-        onConfirm={({ name, accountIds }) =>
-          handleAssignAccountsToGroup(groupAccountPickerGroupId!, name, accountIds)
-        }
-      />
-      <GroupAccountPickerModal
-        isOpen={!!groupQuickAddGroupId}
-        targetGroup={groupQuickAddGroup}
-        accounts={accounts}
-        accountGroups={accountGroups}
-        verificationStatusMap={verificationStatusMap}
-        getVerificationBadge={getVerificationBadge}
-        maskAccountText={maskAccountText}
-        onClose={() => setGroupQuickAddGroupId(null)}
-        onConfirm={({ name, accountIds }) =>
-          handleAssignAccountsToGroup(groupQuickAddGroupId!, name, accountIds)
-        }
-        mode="addAccounts"
-      />
 
       {/* 文件损坏弹窗 */}
       {fileCorruptedError && (

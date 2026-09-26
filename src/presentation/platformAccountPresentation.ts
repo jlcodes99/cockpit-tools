@@ -22,6 +22,7 @@ import {
   formatResetTimeDisplay,
   getAntigravityTierBadge,
   getQuotaClass as getAntigravityQuotaClass,
+  getSubscriptionTier,
   matchModelName,
 } from "../utils/account";
 import {
@@ -506,29 +507,130 @@ export function getAntigravityQuotaDisplayItems(
   _displayGroups: DisplayGroup[],
 ): AgQuotaDisplayItem[] {
   const models = account.quota?.models || [];
-  const buckets = [
-    { key: 'claude:5h', label: 'Claude (5h)', names: ['3p-5h', 'claude:5h'] },
-    { key: 'claude:weekly', label: 'Claude (Weekly)', names: ['3p-weekly', 'claude:weekly'] },
-    { key: 'gemini:5h', label: 'Gemini (5h)', names: ['gemini-5h', 'gemini:5h'] },
-    { key: 'gemini:weekly', label: 'Gemini (Weekly)', names: ['gemini-weekly', 'gemini:weekly'] },
-  ];
+  const tier = getSubscriptionTier(account.quota);
+  const isFree = tier === 'FREE';
+  const stale = !isFree && (account.quota?.quota_summary_stale || undefined);
   const result: AgQuotaDisplayItem[] = [];
-  for (const bucket of buckets) {
-    const model = models.find((entry) => bucket.names.includes(entry.name));
-    if (model) {
-      result.push({
-        key: bucket.key,
-        label: bucket.label,
-        percentage: model.percentage,
-        resetTime: model.reset_time,
-        stale: account.quota?.quota_summary_stale || undefined,
+
+  let claude5h: (typeof models)[0] | undefined;
+  let claudeWeekly: (typeof models)[0] | undefined;
+  let gemini5h: (typeof models)[0] | undefined;
+  let geminiWeekly: (typeof models)[0] | undefined;
+
+  if (isFree) {
+    // 免费账号仅有 Weekly 额度，不显示 5h 额度
+    claudeWeekly =
+      models.find((m) => m.name === '3p-weekly' || m.name === 'claude:weekly') ||
+      models.find((m) => m.name.toLowerCase().includes('claude'));
+
+    geminiWeekly =
+      models.find((m) => m.name === 'gemini-weekly' || m.name === 'gemini:weekly') ||
+      models.find((m) => m.name.toLowerCase().includes('gemini'));
+  } else {
+    // Claude 5h
+    claude5h = models.find((m) => m.name === '3p-5h' || m.name === 'claude:5h');
+    if (!claude5h) {
+      claude5h = models.find((m) => {
+        const name = m.name.toLowerCase();
+        return name.includes('claude') && (name.includes('high') || !name.includes('low'));
+      });
+    }
+    if (!claude5h) {
+      claude5h = models.find((m) => m.name.toLowerCase().includes('claude'));
+    }
+
+    // Claude Weekly
+    claudeWeekly = models.find((m) => m.name === '3p-weekly' || m.name === 'claude:weekly');
+    if (!claudeWeekly) {
+      claudeWeekly = models.find((m) => {
+        const name = m.name.toLowerCase();
+        return name.includes('claude') && name.includes('low');
+      });
+    }
+
+    // Gemini 5h
+    gemini5h = models.find((m) => m.name === 'gemini-5h' || m.name === 'gemini:5h');
+    if (!gemini5h) {
+      gemini5h = models.find((m) => {
+        const name = m.name.toLowerCase();
+        return name.includes('gemini') && name.includes('pro') && name.includes('high');
+      });
+    }
+    if (!gemini5h) {
+      gemini5h = models.find((m) => {
+        const name = m.name.toLowerCase();
+        return name.includes('gemini') && name.includes('high');
+      });
+    }
+    if (!gemini5h) {
+      gemini5h = models.find((m) => {
+        const name = m.name.toLowerCase();
+        return name.includes('gemini') && name.includes('flash');
+      });
+    }
+    if (!gemini5h) {
+      gemini5h = models.find((m) => {
+        const name = m.name.toLowerCase();
+        return name.includes('gemini') && !name.includes('low');
+      });
+    }
+    if (!gemini5h) {
+      gemini5h = models.find((m) => m.name.toLowerCase().includes('gemini'));
+    }
+
+    // Gemini Weekly
+    geminiWeekly = models.find((m) => m.name === 'gemini-weekly' || m.name === 'gemini:weekly');
+    if (!geminiWeekly) {
+      geminiWeekly = models.find((m) => {
+        const name = m.name.toLowerCase();
+        return name.includes('gemini') && name.includes('pro') && name.includes('low');
+      });
+    }
+    if (!geminiWeekly) {
+      geminiWeekly = models.find((m) => {
+        const name = m.name.toLowerCase();
+        return name.includes('gemini') && name.includes('low');
       });
     }
   }
 
-  // 卡片只展示 Claude / Gemini 的 5h 与周窗口这 4 个服务器窗口。
-  // 其余模型条目（high/low 变体、具体模型名）不是时间窗口，逐条列出会把卡片撑成
-  // 一长串模型行，因此不再进入卡片；窗口缺失时由展示层渲染为“无数据”。
+  if (claude5h) {
+    result.push({
+      key: 'claude:5h',
+      label: 'Claude (5h)',
+      percentage: claude5h.percentage,
+      resetTime: claude5h.reset_time,
+      stale,
+    });
+  }
+  if (claudeWeekly) {
+    result.push({
+      key: 'claude:weekly',
+      label: 'Claude (Weekly)',
+      percentage: claudeWeekly.percentage,
+      resetTime: claudeWeekly.reset_time,
+      stale,
+    });
+  }
+  if (gemini5h) {
+    result.push({
+      key: 'gemini:5h',
+      label: 'Gemini (5h)',
+      percentage: gemini5h.percentage,
+      resetTime: gemini5h.reset_time,
+      stale,
+    });
+  }
+  if (geminiWeekly) {
+    result.push({
+      key: 'gemini:weekly',
+      label: 'Gemini (Weekly)',
+      percentage: geminiWeekly.percentage,
+      resetTime: geminiWeekly.reset_time,
+      stale,
+    });
+  }
+
   return result;
 }
 

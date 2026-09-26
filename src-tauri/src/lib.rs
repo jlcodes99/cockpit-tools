@@ -793,6 +793,7 @@ pub fn run() {
             // Account Commands
             commands::account::list_accounts,
             commands::account::add_account,
+            commands::account::deduplicate_accounts,
             commands::account::create_pending_oauth_account,
             commands::account::delete_account,
             commands::account::delete_accounts,
@@ -811,6 +812,8 @@ pub fn run() {
             commands::account::fetch_account_note_mail_url,
             commands::account::load_account_groups,
             commands::account::save_account_groups,
+            commands::account::load_platform_account_groups,
+            commands::account::save_platform_account_groups,
             commands::account::sync_current_from_client,
             commands::account::sync_from_extension,
             // Device Commands

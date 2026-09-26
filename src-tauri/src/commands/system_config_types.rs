@@ -247,6 +247,8 @@ pub struct GeneralConfig {
     pub top_right_ad_visible: bool,
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
     pub antigravity_dual_switch_no_restart_enabled: bool,
+    /// Antigravity 是否开启同邮箱重复账号自动合并
+    pub antigravity_auto_merge_duplicates: bool,
     /// 是否启用自动切号
     pub auto_switch_enabled: bool,
     /// 自动切号阈值（百分比）
@@ -1218,6 +1220,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codex_hide_relay_quota"
             | "top_right_ad_visible"
             | "antigravity_dual_switch_no_restart_enabled"
+            | "antigravity_auto_merge_duplicates"
             | "auto_switch_enabled"
             | "auto_switch_threshold"
             | "auto_switch_credits_enabled"

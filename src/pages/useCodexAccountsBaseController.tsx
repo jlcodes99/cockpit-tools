@@ -20,6 +20,7 @@ import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import type { CodexTab } from "../components/CodexOverviewTabsHeader";
 import { type CodexWakeupTestOpenRequest } from "../components/codex/CodexWakeupContent";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
+import { getActiveGroupTab, setActiveGroupTab } from "../services/platformGroupService";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import { useEscClose } from "../hooks/useEscClose";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
@@ -106,21 +107,13 @@ export function useCodexAccountsBaseController() {
           )
         : [],
     );
-    const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
-      if (
-        !readAccountsOverviewFilterPersistenceEnabled(
-          CODEX_FILTER_PERSISTENCE_SCOPE,
-        )
-      ) {
-        return null;
-      }
-      const saved = readAccountsOverviewFilterField<string | null>(
-        CODEX_FILTER_PERSISTENCE_SCOPE,
-        ACTIVE_GROUP_ID_FIELD,
-        null,
-      );
-      return typeof saved === "string" && saved.trim() ? saved : null;
+    const [activeGroupId, setActiveGroupIdState] = useState<string | null>(() => {
+      return getActiveGroupTab("codex");
     });
+    const setActiveGroupId = useCallback((groupId: string | null) => {
+      setActiveGroupIdState(groupId);
+      setActiveGroupTab("codex", groupId);
+    }, []);
     const [showCodexGroupModal, setShowCodexGroupModal] = useState(false);
     const [showAddToCodexGroupModal, setShowAddToCodexGroupModal] =
       useState(false);
@@ -382,7 +375,10 @@ export function useCodexAccountsBaseController() {
         const next = prev.filter((id) => validIds.has(id));
         return next.length === prev.length ? prev : next;
       });
-    }, [codexGroups, codexGroupsReady]);
+      if (activeGroupId && !validIds.has(activeGroupId)) {
+        setActiveGroupId(null);
+      }
+    }, [activeGroupId, codexGroups, codexGroupsReady, setActiveGroupId]);
   
     const [overviewLayoutMode, setOverviewLayoutMode] =
       useState<CodexOverviewLayoutMode>(() => {

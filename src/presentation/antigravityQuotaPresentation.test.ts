@@ -11,7 +11,8 @@ import {
   getAntigravityQuotaDisplayItems,
 } from './platformAccountPresentation';
 
-const t = ((key: string) => key) as TFunction;
+const t = ((key: string, defaultValue?: string | Record<string, unknown>) =>
+  typeof defaultValue === 'string' ? defaultValue : key) as unknown as TFunction;
 const futureReset = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
 function account(models: ModelQuota[], stale = false): Account {
   return {
@@ -35,13 +36,38 @@ test('explicit quota buckets keep percentages and distant reset times unchanged'
   ]);
 });
 
-test('model-only entries never become quota rows on the card', () => {
+test('free tier accounts only map to weekly quota and omit 5h quota bars', () => {
+  const freeAccount: Account = {
+    ...account([
+      model('gemini-weekly', 100),
+      model('claude-sonnet', 80),
+    ]),
+    quota: {
+      models: [
+        model('gemini-weekly', 100),
+        model('claude-sonnet', 80),
+      ],
+      last_updated: 0,
+      subscription_tier: 'FREE',
+    },
+  };
+  const items = getAntigravityQuotaDisplayItems(freeAccount, []);
+  assert.deepEqual(items.map((i) => i.key), ['claude:weekly', 'gemini:weekly']);
+  assert.equal(items.some((i) => i.key.endsWith(':5h')), false);
+  const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
+  assert.match(html, /Weekly/);
+  assert.doesNotMatch(html, />5h</);
+});
+
+test('free account models fallback and map to quota windows on the card', () => {
   const models = [model('gemini-3.1-pro-high', 25), model('gemini-3.1-pro-low', 60), model('claude-sonnet', 0)];
   const items = getAntigravityQuotaDisplayItems(account(models), []);
-  assert.deepEqual(items, []);
+  assert.equal(items.length, 3);
   const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
-  assert.doesNotMatch(html, /gemini-3.1-pro-high|claude-sonnet|100%/);
-  assert.match(html, /overview.noQuotaData/);
+  assert.match(html, /25%/);
+  assert.match(html, /60%/);
+  assert.match(html, /0%/);
+  assert.doesNotMatch(html, /quota-empty/);
 });
 
 test('only the Claude/Gemini windows are shown, aliases are not duplicated', () => {
@@ -79,7 +105,7 @@ test('stale summary warns only on cached buckets, including shared presentation 
   assert.match(buildQuotaPreviewLines(presentation.quotaItems)[0].title, /cachedRefreshFailed/);
   const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
   assert.match(html, /common.shared.quota.cachedRefreshFailed/);
-  const noCachedBuckets = getAntigravityQuotaDisplayItems(account([model('gemini-pro-high', 40)], true), []);
+  const noCachedBuckets = getAntigravityQuotaDisplayItems(account([model('custom-model', 40)], true), []);
   const noWarning = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items: noCachedBuckets, t }));
   assert.doesNotMatch(noWarning, /cachedRefreshFailed/);
 });

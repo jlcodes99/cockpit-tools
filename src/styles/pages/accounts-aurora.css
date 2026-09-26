@@ -1286,3 +1286,222 @@ html[data-reduced-motion="true"] .accounts-page .account-card.disabled {
   filter: none;
   background: color-mix(in srgb, var(--bg-surface) 92%, var(--danger) 8%);
 }
+
+/* ============================================
+   Account Group Tabs (Aurora Selection Toolbar)
+   ============================================ */
+
+.accounts-page .account-selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.account-selection-toolbar.has-middle {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-selection-toolbar.has-middle .codex-overview-selection-left {
+  justify-self: start;
+}
+
+.account-selection-toolbar-middle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.account-selection-toolbar.has-middle .account-selection-toolbar-middle {
+  justify-self: center;
+}
+
+.account-selection-toolbar.has-middle .codex-overview-selection-actions {
+  justify-self: end;
+}
+
+.account-group-tabs-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .account-selection-toolbar.has-middle {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  .account-selection-toolbar.has-middle .account-selection-toolbar-middle {
+    order: 3;
+    width: 100%;
+    margin-top: 8px;
+  }
+}
+
+.account-group-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--bg-tertiary, #f1f5f9) 80%, transparent);
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--border, #e2e8f0) 70%, transparent);
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+}
+
+.account-group-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.account-group-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.account-group-tab:hover {
+  color: var(--text-primary, #0f172a);
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 65%, transparent);
+}
+
+.account-group-tab.active {
+  color: var(--primary, #2563eb);
+  background: var(--bg-card, #ffffff);
+  border-color: color-mix(in srgb, var(--primary, #2563eb) 25%, var(--border, #e2e8f0));
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--primary, #2563eb) 12%, transparent);
+  font-weight: 600;
+}
+
+.account-group-tab-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-group-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--text-muted, #94a3b8) 18%, transparent);
+  color: var(--text-secondary, #64748b);
+  transition: all 0.18s ease;
+}
+
+.account-group-tab.active .account-group-tab-badge {
+  background: color-mix(in srgb, var(--primary, #2563eb) 16%, transparent);
+  color: var(--primary, #2563eb);
+}
+
+.account-group-tab-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  border: 1px dashed color-mix(in srgb, var(--border, #e2e8f0) 80%, transparent);
+  background: transparent;
+  color: var(--text-muted, #94a3b8);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.account-group-tab-manage-btn:hover {
+  color: var(--primary, #2563eb);
+  border-color: var(--primary, #2563eb);
+  background: color-mix(in srgb, var(--primary, #2563eb) 10%, transparent);
+}
+
+.account-group-quick-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--primary, #2563eb) 30%, transparent);
+  background: color-mix(in srgb, var(--primary, #2563eb) 8%, transparent);
+  color: var(--primary, #2563eb);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+}
+
+.account-group-quick-add-btn:hover {
+  background: color-mix(in srgb, var(--primary, #2563eb) 16%, transparent);
+  border-color: var(--primary, #2563eb);
+}
+
+[data-theme="dark"] .account-group-tabs {
+  background: rgba(30, 41, 59, 0.7);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme="dark"] .account-group-tab {
+  color: rgba(226, 232, 240, 0.75);
+}
+
+[data-theme="dark"] .account-group-tab:hover {
+  color: #f8fafc;
+  background: rgba(51, 65, 85, 0.5);
+}
+
+[data-theme="dark"] .account-group-tab.active {
+  background: rgba(30, 41, 59, 0.95);
+  color: var(--primary-light, #60a5fa);
+  border-color: rgba(96, 165, 250, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .account-group-tab.active .account-group-tab-badge {
+  background: rgba(96, 165, 250, 0.2);
+  color: var(--primary-light, #60a5fa);
+}
+
+[data-theme="dark"] .account-group-tab-manage-btn {
+  border-color: rgba(148, 163, 184, 0.25);
+  color: rgba(148, 163, 184, 0.7);
+}
+
+[data-theme="dark"] .account-group-tab-manage-btn:hover {
+  color: var(--primary-light, #60a5fa);
+  border-color: var(--primary-light, #60a5fa);
+  background: rgba(96, 165, 250, 0.12);
+}
+

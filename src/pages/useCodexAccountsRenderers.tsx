@@ -1,6 +1,5 @@
 import { useEffect, type ReactElement } from "react";
-import { RefreshCw, Upload, Trash2, X, Power, Database, Copy, Check, Play, RotateCw, CircleAlert, Info, Calendar, Tag, Eye, EyeOff, FileText, ExternalLink, Pencil, FolderOpen, FolderPlus, ChevronRight, LogOut, Wrench, Terminal, Link2, Waypoints } from "lucide-react";
-import { isCodexGroupQuotaRefreshInherit, resolveCodexGroupQuotaAutoRefreshMinutes } from "../services/codexAccountGroupService";
+import { RefreshCw, Upload, Trash2, X, Power, Database, Copy, Check, Play, RotateCw, CircleAlert, Info, Calendar, Tag, Eye, EyeOff, FileText, ExternalLink, Pencil, FolderPlus, ChevronRight, Wrench, Terminal, Link2, Waypoints } from "lucide-react";
 import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
 import { isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { CodexQuotaMiniRows } from "../components/codex/CodexQuotaMiniRows";
@@ -167,7 +166,6 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
 >) {
   const {
     accountIdLabel,
-    activeGroupId,
     addingLocalAccessAccountId,
     apiKeyUsageDetailAccount,
     apiKeyUsageMap,
@@ -180,7 +178,6 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     cliLaunchingAccountId,
     closeExternalImportProgressModal,
     cockpitApiPanelAccount,
-    codexGroups,
     editingApiKeyNameId,
     editingApiKeyNameValue,
     externalImportProgress,
@@ -194,12 +191,10 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     formatApiKeyUsageQuotaValue,
     formatDate,
     getCodexSwitchOrLaunchBlockedReason,
-    groupByTag,
     handleAccountNameDoubleClick,
     handleAddLocalAccessAccount,
     handleCopyLocalAccessValue,
     handleDelete,
-    handleEnterGroup,
     handleExportByIds,
     handleHideLocalAccessEntry,
     handleKillLocalAccessPort,
@@ -209,10 +204,8 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     handleQuickRefreshLocalAccessQuota,
     handleQuickToggleLocalAccessEnabled,
     handleRefresh,
-    handleRefreshGroup,
     handleRefreshSubscriptionInfo,
     handleRemoveLocalAccessAccount,
-    handleRemoveSingleFromGroup,
     handleSubmitInlineRename,
     handleSwitch,
     handleToggleOverviewAccount,
@@ -258,10 +251,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     refreshApiKeyUsage,
     refreshApiKeyUsageByAccountId,
     refreshing,
-    refreshingAll,
-    refreshingGroupId,
     refreshingSubscriptionAccountId,
-    removingGroupAccountIds,
     renderAccountNoteButton,
     renderAddLocalAccessAccountButton,
     renderApiKeyRevealLine,
@@ -269,12 +259,10 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     renderOAuthBindingLine,
     renderQuotaErrorInline,
     renderResetCreditControls,
-    requestDeleteGroup,
     resolveAccountMeta,
     resolveApiKeyDisplayText,
     resolveApiProviderDisplayName,
     resolveCockpitApiAccountBalanceText,
-    resolveGroupAccounts,
     resolveLocalAccessBaseUrl,
     resolvePresentation,
     resolveQuotaErrorMeta,
@@ -290,14 +278,12 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     setCockpitApiPanelAccountId,
     setEditingApiKeyNameValue,
     setExternalImportSyncError,
-     setGroupQuickAddGroupId,
-     setImportApiServiceGuideCount,
-     restoreLaunchPreviewInstanceId,
-     setLocalAccessDetailsExpanded,
+    setImportApiServiceGuideCount,
+    restoreLaunchPreviewInstanceId,
+    setLocalAccessDetailsExpanded,
     setLocalAccessKeyVisible,
     setLocalAccessLaunchPreviewOpen,
     setMessage,
-    setShowCodexGroupModal,
     setShowLocalAccessHealthModal,
     setShowLocalAccessQuotaStatsModal,
     shouldOfferReauthorizeAction,
@@ -1857,179 +1843,6 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
       if (localAccessCard) {
         cards.push(localAccessCard);
       }
-  
-      if (!activeGroupId && !groupByTag) {
-        cards.push(
-          ...codexGroups.map((group) => {
-            const groupAccounts = resolveGroupAccounts(group);
-            const previewAccounts = groupAccounts.slice(0, 4);
-            const hiddenCount = Math.max(
-              0,
-              groupAccounts.length - previewAccounts.length,
-            );
-            const refreshableCount = groupAccounts.filter(
-              (account) =>
-                !isCodexApiKeyAccount(account) || isCodexNewApiAccount(account),
-            ).length;
-            const isGroupRefreshing = refreshingGroupId === group.id;
-            const groupRefreshDisabled =
-              refreshingAll ||
-              Boolean(refreshingGroupId) ||
-              refreshableCount === 0;
-  
-            return (
-              <div
-                key={`codex-folder-${group.id}`}
-                className="codex-account-card folder-inline-card codex-group-folder-card"
-                onClick={() => handleEnterGroup(group.id)}
-              >
-                <div className="folder-inline-header">
-                  <div className="folder-inline-icon">
-                    <FolderOpen size={24} />
-                  </div>
-                  <div className="folder-inline-info">
-                    <span className="folder-inline-name">{group.name}</span>
-                    <span className="folder-inline-count">
-                      {t("accounts.groups.accountCount", {
-                        count: groupAccounts.length,
-                      })}
-                      {(() => {
-                        const minutes =
-                          resolveCodexGroupQuotaAutoRefreshMinutes(group);
-                        if (minutes === null) return null;
-                        const label =
-                          minutes === -1
-                            ? t("accounts.groups.quotaRefreshOffBadge", "不刷新")
-                            : t("accounts.groups.quotaRefreshMinutesBadge", {
-                                count: minutes,
-                                defaultValue: "{{count}} 分钟",
-                              });
-                        return (
-                          <span
-                            className="folder-inline-quota-meta"
-                            title={t(
-                              "accounts.groups.quotaRefreshPolicyHint",
-                              "分组额度刷新为最高优先级；可继承平台设置、自定义间隔或不刷新",
-                            )}
-                          >
-                            · {label}
-                          </span>
-                        );
-                      })()}
-                    </span>
-                  </div>
-                  <button
-                    className="folder-icon-btn"
-                    title={
-                      refreshableCount === 0
-                        ? t(
-                            "accounts.groups.refreshEmpty",
-                            "当前分组没有可刷新的账号",
-                          )
-                        : !isCodexGroupQuotaRefreshInherit(group)
-                          ? t(
-                              "accounts.groups.refreshForceHint",
-                              "本组自动额度策略非继承时，仍可手动刷新本组",
-                            )
-                          : t("accounts.groups.refresh", "刷新分组")
-                    }
-                    aria-label={t("accounts.groups.refresh", "刷新分组")}
-                    disabled={groupRefreshDisabled}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void handleRefreshGroup(group);
-                    }}
-                  >
-                    <RefreshCw
-                      size={14}
-                      className={isGroupRefreshing ? "loading-spinner" : ""}
-                    />
-                  </button>
-                  <button
-                    className="folder-icon-btn"
-                    title={t("accounts.groups.addAccounts")}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setGroupQuickAddGroupId(group.id);
-                    }}
-                  >
-                    <FolderPlus size={14} />
-                  </button>
-                  <button
-                    className="folder-icon-btn"
-                    title={t("accounts.groups.editTitle")}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setShowCodexGroupModal(true);
-                    }}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    className="folder-icon-btn folder-delete-btn"
-                    title={t("accounts.groups.deleteTitle")}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      requestDeleteGroup(group.id, group.name);
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <div className="folder-inline-preview">
-                  {previewAccounts.length === 0 ? (
-                    <div className="folder-preview-item more">
-                      {t("accounts.groups.accountPickerEmpty")}
-                    </div>
-                  ) : (
-                    previewAccounts.map((account) => {
-                      const presentation = resolvePresentation(account);
-                      return (
-                        <div
-                          key={`${group.id}-${account.id}`}
-                          className="folder-preview-item"
-                        >
-                          <span
-                            className="folder-preview-email"
-                            title={maskAccountText(presentation.displayName)}
-                          >
-                            {maskAccountText(presentation.displayName)}
-                          </span>
-                          <span
-                            className={`tier-badge ${presentation.planClass || "unknown"}`}
-                          >
-                            {presentation.planLabel}
-                          </span>
-                          <button
-                            type="button"
-                            className="folder-preview-remove-btn"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleRemoveSingleFromGroup(
-                                group.id,
-                                account.id,
-                              );
-                            }}
-                            title={t("accounts.groups.removeFromGroup")}
-                            aria-label={`${t("accounts.groups.removeFromGroup")}: ${maskAccountText(presentation.displayName)}`}
-                            disabled={removingGroupAccountIds.has(account.id)}
-                          >
-                            <LogOut size={12} />
-                          </button>
-                        </div>
-                      );
-                    })
-                  )}
-                  {hiddenCount > 0 && (
-                    <div className="folder-preview-item more">+{hiddenCount}</div>
-                  )}
-                </div>
-              </div>
-            );
-          }),
-        );
-      }
-  
       return cards.length > 0 ? cards : null;
     };
   
@@ -2580,128 +2393,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
         );
       });
   
-    const renderGroupTableRows = () => {
-      if (activeGroupId || groupByTag) return null;
-  
-      const rows: ReactElement[] = codexGroups.map((group) => {
-        const groupAccounts = resolveGroupAccounts(group);
-        const refreshableCount = groupAccounts.filter(
-          (account) =>
-            !isCodexApiKeyAccount(account) || isCodexNewApiAccount(account),
-        ).length;
-        const isGroupRefreshing = refreshingGroupId === group.id;
-        const groupRefreshDisabled =
-          refreshingAll || Boolean(refreshingGroupId) || refreshableCount === 0;
-        return (
-          <tr
-            key={`folder-row-${group.id}`}
-            className="folder-table-row"
-            style={{ cursor: "pointer" }}
-            onClick={() => handleEnterGroup(group.id)}
-          >
-            <td />
-            <td colSpan={4}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <FolderOpen size={16} style={{ color: "var(--primary)" }} />
-                <strong>{group.name}</strong>
-                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
-                  {t("accounts.groups.accountCount", {
-                    count: groupAccounts.length,
-                  })}
-                  {(() => {
-                    const minutes =
-                      resolveCodexGroupQuotaAutoRefreshMinutes(group);
-                    if (minutes === null) return null;
-                    const label =
-                      minutes === -1
-                        ? t("accounts.groups.quotaRefreshOffBadge", "不刷新")
-                        : t("accounts.groups.quotaRefreshMinutesBadge", {
-                            count: minutes,
-                            defaultValue: "{{count}} 分钟",
-                          });
-                    return (
-                      <span
-                        className="folder-inline-quota-meta"
-                        title={t(
-                          "accounts.groups.quotaRefreshPolicyHint",
-                          "分组额度刷新为最高优先级；可继承平台设置、自定义间隔或不刷新",
-                        )}
-                      >
-                        {" "}
-                        · {label}
-                      </span>
-                    );
-                  })()}
-                </span>
-              </div>
-            </td>
-            <td>
-              <div className="folder-table-actions">
-                <button
-                  className="folder-icon-btn"
-                  title={
-                    refreshableCount === 0
-                      ? t(
-                          "accounts.groups.refreshEmpty",
-                          "当前分组没有可刷新的账号",
-                        )
-                      : !isCodexGroupQuotaRefreshInherit(group)
-                        ? t(
-                            "accounts.groups.refreshForceHint",
-                            "本组自动额度策略非继承时，仍可手动刷新本组",
-                          )
-                        : t("accounts.groups.refresh", "刷新分组")
-                  }
-                  aria-label={t("accounts.groups.refresh", "刷新分组")}
-                  disabled={groupRefreshDisabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void handleRefreshGroup(group);
-                  }}
-                >
-                  <RefreshCw
-                    size={14}
-                    className={isGroupRefreshing ? "loading-spinner" : ""}
-                  />
-                </button>
-                <button
-                  className="folder-icon-btn"
-                  title={t("accounts.groups.addAccounts")}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setGroupQuickAddGroupId(group.id);
-                  }}
-                >
-                  <FolderPlus size={14} />
-                </button>
-                <button
-                  className="folder-icon-btn"
-                  title={t("accounts.groups.editTitle")}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setShowCodexGroupModal(true);
-                  }}
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  className="folder-icon-btn folder-delete-btn"
-                  title={t("accounts.groups.deleteTitle")}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    requestDeleteGroup(group.id, group.name);
-                  }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </td>
-          </tr>
-        );
-      });
-  
-      return rows.length > 0 ? rows : null;
-    };
+    const renderGroupTableRows = () => null;
   
     const inlineFolderCards = renderInlineFolderCards();
     const hasGroupEntryCards = Boolean(

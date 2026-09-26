@@ -281,6 +281,9 @@ pub struct UserConfig {
     /// Antigravity 切号是否启用“本地落盘 + 扩展无感”且不重启
     #[serde(default = "default_antigravity_dual_switch_no_restart_enabled")]
     pub antigravity_dual_switch_no_restart_enabled: bool,
+    /// Antigravity 是否开启同邮箱重复账号自动合并
+    #[serde(default = "default_antigravity_auto_merge_duplicates")]
+    pub antigravity_auto_merge_duplicates: bool,
     /// 是否启用自动切号
     #[serde(default = "default_auto_switch_enabled")]
     pub auto_switch_enabled: bool,
@@ -669,6 +672,9 @@ fn default_codex_auto_restore_takeover_on_launch() -> bool {
 fn default_antigravity_dual_switch_no_restart_enabled() -> bool {
     false
 }
+fn default_antigravity_auto_merge_duplicates() -> bool {
+    false
+}
 fn default_auto_switch_enabled() -> bool {
     false
 }
@@ -871,6 +877,8 @@ impl Default for UserConfig {
                 default_codex_auto_restore_takeover_on_launch(),
             antigravity_dual_switch_no_restart_enabled:
                 default_antigravity_dual_switch_no_restart_enabled(),
+            antigravity_auto_merge_duplicates:
+                default_antigravity_auto_merge_duplicates(),
             auto_switch_enabled: default_auto_switch_enabled(),
             auto_switch_threshold: default_auto_switch_threshold(),
             auto_switch_scope_mode: default_auto_switch_scope_mode(),
