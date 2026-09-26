@@ -7,11 +7,11 @@
 [![GitHub release](https://img.shields.io/github/v/release/jlcodes99/cockpit-tools?style=flat)](https://github.com/jlcodes99/cockpit-tools/releases)
 [![GitHub issues](https://img.shields.io/github/issues/jlcodes99/cockpit-tools)](https://github.com/jlcodes99/cockpit-tools/issues)
 
-Uma **ferramenta universal de gerenciamento de contas para IDEs de IA**, atualmente compatível com **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae** e **Zed**, com fluxos de trabalho paralelos em múltiplas instâncias.
+Uma **ferramenta universal de gerenciamento de contas para IDEs de IA**, atualmente compatível com **Antigravity IDE**, **Codex**, **GitHub Copilot**, **Windsurf**, **Kiro**, **Cursor**, **Grok CLI**, **CodeBuddy**, **CodeBuddy CN**, **Qoder**, **Trae**, **TRAE SOLO**, **Trae CN**, **TRAE SOLO CN**, **Zed** e **ZCode**, com fluxos de trabalho paralelos em múltiplas instâncias.
 
 > Projetada para ajudar os usuários a gerenciar com eficiência múltiplas contas de IDE com IA, esta ferramenta oferece suporte à troca com um clique, monitoramento de cota, tarefas de ativação e execuções paralelas em múltiplas instâncias, ajudando você a utilizar totalmente os recursos de diferentes contas.
 
-**Recursos**: Alternância com um clique · Gerenciamento de múltiplas contas · Múltiplas instâncias · Monitoramento de cotas · Tarefas de ativação · Integração de plugins · Gerenciamento do GitHub Copilot · Gerenciamento do Windsurf · Gerenciamento do Kiro · Gerenciamento do Cursor · Gerenciamento do CodeBuddy · Gerenciamento do CodeBuddy CN · Gerenciamento do Qoder · Gerenciamento do Trae · Gerenciamento do Zed
+**Recursos**: Alternância com um clique · Gerenciamento de múltiplas contas · Múltiplas instâncias · Monitoramento de cotas · Tarefas de ativação · Integração de plugins · Gerenciamento do GitHub Copilot · Gerenciamento do Windsurf · Gerenciamento do Kiro · Gerenciamento do Cursor · Gerenciamento do Grok CLI · Gerenciamento do CodeBuddy · Gerenciamento do CodeBuddy CN · Gerenciamento do Qoder · Gerenciamento do pacote Trae · Gerenciamento do Zed · Gerenciamento do ZCode
 
 **Idiomas**: Suporta 18 idiomas
 
@@ -27,7 +27,7 @@ Uma **ferramenta universal de gerenciamento de contas para IDEs de IA**, atualme
 
 Um painel visual totalmente novo que oferece uma visão geral do status em um único lugar:
 
-- **Suporte a doze Plataformas**: Exibe simultaneamente o status das contas do Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, CodeBuddy, CodeBuddy CN, Qoder, Trae e Zed
+- **Suporte a dezesseis Plataformas**: Exibe simultaneamente o status das contas do Antigravity IDE, Codex, GitHub Copilot, Windsurf, Kiro, Cursor, Grok CLI, CodeBuddy, CodeBuddy CN, Qoder, Trae, TRAE SOLO, Trae CN, TRAE SOLO CN, Zed e ZCode
 - **Monitoramento de Cotas**: Visualização em tempo real das cotas restantes e dos horários de redefinição para cada modelo
 - **Ações Rápidas**: Atualização com um clique, ativação com um clique
 - **Progresso Visual**: Barras de progresso intuitivas mostrando o consumo de cotas
@@ -138,14 +138,32 @@ Gerencie instâncias do Cursor com perfis isolados e controles de ciclo de vida.
 - **Controle de Janelas**: Abra janelas de instâncias e feche todas as instâncias.
 
 
-### 8. Gerenciamento de conta CodeBuddy
+### 8. Gerenciamento de Conta Grok CLI
+
+- **Autorização OAuth**: Suporta o fluxo de dispositivo OIDC oficial da xAI e salva a conta após a conclusão da verificação no navegador
+- **Chaves de API e Endpoints de Terceiros**: Suporta chaves de API oficiais da xAI e também `Base URL` e IDs de modelo compatíveis com OpenAI de terceiros; a configuração é gravada em um `config.toml` específico da conta, enquanto a chave é injetada apenas no processo da CLI correspondente na inicialização
+- **Importação e Exportação com Omissão**: Importa credenciais oficiais do `~/.grok/auth.json` padrão ou de um JSON fornecido; as exportações da página de contas e os backups genéricos omitem os tokens de acesso/atualização, não conseguem restaurar um login e exigem uma importação separada do `auth.json` oficial ao migrar
+- **Troca Real de Conta**: Grava a conta selecionada no `~/.grok/auth.json` padrão no formato de registro oficial do Grok CLI, preservando outros escopos de registro do arquivo
+- **Cota e Plano**: Consulta os endpoints oficiais de faturamento/usuário/assinaturas, exibe ciclo, uso, cotas de produto e o valor bruto do plano, e registra o acesso ao Grok Code
+- **Manutenção de Token**: Suporta atualização automática do token de acesso, rotação do token de atualização e alertas de cota
+
+#### 8.1 Grok CLI Multi-Instância
+
+A instância padrão do Grok CLI normalmente usa o diretório oficial `~/.grok` diretamente e inicia sem definir `GROK_HOME`; as instâncias gerenciadas usam diretórios separados. As contas com chave de API, incluindo endpoints de terceiros, sempre iniciam com um `GROK_HOME` específico da conta, para que uma sessão OAuth oficial não possa ter precedência sobre as credenciais.
+
+- **Vinculação de Conta**: A instância padrão pode seguir a conta atual, enquanto cada instância gerenciada pode vincular uma conta diferente
+- **Isolamento de Tempo de Execução**: As instâncias gerenciadas mantêm seus `auth.json`, `config.toml`, diretórios de trabalho e argumentos de inicialização separados
+- **Ciclo de Vida no Terminal**: Gera ou executa comandos de inicialização no terminal, para instâncias e fecha todas as instâncias
+- **Proteção de Diretório**: Instâncias não padrão ficam restritas à raiz gerenciada padrão e são movidas para a lixeira ao serem excluídas; caminhos externos de configurações legadas são apenas cancelados e nunca gravados ou excluídos
+
+### 9. Gerenciamento de conta CodeBuddy
 
 - **Importação de Contas**: Importação via OAuth e Token/JSON
 - **Visualização de Cotas**: Consulta de cotas, detalhes do ciclo e exibição de créditos extras
 - **Operações em Lote**: Tags e ações em massa
 - **Injeção de Troca de Conta**: Suporta a injeção e inicialização do CodeBuddy após a troca de conta
 
-#### 8.1 CodeBuddy Multi-Instância
+#### 9.1 CodeBuddy Multi-Instância
 
 Gerencie instâncias do CodeBuddy com perfis isolados e controles de ciclo de vida.
 
@@ -153,14 +171,14 @@ Gerencie instâncias do CodeBuddy com perfis isolados e controles de ciclo de vi
 - **Ciclo de Vida Rápido**: Inicie, pare e force a parada de instâncias.
 - **Controle de Janelas**: Abra janelas de instâncias e feche todas as instâncias.
 
-### 9. Gerenciamento de Contas do CodeBuddy CN
+### 10. Gerenciamento de Contas do CodeBuddy CN
 
 - **Importação de Conta**: suporta importação de OAuth, Token/JSON e cliente local
 - **Visualização de Cota**: exibe o plano e o status de uso, com um atalho para abrir informações detalhadas de cota na página oficial
 - **Operações em Lote**: suporta tags e ações em massa
 - **Injeção de Troca de Conta**: suporta a gravação do estado de autenticação local de volta e a inicialização do CodeBuddy CN após a troca de conta
 
-#### 8.1 CodeBuddy CN Multi-Instância
+#### 10.1 CodeBuddy CN Multi-Instância
 
 Gerencie instâncias do CodeBuddy CN com perfis isolados e controles de ciclo de vida.
 
@@ -168,14 +186,14 @@ Gerencie instâncias do CodeBuddy CN com perfis isolados e controles de ciclo de
 - **Ciclo de Vida Rápido**: inicie, pare e force a parada de instâncias.
 - **Controle de Janelas**: abra janelas de instâncias e feche todas as instâncias.
 
-### 10. Gerenciamento de Contas do Qoder
+### 11. Gerenciamento de Contas do Qoder
 
 - **Importação de Contas**: suporta importação local e importação JSON
 - **Visualização de Cotas**: mostra o uso de créditos, créditos restantes e valores brutos do plano
 - **Operações em Lote**: suporta tags, filtros, exportação e exclusão/atualização em lote
 - **Injeção de Troca de Conta**: suporta a injeção e inicialização do Qoder após a troca de conta
 
-#### 9.1 Qoder Multi-Instância
+#### 11.1 Qoder Multi-Instância
 
 Gerencie instâncias do Qoder com perfis isolados e controles de ciclo de vida.
 
@@ -183,14 +201,15 @@ Gerencie instâncias do Qoder com perfis isolados e controles de ciclo de vida.
 - **Ciclo de Vida Rápido**: inicie, pare e force a parada de instâncias.
 - **Controle de Janelas**: abra janelas de instâncias e feche todas as instâncias.
 
-### 11. Gerenciamento de Contas Trae
+### 12. Gerenciamento de Contas Trae
 
 - **Importação de Contas**: suporta importação local e importação JSON
 - **Visualização de Cotas**: mostra os valores brutos do plano, USD gasto/orçamento total e tempo de reinicialização
 - **Operações em Lote**: suporta tags, filtros, exportação e exclusão/atualização em lote
+- **Pacote Trae**: suporta importação local e injeção de troca para os clientes padrão do Trae, TRAE SOLO, Trae CN e TRAE SOLO CN; eles são agrupados sob o Trae por padrão
 - **Injeção de Troca de Conta**: suporta a gravação do estado de autenticação local e a inicialização do Trae após a troca de conta
 
-#### 10.1 Trae Multi-Instância
+#### 12.1 Trae Multi-Instância
 
 Gerencie instâncias do Trae com perfis isolados e controles de ciclo de vida.
 
@@ -198,17 +217,33 @@ Gerencie instâncias do Trae com perfis isolados e controles de ciclo de vida.
 - **Ciclo de Vida Rápido**: inicie, pare e force a parada de instâncias.
 - **Controle de Janelas**: abra janelas de instâncias e feche todas as instâncias.
 
-### 12. Gerenciamento de Contas Zed
+### 13. Gerenciamento de Contas Zed
 
 - **Importação de Conta**: Suporta login OAuth oficial, importação JSON e importação do estado atual de login local.
 - **Visualização de Uso**: Exibe o status da assinatura, permite editar previsões, gastos com tokens, limite de gastos e o fim do período de faturamento.
 - **Operações em Lote**: Suporta tags, filtros, exportação e exclusão/atualização em lote.
 - **Injeção de Switch**: Aplica a conta selecionada de volta ao cliente Zed oficial usando as regras de persistência local reais do cliente e reinicia o cliente quando necessário.
 
-### 13. Configurações Gerais
+### 14. Gerenciamento de Conta ZCode
+
+- **Login Oficial**: Com o ZCode fechado, conclua o OAuth Z.ai ou BigModel na janela de autorização integrada do Cockpit; ele captura o callback oficial `zcode://` diretamente e salva a conta
+- **Importação e Exportação**: Lê credenciais locais criptografadas de `~/.zcode/v2/credentials.json`, importa ou exporta JSON e faz backup das contas
+- **Visualização de Cota**: Consulta planos de assinatura e cotas por modelo, preservando os valores brutos do plano
+- **Operações em Lote**: Tags, pesquisa, filtros de plano, exportação e exclusão/atualização em lote
+- **Troca Real de Conta**: Criptografa e grava a conta selecionada de volta usando o formato oficial de credenciais do ZCode
+
+#### 14.1 ZCode Multi-Instância
+
+Gerencie instâncias do ZCode com dados de usuário, de sessão e de dados do ZCode do Electron separados.
+
+- **Vinculação de Conta**: Vincule uma conta diferente a cada instância ou siga a conta atual
+- **Tempo de Execução Isolado**: As credenciais e os dados do aplicativo de cada instância permanecem separados
+- **Controles de Ciclo de Vida**: Inicie, pare, foque e feche todas as instâncias gerenciadas
+
+### 15. Configurações Gerais
 
 - **Configurações Personalizadas**: Troca de tema, configurações de idioma, intervalo de atualização automática
-- **Controles da Plataforma**: Configurações centralizadas de caminho de inicialização e alerta de cota do CodeBuddy CN/Qoder/Trae/Zed
+- **Controles da Plataforma**: Configurações centralizadas de caminho de inicialização e alerta de cota do Grok CLI/CodeBuddy CN/Qoder/pacote Trae/Zed/ZCode
 
 > ![Configurações](docs/images/settings_page.png)
 
@@ -222,7 +257,10 @@ Estas são as perguntas de segurança mais comuns respondidas diretamente:
 - **Os dados são armazenados principalmente em sua máquina**:
   - `~/.antigravity_cockpit`: Contas do Antigravity IDE, configurações, status do WebSocket, etc.
   - `~/.codex`: Arquivo `auth.json` de login atual do Codex
-  - Pasta de dados do aplicativo local em `com.antigravity.cockpit-tools`: Dados de índice de múltiplas contas do Codex / GitHub Copilot / Windsurf / Kiro / Cursor / CodeBuddy / CodeBuddy CN / Qoder / Trae / Zed, etc.
+  - `~/.grok`: a instância padrão oficial do Grok CLI e o `auth.json` do login atual
+  - `~/.zcode/v2`: credenciais criptografadas do ZCode para o login oficial atual e o cache de cota
+  - Pasta de dados do aplicativo local em `com.antigravity.cockpit-tools`: Dados de múltiplas contas do Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Grok CLI / CodeBuddy / CodeBuddy CN / Qoder / pacote Trae / Zed / ZCode, etc.; detalhes de conta, perfis gerenciados e configurações de instância do Grok CLI também são armazenados aqui
+- **As credenciais do Grok CLI não são criptografadas**: os tokens de acesso e de atualização são armazenados localmente como JSON em texto puro e dependem principalmente do isolamento de conta do sistema operacional e das permissões de arquivos locais. Em sistemas Unix, os diretórios de credenciais são definidos como `0700` e os arquivos de credenciais como `0600`. As exportações com omissão não contêm tokens e não servem como backups de login.
 - **O WebSocket é somente local por padrão**: vincula-se a `127.0.0.1`, porta padrão `19528`; você pode desativá-lo ou alterar a porta em Configurações.
 - **Quando ocorre acesso à rede**: login OAuth, atualização de token, obtenção de cota, verificações de atualização e outras solicitações oficiais da API.
 **Solicitações de permissão de privacidade do macOS**: após iniciar o Codex/agente a partir do Cockpit Tools, se um comando do shell executado pelo agente acessar pastas protegidas, como Área de Trabalho, Documentos, Downloads ou Fotos, o macOS poderá exibir a solicitação como "O Cockpit Tools gostaria de acessar...". Isso ocorre porque esses comandos são processos filhos iniciados pelo Cockpit Tools, portanto, o macOS atribui a solicitação ao aplicativo host; isso não significa, por si só, que o processo principal do Cockpit Tools esteja ativamente verificando essas pastas. Conceda acesso somente se você confiar na tarefa atual do agente e nos comandos que ela executará. Em caso de dúvida, negue a solicitação ou execute o projeto a partir de um diretório de trabalho normal primeiro.
@@ -248,13 +286,14 @@ Se você deseja uma configuração estável com ajustes mínimos, siga os valore
 | Windsurf Auto Refresh | Periodically updates Windsurf quota | 5-10 minutes | Same as above |
 | Kiro Auto Refresh | Periodically updates Kiro quota | 5-10 minutes | Same as above |
 | Cursor Auto Refresh | Periodically updates Cursor quota | 5-10 minutes | Same as above |
+| Grok CLI Auto Refresh | Periodically refreshes tokens and updates quota | 5-10 minutes | Same as above |
 | CodeBuddy Auto Refresh | Periodically updates CodeBuddy quota | 5-10 minutes | Same as above |
 | CodeBuddy CN Auto Refresh | Periodically updates CodeBuddy CN quota | 5-10 minutes | Same as above |
 | Qoder Auto Refresh | Periodically updates Qoder quota | 5-10 minutes | Same as above |
-| Trae Auto Refresh | Periodically updates Trae quota | 5-10 minutes | Same as above |
+| Trae Auto Refresh | Periodically updates Trae suite account quota | 5-10 minutes | Same as above |
 | Zed Auto Refresh | Periodically updates Zed quota | 5-10 minutes | Same as above |
 | Data Directory | Where account/config files are stored | Keep default | Only for troubleshooting or backups |
-| Antigravity IDE/Codex/VS Code/Windsurf/Kiro/Cursor/CodeBuddy/CodeBuddy CN/Qoder/Trae/Zed/OpenCode App Path | Manually set executable path | Leave empty (auto-detect) | Change only if auto-detect fails or you use custom install paths |
+| Antigravity IDE/Codex/VS Code/Windsurf/Kiro/Cursor/Grok CLI/CodeBuddy/CodeBuddy CN/Qoder/Trae/Zed/OpenCode App Path | Manually set executable path | Leave empty (auto-detect) | Change only if auto-detect fails or you use custom install paths |
 | Auto-restart OpenCode on Codex switch | Sync OpenCode auth after Codex switch | ON if you use OpenCode; otherwise OFF | Enable for frequent Codex switching with OpenCode |
 
 Observações:
