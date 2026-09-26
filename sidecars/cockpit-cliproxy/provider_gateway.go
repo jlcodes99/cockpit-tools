@@ -307,6 +307,8 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		}
 	}
 	var multiAgentV2Optimized bool
+	// 由 `custom` 工具提升而来的工具名，响应出口据此把 function_call 还原成 custom_tool_call。
+	var freeformTools map[string]bool
 	if sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse) {
 		// 统一历史投影：把 Codex 私有历史项（web_search_call、浮点参数等）
 		// 投影成目标上游能反序列化的形状，避免严格上游直接 422。
@@ -324,6 +326,10 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		// 时整包 422，不会进入后面的工具顺序修复。补 ID 必须在重排之前，
 		// 否则缺 ID 的调用项会让重排直接放弃。
 		body = normalizeProviderGatewayCallIDs(body)
+		// Codex 0.156 起把工具声明放进了 `input[].additional_tools`，第三方 Responses 上游
+		// 只认顶层 `tools`。chat_completions 上游的响应转换链路没有 freeform 还原逻辑，
+		// 那里只提升 function 工具，免得造出客户端无法识别的调用类型。
+		body, freeformTools = providerGatewayHoistAdditionalTools(body, wireAPI == "responses")
 	}
 	if wireAPI == "responses" && providerGatewayRepairsToolCallOrder(gateway) {
 		// 先关掉并行工具调用（从源头避免竞态），再还原已经落盘历史里的顺序。
@@ -430,7 +436,7 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 			return
 		}
 		c.Status(http.StatusOK)
-		s.writeProviderGatewayResponsesStream(c, resp.Body, multiAgentV2Optimized)
+		s.writeProviderGatewayResponsesStream(c, resp.Body, multiAgentV2Optimized, freeformTools)
 		return
 	}
 
@@ -452,6 +458,8 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		payload = normalizeResponsesReasoningContentBody(payload)
 		payload = helps.RestoreCodexMultiAgentV2Response(payload, multiAgentV2Optimized)
 		payload = helps.NormalizeCodexCollaborationToolCalls(payload)
+		// 必须在 item id 改写之前：还原成 custom_tool_call 后 id 才会拿到 ctc 前缀。
+		payload = providerGatewayAdditionalToolsResponsePayload(payload, freeformTools)
 		payload = newProviderGatewayItemIDRewriter().RewritePayload(payload)
 	}
 	contentType := resp.Header.Get("Content-Type")
@@ -681,19 +689,29 @@ func (s *relayServer) writeProviderGatewayTranslatedChatStream(c *gin.Context, b
 }
 
 // writeProviderGatewayResponsesStream 透传 provider gateway 的 Responses SSE，
-// 只在出口清洗第三方推理项，并在需要时还原 Multi-Agent V2 collaboration
-// namespace；其余字节与原有 io.Copy 透传保持一致。
-func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body io.Reader, multiAgentV2Optimized bool) {
+// 只在出口清洗第三方推理项，在需要时还原 Multi-Agent V2 collaboration
+// namespace，并把 freeform 工具的 function_call 还原成 custom_tool_call；
+// 其余字节与原有 io.Copy 透传保持一致。
+func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body io.Reader, multiAgentV2Optimized bool, freeformTools map[string]bool) {
 	if body == nil {
 		return
 	}
 	itemIDRewriter := newProviderGatewayItemIDRewriter()
+	freeformRewriter := newProviderGatewayAdditionalToolsRewriter(freeformTools)
 	reader := bufio.NewReaderSize(body, 64*1024)
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
 			line = normalizeResponsesReasoningContentSSELine(line)
 			line = restoreProviderGatewayMultiAgentV2SSELine(line, multiAgentV2Optimized)
+			// 放在 item id 改写之前：还原成 custom_tool_call 后 id 才会拿到 ctc 前缀。
+			line = freeformRewriter.RewriteSSELine(line)
+			if len(line) == 0 {
+				if err != nil {
+					return
+				}
+				continue
+			}
 			line = itemIDRewriter.RewriteSSEFrame(line)
 			if _, writeErr := c.Writer.Write(line); writeErr != nil {
 				return
