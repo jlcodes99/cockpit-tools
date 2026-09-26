@@ -1992,7 +1992,7 @@ mod tests {
     }
 
     #[test]
-    fn gpt_6_astra_preserves_official_catalog_limits_and_reasoning_levels() {
+    fn gpt_6_astra_allows_explicit_long_context_without_changing_default() {
         let response = build_codex_client_models_response(&["gpt-6-astra".to_string()]);
         let model = response
             .pointer("/models/0")
@@ -2007,7 +2007,7 @@ mod tests {
         );
         assert_eq!(
             model.get("max_context_window").and_then(Value::as_i64),
-            Some(256_000)
+            Some(1_050_000)
         );
         // 统一口径：上下文窗口必须带 90% 的压缩阈值。
         assert_eq!(
@@ -2048,7 +2048,7 @@ mod tests {
     }
 
     #[test]
-    fn gpt_6_sol_and_luna_preserve_official_catalog_limits_and_reasoning_levels() {
+    fn gpt_6_sol_and_luna_allow_explicit_long_context_without_changing_default() {
         for (slug, official_name, fallback_name, priority, supports_ultra) in [
             ("gpt-6-sol", "GPT-6 Sol", "GPT-6 Sol", 2, true),
             ("gpt-6-luna", "GPT-6 Luna", "GPT-6 Luna", 3, false),
@@ -2069,7 +2069,7 @@ mod tests {
             );
             assert_eq!(
                 model.get("max_context_window").and_then(Value::as_i64),
-                Some(256_000)
+                Some(1_050_000)
             );
             // 统一口径：上下文窗口必须带 90% 的压缩阈值。
             assert_eq!(
