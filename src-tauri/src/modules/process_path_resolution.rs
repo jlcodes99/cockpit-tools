@@ -35,6 +35,46 @@ mod app_path_config_guard_tests {
 }
 
 #[cfg(test)]
+mod windows_codex_store_path_refresh_tests {
+    use super::registered_codex_store_path_is_stale;
+    use std::path::Path;
+
+    #[test]
+    fn stale_store_path_is_refreshed_even_when_old_path_may_still_exist() {
+        assert!(registered_codex_store_path_is_stale(
+            Path::new(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex_26.917.8451.0_x64__pkg\app\ChatGPT.exe"
+            ),
+            Path::new(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex_26.917.9434.0_x64__pkg\app\ChatGPT.exe"
+            ),
+        ));
+    }
+
+    #[test]
+    fn same_store_path_is_not_refreshed_after_normalization() {
+        assert!(!registered_codex_store_path_is_stale(
+            Path::new(
+                r"C:/Program Files/WindowsApps/OpenAI.Codex_26.917.9434.0_x64__pkg/app/ChatGPT.exe"
+            ),
+            Path::new(
+                r"c:\program files\windowsapps\openai.codex_26.917.9434.0_x64__pkg\app\chatgpt.exe"
+            ),
+        ));
+    }
+
+    #[test]
+    fn custom_non_store_path_is_never_replaced_by_store_detection() {
+        assert!(!registered_codex_store_path_is_stale(
+            Path::new(r"C:\Tools\Codex\ChatGPT.exe"),
+            Path::new(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex_26.917.9434.0_x64__pkg\app\ChatGPT.exe"
+            ),
+        ));
+    }
+}
+
+#[cfg(test)]
 mod linux_antigravity_path_tests {
     use super::{
         antigravity_executable_paths_match, antigravity_install_root_from_path,
@@ -2757,14 +2797,12 @@ fn codex_managed_store_launch_unsafe_error(
 ///
 /// 返回当前注册包对应的启动路径；路径一致、不是商店目录或无法确认时返回 `None`。
 #[cfg(target_os = "windows")]
-fn refresh_registered_codex_store_launch_path(
-    current: &Path,
-) -> Option<std::path::PathBuf> {
+fn refresh_registered_codex_store_launch_path(current: &Path) -> Option<std::path::PathBuf> {
     if !is_windowsapps_launch_path(current) {
         return None;
     }
     let registered = detect_codex_store_gui_exe()?;
-    if normalized_windows_path_text(&registered) == normalized_windows_path_text(current) {
+    if !registered_codex_store_path_is_stale(current, &registered) {
         return None;
     }
     Some(registered)
@@ -2886,6 +2924,12 @@ fn normalized_windows_path_text(path: &Path) -> String {
 #[cfg(any(test, target_os = "windows"))]
 fn is_windowsapps_launch_path(path: &Path) -> bool {
     normalized_windows_path_text(path).contains("\\windowsapps\\")
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn registered_codex_store_path_is_stale(current: &Path, registered: &Path) -> bool {
+    is_windowsapps_launch_path(current)
+        && normalized_windows_path_text(registered) != normalized_windows_path_text(current)
 }
 
 #[cfg(any(test, target_os = "windows"))]
@@ -3484,6 +3528,16 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
     let configured_path = normalize_custom_path(Some(&configured)).map(std::path::PathBuf::from);
 
     if let Some(path) = configured_path.as_deref() {
+        if let Some(refreshed) = refresh_registered_codex_store_launch_path(path) {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] refreshed stale Store launch path before PID probe: old={} new={}",
+                path.to_string_lossy(),
+                refreshed.to_string_lossy()
+            ));
+            update_app_path_in_config("codex", &refreshed, &configured);
+            return Ok(refreshed);
+        }
+
         if path.is_file() {
             return Ok(path.to_path_buf());
         }
