@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Tydzień"
     },
-    "optional": " (opcjonalne)"
+    "optional": " (opcjonalne)",
+    "clear": "Wyczyść",
+    "done": "Gotowe",
+    "saved": "Zapisano",
+    "edit": "Edytuj"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1073,7 +1077,17 @@
       "menuBarAccountPrefixDesc": "Tylko zwykłe konta: wył. ukrywa prefiks e-mail. Usługa API Codex / API Key nadal pokazuje API",
       "menuBarQuotaConfirmEnable": "Włącz",
       "codexHideRelayQuota": "Ukryj limit relay",
-      "codexHideRelayQuotaDesc": "Ukrywa panele limitu relay / New API w przeglądzie kont Codex."
+      "codexHideRelayQuotaDesc": "Ukrywa panele limitu relay / New API w przeglądzie kont Codex.",
+      "accountLevelRefreshTitle": "Ustawienia odświeżania dla kont",
+      "accountLevelRefreshDesc": "Ustaw różne interwały automatycznego odświeżania dla każdego konta, zastępując domyślną wartość platformy.",
+      "accountLevelRefreshSummaryActive": "Skonfigurowano kont: {{count}}",
+      "accountLevelRefreshSummary": "Rozwiń ustawienia",
+      "accountLevelRefreshInherit": "Odiedziedz ustawienia platformy",
+      "accountLevelRefreshDisabled": "Wyłączone",
+      "errorReporting": "Diagnostyka telemetrii",
+      "errorReportingDesc": "Domyślnie włączone i używane wyłącznie do rozwiązywania problemów z uruchamianiem i interfejsem. Po wyłączeniu nie są wysyłane zdarzenia telemetrii. Dane są anonimizowane przed wysłaniem; hasła kont, tokeny, sekrety 2FA, numery telefonów i inne dane wrażliwe nigdy nie są przesyłane.",
+      "codexAutoRestoreTakeoverOnLaunch": "Przywróć przejęcie proxy Codex przy uruchomieniu",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Automatycznie przywraca ostatnio widoczny model i przejęcie proxy podczas uruchamiania aplikacji, zachowując kontekst 1M bez ręcznego przełączania."
     },
     "network": {
       "apiTitle": "API kokpitu antygrawitacyjnego",
@@ -1387,7 +1401,8 @@
       "windowsApp": "Aplikacja Microsoft Store",
       "defaultOnly": "Tylko domyślny pulpit; dla wielu instancji wybierz prawdziwy Claude.exe.",
       "claudeScanEmpty": "Nie znaleziono celu Claude Desktop. Wybierz Claude.exe ręcznie albo zmień zakres skanowania.",
-      "claudeTargetPlaceholder": "Ścieżka Claude.exe albo shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Ścieżka Claude.exe albo shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Nie wykryto działającej aplikacji {{app}}. Uruchom aplikację i spróbuj ponownie lub wybierz ścieżkę ręcznie."
     },
     "modal": {
       "desc": "Nie znaleziono ścieżki aplikacji {{app}}. Skonfiguruj ją teraz, aby kontynuować."

@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Semana"
     },
-    "optional": " (opcional)"
+    "optional": " (opcional)",
+    "clear": "Limpar",
+    "done": "Concluído",
+    "saved": "Salvo",
+    "edit": "Editar"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1073,7 +1077,17 @@
       "menuBarAccountPrefixDesc": "Só contas normais: desligado oculta o prefixo do e-mail. Serviço API do Codex / API Key ainda mostram API",
       "menuBarQuotaConfirmEnable": "Ativar",
       "codexHideRelayQuota": "Ocultar cota relay",
-      "codexHideRelayQuotaDesc": "Oculta painéis de cota relay / New API na visão de contas Codex."
+      "codexHideRelayQuotaDesc": "Oculta painéis de cota relay / New API na visão de contas Codex.",
+      "accountLevelRefreshTitle": "Configurações de atualização por conta",
+      "accountLevelRefreshDesc": "Defina intervalos de atualização automática diferentes para cada conta, substituindo o padrão da plataforma.",
+      "accountLevelRefreshSummaryActive": "{{count}} contas configuradas",
+      "accountLevelRefreshSummary": "Expandir configurações",
+      "accountLevelRefreshInherit": "Herdar configurações da plataforma",
+      "accountLevelRefreshDisabled": "Desativado",
+      "errorReporting": "Diagnóstico de telemetria",
+      "errorReportingDesc": "Ativado por padrão e usado apenas para diagnosticar problemas de inicialização e da interface. Quando desativado, nenhum evento de telemetria é enviado. Os dados sensíveis são removidos antes do envio; senhas de conta, tokens, segredos 2FA, números de telefone e outras informações sensíveis nunca são enviados.",
+      "codexAutoRestoreTakeoverOnLaunch": "Restaurar a tomada de controle do proxy do Codex na inicialização",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Restaura automaticamente o último modelo visível e a tomada de controle do proxy ao iniciar o aplicativo, mantendo o contexto de 1M sem troca manual."
     },
     "network": {
       "apiTitle": "API de cockpit antigravidade",
@@ -1387,7 +1401,8 @@
       "windowsApp": "App da Microsoft Store",
       "defaultOnly": "Apenas desktop padrão; escolha o Claude.exe real para perfis multi-instância.",
       "claudeScanEmpty": "Nenhum alvo do Claude Desktop foi encontrado. Escolha o Claude.exe manualmente ou ajuste as raízes de escaneamento.",
-      "claudeTargetPlaceholder": "Caminho do Claude.exe ou shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Caminho do Claude.exe ou shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Nenhum {{app}} em execução foi detectado. Inicie o aplicativo e tente novamente ou selecione o caminho manualmente."
     },
     "modal": {
       "desc": "O caminho do aplicativo {{app}} não foi encontrado. Configure-o agora para continuar."

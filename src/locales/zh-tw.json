@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "週"
     },
-    "optional": "（可選）"
+    "optional": "（可選）",
+    "clear": "清除",
+    "done": "完成",
+    "saved": "已儲存",
+    "edit": "編輯"
   },
   "nav": {
     "overview": "Antigravity IDE",
@@ -1073,7 +1077,17 @@
       "menuBarAccountPrefixDesc": "僅一般帳號：關閉後不顯示信箱前綴。Codex API 服務 / API Key 仍會顯示 API 標籤",
       "menuBarQuotaConfirmEnable": "啟用",
       "codexHideRelayQuota": "隱藏中轉站額度",
-      "codexHideRelayQuotaDesc": "開啟後，Codex 帳號總覽隱藏中轉 / New API 類額度面板，減輕列表重疊與視覺干擾。"
+      "codexHideRelayQuotaDesc": "開啟後，Codex 帳號總覽隱藏中轉 / New API 類額度面板，減輕列表重疊與視覺干擾。",
+      "accountLevelRefreshTitle": "帳號級刷新設定",
+      "accountLevelRefreshDesc": "為不同帳號設定不同的自動刷新間隔，覆寫平台級預設值。",
+      "accountLevelRefreshSummaryActive": "已設定 {{count}} 個帳號",
+      "accountLevelRefreshSummary": "展開設定",
+      "accountLevelRefreshInherit": "繼承平台設定",
+      "accountLevelRefreshDisabled": "停用",
+      "errorReporting": "遙測診斷",
+      "errorReportingDesc": "預設開啟，僅用於排查啟動與介面問題；關閉後不會提交遙測事件。回報前會先脫敏，不會上傳帳號密碼、Token、2FA 密鑰、手機號碼等敏感資訊。",
+      "codexAutoRestoreTakeoverOnLaunch": "啟動時自動恢復 Codex 代理接管",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "工具啟動時自動恢復上次可見的模型與代理接管，維持 1M 上下文且無需手動切換。"
     },
     "network": {
       "apiTitle": "反重力駕駛艙 API",
@@ -1387,7 +1401,8 @@
       "windowsApp": "微軟商店",
       "defaultOnly": "僅適用於預設桌面端；應用多開請選擇真實 Claude.exe。",
       "claudeScanEmpty": "未掃描到 Claude Desktop，請手動選擇 Claude.exe 或調整掃描範圍。",
-      "claudeTargetPlaceholder": "Claude.exe 路徑或 shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe 路徑或 shell:AppsFolder\\...",
+      "scanEmptyGeneric": "未偵測到正在執行的 {{app}}，請先啟動應用程式後重試，或手動選擇路徑。"
     },
     "modal": {
       "desc": "找不到 {{app}} 的應用程式路徑，請立即設定以繼續。"

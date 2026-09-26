@@ -162,7 +162,7 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
         }
       }
       setForm(emptyForm);
-      setLocalMessage({ kind: 'success', text: t('common.saved', '已保存') });
+      setLocalMessage({ kind: 'success', text: t('common.saved') });
     } catch (err) {
       setLocalMessage({ kind: 'error', text: String(err) });
     } finally {
@@ -565,8 +565,8 @@ export function CodexSshServersPanel({ embedded = false }: CodexSshServersPanelP
                     <button
                       className="btn btn-secondary icon-only"
                       type="button"
-                      title={t('common.edit', '编辑')}
-                      aria-label={t('common.edit', '编辑')}
+                      title={t('common.edit')}
+                      aria-label={t('common.edit')}
                       onClick={() => setForm(formFromServer(server))}
                     >
                       <Pencil size={14} />

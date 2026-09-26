@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "周"
     },
-    "optional": "（可选）"
+    "optional": "（可选）",
+    "clear": "清除",
+    "done": "完成",
+    "saved": "已保存",
+    "edit": "编辑"
   },
   "floatingCard": {
     "selectPlatform": "切换平台",
@@ -1287,7 +1291,17 @@
       "menuBarAccountPrefixDesc": "仅普通账号：关闭后不显示邮箱前缀。Codex API 服务 / API Key 仍会显示 API 标签",
       "menuBarQuotaConfirmEnable": "启用",
       "codexHideRelayQuota": "隐藏中转站额度",
-      "codexHideRelayQuotaDesc": "开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。"
+      "codexHideRelayQuotaDesc": "开启后，Codex 账号总览隐藏中转 / New API 类额度面板，减轻列表重叠与视觉干扰。",
+      "accountLevelRefreshTitle": "账号级刷新设置",
+      "accountLevelRefreshDesc": "为不同账号设置不同的自动刷新间隔，覆盖平台级默认值。",
+      "accountLevelRefreshSummaryActive": "已配置 {{count}} 个账号",
+      "accountLevelRefreshSummary": "展开设置",
+      "accountLevelRefreshInherit": "继承平台设置",
+      "accountLevelRefreshDisabled": "禁用",
+      "errorReporting": "遥测诊断",
+      "errorReportingDesc": "默认开启，仅用于排查启动和界面问题；关闭后不会提交遥测事件。上报前会脱敏，不上传账号密码、Token、2FA 秘钥、手机号等敏感信息。",
+      "codexAutoRestoreTakeoverOnLaunch": "启动时自动恢复 Codex 代理接管",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "工具启动时自动恢复上次的可见模型与代理接管，保持 1M 上下文且无需手动切换。"
     },
     "tabs": {
       "general": "通用",
@@ -1610,7 +1624,8 @@
       "windowsApp": "微软商店",
       "defaultOnly": "仅适用于默认桌面端；应用多开请选择真实 Claude.exe。",
       "claudeScanEmpty": "未扫描到 Claude Desktop，请手动选择 Claude.exe 或调整扫描范围。",
-      "claudeTargetPlaceholder": "Claude.exe 路径或 shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe 路径或 shell:AppsFolder\\...",
+      "scanEmptyGeneric": "未检测到正在运行的 {{app}}，请先启动应用后重试，或手动选择路径。"
     }
   },
   "accounts": {

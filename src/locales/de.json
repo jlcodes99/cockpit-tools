@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Woche"
     },
-    "optional": " (optional)"
+    "optional": " (optional)",
+    "clear": "Löschen",
+    "done": "Fertig",
+    "saved": "Gespeichert",
+    "edit": "Bearbeiten"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1073,7 +1077,17 @@
       "menuBarAccountPrefixDesc": "Nur normale Konten: Aus blendet das E-Mail-Präfix aus. Codex-API-Dienst / API-Key behalten das API-Label",
       "menuBarQuotaConfirmEnable": "Aktivieren",
       "codexHideRelayQuota": "Relay-Kontingent ausblenden",
-      "codexHideRelayQuotaDesc": "Blendet Relay-/New-API-Kontingenttafeln in der Codex-Kontoübersicht aus."
+      "codexHideRelayQuotaDesc": "Blendet Relay-/New-API-Kontingenttafeln in der Codex-Kontoübersicht aus.",
+      "accountLevelRefreshTitle": "Aktualisierungseinstellungen pro Konto",
+      "accountLevelRefreshDesc": "Legen Sie für jedes Konto ein anderes Intervall für die automatische Aktualisierung fest und überschreiben Sie damit den Standard der Plattform.",
+      "accountLevelRefreshSummaryActive": "{{count}} Konto/Konten konfiguriert",
+      "accountLevelRefreshSummary": "Einstellungen ausklappen",
+      "accountLevelRefreshInherit": "Plattformeinstellung übernehmen",
+      "accountLevelRefreshDisabled": "Deaktiviert",
+      "errorReporting": "Telemetrie-Diagnose",
+      "errorReportingDesc": "Standardmäßig aktiviert und nur zur Fehlerbehebung bei Start- und Oberflächenproblemen verwendet. Wenn deaktiviert, werden keine Telemetrieereignisse gesendet. Daten werden vor der Übermittlung geschwärzt; Kontopasswörter, Tokens, 2FA-Geheimnisse, Telefonnummern und andere sensible Informationen werden nicht hochgeladen.",
+      "codexAutoRestoreTakeoverOnLaunch": "Codex-Proxy-Übernahme beim Start wiederherstellen",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Stellt beim Starten der App automatisch das zuletzt sichtbare Modell und die letzte Proxy-Übernahme wieder her und erhält den 1M-Kontext ohne manuelles Umschalten."
     },
     "network": {
       "apiTitle": "Antigravity-Cockpit-API",
@@ -1387,7 +1401,8 @@
       "windowsApp": "Microsoft-Store-App",
       "defaultOnly": "Nur für das Standard-Desktopprofil; für Mehrfachinstanzen bitte die echte Claude.exe wählen.",
       "claudeScanEmpty": "Kein Claude-Desktop-Ziel gefunden. Wähle Claude.exe manuell oder passe die Scanbereiche an.",
-      "claudeTargetPlaceholder": "Claude.exe-Pfad oder shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe-Pfad oder shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Keine laufende Instanz von {{app}} gefunden. Starten Sie die App und versuchen Sie es erneut, oder wählen Sie den Pfad manuell aus."
     },
     "modal": {
       "desc": "Der App-Pfad für {{app}} wurde nicht gefunden. Bitte jetzt konfigurieren, um fortzufahren."

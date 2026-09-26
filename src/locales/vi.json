@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Tuần"
     },
-    "optional": " (tùy chọn)"
+    "optional": " (tùy chọn)",
+    "clear": "Xóa",
+    "done": "Hoàn tất",
+    "saved": "Đã lưu",
+    "edit": "Chỉnh sửa"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1073,7 +1077,17 @@
       "menuBarAccountPrefixDesc": "Chỉ tài khoản thường: tắt sẽ ẩn tiền tố email. Dịch vụ API Codex / API Key vẫn hiện nhãn API",
       "menuBarQuotaConfirmEnable": "Bật",
       "codexHideRelayQuota": "Ẩn hạn mức relay",
-      "codexHideRelayQuotaDesc": "Ẩn bảng hạn mức relay / New API trên tổng quan tài khoản Codex."
+      "codexHideRelayQuotaDesc": "Ẩn bảng hạn mức relay / New API trên tổng quan tài khoản Codex.",
+      "accountLevelRefreshTitle": "Cài đặt làm mới theo tài khoản",
+      "accountLevelRefreshDesc": "Đặt khoảng thời gian tự động làm mới khác nhau cho từng tài khoản, ghi đè giá trị mặc định của nền tảng.",
+      "accountLevelRefreshSummaryActive": "Đã cấu hình {{count}} tài khoản",
+      "accountLevelRefreshSummary": "Mở rộng cài đặt",
+      "accountLevelRefreshInherit": "Kế thừa cài đặt của nền tảng",
+      "accountLevelRefreshDisabled": "Đã tắt",
+      "errorReporting": "Chẩn đoán telemetry",
+      "errorReportingDesc": "Bật theo mặc định và chỉ dùng để chẩn đoán sự cố khởi động và giao diện. Khi tắt, không có sự kiện telemetry nào được gửi. Dữ liệu được che giấu trước khi báo cáo; mật khẩu tài khoản, token, mã 2FA, số điện thoại và thông tin nhạy cảm khác sẽ không bao giờ được tải lên.",
+      "codexAutoRestoreTakeoverOnLaunch": "Khôi phục tiếp quản proxy Codex khi khởi động",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Tự động khôi phục mô hình hiển thị gần nhất và trạng thái tiếp quản proxy khi ứng dụng khởi động, giữ ngữ cảnh 1M mà không cần chuyển đổi thủ công."
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -1387,7 +1401,8 @@
       "windowsApp": "Ứng dụng Microsoft Store",
       "defaultOnly": "Chỉ dành cho desktop mặc định; hãy chọn Claude.exe thật cho hồ sơ đa phiên bản.",
       "claudeScanEmpty": "Không tìm thấy mục tiêu Claude Desktop. Hãy chọn Claude.exe thủ công hoặc chỉnh phạm vi quét.",
-      "claudeTargetPlaceholder": "Đường dẫn Claude.exe hoặc shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Đường dẫn Claude.exe hoặc shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Không phát hiện ứng dụng {{app}} đang chạy. Hãy khởi động ứng dụng rồi thử lại, hoặc chọn đường dẫn thủ công."
     },
     "modal": {
       "desc": "Không tìm thấy đường dẫn ứng dụng {{app}}. Vui lòng cấu hình ngay để tiếp tục."

@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Semana"
     },
-    "optional": " (opcional)"
+    "optional": " (opcional)",
+    "clear": "Limpiar",
+    "done": "Hecho",
+    "saved": "Guardado",
+    "edit": "Editar"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1073,7 +1077,17 @@
       "menuBarAccountPrefixDesc": "Solo cuentas normales: desactivado oculta el prefijo de correo. El servicio API de Codex / API Key siguen mostrando API",
       "menuBarQuotaConfirmEnable": "Activar",
       "codexHideRelayQuota": "Ocultar cuota relay",
-      "codexHideRelayQuotaDesc": "Oculta los paneles de cuota relay / New API en la vista de cuentas Codex."
+      "codexHideRelayQuotaDesc": "Oculta los paneles de cuota relay / New API en la vista de cuentas Codex.",
+      "accountLevelRefreshTitle": "Configuración de actualización por cuenta",
+      "accountLevelRefreshDesc": "Define intervalos de actualización automática distintos para cada cuenta y sobrescribe el valor predeterminado de la plataforma.",
+      "accountLevelRefreshSummaryActive": "{{count}} cuentas configuradas",
+      "accountLevelRefreshSummary": "Expandir configuración",
+      "accountLevelRefreshInherit": "Heredar configuración de la plataforma",
+      "accountLevelRefreshDisabled": "Deshabilitado",
+      "errorReporting": "Diagnóstico de telemetría",
+      "errorReportingDesc": "Activado de forma predeterminada y utilizado solo para diagnosticar problemas de inicio e interfaz. Si se desactiva, no se envían eventos de telemetría. Los datos se anonimizan antes de informarse; nunca se suben contraseñas de cuenta, tokens, secretos 2FA, números de teléfono ni otra información sensible.",
+      "codexAutoRestoreTakeoverOnLaunch": "Restaurar la toma de control del proxy de Codex al iniciar",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Restaura automáticamente el último modelo visible y la toma de control del proxy al iniciar la aplicación, manteniendo el contexto de 1M sin cambiarlo manualmente."
     },
     "network": {
       "apiTitle": "API de cabina antigravedad",
@@ -1387,7 +1401,8 @@
       "windowsApp": "App de Microsoft Store",
       "defaultOnly": "Solo para el escritorio predeterminado; elige el Claude.exe real para instancias múltiples.",
       "claudeScanEmpty": "No se encontró ningún destino de Claude Desktop. Elige Claude.exe manualmente o ajusta las rutas de escaneo.",
-      "claudeTargetPlaceholder": "Ruta de Claude.exe o shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Ruta de Claude.exe o shell:AppsFolder\\...",
+      "scanEmptyGeneric": "No se detectó ninguna {{app}} en ejecución. Inicia la aplicación y vuelve a intentarlo, o selecciona la ruta manualmente."
     },
     "modal": {
       "desc": "No se encontró la ruta de la aplicación {{app}}. Configúrela ahora para continuar."

@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Неделя"
     },
-    "optional": " (необязательно)"
+    "optional": " (необязательно)",
+    "clear": "Очистить",
+    "done": "Готово",
+    "saved": "Сохранено",
+    "edit": "Редактировать"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1073,7 +1077,17 @@
       "menuBarAccountPrefixDesc": "Только обычные аккаунты: выкл. скрывает префикс почты. API-сервис Codex / API Key по-прежнему показывают API",
       "menuBarQuotaConfirmEnable": "Включить",
       "codexHideRelayQuota": "Скрыть квоту ретранслятора",
-      "codexHideRelayQuotaDesc": "Скрывает панели квоты ретранслятора / New API в обзоре аккаунтов Codex."
+      "codexHideRelayQuotaDesc": "Скрывает панели квоты ретранслятора / New API в обзоре аккаунтов Codex.",
+      "accountLevelRefreshTitle": "Настройки обновления для отдельных аккаунтов",
+      "accountLevelRefreshDesc": "Задайте разные интервалы автоматического обновления для каждого аккаунта, переопределив значение по умолчанию для платформы.",
+      "accountLevelRefreshSummaryActive": "Настроено аккаунтов: {{count}}",
+      "accountLevelRefreshSummary": "Развернуть настройки",
+      "accountLevelRefreshInherit": "Наследовать настройки платформы",
+      "accountLevelRefreshDisabled": "Выключено",
+      "errorReporting": "Диагностика телеметрии",
+      "errorReportingDesc": "Включено по умолчанию и используется только для диагностики проблем запуска и интерфейса. Если выключено, события телеметрии не отправляются. Перед отправкой данные обезличиваются; пароли аккаунтов, токены, секреты 2FA, номера телефонов и другие чувствительные сведения не загружаются.",
+      "codexAutoRestoreTakeoverOnLaunch": "Восстанавливать захват прокси Codex при запуске",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Автоматически восстанавливает последнюю видимую модель и захват прокси при запуске приложения, сохраняя контекст 1M без ручного переключения."
     },
     "network": {
       "apiTitle": "API антигравитационной кабины",
@@ -1387,7 +1401,8 @@
       "windowsApp": "Приложение Microsoft Store",
       "defaultOnly": "Только для стандартного рабочего стола; для нескольких экземпляров выберите реальный Claude.exe.",
       "claudeScanEmpty": "Цель Claude Desktop не найдена. Выберите Claude.exe вручную или измените области сканирования.",
-      "claudeTargetPlaceholder": "Путь Claude.exe или shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Путь Claude.exe или shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Приложение {{app}} не запущено. Запустите его и повторите попытку или выберите путь вручную."
     },
     "modal": {
       "desc": "Путь приложения {{app}} не найден. Настройте его сейчас для продолжения."

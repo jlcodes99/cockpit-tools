@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Mingguan"
     },
-    "optional": " (opsional)"
+    "optional": " (opsional)",
+    "clear": "Hapus",
+    "done": "Selesai",
+    "saved": "Tersimpan",
+    "edit": "Edit"
   },
   "floatingCard": {
     "selectPlatform": "Ganti platform",
@@ -1120,7 +1124,17 @@
       "menuBarAccountPrefixDesc": "Hanya akun normal: mati menyembunyikan awalan email. Layanan API Codex / API Key tetap menampilkan label API",
       "menuBarQuotaConfirmEnable": "Aktifkan",
       "codexHideRelayQuota": "Sembunyikan kuota relay",
-      "codexHideRelayQuotaDesc": "Menyembunyikan panel kuota relay / New API di ringkasan akun Codex."
+      "codexHideRelayQuotaDesc": "Menyembunyikan panel kuota relay / New API di ringkasan akun Codex.",
+      "accountLevelRefreshTitle": "Pengaturan penyegaran per akun",
+      "accountLevelRefreshDesc": "Atur interval penyegaran otomatis yang berbeda untuk setiap akun, menggantikan nilai default platform.",
+      "accountLevelRefreshSummaryActive": "{{count}} akun dikonfigurasi",
+      "accountLevelRefreshSummary": "Buka pengaturan",
+      "accountLevelRefreshInherit": "Ikuti pengaturan platform",
+      "accountLevelRefreshDisabled": "Nonaktif",
+      "errorReporting": "Diagnostik telemetri",
+      "errorReportingDesc": "Aktif secara default dan hanya digunakan untuk mendiagnosis masalah startup dan antarmuka. Saat dimatikan, tidak ada peristiwa telemetri yang dikirim. Data diredaksi sebelum dilaporkan; kata sandi akun, token, rahasia 2FA, nomor telepon, dan informasi sensitif lainnya tidak pernah diunggah.",
+      "codexAutoRestoreTakeoverOnLaunch": "Pulihkan pengambilalihan proxy Codex saat startup",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Secara otomatis memulihkan model yang terakhir terlihat dan pengambilalihan proxy saat aplikasi dimulai, mempertahankan konteks 1M tanpa pergantian manual."
     },
     "network": {
       "apiTitle": "API Antigravity Cockpit",
@@ -1434,7 +1448,8 @@
       "windowsApp": "Aplikasi Microsoft Store",
       "defaultOnly": "Hanya desktop default; pilih Claude.exe asli untuk profil multi-instans.",
       "claudeScanEmpty": "Target Claude Desktop tidak ditemukan. Pilih Claude.exe secara manual atau sesuaikan cakupan pindai.",
-      "claudeTargetPlaceholder": "Jalur Claude.exe atau shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Jalur Claude.exe atau shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Tidak ditemukan {{app}} yang sedang berjalan. Mulai aplikasi lalu coba lagi, atau pilih path secara manual."
     },
     "modal": {
       "desc": "Path aplikasi {{app}} tidak ditemukan. Silakan konfigurasi sekarang untuk melanjutkan."

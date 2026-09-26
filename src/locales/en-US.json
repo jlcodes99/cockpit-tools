@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Weekly"
     },
-    "optional": " (optional)"
+    "optional": " (optional)",
+    "clear": "Clear",
+    "done": "Done",
+    "saved": "Saved",
+    "edit": "Edit"
   },
   "floatingCard": {
     "selectPlatform": "Switch platform",
@@ -1287,7 +1291,17 @@
       "menuBarAccountPrefixDesc": "Normal accounts only: when off, hide email prefix. Codex API Service / API Key still show the API label",
       "menuBarQuotaConfirmEnable": "Enable",
       "codexHideRelayQuota": "Hide relay quota",
-      "codexHideRelayQuotaDesc": "When on, Codex account overview hides mid-relay / New API style balance panels to reduce clutter."
+      "codexHideRelayQuotaDesc": "When on, Codex account overview hides mid-relay / New API style balance panels to reduce clutter.",
+      "accountLevelRefreshTitle": "Per-account refresh settings",
+      "accountLevelRefreshDesc": "Set different auto-refresh intervals for individual accounts, overriding the platform default.",
+      "accountLevelRefreshSummaryActive": "{{count}} accounts configured",
+      "accountLevelRefreshSummary": "Expand settings",
+      "accountLevelRefreshInherit": "Inherit platform settings",
+      "accountLevelRefreshDisabled": "Disabled",
+      "errorReporting": "Telemetry diagnostics",
+      "errorReportingDesc": "Enabled by default and used only to troubleshoot startup and interface issues. When off, no telemetry events are submitted. Data is redacted before reporting; account passwords, tokens, 2FA secrets, phone numbers, and other sensitive information are never uploaded.",
+      "codexAutoRestoreTakeoverOnLaunch": "Restore Codex proxy takeover on startup",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Automatically restores the last visible model and proxy takeover when the app starts, preserving 1M context without manual switching."
     },
     "tabs": {
       "general": "General",
@@ -1607,7 +1621,8 @@
       "windowsApp": "Microsoft Store",
       "defaultOnly": "Default desktop only; choose the real Claude.exe for multi-instance profiles.",
       "claudeScanEmpty": "No Claude Desktop target was found. Choose Claude.exe manually or adjust the scan roots.",
-      "claudeTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe path or shell:AppsFolder\\...",
+      "scanEmptyGeneric": "No running {{app}} was found. Start the app and try again, or select the path manually."
     },
     "modal": {
       "desc": "The app path for {{app}} was not found. Please configure it now to continue."

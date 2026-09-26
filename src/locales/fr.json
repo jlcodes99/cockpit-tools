@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "Semaine"
     },
-    "optional": " (facultatif)"
+    "optional": " (facultatif)",
+    "clear": "Effacer",
+    "done": "Terminé",
+    "saved": "Enregistré",
+    "edit": "Modifier"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -1073,7 +1077,17 @@
       "menuBarAccountPrefixDesc": "Comptes normaux uniquement : désactivé masque le préfixe e-mail. Service API Codex / clé API gardent le libellé API",
       "menuBarQuotaConfirmEnable": "Activer",
       "codexHideRelayQuota": "Masquer le quota relais",
-      "codexHideRelayQuotaDesc": "Masque les panneaux de quota relais / New API dans l’aperçu des comptes Codex."
+      "codexHideRelayQuotaDesc": "Masque les panneaux de quota relais / New API dans l’aperçu des comptes Codex.",
+      "accountLevelRefreshTitle": "Paramètres d'actualisation par compte",
+      "accountLevelRefreshDesc": "Définissez un intervalle d'actualisation automatique différent pour chaque compte, en remplaçant la valeur par défaut de la plateforme.",
+      "accountLevelRefreshSummaryActive": "{{count}} comptes configurés",
+      "accountLevelRefreshSummary": "Développer les paramètres",
+      "accountLevelRefreshInherit": "Hériter des paramètres de la plateforme",
+      "accountLevelRefreshDisabled": "Désactivé",
+      "errorReporting": "Diagnostic de télémétrie",
+      "errorReportingDesc": "Activé par défaut et utilisé uniquement pour diagnostiquer les problèmes de démarrage et d'interface. Lorsque l'option est désactivée, aucun événement de télémétrie n'est envoyé. Les données sont anonymisées avant l'envoi ; les mots de passe de compte, jetons, secrets 2FA, numéros de téléphone et autres informations sensibles ne sont jamais téléchargés.",
+      "codexAutoRestoreTakeoverOnLaunch": "Restaurer la prise de contrôle du proxy Codex au démarrage",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "Restaure automatiquement le dernier modèle visible et la dernière prise de contrôle du proxy au démarrage de l'application, en conservant le contexte 1M sans basculement manuel."
     },
     "network": {
       "apiTitle": "API du cockpit antigravité",
@@ -1387,7 +1401,8 @@
       "windowsApp": "Appli Microsoft Store",
       "defaultOnly": "Profil bureau par défaut uniquement ; choisissez le vrai Claude.exe pour les instances multiples.",
       "claudeScanEmpty": "Aucune cible Claude Desktop trouvée. Choisissez Claude.exe manuellement ou ajustez les dossiers à analyser.",
-      "claudeTargetPlaceholder": "Chemin Claude.exe ou shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Chemin Claude.exe ou shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Aucune application {{app}} en cours d'exécution n'a été détectée. Démarrez l'application, puis réessayez, ou sélectionnez le chemin manuellement."
     },
     "modal": {
       "desc": "Le chemin de l'application {{app}} est introuvable. Veuillez le configurer maintenant pour continuer."

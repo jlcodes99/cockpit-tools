@@ -369,7 +369,11 @@
     "quota": {
       "weeklyWindow": "أسبوع"
     },
-    "optional": "(اختياري)"
+    "optional": "(اختياري)",
+    "clear": "مسح",
+    "done": "تم",
+    "saved": "تم الحفظ",
+    "edit": "تعديل"
   },
   "floatingCard": {
     "selectPlatform": "تبديل المنصة",
@@ -1120,7 +1124,17 @@
       "menuBarAccountPrefixDesc": "للحسابات العادية فقط: عند الإيقاف تُخفى بادئة البريد. خدمة API لـ Codex / مفتاح API ما زالا يعرضان تسمية API",
       "menuBarQuotaConfirmEnable": "تفعيل",
       "codexHideRelayQuota": "إخفاء حصة الترحيل",
-      "codexHideRelayQuotaDesc": "يخفي لوحات حصة الترحيل / New API في نظرة حسابات Codex."
+      "codexHideRelayQuotaDesc": "يخفي لوحات حصة الترحيل / New API في نظرة حسابات Codex.",
+      "accountLevelRefreshTitle": "إعدادات التحديث لكل حساب",
+      "accountLevelRefreshDesc": "اضبط فترات تحديث تلقائي مختلفة لكل حساب، مع تجاوز القيمة الافتراضية للمنصة.",
+      "accountLevelRefreshSummaryActive": "تم إعداد {{count}} حسابًا",
+      "accountLevelRefreshSummary": "توسيع الإعدادات",
+      "accountLevelRefreshInherit": "توريث إعدادات المنصة",
+      "accountLevelRefreshDisabled": "معطل",
+      "errorReporting": "تشخيص القياس عن بُعد",
+      "errorReportingDesc": "مفعّل افتراضيًا ويستخدم فقط لاستكشاف مشكلات بدء التشغيل والواجهة. عند إيقافه، لا يتم إرسال أي أحداث قياس عن بُعد. يتم إخفاء البيانات قبل الإرسال؛ ولا يتم رفع كلمات مرور الحسابات أو token أو أسرار 2FA أو أرقام الهواتف أو أي معلومات حساسة أخرى.",
+      "codexAutoRestoreTakeoverOnLaunch": "استعادة الاستحواذ على وكيل Codex عند بدء التشغيل",
+      "codexAutoRestoreTakeoverOnLaunchDesc": "استعادة تلقائية لآخر نموذج مرئي وحالة الاستحواذ على الوكيل عند بدء تشغيل التطبيق، مع الحفاظ على سياق 1M دون تبديل يدوي."
     },
     "network": {
       "apiTitle": "واجهة برمجة تطبيقات قمرة القيادة المضادة للجاذبية",
@@ -1434,7 +1448,8 @@
       "windowsApp": "تطبيق Microsoft Store",
       "defaultOnly": "لسطح المكتب الافتراضي فقط؛ اختر Claude.exe الحقيقي للملفات متعددة المثيلات.",
       "claudeScanEmpty": "لم يتم العثور على هدف Claude Desktop. اختر Claude.exe يدويا أو عدل نطاقات الفحص.",
-      "claudeTargetPlaceholder": "مسار Claude.exe أو shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "مسار Claude.exe أو shell:AppsFolder\\...",
+      "scanEmptyGeneric": "لم يتم العثور على {{app}} قيد التشغيل. شغّل التطبيق ثم أعد المحاولة، أو حدد المسار يدويًا."
     },
     "modal": {
       "desc": "لم يتم العثور على مسار تطبيق {{app}}. يرجى الضبط الآن للمتابعة."
