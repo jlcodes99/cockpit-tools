@@ -22,6 +22,7 @@ import { GlobalModal } from './components/GlobalModal';
 import { WindowsOperationDialog } from './components/WindowsOperationDialog';
 import { CodexSwitchProgressModal } from './components/CodexSwitchProgressModal';
 import { CodexInstanceLaunchProgressModal } from './components/CodexInstanceLaunchProgressModal';
+import { CodexPelicanHost } from './components/codex/pelican/CodexPelicanHost';
 import { AnnouncementHost } from './components/AnnouncementCenter';
 import { TopCenterPromoBanner } from './components/TopCenterPromoBanner';
 import type { QuickSettingsType } from './components/QuickSettingsPopover';
@@ -3747,6 +3748,7 @@ function MainApp() {
       <GlobalModal />
       <CodexSwitchProgressModal />
       <CodexInstanceLaunchProgressModal />
+      <CodexPelicanHost />
       <WindowsOperationDialog />
 
       {/* 关闭确认对话框 */}

@@ -681,6 +681,42 @@ pub fn update_account_name(account_id: &str, name: String) -> Result<CodexAccoun
     Ok(account)
 }
 
+/// 更新账号级出口代理。
+///
+/// 只接受 HTTP(S)/SOCKS5 代理地址；空值表示回退到现有全局/API 服务代理逻辑。
+pub fn update_account_egress_proxy(
+    account_id: &str,
+    egress_proxy_url: Option<String>,
+) -> Result<CodexAccount, String> {
+    let mut account =
+        load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    if !crate::modules::codex_account_proxy::eligible(&account) {
+        return Err("PROXY_ACCOUNT_UNSUPPORTED".into());
+    }
+    let normalized = normalize_optional_value(egress_proxy_url);
+    account.egress_proxy_url = normalized.as_deref()
+        .map(crate::modules::codex_proxy_runtime::normalize_binding).transpose()?;
+    save_account(&account)?;
+    Ok(account)
+}
+
+/// Remove a deleted source's saved binding, including any legacy account whose
+/// authentication type later changed. The caller holds this account's token lock.
+pub fn clear_account_egress_proxy_for_source(
+    account_id: &str,
+    source_id: &str,
+) -> Result<Option<CodexAccount>, String> {
+    let mut account = load_account(account_id).ok_or("PROXY_SAVE_FAILED")?;
+    if !account.egress_proxy_url.as_deref().is_some_and(|raw| {
+        crate::modules::codex_proxy_catalog_binding::belongs_to_source(raw, source_id)
+    }) {
+        return Ok(None);
+    }
+    account.egress_proxy_url = None;
+    save_account(&account)?;
+    Ok(Some(account))
+}
+
 fn normalize_quota_alert_threshold(raw: i32) -> i32 {
     raw.clamp(0, 100)
 }

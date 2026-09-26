@@ -1,6 +1,6 @@
-import { ReactNode, useMemo } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
+import { Clock3, FolderOpen, Github, Globe2, Layers, MoreHorizontal, PanelTop, Server } from 'lucide-react';
 import { CodexIcon } from '../icons/CodexIcon';
 import { ClaudeIcon } from '../icons/ClaudeIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
@@ -29,7 +29,9 @@ export type PlatformOverviewTab =
   | 'wakeup'
   | 'instances'
   | 'sessions'
-  | 'providers';
+  | 'providers'
+  | 'proxy'
+  | 'top-layout';
 export type PlatformOverviewHeaderId =
   | 'codex'
   | 'claude'
@@ -54,6 +56,7 @@ interface PlatformOverviewTabsHeaderProps {
   active: PlatformOverviewTab;
   onTabChange?: (tab: PlatformOverviewTab) => void;
   tabs?: PlatformOverviewTab[];
+  tabPlacement?: Partial<Record<PlatformOverviewTab, 'top' | 'more'>>;
 }
 
 interface PlatformOverviewConfig {
@@ -143,8 +146,11 @@ export function PlatformOverviewTabsHeader({
   active,
   onTabChange,
   tabs,
+  tabPlacement,
 }: PlatformOverviewTabsHeaderProps) {
   const { t } = useTranslation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
   const { platformGroups } = usePlatformLayoutStore();
   const remoteHiddenPlatformIds = useRemoteConfigStore((state) => state.hiddenPlatformIds);
   const config = CONFIGS[platform];
@@ -219,8 +225,46 @@ export function PlatformOverviewTabsHeader({
       label: t('codex.modelProviders.tab', '模型供应商'),
       icon: <Server className="tab-icon" />,
     },
+    proxy: {
+      key: 'proxy',
+      label: t('codex.proxy.management'),
+      icon: <Globe2 className="tab-icon" />,
+    },
+    'top-layout': {
+      key: 'top-layout',
+      label: t('codex.more.topLayoutTitle'),
+      icon: <PanelTop className="tab-icon" />,
+    },
   };
   const tabSpecs: TabSpec[] = tabOrder.map((tab) => tabLabels[tab]);
+  const visibleTabSpecs = tabSpecs.filter(
+    (tab) => tabPlacement?.[tab.key] !== 'more',
+  );
+  const moreTabSpecs = tabSpecs.filter(
+    (tab) => tabPlacement?.[tab.key] === 'more',
+  );
+  const hasMoreMenu = moreTabSpecs.length > 0 || platform === 'codex';
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (target && !moreRef.current?.contains(target)) {
+        setMoreOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [moreOpen]);
 
   return (
     <>
@@ -233,7 +277,7 @@ export function PlatformOverviewTabsHeader({
         </div>
         <div className="page-top-strip-right-placeholder" aria-hidden="true" />
       </div>
-      <div className="page-tabs-row page-tabs-center page-tabs-row-with-leading">
+      <div className={`page-tabs-row page-tabs-center page-tabs-row-with-leading${platform === 'codex' ? ' codex-page-navigation' : ''}`}>
         <div className="page-tabs-leading">
           <PlatformGroupSwitcher
             currentPlatformId={currentPlatformId}
@@ -242,18 +286,56 @@ export function PlatformOverviewTabsHeader({
             currentGroupId={currentGroup?.id ?? null}
           />
         </div>
-        <div className="page-tabs filter-tabs">
-          {tabSpecs.map((tab) => (
+        {visibleTabSpecs.length > 0 ? (
+          <div className="page-tabs filter-tabs">
+            {visibleTabSpecs.map((tab) => (
+              <button
+                key={tab.key}
+                className={`filter-tab${active === tab.key ? ' active' : ''}`}
+                onClick={() => onTabChange?.(tab.key)}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {hasMoreMenu ? (
+          <div className="page-tabs-trailing" ref={moreRef}>
             <button
-              key={tab.key}
-              className={`filter-tab${active === tab.key ? ' active' : ''}`}
-              onClick={() => onTabChange?.(tab.key)}
+              type="button"
+              className={`page-more-trigger${moreOpen ? ' is-open' : ''}${moreTabSpecs.some((tab) => tab.key === active) ? ' is-active' : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              disabled={moreTabSpecs.length === 0}
+              onClick={() => setMoreOpen((previous) => !previous)}
             >
-              {tab.icon}
-              <span>{tab.label}</span>
+              <MoreHorizontal size={18} />
+              <span>{t('codex.more.title', '更多')}</span>
             </button>
-          ))}
-        </div>
+            {moreOpen ? (
+              <div className="page-more-menu" role="menu">
+                {moreTabSpecs.map((tab) => (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    key={tab.key}
+                    className={`page-more-menu-item${active === tab.key ? ' active' : ''}`}
+                    onClick={() => {
+                      onTabChange?.(tab.key);
+                      setMoreOpen(false);
+                    }}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="page-tabs-trailing-placeholder" aria-hidden="true" />
+        )}
       </div>
     </>
   );

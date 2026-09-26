@@ -190,6 +190,9 @@ pub struct CodexAccount {
     pub account_structure: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_note: Option<String>,
+    /// 账号级出口代理。留空时继续使用全局/API 服务代理。
+    #[serde(default, skip_serializing_if = "Option::is_none", rename(serialize = "egress_proxy"), serialize_with = "crate::modules::codex_account_proxy::serialize_summary")]
+    pub egress_proxy_url: Option<String>,
     /// Codex OAuth 设备指纹收敛模式。未设置时按 `off` 处理。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     // Legacy import/export metadata only; never projected into runtime credentials.
@@ -599,6 +602,7 @@ impl CodexAccount {
             account_name: None,
             account_structure: None,
             account_note: None,
+            egress_proxy_url: None,
             codex_fingerprint_mode: None,
             codex_cli_only: false,
             codex_cli_only_allow_app_server: false,

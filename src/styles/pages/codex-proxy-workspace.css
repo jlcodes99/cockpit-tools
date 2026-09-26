@@ -1,0 +1,38 @@
+/* Content owns the page width; there are no nested fixed-height scrolling workbenches. */
+.codex-tool-page.codex-proxy-workspace { container-type: inline-size; width: 100%; max-width: none; padding: 20px 28px 36px; min-width: 0; }
+.codex-proxy-manager-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.codex-proxy-manager-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.codex-proxy-manager-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)); border-radius: 13px; background: color-mix(in srgb, var(--primary) 7%, var(--bg-card)); color: var(--primary); }
+.codex-proxy-manager-heading h1 { margin: 0; font-size: 21px; font-weight: 650; line-height: 1.3; letter-spacing: -.02em; }
+.codex-proxy-manager-heading p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.codex-proxy-manager-tools { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.codex-proxy-manager-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.codex-proxy-workspace .btn.codex-proxy-manager-tab { appearance: none; display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 3px 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-secondary); font-family: inherit; font-size: 14px; font-weight: 600; line-height: 1.4; box-shadow: none; }
+.codex-proxy-workspace .btn.codex-proxy-manager-tab:hover { background: transparent; color: var(--text-primary); }
+.codex-proxy-workspace .btn.codex-proxy-manager-tab.is-active { color: var(--primary); border-bottom-color: var(--primary); }
+.codex-proxy-workspace .btn.codex-proxy-manager-tab:disabled { opacity: .45; cursor: not-allowed; }
+.codex-proxy-manager-content { min-width: 0; }
+.codex-proxy-manager-accounts { display: grid; gap: 20px; min-width: 0; }
+.codex-proxy-manager-diagnostics { display: grid; gap: 16px; margin-bottom: 20px; }
+.codex-proxy-manager-diagnostics-head, .codex-proxy-manager-diagnostics-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.codex-proxy-manager-diagnostics-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.codex-proxy-manager-diagnostics-toolbar { justify-content: space-between; }
+.codex-proxy-manager-diagnostics-toolbar nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.codex-proxy-manager-diagnostics-toolbar .btn.is-active { color: var(--primary); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--bg-card)); }
+.codex-proxy-manager-diagnostics-toolbar > .single-select-dropdown { width: min(320px, 100%); }
+.codex-proxy-manager-traffic { display: flex; gap: 16px; margin-inline-start: auto; color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.codex-proxy-manager-traffic span { display: inline-flex; gap: 5px; align-items: center; }
+.codex-proxy-manager-content.is-diagnostic { padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+@media (max-width: 900px) {
+  .codex-tool-page.codex-proxy-workspace { padding: 16px 18px 28px; }
+  .codex-proxy-manager-header { align-items: flex-start; gap: 14px; }
+  .codex-proxy-manager-tools { flex-shrink: 0; max-width: 44%; }
+}
+@media (max-width: 620px) {
+  .codex-tool-page.codex-proxy-workspace { padding: 14px 12px 24px; }
+  .codex-proxy-manager-header { flex-direction: column; margin-bottom: 16px; }
+  .codex-proxy-manager-heading h1 { font-size: 19px; }
+  .codex-proxy-manager-tools { max-width: 100%; justify-content: flex-start; }
+  .codex-proxy-manager-tabs { gap: 20px; }
+  .codex-proxy-manager-content.is-diagnostic { padding: 12px; }
+}

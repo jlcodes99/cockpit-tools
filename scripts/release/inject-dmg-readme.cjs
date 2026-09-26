@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
  * Rebuilds the macOS DMG produced by `tauri build` so that it also ships a
- * plain-text troubleshooting note ("app is damaged" / Gatekeeper) next to the
- * app icon, and gives that note a stable position in the DMG window layout.
+ * plain-text note (install steps plus the "app is damaged" / Gatekeeper fix)
+ * and gives that note a stable position in the DMG window layout: the app icon
+ * and the Applications link stay paired on the top row so the drag-and-drop
+ * affordance is unchanged, and the note sits on a second row below them.
  *
  * Tauri does not expose a bundler hook for extra DMG files, so the image is
  * rebuilt from the app bundle inside the original DMG: same volume icon, same
@@ -18,14 +20,13 @@ const path = require('node:path');
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const README_SOURCE = path.join(__dirname, 'assets', 'dmg-readme.txt');
 
-const WINDOW_SIZE = { width: 660, height: 400 };
+const WINDOW_SIZE = { width: 660, height: 490 };
 const WINDOW_POSITION = { x: 10, y: 60 };
-const ICON_SIZE = 128;
-const TEXT_SIZE = 16;
-const ICON_ROW_Y = 170;
-const APP_ICON_POSITION = { x: 180, y: ICON_ROW_Y };
-const README_ICON_POSITION = { x: 330, y: ICON_ROW_Y };
-const APPLICATIONS_ICON_POSITION = { x: 480, y: ICON_ROW_Y };
+const ICON_SIZE = 112;
+const TEXT_SIZE = 14;
+const APP_ICON_POSITION = { x: 180, y: 150 };
+const APPLICATIONS_ICON_POSITION = { x: 480, y: 150 };
+const README_ICON_POSITION = { x: 330, y: 330 };
 // Extra room for Finder metadata plus HFS+ block rounding of the app bundle.
 const IMAGE_SIZE_MARGIN_MB = 40;
 
@@ -411,7 +412,7 @@ function main() {
     fail(`missing volume icon: ${volumeIconPath}`);
   }
 
-  const readmeName = '“已损坏”急救说明 (README).txt';
+  const readmeName = '安装与常见问题.txt';
   const volumeName = version ? `${productName} ${version}` : productName;
   // Keep Tauri's artifact file name: release staging and the Homebrew cask
   // job both derive the published asset name from it.

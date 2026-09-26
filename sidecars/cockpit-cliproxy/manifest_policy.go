@@ -1706,7 +1706,7 @@ func buildOllamaShowResponse(model string, modifiedAt time.Time) gin.H {
 
 func ollamaModelFamily(model string) string {
 	normalized := strings.ToLower(strings.TrimSpace(model))
-	for _, prefix := range []string{"gpt-6-astra", "gpt-5.6", "gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-oss", "codex"} {
+	for _, prefix := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-oss", "codex"} {
 		if strings.HasPrefix(normalized, prefix) {
 			return prefix
 		}
@@ -1724,12 +1724,14 @@ func ollamaModelFamily(model string) string {
 
 func ollamaContextLength(model string) int {
 	switch {
-	case strings.HasPrefix(model, "gpt-6-astra"):
-		return 1050000
+	case strings.HasPrefix(model, "gpt-6-astra"), strings.HasPrefix(model, "gpt-6-sol"), strings.HasPrefix(model, "gpt-6-luna"):
+		return 256000
+	// 以下家族值统一收敛到 Codex 客户端目录（codex_client_models.json）真值，
+	// 避免同一个模型在目录、Ollama 兼容层与 API 服务里报出不同的上下文。
 	case strings.HasPrefix(model, "gpt-5.6"):
-		return 372000
+		return 272000
 	case strings.HasPrefix(model, "gpt-5.5"), strings.HasPrefix(model, "gpt-5.4"):
-		return 400000
+		return 272000
 	case strings.HasPrefix(model, "gpt-5.3"), strings.HasPrefix(model, "gpt-5.2"), strings.HasPrefix(model, "gpt-5.1"):
 		return 272000
 	default:
@@ -1737,10 +1739,40 @@ func ollamaContextLength(model string) int {
 	}
 }
 
+// autoCompactTokenLimitFor 返回目录里声明某个上下文窗口时必须一并下发的压缩阈值。
+//
+// Codex 客户端只认「上下文窗口 + 压缩阈值」这一对声明：只写窗口会让客户端回退到
+// 自身的压缩策略，写满 100% 则永远不会触发压缩。统一按 90% 派生，留出压缩所需的
+// 生成预算。
+func autoCompactTokenLimitFor(contextWindow int64) int64 {
+	if contextWindow <= 0 {
+		return 0
+	}
+	return contextWindow * 90 / 100
+}
+
+// ensureCodexClientCompactionLimit 保证目录条目「上下文窗口 + 压缩阈值」成对下发。
+//
+// 缺失或为 null 时按 90% 派生；已声明但不小于窗口（等于 100%，永远不会触发压缩）时
+// 同样收敛到 90%。其余情况保留目录真值，避免覆盖上游自己的压缩策略。
+func ensureCodexClientCompactionLimit(model map[string]any) {
+	window := intModelValueAny(model["context_window"])
+	if window <= 0 {
+		return
+	}
+	if limit := intModelValueAny(model["auto_compact_token_limit"]); limit > 0 && limit < window {
+		return
+	}
+	model["auto_compact_token_limit"] = autoCompactTokenLimitFor(int64(window))
+}
+
 func ollamaReasoningEfforts(model string) []string {
 	switch {
-	case strings.HasPrefix(model, "gpt-6-astra"):
+	case strings.HasPrefix(model, "gpt-6-astra"), strings.HasPrefix(model, "gpt-6-sol"):
 		return []string{"low", "medium", "high", "xhigh", "max", "ultra"}
+	// Luna 家族没有 ultra 档位，不要跟着上面一起放宽。
+	case strings.HasPrefix(model, "gpt-6-luna"):
+		return []string{"low", "medium", "high", "xhigh", "max"}
 	case strings.HasPrefix(model, "gpt-5.6-sol"), strings.HasPrefix(model, "gpt-5.6-terra"):
 		return []string{"low", "medium", "high", "xhigh", "max", "ultra"}
 	case strings.HasPrefix(model, "gpt-5.6-luna"), strings.HasPrefix(model, "gpt-5.6"):
@@ -1826,6 +1858,8 @@ func applyExplicitContextWindows(models []map[string]any, windows map[string]int
 		if window := lookupExplicitContextWindow(windows, slug); window > 0 {
 			model["context_window"] = window
 			model["max_context_window"] = window
+			// 显式窗口同样必须带压缩阈值，否则客户端会退回内置压缩策略。
+			model["auto_compact_token_limit"] = autoCompactTokenLimitFor(window)
 		}
 	}
 }
@@ -1876,6 +1910,9 @@ func buildCodexClientModelsResponse(models []string, spec *apiKeySpec, windows m
 		// official context/service-tier values from codex_client_models.json.
 		if cw := ollamaContextLength(model); cw > 0 {
 			entry["context_length"] = cw
+			// 目录里声明窗口就必须同时声明压缩阈值，只写窗口会被客户端
+			// 当成「未声明压缩」并回退到自身默认策略。
+			entry["auto_compact_token_limit"] = autoCompactTokenLimitFor(int64(cw))
 		}
 		sourceModels = append(sourceModels, entry)
 	}
@@ -1906,6 +1943,7 @@ func buildCodexClientModelsResponse(models []string, spec *apiKeySpec, windows m
 					"supported_reasoning_levels", "default_reasoning_level",
 					"service_tiers", "additional_speed_tiers",
 					"context_window", "max_context_window",
+					"auto_compact_token_limit",
 				} {
 					if value, exists := template[field]; exists {
 						model[field] = value
@@ -1959,6 +1997,9 @@ func buildCodexClientModelsResponse(models []string, spec *apiKeySpec, windows m
 					model["max_context_window"] = cw
 				}
 			}
+			// 窗口与压缩阈值必须成对下发：模板、路由继承或缺口补齐得到的窗口
+			// 都要带压缩阈值，不允许留空，也不允许出现永不触发压缩的 100%。
+			ensureCodexClientCompactionLimit(model)
 			if _, ok := model["additional_speed_tiers"]; !ok {
 				model["additional_speed_tiers"] = []any{}
 			}
@@ -2085,6 +2126,10 @@ func officialAutomaticModelDisplayName(slug string) string {
 	switch strings.ToLower(strings.TrimSpace(slug)) {
 	case "gpt-6-astra":
 		return "GPT-6 Astra"
+	case "gpt-6-sol":
+		return "GPT-6 Sol"
+	case "gpt-6-luna":
+		return "GPT-6 Luna"
 	case "gpt-5.6-sol":
 		return "GPT-5.6 Sol"
 	case "gpt-5.6-terra":
@@ -2170,6 +2215,10 @@ func displayNameForModel(model string) string {
 		return "GPT-5.6 Luna"
 	case "gpt-6-astra":
 		return "GPT-6 Astra"
+	case "gpt-6-sol":
+		return "GPT-6 Sol"
+	case "gpt-6-luna":
+		return "GPT-6 Luna"
 	case codexReserveModel:
 		return "GPT-5.6 Reserve"
 	case "gpt-5.5":
@@ -2339,7 +2388,7 @@ func rewriteBodyModel(m *manifest, spec *apiKeySpec, requestKind string, body []
 	if isImageRequestKind(requestKind) {
 		return nil, model, nil
 	}
-	// 宿主内部请求（唤醒）的模型由 Cockpit 自己选定，
+	// 宿主内部请求（唤醒、鹈鹕测试）的模型由 Cockpit 自己选定，
 	// 必须绕过对外 API 的模型可见性与排除规则，否则关闭某个模型会连带打断唤醒任务。
 	if spec != nil && spec.Internal {
 		return nil, model, nil
@@ -2513,6 +2562,8 @@ func canonicalModelForClientModel(m *manifest, spec *apiKeySpec, model string) s
 // 原始标记会直接落进正文，表现为「模型不能用工具」。
 var codexShellModelIDs = []string{
 	"gpt-6-astra",
+	"gpt-6-sol",
+	"gpt-6-luna",
 	"gpt-5.6-sol",
 	"gpt-5.6-terra",
 	"gpt-5.6-luna",

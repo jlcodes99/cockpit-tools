@@ -22,6 +22,7 @@ import type {
   CodexInstanceRuntimeOwner,
 } from "../utils/codexInstanceLaunchConflict";
 import { conciseCodexCredentialFailure } from "../utils/codexCredentialProgress";
+import { presentProxyEnginePrerequisite, proxyEnginePrerequisiteKey } from "../utils/codexProxyEnginePrerequisite";
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
 import type { CodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
 import { parseCodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
@@ -141,6 +142,11 @@ export function CodexInstanceLaunchProgressModal() {
     let unlistenSwitch: (() => void) | undefined;
     const applyPayload = (payload: LaunchProgressPayload) => {
       if (disposed || !payload.instanceId) return;
+      const prerequisiteKey = payload.type === "error" ? proxyEnginePrerequisiteKey(payload.error) : null;
+      if (prerequisiteKey) {
+        presentProxyEnginePrerequisite(payload.error);
+        payload = { ...payload, error: t(prerequisiteKey) };
+      }
       setState((previous) => {
         if (payload.type === "start") {
           setActionError(null);

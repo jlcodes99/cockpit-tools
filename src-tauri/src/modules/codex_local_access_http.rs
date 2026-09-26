@@ -237,6 +237,11 @@ fn apply_explicit_context_windows_to_client_models(
         if let Some(object) = model.as_object_mut() {
             object.insert("context_window".to_string(), json!(window));
             object.insert("max_context_window".to_string(), json!(window));
+            // 统一口径：写窗口时必须同时写压缩阈值（90%），避免目录里出现半边配置。
+            object.insert(
+                "auto_compact_token_limit".to_string(),
+                json!(codex_protocol::derived_auto_compact_token_limit(window)),
+            );
         }
     }
     catalog
@@ -2247,7 +2252,14 @@ async fn send_upstream_request_with_authorization_url(
 ) -> Result<reqwest::Response, String> {
     let method =
         Method::from_bytes(method.as_bytes()).map_err(|e| format!("不支持的请求方法: {}", e))?;
-    let client = upstream_http_client(upstream_proxy_url, connect_timeout)?;
+    crate::modules::codex_proxy_runtime::ensure_account_proxy_state(account).await?;
+    let client = if crate::modules::codex_account_proxy::has_configured_url(account)? {
+        crate::modules::codex_proxy_runtime::client_builder(account,
+            Client::builder().connect_timeout(connect_timeout)).await?
+            .build().map_err(|_| "PROXY_CLIENT_FAILED")?
+    } else {
+        upstream_http_client(upstream_proxy_url, connect_timeout)?
+    };
     let upstream_body = build_account_scoped_upstream_body(
         target,
         body,

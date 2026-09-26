@@ -196,12 +196,14 @@ export function buildCodexConfigToml(input: {
   if (family.id === "codex" || family.id === "grok") {
     lines.push(`model_reasoning_effort = "high"`);
   }
+  // 压缩阈值统一按上下文窗口的 90% 派生；等于窗口值会导致永不触发压缩。
+  const autoCompactTokenLimit = Math.floor((family.contextWindow * 90) / 100);
   lines.push(
     "disable_response_storage = true",
     'network_access = "enabled"',
     "windows_wsl_setup_acknowledged = true",
     `model_context_window = ${family.contextWindow}`,
-    `model_auto_compact_token_limit = ${family.contextWindow}`,
+    `model_auto_compact_token_limit = ${autoCompactTokenLimit}`,
     "effective_context_window_percent = 95",
     "",
     "[model_providers.codex]",

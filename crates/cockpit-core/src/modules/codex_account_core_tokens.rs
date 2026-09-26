@@ -291,14 +291,19 @@ fn find_existing_account_id(
         if !summary.email.eq_ignore_ascii_case(email) {
             continue;
         }
+        let Some(account) = load_account(&summary.id) else {
+            continue;
+        };
+        if account.is_api_key_auth()
+            || account.is_agent_identity_auth()
+            || account.id.starts_with("codex_grok_")
+        {
+            continue;
+        }
         email_match_count += 1;
         if first_email_match.is_none() {
             first_email_match = Some(summary.id.clone());
         }
-
-        let Some(account) = load_account(&summary.id) else {
-            continue;
-        };
 
         let current_account_id = normalize_optional_ref(account.account_id.as_deref());
         let current_org_id = normalize_optional_ref(account.organization_id.as_deref());
@@ -831,6 +836,9 @@ fn resolve_reauth_target_account_id(
             target.email, email
         ));
     }
+    if target.is_agent_identity_auth() || target.id.starts_with("codex_grok_") {
+        return Ok(None);
+    }
     Ok(Some(if target.id.trim().is_empty() {
         target_id
     } else {
@@ -860,10 +868,11 @@ fn upsert_account_with_hints_and_reauth_target(
     let mut index = load_account_index();
     let generated_id =
         build_account_storage_id(&email, account_id.as_deref(), organization_id.as_deref());
-    let has_reauth_target = normalize_optional_ref(reauth_target_account_id).is_some();
+    let reauth_target = resolve_reauth_target_account_id(reauth_target_account_id, &email)?;
+    let has_reauth_target = reauth_target.is_some();
 
     // 明确的重新授权来自某个旧账号卡片，必须优先覆盖该旧账号。
-    let existing_id = resolve_reauth_target_account_id(reauth_target_account_id, &email)?
+    let existing_id = reauth_target
         .or_else(|| {
             find_existing_account_id(
                 &index,

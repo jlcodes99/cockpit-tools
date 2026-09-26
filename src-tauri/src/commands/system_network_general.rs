@@ -682,12 +682,3 @@ pub fn codex_ssh_sync_current(id: String) -> Result<String, String> {
 pub fn codex_managed_lb_provider_id() -> String {
     "cockpit-codex-lb".to_string()
 }
-
-#[tauri::command]
-pub fn codebuddy_list_local_session_files(
-    limit: Option<u32>,
-) -> Result<Vec<modules::codebuddy_session_list::CodebuddySessionFileEntry>, String> {
-    Ok(modules::codebuddy_session_list::list_local_session_files(
-        limit.unwrap_or(100) as usize,
-    ))
-}

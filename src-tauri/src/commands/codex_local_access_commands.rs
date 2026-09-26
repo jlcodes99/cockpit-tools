@@ -97,23 +97,6 @@ pub async fn codex_local_access_clear_stats() -> Result<CodexLocalAccessState, S
     codex_local_access::clear_local_access_stats().await
 }
 
-/// 读取全部账号的风控状态（基于上游 `x-codex-turn-state` 的旁路观测）。
-#[tauri::command]
-pub async fn codex_account_turn_state_statuses(
-) -> Result<Vec<codex_local_access::CodexAccountTurnStateStatus>, String> {
-    tauri::async_runtime::spawn_blocking(codex_local_access::codex_account_turn_state_statuses)
-        .await
-        .map_err(|error| format!("读取账号风控状态后台任务失败: {}", error))
-}
-
-/// 手动风控检测：只发一条最小官方请求并读取响应头里的 state，不解析正文。
-#[tauri::command]
-pub async fn codex_probe_account_turn_state(
-    account_id: String,
-) -> Result<codex_local_access::CodexTurnStateProbeResult, String> {
-    codex_local_access::probe_codex_account_turn_state(&account_id).await
-}
-
 #[tauri::command]
 pub async fn codex_local_access_query_request_logs(
     page: u32,
@@ -146,6 +129,13 @@ pub async fn codex_local_access_query_request_logs(
         error_category,
     )
     .await
+}
+
+#[tauri::command]
+pub async fn codex_account_proxy_recent_requests(
+    account_id: String,
+) -> Result<Vec<codex_local_access::CodexAccountProxyRecentRequest>, String> {
+    codex_local_access::query_recent_account_proxy_requests(account_id).await
 }
 
 #[tauri::command]

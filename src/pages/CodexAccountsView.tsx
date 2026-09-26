@@ -1,5 +1,15 @@
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { RefreshCw, Download, X, Database, Copy, Check, CircleAlert, Minimize2 } from "lucide-react";
+import {
+  RefreshCw,
+  Download,
+  X,
+  Database,
+  Copy,
+  Check,
+  CircleAlert,
+  Minimize2,
+} from "lucide-react";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 import { CodexOverviewTabsHeader } from "../components/CodexOverviewTabsHeader";
 import { CodexInstancesContent } from "./CodexInstancesPage";
@@ -12,6 +22,14 @@ import { isCodexApiKeyAccount, type CodexAccount } from "../types/codex";
 import type { useCodexAccountsPageController } from "./CodexAccountsPage";
 import { CodexOAuthBindingModal } from "./CodexOAuthBindingModal";
 import { CodexAccountsOverviewPanel } from "./CodexAccountsOverviewPanel";
+import { CodexTopLayoutPage } from "../components/codex/CodexTopLayoutPage";
+import { CodexEgressProxyPage } from "../components/codex/CodexEgressProxyPage";
+import { CodexAccountProxyPreview } from "../components/codex/CodexAccountProxyPreview";
+import { CODEX_OPEN_PROXY_EVENT, canUseCodexAccountProxy } from "../utils/codexAccountProxy";
+import {
+  readCodexTopLayoutPreference,
+  writeCodexTopLayoutPreference,
+} from "../utils/codexTopLayoutPreferences";
 
 
 export type CodexAccountsViewProps = ReturnType<typeof useCodexAccountsPageController>;
@@ -108,6 +126,28 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     updateCodexCliWorkingDir,
     wakeupPresetManagerSignal,
   } = props;
+  const [topLayout, setTopLayout] = useState(readCodexTopLayoutPreference);
+  const [proxyAccountId, setProxyAccountId] = useState<string | null>(null);
+  const [proxyPreviewId, setProxyPreviewId] = useState<string | null>(null);
+  // The shortcut opens a read-only summary; only its explicit action leaves for the page.
+  const proxyPreviewAccount = accounts.find(
+    (account) => account.id === proxyPreviewId && canUseCodexAccountProxy(account),
+  );
+  useEffect(() => {
+    const openProxy = (event: Event) => {
+      const accountId: unknown = (event as CustomEvent).detail;
+      if (typeof accountId !== 'string' || !accounts.some((account) =>
+        account.id === accountId && canUseCodexAccountProxy(account))) return;
+      // Card and table shortcuts open the account's proxy preview without leaving the list.
+      setProxyPreviewId(accountId);
+    };
+    window.addEventListener(CODEX_OPEN_PROXY_EVENT, openProxy);
+    return () => window.removeEventListener(CODEX_OPEN_PROXY_EVENT, openProxy);
+  }, [accounts]);
+
+  useEffect(() => {
+    writeCodexTopLayoutPreference(topLayout);
+  }, [topLayout]);
 
   /** 启动预览里的 OAuth 绑定信息（仅 API Key 账号展示）。 */
   const launchPreviewOAuthBindingAccount =
@@ -170,8 +210,23 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
       <CodexOverviewTabsHeader
         active={activeTab}
         onTabChange={setActiveTab}
-        tabs={["overview", "providers", "wakeup", "instances", "sessions"]}
+        tabs={topLayout.order}
+        tabPlacement={topLayout.placement}
       />
+
+      {activeTab === "top-layout" && <CodexTopLayoutPage
+        layout={topLayout}
+        onChange={setTopLayout}
+        onBack={() => setActiveTab("overview")}
+      />}
+      {activeTab === "proxy" && <CodexEgressProxyPage
+        accounts={accounts}
+        accountId={proxyAccountId}
+        resolveDisplayName={(account) =>
+          maskAccountText(account.account_name || account.email || account.id)
+        }
+        onBack={() => setActiveTab("overview")}
+      />}
 
       {batchImportOpen &&
         createPortal(
@@ -974,6 +1029,24 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           onRefreshAccounts={async () => {
             await fetchAccounts();
             await fetchCurrentAccount();
+          }}
+        />
+      )}
+
+      {proxyPreviewAccount && (
+        <CodexAccountProxyPreview
+          key={`${proxyPreviewAccount.id}:${JSON.stringify(proxyPreviewAccount.egress_proxy)}`}
+          account={proxyPreviewAccount}
+          displayName={maskAccountText(
+            proxyPreviewAccount.account_name ||
+              proxyPreviewAccount.email ||
+              proxyPreviewAccount.id,
+          )}
+          onClose={() => setProxyPreviewId(null)}
+          onManage={() => {
+            setProxyAccountId(proxyPreviewAccount.id);
+            setProxyPreviewId(null);
+            setActiveTab("proxy");
           }}
         />
       )}

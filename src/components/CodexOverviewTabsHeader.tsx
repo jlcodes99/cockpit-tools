@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
-import { PlatformOverviewTabsHeader, PlatformOverviewTab } from './platform/PlatformOverviewTabsHeader';
+import {
+  PlatformOverviewTabsHeader,
+  PlatformOverviewTab,
+} from './platform/PlatformOverviewTabsHeader';
 import { CODEX_SUITE_ENSURE_MOUNTED_EVENT } from '../utils/codexAddAccountRequest';
 
 export type CodexTab = PlatformOverviewTab;
@@ -8,12 +11,14 @@ interface CodexOverviewTabsHeaderProps {
   active: CodexTab;
   onTabChange?: (tab: CodexTab) => void;
   tabs?: CodexTab[];
+  tabPlacement?: Partial<Record<CodexTab, 'top' | 'more'>>;
 }
 
 export function CodexOverviewTabsHeader({
   active,
   onTabChange,
   tabs,
+  tabPlacement,
 }: CodexOverviewTabsHeaderProps) {
   useEffect(() => {
     if (!onTabChange) return;
@@ -30,6 +35,7 @@ export function CodexOverviewTabsHeader({
       active={active}
       onTabChange={onTabChange}
       tabs={tabs}
+      tabPlacement={tabPlacement}
     />
   );
 }

@@ -717,6 +717,403 @@
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 
+    fn assert_builtin_provider_config(content: &str) {
+        let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(content)
+            .expect("parse builtin provider config");
+        let expected = if cfg!(target_os = "windows") {
+            Some("openai")
+        } else {
+            None
+        };
+        assert_eq!(
+            doc.get("model_provider").and_then(|item| item.as_str()),
+            expected
+        );
+        assert!(doc.get("model_providers").is_none(), "config: {content}");
+    }
+
+    /// 通用回归：工具写入的第三方 provider 引用必须在切回官方账号时还原。
+    ///
+    /// 官方账号投影只清理受管 provider（`openai` / `codex_local_access` / ...），并把其余 id 当作
+    /// 用户自定义 provider 保留——工具自己写给供应商账号的 `model_provider` 因此会残留，
+    /// 表现为「账号已经切回普通账号，客户端仍按上一个供应商发请求」。这里用非 DeepSeek 的自建
+    /// 中转验证机制是通用的，而不是按供应商 id 写特判。
+    #[test]
+    fn official_account_switch_restores_supplier_provider_snapshot() {
+        let base_dir = make_temp_dir("codex-provider-override-snapshot");
+        let config_path = base_dir.join("config.toml");
+        fs::write(&config_path, "model = \"gpt-5.5\"\n").expect("write official config");
+
+        let relay_config = resolve_api_provider_config(
+            Some("https://relay.example.com/v1"),
+            Some(CodexApiProviderMode::Custom),
+            Some("relay"),
+            Some("Relay"),
+        )
+        .expect("resolve relay config");
+        super::write_api_provider_to_config_toml_with_options(&base_dir, &relay_config, false)
+            .expect("write relay provider");
+
+        let relay_content = fs::read_to_string(&config_path).expect("read relay config");
+        assert!(relay_content.contains("model_provider = \"relay\""));
+        assert!(relay_content.contains("[model_providers.relay]"));
+        assert!(base_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).is_file());
+
+        let official_config =
+            resolve_api_provider_config(None, Some(CodexApiProviderMode::OpenaiBuiltin), None, None)
+                .expect("resolve official config");
+        super::write_api_provider_to_config_toml_with_options(&base_dir, &official_config, false)
+            .expect("write official provider");
+
+        let content = fs::read_to_string(&config_path).expect("read official config");
+        assert_builtin_provider_config(&content);
+        assert!(!content.contains("relay.example.com"), "config: {content}");
+        assert!(content.contains("model = \"gpt-5.5\""), "config: {content}");
+        assert!(
+            !base_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).exists(),
+            "快照只服务一次还原"
+        );
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn provider_snapshot_preserves_manual_provider_and_model_changes() {
+        for manual_provider in [Some("myrelay"), None] {
+            let base_dir = make_temp_dir("codex-provider-snapshot-manual-change");
+            let config_path = base_dir.join("config.toml");
+            fs::write(&config_path, "model = \"gpt-5.5\"\n").expect("write original config");
+            let relay = resolve_api_provider_config(
+                Some("https://relay.example.com/v1"),
+                Some(CodexApiProviderMode::Custom),
+                Some("relay"),
+                Some("Relay"),
+            )
+            .expect("resolve relay");
+            super::write_api_provider_to_config_toml_with_options(&base_dir, &relay, false)
+                .expect("write relay config and snapshot");
+            assert!(base_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).is_file());
+
+            // Simulate a later user edit, including selecting the implicit builtin provider.
+            let current = fs::read_to_string(&config_path).expect("read relay config");
+            let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&current)
+                .expect("parse relay config");
+            doc["model"] = toml_edit::value("gpt-6-sol");
+            if let Some(provider) = manual_provider {
+                doc["model_provider"] = toml_edit::value(provider);
+                doc["model_providers"][provider] = toml_edit::table();
+                doc["model_providers"][provider]["name"] = toml_edit::value("My Relay");
+                doc["model_providers"][provider]["base_url"] =
+                    toml_edit::value("https://myrelay.example.com/v1");
+                doc["model_providers"][provider]["wire_api"] = toml_edit::value("responses");
+            } else {
+                doc.remove("model_provider");
+            }
+            fs::write(
+                &config_path,
+                crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc),
+            )
+            .expect("write user's provider and model");
+
+            let official = resolve_api_provider_config(
+                None,
+                Some(CodexApiProviderMode::OpenaiBuiltin),
+                None,
+                None,
+            )
+            .expect("resolve builtin");
+            super::write_api_provider_to_config_toml_with_options(&base_dir, &official, false)
+                .expect("switch to official account");
+            let content = fs::read_to_string(&config_path).expect("read final config");
+            let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
+                .expect("parse final config");
+            let expected_provider = manual_provider.or_else(|| {
+                if cfg!(target_os = "windows") {
+                    Some("openai")
+                } else {
+                    None
+                }
+            });
+            assert_eq!(
+                doc.get("model_provider").and_then(|item| item.as_str()),
+                expected_provider
+            );
+            assert_eq!(doc["model"].as_str(), Some("gpt-6-sol"));
+            if let Some(provider) = manual_provider {
+                assert_eq!(
+                    doc["model_providers"][provider]["base_url"].as_str(),
+                    Some("https://myrelay.example.com/v1"),
+                );
+            }
+            assert!(!base_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).exists());
+            fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+        }
+    }
+
+    #[test]
+    fn provider_snapshot_restores_original_user_provider_from_legacy_snapshot() {
+        let base_dir = make_temp_dir("codex-provider-snapshot-legacy-user-provider");
+        let config_path = base_dir.join("config.toml");
+        fs::write(
+            &config_path,
+            r#"model = "deepseek-v4-pro"
+model_provider = "deepseek"
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com"
+wire_api = "responses"
+[model_providers.myrelay]
+name = "My Relay"
+base_url = "https://myrelay.example.com/v1"
+wire_api = "responses"
+"#,
+        )
+        .expect("write supplier config");
+        fs::write(
+            base_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE),
+            r#"{
+  "providerId": "deepseek",
+  "model": "gpt-5.5",
+  "modelProvider": "myrelay",
+  "providerTable": null
+}"#,
+        )
+        .expect("write existing snapshot format");
+        let official =
+            resolve_api_provider_config(None, Some(CodexApiProviderMode::OpenaiBuiltin), None, None)
+                .expect("resolve builtin");
+
+        super::write_api_provider_to_config_toml_with_options(&base_dir, &official, false)
+            .expect("restore original user provider");
+        let content = fs::read_to_string(&config_path).expect("read restored config");
+        let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
+            .expect("parse restored config");
+        assert_eq!(doc["model_provider"].as_str(), Some("myrelay"));
+        assert_eq!(doc["model"].as_str(), Some("gpt-5.5"));
+        assert_eq!(
+            doc["model_providers"]["myrelay"]["base_url"].as_str(),
+            Some("https://myrelay.example.com/v1")
+        );
+        assert!(doc["model_providers"].get("deepseek").is_none());
+        assert!(!base_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).exists());
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    /// 没有工具快照时，用户自己配置的 provider 必须原样保留（不能被通用还原误删）。
+    #[test]
+    fn official_account_switch_keeps_user_owned_provider_without_snapshot() {
+        let base_dir = make_temp_dir("codex-provider-override-user-owned");
+        let config_path = base_dir.join("config.toml");
+        fs::write(
+            &config_path,
+            r#"model = "gpt-5.5"
+model_provider = "myrelay"
+
+[model_providers.myrelay]
+name = "My Relay"
+base_url = "https://relay.example.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#,
+        )
+        .expect("write custom provider config");
+
+        let official_config =
+            resolve_api_provider_config(None, Some(CodexApiProviderMode::OpenaiBuiltin), None, None)
+                .expect("resolve official config");
+        super::write_api_provider_to_config_toml_with_options(&base_dir, &official_config, false)
+            .expect("write official provider");
+
+        let content = fs::read_to_string(&config_path).expect("read config");
+        assert!(content.contains("model_provider = \"myrelay\""));
+        assert!(content.contains("[model_providers.myrelay]"));
+        assert!(content.contains("model = \"gpt-5.5\""));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    /// 连续切号回归：受管 API Key → DeepSeek → OAuth 不得恢复已删除的运行时 provider。
+    #[test]
+    fn provider_snapshot_oauth_bundle_after_deepseek_drops_managed_providers() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-deepseek-switch-back-oauth");
+        let oauth_account = seed_oauth_account(make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            "deepseek-switch-back",
+            "rt-deepseek-switch-back",
+        ));
+
+        let mut deepseek_account = CodexAccount::new_api_key(
+            "deepseek-switch-back-key".to_string(),
+            "deepseek-switch-back@example.com".to_string(),
+            "sk-deepseek-switch-back".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-v4-pro".to_string()],
+        );
+        deepseek_account.api_wire_api = Some("responses".to_string());
+        deepseek_account.api_sync_model_catalog_to_codex = true;
+        deepseek_account.api_instance_access_mode = Some("cdp".to_string());
+        deepseek_account.api_startup_model = Some("deepseek-v4-pro".to_string());
+
+        for (access_mode, start_with_managed_provider) in
+            [("direct", false), ("direct", true), ("cdp", false), ("cdp", true)]
+        {
+            deepseek_account.api_instance_access_mode = Some(access_mode.to_string());
+            let profile_dir = env
+                .home_dir
+                .join(format!("managed-profile-{access_mode}-{start_with_managed_provider}"));
+            if start_with_managed_provider {
+                let mut relay_account = CodexAccount::new_api_key(
+                    "relay-before-deepseek".to_string(),
+                    "relay@example.com".to_string(),
+                    "sk-relay-before-deepseek".to_string(),
+                    CodexApiProviderMode::Custom,
+                    Some("https://relay.example.com/v1".to_string()),
+                    Some("relay".to_string()),
+                    Some("Relay".to_string()),
+                    vec!["gpt-5.5".to_string()],
+                );
+                relay_account.api_wire_api = Some("responses".to_string());
+                relay_account.api_supports_websockets = false;
+                write_account_bundle_to_dir(&profile_dir, &relay_account).expect("write relay bundle");
+                let relay_config = fs::read_to_string(profile_dir.join("config.toml")).unwrap();
+                assert!(relay_config.contains("model_provider = \"codex_local_access\""));
+            }
+            write_account_bundle_to_dir(&profile_dir, &deepseek_account)
+                .expect("write deepseek bundle");
+            let deepseek_config = fs::read_to_string(profile_dir.join("config.toml")).unwrap();
+            assert!(deepseek_config.contains("model_provider = \"deepseek\""));
+            assert!(deepseek_config.contains("[model_providers.deepseek]"));
+            if start_with_managed_provider {
+                let snapshot: serde_json::Value = serde_json::from_str(
+                    &fs::read_to_string(profile_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE)).unwrap(),
+                )
+                .expect("read provider snapshot");
+                assert_eq!(snapshot["modelProvider"], "codex_local_access");
+            }
+
+            write_account_bundle_to_dir(&profile_dir, &oauth_account).expect("write oauth bundle");
+            let content = fs::read_to_string(profile_dir.join("config.toml")).expect("read config");
+            assert_builtin_provider_config(&content);
+            assert!(
+                !content.contains("experimental_bearer_token"),
+                "config: {content}"
+            );
+            assert!(!content.contains("deepseek"), "config: {content}");
+            assert!(
+                !content.contains("preferred_auth_method"),
+                "config: {content}"
+            );
+            assert!(!profile_dir
+                .join(super::CODEX_PROVIDER_OVERRIDE_FILE)
+                .exists());
+        }
+    }
+
+    #[test]
+    fn provider_snapshot_oauth_bundle_preserves_manual_provider_and_model_changes() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-provider-snapshot-manual-bundle");
+        let oauth_account = seed_oauth_account(make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            "provider-manual-bundle",
+            "rt-provider-manual-bundle",
+        ));
+        let mut deepseek_account = CodexAccount::new_api_key(
+            "deepseek-manual-bundle-key".to_string(),
+            "deepseek-manual-bundle@example.com".to_string(),
+            "sk-deepseek-manual-bundle".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec!["deepseek-v4-pro".to_string()],
+        );
+        deepseek_account.api_wire_api = Some("responses".to_string());
+        deepseek_account.api_sync_model_catalog_to_codex = true;
+        deepseek_account.api_startup_model = Some("deepseek-v4-pro".to_string());
+
+        for (access_mode, manual_provider) in [
+            ("direct", Some("myrelay")),
+            ("direct", None),
+            ("cdp", Some("myrelay")),
+            ("cdp", None),
+        ] {
+            deepseek_account.api_instance_access_mode = Some(access_mode.to_string());
+            let profile_dir = env.home_dir.join(format!(
+                "manual-profile-{access_mode}-{}",
+                manual_provider.unwrap_or("builtin")
+            ));
+            fs::create_dir_all(&profile_dir).expect("create profile");
+            let config_path = profile_dir.join("config.toml");
+            fs::write(&config_path, "model = \"gpt-5.5\"\n").expect("write initial config");
+            write_account_bundle_to_dir(&profile_dir, &deepseek_account)
+                .expect("write deepseek bundle");
+            assert!(profile_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).is_file());
+
+            let content = fs::read_to_string(&config_path).expect("read deepseek config");
+            let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
+                .expect("parse deepseek config");
+            doc["model"] = toml_edit::value("gpt-6-sol");
+            if let Some(provider) = manual_provider {
+                doc["model_provider"] = toml_edit::value(provider);
+                doc["model_providers"][provider] = toml_edit::table();
+                doc["model_providers"][provider]["name"] = toml_edit::value("My Relay");
+                doc["model_providers"][provider]["base_url"] =
+                    toml_edit::value("https://myrelay.example.com/v1");
+                doc["model_providers"][provider]["wire_api"] = toml_edit::value("responses");
+            } else {
+                doc.remove("model_provider");
+            }
+            fs::write(
+                &config_path,
+                crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc),
+            )
+            .expect("write manual provider selection");
+
+            // Exercise auth projection and both catalog cleanup paths, then repeat the same
+            // projection to ensure a consumed snapshot cannot overwrite the user's selection.
+            for _ in 0..2 {
+                write_account_bundle_to_dir(&profile_dir, &oauth_account)
+                    .expect("write oauth bundle");
+                let content = fs::read_to_string(&config_path).expect("read oauth config");
+                let doc =
+                    crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
+                        .expect("parse oauth config");
+                let expected_provider = manual_provider.or_else(|| {
+                    if cfg!(target_os = "windows") {
+                        Some("openai")
+                    } else {
+                        None
+                    }
+                });
+                assert_eq!(
+                    doc.get("model_provider").and_then(|item| item.as_str()),
+                    expected_provider,
+                );
+                assert_eq!(doc["model"].as_str(), Some("gpt-6-sol"));
+                if let Some(provider) = manual_provider {
+                    assert_eq!(
+                        doc["model_providers"][provider]["base_url"].as_str(),
+                        Some("https://myrelay.example.com/v1"),
+                    );
+                }
+                assert!(!profile_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).exists());
+            }
+        }
+    }
+
     #[test]
     fn deepseek_catalog_keeps_custom_models_and_honors_vision_override() {
         let mut account = CodexAccount::new_api_key(

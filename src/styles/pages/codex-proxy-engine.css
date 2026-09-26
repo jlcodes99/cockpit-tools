@@ -1,0 +1,25 @@
+.codex-proxy-engine-card { margin-bottom: 18px; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: var(--bg-card); }
+.codex-proxy-engine-heading { display: flex; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--border); background: linear-gradient(110deg, color-mix(in srgb, var(--primary) 6%, var(--bg-card)), var(--bg-card)); }
+.codex-proxy-engine-icon { display: grid; place-items: center; flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px; background: var(--primary-light); color: var(--primary); }
+.codex-proxy-engine-heading > div { min-width: 0; flex: 1; }
+.codex-proxy-engine-heading h2 { margin: 0 0 4px; font-size: 14px; font-weight: 650; }
+.codex-proxy-engine-heading p, .codex-proxy-engine-info p, .codex-proxy-engine-progress p { margin: 0; font-size: 12px; line-height: 1.65; color: var(--text-secondary); }
+.codex-proxy-engine-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--text-secondary); flex-shrink: 0; }
+.codex-proxy-engine-badge.is-ready { color: var(--primary); background: var(--primary-light); border-color: transparent; }
+.codex-proxy-engine-body { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 20px; }
+.codex-proxy-engine-info { flex: 1 1 420px; min-width: 0; }
+.codex-proxy-engine-version { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+.codex-proxy-engine-version span { color: var(--text-secondary); }
+.codex-proxy-engine-info code { display: block; overflow-wrap: anywhere; font-size: 11px; }
+.codex-proxy-engine-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.codex-proxy-engine-progress { margin: 0 20px 18px; }
+.codex-proxy-engine-progress > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text-secondary); }
+.codex-proxy-engine-progress progress { appearance: none; display: block; width: 100%; height: 6px; margin: 10px 0; border: 0; border-radius: 3px; overflow: hidden; background: var(--bg-secondary); accent-color: var(--primary); }
+.codex-proxy-engine-progress progress::-webkit-progress-bar { background: var(--bg-secondary); border-radius: 3px; }
+.codex-proxy-engine-progress progress::-webkit-progress-value { background: var(--primary); border-radius: 3px; }
+.codex-proxy-engine-progress progress::-moz-progress-bar { background: var(--primary); border-radius: 3px; }
+.codex-proxy-engine-progress progress:indeterminate { background: linear-gradient(90deg, var(--bg-secondary), var(--primary-light), var(--bg-secondary)); }
+.codex-proxy-engine-error, .codex-proxy-engine-message { margin: 0 20px 18px; padding: 12px; border-radius: 8px; font-size: 12px; line-height: 1.6; }
+.codex-proxy-engine-error { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--danger, #dc2626); background: color-mix(in srgb, var(--danger, #dc2626) 8%, var(--bg-card)); }
+.codex-proxy-engine-message { background: var(--bg-secondary); color: var(--text-secondary); }
+@media (max-width: 600px) { .codex-proxy-engine-heading { flex-wrap: wrap; } .codex-proxy-engine-badge { margin-left: 50px; } .codex-proxy-engine-actions { width: 100%; } }

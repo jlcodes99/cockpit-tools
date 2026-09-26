@@ -33,30 +33,47 @@ fn key_path() -> Result<PathBuf, String> {
 
 fn read_or_create_key() -> Result<[u8; 32], String> {
     let path = key_path()?;
+    read_or_create_key_at(&path)
+}
+
+fn read_key(path: &Path) -> Result<[u8; 32], String> {
+    let raw = fs::read_to_string(path).map_err(|e| format!("读取账号详情加密密钥失败: {}", e))?;
+    let bytes = general_purpose::STANDARD
+        .decode(raw.trim())
+        .map_err(|e| format!("解析账号详情加密密钥失败: {}", e))?;
+    bytes
+        .try_into()
+        .map_err(|_| "账号详情加密密钥长度无效".to_string())
+}
+
+fn read_or_create_key_at(path: &Path) -> Result<[u8; 32], String> {
     if path.exists() {
-        let raw =
-            fs::read_to_string(&path).map_err(|e| format!("读取账号详情加密密钥失败: {}", e))?;
-        let bytes = general_purpose::STANDARD
-            .decode(raw.trim())
-            .map_err(|e| format!("解析账号详情加密密钥失败: {}", e))?;
-        if bytes.len() != 32 {
-            return Err("账号详情加密密钥长度无效".to_string());
-        }
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&bytes);
-        return Ok(key);
+        return read_key(path);
+    }
+    // Account saves and zero-account proxy imports share this key. Serialize
+    // first creation across threads/processes without blocking the caller.
+    let lock_path = path.with_extension("key.lock");
+    if lock_path.is_symlink() {
+        return Err("账号详情加密密钥锁无效".into());
+    }
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path)
+        .map_err(|e| format!("创建账号详情加密密钥锁失败: {}", e))?;
+    fs2::FileExt::try_lock_exclusive(&lock)
+        .map_err(|_| "账号详情加密密钥正在初始化，请重试".to_string())?;
+    if path.exists() {
+        return read_key(path);
     }
 
     let mut key = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut key);
     let encoded = general_purpose::STANDARD.encode(key);
-    crate::modules::atomic_write::write_string_atomic(&path, &encoded)
+    crate::modules::atomic_write::write_secret_string_atomic(path, &encoded)
         .map_err(|e| format!("写入账号详情加密密钥失败: {}", e))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
-    }
     Ok(key)
 }
 
@@ -158,6 +175,35 @@ mod tests {
     struct DemoAccount {
         id: String,
         secret: String,
+    }
+
+    #[test]
+    fn concurrent_first_key_creation_never_replaces_the_winner() {
+        let dir = std::env::temp_dir().join(format!("storage-key-race-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(KEY_FILE);
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(16));
+        let threads: Vec<_> = (0..16)
+            .map(|_| {
+                let path = path.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    read_or_create_key_at(&path)
+                })
+            })
+            .collect();
+        let results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+        let key = read_key(&path).unwrap();
+        assert!(results.iter().any(Result::is_ok));
+        for result in results {
+            match result {
+                Ok(created) => assert_eq!(created, key),
+                Err(error) => assert_eq!(error, "账号详情加密密钥正在初始化，请重试"),
+            }
+        }
+        assert_eq!(read_or_create_key_at(&path).unwrap(), key);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

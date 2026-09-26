@@ -11,7 +11,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// 受管模型目录生成逻辑的版本号。改动目录结构或模型能力字段时递增。
-pub(crate) const MANAGED_MODEL_CATALOG_GENERATOR_VERSION: u32 = 1;
+///
+/// 3：上下文与压缩统一为 90% 口径（压缩阈值不再留空），GPT-6 系列上下文修正为 256K。
+pub(crate) const MANAGED_MODEL_CATALOG_GENERATOR_VERSION: u32 = 3;
 
 const META_FILE_NAME: &str = "cockpit-model-catalog.meta.json";
 

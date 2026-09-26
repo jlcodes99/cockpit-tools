@@ -42,7 +42,11 @@ pub fn import_workbuddy_from_json(json_content: String) -> Result<Vec<WorkbuddyA
 
 #[tauri::command]
 pub async fn import_workbuddy_from_local(app: AppHandle) -> Result<Vec<WorkbuddyAccount>, String> {
-    let mut local_payload = match workbuddy_account::import_payload_from_local()? {
+    let local_payload =
+        tauri::async_runtime::spawn_blocking(workbuddy_account::import_payload_from_local_prepared)
+            .await
+            .map_err(|error| format!("WorkBuddy 本机导入后台任务失败: {}", error))??;
+    let mut local_payload = match local_payload {
         Some(payload) => payload,
         None => return Err("未在本机 WorkBuddy 客户端中找到登录信息".to_string()),
     };
@@ -305,7 +309,12 @@ pub async fn inject_workbuddy_to_vscode(
                 logger::log_warn(&format!("WorkBuddy 默认实例启动失败：{}", err));
                 // 保持既有行为：即使应用路径异常，认证切换仍然落盘。由于此时无法
                 // 确认官方进程已退出，不在这里执行可能较慢的会话目录合并。
-                workbuddy_account::write_account_to_default_client(&account)?;
+                let account_to_write = account.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    workbuddy_account::write_account_to_default_client(&account_to_write)
+                })
+                .await
+                .map_err(|error| format!("WorkBuddy 账号切换后台任务失败: {}", error))??;
                 if err.starts_with("APP_PATH_NOT_FOUND:") || err.contains("APP_PATH_NOT_FOUND:") {
                     let _ = app.emit(
                         "app:path_missing",

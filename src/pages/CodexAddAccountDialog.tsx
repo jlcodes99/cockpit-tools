@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useEffect } from "react";
 import { RefreshCw, Download, X, Globe, KeyRound, Database, Copy, Check, RotateCw, CircleAlert, Info, Star, Eye, EyeOff, FileUp, FileText, ExternalLink, FolderPlus, Monitor, Terminal, ShieldCheck } from "lucide-react";
 import { ModalErrorMessage } from "../components/ModalErrorMessage";
 import { MfaQuickCodeSelect } from "../components/MfaQuickCodeSelect";
@@ -8,6 +9,7 @@ import { useModalScrollLock } from "../hooks/useModalScrollLock";
 import "./CodexAccountDialogs.css";
 import { CODEX_TEMP_LOGIN_STEPS } from "../services/codexTempLoginService";
 import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, COCKPIT_API_PROVIDER_ID } from "../utils/codexProviderPresets";
+import { canUseCodexAccountProxy } from "../utils/codexAccountProxy";
 import type { CodexAccountsViewProps } from "./CodexAccountsView";
 
 /** 渲染 CodexAccountsOverviewPanel 的 expr:showAddModal && 业务面板。 */
@@ -53,6 +55,9 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     handleOpenDeviceAuthUrl,
     handleOpenOauthIncognitoWindow,
     handleOpenOauthUrl,
+    handleOauthProxyToggle,
+    handleOauthProxyInputChange,
+    handleOauthProxyStart,
     handleOpenProviderLink,
     handlePendingOAuthEmailInputChange,
     handleReleaseOauthPort,
@@ -87,6 +92,12 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     oauthCompletingRef,
     oauthLoginIdRef,
     oauthMethod,
+    oauthProxyEnabled,
+    oauthProxyInput,
+    oauthProxyReady,
+    oauthProxyFieldError,
+    oauthProxyUsesAccountExit,
+    oauthProxyExitLabel,
     oauthPortInUse,
     oauthPrepareError,
     oauthTimeoutInfo,
@@ -131,6 +142,11 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     tokenImportProgress,
     tokenInput,
   } = props;
+  useEffect(() => {
+    if (oauthProxyFieldError) {
+      document.getElementById("codex-oauth-proxy-url")?.focus();
+    }
+  }, [oauthProxyFieldError]);
   // 选实例弹框叠加在添加账号弹框之上：只让最上层响应 ESC。
   useEscCloseTopmost(
     Boolean(localImportInstances),
@@ -233,6 +249,54 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             group: codexAddTargetGroup.name,
                           })}
                         </span>
+                      </div>
+                    )}
+                    {reauthTargetAccount && (
+                      <div className="codex-reauth-target-summary">
+                        {reauthTargetEmail && (
+                          <div className="oauth-link codex-reauth-email-block">
+                            <label>
+                              {t(
+                                "codex.oauth.reauthEmailLabel",
+                                "本次重新授权账号",
+                              )}
+                            </label>
+                            <div className="oauth-url-box">
+                              <input
+                                type="text"
+                                value={reauthTargetEmail}
+                                readOnly
+                                aria-label={t(
+                                  "codex.oauth.reauthEmailLabel",
+                                  "本次重新授权账号",
+                                )}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void handleCopyReauthEmail()}
+                                title={
+                                  reauthEmailCopied
+                                    ? t("common.copied", "已复制")
+                                    : t("common.copy", "复制")
+                                }
+                                aria-label={
+                                  reauthEmailCopied
+                                    ? t("common.copied", "已复制")
+                                    : t("common.copy", "复制")
+                                }
+                              >
+                                {reauthEmailCopied ? (
+                                  <Check size={16} />
+                                ) : (
+                                  <Copy size={16} />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="codex-reauth-note-summary">
+                          {renderAccountNoteButton(reauthTargetAccount)}
+                        </div>
                       </div>
                     )}
                     {addTab !== "oauth" && <MfaQuickCodeSelect />}
@@ -402,52 +466,6 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                     )}
                     {addTab === "oauth" && (
                       <div className="add-section">
-                        {reauthTargetEmail && (
-                          <div className="oauth-link codex-reauth-email-block">
-                            <label>
-                              {t(
-                                "codex.oauth.reauthEmailLabel",
-                                "本次重新授权账号",
-                              )}
-                            </label>
-                            <div className="oauth-url-box">
-                              <input
-                                type="text"
-                                value={reauthTargetEmail}
-                                readOnly
-                                aria-label={t(
-                                  "codex.oauth.reauthEmailLabel",
-                                  "本次重新授权账号",
-                                )}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => void handleCopyReauthEmail()}
-                                title={
-                                  reauthEmailCopied
-                                    ? t("common.copied", "已复制")
-                                    : t("common.copy", "复制")
-                                }
-                                aria-label={
-                                  reauthEmailCopied
-                                    ? t("common.copied", "已复制")
-                                    : t("common.copy", "复制")
-                                }
-                              >
-                                {reauthEmailCopied ? (
-                                  <Check size={16} />
-                                ) : (
-                                  <Copy size={16} />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        {reauthTargetAccount && (
-                          <div className="codex-reauth-note-summary">
-                            {renderAccountNoteButton(reauthTargetAccount)}
-                          </div>
-                        )}
                         {shouldShowPendingOAuthDraftForm && (
                           <div className="codex-pending-oauth-draft">
                             <div className="oauth-link">
@@ -529,6 +547,74 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             "通过 OpenAI 官方 OAuth 授权您的 Codex 账号。",
                           )}
                         </p>
+                        {/* 重新授权已有账号时，只有后端确认了实际出口或出现错误才显示代理区，
+                            避免在没有生效出口时闪出一个用不上的开关。 */}
+                        {(!reauthTargetAccount ||
+                          (!isMacOS &&
+                            (Boolean(oauthProxyExitLabel) ||
+                              Boolean(oauthPrepareError) ||
+                              (oauthProxyEnabled && !oauthProxyUsesAccountExit)))) && (
+                          <div className="codex-oauth-proxy-setup">
+                            <label className="codex-import-api-service-toggle">
+                              <span className="codex-import-api-service-toggle-copy">
+                                <strong>{t("codex.oauthProxy.toggle")}</strong>
+                                <small>
+                                  {reauthTargetAccount
+                                    ? t("codex.oauthProxy.hint")
+                                    : t(isMacOS ? "codex.oauthProxy.macUnavailable" : "codex.oauthProxy.hint")}
+                                </small>
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={oauthProxyEnabled}
+                                disabled={isMacOS || deviceAuthStarting || oauthCompletingRef.current}
+                                onChange={(event) => void handleOauthProxyToggle(event.target.checked)}
+                              />
+                              <span className="codex-import-api-service-switch" />
+                            </label>
+                            {oauthProxyEnabled && (
+                              <>
+                                {oauthProxyExitLabel && oauthProxyUsesAccountExit && (
+                                  <p className="section-desc">
+                                    {t("codex.oauthProxy.reauthExit", { name: oauthProxyExitLabel })}
+                                  </p>
+                                )}
+                                <div className="codex-oauth-proxy-field">
+                                  <label htmlFor="codex-oauth-proxy-url">{t("codex.oauthProxy.urlLabel")}</label>
+                                  <input
+                                    id="codex-oauth-proxy-url"
+                                    className={oauthProxyFieldError ? "input-error" : ""}
+                                    type="password"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    value={oauthProxyInput}
+                                    onChange={(event) => handleOauthProxyInputChange(event.target.value)}
+                                    placeholder={t("codex.oauthProxy.urlPlaceholder")}
+                                    aria-invalid={Boolean(oauthProxyFieldError)}
+                                    aria-describedby={oauthProxyFieldError ? "codex-oauth-proxy-error" : undefined}
+                                  />
+                                  {oauthProxyFieldError && <span id="codex-oauth-proxy-error" className="field-error">{oauthProxyFieldError}</span>}
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={handleOauthProxyStart}
+                                    disabled={oauthProxyReady || oauthCompletingRef.current}
+                                  >
+                                    {t(oauthProxyReady ? "codex.oauthProxy.active" : "codex.oauthProxy.start")}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {/* macOS 当前构建不支持内置授权窗口代理：如实说明，不让重新授权看起来已走该出口。 */}
+                        {reauthTargetAccount &&
+                          isMacOS &&
+                          canUseCodexAccountProxy(reauthTargetAccount) && (
+                            <p className="section-desc">
+                              {t("codex.oauthProxy.macUnavailable")}
+                            </p>
+                          )}
                         <div
                           className="codex-oauth-method-switch"
                           role="tablist"
@@ -555,7 +641,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             className={oauthMethod === "device" ? "active" : ""}
                             onClick={() => void handleStartDeviceAuth()}
                             disabled={
-                              deviceAuthStarting || oauthCompletingRef.current
+                              deviceAuthStarting || oauthCompletingRef.current || oauthProxyEnabled
                             }
                             role="tab"
                             aria-selected={oauthMethod === "device"}
@@ -706,7 +792,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             </div>
                           ) : oauthUrl ? (
                             <div className="oauth-url-section">
-                              <div className="oauth-link">
+                              {!oauthProxyEnabled && <div className="oauth-link">
                                 <label>
                                   {t("accounts.oauth.linkLabel", "授权链接")}
                                 </label>
@@ -724,7 +810,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                     )}
                                   </button>
                                 </div>
-                              </div>
+                              </div>}
                               <button
                                 className="btn btn-primary btn-full"
                                 onClick={
@@ -743,12 +829,14 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                       "codex.oauth.timeoutRetry",
                                       "刷新授权链接",
                                     )
-                                  : t(
+                                  : oauthProxyEnabled
+                                    ? t("codex.oauthProxy.openWindow")
+                                    : t(
                                       "common.shared.oauth.openBrowser",
                                       "Open in Browser",
                                     )}
                               </button>
-                              {!isOauthTimeoutState && isMacOS && (
+                              {!isOauthTimeoutState && isMacOS && !oauthProxyEnabled && (
                                 <button
                                   type="button"
                                   className="btn btn-secondary btn-full"
@@ -834,7 +922,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                 )}
                               </div>
                             </div>
-                          ) : (
+                          ) : oauthProxyEnabled && !oauthProxyReady ? null : (
                             <div className="oauth-loading">
                               <RefreshCw
                                 size={24}

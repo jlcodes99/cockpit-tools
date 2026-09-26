@@ -45,3 +45,54 @@
 .modal-content.codex-account-dialog > .modal-footer {
   flex-wrap: wrap;
 }
+
+.codex-oauth-proxy-setup {
+  display: grid;
+  gap: 12px;
+}
+
+.codex-oauth-proxy-field {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+}
+
+.codex-oauth-proxy-field > label {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.codex-oauth-proxy-field > input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.codex-oauth-proxy-field > input:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.codex-oauth-proxy-field > input.input-error {
+  border-color: var(--danger);
+}
+
+.codex-oauth-proxy-field > .field-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.codex-oauth-proxy-field > .btn {
+  justify-self: start;
+}

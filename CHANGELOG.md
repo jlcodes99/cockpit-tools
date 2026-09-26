@@ -7,7 +7,57 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
-## [Unreleased]
+## [1.3.60] - 2026-09-25
+
+### Added
+
+- **Codex proxy management**: import subscriptions or add proxies manually, use a shared proxy or per-account proxies, and assign them in batches. Switch nodes, test group latency, configure automatic selection, failover or load balancing, and view egress IPs, connection traffic and request logs.
+- **Codex top navigation settings**: reorder tabs and customize the More menu.
+
+### Changed
+
+- **Support for newer WorkBuddy clients**: account switching and local account import.
+- **Updated Codex model settings**: corrected default context windows for GPT-6 models, standardized auto-compaction thresholds, and updated GPT-5.6 Sol cost estimates.
+- **Pelican tests and wakeups run independently**: the API Service no longer needs to be running.
+- **New instances start blank by default**: copying an existing instance remains available.
+
+### Fixed
+
+- Fixed incorrect account errors, accounts becoming unavailable again after recovery, and duplicate streamed replies in the Codex API Service.
+- Fixed leftover provider settings after switching back to an official Codex account, and Codex OAuth and Grok provider accounts overwriting each other when sharing an email.
+- Fixed stalled client launches, scroll jumps in dialogs, and overlapping columns in the Codex instance table.
+
+## [1.3.59] - 2026-09-23
+
+### Added
+
+- **Two new built-in models: GPT-6 Sol and GPT-6 Luna**: the account model catalog, the API-service model picker and wakeup model presets now include both official models, ordered like the official client (right after GPT-6 Astra and before the GPT-5.6 family). API-service cost estimates use the published per-token rates for Standard and Fast mode, with the same long-context multipliers as the other GPT-6 models. Users whose catalog still follows the official recommended set get both models added automatically, while catalogs you edited yourself are left untouched.
+
+- **Quota rows now show an estimated full-window cost**: the 5h and Weekly quota rows add an `≈$` figure right after the `A $` amount, scaling this window's cost by the usage percentage so you can judge what the quota is worth. Nothing is shown when the window has no cost or no usage yet, and the existing quota, progress bar and reset time are unchanged.
+
+- **DeepSeek models declare V2 collaboration capability in managed model catalogs**: API-service and DeepSeek catalogs retain the declaration after template overrides. Existing catalogs rebuild through the generator-version check; GPT and Grok declarations are unchanged.
+
+- **Pelican testing is back**: Codex accounts can again run one shared prompt across selected accounts in parallel, inspect the generated results, HTML previews and side-by-side comparison, retry failed accounts, and clean up test records and generated files automatically by retention days or manually. Test requests go through the local API Service internal scheduler again, sharing account concurrency, token handling and quota cooldowns with wakeups.
+
+### Changed
+
+- **Built-in model labels now always carry the `GPT-` prefix**: wakeup and Pelican model presets, the model-management list and the managed model catalog now consistently show `GPT-6 Astra`, `GPT-6 Sol`, `GPT-6 Luna`, `GPT-5.6 Sol`, `GPT-5.6 Terra`, `GPT-5.6 Luna` and `GPT-5.5`. Upgrading adds the prefix to the old short labels (`6 Astra`, `5.6 Sol`, …) automatically, while model IDs and any display name you edited yourself stay unchanged.
+
+- **Account re-authorization now opens the official login and keeps the account info visible**: the re-authorize entries on account cards, table rows and the account-issue dialog go straight to the official login tab, which now always shows the target account email and its note button, so the note can be checked or edited while re-authorizing.
+
+- **Account risk detection has been removed**: the accounts overview no longer offers the risk-check entry or its dialog, account cards and table rows no longer show status labels such as Suspected risk or Unknown, and the API Service request log no longer annotates state lengths or classes. Wakeups and gateway forwarding no longer record state observations on the side. Existing local observation data is not deleted; collection and display simply stop.
+
+- **The CodeBuddy accounts overview no longer lists local session files**: session browsing stays in the Sessions tab, so the overview no longer shows the local JSON/JSONL file list under the account list.
+- **The Codex speed switch has been removed from the accounts overview**: account cards, list rows, the account action menu and the API service card no longer show the Standard/Fast tier picker.
+- **The macOS DMG installer window now uses a two-row layout**: Cockpit Tools and the Applications link stay on the same row so the drag-to-install gesture is unchanged, while the note is renamed to `安装与常见问题.txt` and moved to a second row below them. The note covers installation first, then the "app is damaged" fix, recommending the no-password System Settings "Open Anyway" path with the Terminal command as the fallback.
+
+### Fixed
+
+- **Fixed the local gateway keeping stale credentials after re-authorization**: a completed re-authorization or local import now writes the fresh token into the API-service sidecar immediately and resets that account's scheduler and failure state in the background, instead of waiting for the next full reload, and the UI no longer keeps showing the previous failure.
+
+- **Fixed API-service account recovery doing nothing once credentials are invalid**: recovery now forces a token refresh and pushes the fresh credentials to the local gateway first, and accounts whose credentials are invalid (upstream 401 invalidated oauth token) now offer re-authorization in the account-issue dialog instead of only reporting that recovery was submitted.
+
+- **Fixed the memory peak of the one-time history cleanup on large history databases**: the third-party reasoning cleanup now scans and commits in batches, and the rollback backup is streamed to disk while scanning, so memory no longer grows with the number of matched rows. The backup file layout and coverage are unchanged and remain manually restorable.
 
 ## [1.3.58] - 2026-09-22
 

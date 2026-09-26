@@ -20,6 +20,7 @@ include!("codex_account_import.rs");
 mod tests {
     include!("codex_account_tests_identity_import_refresh.rs");
     include!("codex_account_tests_local_import.rs");
+    include!("codex_account_tests_identity_isolation.rs");
     include!("codex_account_tests_portable_import_metadata.rs");
     include!("codex_account_tests_storage_provider.rs");
     include!("codex_account_tests_model_catalog.rs");

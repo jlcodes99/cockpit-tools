@@ -278,8 +278,26 @@ struct ExperimentalModelCatalogConfig {
 }
 
 const GPT_6_ASTRA_DEFAULT_REPAIR_MIGRATION_ID: &str = "repair-gpt-6-astra-default-model";
-const GPT_6_ASTRA_DISPLAY_NAME_MIGRATION_ID: &str =
-    "rename-gpt-6-astra-display-name-to-6-astra";
+const BUILTIN_MODEL_DISPLAY_NAME_MIGRATION_ID: &str =
+    "prefix-builtin-model-display-names";
+
+/// 内建模型的早期短名 → 带官方 `GPT-` 前缀的展示名。
+///
+/// 只有「模型 ID 与短名同时匹配」的内建条目才会改名，用户自己改过的展示名不受影响。
+const BUILTIN_MODEL_DISPLAY_NAME_MIGRATIONS: &[(&str, &str, &str)] = &[
+    (GPT_6_ASTRA_MODEL_ID, "6 Astra", "GPT-6 Astra"),
+    (GPT_6_SOL_MODEL_ID, "6 Sol", "GPT-6 Sol"),
+    (GPT_6_LUNA_MODEL_ID, "6 Luna", "GPT-6 Luna"),
+    ("gpt-5.6-sol", "5.6 Sol", "GPT-5.6 Sol"),
+    ("gpt-5.6-terra", "5.6 Terra", "GPT-5.6 Terra"),
+    ("gpt-5.6-luna", "5.6 Luna", "GPT-5.6 Luna"),
+    ("gpt-5.3-codex", "5.3 Codex", "GPT-5.3 Codex"),
+    ("gpt-5.5", "5.5", "GPT-5.5"),
+    ("gpt-5.4", "5.4", "GPT-5.4"),
+    ("gpt-5.4-mini", "5.4 Mini", "GPT-5.4 Mini"),
+    ("gpt-5.3-codex-spark", "5.3 Codex Spark", "GPT-5.3 Codex Spark"),
+    ("gpt-5.6-sol-wm", "5.6 Sol WM", "GPT-5.6 Sol WM"),
+];
 
 fn read_experimental_model_catalog_config(
     base_dir: &Path,
@@ -293,13 +311,22 @@ fn experimental_model_catalog_has_migration(base_dir: &Path, migration_id: &str)
         .is_some_and(|config| config.migrations.iter().any(|item| item == migration_id))
 }
 
-fn is_legacy_gpt_6_astra_display_name(value: &serde_json::Value) -> bool {
-    value
-        .as_str()
-        .is_some_and(|name| name.trim().eq_ignore_ascii_case("GPT-6 Astra"))
+/// 该模型当前展示名是否是需要补前缀的内建短名；是则返回统一后的名字。
+fn prefixed_builtin_display_name(
+    model_id: &str,
+    value: &serde_json::Value,
+) -> Option<&'static str> {
+    let name = value.as_str()?.trim();
+    let model_id = model_id.trim();
+    BUILTIN_MODEL_DISPLAY_NAME_MIGRATIONS
+        .iter()
+        .find(|(id, legacy, _)| {
+            id.eq_ignore_ascii_case(model_id) && legacy.eq_ignore_ascii_case(name)
+        })
+        .map(|(_, _, canonical)| *canonical)
 }
 
-fn migrate_gpt_6_astra_display_name(
+fn migrate_builtin_model_display_names(
     base_dir: &Path,
     doc: &Document,
 ) -> Result<bool, String> {
@@ -340,25 +367,26 @@ fn migrate_gpt_6_astra_display_name(
             .and_then(serde_json::Value::as_array)
             .is_some_and(|migrations| {
                 migrations.iter().any(|migration| {
-                    migration.as_str() == Some(GPT_6_ASTRA_DISPLAY_NAME_MIGRATION_ID)
+                    migration.as_str() == Some(BUILTIN_MODEL_DISPLAY_NAME_MIGRATION_ID)
                 })
             });
         if !migration_already_applied {
             if let Some(models) = config.get_mut("models").and_then(serde_json::Value::as_array_mut)
             {
                 for model in models {
-                    let is_astra = model
+                    let model_id = model
                         .get("model_id")
                         .and_then(serde_json::Value::as_str)
-                        .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID));
-                    if is_astra
-                        && model
-                            .get("display_name")
-                            .is_some_and(is_legacy_gpt_6_astra_display_name)
-                    {
-                        model["display_name"] = serde_json::Value::String("6 Astra".to_string());
-                        cached_config_needs_write = true;
-                    }
+                        .unwrap_or_default()
+                        .to_string();
+                    let Some(display_name) = model
+                        .get("display_name")
+                        .and_then(|value| prefixed_builtin_display_name(&model_id, value))
+                    else {
+                        continue;
+                    };
+                    model["display_name"] = serde_json::Value::String(display_name.to_string());
+                    cached_config_needs_write = true;
                 }
             }
             if let Some(object) = config.as_object_mut() {
@@ -367,7 +395,7 @@ fn migrate_gpt_6_astra_display_name(
                     .or_insert_with(|| serde_json::Value::Array(Vec::new()));
                 if let Some(migrations) = migrations.as_array_mut() {
                     migrations.push(serde_json::Value::String(
-                        GPT_6_ASTRA_DISPLAY_NAME_MIGRATION_ID.to_string(),
+                        BUILTIN_MODEL_DISPLAY_NAME_MIGRATION_ID.to_string(),
                     ));
                     cached_config_needs_write = true;
                 }
@@ -400,25 +428,23 @@ fn migrate_gpt_6_astra_display_name(
         })?;
         if let Some(models) = parsed.get_mut("models").and_then(serde_json::Value::as_array_mut) {
             for model in models {
-                let is_astra = model
+                let model_id = model
                     .get("slug")
                     .and_then(serde_json::Value::as_str)
-                    .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID));
-                if !is_astra {
-                    continue;
-                }
-                if model
+                    .unwrap_or_default()
+                    .to_string();
+                if let Some(display_name) = model
                     .get("display_name")
-                    .is_some_and(is_legacy_gpt_6_astra_display_name)
+                    .and_then(|value| prefixed_builtin_display_name(&model_id, value))
                 {
-                    model["display_name"] = serde_json::Value::String("6 Astra".to_string());
+                    model["display_name"] = serde_json::Value::String(display_name.to_string());
                     catalog_changed = true;
                 }
-                if model
+                if let Some(description) = model
                     .get("description")
-                    .is_some_and(is_legacy_gpt_6_astra_display_name)
+                    .and_then(|value| prefixed_builtin_display_name(&model_id, value))
                 {
-                    model["description"] = serde_json::Value::String("6 Astra".to_string());
+                    model["description"] = serde_json::Value::String(description.to_string());
                     catalog_changed = true;
                 }
             }
@@ -470,16 +496,30 @@ fn migrate_gpt_6_astra_display_name(
     Ok(catalog_changed || cached_config_needs_write)
 }
 
-fn prioritize_gpt_6_astra_model_definition(
+/// 把 GPT-6 家族按官方推荐顺序（astra → sol → luna）排到清单最前面。
+///
+/// 官方客户端的推荐集把这三个模型放在 5.6 系列之前；缺失的条目会被跳过，
+/// 不会凭空插入用户清单里不存在的模型。
+fn prioritize_gpt_6_model_definitions(
     mut models: Vec<CodexExperimentalModelDefinition>,
 ) -> Vec<CodexExperimentalModelDefinition> {
-    if let Some(index) = models
-        .iter()
-        .position(|model| model.model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
+    for (target_index, model_id) in [
+        GPT_6_ASTRA_MODEL_ID,
+        GPT_6_SOL_MODEL_ID,
+        GPT_6_LUNA_MODEL_ID,
+    ]
+    .into_iter()
+    .enumerate()
     {
-        if index > 0 {
-            let astra = models.remove(index);
-            models.insert(0, astra);
+        let Some(index) = models
+            .iter()
+            .position(|model| model.model_id.eq_ignore_ascii_case(model_id))
+        else {
+            continue;
+        };
+        if index > target_index {
+            let model = models.remove(index);
+            models.insert(target_index, model);
         }
     }
     models
@@ -629,7 +669,7 @@ fn maybe_add_gpt_6_astra_to_previous_shipped_model_definitions(
         .iter()
         .any(|model| model.model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
     {
-        return prioritize_gpt_6_astra_model_definition(models);
+        return prioritize_gpt_6_model_definitions(models);
     }
 
     let existing_ids = models
@@ -651,21 +691,78 @@ fn maybe_add_gpt_6_astra_to_previous_shipped_model_definitions(
     {
         models.insert(0, astra);
     }
-    prioritize_gpt_6_astra_model_definition(models)
+    prioritize_gpt_6_model_definitions(models)
+}
+
+/// 把 `gpt-6-sol` / `gpt-6-luna` 补进上一版自动生成的清单。
+///
+/// 与 astra 的补齐规则一致：只有清单仍与上一版随包发布的自动清单一致时才补齐，
+/// 用户自己增删过的精修清单保持原样（`gpt-6-sol` 与 `gpt-6-luna` 只存在其中一个时
+/// 同样视为用户已接管，不再自动改动）。
+fn maybe_add_gpt_6_sol_luna_to_previous_shipped_model_definitions(
+    base_dir: &Path,
+    mut models: Vec<CodexExperimentalModelDefinition>,
+) -> Vec<CodexExperimentalModelDefinition> {
+    let has_sol = models
+        .iter()
+        .any(|model| model.model_id.eq_ignore_ascii_case(GPT_6_SOL_MODEL_ID));
+    let has_luna = models
+        .iter()
+        .any(|model| model.model_id.eq_ignore_ascii_case(GPT_6_LUNA_MODEL_ID));
+    if has_sol || has_luna {
+        return prioritize_gpt_6_model_definitions(models);
+    }
+
+    let existing_ids = models
+        .iter()
+        .map(|model| model.model_id.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    if !PRE_GPT_6_SOL_LUNA_SHIPPED_VISIBLE_CODEX_MODEL_IDS
+        .iter()
+        .filter(|model_id| !crate::modules::codex_wakeup::is_codex_model_before_5_5(model_id))
+        .all(|model_id| existing_ids.contains(&model_id.to_ascii_lowercase()))
+    {
+        return models;
+    }
+
+    let defaults = default_experimental_model_definitions(base_dir);
+    let mut additions = [GPT_6_SOL_MODEL_ID, GPT_6_LUNA_MODEL_ID]
+        .into_iter()
+        .filter_map(|model_id| {
+            defaults
+                .iter()
+                .find(|model| model.model_id.eq_ignore_ascii_case(model_id))
+                .cloned()
+        })
+        .collect::<Vec<_>>();
+    if additions.is_empty() {
+        return models;
+    }
+    let insert_at = models
+        .iter()
+        .position(|model| model.model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    for (offset, model) in additions.drain(..).enumerate() {
+        models.insert(insert_at + offset, model);
+    }
+    prioritize_gpt_6_model_definitions(models)
 }
 
 fn model_catalog_display_name(model_id: &str, fallback: &str) -> String {
     match model_id.trim().to_ascii_lowercase().as_str() {
-        "gpt-5.6-sol" => "5.6 Sol".to_string(),
-        "gpt-5.6-terra" => "5.6 Terra".to_string(),
-        "gpt-5.6-luna" => "5.6 Luna".to_string(),
-        GPT_6_ASTRA_MODEL_ID => "6 Astra".to_string(),
-        "gpt-5.3-codex" => "5.3 Codex".to_string(),
-        "gpt-5.5" => "5.5".to_string(),
-        "gpt-5.4" => "5.4".to_string(),
-        "gpt-5.4-mini" => "5.4 Mini".to_string(),
-        "gpt-5.3-codex-spark" => "5.3 Codex Spark".to_string(),
-        "gpt-5.6-sol-wm" => "5.6 Sol WM".to_string(),
+        "gpt-5.6-sol" => "GPT-5.6 Sol".to_string(),
+        "gpt-5.6-terra" => "GPT-5.6 Terra".to_string(),
+        "gpt-5.6-luna" => "GPT-5.6 Luna".to_string(),
+        GPT_6_ASTRA_MODEL_ID => "GPT-6 Astra".to_string(),
+        GPT_6_SOL_MODEL_ID => "GPT-6 Sol".to_string(),
+        GPT_6_LUNA_MODEL_ID => "GPT-6 Luna".to_string(),
+        "gpt-5.3-codex" => "GPT-5.3 Codex".to_string(),
+        "gpt-5.5" => "GPT-5.5".to_string(),
+        "gpt-5.4" => "GPT-5.4".to_string(),
+        "gpt-5.4-mini" => "GPT-5.4 Mini".to_string(),
+        "gpt-5.3-codex-spark" => "GPT-5.3 Codex Spark".to_string(),
+        "gpt-5.6-sol-wm" => "GPT-5.6 Sol WM".to_string(),
         _ => fallback.trim().to_string(),
     }
 }
@@ -727,12 +824,14 @@ pub(crate) fn normalize_experimental_model_definitions(
         {
             return Err("EXPERIMENTAL_MODEL_CATALOG_CONTEXT_WINDOW_INVALID".to_string());
         }
-        if model.auto_compact_token_limit.is_some_and(|value| value <= 0)
-            || (model.context_window.is_some() && model.auto_compact_token_limit.is_none())
-        {
+        if model.auto_compact_token_limit.is_some_and(|value| value <= 0) {
             return Err("EXPERIMENTAL_MODEL_CATALOG_AUTO_COMPACT_INVALID".to_string());
         }
-        if let (Some(window), Some(compact)) = (model.context_window, model.auto_compact_token_limit) {
+        // 统一口径：给了上下文窗口就必须带压缩阈值；调用方只给窗口时按 90% 派生，
+        // 但显式给出的阈值必须严格小于窗口。
+        if let (Some(window), Some(compact)) =
+            (model.context_window, model.auto_compact_token_limit)
+        {
             if compact >= window {
                 return Err("EXPERIMENTAL_MODEL_CATALOG_AUTO_COMPACT_RANGE_INVALID".to_string());
             }
@@ -742,7 +841,13 @@ pub(crate) fn normalize_experimental_model_definitions(
             display_name: display_name.to_string(),
             reasoning_efforts: normalize_reasoning_efforts(model.reasoning_efforts.clone())?,
             context_window: model.context_window,
-            auto_compact_token_limit: model.auto_compact_token_limit,
+            auto_compact_token_limit: model.context_window.map(|window| {
+                model
+                    .auto_compact_token_limit
+                    .unwrap_or_else(|| {
+                        crate::modules::codex_protocol::derived_auto_compact_token_limit(window)
+                    })
+            }),
         });
     }
     Ok(normalized)
@@ -765,20 +870,38 @@ pub(crate) fn read_experimental_model_definitions(
                     .migrations
                     .iter()
                     .any(|item| item == GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID);
+            let should_add_sol_luna = config.version == EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION
+                && !config
+                    .migrations
+                    .iter()
+                    .any(|item| item == GPT_6_SOL_LUNA_MODEL_CATALOG_MIGRATION_ID);
             normalize_experimental_model_definitions(config.models).map(|models| {
-                (models, requires_catalog_migration, should_add_astra)
+                (
+                    models,
+                    requires_catalog_migration,
+                    should_add_astra,
+                    should_add_sol_luna,
+                )
             })
         })
     {
-        Ok((_models, true, _)) => {
+        Ok((_models, true, _, _)) => {
             // A release migration intentionally resets all pre-release lists to the
             // shipped visible-model preset. Later user edits are preserved by version 4+
-            // and the additive Astra migration marker.
+            // and the additive Astra / GPT-6 Sol-Luna migration markers.
             default_experimental_model_definitions(base_dir)
         }
-        Ok((models, false, false)) => prioritize_gpt_6_astra_model_definition(models),
-        Ok((models, false, true)) => {
-            maybe_add_gpt_6_astra_to_previous_shipped_model_definitions(base_dir, models)
+        Ok((models, false, should_add_astra, should_add_sol_luna)) => {
+            let models = if should_add_astra {
+                maybe_add_gpt_6_astra_to_previous_shipped_model_definitions(base_dir, models)
+            } else {
+                prioritize_gpt_6_model_definitions(models)
+            };
+            if should_add_sol_luna {
+                maybe_add_gpt_6_sol_luna_to_previous_shipped_model_definitions(base_dir, models)
+            } else {
+                prioritize_gpt_6_model_definitions(models)
+            }
         }
         Err(error) => {
             logger::log_warn(&format!(
@@ -811,7 +934,7 @@ fn persist_experimental_model_definitions(
         .as_ref()
         .and_then(|config| config.default_model_id.as_deref())
         .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID));
-    let models = prioritize_gpt_6_astra_model_definition(normalize_experimental_model_definitions(
+    let models = prioritize_gpt_6_model_definitions(normalize_experimental_model_definitions(
         models,
     )?);
     let mut default_model_id = default_model_id.and_then(|value| {
@@ -846,6 +969,12 @@ fn persist_experimental_model_definitions(
         .any(|item| item == GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID)
     {
         migrations.push(GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID.to_string());
+    }
+    if !migrations
+        .iter()
+        .any(|item| item == GPT_6_SOL_LUNA_MODEL_CATALOG_MIGRATION_ID)
+    {
+        migrations.push(GPT_6_SOL_LUNA_MODEL_CATALOG_MIGRATION_ID.to_string());
     }
     let mut content = serde_json::to_string_pretty(&ExperimentalModelCatalogConfig {
         version: EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
@@ -908,13 +1037,13 @@ pub(crate) fn decorate_managed_model_catalog_for_profile(
     if !experimental_model_policy_enabled(base_dir) {
         return Ok(catalog_json.to_string());
     }
-    let models = read_experimental_model_definitions(base_dir);
-    if !models.iter().any(|model| model.context_window.is_some()) {
-        return Ok(catalog_json.to_string());
-    }
     let mut catalog = serde_json::from_str::<serde_json::Value>(catalog_json)
         .map_err(|error| format!("解析 Codex 受管模型目录失败: {}", error))?;
+    let models = read_experimental_model_definitions(base_dir);
     apply_model_context_config_to_catalog(&mut catalog, &models);
+    // 统一口径收口：即使没有任何逐模型覆盖，也要保证受管目录里每个声明了上下文窗口的
+    // 模型都带自动压缩阈值（缺失时按 90% 派生）。
+    crate::modules::codex_protocol::ensure_client_model_auto_compact_limits(&mut catalog);
     serde_json::to_string_pretty(&catalog)
         .map_err(|error| format!("序列化 Codex 受管模型目录失败: {}", error))
 }
@@ -1067,12 +1196,25 @@ fn read_catalog_model_definitions(
             let official = crate::modules::codex_protocol::build_codex_client_models_response(
                 &[model_id.to_string()],
             );
-            let (context_window, auto_compact_token_limit) = match (context, compact) {
-                (Some(window), Some(limit)) if window > limit && limit > 0
-                    && (official["models"][0]["context_window"].as_i64() != Some(window)
-                        || official["models"][0]["auto_compact_token_limit"].as_i64() != Some(limit)) =>
-                    (Some(window), Some(limit)),
-                _ => (None, None),
+            // 统一口径：外部目录只要声明了有效上下文窗口就采纳，压缩阈值缺失时按 90%
+            // 派生，不再因为「没有阈值」把整对覆盖丢掉。
+            let (context_window, auto_compact_token_limit) = match context.filter(|value| *value > 0)
+            {
+                Some(window) => {
+                    let limit = compact
+                        .filter(|value| *value > 0 && *value < window)
+                        .unwrap_or_else(|| {
+                            crate::modules::codex_protocol::derived_auto_compact_token_limit(window)
+                        });
+                    if official["models"][0]["context_window"].as_i64() == Some(window)
+                        && official["models"][0]["auto_compact_token_limit"].as_i64() == Some(limit)
+                    {
+                        (None, None)
+                    } else {
+                        (Some(window), Some(limit))
+                    }
+                }
+                None => (None, None),
             };
             Some(CodexExperimentalModelDefinition {
                 model_id: model_id.to_string(),
@@ -1411,7 +1553,7 @@ pub fn read_quick_config_from_config_toml(base_dir: &Path) -> Result<CodexQuickC
         crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
             .map_err(|e| format!("解析 config.toml 失败: {}", e))?
     };
-    if let Err(error) = migrate_gpt_6_astra_display_name(base_dir, &doc) {
+    if let Err(error) = migrate_builtin_model_display_names(base_dir, &doc) {
         logger::log_warn(&format!(
             "[Codex实验模型] 迁移 GPT-6 Astra 显示名称失败，继续读取现有配置: {}",
             error
@@ -1592,17 +1734,21 @@ fn write_quick_config_to_config_toml_with_default_mode(
             if context_window <= 0 {
                 return Err("上下文窗口必须大于 0".to_string());
             }
-            doc[CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY] = value(context_window);
-        } else {
-            let _ = doc.remove(CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY);
-        }
-
-        if let Some(compact_limit) = auto_compact_token_limit {
-            if compact_limit <= 0 {
-                return Err("自动压缩阈值必须大于 0".to_string());
+            // 统一口径：写了上下文窗口就必须同时写自动压缩阈值；调用方没给阈值时按
+            // 90% 派生，避免 config.toml 里出现「有窗口无阈值」的半边配置。
+            let compact_limit = auto_compact_token_limit
+                .filter(|value| *value > 0)
+                .unwrap_or_else(|| {
+                    crate::modules::codex_protocol::derived_auto_compact_token_limit(context_window)
+                });
+            if compact_limit >= context_window {
+                return Err("自动压缩阈值必须小于上下文窗口".to_string());
             }
+            doc[CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY] = value(context_window);
             doc[CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY] = value(compact_limit);
         } else {
+            // 跟随官方：两个键必须一起移除，不允许留下孤立的压缩阈值。
+            let _ = doc.remove(CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY);
             let _ = doc.remove(CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY);
         }
     }
@@ -1887,6 +2033,150 @@ fn apply_forced_login_method_to_config_toml(
     Ok(true)
 }
 
+/// profile 级「工具写入的 provider 引用」快照文件名。
+///
+/// 切到第三方/自建供应商账号时，工具会把 `model_provider` 与 `[model_providers.<id>]` 写进官方
+/// profile 的 config.toml（含 DeepSeek、自建中转等）。切回官方内置 provider 时，官方账号投影只
+/// 清理受管 provider（`openai` / `codex_local_access` / `cockpit_api` / `openai_api_key`），其余 id
+/// 会被当作用户自定义 provider 保留——于是「账号已切回官方，客户端仍按上一个供应商发请求」
+/// （例如切回普通账号后一直显示 DeepSeek）。
+///
+/// 因此写入前按 profile 记录原值，切回官方内置 provider 时按同一份记录还原；这是 profile 级
+/// 状态，多开实例天然隔离，也不需要按供应商 id 写特判。
+const CODEX_PROVIDER_OVERRIDE_FILE: &str = "cockpit-provider-override.json";
+
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexProviderOverrideSnapshot {
+    provider_id: String,
+    /// 写入前 `model` 的原值；`None` 表示原本没有这个键。
+    #[serde(default)]
+    model: Option<String>,
+    /// 写入前 `model_provider` 的原值；`None` 表示原本没有这个键。
+    #[serde(default)]
+    model_provider: Option<String>,
+    /// 写入前 `[model_providers.<id>]` 的 TOML 片段；`None` 表示原本没有该表项。
+    #[serde(default)]
+    provider_table: Option<String>,
+}
+
+fn provider_override_snapshot_path(base_dir: &Path) -> PathBuf {
+    base_dir.join(CODEX_PROVIDER_OVERRIDE_FILE)
+}
+
+fn read_top_level_config_string(doc: &Document, key: &str) -> Option<String> {
+    doc.get(key).and_then(|item| item.as_str()).map(str::to_string)
+}
+
+/// 写入工具 provider 之前记录原值。已有快照时不覆盖：一份快照对应一次「工具接管」，
+/// 必须保留最早的用户原值，否则切走时只会还原成上一次的接管状态。
+fn record_provider_override_snapshot(doc: &Document, base_dir: &Path, provider_id: &str) {
+    let provider_id = provider_id.trim();
+    if provider_id.is_empty() {
+        return;
+    }
+    let path = provider_override_snapshot_path(base_dir);
+    if path.exists() {
+        return;
+    }
+    let snapshot = CodexProviderOverrideSnapshot {
+        provider_id: provider_id.to_string(),
+        model: read_top_level_config_string(doc, CODEX_CONFIG_MODEL_KEY),
+        model_provider: read_top_level_config_string(doc, CODEX_CONFIG_MODEL_PROVIDER_KEY),
+        provider_table: doc
+            .get(CODEX_CONFIG_MODEL_PROVIDERS_KEY)
+            .and_then(|item| item.get(provider_id))
+            .map(ToString::to_string),
+    };
+    let Ok(content) = serde_json::to_string_pretty(&snapshot) else {
+        return;
+    };
+    if let Err(error) = crate::modules::atomic_write::write_string_atomic(&path, &content) {
+        logger::log_warn(&format!(
+            "[Codex切号] 记录 provider 引用快照失败: path={}, error={}",
+            path.display(),
+            error
+        ));
+    }
+}
+
+/// 还原 `[model_providers.<id>]`：原本存在就写回原内容，原本不存在就移除工具写入的表项。
+fn restore_provider_table_entry(doc: &mut Document, provider_id: &str, snapshot: Option<&str>) {
+    let previous = snapshot.and_then(|raw| {
+        let escaped = provider_id.replace('\\', "\\\\").replace('"', "\\\"");
+        crate::modules::codex_config_format::read_codex_config_doc_from_str(&format!(
+            "[model_providers.\"{escaped}\"]\n{raw}"
+        ))
+        .ok()
+        .and_then(|parsed| {
+            parsed
+                .get(CODEX_CONFIG_MODEL_PROVIDERS_KEY)
+                .and_then(|item| item.get(provider_id))
+                .cloned()
+        })
+    });
+    let providers_empty = doc
+        .get_mut(CODEX_CONFIG_MODEL_PROVIDERS_KEY)
+        .and_then(|item| item.as_table_mut())
+        .map(|providers| {
+            match previous {
+                Some(item) => {
+                    providers.insert(provider_id, item);
+                }
+                None => {
+                    let _ = providers.remove(provider_id);
+                }
+            }
+            providers.is_empty()
+        })
+        .unwrap_or(false);
+    if providers_empty {
+        let _ = doc.remove(CODEX_CONFIG_MODEL_PROVIDERS_KEY);
+    }
+}
+
+/// 切回官方内置 provider 时按快照还原工具写入的 provider 引用。
+///
+/// 必须在清理当前 provider 前调用，才能识别用户在工具写入之后做出的选择。
+fn restore_provider_override_snapshot(base_dir: &Path, doc: &mut Document) -> bool {
+    let path = provider_override_snapshot_path(base_dir);
+    let Ok(content) = fs::read_to_string(&path) else {
+        return false;
+    };
+    // 快照只服务一次还原：无论能否应用都丢弃，避免过期记录影响后续切号。
+    let _ = fs::remove_file(&path);
+    let Ok(snapshot) = serde_json::from_str::<CodexProviderOverrideSnapshot>(&content) else {
+        return false;
+    };
+    let provider_id = snapshot.provider_id.trim().to_string();
+    if provider_id.is_empty() {
+        return false;
+    }
+    // 用户可能又手动切到了别的供应商：保留用户当前选择，只丢弃过期快照。
+    let current_provider = doc
+        .get(CODEX_CONFIG_MODEL_PROVIDER_KEY)
+        .and_then(|item| item.as_str())
+        .map(str::trim);
+    if current_provider != Some(provider_id.as_str()) {
+        return false;
+    }
+
+    match snapshot.model_provider.as_deref() {
+        Some(previous) => doc[CODEX_CONFIG_MODEL_PROVIDER_KEY] = value(previous),
+        None => {
+            let _ = doc.remove(CODEX_CONFIG_MODEL_PROVIDER_KEY);
+        }
+    }
+    match snapshot.model.as_deref() {
+        Some(previous) => doc[CODEX_CONFIG_MODEL_KEY] = value(previous),
+        None => {
+            let _ = doc.remove(CODEX_CONFIG_MODEL_KEY);
+        }
+    }
+    restore_provider_table_entry(doc, &provider_id, snapshot.provider_table.as_deref());
+    true
+}
+
 fn write_api_provider_to_config_toml_with_options(
     base_dir: &Path,
     provider_config: &ApiProviderConfig,
@@ -1909,6 +2199,9 @@ fn write_api_provider_to_config_toml_with_options(
 
     match provider_config.mode {
         CodexApiProviderMode::OpenaiBuiltin => {
+            // 先根据尚未清理的当前选择还原快照；用户已改选（含移除 provider）时保留
+            // 当前 provider/model。之后再统一清理受管引用，旧快照也不能复活运行时 provider。
+            restore_provider_override_snapshot(base_dir, &mut doc);
             let preserved_user_model_provider = doc
                 .get(CODEX_CONFIG_MODEL_PROVIDER_KEY)
                 .and_then(|item| item.as_str())
@@ -1958,6 +2251,7 @@ fn write_api_provider_to_config_toml_with_options(
                 .unwrap_or(provider_id);
             let base_url = normalized.as_deref().ok_or("自定义供应商缺少 Base URL")?;
 
+            let _ = record_provider_override_snapshot(&doc, base_dir, provider_id);
             doc[CODEX_CONFIG_MODEL_PROVIDER_KEY] = value(provider_id);
             if doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY).is_none() {
                 doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY] = toml_edit::table();
@@ -2726,6 +3020,8 @@ fn write_deepseek_official_responses_runtime_to_dir(
             .map_err(|e| format!("解析 config.toml 失败: {}", e))?
     };
 
+    // 记录写入前的 model / model_provider / provider 表，切回官方账号时按同一份快照还原。
+    record_provider_override_snapshot(&doc, base_dir, DEEPSEEK_PROVIDER_ID);
     doc["model"] = value(selected_model.as_str());
     let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
     crate::modules::codex_account::apply_deepseek_reasoning_effort(&mut doc);

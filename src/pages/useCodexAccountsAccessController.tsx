@@ -749,6 +749,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           const bindAccountId = isDeepSeekAccount(launchAccount)
             ? resolveDeepSeekBindAccountId(launchAccount)
             : launchAccount.id;
+          // 先关闭预览弹框再执行启动事务：启动链路本身可能耗时数十秒，
+          // 弹框停在原地会让主按钮和“关闭”看起来卡死。
+          setLaunchPreviewAccount(null);
           await codexInstanceStore.updateInstance({
             instanceId: launchPreviewInstanceId,
             bindAccountId,
@@ -757,7 +760,6 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           if (launchAfterSwitch) {
             await codexInstanceStore.startInstance(launchPreviewInstanceId);
           }
-          setLaunchPreviewAccount(null);
           return true;
         }
         setLaunchPreviewAccount(null);

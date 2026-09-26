@@ -45,7 +45,6 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
-import { CodebuddySessionListPanel } from '../components/codebuddy/CodebuddySessionListPanel';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 
 const CB_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.codebuddy.flow_notice_collapsed';
@@ -805,9 +804,6 @@ export function CodebuddyAccountsPage() {
         onPreviousPage={pagination.goToPreviousPage}
         onNextPage={pagination.goToNextPage}
       />
-
-      {/* Full session manager is on the sessions tab; keep lightweight list on overview. */}
-      <CodebuddySessionListPanel />
 
       {showAddModal && (
         <div className="modal-overlay">

@@ -22,9 +22,70 @@ const CODEX_CLIENT_MODEL_TEMPLATES_JSON: &str = include_str!(concat!(
     "/../sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/internal/registry/models/codex_client_models.json"
 ));
 const DEFAULT_CONTEXT_WINDOW: i64 = 272_000;
-const DEFAULT_MAX_CONTEXT_WINDOW: i64 = 1_000_000;
+/// 未知 / 自定义 Codex 模型的兜底上限。
+///
+/// 兜底不再声明 1M 上限：1M 级上下文属于具体模型的真实能力值，只能来自模型目录或
+/// 用户显式覆盖；兜底一律与 `DEFAULT_CONTEXT_WINDOW` 保持一致，避免客户端按 1M
+/// 上报所有第三方模型。
+const DEFAULT_MAX_CONTEXT_WINDOW: i64 = DEFAULT_CONTEXT_WINDOW;
 const LOCAL_PROXY_BYPASS_HOSTS: [&str; 5] =
     ["127.0.0.1", "127.0.0.0/8", "localhost", "::1", "::1/128"];
+
+/// Codex 客户端「上下文 / 压缩」统一口径：压缩阈值固定取上下文窗口的 90%。
+pub(crate) const AUTO_COMPACT_RATIO_PERCENT: i64 = 90;
+
+/// 按统一口径派生自动压缩阈值：`context_window * 90 / 100`（整数除法，向下取整）。
+///
+/// 例：`516000 -> 464400`、`1000000 -> 900000`、`272000 -> 244800`、`128000 -> 115200`。
+/// 非正输入返回 0，调用方据此判断「无法派生」。
+pub(crate) fn derived_auto_compact_token_limit(context_window: i64) -> i64 {
+    if context_window <= 0 {
+        return 0;
+    }
+    context_window.saturating_mul(AUTO_COMPACT_RATIO_PERCENT) / 100
+}
+
+/// 为单个模型条目补齐压缩阈值：声明了 `context_window` 但缺少、非正或大于等于窗口的
+/// 压缩阈值时，按统一口径派生写入；合法的显式阈值保持原样。
+fn ensure_model_auto_compact_limit(object: &mut Map<String, Value>) -> bool {
+    let Some(context_window) = object
+        .get("context_window")
+        .and_then(Value::as_i64)
+        .filter(|value| *value > 0)
+    else {
+        return false;
+    };
+    let existing = object
+        .get("auto_compact_token_limit")
+        .and_then(Value::as_i64)
+        .filter(|value| *value > 0);
+    // 已声明的压缩阈值必须小于上下文窗口，否则视为无效并重新派生。
+    if existing.is_some_and(|value| value < context_window) {
+        return false;
+    }
+    object.insert(
+        "auto_compact_token_limit".to_string(),
+        json!(derived_auto_compact_token_limit(context_window)),
+    );
+    true
+}
+
+/// 为整个 Codex 客户端模型目录补齐压缩阈值（统一口径的收口点）。
+///
+/// 只要条目声明了 `context_window > 0`，就必定带 `auto_compact_token_limit`；
+/// 内置模板、`gpt-reserve`、模板回落条目与外部覆盖都不再留空。
+pub(crate) fn ensure_client_model_auto_compact_limits(catalog: &mut Value) -> bool {
+    let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) else {
+        return false;
+    };
+    let mut changed = false;
+    for model in models {
+        if let Some(object) = model.as_object_mut() {
+            changed |= ensure_model_auto_compact_limit(object);
+        }
+    }
+    changed
+}
 
 pub fn merge_local_no_proxy(raw: &str) -> String {
     let mut seen = HashSet::new();
@@ -134,17 +195,20 @@ pub fn apply_model_context_overrides(
         let Some(object) = model.as_object_mut() else {
             continue;
         };
-        if let Some(context_window) = context_window.filter(|value| *value > 0) {
-            object.insert("context_window".to_string(), json!(context_window));
-            object.insert("max_context_window".to_string(), json!(context_window));
-        }
-        if let Some(auto_compact_token_limit) = auto_compact_token_limit.filter(|value| *value > 0)
-        {
-            object.insert(
-                "auto_compact_token_limit".to_string(),
-                json!(auto_compact_token_limit),
-            );
-        }
+        // 上下文窗口与压缩阈值必须成对出现：只给了压缩阈值属于半边配置，直接忽略，
+        // 保持「跟随官方」语义（客户端继续使用官方目录值）。
+        let Some(context_window) = context_window.filter(|value| *value > 0) else {
+            continue;
+        };
+        object.insert("context_window".to_string(), json!(context_window));
+        object.insert("max_context_window".to_string(), json!(context_window));
+        let auto_compact_token_limit = auto_compact_token_limit
+            .filter(|value| *value > 0 && *value < context_window)
+            .unwrap_or_else(|| derived_auto_compact_token_limit(context_window));
+        object.insert(
+            "auto_compact_token_limit".to_string(),
+            json!(auto_compact_token_limit),
+        );
     }
 }
 
@@ -242,12 +306,21 @@ pub(crate) fn managed_codex_model_ids() -> Vec<String> {
         .map(str::to_string)
         .collect::<Vec<_>>();
 
-    if let Some(index) = model_ids
+    // 官方推荐集把 GPT-6 家族排在最前，顺序固定为 Astra → Sol → Luna；
+    // 只移动已存在的条目，不插入目录里没有的模型。
+    for (offset, model_id) in ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]
         .iter()
-        .position(|model| model.eq_ignore_ascii_case("gpt-6-astra"))
+        .enumerate()
     {
-        let astra = model_ids.remove(index);
-        model_ids.insert(0, astra);
+        if let Some(index) = model_ids
+            .iter()
+            .position(|model| model.eq_ignore_ascii_case(model_id))
+        {
+            if index > offset {
+                let model = model_ids.remove(index);
+                model_ids.insert(offset, model);
+            }
+        }
     }
 
     model_ids
@@ -473,6 +546,10 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
             "max_context_window".to_string(),
             json!(DEFAULT_MAX_CONTEXT_WINDOW),
         );
+        object.insert(
+            "auto_compact_token_limit".to_string(),
+            json!(derived_auto_compact_token_limit(DEFAULT_CONTEXT_WINDOW)),
+        );
         object.insert("priority".to_string(), json!(1000 + index));
         object.insert(
             "additional_speed_tiers".to_string(),
@@ -507,7 +584,23 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
         "comp_hash".to_string(),
         Value::String(CODEX_CLIENT_COMP_HASH.to_string()),
     );
+    apply_deepseek_multi_agent_capability(&mut model);
+    // 统一口径收口：任何声明了上下文窗口的条目（内置模板、模板回落、外部覆盖）都必须
+    // 带自动压缩阈值，避免目录里出现「有窗口无阈值」的空档。
+    if let Some(object) = model.as_object_mut() {
+        ensure_model_auto_compact_limit(object);
+    }
     model
+}
+
+/// 只为已适配的 DeepSeek 模型补协作声明；必须在模板覆盖之后调用。
+pub(crate) fn apply_deepseek_multi_agent_capability(model: &mut Value) {
+    let slug = model.get("slug").and_then(Value::as_str).unwrap_or_default();
+    let id = slug.trim().rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
+    if !matches!(id.as_str(), "deepseek-flash" | "deepseek-v4-flash" | "deepseek-v4-pro") {
+        return;
+    }
+    model["multi_agent_version"] = json!("v2");
 }
 
 fn codex_client_model_catalog() -> &'static Value {
@@ -536,6 +629,7 @@ fn inherit_routed_gpt_capabilities(object: &mut Map<String, Value>, model_id: &s
         "additional_speed_tiers",
         "context_window",
         "max_context_window",
+        "auto_compact_token_limit",
     ] {
         if let Some(value) = template.get(field) {
             object.insert(field.to_string(), value.clone());
@@ -622,7 +716,9 @@ fn display_name_for_model(model_id: &str) -> String {
         "gpt-5.4-mini" => "GPT-5.4 Mini".to_string(),
         "gpt-5.3-codex" => "GPT-5.3 Codex".to_string(),
         "gpt-5.3-codex-spark" => "GPT-5.3 Codex Spark".to_string(),
-        "gpt-6-astra" => "6 Astra".to_string(),
+        "gpt-6-astra" => "GPT-6 Astra".to_string(),
+        "gpt-6-sol" => "GPT-6 Sol".to_string(),
+        "gpt-6-luna" => "GPT-6 Luna".to_string(),
         "gpt-5.2" => "GPT-5.2".to_string(),
         "gpt-5.2-codex" => "GPT-5.2 Codex".to_string(),
         "gpt-5.1-codex-max" => "GPT-5.1 Codex Max".to_string(),
@@ -1108,6 +1204,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn deepseek_multi_agent_catalog_is_scoped_and_preserves_identity() {
+        for slug in ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro", "relay/deepseek-v4-pro"] {
+            let model = build_codex_client_model(slug, 0);
+            assert_eq!(model["slug"], json!(slug));
+            assert_eq!(model["multi_agent_version"], json!("v2"));
+        }
+        for slug in ["gpt-5.5", "gpt-5.6-luna", "gpt-reserve", "grok-4.6", "glm-4.6", "deepseek-custom"] {
+            let mut model = build_codex_client_model(slug, 0);
+            let before = model.clone();
+            apply_deepseek_multi_agent_capability(&mut model);
+            assert_eq!(model, before, "{slug}");
+        }
+    }
+
+    #[test]
     fn grok_models_declare_multi_agent_capability() {
         let catalog = build_codex_client_models_response(&[
             "grok-4.6".into(),
@@ -1196,7 +1307,12 @@ mod tests {
         expected["visibility"] = json!("list");
         expected["display_name"] = json!(CODEX_RESERVE_DISPLAY_NAME);
         assert_eq!(models.last(), Some(&expected));
-        assert!(expected["auto_compact_token_limit"].is_null());
+        // 统一口径：Reserve 沿用 Luna 模板的上下文窗口，压缩阈值必须同时存在且为 90%。
+        let reserve_context = expected["context_window"].as_i64().expect("context window");
+        assert_eq!(
+            expected["auto_compact_token_limit"].as_i64(),
+            Some(derived_auto_compact_token_limit(reserve_context))
+        );
 
         let explicit = build_codex_client_models_response(&[CODEX_RESERVE_MODEL_ID.to_string()]);
         assert_eq!(explicit["models"][0], expected);
@@ -1803,6 +1919,8 @@ mod tests {
             managed_codex_model_ids(),
             vec![
                 "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna"
@@ -1885,11 +2003,16 @@ mod tests {
         );
         assert_eq!(
             model.get("context_window").and_then(Value::as_i64),
-            Some(1_050_000)
+            Some(256_000)
         );
         assert_eq!(
             model.get("max_context_window").and_then(Value::as_i64),
-            Some(1_050_000)
+            Some(256_000)
+        );
+        // 统一口径：上下文窗口必须带 90% 的压缩阈值。
+        assert_eq!(
+            model.get("auto_compact_token_limit").and_then(Value::as_i64),
+            Some(230_400)
         );
         assert_eq!(
             model.get("max_completion_tokens").and_then(Value::as_i64),
@@ -1922,6 +2045,48 @@ mod tests {
             model.get("use_responses_lite").and_then(Value::as_bool),
             Some(true)
         );
+    }
+
+    #[test]
+    fn gpt_6_sol_and_luna_preserve_official_catalog_limits_and_reasoning_levels() {
+        for (slug, official_name, fallback_name, priority, supports_ultra) in [
+            ("gpt-6-sol", "GPT-6 Sol", "GPT-6 Sol", 2, true),
+            ("gpt-6-luna", "GPT-6 Luna", "GPT-6 Luna", 3, false),
+        ] {
+            let response = build_codex_client_models_response(&[slug.to_string()]);
+            let model = response
+                .pointer("/models/0")
+                .expect("GPT-6 model should be present");
+            assert_eq!(
+                model.get("display_name").and_then(Value::as_str),
+                Some(official_name)
+            );
+            assert_eq!(display_name_for_model(slug), fallback_name);
+            assert_eq!(model.get("priority").and_then(Value::as_i64), Some(priority));
+            assert_eq!(
+                model.get("context_window").and_then(Value::as_i64),
+                Some(256_000)
+            );
+            assert_eq!(
+                model.get("max_context_window").and_then(Value::as_i64),
+                Some(256_000)
+            );
+            // 统一口径：上下文窗口必须带 90% 的压缩阈值。
+            assert_eq!(
+                model.get("auto_compact_token_limit").and_then(Value::as_i64),
+                Some(230_400),
+                "{slug}"
+            );
+            let efforts = model
+                .get("supported_reasoning_levels")
+                .and_then(Value::as_array)
+                .expect("GPT-6 reasoning levels should exist")
+                .iter()
+                .filter_map(|level| level.get("effort").and_then(Value::as_str))
+                .collect::<Vec<_>>();
+            assert!(efforts.contains(&"max"), "{slug}: {efforts:?}");
+            assert_eq!(efforts.contains(&"ultra"), supports_ultra, "{slug}: {efforts:?}");
+        }
     }
 
     #[test]
@@ -1984,6 +2149,9 @@ mod tests {
         assert_eq!(custom["description"], "Custom Model");
         assert_eq!(custom["context_window"], DEFAULT_CONTEXT_WINDOW);
         assert_eq!(custom["max_context_window"], DEFAULT_MAX_CONTEXT_WINDOW);
+        // 兜底不再声明 1M 上限；压缩阈值按统一口径派生为窗口的 90%。
+        assert_eq!(custom["max_context_window"], 272_000);
+        assert_eq!(custom["auto_compact_token_limit"], 244_800);
         assert_eq!(
             custom["supported_reasoning_levels"],
             base["supported_reasoning_levels"]
@@ -2014,8 +2182,46 @@ mod tests {
 
         assert_eq!(
             priorities,
-            vec![Some(1), Some(2), Some(3), Some(7), Some(16), Some(23)]
+            vec![Some(4), Some(7), Some(8), Some(12), Some(16), Some(23)]
         );
+    }
+
+    #[test]
+    fn derived_auto_compact_limits_follow_ninety_percent_rule() {
+        for (window, expected) in [
+            (516_000, 464_400),
+            (1_000_000, 900_000),
+            (272_000, 244_800),
+            (128_000, 115_200),
+            (256_000, 230_400),
+            (1_048_576, 943_718),
+        ] {
+            assert_eq!(
+                derived_auto_compact_token_limit(window),
+                expected,
+                "window={window}"
+            );
+        }
+        assert_eq!(derived_auto_compact_token_limit(0), 0);
+        assert_eq!(derived_auto_compact_token_limit(-1), 0);
+        assert_eq!(AUTO_COMPACT_RATIO_PERCENT, 90);
+    }
+
+    #[test]
+    fn catalog_models_without_compact_limit_derive_ninety_percent() {
+        let mut catalog = json!({"models": [
+            {"slug": "windowless-model"},
+            {"slug": "official-model", "context_window": 272_000},
+            {"slug": "explicit-model", "context_window": 516_000, "auto_compact_token_limit": 460_000},
+            {"slug": "stale-model", "context_window": 100_000, "auto_compact_token_limit": 100_000},
+        ]});
+        assert!(ensure_client_model_auto_compact_limits(&mut catalog));
+        assert!(catalog["models"][0].get("auto_compact_token_limit").is_none());
+        assert_eq!(catalog["models"][1]["auto_compact_token_limit"], 244_800);
+        // 显式给出的（小于窗口的）阈值保持原样。
+        assert_eq!(catalog["models"][2]["auto_compact_token_limit"], 460_000);
+        // 大于等于窗口的无效阈值会被 90% 派生值替换。
+        assert_eq!(catalog["models"][3]["auto_compact_token_limit"], 90_000);
     }
 
     #[test]

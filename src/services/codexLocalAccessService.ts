@@ -24,26 +24,10 @@ import type {
   CodexLocalAccessUsageEventPage,
   CodexLocalAccessImageGenerationPolicy,
   CodexInstanceGatewayView,
-  CodexAccountTurnStateStatus,
-  CodexTurnStateProbeResult,
 } from "../types/codexLocalAccess";
 
 export async function getCodexLocalAccessState(): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_get_state");
-}
-
-/** 读取全部账号的风控状态（基于上游 x-codex-turn-state 观测）。 */
-export async function listCodexAccountTurnStateStatuses(): Promise<
-  CodexAccountTurnStateStatus[]
-> {
-  return await invoke("codex_account_turn_state_statuses");
-}
-
-/** 手动风控检测：只发一条最小官方请求并读取响应头里的 state。 */
-export async function probeCodexAccountTurnState(
-  accountId: string,
-): Promise<CodexTurnStateProbeResult> {
-  return await invoke("codex_probe_account_turn_state", { accountId });
 }
 
 export async function saveCodexLocalAccessAccounts(

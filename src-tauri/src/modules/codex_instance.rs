@@ -61,6 +61,37 @@ pub fn provider_gateway_bind_account_id(account_id: &str) -> Option<String> {
     ))
 }
 
+/// 解析实例绑定账号的出口代理。API 服务聚合入口不直接访问 OpenAI，不需要账号代理。
+pub async fn preflight_egress_proxy_for_bind_account(bind_account_id: Option<&str>) -> Result<(), String> {
+    let Some(bound) = bind_account_id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    if is_api_service_bind_account_id(bound) {
+        return Ok(());
+    }
+    let account_id = parse_provider_gateway_bind_account_id(bound).unwrap_or_else(|| bound.to_owned());
+    crate::modules::codex_proxy_engine_preflight::for_account(
+        &account_id,
+        crate::modules::codex_proxy_engine_preflight::Usage::Desktop,
+    ).await
+}
+
+/// 解析实例绑定账号的出口代理。API 服务聚合入口不直接访问 OpenAI，不需要账号代理。
+///
+/// 受管客户端启动时统一走 `codex_proxy_desktop_router::ensure`：账号符合资格且已有
+/// 生效出口（账号绑定或统一代理）时才注入固定入口。已接入入口的客户端换节点或解绑
+/// 只影响新连接；尚未接入的客户端首次绑定后需重启。未绑定账号的新启动沿用原有出口。
+/// 入口创建失败时 `ensure` 返回 `None`，不注入代理参数，也不阻断客户端启动。
+pub async fn resolve_egress_proxy_for_bind_account(bind_account_id: Option<&str>) -> Result<Option<String>, String> {
+    let Some(bind_account_id) = bind_account_id.map(str::trim).filter(|value| !value.is_empty()) else { return Ok(None); };
+    if is_api_service_bind_account_id(bind_account_id) {
+        return Ok(None);
+    }
+    let account_id =
+        parse_provider_gateway_bind_account_id(bind_account_id).unwrap_or_else(|| bind_account_id.to_string());
+    crate::modules::codex_proxy_desktop_router::ensure(&account_id).await
+}
+
 #[derive(Debug, Clone)]
 pub struct CreateInstanceParams {
     pub name: String,

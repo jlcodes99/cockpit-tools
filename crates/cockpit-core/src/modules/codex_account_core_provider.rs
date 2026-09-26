@@ -42,6 +42,16 @@ const CODEX_LEGACY_API_KEY_OPENAI_PROVIDER_ID: &str = "openai_api_key";
 const CODEX_PROVIDER_WIRE_API: &str = "responses";
 const CODEX_CONTEXT_WINDOW_1M_VALUE: i64 = 1_000_000;
 const CODEX_AUTO_COMPACT_DEFAULT_LIMIT: i64 = 900_000;
+/// 统一口径：上下文窗口与压缩阈值必须成对，压缩阈值固定取窗口的 90%。
+const CODEX_AUTO_COMPACT_RATIO_PERCENT: i64 = 90;
+
+/// 按统一口径派生压缩阈值：`context_window * 90 / 100`（整数除法，向下取整）。
+fn derived_auto_compact_token_limit(context_window: i64) -> i64 {
+    if context_window <= 0 {
+        return 0;
+    }
+    context_window.saturating_mul(CODEX_AUTO_COMPACT_RATIO_PERCENT) / 100
+}
 #[cfg(target_os = "macos")]
 const CODEX_KEYCHAIN_SERVICE: &str = "Codex Auth";
 const CODEX_AUTO_SWITCH_ACCOUNT_SCOPE_ALL: &str = "all_accounts";
@@ -666,13 +676,20 @@ fn write_quick_config_to_config_toml(
     };
 
     if context_window_1m {
-        let compact_limit = auto_compact_token_limit.unwrap_or(CODEX_AUTO_COMPACT_DEFAULT_LIMIT);
-        if compact_limit <= 0 {
-            return Err("自动压缩阈值必须大于 0".to_string());
+        // 统一口径：启用 1M 上下文时必须同时写入压缩阈值；调用方没给阈值时按 90%
+        // 派生，并且显式给出的阈值必须严格小于上下文窗口。
+        let compact_limit = auto_compact_token_limit
+            .filter(|value| *value > 0)
+            .unwrap_or_else(|| {
+                derived_auto_compact_token_limit(CODEX_CONTEXT_WINDOW_1M_VALUE)
+            });
+        if compact_limit >= CODEX_CONTEXT_WINDOW_1M_VALUE {
+            return Err("自动压缩阈值必须小于上下文窗口".to_string());
         }
         doc[CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY] = value(CODEX_CONTEXT_WINDOW_1M_VALUE);
         doc[CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY] = value(compact_limit);
     } else {
+        // 跟随官方：两个键必须一起移除，不允许留下孤立的压缩阈值。
         let _ = doc.remove(CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY);
         let _ = doc.remove(CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY);
     }
@@ -962,4 +979,3 @@ fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
         }
     }
 }
-

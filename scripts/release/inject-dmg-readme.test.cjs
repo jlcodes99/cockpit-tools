@@ -82,12 +82,12 @@ test('positions all three DMG icons in the generated AppleScript', () => {
   const script = buildFinderScript({
     volumeName: 'Cockpit Tools 1.2.3',
     appName: 'Cockpit Tools.app',
-    readmeName: '“已损坏”急救说明 (README).txt',
+    readmeName: '安装与常见问题.txt',
   });
 
   assert.match(script, /set theDisk to disk "Cockpit Tools 1\.2\.3"/);
-  assert.match(script, /set position of item "Cockpit Tools\.app" to \{180, 170\}/);
-  assert.match(script, /set position of item "“已损坏”急救说明 \(README\)\.txt" to \{330, 170\}/);
-  assert.match(script, /set position of item "Applications" to \{480, 170\}/);
-  assert.match(script, /set icon size to 128/);
+  assert.match(script, /set position of item "Cockpit Tools\.app" to \{180, 150\}/);
+  assert.match(script, /set position of item "安装与常见问题\.txt" to \{330, 330\}/);
+  assert.match(script, /set position of item "Applications" to \{480, 150\}/);
+  assert.match(script, /set icon size to 112/);
 });

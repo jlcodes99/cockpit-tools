@@ -14,6 +14,7 @@ import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import * as codexService from "../services/codexService";
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
 import { conciseCodexCredentialFailure } from "../utils/codexCredentialProgress";
+import { proxyEnginePrerequisiteKey } from "../utils/codexProxyEnginePrerequisite";
 import type { CodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
 import { parseWindowsOperationError } from "../utils/windowsOperationError";
 import "./CodexSwitchProgressModal.css";
@@ -138,8 +139,9 @@ export function CodexSwitchProgressModal() {
             ? previous
             : createProgressState(accountId);
         if (detail.type === "error") {
+          const prerequisite = proxyEnginePrerequisiteKey(detail.error);
           const errorText =
-            detail.error || base.error || t("common.failed", "失败");
+            prerequisite ? t(prerequisite) : detail.error || base.error || t("common.failed", "失败");
           const authFailure =
             detail.authFailure === undefined
               ? base.authFailure

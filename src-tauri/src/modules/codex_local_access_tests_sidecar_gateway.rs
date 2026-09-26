@@ -229,6 +229,32 @@
     }
 
     #[test]
+    fn manual_recovery_suppresses_recovered_accounts_until_window_expires() {
+        let mut runtime = super::GatewayRuntime::default();
+        super::suppress_local_access_recovery_rows(
+            &mut runtime,
+            &["account-1".to_string(), " account-2 ".to_string()],
+            2_000,
+        );
+
+        assert_eq!(
+            runtime.recovery_suppressed_accounts.get("account-1"),
+            Some(&2_000)
+        );
+        assert_eq!(
+            runtime.recovery_suppressed_accounts.get("account-2"),
+            Some(&2_000)
+        );
+        assert_eq!(runtime.recovery_suppressed_accounts.len(), 2);
+
+        super::prune_runtime_routing_state(&mut runtime, 1_000);
+        assert_eq!(runtime.recovery_suppressed_accounts.len(), 2);
+
+        super::prune_runtime_routing_state(&mut runtime, 2_000);
+        assert!(runtime.recovery_suppressed_accounts.is_empty());
+    }
+
+    #[test]
     fn quota_exhaustion_blocks_dispatch_until_reset_or_recovery() {
         let mut runtime = super::GatewayRuntime::default();
         runtime.account_quota_cooldowns.insert(
@@ -284,6 +310,32 @@
         assert!(!runtime.account_health.contains_key("account-1"));
         assert!(!runtime.account_quota_cooldowns.contains_key("account-1"));
         assert!(runtime.account_quota_cooldowns.contains_key("account-2"));
+    }
+
+    #[test]
+    fn recovery_membership_removes_then_restores_selected_accounts() {
+        let current = vec![
+            "account-keep".to_string(),
+            "account-recover".to_string(),
+            "account-other".to_string(),
+        ];
+        let (selected, remaining, restored) = super::local_access_recovery_membership(
+            &current,
+            &[" account-recover ".to_string(), "missing".to_string()],
+        )
+        .expect("selected membership");
+
+        assert_eq!(selected, vec!["account-recover".to_string()]);
+        assert_eq!(
+            remaining,
+            vec!["account-keep".to_string(), "account-other".to_string()]
+        );
+        assert_eq!(restored, current);
+        assert!(super::local_access_recovery_membership(
+            &current,
+            &["missing".to_string()]
+        )
+        .is_err());
     }
 
     fn oauth_account_with_quota(
@@ -388,6 +440,18 @@
         assert_eq!(window("gpt-5.4"), Some(272000));
         assert_eq!(window("gpt-5.6-sol"), Some(900_000));
         assert_eq!(window("gpt-5.5"), Some(1048576));
+        // 统一口径：显式写窗口时必须同时写 90% 的压缩阈值。
+        let compact = |slug: &str| {
+            parsed["models"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|model| model["slug"] == slug)
+                .and_then(|model| model["auto_compact_token_limit"].as_i64())
+        };
+        assert_eq!(compact("gpt-5.6-sol"), Some(810_000));
+        // 官方 DeepSeek 壳位模型保留目录原值，不会被兜底窗口覆盖。
+        assert_eq!(compact("gpt-5.5"), None);
     }
 
     #[test]
@@ -415,6 +479,16 @@
         };
         assert_eq!(window("gpt-5.4"), official_window);
         assert_eq!(window("gpt-5.6-sol"), Some(900_000));
+        // 统一口径：显式覆盖窗口时同步写入 90% 压缩阈值。
+        let compact = |slug: &str| {
+            decorated["models"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|model| model["slug"] == slug)
+                .and_then(|model| model["auto_compact_token_limit"].as_i64())
+        };
+        assert_eq!(compact("gpt-5.6-sol"), Some(810_000));
     }
 
     #[test]
@@ -692,6 +766,7 @@
         sidecar_auth_account_is_scoped, sidecar_auth_file_name, sidecar_auth_json_for_account,
         sidecar_auths_dir, sidecar_client_api_keys, sidecar_codex_api_key_auth_id,
         sidecar_codex_key_config_value, sidecar_config_fingerprint,
+        sidecar_config_fingerprint_with_account_proxies, account_proxy_fingerprint,
         sidecar_local_account_usable_for_start, sidecar_payload_default_service_tier,
         sidecar_quota_reserve_snapshot_value, sidecar_routing_strategy_value, sidecar_stable_id,
         sidecar_usage_event_is_client_canceled, sidecar_usage_event_should_auto_restart,
@@ -2023,14 +2098,28 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
-    fn provider_gateway_model_slots_keep_identity_for_gpt_6_astra() {
-        let slots = provider_gateway_model_slots(&["gpt-6-astra".to_string()]);
+    fn provider_gateway_model_slots_keep_identity_for_gpt_6_family() {
+        let slots = provider_gateway_model_slots(&[
+            "gpt-6-astra".to_string(),
+            "gpt-6-sol".to_string(),
+            "gpt-6-luna".to_string(),
+        ]);
         assert_eq!(
             slots,
-            vec![super::ProviderGatewayModelSlot {
-                client_model: "gpt-6-astra".to_string(),
-                upstream_model: "gpt-6-astra".to_string(),
-            }]
+            vec![
+                super::ProviderGatewayModelSlot {
+                    client_model: "gpt-6-astra".to_string(),
+                    upstream_model: "gpt-6-astra".to_string(),
+                },
+                super::ProviderGatewayModelSlot {
+                    client_model: "gpt-6-sol".to_string(),
+                    upstream_model: "gpt-6-sol".to_string(),
+                },
+                super::ProviderGatewayModelSlot {
+                    client_model: "gpt-6-luna".to_string(),
+                    upstream_model: "gpt-6-luna".to_string(),
+                },
+            ]
         );
     }
 
@@ -2701,6 +2790,86 @@ http_headers = { "x-cockpit-instance-id" = "default" }
     }
 
     #[test]
+    fn sidecar_fingerprint_tracks_account_local_proxy_port() {
+        let config = r#"{"host":"127.0.0.1","port":12345}"#;
+        let manifest = r#"{"accounts":[{"id":"account-a","email":"a@example.com"}]}"#;
+        let before = vec![account_proxy_fingerprint(Some(
+            "socks5h://local-user:local-secret@127.0.0.1:58887",
+        ))];
+        let after = vec![account_proxy_fingerprint(Some(
+            "socks5h://local-user:local-secret@127.0.0.1:64202",
+        ))];
+
+        assert_ne!(
+            sidecar_config_fingerprint_with_account_proxies(config, manifest, &before),
+            sidecar_config_fingerprint_with_account_proxies(config, manifest, &after),
+            "a restarted account tunnel must rebuild the sidecar instead of dialling the old port"
+        );
+        assert_eq!(
+            sidecar_config_fingerprint_with_account_proxies(config, manifest, &before),
+            sidecar_config_fingerprint_with_account_proxies(config, manifest, &before.clone()),
+            "an unchanged tunnel must not restart active streams"
+        );
+        assert_eq!(
+            sidecar_config_fingerprint(config, manifest),
+            sidecar_config_fingerprint_with_account_proxies(config, manifest, &[]),
+            "accounts without a local proxy keep the historical fingerprint"
+        );
+    }
+
+    #[test]
+    fn sidecar_fingerprint_ignores_account_proxy_order_but_not_absence() {
+        let config = r#"{"host":"127.0.0.1","port":12345}"#;
+        let manifest = r#"{"accounts":[{"id":"account-a"},{"id":"account-b"}]}"#;
+        let first = account_proxy_fingerprint(Some("http://127.0.0.1:1"));
+        let second = account_proxy_fingerprint(Some("http://127.0.0.1:2"));
+        let unordered = vec![first.clone(), second.clone()];
+        let reversed = vec![second.clone(), first.clone()];
+
+        assert_eq!(
+            sidecar_config_fingerprint_with_account_proxies(config, manifest, &unordered),
+            sidecar_config_fingerprint_with_account_proxies(config, manifest, &reversed),
+            "pool ordering must not churn the gateway"
+        );
+        assert_ne!(
+            sidecar_config_fingerprint_with_account_proxies(config, manifest, &unordered),
+            sidecar_config_fingerprint_with_account_proxies(
+                config,
+                manifest,
+                &[first.clone(), account_proxy_fingerprint(None)]
+            ),
+            "losing a bound proxy must rebuild the sidecar"
+        );
+        assert_ne!(
+            sidecar_config_fingerprint_with_account_proxies(
+                config,
+                manifest,
+                &[account_proxy_fingerprint(None)]
+            ),
+            sidecar_config_fingerprint_with_account_proxies(
+                config,
+                manifest,
+                &[account_proxy_fingerprint(Some("http://127.0.0.1:1"))]
+            ),
+            "binding a proxy must rebuild the sidecar"
+        );
+    }
+
+    #[test]
+    fn account_proxy_fingerprint_never_reveals_credentials() {
+        let digest = account_proxy_fingerprint(Some("socks5h://user:secret@127.0.0.1:58887"));
+        assert_eq!(digest.len(), 40);
+        for secret in ["user", "secret", "58887", "127.0.0.1"] {
+            assert!(
+                !digest.contains(secret),
+                "digest must not embed {secret}"
+            );
+        }
+        assert_eq!(account_proxy_fingerprint(Some("   ")), String::new());
+        assert_eq!(account_proxy_fingerprint(None), String::new());
+    }
+
+    #[test]
     fn sidecar_fingerprint_ignores_remaining_quota() {
         let config = r#"{"host":"127.0.0.1","port":58393}"#;
         let manifest_a = r#"{
@@ -3195,6 +3364,8 @@ http_headers = { "x-cockpit-instance-id" = "default" }
 
     #[test]
     fn scoped_api_key_pool_discovers_spark_entitlement_from_effective_accounts() {
+        let shared_state = crate::modules::codex_unified_proxy::TestCacheGuard::new();
+        shared_state.prepare_disabled();
         let mut plus = test_account_with_plan("plus");
         plus.id = "scoped-plus".to_string();
         plus.quota = Some(CodexQuota {
@@ -3612,6 +3783,8 @@ http_headers = { "x-cockpit-instance-id" = "default" }
 
     #[test]
     fn provider_gateway_runtime_auth_sync_rewrites_access_token_without_refresh_token() {
+        let shared_state = crate::modules::codex_unified_proxy::TestCacheGuard::new();
+        shared_state.prepare_disabled();
         let sidecar_dir = make_temp_dir("codex-provider-runtime-auth-sync");
         let auths_dir = sidecar_auths_dir(&sidecar_dir);
         fs::create_dir_all(&auths_dir).expect("create auths dir");

@@ -1,6 +1,8 @@
 @import "./codex-accounts-overview.css";
 @import "./codex-account-cards.css";
 @import "./codex-account-dialogs.css";
+@import "./codex-more-layout.css";
+@import "./codex-proxy-page.css";
 @import "./codex-local-import-instance.css";
 @import "./codex-temp-login.css";
 @import "./codex-instances-wakeup.css";

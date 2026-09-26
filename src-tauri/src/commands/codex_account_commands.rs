@@ -1044,6 +1044,14 @@ pub async fn switch_codex_account(
     if launch_after_switch {
         let default_settings = crate::modules::codex_instance::load_default_settings()?;
         if default_settings.launch_mode != crate::models::InstanceLaunchMode::Cli {
+            if let Err(error) = crate::modules::codex_instance::preflight_egress_proxy_for_bind_account(Some(&account_id)).await {
+                let _ = app.emit("codex:switch-progress", serde_json::json!({
+                    "accountId": account_id, "type": "error", "error": error, "canRetry": true,
+                }));
+                progress_guard.completed = true;
+                return Err(error);
+            }
+            ensure_codex_switch_not_cancelled(&account_id)?;
             process::ensure_codex_launch_path_configured()?;
         }
     }
@@ -1536,12 +1544,6 @@ pub async fn delete_codex_account(account_id: String) -> Result<(), String> {
             account_id, error
         ));
     }
-    if let Err(error) = codex_local_access::remove_codex_turn_state_records(&[account_id.clone()]) {
-        logger::log_warn(&format!(
-            "[Codex] 清理账号风控观测记录失败: account_id={}, error={}",
-            account_id, error
-        ));
-    }
     // 本地删除成功后立即返回；API 服务账号池持久化与网关重载在后台完成，
     // 避免外部进程延迟让用户误以为账号没有删除。
     spawn_accounts_cleanup_from_api_service("single_delete".to_string(), vec![account_id]);
@@ -1555,13 +1557,6 @@ pub async fn delete_codex_accounts(account_ids: Vec<String>) -> Result<(), Strin
     if let Err(error) = codex_wakeup::remove_deleted_accounts_from_tasks(&account_ids) {
         logger::log_warn(&format!(
             "[Codex] 批量清理唤醒任务账号引用失败: count={}, error={}",
-            account_ids.len(),
-            error
-        ));
-    }
-    if let Err(error) = codex_local_access::remove_codex_turn_state_records(&account_ids) {
-        logger::log_warn(&format!(
-            "[Codex] 批量清理账号风控观测记录失败: count={}, error={}",
             account_ids.len(),
             error
         ));
@@ -1970,16 +1965,28 @@ pub async fn refresh_codex_quotas_batch(
 async fn save_codex_oauth_tokens(
     tokens: CodexTokens,
     reauth_account_id: Option<&str>,
+    proxy_url: Option<String>,
 ) -> Result<CodexAccount, String> {
-    let account = if let Some(account_id) = reauth_account_id.and_then(|value| {
+    let reauth_target = reauth_account_id.and_then(|value| {
         let trimmed = value.trim();
         if trimmed.is_empty() {
             None
         } else {
             Some(trimmed)
         }
-    }) {
+    });
+    // 重新授权时账号已经存在：本次登录的出口可能是账号自身绑定或统一代理，
+    // 两种都按原配置继续生效，授权流程不会借一次登录改写账号已有的代理绑定。
+    let persisted_proxy = if reauth_target.is_some() {
+        None
+    } else {
+        proxy_url
+    };
+    let selected_proxy = persisted_proxy.is_some();
+    let account = if let Some(account_id) = reauth_target {
         codex_account::upsert_account_for_reauth(tokens, account_id)?
+    } else if let Some(proxy_url) = persisted_proxy {
+        codex_account::upsert_account_with_proxy(tokens, proxy_url)?
     } else {
         codex_account::upsert_account(tokens)?
     };
@@ -1987,7 +1994,7 @@ async fn save_codex_oauth_tokens(
     // 旧官方客户端可能仍持有同一账号的旧 auth.json。普通新增授权使用刚落库的
     // 凭据直接查询配额，避免 live authority 把新 Token 覆盖回旧 Token；重新授权
     // 则等自动切号提交完成后再按正常流程刷新。
-    if reauth_account_id.is_none() {
+    if reauth_target.is_none() {
         if let Err(e) = codex_quota::refresh_freshly_authorized_account_quota(
             &account.id,
             account.token_generation,
@@ -2000,7 +2007,21 @@ async fn save_codex_oauth_tokens(
 
     let loaded =
         codex_account::load_account(&account.id).ok_or_else(|| "账号保存后无法读取".to_string())?;
-    if reauth_account_id.is_some() {
+    if selected_proxy {
+        let for_sidecar = loaded.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            if codex_local_access::sync_sidecar_auth_file_for_account(&for_sidecar).is_err() {
+                logger::log_warn(&format!(
+                    "OAuth 账号代理同步到 API Service sidecar 失败: account_id={}",
+                    for_sidecar.id
+                ));
+            }
+            if codex_local_access::collection_contains_account(&for_sidecar.id) {
+                codex_local_access::trigger_gateway_reload_in_background("OAuth 账号代理已更新");
+            }
+        });
+    }
+    if reauth_target.is_some() {
         if let Err(error) = codex_account::sync_bound_oauth_consumers_after_reauth(&loaded.id).await
         {
             logger::log_warn(&format!(
@@ -2017,12 +2038,18 @@ async fn save_codex_oauth_tokens(
 }
 
 /// OAuth：开始登录（返回 loginId + authUrl）
+///
+/// `reauth_account_id` 只在未显式提供 `proxy_url` 时用于解析该账号的生效出口
+/// （账号独立绑定 > 统一代理）；首次添加账号不传该参数。
 #[tauri::command]
 pub async fn codex_oauth_login_start(
     app_handle: AppHandle,
+    proxy_url: Option<String>,
+    reauth_account_id: Option<String>,
 ) -> Result<codex_oauth::CodexOAuthLoginStartResponse, String> {
     logger::log_info("Codex OAuth start 命令触发");
-    let response = codex_oauth::start_oauth_login(app_handle).await?;
+    let response =
+        codex_oauth::start_oauth_login(app_handle, proxy_url, reauth_account_id).await?;
     logger::log_info(&format!(
         "Codex OAuth start 命令成功: login_id={}",
         response.login_id
@@ -2059,8 +2086,8 @@ pub async fn codex_oauth_login_completed(
         "Codex OAuth completed 命令开始: login_id={}, started_at_ms={}",
         login_id, started_at_ms
     ));
-    let tokens = match codex_oauth::complete_oauth_login(&login_id).await {
-        Ok(tokens) => tokens,
+    let completion = match codex_oauth::complete_oauth_login(&login_id).await {
+        Ok(completion) => completion,
         Err(e) => {
             logger::log_error(&format!(
                 "Codex OAuth completed 命令失败: login_id={}, duration_ms={}, error={}",
@@ -2071,7 +2098,7 @@ pub async fn codex_oauth_login_completed(
             return Err(e);
         }
     };
-    let account = save_codex_oauth_tokens(tokens, reauth_account_id.as_deref()).await?;
+    let account = save_codex_oauth_tokens(completion.tokens, reauth_account_id.as_deref(), completion.proxy_url).await?;
     logger::log_info(&format!(
         "Codex OAuth completed 命令成功: login_id={}, duration_ms={}, account_id={}, account_email={}",
         login_id,
@@ -2179,6 +2206,46 @@ pub fn add_codex_account_with_api_key(
 #[tauri::command]
 pub fn update_codex_account_name(account_id: String, name: String) -> Result<CodexAccount, String> {
     codex_account::update_account_name(&account_id, name)
+}
+
+#[tauri::command]
+pub async fn update_codex_account_egress_proxy(
+    account_id: String,
+    egress_proxy_url: Option<String>,
+) -> Result<CodexAccount, String> {
+    let saved = crate::modules::codex_proxy_runtime::save_binding(account_id, egress_proxy_url).await?;
+    tauri::async_runtime::spawn_blocking(move || {
+    let account = saved;
+    if codex_local_access::sync_sidecar_auth_file_for_account(&account).is_err() {
+        logger::log_warn(&format!(
+            "同步账号出口代理到 API Service sidecar 失败: account_id={}",
+            account.id
+        ));
+    }
+    if codex_local_access::collection_contains_account(&account.id) {
+        codex_local_access::trigger_gateway_reload_in_background("更新账号出口代理");
+    }
+    Ok(account)
+    }).await.map_err(|_| "PROXY_SAVE_FAILED".to_string())?
+}
+
+#[tauri::command]
+pub async fn test_codex_account_egress_proxy(
+    account_id: String,
+    request_id: String,
+    proxy_url: Option<String>,
+) -> Result<crate::modules::codex_proxy_probe::ProxyProbeResult, String> {
+    crate::modules::codex_proxy_probe::probe(account_id, request_id, proxy_url).await
+}
+
+#[tauri::command]
+pub fn cancel_codex_account_egress_proxy(account_id: String, request_id: String) -> Result<(), String> {
+    crate::modules::codex_proxy_probe::cancel(&account_id, &request_id)
+}
+
+#[tauri::command]
+pub async fn get_codex_account_proxy_status(account_id: String) -> Result<crate::modules::codex_proxy_runtime::RuntimeStatus, String> {
+    crate::modules::codex_proxy_runtime::status(&account_id).await
 }
 
 /// 通过 Grok 平台账号添加 Codex 供应商账号。

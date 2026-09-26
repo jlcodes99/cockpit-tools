@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { withProxyEnginePrerequisite } from "../utils/codexProxyEnginePrerequisite";
 import { createPlatformInstanceService } from "./platform/createPlatformInstanceService";
 import type {
   CodexSessionVisibilityRepairInstanceList,
@@ -48,12 +49,12 @@ export async function startInstance(
     instanceId,
   });
   try {
-    return await invoke<InstanceProfile>("codex_start_instance", {
+    return await withProxyEnginePrerequisite(invoke<InstanceProfile>("codex_start_instance", {
       instanceId,
       transferConflictingAccount:
         options?.transferConflictingAccount === true ? true : null,
       skipFailedStep: options?.skipFailedStep ?? null,
-    });
+    }));
   } finally {
     console.info(
       "[Codex Start][Service] invoke codex_start_instance finished",

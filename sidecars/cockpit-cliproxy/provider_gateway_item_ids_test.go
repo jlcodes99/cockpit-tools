@@ -1,11 +1,68 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/tidwall/gjson"
 )
+
+func TestProviderGatewayItemIDRewriterKeepsIDAcrossStreamEvents(t *testing.T) {
+	for _, tc := range []struct {
+		name, itemType, id, prefix string
+	}{
+		{"valid message", "message", "msg_1", "msg_"},
+		{"valid reasoning", "reasoning", "rs_1", "rs_"},
+		{"valid function", "function_call", "fc_1", "fc_"},
+		{"valid custom tool", "custom_tool_call", "ctc_1", "ctc_"},
+		{"missing prefix", "message", "upstream_1", "msg_"},
+		{"wrong prefix", "custom_tool_call", "fc_1", "ctc_"},
+		{"long ID", "message", "msg_" + strings.Repeat("x", 80), "msg_"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newProviderGatewayItemIDRewriter()
+			item := fmt.Sprintf(`{"type":%q,"id":%q}`, tc.itemType, tc.id)
+			added := r.RewritePayload([]byte(`{"type":"response.output_item.added","output_index":0,"item":` + item + `}`))
+			want := gjson.GetBytes(added, "item.id").String()
+			if !strings.HasPrefix(want, tc.prefix) || len([]rune(want)) > providerGatewayItemIDLimit {
+				t.Fatalf("invalid normalized ID: %q", want)
+			}
+			if strings.HasPrefix(tc.id, tc.prefix) && len([]rune(tc.id)) <= providerGatewayItemIDLimit && want != tc.id {
+				t.Fatalf("valid ID changed: %q -> %q", tc.id, want)
+			}
+			for _, event := range []struct{ payload, path string }{
+				{fmt.Sprintf(`{"type":"response.output_text.delta","item_id":%q,"delta":"hello"}`, tc.id), "item_id"},
+				{`{"type":"response.output_item.done","output_index":0,"item":` + item + `}`, "item.id"},
+				{fmt.Sprintf(`{"type":"response.output_text.done","item_id":%q,"text":"hello"}`, tc.id), "item_id"},
+				{`{"type":"response.completed","response":{"id":"resp_1","output":[` + item + `]}}`, "response.output.0.id"},
+			} {
+				got := r.RewritePayload([]byte(event.payload))
+				if id := gjson.GetBytes(got, event.path).String(); id != want {
+					t.Errorf("same item changed ID: want %q, got %q; event=%s", want, id, got)
+				}
+			}
+		})
+	}
+}
+
+func TestProviderGatewayItemIDRewriterKeepsCollidingIDsDistinct(t *testing.T) {
+	r := newProviderGatewayItemIDRewriter()
+	ids := map[string]string{}
+	for _, eventType := range []string{"response.output_item.added", "response.output_item.done"} {
+		for index, rawID := range []string{"msg_1", "1"} {
+			payload := fmt.Sprintf(`{"type":%q,"output_index":%d,"item":{"type":"message","id":%q}}`, eventType, index, rawID)
+			got := gjson.GetBytes(r.RewritePayload([]byte(payload)), "item.id").String()
+			if previous, ok := ids[rawID]; ok && previous != got {
+				t.Fatalf("ID changed for %q: %q -> %q", rawID, previous, got)
+			}
+			ids[rawID] = got
+		}
+	}
+	if ids["msg_1"] == ids["1"] {
+		t.Fatal("distinct upstream IDs must not be merged")
+	}
+}
 
 func TestProviderGatewayItemIDRewriterRepairsWrongPrefix(t *testing.T) {
 	rewriter := newProviderGatewayItemIDRewriter()

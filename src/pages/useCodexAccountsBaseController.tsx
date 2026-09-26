@@ -19,14 +19,13 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import type { CodexTab } from "../components/CodexOverviewTabsHeader";
 import { type CodexWakeupTestOpenRequest } from "../components/codex/CodexWakeupContent";
-import { CodexSpeedSelect } from "../components/codex/CodexSpeedSelect";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import { useEscClose } from "../hooks/useEscClose";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import { useRememberMfaQuery } from "../hooks/useRememberMfaQuery";
 import type { SingleSelectFilterOption } from "../components/SingleSelectFilterDropdown";
-import type { CodexAccount, CodexAppSpeed } from "../types/codex";
+import type { CodexAccount } from "../types/codex";
 import type { CodexLocalAccessAddressKind, CodexLocalAccessState } from "../types/codexLocalAccess";
 import { CODEX_API_SERVICE_BIND_ID, type InstanceDefaults } from "../types/instance";
 import { emitAccountsChanged } from "../utils/accountSyncEvents";
@@ -469,9 +468,6 @@ export function useCodexAccountsBaseController() {
       useRef<CodexAccountNoteMailPreviewSnapshot | null>(null);
     const [mfaTimeRemaining, setMfaTimeRemaining] = useState(getMfaTimeRemaining);
     const [savingAccountNote, setSavingAccountNote] = useState(false);
-    const [savingAppSpeedId, setSavingAppSpeedId] = useState<string | null>(null);
-    const [apiServiceAppSpeed, setApiServiceAppSpeed] =
-      useState<CodexAppSpeed>("standard");
     const [reauthTargetAccount, setReauthTargetAccount] =
       useState<CodexAccount | null>(null);
     const [reauthRetrySwitchAccountId, setReauthRetrySwitchAccountId] = useState<
@@ -1974,7 +1970,6 @@ export function useCodexAccountsBaseController() {
       updateAccountName,
       updateApiKeyCredentials,
       updateApiKeyBoundOAuthAccount,
-      updateAccountAppSpeed,
       updateAccountInstanceAccess,
     } = store;
     const localAccessCollection = localAccessState?.collection ?? null;
@@ -2487,85 +2482,6 @@ export function useCodexAccountsBaseController() {
       setAccountNoteError,
     ]);
   
-    const loadApiServiceAppSpeed = useCallback(async () => {
-      try {
-        const config = await codexService.getCodexApiServiceAppSpeedConfig();
-        setApiServiceAppSpeed(config.speed);
-      } catch (error) {
-        console.warn("加载 Codex API 服务速度失败:", error);
-      }
-    }, []);
-  
-    useEffect(() => {
-      void loadApiServiceAppSpeed();
-    }, [loadApiServiceAppSpeed]);
-  
-    const handleAccountAppSpeedChange = useCallback(
-      async (account: CodexAccount, speed: CodexAppSpeed) => {
-        if (savingAppSpeedId) return;
-        setSavingAppSpeedId(account.id);
-        try {
-          await updateAccountAppSpeed(account.id, speed);
-          setMessage({
-            text: t("codex.speed.saveSuccess", "速度已更新"),
-          });
-        } catch (error) {
-          setMessage({
-            text: t("codex.speed.saveFailed", {
-              defaultValue: "保存速度失败：{{error}}",
-              error: String(error),
-            }),
-            tone: "error",
-          });
-        } finally {
-          setSavingAppSpeedId(null);
-        }
-      },
-      [savingAppSpeedId, setMessage, t, updateAccountAppSpeed],
-    );
-  
-    const handleApiServiceAppSpeedChange = useCallback(
-      async (speed: CodexAppSpeed) => {
-        if (savingAppSpeedId) return;
-        const previousSpeed = apiServiceAppSpeed;
-        setApiServiceAppSpeed(speed);
-        setSavingAppSpeedId(CODEX_API_SERVICE_BIND_ID);
-        try {
-          const saved = await codexService.saveCodexApiServiceAppSpeed(speed);
-          setApiServiceAppSpeed(saved.speed);
-          setMessage({
-            text: t("codex.speed.saveSuccess", "速度已更新"),
-          });
-        } catch (error) {
-          setApiServiceAppSpeed(previousSpeed);
-          setMessage({
-            text: t("codex.speed.saveFailed", {
-              defaultValue: "保存速度失败：{{error}}",
-              error: String(error),
-            }),
-            tone: "error",
-          });
-        } finally {
-          setSavingAppSpeedId(null);
-        }
-      },
-      [apiServiceAppSpeed, savingAppSpeedId, setMessage, t],
-    );
-  
-    const renderAccountSpeedSelect = useCallback(
-      (account: CodexAccount, compact = false) => (
-        <CodexSpeedSelect
-          value={account.app_speed ?? "standard"}
-          onChange={(speed) => handleAccountAppSpeedChange(account, speed)}
-          busy={savingAppSpeedId === account.id}
-          compact={compact}
-          preferredPlacement="top"
-          ariaLabel={t("codex.speed.title", "速度")}
-        />
-      ),
-      [handleAccountAppSpeedChange, savingAppSpeedId, t],
-    );
-  
     const handleSubmitAccountNote = useCallback(async () => {
       if (!activeAccountNoteMode || activeAccountNoteSaving) return;
       setSavingAccountNote(true);
@@ -2761,7 +2677,6 @@ export function useCodexAccountsBaseController() {
     addStatus,
     addTab,
     apiKeyUsageDetailAccountId,
-    apiServiceAppSpeed,
     applyAccountSnapshot,
     assignCodexAccountsToTargetGroup,
     availableTags,
@@ -2863,7 +2778,6 @@ export function useCodexAccountsBaseController() {
     groupDeleteErrorScrollKey,
     groupFilter,
     groupQuickAddGroupId,
-    handleApiServiceAppSpeedChange,
     handleChangeOverviewLayoutMode,
     handleCloseExportModal,
     handleConfirmConsumeResetCredit,
@@ -2945,7 +2859,6 @@ export function useCodexAccountsBaseController() {
     reloadLocalAccessState,
     removingGroupAccountIds,
     renderAccountNoteButton,
-    renderAccountSpeedSelect,
     reportExportModalError,
     requestDeleteTag,
     requestLocalAccessRiskNotice,
@@ -2962,7 +2875,6 @@ export function useCodexAccountsBaseController() {
     resolveValidCodexGroupId,
     savedMfaRecords,
     saveFormattedExportJson,
-    savingAppSpeedId,
     savingPendingOAuthAccount,
     searchQuery,
     selected,

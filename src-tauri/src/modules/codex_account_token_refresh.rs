@@ -140,6 +140,10 @@ fn switch_auth_reason_code(reason: &str) -> &'static str {
 /// 只有账号已经被 Token Authority 明确标记为需要重新授权时才包装错误；
 /// 其它启动、落盘或网络地区错误仍保持原错误，避免误导用户重新登录。
 pub(crate) fn format_account_switch_error(account_id: &str, error: String) -> String {
+    // An engine prerequisite is independent of a previously recorded reauth state.
+    if super::codex_proxy_engine_preflight::is_prerequisite_error(&error) {
+        return error;
+    }
     // 统一错误可能经过账号切换、默认实例和 API 服务多层转发；已经带有结构化
     // 授权标记时直接透传，避免重复嵌套并破坏前端解析。
     if error
@@ -885,6 +889,15 @@ fn build_account_storage_id(
     format!("codex_{:x}", md5::compute(seed.as_bytes()))
 }
 
+// OAuth 的邮箱兼容去重只能在自己的身份域内进行。Grok 的保留 ID
+// 也要排除：历史版本可能已把其 auth_mode 错改成 OAuth。
+fn is_oauth_identity_candidate(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth()
+        && !account.is_agent_identity_auth()
+        && !account.id.starts_with("codex_grok_")
+        && normalize_optional_ref(account.upstream_grok_account_id.as_deref()).is_none()
+}
+
 fn find_existing_account_id(
     index: &CodexAccountIndex,
     email: &str,
@@ -903,14 +916,16 @@ fn find_existing_account_id(
         if !summary.email.eq_ignore_ascii_case(email) {
             continue;
         }
+        let Some(account) = load_account(&summary.id) else {
+            continue;
+        };
+        if !is_oauth_identity_candidate(&account) {
+            continue;
+        }
         email_match_count += 1;
         if first_email_match.is_none() {
             first_email_match = Some(summary.id.clone());
         }
-
-        let Some(account) = load_account(&summary.id) else {
-            continue;
-        };
 
         let current_account_id = normalize_optional_ref(account.account_id.as_deref());
         let current_org_id = normalize_optional_ref(account.organization_id.as_deref());

@@ -8,6 +8,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { preflightCodexProxyInstance } from "../services/codexProxyEngineService";
+import { proxyEnginePrerequisiteKey } from "../utils/codexProxyEnginePrerequisite";
 import {
   Plus,
   Play,
@@ -666,7 +668,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   const [formPath, setFormPath] = useState("");
   const [formWorkingDir, setFormWorkingDir] = useState("");
   const [formExtraArgs, setFormExtraArgs] = useState("");
-  const [formInitMode, setFormInitMode] = useState<InstanceInitMode>("copy");
+  const [formInitMode, setFormInitMode] = useState<InstanceInitMode>("empty");
   const [formLaunchMode, setFormLaunchMode] =
     useState<InstanceLaunchMode>("app");
   const [formAppSpeed, setFormAppSpeed] = useState<CodexAppSpeed>("standard");
@@ -1069,7 +1071,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     setFormPath(showRoot && defaultRoot ? defaultRoot : "");
     setFormWorkingDir("");
     setFormExtraArgs("");
-    setFormInitMode(isGrokApp ? "empty" : "copy");
+    setFormInitMode("empty");
     setFormLaunchMode(isCliOnlyApp ? "cli" : "app");
     setFormAppSpeed("standard");
     setFormBindAccountId("");
@@ -1576,6 +1578,8 @@ export function InstancesManager<TAccount extends AccountLike>({
           await updateInstance(updatePayload);
         }
         if (restartAfterSave) {
+          // Preserve the running client when its configured proxy engine is not ready.
+          if (isCodexApp) await preflightCodexProxyInstance(editing.id);
           try {
             await stopInstance(editing.id);
             await startInstance(editing.id);
@@ -1653,7 +1657,8 @@ export function InstancesManager<TAccount extends AccountLike>({
       }
       closeModal();
     } catch (e) {
-      setFormError(getCodexExperimentalModelErrorMessage(t, e) ?? String(e));
+      const prerequisite = proxyEnginePrerequisiteKey(e);
+      setFormError(prerequisite ? t(prerequisite) : getCodexExperimentalModelErrorMessage(t, e) ?? String(e));
       setFormErrorTick((prev) => prev + 1);
     } finally {
       setActionLoading(null);
@@ -1986,6 +1991,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     setRunningNoticeInstance(null);
     setActionLoading(target.id);
     try {
+      if (isCodexApp) await preflightCodexProxyInstance(target.id);
       await stopInstance(target.id);
       const latest = await refreshInstances();
       const refreshedTarget = latest.find((item) => item.id === target.id) || {
@@ -1999,7 +2005,8 @@ export function InstancesManager<TAccount extends AccountLike>({
       if (handleMissingPathError(e, target.id)) {
         return;
       }
-      setMessage({ text: String(e), tone: "error" });
+      const prerequisite = proxyEnginePrerequisiteKey(e);
+      setMessage({ text: prerequisite ? t(prerequisite) : String(e), tone: "error" });
     } finally {
       setRestartingAll(false);
       setActionLoading(null);

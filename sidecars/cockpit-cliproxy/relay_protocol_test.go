@@ -416,6 +416,7 @@ func TestRelayServerProviderGatewayChatStreamTerminatesResponsesSSEFrames(t *tes
 	if !strings.Contains(body, "event: response.completed\n") || !strings.Contains(body, "\n\n") {
 		t.Fatalf("stream should emit complete SSE frames separated by a blank line: %q", body)
 	}
+	assertProviderGatewayMessageIdentity(t, body, "ok")
 }
 
 func TestRelayServerProviderGatewayModelResolution(t *testing.T) {

@@ -256,7 +256,7 @@ fn now_timestamp() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
-fn codex_token_lock_for(account_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+pub(crate) fn codex_token_lock_for(account_id: &str) -> Arc<tokio::sync::Mutex<()>> {
     let mut locks = CODEX_TOKEN_REFRESH_LOCKS
         .lock()
         .unwrap_or_else(|err| err.into_inner());

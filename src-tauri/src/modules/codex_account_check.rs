@@ -147,8 +147,11 @@ async fn request_remote_account_check(
         });
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
+    let client = crate::modules::codex_proxy_runtime::client_builder(account, reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))).await.map_err(|_| CodexAccountCheckError {
+            kind: CodexAccountCheckErrorKind::Network,
+            message: "PROXY_CLIENT_FAILED".into(),
+        })?
         .build()
         .map_err(|error| CodexAccountCheckError {
             kind: CodexAccountCheckErrorKind::Network,
@@ -230,4 +233,3 @@ async fn fetch_remote_account_profile(
         .map_err(|error| error.message)?;
     Ok(parse_account_profile_from_check_response(&payload, account))
 }
-

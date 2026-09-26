@@ -523,6 +523,18 @@
   background: color-mix(in srgb, var(--primary) 5%, var(--bg-secondary));
 }
 
+/* 重新授权上下文（目标账号 + 备注）：在官方登录等所有页签下都展示。 */
+.codex-reauth-target-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.codex-reauth-target-summary .codex-reauth-note-summary {
+  margin-top: 0;
+}
+
 .codex-pending-oauth-draft {
   display: flex;
   flex-direction: column;

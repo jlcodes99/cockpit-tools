@@ -749,12 +749,6 @@ pub struct CodexLocalAccessUsageEvent {
     /// Request reasoning effort (e.g. low/medium/high/xhigh/max), when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
-    /// 上游响应头 `x-codex-turn-state` 的长度（只记录长度，不保存原文）。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_state_length: Option<i64>,
-    /// state 长度分级：normal / renew / abnormal / missing。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_state_class: Option<String>,
     #[serde(default)]
     pub success: bool,
     #[serde(default)]
@@ -962,6 +956,10 @@ pub struct CodexLocalAccessState {
     pub stats: CodexLocalAccessStats,
     pub account_health: Vec<CodexLocalAccessAccountHealth>,
     pub account_pool_health: Vec<CodexLocalAccessAccountPoolHealth>,
+    /// 手动恢复后仍在抑制窗口内的账号：界面据此隐藏这些账号的账号池异常行，
+    /// 避免恢复过程中仍在飞行的旧请求失败状态立刻把行重新点亮。
+    #[serde(default)]
+    pub recovery_suppressed_account_ids: Vec<String>,
     pub quota_reserve_status: Option<CodexLocalAccessQuotaReserveStatus>,
 }
 

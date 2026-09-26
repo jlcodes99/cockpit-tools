@@ -1,0 +1,31 @@
+.codex-proxy-engine-required-overlay {
+  z-index: 12000;
+  overflow-y: auto;
+  align-items: safe center;
+  padding: 16px;
+}
+
+.modal.codex-proxy-engine-required-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.codex-proxy-engine-required-dialog > .modal-header,
+.codex-proxy-engine-required-dialog > .modal-footer {
+  flex: 0 0 auto;
+}
+
+.codex-proxy-engine-required-dialog > .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 20px;
+}
+
+.codex-proxy-engine-required-dialog .codex-proxy-engine-body {
+  flex-wrap: wrap;
+}

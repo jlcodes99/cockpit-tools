@@ -319,7 +319,7 @@ const trimmedAutomaticRoutingManifestPayload = `{
 		"modelRouting": {
 			"automatic": true,
 			"nativeModels": [
-				"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
+				"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
 				"gpt-image-2.5", "codex-auto-review", "gpt-reserve"
 			],
 			"routableModels": ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"],
@@ -354,7 +354,7 @@ func TestAutomaticRoutingListsOnlyRecommendedGptModels(t *testing.T) {
 		listed[strings.ToLower(model)] = true
 	}
 
-	for _, expected := range []string{"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"} {
+	for _, expected := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"} {
 		if !listed[expected] {
 			t.Fatalf("推荐模型 %s 必须出现在模型列表里: %#v", expected, models)
 		}
@@ -491,6 +491,8 @@ func TestAutomaticRoutingStillAcceptsRoutableHistoryModels(t *testing.T) {
 func TestAutomaticRoutingUsesOfficialDisplayNames(t *testing.T) {
 	for model, want := range map[string]string{
 		"gpt-6-astra":   "GPT-6 Astra",
+		"gpt-6-sol":     "GPT-6 Sol",
+		"gpt-6-luna":    "GPT-6 Luna",
 		"gpt-5.6-sol":   "GPT-5.6 Sol",
 		"gpt-5.6-terra": "GPT-5.6 Terra",
 		"gpt-5.6-luna":  "GPT-5.6 Luna",
@@ -518,7 +520,7 @@ const deepseekAutomaticRoutingManifestPayload = `{
 		"excludedModels": [],
 		"modelRouting": {
 			"automatic": true,
-			"nativeModels": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-reserve"],
+			"nativeModels": ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-reserve"],
 			"routableModels": ["gpt-5.4", "gpt-5.4-mini"],
 			"defaultRoute": "oauth",
 			"failurePolicy": "strict",
@@ -671,6 +673,8 @@ func TestAutomaticRoutingPublishesRouteModelNamesAndReasoningLevels(t *testing.T
 	}
 	for slug, wantName := range map[string]string{
 		"gpt-6-astra":   "GPT-6 Astra",
+		"gpt-6-sol":     "GPT-6 Sol",
+		"gpt-6-luna":    "GPT-6 Luna",
 		"gpt-5.6-sol":   "GPT-5.6 Sol",
 		"gpt-5.6-terra": "GPT-5.6 Terra",
 		"gpt-5.6-luna":  "GPT-5.6 Luna",

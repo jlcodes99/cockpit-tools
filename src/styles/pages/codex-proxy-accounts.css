@@ -1,0 +1,180 @@
+/* Assignments occupy the entire workspace; optional editors mount separately. */
+.codex-proxy-accounts, .codex-proxy-rules { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.codex-proxy-accounts-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.codex-proxy-accounts-toolbar .codex-proxy-search { flex: 1 1 220px; max-width: 420px; }
+.codex-proxy-accounts-toolbar > .single-select-dropdown { width: 180px; }
+.codex-proxy-accounts-count { margin-left: auto; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.codex-proxy-accounts-selection { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--primary) 5%, var(--bg-card)); }
+.codex-proxy-accounts-selection strong { margin-right: auto; font-size: 12px; color: var(--primary); }
+.codex-proxy-accounts-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.codex-proxy-accounts-table { width: 100%; min-width: 680px; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+.codex-proxy-accounts-table th, .codex-proxy-accounts-table td { padding: 13px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.codex-proxy-accounts-table thead th { padding-top: 8px; padding-bottom: 8px; background: var(--bg-secondary); font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+.codex-proxy-accounts-table th:nth-child(2) { width: 32%; }
+.codex-proxy-accounts-table th:nth-child(3) { width: 18%; }
+.codex-proxy-accounts-table th:last-child { width: 180px; }
+.codex-proxy-accounts-table .codex-proxy-accounts-check-cell { width: 44px; padding-right: 4px; }
+.codex-proxy-accounts .codex-proxy-accounts-check { padding: 0; min-height: 25px; min-width: 25px; border-color: transparent; background: transparent; color: var(--text-muted); }
+.codex-proxy-accounts .codex-proxy-accounts-check:hover:not(:disabled), .codex-proxy-accounts .codex-proxy-accounts-check[aria-checked="true"] { color: var(--primary); background: var(--primary-light); border-color: transparent; }
+.codex-proxy-accounts .codex-proxy-accounts-check:disabled { color: var(--text-muted); opacity: .45; }
+.codex-proxy-accounts-table tbody tr:last-child > * { border-bottom: 0; }
+.codex-proxy-accounts-table tbody tr:hover { background: color-mix(in srgb, var(--primary) 2%, var(--bg-card)); }
+.codex-proxy-accounts-table tbody tr.is-selected { background: color-mix(in srgb, var(--primary) 5%, var(--bg-card)); }
+.codex-proxy-accounts-table tbody tr.is-current > th { box-shadow: inset 2px 0 var(--primary); }
+.codex-proxy-accounts-identity { display: flex; gap: 9px; align-items: center; min-width: 0; }
+.codex-proxy-accounts-avatar { display: grid; place-items: center; flex: 0 0 31px; height: 31px; border-radius: 9px; background: var(--bg-secondary); color: var(--text-secondary); font-size: 12px; }
+.codex-proxy-accounts-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.codex-proxy-accounts-identity .tier-badge { flex-shrink: 0; max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codex-proxy-accounts-mode { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 11px; }
+.codex-proxy-accounts-mode::before { content: ''; width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: var(--text-muted); }
+.codex-proxy-accounts-mode.is-independent::before { background: var(--primary); }
+.codex-proxy-accounts-mode.is-unified::before { background: #10b981; }
+.codex-proxy-accounts-mode.is-stale::before { background: var(--danger); }
+.codex-proxy-accounts-proxy { display: grid; gap: 3px; min-width: 0; }
+.codex-proxy-accounts-proxy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codex-proxy-accounts-proxy small { color: var(--danger); font-size: 10px; }
+.codex-proxy-accounts-row-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.codex-proxy-accounts-row-actions .btn { white-space: nowrap; }
+.codex-proxy-accounts-scope { margin: 0; font-size: 11px; line-height: 1.7; color: var(--text-muted); }
+.codex-proxy-accounts-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.codex-proxy-accounts-empty { display: grid; justify-items: center; gap: 10px; padding: 48px 20px; border: 1px dashed var(--border); border-radius: 14px; background: var(--bg-secondary); text-align: center; }
+.codex-proxy-accounts-empty h3 { margin: 0; font-size: 15px; }
+.codex-proxy-accounts-empty p { max-width: 460px; margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.7; }
+.codex-proxy-accounts-empty-icon, .codex-proxy-rules-empty-icon { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 14px; background: var(--primary-light); color: var(--primary); }
+.codex-proxy-accounts-empty-result { display: grid; justify-items: center; gap: 8px; padding: 36px 20px; color: var(--text-secondary); font-size: 12px; }
+.codex-proxy-accounts-empty-result p { margin: 0; }
+
+/* Local operations keep their title/footer visible, including in 600px-high windows. */
+.codex-proxy-account-dialog-overlay, .codex-proxy-accounts-note-overlay { padding: 20px; overflow-y: auto; align-items: safe center; }
+.modal.codex-proxy-account-dialog, .modal.codex-proxy-follow-dialog {
+  --bg-card: var(--bg-surface);
+  width: min(760px, calc(100vw - 40px)); max-width: 760px; max-height: calc(100vh - 40px); height: auto; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 16px;
+  background: var(--bg-card); color: var(--text-primary); box-shadow: 0 24px 80px #0003;
+}
+.modal.codex-proxy-follow-dialog { width: min(520px, calc(100vw - 40px)); max-width: 520px; }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .modal-header > div { min-width: 0; }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) h2 { margin: 0; font-size: 17px; overflow-wrap: anywhere; }
+.codex-proxy-account-dialog .modal-header p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 22px; overscroll-behavior: contain; }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .modal-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; flex: 0 0 auto; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .btn { appearance: none; display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 35px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1.4; cursor: pointer; }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .btn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--primary); }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .btn:disabled { opacity: .45; cursor: not-allowed; }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .btn-primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 88%, #000); }
+:is(.codex-proxy-account-dialog, .codex-proxy-follow-dialog, .codex-proxy-accounts-note) .btn-primary:disabled { background: var(--primary); color: #fff; opacity: .45; }
+.codex-proxy-account-dialog-tabs { flex: 0 0 auto; display: flex; gap: 8px; padding: 12px 22px 0; }
+.codex-proxy-account-dialog-tabs .btn.active { color: var(--primary); border-color: var(--primary); background: var(--primary-light); }
+.codex-proxy-account-mode-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+.codex-proxy-account-dialog .codex-proxy-account-mode-option { justify-content: flex-start; align-items: flex-start; gap: 10px; padding: 13px; text-align: left; white-space: normal; }
+.codex-proxy-account-dialog .codex-proxy-account-mode-option.active { background: color-mix(in srgb, var(--primary) 5%, var(--bg-card)); border-color: var(--primary); }
+.codex-proxy-account-mode-option strong, .codex-proxy-account-mode-option small { display: block; }
+.codex-proxy-account-mode-option strong { font-size: 12px; font-weight: 600; }
+.codex-proxy-account-mode-option small { margin-top: 4px; color: var(--text-secondary); font-size: 11px; line-height: 1.65; }
+.codex-proxy-account-mode-dot { display: grid; place-items: center; width: 17px; height: 17px; flex: 0 0 17px; border-radius: 50%; border: 1px solid var(--border); color: #fff; }
+.active > .codex-proxy-account-mode-dot { border-color: var(--primary); background: var(--primary); }
+.codex-proxy-account-follow-preview { display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 10px; background: var(--bg-secondary); color: var(--primary); }
+.codex-proxy-account-follow-preview > div { display: grid; gap: 5px; }
+.codex-proxy-account-follow-preview span { color: var(--text-secondary); font-size: 11px; }
+.codex-proxy-account-follow-preview strong { font-size: 13px; color: var(--text-primary); overflow-wrap: anywhere; }
+.codex-proxy-account-check-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.codex-proxy-account-details { display: grid; gap: 16px; }
+.codex-proxy-account-note-preview { flex: 1 1 180px; color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.codex-proxy-account-saved { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; color: var(--primary); font-size: 12px; }
+.codex-proxy-account-dialog .codex-proxy-check-result { margin: 16px 0; }
+.codex-proxy-account-dialog .codex-proxy-field { font-size: 12px; }
+.codex-proxy-account-follow-failures { padding: 0; list-style: none; }
+.codex-proxy-account-follow-failures li { display: grid; gap: 5px; padding: 10px 0; font-size: 12px; overflow-wrap: anywhere; }
+.codex-proxy-account-follow-failures span { color: var(--danger); }
+.codex-proxy-follow-dialog .modal-body > p { margin-top: 0; font-size: 13px; line-height: 1.7; }
+
+@media (max-width: 600px) {
+  .codex-proxy-account-mode-options { grid-template-columns: minmax(0, 1fr); }
+  .codex-proxy-accounts-toolbar .codex-proxy-search { max-width: none; }
+  .codex-proxy-accounts-row-actions { gap: 4px; }
+}
+
+/* Note dialog: one semantic size class, viewport-bounded height, body scrolls. */
+.codex-proxy-accounts-note-overlay { padding: 24px; }
+.modal.codex-proxy-accounts-note {
+  --bg-card: var(--bg-surface);
+  width: min(520px, calc(100vw - 32px));
+  max-width: 520px;
+  height: auto;
+  max-height: min(560px, calc(100vh - 48px));
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.codex-proxy-accounts-note .modal-header { flex: 0 0 auto; }
+.codex-proxy-accounts-note .modal-header p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.codex-proxy-accounts-note .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.codex-proxy-accounts-note .modal-footer { flex: 0 0 auto; }
+.codex-proxy-accounts-note-field { display: grid; gap: 7px; font-size: 12px; color: var(--text-secondary); }
+.codex-proxy-accounts-note-input {
+  appearance: none;
+  width: 100%;
+  min-height: 132px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.codex-proxy-accounts-note-input:focus-visible { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.codex-proxy-accounts-note-input:disabled { opacity: .6; cursor: not-allowed; }
+
+
+/* Exit rules: resolution order, read-only table and the shared exit. */
+.codex-proxy-rules-order { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); }
+.codex-proxy-rules-order-label { color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.codex-proxy-rules-order-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding: 0; list-style: none; }
+.codex-proxy-rules-order-list li { padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-card); font-size: 11px; font-weight: 500; white-space: nowrap; }
+.codex-proxy-rules-order-list li.is-independent { color: #047857; border-color: color-mix(in srgb, #10b981 22%, var(--border)); }
+.codex-proxy-rules-order-list li.is-unified { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 24%, var(--border)); }
+.codex-proxy-rules-order-list li.is-default { color: var(--text-secondary); }
+[data-theme="dark"] .codex-proxy-rules-order-list li.is-independent { color: #6ee7b7; }
+.codex-proxy-rules-order-list li + li::before { content: "›"; margin-right: 8px; margin-left: -8px; color: var(--text-muted); }
+
+.codex-proxy-rules-failure { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--danger); border-radius: 12px; background: color-mix(in srgb, var(--danger) 5%, var(--bg-card)); }
+.codex-proxy-rules-failure strong { color: var(--danger); font-size: 13px; }
+.codex-proxy-rules-failure p { margin: 4px 0 0; color: var(--danger); font-size: 12px; line-height: 1.6; }
+.codex-proxy-rules-failure-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.codex-proxy-rules-failure-actions small { max-width: 320px; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+
+.codex-proxy-rules-empty { display: grid; justify-items: center; gap: 10px; padding: 40px 20px; border: 1px dashed var(--border); border-radius: 14px; background: var(--bg-secondary); text-align: center; }
+.codex-proxy-rules-empty h3 { margin: 0; font-size: 15px; }
+.codex-proxy-rules-empty p { max-width: 460px; margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.7; }
+
+.codex-proxy-rules-table-card,
+.codex-proxy-rules-unified { padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); }
+.codex-proxy-rules-table-card .codex-proxy-page-section-heading,
+.codex-proxy-rules-unified .codex-proxy-page-section-heading { margin-bottom: 12px; }
+.codex-proxy-rules-table-card h3,
+.codex-proxy-rules-unified h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.codex-proxy-rules-loading { color: var(--text-secondary); font-size: 11px; }
+.codex-proxy-rules-table-wrap { overflow-x: auto; overscroll-behavior: contain; }
+.codex-proxy-rules-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 12px; }
+.codex-proxy-rules-table th,
+.codex-proxy-rules-table td { padding: 10px 12px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.codex-proxy-rules-table thead th { color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.codex-proxy-rules-table tbody tr { cursor: pointer; }
+.codex-proxy-rules-table tbody tr:hover { background: var(--bg-hover); }
+.codex-proxy-rules-table tbody th { max-width: 220px; font-weight: 500; }
+.codex-proxy-rules-table tbody td { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.codex-proxy-rules-table tbody tr:last-child th,
+.codex-proxy-rules-table tbody tr:last-child td { border-bottom: 0; }
+.codex-proxy-rules-table td.is-following { color: var(--primary); font-weight: 600; }
+.codex-proxy-rules-open { appearance: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 12px; }

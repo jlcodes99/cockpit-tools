@@ -949,7 +949,7 @@ fn load_account_with_summary(
                 move || {
                     crate::modules::secure_account_storage::serialize_account_file(
                         "codex",
-                        &account_for_rewrite,
+                        &crate::modules::codex_account_proxy::storage_value(&account_for_rewrite)?,
                     )
                 },
             );
@@ -978,7 +978,7 @@ fn load_account_with_summary(
         move || {
             crate::modules::secure_account_storage::serialize_account_file(
                 "codex",
-                &account_for_rewrite,
+                &crate::modules::codex_account_proxy::storage_value(&account_for_rewrite)?,
             )
         },
     );
@@ -1026,7 +1026,8 @@ fn save_account_with_tombstone_guard(account: &CodexAccount) -> Result<(), Strin
 
 fn save_account_unchecked(account: &CodexAccount) -> Result<(), String> {
     let path = get_accounts_dir().join(format!("{}.json", &account.id));
-    let content = crate::modules::secure_account_storage::serialize_account_file("codex", account)?;
+    let content = crate::modules::secure_account_storage::serialize_account_file("codex",
+        &crate::modules::codex_account_proxy::storage_value(account)?)?;
     write_string_atomic(&path, &content).map_err(|e| format!("写入账号详情失败: {}", e))?;
     Ok(())
 }
@@ -1067,6 +1068,7 @@ fn delete_account_file_unlocked(account_id: &str) -> Result<(), String> {
         crate::modules::atomic_write::remove_file_locked(&path)
             .map_err(|e| format!("删除文件失败: {}", e))?;
     }
+    crate::modules::codex_proxy_runtime::release_deleted_account(account_id);
     Ok(())
 }
 
@@ -1289,4 +1291,14 @@ pub fn list_accounts_checked() -> Result<Vec<CodexAccount>, String> {
     }
 
     Ok(accounts)
+}
+
+/// Destructive proxy-source deletion must see every indexed account before unbinding.
+pub fn list_accounts_for_proxy_removal() -> Result<Vec<CodexAccount>, String> {
+    let index = load_account_index_checked().map_err(|_| "CATALOG_ACCOUNT_READ")?;
+    index.accounts.iter().map(|summary| {
+        load_account_with_summary(&summary.id, Some(summary))
+            .map_err(|_| "CATALOG_ACCOUNT_READ")?
+            .ok_or_else(|| "CATALOG_ACCOUNT_READ".to_string())
+    }).collect()
 }

@@ -119,8 +119,20 @@ pub(crate) struct CodexInstanceStartTarget {
     pub(crate) user_data_dir: PathBuf,
     pub(crate) bind_account_id: Option<String>,
     pub(crate) model_routing: Option<CodexInstanceModelRouting>,
+    pub(crate) launch_mode: InstanceLaunchMode,
     pub(crate) is_default: bool,
     pub(crate) launch_operation: Option<String>,
+}
+
+impl CodexInstanceStartTarget {
+    pub(crate) async fn preflight_desktop_proxy(&self) -> Result<(), String> {
+        if launch_mode_uses_desktop_runtime(&self.launch_mode) {
+            modules::codex_instance::preflight_egress_proxy_for_bind_account(
+                self.bind_account_id.as_deref(),
+            ).await?;
+        }
+        Ok(())
+    }
 }
 
 fn emit_codex_instance_launch_progress(
@@ -187,6 +199,7 @@ pub(crate) fn resolve_codex_instance_start_target(
             user_data_dir: modules::codex_instance::get_default_codex_home()?,
             bind_account_id: resolve_default_account_id(&settings),
             model_routing: settings.model_routing,
+            launch_mode: settings.launch_mode,
             is_default: true,
             launch_operation: None,
         });
@@ -204,6 +217,7 @@ pub(crate) fn resolve_codex_instance_start_target(
         user_data_dir: PathBuf::from(instance.user_data_dir),
         bind_account_id: instance.bind_account_id,
         model_routing: instance.model_routing,
+        launch_mode: instance.launch_mode,
         is_default: false,
         launch_operation: None,
     })
@@ -1407,12 +1421,16 @@ mod tests {
         let content =
             std::fs::read_to_string(profile_dir.join("config.toml")).expect("read saved config");
         assert!(content.contains("model_context_window = 700000"));
-        assert!(!content.contains("model_auto_compact_token_limit"));
+        // 统一口径：写了上下文窗口就必须同时写 90% 的压缩阈值。
+        assert!(content.contains("model_auto_compact_token_limit = 630000"));
         assert_eq!(
             saved.quick_config.detected_model_context_window,
             Some(700_000)
         );
-        assert_eq!(saved.quick_config.detected_auto_compact_token_limit, None);
+        assert_eq!(
+            saved.quick_config.detected_auto_compact_token_limit,
+            Some(630_000)
+        );
     }
 
     #[tokio::test]
@@ -2910,16 +2928,7 @@ async fn codex_start_instance_internal(
     let _start_guard = CodexInstanceStartGuard::acquire(&instance_id)?;
     clear_codex_instance_start_cancel(&instance_id);
     let mut launch_target = resolve_codex_instance_start_target(&instance_id)?;
-    let configured_launch_mode = if instance_id == DEFAULT_INSTANCE_ID {
-        modules::codex_instance::load_default_settings()?.launch_mode
-    } else {
-        modules::codex_instance::load_instance_store()?
-            .instances
-            .into_iter()
-            .find(|item| item.id == instance_id)
-            .map(|item| item.launch_mode)
-            .ok_or("实例不存在")?
-    };
+    let configured_launch_mode = launch_target.launch_mode.clone();
     // 绑定账号不再是可直接登录的 OAuth 订阅账号时，路由按关闭处理：
     // 这里必须用归一化结果，否则启动阶段仍会尝试建立混合路由网关。
     launch_target.model_routing = validate_instance_model_routing(
@@ -2947,6 +2956,10 @@ async fn codex_start_instance_internal(
         4,
         serde_json::json!({}),
     );
+    // Validate the effective route before credentials, profile writes, or stopping
+    // the previous client. Metadata/status lookup alone cannot detect a damaged engine.
+    launch_target.preflight_desktop_proxy().await?;
+    ensure_codex_instance_start_not_cancelled(&instance_id)?;
     let start_flow_lock =
         CODEX_INSTANCE_START_FLOW_LOCK.get_or_init(|| tokio::sync::Mutex::new(()));
     let _start_flow_guard = start_flow_lock.lock().await;
@@ -3371,8 +3384,14 @@ async fn codex_start_instance_internal(
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let cdp_enabled =
             modules::codex_app_injection::should_enable_cdp(default_bind_account_id.as_deref());
-        let injection_plan =
+        let mut injection_plan =
             modules::codex_app_injection::build_launch_args(&extra_args, cdp_enabled)?;
+        let egress_proxy_url = modules::codex_instance::resolve_egress_proxy_for_bind_account(
+            default_bind_account_id.as_deref(),
+        ).await?;
+        if let Some(proxy_url) = egress_proxy_url.as_deref() {
+            modules::process::append_electron_proxy_args(&mut injection_plan.args, proxy_url);
+        }
         emit_codex_instance_launch_step(
             &app,
             emit_launch_progress,
@@ -3385,9 +3404,15 @@ async fn codex_start_instance_internal(
         let launch_started = Instant::now();
         ensure_codex_instance_start_not_cancelled(&instance_id)?;
         let pid = if skip_default_bind_account_injection {
-            modules::process::start_codex_default_fast_after_close(&injection_plan.args)?
+            modules::process::start_codex_default_fast_after_close_with_egress(
+                &injection_plan.args,
+                egress_proxy_url.as_deref(),
+            )?
         } else {
-            modules::process::start_codex_default(&injection_plan.args)?
+            modules::process::start_codex_default_with_egress(
+                &injection_plan.args,
+                egress_proxy_url.as_deref(),
+            )?
         };
         if codex_instance_start_cancelled(&instance_id) {
             let _ = modules::process::close_pid(pid, 5);
@@ -3673,7 +3698,14 @@ async fn codex_start_instance_internal(
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
     let cdp_enabled =
         modules::codex_app_injection::should_enable_cdp(instance.bind_account_id.as_deref());
-    let injection_plan = modules::codex_app_injection::build_launch_args(&extra_args, cdp_enabled)?;
+    let mut injection_plan =
+        modules::codex_app_injection::build_launch_args(&extra_args, cdp_enabled)?;
+    let egress_proxy_url = modules::codex_instance::resolve_egress_proxy_for_bind_account(
+        instance.bind_account_id.as_deref(),
+    ).await?;
+    if let Some(proxy_url) = egress_proxy_url.as_deref() {
+        modules::process::append_electron_proxy_args(&mut injection_plan.args, proxy_url);
+    }
     emit_codex_instance_launch_step(
         &app,
         emit_launch_progress,
@@ -3685,8 +3717,12 @@ async fn codex_start_instance_internal(
     );
     let launch_started = Instant::now();
     ensure_codex_instance_start_not_cancelled(&instance_id)?;
-    let pid =
-        modules::process::start_codex_with_args(&instance.user_data_dir, &injection_plan.args)?;
+    let pid = modules::process::start_codex_with_args_and_env_and_egress(
+        &instance.user_data_dir,
+        &injection_plan.args,
+        &[],
+        egress_proxy_url.as_deref(),
+    )?;
     if codex_instance_start_cancelled(&instance_id) {
         let _ = modules::process::close_pid(pid, 5);
         return Err("CODEX_START_CANCELLED".to_string());

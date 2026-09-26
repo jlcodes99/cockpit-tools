@@ -50,6 +50,15 @@ pub fn upsert_account(tokens: CodexTokens) -> Result<CodexAccount, String> {
     upsert_account_with_hints(tokens, None, None)
 }
 
+/// The selected OAuth proxy is written with the tokens, before any quota call.
+pub fn upsert_account_with_proxy(
+    tokens: CodexTokens,
+    proxy_url: String,
+) -> Result<CodexAccount, String> {
+    let normalized = crate::modules::codex_proxy_runtime::normalize_binding(&proxy_url)?;
+    upsert_account_with_hints_and_reauth_target(tokens, None, None, None, None, Some(normalized))
+}
+
 fn build_agent_identity_account_draft(
     identity: CodexAgentIdentity,
 ) -> Result<CodexAccount, String> {
@@ -143,7 +152,14 @@ pub fn upsert_account_for_reauth(
     tokens: CodexTokens,
     target_account_id: &str,
 ) -> Result<CodexAccount, String> {
-    upsert_account_with_hints_and_reauth_target(tokens, None, None, None, Some(target_account_id))
+    upsert_account_with_hints_and_reauth_target(
+        tokens,
+        None,
+        None,
+        None,
+        Some(target_account_id),
+        None,
+    )
 }
 
 pub fn upsert_api_key_account(
@@ -269,6 +285,7 @@ fn upsert_account_with_hints(
         organization_id_hint,
         None,
         None,
+        None,
     )
 }
 
@@ -283,6 +300,7 @@ fn upsert_account_with_import_hints(
         account_id_hint,
         organization_id_hint,
         subscription_active_until_hint,
+        None,
         None,
     )
 }
@@ -305,6 +323,10 @@ fn resolve_reauth_target_account_id(
             target.email, email
         ));
     }
+    // 历史混合记录保留原文件及引用；本次授权回到 OAuth 身份域独立保存。
+    if !is_oauth_identity_candidate(&target) {
+        return Ok(None);
+    }
     Ok(Some(if target.id.trim().is_empty() {
         target_id
     } else {
@@ -318,6 +340,7 @@ fn upsert_account_with_hints_and_reauth_target(
     organization_id_hint: Option<String>,
     subscription_active_until_hint: Option<String>,
     reauth_target_account_id: Option<&str>,
+    selected_proxy: Option<String>,
 ) -> Result<CodexAccount, String> {
     crate::modules::codex_auth_diagnostic::log_event(
         if reauth_target_account_id.is_some() {
@@ -355,10 +378,11 @@ fn upsert_account_with_hints_and_reauth_target(
     let mut index = load_account_index();
     let generated_id =
         build_account_storage_id(&email, account_id.as_deref(), organization_id.as_deref());
-    let has_reauth_target = normalize_optional_ref(reauth_target_account_id).is_some();
+    let reauth_target = resolve_reauth_target_account_id(reauth_target_account_id, &email)?;
+    let has_reauth_target = reauth_target.is_some();
 
     // 明确的重新授权来自某个旧账号卡片，必须优先覆盖该旧账号。
-    let existing_id = resolve_reauth_target_account_id(reauth_target_account_id, &email)?
+    let existing_id = reauth_target
         .or_else(|| {
             find_existing_account_id(
                 &index,
@@ -375,6 +399,7 @@ fn upsert_account_with_hints_and_reauth_target(
         acc.tokens = tokens;
         mark_token_chain_updated(&mut acc);
         acc.auth_mode = CodexAuthMode::OAuth;
+        acc.upstream_grok_account_id = None;
         acc.agent_identity = None;
         acc.authorization_status = None;
         acc.openai_api_key = None;
@@ -397,6 +422,7 @@ fn upsert_account_with_hints_and_reauth_target(
         let mut acc = CodexAccount::new(existing_id.clone(), email.clone(), tokens);
         mark_token_chain_updated(&mut acc);
         acc.auth_mode = CodexAuthMode::OAuth;
+        acc.upstream_grok_account_id = None;
         acc.agent_identity = None;
         acc.authorization_status = None;
         acc.openai_api_key = None;
@@ -439,6 +465,10 @@ fn upsert_account_with_hints_and_reauth_target(
     // 普通额度、限流和网络错误仍由额度状态独立保留和刷新。
     if account_has_remote_api_auth_rejection(&account) {
         account.quota_error = None;
+    }
+
+    if let Some(proxy) = selected_proxy {
+        account.egress_proxy_url = Some(proxy);
     }
 
     if has_reauth_target && generated_id != account.id {

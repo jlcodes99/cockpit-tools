@@ -1,12 +1,14 @@
 {
   "name": "cockpit-tools",
   "private": true,
-  "version": "1.3.58",
+  "version": "1.3.60",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "test": "node scripts/run_ts_tests.cjs",
     "test:release": "node --test scripts/release/*.test.cjs",
+    "proxy-engine:prepare": "node scripts/prepare-proxy-engine.cjs",
+    "proxy-engine:bundle-config": "node scripts/proxy-engine-bundle-config.cjs",
     "test:go": "cd sidecars/cockpit-cliproxy && go test ./...",
     "test:codex-api-key-scope": "tsx --test src/utils/codexApiKeyAccountScope.test.ts",
     "typecheck": "tsc --noEmit",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from "react";
 import { RefreshCw, RotateCw } from "lucide-react";
 import * as codexService from "../services/codexService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
@@ -8,16 +8,11 @@ import { summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 import { buildCodexAccountWindowStatQueries, formatCodexWindowStatsText, type CodexWindowStats } from "../utils/codexWindowStats";
 import { type CodexLaunchPreviewAction, type CodexLaunchPreviewSummary } from "../components/codex/CodexLaunchPreviewModal";
-import {
-  CODEX_SPEED_DESCRIPTION,
-  CodexSpeedSelect,
-} from "../components/codex/CodexSpeedSelect";
 import { CodexImageModelSelect } from "../components/CodexImageModelConfig";
 import { useCodexImageForwardConfig } from "../components/CodexImageForwardConfig";
 import { useEscClose } from "../hooks/useEscClose";
 import { useEnterConfirm } from "../hooks/useEnterConfirm";
 import type { CodexAccount } from "../types/codex";
-import type { CodexAccountTurnStateStatus } from "../types/codexLocalAccess";
 import { CODEX_API_SERVICE_BIND_ID } from "../types/instance";
 import { createCodexOverviewAccountComparator, filterAndSortCodexOverviewAccounts } from "../utils/codexAccountOverview";
 import { buildPaginatedGroups, buildPaginationPageSizeStorageKey, isEveryIdSelected, usePagination } from "../hooks/usePagination";
@@ -34,7 +29,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
   | "activeTab"
   | "addingLocalAccessAccountId"
   | "apiKeyUsageMap"
-  | "apiServiceAppSpeed"
   | "batchDeleteBusy"
   | "batchDeleteJob"
   | "batchDeleteRefreshedCompletedRef"
@@ -63,7 +57,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
   | "groupDeleteConfirm"
   | "groupFilter"
   | "handleAddLocalAccessAccount"
-  | "handleApiServiceAppSpeedChange"
   | "handleExportByIds"
   | "handleHideLocalAccessEntry"
   | "handleKillLocalAccessPort"
@@ -101,7 +94,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
   | "refreshApiKeyUsage"
   | "refreshing"
   | "refreshingSubscriptionAccountId"
-  | "renderAccountSpeedSelect"
   | "resettingResetCreditAccountId"
   | "resolveAccountMeta"
   | "resolveApiKeyDisplayText"
@@ -113,7 +105,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
   | "resolveSingleExportBaseName"
   | "resolveSubscriptionPresentation"
   | "resolveUsageProviderForApiKeyAccount"
-  | "savingAppSpeedId"
   | "searchQuery"
   | "selected"
   | "sessionWindowStats"
@@ -154,7 +145,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     activeTab,
     addingLocalAccessAccountId,
     apiKeyUsageMap,
-    apiServiceAppSpeed,
     batchDeleteBusy,
     batchDeleteJob,
     batchDeleteRefreshedCompletedRef,
@@ -183,7 +173,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     groupDeleteConfirm,
     groupFilter,
     handleAddLocalAccessAccount,
-    handleApiServiceAppSpeedChange,
     handleExportByIds,
     handleHideLocalAccessEntry,
     handleKillLocalAccessPort,
@@ -221,7 +210,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     refreshApiKeyUsage,
     refreshing,
     refreshingSubscriptionAccountId,
-    renderAccountSpeedSelect,
     resettingResetCreditAccountId,
     resolveAccountMeta,
     resolveApiKeyDisplayText,
@@ -233,7 +221,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     resolveSingleExportBaseName,
     resolveSubscriptionPresentation,
     resolveUsageProviderForApiKeyAccount,
-    savingAppSpeedId,
     searchQuery,
     selected,
     sessionWindowStats,
@@ -272,109 +259,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
       ? null
       : (currentAccount?.id ?? null);
 
-  // ─── 风控检测：上游 `x-codex-turn-state` 观测定级 ─────────────────────
-  const [accountTurnStateMap, setAccountTurnStateMap] = useState<
-    Record<string, CodexAccountTurnStateStatus>
-  >({});
-  const [turnStateCheckOpen, setTurnStateCheckOpen] = useState(false);
-  const [turnStateProbingIds, setTurnStateProbingIds] = useState<string[]>([]);
-  const [turnStateErrors, setTurnStateErrors] = useState<
-    Record<string, string>
-  >({});
-
-  const mergeAccountTurnStateStatus = useCallback(
-    (status: CodexAccountTurnStateStatus) => {
-      const accountId = (status.accountId || "").trim();
-      if (!accountId) return;
-      setAccountTurnStateMap((previous) => ({
-        ...previous,
-        [accountId]: status,
-      }));
-    },
-    [],
-  );
-
-  const refreshAccountTurnState = useCallback(async () => {
-    try {
-      const statuses =
-        await codexLocalAccessService.listCodexAccountTurnStateStatuses();
-      const next: Record<string, CodexAccountTurnStateStatus> = {};
-      statuses.forEach((status) => {
-        const accountId = (status.accountId || "").trim();
-        if (accountId) next[accountId] = status;
-      });
-      setAccountTurnStateMap(next);
-    } catch (error) {
-      console.warn("[CodexTurnState] 读取账号风控状态失败", error);
-    }
-  }, []);
-
-  const probeAccountTurnState = useCallback(
-    async (accountId: string) => {
-      const id = (accountId || "").trim();
-      if (!id) return;
-      setTurnStateProbingIds((previous) =>
-        previous.includes(id) ? previous : [...previous, id],
-      );
-      setTurnStateErrors((previous) => {
-        if (!(id in previous)) return previous;
-        const next = { ...previous };
-        delete next[id];
-        return next;
-      });
-      try {
-        const result = await codexLocalAccessService.probeCodexAccountTurnState(id);
-        mergeAccountTurnStateStatus(result.status);
-      } catch (error) {
-        setTurnStateErrors((previous) => ({
-          ...previous,
-          [id]: error instanceof Error ? error.message : String(error),
-        }));
-      } finally {
-        setTurnStateProbingIds((previous) =>
-          previous.filter((item) => item !== id),
-        );
-      }
-    },
-    [mergeAccountTurnStateStatus],
-  );
-
-  const probeAccountsTurnState = useCallback(
-    async (accountIds: string[]) => {
-      // 顺序执行：上游探测限流敏感，逐个账号串行更稳。
-      for (const accountId of accountIds) {
-        await probeAccountTurnState(accountId);
-      }
-    },
-    [probeAccountTurnState],
-  );
-
-  const openTurnStateCheckModal = useCallback(() => {
-    setTurnStateCheckOpen(true);
-    void refreshAccountTurnState();
-  }, [refreshAccountTurnState]);
-
-  const closeTurnStateCheckModal = useCallback(() => {
-    setTurnStateCheckOpen(false);
-  }, []);
-
-  const turnStateCheckableAccountIds = useMemo(
-    () =>
-      accounts
-        .filter(
-          (account) =>
-            !isCodexApiKeyAccount(account) &&
-            !isPendingOAuthCodexAccount(account),
-        )
-        .map((account) => account.id),
-    [accounts],
-  );
-  const hasTurnStateCheckableAccounts = turnStateCheckableAccountIds.length > 0;
-
-  useEffect(() => {
-    if (activeTab !== "overview") return;
-    void refreshAccountTurnState();
-  }, [activeTab, accounts.length, refreshAccountTurnState]);
   
     useEffect(() => {
       if (activeTab !== "overview") {
@@ -816,16 +700,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
         });
       }
 
-      const speedDescription = CODEX_SPEED_DESCRIPTION[account.app_speed ?? "standard"] ??
-        CODEX_SPEED_DESCRIPTION.standard;
-
       actions.push(
-        {
-          id: "speed",
-          label: t("codex.speed.title", "速度"),
-          description: t(speedDescription.key, speedDescription.fallback),
-          control: renderAccountSpeedSelect(account),
-        },
         {
           id: "tags",
           label: t("accounts.editTags", "编辑标签"),
@@ -1048,8 +923,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
       (): CodexLaunchPreviewAction[] => {
         if (!localAccessCollection) return [];
         const baseUrl = resolveLocalAccessBaseUrl() || "-";
-        const apiServiceSpeedDescription = CODEX_SPEED_DESCRIPTION[apiServiceAppSpeed] ??
-          CODEX_SPEED_DESCRIPTION.standard;
         const actions: CodexLaunchPreviewAction[] = [
           {
             id: "image-forward",
@@ -1142,23 +1015,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
             onAction: async () => {
               await handleQuickRefreshLocalAccessQuota();
             },
-          },
-          {
-            id: "speed",
-            label: t("codex.speed.title", "速度"),
-            description: t(
-              apiServiceSpeedDescription.key,
-              apiServiceSpeedDescription.fallback,
-            ),
-            control: (
-              <CodexSpeedSelect
-                value={apiServiceAppSpeed}
-                onChange={handleApiServiceAppSpeedChange}
-                busy={savingAppSpeedId === CODEX_API_SERVICE_BIND_ID}
-                preferredPlacement="top"
-                ariaLabel={t("codex.speed.title", "速度")}
-              />
-            ),
           },
           {
             id: "toggle-service",
@@ -1893,7 +1749,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
       );
     };
   return {
-    accountTurnStateMap,
     applyWindowStatsToQuotaItems,
     authFailedExportAccountIds,
     buildAccountLaunchPreviewActions,
@@ -1901,7 +1756,6 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     buildLocalAccessLaunchPreviewActions,
     buildLocalAccessLaunchPreviewSummary,
     canSelectAllFilteredAccounts,
-    closeTurnStateCheckModal,
     confirmCodexDelete,
     customSortAccounts,
     errorAccountIds,
@@ -1925,25 +1779,16 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     handleToggleSelectAllPaginated,
     hasActiveOverviewFilters,
     hasDetectableFullQuotaWakeupAccounts,
-    hasTurnStateCheckableAccounts,
     isAllFilteredSelectionActive,
     isAllPaginatedSelected,
     isCustomSortActive,
     moveCustomSortAccount,
     openFullQuotaWakeupTestModal,
-    openTurnStateCheckModal,
     overviewCurrentAccountId,
     overviewFilterChips,
     overviewTotalCount,
     overviewVisibleCount,
     paginatedAccounts,
-    probeAccountTurnState,
-    probeAccountsTurnState,
-    refreshAccountTurnState,
-    turnStateCheckOpen,
-    turnStateCheckableAccountIds,
-    turnStateErrors,
-    turnStateProbingIds,
     paginatedGroupedAccounts,
     pagination,
     renderResetCreditControls,

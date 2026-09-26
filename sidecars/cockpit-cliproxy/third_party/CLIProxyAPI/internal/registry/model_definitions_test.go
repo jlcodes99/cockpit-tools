@@ -55,36 +55,101 @@ func TestWithXAIBuiltinsIncludesImage20(t *testing.T) {
 	t.Fatalf("expected xAI builtin model %s", xaiBuiltinImage20ModelID)
 }
 
-func TestPaidCodexModelsIncludeAstraButFreeDoesNot(t *testing.T) {
+func TestPaidCodexModelsIncludeGPT6FamilyButFreeDoesNot(t *testing.T) {
+	wantOrder := []string{
+		codexBuiltinGPT6AstraModelID,
+		codexBuiltinGPT6SolModelID,
+		codexBuiltinGPT6LunaModelID,
+	}
+	wantDisplayNames := map[string]string{
+		codexBuiltinGPT6AstraModelID: "GPT-6 Astra",
+		codexBuiltinGPT6SolModelID:   "GPT-6 Sol",
+		codexBuiltinGPT6LunaModelID:  "GPT-6 Luna",
+	}
+
 	for _, models := range [][]*ModelInfo{
 		GetCodexTeamModels(),
 		GetCodexPlusModels(),
 		GetCodexProModels(),
 	} {
-		var astra *ModelInfo
-		for _, model := range models {
-			if model != nil && model.ID == codexBuiltinGPT6AstraModelID {
-				astra = model
-				break
+		if len(models) < len(wantOrder) {
+			t.Fatalf("paid Codex models = %d entries, want at least %d", len(models), len(wantOrder))
+		}
+		for i, wantID := range wantOrder {
+			if models[i] == nil || models[i].ID != wantID {
+				t.Fatalf("paid Codex model %d = %#v, want %s", i, models[i], wantID)
 			}
 		}
-		if astra == nil {
-			t.Fatalf("paid Codex models do not contain %s", codexBuiltinGPT6AstraModelID)
+
+		byID := make(map[string]*ModelInfo, len(models))
+		for _, model := range models {
+			if model != nil {
+				byID[model.ID] = model
+			}
 		}
-		if models[0] == nil || models[0].ID != codexBuiltinGPT6AstraModelID {
-			t.Fatalf("Astra is not the first paid Codex model: got %#v", models[0])
+		for _, modelID := range wantOrder {
+			model := byID[modelID]
+			if model == nil {
+				t.Fatalf("paid Codex models do not contain %s", modelID)
+			}
+			if model.ContextLength != 256000 || model.MaxCompletionTokens != 128000 {
+				t.Fatalf("%s limits = %d/%d, want 256000/128000", modelID, model.ContextLength, model.MaxCompletionTokens)
+			}
+			if model.DisplayName != wantDisplayNames[modelID] {
+				t.Fatalf("%s display name = %q, want %q", modelID, model.DisplayName, wantDisplayNames[modelID])
+			}
 		}
-		if astra.ContextLength != 1050000 || astra.MaxCompletionTokens != 128000 {
-			t.Fatalf("Astra limits = %d/%d, want 1050000/128000", astra.ContextLength, astra.MaxCompletionTokens)
-		}
+
+		astra := byID[codexBuiltinGPT6AstraModelID]
 		if astra.Thinking == nil || len(astra.Thinking.Levels) != 6 || astra.Thinking.Levels[4] != "max" || astra.Thinking.Levels[5] != "ultra" {
 			t.Fatalf("Astra reasoning levels = %#v", astra.Thinking)
 		}
-	}
-	for _, model := range GetCodexFreeModels() {
-		if model != nil && model.ID == codexBuiltinGPT6AstraModelID {
-			t.Fatal("free Codex models should not advertise Astra before entitlement rollout")
+		sol := byID[codexBuiltinGPT6SolModelID]
+		if sol.Thinking == nil || len(sol.Thinking.Levels) != 6 || sol.Thinking.Levels[4] != "max" || sol.Thinking.Levels[5] != "ultra" {
+			t.Fatalf("Sol reasoning levels = %#v", sol.Thinking)
 		}
+		luna := byID[codexBuiltinGPT6LunaModelID]
+		if luna.Thinking == nil || len(luna.Thinking.Levels) != 5 || luna.Thinking.Levels[4] != "max" {
+			t.Fatalf("Luna reasoning levels = %#v", luna.Thinking)
+		}
+		for _, level := range luna.Thinking.Levels {
+			if level == "ultra" {
+				t.Fatalf("Luna reasoning levels = %#v, want no ultra", luna.Thinking)
+			}
+		}
+	}
+
+	for _, model := range GetCodexFreeModels() {
+		if model == nil {
+			continue
+		}
+		for _, modelID := range wantOrder {
+			if model.ID == modelID {
+				t.Fatalf("free Codex models should not advertise %s before entitlement rollout", modelID)
+			}
+		}
+	}
+}
+
+func TestLookupStaticModelInfoFallsBackToShippedGPT6Builtins(t *testing.T) {
+	for _, modelID := range []string{
+		codexBuiltinGPT6AstraModelID,
+		codexBuiltinGPT6SolModelID,
+		codexBuiltinGPT6LunaModelID,
+	} {
+		model := LookupStaticModelInfo(modelID)
+		if model == nil {
+			t.Fatalf("LookupStaticModelInfo(%s) = nil, want shipped builtin", modelID)
+		}
+		if model.ID != modelID {
+			t.Fatalf("LookupStaticModelInfo(%s).ID = %s, want %s", modelID, model.ID, modelID)
+		}
+		if model.ContextLength != 256000 || model.MaxCompletionTokens != 128000 {
+			t.Fatalf("%s limits = %d/%d, want 256000/128000", modelID, model.ContextLength, model.MaxCompletionTokens)
+		}
+	}
+	if model := LookupStaticModelInfo("gpt-6-unknown"); model != nil {
+		t.Fatalf("LookupStaticModelInfo(gpt-6-unknown) = %#v, want nil", model)
 	}
 }
 

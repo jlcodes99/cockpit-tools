@@ -1,0 +1,138 @@
+/* Self-built multi-node strategies: one list, one editor dialog, one confirmed delete.
+   Controls reuse the project .btn / .codex-proxy-search / modal system instead of native widgets. */
+.codex-strategy { display: grid; gap: 14px; margin-top: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-card); }
+.codex-strategy-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.codex-strategy-head h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; }
+.codex-strategy-head h3 svg { flex-shrink: 0; color: var(--primary); }
+.codex-strategy-head p { max-width: 640px; margin: 6px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.codex-strategy-head > .btn { flex-shrink: 0; }
+.codex-strategy-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.codex-strategy-card { display: grid; gap: 8px; min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); }
+.codex-strategy-card-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.codex-strategy-card-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.codex-strategy-card-title strong { min-width: 0; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.codex-strategy-tag { flex-shrink: 0; padding: 1px 7px; border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--border)); border-radius: 5px; background: color-mix(in srgb, var(--primary) 8%, var(--bg-card)); color: var(--primary); font-size: 10px; font-weight: 600; line-height: 1.6; white-space: nowrap; }
+.codex-strategy-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.codex-strategy-order { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0; font-size: 12px; line-height: 1.6; }
+.codex-strategy-count { flex-shrink: 0; color: var(--text-secondary); }
+.codex-strategy-order-text { min-width: 0; overflow-wrap: anywhere; }
+.codex-strategy-warning { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--danger); font-size: 11px; line-height: 1.6; }
+.codex-strategy-warning svg { flex-shrink: 0; }
+.codex-strategy-card-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.codex-strategy-error { color: var(--danger); }
+
+/* Dialog sizing lives on `.modal.<dialog-class>` so no CSS order can change it (rule 35). */
+.codex-strategy-overlay { padding: 16px; align-items: safe center; overflow-y: auto; }
+.modal.codex-strategy-dialog,
+.modal.codex-strategy-confirm {
+  width: min(780px, calc(100vw - 32px));
+  max-width: min(780px, calc(100vw - 32px));
+  height: auto;
+  max-height: calc(100dvh - 32px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal.codex-strategy-confirm { width: min(460px, calc(100vw - 32px)); max-width: min(460px, calc(100vw - 32px)); }
+.codex-strategy-dialog > .modal-header,
+.codex-strategy-confirm > .modal-header,
+.codex-strategy-confirm > .modal-footer,
+.codex-strategy-dialog > .modal-footer { flex-shrink: 0; }
+.codex-strategy-dialog > .modal-header, .codex-strategy-confirm > .modal-header { gap: 12px; }
+.codex-strategy-dialog > .modal-header h2, .codex-strategy-confirm > .modal-header h2 { font-size: 18px; }
+.codex-strategy-dialog > .modal-footer, .codex-strategy-confirm > .modal-footer { flex-wrap: wrap; }
+/* The body owns the scroll so the title and the action row stay reachable (rule 36). */
+.codex-strategy-dialog > .modal-body, .codex-strategy-confirm > .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.codex-strategy-dialog-body { display: grid; gap: 18px; align-content: start; }
+
+.codex-strategy-block { display: grid; gap: 8px; min-width: 0; }
+.codex-strategy-block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.codex-strategy-label { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.codex-strategy-block-head .codex-proxy-page-note,
+.codex-strategy-block > .codex-proxy-page-note,
+.codex-strategy-selected > .codex-proxy-page-note { margin: 0; }
+.codex-strategy-field { display: grid; gap: 6px; min-width: 0; color: var(--text-secondary); font-size: 12px; }
+.codex-strategy-input { appearance: none; width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 13px; line-height: 1.5; }
+.codex-strategy-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.codex-strategy-input:disabled { opacity: .55; }
+.codex-strategy-input[aria-invalid="true"] { border-color: var(--danger); }
+.codex-strategy-field-error { color: var(--danger); font-size: 11px; line-height: 1.5; }
+.codex-strategy-kind { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.codex-strategy-kind .btn { min-height: 34px; justify-content: flex-start; padding: 11px 13px; white-space: normal; text-align: start; }
+.codex-strategy-kind .btn.active { color: var(--primary); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--bg-card)); }
+.codex-strategy-kind .btn.active:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 14%, var(--bg-card)); }
+
+.codex-strategy-search { margin: 0; }
+.codex-strategy-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.codex-strategy-candidates { display: grid; gap: 6px; align-content: start; max-height: min(240px, 32dvh); overflow-y: auto; overscroll-behavior: contain; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-secondary); scrollbar-width: thin; }
+.codex-strategy-candidate { appearance: none; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 12px; font-weight: 400; line-height: 1.4; text-align: start; cursor: pointer; }
+.codex-strategy-candidate > svg { flex-shrink: 0; color: var(--primary); }
+.codex-strategy-candidate > span { flex: 1; min-width: 0; }
+.codex-strategy-candidate strong { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.codex-strategy-candidate small { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere; }
+.codex-strategy-candidate:hover:not(:disabled) { border-color: var(--primary); background: var(--bg-hover); }
+.codex-strategy-candidate:disabled { opacity: .55; cursor: not-allowed; }
+.codex-strategy-candidate:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.codex-strategy-selected { display: grid; gap: 8px; align-content: start; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-secondary); }
+.codex-strategy-orderlist { display: grid; gap: 6px; max-height: min(260px, 36dvh); overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 0; list-style: none; scrollbar-width: thin; }
+.codex-strategy-orderlist li { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); }
+.codex-strategy-index { display: grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; border-radius: 6px; background: color-mix(in srgb, var(--primary) 10%, var(--bg-card)); color: var(--primary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.codex-strategy-member { flex: 1; min-width: 0; }
+.codex-strategy-member strong { display: block; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.codex-strategy-member small { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere; }
+.codex-strategy-member-actions { display: flex; flex-shrink: 0; gap: 4px; }
+.codex-strategy-member-actions .btn { width: 28px; min-height: 28px; padding: 0; }
+
+.codex-strategy-advanced { margin: 0; }
+.codex-strategy-advanced .codex-proxy-page-note { margin: 8px 0 0; }
+.codex-strategy-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.codex-strategy-lazy { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--text-secondary); font-size: 12px; }
+.codex-strategy-switch { appearance: none; display: block; flex-shrink: 0; width: 30px; height: 18px; padding: 2px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-tertiary, #b5becd); color: var(--text-primary); font: inherit; cursor: pointer; }
+.codex-strategy-switch span { display: block; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #14264720; transition: transform .15s; }
+.codex-strategy-switch.on { background: var(--primary); border-color: var(--primary); }
+.codex-strategy-switch.on span { transform: translateX(12px); }
+.codex-strategy-switch:hover:not(:disabled) { filter: brightness(.95); }
+.codex-strategy-switch:disabled { opacity: .5; cursor: not-allowed; }
+.codex-strategy-switch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.codex-strategy-summary { display: grid; gap: 6px; padding: 12px; border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--primary) 4%, var(--bg-card)); }
+.codex-strategy-summary-title { margin: 0; font-size: 12px; font-weight: 650; color: var(--text-primary); }
+.codex-strategy-summary p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0; font-size: 12px; line-height: 1.6; }
+.codex-strategy-summary p > span { flex: 0 0 auto; color: var(--text-secondary); }
+.codex-strategy-summary p > strong { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.codex-strategy-notice { color: var(--text-secondary); }
+.codex-strategy-notice.is-strong { color: #b45309; }
+[data-theme="dark"] .codex-strategy-notice.is-strong { color: #fbbf24; }
+
+.codex-strategy-delete-name { display: block; overflow-wrap: anywhere; font-size: 14px; }
+.codex-strategy-delete-impact { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-secondary); }
+.codex-strategy-delete-impact h3 { margin: 0; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.codex-strategy-delete-impact p { margin: 0; font-size: 12px; line-height: 1.6; }
+.codex-strategy-delete-count { font-weight: 600; }
+.codex-strategy-delete-accounts { display: grid; gap: 6px; max-height: min(180px, 32dvh); overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 0; list-style: none; scrollbar-width: thin; }
+.codex-strategy-delete-accounts li { display: grid; min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); }
+.codex-strategy-delete-accounts strong { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.codex-strategy-delete-accounts span { color: var(--text-secondary); font-size: 11px; overflow-wrap: anywhere; }
+.codex-strategy-impact-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--danger); font-size: 12px; line-height: 1.6; }
+.codex-strategy-impact-error > span { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+
+@container (max-width: 800px) {
+  .codex-strategy-columns { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 540px) {
+  .codex-strategy { padding: 16px; }
+  .codex-strategy-head { flex-direction: column; align-items: stretch; }
+  .codex-strategy-head > .btn { align-self: flex-start; }
+  .codex-strategy-fields { grid-template-columns: minmax(0, 1fr); }
+  .codex-strategy-card-actions .btn { flex: 1 1 96px; }
+}
+
+/* Candidate selection uses the dialog width; narrow windows stack without hiding actions. */
+.codex-strategy-summary { padding: 10px 12px; background: var(--bg-secondary); border-color: var(--border); }
+@media (max-width: 680px) {
+  .codex-strategy-columns, .codex-strategy-fields { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 460px) {
+  .codex-strategy-kind { grid-template-columns: minmax(0, 1fr); }
+}

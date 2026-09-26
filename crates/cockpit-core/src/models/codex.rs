@@ -80,6 +80,9 @@ pub struct CodexAccount {
     pub account_structure: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_note: Option<String>,
+    /// 账号级出口代理。留空时继续使用全局/API 服务代理。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub egress_proxy_url: Option<String>,
     pub tokens: CodexTokens,
     #[serde(default)]
     pub token_generation: u64,
@@ -289,6 +292,7 @@ impl CodexAccount {
             account_name: None,
             account_structure: None,
             account_note: None,
+            egress_proxy_url: None,
             tokens,
             token_generation: 0,
             token_updated_at: Some(now),

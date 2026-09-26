@@ -28,6 +28,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useEscClose } from "../../hooks/useEscClose";
+import { resolveStoredCompactLimitInput } from "../../utils/codexModelContext";
 import {
   saveCodexInstanceQuickConfig,
   saveCodexInstanceConfiguration,
@@ -369,19 +370,24 @@ export function CodexLaunchPreviewModal({
     executing !== null;
   const configBusy = busy || checkingConfig || !configReady;
   const requestClose = useCallback(() => {
-    // Explicit close buttons belong to this preview, even when another overlay
-    // is mounted behind it. Invalidate pending work before React unmounts it.
-    configSession.current += 1;
-    onClose();
-  }, [onClose]);
-  const requestEscClose = useCallback(() => {
+    // 只把本弹框自己的子弹框（codex-launch-preview-* 系列）视为“还叠着一层”：
+    // 启动进度弹框、Windows 操作提示等全局弹框不是它的子级，不应该让「关闭」失效。
     const hasStackedModal = Array.from(
       document.querySelectorAll<HTMLElement>(".modal-overlay"),
-    ).some(
-      (element) => !element.classList.contains("codex-launch-preview-overlay"),
+    ).some((element) =>
+      Array.from(element.classList).some(
+        (className) =>
+          className.startsWith("codex-launch-preview-") &&
+          className !== "codex-launch-preview-overlay",
+      ),
     );
-    if (!hasStackedModal) requestClose();
-  }, [requestClose]);
+    if (!hasStackedModal) {
+      // Invalidate pending read-before-write work synchronously, before React
+      // commits the unmount and runs passive-effect cleanup.
+      configSession.current += 1;
+      onClose();
+    }
+  }, [onClose]);
   useEscClose(
     !busy &&
       !repairOpen &&
@@ -391,7 +397,7 @@ export function CodexLaunchPreviewModal({
       !imageGenPickerOpen &&
       !imageGenModeSwitchOpen &&
       !manualRefreshResult,
-    requestEscClose,
+    requestClose,
   );
   useEscClose(deepSeekAccessModeDialogOpen, () =>
     setDeepSeekAccessModeDialogOpen(false),
@@ -411,7 +417,8 @@ export function CodexLaunchPreviewModal({
       contextWindow !== undefined || compactLimit !== undefined,
     );
     setContextWindowInput(contextWindow?.toString() ?? "");
-    setCompactLimitInput(compactLimit?.toString() ?? "");
+    // 存量配置里压缩阈值缺失、等于或超过上下文时按 90% 归一，避免带出非法配对。
+    setCompactLimitInput(resolveStoredCompactLimitInput(contextWindow, compactLimit));
     setModelsError(null);
   }, []);
 
@@ -776,7 +783,9 @@ export function CodexLaunchPreviewModal({
           experimentalModelCatalogDefaultModelId: nextCatalog.defaultModelId,
         });
         saved = result.quickConfig;
-        setLoadedInstanceKey(codexLaunchPreviewInstanceConfigKey(result.instance));
+        if (session === configSession.current) {
+          setLoadedInstanceKey(codexLaunchPreviewInstanceConfigKey(result.instance));
+        }
         useCodexInstanceStore.setState({
           instances: useCodexInstanceStore.getState().instances.map((item) =>
             item.id === result.instance.id ? result.instance : item),
@@ -792,6 +801,9 @@ export function CodexLaunchPreviewModal({
         );
       }
       rememberCodexLaunchPreviewConfig(instanceId, saved);
+      // A dispatched write may finish after Close. Keep shared snapshots current,
+      // but do not revive the dismissed preview or continue its launch/switch.
+      if (session !== configSession.current) return false;
       applyLoadedConfig(saved);
       setRoutingRoutes(normalizedRoutingRoutes);
       setNotice(routingDirty
@@ -859,8 +871,9 @@ export function CodexLaunchPreviewModal({
   const handleExecute = useCallback(
     async (launchAfterSwitch: boolean) => {
       if (configBusy) return;
+      const session = configSession.current;
       const saved = await persistDraft();
-      if (!saved) return;
+      if (!saved || session !== configSession.current) return;
       setExecuting(launchAfterSwitch ? "launch" : "switch");
       setNotice(null);
       setError(null);
@@ -876,10 +889,11 @@ export function CodexLaunchPreviewModal({
                   : [],
               }
             : undefined;
-        const started = await onExecute(launchAfterSwitch, launchOptions);
-        if (!started) setExecuting(null);
+        await onExecute(launchAfterSwitch, launchOptions);
       } catch (executeError) {
         setError(String(executeError).replace(/^Error:\s*/, ""));
+      } finally {
+        // 启动事务超时或长期不返回时，按钮不能永久停在“加载中”状态。
         setExecuting(null);
       }
     },
@@ -1090,7 +1104,6 @@ export function CodexLaunchPreviewModal({
     accountPresentation?.planLabel ||
     (mode === "apiService" ? "API Key" : "Codex");
   const displayContextText = summary?.contextText || fallbackContextText;
-  const speedAction = displayActions.find((action) => action.id === "speed");
   // API 服务的「启用 GPT 生图」：在预览正文里单独成行，与 DeepSeek 启动预览保持一致。
   const imageForwardAction = displayActions.find(
     (action) => action.id === "image-forward",
@@ -1163,9 +1176,10 @@ export function CodexLaunchPreviewModal({
       ) {
         return;
       }
+      const session = configSession.current;
       if (configReady) {
         const saved = await persistDraft();
-        if (!saved) return;
+        if (!saved || session !== configSession.current) return;
       }
       setChangingInstance(true);
       setNotice(null);
@@ -1293,6 +1307,7 @@ export function CodexLaunchPreviewModal({
         defaultModelId,
       );
       rememberCodexLaunchPreviewConfig(instanceId, saved);
+      if (session !== configSession.current) return;
       applyLoadedConfig(saved);
       setContextConfigSnapshot(null);
       setContextConfigOpen(false);
@@ -1602,15 +1617,6 @@ export function CodexLaunchPreviewModal({
                       </>
                     )}
                   </div>
-                  {speedAction?.control && (
-                    <div
-                      className="codex-launch-preview-header-speed"
-                      title={speedAction.description}
-                    >
-                      <span>{speedAction.label}</span>
-                      {speedAction.control}
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -2019,7 +2025,7 @@ export function CodexLaunchPreviewModal({
                       {loading
                         ? t("common.loading", "加载中...")
                         : contextOverridePreset === "preset_516k"
-                          ? "516K / 460K"
+                          ? "516K / 464K"
                           : contextOverridePreset === "preset_1m"
                             ? "1M / 900K"
                             : contextOverridePreset === "custom"
@@ -2189,7 +2195,6 @@ export function CodexLaunchPreviewModal({
                   type="button"
                   className="btn btn-secondary"
                   onClick={requestClose}
-                  disabled={busy}
                 >
                   {t("common.close", "关闭")}
                 </button>

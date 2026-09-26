@@ -728,7 +728,8 @@ fn build_subscription_headers(
 async fn fetch_subscription_account_check(
     account: &CodexAccount,
 ) -> Result<SubscriptionStatusSnapshot, String> {
-    let client = reqwest::Client::new();
+    let client = crate::modules::codex_proxy_runtime::client_builder(account, reqwest::Client::builder()).await?
+        .build().map_err(|_| "PROXY_CLIENT_FAILED")?;
     let headers =
         build_subscription_headers(account, "/backend-api/accounts/check/v4-2023-04-27", None)?;
     let timezone_offset_min = current_chatgpt_timezone_offset_min();
@@ -778,7 +779,8 @@ async fn fetch_subscriptions_snapshot(
     account: &CodexAccount,
     account_id: &str,
 ) -> Result<SubscriptionStatusSnapshot, String> {
-    let client = reqwest::Client::new();
+    let client = crate::modules::codex_proxy_runtime::client_builder(account, reqwest::Client::builder()).await?
+        .build().map_err(|_| "PROXY_CLIENT_FAILED")?;
     let headers = build_subscription_headers(account, "/backend-api/subscriptions", None)?;
 
     let response = client
@@ -1333,8 +1335,8 @@ async fn send_codex_api_request_with_agent_auth_base_url(
     let account_id = account.account_id.clone().or_else(|| {
         codex_account::extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
     });
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
+    let client = crate::modules::codex_proxy_runtime::client_builder(account, reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))).await?
         .build()
         .map_err(|error| format!("创建 Codex 上游客户端失败: {}", error))?;
     let mut current = account.clone();

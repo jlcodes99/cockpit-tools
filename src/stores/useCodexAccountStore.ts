@@ -14,6 +14,7 @@ import {
 import * as codexService from '../services/codexService';
 import { removeAccountIdsFromAllCodexGroups } from '../services/codexAccountGroupService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
+import { withoutCachedProxySecret } from '../utils/codexProxyCache';
 
 const APP_PROFILE = (import.meta.env.VITE_COCKPIT_TOOLS_PROFILE || '').trim();
 const STORAGE_PROFILE_SUFFIX = APP_PROFILE && APP_PROFILE !== 'prod' ? `.${APP_PROFILE}` : '';
@@ -36,7 +37,13 @@ const loadCachedCodexAccounts = () => {
     const raw = localStorage.getItem(CODEX_ACCOUNTS_CACHE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const accounts = parsed.filter((account) => account && typeof account === 'object');
+    const sanitized = accounts.map(withoutCachedProxySecret);
+    if (accounts.some((account) => Object.prototype.hasOwnProperty.call(account, 'egress_proxy_url'))) {
+      try { localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(sanitized)); } catch { /* cache is optional */ }
+    }
+    return sanitized;
   } catch {
     return [];
   }
@@ -46,7 +53,13 @@ const loadCachedCodexCurrentAccount = () => {
   try {
     const raw = localStorage.getItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as CodexAccount;
+    const parsed = JSON.parse(raw) as CodexAccount | null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const sanitized = withoutCachedProxySecret(parsed);
+    if (Object.prototype.hasOwnProperty.call(parsed, 'egress_proxy_url')) {
+      try { localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(sanitized)); } catch { /* cache is optional */ }
+    }
+    return sanitized;
   } catch {
     return null;
   }
@@ -57,7 +70,7 @@ const initialCachedCodexCurrentAccount = loadCachedCodexCurrentAccount();
 
 const persistCodexAccountsCache = (accounts: CodexAccount[]) => {
   try {
-    localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(accounts));
+    localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(accounts.map(withoutCachedProxySecret)));
   } catch {
     // ignore cache write failures
   }
@@ -69,7 +82,7 @@ const persistCodexCurrentAccountCache = (account: CodexAccount | null) => {
       localStorage.removeItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY);
       return;
     }
-    localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(account));
+    localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(withoutCachedProxySecret(account)));
   } catch {
     // ignore cache write failures
   }
@@ -96,10 +109,12 @@ const mergeCodexAccountIntoList = (
 
 type FetchCodexAccountsOptions = {
   allowEmpty?: boolean;
+  throwOnError?: boolean;
 };
 
 type FetchCodexCurrentAccountOptions = {
   allowEmpty?: boolean;
+  throwOnError?: boolean;
 };
 
 type SwitchCodexAccountOptions = {
@@ -152,6 +167,10 @@ interface CodexAccountState {
     boundOauthAccountId: string | null,
   ) => Promise<CodexAccount>;
   updateAccountTags: (accountId: string, tags: string[]) => Promise<CodexAccount>;
+  updateAccountEgressProxy: (
+    accountId: string,
+    egressProxyUrl: string | null,
+  ) => Promise<CodexAccount>;
   updateAccountNote: (
     accountId: string,
     update: string | CodexAccountNoteUpdate,
@@ -186,9 +205,11 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       void get().hydrateAccountProfilesIfNeeded(accounts.map((account) => account.id));
     } catch (e) {
       if (requestId !== fetchCodexAccountsSeq) {
+        if (options?.throwOnError) throw e;
         return;
       }
       set({ error: String(e), loading: false });
+      if (options?.throwOnError) throw e;
     }
   },
 
@@ -204,9 +225,11 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       persistCodexCurrentAccountCache(currentAccount);
     } catch (e) {
       if (requestId !== fetchCodexCurrentAccountSeq) {
+        if (options?.throwOnError) throw e;
         return;
       }
       console.error('获取当前 Codex 账号失败:', e);
+      if (options?.throwOnError) throw e;
     }
   },
 
@@ -531,6 +554,13 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
   updateAccountTags: async (accountId: string, tags: string[]) => {
     const account = await codexService.updateCodexAccountTags(accountId, tags);
     await get().fetchAccounts();
+    return account;
+  },
+
+  updateAccountEgressProxy: async (accountId: string, egressProxyUrl: string | null) => {
+    const account = await codexService.updateCodexAccountEgressProxy(accountId, egressProxyUrl);
+    await get().fetchAccounts();
+    await get().fetchCurrentAccount();
     return account;
   },
 

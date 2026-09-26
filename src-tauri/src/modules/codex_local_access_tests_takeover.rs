@@ -790,6 +790,8 @@
                 "migrations": ["add-gpt-6-astra-model"],
                 "models": [
                     {"model_id": "gpt-6-astra", "display_name": "6 Astra"},
+                    {"model_id": "gpt-6-sol", "display_name": "6 Sol"},
+                    {"model_id": "gpt-6-luna", "display_name": "6 Luna"},
                     {"model_id": "gpt-5.6-sol", "display_name": "5.6 Sol"},
                     {"model_id": "gpt-5.6-terra", "display_name": "5.6 Terra"},
                     {"model_id": "gpt-5.6-luna", "display_name": "5.6 Luna"},
@@ -825,6 +827,8 @@
             .collect::<HashMap<_, _>>();
         for (slug, expected_name) in [
             ("gpt-6-astra", "GPT-6 Astra"),
+            ("gpt-6-sol", "GPT-6 Sol"),
+            ("gpt-6-luna", "GPT-6 Luna"),
             ("gpt-5.6-sol", "GPT-5.6 Sol"),
             ("gpt-5.6-terra", "GPT-5.6 Terra"),
             ("gpt-5.6-luna", "GPT-5.6 Luna"),
@@ -927,6 +931,7 @@
 
     #[tokio::test]
     async fn sidecar_config_disables_chat_image_generation_for_oauth_pool() {
+        let _shared_state = crate::modules::codex_unified_proxy::TestCacheGuard::new();
         let dir = make_temp_dir("codex-sidecar-oauth-image-generation");
         let account = CodexAccount::new(
             "oauth-image-generation-1".to_string(),
@@ -958,6 +963,7 @@
 
     #[tokio::test]
     async fn sidecar_config_uses_streaming_bootstrap_retry_setting() {
+        let _shared_state = crate::modules::codex_unified_proxy::TestCacheGuard::new();
         let dir = make_temp_dir("codex-sidecar-streaming-bootstrap-retries");
         let account = CodexAccount::new(
             "oauth-streaming-retries-1".to_string(),

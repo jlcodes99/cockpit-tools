@@ -777,6 +777,7 @@
 }
 
 .export-json-sensitive-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -790,8 +791,13 @@
 
 .export-json-sensitive-toggle input {
   position: absolute;
+  top: 50%;
+  left: 0;
   width: 1px;
   height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
   opacity: 0;
   pointer-events: none;
 }

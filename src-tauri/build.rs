@@ -178,8 +178,10 @@ fn main() {
     }
     build_cockpit_cliproxy_sidecar();
 
+    // The cfg gate selects the build host. Only link Swift for a macOS target,
+    // otherwise macOS-to-Windows builds inherit Darwin-only linker arguments.
     #[cfg(target_os = "macos")]
-    {
+    if target.ends_with("-apple-darwin") {
         SwiftLinker::new("12.0")
             .with_package("MacosNativeMenuSwift", "native/macos-native-menu")
             .link();

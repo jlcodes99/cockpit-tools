@@ -2,11 +2,25 @@
 // 通过 include! 保持原 modules::process 作用域和平台分支行为。
 /// 启动 Codex 默认桌面实例（不注入 CODEX_HOME，支持附加参数）。
 pub fn start_codex_default(extra_args: &[String]) -> Result<u32, String> {
-    start_codex_default_internal(extra_args, false)
+    start_codex_default_internal(extra_args, false, None)
 }
 
 pub fn start_codex_default_fast_after_close(extra_args: &[String]) -> Result<u32, String> {
-    start_codex_default_internal(extra_args, true)
+    start_codex_default_internal(extra_args, true, None)
+}
+
+pub fn start_codex_default_with_egress(
+    extra_args: &[String],
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
+    start_codex_default_internal(extra_args, false, egress_proxy_url)
+}
+
+pub fn start_codex_default_fast_after_close_with_egress(
+    extra_args: &[String],
+    egress_proxy_url: Option<&str>,
+) -> Result<u32, String> {
+    start_codex_default_internal(extra_args, true, egress_proxy_url)
 }
 
 fn build_codex_app_launch_args(extra_args: &[String]) -> Vec<String> {
@@ -25,6 +39,7 @@ fn build_codex_default_launch_args(extra_args: &[String]) -> Vec<String> {
 fn start_codex_default_internal(
     extra_args: &[String],
     fast_after_close: bool,
+    egress_proxy_url: Option<&str>,
 ) -> Result<u32, String> {
     #[cfg(not(target_os = "windows"))]
     let _ = fast_after_close;
@@ -40,7 +55,13 @@ fn start_codex_default_internal(
         let args = build_codex_default_launch_args(extra_args);
 
         // 使用 open -n -a 启动默认实例，避免复用已运行的其他 Codex 实例。
-        let open_pid = spawn_open_app_with_options(&app_root, &args, true)
+        let open_pid = spawn_open_app_with_options_and_env_and_egress(
+            &app_root,
+            &args,
+            true,
+            &[],
+            egress_proxy_url,
+        )
             .map_err(|e| format!("启动 Codex 失败: {}", e))?;
         crate::modules::logger::log_info("Codex 默认实例启动命令已发送（open -n -a）");
         let probe_started = Instant::now();
@@ -99,7 +120,19 @@ fn start_codex_default_internal(
                 app_user_model_id
             ));
             let args = build_codex_default_launch_args(extra_args);
-            match launch_codex_via_store_app_user_model_id(&app_user_model_id, None, None, &args) {
+            let launch_env = egress_proxy_url
+                .map(account_proxy_env_pairs)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(key, value)| (key.to_string(), value))
+                .collect::<Vec<_>>();
+            match launch_codex_via_store_app_user_model_id(
+                &app_user_model_id,
+                None,
+                None,
+                &args,
+                &launch_env,
+            ) {
                 Ok(()) => {
                     store_entry_launched = true;
                     crate::modules::logger::log_info(&format!(
@@ -221,7 +254,7 @@ fn start_codex_default_internal(
             launch_path_text
         ));
         let mut cmd = Command::new(&launch_path);
-        apply_managed_proxy_env_to_command(&mut cmd);
+        apply_effective_proxy_env_to_command(&mut cmd, egress_proxy_url);
         if should_detach_child() {
             cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
             cmd.stdin(Stdio::null())
@@ -272,7 +305,7 @@ fn start_codex_default_internal(
     {
         let launch_path = resolve_codex_launch_path()?;
         let mut command = Command::new(&launch_path);
-        apply_managed_proxy_env_to_command(&mut command);
+        apply_effective_proxy_env_to_command(&mut command, egress_proxy_url);
         sanitize_linux_gui_launch_env(&mut command);
         for arg in build_codex_default_launch_args(extra_args) {
             command.arg(arg);
@@ -302,6 +335,7 @@ fn start_codex_default_internal(
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = extra_args;
+        let _ = egress_proxy_url;
         Err("当前系统不支持 Codex 桌面应用启动".to_string())
     }
 }
@@ -401,6 +435,11 @@ pub fn close_codex_default(timeout_secs: u64) -> Result<(), String> {
     }
 }
 
+/// macOS 优雅关闭（osascript）的最长等待时间：超时即回落强杀，避免自动化权限
+/// 弹窗或 System Events 无响应把启动流程挂住。
+#[cfg(target_os = "macos")]
+const CODEX_GRACEFUL_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[cfg(target_os = "macos")]
 fn request_codex_graceful_close(pid: u32) -> bool {
     if pid == 0 || !is_pid_running(pid) {
@@ -415,39 +454,77 @@ fn request_codex_graceful_close(pid: u32) -> bool {
         "[Codex Close] graceful osascript start pid={}",
         pid
     ));
-    match Command::new("osascript")
+    // osascript 会等待 System Events 回应；自动化权限弹窗、权限被拒或 System Events
+    // 无响应时可能长时间不返回，进而让整个启动/关闭流程看起来卡死。这里改为带
+    // 超时的等待：超时后结束 osascript，直接回落到强杀流程。
+    let mut child = match Command::new("osascript")
         .args([
             "-e",
             &focus_script,
             "-e",
             "tell application \"System Events\" to keystroke \"q\" using command down",
         ])
-        .output()
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
     {
-        Ok(output) => {
-            if output.status.success() {
-                crate::modules::logger::log_info(&format!(
-                    "[Codex Close] graceful osascript success pid={}",
-                    pid
-                ));
-                true
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                crate::modules::logger::log_warn(&format!(
-                    "[Codex Close] graceful osascript failed pid={} err={}",
-                    pid,
-                    stderr.trim()
-                ));
-                false
-            }
-        }
+        Ok(child) => child,
         Err(err) => {
             crate::modules::logger::log_warn(&format!(
                 "[Codex Close] graceful osascript error pid={} err={}",
                 pid, err
             ));
+            return false;
+        }
+    };
+    let deadline = Instant::now() + CODEX_GRACEFUL_CLOSE_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    crate::modules::logger::log_warn(&format!(
+                        "[Codex Close] graceful osascript 超时，改为强制关闭: pid={}, timeout_ms={}",
+                        pid,
+                        CODEX_GRACEFUL_CLOSE_TIMEOUT.as_millis()
+                    ));
+                    return false;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(err) => {
+                crate::modules::logger::log_warn(&format!(
+                    "[Codex Close] graceful osascript error pid={} err={}",
+                    pid, err
+                ));
+                return false;
+            }
+        }
+    };
+    match status {
+        Some(status) if status.success() => {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Close] graceful osascript success pid={}",
+                pid
+            ));
+            true
+        }
+        Some(_) => {
+            let mut stderr_text = String::new();
+            if let Some(mut stderr) = child.stderr.take() {
+                use std::io::Read;
+                let _ = stderr.read_to_string(&mut stderr_text);
+            }
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Close] graceful osascript failed pid={} err={}",
+                pid,
+                stderr_text.trim()
+            ));
             false
         }
+        None => false,
     }
 }
 

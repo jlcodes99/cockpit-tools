@@ -533,9 +533,9 @@ fn insert_local_access_usage_event(
         .as_deref()
         .and_then(normalize_recorded_reasoning_effort)
         .unwrap_or_default();
-    // state 只记录长度与分级，原文不入库。
-    let turn_state_length = event.turn_state_length.filter(|value| *value > 0);
-    let turn_state_class = normalize_turn_state_class(event.turn_state_class.as_deref()).unwrap_or_default();
+    // 风控检测已移除：列结构保留以兼容历史库，但不再写入新的 state 观测值。
+    let turn_state_length: Option<i64> = None;
+    let turn_state_class = "";
     let token_breakdown_json = serialize_token_breakdown_for_db(event.token_breakdown.as_ref());
     if has_service_tier_column && has_reasoning_effort_column {
         conn.execute(
@@ -1515,13 +1515,6 @@ fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalA
     let request_kind: String = row.get("request_kind")?;
     let service_tier: String = row.get("service_tier")?;
     let reasoning_effort: String = row.get::<_, String>("reasoning_effort").unwrap_or_default();
-    // 旧库或旧 SELECT 可能没有这两列，读取失败时按「无观测」处理。
-    let turn_state_length: Option<i64> = row
-        .get::<_, Option<i64>>("turn_state_length")
-        .unwrap_or(None);
-    let turn_state_class: String = row
-        .get::<_, String>("turn_state_class")
-        .unwrap_or_default();
     let success: i64 = row.get("success")?;
     let http_status: Option<i64> = row.get("http_status")?;
     let gateway_mode: String = row.get("gateway_mode")?;
@@ -1549,9 +1542,6 @@ fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalA
         request_kind: request_kind_from_db_value(request_kind.as_str()),
         service_tier: normalize_proxy_service_tier(service_tier.as_str()).map(str::to_string),
         reasoning_effort: normalize_recorded_reasoning_effort(reasoning_effort.as_str())
-            .map(str::to_string),
-        turn_state_length: turn_state_length.filter(|value| *value > 0),
-        turn_state_class: normalize_turn_state_class(Some(turn_state_class.as_str()))
             .map(str::to_string),
         success: success != 0,
         http_status: http_status.and_then(|value| u16::try_from(value).ok()),
@@ -1698,6 +1688,145 @@ fn empty_usage_event_page(page: u32, page_size: u32) -> CodexLocalAccessUsageEve
         page: page.max(1),
         page_size: page_size.clamp(1, 200),
         total_pages: 1,
+    }
+}
+
+/// Only completed local API-service metadata is exposed to the account proxy UI.
+/// This log does not record or prove the public exit of each request.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexAccountProxyRecentRequest {
+    timestamp: i64,
+    model_id: String,
+    success: bool,
+    http_status: Option<i64>,
+    latency_ms: i64,
+}
+
+fn query_recent_account_proxy_requests_from_conn(
+    conn: &Connection,
+    account_id: &str,
+) -> Result<Vec<CodexAccountProxyRecentRequest>, SqliteError> {
+    let mut stmt = conn.prepare(
+        "SELECT timestamp, model_id, success, http_status, latency_ms \
+         FROM request_logs WHERE account_id = ?1 AND gateway_mode = 'sidecar' \
+         ORDER BY timestamp DESC, id DESC LIMIT 8",
+    )?;
+    let rows = stmt.query_map(params![account_id], |row| {
+        Ok(CodexAccountProxyRecentRequest {
+            timestamp: row.get(0)?,
+            model_id: row.get(1)?,
+            success: row.get::<_, i64>(2)? != 0,
+            http_status: row.get(3)?,
+            latency_ms: row.get(4)?,
+        })
+    })?;
+    rows.collect()
+}
+
+pub async fn query_recent_account_proxy_requests(
+    account_id: String,
+) -> Result<Vec<CodexAccountProxyRecentRequest>, String> {
+    if account_id.trim().is_empty()
+        || account_id.len() > 256
+        || account_id.chars().any(char::is_control)
+    {
+        return Err("PROXY_INVALID_ACCOUNT".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = local_access_logs_db_path()?;
+        read_recent_account_proxy_requests(&path, &account_id)
+    })
+    .await
+    .map_err(|_| "PROXY_LOGS_UNAVAILABLE".to_string())?
+}
+
+// Historical metadata is independent of today's account/proxy/engine configuration.
+// Keep this a read-only path: no account decryption, runtime startup or DB migration.
+fn read_recent_account_proxy_requests(
+    path: &Path,
+    account_id: &str,
+) -> Result<Vec<CodexAccountProxyRecentRequest>, String> {
+    if !path.try_exists().map_err(|_| "PROXY_LOGS_UNAVAILABLE".to_string())? {
+        return Ok(Vec::new());
+    }
+    let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|_| "PROXY_LOGS_UNAVAILABLE".to_string())?;
+    conn.busy_timeout(Duration::from_secs(1))
+        .map_err(|_| "PROXY_LOGS_UNAVAILABLE".to_string())?;
+    query_recent_account_proxy_requests_from_conn(&conn, account_id)
+        .map_err(|_| "PROXY_LOGS_UNAVAILABLE".to_string())
+}
+
+#[cfg(test)]
+mod account_proxy_recent_request_tests {
+    use super::*;
+
+    #[test]
+    fn history_reads_need_only_the_log_db_and_never_create_or_repair_it() {
+        struct Fixture(PathBuf);
+        impl Drop for Fixture {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let fixture = Fixture(std::env::temp_dir().join(format!(
+            "cockpit-proxy-history-{}", uuid::Uuid::new_v4()
+        )));
+        fs::create_dir_all(&fixture.0).unwrap();
+        let path = fixture.0.join("history.db");
+        // No account file, binding, unified settings, or engine exists in this fixture.
+        assert!(read_recent_account_proxy_requests(&path, "unbound-account").unwrap().is_empty());
+        assert!(!path.exists(), "reading absent history must not create a database");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE request_logs (
+            id INTEGER PRIMARY KEY, timestamp INTEGER, account_id TEXT, gateway_mode TEXT,
+            model_id TEXT, success INTEGER, http_status INTEGER, latency_ms INTEGER
+        );").unwrap();
+        for id in 1..=12 {
+            conn.execute("INSERT INTO request_logs VALUES (?1, ?1, 'unbound-account', 'sidecar', 'model', 1, 200, 10)", params![id]).unwrap();
+        }
+        drop(conn);
+        let before = fs::read(&path).unwrap();
+        let rows = read_recent_account_proxy_requests(&path, "unbound-account").unwrap();
+        assert_eq!(rows.iter().map(|row| row.timestamp).collect::<Vec<_>>(), vec![12, 11, 10, 9, 8, 7, 6, 5]);
+        assert!(read_recent_account_proxy_requests(&path, "other-account").unwrap().is_empty());
+        assert_eq!(fs::read(&path).unwrap(), before, "history reads must not modify storage");
+        fs::write(&path, b"corrupt sqlite database").unwrap();
+        assert_eq!(read_recent_account_proxy_requests(&path, "unbound-account").unwrap_err(), "PROXY_LOGS_UNAVAILABLE");
+        assert_eq!(fs::read(&path).unwrap(), b"corrupt sqlite database");
+    }
+
+    #[test]
+    fn recent_request_summary_filters_exact_account_and_excludes_secrets() {
+        let conn = Connection::open_in_memory().expect("open database");
+        conn.execute_batch(
+            "CREATE TABLE request_logs (
+            id INTEGER PRIMARY KEY, timestamp INTEGER, account_id TEXT, gateway_mode TEXT,
+            model_id TEXT, success INTEGER, http_status INTEGER, latency_ms INTEGER,
+            error_message TEXT, api_key_label TEXT
+        );",
+        )
+        .expect("create request log table");
+        for (id, account_id, gateway_mode) in [
+            (1, "account-a", "sidecar"),
+            (2, "account-a-other", "sidecar"),
+            (3, "account-a", "legacy"),
+        ] {
+            conn.execute(
+                "INSERT INTO request_logs (id, timestamp, account_id, gateway_mode, model_id, success, http_status, latency_ms, error_message, api_key_label)
+                 VALUES (?1, ?1, ?2, ?3, 'gpt-test', 1, 200, 12, 'secret-error', 'secret-key')",
+                params![id, account_id, gateway_mode],
+            ).expect("insert request log");
+        }
+        let rows = query_recent_account_proxy_requests_from_conn(&conn, "account-a")
+            .expect("query recent requests");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].timestamp, 1);
+        let serialized = serde_json::to_string(&rows).expect("serialize summary");
+        assert!(!serialized.contains("secret-error"));
+        assert!(!serialized.contains("secret-key"));
+        assert!(!serialized.contains("account-a"));
     }
 }
 
@@ -2319,7 +2448,7 @@ fn append_usage_event(
     model_pricing_version: u64,
     estimated_cost_usd: f64,
 ) -> CodexLocalAccessUsageEvent {
-    append_usage_event_with_turn_state(
+    append_usage_event_with_meta(
         events,
         now,
         request_id,
@@ -2344,12 +2473,10 @@ fn append_usage_event(
         pricing,
         model_pricing_version,
         estimated_cost_usd,
-        None,
-        None,
     )
 }
 
-fn append_usage_event_with_turn_state(
+fn append_usage_event_with_meta(
     events: &mut Vec<CodexLocalAccessUsageEvent>,
     now: i64,
     request_id: Option<&str>,
@@ -2374,8 +2501,6 @@ fn append_usage_event_with_turn_state(
     pricing: Option<&CodexLocalAccessModelPricing>,
     model_pricing_version: u64,
     estimated_cost_usd: f64,
-    turn_state_length: Option<i64>,
-    turn_state_class: Option<&str>,
 ) -> CodexLocalAccessUsageEvent {
     let usage = usage.cloned().unwrap_or_default();
     let model_id = model_id.unwrap_or_default().trim().to_string();
@@ -2406,9 +2531,6 @@ fn append_usage_event_with_turn_state(
         reasoning_effort: reasoning_effort
             .and_then(normalize_recorded_reasoning_effort)
             .map(str::to_string),
-        // 只保留长度与分级；state 原文（含观测到的那一份）不进入任何持久化结构。
-        turn_state_length: turn_state_length.filter(|value| *value > 0),
-        turn_state_class: normalize_turn_state_class(turn_state_class).map(str::to_string),
         success,
         http_status,
         error_category: error_category.unwrap_or_default().trim().to_string(),

@@ -735,6 +735,24 @@
   background: rgba(239, 68, 68, 0.15);
 }
 
+/* 配置读取中的占位：避免加载期间弹层看起来“什么都没有” */
+.qs-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 24px 28px;
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.qs-loading .loading-spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
 .qs-modal .settings-account-scope-toolbar {
   grid-template-columns: 1fr;
   align-items: stretch;

@@ -16,6 +16,8 @@ import { CODEX_ADDITIONAL_QUOTA_VISIBILITY_CHANGED_EVENT, CODEX_CODE_REVIEW_QUOT
 import { emitAccountsChanged } from "../utils/accountSyncEvents";
 import { resolveCodexModelProviderAccountName } from "../utils/codexModelProviderAccountName";
 import { readCodexCustomSortOrder, writeCodexCustomSortActive, writeCodexCustomSortOrder } from "../utils/codexAccountOverview";
+import { shouldDefaultReauthProxy, oauthProxyUseAfterStart, oauthStartProxyArgs } from "../utils/codexOAuthReauthProxy";
+import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import { CODEX_API_PROVIDER_CUSTOM_ID, COCKPIT_API_PROVIDER_ID, COCKPIT_API_PROVIDER_NAME, DEEPSEEK_API_PROVIDER_ID, codexApiProviderPresetVisionSupport, findCodexApiProviderPresetById, isCockpitApiProviderBaseUrl } from "../utils/codexProviderPresets";
 import { isApiKeyFunProviderBaseUrl } from "../utils/apikeyFunLinks";
 import { type ApiKeyFunPrefillPayload } from "../utils/apiKeyFunPrefill";
@@ -104,6 +106,37 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
     t,
   } = context;
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  const [oauthProxyEnabled, setOauthProxyEnabled] = useState(false);
+  const [oauthProxyInput, setOauthProxyInput] = useState("");
+  const [oauthProxyReady, setOauthProxyReady] = useState(false);
+  const [oauthProxyFieldError, setOauthProxyFieldError] = useState<string | null>(null);
+  const [oauthSessionRevision, setOauthSessionRevision] = useState(0);
+  const oauthProxyChangeSequence = useRef(0);
+  const oauthProxyChanging = useRef(false);
+  const oauthStartTask = useRef<Promise<void> | null>(null);
+  const oauthCancelTask = useRef<Promise<void> | null>(null);
+  const oauthCancelLoginId = useRef<string | null>(null);
+  /** 重新授权默认沿用账号生效出口：留空输入框时由后端解析地址。 */
+  const [oauthProxyUsesAccountExit, setOauthProxyUsesAccountExit] = useState(false);
+  /** 后端确认的出口摘要；null 表示该账号当前没有生效出口。 */
+  const [oauthProxyExitLabel, setOauthProxyExitLabel] = useState<string | null>(null);
+  /** 已经套用默认出口的重新授权账号，避免用户关闭开关后被重新打开。 */
+  const [oauthProxyDefaultAccountId, setOauthProxyDefaultAccountId] = useState<string | null>(null);
+  const isMacOS = usePlatformRuntimeSupport("macos-only");
+  const reauthProxyAccount = useMemo(
+    () => accounts.find((entry) => entry.id === reauthTargetAccountId) ?? null,
+    [accounts, reauthTargetAccountId],
+  );
+  /** 只有重新授权已有账号且平台支持时才默认沿用账号生效出口。 */
+  const reauthProxyDefault = useMemo(
+    () =>
+      shouldDefaultReauthProxy({
+        active: showAddModal && addTab === "oauth",
+        isMacOS,
+        account: reauthProxyAccount,
+      }),
+    [showAddModal, addTab, isMacOS, reauthProxyAccount],
+  );
     const [oauthUrlCopied, setOauthUrlCopied] = useState(false);
     const [oauthPrepareError, setOauthPrepareError] = useState<string | null>(
       null,
@@ -1144,6 +1177,16 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       t,
     ]);
   
+    const describeOauthProxyError = useCallback((error: unknown) => {
+      const raw = String(error).replace(/^Error:\s*/, "");
+      if (!oauthProxyEnabled) return raw;
+      if (raw.includes("PROXY_ENGINE_MISSING")) return t("codex.proxy.engineMissing");
+      if (raw.includes("PROXY_OAUTH_BROWSER_UNSUPPORTED")) return t("codex.oauthProxy.macUnavailable");
+      if (raw.includes("CODEX_OAUTH_START_BUSY") || raw.includes("PROXY_OAUTH_SESSION_ACTIVE")) return t("codex.oauthProxy.busy");
+      if (raw.startsWith("PROXY_")) return t("codex.oauthProxy.connectFailed");
+      return raw;
+    }, [oauthProxyEnabled, t]);
+
     const handleOauthPrepareError = useCallback(
       (e: unknown) => {
         console.error("[CodexOAuth] 准备授权链接失败", { error: String(e) });
@@ -1156,6 +1199,11 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         setDeviceAuthError(null);
         setOauthMethod("browser");
         setDeviceCodeCopied(false);
+        if (oauthProxyEnabled) setOauthProxyReady(false);
+        if (oauthProxyEnabled && /PROXY_INVALID_URL|PROXY_UNSUPPORTED_PROTOCOL/.test(String(e))) {
+          setOauthProxyFieldError(t("codex.oauthProxy.invalid"));
+          return;
+        }
         const match = String(e).match(/CODEX_OAUTH_PORT_IN_USE:(\d+)/);
         if (match) {
           const port = Number(match[1]);
@@ -1164,10 +1212,10 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
           return;
         }
         setOauthPrepareError(
-          t("common.shared.oauth.failed", "授权失败") + ": " + String(e),
+          t("common.shared.oauth.failed", "授权失败") + ": " + describeOauthProxyError(e),
         );
       },
-      [t],
+      [t, oauthProxyEnabled, describeOauthProxyError],
     );
   
     const completeOauthSuccess = useCallback(
@@ -1360,11 +1408,11 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       (e: unknown, allowTokenExchangeRetry = false) => {
         setAddStatus("error");
         setAddMessage(
-          t("common.shared.oauth.failed", "授权失败") + ": " + String(e),
+          t("common.shared.oauth.failed", "授权失败") + ": " + describeOauthProxyError(e),
         );
         setOauthTokenExchangeRetryVisible(allowTokenExchangeRetry);
       },
-      [t, setAddStatus, setAddMessage],
+      [t, setAddStatus, setAddMessage, describeOauthProxyError],
     );
   
     const isOauthTimeoutState = useMemo(
@@ -1480,9 +1528,122 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       setAddMessage,
     ]);
   
+    // Keep the old session identity until cancellation succeeds, so a failure can
+    // be retried without accidentally starting a second, differently routed login.
+    const cancelOauthSession = useCallback((loginId: string): Promise<void> => {
+      if (oauthCancelTask.current && oauthCancelLoginId.current === loginId) {
+        return oauthCancelTask.current;
+      }
+      oauthCancelLoginId.current = loginId;
+      const task = codexService.cancelCodexOAuthLogin(loginId).then(() => {
+        if (oauthCancelLoginId.current === loginId) oauthCancelLoginId.current = null;
+        if (oauthLoginIdRef.current === loginId) oauthLoginIdRef.current = null;
+      });
+      oauthCancelTask.current = task;
+      void task.then(() => {}, () => {}).finally(() => {
+        if (oauthCancelTask.current === task) oauthCancelTask.current = null;
+        setOauthSessionRevision((value) => value + 1);
+      });
+      return task;
+    }, []);
+
+    const discardOauthForProxyChoice = async () => {
+      ++oauthAttemptSeqRef.current;
+      const loginId = oauthCancelLoginId.current ?? oauthLoginIdRef.current;
+      oauthActiveRef.current = false;
+      setOauthUrl(null);
+      setOauthPrepareError(null);
+      setOauthTimeoutInfo(null);
+      setOauthCallbackError(null);
+      setDeviceAuthInfo(null);
+      setDeviceAuthError(null);
+      setDeviceAuthStarting(false);
+      // A start already in flight must finish its stale-session cleanup before a
+      // replacement is allowed to start. Concurrent edits share cancellation.
+      await Promise.all([
+        loginId ? cancelOauthSession(loginId) : Promise.resolve(),
+        oauthStartTask.current,
+      ]);
+    };
+
+    const handleOauthProxyToggle = async (enabled: boolean) => {
+      const sequence = ++oauthProxyChangeSequence.current;
+      oauthProxyChanging.current = true;
+      setOauthProxyReady(false);
+      setOauthProxyFieldError(null);
+      try {
+        await discardOauthForProxyChoice();
+        if (sequence !== oauthProxyChangeSequence.current || !showAddModalRef.current || addTabRef.current !== "oauth") return;
+        setOauthProxyEnabled(enabled);
+        if (enabled) setOauthMethod("browser");
+        // 账号出口模式下允许留空输入框，由后端解析地址；重新打开开关时沿用已确认的出口。
+        setOauthProxyUsesAccountExit(enabled && Boolean(oauthProxyExitLabel));
+        if (!enabled) setOauthProxyInput("");
+      } catch (error) {
+        if (sequence === oauthProxyChangeSequence.current && showAddModalRef.current) {
+          setOauthPrepareError(t("codex.oauthProxy.cancelFailed", { error: String(error) }));
+        }
+      } finally {
+        if (sequence === oauthProxyChangeSequence.current) {
+          oauthProxyChanging.current = false;
+          setOauthSessionRevision((value) => value + 1);
+        }
+      }
+    };
+
+    const handleOauthProxyInputChange = (value: string) => {
+      setOauthProxyInput(value);
+      setOauthProxyFieldError(null);
+      // 用户改成其他地址：不再沿用账号生效出口，出口说明改由本次输入决定。
+      if (value.trim()) setOauthProxyUsesAccountExit(false);
+      if (oauthProxyReady || oauthProxyChanging.current || oauthCancelLoginId.current) {
+        const sequence = ++oauthProxyChangeSequence.current;
+        oauthProxyChanging.current = true;
+        setOauthProxyReady(false);
+        void discardOauthForProxyChoice().catch((error) => {
+          if (sequence === oauthProxyChangeSequence.current && showAddModalRef.current) {
+            setOauthPrepareError(t("codex.oauthProxy.cancelFailed", { error: String(error) }));
+          }
+        }).finally(() => {
+          if (sequence === oauthProxyChangeSequence.current) {
+            oauthProxyChanging.current = false;
+            setOauthSessionRevision((revision) => revision + 1);
+          }
+        });
+      }
+    };
+
+    const handleOauthProxyStart = async () => {
+      if (!oauthProxyInput.trim() && !oauthProxyUsesAccountExit) {
+        setOauthProxyFieldError(t("codex.oauthProxy.required"));
+        return;
+      }
+      setOauthProxyFieldError(null);
+      setOauthPrepareError(null);
+      if (oauthProxyChanging.current || oauthCancelLoginId.current) {
+        const sequence = ++oauthProxyChangeSequence.current;
+        oauthProxyChanging.current = true;
+        try {
+          await discardOauthForProxyChoice();
+          if (sequence !== oauthProxyChangeSequence.current || !showAddModalRef.current || addTabRef.current !== "oauth") return;
+        } catch (error) {
+          if (sequence === oauthProxyChangeSequence.current && showAddModalRef.current) {
+            setOauthPrepareError(t("codex.oauthProxy.cancelFailed", { error: String(error) }));
+          }
+          return;
+        } finally {
+          if (sequence === oauthProxyChangeSequence.current) {
+            oauthProxyChanging.current = false;
+            setOauthSessionRevision((value) => value + 1);
+          }
+        }
+      }
+      setOauthProxyReady(true);
+    };
+
     const prepareOauthUrl = useCallback(() => {
       if (!showAddModalRef.current || addTabRef.current !== "oauth") return;
-      if (oauthActiveRef.current) return;
+      if (oauthActiveRef.current || oauthProxyChanging.current || oauthStartTask.current || oauthCancelLoginId.current) return;
       const attemptSeq = ++oauthAttemptSeqRef.current;
       oauthActiveRef.current = true;
       setOauthPrepareError(null);
@@ -1493,15 +1654,36 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       setOauthCallbackError(null);
       setOauthTokenExchangeRetryVisible(false);
   
-      codexService
-        .startCodexOAuthLogin()
-        .then(({ loginId, authUrl }) => {
+      const proxyArgs = oauthStartProxyArgs({
+        enabled: oauthProxyEnabled,
+        input: oauthProxyInput,
+        usesAccountExit: oauthProxyUsesAccountExit,
+        reauthAccountId: reauthTargetAccountId,
+      });
+      const task = codexService
+        .startCodexOAuthLogin(
+          proxyArgs.proxyUrl ?? undefined,
+          proxyArgs.reauthAccountId ?? undefined,
+        )
+        .then(async ({ loginId, authUrl, proxy }) => {
           if (attemptSeq !== oauthAttemptSeqRef.current) {
             if (loginId) {
-              codexService.cancelCodexOAuthLogin(loginId).catch(() => {});
+              await cancelOauthSession(loginId);
             }
             oauthLog("忽略过期 OAuth start 响应", { loginId, attemptSeq });
             return;
+          }
+          // 自动模式以后端解析结果为准：显示本次登录使用的出口，或回到原有默认授权路径。
+          const proxyOutcome = oauthProxyUseAfterStart({
+            usesAccountExit: oauthProxyUsesAccountExit,
+            input: oauthProxyInput,
+            proxy,
+          });
+          if (proxyOutcome) {
+            setOauthProxyEnabled(proxyOutcome.enabled);
+            setOauthProxyUsesAccountExit(proxyOutcome.usesAccountExit);
+            setOauthProxyExitLabel(proxyOutcome.label);
+            if (proxyOutcome.input) setOauthProxyInput(proxyOutcome.input);
           }
           oauthLoginIdRef.current = loginId ?? null;
           if (
@@ -1514,8 +1696,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
           } else {
             oauthActiveRef.current = false;
           }
-        })
-        .catch((e) => {
+        }, (e) => {
           if (attemptSeq !== oauthAttemptSeqRef.current) {
             oauthLog("忽略过期 OAuth start 异常回调", {
               attemptSeq,
@@ -1525,15 +1706,56 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
           }
           handleOauthPrepareError(e);
         });
-    }, [handleOauthPrepareError, oauthLog]);
+      oauthStartTask.current = task;
+      void task.catch((error) => {
+        if (showAddModalRef.current && addTabRef.current === "oauth") {
+          setOauthPrepareError(t("codex.oauthProxy.cancelFailed", { error: String(error) }));
+        }
+      }).finally(() => {
+        if (oauthStartTask.current === task) oauthStartTask.current = null;
+        setOauthSessionRevision((value) => value + 1);
+      });
+    }, [
+      handleOauthPrepareError,
+      oauthLog,
+      oauthProxyEnabled,
+      oauthProxyInput,
+      oauthProxyUsesAccountExit,
+      reauthTargetAccountId,
+      cancelOauthSession,
+      t,
+    ]);
   
+    useEffect(() => {
+      if (!reauthProxyDefault) return;
+      if (oauthProxyDefaultAccountId === reauthTargetAccountId) return;
+      // 已经发起过授权（例如账号列表晚到）时保持当前会话，不让界面显示并未生效的出口。
+      if (oauthActiveRef.current) return;
+      // 重新授权已有账号：默认沿用其生效出口，地址由后端解析后再回填。
+      setOauthProxyDefaultAccountId(reauthTargetAccountId);
+      setOauthProxyEnabled(true);
+      setOauthProxyUsesAccountExit(true);
+      setOauthProxyReady(true);
+      setOauthProxyExitLabel(null);
+      setOauthProxyFieldError(null);
+      setOauthPrepareError(null);
+    }, [
+      reauthProxyDefault,
+      reauthTargetAccountId,
+      oauthProxyDefaultAccountId,
+    ]);
+
     useEffect(() => {
       if (
         !showAddModal ||
         addTab !== "oauth" ||
         oauthUrl ||
+        oauthPrepareError ||
         oauthTimeoutInfo ||
         oauthMethod !== "browser" ||
+        (oauthProxyEnabled && !oauthProxyReady) ||
+        // 默认出口尚未套用前不要先发起一次直连会话。
+        (reauthProxyDefault && oauthProxyDefaultAccountId !== reauthTargetAccountId) ||
         deviceAuthInfo ||
         deviceAuthStarting ||
         deviceAuthError
@@ -1544,8 +1766,15 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       showAddModal,
       addTab,
       oauthUrl,
+      oauthPrepareError,
+      oauthSessionRevision,
       oauthTimeoutInfo,
       oauthMethod,
+      oauthProxyEnabled,
+      oauthProxyReady,
+      reauthProxyDefault,
+      oauthProxyDefaultAccountId,
+      reauthTargetAccountId,
       deviceAuthInfo,
       deviceAuthStarting,
       deviceAuthError,
@@ -1554,8 +1783,17 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
   
     useEffect(() => {
       if (showAddModal && addTab === "oauth") return;
+      // Invalidate pending proxy edits even if the dialog is reopened before
+      // their cancellation IPC completes.
+      oauthProxyChangeSequence.current += 1;
+      oauthProxyChanging.current = false;
       const loginId = oauthLoginIdRef.current ?? undefined;
       const hasOauthUiResidue =
+        oauthProxyEnabled ||
+        oauthProxyUsesAccountExit ||
+        Boolean(oauthProxyExitLabel) ||
+        Boolean(oauthProxyDefaultAccountId) ||
+        oauthProxyInput.length > 0 ||
         Boolean(oauthUrl) ||
         Boolean(oauthTimeoutInfo) ||
         oauthCallbackInput.length > 0 ||
@@ -1576,7 +1814,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         return;
       oauthAttemptSeqRef.current += 1;
       if (loginId) {
-        codexService.cancelCodexOAuthLogin(loginId).catch(() => {});
+        void cancelOauthSession(loginId).catch(() => {});
       }
       oauthActiveRef.current = false;
       oauthCompletingRef.current = false;
@@ -1592,6 +1830,13 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       setDeviceAuthError(null);
       setOauthMethod("browser");
       setDeviceCodeCopied(false);
+      setOauthProxyEnabled(false);
+      setOauthProxyReady(false);
+      setOauthProxyInput("");
+      setOauthProxyFieldError(null);
+      setOauthProxyUsesAccountExit(false);
+      setOauthProxyExitLabel(null);
+      setOauthProxyDefaultAccountId(null);
     }, [
       showAddModal,
       addTab,
@@ -1607,6 +1852,12 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       oauthPortInUse,
       oauthUrlCopied,
       oauthTokenExchangeRetryVisible,
+      oauthProxyEnabled,
+      oauthProxyInput,
+      oauthProxyUsesAccountExit,
+      oauthProxyExitLabel,
+      oauthProxyDefaultAccountId,
+      cancelOauthSession,
     ]);
   
     useEffect(
@@ -1615,13 +1866,13 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         const loginId = oauthLoginIdRef.current ?? undefined;
         if (loginId) {
           oauthLog("页面卸载，准备取消授权流程", { loginId });
-          codexService.cancelCodexOAuthLogin(loginId).catch(() => {});
+          void cancelOauthSession(loginId).catch(() => {});
         }
         oauthActiveRef.current = false;
         oauthCompletingRef.current = false;
         oauthLoginIdRef.current = null;
       },
-      [oauthLog],
+      [oauthLog, cancelOauthSession],
     );
   
     const handleCopyOauthUrl = async () => {
@@ -1659,7 +1910,25 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       prepareOauthUrl();
     };
   
-    const handleRetryOauthAfterTimeout = () => {
+    const handleRetryOauthAfterTimeout = async () => {
+      if (oauthProxyChanging.current || oauthCancelLoginId.current) {
+        const sequence = ++oauthProxyChangeSequence.current;
+        oauthProxyChanging.current = true;
+        try {
+          await discardOauthForProxyChoice();
+          if (sequence !== oauthProxyChangeSequence.current || !showAddModalRef.current || addTabRef.current !== "oauth") return;
+        } catch (error) {
+          if (sequence === oauthProxyChangeSequence.current && showAddModalRef.current) {
+            setOauthPrepareError(t("codex.oauthProxy.cancelFailed", { error: String(error) }));
+          }
+          return;
+        } finally {
+          if (sequence === oauthProxyChangeSequence.current) {
+            oauthProxyChanging.current = false;
+            setOauthSessionRevision((value) => value + 1);
+          }
+        }
+      }
       oauthActiveRef.current = false;
       oauthLoginIdRef.current = null;
       setOauthTimeoutInfo(null);
@@ -1676,6 +1945,10 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
   
     const handleOpenOauthUrl = async () => {
       if (!oauthUrl) return;
+      if (oauthProxyEnabled) {
+        await handleOpenOauthIncognitoWindow();
+        return;
+      }
       try {
         await openUrl(oauthUrl);
       } catch {
@@ -1696,12 +1969,16 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
         setAddMessage(
           t("common.shared.oauth.failed", "授权失败") +
             ": " +
-            String(error).replace(/^Error:\s*/, ""),
+            describeOauthProxyError(error),
         );
       }
     };
   
     const handleStartDeviceAuth = async () => {
+      if (oauthProxyEnabled) {
+        setDeviceAuthError(t("codex.oauthProxy.deviceUnavailable"));
+        return;
+      }
       if (
         deviceAuthStarting ||
         oauthCompletingRef.current ||
@@ -1891,6 +2168,9 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
     handleOpenDeviceAuthUrl,
     handleOpenOauthIncognitoWindow,
     handleOpenOauthUrl,
+    handleOauthProxyToggle,
+    handleOauthProxyInputChange,
+    handleOauthProxyStart,
     handlePendingOAuthEmailInputChange,
     handleReleaseOauthPort,
     handleRetryOauthAfterTimeout,
@@ -1933,6 +2213,12 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
     oauthCompletingRef,
     oauthLoginIdRef,
     oauthMethod,
+    oauthProxyEnabled,
+    oauthProxyInput,
+    oauthProxyReady,
+    oauthProxyFieldError,
+    oauthProxyUsesAccountExit,
+    oauthProxyExitLabel,
     oauthPortInUse,
     oauthPrepareError,
     oauthTimeoutInfo,

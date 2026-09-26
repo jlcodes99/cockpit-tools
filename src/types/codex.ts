@@ -83,6 +83,10 @@ export interface CodexAccount {
   account_name?: string;
   account_structure?: string;
   account_note?: string;
+  /** 账号级出口代理；留空时使用现有全局/API 服务代理。 */
+  egress_proxy_url?: string | null;
+  /** Backend-provided safe proxy metadata; never contains credentials. */
+  egress_proxy?: { protocol: string; server?: string; port?: number; name?: string; sourceName?: string; sourceId?: string; itemId?: string; groupId?: string | null; selectedName?: string | null } | null;
   /** Legacy import/export metadata; no longer changes outgoing requests. */
   codex_fingerprint_mode?: CodexFingerprintMode;
   /** Legacy backup metadata; no longer restricts clients or reaches the sidecar. */

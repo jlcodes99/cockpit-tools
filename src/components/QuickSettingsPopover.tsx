@@ -1772,6 +1772,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           </div>
         )}
 
+        {!config && !error && (
+          <div className="qs-loading" role="status" aria-live="polite">
+            <span className="loading-spinner" aria-hidden="true" />
+            <span>{t('common.loading', '加载中...')}</span>
+          </div>
+        )}
+
         {config && (
           <div className="qs-body">
             {type === 'grok' && (

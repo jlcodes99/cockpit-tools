@@ -50,7 +50,7 @@ function editor(initial: Values) {
   };
 }
 
-for (const [contextWindow, compactLimit] of [['516000', '460000'], ['1000000', '900000']]) {
+for (const [contextWindow, compactLimit] of [['516000', '464400'], ['1000000', '900000']]) {
   test(`custom editing opens and preserves preset ${contextWindow}/${compactLimit}`, () => {
     const control = editor({ enabled: true, contextWindow, compactLimit });
     assert.equal(control.render().fields, false);
@@ -83,4 +83,33 @@ test('empty official values enter custom editing without inventing defaults', ()
   const control = editor({ enabled: false, contextWindow: '', compactLimit: '' });
   assert.ok(control.select('custom').fields);
   assert.deepEqual(control.values(), { enabled: true, contextWindow: '', compactLimit: '' });
+});
+
+test('typing only a context window derives the 90% compact limit', () => {
+  const control = editor({ enabled: false, contextWindow: '', compactLimit: '' });
+  const fields = control.select('custom').fields;
+  assert.ok(fields);
+  const contextInput: Element = fields.props.children[0].props.children[1];
+  contextInput.props.onChange({ target: { value: '272000' } });
+  assert.deepEqual(control.values(), { enabled: true, contextWindow: '272000', compactLimit: '244800' });
+  contextInput.props.onChange({ target: { value: '516000' } });
+  assert.deepEqual(control.values(), { enabled: true, contextWindow: '516000', compactLimit: '464400' });
+});
+
+test('explicit compact limit stays untouched while context changes', () => {
+  const control = editor({ enabled: true, contextWindow: '516000', compactLimit: '450000' });
+  const fields = control.render().fields;
+  assert.ok(fields);
+  const contextInput: Element = fields.props.children[0].props.children[1];
+  contextInput.props.onChange({ target: { value: '1000000' } });
+  assert.deepEqual(control.values(), { enabled: true, contextWindow: '1000000', compactLimit: '450000' });
+});
+
+test('clearing the compact limit falls back to the derived 90% value', () => {
+  const control = editor({ enabled: true, contextWindow: '516000', compactLimit: '450000' });
+  const fields = control.render().fields;
+  assert.ok(fields);
+  const compactInput: Element = fields.props.children[1].props.children[1];
+  compactInput.props.onChange({ target: { value: '' } });
+  assert.deepEqual(control.values(), { enabled: true, contextWindow: '516000', compactLimit: '464400' });
 });

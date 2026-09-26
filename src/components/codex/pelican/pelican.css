@@ -1,0 +1,230 @@
+.pelican-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(12, 17, 28, .48);
+  backdrop-filter: blur(5px);
+}
+
+.pelican-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, 92vw);
+  height: auto;
+  max-height: 88vh;
+  color: var(--text-primary, #202939);
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-color, #e1e5eb);
+  border-radius: 18px;
+  box-shadow: 0 22px 90px rgba(0, 0, 0, .23);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+/* Only the result matrix uses a square, scrollable workspace. */
+.pelican-results-dialog {
+  height: min(900px, 88vh);
+  aspect-ratio: 1 / 1;
+}
+
+.pelican-header, .pelican-footer, .pelican-tabs { display: flex; align-items: center; gap: 10px; padding: 16px 22px; flex-shrink: 0; }
+.pelican-header { justify-content: space-between; padding-bottom: 12px; }
+.pelican-header h2 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 19px; }
+.pelican-header h2:focus { outline: none; }
+.pelican-header > .pelican-actions .btn { width: 36px; height: 36px; padding: 0; }
+.pelican-tabs { gap: 4px; padding-top: 0; padding-bottom: 14px; border-bottom: 1px solid var(--border-color, #e1e5eb); flex-wrap: wrap; }
+.pelican-footer { justify-content: flex-end; padding-top: 14px; padding-bottom: 14px; border-top: 1px solid var(--border-color, #e1e5eb); background: var(--bg-secondary, #f6f7f9); }
+.pelican-footer .btn { min-width: 88px; min-height: 36px; }
+.pelican-body { flex: 1 1 auto; min-height: 0; padding: 20px 22px 24px; overflow-y: auto; }
+.pelican-results-dialog .pelican-body { overflow: hidden; padding: 12px 16px; }
+.pelican-results-dialog .pelican-table-scroll { height: 100%; box-sizing: border-box; }
+.pelican-results-dialog .btn { font-size: 10px; padding: 5px 8px; min-height: 28px; }
+.pelican-results-dialog .pelican-header > .pelican-actions .btn { width: 30px; height: 30px; padding: 0; }
+.pelican-results-dialog .pelican-footer .btn { min-height: 30px; }
+.pelican-canvas-placeholder .btn { font-size: 9px; padding: 3px 2px; min-height: 22px; }
+.pelican-canvas-placeholder > .pelican-cell-actions { margin-top: 2px; }
+
+.pelican-setup { display: flex; flex-direction: column; gap: 13px; }
+.pelican-setup label { display: flex; flex-direction: column; gap: 7px; }
+.pelican-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(130px, 1fr) minmax(100px, 1fr); gap: 12px; }
+.pelican-muted { color: var(--text-secondary, #627084); line-height: 1.6; overflow-wrap: anywhere; }
+.pelican-setup p { margin: 0; }
+.pelican-actions, .pelican-inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pelican-actions { justify-content: flex-end; }
+.pelican-inline { margin: 10px 0; }
+.pelican-inline > input, .pelican-inline > .single-select-dropdown { flex: 1; min-width: 160px; }
+.pelican-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; overflow-wrap: anywhere; }
+.pelican-section-heading h3 { margin: 0; }
+.pelican-account-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border-color, #e1e5eb); border-radius: 10px; }
+.pelican-setup .pelican-account-choice { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--border-color, #e1e5eb); }
+.pelican-account-choice:last-child { border-bottom: none; }
+.pelican-account-choice span { overflow-wrap: anywhere; }
+.pelican-account-choice small { color: var(--text-secondary, #627084); }
+.pelican-account-identity { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 120px; }
+.pelican-account-tags { overflow-wrap: anywhere; }
+.pelican-account-summary, .pelican-account-quotas { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.pelican-account-summary { max-width: 60%; min-width: 0; }
+.pelican-account-summary .tier-badge { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.pelican-quota-badge { border: 1px solid var(--border-color, #d7dde6); border-radius: 6px; padding: 3px 7px; font-size: 11px; line-height: 1.4; }
+.pelican-quota-badge { display: inline-flex; gap: 6px; white-space: nowrap; color: var(--text-secondary, #627084); }
+.pelican-quota-badge.high strong { color: #259467; }
+.pelican-quota-badge.medium strong { color: #b78117; }
+.pelican-quota-badge.low strong, .pelican-quota-badge.critical strong { color: #dc4545; }
+.pelican-dialog input:not([type="checkbox"]), .pelican-dialog textarea {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  color: var(--text-primary, #202939);
+  background: var(--bg-secondary, #f6f7f9);
+  border: 1px solid var(--border-color, #d7dde6);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+.pelican-dialog textarea { resize: vertical; min-height: 80px; }
+.pelican-dialog input[type="checkbox"] {
+  appearance: none;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--border-color, #bbc4d0);
+  border-radius: 4px;
+  background: var(--bg-primary, #fff);
+}
+.pelican-dialog input[type="checkbox"]:checked { background: var(--primary-color, #3576df); border-color: var(--primary-color, #3576df); box-shadow: inset 0 0 0 3px var(--bg-primary, #fff); }
+.pelican-dialog input:focus-visible, .pelican-dialog textarea:focus-visible, .pelican-dialog button:focus-visible, .pelican-account-list:focus { outline: 2px solid var(--primary-color, #3576df); outline-offset: 2px; }
+.pelican-dialog input:disabled, .pelican-dialog textarea:disabled { opacity: .55; cursor: not-allowed; }
+.pelican-dialog [aria-invalid="true"] { border-color: #dc4545; }
+.pelican-field-error { color: #dc4545; font-size: 12px; }
+.pelican-dialog .btn, .pelican-floating.btn {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 8px 11px;
+  border: 1px solid var(--border-color, #d7dde6);
+  border-radius: 8px;
+  color: var(--text-primary, #202939);
+  background: var(--bg-secondary, #f6f7f9);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pelican-dialog .btn-secondary { color: var(--text-primary, #202939); background: var(--bg-secondary, #f6f7f9); }
+.pelican-dialog .btn-secondary:hover:not(:disabled) { background: var(--bg-hover, #e9eef5); }
+.pelican-dialog .btn-primary, .pelican-floating.btn { color: #fff; background: var(--primary-color, #3576df); border-color: transparent; }
+.pelican-dialog .btn-primary:hover:not(:disabled), .pelican-floating.btn:hover { filter: brightness(1.08); }
+.pelican-dialog .btn-danger { color: #dc4545; background: rgba(220, 69, 69, .08); border-color: rgba(220, 69, 69, .25); }
+.pelican-dialog .btn-danger:hover:not(:disabled) { background: rgba(220, 69, 69, .16); }
+.pelican-dialog .btn-secondary:disabled, .pelican-dialog .btn-primary:disabled, .pelican-dialog .btn-danger:disabled, .pelican-floating.btn:disabled { opacity: .45; cursor: not-allowed; }
+.pelican-dialog .pelican-tab { border-color: transparent; color: var(--text-secondary, #627084); background: transparent; }
+.pelican-dialog .pelican-tab:hover:not(:disabled) { color: var(--text-primary, #202939); background: var(--bg-hover, #e9eef5); }
+.pelican-dialog .pelican-tab.is-active { border-color: var(--border-color, #d7dde6); color: var(--text-primary, #202939); background: var(--bg-primary, #fff); box-shadow: 0 1px 3px rgba(20, 35, 55, .08); }
+.pelican-dialog .pelican-tab:disabled { opacity: .45; cursor: not-allowed; }
+.pelican-floating.btn { position: fixed; bottom: 24px; right: 24px; z-index: 9990; box-shadow: 0 8px 30px rgba(20, 50, 90, .25); max-width: calc(100vw - 48px); white-space: normal; }
+.pelican-progress-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--border-color, #e1e5eb); border-radius: 12px; background: var(--bg-secondary, #f6f7f9); }
+.pelican-progress-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pelican-progress-header > div { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.pelican-progress-header strong { font-size: 14px; }
+.pelican-eyebrow { color: var(--text-secondary, #627084); font-size: 11px; }
+.pelican-progress-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--text-secondary, #627084); font-size: 11px; }
+.pelican-progress-meta span + span { position: relative; }
+.pelican-progress-meta span + span::before { content: '·'; position: absolute; left: -10px; color: var(--border-color, #bbc4d0); }
+.pelican-prompt-details { border-top: 1px solid var(--border-color, #e1e5eb); padding-top: 9px; }
+.pelican-prompt-details summary { color: var(--text-secondary, #627084); cursor: pointer; font-size: 12px; }
+.pelican-prompt-details summary::marker { color: var(--primary-color, #3576df); }
+/* Six compact account tiles per row; additional accounts continue vertically. */
+.pelican-table-scroll { overflow-y: auto; overflow-x: hidden; max-width: 100%; max-height: 100%; padding: 4px; }
+.pelican-table-scroll:focus-visible { outline: 2px solid var(--primary-color, #3576df); outline-offset: 2px; }
+.pelican-canvas-table { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; justify-items: stretch; align-content: start; }
+.pelican-account-tile { min-width: 0; overflow: hidden; border: 1px solid var(--border-color, #e1e5eb); border-radius: 8px; background: var(--bg-primary, #fff); }
+.pelican-account-tile h3 { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0; padding: 8px 6px; border-bottom: 1px solid var(--border-color, #e1e5eb); text-align: left; font-size: 10px; line-height: 1.3; }
+.pelican-account-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pelican-account-plan { flex: 0 0 auto; min-width: 0; }
+.pelican-account-plan .tier-badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 9px; padding: 2px 4px; }
+.pelican-canvas-cell { padding: 6px; vertical-align: top; }
+.pelican-canvas, .pelican-canvas-placeholder { width: 100%; height: 158px; margin: 0 auto; border: 1px solid var(--border-color, #d7dde6); border-radius: 6px; box-sizing: border-box; }
+.pelican-canvas { display: block; appearance: none; -webkit-appearance: none; font: inherit; color: inherit; padding: 0; background: #fff; overflow: hidden; cursor: zoom-in; }
+.pelican-canvas:hover { border-color: var(--primary-color, #3576df); }
+.pelican-canvas iframe { display: block; width: 876px; height: 714px; border: 0; transform: scale(.18); transform-origin: top left; pointer-events: none; }
+.pelican-canvas-placeholder { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 8px; overflow: hidden; color: var(--text-secondary, #627084); background: var(--bg-secondary, #f6f7f9); }
+.pelican-canvas-placeholder.is-failed { color: #dc4545; background: rgba(220, 69, 69, .05); border-color: rgba(220, 69, 69, .25); }
+.pelican-cell-error { margin: 0; width: 100%; max-height: 58px; overflow: auto; overflow-wrap: anywhere; font-size: 10px; line-height: 1.35; user-select: text; }
+.pelican-cell-caption, .pelican-cell-actions { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px; font-size: 10px; color: var(--text-secondary, #627084); font-variant-numeric: tabular-nums; }
+.pelican-cell-usage, .pelican-detail-usage { display: flex; align-items: center; justify-content: center; gap: 4px 8px; flex-wrap: wrap; font-size: 10px; color: var(--text-secondary, #627084); font-variant-numeric: tabular-nums; }
+.pelican-cell-usage { margin-top: 4px; }
+.pelican-detail-usage { justify-content: flex-start; padding: 8px 0 2px; }
+.pelican-cell-actions { width: 100%; flex-wrap: nowrap; }
+.pelican-cell-actions .btn { min-width: 0; flex: 1 1 0; min-height: 22px; padding: 2px 1px; border: 0; box-shadow: none; color: var(--primary-color, #3576df); background: transparent; font-size: clamp(8px, 1vw, 10px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pelican-cell-actions .btn:hover:not(:disabled) { color: var(--primary-color, #3576df); background: transparent; text-decoration: underline; }
+.pelican-canvas-placeholder > strong { font-size: 11px; font-weight: 600; line-height: 1.3; }
+.pelican-elapsed { font-variant-numeric: tabular-nums; font-size: 11px; line-height: 1.3; }
+.pelican-canvas-placeholder .pelican-elapsed { color: inherit; }
+.pelican-spinner { animation: pelican-spin 1s linear infinite; }
+@keyframes pelican-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pelican-spinner { animation: none; } }
+.pelican-detail-overlay { position: fixed; inset: 0; z-index: 10020; display: flex; align-items: safe center; justify-content: center; overflow-y: auto; padding: 20px; background: rgba(12, 17, 28, .42); backdrop-filter: blur(3px); }
+.pelican-detail-dialog { display: flex; flex-direction: column; width: min(760px, 88vw); max-height: 84vh; overflow: hidden; padding: 20px 22px; border: 1px solid var(--border-color, #e1e5eb); border-radius: 14px; background: var(--bg-primary, #fff); box-shadow: 0 18px 70px rgba(0, 0, 0, .24); }
+.pelican-detail-header { display: flex; flex: 0 0 auto; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border-color, #e1e5eb); }
+.pelican-detail-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pelican-detail-header > div { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; min-width: 0; }
+.pelican-detail-header h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.pelican-detail-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 12px 0; color: var(--text-secondary, #627084); font-size: 11px; }
+.pelican-detail-error { display: flex; align-items: flex-start; gap: 10px; }
+.pelican-detail-error > [role="alert"] { flex: 1; margin-bottom: 0 !important; }
+.pelican-detail-error > .btn { min-height: 36px; }
+.pelican-detail-actions { padding: 10px 0 4px; border-top: 1px solid var(--border-color, #e1e5eb); }
+.pelican-detail-canvas { width: 100%; height: 65vh; min-height: 280px; flex-shrink: 0; border: 1px solid var(--border-color, #e1e5eb); border-radius: 8px; background: #fff; }
+.pelican-detail-output { min-height: 280px; max-height: 65vh; margin: 8px 0 0; padding: 12px; border: 1px solid var(--border-color, #e1e5eb); border-radius: 8px; background: var(--bg-secondary, #f6f7f9); white-space: pre-wrap; overflow: auto; overflow-wrap: anywhere; font-size: 12px; line-height: 1.55; user-select: text; }
+.pelican-detail-dialog .pelican-organize { margin-top: 14px; }
+.pelican-status { padding: 3px 8px; border-radius: 10px; font-size: 11px; background: var(--bg-hover, #e9eef5); flex-shrink: 0; }
+.pelican-status-running { color: var(--primary-color, #3576df); }
+.pelican-status-failed { color: #dc4545; }
+.pelican-status-completed { color: #259467; }
+.pelican-reply { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.55; max-height: 240px; overflow: auto; }
+.pelican-organize { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color, #e1e5eb); }
+.pelican-history-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding: 13px 14px; border: 1px solid var(--border-color, #e1e5eb); border-radius: 10px; background: var(--bg-primary, #fff); }
+.pelican-history-row p { margin: 5px 0 0; }
+.pelican-retention-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 14px 0 16px; padding: 13px 14px; border: 1px solid var(--border-color, #e1e5eb); border-radius: 10px; background: var(--bg-secondary, #f6f7f9); }
+.pelican-retention-card p { margin: 4px 0 0; font-size: 11px; }
+.pelican-retention-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.pelican-retention-controls input { width: 74px !important; padding: 8px 9px !important; text-align: center; }
+.pelican-retention-controls .btn { min-height: 34px; }
+.pelican-progress-track { margin-top: 12px; height: 5px; background: var(--bg-hover, #e9eef5); border-radius: 5px; overflow: hidden; }
+.pelican-progress-track > div { height: 100%; background: var(--primary-color, #3576df); transition: width .2s; }
+.pelican-confirm-overlay { z-index: 11010; }
+.pelican-confirm { width: min(480px, 92vw); height: auto; max-height: none; aspect-ratio: auto; padding: 0; }
+.pelican-confirm-heading { display: flex; align-items: center; gap: 11px; padding: 22px 24px 12px; }
+.pelican-confirm-icon { display: inline-flex; width: 34px; height: 34px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 10px; color: #dc4545; background: rgba(220, 69, 69, .1); }
+.pelican-confirm h3 { margin: 0; font-size: 16px; line-height: 1.45; }
+.pelican-confirm > p { margin: 0; padding: 0 24px 20px 69px; color: var(--text-secondary, #627084); line-height: 1.65; }
+.pelican-confirm > [role="alert"] { margin-right: 24px; margin-left: 24px; }
+.pelican-confirm-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 24px 18px; border-top: 1px solid var(--border-color, #e1e5eb); background: var(--bg-secondary, #f6f7f9); }
+.pelican-confirm-actions .btn { min-width: 84px; min-height: 36px; }
+@media (max-width: 650px) {
+  .pelican-setup .pelican-account-choice { flex-wrap: wrap; }
+  .pelican-account-summary { max-width: 100%; width: 100%; padding-left: 26px; box-sizing: border-box; justify-content: flex-start; }
+  .pelican-overlay { padding: 10px; }
+  .pelican-fields { grid-template-columns: 1fr; }
+  .pelican-body, .pelican-header, .pelican-footer, .pelican-tabs { padding-left: 14px; padding-right: 14px; }
+  .pelican-history-row { align-items: flex-start; flex-direction: column; }
+  .pelican-retention-card { align-items: flex-start; flex-direction: column; }
+  .pelican-retention-controls { width: 100%; }
+  .pelican-retention-controls input { flex: 1; width: auto !important; }
+  .pelican-canvas-table { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .pelican-detail-overlay { padding: 10px; }
+  .pelican-detail-dialog { width: 100%; padding: 16px; }
+  .pelican-confirm-heading { padding-left: 18px; padding-right: 18px; }
+  .pelican-confirm > p { padding-right: 18px; padding-left: 18px; }
+  .pelican-confirm-actions { padding-right: 18px; padding-left: 18px; }
+}

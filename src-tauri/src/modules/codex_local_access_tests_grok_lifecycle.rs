@@ -62,6 +62,16 @@ async fn grok_auth_sync_lock_contention_scenario(delete_source: bool) {
     fs::create_dir_all(&auths).unwrap();
     let auth_path = auths.join(codex_account::grok_sidecar_auth_file_name(&proxy.id));
     assert!(super::prepare_grok_sidecar_auth_file(&proxy, &auth_path, None).unwrap());
+    let auth_backup = auth_path.with_file_name(format!(
+        "{}.bak",
+        auth_path.file_name().unwrap().to_string_lossy()
+    ));
+    fs::write(&auth_backup, "stale credential backup").unwrap();
+    assert!(super::prepare_grok_sidecar_auth_file(&proxy, &auth_path, None).unwrap());
+    assert!(
+        !auth_backup.exists(),
+        "sidecar auth backups must be removed"
+    );
 
     let lifecycle = super::provider_gateway_lifecycle_lock().lock().await;
     let wait = std::time::Duration::from_millis(5);

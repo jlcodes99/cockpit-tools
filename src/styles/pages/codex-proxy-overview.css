@@ -1,0 +1,244 @@
+/* Codex 代理工作台「概览」与「连接」两页：卡片布局、连接表与流量曲线容器。
+   卡片外观沿用代理页既有令牌；按钮、下拉、输入框全部复用项目设计系统，
+   本文件不复制 codex-proxy-page.css / codex-proxy-workspace.css 的既有样式。 */
+
+.codex-proxy-overview,
+.codex-proxy-connections { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* 连接页统一成参考卡片：白色卡面 + 头栏分隔线 + 内容留白。 */
+.codex-proxy-workspace .codex-proxy-connections {
+  padding: 0 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+}
+.codex-proxy-workspace .codex-proxy-connections > .codex-proxy-connections-head {
+  min-height: 62px; margin: 0 -16px 16px; padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.codex-proxy-overview > .codex-proxy-page-note { margin: 0; }
+
+/* 上排两栏卡片，窄窗口纵向堆叠，保证操作始终可见。 */
+.codex-proxy-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* 卡片基类沿用 codex-proxy-page-card 的后代规则；外观由本页语义类提供，不依赖加载顺序。 */
+.codex-proxy-overview-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-card);
+}
+.codex-proxy-overview-card .codex-proxy-page-section-heading { align-items: flex-start; margin-bottom: 14px; }
+.codex-proxy-overview-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.codex-proxy-overview-card > .codex-proxy-page-note { margin-bottom: 0; }
+
+.codex-proxy-overview-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; min-width: 0; }
+
+/* 与出口规则页一致：独立代理是最强绑定，用既有绿色状态色而不是中性兜底。 */
+.codex-proxy-overview .codex-proxy-page-state.is-independent {
+  color: #047857;
+  background: color-mix(in srgb, #10b981 8%, var(--bg-card));
+  border-color: color-mix(in srgb, #10b981 22%, var(--border));
+}
+[data-theme="dark"] .codex-proxy-overview .codex-proxy-page-state.is-independent { color: #6ee7b7; }
+
+.codex-proxy-overview-source-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.codex-proxy-overview-source-head strong {
+  min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 15px; font-weight: 650;
+}
+
+.codex-proxy-overview-chip {
+  display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
+  padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg-secondary); color: var(--text-secondary); font-size: 11px; font-weight: 500; white-space: nowrap;
+}
+.codex-proxy-overview-chip.is-warning {
+  color: #b45309;
+  border-color: color-mix(in srgb, #f59e0b 30%, var(--border));
+  background: color-mix(in srgb, #f59e0b 8%, var(--bg-card));
+}
+
+/* 订阅卡片改成参考首页的一行一条：图标 + 标签: 值，扫读更快。 */
+.codex-proxy-overview-rows { display: flex; flex-direction: column; gap: 13px; margin: 16px 0 0; padding: 0; list-style: none; }
+.codex-proxy-overview-rows > li { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 13px; }
+.codex-proxy-overview-rows > li > svg { flex: 0 0 auto; color: var(--text-muted); }
+.codex-proxy-overview-rows > li > span { flex: 0 0 auto; color: var(--text-secondary); }
+.codex-proxy-overview-rows > li > b {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;
+}
+
+/* 来源用量只在后端给出完整数据时渲染。 */
+.codex-proxy-overview-usage { display: grid; gap: 7px; margin-top: 14px; }
+.codex-proxy-overview-usage-line {
+  display: flex; flex-wrap: wrap; gap: 4px 12px;
+  color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.codex-proxy-overview-progress { height: 8px; border-radius: 999px; background: var(--bg-secondary); overflow: hidden; }
+.codex-proxy-overview-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+
+.codex-proxy-overview-callout {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border: 1px dashed var(--border); border-radius: 12px; background: var(--bg-secondary);
+}
+.codex-proxy-overview-callout > div { min-width: 0; }
+.codex-proxy-overview-callout strong { font-size: 13px; }
+.codex-proxy-overview-callout p { margin: 4px 0 0; max-width: 420px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.codex-proxy-overview-callout.is-warning {
+  border-style: solid;
+  border-color: color-mix(in srgb, #f59e0b 32%, var(--border));
+  background: color-mix(in srgb, #f59e0b 7%, var(--bg-card));
+}
+
+.codex-proxy-overview-exit-form { display: grid; gap: 12px; min-width: 0; }
+.codex-proxy-overview-exit-form .codex-picker { margin: 0; }
+.codex-proxy-overview-exit-form .codex-proxy-page-note { margin: 0; }
+
+.codex-proxy-overview-notice {
+  display: flex; align-items: center; gap: 6px; margin: 12px 0 0; padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border)); border-radius: 9px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-card)); color: var(--primary);
+  font-size: 12px; line-height: 1.6;
+}
+.codex-proxy-overview-notice svg { flex: 0 0 auto; }
+.codex-proxy-overview-notice.is-warning {
+  color: #b45309;
+  border-color: color-mix(in srgb, #f59e0b 30%, var(--border));
+  background: color-mix(in srgb, #f59e0b 8%, var(--bg-card));
+}
+
+.codex-proxy-overview-unified { display: grid; gap: 12px; }
+.codex-proxy-overview-unified > .btn { justify-self: start; }
+.codex-proxy-overview-unified-head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.codex-proxy-overview-unified-head > svg { flex: 0 0 auto; margin-top: 2px; color: var(--primary); }
+.codex-proxy-overview-unified-head strong { display: block; overflow-wrap: anywhere; font-size: 13px; }
+.codex-proxy-overview-unified-head p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+
+/* 流量统计：速率网格 + 仅存在于本会话内存的十分钟曲线。 */
+.codex-proxy-overview-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.codex-proxy-overview-stat {
+  display: grid; gap: 5px; min-width: 0; padding: 11px 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg-secondary);
+}
+.codex-proxy-overview-stat > span { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 11px; }
+.codex-proxy-overview-stat svg { flex: 0 0 auto; }
+.codex-proxy-overview-stat.is-up svg { color: #10b981; }
+.codex-proxy-overview-stat.is-down svg { color: #3b82f6; }
+.codex-proxy-overview-stat strong {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums;
+}
+
+.codex-proxy-overview-chart-wrap { margin-top: 14px; }
+.codex-proxy-overview-chart {
+  height: 150px; padding: 6px 0; border: 1px solid var(--border); border-radius: 10px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 4%, var(--bg-secondary)), var(--bg-secondary));
+  overflow: hidden;
+}
+.codex-proxy-overview-chart svg { display: block; width: 100%; height: 100%; }
+.codex-proxy-overview-chart .is-axis { stroke: var(--border); }
+.codex-proxy-overview-chart .is-up,
+.codex-proxy-overview-chart .is-down {
+  fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round;
+}
+.codex-proxy-overview-chart .is-up { stroke: #10b981; }
+.codex-proxy-overview-chart .is-down { stroke: #3b82f6; }
+.codex-proxy-overview-chart-legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 8px;
+  color: var(--text-secondary); font-size: 11px;
+}
+.codex-proxy-overview-chart-legend > span { display: inline-flex; align-items: center; gap: 4px; }
+.codex-proxy-overview-chart-legend .is-up svg { color: #10b981; }
+.codex-proxy-overview-chart-legend .is-down svg { color: #3b82f6; }
+.codex-proxy-overview-chart-peak { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.codex-proxy-overview-placeholder {
+  display: grid; place-items: center; min-height: 96px; margin: 14px 0 0; padding: 16px;
+  border: 1px dashed var(--border); border-radius: 12px; background: var(--bg-secondary);
+  color: var(--text-secondary); font-size: 12px; line-height: 1.6; text-align: center;
+}
+
+/* 连接页 */
+.codex-proxy-connections-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.codex-proxy-connections-scope { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.codex-proxy-connections-hint { margin: 5px 0 0; max-width: 720px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.codex-proxy-connections-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
+.codex-proxy-connections-warning {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--border)); border-radius: 10px;
+  background: color-mix(in srgb, #f59e0b 8%, var(--bg-card)); color: #b45309;
+  font-size: 12px; line-height: 1.6;
+}
+.codex-proxy-connections-warning svg { flex: 0 0 auto; }
+.codex-proxy-connections-warning .btn { margin-left: auto; }
+
+.codex-proxy-connections-table-card {
+  min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card);
+}
+.codex-proxy-connections-table-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.codex-proxy-connections-paused {
+  flex: 0 0 auto; padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg-secondary); color: var(--text-secondary); font-size: 11px;
+}
+
+.codex-proxy-connections-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.codex-proxy-connections-toolbar .codex-proxy-search { flex: 1 1 220px; min-width: 0; }
+.codex-proxy-connections-count {
+  margin-left: auto; color: var(--text-secondary); font-size: 11px;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* 窄窗口横向滚动，表格自身不撑破容器。 */
+.codex-proxy-connections-table-wrap { margin-top: 14px; overflow-x: auto; overscroll-behavior: contain; }
+.codex-proxy-connections-table { width: 100%; min-width: 940px; border-collapse: collapse; font-size: 12px; }
+.codex-proxy-connections-table th,
+.codex-proxy-connections-table td { padding: 9px 10px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border); }
+.codex-proxy-connections-table thead th { color: var(--text-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.codex-proxy-connections-table tbody tr:hover { background: var(--bg-hover); }
+.codex-proxy-connections-table tbody tr:last-child td { border-bottom: 0; }
+.codex-proxy-connections-table td { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codex-proxy-connections-table td.is-target { max-width: 300px; font-weight: 500; }
+.codex-proxy-connections-table td.is-chains,
+.codex-proxy-connections-table td.is-rule { color: var(--text-secondary); }
+.codex-proxy-connections-table td.is-number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.codex-proxy-connections-table th.is-number { text-align: right; }
+.codex-proxy-connections-pill {
+  display: inline-flex; align-items: center; padding: 2px 7px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--bg-secondary);
+  color: var(--text-secondary); font-size: 11px; white-space: nowrap;
+}
+
+.codex-proxy-connections-state {
+  display: grid; justify-items: center; gap: 8px; padding: 32px 18px;
+  border: 1px dashed var(--border); border-radius: 12px; background: var(--bg-secondary); text-align: center;
+}
+.codex-proxy-connections-state-icon {
+  display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-card)); color: var(--primary);
+}
+.codex-proxy-connections-state h4 { margin: 0; font-size: 14px; }
+.codex-proxy-connections-state p { max-width: 460px; margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.7; }
+.codex-proxy-connections-state .btn { margin-top: 4px; }
+
+@media (max-width: 900px) {
+  .codex-proxy-overview-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .codex-proxy-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .codex-proxy-overview-facts { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 460px) {
+  .codex-proxy-overview-stats { grid-template-columns: minmax(0, 1fr); }
+  .codex-proxy-connections-actions { justify-content: flex-start; }
+  .codex-proxy-connections-count { margin-left: 0; }
+}

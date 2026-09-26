@@ -460,6 +460,8 @@ pub fn run() {
                 }
             });
 
+            tauri::async_runtime::spawn(modules::codex_proxy_catalog::auto_refresh_loop());
+
             // 启动 WebSocket 服务（使用 Tauri 的 async runtime）
             tauri::async_runtime::spawn(async {
                 modules::websocket::start_server().await;
@@ -773,6 +775,21 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            commands::codex_pelican::codex_pelican_start,
+            commands::codex_pelican::codex_pelican_retry,
+            commands::codex_pelican::codex_pelican_active,
+            commands::codex_pelican::codex_pelican_get,
+            commands::codex_pelican::codex_pelican_history,
+            commands::codex_pelican::codex_pelican_retention_settings,
+            commands::codex_pelican::codex_pelican_update_retention_days,
+            commands::codex_pelican::codex_pelican_cleanup_expired,
+            commands::codex_pelican::codex_pelican_clear_all,
+            commands::codex_pelican::codex_pelican_cancel,
+            commands::codex_pelican::codex_pelican_dismiss,
+            commands::codex_pelican::codex_pelican_artifact,
+            commands::codex_pelican::codex_pelican_delete,
+            modules::codex_pelican_preview::codex_pelican_preview,
+            modules::codex_pelican_preview::codex_pelican_browser,
             // Account Commands
             commands::account::list_accounts,
             commands::account::add_account,
@@ -903,7 +920,6 @@ pub fn run() {
             commands::system::codex_ssh_test_connection,
             commands::system::codex_ssh_sync_current,
             commands::system::codex_managed_lb_provider_id,
-            commands::system::codebuddy_list_local_session_files,
             commands::system::save_refresh_interval_config,
             commands::system::save_tray_platform_layout,
             commands::system::set_app_path,
@@ -1049,6 +1065,42 @@ pub fn run() {
             commands::codex::add_codex_account_with_api_key,
             commands::codex::add_codex_account_from_grok,
             commands::codex::update_codex_account_name,
+            commands::codex::update_codex_account_egress_proxy,
+            commands::codex::test_codex_account_egress_proxy,
+            commands::codex::cancel_codex_account_egress_proxy,
+            commands::codex::get_codex_account_proxy_status,
+            commands::codex_proxy_catalog::codex_proxy_catalog_list,
+            commands::codex_proxy_catalog::codex_proxy_catalog_import,
+            commands::codex_proxy_catalog::codex_proxy_catalog_preview,
+            commands::codex_proxy_catalog::codex_proxy_catalog_network,
+            commands::codex_proxy_catalog::codex_proxy_catalog_insecure,
+            commands::codex_proxy_catalog::codex_proxy_catalog_group_insecure,
+            commands::codex_proxy_catalog::codex_proxy_catalog_rename,
+            commands::codex_proxy_catalog::codex_proxy_catalog_latency,
+            commands::codex_proxy_catalog::codex_proxy_catalog_refresh,
+            commands::codex_proxy_catalog::codex_proxy_catalog_cancel,
+            commands::codex_proxy_catalog::codex_proxy_catalog_dependencies,
+            commands::codex_proxy_catalog::codex_proxy_catalog_remove,
+            commands::codex_proxy_catalog::codex_proxy_catalog_set_auto_update,
+            commands::codex_proxy_catalog::codex_proxy_catalog_set_default,
+            commands::codex_proxy_catalog::codex_proxy_catalog_clear_default,
+            commands::codex_proxy_catalog::codex_proxy_catalog_bind,
+            commands::codex_proxy_catalog::codex_proxy_catalog_probe,
+            commands::codex_proxy_catalog::codex_proxy_strategy_save,
+            commands::codex_proxy_catalog::codex_proxy_strategy_remove,
+            commands::codex_proxy_engine::codex_proxy_engine_status,
+            commands::codex_proxy_engine::codex_proxy_engine_preflight,
+            commands::codex_proxy_engine::codex_proxy_instance_preflight,
+            commands::codex_proxy_engine::codex_proxy_activity_snapshot,
+            commands::codex_proxy_engine::codex_proxy_activity_summary,
+            commands::codex_proxy_engine::codex_proxy_activity_set_enabled,
+            commands::codex_proxy_engine::codex_proxy_activity_clear,
+            commands::codex_unified_proxy::codex_unified_proxy_get,
+            commands::codex_unified_proxy::codex_unified_proxy_preview,
+            commands::codex_unified_proxy::codex_unified_proxy_apply,
+            commands::codex_unified_proxy::codex_unified_proxy_disable,
+            commands::codex_proxy_engine::codex_proxy_engine_install,
+            commands::codex_proxy_engine::codex_proxy_engine_cancel,
             commands::codex::update_codex_api_key_credentials,
             commands::codex::sync_codex_api_key_provider_accounts,
             commands::codex::update_codex_api_key_bound_oauth_account,
@@ -1092,11 +1144,10 @@ pub fn run() {
             commands::codex::codex_local_access_rotate_api_key,
             commands::codex::codex_local_access_update_bound_oauth_account,
             commands::codex::codex_local_access_clear_stats,
-            commands::codex::codex_account_turn_state_statuses,
-            commands::codex::codex_probe_account_turn_state,
             commands::codex::codex_local_access_query_stats,
             commands::codex::codex_local_access_query_account_window_stats,
             commands::codex::codex_local_access_query_request_logs,
+            commands::codex::codex_account_proxy_recent_requests,
             commands::codex::codex_local_access_prepare_restart,
             commands::codex::codex_local_access_restart_sidecar,
             commands::codex::codex_local_access_kill_port,
@@ -1554,6 +1605,7 @@ pub fn run() {
                         commands::codex_instance::restore_mixed_model_profiles_for_app_exit();
                     }
                     modules::codex_app_injection::stop_all();
+                    modules::codex_proxy_engine::shutdown_all();
                     tauri::async_runtime::spawn(async {
                         modules::codex_local_access::shutdown_local_access_gateway_for_app_exit()
                             .await;
@@ -1566,6 +1618,7 @@ pub fn run() {
                     commands::codex_instance::restore_mixed_model_profiles_for_app_exit();
                 }
                 modules::codex_app_injection::stop_all();
+                modules::codex_proxy_engine::shutdown_all();
                 tauri::async_runtime::spawn(async {
                     modules::codex_local_access::shutdown_local_access_gateway_for_app_exit().await;
                 });

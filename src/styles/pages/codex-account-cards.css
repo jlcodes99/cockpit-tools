@@ -124,7 +124,8 @@
 
 .codex-account-card .tier-badge,
 .codex-accounts-page .account-table .tier-badge,
-.codex-oauth-binding-row .tier-badge {
+.codex-oauth-binding-row .tier-badge,
+.pelican-account-summary .tier-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -141,13 +142,15 @@
 
 .codex-account-card .tier-badge::before,
 .codex-accounts-page .account-table .tier-badge::before,
-.codex-oauth-binding-row .tier-badge::before {
+.codex-oauth-binding-row .tier-badge::before,
+.pelican-account-summary .tier-badge::before {
   display: none;
 }
 
 .codex-account-card .tier-badge.free,
 .codex-accounts-page .account-table .tier-badge.free,
-.codex-oauth-binding-row .tier-badge.free {
+.codex-oauth-binding-row .tier-badge.free,
+.pelican-account-summary .tier-badge.free {
   background: var(--plan-free-bg);
   color: var(--plan-free-color);
   border: 1px solid var(--plan-free-border);
@@ -157,6 +160,7 @@
 .codex-account-card .tier-badge.pending-auth,
 .codex-accounts-page .account-table .tier-badge.pending-auth,
 .codex-oauth-binding-row .tier-badge.pending-auth,
+.pelican-account-summary .tier-badge.pending-auth,
 .codex-accounts-page .folder-preview-item .tier-badge.pending-auth,
 .codex-wakeup-account-chip .tier-badge.pending-auth {
   background: color-mix(in srgb, var(--primary) 9%, var(--bg-secondary));
@@ -166,7 +170,8 @@
 
 .codex-account-card .tier-badge.plus,
 .codex-accounts-page .account-table .tier-badge.plus,
-.codex-oauth-binding-row .tier-badge.plus {
+.codex-oauth-binding-row .tier-badge.plus,
+.pelican-account-summary .tier-badge.plus {
   background: var(--plan-plus-bg);
   color: var(--plan-plus-color);
   border: 1px solid var(--plan-plus-border);
@@ -176,6 +181,7 @@
 .codex-account-card .tier-badge.codex-plus,
 .codex-accounts-page .account-table .tier-badge.codex-plus,
 .codex-oauth-binding-row .tier-badge.codex-plus,
+.pelican-account-summary .tier-badge.codex-plus,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-plus,
 .codex-wakeup-account-chip .tier-badge.codex-plus,
 .group-account-tier-badge.codex-plus {
@@ -189,7 +195,8 @@
 
 .codex-account-card .tier-badge.team,
 .codex-accounts-page .account-table .tier-badge.team,
-.codex-oauth-binding-row .tier-badge.team {
+.codex-oauth-binding-row .tier-badge.team,
+.pelican-account-summary .tier-badge.team {
   background: var(--plan-team-bg);
   color: var(--plan-team-color);
   border: 1px solid var(--plan-team-border);
@@ -197,7 +204,8 @@
 
 .codex-account-card .tier-badge.enterprise,
 .codex-accounts-page .account-table .tier-badge.enterprise,
-.codex-oauth-binding-row .tier-badge.enterprise {
+.codex-oauth-binding-row .tier-badge.enterprise,
+.pelican-account-summary .tier-badge.enterprise {
   background: var(--plan-enterprise-bg);
   color: var(--plan-enterprise-color);
   border: 1px solid var(--plan-enterprise-border);
@@ -205,7 +213,8 @@
 
 .codex-account-card .tier-badge.pro,
 .codex-accounts-page .account-table .tier-badge.pro,
-.codex-oauth-binding-row .tier-badge.pro {
+.codex-oauth-binding-row .tier-badge.pro,
+.pelican-account-summary .tier-badge.pro {
   background: var(--plan-pro-bg);
   color: var(--plan-pro-color);
   border: 1px solid var(--plan-pro-border);
@@ -215,6 +224,7 @@
 .codex-account-card .tier-badge.codex-pro-lite,
 .codex-accounts-page .account-table .tier-badge.codex-pro-lite,
 .codex-oauth-binding-row .tier-badge.codex-pro-lite,
+.pelican-account-summary .tier-badge.codex-pro-lite,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-pro-lite,
 .codex-wakeup-account-chip .tier-badge.codex-pro-lite {
   background: linear-gradient(135deg, #f8fafc 0%, #dbeafe 45%, #a8b7ca 100%);
@@ -229,6 +239,7 @@
 .codex-account-card .tier-badge.codex-pro-max,
 .codex-accounts-page .account-table .tier-badge.codex-pro-max,
 .codex-oauth-binding-row .tier-badge.codex-pro-max,
+.pelican-account-summary .tier-badge.codex-pro-max,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-pro-max,
 .codex-wakeup-account-chip .tier-badge.codex-pro-max {
   background: linear-gradient(135deg, #fff7cc 0%, #f6d365 42%, #d99b16 100%);
@@ -243,6 +254,7 @@
 .codex-account-card .tier-badge.new-api-exclusive,
 .codex-accounts-page .account-table .tier-badge.new-api-exclusive,
 .codex-oauth-binding-row .tier-badge.new-api-exclusive,
+.pelican-account-summary .tier-badge.new-api-exclusive,
 .codex-accounts-page .folder-preview-item .tier-badge.new-api-exclusive,
 .codex-wakeup-account-chip .tier-badge.new-api-exclusive {
   background: linear-gradient(135deg, #ecfeff 0%, #99f6e4 52%, #2dd4bf 100%);
@@ -257,6 +269,7 @@
 .codex-account-card .tier-badge.sponsor-api,
 .codex-accounts-page .account-table .tier-badge.sponsor-api,
 .codex-oauth-binding-row .tier-badge.sponsor-api,
+.pelican-account-summary .tier-badge.sponsor-api,
 .codex-accounts-page .folder-preview-item .tier-badge.sponsor-api,
 .codex-wakeup-account-chip .tier-badge.sponsor-api {
   background: linear-gradient(135deg, #fff7cc 0%, #fcd34d 52%, #f59e0b 100%);
@@ -289,47 +302,6 @@
   color: color-mix(in srgb, var(--warning-strong) 82%, var(--text-primary));
   border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
   flex-shrink: 0;
-}
-
-/* 风控检测徽标：由上游 x-codex-turn-state 观测定级，点击查看依据。 */
-.codex-accounts-page .codex-status-pill.turn-state-suspected {
-  background: rgba(239, 68, 68, 0.12);
-  color: #b91c1c;
-  border: 1px solid rgba(239, 68, 68, 0.26);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.codex-accounts-page .codex-status-pill.turn-state-abnormal {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.codex-accounts-page .codex-status-pill.turn-state-suspected:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.42);
-}
-
-.codex-accounts-page .codex-status-pill.turn-state-abnormal:hover {
-  background: rgba(245, 158, 11, 0.22);
-  border-color: rgba(245, 158, 11, 0.46);
-}
-
-.codex-accounts-page .codex-status-pill.turn-state-suspected:disabled,
-.codex-accounts-page .codex-status-pill.turn-state-abnormal:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-[data-theme="dark"] .codex-accounts-page .codex-status-pill.turn-state-suspected {
-  color: #f87171;
-}
-
-[data-theme="dark"] .codex-accounts-page .codex-status-pill.turn-state-abnormal {
-  color: #fbbf24;
 }
 
 .codex-accounts-page .codex-status-pill.quota-refresh {

@@ -91,6 +91,7 @@
 
     #[tokio::test]
     async fn prepare_sidecar_config_prunes_stale_auth_files_incrementally() {
+        let _shared_state = crate::modules::codex_unified_proxy::TestCacheGuard::new();
         let dir = make_temp_dir("codex-sidecar-incremental-auth-files");
         let account = CodexAccount::new(
             "oauth-incremental".to_string(),
@@ -121,7 +122,15 @@
         let auth_path = auths_dir.join(sidecar_auth_file_name(&account.id));
         let initial_auth_content = fs::read_to_string(&auth_path).expect("read auth file");
         let stale_path = auths_dir.join("stale.json");
+        let stale_backup_path = auths_dir.join("stale.json.bak");
+        let retained_backup_path = auths_dir.join(format!(
+            "{}.bak",
+            sidecar_auth_file_name(&account.id)
+        ));
         fs::write(&stale_path, "{}").expect("write stale auth file");
+        fs::write(&stale_backup_path, "stale secret backup").expect("write stale backup");
+        fs::write(&retained_backup_path, "retained secret backup")
+            .expect("write retained backup");
 
         prepare_sidecar_launch_config_in_dir(
             &collection,
@@ -134,6 +143,11 @@
         .expect("second sidecar config should build");
 
         assert!(!stale_path.exists(), "stale auth file should be removed");
+        assert!(!stale_backup_path.exists(), "stale auth backup should be removed");
+        assert!(
+            !retained_backup_path.exists(),
+            "retained auth backup should be removed without replacing retained auth"
+        );
         assert_eq!(
             fs::read_to_string(&auth_path).expect("read retained auth file"),
             initial_auth_content
@@ -1116,8 +1130,36 @@
         let sol =
             resolve_effective_model_pricing(None, Some("gpt-5.6-sol"), Some(&short_usage), None)
                 .expect("gpt-5.6-sol pricing");
-        assert_eq!(sol.input_usd_per_million, 5.0);
-        assert_eq!(sol.output_usd_per_million, 30.0);
+        assert_eq!(sol.input_usd_per_million, 4.0);
+        assert_eq!(sol.cached_input_usd_per_million, Some(0.4));
+        assert_eq!(sol.output_usd_per_million, 20.0);
+        for model in ["gpt-5.6", "gpt-5.6-sol"] {
+            let long = resolve_effective_model_pricing(None, Some(model), Some(&long_usage), None)
+                .expect("gpt-5.6 long-context pricing");
+            assert_eq!(long.input_usd_per_million, 8.0);
+            assert_eq!(long.cached_input_usd_per_million, Some(0.8));
+            assert_eq!(long.output_usd_per_million, 30.0);
+            let fast = resolve_effective_model_pricing(
+                None,
+                Some(model),
+                Some(&short_usage),
+                Some("priority"),
+            )
+            .expect("gpt-5.6 fast pricing");
+            assert_eq!(fast.input_usd_per_million, 8.0);
+            assert_eq!(fast.cached_input_usd_per_million, Some(0.8));
+            assert_eq!(fast.output_usd_per_million, 40.0);
+            let fast_long = resolve_effective_model_pricing(
+                None,
+                Some(model),
+                Some(&long_usage),
+                Some("priority"),
+            )
+            .expect("gpt-5.6 fast long-context pricing");
+            assert_eq!(fast_long.input_usd_per_million, 16.0);
+            assert_eq!(fast_long.cached_input_usd_per_million, Some(1.6));
+            assert_eq!(fast_long.output_usd_per_million, 60.0);
+        }
         let terra =
             resolve_effective_model_pricing(None, Some("gpt-5.6-terra"), Some(&short_usage), None)
                 .expect("gpt-5.6-terra pricing");
@@ -1148,11 +1190,78 @@
         assert_eq!(astra_long.input_usd_per_million, 40.0);
         assert_eq!(astra_long.output_usd_per_million, 150.0);
         assert_eq!(astra_long.cached_input_usd_per_million, Some(4.0));
+
+        // GPT-6 Sol / Luna keep official short-context rates (2 / 0.2 / 10, 0.1 / 0.01 / 0.5).
+        let sol =
+            resolve_effective_model_pricing(None, Some("gpt-6-sol"), Some(&short_usage), None)
+                .expect("gpt-6-sol pricing");
+        assert_eq!(sol.input_usd_per_million, 2.0);
+        assert_eq!(sol.output_usd_per_million, 10.0);
+        assert_eq!(sol.cached_input_usd_per_million, Some(0.2));
+        let luna =
+            resolve_effective_model_pricing(None, Some("gpt-6-luna"), Some(&short_usage), None)
+                .expect("gpt-6-luna pricing");
+        assert_eq!(luna.input_usd_per_million, 0.1);
+        assert_eq!(luna.output_usd_per_million, 0.5);
+        assert_eq!(luna.cached_input_usd_per_million, Some(0.01));
+
+        // Long context (>272k) applies the official multipliers: sol 2 -> 4 / 0.2 -> 0.4 / 10 -> 15,
+        // priority sol 4 -> 8 / 0.4 -> 0.8 / 20 -> 30.
+        let sol_long =
+            resolve_effective_model_pricing(None, Some("gpt-6-sol"), Some(&long_usage), None)
+                .expect("gpt-6-sol long pricing");
+        assert_eq!(sol_long.input_usd_per_million, 4.0);
+        assert_eq!(sol_long.output_usd_per_million, 15.0);
+        assert_eq!(sol_long.cached_input_usd_per_million, Some(0.4));
+        let sol_priority_long = resolve_effective_model_pricing(
+            None,
+            Some("gpt-6-sol"),
+            Some(&long_usage),
+            Some("priority"),
+        )
+        .expect("gpt-6-sol priority long pricing");
+        assert_eq!(sol_priority_long.input_usd_per_million, 8.0);
+        assert_eq!(sol_priority_long.output_usd_per_million, 30.0);
+        assert_eq!(sol_priority_long.cached_input_usd_per_million, Some(0.8));
+        // luna long context: 0.1 -> 0.2 / 0.01 -> 0.02 / 0.5 -> 0.75,
+        // priority long: 0.2 -> 0.4 / 0.02 -> 0.04 / 1 -> 1.5.
+        let luna_long =
+            resolve_effective_model_pricing(None, Some("gpt-6-luna"), Some(&long_usage), None)
+                .expect("gpt-6-luna long pricing");
+        assert_eq!(luna_long.input_usd_per_million, 0.2);
+        assert_eq!(luna_long.output_usd_per_million, 0.75);
+        assert_eq!(luna_long.cached_input_usd_per_million, Some(0.02));
+        let luna_priority_long = resolve_effective_model_pricing(
+            None,
+            Some("gpt-6-luna"),
+            Some(&long_usage),
+            Some("priority"),
+        )
+        .expect("gpt-6-luna priority long pricing");
+        assert_eq!(luna_priority_long.input_usd_per_million, 0.4);
+        assert_eq!(luna_priority_long.output_usd_per_million, 1.5);
+        assert_eq!(luna_priority_long.cached_input_usd_per_million, Some(0.04));
     }
 
     #[test]
     fn drops_legacy_default_56_overrides_but_keeps_custom_rates() {
         let kept = super::drop_superseded_default_56_model_pricings(vec![
+            model_pricing(
+                "gpt-5.6-sol",
+                Some(272_000),
+                codex_price(5.0, 0.5, 30.0),
+                None,
+                Some(codex_price(10.0, 1.0, 60.0)),
+                None,
+            ),
+            model_pricing(
+                "gpt-5.6",
+                Some(272_000),
+                codex_price(5.0, 0.5, 30.0),
+                None,
+                Some(codex_price(10.0, 1.0, 60.0)),
+                None,
+            ),
             model_pricing(
                 "gpt-5.6-terra",
                 Some(272_000),
@@ -1191,6 +1300,45 @@
         assert_eq!(kept[0].input_usd_per_million, 9.9);
         assert_eq!(kept[1].model_id, "gpt-5.5");
 
+        let mut upgraded = test_local_access_collection(vec!["account-a".to_string()]);
+        upgraded.model_pricing_version = 3;
+        upgraded.model_pricings = vec![
+            model_pricing(
+                "gpt-5.6-sol",
+                Some(272_000),
+                codex_price(5.0, 0.5, 30.0),
+                None,
+                Some(codex_price(10.0, 1.0, 60.0)),
+                None,
+            ),
+            model_pricing(
+                "gpt-5.6-luna",
+                Some(272_000),
+                codex_price(9.9, 0.9, 19.0),
+                None,
+                None,
+                None,
+            ),
+        ];
+        super::sanitize_collection_structure(&mut upgraded).expect("upgrade pricing book");
+        assert_eq!(upgraded.model_pricing_version, DEFAULT_MODEL_PRICING_VERSION);
+        assert_eq!(upgraded.model_pricings.len(), 1);
+        assert_eq!(upgraded.model_pricings[0].model_id, "gpt-5.6-luna");
+        assert_eq!(upgraded.model_pricings[0].input_usd_per_million, 9.9);
+
+        let mut custom_after_upgrade = test_local_access_collection(Vec::new());
+        custom_after_upgrade.model_pricings = vec![model_pricing(
+            "gpt-5.6-sol",
+            Some(272_000),
+            codex_price(5.0, 0.5, 30.0),
+            None,
+            Some(codex_price(10.0, 1.0, 60.0)),
+            None,
+        )];
+        super::sanitize_collection_structure(&mut custom_after_upgrade)
+            .expect("keep prices customized after upgrade");
+        assert_eq!(custom_after_upgrade.model_pricings.len(), 1);
+
         let mut collection = test_local_access_collection(vec!["account-a".to_string()]);
         collection.model_pricings = vec![model_pricing(
             "gpt-5.6-luna",
@@ -1219,6 +1367,29 @@
         .expect("legacy snapshot should fall back to new book");
         assert_eq!(luna.input_usd_per_million, 0.2);
         assert_eq!(luna.output_usd_per_million, 1.2);
+    }
+
+    #[test]
+    fn cache_write_cost_uses_official_multiplier_for_gpt_56_and_6() {
+        let mut breakdown = CodexTokenBreakdown::default();
+        breakdown.schema_version = 2;
+        breakdown.quality = "complete".to_string();
+        breakdown.total_tokens = 100_000;
+        breakdown.input.total_tokens = 100_000;
+        breakdown.input.cache_write_tokens = 100_000;
+        let usage = UsageCapture {
+            input_tokens: 100_000,
+            output_tokens: 0,
+            total_tokens: 100_000,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
+            token_breakdown: Some(breakdown),
+        };
+        for (model, expected) in [("gpt-5.6-sol", 0.5), ("gpt-6-sol", 0.25)] {
+            let pricing = resolve_effective_model_pricing(None, Some(model), Some(&usage), None)
+                .expect("official pricing");
+            assert_eq!(calculate_usage_cost_usd(Some(&usage), Some(&pricing)), expected);
+        }
     }
 
     #[test]

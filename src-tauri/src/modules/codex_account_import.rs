@@ -10,6 +10,13 @@ pub fn import_from_local() -> Result<CodexAccount, String> {
 /// `codex_home` 既可以是默认实例的 `CODEX_HOME`，也可以是某个多开实例自己的 profile
 /// 目录（官方客户端按 `CODEX_HOME` 落盘凭据），因此多开实例的本地账号同样可以被读取。
 pub fn import_from_local_at(codex_home: &Path) -> Result<CodexAccount, String> {
+    let account = import_from_local_at_inner(codex_home)?;
+    // 重新授权 / 本机导入后立即把新凭据推给运行中的本地网关，并清掉该账号的旧失败状态。
+    crate::modules::codex_local_access::notify_account_credentials_updated(&account);
+    Ok(account)
+}
+
+fn import_from_local_at_inner(codex_home: &Path) -> Result<CodexAccount, String> {
     let codex_home = codex_home.to_path_buf();
     let auth_path = codex_home.join("auth.json");
     let content = fs::read_to_string(&auth_path).ok();
@@ -1293,6 +1300,7 @@ fn upsert_account_from_access_token_with_hints(
         acc.tokens = tokens;
         mark_token_chain_updated(&mut acc);
         acc.auth_mode = CodexAuthMode::OAuth;
+        acc.upstream_grok_account_id = None;
         acc.authorization_status = None;
         acc.openai_api_key = None;
         acc.api_base_url = None;
@@ -1319,6 +1327,7 @@ fn upsert_account_from_access_token_with_hints(
         let mut acc = CodexAccount::new(existing_id.clone(), email.clone(), tokens);
         mark_token_chain_updated(&mut acc);
         acc.auth_mode = CodexAuthMode::OAuth;
+        acc.upstream_grok_account_id = None;
         acc.authorization_status = None;
         acc.openai_api_key = None;
         acc.api_base_url = None;

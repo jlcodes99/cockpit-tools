@@ -394,7 +394,7 @@ fn apply_automatic_api_service_model_routing(
 ) {
     for value in values {
         if value.get("internal").and_then(Value::as_bool) == Some(true) {
-            // 宿主内部请求（唤醒）固定落到指定账号，因此只保留原生路由：
+            // 宿主内部请求（唤醒、鹈鹕测试）固定落到指定账号，因此只保留原生路由：
             // 历史模型仍然可用，且不会把内部请求转交到其它账号。
             let routable = api_service_routable_codex_model_ids();
             value["modelRouting"] = json!({

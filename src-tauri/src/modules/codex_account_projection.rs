@@ -1373,8 +1373,17 @@ pub async fn sync_bound_oauth_consumers_after_reauth(account_id: &str) -> Result
     if account_id.is_empty() {
         return Err("OAuth 账号 ID 为空".to_string());
     }
-    let account = load_account(account_id)
-        .ok_or_else(|| format!("重新授权后找不到 OAuth 账号: {}", account_id))?;
-
-    sync_managed_account_sidecar_checked(&account)
+    let account_id = account_id.to_string();
+    let account = tauri::async_runtime::spawn_blocking(move || {
+        load_account(&account_id)
+            .ok_or_else(|| format!("重新授权后找不到 OAuth 账号: {}", account_id))
+    })
+    .await
+    .map_err(|_| "PROXY_RUNTIME_FAILED".to_string())??;
+    // The authorization callback only loads shared proxy state. Runtime startup
+    // belongs to the background writer for an already-running profile gateway.
+    crate::modules::codex_proxy_runtime::ensure_account_proxy_state(&account).await?;
+    tauri::async_runtime::spawn_blocking(move || sync_managed_account_sidecar_checked(&account))
+        .await
+        .map_err(|_| "PROXY_RUNTIME_FAILED".to_string())?
 }

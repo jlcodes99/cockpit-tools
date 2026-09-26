@@ -222,8 +222,6 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             request_kind: "text".to_string(),
             service_tier: None,
             reasoning_effort: None,
-            turn_state_length: None,
-            turn_state_class: None,
             success: false,
             status: Some(200),
             error_category: Some("request_failed".to_string()),
@@ -253,6 +251,39 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         assert_eq!(
             normalized_sidecar_error_category(&event).as_deref(),
             Some("gateway_context_canceled")
+        );
+    }
+
+    #[test]
+    fn sidecar_loopback_proxy_refusal_requests_automatic_restart() {
+        let event: SidecarUsageEvent = serde_json::from_value(json!({
+            "success": false,
+            "status": 502,
+            "errorCategory": "connection_lifecycle",
+            "errorMessage": "Post \"https://chatgpt.com/backend-api/codex/responses\": utls: dial upstream: socks connect tcp 127.0.0.1:58887->chatgpt.com:443: dial tcp 127.0.0.1:58887: connect: connection refused"
+        }))
+        .expect("loopback refusal event should deserialize");
+
+        assert!(
+            sidecar_usage_event_should_auto_restart(&event),
+            "a stale account tunnel port must rebuild the sidecar instead of failing forever"
+        );
+        assert!(!sidecar_usage_event_is_client_canceled(&event));
+    }
+
+    #[test]
+    fn sidecar_remote_refusal_does_not_request_automatic_restart() {
+        let event: SidecarUsageEvent = serde_json::from_value(json!({
+            "success": false,
+            "status": 502,
+            "errorCategory": "connection_lifecycle",
+            "errorMessage": "Post \"https://chatgpt.com/backend-api/codex/responses\": dial tcp 10.0.0.5:443: connect: connection refused"
+        }))
+        .expect("remote refusal event should deserialize");
+
+        assert!(
+            !sidecar_usage_event_should_auto_restart(&event),
+            "remote dial refusals are not a local gateway problem"
         );
     }
 
@@ -961,6 +992,8 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
             "gpt-5.6-terra",
             "gpt-5.6-luna",
             "gpt-6-astra",
+            "gpt-6-sol",
+            "gpt-6-luna",
         ] {
             assert!(models.iter().any(|item| item == model));
         }
@@ -3125,6 +3158,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             "gpt-5.6-terra",
             "gpt-5.6-luna",
             "gpt-6-astra",
+            "gpt-6-sol",
+            "gpt-6-luna",
             "gpt-5.3-codex",
             "gpt-5.3-codex-spark",
         ] {
@@ -3141,6 +3176,8 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             default_codex_model_ids(),
             vec![
                 "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",

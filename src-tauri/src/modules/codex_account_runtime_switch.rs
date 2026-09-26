@@ -59,9 +59,10 @@ async fn perform_managed_token_refresh(
         account.id, account.email, reason
     ));
 
-    match codex_oauth::refresh_access_token_with_fallback(
+    match codex_oauth::refresh_access_token_with_account_proxy(
         &refresh_token,
         Some(account.tokens.id_token.as_str()),
+        Some(&account),
     )
     .await
     {

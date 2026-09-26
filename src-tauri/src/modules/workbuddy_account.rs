@@ -12,7 +12,7 @@ use tauri::Emitter;
 use crate::models::workbuddy::{
     WorkbuddyAccount, WorkbuddyAccountIndex, WorkbuddyOAuthCompletePayload,
 };
-use crate::modules::{account, logger, workbuddy_oauth};
+use crate::modules::{account, logger, workbuddy_auth_crypto, workbuddy_oauth};
 
 const ACCOUNTS_INDEX_FILE: &str = "workbuddy_accounts.json";
 const ACCOUNTS_DIR: &str = "workbuddy_accounts";
@@ -1562,20 +1562,19 @@ fn build_default_client_auth_session(account: &WorkbuddyAccount) -> Value {
     build_default_client_auth_session_from_base(account, None)
 }
 
-fn contains_encrypted_wrapper(value: &Value) -> bool {
-    match value {
-        Value::Object(obj) => {
-            if obj.get("$wbEncrypted").is_some() {
-                return true;
-            }
-            obj.values().any(contains_encrypted_wrapper)
-        }
-        Value::Array(items) => items.iter().any(contains_encrypted_wrapper),
-        _ => false,
-    }
+pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayload>, String> {
+    import_payload_from_local_with_key_preparation(false)
 }
 
-pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayload>, String> {
+/// 显式导入使用后台线程等待有界密钥准备；托盘等读取入口仅使用内存缓存。
+pub fn import_payload_from_local_prepared() -> Result<Option<WorkbuddyOAuthCompletePayload>, String>
+{
+    import_payload_from_local_with_key_preparation(true)
+}
+
+fn import_payload_from_local_with_key_preparation(
+    prepare_key: bool,
+) -> Result<Option<WorkbuddyOAuthCompletePayload>, String> {
     let auth_file = match get_default_workbuddy_auth_file_path() {
         Some(path) => path,
         None => return Ok(None),
@@ -1587,13 +1586,29 @@ pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayloa
     let secret = fs::read_to_string(&auth_file)
         .map_err(|e| format!("读取本机 WorkBuddy 登录信息失败: {}", e))?;
 
-    let parsed_json = serde_json::from_str::<Value>(&secret).ok();
+    parse_local_auth_secret(&secret, prepare_key).map(Some)
+}
+
+fn parse_local_auth_secret(
+    secret: &str,
+    prepare_key: bool,
+) -> Result<WorkbuddyOAuthCompletePayload, String> {
+    let mut parsed_json = serde_json::from_str::<Value>(secret).ok();
+    if let Some(raw) = parsed_json.as_ref() {
+        if workbuddy_auth_crypto::contains_encrypted_wrapper(raw) {
+            if prepare_key {
+                workbuddy_auth_crypto::prepare()?;
+            }
+            parsed_json = Some(workbuddy_auth_crypto::decode_session(raw)?);
+        }
+    }
     let token_candidate = parsed_json
         .as_ref()
         .and_then(parse_local_access_token)
         .or_else(|| {
             let raw = secret.trim();
-            if raw.is_empty() {
+            // JSON 登录文件缺少 token 时必须报错，不能把整个 JSON 当作凭据。
+            if parsed_json.is_some() || raw.is_empty() {
                 None
             } else {
                 Some(raw.to_string())
@@ -1615,45 +1630,86 @@ pub fn import_payload_from_local() -> Result<Option<WorkbuddyOAuthCompletePayloa
     };
 
     let payload = build_local_import_payload(access_token, parsed_json, uid_from_token);
-    Ok(Some(payload))
+    Ok(payload)
 }
 
 pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(), String> {
     let auth_file = get_default_workbuddy_auth_file_path()
         .ok_or_else(|| "无法定位默认 WorkBuddy 登录信息路径".to_string())?;
-    if let Some(raw) = account.auth_raw.as_ref() {
-        if contains_encrypted_wrapper(raw) {
-            return Err(
-                "当前 WorkBuddy 登录文件包含官方加密字段，未取得官方密钥，已停止覆盖以避免破坏登录状态"
-                    .to_string(),
-            );
-        }
-    }
-    let marker_path = workbuddy_logout_marker_path(&auth_file);
+    write_account_to_auth_file(account, &auth_file)
+}
+
+fn write_account_to_auth_file(account: &WorkbuddyAccount, auth_file: &Path) -> Result<(), String> {
+    let marker_path = workbuddy_logout_marker_path(auth_file);
     let marker_hash_before: Option<[u8; 32]> = fs::read(&marker_path)
         .ok()
         .map(|bytes| Sha256::digest(&bytes).into());
-    if auth_file.exists() {
-        let existing =
-            fs::read(&auth_file).map_err(|e| format!("读取现有 WorkBuddy 登录信息失败: {}", e))?;
-        let existing_json: Value = serde_json::from_slice(&existing)
-            .map_err(|e| format!("现有 WorkBuddy 登录信息不是有效 JSON，已停止覆盖: {}", e))?;
-        if contains_encrypted_wrapper(&existing_json) {
-            return Err(
-                "当前 WorkBuddy 登录文件包含官方加密字段，未取得官方密钥，已停止覆盖以避免破坏登录状态"
-                    .to_string(),
-            );
+    let existing = if auth_file.exists() {
+        Some(fs::read(auth_file).map_err(|e| format!("读取现有 WorkBuddy 登录信息失败: {}", e))?)
+    } else {
+        None
+    };
+    let existing_json = existing
+        .as_deref()
+        .map(serde_json::from_slice::<Value>)
+        .transpose()
+        .map_err(|e| format!("现有 WorkBuddy 登录信息不是有效 JSON，已停止覆盖: {}", e))?;
+    let encrypt = existing_json
+        .as_ref()
+        .is_some_and(workbuddy_auth_crypto::contains_encrypted_wrapper)
+        || account
+            .auth_raw
+            .as_ref()
+            .is_some_and(workbuddy_auth_crypto::contains_encrypted_wrapper)
+        || account
+            .profile_raw
+            .as_ref()
+            .is_some_and(workbuddy_auth_crypto::contains_encrypted_wrapper);
+    let mut decoded_account = account.clone();
+    let decoded_existing = if encrypt {
+        workbuddy_auth_crypto::prepare()?;
+        decoded_account.auth_raw = account
+            .auth_raw
+            .as_ref()
+            .map(workbuddy_auth_crypto::decode_session)
+            .transpose()?;
+        // 历史导入会将 account 单独保存到 profile_raw；构造登录态时它的
+        // 优先级高于 auth_raw.account，必须按同一官方字段规则解密。
+        decoded_account.profile_raw = account
+            .profile_raw
+            .as_ref()
+            .map(|profile| {
+                let session = serde_json::json!({ "account": profile });
+                workbuddy_auth_crypto::decode_session(&session)
+                    .map(|decoded| decoded["account"].clone())
+            })
+            .transpose()?;
+        existing_json
+            .as_ref()
+            .map(workbuddy_auth_crypto::decode_session)
+            .transpose()?
+    } else {
+        existing_json
+    };
+    let session = match decoded_existing.as_ref() {
+        Some(existing) => {
+            build_default_client_auth_session_from_base(&decoded_account, Some(existing))
         }
+        None => build_default_client_auth_session(&decoded_account),
+    };
+    let session = if encrypt {
+        workbuddy_auth_crypto::encode_session(&session)?
+    } else {
+        session
+    };
+    let content =
+        serde_json::to_string_pretty(&session).map_err(|e| format!("序列化登录信息失败: {}", e))?;
+    if let Some(existing) = existing {
         let expected_hash: [u8; 32] = Sha256::digest(&existing).into();
         let written = crate::modules::atomic_write::write_string_atomic_if_hash_matches(
-            &auth_file,
+            auth_file,
             expected_hash,
-            || {
-                let session =
-                    build_default_client_auth_session_from_base(account, Some(&existing_json));
-                serde_json::to_string_pretty(&session)
-                    .map_err(|e| format!("序列化登录信息失败: {}", e))
-            },
+            || Ok(content),
         )
         .map_err(|e| format!("写入 WorkBuddy 登录信息失败: {}", e))?;
         if !written {
@@ -1662,10 +1718,7 @@ pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(),
             );
         }
     } else {
-        let session = build_default_client_auth_session(account);
-        let content = serde_json::to_string_pretty(&session)
-            .map_err(|e| format!("序列化登录信息失败: {}", e))?;
-        crate::modules::atomic_write::write_string_atomic(&auth_file, &content)
+        crate::modules::atomic_write::write_string_atomic(auth_file, &content)
             .map_err(|e| format!("写入 WorkBuddy 登录信息失败: {}", e))?;
     }
 
@@ -1679,6 +1732,7 @@ pub fn write_account_to_default_client(account: &WorkbuddyAccount) -> Result<(),
         .map_err(|e| format!("校验 WorkBuddy 登录信息失败: {}", e))?;
     let written_json: Value = serde_json::from_str(&written)
         .map_err(|e| format!("校验 WorkBuddy 登录信息 JSON 失败: {}", e))?;
+    let written_json = workbuddy_auth_crypto::decode_session(&written_json)?;
     let written_token = written_json
         .get("auth")
         .and_then(|auth| auth.get("accessToken"))
@@ -1886,6 +1940,30 @@ mod client_auth_session_tests {
     use super::*;
     use serde_json::json;
 
+    struct TestAuthFile(PathBuf);
+
+    impl TestAuthFile {
+        fn new() -> Self {
+            let unique = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let dir = std::env::temp_dir().join(format!(
+                "cockpit-workbuddy-auth-{}-{}",
+                std::process::id(),
+                unique
+            ));
+            fs::create_dir_all(&dir).unwrap();
+            Self(dir.join(WORKBUDDY_AUTH_FILE_NAME))
+        }
+    }
+
+    impl Drop for TestAuthFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(self.0.parent().unwrap());
+        }
+    }
+
     fn test_account(auth_raw: Option<Value>) -> WorkbuddyAccount {
         serde_json::from_value(json!({
             "id": "test",
@@ -1940,11 +2018,133 @@ mod client_auth_session_tests {
 
     #[test]
     fn detects_future_official_encrypted_wrappers() {
-        assert!(contains_encrypted_wrapper(&json!({
+        assert!(workbuddy_auth_crypto::contains_encrypted_wrapper(&json!({
             "auth": { "accessToken": { "$wbEncrypted": 1, "envelope": "opaque" } }
         })));
-        assert!(!contains_encrypted_wrapper(&json!({
+        assert!(!workbuddy_auth_crypto::contains_encrypted_wrapper(&json!({
             "auth": { "accessToken": "plaintext-current-build" }
         })));
+    }
+
+    #[test]
+    fn local_import_rejects_json_without_token_and_keeps_legacy_token() {
+        assert!(
+            parse_local_auth_secret(r#"{"auth":{},"account":{"uid":"someone"}}"#, false).is_err()
+        );
+        let payload = parse_local_auth_secret("legacy-user+legacy-token", false).unwrap();
+        assert_eq!(payload.uid.as_deref(), Some("legacy-user"));
+        assert_eq!(payload.access_token, "legacy-token");
+    }
+
+    #[test]
+    fn encrypted_local_import_decodes_token_and_rejects_bad_envelope() {
+        workbuddy_auth_crypto::with_test_key(|| {
+            let session = build_default_client_auth_session(&test_account(None));
+            let mut encrypted = workbuddy_auth_crypto::encode_session(&session).unwrap();
+            let payload = parse_local_auth_secret(&encrypted.to_string(), false).unwrap();
+            assert_eq!(payload.access_token, "access-redacted");
+            assert_eq!(payload.refresh_token.as_deref(), Some("refresh-redacted"));
+            assert_eq!(payload.uid.as_deref(), Some("uid-current"));
+            encrypted["auth"]["accessToken"] = json!({"$wbEncrypted": 1, "envelope": "invalid"});
+            assert!(parse_local_auth_secret(&encrypted.to_string(), false).is_err());
+        });
+    }
+
+    #[test]
+    fn encrypted_switch_preserves_encryption_other_accounts_and_unknown_fields() {
+        workbuddy_auth_crypto::with_test_key(|| {
+            let file = TestAuthFile::new();
+            let mut old = test_account(None);
+            old.uid = Some("uid-other".to_string());
+            let mut session = build_default_client_auth_session(&old);
+            session["futureOfficialField"] = json!({"revision": 2});
+            let encrypted = workbuddy_auth_crypto::encode_session(&session).unwrap();
+            fs::write(&file.0, encrypted.to_string()).unwrap();
+            let marker = workbuddy_logout_marker_path(&file.0);
+            fs::write(&marker, "logged-out").unwrap();
+
+            let target = test_account(None);
+            write_account_to_auth_file(&target, &file.0).unwrap();
+            let written: Value = serde_json::from_slice(&fs::read(&file.0).unwrap()).unwrap();
+            assert!(workbuddy_auth_crypto::contains_encrypted_wrapper(&written));
+            assert!(!written["auth"]["accessToken"].is_string());
+            let decoded = workbuddy_auth_crypto::decode_session(&written).unwrap();
+            assert_eq!(decoded["auth"]["accessToken"], target.access_token);
+            assert_eq!(decoded["auth"]["refreshToken"], "refresh-redacted");
+            assert_eq!(decoded["futureOfficialField"]["revision"], 2);
+            assert_eq!(decoded["accounts"].as_array().unwrap().len(), 2);
+            assert_eq!(decoded["accounts"][0]["lastLogin"], false);
+            assert_eq!(decoded["accounts"][1]["uid"], "uid-current");
+            assert!(!marker.exists());
+        });
+    }
+
+    #[test]
+    fn failed_encrypted_switch_keeps_auth_file_and_logout_marker_unchanged() {
+        workbuddy_auth_crypto::with_test_key(|| {
+            let file = TestAuthFile::new();
+            let original = r#"{"auth":{"accessToken":{"$wbEncrypted":1,"envelope":"invalid"}}}"#;
+            fs::write(&file.0, original).unwrap();
+            let marker = workbuddy_logout_marker_path(&file.0);
+            fs::write(&marker, "logged-out").unwrap();
+            assert!(write_account_to_auth_file(&test_account(None), &file.0).is_err());
+            assert_eq!(fs::read_to_string(&file.0).unwrap(), original);
+            assert_eq!(fs::read_to_string(&marker).unwrap(), "logged-out");
+        });
+    }
+
+    #[test]
+    fn new_file_uses_encryption_when_imported_auth_was_encrypted() {
+        workbuddy_auth_crypto::with_test_key(|| {
+            let file = TestAuthFile::new();
+            let original = build_default_client_auth_session(&test_account(None));
+            let raw = workbuddy_auth_crypto::encode_session(&original).unwrap();
+            write_account_to_auth_file(&test_account(Some(raw)), &file.0).unwrap();
+            let written: Value = serde_json::from_slice(&fs::read(&file.0).unwrap()).unwrap();
+            assert!(workbuddy_auth_crypto::contains_encrypted_wrapper(&written));
+        });
+    }
+
+    #[test]
+    fn historical_encrypted_profile_is_decoded_before_building_target_session() {
+        workbuddy_auth_crypto::with_test_key(|| {
+            let plain = json!({"account": {
+                "uid": "uid-current",
+                "nickname": "历史昵称",
+                "phoneNumber": "12345",
+                "departmentFullName": "team",
+                "futureOfficialField": {"revision": 2}
+            }});
+            let encrypted = workbuddy_auth_crypto::encode_session(&plain).unwrap();
+            // 既覆盖只保留 profile_raw 的导入，也覆盖旧版两个 raw 字段并存。
+            for with_auth_raw in [false, true] {
+                let file = TestAuthFile::new();
+                let mut account = test_account(with_auth_raw.then(|| encrypted.clone()));
+                account.profile_raw = Some(encrypted["account"].clone());
+                write_account_to_auth_file(&account, &file.0).unwrap();
+                let written: Value = serde_json::from_slice(&fs::read(&file.0).unwrap()).unwrap();
+                assert!(written["account"]["phoneNumber"].is_object());
+                let decoded = workbuddy_auth_crypto::decode_session(&written).unwrap();
+                for field in [
+                    "nickname",
+                    "phoneNumber",
+                    "departmentFullName",
+                    "futureOfficialField",
+                ] {
+                    assert_eq!(decoded["account"][field], plain["account"][field]);
+                }
+                assert_eq!(decoded["auth"]["accessToken"], "access-redacted");
+            }
+        });
+    }
+
+    #[test]
+    fn plaintext_switch_does_not_require_official_key_or_change_storage_format() {
+        let file = TestAuthFile::new();
+        write_account_to_auth_file(&test_account(None), &file.0).unwrap();
+        let written: Value = serde_json::from_slice(&fs::read(&file.0).unwrap()).unwrap();
+        assert!(!workbuddy_auth_crypto::contains_encrypted_wrapper(&written));
+        assert_eq!(written["auth"]["accessToken"], "access-redacted");
+        write_account_to_auth_file(&test_account(None), &file.0).unwrap();
     }
 }

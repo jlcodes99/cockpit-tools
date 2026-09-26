@@ -1152,8 +1152,8 @@ const fn codex_price(
 }
 
 /// Default Codex/OpenAI price book for local cost estimation (USD / 1M tokens).
-/// Bump `DEFAULT_MODEL_PRICING_VERSION` when defaults change so saved overrides
-/// reseal and historical estimates reprice.
+/// Bump `DEFAULT_MODEL_PRICING_VERSION` when defaults change so former presets
+/// can be replaced and historical estimates reprice.
 const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
     // Keep in sync with supported Codex models and public OpenAI rates.
     CodexLocalAccessPriceBookEntry {
@@ -1163,17 +1163,29 @@ const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
         priority: Some(codex_price(20.0, 2.0, 100.0)),
     },
     CodexLocalAccessPriceBookEntry {
+        model_id: "gpt-6-sol",
+        session_long_context: true,
+        standard: codex_price(2.0, 0.2, 10.0),
+        priority: Some(codex_price(4.0, 0.4, 20.0)),
+    },
+    CodexLocalAccessPriceBookEntry {
+        model_id: "gpt-6-luna",
+        session_long_context: true,
+        standard: codex_price(0.1, 0.01, 0.5),
+        priority: Some(codex_price(0.2, 0.02, 1.0)),
+    },
+    CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.6-sol",
         session_long_context: true,
-        standard: codex_price(5.0, 0.5, 30.0),
-        priority: Some(codex_price(10.0, 1.0, 60.0)),
+        standard: codex_price(4.0, 0.4, 20.0),
+        priority: Some(codex_price(8.0, 0.8, 40.0)),
     },
     CodexLocalAccessPriceBookEntry {
         // Bare gpt-5.6 uses sol-tier rates.
         model_id: "gpt-5.6",
         session_long_context: true,
-        standard: codex_price(5.0, 0.5, 30.0),
-        priority: Some(codex_price(10.0, 1.0, 60.0)),
+        standard: codex_price(4.0, 0.4, 20.0),
+        priority: Some(codex_price(8.0, 0.8, 40.0)),
     },
     CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.6-terra",
@@ -1363,6 +1375,12 @@ fn normalize_known_openai_codex_model(model: &str) -> Option<String> {
     if normalized.contains("gpt-6-astra") {
         return Some("gpt-6-astra".to_string());
     }
+    if normalized.contains("gpt-6-sol") {
+        return Some("gpt-6-sol".to_string());
+    }
+    if normalized.contains("gpt-6-luna") {
+        return Some("gpt-6-luna".to_string());
+    }
     if normalized.contains("gpt-5.6-sol") {
         return Some("gpt-5.6-sol".to_string());
     }
@@ -1458,6 +1476,8 @@ fn is_openai_session_long_context_model(model_id: &str) -> bool {
         "gpt-5.4"
             | "gpt-5.5"
             | "gpt-6-astra"
+            | "gpt-6-sol"
+            | "gpt-6-luna"
             | "gpt-5.6"
             | "gpt-5.6-sol"
             | "gpt-5.6-terra"
@@ -1693,13 +1713,14 @@ fn optional_price_matches_legacy(value: Option<f64>, expected: f64) -> bool {
     }
 }
 
-/// Previous official book rates that should follow the new book going forward.
+/// Former built-in rates that should follow the new book going forward.
 /// Custom overrides that are not these snapshots are kept.
 fn is_superseded_default_56_pricing(pricing: &CodexLocalAccessModelPricing) -> bool {
     let model_id = normalize_known_openai_codex_model(&pricing.model_id)
         .unwrap_or_else(|| pricing.model_id.trim().to_ascii_lowercase());
     let (input, cached, output, priority_input, priority_cached, priority_output) =
         match model_id.as_str() {
+            "gpt-5.6" | "gpt-5.6-sol" => (5.0, 0.5, 30.0, 10.0, 1.0, 60.0),
             "gpt-5.6-terra" => (2.5, 0.25, 15.0, 5.0, 0.5, 30.0),
             "gpt-5.6-luna" => (1.0, 0.1, 6.0, 2.0, 0.2, 12.0),
             _ => return false,
@@ -1900,9 +1921,19 @@ fn calculate_usage_cost_usd(
             let cached_input_price = pricing
                 .cached_input_usd_per_million
                 .unwrap_or(pricing.input_usd_per_million);
+            let cache_write_multiplier =
+                match normalize_known_openai_codex_model(&pricing.model_id).as_deref() {
+                    Some(
+                        "gpt-5.6" | "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna"
+                        | "gpt-6-astra" | "gpt-6-sol" | "gpt-6-luna",
+                    ) => 1.25,
+                    _ => 1.0,
+                };
             let cost = (breakdown.input.uncached_tokens as f64 * pricing.input_usd_per_million
                 + breakdown.input.cache_read_tokens as f64 * cached_input_price
-                + breakdown.input.cache_write_tokens as f64 * pricing.input_usd_per_million
+                + breakdown.input.cache_write_tokens as f64
+                    * pricing.input_usd_per_million
+                    * cache_write_multiplier
                 + breakdown.output.total_tokens as f64 * pricing.output_usd_per_million)
                 / 1_000_000.0;
             return if cost.is_finite() && cost > 0.0 {

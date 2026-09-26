@@ -127,6 +127,8 @@ fn automatic_routing_trims_visible_gpt_models_and_keeps_history_routable() {
     // 只断言纯函数：清单不依赖全局实验目录（其它用例可能开启「模型管理」）。
     let trimmed = super::automatic_api_service_visible_model_ids(vec![
         "gpt-6-astra".into(),
+        "gpt-6-sol".into(),
+        "gpt-6-luna".into(),
         "gpt-5.6-sol".into(),
         "gpt-5.4".into(),
         "gpt-5.4-mini".into(),
@@ -142,6 +144,8 @@ fn automatic_routing_trims_visible_gpt_models_and_keeps_history_routable() {
         trimmed,
         vec![
             "gpt-6-astra",
+            "gpt-6-sol",
+            "gpt-6-luna",
             "gpt-5.6-sol",
             "gpt-image-2.5",
             "codex-auto-review",

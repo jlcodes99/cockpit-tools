@@ -141,6 +141,24 @@ fn write_synced_temp_file(temp_path: &Path, content: &str) -> Result<(), String>
     write_synced_temp_file_bytes(temp_path, content.as_bytes())
 }
 
+fn write_secret_temp_file(temp_path: &Path, content: &str) -> Result<(), String> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(temp_path)
+        .map_err(|e| format_io_error("创建私有临时文件", temp_path, &e))?;
+    file.write_all(content.as_bytes())
+        .map_err(|e| format_io_error("写入私有临时文件", temp_path, &e))?;
+    file.sync_all()
+        .map_err(|e| format_io_error("同步私有临时文件", temp_path, &e))?;
+    Ok(())
+}
+
 fn write_string_atomic_internal(
     path: &Path,
     content: &str,
@@ -180,10 +198,63 @@ fn write_string_atomic_internal(
     Ok(())
 }
 
+fn remove_secret_backup(path: &Path) -> Result<(), String> {
+    let parent = path.parent().ok_or("无法定位目标目录")?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("无法解析目标文件名: {}", path.display()))?;
+    let mut backup_name = file_name.to_os_string();
+    backup_name.push(".bak");
+    let backup_path = parent.join(backup_name);
+    match fs::remove_file(&backup_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format_io_error("删除凭据备份", &backup_path, &error)),
+    }
+    Ok(())
+}
+
+fn write_secret_string_atomic_internal(path: &Path, content: &str) -> Result<(), String> {
+    let parent = path.parent().ok_or("无法定位目标目录")?;
+    fs::create_dir_all(parent).map_err(|e| format_io_error("创建目录", parent, &e))?;
+    remove_secret_backup(path)?;
+    let temp_path = build_temp_file_path(parent, path, "secret-atomic");
+    if let Err(err) = write_secret_temp_file(&temp_path, content) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(err);
+    }
+    if let Err(err) = fs::rename(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format_io_error("替换私有文件", path, &err));
+    }
+    Ok(())
+}
+
 pub fn write_string_atomic(path: &Path, content: &str) -> Result<(), String> {
     let lock = path_write_lock(path)?;
     let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
     write_string_atomic_internal(path, content, true)
+}
+
+/// Atomically replace credential material without creating a plaintext .bak file.
+pub fn write_secret_string_atomic(path: &Path, content: &str) -> Result<(), String> {
+    let lock = path_write_lock(path)?;
+    let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
+    write_secret_string_atomic_internal(path, content)
+}
+
+pub fn write_secret_string_atomic_if_changed(path: &Path, content: &str) -> Result<bool, String> {
+    let lock = path_write_lock(path)?;
+    let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
+    remove_secret_backup(path)?;
+    match fs::read_to_string(path) {
+        Ok(existing) if existing == content => return Ok(false),
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format_io_error("读取私有文件", path, &error)),
+    }
+    write_secret_string_atomic_internal(path, content)?;
+    Ok(true)
 }
 
 pub fn write_string_atomic_if_hash_matches<F>(
@@ -309,7 +380,8 @@ pub fn parse_json_with_auto_restore<T: DeserializeOwned>(
 mod tests {
     use super::{
         build_backup_path, quarantine_file, remove_file_if_hash_matches, remove_file_locked,
-        restore_from_backup, write_string_atomic, write_string_atomic_if_hash_matches,
+        restore_from_backup, write_secret_string_atomic, write_string_atomic,
+        write_string_atomic_if_hash_matches,
     };
     use sha2::{Digest, Sha256};
     use std::fs;
@@ -324,6 +396,29 @@ mod tests {
             std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), unique));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
+    }
+
+    #[test]
+    fn secret_atomic_write_is_private_and_never_keeps_plaintext_backup() {
+        let dir = make_temp_dir("atomic_write_secret");
+        let path = dir.join("oauth.json");
+        write_string_atomic(&path, "{\"token\":\"old\"}").expect("write old value");
+        write_string_atomic(&path, "{\"token\":\"previous\"}")
+            .expect("create legacy plaintext backup");
+        assert!(dir.join("oauth.json.bak").exists());
+        write_secret_string_atomic(&path, "{\"token\":\"new\"}")
+            .expect("replace secret value without backup");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"token\":\"new\"}");
+        assert!(!dir.join("oauth.json.bak").exists());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

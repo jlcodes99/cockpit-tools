@@ -171,6 +171,27 @@ fn apply_account_usage_priority_ids(
     );
 }
 
+enum LocalAccessGatewayReload {
+    Background,
+    Await,
+}
+
+fn routing_priority_ids(collection: &CodexLocalAccessCollection) -> (Vec<String>, Vec<String>) {
+    let backup_account_ids = collection
+        .custom_routing_rules
+        .iter()
+        .filter(|rule| rule.is_backup)
+        .map(|rule| rule.account_id.clone())
+        .collect();
+    let preferred_account_ids = collection
+        .custom_routing_rules
+        .iter()
+        .filter(|rule| rule.is_preferred)
+        .map(|rule| rule.account_id.clone())
+        .collect();
+    (backup_account_ids, preferred_account_ids)
+}
+
 pub async fn save_local_access_accounts(
     account_ids: Vec<String>,
     restrict_free_accounts: bool,
@@ -180,6 +201,30 @@ pub async fn save_local_access_accounts(
     session_affinity_ttl_ms: Option<i64>,
     image_generation_account_policies:
         Option<HashMap<String, CodexLocalAccessImageGenerationPolicy>>,
+) -> Result<CodexLocalAccessState, String> {
+    save_local_access_accounts_with_reload(
+        account_ids,
+        restrict_free_accounts,
+        backup_account_ids,
+        preferred_account_ids,
+        session_affinity,
+        session_affinity_ttl_ms,
+        image_generation_account_policies,
+        LocalAccessGatewayReload::Background,
+    )
+    .await
+}
+
+async fn save_local_access_accounts_with_reload(
+    account_ids: Vec<String>,
+    restrict_free_accounts: bool,
+    backup_account_ids: Option<Vec<String>>,
+    preferred_account_ids: Option<Vec<String>>,
+    session_affinity: Option<bool>,
+    session_affinity_ttl_ms: Option<i64>,
+    image_generation_account_policies:
+        Option<HashMap<String, CodexLocalAccessImageGenerationPolicy>>,
+    reload: LocalAccessGatewayReload,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
 
@@ -265,7 +310,14 @@ pub async fn save_local_access_accounts(
     }
 
     if should_reload_gateway {
-        trigger_gateway_reload_in_background("保存 API 服务账号集合");
+        match reload {
+            LocalAccessGatewayReload::Await => {
+                ensure_gateway_matches_runtime().await?;
+            }
+            LocalAccessGatewayReload::Background => {
+                trigger_gateway_reload_in_background("保存 API 服务账号集合");
+            }
+        }
     }
     snapshot_state_without_gateway_reload().await
 }

@@ -732,8 +732,14 @@ async fn refresh_due_workbuddy_accounts() -> bool {
                 clear_attempt_backoff(&key);
                 refreshed_any = true;
                 if current_id.as_deref() == Some(updated.id.as_str()) {
-                    if let Err(err) = workbuddy_account::sync_account_to_default_client(&updated.id)
-                    {
+                    let account_id = updated.id.clone();
+                    let sync_result = tauri::async_runtime::spawn_blocking(move || {
+                        workbuddy_account::sync_account_to_default_client(&account_id)
+                    })
+                    .await
+                    .map_err(|error| format!("WorkBuddy 登录回写后台任务失败: {}", error))
+                    .and_then(|result| result);
+                    if let Err(err) = sync_result {
                         logger::log_warn(&format!(
                             "[TokenKeeper][WorkBuddy] 当前本地登录回写失败: account_id={}, error={}",
                             updated.id, err
