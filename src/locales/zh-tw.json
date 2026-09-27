@@ -2116,6 +2116,10 @@
     "other_group": "其他模型"
   },
   "codex": {
+    "cliDaemon": {
+      "title": "請重新啟動 Codex CLI 常駐程序",
+      "description": "無法完成自動重新啟動。帳號憑證已更新，但執行中的 Codex CLI 常駐程序可能仍使用先前的帳號，即使開啟新終端機也一樣。請先完成正在進行的 Codex CLI 工作，執行以下指令，再重新開啟 CLI。重新啟動共用常駐程序可能會中斷已連線的工作階段。"
+    },
     "launchErrors": {
       "bindingFailed": "無法確認帳號綁定，已停止啟動，請重試切換帳號。",
       "processScanFailed": "無法檢查舊背景程序，已停止啟動，請重試。",

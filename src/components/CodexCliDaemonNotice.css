@@ -1,0 +1,16 @@
+.codex-cli-daemon-overlay {
+  z-index: 12010;
+}
+
+.codex-cli-daemon-body p {
+  line-height: 1.6;
+}
+
+.codex-cli-daemon-body pre {
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

@@ -198,6 +198,11 @@ jobs:
       - name: 🔄 Sync versions
         run: npm run sync-version
 
+      - name: 🧪 Test Codex CLI daemon restart
+        if: matrix.label == 'ubuntu-22.04' || matrix.label == 'macos-aarch64'
+        working-directory: src-tauri
+        run: cargo test codex_cli_daemon --lib
+
       - name: 🧪 Test core Rust library
         if: matrix.label == 'ubuntu-22.04'
         run: npm run test:rust:core

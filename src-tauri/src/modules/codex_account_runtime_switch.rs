@@ -672,6 +672,7 @@ pub async fn prepare_account_for_injection_from_store(
 fn switch_account_with_prepared(
     account_id: &str,
     account_for_write: CodexAccount,
+    committed_home: &mut Option<PathBuf>,
 ) -> Result<CodexAccount, String> {
     let codex_home = get_codex_home();
     let auth_path = codex_home.join("auth.json");
@@ -681,7 +682,11 @@ fn switch_account_with_prepared(
         account_for_write.email,
         codex_home.display()
     ));
-    write_prepared_account_bundle_to_dir(&codex_home, &account_for_write)?;
+    write_prepared_account_bundle_to_dir_with_commit_tracking(
+        &codex_home,
+        &account_for_write,
+        committed_home,
+    )?;
     logger::log_info(&format!(
         "[Codex切号] 已替换目录登录信息: target_dir={}, target_file={}",
         codex_home.display(),
@@ -851,10 +856,12 @@ async fn prepare_freshly_reauthorized_account_switch_locked(
 async fn commit_account_switch_locked(
     account_id: &str,
     prepared: PreparedCodexAccountSwitch,
+    committed_home: &mut Option<PathBuf>,
 ) -> Result<CodexAccount, String> {
     match prepared {
         PreparedCodexAccountSwitch::Account(account) => {
-            let updated_account = switch_account_with_prepared(account_id, account)?;
+            let updated_account =
+                switch_account_with_prepared(account_id, account, committed_home)?;
             let codex_home = get_codex_home();
             activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account).await?;
             Ok(updated_account)
@@ -871,7 +878,12 @@ async fn commit_account_switch_locked(
                 oauth_account.id,
                 codex_home.display()
             ));
-            write_api_key_account_bundle_with_oauth_to_dir(&codex_home, &account, &oauth_account)?;
+            write_api_key_account_bundle_with_oauth_to_dir_with_commit_tracking(
+                &codex_home,
+                &account,
+                &oauth_account,
+                committed_home,
+            )?;
             logger::log_info(&format!(
                 "[Codex切号] 已替换目录登录信息: target_dir={}, target_file={}",
                 codex_home.display(),
@@ -916,7 +928,8 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
-    switch_account_managed_with_before_commit_options(account_id, false, before_commit).await
+    switch_account_managed_with_before_commit_options(account_id, false, before_commit, &mut None)
+        .await
 }
 
 /// 用户从账号页主动切号时使用：每次都重新读取当前凭据，并按统一 Token Authority
@@ -929,19 +942,31 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
-    switch_account_managed_with_before_commit_and_revalidation_options(account_id, before_commit)
-        .await
+    switch_account_managed_with_before_commit_and_revalidation_options(
+        account_id,
+        before_commit,
+        &mut None,
+    )
+    .await
 }
 
+/// `committed_home` survives post-auth failures so callers can notify stale daemons.
 pub async fn switch_account_managed_with_before_commit_and_revalidation_options<F, Fut>(
     account_id: &str,
     before_commit: F,
+    committed_home: &mut Option<PathBuf>,
 ) -> Result<CodexAccount, String>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
-    switch_account_managed_with_before_commit_options(account_id, true, before_commit).await
+    switch_account_managed_with_before_commit_options(
+        account_id,
+        true,
+        before_commit,
+        committed_home,
+    )
+    .await
 }
 
 /// OAuth 重新授权成功后的受控切号。
@@ -963,6 +988,7 @@ where
         account_id,
         expected_token_generation,
         before_commit,
+        &mut None,
     )
     .await
 }
@@ -971,11 +997,13 @@ pub async fn switch_account_managed_after_reauth_with_before_commit_options<F, F
     account_id: &str,
     expected_token_generation: u64,
     before_commit: F,
+    committed_home: &mut Option<PathBuf>,
 ) -> Result<CodexAccount, String>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
+    *committed_home = None;
     crate::modules::codex_auth_diagnostic::log_event(
         "reauth_switch_start",
         serde_json::json!({
@@ -991,7 +1019,7 @@ where
         prepare_freshly_reauthorized_account_switch_locked(account_id, expected_token_generation)
             .await?;
     before_commit().await?;
-    let result = commit_account_switch_locked(account_id, prepared).await;
+    let result = commit_account_switch_locked(account_id, prepared, committed_home).await;
     crate::modules::codex_auth_diagnostic::log_event(
         "reauth_switch_finished",
         match &result {
@@ -1015,6 +1043,7 @@ pub async fn switch_account_managed_with_before_commit_options<F, Fut>(
     account_id: &str,
     retry_known_reauth: bool,
     before_commit: F,
+    committed_home: &mut Option<PathBuf>,
 ) -> Result<CodexAccount, String>
 where
     F: FnOnce() -> Fut,
@@ -1024,6 +1053,7 @@ where
         account_id,
         retry_known_reauth,
         before_commit,
+        committed_home,
     )
     .await
 }
@@ -1031,11 +1061,13 @@ async fn switch_account_managed_with_before_commit_internal<F, Fut>(
     account_id: &str,
     retry_known_reauth: bool,
     before_commit: F,
+    committed_home: &mut Option<PathBuf>,
 ) -> Result<CodexAccount, String>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
+    *committed_home = None;
     let _switch_guard = CODEX_ACCOUNT_SWITCH_LOCK.lock().await;
     sync_active_official_account_before_switch().await?;
 
@@ -1064,5 +1096,5 @@ where
     let prepared = prepare_account_switch_locked(account_id, retry_known_reauth).await?;
     // 目标凭据已经通过检查并在账号库中落稳，才关闭旧运行态并提交到官方目录。
     before_commit().await?;
-    commit_account_switch_locked(account_id, prepared).await
+    commit_account_switch_locked(account_id, prepared, committed_home).await
 }

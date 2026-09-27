@@ -725,6 +725,14 @@ fn write_auth_value_to_configured_store(
 }
 
 pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+    write_auth_file_to_dir_with_commit_tracking(base_dir, account, &mut None)
+}
+
+fn write_auth_file_to_dir_with_commit_tracking(
+    base_dir: &Path,
+    account: &CodexAccount,
+    committed_home: &mut Option<PathBuf>,
+) -> Result<(), String> {
     let auth_path = base_dir.join("auth.json");
     logger::log_info(&format!(
         "[Codex切号] 准备写入登录信息: account_id={}, email={}, target_dir={}, target_file={}",
@@ -738,6 +746,9 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
 
     let auth_file = build_merged_auth_file_value(base_dir, account)?;
     let auth_store = write_auth_value_to_configured_store(base_dir, &auth_path, &auth_file)?;
+    // Auth is already durable in the file or Keychain. Later config, projection,
+    // index or account writes can fail without rolling these credentials back.
+    *committed_home = Some(base_dir.to_path_buf());
 
     let provider_config = if account.is_api_key_auth() {
         let provider_config = infer_api_provider_config(
@@ -822,8 +833,16 @@ pub(crate) fn write_prepared_account_bundle_to_dir(
     base_dir: &Path,
     account: &CodexAccount,
 ) -> Result<(), String> {
+    write_prepared_account_bundle_to_dir_with_commit_tracking(base_dir, account, &mut None)
+}
+
+fn write_prepared_account_bundle_to_dir_with_commit_tracking(
+    base_dir: &Path,
+    account: &CodexAccount,
+    committed_home: &mut Option<PathBuf>,
+) -> Result<(), String> {
     let account = resolve_account_for_bundle_write(base_dir, account)?;
-    write_auth_file_to_dir(base_dir, &account)?;
+    write_auth_file_to_dir_with_commit_tracking(base_dir, &account, committed_home)?;
     write_managed_projection_to_dir(base_dir, &account)?;
     sync_or_cleanup_managed_model_catalog_for_dir(base_dir, &account)?;
     Ok(())
@@ -926,6 +945,20 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
     api_key_account: &CodexAccount,
     oauth_account: &CodexAccount,
 ) -> Result<(), String> {
+    write_api_key_account_bundle_with_oauth_to_dir_with_commit_tracking(
+        base_dir,
+        api_key_account,
+        oauth_account,
+        &mut None,
+    )
+}
+
+fn write_api_key_account_bundle_with_oauth_to_dir_with_commit_tracking(
+    base_dir: &Path,
+    api_key_account: &CodexAccount,
+    oauth_account: &CodexAccount,
+    committed_home: &mut Option<PathBuf>,
+) -> Result<(), String> {
     if !api_key_account.is_api_key_auth() {
         return Err("仅 API Key 账号支持 OAuth 绑定写入".to_string());
     }
@@ -937,7 +970,11 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
     }
 
     if oauth_account.tokens.id_token.trim().is_empty() {
-        write_prepared_account_bundle_to_dir(base_dir, api_key_account)?;
+        write_prepared_account_bundle_to_dir_with_commit_tracking(
+            base_dir,
+            api_key_account,
+            committed_home,
+        )?;
         logger::log_info(&format!(
             "[Codex切号] 已写入 API Key 账号配置，绑定 OAuth 缺少 id_token，跳过 OAuth 登录态投影: api_account_id={}, oauth_account_id={}, target_dir={}",
             api_key_account.id,
@@ -947,7 +984,11 @@ fn write_api_key_account_bundle_with_oauth_to_dir(
         return Ok(());
     }
 
-    write_prepared_account_bundle_to_dir(base_dir, oauth_account)?;
+    write_prepared_account_bundle_to_dir_with_commit_tracking(
+        base_dir,
+        oauth_account,
+        committed_home,
+    )?;
     let provider_config =
         write_api_key_provider_override_to_config_toml(base_dir, api_key_account)?;
     // config/Provider 归 API Key 账号所有，但 auth.json/keychain 中的一次性 RT 链

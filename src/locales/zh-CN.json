@@ -2336,6 +2336,10 @@
     "other_group": "其他模型"
   },
   "codex": {
+    "cliDaemon": {
+      "title": "请重启 Codex CLI 守护进程",
+      "description": "无法完成自动重启。账号凭据已更新，但正在运行的 Codex CLI 守护进程可能仍使用之前的账号，即使打开新终端也一样。请先完成正在进行的 Codex CLI 任务，运行以下命令，再重新打开 CLI。重启共享守护进程可能会中断已连接的会话。"
+    },
     "launchErrors": {
       "bindingFailed": "无法确认账号绑定，已停止启动，请重试切号。",
       "processScanFailed": "无法检查旧后台进程，已停止启动，请重试。",

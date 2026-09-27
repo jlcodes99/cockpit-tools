@@ -20,6 +20,7 @@ include!("codex_account_import.rs");
 #[cfg(test)]
 mod tests {
     include!("codex_account_tests_identity_import_refresh.rs");
+    include!("codex_account_tests_cli_daemon.rs");
     include!("codex_account_tests_local_import.rs");
     include!("codex_account_tests_identity_isolation.rs");
     include!("codex_account_tests_portable_import_metadata.rs");

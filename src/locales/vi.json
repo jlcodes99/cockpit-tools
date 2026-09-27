@@ -2116,6 +2116,10 @@
     "other_group": "Mô hình khác"
   },
   "codex": {
+    "cliDaemon": {
+      "title": "Khởi động lại daemon Codex CLI",
+      "description": "Không thể hoàn tất việc tự động khởi động lại daemon. Thông tin đăng nhập đã được cập nhật, nhưng daemon Codex CLI đang chạy có thể vẫn dùng tài khoản cũ, ngay cả khi mở terminal mới. Hãy hoàn tất công việc đang chạy trong Codex CLI, chạy lệnh bên dưới rồi mở lại CLI. Khởi động lại daemon dùng chung có thể ngắt các phiên đang kết nối."
+    },
     "launchErrors": {
       "bindingFailed": "Không thể xác nhận tài khoản liên kết. Đã dừng khởi động; hãy thử chuyển tài khoản lại.",
       "processScanFailed": "Không thể kiểm tra các tiến trình nền cũ. Đã dừng khởi động; hãy thử lại.",

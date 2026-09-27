@@ -2163,6 +2163,10 @@
     "other_group": "Model Lainnya"
   },
   "codex": {
+    "cliDaemon": {
+      "title": "Mulai ulang daemon Codex CLI",
+      "description": "Mulai ulang otomatis tidak dapat diselesaikan. Kredensial telah diperbarui, tetapi daemon Codex CLI yang berjalan mungkin masih menggunakan akun sebelumnya, bahkan di terminal baru. Selesaikan pekerjaan aktif, jalankan perintah di bawah, lalu buka kembali CLI. Memulai ulang daemon bersama dapat mengganggu sesi yang terhubung."
+    },
     "launchErrors": {
       "bindingFailed": "Tidak dapat memastikan akun yang terhubung. Proses mulai dihentikan; coba beralih akun lagi.",
       "processScanFailed": "Tidak dapat memeriksa proses latar belakang sebelumnya. Proses mulai dihentikan; coba lagi.",

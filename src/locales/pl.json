@@ -2116,6 +2116,10 @@
     "other_group": "Inne modele"
   },
   "codex": {
+    "cliDaemon": {
+      "title": "Uruchom ponownie demona Codex CLI",
+      "description": "Nie udało się ukończyć automatycznego ponownego uruchomienia. Dane logowania zostały zaktualizowane, ale działający demon Codex CLI może nadal używać poprzedniego konta, nawet w nowym terminalu. Zakończ aktywne zadania, wykonaj poniższe polecenie i ponownie otwórz CLI. Ponowne uruchomienie współdzielonego demona może przerwać połączone sesje."
+    },
     "launchErrors": {
       "bindingFailed": "Nie można potwierdzić powiązania konta. Uruchamianie zatrzymano. Spróbuj ponownie przełączyć konto.",
       "processScanFailed": "Nie można sprawdzić poprzednich procesów w tle. Uruchamianie zatrzymano. Spróbuj ponownie.",

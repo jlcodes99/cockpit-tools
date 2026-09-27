@@ -2116,6 +2116,10 @@
     "other_group": "Ostatní modely"
   },
   "codex": {
+    "cliDaemon": {
+      "title": "Restartujte démona Codex CLI",
+      "description": "Automatický restart se nepodařilo dokončit. Přihlašovací údaje byly aktualizovány, ale běžící démon Codex CLI může stále používat předchozí účet i v novém terminálu. Dokončete probíhající úlohy, spusťte následující příkaz a znovu otevřete CLI. Restart sdíleného démona může přerušit připojené relace."
+    },
     "launchErrors": {
       "bindingFailed": "Nelze potvrdit přiřazení účtu. Spuštění zastaveno. Zkuste účet přepnout znovu.",
       "processScanFailed": "Nelze zkontrolovat předchozí procesy na pozadí. Spuštění zastaveno. Zkuste to znovu.",

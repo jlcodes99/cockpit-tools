@@ -21,6 +21,7 @@ import { BootReadyMarker, VisibleBootPage } from './components/BootReadyMarker';
 import { GlobalModal } from './components/GlobalModal';
 import { WindowsOperationDialog } from './components/WindowsOperationDialog';
 import { CodexSwitchProgressModal } from './components/CodexSwitchProgressModal';
+import { CodexCliDaemonNotice } from './components/CodexCliDaemonNotice';
 import { CodexInstanceLaunchProgressModal } from './components/CodexInstanceLaunchProgressModal';
 import { CodexPelicanHost } from './components/codex/pelican/CodexPelicanHost';
 import { AnnouncementHost } from './components/AnnouncementCenter';
@@ -3753,6 +3754,7 @@ function MainApp() {
       )}
       <GlobalModal />
       <CodexSwitchProgressModal />
+      <CodexCliDaemonNotice />
       <CodexInstanceLaunchProgressModal />
       <CodexPelicanHost />
       <WindowsOperationDialog />

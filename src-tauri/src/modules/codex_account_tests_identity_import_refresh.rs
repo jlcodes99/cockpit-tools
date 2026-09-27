@@ -1478,6 +1478,7 @@ fn reauth_switch_preserves_new_tokens_and_marks_account_current() {
                 &reauthed.id,
                 reauthed.token_generation,
                 || async { Ok(()) },
+                &mut None,
             ),
         )
         .expect("commit newly authorized tokens");

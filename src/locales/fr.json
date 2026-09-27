@@ -2116,6 +2116,10 @@
     "other_group": "Autres modèles"
   },
   "codex": {
+    "cliDaemon": {
+      "title": "Redémarrer le daemon Codex CLI",
+      "description": "Le redémarrage automatique n’a pas pu être effectué. Les identifiants ont été mis à jour, mais un daemon Codex CLI en cours peut encore utiliser le compte précédent, même dans un nouveau terminal. Terminez les tâches en cours, exécutez la commande ci-dessous, puis rouvrez la CLI. Le redémarrage du daemon partagé peut interrompre les sessions connectées."
+    },
     "launchErrors": {
       "bindingFailed": "Impossible de confirmer le compte associé. Démarrage arrêté ; réessayez de changer de compte.",
       "processScanFailed": "Impossible de vérifier les anciens processus en arrière-plan. Démarrage arrêté ; réessayez.",

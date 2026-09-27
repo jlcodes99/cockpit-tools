@@ -2116,6 +2116,10 @@
     "other_group": "Outros modelos"
   },
   "codex": {
+    "cliDaemon": {
+      "title": "Reinicie o daemon do Codex CLI",
+      "description": "Não foi possível concluir a reinicialização automática. As credenciais foram atualizadas, mas um daemon do Codex CLI em execução ainda pode usar a conta anterior, mesmo em um novo terminal. Conclua as tarefas ativas, execute o comando abaixo e reabra a CLI. Reiniciar o daemon compartilhado pode interromper as sessões conectadas."
+    },
     "launchErrors": {
       "bindingFailed": "Não foi possível confirmar a conta vinculada. Inicialização interrompida; tente trocar de conta novamente.",
       "processScanFailed": "Não foi possível verificar os processos anteriores em segundo plano. Inicialização interrompida; tente novamente.",

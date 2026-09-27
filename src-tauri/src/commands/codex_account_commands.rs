@@ -1188,20 +1188,33 @@ pub async fn switch_codex_account(
             Ok(())
         }
     };
+    let mut committed_home = None;
     let switch_result = if let Some(expected_generation) = reauth_token_generation {
-        codex_account::switch_account_managed_after_reauth_with_before_commit(
+        codex_account::switch_account_managed_after_reauth_with_before_commit_options(
             &account_id,
             expected_generation,
             before_commit,
+            &mut committed_home,
         )
         .await
     } else {
         codex_account::switch_account_managed_with_before_commit_and_revalidation_options(
             &account_id,
             before_commit,
+            &mut committed_home,
         )
         .await
     };
+    // A failed switch can still have committed auth before config/index writes
+    // failed. Restart that home's daemon before propagating errors or cancellation;
+    // fall back to a manual notice without replacing the original switch result.
+    if let Some(codex_home) = committed_home.as_deref() {
+        if let Some(command) =
+            crate::modules::codex_cli_daemon::restart_after_auth_commit(codex_home).await
+        {
+            let _ = app.emit("codex:cli-daemon-restart-required", command);
+        }
+    }
     ensure_codex_switch_not_cancelled(&account_id)?;
     let account = match switch_result {
         Ok(account) => account,
