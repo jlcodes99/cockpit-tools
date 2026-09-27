@@ -42,6 +42,34 @@ type sidecarRuntime struct {
 	done    chan error
 }
 
+func applyDeepSeekReasoningDefaults(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	for i := range cfg.CodexKey {
+		for j := range cfg.CodexKey[i].Models {
+			model := &cfg.CodexKey[i].Models[j]
+			if model.Thinking != nil {
+				continue
+			}
+			name := strings.TrimSpace(model.Name)
+			if name == "" {
+				name = strings.TrimSpace(model.Alias)
+			}
+			var levels []string
+			switch strings.ToLower(name) {
+			case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4.1-flash":
+				levels = []string{"max", "low", "medium", "high"}
+			case "deepseek-v4-pro":
+				levels = []string{"xhigh", "low", "medium", "high"}
+			}
+			if len(levels) > 0 {
+				model.Thinking = &internalregistry.ThinkingSupport{Levels: levels}
+			}
+		}
+	}
+}
+
 // sidecarOAuthProviders 是 manifest OAuth auth 文件允许使用的上游 provider。
 // codex 走官方 Codex/ChatGPT 执行器，xai 走 Grok(xAI) 执行器（Cockpit 的 Grok
 // 平台账号以 xai OAuth auth 文件形式交给 sidecar），其它 provider 一律拒绝。

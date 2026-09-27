@@ -134,6 +134,7 @@ func main() {
 		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
 		os.Exit(2)
 	}
+	applyDeepSeekReasoningDefaults(cfg)
 	emitter.emitStartupStage("load_manifest")
 	m, err := loadManifest(*manifestPath)
 	if err != nil {
