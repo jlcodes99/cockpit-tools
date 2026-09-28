@@ -1,4 +1,5 @@
 export type CodexApiProviderMode = "openai_builtin" | "custom";
+import type { CodexModelCatalogSourceInfo } from "../services/codexModelCatalogSourceService";
 export type CodexProviderWireApi = "responses" | "chat_completions";
 
 export interface CodexApiModelMapping {
@@ -28,6 +29,7 @@ export interface CodexQuickConfig {
   experimental_model_catalog_unavailable_reason?: "catalog_conflict";
   experimental_model_catalog_conflict?: string;
   experimental_model_catalog_models: CodexExperimentalModelDefinition[];
+  experimental_model_catalog_source?: CodexModelCatalogSourceInfo | null;
   experimental_model_catalog_default_model_id?: string | null;
   experimental_model_catalog_reset_models: CodexExperimentalModelDefinition[];
   experimental_model_catalog_reset_default_model_id?: string | null;

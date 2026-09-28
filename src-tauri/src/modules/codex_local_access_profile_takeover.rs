@@ -931,6 +931,33 @@ fn restore_profile_takeover_backup(
     Ok(true)
 }
 
+fn restore_profile_takeover_backup_for_dir(profile_dir: &Path) -> Result<bool, String> {
+    let mut backups = load_takeover_backups()?;
+    let profile_key = normalize_profile_dir_key(profile_dir);
+    if let Some(index) = backups.profiles.iter().position(|item| item.profile_dir == profile_key) {
+        let backup = backups.profiles[index].clone();
+        if restore_profile_takeover_backup(&backup, "", true)? {
+            backups.profiles.remove(index);
+            save_takeover_backups(&backups)?;
+            return Ok(true);
+        }
+        return ensure_profile_no_longer_uses_local_access(profile_dir);
+    }
+    cleanup_profile_takeover_without_backup(profile_dir, "", true)?;
+    ensure_profile_no_longer_uses_local_access(profile_dir)
+}
+
+fn ensure_profile_no_longer_uses_local_access(profile_dir: &Path) -> Result<bool, String> {
+    let config = read_optional_profile_file(&profile_config_path(profile_dir))?;
+    if config.as_deref().is_some_and(is_cockpit_managed_local_access_config) {
+        return Err(format!(
+            "接管配置仍指向本地网关: profile={}",
+            profile_dir.display()
+        ));
+    }
+    Ok(false)
+}
+
 fn cleanup_profile_takeover_without_backup(
     profile_dir: &Path,
     api_key: &str,

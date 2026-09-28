@@ -1,7 +1,15 @@
+import type { CodexExperimentalModelDefinition } from '../types/codex';
+
 export interface MovableCodexProviderApiKey {
   id: string;
   name: string;
   apiKey: string;
+  modelCatalog?: string[];
+  modelContextWindows?: Record<string, number>;
+  modelAutoCompactTokenLimits?: Record<string, number>;
+  compactionMode?: 'auto' | 'remote' | 'local';
+  modelDefinitions?: CodexExperimentalModelDefinition[];
+  defaultModelId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -53,6 +61,14 @@ export function moveCodexProviderApiKey(
     }
     if (!targetName && sourceName) {
       targetApiKey.name = sourceName;
+    }
+    if (targetApiKey.modelCatalog === undefined && sourceApiKey.modelCatalog !== undefined) {
+      targetApiKey.modelCatalog = [...sourceApiKey.modelCatalog];
+      targetApiKey.modelContextWindows = { ...sourceApiKey.modelContextWindows };
+      targetApiKey.modelAutoCompactTokenLimits = { ...sourceApiKey.modelAutoCompactTokenLimits };
+      targetApiKey.compactionMode = sourceApiKey.compactionMode;
+      targetApiKey.modelDefinitions = sourceApiKey.modelDefinitions?.map((model) => ({ ...model }));
+      targetApiKey.defaultModelId = sourceApiKey.defaultModelId;
     }
     targetApiKey.updatedAt = now;
     source.apiKeys.splice(sourceIndex, 1);

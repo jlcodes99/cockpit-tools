@@ -421,6 +421,8 @@ pub struct CodexLocalAccessProviderGateway {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wire_api: Option<String>,
     #[serde(default)]
+    pub supports_remote_compaction: bool,
+    #[serde(default)]
     pub supports_vision: bool,
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub model_capabilities:

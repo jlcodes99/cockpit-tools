@@ -61,6 +61,10 @@ import { scrollElementIntoView } from "../utils/reducedMotion";
 import { useEscClose } from "../hooks/useEscClose";
 import { useEnterConfirm } from "../hooks/useEnterConfirm";
 import { CodexExperimentalModelEditor } from "./codex/CodexExperimentalModelEditor";
+import { CodexModelCatalogSourceControls } from "./codex/CodexModelCatalogSourceControls";
+import type { CodexModelCatalogSourceInfo } from "../services/codexModelCatalogSourceService";
+import { validateEffectiveModelContexts } from "../utils/codexModelContext";
+import { listModelProviderModels } from "../services/modelProviderUsageService";
 import {
   CodexModelRoutingFields,
   CODEX_MODEL_ROUTE_NAMESPACE_PATTERN,
@@ -84,6 +88,7 @@ import {
   openCodexInstanceConfigToml,
   saveCodexInstanceConfiguration,
   saveCodexInstanceModelCatalog,
+  saveCodexInstanceModelCatalogSource,
 } from "../services/codexInstanceService";
 import { CodexSpeedSelect } from "./codex/CodexSpeedSelect";
 import { SingleSelectDropdown } from "./SingleSelectDropdown";
@@ -686,6 +691,7 @@ export function InstancesManager<TAccount extends AccountLike>({
   const [formExperimentalModels, setFormExperimentalModels] = useState<
     CodexExperimentalModelDefinition[]
   >([]);
+  const [formModelSourceInfo, setFormModelSourceInfo] = useState<CodexModelCatalogSourceInfo | null>(null);
   const [formExperimentalDefaultModelId, setFormExperimentalDefaultModelId] =
     useState<string | null>(null);
   const [formExperimentalModelsError, setFormExperimentalModelsError] =
@@ -1080,6 +1086,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     setFormCodexQuickConfig(null);
     setFormExperimentalModelCatalogEnabled(false);
     setFormExperimentalModels([]);
+    setFormModelSourceInfo(null);
     setFormExperimentalModelsError(null);
     setFormCodexQuickConfigLoading(false);
     setFormCodexQuickConfigError(null);
@@ -1163,6 +1170,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     setFormCodexQuickConfig(null);
     setFormExperimentalModelCatalogEnabled(false);
     setFormExperimentalModels([]);
+    setFormModelSourceInfo(null);
     setFormExperimentalModelsError(null);
     setFormCodexQuickConfigLoading(isCodexApp);
     setFormCodexQuickConfigError(null);
@@ -1341,6 +1349,20 @@ export function InstancesManager<TAccount extends AccountLike>({
       setFormError(formExperimentalModelsError);
       setFormErrorTick((prev) => prev + 1);
       return;
+    }
+
+    if (editing && isCodexApp && formExperimentalModelCatalogEnabled) {
+      const conflict = validateEffectiveModelContexts(
+        formExperimentalModels,
+        formCodexQuickConfig?.detected_model_context_window,
+        formCodexQuickConfig?.detected_auto_compact_token_limit,
+        formModelSourceInfo?.modelMetadata,
+      );
+      if (conflict) {
+        setFormError(conflict);
+        setFormErrorTick((prev) => prev + 1);
+        return;
+      }
     }
 
     let nextModelRouting: CodexInstanceModelRouting | null = null;
@@ -1573,6 +1595,9 @@ export function InstancesManager<TAccount extends AccountLike>({
             experimentalModelCatalogDefaultModelId:
               nextCatalog.defaultModelId,
           });
+          if (formModelSourceInfo) {
+            await saveCodexInstanceModelCatalogSource(editing.id, formModelSourceInfo);
+          }
           await refreshInstances();
         } else {
           await updateInstance(updatePayload);
@@ -2158,6 +2183,7 @@ export function InstancesManager<TAccount extends AccountLike>({
         nextConfig.experimental_model_catalog_enabled,
       );
       setFormExperimentalModels(nextConfig.experimental_model_catalog_models);
+      setFormModelSourceInfo(nextConfig.experimental_model_catalog_source ?? null);
       setFormExperimentalDefaultModelId(
         nextConfig.experimental_model_catalog_default_model_id ?? null,
       );
@@ -2231,6 +2257,8 @@ export function InstancesManager<TAccount extends AccountLike>({
         formExperimentalModelCatalogEnabled ||
       JSON.stringify(formCodexQuickConfig.experimental_model_catalog_models) !==
         JSON.stringify(formExperimentalModels) ||
+      JSON.stringify(formCodexQuickConfig.experimental_model_catalog_source ?? null) !==
+        JSON.stringify(formModelSourceInfo) ||
       (formCodexQuickConfig.experimental_model_catalog_default_model_id ??
         null) !== formExperimentalDefaultModelId
     );
@@ -2239,6 +2267,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     formExperimentalModelCatalogEnabled,
     formExperimentalDefaultModelId,
     formExperimentalModels,
+    formModelSourceInfo,
   ]);
   const formExperimentalModelUnavailableMessage = useMemo(() => {
     const reason =
@@ -3698,14 +3727,48 @@ export function InstancesManager<TAccount extends AccountLike>({
                         </label>
                       </div>
                       {(formExperimentalModelCatalogEnabled || formModelRoutingEnabled) && (
+                        <CodexModelCatalogSourceControls
+                          sourceInfo={formModelSourceInfo}
+                          accountId={formBindAccountId || null}
+                          instanceId={editing?.id ?? null}
+                          hasExistingModels={formExperimentalModels.length > 0}
+                          disabled={actionLoading === editing?.id}
+                          onReplace={(nextModels, sourceInfo) => {
+                            setFormExperimentalModels(nextModels);
+                            setFormModelSourceInfo(sourceInfo);
+                            setFormExperimentalDefaultModelId(nextModels[0]?.model_id ?? null);
+                            setFormExperimentalModelsError(null);
+                            setFormCodexQuickConfigError(null);
+                          }}
+                          onFetchUpstream={async () => {
+                            const account = accounts.find((item) => item.id === formBindAccountId);
+                            if (!account?.api_base_url || !account.openai_api_key) {
+                              throw new Error("当前实例没有绑定 API Key 账号");
+                            }
+                            const result = await listModelProviderModels({
+                              baseUrl: account.api_base_url,
+                              apiKey: account.openai_api_key,
+                            });
+                            return result.models.map((model) => ({
+                              model_id: model.id,
+                              display_name: model.displayName || model.id,
+                            }));
+                          }}
+                        />
+                      )}
+                      {(formExperimentalModelCatalogEnabled || formModelRoutingEnabled) && (
                         <CodexExperimentalModelEditor
                           models={formExperimentalModels}
+                          sourceInfo={formModelSourceInfo}
+                          globalContextWindow={formCodexQuickConfig?.detected_model_context_window}
+                          globalAutoCompactTokenLimit={formCodexQuickConfig?.detected_auto_compact_token_limit}
                           defaultModelId={formExperimentalDefaultModelId}
                           mode="summary"
                           availableChannels={formAvailableChannels}
                           resolveModelSource={resolveFormModelSource}
                           onChange={(models) => {
                             setFormExperimentalModels(models);
+                            setFormModelSourceInfo((current) => current ? { ...current, manuallyAdjusted: true } : null);
                             setFormCodexQuickConfigError(null);
                           }}
                           onDefaultModelChange={(modelId) => {

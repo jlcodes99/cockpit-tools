@@ -2148,6 +2148,7 @@
     },
     "title": "Gestione account Codex",
     "contextOverride": {
+      "apiKeyHint": "Questa impostazione vale per l'intera istanza. Imposta il contesto per modello di questa chiave in Gestione modelli.",
       "title": "Gestione del contesto",
       "description": "Modelli, ordine, modello predefinito e livelli di ragionamento seguono il catalogo ufficiale. Il contesto viene sostituito solo manualmente.",
       "dialogDescription": "L’impostazione si applica a tutti gli account dell’istanza Codex corrente e resta invariata al cambio di account. Scegli le impostazioni ufficiali, un preset o un contesto personalizzato.",
@@ -3648,6 +3649,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Gestisci i modelli di questa chiave",
+      "discardKeyChanges": "Le modifiche a questa chiave non sono salvate. Scartarle e cambiare chiave?",
+      "discardKeyChangesTitle": "Cambia chiave API",
+      "keyModelHint": "Ogni chiave API ha un catalogo modelli, un contesto e impostazioni di compattazione propri.",
+      "keyNotFound": "Questa chiave API non è ancora nella gestione dei provider.",
+      "compactLimit": "Soglia di compattazione automatica",
+      "compactionMode": "Modalità di compattazione",
+      "compactionAuto": "Automatica",
+      "compactionRemote": "Compattazione remota",
+      "compactionLocal": "Compattazione locale",
       "keyModels": {
         "title": "Modelli chiave",
         "override": "Personalizza",

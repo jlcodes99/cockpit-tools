@@ -47,7 +47,7 @@ function harness(routing = false, overlay = "global-progress-overlay") {
     configSession: { current: 1 }, configWritePending: { current: false },
     busy: false, checkingConfig: false, configReady: true, configBusy: false, contextConfigSaving: false,
     loadedConfig: {}, loadedInstanceKey: null, configLoadInputs: { current: { selectedInstance: store.instances[0] } },
-    catalogEnabled: false, modelsError: null, models: [], defaultModelId: null,
+    catalogEnabled: false, modelsError: null, models: [], defaultModelId: null, modelSourceInfo: null,
     routingEnabled: false, routingEnabledForSave: false, routingDirty: routing,
     nextModelRouting: { enabled: false, routes: [] }, mixedRoutingBindAccountId: undefined,
     normalizedRoutingRoutes: [], dirty: true, contextWindowInput: "", compactLimitInput: "",

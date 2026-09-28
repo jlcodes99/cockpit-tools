@@ -1072,6 +1072,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                     "deepseek-v4-flash".to_string(),
                 ],
                 wire_api: Some("chat_completions".to_string()),
+                supports_remote_compaction: false,
                 supports_vision: false,
                 model_capabilities: HashMap::new(),
                 vision_routing_model: None,

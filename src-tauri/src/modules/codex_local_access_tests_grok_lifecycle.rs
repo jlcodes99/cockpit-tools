@@ -176,6 +176,7 @@ fn grok_missing_source_is_isolated_and_stale_auth_is_removed() {
                             upstream_model: "grok-test-only".to_string(),
                             upstream_models: vec!["grok-test-only".to_string()],
                             wire_api: Some("responses".to_string()),
+                            supports_remote_compaction: false,
                             supports_vision: true,
                             model_capabilities: HashMap::new(),
                             vision_routing_model: None,

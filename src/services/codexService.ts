@@ -640,6 +640,7 @@ export async function syncCodexApiKeyProviderAccounts(input: {
   apiProviderName: string;
   apiModelCatalog?: string[];
   apiModelContextWindows?: Record<string, number>;
+  apiSyncModelCatalogToCodex?: boolean;
   apiWireApi: CodexProviderWireApi;
   apiSupportsWebsockets: boolean;
   apiSupportsVision: boolean;
@@ -654,6 +655,7 @@ export async function syncCodexApiKeyProviderAccounts(input: {
     apiProviderName: input.apiProviderName,
     apiModelCatalog: input.apiModelCatalog ?? null,
     apiModelContextWindows: input.apiModelContextWindows ?? null,
+    apiSyncModelCatalogToCodex: input.apiSyncModelCatalogToCodex ?? null,
     apiWireApi: input.apiWireApi,
     apiSupportsWebsockets: input.apiSupportsWebsockets,
     apiSupportsVision: input.apiSupportsVision,

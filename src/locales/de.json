@@ -2148,6 +2148,7 @@
     },
     "title": "Codex-Konten verwalten",
     "contextOverride": {
+      "apiKeyHint": "Diese Einstellung gilt für die gesamte Instanz. Den Kontext je Modell für diesen Schlüssel in der Modellverwaltung festlegen.",
       "title": "Kontextverwaltung",
       "description": "Modelle, Reihenfolge, Standardmodell und Denkstufen folgen dem offiziellen Katalog. Der Kontext wird nur manuell überschrieben.",
       "dialogDescription": "Die Einstellung gilt für alle Konten der aktuellen Codex-Instanz und bleibt beim Kontowechsel erhalten. Wählen Sie die offiziellen Einstellungen, eine Voreinstellung oder einen eigenen Kontext.",
@@ -3648,6 +3649,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Modelle dieses Schlüssels verwalten",
+      "discardKeyChanges": "Änderungen an diesem Schlüssel sind nicht gespeichert. Verwerfen und Schlüssel wechseln?",
+      "discardKeyChangesTitle": "API-Schlüssel wechseln",
+      "keyModelHint": "Jeder API-Schlüssel hat einen eigenen Modellkatalog sowie eigene Kontext- und Komprimierungseinstellungen.",
+      "keyNotFound": "Dieser API-Schlüssel ist noch nicht in der Anbieterverwaltung.",
+      "compactLimit": "Grenzwert für automatische Komprimierung",
+      "compactionMode": "Komprimierungsmodus",
+      "compactionAuto": "Automatisch",
+      "compactionRemote": "Remote-Komprimierung",
+      "compactionLocal": "Lokale Komprimierung",
       "keyModels": {
         "title": "Key-Modelle",
         "override": "Eigene Vorgaben",

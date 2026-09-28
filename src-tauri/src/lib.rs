@@ -1545,6 +1545,8 @@ pub fn run() {
             commands::codex_instance::codex_save_instance_context_management,
             commands::codex_instance::codex_save_instance_quick_config,
             commands::codex_instance::codex_save_instance_model_catalog,
+            commands::codex_instance::codex_save_instance_model_catalog_source,
+            commands::codex_instance::codex_list_model_catalog_source_models,
             commands::codex_instance::codex_save_instance_configuration,
             commands::codex_instance::codex_open_instance_config_toml,
             commands::codex_instance::codex_sync_threads_across_instances,

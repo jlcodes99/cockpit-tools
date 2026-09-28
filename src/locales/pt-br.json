@@ -2148,6 +2148,7 @@
     },
     "title": "Gerenciamento de contas Codex",
     "contextOverride": {
+      "apiKeyHint": "Esta configuração afeta toda a instância. Defina o contexto por modelo desta chave no Gerenciamento de Modelos.",
       "title": "Gerenciamento de contexto",
       "description": "Modelos, ordem, modelo padrão e níveis de raciocínio seguem o catálogo oficial. O contexto só é substituído manualmente.",
       "dialogDescription": "A configuração vale para todas as contas da instância atual do Codex e é mantida ao trocar de conta. Escolha as configurações oficiais, uma predefinição ou um contexto personalizado.",
@@ -3648,6 +3649,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Gerenciar modelos desta chave",
+      "discardKeyChanges": "As alterações desta chave não foram salvas. Descartá-las e trocar de chave?",
+      "discardKeyChangesTitle": "Trocar chave de API",
+      "keyModelHint": "Cada chave de API tem seu próprio catálogo de modelos, contexto e configuração de compactação.",
+      "keyNotFound": "Esta chave de API ainda não está no gerenciamento de provedores.",
+      "compactLimit": "Limite de compactação automática",
+      "compactionMode": "Modo de compactação",
+      "compactionAuto": "Automático",
+      "compactionRemote": "Compactação remota",
+      "compactionLocal": "Compactação local",
       "keyModels": {
         "title": "Modelos da chave",
         "override": "Personalizar",

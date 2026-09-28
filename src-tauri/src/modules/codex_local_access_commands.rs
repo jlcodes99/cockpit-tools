@@ -1626,7 +1626,8 @@ async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
         }
     }
 
-    let provider_endpoints = stop_all_provider_gateways_for_app_shutdown().await;
+    let (provider_endpoints, preserve_instance_gateway) =
+        stop_all_provider_gateways_for_app_shutdown().await;
     for endpoint in provider_endpoints {
         if let Err(error) = wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await
         {
@@ -1639,7 +1640,7 @@ async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        if !preserve_running_mixed_gateway {
+        if !preserve_running_mixed_gateway && !preserve_instance_gateway {
             if let Err(error) = close_installed_sidecar_processes_by_path(5) {
                 errors.push(format!("关闭安装目录 sidecar 残留进程失败: {}", error));
             }

@@ -2148,6 +2148,7 @@
     },
     "title": "Správa účtů Codex",
     "contextOverride": {
+      "apiKeyHint": "Toto nastavení platí pro celou instanci. Kontext jednotlivých modelů tohoto klíče nastavte ve Správě modelů.",
       "title": "Správa kontextu",
       "description": "Modely, pořadí, výchozí model a úrovně uvažování se řídí oficiálním katalogem. Kontext se přepíše jen ručně.",
       "dialogDescription": "Nastavení platí pro všechny účty v aktuální instanci Codex a při přepnutí účtu zůstává zachováno. Zvolte oficiální nastavení, předvolbu nebo vlastní kontext.",
@@ -3648,6 +3649,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Spravovat modely tohoto klíče",
+      "discardKeyChanges": "Změny tohoto klíče nejsou uloženy. Zahodit je a přepnout klíč?",
+      "discardKeyChangesTitle": "Přepnout klíč API",
+      "keyModelHint": "Každý klíč API má vlastní katalog modelů, kontext a nastavení komprese.",
+      "keyNotFound": "Tento klíč API ještě není ve správě poskytovatelů.",
+      "compactLimit": "Limit automatické komprese",
+      "compactionMode": "Režim komprese",
+      "compactionAuto": "Automaticky",
+      "compactionRemote": "Vzdálená komprese",
+      "compactionLocal": "Místní komprese",
       "keyModels": {
         "title": "Modely klíče",
         "override": "Vlastní nastavení",

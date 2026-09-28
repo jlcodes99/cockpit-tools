@@ -866,24 +866,6 @@ fn lookup_explicit_catalog_context_window(
     None
 }
 
-fn is_official_deepseek_catalog_model(model: &str) -> bool {
-    DEEPSEEK_OFFICIAL_SHELL_SLOTS
-        .iter()
-        .any(|(upstream, _)| upstream.eq_ignore_ascii_case(model.trim()))
-}
-
-fn should_keep_official_catalog_window(slot: &ProviderGatewayModelSlot) -> bool {
-    if is_official_deepseek_catalog_model(&slot.upstream_model)
-        || is_official_deepseek_catalog_model(&slot.client_model)
-    {
-        return true;
-    }
-    slot.client_model
-        .trim()
-        .eq_ignore_ascii_case(slot.upstream_model.trim())
-        && is_provider_model_shell_slug(&slot.client_model)
-}
-
 pub(crate) fn decorate_catalog_context_windows(
     catalog_json: &str,
     slots: &[ProviderGatewayModelSlot],
@@ -895,9 +877,7 @@ pub(crate) fn decorate_catalog_context_windows(
     let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) else {
         return Ok(catalog_json.to_string());
     };
-    let fallback = default_window
-        .filter(|value| *value > 0)
-        .unwrap_or(FALLBACK_CATALOG_CONTEXT_WINDOW);
+    let global_window = default_window.filter(|value| *value > 0);
     for model in models.iter_mut() {
         let slug = model
             .get("slug")
@@ -912,13 +892,10 @@ pub(crate) fn decorate_catalog_context_windows(
             .iter()
             .find(|slot| slot.client_model.eq_ignore_ascii_case(&slug));
         let window = if let Some(slot) = slot {
-            lookup_explicit_catalog_context_window(slot, explicit).or_else(|| {
-                if should_keep_official_catalog_window(slot) {
-                    None
-                } else {
-                    Some(fallback)
-                }
-            })
+            lookup_explicit_catalog_context_window(slot, explicit)
+                .or(global_window)
+                .or_else(|| model.get("context_window").and_then(Value::as_i64).filter(|value| *value > 0))
+                .or(Some(FALLBACK_CATALOG_CONTEXT_WINDOW))
         } else {
             explicit
                 .get(&slug)
@@ -929,6 +906,8 @@ pub(crate) fn decorate_catalog_context_windows(
                     })
                 })
                 .filter(|value| *value > 0)
+                .or(global_window)
+                .or_else(|| model.get("context_window").and_then(Value::as_i64).filter(|value| *value > 0))
         };
         let Some(window) = window else {
             continue;
@@ -953,17 +932,90 @@ pub(crate) fn decorate_account_catalog_context_windows(
     slots: &[ProviderGatewayModelSlot],
     account: &CodexAccount,
     default_window: Option<i64>,
+    default_limit: Option<i64>,
 ) -> Result<String, String> {
-    decorate_catalog_context_windows(
-        catalog_json,
+    let key_config = model_provider_key_config_for_account(account);
+    let mut source_catalog: Value = serde_json::from_str(catalog_json)
+        .map_err(|error| format!("解析账号模型目录失败: {}", error))?;
+    if let (Some(models), Some(metadata)) = (
+        source_catalog.get_mut("models").and_then(Value::as_array_mut),
+        key_config.as_ref().and_then(|key| key.pointer("/modelSource/modelMetadata")).and_then(Value::as_object),
+    ) {
+        for model in models {
+            let slug = model.get("slug").and_then(Value::as_str).unwrap_or_default();
+            let slot = slots.iter().find(|slot| slot.client_model.eq_ignore_ascii_case(slug));
+            let source = [slot.map(|slot| slot.upstream_model.as_str()), Some(slug)]
+                .into_iter().flatten().find_map(|id| metadata.iter()
+                    .find(|(name, _)| name.eq_ignore_ascii_case(id)).map(|(_, value)| value));
+            if let (Some(source), Some(object)) = (source, model.as_object_mut()) {
+                for (field, source_field) in [("context_window", "contextWindow"),
+                    ("auto_compact_token_limit", "autoCompactTokenLimit")] {
+                    if let Some(value) = source.get(source_field).and_then(Value::as_i64).filter(|value| *value > 0) {
+                        object.insert(field.to_string(), json!(value));
+                    }
+                }
+            }
+        }
+    }
+    let content = decorate_catalog_context_windows(
+        &source_catalog.to_string(),
         slots,
         &account.api_model_context_windows,
         default_window,
-    )
+    )?;
+    let empty_limits = serde_json::Map::new();
+    let limits = key_config.as_ref()
+        .and_then(|key| key.get("modelAutoCompactTokenLimits"))
+        .and_then(Value::as_object).unwrap_or(&empty_limits);
+    apply_auto_compact_limits_to_catalog(&content, slots, limits, default_limit)
+}
+
+fn apply_auto_compact_limits_to_catalog(
+    content: &str,
+    slots: &[ProviderGatewayModelSlot],
+    limits: &serde_json::Map<String, Value>,
+    default_limit: Option<i64>,
+) -> Result<String, String> {
+    let mut catalog: Value = serde_json::from_str(&content)
+        .map_err(|error| format!("解析账号模型目录失败: {}", error))?;
+    let explicit_limits: HashMap<String, i64> = limits.iter()
+        .filter_map(|(name, value)| value.as_i64().map(|value| (name.clone(), value)))
+        .collect();
+    if let Some(models) = catalog.get_mut("models").and_then(Value::as_array_mut) {
+        for model in models {
+            let slug = model.get("slug").and_then(Value::as_str).unwrap_or_default();
+            let slot = slots.iter().find(|slot| slot.client_model.eq_ignore_ascii_case(slug));
+            let limit = slot
+                .and_then(|slot| lookup_explicit_catalog_context_window(slot, &explicit_limits))
+                .or_else(|| limits.iter().find_map(|(name, value)|
+                    name.eq_ignore_ascii_case(slug).then(|| value.as_i64()).flatten()))
+                .or(default_limit.filter(|value| *value > 0))
+                .or_else(|| model.get("auto_compact_token_limit").and_then(Value::as_i64));
+            let window = model.get("context_window").and_then(Value::as_i64);
+            if let (Some(limit), Some(window)) = (limit, window) {
+                if limit <= 0 || limit >= window {
+                    return Err(format!(
+                        "模型 {} 的自动压缩阈值 {} 必须小于上下文窗口 {}",
+                        slug, limit, window
+                    ));
+                }
+                if let Some(object) = model.as_object_mut() {
+                    object.insert("auto_compact_token_limit".to_string(), json!(limit));
+                }
+            }
+        }
+    }
+    serde_json::to_string_pretty(&catalog)
+        .map_err(|error| format!("序列化账号模型目录失败: {}", error))
 }
 
 pub(crate) fn read_toml_model_context_window(doc: &Document) -> Option<i64> {
     doc.get("model_context_window")
+        .and_then(|item| item.as_integer())
+}
+
+pub(crate) fn read_toml_model_auto_compact_token_limit(doc: &Document) -> Option<i64> {
+    doc.get("model_auto_compact_token_limit")
         .and_then(|item| item.as_integer())
 }
 
@@ -975,6 +1027,12 @@ pub(crate) fn read_file_model_context_window(path: &std::path::Path) -> Option<i
     let doc =
         crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing).ok()?;
     read_toml_model_context_window(&doc)
+}
+
+pub(crate) fn read_file_model_auto_compact_token_limit(path: &std::path::Path) -> Option<i64> {
+    let existing = std::fs::read_to_string(path).ok()?;
+    let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing).ok()?;
+    read_toml_model_auto_compact_token_limit(&doc)
 }
 
 /// Build a Codex client catalog that keeps official shell slugs for display, but copies
@@ -1311,6 +1369,37 @@ struct CodexModelProviderVisionEntry {
 
 const CODEX_MODEL_PROVIDERS_FILE: &str = "codex_model_providers.json";
 
+/// A key's capabilities are matched by both endpoint and credential. The endpoint alone
+/// deliberately never selects model settings.
+pub(crate) fn model_provider_key_config_for_account(account: &CodexAccount) -> Option<Value> {
+    let path = account::get_data_dir().ok()?.join(CODEX_MODEL_PROVIDERS_FILE);
+    let content = fs::read_to_string(path).ok()?;
+    let providers: Value = serde_json::from_str(&content).ok()?;
+    select_model_provider_key_config(&providers, account)
+}
+
+fn select_model_provider_key_config(providers: &Value, account: &CodexAccount) -> Option<Value> {
+    let api_key = account.openai_api_key.as_deref()?.trim();
+    let base_url = normalize_provider_vision_base_url(account.api_base_url.as_deref()?)?;
+    providers.as_array()?.iter().find_map(|provider| {
+        let provider_url = provider.get("baseUrl").and_then(Value::as_str)
+            .and_then(normalize_provider_vision_base_url)?;
+        if provider_url != base_url { return None; }
+        provider.get("apiKeys")?.as_array()?.iter()
+            .find(|key| key.get("apiKey").and_then(Value::as_str).is_some_and(|value| value.trim() == api_key))
+            .cloned()
+    })
+}
+
+pub(crate) fn model_provider_key_compaction_mode(account: &CodexAccount) -> Option<String> {
+    let key = model_provider_key_config_for_account(account)?;
+    Some(if key.get("compactionMode").and_then(Value::as_str) == Some("remote") {
+        "remote"
+    } else {
+        "local"
+    }.to_string())
+}
+
 fn normalize_provider_vision_base_url(value: &str) -> Option<String> {
     let trimmed = value.trim().trim_end_matches('/').to_ascii_lowercase();
     if trimmed.is_empty() {
@@ -1469,6 +1558,7 @@ fn provider_gateway_for_account(
             upstream_model: upstream_models.first().cloned().unwrap_or_default(),
             upstream_models,
             wire_api: Some("responses".to_string()),
+            supports_remote_compaction: false,
             supports_vision: account.api_supports_vision,
             model_capabilities,
             vision_routing_model: None,
@@ -1552,6 +1642,9 @@ fn provider_gateway_for_account(
         upstream_model: upstream_models.first().cloned().unwrap_or_default(),
         upstream_models,
         wire_api: Some(provider_gateway_wire_api_for_account(account)),
+        supports_remote_compaction: model_provider_key_compaction_mode(account).as_deref()
+            == Some("remote")
+            && provider_gateway_wire_api_for_account(account) == "responses",
         supports_vision: gateway_supports_vision,
         model_capabilities,
         vision_routing_model: account
@@ -2568,8 +2661,9 @@ fn write_provider_gateway_model_catalog_with_templates(
     };
     let config_path = profile_config_path(profile_dir);
     let default_window = read_file_model_context_window(&config_path);
+    let default_limit = read_file_model_auto_compact_token_limit(&config_path);
     let content = if let Some(account) = account {
-        decorate_account_catalog_context_windows(&raw, slots, account, default_window)?
+        decorate_account_catalog_context_windows(&raw, slots, account, default_window, default_limit)?
     } else {
         decorate_catalog_context_windows(&raw, slots, &HashMap::new(), default_window)?
     };
@@ -3146,10 +3240,61 @@ pub fn has_running_persisted_mixed_model_gateway() -> bool {
         })
 }
 
-async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoint> {
+async fn stop_all_provider_gateways_for_app_shutdown() -> (Vec<GatewayBindEndpoint>, bool) {
     let _guard = provider_gateway_lifecycle_lock().lock().await;
     let mut preserve_mixed_profiles = HashSet::new();
+    let mut preserve_runtime_keys = HashSet::new();
     let mut configured_profiles = HashMap::new();
+    let targets = match collect_instance_gateway_targets() {
+        Ok(targets) => targets,
+        Err(error) => {
+            logger::log_codex_api_warn(&format!(
+                "[CodexLocalAccess][instance-gateway] 退出前读取实例失败，保留实例网关: {}",
+                error
+            ));
+            return (Vec::new(), true);
+        }
+    };
+    let process_entries = crate::modules::process::collect_codex_process_entries();
+    for target in targets {
+        let profile_key = normalize_profile_dir_key(&target.profile_dir);
+        configured_profiles.insert(profile_key.clone(), target.profile_dir.clone());
+        if instance_target_is_running(&target, &process_entries) {
+            preserve_runtime_keys.insert(provider_gateway_runtime_key(
+                &target.profile_dir,
+                &target.runtime_id,
+            ));
+            if target.kind == INSTANCE_GATEWAY_KIND_MIXED_MODEL {
+                preserve_mixed_profiles.insert(profile_key);
+            }
+        } else {
+            let restore = if target.kind == INSTANCE_GATEWAY_KIND_MIXED_MODEL {
+                restore_mixed_model_gateway_profile(&target.profile_dir).and_then(|restored| {
+                    if restored {
+                        Ok(())
+                    } else {
+                        ensure_profile_no_longer_uses_local_access(&target.profile_dir).map(|_| ())
+                    }
+                })
+            } else {
+                cleanup_provider_gateway_profile_model_overrides(&target.profile_dir)
+                    .and_then(|_| restore_profile_takeover_backup_for_dir(&target.profile_dir).map(|_| ()))
+            };
+            if let Err(error) = restore {
+                logger::log_codex_api_warn(&format!(
+                    "[CodexLocalAccess][provider-gateway] 退出前恢复实例配置失败，保留网关: profile={}, error={}",
+                    target.profile_dir.display(), error
+                ));
+                preserve_runtime_keys.insert(provider_gateway_runtime_key(
+                    &target.profile_dir,
+                    &target.runtime_id,
+                ));
+                if target.kind == INSTANCE_GATEWAY_KIND_MIXED_MODEL {
+                    preserve_mixed_profiles.insert(profile_key);
+                }
+            }
+        }
+    }
     if let Ok(default_settings) = crate::modules::codex_instance::load_default_settings() {
         if let Ok(profile_dir) = crate::modules::codex_instance::get_default_codex_home() {
             configured_profiles
@@ -3199,11 +3344,12 @@ async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoin
                 let Some((profile_key, runtime_id)) = runtime_key.rsplit_once('\n') else {
                     return true;
                 };
-                let preserve = runtime_id == MIXED_MODEL_ROUTING_RUNTIME_ID
-                    && preserve_mixed_profiles.contains(profile_key);
+                let preserve = preserve_runtime_keys.contains(*runtime_key)
+                    || (runtime_id == MIXED_MODEL_ROUTING_RUNTIME_ID
+                        && preserve_mixed_profiles.contains(profile_key));
                 if preserve {
                     logger::log_codex_api_info(&format!(
-                        "[CodexLocalAccess][mixed-model-routing] Codex 仍在运行，应用退出后保留 sidecar: profile={}",
+                        "[CodexLocalAccess][instance-gateway] 应用退出后保留 sidecar: profile={}",
                         profile_key
                     ));
                 }
@@ -3233,7 +3379,7 @@ async fn stop_all_provider_gateways_for_app_shutdown() -> Vec<GatewayBindEndpoin
             endpoints.push(endpoint);
         }
     }
-    endpoints
+    (endpoints, !preserve_runtime_keys.is_empty() || !preserve_mixed_profiles.is_empty())
 }
 
 pub async fn mixed_model_gateway_runtime_is_healthy(profile_dir: &Path) -> bool {

@@ -2148,6 +2148,7 @@
     },
     "title": "Codex Hesap Yönetimi",
     "contextOverride": {
+      "apiKeyHint": "Bu ayar tüm örneği etkiler. Bu anahtarın model başına bağlamını Model Yönetimi'nde ayarlayın.",
       "title": "Bağlam yönetimi",
       "description": "Modeller, sıralama, varsayılan model ve akıl yürütme düzeyleri resmi kataloğu izler. Bağlam yalnızca elle ayarlanırsa geçersiz kılınır.",
       "dialogDescription": "Bu ayar mevcut Codex örneğindeki tüm hesaplara uygulanır ve hesap değiştirildiğinde korunur. Resmi ayarları, bir ön ayarı veya özel bağlamı seçin.",
@@ -3648,6 +3649,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Bu anahtarın modellerini yönet",
+      "discardKeyChanges": "Bu anahtardaki değişiklikler kaydedilmedi. Atıp anahtar değiştirilsin mi?",
+      "discardKeyChangesTitle": "API anahtarını değiştir",
+      "keyModelHint": "Her API anahtarının ayrı model kataloğu, bağlamı ve sıkıştırma ayarları vardır.",
+      "keyNotFound": "Bu API anahtarı henüz sağlayıcı yönetiminde yok.",
+      "compactLimit": "Otomatik sıkıştırma sınırı",
+      "compactionMode": "Sıkıştırma modu",
+      "compactionAuto": "Otomatik",
+      "compactionRemote": "Uzak sıkıştırma",
+      "compactionLocal": "Yerel sıkıştırma",
       "keyModels": {
         "title": "Anahtar modelleri",
         "override": "Özel ayar",

@@ -297,11 +297,11 @@ const CODEX_LOCAL_ACCESS_TAKEOVER_BACKUP_VERSION: u32 = 1;
 const CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID: &str = "codex_local_access";
 /// 托管 profile 写入的 provider 显示名。
 ///
-/// 客户端按 provider 能力选择压缩路径；当前 `ModelProviderInfo::is_openai()` 要求名字
-/// 恰好等于 `OpenAI`，远端 V2 使用 `/responses` 与 `compaction_trigger`，并非旧 V1 的
-/// `/responses/compact`。非 OpenAI provider 采用客户端摘要流程。本地 API 服务可能转发
-/// 到没有服务端压缩的上游，因此保留既有非 `OpenAI` 名称；不依赖已移除的 feature 开关。
+/// Codex 的 `ModelProviderInfo::is_openai()` 要求名字恰好为 `OpenAI` 才选择远程 V2；
+/// 远程 V2 使用 `/responses` 与 `compaction_trigger`。其它名字使用本地摘要流程。
+/// 仅在当前 Key 明确启用远程压缩且网关支持 Responses 时使用 `OpenAI`。
 const CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME: &str = "Codex API Service";
+const CODEX_LOCAL_ACCESS_REMOTE_PROVIDER_NAME: &str = "OpenAI";
 const CODEX_LOCAL_ACCESS_RUNTIME_ACCOUNT_ID: &str = "codex_local_access_runtime";
 const CODEX_IMAGEGEN_ACTOR_HEADER: &str = "x-openai-actor-authorization";
 const CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER: &str =

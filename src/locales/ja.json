@@ -2148,6 +2148,7 @@
     },
     "title": "Codex アカウント管理",
     "contextOverride": {
+      "apiKeyHint": "この設定はインスタンス全体に適用されます。このキーのモデル別コンテキストはモデル管理で設定してください。",
       "title": "コンテキスト管理",
       "description": "モデル、並び順、既定モデル、推論レベルは公式カタログに従います。手動設定した場合のみコンテキストを上書きします。",
       "dialogDescription": "現在の Codex インスタンス内の全アカウントに適用され、アカウントを切り替えても維持されます。公式設定、プリセット、またはカスタムを選択してください。",
@@ -3648,6 +3649,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "このキーのモデルを管理",
+      "discardKeyChanges": "このキーの変更は保存されていません。破棄してキーを切り替えますか？",
+      "discardKeyChangesTitle": "API キーを切り替え",
+      "keyModelHint": "API キーごとにモデル一覧、コンテキスト、圧縮設定を個別に管理します。",
+      "keyNotFound": "この API キーはまだモデルプロバイダー管理に登録されていません。",
+      "compactLimit": "自動圧縮しきい値",
+      "compactionMode": "圧縮方式",
+      "compactionAuto": "自動",
+      "compactionRemote": "リモート圧縮",
+      "compactionLocal": "ローカル圧縮",
       "keyModels": {
         "title": "Key のモデル",
         "override": "個別設定",

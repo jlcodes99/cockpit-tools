@@ -1602,6 +1602,7 @@ fn build_runtime_account(
     api_key: String,
     bound_oauth_account_id: Option<String>,
     supports_websockets: bool,
+    supports_remote_compaction: bool,
 ) -> CodexAccount {
     let mut runtime_account = CodexAccount::new_api_key(
         CODEX_LOCAL_ACCESS_RUNTIME_ACCOUNT_ID.to_string(),
@@ -1610,7 +1611,11 @@ fn build_runtime_account(
         CodexApiProviderMode::Custom,
         Some(base_url),
         Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID.to_string()),
-        Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME.to_string()),
+        Some(if supports_remote_compaction {
+            CODEX_LOCAL_ACCESS_REMOTE_PROVIDER_NAME.to_string()
+        } else {
+            CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME.to_string()
+        }),
         Vec::new(),
     );
     runtime_account.account_name = Some("API Service".to_string());
@@ -1632,6 +1637,20 @@ fn profile_api_key_supports_websockets(
             .find(|item| item.enabled && item.key.trim() == api_key.trim())
             .map(|item| item.provider_gateway.is_none() && item.model_routing.is_none())
             .unwrap_or(true)
+}
+
+fn profile_api_key_supports_remote_compaction(
+    collection: &CodexLocalAccessCollection,
+    api_key: &str,
+) -> bool {
+    collection.api_keys.iter().any(|item| {
+        item.enabled
+            && item.key.trim() == api_key.trim()
+            && item.provider_gateway.as_ref().is_some_and(|gateway| {
+                gateway.supports_remote_compaction
+                    && gateway.wire_api.as_deref() == Some("responses")
+            })
+    })
 }
 
 /// API 服务 profile 模型目录里的一个条目。
@@ -2125,11 +2144,14 @@ async fn write_local_access_profile_takeover(
         .map(str::to_string)
         .unwrap_or_else(|| collection.api_key.clone());
     let supports_websockets = profile_api_key_supports_websockets(collection, &runtime_api_key);
+    let supports_remote_compaction =
+        profile_api_key_supports_remote_compaction(collection, &runtime_api_key);
     let runtime_account = build_runtime_account(
         build_collection_base_url(collection),
         runtime_api_key.clone(),
         bound_oauth_account_id,
         supports_websockets,
+        supports_remote_compaction,
     );
     codex_account::write_account_bundle_to_dir(profile_dir, &runtime_account)?;
     write_mixed_model_realtime_sideband_override(profile_dir, collection, &runtime_api_key)?;
@@ -2403,7 +2425,11 @@ fn local_access_profile_takeover_needs_sync(
         .as_ref()
         .and_then(|doc| doc.get("model_catalog_json").and_then(|item| item.as_str()));
 
-    config_provider_name != Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME)
+    config_provider_name != Some(if profile_api_key_supports_remote_compaction(collection, &collection.api_key) {
+        CODEX_LOCAL_ACCESS_REMOTE_PROVIDER_NAME
+    } else {
+        CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME
+    })
         || config_supports_websockets != Some(expected)
         || !profile_model_catalog_websocket_preference_matches(profile_dir, catalog_file, expected)
 }
