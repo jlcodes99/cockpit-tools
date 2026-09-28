@@ -974,7 +974,9 @@ fn antigravity_metadata_candidates(
             }
         }
         for path in roots {
-            if path.exists() {
+            if crate::modules::process::can_probe_passive_windows_path(&path.to_string_lossy())
+                && path.exists()
+            {
                 push_unique_antigravity_candidate(&mut candidates, path);
             }
         }

@@ -1,5 +1,238 @@
 // Process 模块测试：平台路径、Codex 启动参数和进程清理行为。
 // 保持测试模块位于原作用域，super 引用和 cfg 条件不变。
+#[cfg(all(test, target_os = "windows"))]
+mod windows_passive_exec_scan_tests {
+    use super::{
+        build_windows_exec_path_scan_script, parse_windows_exec_candidates, powershell_quote,
+        running_wsl_output_contains_distro, wsl_unc_distro, WINDOWS_EXEC_CANDIDATE_FUNCTIONS,
+    };
+    use std::process::Command;
+
+    #[test]
+    fn stopped_wsl_shortcut_target_is_skipped_before_existence_check() {
+        let script = format!(
+            r#"$visited = @()
+$global:wslQueries = 0
+function wsl.exe {{ param($a, $b, $c) $global:wslQueries++; $global:LASTEXITCODE = 0; return @() }}
+function Test-Path([string]$LiteralPath) {{
+  $script:visited += "VISIT:$LiteralPath"
+  return $true
+}}
+{WINDOWS_EXEC_CANDIDATE_FUNCTIONS}
+Emit-Candidate '\\wsl.localhost\Ubuntu-22.04\home\demo\Antigravity IDE.exe'
+Emit-Candidate '\\WSL$\Ubuntu-22.04\Antigravity IDE.exe'
+Emit-Candidate '\\?\UNC\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe'
+Emit-Candidate '\\?\unc\WSL$\Ubuntu-22.04\Antigravity IDE.exe'
+Emit-Candidate '\\wsl.localhost\Ubuntu-22.04\home\demo\Antigravity IDE.exe'
+Emit-Candidate '  '
+Emit-Candidate 'C:\Program Files\Antigravity IDE\Antigravity IDE.exe'
+Emit-Candidate '\\server\share\Antigravity IDE.exe'
+Emit-Candidate '\\wsl.localhost.example\share\Antigravity IDE.exe'
+$visited
+"WSL_QUERIES:$global:wslQueries"
+"#
+        );
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .expect("PowerShell must be available for the Windows scan");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let lines = String::from_utf8_lossy(&output.stdout);
+        assert!(!lines.contains(r"VISIT:\\wsl.localhost\"), "{lines}");
+        assert!(!lines.contains(r"VISIT:\\WSL$"), "{lines}");
+        assert!(!lines.contains(r"VISIT:\\?\"), "{lines}");
+        assert!(lines.contains("VISIT:C:\\Program Files"), "{lines}");
+        assert!(lines.contains(r"VISIT:\\server\share"), "{lines}");
+        assert!(lines.contains(r"VISIT:\\wsl.localhost.example"), "{lines}");
+        assert!(lines.contains("WSL_QUERIES:1"), "{lines}");
+    }
+
+    #[test]
+    fn running_wsl_shortcut_target_is_checked() {
+        let script = format!(
+            r#"$global:wslQueries = 0
+$script:visited = @()
+function wsl.exe {{ param($a, $b, $c) $global:wslQueries++; $global:LASTEXITCODE = 0; return 'Ubuntu-22.04' }}
+function Test-Path([string]$LiteralPath) {{ $script:visited += "VISIT:$LiteralPath"; return $true }}
+{WINDOWS_EXEC_CANDIDATE_FUNCTIONS}
+Emit-Candidate '\\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe'
+Emit-Candidate '\\WSL$\Other-Distro\Antigravity IDE.exe'
+$visited
+"WSL_QUERIES:$global:wslQueries"
+"#
+        );
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let lines = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            lines.contains(r"VISIT:\\wsl.localhost\Ubuntu-22.04"),
+            "{lines}"
+        );
+        assert!(!lines.contains(r"VISIT:\\WSL$\Other-Distro"), "{lines}");
+        assert!(lines.contains("WSL_QUERIES:1"), "{lines}");
+    }
+
+    #[test]
+    fn failed_wsl_status_query_skips_target() {
+        let script = format!(
+            r#"function wsl.exe {{ param($a, $b, $c) $global:LASTEXITCODE = 1; return 'Ubuntu-22.04' }}
+function Test-Path([string]$LiteralPath) {{ Write-Output "VISIT:$LiteralPath"; return $true }}
+{WINDOWS_EXEC_CANDIDATE_FUNCTIONS}
+Emit-Candidate '\\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe'
+"#
+        );
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let lines = String::from_utf8_lossy(&output.stdout);
+        assert!(!lines.contains("VISIT:"), "{lines}");
+    }
+
+    #[test]
+    fn wsl_unc_paths_identify_target_distro_without_accessing_it() {
+        for path in [
+            r"\\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe",
+            r"\\WSL$\Ubuntu-22.04\Antigravity IDE.exe",
+            r"\\?\UNC\wsl.localhost\Ubuntu-22.04\Antigravity IDE.exe",
+            r"\\?\unc\WSL$\Ubuntu-22.04\Antigravity IDE.exe",
+        ] {
+            assert_eq!(
+                wsl_unc_distro(path).as_deref(),
+                Some("ubuntu-22.04"),
+                "{path}"
+            );
+        }
+        assert!(wsl_unc_distro(r"C:\Program Files\Antigravity IDE.exe").is_none());
+        assert!(wsl_unc_distro(r"\\server\share\Antigravity IDE.exe").is_none());
+        assert!(wsl_unc_distro(r"\\wsl.localhost.example\share\app.exe").is_none());
+    }
+
+    #[test]
+    fn running_distro_status_requires_exact_name_in_utf16_output() {
+        let bytes: Vec<u8> = "Ubuntu-22.04\0\r\nDebian\0\r\n"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        assert!(running_wsl_output_contains_distro(&bytes, "ubuntu-22.04"));
+        assert!(running_wsl_output_contains_distro(&bytes, "Debian"));
+        assert!(!running_wsl_output_contains_distro(&bytes, "Ubuntu"));
+        assert!(!running_wsl_output_contains_distro(&bytes, ""));
+        assert!(!running_wsl_output_contains_distro(
+            &bytes[..bytes.len() - 1],
+            "Debian"
+        ));
+    }
+
+    #[test]
+    fn shortcut_scan_finishes_without_probing_wsl_target() {
+        let scan = build_windows_exec_path_scan_script(
+            &["cockpit-regression-ide.exe"],
+            &["cockpit-regression-command-not-found"],
+            &["cockpit-regression-protocol-not-found"],
+            &["cockpit-regression-product-not-found"],
+        );
+        let root = std::env::temp_dir().join(format!(
+            "cockpit-wsl-shortcut-scan-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let root_literal = powershell_quote(&root.to_string_lossy());
+        let setup = format!(
+            r#"$ErrorActionPreference = 'Stop'
+$root = {root_literal}
+$env:APPDATA = $root
+$env:ProgramData = $root
+$env:USERPROFILE = $root
+$env:PUBLIC = $root
+$desktop = Join-Path $root 'Desktop'
+[void][System.IO.Directory]::CreateDirectory($desktop)
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut((Join-Path $desktop 'wsl.lnk'))
+$wslTarget = '\\wsl.localhost\cockpit-regression-missing\cockpit-regression-ide.exe'
+$shortcut.TargetPath = $wslTarget
+$shortcut.Save()
+if (-not [System.IO.File]::Exists((Join-Path $desktop 'wsl.lnk'))) {{ throw 'WSL shortcut was not saved' }}
+if ($shell.CreateShortcut((Join-Path $desktop 'wsl.lnk')).TargetPath -ne $wslTarget) {{ throw 'WSL shortcut target changed' }}
+function Test-Path([string]$LiteralPath) {{
+  Write-Host "VISIT:$LiteralPath"
+  return $true
+}}
+"#
+        );
+        let script = format!("{setup}\n{scan}");
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .expect("PowerShell must be available for the Windows scan");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("STAGE:END"), "{stdout}");
+        assert!(!stdout.contains("VISIT:\\\\wsl.localhost"), "{stdout}");
+        assert!(
+            !stdout.lines().any(|line| line.starts_with(r"\\wsl.localhost")),
+            "{stdout}"
+        );
+        assert!(
+            parse_windows_exec_candidates("antigravity", &["cockpit-regression-ide.exe"], &[], output)
+                .is_none()
+        );
+
+        let local_exe = root.join("cockpit-regression-ide.exe");
+        std::fs::write(&local_exe, []).unwrap();
+        let local_literal = powershell_quote(&local_exe.to_string_lossy());
+        let add_local_shortcut = format!(
+            r#"$ErrorActionPreference = 'Stop'
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut((Join-Path {root_literal} 'Desktop\local.lnk'))
+$shortcut.TargetPath = {local_literal}
+$shortcut.Save()
+"#
+        );
+        let added = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &add_local_shortcut])
+            .output()
+            .unwrap();
+        assert!(
+            added.status.success(),
+            "{}",
+            String::from_utf8_lossy(&added.stderr)
+        );
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let detected = parse_windows_exec_candidates(
+            "antigravity",
+            &["cockpit-regression-ide.exe"],
+            &[],
+            output,
+        );
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(detected.as_deref(), Some(local_exe.as_path()));
+    }
+}
+
 #[cfg(test)]
 mod legacy_platform_adapter_cleanup_tests {
     use super::{orphaned_legacy_platform_adapter_pid_from_ps_line, utf8_command_output_snippet};
