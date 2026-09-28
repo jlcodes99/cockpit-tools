@@ -186,6 +186,11 @@ jobs:
           go-version-file: sidecars/cockpit-cliproxy/go.mod
           cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
 
+      - name: 🧪 Test Codex Store path refresh
+        if: matrix.label == 'ubuntu-22.04'
+        working-directory: src-tauri
+        run: cargo test --lib windows_codex_store_path_refresh_tests
+
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
