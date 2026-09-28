@@ -39,6 +39,11 @@ import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDrop
 import { useEscClose } from '../hooks/useEscClose';
 import { useEnterConfirm } from '../hooks/useEnterConfirm';
 import {
+  DEFAULT_VIEW_MODE,
+  normalizeViewMode,
+  type ViewMode,
+} from '../hooks/useProviderAccountsPage';
+import {
   PlatformOverviewTab,
   PlatformOverviewTabsHeader,
 } from '../components/platform/PlatformOverviewTabsHeader';
@@ -99,7 +104,6 @@ const QODER_FILTER_FIELD_TAG_FILTER = 'tag_filter';
 const QODER_FILTER_FIELD_GROUP_BY_TAG = 'group_by_tag';
 const UNTAGGED_KEY = '__untagged__';
 
-type ViewMode = 'grid' | 'list';
 type SortBy = 'created_at' | 'plan' | 'quota';
 type SortDirection = 'asc' | 'desc';
 
@@ -136,10 +140,6 @@ function writeBooleanStorage(key: string, value: boolean) {
   } catch {
     // ignore
   }
-}
-
-function normalizeQoderViewMode(value: unknown): ViewMode {
-  return value === 'list' ? 'list' : 'grid';
 }
 
 function normalizeQoderSortBy(value: unknown): SortBy {
@@ -257,14 +257,14 @@ export function QoderAccountsPage() {
   );
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     initialFilterPersistenceEnabled
-      ? normalizeQoderViewMode(
+      ? normalizeViewMode(
           readAccountsOverviewFilterField<unknown>(
             QODER_FILTER_PERSISTENCE_SCOPE,
             QODER_FILTER_FIELD_VIEW_MODE,
-            'grid',
+            DEFAULT_VIEW_MODE,
           ),
         )
-      : 'grid',
+      : DEFAULT_VIEW_MODE,
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTypes, setFilterTypes] = useState<string[]>(() =>
