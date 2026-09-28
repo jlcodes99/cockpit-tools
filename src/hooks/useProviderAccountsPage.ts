@@ -1220,14 +1220,23 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   const handleRefresh = useCallback(
     async (accountId: string) => {
       setRefreshing(accountId);
+      setMessage(null);
       try {
         await refreshToken(accountId);
+        setMessage({ text: t('messages.refreshSuccess', '刷新成功'), tone: 'success' });
       } catch (e) {
         console.error(e);
+        setMessage({
+          text: t('messages.refreshFailed', '刷新失败：{{error}}', {
+            error: String(e).replace(/^Error:\s*/, ''),
+          }),
+          tone: 'error',
+        });
+      } finally {
+        setRefreshing(null);
       }
-      setRefreshing(null);
     },
-    [refreshToken],
+    [refreshToken, t],
   );
 
   const handleRefreshAll = useCallback(async () => {
