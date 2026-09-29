@@ -1,6 +1,239 @@
 // Process 模块测试：平台路径、Codex 启动参数和进程清理行为。
 // 保持测试模块位于原作用域，super 引用和 cfg 条件不变。
 #[cfg(test)]
+mod codex_store_timeout_cleanup_tests {
+    use super::collect_new_codex_profile_pids;
+    use std::collections::HashSet;
+    use std::path::Path;
+
+    #[test]
+    fn selects_only_new_processes_in_the_requested_profile() {
+        let entries = vec![
+            (10, Some("/profiles/login".to_string())),
+            (11, Some("/profiles/login".to_string())),
+            (12, Some("/profiles/other".to_string())),
+            (13, None),
+            (14, Some(String::new())),
+            (15, Some("/profiles/login-backup".to_string())),
+            (16, Some("  ".to_string())),
+        ];
+        let existing_pids = HashSet::from([10]);
+        assert_eq!(
+            collect_new_codex_profile_pids(&entries, &existing_pids, Path::new("/profiles/login")),
+            vec![11]
+        );
+    }
+
+    #[test]
+    fn preserves_all_preexisting_processes_even_when_the_directory_now_matches() {
+        let entries = vec![(10, Some("/profiles/login".to_string()))];
+        assert!(collect_new_codex_profile_pids(
+            &entries,
+            &HashSet::from([10]),
+            Path::new("/profiles/login")
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn rejects_an_empty_target_directory() {
+        let entries = vec![(10, None), (11, Some(String::new()))];
+        assert!(
+            collect_new_codex_profile_pids(&entries, &HashSet::new(), Path::new("")).is_empty()
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn matches_windows_directory_case_and_separator_variants() {
+        let entries = vec![(10, Some("c:/profiles/Login".to_string()))];
+        assert_eq!(
+            collect_new_codex_profile_pids(
+                &entries,
+                &HashSet::new(),
+                Path::new(r"C:\Profiles\login")
+            ),
+            vec![10]
+        );
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod local_store_login_smoke_tests {
+    // 析构时也执行关闭，避免测试提前失败后遗留实例。目录均为本测试新建。
+    struct IsolatedStoreProfile {
+        home: String,
+        profile: std::path::PathBuf,
+        runtime: std::path::PathBuf,
+    }
+
+    impl IsolatedStoreProfile {
+        fn new() -> Self {
+            let profile = std::env::temp_dir()
+                .join(format!("cockpit-store-timeout-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir(&profile).expect("create isolated test profile");
+            let runtime = crate::modules::codex_instance::get_windows_app_user_data_dir(&profile)
+                .expect("resolve isolated runtime directory");
+            assert!(!runtime.exists(), "test runtime must be a new directory");
+            std::fs::write(
+                profile.join("config.toml"),
+                "cli_auth_credentials_store = \"file\"\n",
+            )
+            .expect("write isolated configuration");
+            Self {
+                home: profile.to_string_lossy().to_string(),
+                profile,
+                runtime,
+            }
+        }
+
+        fn close(&self) -> Result<(), String> {
+            super::close_codex_instances(std::slice::from_ref(&self.home), 10)
+        }
+    }
+
+    impl Drop for IsolatedStoreProfile {
+        fn drop(&mut self) {
+            if self.close().is_ok() {
+                if self.runtime.exists() {
+                    let _ = std::fs::remove_dir_all(&self.runtime);
+                }
+                let _ = std::fs::remove_dir_all(&self.profile);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "opens two isolated installed Codex desktops; run explicitly on Windows"]
+    fn package_activation_timeout_closes_only_the_new_profile() {
+        let launch_path = super::resolve_codex_launch_path().expect("resolve installed client");
+        assert!(
+            super::is_windowsapps_launch_path(&launch_path),
+            "requires Store client"
+        );
+        let control = IsolatedStoreProfile::new();
+        let target = IsolatedStoreProfile::new();
+        let control_pid = super::start_codex_with_args(&control.home, &[])
+            .expect("start the existing control instance");
+        let existing_pids = super::collect_codex_process_entries()
+            .into_iter()
+            .map(|(pid, _)| pid)
+            .collect();
+        super::launch_codex_via_package_identity(
+            &launch_path,
+            &target.home,
+            &target.runtime,
+            &[],
+            &[],
+        )
+        .expect("activate the target instance");
+        let observed_pid = std::cell::Cell::new(None);
+        // 客户端实际启动，但模拟主进程 PID 始终无法确认，走完整超时清理分支。
+        let result = super::wait_for_codex_package_activation(
+            &launch_path,
+            &target.home,
+            &target.runtime,
+            &existing_pids,
+            |last_pid, home| {
+                observed_pid.set(super::resolve_codex_pid(last_pid, home));
+                None
+            },
+        );
+        let remaining_target = super::resolve_codex_pid(None, Some(&target.home));
+        let target_still_running = observed_pid.get().is_some_and(super::is_pid_running);
+        let control_still_running = super::is_pid_running(control_pid)
+            && super::resolve_codex_pid(Some(control_pid), Some(&control.home))
+                == Some(control_pid);
+        let auth_written =
+            target.profile.join("auth.json").exists() || control.profile.join("auth.json").exists();
+        let target_cleanup = target.close();
+        let control_cleanup = control.close();
+        target_cleanup.expect("clean up the target before assertions");
+        control_cleanup.expect("clean up the control before assertions");
+        let error = result.expect_err("forced PID confirmation failure must time out");
+        assert!(
+            error.contains("未找到稳定运行"),
+            "unexpected error: {error}"
+        );
+        assert!(
+            !error.contains("清理新启动进程失败"),
+            "cleanup must succeed: {error}"
+        );
+        assert!(
+            observed_pid.get().is_some(),
+            "target must actually have started"
+        );
+        assert_eq!(
+            remaining_target, None,
+            "timeout must remove the target instance"
+        );
+        assert!(
+            !target_still_running,
+            "target PID must exit during timeout cleanup"
+        );
+        assert!(
+            control_still_running,
+            "existing control instance must survive the timeout"
+        );
+        assert!(!auth_written, "test must not use real credentials");
+    }
+
+    #[test]
+    #[ignore = "opens an isolated installed Codex desktop; run explicitly on Windows"]
+    fn managed_store_login_survives_bootstrap() {
+        let launch_path =
+            super::resolve_codex_launch_path().expect("resolve installed Store client");
+        assert!(
+            super::is_windowsapps_launch_path(&launch_path),
+            "this test requires an installed Windows Store Codex client"
+        );
+        let profile =
+            std::env::temp_dir().join(format!("cockpit-store-smoke-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&profile).expect("create isolated test profile");
+        let app_user_data_dir =
+            crate::modules::codex_instance::get_windows_app_user_data_dir(&profile)
+                .expect("resolve isolated app runtime directory");
+        assert!(
+            !app_user_data_dir.exists(),
+            "test runtime must be a new directory"
+        );
+        std::fs::write(
+            profile.join("config.toml"),
+            "cli_auth_credentials_store = \"file\"\n",
+        )
+        .expect("write isolated configuration");
+        let home = profile.to_string_lossy().to_string();
+        let launch_result = super::start_codex_with_args(&home, &[]);
+        let (running, live_pid) = match launch_result.as_ref() {
+            Ok(pid) => {
+                std::thread::sleep(std::time::Duration::from_secs(8));
+                (
+                    super::is_pid_running(*pid),
+                    super::resolve_codex_pid(Some(*pid), Some(&home)),
+                )
+            }
+            Err(_) => (false, None),
+        };
+        let auth_file_written = profile.join("auth.json").exists();
+        let cleanup = super::close_codex_instances(&[home], 10);
+        cleanup.expect("close only the isolated test instance");
+        if app_user_data_dir.exists() {
+            std::fs::remove_dir_all(&app_user_data_dir)
+                .expect("remove isolated app runtime directory");
+        }
+        std::fs::remove_dir_all(&profile).expect("remove isolated test profile");
+        let pid = launch_result.expect("Store client must start with package identity");
+        assert!(running, "Store client exited during bootstrap");
+        assert_eq!(
+            live_pid,
+            Some(pid),
+            "PID must belong to the isolated profile"
+        );
+        assert!(!auth_file_written, "test must not use real credentials");
+    }
+}
+
+#[cfg(test)]
 mod legacy_platform_adapter_cleanup_tests {
     use super::{orphaned_legacy_platform_adapter_pid_from_ps_line, utf8_command_output_snippet};
 
@@ -311,13 +544,13 @@ mod codex_linux_layout_tests {
         linux_codex_discovery_paths, select_codex_direct_app_server_descendants,
         CodexProcessTreeEntry,
     };
-    use std::ffi::OsString;
     use std::path::{Path, PathBuf};
 
     #[test]
     fn discovery_includes_official_linux_package_and_path_launchers() {
         let home = Path::new("/home/demo");
-        let path = OsString::from("/custom/bin:/usr/bin");
+        let path = std::env::join_paths(["/custom/bin", "/usr/bin"])
+            .expect("create PATH using the host separator");
         let candidates = linux_codex_discovery_paths(Some(home), Some(path.as_os_str()));
         assert!(candidates.contains(&PathBuf::from("/usr/bin/chatgpt")));
         assert!(candidates.contains(&PathBuf::from("/usr/lib/chatgpt/ChatGPT")));

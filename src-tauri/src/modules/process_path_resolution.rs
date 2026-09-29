@@ -2629,7 +2629,7 @@ try {{
     $appId = [string]$application.Id
   }}
 }} catch {{}}
-Invoke-CommandInDesktopPackage -PackageFamilyName $pkg.PackageFamilyName -AppId $appId -Command 'powershell.exe' -Args '-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}'"#,
+Invoke-CommandInDesktopPackage -PackageFamilyName $pkg.PackageFamilyName -AppId $appId -PreventBreakaway -Command 'powershell.exe' -Args '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand {encoded}'"#,
         install_location = escape_powershell_single_quoted(&install_location),
         encoded = encoded_command,
     );
