@@ -1,6 +1,7 @@
 import { useEffect, type ReactElement } from "react";
 import { RefreshCw, Upload, Trash2, X, Power, Database, Copy, Check, Play, RotateCw, CircleAlert, Info, Calendar, Tag, Eye, EyeOff, FileText, ExternalLink, Pencil, FolderPlus, ChevronRight, Wrench, Terminal, Link2, Waypoints } from "lucide-react";
-import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
+import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount, type CodexAccount } from "../types/codex";
+import type { CodexModelProvider } from "../services/codexModelProviderService";
 import { isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { CodexQuotaMiniRows } from "../components/codex/CodexQuotaMiniRows";
 import { CodexAccountProxyButton } from "../components/codex/CodexAccountProxyButton";
@@ -21,6 +22,30 @@ import type { useCodexAccountsOAuthController } from "./useCodexAccountsOAuthCon
 import type { useCodexAccountsAccessController } from "./useCodexAccountsAccessController";
 import type { useCodexAccountsLocalAccessController } from "./useCodexAccountsLocalAccessController";
 import type { useCodexAccountsOverviewController } from "./useCodexAccountsOverviewController";
+
+function resolveAccountCompactionMode(
+  account: CodexAccount,
+  providers: CodexModelProvider[],
+): "remote" | "local" | null {
+  const baseUrl = account.api_base_url?.trim().replace(/\/+$/, "").toLowerCase();
+  const apiKey = account.openai_api_key?.trim();
+  if (!baseUrl || !apiKey) return null;
+  const provider = providers.find((item) => item.baseUrl.trim().replace(/\/+$/, "").toLowerCase() === baseUrl);
+  const key = provider?.apiKeys.find((item) => item.apiKey.trim() === apiKey);
+  if (!key) return null;
+  const usesGateway = account.api_instance_access_mode === "gateway" ||
+    isCodexChatCompletionsApiKeyAccount(account) ||
+    (account.api_instance_access_mode !== "direct" && Boolean(account.api_sync_model_catalog_to_codex));
+  if (usesGateway) {
+    return key.compactionMode === "remote" && account.api_wire_api !== "chat_completions"
+      ? "remote"
+      : "local";
+  }
+  return account.api_wire_api !== "chat_completions" &&
+    key.compactionMode === "remote"
+    ? "remote"
+    : "local";
+}
 
 /** 封装 useCodexAccountsPageController 的 useCodexAccountsRenderers 业务域状态与动作。 */
 export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCodexAccountsBaseController> & ReturnType<typeof useCodexAccountsOAuthController> & ReturnType<typeof useCodexAccountsAccessController> & ReturnType<typeof useCodexAccountsLocalAccessController> & ReturnType<typeof useCodexAccountsOverviewController>,
@@ -99,6 +124,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
   | "localAccessStarting"
   | "localAccessState"
   | "maskAccountText"
+  | "managedProviders"
   | "openAccountNoteModal"
   | "openApiKeyCredentialsModal"
   | "openCodexAddModal"
@@ -235,6 +261,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     localAccessStarting,
     localAccessState,
     maskAccountText,
+    managedProviders,
     openAccountNoteModal,
     openApiKeyCredentialsModal,
     openCodexAddModal,
@@ -669,7 +696,13 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             : meta.userId;
         const signInLine = `${meta.signedInWithText} | ${accountIdLabel}: ${accountIdText}`;
         const apiProviderName = resolveApiProviderDisplayName(account);
-        const apiProviderLine = `${t("codex.api.provider.label", "供应商")}：${apiProviderName}`;
+        const compactionMode = resolveAccountCompactionMode(account, managedProviders);
+        const compactionLabel = compactionMode === "remote"
+          ? t("codex.modelProviders.compactionRemote", "远程压缩")
+          : compactionMode === "local"
+            ? t("codex.modelProviders.compactionLocal", "本地压缩")
+            : null;
+        const apiProviderLine = `${t("codex.api.provider.label", "供应商")}：${apiProviderName}${compactionLabel ? `（${compactionLabel}）` : ""}`;
         const apiBaseUrlText = (account.api_base_url || "").trim() || "-";
         const apiBaseUrlLine = `${t("codex.api.baseUrl", "Base URL")}：${apiBaseUrlText}`;
         const apiKeyUsageProvider = resolveUsageProviderForApiKeyAccount(account);
@@ -1927,7 +1960,13 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
             : meta.userId;
         const signInLine = `${meta.signedInWithText} | ${accountIdLabel}: ${accountIdText}`;
         const apiProviderName = resolveApiProviderDisplayName(account);
-        const apiProviderLine = `${t("codex.api.provider.label", "供应商")}：${apiProviderName}`;
+        const compactionMode = resolveAccountCompactionMode(account, managedProviders);
+        const compactionLabel = compactionMode === "remote"
+          ? t("codex.modelProviders.compactionRemote", "远程压缩")
+          : compactionMode === "local"
+            ? t("codex.modelProviders.compactionLocal", "本地压缩")
+            : null;
+        const apiProviderLine = `${t("codex.api.provider.label", "供应商")}：${apiProviderName}${compactionLabel ? `（${compactionLabel}）` : ""}`;
         const apiBaseUrlText = (account.api_base_url || "").trim() || "-";
         const apiBaseUrlLine = `${t("codex.api.baseUrl", "Base URL")}：${apiBaseUrlText}`;
         const apiKeyUsageProvider = resolveUsageProviderForApiKeyAccount(account);

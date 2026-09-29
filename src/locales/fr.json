@@ -2156,6 +2156,7 @@
     },
     "title": "Gestion des comptes Codex",
     "contextOverride": {
+      "apiKeyHint": "Ce réglage s’applique à toute l’instance. Définissez le contexte par modèle pour cette clé dans la gestion des modèles.",
       "title": "Gestion du contexte",
       "description": "Les modèles, leur ordre, le modèle par défaut et les niveaux de raisonnement suivent le catalogue officiel. Le contexte n’est remplacé que manuellement.",
       "dialogDescription": "Ce réglage s’applique à tous les comptes de l’instance Codex actuelle et reste inchangé lors d’un changement de compte. Choisissez les réglages officiels, un préréglage ou un contexte personnalisé.",
@@ -3656,6 +3657,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Gérer les modèles de cette clé",
+      "discardKeyChanges": "Les modifications de cette clé ne sont pas enregistrées. Les ignorer et changer de clé ?",
+      "discardKeyChangesTitle": "Changer de clé API",
+      "keyModelHint": "Chaque clé API possède son propre catalogue, contexte et réglage de compactage.",
+      "keyNotFound": "Cette clé API n’est pas encore dans la gestion des fournisseurs.",
+      "compactLimit": "Seuil de compactage automatique",
+      "compactionMode": "Mode de compactage",
+      "compactionAuto": "Automatique",
+      "compactionRemote": "Compactage distant",
+      "compactionLocal": "Compactage local",
       "keyModels": {
         "title": "Modèles de clé",
         "override": "Personnaliser",

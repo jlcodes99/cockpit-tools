@@ -152,9 +152,13 @@ fn maintain_local_access_profile(
         .to_string();
     let next_base = build_collection_base_url(collection);
     let supports_websockets = profile_api_key_supports_websockets(collection, &collection.api_key);
-    // Preserve the existing migration for the historically mislabelled provider.
-    if provider.get("name").and_then(|item| item.as_str()) == Some("OpenAI") {
-        provider["name"] = value(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME);
+    let expected_name = if profile_api_key_supports_remote_compaction(collection, &collection.api_key) {
+        CODEX_LOCAL_ACCESS_REMOTE_PROVIDER_NAME
+    } else {
+        CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME
+    };
+    if provider.get("name").and_then(|item| item.as_str()) != Some(expected_name) {
+        provider["name"] = value(expected_name);
     }
     if old_base != next_base {
         provider["base_url"] = value(next_base.clone());

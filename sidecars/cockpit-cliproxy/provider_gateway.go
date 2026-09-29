@@ -251,17 +251,21 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		writeAPIError(c, http.StatusBadGateway, "provider gateway is not configured", "bad_gateway")
 		return
 	}
-	if fixedAlt == "responses/compact" {
-		writeAPIError(c, http.StatusNotFound, "provider gateway does not support responses/compact", "not_found")
-		return
-	}
-	stream := requestBodyStream(body)
 	wireAPI := normalizeProviderGatewayWireAPI(gateway.WireAPI)
 	upstreamModel := s.providerGatewayUpstreamModel(gateway, model)
 	if strings.TrimSpace(upstreamModel) == "" {
 		writeAPIError(c, http.StatusNotFound, fmt.Sprintf("model %s is not available for this provider gateway", model), "model_not_available")
 		return
 	}
+	if fixedAlt == "responses/compact" {
+		if !gateway.SupportsRemoteCompaction || wireAPI != "responses" || !sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse) {
+			writeAPIError(c, http.StatusNotFound, "provider gateway does not support responses/compact", "not_found")
+			return
+		}
+		s.forwardProviderGatewayCompact(c, gateway, rewriteProviderGatewayBodyModel(body, upstreamModel))
+		return
+	}
+	stream := requestBodyStream(body)
 	supportsVision := providerGatewayModelSupportsVision(gateway, upstreamModel)
 	if wireAPI == "chat_completions" {
 		if modelSupportsVision, ok := providerGatewayModelCapabilityOverridesVision(gateway, upstreamModel); ok {
@@ -459,6 +463,40 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		contentType = "application/json"
 	}
 	c.Data(http.StatusOK, contentType, payload)
+}
+
+func (s *relayServer) forwardProviderGatewayCompact(c *gin.Context, gateway *providerGatewaySpec, body []byte) {
+	upstreamURL, err := providerGatewayURL(gateway.BaseURL, "/v1/responses/compact")
+	if err != nil {
+		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
+		return
+	}
+	req, err := http.NewRequestWithContext(relayContext(c), http.MethodPost, upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+gateway.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	copyProviderGatewayDiagnosticHeaders(req.Header, c.Request.Header)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
+		return
+	}
+	defer resp.Body.Close()
+	writeUpstreamHeaders(c.Writer.Header(), resp.Header)
+	payload, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
+		return
+	}
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	c.Data(resp.StatusCode, contentType, payload)
 }
 
 func isOpenCodeGoGateway(rawURL string) bool {

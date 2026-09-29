@@ -2156,6 +2156,7 @@
     },
     "title": "Quản lý tài khoản Codex",
     "contextOverride": {
+      "apiKeyHint": "Thiết lập này áp dụng cho toàn bộ phiên bản. Đặt ngữ cảnh theo từng mô hình của khóa này trong Quản lý mô hình.",
       "title": "Quản lý ngữ cảnh",
       "description": "Mô hình, thứ tự, mô hình mặc định và mức suy luận tuân theo danh mục chính thức. Ngữ cảnh chỉ bị ghi đè khi đặt thủ công.",
       "dialogDescription": "Cài đặt này áp dụng cho mọi tài khoản trong phiên bản Codex hiện tại và được giữ nguyên khi chuyển tài khoản. Chọn cấu hình chính thức, cài đặt sẵn hoặc ngữ cảnh tùy chỉnh.",
@@ -3656,6 +3657,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Quản lý mô hình của khóa này",
+      "discardKeyChanges": "Các thay đổi của khóa này chưa được lưu. Hủy và chuyển khóa?",
+      "discardKeyChangesTitle": "Chuyển khóa API",
+      "keyModelHint": "Mỗi khóa API có danh mục mô hình, ngữ cảnh và thiết lập nén riêng.",
+      "keyNotFound": "Khóa API này chưa có trong quản lý nhà cung cấp.",
+      "compactLimit": "Ngưỡng nén tự động",
+      "compactionMode": "Chế độ nén",
+      "compactionAuto": "Tự động",
+      "compactionRemote": "Nén từ xa",
+      "compactionLocal": "Nén cục bộ",
       "keyModels": {
         "title": "Mô hình của khóa",
         "override": "Thiết lập riêng",

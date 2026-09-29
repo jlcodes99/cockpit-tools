@@ -2156,6 +2156,7 @@
     },
     "title": "Zarządzanie kontami Codex",
     "contextOverride": {
+      "apiKeyHint": "To ustawienie dotyczy całej instancji. Kontekst modeli dla tego klucza ustaw w zarządzaniu modelami.",
       "title": "Zarządzanie kontekstem",
       "description": "Modele, kolejność, model domyślny i poziomy rozumowania są zgodne z oficjalnym katalogiem. Kontekst jest zastępowany tylko ręcznie.",
       "dialogDescription": "Ustawienie dotyczy wszystkich kont w bieżącej instancji Codex i pozostaje bez zmian po przełączeniu konta. Wybierz ustawienia oficjalne, ustawienie wstępne lub własny kontekst.",
@@ -3656,6 +3657,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Zarządzaj modelami tego klucza",
+      "discardKeyChanges": "Zmiany tego klucza nie zostały zapisane. Odrzucić je i zmienić klucz?",
+      "discardKeyChangesTitle": "Zmień klucz API",
+      "keyModelHint": "Każdy klucz API ma własny katalog modeli, kontekst i ustawienia kompresji.",
+      "keyNotFound": "Tego klucza API nie ma jeszcze w zarządzaniu dostawcami.",
+      "compactLimit": "Próg automatycznej kompresji",
+      "compactionMode": "Tryb kompresji",
+      "compactionAuto": "Automatyczny",
+      "compactionRemote": "Kompresja zdalna",
+      "compactionLocal": "Kompresja lokalna",
       "keyModels": {
         "title": "Modele klucza",
         "override": "Własne ustawienia",

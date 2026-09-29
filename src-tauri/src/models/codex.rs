@@ -51,6 +51,28 @@ pub struct CodexExperimentalModelDefinition {
     pub auto_compact_token_limit: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexModelSourceMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_compact_token_limit: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexModelCatalogSourceInfo {
+    pub source: String,
+    pub fetched_at: i64,
+    #[serde(default)]
+    pub manually_adjusted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_info: Option<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub model_metadata: HashMap<String, CodexModelSourceMetadata>,
+}
+
 /// Codex config.toml 快捷配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexQuickConfig {
@@ -70,6 +92,8 @@ pub struct CodexQuickConfig {
     pub experimental_model_catalog_conflict: Option<String>,
     #[serde(default)]
     pub experimental_model_catalog_models: Vec<CodexExperimentalModelDefinition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experimental_model_catalog_source: Option<CodexModelCatalogSourceInfo>,
     /// 当前可见模型目录中写入 Codex config.toml 的默认模型；None 表示不强制指定。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub experimental_model_catalog_default_model_id: Option<String>,

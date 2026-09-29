@@ -2203,6 +2203,7 @@
     },
     "title": "Codex Account​",
     "contextOverride": {
+      "apiKeyHint": "Pengaturan ini berlaku untuk seluruh instans. Atur konteks tiap model untuk kunci ini di Pengelolaan Model.",
       "title": "Manajemen konteks",
       "description": "Model, urutan, model default, dan tingkat penalaran mengikuti katalog resmi. Konteks hanya ditimpa secara manual.",
       "dialogDescription": "Pengaturan ini berlaku untuk semua akun dalam instans Codex saat ini dan tetap sama saat berganti akun. Pilih pengaturan resmi, preset, atau konteks kustom.",
@@ -3703,6 +3704,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "Kelola model kunci ini",
+      "discardKeyChanges": "Perubahan pada kunci ini belum disimpan. Buang perubahan dan beralih kunci?",
+      "discardKeyChangesTitle": "Beralih kunci API",
+      "keyModelHint": "Setiap kunci API memiliki katalog model, konteks, dan pengaturan pemadatan sendiri.",
+      "keyNotFound": "Kunci API ini belum ada di Pengelolaan Penyedia.",
+      "compactLimit": "Batas pemadatan otomatis",
+      "compactionMode": "Mode pemadatan",
+      "compactionAuto": "Otomatis",
+      "compactionRemote": "Pemadatan jarak jauh",
+      "compactionLocal": "Pemadatan lokal",
       "keyModels": {
         "title": "Model kunci",
         "override": "Atur sendiri",

@@ -45,3 +45,16 @@ test("excludes OAuth accounts and API Key accounts without a readable key", () =
 
   assert.deepEqual(result, []);
 });
+
+test("a shared endpoint does not link an unregistered credential", () => {
+  const result = findCodexAccountsReferencingModelProvider(
+    { id: "provider-1", baseUrl: "https://relay.example.com/v1",
+      apiKeys: [{ apiKey: "key-a" }, { apiKey: "key-b" }] },
+    [
+      account({ id: "a", openai_api_key: "key-a", api_base_url: "https://relay.example.com/v1" }),
+      account({ id: "b", openai_api_key: "key-b", api_base_url: "https://relay.example.com/v1" }),
+      account({ id: "unregistered", openai_api_key: "key-c", api_base_url: "https://relay.example.com/v1" }),
+    ],
+  );
+  assert.deepEqual(result, ["a", "b"]);
+});

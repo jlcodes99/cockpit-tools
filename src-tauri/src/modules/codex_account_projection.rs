@@ -823,6 +823,7 @@ pub(crate) fn write_prepared_account_bundle_to_dir(
     account: &CodexAccount,
 ) -> Result<(), String> {
     let account = resolve_account_for_bundle_write(base_dir, account)?;
+    restore_api_key_compaction_for_dir(base_dir)?;
     write_auth_file_to_dir(base_dir, &account)?;
     write_managed_projection_to_dir(base_dir, &account)?;
     sync_or_cleanup_managed_model_catalog_for_dir(base_dir, &account)?;
@@ -1281,17 +1282,15 @@ fn authority_projection_dirs_for_account_with_entries(
 
 pub fn cleanup_managed_model_catalogs_on_startup() -> Result<usize, String> {
     let current_account_id = load_account_index().current_account_id;
-    let account_requires_managed_catalog = |account_id: Option<&str>| {
+    let account_requires_managed_catalog = |dir: &Path, account_id: Option<&str>| {
         account_id
             .and_then(load_account)
             .map(|account| {
                 crate::modules::codex_local_access::account_requires_provider_gateway(&account)
-                    || account_syncs_model_catalog_to_codex(&account)
+                    || account_syncs_model_catalog_to_codex(dir, &account)
             })
             .unwrap_or(false)
     };
-    let current_requires_managed_catalog =
-        account_requires_managed_catalog(current_account_id.as_deref());
     let mut dirs: HashMap<String, (PathBuf, bool)> = HashMap::new();
     let mut add_dir = |dir: PathBuf, preserve_catalog: bool| {
         let key = dir.to_string_lossy().to_string();
@@ -1300,21 +1299,32 @@ pub fn cleanup_managed_model_catalogs_on_startup() -> Result<usize, String> {
             .or_insert((dir, preserve_catalog));
     };
 
-    add_dir(get_codex_home(), current_requires_managed_catalog);
+    let current_home = get_codex_home();
+    let current_requires_managed_catalog =
+        account_requires_managed_catalog(&current_home, current_account_id.as_deref());
+    add_dir(current_home, current_requires_managed_catalog);
     if let Some(wsl_dir) = configured_codex_wsl_config_dir() {
-        add_dir(wsl_dir, current_requires_managed_catalog);
+        let preserve = account_requires_managed_catalog(&wsl_dir, current_account_id.as_deref());
+        add_dir(wsl_dir, preserve);
     }
     if let Ok(store) = crate::modules::codex_instance::load_instance_store() {
         if let Ok(default_home) = crate::modules::codex_instance::get_default_codex_home() {
+            let preserve = account_requires_managed_catalog(
+                &default_home, store.default_settings.bind_account_id.as_deref(),
+            );
             add_dir(
                 default_home,
-                account_requires_managed_catalog(store.default_settings.bind_account_id.as_deref()),
+                preserve,
             );
         }
         for instance in store.instances {
+            let dir = PathBuf::from(&instance.user_data_dir);
+            let preserve = account_requires_managed_catalog(
+                &dir, instance.bind_account_id.as_deref(),
+            );
             add_dir(
-                PathBuf::from(instance.user_data_dir),
-                account_requires_managed_catalog(instance.bind_account_id.as_deref()),
+                dir,
+                preserve,
             );
         }
     }

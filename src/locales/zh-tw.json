@@ -2156,6 +2156,7 @@
     },
     "title": "Codex 帳號管理",
     "contextOverride": {
+      "apiKeyHint": "此處為執行個體的全域覆寫。此 Key 的逐模型上下文請至「模型管理」設定。",
       "title": "上下文管理",
       "description": "模型、排序、預設模型與推理強度跟隨官方目錄；只有手動設定時才覆寫上下文。",
       "dialogDescription": "對目前 Codex 執行個體的所有帳號生效，切換帳號後保持不變；可選擇跟隨官方、預設值或自訂。",
@@ -3656,6 +3657,16 @@
       }
     },
     "modelProviders": {
+      "manageKeyModels": "管理此 Key 模型",
+      "discardKeyChanges": "目前 Key 的模型修改尚未儲存。切換後將捨棄，確定切換？",
+      "discardKeyChangesTitle": "切換 API Key",
+      "keyModelHint": "每把 API Key 都有獨立的模型目錄、上下文與壓縮設定。",
+      "keyNotFound": "目前 API Key 尚未加入模型供應商管理。",
+      "compactLimit": "自動壓縮門檻",
+      "compactionMode": "壓縮方式",
+      "compactionAuto": "自動",
+      "compactionRemote": "遠端壓縮",
+      "compactionLocal": "本機壓縮",
       "keyModels": {
         "title": "Key 模型設定",
         "override": "獨立設定",

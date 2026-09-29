@@ -198,6 +198,22 @@ jobs:
       - name: 🔄 Sync versions
         run: npm run sync-version
 
+      - name: 🧪 Verify model management and OAuth regressions
+        if: matrix.label == 'windows-latest' || matrix.label == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
+          cd src-tauri
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            # Hosted Windows cannot launch the Tauri test harness (0xc0000139).
+            cargo test --lib --no-run
+          else
+            for test_filter in model_management_default_off_migration model_context source_metadata auto_compact_limits api_key_compaction same_endpoint model_provider_key official_app_server model_list_refresh; do
+              cargo test "$test_filter" --lib
+            done
+          fi
+
       - name: 🧪 Test core Rust library
         if: matrix.label == 'ubuntu-22.04'
         run: npm run test:rust:core

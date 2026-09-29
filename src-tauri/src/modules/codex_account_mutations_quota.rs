@@ -616,6 +616,7 @@ pub fn sync_api_key_provider_accounts(
     api_model_vision_support: std::collections::HashMap<String, bool>,
     api_vision_routing_model: Option<String>,
     api_model_context_windows: Option<std::collections::HashMap<String, i64>>,
+    api_sync_model_catalog_to_codex: Option<bool>,
 ) -> Result<usize, String> {
     let provider_config = resolve_api_provider_config(
         api_base_url.as_deref(),
@@ -639,7 +640,8 @@ pub fn sync_api_key_provider_accounts(
         }
         let api_key = normalize_api_key(account.openai_api_key.as_deref().unwrap_or_default())
             .ok_or_else(|| format!("API Key 账号缺少密钥: {}", account.id))?;
-        let sync_model_catalog_to_codex = account.api_sync_model_catalog_to_codex;
+        let sync_model_catalog_to_codex = api_sync_model_catalog_to_codex
+            .unwrap_or(account.api_sync_model_catalog_to_codex);
         apply_api_key_fields(
             &mut account,
             &api_key,

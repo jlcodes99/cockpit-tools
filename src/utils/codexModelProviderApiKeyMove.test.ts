@@ -111,3 +111,16 @@ test("does not guess when the same key has conflicting saved names", () => {
   assert.equal(result, "name_conflict");
   assert.deepEqual(providers, before);
 });
+
+test("deduplicating a key preserves its independent model settings", () => {
+  const providers = [
+    provider('old', [{ id: 'old-key', name: 'Key', apiKey: 'secret',
+      modelCatalog: ['gpt-6-sol'], modelContextWindows: { 'gpt-6-sol': 1_000_000 },
+      compactionMode: 'remote', createdAt: 1, updatedAt: 1 }]),
+    provider('new', [{ id: 'new-key', name: 'Key', apiKey: 'secret', createdAt: 2, updatedAt: 2 }]),
+  ];
+  assert.equal(moveCodexProviderApiKey(providers, 'old', 'new', 'secret'), 'deduplicated');
+  assert.deepEqual(providers[1].apiKeys[0].modelCatalog, ['gpt-6-sol']);
+  assert.equal(providers[1].apiKeys[0].modelContextWindows?.['gpt-6-sol'], 1_000_000);
+  assert.equal(providers[1].apiKeys[0].compactionMode, 'remote');
+});

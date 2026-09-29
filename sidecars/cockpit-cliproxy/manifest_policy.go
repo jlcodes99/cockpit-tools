@@ -350,14 +350,15 @@ func (s *apiKeyPriorityStateStore) reloadIfChanged() {
 }
 
 type providerGatewaySpec struct {
-	BaseURL            string                                    `json:"baseUrl"`
-	APIKey             string                                    `json:"apiKey"`
-	UpstreamModel      string                                    `json:"upstreamModel"`
-	UpstreamModels     []string                                  `json:"upstreamModels,omitempty"`
-	WireAPI            string                                    `json:"wireApi,omitempty"`
-	SupportsVision     bool                                      `json:"supportsVision,omitempty"`
-	ModelCapabilities  map[string]providerGatewayModelCapability `json:"modelCapabilities,omitempty"`
-	VisionRoutingModel string                                    `json:"visionRoutingModel,omitempty"`
+	BaseURL                  string                                    `json:"baseUrl"`
+	APIKey                   string                                    `json:"apiKey"`
+	UpstreamModel            string                                    `json:"upstreamModel"`
+	UpstreamModels           []string                                  `json:"upstreamModels,omitempty"`
+	WireAPI                  string                                    `json:"wireApi,omitempty"`
+	SupportsRemoteCompaction bool                                      `json:"supportsRemoteCompaction,omitempty"`
+	SupportsVision           bool                                      `json:"supportsVision,omitempty"`
+	ModelCapabilities        map[string]providerGatewayModelCapability `json:"modelCapabilities,omitempty"`
+	VisionRoutingModel       string                                    `json:"visionRoutingModel,omitempty"`
 }
 
 type providerGatewayModelCapability struct {

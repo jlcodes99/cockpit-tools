@@ -1381,6 +1381,7 @@ supports_websockets = false
             Default::default(),
             None,
             None,
+            None,
         )
         .expect("sync provider snapshot");
 

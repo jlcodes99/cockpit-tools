@@ -1863,6 +1863,30 @@ supports_websockets = false
     }
 
     #[test]
+    fn provider_gateway_restore_recovers_previous_provider_before_shutdown() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _env = LocalAccessTestDataGuard::new("provider-gateway-restore");
+        let profile_dir = make_temp_dir("provider-gateway-restore-profile");
+        let original = "model_provider = \"previous\"\n[model_providers.previous]\nname = \"OpenAI\"\nbase_url = \"https://relay.example/v1\"\n";
+        fs::write(profile_dir.join(CODEX_PROFILE_CONFIG_FILE), original).unwrap();
+        super::save_profile_takeover_backup(&profile_dir, "agt_codex_restore_test").unwrap();
+        fs::write(
+            profile_dir.join(CODEX_PROFILE_CONFIG_FILE),
+            "model_provider = \"codex_local_access\"\n[model_providers.codex_local_access]\nname = \"OpenAI\"\nbase_url = \"http://localhost:64861/v1\"\nexperimental_bearer_token = \"agt_codex_restore_test\"\n",
+        ).unwrap();
+
+        assert!(super::restore_profile_takeover_backup_for_dir(&profile_dir).unwrap());
+        let restored = fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).unwrap();
+        assert!(restored.contains("model_provider = \"previous\""));
+        assert!(restored.contains("https://relay.example/v1"));
+        assert!(!restored.contains("http://localhost:64861/v1"));
+        assert!(super::load_takeover_backups().unwrap().profiles.is_empty());
+        fs::remove_dir_all(profile_dir).unwrap();
+    }
+
+    #[test]
     fn mixed_model_gateway_reuses_persisted_profile_port() {
         let _lock = crate::modules::test_support::env_lock()
             .lock()

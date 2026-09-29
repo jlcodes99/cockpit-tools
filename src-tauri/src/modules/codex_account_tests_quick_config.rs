@@ -1,6 +1,24 @@
 // Codex 账号测试：Quick config, provider validation and index repair behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
     #[test]
+    fn api_key_compaction_restore_recovers_previous_profile_settings() {
+        let base_dir = make_temp_dir("codex-api-key-compaction-restore");
+        fs::write(
+            base_dir.join("config.toml"),
+            "[features]\nremote_compaction_v2 = false\ntoken_budget = true\n",
+        ).expect("write profile");
+        fs::write(
+            base_dir.join(super::API_KEY_COMPACTION_BACKUP_FILE),
+            r#"{"remote_compaction_v2":true,"token_budget":null}"#,
+        ).expect("write backup");
+        super::restore_api_key_compaction_for_dir(&base_dir).expect("restore compaction");
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("remote_compaction_v2 = true"));
+        assert!(!config.contains("token_budget"));
+        assert!(!base_dir.join(super::API_KEY_COMPACTION_BACKUP_FILE).exists());
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+    #[test]
     fn managed_catalog_lists_reserve_without_changing_defaults_and_cleans_up_when_disabled() {
         let base_dir = make_temp_dir("codex-reserve-managed-catalog");
         fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")
@@ -1003,10 +1021,19 @@
     }
 
     #[test]
-    fn model_context_overrides_require_positive_pairs_and_strict_compact_limit() {
+    fn model_context_overrides_allow_independent_values_and_reject_invalid_pairs() {
+        for (window, compact) in [(None, Some(1)), (Some(100), None)] {
+            let definition = CodexExperimentalModelDefinition {
+                model_id: "custom-model".into(), display_name: "Custom".into(),
+                reasoning_efforts: None, context_window: window, auto_compact_token_limit: compact,
+            };
+            let normalized = super::normalize_experimental_model_definitions(vec![definition])
+                .expect("independent override");
+            assert_eq!(normalized[0].context_window, window);
+            assert_eq!(normalized[0].auto_compact_token_limit, compact);
+        }
         for (window, compact, error) in [
             (Some(0), Some(1), "EXPERIMENTAL_MODEL_CATALOG_CONTEXT_WINDOW_INVALID"),
-            (None, Some(1), "EXPERIMENTAL_MODEL_CATALOG_CONTEXT_WINDOW_INVALID"),
             (Some(100), Some(0), "EXPERIMENTAL_MODEL_CATALOG_AUTO_COMPACT_INVALID"),
             (Some(100), Some(-1), "EXPERIMENTAL_MODEL_CATALOG_AUTO_COMPACT_INVALID"),
             (Some(100), Some(100), "EXPERIMENTAL_MODEL_CATALOG_AUTO_COMPACT_RANGE_INVALID"),
@@ -1019,7 +1046,7 @@
             assert_eq!(super::normalize_experimental_model_definitions(vec![definition]).unwrap_err(), error);
         }
 
-        // 统一口径：只给上下文窗口时按 90% 派生压缩阈值，不再视为非法配置。
+        // A missing compact override remains absent so the instance can supply it.
         let derived = super::normalize_experimental_model_definitions(vec![
             CodexExperimentalModelDefinition {
                 model_id: "custom-model".into(), display_name: "Custom".into(),
@@ -1027,9 +1054,49 @@
                 auto_compact_token_limit: None,
             },
         ])
-        .expect("context-only definition should derive the compact limit");
+        .expect("context-only definition should preserve inheritance");
         assert_eq!(derived[0].context_window, Some(516_000));
-        assert_eq!(derived[0].auto_compact_token_limit, Some(464_400));
+        assert_eq!(derived[0].auto_compact_token_limit, None);
+    }
+
+    #[test]
+    fn source_metadata_follows_global_context_and_conflicting_model_override_is_rejected() {
+        let base_dir = make_temp_dir("codex-source-metadata-global-priority");
+        fs::write(base_dir.join("config.toml"),
+            "model_context_window = 2760000\nmodel_auto_compact_token_limit = 2750000\n")
+            .expect("write global context");
+        let ids = ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"];
+        let models = ids.iter().map(|id| CodexExperimentalModelDefinition {
+            model_id: (*id).into(), display_name: (*id).into(), reasoning_efforts: None,
+            context_window: None, auto_compact_token_limit: None,
+        }).collect::<Vec<_>>();
+        super::save_model_catalog_for_base_dir_preserving_context(&base_dir, true, models.clone(), None)
+            .expect("save models");
+        super::save_model_catalog_source_for_base_dir(&base_dir, super::CodexModelCatalogSourceInfo {
+            source: "codex".into(), fetched_at: 1, manually_adjusted: false,
+            cache_info: None,
+            model_metadata: ids.iter().map(|id| ((*id).into(),
+                crate::models::codex::CodexModelSourceMetadata {
+                    context_window: Some(1_050_000), auto_compact_token_limit: Some(900_000),
+                })).collect(),
+        }).expect("save source metadata");
+        super::save_model_catalog_for_base_dir_preserving_context(&base_dir, true, models.clone(), None)
+            .expect("regenerate catalog");
+        let catalog: serde_json::Value = serde_json::from_str(&fs::read_to_string(
+            base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)).expect("read catalog"))
+            .expect("parse catalog");
+        for id in ids {
+            let model = catalog["models"].as_array().unwrap().iter()
+                .find(|model| model["slug"] == id).expect("model in catalog");
+            assert_eq!(model["context_window"], 2_760_000);
+            assert_eq!(model["auto_compact_token_limit"], 2_750_000);
+        }
+        let mut conflicting = models;
+        conflicting[0].context_window = Some(1_050_000);
+        let error = super::save_model_catalog_for_base_dir_preserving_context(
+            &base_dir, true, conflicting, None).expect_err("reject effective threshold conflict");
+        assert!(error.contains("gpt-6-astra") && error.contains("2750000") && error.contains("1050000"));
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 
     #[test]
@@ -1761,10 +1828,9 @@ wire_api = "responses"
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
 
-    /// 一次性迁移：把历史遗留的「模型管理」关闭并恢复跟随官方模型目录，
-    /// 只执行一次，且保留用户已保存的模型清单（重新开启后仍可用）。
+    /// 用户明确开启的模型管理不得被迁移关闭。
     #[test]
-    fn model_management_default_off_migration_runs_once_and_keeps_definitions() {
+    fn model_management_default_off_migration_preserves_explicit_enablement() {
         let base_dir = make_temp_dir("codex-model-management-default-off-migration");
         fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")
             .expect("write base config");
@@ -1778,16 +1844,10 @@ wire_api = "responses"
         .expect("enable managed catalog");
         assert!(super::experimental_model_policy_enabled(&base_dir));
 
-        assert!(
-            super::migrate_model_management_default_off_once(&base_dir).expect("run migration"),
-            "首次执行必须生效"
-        );
-        assert!(!super::experimental_model_policy_enabled(&base_dir));
-        assert!(!base_dir
-            .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
-            .exists());
+        assert!(!super::migrate_model_management_default_off_once(&base_dir).expect("run migration"));
+        assert!(super::experimental_model_policy_enabled(&base_dir));
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(!config.contains("model_catalog_json"));
+        assert!(config.contains("model_catalog_json"));
         assert!(config.contains("model = \"gpt-5.6-sol\""));
         assert_eq!(
             super::read_experimental_model_definitions(&base_dir).len(),
@@ -1795,7 +1855,26 @@ wire_api = "responses"
             "用户模型清单必须保留"
         );
 
-        // 迁移只执行一次：之后用户自己再开启模型管理不再被关闭。
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn model_management_default_off_migration_backs_up_and_clears_stale_reference() {
+        let base_dir = make_temp_dir("codex-model-management-stale-reference-migration");
+        let original = "model_catalog_json = \"cockpit-model-catalog.json\"\nmodel_context_window = 2760000\n";
+        fs::write(base_dir.join("config.toml"), original).expect("write stale config");
+        assert!(super::migrate_model_management_default_off_once(&base_dir).expect("run migration"));
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(!config.contains("model_catalog_json"));
+        assert!(config.contains("model_context_window = 2760000"));
+        assert_eq!(
+            fs::read_to_string(base_dir.join("config.toml.cockpit-model-management-stale-reference.bak"))
+                .expect("read migration backup"),
+            original,
+        );
+        assert!(!super::migrate_model_management_default_off_once(&base_dir).expect("run again"));
+
+        let definitions = super::default_experimental_model_definitions(&base_dir);
         super::save_model_catalog_for_base_dir_preserving_context(
             &base_dir,
             true,
@@ -1803,10 +1882,7 @@ wire_api = "responses"
             None,
         )
         .expect("re-enable managed catalog");
-        assert!(
-            !super::migrate_model_management_default_off_once(&base_dir).expect("run migration"),
-            "已迁移过的 profile 不能再次执行"
-        );
+        assert!(!super::migrate_model_management_default_off_once(&base_dir).expect("run migration"));
         assert!(super::experimental_model_policy_enabled(&base_dir));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");

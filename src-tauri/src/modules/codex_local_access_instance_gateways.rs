@@ -204,12 +204,14 @@ fn clear_instance_gateway_profile_state(profile_dir: &Path, runtime_id: &str) {
 
 /// 停止该 profile 的全部实例级网关，并还原它写入的接管状态与持久状态。
 ///
-/// 实例不运行（被关闭 / 手动停止网关）时使用：停进程后必须一并清理状态，
-/// 否则下次启动自愈或后台监控会把它再拉起来。
+/// 实例不运行（被关闭 / 手动停止网关）时使用：先恢复配置，再停进程并清理状态，
+/// 否则恢复失败会留下失效地址，下次启动自愈或后台监控还可能把网关拉起来。
 pub async fn release_instance_gateway_for_profile(profile_dir: &Path) -> Result<(), String> {
-    stop_provider_gateways_for_profile(profile_dir).await;
-    restore_mixed_model_gateway_profile(profile_dir)?;
     cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
+    if !restore_mixed_model_gateway_profile(profile_dir)? {
+        restore_profile_takeover_backup_for_dir(profile_dir)?;
+    }
+    stop_provider_gateways_for_profile(profile_dir).await;
     clear_instance_gateway_profile_state(profile_dir, MIXED_MODEL_ROUTING_RUNTIME_ID);
     set_instance_gateway_recovery_error(
         &provider_gateway_runtime_key(profile_dir, MIXED_MODEL_ROUTING_RUNTIME_ID),
@@ -227,6 +229,9 @@ pub async fn stop_instance_gateway_for(instance_id: &str, kind: &str) -> Result<
     let runtime_key = provider_gateway_runtime_key(&target.profile_dir, &target.runtime_id);
     if target.kind == INSTANCE_GATEWAY_KIND_MIXED_MODEL {
         crate::modules::codex_instance::disable_model_routing(&target.instance_id)?;
+        return release_instance_gateway_for_profile(&target.profile_dir).await;
+    }
+    if target.kind == INSTANCE_GATEWAY_KIND_PROVIDER {
         return release_instance_gateway_for_profile(&target.profile_dir).await;
     }
     if let Some(endpoint) = stop_provider_gateway_runtime(&runtime_key).await {

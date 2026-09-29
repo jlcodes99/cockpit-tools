@@ -3,7 +3,8 @@
 use crate::models::codex::{
     CodexAccount, CodexAccountIndex, CodexAccountSummary, CodexAgentIdentity, CodexApiModelMapping,
     CodexApiProviderMode, CodexAppSpeed, CodexAuthFile, CodexAuthMode, CodexAuthTokens,
-    CodexExperimentalModelDefinition, CodexJwtPayload, CodexQuickConfig, CodexTokens,
+    CodexExperimentalModelDefinition, CodexJwtPayload, CodexModelCatalogSourceInfo,
+    CodexQuickConfig, CodexTokens,
 };
 use crate::modules::apikey_fun_links::{
     normalize_legacy_apikey_fun_url, APIKEY_FUN_LEGACY_PROVIDER_BASE_URL,
@@ -1338,6 +1339,7 @@ fn write_deepseek_official_model_catalog_file(
         crate::modules::codex_local_access::read_file_model_context_window(&get_config_toml_path(
             base_dir,
         )),
+        crate::modules::codex_local_access::read_file_model_auto_compact_token_limit(&get_config_toml_path(base_dir)),
     )?;
     let catalog_path = deepseek_official_model_catalog_path(base_dir);
     let content = decorate_managed_model_catalog_for_profile(base_dir, &content)?;
@@ -2039,6 +2041,7 @@ fn sync_deepseek_shell_remap_catalog_to_dir(
         crate::modules::codex_local_access::read_file_model_context_window(&get_config_toml_path(
             base_dir,
         )),
+        crate::modules::codex_local_access::read_file_model_auto_compact_token_limit(&get_config_toml_path(base_dir)),
     )?;
     let catalog_path = deepseek_official_model_catalog_path(base_dir);
     let content = decorate_managed_model_catalog_for_profile(base_dir, &content)?;

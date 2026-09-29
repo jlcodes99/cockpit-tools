@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { withProxyEnginePrerequisite } from "../utils/codexProxyEnginePrerequisite";
+import type { CodexModelCatalogSourceInfo } from "./codexModelCatalogSourceService";
 import { createPlatformInstanceService } from "./platform/createPlatformInstanceService";
 import type {
   CodexSessionVisibilityRepairInstanceList,
@@ -33,6 +34,13 @@ import type {
 } from "../types/instance";
 
 const service = createPlatformInstanceService("codex");
+
+export async function saveCodexInstanceModelCatalogSource(
+  instanceId: string,
+  source: CodexModelCatalogSourceInfo,
+): Promise<void> {
+  await invoke("codex_save_instance_model_catalog_source", { instanceId, source });
+}
 
 export const getInstanceDefaults = service.getInstanceDefaults;
 export const listInstances = service.listInstances;
