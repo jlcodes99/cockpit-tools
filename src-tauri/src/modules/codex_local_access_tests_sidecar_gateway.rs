@@ -1086,6 +1086,38 @@
     }
 
     #[test]
+    fn sidecar_launch_catalog_matches_the_host_snapshot() {
+        let dir = make_temp_dir("codex-sidecar-catalog");
+        let collection = test_local_access_collection(Vec::new());
+        super::prepare_sidecar_launch_config_in_dir_sync(
+            &collection,
+            dir.clone(),
+            HashMap::new(),
+            None,
+            HashMap::new(),
+            true,
+            None,
+        )
+        .expect("prepare sidecar catalog");
+        let manifest: Value = serde_json::from_str(
+            &fs::read_to_string(super::sidecar_manifest_path(&dir)).unwrap(),
+        )
+        .unwrap();
+        let catalog_path = manifest["codexClientModelsPath"].as_str().unwrap();
+        let content = fs::read(catalog_path).unwrap();
+        use sha2::{Digest, Sha256};
+        assert_eq!(
+            manifest["codexClientModelsHash"],
+            format!("{:x}", Sha256::digest(&content))
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&content).unwrap(),
+            crate::modules::codex_model_catalog::snapshot().as_ref().clone()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn provider_gateway_model_aliases_stay_off_the_oauth_channel() {
         let dir = make_temp_dir("codex-provider-gateway-alias");
         let mut collection = test_local_access_collection(vec!["provider-account".to_string()]);
