@@ -1,7 +1,7 @@
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::sync::OnceLock;
+use std::sync::Arc;
 
 const REASONING_ENCRYPTED_CONTENT_INCLUDE: &str = "reasoning.encrypted_content";
 const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
@@ -17,10 +17,6 @@ const CODEX_INPUT_ITEM_ID_LIMIT: usize = 64;
 /// （`run_auto_compact{reason=CompHashChanged}`），与当前 token 用量无关；
 /// 统一为最新官方值即可避免混合模型目录内切换模型被强制重建上下文。
 pub(crate) const CODEX_CLIENT_COMP_HASH: &str = "3000";
-const CODEX_CLIENT_MODEL_TEMPLATES_JSON: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/internal/registry/models/codex_client_models.json"
-));
 const DEFAULT_CONTEXT_WINDOW: i64 = 272_000;
 /// 未知 / 自定义 Codex 模型的兜底上限。
 ///
@@ -603,12 +599,8 @@ pub(crate) fn apply_deepseek_multi_agent_capability(model: &mut Value) {
     model["multi_agent_version"] = json!("v2");
 }
 
-fn codex_client_model_catalog() -> &'static Value {
-    static CATALOG: OnceLock<Value> = OnceLock::new();
-    CATALOG.get_or_init(|| {
-        serde_json::from_str(CODEX_CLIENT_MODEL_TEMPLATES_JSON)
-            .expect("Codex client model templates JSON should be valid")
-    })
+fn codex_client_model_catalog() -> Arc<Value> {
+    crate::modules::codex_model_catalog::snapshot()
 }
 
 fn inherit_routed_gpt_capabilities(object: &mut Map<String, Value>, model_id: &str) {
@@ -1215,6 +1207,40 @@ fn remove_unsupported_responses_fields(obj: &mut Map<String, Value>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_catalog_supplies_future_model_capabilities() {
+        let mut catalog = codex_client_model_catalog().as_ref().clone();
+        let future = catalog["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|model| model["slug"] == "gpt-5.5")
+            .unwrap();
+        let mut future = future.clone();
+        future["slug"] = json!("gpt-6.2-sol");
+        future["display_name"] = json!("GPT-6.2 Sol");
+        future["context_window"] = json!(512000);
+        future["max_context_window"] = json!(1024000);
+        future["default_reasoning_level"] = json!("low");
+        future["supported_reasoning_levels"] = json!([
+            {"effort": "low", "description": "Low"},
+            {"effort": "high", "description": "High"}
+        ]);
+        future["use_responses_lite"] = json!(true);
+        catalog["models"].as_array_mut().unwrap().push(future);
+        crate::modules::codex_model_catalog::with_test_catalog(catalog, || {
+            let response = build_codex_client_models_response(&["gpt-6.2-sol".into()]);
+            let model = &response["models"][0];
+            assert_eq!(model["display_name"], "GPT-6.2 Sol");
+            assert_eq!(model["context_window"], 512000);
+            assert_eq!(model["max_context_window"], 1024000);
+            assert_eq!(model["default_reasoning_level"], "low");
+            assert_eq!(model["supported_reasoning_levels"][1]["effort"], "high");
+            assert!(codex_model_uses_responses_lite("gpt-6.2-sol"));
+            assert!(managed_codex_model_ids().contains(&"gpt-6.2-sol".into()));
+        });
+    }
 
     #[test]
     fn deepseek_multi_agent_catalog_is_scoped_and_preserves_identity() {
