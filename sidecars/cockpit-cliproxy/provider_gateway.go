@@ -681,6 +681,11 @@ func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body i
 	if body == nil {
 		return
 	}
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		writeAPIError(c, http.StatusInternalServerError, "streaming not supported", "streaming_not_supported")
+		return
+	}
 	itemIDRewriter := newProviderGatewayItemIDRewriter()
 	reader := bufio.NewReaderSize(body, 64*1024)
 	for {
@@ -692,8 +697,14 @@ func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body i
 			if _, writeErr := c.Writer.Write(line); writeErr != nil {
 				return
 			}
+			// SSE events are terminated by a blank line; flush there so the client sees
+			// each event as it arrives instead of one bufio burst at the end.
+			if len(bytes.TrimRight(line, "\r\n")) == 0 {
+				flusher.Flush()
+			}
 		}
 		if err != nil {
+			flusher.Flush()
 			return
 		}
 	}
