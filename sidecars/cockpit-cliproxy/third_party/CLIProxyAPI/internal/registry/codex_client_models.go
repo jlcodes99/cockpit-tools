@@ -178,6 +178,11 @@ func GetCodexClientModelsSnapshot() ([]byte, uint64) {
 	return append([]byte(nil), codexClientCatalogStore.data...), codexClientCatalogStore.revision
 }
 
+// LoadCodexClientModelsJSON imports a complete, effective host catalog without merging shipped models.
+func LoadCodexClientModelsJSON(data []byte) (bool, error) {
+	return loadCodexClientModelsFromBytes(data, "host Codex client model catalog")
+}
+
 func loadCodexClientModelsFromBytes(data []byte, source string) (bool, error) {
 	if err := ValidateCodexClientModelsJSON(data); err != nil {
 		return false, fmt.Errorf("%s: %w", source, err)

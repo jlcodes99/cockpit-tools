@@ -96,6 +96,8 @@ type accountModelRule struct {
 }
 
 type manifest struct {
+	CodexClientModelsPath      string                   `json:"codexClientModelsPath,omitempty"`
+	CodexClientModelsHash      string                   `json:"codexClientModelsHash,omitempty"`
 	ProxyRouteObservers        []proxyRouteObserverSpec `json:"proxyRouteObservers,omitempty"`
 	Locale                     string                   `json:"locale"`
 	APIKeys                    []apiKeySpec             `json:"apiKeys"`
@@ -125,6 +127,8 @@ type manifest struct {
 	originalIndexByID map[string]int
 	quotaCooldowns    *quotaCooldownStateStore
 	authManager       *coreauth.Manager
+
+	codexClientModelsLoaded bool
 }
 
 type apiKeySpec struct {
@@ -2236,6 +2240,11 @@ func displayNameForModel(model string) string {
 	case codexAutoReviewModel:
 		return "Codex Auto Review"
 	default:
+		if metadata := codexClientModelMetadata(model); metadata != nil {
+			if name, ok := metadata["display_name"].(string); ok && strings.TrimSpace(name) != "" {
+				return name
+			}
+		}
 		return model
 	}
 }
