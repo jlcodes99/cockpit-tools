@@ -19,6 +19,7 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         custom_routing_rules: Vec::new(),
         account_model_rules: Vec::new(),
         model_aliases: Vec::new(),
+        custom_models: Vec::new(),
         suppress_oauth_model_alias: false,
         model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,
         model_pricings: Vec::new(),
@@ -470,9 +471,68 @@ pub async fn update_local_access_account_model_rules(
     snapshot_state().await
 }
 
+pub async fn refresh_api_service_models() -> Result<(), String> {
+    ensure_runtime_loaded_without_start().await?;
+    ensure_gateway_matches_runtime().await?;
+    emit_local_access_state_updated();
+    Ok(())
+}
+
+fn replace_account_refs_in_collection(
+    collection: &mut CodexLocalAccessCollection,
+    old_id: &str,
+    new_id: &str,
+) {
+    let replace = |id: &mut String| {
+        if id == old_id { *id = new_id.to_string(); }
+    };
+    for id in &mut collection.account_ids { replace(id); }
+    for key in &mut collection.api_keys {
+        for id in &mut key.account_ids { replace(id); }
+        for id in &mut key.priority_account_ids { replace(id); }
+        if let Some(id) = &mut key.preferred_account_id { replace(id); }
+        if let Some(routing) = &mut key.model_routing {
+            for route in &mut routing.routes { replace(&mut route.provider_account_id); }
+        }
+    }
+    for model in &mut collection.custom_models { replace(&mut model.account_id); }
+    for rule in &mut collection.account_model_rules { replace(&mut rule.account_id); }
+    for rule in &mut collection.custom_routing_rules { replace(&mut rule.account_id); }
+    if let Some(id) = &mut collection.bound_oauth_account_id { replace(id); }
+    for id in &mut collection.image_generation_account_ids { replace(id); }
+    if let Some(policy) = collection.image_generation_account_policies.remove(old_id) {
+        collection.image_generation_account_policies.insert(new_id.to_string(), policy);
+    }
+}
+
+pub async fn update_account_with_api_service_references(
+    old_id: &str,
+    update: impl FnOnce() -> Result<CodexAccount, String>,
+) -> Result<CodexAccount, String> {
+    // Keep background membership cleanup from pruning the old ID during key rotation.
+    let mut runtime = gateway_runtime().lock().await;
+    let collection = if runtime.loaded {
+        runtime.collection.clone()
+    } else {
+        load_collection_from_disk()?
+    };
+    let account = update()?;
+    if old_id != account.id {
+        if let Some(mut collection) = collection {
+            replace_account_refs_in_collection(&mut collection, old_id, &account.id);
+            collection.updated_at = now_ms();
+            save_collection_to_disk(&collection)
+                .map_err(|error| format!("账号已更新，但 API 服务账号引用迁移失败: {}", error))?;
+            if runtime.loaded { sync_runtime_collection(&mut runtime, collection); }
+        }
+    }
+    Ok(account)
+}
+
 pub async fn update_local_access_model_rules(
     model_aliases: Vec<CodexLocalAccessModelAlias>,
     excluded_models: Vec<String>,
+    custom_models: Option<Vec<CodexLocalAccessCustomModel>>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
 
@@ -485,6 +545,9 @@ pub async fn update_local_access_model_rules(
         return Err("本地接入集合尚未创建".to_string());
     };
 
+    if let Some(models) = custom_models {
+        collection.custom_models = validate_custom_api_service_models(models, &collection)?;
+    }
     collection.model_aliases = normalize_model_aliases(model_aliases);
     collection.excluded_models = normalize_model_rule_list(excluded_models);
     collection.updated_at = now_ms();
@@ -495,7 +558,8 @@ pub async fn update_local_access_model_rules(
         sync_runtime_collection(&mut runtime, collection);
     }
 
-    ensure_gateway_matches_runtime().await?;
+    ensure_gateway_matches_runtime().await
+        .map_err(|error| format!("模型配置已保存，但 API 服务刷新失败: {}", error))?;
     snapshot_state().await
 }
 

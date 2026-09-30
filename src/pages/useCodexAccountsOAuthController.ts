@@ -232,6 +232,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       editingApiSyncModelCatalogToCodex,
       setEditingApiSyncModelCatalogToCodex,
     ] = useState(false);
+    const [editingApiSyncModelCatalogToApiService, setEditingApiSyncModelCatalogToApiService] = useState(false);
     const [editingApiModelCatalogFetching, setEditingApiModelCatalogFetching] =
       useState(false);
     const [editingApiModelCatalogError, setEditingApiModelCatalogError] =
@@ -2168,6 +2169,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
     editingApiModelContextWindowsInput,
     editingApiProviderPresetId,
     editingApiSyncModelCatalogToCodex,
+    editingApiSyncModelCatalogToApiService,
     editingManagedProviderApiKeyId,
     editingManagedProviderId,
     editingNewManagedProviderNameInput,
@@ -2281,6 +2283,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
     setEditingApiModelContextWindowsInput,
     setEditingApiProviderPresetId,
     setEditingApiSyncModelCatalogToCodex,
+    setEditingApiSyncModelCatalogToApiService,
     setEditingManagedProviderApiKeyId,
     setEditingManagedProviderId,
     setEditingNewManagedProviderNameInput,

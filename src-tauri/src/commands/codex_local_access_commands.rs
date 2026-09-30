@@ -198,8 +198,9 @@ pub async fn codex_local_access_update_account_model_rules(
 pub async fn codex_local_access_update_model_rules(
     model_aliases: Vec<CodexLocalAccessModelAlias>,
     excluded_models: Vec<String>,
+    custom_models: Option<Vec<CodexLocalAccessCustomModel>>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::update_local_access_model_rules(model_aliases, excluded_models).await
+    codex_local_access::update_local_access_model_rules(model_aliases, excluded_models, custom_models).await
 }
 
 #[tauri::command]

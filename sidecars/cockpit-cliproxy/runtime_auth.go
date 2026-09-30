@@ -752,13 +752,26 @@ func manifestModelsForAuth(m *manifest, auth *coreauth.Auth) []*cliproxy.ModelIn
 		return filtered
 	}
 	account := accountForAuthInManifest(m, auth)
-	if account == nil || len(account.ModelIDs) == 0 {
+	if account == nil {
 		return nil
 	}
 	entries := make([]manifestRegistryModelEntry, 0, len(account.ModelIDs))
 	seen := make(map[string]struct{}, len(account.ModelIDs))
 	for _, id := range account.ModelIDs {
 		entries = appendManifestRegistryModelEntry(entries, seen, id, "")
+	}
+	for _, spec := range m.APIKeys {
+		if spec.ModelRouting == nil {
+			continue
+		}
+		for _, route := range spec.ModelRouting.Routes {
+			if route.ProviderAccountID != account.ID || normalizedSidecarProvider(route.NativeProvider) != provider {
+				continue
+			}
+			for _, mapping := range route.Models {
+				entries = appendManifestRegistryModelEntry(entries, seen, mapping.UpstreamModel, "")
+			}
+		}
 	}
 	return manifestRegistryModelInfos(entries)
 }
@@ -892,6 +905,19 @@ func manifestRegistryModels(m *manifest) []*cliproxy.ModelInfo {
 	for _, alias := range m.ModelAliases {
 		entries = appendManifestRegistryModelEntry(entries, seen, alias.SourceModel, "")
 		entries = appendManifestRegistryModelEntry(entries, seen, alias.Alias, alias.SourceModel)
+	}
+	for _, spec := range m.APIKeys {
+		if spec.ModelRouting == nil {
+			continue
+		}
+		for _, route := range spec.ModelRouting.Routes {
+			if route.NativeProvider != "codex" {
+				continue
+			}
+			for _, mapping := range route.Models {
+				entries = appendManifestRegistryModelEntry(entries, seen, mapping.UpstreamModel, "")
+			}
+		}
 	}
 	for _, id := range appendCodexInternalModels(nil) {
 		entries = appendManifestRegistryModelEntry(entries, seen, id, "")

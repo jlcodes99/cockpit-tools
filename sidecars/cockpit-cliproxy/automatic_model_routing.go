@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -89,7 +91,10 @@ func (s *relayServer) automaticCandidates(spec *apiKeySpec, model string) []auto
 		route := &spec.ModelRouting.Routes[i]
 		accountID := strings.TrimSpace(route.ProviderAccountID)
 		account := s.manifest.accountByID[accountID]
-		if route.ProviderGateway == nil || account == nil || seen[accountID] {
+		if (route.ProviderGateway == nil && route.NativeProvider == "") || account == nil || seen[accountID] {
+			continue
+		}
+		if len(spec.AccountIDs) > 0 && !containsAccountID(spec.AccountIDs, accountID) {
 			continue
 		}
 		for _, mapping := range route.Models {
@@ -99,6 +104,20 @@ func (s *relayServer) automaticCandidates(spec *apiKeySpec, model string) []auto
 			// Use the business ID as the synthetic auth identity; account policy is
 			// resolved from account_id, including IDs containing dots or slashes.
 			auth := &coreauth.Auth{ID: "cockpit-provider:" + accountID, Provider: "codex", Status: coreauth.StatusActive, Attributes: map[string]string{"account_id": accountID}}
+			if route.NativeProvider != "" {
+				// Share the real auth's concurrency slot with the pinned execution.
+				if account.AuthID != "" {
+					auth.ID = account.AuthID
+				}
+				if s.authManager != nil {
+					for _, registered := range s.authManager.List() {
+						if linked := accountForAuthInManifest(s.manifest, registered); linked != nil && linked.ID == accountID {
+							auth = registered
+							break
+						}
+					}
+				}
+			}
 			if authModelExcluded(s.manifest, auth, model) || authModelExcluded(s.manifest, auth, mapping.UpstreamModel) {
 				continue
 			}
@@ -132,6 +151,38 @@ func retryableAutomaticStatus(status int) bool {
 	return status == http.StatusUnauthorized || status == http.StatusPaymentRequired || status == http.StatusForbidden || status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
+func (w *automaticAttemptWriter) retryable() bool {
+	if retryableAutomaticStatus(w.Status()) {
+		return true
+	}
+	if w.Status() != http.StatusBadRequest && w.Status() != http.StatusNotFound {
+		return false
+	}
+	var payload struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(w.failedBody.Bytes(), &payload) != nil {
+		return false
+	}
+	switch payload.Error.Code {
+	case "model_not_found", "unsupported_model", "model_not_supported":
+		return true
+	default:
+		return false
+	}
+}
+
+func containsAccountID(ids []string, id string) bool {
+	for _, candidate := range ids {
+		if strings.TrimSpace(candidate) == id {
+			return true
+		}
+	}
+	return false
+}
+
 // A failed upstream attempt is held until a same-model candidate succeeds.
 // Successful output passes straight through, including the first SSE byte;
 // once that happens it is never replayed against another provider.
@@ -144,7 +195,21 @@ func (s *relayServer) handleAutomaticModelRequest(c *gin.Context, spec *apiKeySp
 	originalWriter := c.Writer
 	defer func() { c.Writer = originalWriter }()
 	var last *automaticAttemptWriter
-	if automaticNativeModel(spec, model) {
+	nativeSpec := *spec
+	nativeAllowed := automaticNativeModel(spec, model)
+	if spec.ModelRouting.NativeModelAccounts != nil {
+		nativeSpec.AccountIDs = nil
+		for _, id := range spec.ModelRouting.NativeModelAccounts[strings.ToLower(stripModelPrefix(model, spec))] {
+			if len(spec.AccountIDs) == 0 || containsAccountID(spec.AccountIDs, id) {
+				nativeSpec.AccountIDs = append(nativeSpec.AccountIDs, id)
+			}
+		}
+		nativeAllowed = nativeAllowed && len(nativeSpec.AccountIDs) > 0
+	}
+	if nativeAllowed {
+		nativeSpec.ModelRouting = nil
+		originalRequest := c.Request
+		c.Request = originalRequest.WithContext(context.WithValue(originalRequest.Context(), clientAPIKeyContextKey, &nativeSpec))
 		last = newAutomaticAttemptWriter(originalWriter)
 		c.Writer = last
 		canonical := canonicalModelForClientModel(s.manifest, spec, model)
@@ -164,7 +229,8 @@ func (s *relayServer) handleAutomaticModelRequest(c *gin.Context, spec *apiKeySp
 		} else {
 			s.handleNonStream(c, nativeBody, canonical, sourceFormat, alt, executionProviders())
 		}
-		if originalWriter.Written() || !retryableAutomaticStatus(last.Status()) || c.Request.Context().Err() != nil || fixedAlt == "responses/compact" {
+		c.Request = originalRequest
+		if originalWriter.Written() || !last.retryable() || c.Request.Context().Err() != nil || fixedAlt == "responses/compact" {
 			last.commit()
 			return
 		}
@@ -206,8 +272,35 @@ func (s *relayServer) handleAutomaticModelRequest(c *gin.Context, spec *apiKeySp
 		if s.policy != nil && s.policy.tracker != nil {
 			s.policy.tracker.recordSelectedAccount(internallogging.GetRequestID(c.Request.Context()), s.manifest.accountByID[candidate.route.ProviderAccountID], selected.ID)
 		}
-		s.handleProviderGatewayRequest(c, candidate.route.ProviderGateway, body, candidate.upstream, sourceFormat, fixedAlt)
-		if originalWriter.Written() || !retryableAutomaticStatus(last.Status()) {
+		if candidate.route.NativeProvider != "" {
+			originalRequest := c.Request
+			routeSpec := *spec
+			routeSpec.AccountIDs = []string{candidate.route.ProviderAccountID}
+			routeSpec.ModelRouting = nil
+			ctx := context.WithValue(originalRequest.Context(), clientAPIKeyContextKey, &routeSpec)
+			ctx = context.WithValue(ctx, targetAccountIDContextKey, candidate.route.ProviderAccountID)
+			c.Request = originalRequest.WithContext(ctx)
+			executorModel := candidate.upstream
+			// API-key auth uses the executor's configured alias mapping; OAuth uses
+			// the upstream name directly. Both remain pinned to this candidate.
+			if account := s.manifest.accountByID[candidate.route.ProviderAccountID]; account != nil && account.UpstreamAPIKey != "" && candidate.route.NativeProvider == "codex" {
+				executorModel = stripModelPrefix(model, spec)
+			}
+			nativeBody := rewriteProviderGatewayBodyModel(body, executorModel)
+			alt := fixedAlt
+			if alt == "" {
+				alt = requestAlt(c)
+			}
+			if requestBodyStream(body) && fixedAlt != "responses/compact" {
+				s.handleStream(c, nativeBody, executorModel, sourceFormat, alt, []string{candidate.route.NativeProvider})
+			} else {
+				s.handleNonStream(c, nativeBody, executorModel, sourceFormat, alt, []string{candidate.route.NativeProvider})
+			}
+			c.Request = originalRequest
+		} else {
+			s.handleProviderGatewayRequest(c, candidate.route.ProviderGateway, body, candidate.upstream, sourceFormat, fixedAlt)
+		}
+		if originalWriter.Written() || !last.retryable() || fixedAlt == "responses/compact" {
 			last.commit()
 			return
 		}

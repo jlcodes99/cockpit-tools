@@ -1057,6 +1057,7 @@
             custom_routing_rules: Vec::new(),
             account_model_rules: Vec::new(),
             model_aliases: Vec::new(),
+            custom_models: Vec::new(),
             suppress_oauth_model_alias: false,
             model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,
             model_pricings: Vec::new(),
@@ -4126,6 +4127,7 @@ http_headers = { "x-cockpit-instance-id" = "default" }
             vec!["deepseek-flash".to_string(), "deepseek-v4-pro".to_string()],
         );
         deepseek.api_wire_api = Some("responses".to_string());
+        deepseek.api_sync_model_catalog_to_api_service = true;
         let mut grok = CodexAccount::new_api_key(
             "grok-overlay".to_string(),
             "grok-overlay@example.com".to_string(),
@@ -4141,6 +4143,7 @@ http_headers = { "x-cockpit-instance-id" = "default" }
             ],
         );
         grok.api_wire_api = Some("responses".to_string());
+        grok.api_sync_model_catalog_to_api_service = true;
         grok.upstream_grok_account_id = Some("grok-source".to_string());
         grok.openai_api_key = None;
         crate::modules::codex_account::save_account(&deepseek).expect("save deepseek");

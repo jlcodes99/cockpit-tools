@@ -1963,6 +1963,19 @@ fn local_access_profile_model_definitions(
             image_capable,
         ));
     }
+    if !user_took_over_catalog {
+        let visible = visible_codex_model_ids_for_api_key_with_optional_accounts(
+            collection, &resolved_key, Some(&accounts), None,
+        );
+        let hidden = local_access_profile_hidden_model_definitions();
+        definitions.retain(|definition| {
+            hidden.iter().any(|(id, _)| id.eq_ignore_ascii_case(&definition.model_id))
+                || visible.iter().any(|id| {
+                    strip_model_prefix(id, resolved_key.model_prefix.as_deref())
+                        .eq_ignore_ascii_case(&definition.model_id)
+                })
+        });
+    }
     Ok(definitions)
 }
 

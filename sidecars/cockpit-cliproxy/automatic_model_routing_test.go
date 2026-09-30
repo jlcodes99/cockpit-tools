@@ -171,6 +171,118 @@ func TestAutomaticRoutingCandidatesRespectModelMapping(t *testing.T) {
 	}
 }
 
+func TestAutomaticCustomNativeMappingPinsTheSelectedAccount(t *testing.T) {
+	router, runtime, spec := newNativeRouteTestRouter()
+	spec.AccountIDs = []string{"grok-target", "grok-other", "oauth-default"}
+	spec.ModelRouting = &modelRoutingSpec{Automatic: true, AllowCustomModels: true,
+		DefaultRoute: "oauth", FailurePolicy: "strict", Routes: []modelRouteSpec{{
+			ID: "custom", Namespace: "custom", ProviderAccountID: "grok-target", NativeProvider: "xai",
+			Models: []modelRouteModelSpec{{ClientModel: "gpt-custom", UpstreamModel: "grok-4.6"}},
+		}}}
+	w := nativeRouteTestRequest(router, spec.Key, "gpt-custom", false)
+	if w.Code != http.StatusOK || runtime.selected == nil || runtime.selected.ID != "target.json" {
+		t.Fatalf("custom model escaped bound account: status=%d selected=%v body=%s", w.Code, runtime.selected, w.Body.String())
+	}
+	if runtime.lastReq.Model != "grok-4.6" || !reflect.DeepEqual(runtime.executionKey.AccountIDs, []string{"grok-target"}) {
+		t.Fatalf("unexpected execution scope/model: %#v %s", runtime.executionKey.AccountIDs, runtime.lastReq.Model)
+	}
+	if len(spec.AccountIDs) != 3 {
+		t.Fatal("request mutated persisted API key scope")
+	}
+	spec.AccountIDs = []string{"oauth-default"}
+	w = nativeRouteTestRequest(router, spec.Key, "gpt-custom", false)
+	if w.Code == http.StatusOK || runtime.executeCalls != 1 {
+		t.Fatal("custom route bypassed API key account scope")
+	}
+}
+
+func TestAutomaticNativeModelUsesOnlyItsAccountSubset(t *testing.T) {
+	router, runtime, spec := newNativeRouteTestRouter()
+	for _, auth := range runtime.auths {
+		auth.Provider = "codex"
+	}
+	spec.AccountIDs = []string{"grok-target", "grok-other", "oauth-default"}
+	spec.ModelRouting = &modelRoutingSpec{Automatic: true, NativeModels: []string{"gpt-5.5"},
+		NativeModelAccounts: map[string][]string{"gpt-5.5": {"oauth-default"}}}
+	w := nativeRouteTestRequest(router, spec.Key, "gpt-5.5", false)
+	if w.Code != http.StatusOK || runtime.selected == nil || runtime.selected.ID != "oauth.json" {
+		t.Fatalf("unsupported account selected: status=%d selected=%v body=%s", w.Code, runtime.selected, w.Body.String())
+	}
+	spec.ModelRouting.NativeModelAccounts["gpt-5.5"] = nil
+	w = nativeRouteTestRequest(router, spec.Key, "gpt-5.5", false)
+	if w.Code == http.StatusOK || runtime.executeCalls != 1 {
+		t.Fatal("empty model scope broadened to entire account pool")
+	}
+}
+
+func TestAutomaticModelErrorsRetryOnlyExplicitUnsupportedCodes(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want bool
+	}{
+		{`{"error":{"code":"model_not_found"}}`, true},
+		{`{"error":{"code":"unsupported_model"}}`, true},
+		{`{"error":{"code":"invalid_request"}}`, false},
+		{`not found`, false},
+	} {
+		w := &automaticAttemptWriter{}
+		w.status = http.StatusNotFound
+		w.failedBody.WriteString(tc.body)
+		if w.retryable() != tc.want {
+			t.Fatalf("retry classification for %s = %v", tc.body, w.retryable())
+		}
+	}
+}
+
+func TestAutomaticCustomModelFailoverUsesEachAccountsUpstreamName(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var requested []string
+	a := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		requested = append(requested, string(body))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":"model_not_found"}}`))
+	}))
+	defer a.Close()
+	b := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		requested = append(requested, string(body))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"success"}`))
+	}))
+	defer b.Close()
+	m := loadAutomaticRoutingManifest(t, automaticRoutingManifestPayload)
+	spec := m.apiKeyByValue["client-key"]
+	spec.AccountIDs = []string{"chat-account", "chat-b", "unsupported"}
+	spec.ModelRouting.NativeModels = nil
+	spec.ModelRouting.AllowCustomModels = true
+	spec.ModelRouting.Routes = nil
+	for i, entry := range []struct{ id, url, upstream string }{
+		{"chat-account", a.URL, "vendor-a"}, {"chat-b", b.URL, "vendor-b"}, {"unsupported", b.URL, "other"},
+	} {
+		m.accountByID[entry.id] = &accountSpec{ID: entry.id, UpstreamAPIKey: "sk-test"}
+		client := "gpt-custom"
+		if i == 2 {
+			client = "other-model"
+		}
+		spec.ModelRouting.Routes = append(spec.ModelRouting.Routes, modelRouteSpec{
+			ID: entry.id, Namespace: entry.id, ProviderAccountID: entry.id,
+			ProviderGateway: &providerGatewaySpec{BaseURL: entry.url + "/v1", APIKey: "sk-test", WireAPI: "chat_completions", UpstreamModel: entry.upstream, UpstreamModels: []string{entry.upstream}},
+			Models:          []modelRouteModelSpec{{ClientModel: client, UpstreamModel: entry.upstream}},
+		})
+	}
+	server := &relayServer{runtime: &fakeRuntime{}, cfg: &config.Config{}, manifest: m,
+		policy: &requestPolicy{manifest: m}, automaticSelector: &firstAuthSelector{}}
+	if candidates := server.automaticCandidates(spec, "gpt-custom"); len(candidates) != 2 {
+		t.Fatalf("unsupported account included in candidates: %#v", candidates)
+	}
+	w := postAutomaticRoutingRequest(t, server.router(), "gpt-custom")
+	if w.Code != http.StatusOK || len(requested) != 2 || !strings.Contains(requested[0], "vendor-a") || !strings.Contains(requested[1], "vendor-b") {
+		t.Fatalf("incorrect failover: status=%d requests=%v body=%s", w.Code, requested, w.Body.String())
+	}
+}
+
 func TestRewriteBodyModelValidatesAutomaticModelScope(t *testing.T) {
 	m := loadAutomaticRoutingManifest(t, automaticRoutingManifestPayload)
 	spec := m.apiKeyByValue["client-key"]

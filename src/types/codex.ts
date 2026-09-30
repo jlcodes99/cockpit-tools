@@ -58,6 +58,7 @@ export interface CodexAccount {
   api_model_context_windows?: Record<string, number>;
   api_model_mappings?: CodexApiModelMapping[];
   api_sync_model_catalog_to_codex?: boolean;
+  api_sync_model_catalog_to_api_service?: boolean;
   api_wire_api?: CodexProviderWireApi | null;
   api_supports_websockets?: boolean;
   api_supports_vision?: boolean;

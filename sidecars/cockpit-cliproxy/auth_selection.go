@@ -1817,7 +1817,66 @@ func buildCoreAuthSelectorWithConcurrency(cfg *config.Config, selector coreauth.
 			fallback: selector,
 		}
 	}
+	if m != nil {
+		selector = &automaticModelScopeSelector{manifest: m, fallback: selector}
+	}
 	return selector
+}
+
+// Filter before concurrency waiting and affinity so cached selections and WebSockets
+// cannot escape the model's configured account candidates.
+type automaticModelScopeSelector struct {
+	manifest *manifest
+	fallback coreauth.Selector
+}
+
+func (s *automaticModelScopeSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
+	requestKind, _ := ctx.Value(requestKindContextKey).(string)
+	if isImageRequestKind(requestKind) {
+		return s.fallback.Pick(ctx, provider, model, opts, auths)
+	}
+	spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec)
+	if spec == nil || spec.ModelRouting == nil || !spec.ModelRouting.Automatic || spec.ModelRouting.NativeModelAccounts == nil {
+		return s.fallback.Pick(ctx, provider, model, opts, auths)
+	}
+	allowed := make(map[string]bool)
+	if requested, _ := ctx.Value(requestModelContextKey).(string); strings.TrimSpace(requested) != "" {
+		model = requested
+	}
+	key := strings.ToLower(stripModelPrefix(model, spec))
+	for _, id := range spec.ModelRouting.NativeModelAccounts[key] {
+		allowed[id] = true
+	}
+	for _, route := range spec.ModelRouting.Routes {
+		for _, mapping := range route.Models {
+			if strings.EqualFold(mapping.ClientModel, key) {
+				allowed[route.ProviderAccountID] = true
+			}
+		}
+	}
+	filtered := make([]*coreauth.Auth, 0, len(auths))
+	for _, auth := range auths {
+		account := accountForAuthInManifest(s.manifest, auth)
+		if account != nil && allowed[account.ID] && (len(spec.AccountIDs) == 0 || containsAccountID(spec.AccountIDs, account.ID)) {
+			filtered = append(filtered, auth)
+		}
+	}
+	return s.fallback.Pick(ctx, provider, model, opts, filtered)
+}
+
+func (s *automaticModelScopeSelector) OnResult(result coreauth.Result) {
+	forwardAuthSelectionResult(s.fallback, result)
+}
+func (s *automaticModelScopeSelector) Stop() {
+	if stoppable, ok := s.fallback.(coreauth.StoppableSelector); ok {
+		stoppable.Stop()
+	}
+}
+func (s *automaticModelScopeSelector) ReportAuthSelectionFailure(ctx context.Context, provider, model string, candidates []*coreauth.Auth, err error) error {
+	if reporter, ok := s.fallback.(coreauth.AuthSelectionFailureReporter); ok {
+		return reporter.ReportAuthSelectionFailure(ctx, provider, model, candidates, err)
+	}
+	return err
 }
 
 func accountConcurrencyEnabled(m *manifest, tracker *requestUsageTracker) bool {

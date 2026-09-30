@@ -276,6 +276,11 @@ func TestAccountConcurrencyWrapsSelectorChainWhenEnabled(t *testing.T) {
 		t.Fatal("expected concurrency gate to be enabled")
 	}
 	chain := buildCoreAuthSelectorWithConcurrency(nil, &orderedAuthSelector{order: []string{"auth-a"}}, m, nil, tracker)
+	scope, ok := chain.(*automaticModelScopeSelector)
+	if !ok {
+		t.Fatalf("expected model scope to filter concurrency wait candidates, got %#v", chain)
+	}
+	chain = scope.fallback
 	if _, ok := chain.(*accountConcurrencySelector); !ok {
 		t.Fatalf("expected accountConcurrencySelector at the outermost layer, got %#v", chain)
 	}
@@ -298,6 +303,56 @@ func TestReleaseAccountSlotsFreesSlotForNextRequest(t *testing.T) {
 	}
 	if !tracker.tryReserveAccountSlot("second", "auth-a", 1) {
 		t.Fatal("expected reservation to succeed after release")
+	}
+}
+
+func TestAutomaticModelScopeRestrictsAffinityAndConcurrencyWait(t *testing.T) {
+	a, b := testAuth("auth-a"), testAuth("auth-b")
+	accountA := &accountSpec{ID: "a", AuthID: a.ID}
+	accountB := &accountSpec{ID: "b", AuthID: b.ID}
+	m := &manifest{MaxAccountConcurrency: 1, accountByAuthID: map[string]*accountSpec{a.ID: accountA, b.ID: accountB}}
+	tracker := newRequestUsageTracker()
+	cfg := &config.Config{}
+	cfg.Routing.SessionAffinity = true
+	selector := buildCoreAuthSelectorWithConcurrency(cfg, &orderedAuthSelector{order: []string{a.ID, b.ID}}, m, nil, tracker)
+	defer selector.(coreauth.StoppableSelector).Stop()
+	spec := &apiKeySpec{ID: "client", ModelRouting: &modelRoutingSpec{Automatic: true, NativeModelAccounts: map[string][]string{"custom": {"a"}}}}
+	ctx := context.WithValue(accountConcurrencyRequestContext("first"), clientAPIKeyContextKey, spec)
+	opts := cliproxyexecutor.Options{Headers: http.Header{"X-Session-ID": {"model-scope"}}}
+	first, err := selector.Pick(ctx, "codex", "custom", opts, []*coreauth.Auth{a, b})
+	if err != nil || first == nil || first.ID != a.ID {
+		t.Fatalf("initial affinity: auth=%v err=%v", first, err)
+	}
+	tracker.releaseAccountSlots("first")
+	spec.ModelRouting.NativeModelAccounts["custom"] = []string{"b"}
+	ctx = context.WithValue(accountConcurrencyRequestContext("second"), clientAPIKeyContextKey, spec)
+	second, err := selector.Pick(ctx, "codex", "custom", opts, []*coreauth.Auth{a, b})
+	if err != nil || second == nil || second.ID != b.ID {
+		t.Fatalf("stale affinity escaped scope: auth=%v err=%v", second, err)
+	}
+	// A is idle, but only the occupied B is allowed in the waiting path.
+	ctx = context.WithValue(accountConcurrencyRequestContext("third"), clientAPIKeyContextKey, spec)
+	selected, err := selector.Pick(ctx, "codex", "custom", cliproxyexecutor.Options{}, []*coreauth.Auth{a, b})
+	if err == nil || selected != nil {
+		t.Fatalf("concurrency wait escaped scope: auth=%v err=%v", selected, err)
+	}
+}
+
+func TestAutomaticModelScopeUsesRequestAliasAndPreservesImageRouting(t *testing.T) {
+	a, b := testAuth("auth-a"), testAuth("auth-b")
+	m := &manifest{accountByAuthID: map[string]*accountSpec{a.ID: {ID: "a"}, b.ID: {ID: "b"}}}
+	selector := &automaticModelScopeSelector{manifest: m, fallback: &orderedAuthSelector{order: []string{a.ID, b.ID}}}
+	spec := &apiKeySpec{ModelRouting: &modelRoutingSpec{Automatic: true, NativeModelAccounts: map[string][]string{"alias": {"b"}}}}
+	ctx := context.WithValue(context.Background(), clientAPIKeyContextKey, spec)
+	ctx = context.WithValue(ctx, requestModelContextKey, "alias")
+	selected, err := selector.Pick(ctx, "codex", "upstream", cliproxyexecutor.Options{}, []*coreauth.Auth{a, b})
+	if err != nil || selected == nil || selected.ID != b.ID {
+		t.Fatalf("request alias scope: auth=%v err=%v", selected, err)
+	}
+	ctx = context.WithValue(ctx, requestKindContextKey, "image_generation")
+	selected, err = selector.Pick(ctx, "codex", "gpt-image-2", cliproxyexecutor.Options{}, []*coreauth.Auth{a, b})
+	if err != nil || selected == nil || selected.ID != a.ID {
+		t.Fatalf("image scope must use existing image selection: auth=%v err=%v", selected, err)
 	}
 }
 

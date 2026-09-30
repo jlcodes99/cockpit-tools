@@ -9,6 +9,10 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
+fn default_api_service_model_sync() -> bool {
+    true
+}
+
 /// Codex 认证模式
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -142,6 +146,8 @@ pub struct CodexAccount {
     pub api_model_mappings: Vec<CodexApiModelMapping>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub api_sync_model_catalog_to_codex: bool,
+    #[serde(default = "default_api_service_model_sync")]
+    pub api_sync_model_catalog_to_api_service: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_wire_api: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -584,6 +590,7 @@ impl CodexAccount {
             api_model_context_windows: HashMap::new(),
             api_model_mappings: Vec::new(),
             api_sync_model_catalog_to_codex: false,
+            api_sync_model_catalog_to_api_service: false,
             api_wire_api: None,
             api_supports_websockets: false,
             api_supports_vision: false,
@@ -821,6 +828,7 @@ mod tests {
             Vec::new(),
         );
         let mut value = serde_json::to_value(account).expect("serialize account");
+        assert_eq!(value["api_sync_model_catalog_to_api_service"], false);
         value
             .as_object_mut()
             .expect("account object")
@@ -829,5 +837,10 @@ mod tests {
         let restored: CodexAccount = serde_json::from_value(value).expect("deserialize account");
         assert!(!restored.api_supports_websockets);
         assert!(!restored.api_sync_model_catalog_to_codex);
+        assert!(!restored.api_sync_model_catalog_to_api_service);
+        let mut legacy = serde_json::to_value(restored).unwrap();
+        legacy.as_object_mut().unwrap().remove("api_sync_model_catalog_to_api_service");
+        let legacy: CodexAccount = serde_json::from_value(legacy).unwrap();
+        assert!(legacy.api_sync_model_catalog_to_api_service);
     }
 }

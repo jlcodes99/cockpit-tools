@@ -486,6 +486,8 @@
     #[tokio::test]
     async fn local_access_takeover_preserves_enabled_model_catalog() {
         let profile_dir = make_temp_dir("codex-local-access-model-catalog-test");
+        fs::write(profile_dir.join(".cockpit-experimental-model-catalog-user-customized"), "customized\n")
+            .expect("mark user-defined model catalog");
         fs::write(
             profile_dir.join(".cockpit-experimental-model-catalog-enabled"),
             "enabled\n",
@@ -904,6 +906,7 @@
             vec!["deepseek-flash".to_string(), "deepseek-v4-pro".to_string()],
         );
         deepseek.api_wire_api = Some("responses".to_string());
+        deepseek.api_sync_model_catalog_to_api_service = true;
         deepseek.api_model_mappings =
             crate::modules::codex_account::default_deepseek_api_model_mappings();
         deepseek.api_model_vision_support = HashMap::from([
@@ -1880,6 +1883,7 @@
         );
         // 真实环境里 DeepSeek 这类账号既可能按原生 Responses 接入，也可能按 Chat 协议转发。
         deepseek.api_wire_api = Some("responses".to_string());
+        deepseek.api_sync_model_catalog_to_api_service = true;
         // 规范化后的 DeepSeek 账号带有逐模型识图开关。
         deepseek.api_model_vision_support = HashMap::from([
             ("deepseek-flash".to_string(), true),
@@ -1898,6 +1902,7 @@
             vec!["vendor-model".to_string()],
         );
         chat_account.api_wire_api = Some("chat_completions".to_string());
+        chat_account.api_sync_model_catalog_to_api_service = true;
         crate::modules::codex_account::save_account(&chat_account).expect("save chat fixture");
 
         let collection = test_local_access_collection(vec![

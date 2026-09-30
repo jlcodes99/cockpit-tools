@@ -11,7 +11,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessApiKeyStats, CodexLocalAccessAppendAccountSkipped,
     CodexLocalAccessAppendAccountsResult, CodexLocalAccessChatMessage, CodexLocalAccessChatResult,
     CodexLocalAccessClientBaseUrlHost, CodexLocalAccessCollection,
-    CodexLocalAccessCustomRoutingRule, CodexLocalAccessGatewayMode,
+    CodexLocalAccessCustomRoutingRule, CodexLocalAccessCustomModel, CodexLocalAccessGatewayMode,
     CodexLocalAccessImageGenerationMode, CodexLocalAccessImageGenerationPolicy,
     CodexLocalAccessImageGenerationStatus, CodexLocalAccessModelAlias,
     CodexLocalAccessModelPricing, CodexLocalAccessModelRoute, CodexLocalAccessModelRouting,
@@ -2809,7 +2809,7 @@ fn base_codex_model_ids_for_collection(
             is_local_access_eligible_account(account, collection.restrict_free_accounts)
         })
         .collect();
-    model_ids = automatic_api_service_pool_model_ids(&accounts, model_ids);
+    model_ids = api_service_pool_model_ids(collection, &accounts, model_ids);
 
     model_ids
 }
@@ -2984,8 +2984,7 @@ fn visible_codex_model_ids_for_collection(
     health_by_account_id: Option<&HashMap<String, RuntimeAccountHealth>>,
 ) -> Vec<String> {
     let base = base_codex_model_ids_for_collection(collection, health_by_account_id);
-    let aliased = apply_model_aliases_to_ids(base, &collection.model_aliases);
-    apply_model_filters(aliased, &[], &collection.excluded_models)
+    apply_model_filters(base, &[], &collection.excluded_models)
 }
 
 fn visible_codex_model_ids_for_api_key(
@@ -3062,10 +3061,10 @@ fn visible_codex_model_ids_for_api_key_with_supported_models(
             })
             .cloned()
             .collect();
-        base = automatic_api_service_pool_model_ids(&scoped, base);
+        base = api_service_pool_model_ids(collection, &scoped, base);
     }
     let mut visible = apply_model_filters(
-        apply_model_aliases_to_ids(base, &collection.model_aliases),
+        base,
         &[],
         &collection.excluded_models,
     );

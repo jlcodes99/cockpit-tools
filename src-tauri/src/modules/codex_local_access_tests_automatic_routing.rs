@@ -1,4 +1,5 @@
 // 自动混合路由测试：同模型多候选、映射 fork、账号级排除、显式路由保留。
+use crate::models::codex_local_access::CodexLocalAccessCustomModel;
 fn automatic_routing_account(id: &str, wire_api: &str, models: &[&str]) -> CodexAccount {
     let mut account = CodexAccount::new_api_key(
         id.to_string(),
@@ -11,11 +12,185 @@ fn automatic_routing_account(id: &str, wire_api: &str, models: &[&str]) -> Codex
         models.iter().map(|model| model.to_string()).collect(),
     );
     account.api_wire_api = Some(wire_api.to_string());
+    account.api_sync_model_catalog_to_api_service = true;
     account
+}
+
+#[test]
+fn custom_models_override_auto_candidates_and_keep_per_account_upstream() {
+    let mut collection = automatic_routing_collection();
+    collection.custom_models = vec![
+        CodexLocalAccessCustomModel { client_model: "gpt-custom".into(), account_id: "a".into(), upstream_model: "vendor-a".into() },
+        CodexLocalAccessCustomModel { client_model: "gpt-custom".into(), account_id: "b".into(), upstream_model: "vendor-b".into() },
+    ];
+    let accounts: HashMap<_, _> = [
+        automatic_routing_account("a", "chat_completions", &["gpt-custom"]),
+        automatic_routing_account("b", "chat_completions", &["gpt-custom"]),
+        automatic_routing_account("c", "responses", &["gpt-custom"]),
+    ].into_iter().map(|account| (account.id.clone(), account)).collect();
+    let routing = super::automatic_api_service_model_routing_value(&collection, &["a".into(), "b".into(), "c".into()], &accounts);
+    assert_eq!(routing["nativeModels"], json!([]));
+    assert_eq!(routing["routes"].as_array().unwrap().len(), 2);
+    assert_eq!(routing["routes"][0]["models"][0]["upstreamModel"], "vendor-a");
+    assert_eq!(routing["routes"][1]["models"][0]["upstreamModel"], "vendor-b");
+    let scoped = super::automatic_api_service_model_routing_value(&collection, &["a".into()], &accounts);
+    assert_eq!(scoped["routes"].as_array().unwrap().len(), 1);
+    collection.custom_models.clear();
+    let restored = super::automatic_api_service_model_routing_value(&collection, &["c".into()], &accounts);
+    assert_eq!(restored["nativeModelAccounts"]["gpt-custom"], json!(["c"]));
+}
+
+#[test]
+fn disabled_provider_sync_has_no_default_model_fallback_but_allows_manual_mapping() {
+    let mut collection = automatic_routing_collection();
+    let mut account = automatic_routing_account("a", "responses", &[]);
+    account.api_sync_model_catalog_to_api_service = false;
+    assert!(super::automatic_api_service_route_models(&collection, &account, &["gpt-5.5".into()]).is_empty());
+    collection.custom_models.push(CodexLocalAccessCustomModel { client_model: "gpt-custom".into(), account_id: "a".into(), upstream_model: "vendor".into() });
+    let models = super::automatic_api_service_route_models(&collection, &account, &["gpt-5.5".into()]);
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0]["clientModel"], "gpt-custom");
+    let restored: CodexLocalAccessCollection = serde_json::from_value(serde_json::to_value(&collection).unwrap()).unwrap();
+    assert_eq!(restored.custom_models, collection.custom_models);
+}
+
+#[test]
+fn disabled_provider_sync_removes_official_models_from_generated_profile() {
+    let _lock = crate::modules::test_support::env_lock().lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _env = LocalAccessTestDataGuard::new("api-model-profile");
+    let profile_dir = make_temp_dir("api-model-profile-config");
+    fs::write(profile_dir.join("config.toml"), "").unwrap();
+    let mut account = automatic_routing_account("disabled-profile", "responses", &["gpt-5.5"]);
+    account.api_sync_model_catalog_to_api_service = false;
+    codex_account::save_account(&account).unwrap();
+    let collection = test_local_access_collection(vec![account.id.clone()]);
+    let definitions = super::local_access_profile_model_definitions(
+        &profile_dir, &collection, &collection.api_key, true,
+    ).unwrap();
+    assert!(!definitions.iter().any(|model| model.model_id == "gpt-5.5"));
+    fs::remove_dir_all(profile_dir).unwrap();
 }
 
 fn automatic_routing_collection() -> CodexLocalAccessCollection {
     test_local_access_collection(Vec::new())
+}
+
+#[test]
+fn custom_model_override_filters_alias_collisions_before_scheduling() {
+    let mut collection = automatic_routing_collection();
+    collection.model_aliases = vec![crate::models::codex_local_access::CodexLocalAccessModelAlias {
+        source_model: "foo".into(), alias: "shared".into(), fork: true,
+    }];
+    collection.custom_models = vec![CodexLocalAccessCustomModel {
+        client_model: "shared".into(), account_id: "b".into(), upstream_model: "vendor-b".into(),
+    }];
+    let accounts = HashMap::from([
+        ("a".into(), automatic_routing_account("a", "responses", &["foo"])),
+        ("b".into(), automatic_routing_account("b", "chat_completions", &[])),
+    ]);
+    let routing = super::automatic_api_service_model_routing_value(&collection, &["a".into(), "b".into()], &accounts);
+    assert_eq!(routing["nativeModels"], json!(["foo"]));
+    assert!(routing["nativeModelAccounts"].get("shared").is_none());
+    assert_eq!(routing["routes"][0]["providerAccountId"], "b");
+    assert_eq!(routing["routes"][0]["models"][0]["clientModel"], "shared");
+    collection.custom_models.clear();
+    let restored = super::automatic_api_service_model_routing_value(&collection, &["a".into()], &accounts);
+    assert_eq!(restored["nativeModelAccounts"]["shared"], json!(["a"]));
+}
+
+#[test]
+fn chained_aliases_are_expanded_once_in_catalog_and_routes() {
+    let mut collection = test_local_access_collection(vec!["a".into()]);
+    collection.model_aliases = vec![
+        crate::models::codex_local_access::CodexLocalAccessModelAlias {
+            source_model: "foo".into(), alias: "bar".into(), fork: false,
+        },
+        crate::models::codex_local_access::CodexLocalAccessModelAlias {
+            source_model: "bar".into(), alias: "baz".into(), fork: false,
+        },
+    ];
+    let account = automatic_routing_account("a", "responses", &["foo"]);
+    let key = super::resolve_collection_api_key(&collection, &collection.api_key).unwrap();
+    let visible = super::visible_codex_model_ids_for_api_key_with_optional_accounts(
+        &collection, &key, Some(&[account.clone()]), None,
+    );
+    assert!(visible.iter().any(|id| id == "bar"));
+    assert!(!visible.iter().any(|id| id == "baz"));
+    let routing = super::automatic_api_service_model_routing_value(
+        &collection, &["a".into()], &HashMap::from([("a".into(), account)]),
+    );
+    assert_eq!(routing["nativeModels"], json!(["bar"]));
+    assert!(routing["nativeModelAccounts"].get("baz").is_none());
+}
+
+#[test]
+fn alias_expansion_preserves_source_model_account_exclusions() {
+    let mut collection = test_local_access_collection(vec!["a".into()]);
+    collection.model_aliases.push(crate::models::codex_local_access::CodexLocalAccessModelAlias {
+        source_model: "foo".into(), alias: "bar".into(), fork: false,
+    });
+    collection.account_model_rules.push(crate::models::codex_local_access::CodexLocalAccessAccountModelRule {
+        account_id: "a".into(), excluded_models: vec!["foo".into()],
+    });
+    let mut account = automatic_routing_account("a", "responses", &["foo"]);
+    account.api_model_mappings.push(crate::models::codex::CodexApiModelMapping {
+        client_model: "foo".into(), upstream_model: "vendor".into(),
+    });
+    assert!(super::automatic_api_service_route_models(&collection, &account, &[]).is_empty());
+    collection.custom_models.push(CodexLocalAccessCustomModel {
+        client_model: "foo".into(), account_id: "a".into(), upstream_model: "custom-vendor".into(),
+    });
+    assert!(super::automatic_api_service_route_models(&collection, &account, &[]).is_empty());
+}
+
+#[tokio::test]
+async fn api_key_rotation_migrates_persisted_and_runtime_model_bindings() {
+    let _lock = crate::modules::test_support::env_lock().lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _env = LocalAccessTestDataGuard::new("api-key-model-migration");
+    let old = automatic_routing_account("old", "responses", &["vendor"]);
+    codex_account::save_account(&old).unwrap();
+    let mut collection = test_local_access_collection(vec![old.id.clone()]);
+    collection.custom_models.push(CodexLocalAccessCustomModel {
+        client_model: "custom".into(), account_id: old.id.clone(), upstream_model: "vendor".into(),
+    });
+    collection.account_model_rules.push(crate::models::codex_local_access::CodexLocalAccessAccountModelRule {
+        account_id: old.id.clone(), excluded_models: vec!["excluded".into()],
+    });
+    let mut key: crate::models::codex_local_access::CodexLocalAccessApiKey = serde_json::from_value(json!({
+        "id": "scoped", "label": "Scoped", "key": "scoped-key", "accountIds": ["old"],
+        "priorityAccountIds": ["old"], "createdAt": 0, "updatedAt": 0,
+    })).unwrap();
+    key.preferred_account_id = Some(old.id.clone());
+    collection.api_keys.push(key);
+    super::save_collection_to_disk(&collection).unwrap();
+    let previous = {
+        let mut runtime = super::gateway_runtime().lock().await;
+        let previous = (runtime.loaded, runtime.collection.clone());
+        super::sync_runtime_collection(&mut runtime, collection);
+        previous
+    };
+    let updated = super::update_account_with_api_service_references("old", || {
+        codex_account::update_api_key_credentials(
+            "old", "sk-rotated".into(), Some("https://example.com/v1".into()),
+            Some(CodexApiProviderMode::Custom), None, None, vec!["vendor".into()],
+            None, Some("responses".into()), false, false, HashMap::new(), None, None, None,
+        )
+    }).await.unwrap();
+    let persisted = super::load_collection_from_disk().unwrap().unwrap();
+    assert_ne!(updated.id, "old");
+    assert_eq!(persisted.account_ids, vec![updated.id.clone()]);
+    assert_eq!(persisted.custom_models[0].account_id, updated.id);
+    assert_eq!(persisted.account_model_rules[0].account_id, updated.id);
+    assert_eq!(persisted.api_keys[0].account_ids, vec![updated.id.clone()]);
+    assert_eq!(persisted.api_keys[0].priority_account_ids, vec![updated.id.clone()]);
+    let mut runtime = super::gateway_runtime().lock().await;
+    let current = runtime.collection.as_ref().unwrap();
+    assert_eq!(current.custom_models[0].account_id, updated.id);
+    assert_eq!(current.api_keys[0].preferred_account_id.as_deref(), Some(updated.id.as_str()));
+    runtime.loaded = previous.0;
+    runtime.collection = previous.1;
 }
 
 #[test]
@@ -182,6 +357,7 @@ fn deepseek_routing_account(vision: &[(&str, bool)]) -> CodexAccount {
         vec!["deepseek-flash".to_string(), "deepseek-v4-pro".to_string()],
     );
     account.api_wire_api = Some("responses".to_string());
+    account.api_sync_model_catalog_to_api_service = true;
     account.api_model_mappings = super::codex_account::default_deepseek_api_model_mappings();
     account.api_model_vision_support = vision
         .iter()
@@ -498,11 +674,11 @@ fn profile_extra_models_include_account_owned_gpt_models() {
     assert!(models.iter().any(|model| model == "gpt-5.6-luna"));
     assert!(models.iter().any(|model| model == "custom-model"));
     assert!(
-        !models.iter().any(|model| model == "gpt-4o"),
-        "不在官方推荐集里的 GPT 名字不展示: {models:?}"
+        models.iter().any(|model| model == "gpt-4o"),
+        "显式同步的供应商模型不受官方推荐清单限制: {models:?}"
     );
     assert!(
-        !models.iter().any(|model| model == "gpt-5.6-sol"),
-        "壳位别名不应进入目录: {models:?}"
+        models.iter().any(|model| model == "gpt-5.6-sol"),
+        "供应商目录中的映射模型应可见: {models:?}"
     );
 }

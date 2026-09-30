@@ -37,7 +37,7 @@ function harness() {
     editingApiBaseUrlCredentialsValue: account.api_base_url, editingApiProviderPresetId: 'custom',
     editingManagedProviderId: 'provider', editingNewManagedProviderNameInput: 'Relay',
     editingApiModelCatalogDraft: ['model'], editingApiModelContextWindowsInput: {},
-    editingApiSyncModelCatalogToCodex: false, savingApiKeyCredentials: false,
+    editingApiSyncModelCatalogToCodex: false, editingApiSyncModelCatalogToApiService: true, savingApiKeyCredentials: false,
     editingApiWireApi: 'chat_completions', editingApiSupportsWebsockets: true,
     selectedEditingManagedProvider: provider, selectedEditingManagedProviderApiKey: provider.apiKeys[0],
     validateApiKeyCredentialInputs: () => ({ ok: true, apiKey: 'sk-test', apiBaseUrl: account.api_base_url }),
@@ -61,13 +61,42 @@ function harness() {
     setApiKeyUsageMap() {}, setEditingApiKeyCredentialsValue() {}, setEditingApiKeyCredentialsVisible() {},
     setEditingApiBaseUrlCredentialsValue() {}, setEditingApiProviderPresetId() {}, setEditingManagedProviderId() {},
     setEditingManagedProviderApiKeyId() {}, setEditingNewManagedProviderNameInput() {}, setEditingApiModelCatalogInput() {},
-    setEditingApiSyncModelCatalogToCodex() {}, setEditingApiModelCatalogError() {},
+    setEditingApiSyncModelCatalogToCodex() {}, setEditingApiSyncModelCatalogToApiService() {}, setEditingApiModelCatalogError() {},
     DEFAULT_CODEX_API_BASE_URL: 'https://api.openai.com/v1', DEFAULT_CODEX_API_PROVIDER_ID: 'custom',
     COCKPIT_API_PROVIDER_ID: 'cockpit', t: (key: string) => key,
     modalId: 'account', error: 'old error',
   };
   return { state, writes, snapshots };
 }
+
+test('Codex catalog availability does not reset API service synchronization', () => {
+  const file = 'useCodexAccountsOAuthController.ts';
+  const source = ts.createSourceFile(file, readFileSync(new URL(file, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
+  let callback: ts.Expression | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect' &&
+      node.arguments[1]?.getText(source) === '[editingApiModelCatalogSyncAvailable]') {
+      callback = node.arguments[0];
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  assert.ok(callback);
+  for (const available of [false, true]) {
+    const state = {
+      editingApiModelCatalogSyncAvailable: available,
+      codexSync: true, apiServiceSync: true,
+      setEditingApiSyncModelCatalogToCodex(value: boolean) { state.codexSync = value; },
+      setEditingApiSyncModelCatalogToApiService(value: boolean) { state.apiServiceSync = value; },
+    };
+    const code = ts.transpileModule(`(${callback.getText(source)})()`, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    vm.runInNewContext(code, state);
+    assert.equal(state.apiServiceSync, true);
+    assert.equal(state.codexSync, available);
+  }
+});
 
 test('credential editor saves an explicit protocol change and disables incompatible WebSocket transport', async () => {
   const h = harness();
@@ -76,6 +105,7 @@ test('credential editor saves an explicit protocol change and disables incompati
   assert.equal(h.writes[0].supportsWebsockets, false);
   assert.equal(h.snapshots[0][10], 'chat_completions');
   assert.equal(h.snapshots[0][11], false);
+  assert.equal(h.snapshots[0][15], true);
   assert.equal(h.snapshots[1].apiWireApi, 'chat_completions');
   assert.equal(h.snapshots[1].apiSupportsWebsockets, false);
   assert.equal(h.state.modalId, null);

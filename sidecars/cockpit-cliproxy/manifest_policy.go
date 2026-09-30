@@ -150,11 +150,13 @@ type apiKeySpec struct {
 }
 
 type modelRoutingSpec struct {
-	DefaultRoute  string           `json:"defaultRoute"`
-	FailurePolicy string           `json:"failurePolicy"`
-	Routes        []modelRouteSpec `json:"routes"`
-	Automatic     bool             `json:"automatic,omitempty"`
-	NativeModels  []string         `json:"nativeModels,omitempty"`
+	AllowCustomModels   bool                `json:"allowCustomModels,omitempty"`
+	DefaultRoute        string              `json:"defaultRoute"`
+	FailurePolicy       string              `json:"failurePolicy"`
+	Routes              []modelRouteSpec    `json:"routes"`
+	Automatic           bool                `json:"automatic,omitempty"`
+	NativeModels        []string            `json:"nativeModels,omitempty"`
+	NativeModelAccounts map[string][]string `json:"nativeModelAccounts,omitempty"`
 	// RoutableModels 只参与路由与校验，不出现在客户端模型列表里（唤醒预设、历史兼容模型）。
 	RoutableModels []string `json:"routableModels,omitempty"`
 }
@@ -2476,7 +2478,7 @@ func visibleModelsForAPIKey(m *manifest, spec *apiKeySpec) []string {
 	models := applyModelFilters(baseModels, nil, m.ExcludedModels)
 	if spec != nil && spec.ModelRouting != nil {
 		for _, route := range spec.ModelRouting.Routes {
-			if route.ProviderGateway == nil {
+			if route.ProviderGateway == nil && route.NativeProvider == "" {
 				continue
 			}
 			if len(route.Models) > 0 {
@@ -2485,7 +2487,7 @@ func visibleModelsForAPIKey(m *manifest, spec *apiKeySpec) []string {
 					// 上游是 deepseek-* 等）只展示官方推荐集，别名本身不出现在模型列表里；
 					// 上游本身就是 GPT / Codex 家族的账号模型（例如第三方 GPT 中转）照常展示，
 					// 否则客户端看得到却会被请求校验拒绝。
-					if automatic && isGptFamilyModelName(model.ClientModel) &&
+					if automatic && !spec.ModelRouting.AllowCustomModels && isGptFamilyModelName(model.ClientModel) &&
 						!isGptFamilyModelName(model.UpstreamModel) &&
 						!automaticListedModel(spec, model.ClientModel) {
 						continue
