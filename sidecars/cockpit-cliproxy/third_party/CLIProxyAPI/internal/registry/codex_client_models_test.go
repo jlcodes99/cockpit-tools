@@ -27,6 +27,54 @@ func TestEmbeddedCodexClientModelsCatalogIsValid(t *testing.T) {
 	}
 }
 
+func TestLoadCodexClientModelsJSONImportsExactHostSnapshot(t *testing.T) {
+	original, _ := GetCodexClientModelsSnapshot()
+	t.Cleanup(func() {
+		if _, err := LoadCodexClientModelsJSON(original); err != nil {
+			t.Fatalf("restore catalog: %v", err)
+		}
+	})
+	future := testCodexClientModel("gpt-6.2-sol", 2)
+	future["supported_reasoning_levels"] = []map[string]any{{"effort": "low"}, {"effort": "ultra"}}
+	future["default_reasoning_level"] = "ultra"
+	valid := testCodexClientCatalog(t, testCodexClientModel("gpt-5.5", 1), future)
+	_, beforeRevision := GetCodexClientModelsSnapshot()
+	changed, err := LoadCodexClientModelsJSON(valid)
+	if err != nil || !changed {
+		t.Fatalf("import = (%v, %v), want changed", changed, err)
+	}
+	loaded, revision := GetCodexClientModelsSnapshot()
+	if string(loaded) != string(valid) || revision != beforeRevision+1 {
+		t.Fatal("host bytes must be imported exactly, without another pinned-model merge")
+	}
+	valid[0] ^= 0xff
+	if string(GetCodexClientModelsJSON()) != string(loaded) {
+		t.Fatal("caller bytes alias the stored snapshot")
+	}
+	if changed, err := LoadCodexClientModelsJSON(loaded); err != nil || changed {
+		t.Fatalf("identical import = (%v, %v), want unchanged", changed, err)
+	}
+	future["supported_reasoning_levels"] = []map[string]any{{"effort": "medium"}, {"effort": "max"}}
+	future["default_reasoning_level"] = "max"
+	revised := testCodexClientCatalog(t, testCodexClientModel("gpt-5.5", 1), future)
+	if changed, err := LoadCodexClientModelsJSON(revised); err != nil || !changed {
+		t.Fatalf("reasoning revision = (%v, %v), want changed", changed, err)
+	}
+	accepted, acceptedRevision := GetCodexClientModelsSnapshot()
+	if acceptedRevision != revision+1 {
+		t.Fatal("reasoning revision did not advance catalog revision")
+	}
+	for _, invalid := range [][]byte{[]byte(`{"models":`), []byte(`{"models":[]}`), testCodexClientCatalog(t, future)} {
+		if changed, err := LoadCodexClientModelsJSON(invalid); err == nil || changed {
+			t.Fatalf("invalid import = (%v, %v), want rejected", changed, err)
+		}
+		data, gotRevision := GetCodexClientModelsSnapshot()
+		if string(data) != string(accepted) || gotRevision != acceptedRevision {
+			t.Fatal("invalid import replaced the last accepted snapshot")
+		}
+	}
+}
+
 func TestValidateCodexClientModelsJSON(t *testing.T) {
 	validDefault := testCodexClientModel("gpt-5.5", 1)
 	validOther := testCodexClientModel("gpt-5.6-sol", 2)

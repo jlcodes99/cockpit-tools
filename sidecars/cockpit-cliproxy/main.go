@@ -141,6 +141,11 @@ func main() {
 		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
 		os.Exit(2)
 	}
+	emitter.emitStartupStage("load_codex_client_models")
+	if err := loadManifestCodexClientModels(m); err != nil {
+		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
+		os.Exit(2)
+	}
 	emitter.emitStartupStage("init_runtime")
 	helps.SetRequestProxyRouteObserver(newRequestProxyRouteObserver(m.ProxyRouteObservers))
 	m.quotaCooldowns = newQuotaCooldownStateStore(*quotaPoolStatePath, m)

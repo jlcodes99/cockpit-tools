@@ -618,8 +618,8 @@ fn sidecar_codex_key_model_values(
     account: &CodexAccount,
     collection: &CodexLocalAccessCollection,
 ) -> Vec<Value> {
-    if !account.api_model_mappings.is_empty() {
-        return account
+    let mut models = if !account.api_model_mappings.is_empty() {
+        account
             .api_model_mappings
             .iter()
             .map(|mapping| {
@@ -628,18 +628,36 @@ fn sidecar_codex_key_model_values(
                     "alias": mapping.client_model.clone(),
                 })
             })
-            .collect();
-    }
-    collection
-        .model_aliases
-        .iter()
-        .map(|alias| {
-            json!({
-                "name": alias.source_model.clone(),
-                "alias": alias.alias.clone(),
+            .collect::<Vec<_>>()
+    } else {
+        collection
+            .model_aliases
+            .iter()
+            .map(|alias| {
+                json!({
+                    "name": alias.source_model.clone(),
+                    "alias": alias.alias.clone(),
+                })
             })
-        })
-        .collect()
+            .collect::<Vec<_>>()
+    };
+    let catalog = crate::modules::codex_model_catalog::snapshot();
+    for model in &mut models {
+        let name = model["name"].as_str().unwrap_or_default();
+        let Some(template) = catalog["models"].as_array().and_then(|templates| {
+            templates.iter().find(|template| {
+                template["slug"].as_str().is_some_and(|slug| slug.eq_ignore_ascii_case(name))
+            })
+        }) else {
+            continue;
+        };
+        if let Some(levels) = template["supported_reasoning_levels"].as_array() {
+            model["thinking"] = json!({
+                "levels": levels.iter().filter_map(|level| level["effort"].as_str()).collect::<Vec<_>>()
+            });
+        }
+    }
+    models
 }
 
 fn account_api_model_mapping_ids(account: &CodexAccount) -> HashSet<String> {
@@ -2267,6 +2285,7 @@ async fn prepare_sidecar_launch_config(
     collection: &CodexLocalAccessCollection,
     preparation: GatewayPreparationContext,
 ) -> Result<SidecarLaunchConfig, String> {
+    crate::modules::codex_model_catalog::initialize().await;
     crate::modules::codex_proxy_runtime::prepare_accounts(effective_sidecar_account_ids(
         collection,
     ))
@@ -2301,6 +2320,7 @@ async fn prepare_sidecar_launch_config_in_dir(
     default_service_tier: Option<&str>,
     account_overrides: HashMap<String, CodexAccount>,
 ) -> Result<SidecarLaunchConfig, String> {
+    crate::modules::codex_model_catalog::initialize().await;
     // Overrides are authoritative for this configuration and may not be in the
     // persisted account list yet. Prepare their shared-proxy state as well.
     for account in account_overrides.values() {
@@ -2602,7 +2622,15 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             &routing_accounts,
         );
     }
+    let catalog = crate::modules::codex_model_catalog::snapshot();
+    let catalog_content = serde_json::to_string(catalog.as_ref())
+        .map_err(|error| format!("序列化 Codex 模型目录失败: {error}"))?;
+    let catalog_hash = format!("{:x}", Sha256::digest(catalog_content.as_bytes()));
+    let catalog_path = base_dir.join(format!("codex-client-models-{catalog_hash}.json"));
+    write_string_atomic_if_changed(&catalog_path, &catalog_content)?;
     let manifest = json!({
+        "codexClientModelsPath": catalog_path,
+        "codexClientModelsHash": catalog_hash,
         "locale": app_locale,
         "apiKeys": api_key_manifest_values,
         "accounts": manifest_accounts,

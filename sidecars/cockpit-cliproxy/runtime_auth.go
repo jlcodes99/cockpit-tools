@@ -760,7 +760,7 @@ func manifestModelsForAuth(m *manifest, auth *coreauth.Auth) []*cliproxy.ModelIn
 	for _, id := range account.ModelIDs {
 		entries = appendManifestRegistryModelEntry(entries, seen, id, "")
 	}
-	return manifestRegistryModelInfos(entries)
+	return manifestRegistryModelInfos(entries, m.codexClientModelsLoaded)
 }
 
 func excludedModelsForAuth(m *manifest, auth *coreauth.Auth) []string {
@@ -896,14 +896,14 @@ func manifestRegistryModels(m *manifest) []*cliproxy.ModelInfo {
 	for _, id := range appendCodexInternalModels(nil) {
 		entries = appendManifestRegistryModelEntry(entries, seen, id, "")
 	}
-	return manifestRegistryModelInfos(entries)
+	return manifestRegistryModelInfos(entries, m.codexClientModelsLoaded)
 }
 
-func manifestRegistryModelInfos(entries []manifestRegistryModelEntry) []*cliproxy.ModelInfo {
+func manifestRegistryModelInfos(entries []manifestRegistryModelEntry, importedCatalog bool) []*cliproxy.ModelInfo {
 	models := make([]*cliproxy.ModelInfo, 0, len(entries))
 	now := time.Now().Unix()
 	for _, entry := range entries {
-		models = append(models, manifestRegistryModelInfo(entry.id, entry.source, now))
+		models = append(models, manifestRegistryModelInfoWithCatalog(entry.id, entry.source, now, importedCatalog))
 	}
 	return models
 }
@@ -930,6 +930,10 @@ func appendManifestRegistryModelEntry(entries []manifestRegistryModelEntry, seen
 }
 
 func manifestRegistryModelInfo(id string, source string, created int64) *cliproxy.ModelInfo {
+	return manifestRegistryModelInfoWithCatalog(id, source, created, false)
+}
+
+func manifestRegistryModelInfoWithCatalog(id string, source string, created int64, importedCatalog bool) *cliproxy.ModelInfo {
 	info := &cliproxy.ModelInfo{
 		ID:          id,
 		Object:      "model",
@@ -941,6 +945,13 @@ func manifestRegistryModelInfo(id string, source string, created int64) *cliprox
 	lookupID := id
 	if source != "" {
 		lookupID = source
+	}
+	if importedCatalog {
+		if model := codexClientModelMetadata(lookupID); model != nil {
+			info.Thinking = codexClientThinkingSupport(lookupID)
+			info.ContextLength = intModelValueAny(model["context_window"])
+			return info
+		}
 	}
 	if staticInfo := internalregistry.LookupStaticModelInfo(lookupID); staticInfo != nil {
 		if staticInfo.Thinking != nil {
@@ -956,38 +967,45 @@ func manifestRegistryModelInfo(id string, source string, created int64) *cliprox
 	return info
 }
 
-func codexClientThinkingSupport(modelID string) *internalregistry.ThinkingSupport {
+func codexClientModelMetadata(modelID string) map[string]any {
 	var catalog struct {
 		Models []map[string]any `json:"models"`
 	}
-	if errDecode := json.Unmarshal(internalregistry.GetCodexClientModelsJSON(), &catalog); errDecode != nil {
+	if err := json.Unmarshal(internalregistry.GetCodexClientModelsJSON(), &catalog); err != nil {
 		return nil
 	}
 	for _, model := range catalog.Models {
-		if !strings.EqualFold(strings.TrimSpace(stringFieldFromAny(model["slug"])), strings.TrimSpace(modelID)) {
-			continue
+		if strings.EqualFold(strings.TrimSpace(stringFieldFromAny(model["slug"])), strings.TrimSpace(modelID)) {
+			return model
 		}
-		levels, ok := model["supported_reasoning_levels"].([]any)
-		if !ok || len(levels) == 0 {
-			return nil
-		}
-		out := &internalregistry.ThinkingSupport{}
-		for _, raw := range levels {
-			if level, ok := raw.(map[string]any); ok {
-				if effort := strings.TrimSpace(stringFieldFromAny(level["effort"])); effort != "" {
-					out.Levels = append(out.Levels, effort)
-				}
-			}
-		}
-		if len(out.Levels) == 0 {
-			return nil
-		}
-		return out
 	}
 	if isCodexReserveModel(modelID) {
-		return codexClientThinkingSupport("gpt-5.6-luna")
+		return codexClientModelMetadata("gpt-5.6-luna")
 	}
 	return nil
+}
+
+func codexClientThinkingSupport(modelID string) *internalregistry.ThinkingSupport {
+	model := codexClientModelMetadata(modelID)
+	if model == nil {
+		return nil
+	}
+	levels, ok := model["supported_reasoning_levels"].([]any)
+	if !ok || len(levels) == 0 {
+		return nil
+	}
+	out := &internalregistry.ThinkingSupport{}
+	for _, raw := range levels {
+		if level, ok := raw.(map[string]any); ok {
+			if effort := strings.TrimSpace(stringFieldFromAny(level["effort"])); effort != "" {
+				out.Levels = append(out.Levels, effort)
+			}
+		}
+	}
+	if len(out.Levels) == 0 {
+		return nil
+	}
+	return out
 }
 
 type sidecarRoundTripperProvider struct {

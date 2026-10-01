@@ -47,6 +47,7 @@ pub mod codex_pelican;
 pub mod codex_pelican_preview;
 pub mod codex_official_app_server;
 pub mod codex_protocol;
+pub(crate) mod codex_model_catalog;
 pub mod codex_quota;
 pub mod codex_temp_login;
 pub(crate) mod codex_quota_refresh_scheduler;

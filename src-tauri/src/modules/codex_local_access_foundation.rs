@@ -416,20 +416,6 @@ const CODEX_IMAGE_MODEL_ID: &str = "gpt-image-2.5";
 const LEGACY_CODEX_IMAGE_MODEL_ID: &str = "gpt-image-2";
 const CODEX_GPT_RESERVE_MODEL_ID: &str = "gpt-reserve";
 const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
-/// API 服务 / 本地网关 profile 向客户端展示的 GPT 系列模型。
-///
-/// 只保留官方客户端推荐集里的这几个模型，显示名与官方客户端保持一致（`GPT-` 前缀、空格分隔）；
-/// 其它历史模型仍然可以路由，只是不再出现在客户端模型选择器里。
-const LOCAL_GATEWAY_VISIBLE_GPT_MODELS: &[(&str, &str)] = &[
-    ("gpt-6.1-sol", "GPT-6.1 Sol"),
-    ("gpt-6-astra", "GPT-6 Astra"),
-    ("gpt-6-sol", "GPT-6 Sol"),
-    ("gpt-6-luna", "GPT-6 Luna"),
-    ("gpt-5.6-sol", "GPT-5.6 Sol"),
-    ("gpt-5.6-terra", "GPT-5.6 Terra"),
-    ("gpt-5.6-luna", "GPT-5.6 Luna"),
-    ("gpt-5.5", "GPT-5.5"),
-];
 const DEFAULT_IMAGES_MAIN_MODEL: &str = "gpt-5.5";
 const MAX_MODEL_PRICE_USD_PER_MILLION: f64 = 1_000_000.0;
 const CODEX_LOCAL_ACCESS_LONG_CONTEXT_THRESHOLD_TOKENS: u64 = 272_000;
@@ -2560,18 +2546,15 @@ fn api_service_experimental_model_catalog() -> Option<Vec<String>> {
 
 /// 客户端模型选择器里展示的 GPT 模型 ID（官方推荐集）。
 fn local_gateway_visible_gpt_model_ids() -> Vec<String> {
-    LOCAL_GATEWAY_VISIBLE_GPT_MODELS
-        .iter()
-        .map(|(model_id, _)| model_id.to_string())
+    local_gateway_visible_gpt_model_definitions()
+        .into_iter()
+        .map(|(model_id, _)| model_id)
         .collect()
 }
 
 /// 客户端模型目录（profile `model_catalog_json`）里的 GPT 条目：模型 ID + 官方显示名。
 fn local_gateway_visible_gpt_model_definitions() -> Vec<(String, String)> {
-    LOCAL_GATEWAY_VISIBLE_GPT_MODELS
-        .iter()
-        .map(|(model_id, display_name)| (model_id.to_string(), display_name.to_string()))
-        .collect()
+    crate::modules::codex_model_catalog::recommended_models()
 }
 
 /// API 服务对外展示的模型清单：官方推荐 GPT 集 + 客户端内部需要的隐藏模型。

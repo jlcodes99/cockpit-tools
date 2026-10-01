@@ -479,12 +479,14 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(async {
+                modules::codex_model_catalog::initialize().await;
                 modules::codex_local_access::restore_local_access_gateway().await;
             });
 
             // 实例级网关（provider gateway / 绑定 OAuth 本地网关）启动自愈：宿主重启后按已持久化的
             // profile 绑定与 sidecar 目录重建，避免 Codex 实例指向一个已经不存在的本地端口。
             tauri::async_runtime::spawn(async {
+                modules::codex_model_catalog::initialize().await;
                 modules::codex_local_access::restore_instance_gateways_on_startup().await;
             });
 
