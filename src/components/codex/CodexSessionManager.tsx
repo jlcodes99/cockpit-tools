@@ -288,6 +288,7 @@ export function CodexSessionManager() {
   const [exportSelectionFilter, setExportSelectionFilter] = useState<ExportSelectionFilter>('all');
   const [importPreview, setImportPreview] = useState<CodexSessionImportPreview | null>(null);
   const [importTargetInstanceId, setImportTargetInstanceId] = useState('');
+  const [importCwdMappings, setImportCwdMappings] = useState<Record<string, string>>({});
   const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -437,6 +438,17 @@ export function CodexSessionManager() {
   const importReadyItems = useMemo(
     () => importPreview?.items.filter((item) => item.status === 'ready') ?? [],
     [importPreview],
+  );
+  const importSourceCwds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          importReadyItems
+            .map((item) => item.cwd.trim())
+            .filter((cwd) => cwd.length > 0),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [importReadyItems],
   );
   const exportPreviewItems = useMemo(
     () => exportPreview?.items ?? [],
@@ -1347,6 +1359,7 @@ export function CodexSessionManager() {
     setMessage(null);
     setShowImportModal(true);
     setImportPreview(null);
+    setImportCwdMappings({});
     setSelectedImportIds([]);
     setImportModalError(null);
     try {
@@ -1370,6 +1383,7 @@ export function CodexSessionManager() {
     if (importing || loadingImportPreview) return;
     setShowImportModal(false);
     setImportPreview(null);
+    setImportCwdMappings({});
     setSelectedImportIds([]);
     setImportModalError(null);
   };
@@ -1441,6 +1455,11 @@ export function CodexSessionManager() {
         importPreview.importFilePath,
         importTargetInstanceId,
         selectedImportIds,
+        Object.fromEntries(
+          Object.entries(importCwdMappings)
+            .map(([source, target]) => [source.trim(), target.trim()] as const)
+            .filter(([source, target]) => source.length > 0 && target.length > 0 && source !== target),
+        ),
         transferId,
       );
       setTransferTask((current) =>
@@ -2350,6 +2369,47 @@ export function CodexSessionManager() {
                       : t('codex.sessionManager.importModal.selectReady', '选择可导入')}
                   </button>
                 </div>
+              ) : null}
+              {!loadingImportPreview && importSourceCwds.length > 0 ? (
+                <section className="codex-session-import-mappings">
+                  <div className="codex-session-import-mappings__intro">
+                    <strong>
+                      {t('codex.sessionManager.importModal.cwdMappingTitle', '项目路径映射（可选）')}
+                    </strong>
+                    <p>
+                      {t(
+                        'codex.sessionManager.importModal.cwdMappingHint',
+                        '将源工作目录映射到此电脑上的项目路径；留空则保留源路径。',
+                      )}
+                    </p>
+                  </div>
+                  <div className="codex-session-import-mappings__list">
+                    {importSourceCwds.map((sourceCwd) => (
+                      <label className="codex-session-import-mappings__row" key={sourceCwd}>
+                        <code className="codex-session-import-mappings__source" title={sourceCwd}>
+                          {sourceCwd}
+                        </code>
+                        <input
+                          className="codex-session-import-mappings__target"
+                          type="text"
+                          value={importCwdMappings[sourceCwd] ?? ''}
+                          placeholder={t(
+                            'codex.sessionManager.importModal.cwdTargetPlaceholder',
+                            '输入此电脑上的项目绝对路径',
+                          )}
+                          aria-label={`${t('codex.sessionManager.importModal.cwdMappingTitle', '项目路径映射')}: ${sourceCwd}`}
+                          disabled={importing}
+                          onChange={(event) =>
+                            setImportCwdMappings((previous) => ({
+                              ...previous,
+                              [sourceCwd]: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </section>
               ) : null}
               {loadingImportPreview ? (
                 <div className="codex-session-restore-modal__empty">

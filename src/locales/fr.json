@@ -3336,6 +3336,9 @@
       "importModal": {
         "title": "Importer des sessions",
         "hint": "Les paquets de sessions importent uniquement les fichiers rollout et les entrées session_index. Les comptes, tokens, clés API et paramètres de l’application ne sont pas inclus ; les sessions avec le même ID déjà présentes dans l’instance cible sont ignorées.",
+        "cwdMappingTitle": "Correspondance des chemins de projet (facultatif)",
+        "cwdMappingHint": "Associez chaque répertoire de travail source à un chemin de projet sur cet ordinateur. Laissez vide pour conserver le chemin source.",
+        "cwdTargetPlaceholder": "Saisissez le chemin absolu d’un projet sur cet ordinateur",
         "noTarget": "Aucune instance Codex disponible pour l’import",
         "noPackage": "Sélectionnez d’abord un paquet de sessions",
         "pickOne": "Sélectionnez au moins une session importable",

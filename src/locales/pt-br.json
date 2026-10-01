@@ -3336,6 +3336,9 @@
       "importModal": {
         "title": "Importar sessões",
         "hint": "Pacotes de sessão importam apenas arquivos rollout e entradas session_index. Contas, tokens, API keys e configurações do app não são incluídos; sessões com o mesmo ID na instância de destino são ignoradas.",
+        "cwdMappingTitle": "Mapeamento de caminhos do projeto (opcional)",
+        "cwdMappingHint": "Associe cada diretório de trabalho de origem a um caminho de projeto neste computador. Deixe vazio para manter o caminho de origem.",
+        "cwdTargetPlaceholder": "Digite o caminho absoluto de um projeto neste computador",
         "noTarget": "Nenhuma instância Codex disponível para importação",
         "noPackage": "Selecione primeiro um pacote de sessões",
         "pickOne": "Selecione ao menos uma sessão importável",

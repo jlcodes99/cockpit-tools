@@ -3336,6 +3336,9 @@
       "importModal": {
         "title": "Importuj sesje",
         "hint": "Pakiet sesji importuje tylko pliki rollout i wpisy session_index. Konta, tokeny, klucze API i ustawienia aplikacji nie są dołączone; sesje z tym samym ID w instancji docelowej są pomijane.",
+        "cwdMappingTitle": "Mapowanie ścieżek projektu (opcjonalne)",
+        "cwdMappingHint": "Przypisz źródłowe katalogi robocze do ścieżek projektów na tym komputerze. Pozostaw puste, aby zachować ścieżkę źródłową.",
+        "cwdTargetPlaceholder": "Wpisz bezwzględną ścieżkę projektu na tym komputerze",
         "noTarget": "Brak instancji Codex dostępnej do importu",
         "noPackage": "Najpierw wybierz pakiet sesji",
         "pickOne": "Wybierz co najmniej jedną sesję do importu",

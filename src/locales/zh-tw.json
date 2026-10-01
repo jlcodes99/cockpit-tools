@@ -3467,6 +3467,9 @@
       "importModal": {
         "title": "匯入會話",
         "hint": "會話包只會匯入 rollout 檔與 session_index 項目，不包含帳號、Token、API Key 或應用程式設定；目標實例已有相同 ID 的會話時會略過。",
+        "cwdMappingTitle": "專案路徑對應（選填）",
+        "cwdMappingHint": "將來源工作目錄對應到這台電腦上的專案路徑；留空則保留來源路徑。",
+        "cwdTargetPlaceholder": "輸入這台電腦上的專案絕對路徑",
         "noTarget": "未找到可匯入的 Codex 實例",
         "noPackage": "請先選擇會話包",
         "pickOne": "請至少選擇一個可匯入會話",

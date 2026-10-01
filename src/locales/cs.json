@@ -3336,6 +3336,9 @@
       "importModal": {
         "title": "Import relací",
         "hint": "Balíček relací importuje jen soubory rollout a položky session_index. Neobsahuje účty, tokeny, API klíče ani nastavení aplikace; relace se stejným ID v cílové instanci se přeskočí.",
+        "cwdMappingTitle": "Mapování cest projektů (volitelné)",
+        "cwdMappingHint": "Namapujte zdrojové pracovní složky na cesty projektů v tomto počítači. Ponechte prázdné pro zachování původní cesty.",
+        "cwdTargetPlaceholder": "Zadejte absolutní cestu k projektu v tomto počítači",
         "noTarget": "Není dostupná žádná instance Codex pro import",
         "noPackage": "Nejprve vyberte balíček relací",
         "pickOne": "Vyberte alespoň jednu importovatelnou relaci",
