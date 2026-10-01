@@ -1826,6 +1826,24 @@ fn credit_usage_sources<'a>(billing: &'a Value, config: &'a Value) -> [Option<&'
     ]
 }
 
+/// #2607：X Premium 零用量时 JSON billing 不带 creditUsagePercent，也没有任何
+/// credit bag 键，但计费周期与 on-demand 池键齐全——报告者同凭据对照 CC Switch
+/// 对该响应按周已用 0% 处理。仅在这种"完整账单响应"形状下补 0%，形状未知
+/// （无周期或无 on-demand 锚点）保持 None，不发明数据。
+fn zero_weekly_usage_when_pool_omitted(billing: &Value, config: &Value) -> Option<f64> {
+    let has_billing_period = config.get("currentPeriod").is_some()
+        || config.get("billingPeriodStart").is_some()
+        || config.get("billingPeriodEnd").is_some();
+    let has_on_demand_pool =
+        config.get("onDemandUsed").is_some() && config.get("onDemandCap").is_some();
+    let weekly_pool_present = credit_usage_sources(billing, config)
+        .into_iter()
+        .flatten()
+        .next()
+        .is_some();
+    (has_billing_period && has_on_demand_pool && !weekly_pool_present).then_some(0.0)
+}
+
 fn credit_usage_percent(billing: &Value, config: &Value) -> Option<f64> {
     credit_usage_sources(billing, config)
         .into_iter()
@@ -1905,7 +1923,8 @@ fn quota_from_payload(
         period_end: raw_string(period.get("end"))
             .or_else(|| raw_string(config.get("billingPeriodEnd"))),
         weekly_limit_percent: number(config.get("creditUsagePercent"))
-            .or_else(|| credit_usage_percent(billing, config)),
+            .or_else(|| credit_usage_percent(billing, config))
+            .or_else(|| zero_weekly_usage_when_pool_omitted(billing, config)),
         weekly_used,
         weekly_total,
         on_demand_used: number(config.get("onDemandUsed")),
@@ -3755,6 +3774,42 @@ mod tests {
         assert_eq!(quota.weekly_used, Some(25.0));
         assert_eq!(quota.weekly_total, Some(100.0));
         assert_eq!(quota.on_demand_cap, Some(0.0));
+    }
+
+    // #2607：X Premium 零用量时 JSON billing 不带 creditUsagePercent，也不带任何
+    // credit bag 键，但 currentPeriod/billingPeriod*/onDemand* 齐全（报告者同凭据
+    // 双接口对照：CC Switch 对该响应显示周已用 0%）。
+    #[test]
+    fn parses_zero_weekly_usage_when_complete_billing_omits_weekly_pool() {
+        let billing = json!({
+            "config": {
+                "currentPeriod": {"type": "weekly", "start": "2026-09-24T17:02:55+00:00", "end": "2026-10-01T17:02:55+00:00"},
+                "onDemandCap": 40,
+                "onDemandUsed": 0,
+                "isUnifiedBillingUser": true,
+                "prepaidBalance": 0,
+                "billingPeriodStart": "2026-09-24T17:02:55+00:00",
+                "billingPeriodEnd": "2026-10-01T17:02:55+00:00"
+            }
+        });
+        let quota = quota_from_payload(&billing, None, None, None);
+        assert_eq!(quota.weekly_limit_percent, Some(0.0));
+        assert_eq!(
+            quota.period_end.as_deref(),
+            Some("2026-10-01T17:02:55+00:00")
+        );
+        assert_eq!(quota.on_demand_used, Some(0.0));
+        assert_eq!(quota.on_demand_cap, Some(40.0));
+    }
+
+    // 反例：形状未知（无计费周期、无 on-demand 锚点）时不得发明 0%。
+    #[test]
+    fn keeps_weekly_percent_unknown_for_responses_without_billing_anchors() {
+        let billing = json!({
+            "config": {"prepaidBalance": 0}
+        });
+        let quota = quota_from_payload(&billing, None, None, None);
+        assert_eq!(quota.weekly_limit_percent, None);
     }
 
     #[test]
