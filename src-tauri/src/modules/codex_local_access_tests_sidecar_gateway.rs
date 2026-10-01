@@ -1086,6 +1086,22 @@
     }
 
     #[test]
+    fn provider_gateway_template_preserves_account_concurrency_settings() {
+        let mut generated = test_local_access_collection(Vec::new());
+        generated.max_account_concurrency = 0;
+        generated.account_concurrency_wait_ms = 1;
+
+        let mut template = test_local_access_collection(Vec::new());
+        template.max_account_concurrency = 2;
+        template.account_concurrency_wait_ms = 45_000;
+
+        super::apply_provider_gateway_template_settings(&mut generated, &template);
+
+        assert_eq!(generated.max_account_concurrency, 2);
+        assert_eq!(generated.account_concurrency_wait_ms, 45_000);
+    }
+
+    #[test]
     fn provider_gateway_model_aliases_stay_off_the_oauth_channel() {
         let dir = make_temp_dir("codex-provider-gateway-alias");
         let mut collection = test_local_access_collection(vec!["provider-account".to_string()]);

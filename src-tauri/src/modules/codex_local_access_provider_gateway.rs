@@ -1586,6 +1586,8 @@ fn apply_provider_gateway_template_settings(
     collection.disable_cooling = template.disable_cooling;
     collection.restrict_free_accounts = template.restrict_free_accounts;
     collection.debug_logs = template.debug_logs;
+    collection.max_account_concurrency = template.max_account_concurrency;
+    collection.account_concurrency_wait_ms = template.account_concurrency_wait_ms;
 }
 
 fn provider_gateway_bound_oauth_account_id_for_account(account: &CodexAccount) -> Option<String> {
