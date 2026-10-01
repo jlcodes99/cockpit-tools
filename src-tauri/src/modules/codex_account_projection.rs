@@ -180,7 +180,12 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
             refresh_token: Some(
                 normalize_optional_ref(account.tokens.refresh_token.as_deref()).unwrap_or_default(),
             ),
-            account_id: account.account_id.clone(),
+            // #2671：账号库元数据缺 account_id（如 id_token 为空导致 resolve 侧回填跳过）时，
+            // 从 access_token JWT claim 兜底提取，保证官方 auth.json 始终携带 tokens.account_id，
+            // 否则官方 Codex 端 workspace routing 判定失败并陷入 401 重试循环。
+            account_id: normalize_optional_ref(account.account_id.as_deref()).or_else(|| {
+                extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
+            }),
         }),
         agent_identity: None,
         personal_access_token: None,

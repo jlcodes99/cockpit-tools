@@ -1058,6 +1058,70 @@ fn build_auth_file_value_uses_real_token_update_time() {
 }
 
 #[test]
+fn build_auth_file_value_falls_back_to_access_token_claim_when_account_id_missing() {
+    // #2671：账号库元数据缺 account_id 时，官方 auth.json 仍必须带 tokens.account_id，
+    // 否则官方 Codex 端 workspace routing 判定失败并陷入 401 重试循环。
+    let access_claim = "acc-from-access-claim";
+    let mut tokens = make_codex_tokens(
+        "claim@example.com",
+        "acc-from-id-claim",
+        "org-claim",
+        "fallback",
+        "rt-fallback",
+    );
+    // id_token 为空时 resolve 侧的元数据回填会被跳过，写入侧必须从 access_token 兜底。
+    tokens.id_token = String::new();
+    tokens.access_token = make_jwt(serde_json::json!({
+        "sub": "access-fallback",
+        "exp": 4_102_444_800i64,
+        "https://api.openai.com/auth": {
+            "chatgpt_account_id": access_claim,
+        }
+    }));
+    let mut account = CodexAccount::new(
+        "codex-auth-id-fallback".to_string(),
+        "claim@example.com".to_string(),
+        tokens,
+    );
+    account.account_id = None;
+
+    let auth_file = build_auth_file_value(&account).expect("build auth file");
+    let tokens_out = auth_file
+        .get("tokens")
+        .and_then(|value| value.as_object())
+        .expect("tokens object");
+    assert_eq!(
+        tokens_out.get("account_id").and_then(|value| value.as_str()),
+        Some(access_claim),
+        "账号库缺 account_id 时应从 access_token JWT claim 兜底: {auth_file}"
+    );
+}
+
+#[test]
+fn build_auth_file_value_keeps_stored_account_id_over_access_claim() {
+    // 已有元数据优先：access_token claim 不覆盖账号库中已确认的 account_id。
+    let tokens = make_codex_tokens(
+        "keep@example.com",
+        "acc-claim-should-lose",
+        "org-keep",
+        "keep",
+        "rt-keep",
+    );
+    let mut account = build_test_oauth_account(tokens);
+    account.account_id = Some("acc-stored".to_string());
+
+    let auth_file = build_auth_file_value(&account).expect("build auth file");
+    let tokens_out = auth_file
+        .get("tokens")
+        .and_then(|value| value.as_object())
+        .expect("tokens object");
+    assert_eq!(
+        tokens_out.get("account_id").and_then(|value| value.as_str()),
+        Some("acc-stored")
+    );
+}
+
+#[test]
 fn bundle_write_derives_workspace_id_from_coherent_token_pair() {
     let tokens = make_codex_tokens(
         "tuple@example.com",
