@@ -1209,6 +1209,16 @@ fn sidecar_client_api_keys(
     sidecar_client_api_keys_with_internal(collection, account_overrides, false)
 }
 
+/// Whether the collection still declares at least one usable `api_keys` entry.
+/// Used to distinguish a legitimately keyless gateway from a provisioning
+/// failure that dropped every declared key before writing the sidecar config.
+fn collection_declares_enabled_client_keys(collection: &CodexLocalAccessCollection) -> bool {
+    collection
+        .api_keys
+        .iter()
+        .any(|item| item.enabled && !item.key.trim().is_empty())
+}
+
 fn sidecar_client_api_keys_with_internal(
     collection: &CodexLocalAccessCollection,
     account_overrides: &HashMap<String, CodexAccount>,
@@ -2362,6 +2372,13 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     api_service: bool,
     preparation: Option<GatewayPreparationContext>,
 ) -> Result<SidecarLaunchConfig, String> {
+    // Never persist a config without inbound client keys: the sidecar would reject
+    // (or leave unauthenticated) every request until the next provisioning. If the
+    // collection declares enabled keys but none resolve, fail loudly instead of
+    // writing the broken state observed in #2635. The check runs after the account
+    // loop so a stale lifecycle generation still wins with the cancellation error.
+    let client_api_keys =
+        sidecar_client_api_keys_with_internal(collection, &account_overrides, api_service);
     let auths_dir = sidecar_auths_dir(&base_dir);
     std::fs::create_dir_all(&auths_dir)
         .map_err(|e| format!("创建 API 服务 sidecar 认证目录失败: {}", e))?;
@@ -2541,6 +2558,17 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     }
     remove_stale_sidecar_auth_files(&auths_dir, &expected_auth_files)?;
 
+    // Refuse to persist a config that dropped every declared client key: the
+    // sidecar would 401 every client request until the next provisioning (#2635).
+    // Only explicit `api_keys` entries count; a keyless collection is a legitimate
+    // user state, and the legacy single key keeps its historical tolerant behavior.
+    if client_api_keys.is_empty() && collection_declares_enabled_client_keys(collection) {
+        return Err(
+            "网关配置无法解析任何入站 API Key，已取消写入；请恢复被引用的账号后重试，或重新接管该网关"
+                .to_string(),
+        );
+    }
+
     // Explicit native routes must not advertise or select a revoked xAI credential. Keep the
     // persisted route and key account scopes intact so recovery cannot broaden access scopes.
     let mut runtime_collection = collection.clone();
@@ -2645,14 +2673,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         json!(auths_dir.to_string_lossy().to_string()),
     );
     config.insert("debug".to_string(), json!(collection.debug_logs));
-    config.insert(
-        "api-keys".to_string(),
-        json!(sidecar_client_api_keys_with_internal(
-            collection,
-            &account_overrides,
-            api_service,
-        )),
-    );
+    config.insert("api-keys".to_string(), json!(client_api_keys));
     config.insert(
         "api-key-account-ids".to_string(),
         sidecar_api_key_account_scope_values_with_internal(

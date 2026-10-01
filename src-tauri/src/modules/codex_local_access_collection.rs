@@ -1724,10 +1724,25 @@ fn sanitize_collection_with_accounts(
         } else {
             &valid_account_ids
         };
-        api_key
+        let retained: Vec<String> = api_key
             .account_ids
-            .retain(|account_id| valid_scope_account_ids.contains(account_id));
-        if api_key.account_ids != before {
+            .iter()
+            .filter(|account_id| valid_scope_account_ids.contains(*account_id))
+            .cloned()
+            .collect();
+        // Instance gateways (mixed model routing / provider gateway) synthesize a
+        // single client key scoped to their bound account. If that account is
+        // temporarily unresolvable (e.g. an interrupted re-auth leaves a
+        // half-broken account store), pruning the whole scope silently drops the
+        // key and the sidecar config ends up with `"api-keys": []`, so the gateway
+        // rejects every client request with 401. Keep the declared scope instead:
+        // the config writer still verifies per-key resolvability, and explicit
+        // deletions clean scopes through `remove_account_refs_from_collection`.
+        if !before.is_empty() && retained.is_empty() {
+            continue;
+        }
+        if retained != before {
+            api_key.account_ids = retained;
             changed = true;
         }
     }
