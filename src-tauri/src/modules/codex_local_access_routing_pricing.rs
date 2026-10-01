@@ -1231,6 +1231,34 @@ fn derived_standard_long_price(standard: CodexLocalAccessPrice) -> CodexLocalAcc
     )
 }
 
+/// A standard_long triple counts as a user override only when all three
+/// fields are present and at least one differs from the multiplier derivation
+/// of the standard rates; anything else follows the derivation.
+fn custom_standard_long_price(
+    standard: CodexLocalAccessPrice,
+    long_input: Option<f64>,
+    long_cached: Option<f64>,
+    long_output: Option<f64>,
+) -> Option<CodexLocalAccessPrice> {
+    let submitted = CodexLocalAccessPrice {
+        input_usd_per_million: long_input?,
+        cached_input_usd_per_million: long_cached?,
+        output_usd_per_million: long_output?,
+    };
+    let derived = derived_standard_long_price(standard);
+    let matches_derived = prices_close(
+        submitted.input_usd_per_million,
+        derived.input_usd_per_million,
+    ) && prices_close(
+        submitted.cached_input_usd_per_million,
+        derived.cached_input_usd_per_million,
+    ) && prices_close(
+        submitted.output_usd_per_million,
+        derived.output_usd_per_million,
+    );
+    (!matches_derived).then_some(submitted)
+}
+
 fn price_book_entry_to_model_pricing(
     entry: &CodexLocalAccessPriceBookEntry,
 ) -> CodexLocalAccessModelPricing {
@@ -1474,8 +1502,9 @@ fn compute_effective_unit_prices(
         .unwrap_or(pricing.input_usd_per_million);
     let mut tier_multiplier = 1.0_f64;
 
+    let explicit_priority_rates = pricing_has_explicit_priority_rates(pricing);
     match parse_billing_service_tier(service_tier) {
-        CodexBillingServiceTier::Priority if pricing_has_explicit_priority_rates(pricing) => {
+        CodexBillingServiceTier::Priority if explicit_priority_rates => {
             if let Some(value) = pricing
                 .priority_input_usd_per_million
                 .filter(|value| *value > 0.0)
@@ -1505,9 +1534,34 @@ fn compute_effective_unit_prices(
     }
 
     if should_apply_session_long_context(model_id, pricing, usage) {
-        input_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_INPUT_MULTIPLIER;
-        cache_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_CACHE_MULTIPLIER;
-        output_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_OUTPUT_MULTIPLIER;
+        let long_override = if explicit_priority_rates {
+            // priority_long_* has no override semantics; explicit priority
+            // rates keep composing with the multipliers.
+            None
+        } else {
+            let standard_base = CodexLocalAccessPrice {
+                input_usd_per_million: pricing.input_usd_per_million,
+                cached_input_usd_per_million: pricing
+                    .cached_input_usd_per_million
+                    .unwrap_or(pricing.input_usd_per_million),
+                output_usd_per_million: pricing.output_usd_per_million,
+            };
+            custom_standard_long_price(
+                standard_base,
+                pricing.standard_long_input_usd_per_million,
+                pricing.standard_long_cached_input_usd_per_million,
+                pricing.standard_long_output_usd_per_million,
+            )
+        };
+        if let Some(long_price) = long_override {
+            input_price = long_price.input_usd_per_million;
+            cache_price = long_price.cached_input_usd_per_million;
+            output_price = long_price.output_usd_per_million;
+        } else {
+            input_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_INPUT_MULTIPLIER;
+            cache_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_CACHE_MULTIPLIER;
+            output_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_OUTPUT_MULTIPLIER;
+        }
     }
 
     CodexLocalAccessPrice {
@@ -1611,9 +1665,24 @@ fn normalize_model_pricings(
                 .map(normalize_price_value),
             normalize_price_value(pricing.output_usd_per_million),
         );
-        // standard_long absolute fields are display-only / legacy; billing uses
-        // multipliers. Persist derived display values for session-long models.
-        let standard_long = session_long.then(|| derived_standard_long_price(standard));
+        // standard_long defaults to the multiplier derivation of the standard
+        // rates; a complete submitted triple that differs from it is a user
+        // override and is persisted verbatim.
+        let standard_long = session_long.then(|| {
+            custom_standard_long_price(
+                standard,
+                pricing
+                    .standard_long_input_usd_per_million
+                    .map(normalize_price_value),
+                pricing
+                    .standard_long_cached_input_usd_per_million
+                    .map(normalize_price_value),
+                pricing
+                    .standard_long_output_usd_per_million
+                    .map(normalize_price_value),
+            )
+            .unwrap_or_else(|| derived_standard_long_price(standard))
+        });
 
         normalized.push(CodexLocalAccessModelPricing {
             model_id,

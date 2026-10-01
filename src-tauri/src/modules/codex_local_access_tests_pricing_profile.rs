@@ -1451,6 +1451,161 @@
     }
 
     #[test]
+    fn normalize_model_pricings_keeps_custom_standard_long_context_rates() {
+        // gpt-6-astra book rates: standard 10/1/50 -> derived long 20/2/75.
+        // A submitted triple that differs from the derivation is a user override.
+        let normalized = normalize_model_pricings(vec![model_pricing(
+            "gpt-6-astra",
+            Some(272_000),
+            codex_price(10.0, 1.0, 50.0),
+            Some(codex_price(30.0, 3.0, 60.0)),
+            None,
+            None,
+        )]);
+        assert_eq!(normalized.len(), 1);
+        assert_eq!(normalized[0].standard_long_input_usd_per_million, Some(30.0));
+        assert_eq!(
+            normalized[0].standard_long_cached_input_usd_per_million,
+            Some(3.0)
+        );
+        assert_eq!(
+            normalized[0].standard_long_output_usd_per_million,
+            Some(60.0)
+        );
+
+        // A triple matching the multiplier derivation keeps being re-derived
+        // (same values either way, but standard-rate edits re-derive it).
+        let normalized = normalize_model_pricings(vec![model_pricing(
+            "gpt-6-astra",
+            Some(272_000),
+            codex_price(10.0, 1.0, 50.0),
+            Some(codex_price(20.0, 2.0, 75.0)),
+            None,
+            None,
+        )]);
+        assert_eq!(normalized[0].standard_long_input_usd_per_million, Some(20.0));
+        assert_eq!(
+            normalized[0].standard_long_cached_input_usd_per_million,
+            Some(2.0)
+        );
+        assert_eq!(
+            normalized[0].standard_long_output_usd_per_million,
+            Some(75.0)
+        );
+
+        // Missing triples fall back to the derived rates.
+        let normalized = normalize_model_pricings(vec![model_pricing(
+            "gpt-6-astra",
+            Some(272_000),
+            codex_price(10.0, 1.0, 50.0),
+            None,
+            None,
+            None,
+        )]);
+        assert_eq!(normalized[0].standard_long_input_usd_per_million, Some(20.0));
+        assert_eq!(
+            normalized[0].standard_long_cached_input_usd_per_million,
+            Some(2.0)
+        );
+        assert_eq!(
+            normalized[0].standard_long_output_usd_per_million,
+            Some(75.0)
+        );
+    }
+
+    #[test]
+    fn long_context_billing_uses_custom_standard_long_rates() {
+        let mut collection = test_local_access_collection(vec!["account-a".to_string()]);
+        collection.model_pricings = vec![model_pricing(
+            "gpt-6-astra",
+            Some(272_000),
+            codex_price(10.0, 1.0, 50.0),
+            Some(codex_price(30.0, 3.0, 60.0)),
+            None,
+            None,
+        )];
+        let short_usage = UsageCapture {
+            input_tokens: 272_000,
+            output_tokens: 1,
+            total_tokens: 272_001,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
+            token_breakdown: None,
+        };
+        let long_usage = UsageCapture {
+            input_tokens: 272_001,
+            ..short_usage.clone()
+        };
+
+        // Below the threshold the standard rates still apply.
+        let short = resolve_effective_model_pricing(
+            Some(&collection),
+            Some("gpt-6-astra"),
+            Some(&short_usage),
+            None,
+        )
+        .expect("short-context pricing");
+        assert_eq!(short.input_usd_per_million, 10.0);
+        assert_eq!(short.cached_input_usd_per_million, Some(1.0));
+        assert_eq!(short.output_usd_per_million, 50.0);
+
+        // Above the threshold the persisted override wins over x2/x2/x1.5.
+        let long = resolve_effective_model_pricing(
+            Some(&collection),
+            Some("gpt-6-astra"),
+            Some(&long_usage),
+            None,
+        )
+        .expect("long-context pricing");
+        assert_eq!(long.input_usd_per_million, 30.0);
+        assert_eq!(long.cached_input_usd_per_million, Some(3.0));
+        assert_eq!(long.output_usd_per_million, 60.0);
+
+        // Priority tier without explicit rates doubles the overridden rates.
+        let priority = resolve_effective_model_pricing(
+            Some(&collection),
+            Some("gpt-6-astra"),
+            Some(&long_usage),
+            Some("priority"),
+        )
+        .expect("priority long-context pricing");
+        assert_eq!(priority.input_usd_per_million, 60.0);
+        assert_eq!(priority.output_usd_per_million, 120.0);
+
+        // Legacy entries whose long-context rates match the derivation keep
+        // the multiplier behavior.
+        let mut legacy = test_local_access_collection(vec!["account-b".to_string()]);
+        legacy.model_pricings = vec![model_pricing(
+            "gpt-6-astra",
+            Some(272_000),
+            codex_price(10.0, 1.0, 50.0),
+            Some(codex_price(20.0, 2.0, 75.0)),
+            None,
+            None,
+        )];
+        let legacy_long = resolve_effective_model_pricing(
+            Some(&legacy),
+            Some("gpt-6-astra"),
+            Some(&long_usage),
+            None,
+        )
+        .expect("legacy long-context pricing");
+        assert_eq!(legacy_long.input_usd_per_million, 20.0);
+        assert_eq!(legacy_long.output_usd_per_million, 75.0);
+
+        // Preset entries keep the multiplier behavior.
+        let preset = resolve_effective_model_pricing(
+            None,
+            Some("gpt-6-astra"),
+            Some(&long_usage),
+            None,
+        )
+        .expect("preset long-context pricing");
+        assert_eq!(preset.input_usd_per_million, 20.0);
+        assert_eq!(preset.output_usd_per_million, 75.0);
+    }
+
+    #[test]
     fn removes_only_codex_local_access_provider_config() {
         let input = r#"model_provider = "codex_local_access"
 model_catalog_json = "cockpit-local-access-model-catalog.json"
