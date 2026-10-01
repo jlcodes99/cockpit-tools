@@ -2142,7 +2142,7 @@ pub async fn codex_import_sessions(
     import_file_path: String,
     target_instance_id: Option<String>,
     session_ids: Vec<String>,
-    cwd_mappings: std::collections::HashMap<String, String>,
+    cwd_mappings: Option<std::collections::HashMap<String, String>>,
     transfer_id: Option<String>,
 ) -> Result<modules::codex_session_manager::CodexSessionImportSummary, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -2158,7 +2158,7 @@ pub async fn codex_import_sessions(
             import_file_path,
             target_instance_id,
             session_ids,
-            cwd_mappings,
+            cwd_mappings.unwrap_or_default(),
             transfer_id,
             Some(&reporter),
         )

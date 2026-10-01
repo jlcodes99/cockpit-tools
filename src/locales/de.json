@@ -3337,7 +3337,7 @@
         "title": "Sitzungen importieren",
         "hint": "Sitzungspakete importieren nur rollout-Dateien und session_index-Einträge. Konten, Token, API-Schlüssel und App-Einstellungen sind nicht enthalten; Sitzungen mit derselben ID in der Zielinstanz werden übersprungen.",
         "cwdMappingTitle": "Projektpfadzuordnung (optional)",
-        "cwdMappingHint": "Ordne Quellarbeitsverzeichnisse Projektpfaden auf diesem Computer zu. Leer lassen, um den Quellpfad beizubehalten.",
+        "cwdMappingHint": "Ordne Quellarbeitsverzeichnisse Pfaden bereits hinzugefügter Codex-Projekte auf diesem Computer zu. Leer lassen, um den Quellpfad beizubehalten.",
         "cwdTargetPlaceholder": "Absoluten Projektpfad auf diesem Computer eingeben",
         "noTarget": "Keine Codex-Instanz für den Import verfügbar",
         "noPackage": "Wähle zuerst ein Sitzungspaket aus",

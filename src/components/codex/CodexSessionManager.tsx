@@ -2379,7 +2379,7 @@ export function CodexSessionManager() {
                     <p>
                       {t(
                         'codex.sessionManager.importModal.cwdMappingHint',
-                        '将源工作目录映射到此电脑上的项目路径；留空则保留源路径。',
+                        '将源工作目录映射到此电脑上已添加到 Codex 的项目路径；留空则保留源路径。',
                       )}
                     </p>
                   </div>

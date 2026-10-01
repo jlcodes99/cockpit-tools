@@ -3337,7 +3337,7 @@
         "title": "Oturumları içe aktar",
         "hint": "Oturum paketleri yalnızca rollout dosyalarını ve session_index kayıtlarını içe aktarır. Hesaplar, tokenlar, API anahtarları ve uygulama ayarları dahil değildir; hedef örnekte aynı ID’ye sahip oturumlar atlanır.",
         "cwdMappingTitle": "Proje yolu eşlemesi (isteğe bağlı)",
-        "cwdMappingHint": "Kaynak çalışma dizinlerini bu bilgisayardaki proje yollarıyla eşleştirin. Kaynak yolu korumak için boş bırakın.",
+        "cwdMappingHint": "Kaynak çalışma dizinlerini bu bilgisayarda Codex’e zaten eklenmiş projelerin yollarıyla eşleştirin. Kaynak yolu korumak için boş bırakın.",
         "cwdTargetPlaceholder": "Bu bilgisayardaki projenin mutlak yolunu girin",
         "noTarget": "İçe aktarma için kullanılabilir Codex örneği yok",
         "noPackage": "Önce bir oturum paketi seçin",

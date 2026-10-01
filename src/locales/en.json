@@ -4159,7 +4159,7 @@
         "title": "Import Sessions",
         "hint": "Session packages only import rollout files and session_index entries. Accounts, tokens, API keys, and app settings are not included. Sessions with the same ID already in the target instance are skipped.",
         "cwdMappingTitle": "Workspace path mapping (optional)",
-        "cwdMappingHint": "Map each source working directory to a project path on this computer. Leave blank to keep the source path.",
+        "cwdMappingHint": "Map each source working directory to an existing Codex project path on this computer. Leave blank to keep the source path.",
         "cwdTargetPlaceholder": "Enter an absolute project path on this computer",
         "noTarget": "No Codex instance is available for import",
         "noPackage": "Select a session package first",

@@ -4159,7 +4159,7 @@
         "title": "导入会话",
         "hint": "会话包只导入 rollout 文件和 session_index 条目，不包含账号、Token、API Key 或应用配置；目标实例已有同 ID 会话时会跳过。",
         "cwdMappingTitle": "项目路径映射（可选）",
-        "cwdMappingHint": "将源工作目录映射到此电脑上的项目路径；留空则保留源路径。",
+        "cwdMappingHint": "将源工作目录映射到此电脑上已添加到 Codex 的项目路径；留空则保留源路径。",
         "cwdTargetPlaceholder": "输入此电脑上的项目绝对路径",
         "noTarget": "未发现可导入的 Codex 实例",
         "noPackage": "请先选择会话包",

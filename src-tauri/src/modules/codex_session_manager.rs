@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -1341,13 +1341,15 @@ pub fn import_sessions(
     }
     let target = resolve_session_import_target(target_instance_id)?;
     let manifest = read_session_export_manifest_from_path(&import_file_path)?;
-    for target_cwd in cwd_mappings
-        .values()
-        .map(|cwd| cwd.trim())
-        .filter(|cwd| !cwd.is_empty())
+    for item in manifest
+        .sessions
+        .iter()
+        .filter(|item| requested_ids.contains(&item.session_id))
     {
-        if !Path::new(target_cwd).is_absolute() {
-            return Err(format!("目标项目路径必须是绝对路径: {}", target_cwd));
+        if let Some(target_cwd) = resolve_import_cwd_mapping(&item.cwd, &cwd_mappings) {
+            if !Path::new(target_cwd).is_absolute() {
+                return Err(format!("目标项目路径必须是绝对路径: {}", target_cwd));
+            }
         }
     }
     let manifest_by_id = manifest
@@ -1363,6 +1365,8 @@ pub fn import_sessions(
     let original_session_index_content = read_session_index_content(&target.data_dir)?;
     let mut imported_count = 0usize;
     let mut skipped_count = 0usize;
+    let mut mapped_threads = Vec::new();
+    let mut metadata_warning = None;
     let mut next_session_index_content = original_session_index_content.clone();
 
     let file = File::open(&import_file_path)
@@ -1418,6 +1422,9 @@ pub fn import_sessions(
             return Err(error);
         }
         next_session_index_content = read_session_index_content(&target.data_dir)?;
+        if let Some(cwd) = mapped_cwd {
+            mapped_threads.push((session_id.clone(), cwd.to_string()));
+        }
         target_session_ids.insert(session_id.clone());
         imported_count += 1;
         emit_session_transfer_progress(
@@ -1443,13 +1450,15 @@ pub fn import_sessions(
             Some(target.name.clone()),
             true,
         );
-        if let Err(error) =
-            modules::codex_official_app_server::rebuild_thread_metadata(&target.data_dir)
-        {
+        if let Err(error) = modules::codex_official_app_server::rebuild_imported_thread_metadata(
+            &target.data_dir,
+            &mapped_threads,
+        ) {
             modules::logger::log_warn(&format!(
                 "会话已导入，但官方 Codex 重建会话索引失败 ({}): {}",
                 target.name, error
             ));
+            metadata_warning = Some(error);
         }
     }
     emit_session_transfer_progress(
@@ -1463,20 +1472,24 @@ pub fn import_sessions(
         false,
     );
 
+    let mut message = if imported_count > 0 {
+        format!(
+            "已导入 {} 条会话到 {}；已跳过 {} 条",
+            imported_count, target.name, skipped_count
+        )
+    } else {
+        format!("没有导入新会话；已跳过 {} 条", skipped_count)
+    };
+    if let Some(warning) = metadata_warning {
+        message.push_str(&format!("；Codex 索引或项目归属更新未完成: {}", warning));
+    }
     Ok(CodexSessionImportSummary {
         requested_session_count: requested_ids.len(),
         imported_session_count: imported_count,
         skipped_session_count: skipped_count,
         target_instance_id: target.id,
         target_instance_name: target.name.clone(),
-        message: if imported_count > 0 {
-            format!(
-                "已导入 {} 条会话到 {}；已跳过 {} 条",
-                imported_count, target.name, skipped_count
-            )
-        } else {
-            format!("没有导入新会话；已跳过 {} 条", skipped_count)
-        },
+        message,
     })
 }
 
@@ -1959,7 +1972,12 @@ fn write_imported_rollout_from_archive(
             ".cockpit-session-import-remap-{}.tmp",
             Uuid::new_v4()
         ));
-        if let Err(error) = rewrite_rollout_session_meta_cwd(&temp_path, &remapped_temp_path, cwd) {
+        if let Err(error) = modules::codex_session_import_paths::rewrite_rollout_workspace_paths(
+            &temp_path,
+            &remapped_temp_path,
+            &item.cwd,
+            cwd,
+        ) {
             let _ = fs::remove_file(&temp_path);
             let _ = fs::remove_file(&remapped_temp_path);
             return Err(error);
@@ -1999,94 +2017,6 @@ fn resolve_import_cwd_mapping<'a>(
         return None;
     }
     Some(target_cwd)
-}
-
-fn rewrite_rollout_session_meta_cwd(
-    source_path: &Path,
-    target_path: &Path,
-    cwd: &str,
-) -> Result<(), String> {
-    let rewrite_result = (|| -> Result<bool, String> {
-        let source = File::open(source_path).map_err(|error| {
-            format!("打开待映射会话文件失败 ({}): {}", source_path.display(), error)
-        })?;
-        let mut reader = BufReader::new(source);
-        let target = File::create(target_path).map_err(|error| {
-            format!("创建路径映射临时文件失败 ({}): {}", target_path.display(), error)
-        })?;
-        let mut writer = BufWriter::new(target);
-        let mut line = Vec::new();
-        let mut replaced = false;
-
-        loop {
-            line.clear();
-            let bytes_read = reader.read_until(b'\n', &mut line).map_err(|error| {
-                format!("读取待映射会话文件失败 ({}): {}", source_path.display(), error)
-            })?;
-            if bytes_read == 0 {
-                break;
-            }
-
-            if !replaced {
-                let content_end = if line.ends_with(b"\r\n") {
-                    line.len() - 2
-                } else if line.ends_with(b"\n") {
-                    line.len() - 1
-                } else {
-                    line.len()
-                };
-                if let Ok(mut record) = serde_json::from_slice::<JsonValue>(&line[..content_end]) {
-                    if record.get("type").and_then(JsonValue::as_str) == Some("session_meta") {
-                        let payload = record
-                            .get_mut("payload")
-                            .and_then(JsonValue::as_object_mut)
-                            .ok_or_else(|| {
-                                format!(
-                                    "会话元数据格式无效，无法映射工作目录: {}",
-                                    source_path.display()
-                                )
-                            })?;
-                        payload.insert("cwd".to_string(), JsonValue::String(cwd.to_string()));
-
-                        let mut serialized = serde_json::to_vec(&record).map_err(|error| {
-                            format!("序列化会话元数据失败 ({}): {}", source_path.display(), error)
-                        })?;
-                        if line.ends_with(b"\r\n") {
-                            serialized.extend_from_slice(b"\r\n");
-                        } else if line.ends_with(b"\n") {
-                            serialized.push(b'\n');
-                        }
-                        line = serialized;
-                        replaced = true;
-                    }
-                }
-            }
-
-            writer.write_all(&line).map_err(|error| {
-                format!("写入路径映射临时文件失败 ({}): {}", target_path.display(), error)
-            })?;
-        }
-
-        writer.flush().map_err(|error| {
-            format!("写入路径映射临时文件失败 ({}): {}", target_path.display(), error)
-        })?;
-        Ok(replaced)
-    })();
-
-    match rewrite_result {
-        Ok(true) => Ok(()),
-        Ok(false) => {
-            let _ = fs::remove_file(target_path);
-            Err(format!(
-                "会话文件中未找到 session_meta，无法映射工作目录: {}",
-                source_path.display()
-            ))
-        }
-        Err(error) => {
-            let _ = fs::remove_file(target_path);
-            Err(error)
-        }
-    }
 }
 
 fn set_session_index_entry_cwd(entry: &mut JsonValue, cwd: &str) {
@@ -3609,6 +3539,73 @@ mod tests {
         assert!(index_map.contains_key(other_session_id));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn import_checks_original_hash_before_remapping_and_preserves_unmapped_bytes() {
+        let base = make_temp_dir("codex-import-mapping");
+        let package_path = base.join("package.zip");
+        let content = concat!(
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-1\",\"cwd\":\"/a/project\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"thread_settings_applied\",\"thread_settings\":{\"cwd\":\"/a/project\"}}}\n",
+            "{ \"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"/a/project\"}}\n"
+        );
+        let mut package = ZipWriter::new(File::create(&package_path).unwrap());
+        package
+            .start_file("files/rollout.jsonl", SimpleFileOptions::default())
+            .unwrap();
+        package.write_all(content.as_bytes()).unwrap();
+        package.finish().unwrap();
+        let package_hash = sha256_file(&package_path).unwrap();
+        let mut archive = ZipArchive::new(File::open(&package_path).unwrap()).unwrap();
+        let mut item = SessionExportManifestItem {
+            session_id: "session-1".into(),
+            title: "chat".into(),
+            cwd: "/a/project".into(),
+            updated_at: Some(1_780_362_123),
+            relative_rollout_path: "sessions/rollout-test.jsonl".into(),
+            file_entry: "files/rollout.jsonl".into(),
+            size_bytes: content.len() as u64,
+            sha256: hex_lower(Sha256::digest(content.as_bytes()).as_slice()),
+            session_index_entry: json!({"id":"session-1","cwd":"/a/project","pinned":true}),
+            source_instance: SessionExportInstance {
+                id: "source".into(),
+                name: "source".into(),
+            },
+        };
+        let unchanged = base.join("unmapped/rollout.jsonl");
+        write_imported_rollout_from_archive(&mut archive, &item, &unchanged, None).unwrap();
+        assert_eq!(fs::read(&unchanged).unwrap(), content.as_bytes());
+        let mapped = base.join("mapped/rollout.jsonl");
+        let cwd = base.join("project-b").to_string_lossy().into_owned();
+        write_imported_rollout_from_archive(&mut archive, &item, &mapped, Some(&cwd)).unwrap();
+        let records = fs::read_to_string(&mapped)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<JsonValue>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(records[0]["payload"]["cwd"], cwd);
+        assert_eq!(records[1]["payload"]["thread_settings"]["cwd"], cwd);
+        assert_eq!(records[2]["payload"]["message"], "/a/project");
+        let mut entry = build_imported_session_index_entry(&item, &mapped);
+        set_session_index_entry_cwd(&mut entry, &cwd);
+        assert_eq!(entry["cwd"], cwd);
+        assert_eq!(entry["pinned"], true);
+        assert_eq!(item.session_index_entry["cwd"], "/a/project");
+        assert_eq!(sha256_file(&package_path).unwrap(), package_hash);
+        let restored_time = rollout_file_modified_seconds(&mapped).unwrap();
+        assert!((restored_time - item.updated_at.unwrap()).abs() <= 1);
+        item.sha256 = "0".repeat(64);
+        let invalid = base.join("invalid/rollout.jsonl");
+        assert!(
+            write_imported_rollout_from_archive(&mut archive, &item, &invalid, Some(&cwd))
+                .unwrap_err()
+                .contains("校验失败")
+        );
+        assert!(!invalid.exists());
+        assert_eq!(fs::read_dir(invalid.parent().unwrap()).unwrap().count(), 0);
+        drop(archive);
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

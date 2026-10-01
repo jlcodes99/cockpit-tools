@@ -3337,7 +3337,7 @@
         "title": "Importa sessioni",
         "hint": "I pacchetti sessione importano solo file rollout e voci session_index. Account, token, API key e impostazioni dell’app non sono inclusi; le sessioni con lo stesso ID già presenti nell’istanza target vengono saltate.",
         "cwdMappingTitle": "Mappatura dei percorsi del progetto (facoltativa)",
-        "cwdMappingHint": "Associa ogni directory di lavoro di origine a un percorso del progetto su questo computer. Lascia vuoto per mantenere il percorso di origine.",
+        "cwdMappingHint": "Associa ogni directory di lavoro di origine al percorso di un progetto già aggiunto a Codex su questo computer. Lascia vuoto per mantenere il percorso di origine.",
         "cwdTargetPlaceholder": "Inserisci il percorso assoluto di un progetto su questo computer",
         "noTarget": "Nessuna istanza Codex disponibile per l’importazione",
         "noPackage": "Seleziona prima un pacchetto sessione",

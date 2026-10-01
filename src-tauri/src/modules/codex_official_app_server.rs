@@ -18,6 +18,13 @@ const CODEX_APP_SERVER_EXECUTABLE_ENV: &str = "CODEX_APP_SERVER_EXECUTABLE";
 const APP_SERVER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
+    rebuild_imported_thread_metadata(codex_home, &[])
+}
+
+pub fn rebuild_imported_thread_metadata(
+    codex_home: &Path,
+    mapped_threads: &[(String, String)],
+) -> Result<(), String> {
     let flow_started = Instant::now();
     crate::modules::logger::log_info(&format!(
         "[Codex Official AppServer] rebuild_thread_metadata flow started: codex_home={}",
@@ -103,7 +110,11 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
                         "name": "cockpit-tools",
                         "version": env!("CARGO_PKG_VERSION"),
                     },
-                    "capabilities": null,
+                    "capabilities": if mapped_threads.is_empty() {
+                        JsonValue::Null
+                    } else {
+                        json!({ "experimentalApi": true })
+                    },
                 },
             }),
         )?;
@@ -133,6 +144,9 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
             }),
         )?;
         wait_for_response(&receiver, 2)?;
+        if !mapped_threads.is_empty() {
+            assign_imported_threads_to_projects(&mut stdin, &receiver, mapped_threads)?;
+        }
         crate::modules::logger::log_info(&format!(
             "[Codex Official AppServer] thread/list finished: codex_home={}, elapsed_ms={}, total_ms={}",
             codex_home.display(),
@@ -179,6 +193,89 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
         ));
     }
     result
+}
+
+fn assign_imported_threads_to_projects(
+    stdin: &mut impl Write,
+    receiver: &mpsc::Receiver<String>,
+    mapped_threads: &[(String, String)],
+) -> Result<(), String> {
+    let mut request_id = 3;
+    let mut cursor = JsonValue::Null;
+    let mut projects = Vec::new();
+    loop {
+        send_request(
+            stdin,
+            json!({
+                "method": "project/list", "id": request_id,
+                "params": { "cursor": cursor, "limit": 100 }
+            }),
+        )?;
+        let response = match wait_for_response_value(receiver, request_id) {
+            Ok(response) => response,
+            Err(error) => {
+                let message = error.message();
+                // Older Codex versions group by cwd and do not expose project identities.
+                if message.contains("-32601") || message.contains("unknown variant `project/list`")
+                {
+                    return Ok(());
+                }
+                return Err(message.to_string());
+            }
+        };
+        let result = response
+            .get("result")
+            .ok_or("project/list 响应缺少 result")?;
+        projects.extend(
+            result
+                .get("data")
+                .and_then(JsonValue::as_array)
+                .ok_or("project/list 响应缺少项目列表")?
+                .iter()
+                .cloned(),
+        );
+        request_id += 1;
+        cursor = result.get("nextCursor").cloned().unwrap_or(JsonValue::Null);
+        if cursor.is_null() {
+            break;
+        }
+    }
+    let mut warnings = Vec::new();
+    for (thread_id, cwd) in mapped_threads {
+        let project_id =
+            match crate::modules::codex_session_import_paths::project_id_for_cwd(&projects, cwd) {
+                Ok(Some(project_id)) => project_id,
+                Ok(None) => {
+                    warnings.push(format!(
+                        "未找到目标目录对应的 Codex 项目，请先在 Codex 中添加该项目: {}",
+                        cwd
+                    ));
+                    continue;
+                }
+                Err(error) => {
+                    warnings.push(error);
+                    continue;
+                }
+            };
+        send_request(
+            stdin,
+            json!({
+                "method": "thread/metadata/update", "id": request_id,
+                "params": { "threadId": thread_id, "projectId": project_id }
+            }),
+        )?;
+        if let Err(error) = wait_for_response(receiver, request_id) {
+            warnings.push(error);
+        }
+        request_id += 1;
+    }
+    warnings.sort();
+    warnings.dedup();
+    if warnings.is_empty() {
+        Ok(())
+    } else {
+        Err(warnings.join("；"))
+    }
 }
 
 /// 通过官方 app-server 的 `thread/delete` 删除会话线程（与官方客户端一致），
@@ -574,6 +671,69 @@ fn finish_child(child: &mut Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imported_project_binding_paginates_and_updates_matching_project() {
+        let (sender, receiver) = mpsc::channel();
+        sender
+            .send(json!({"id":3,"result":{"data":[],"nextCursor":"page-2"}}).to_string())
+            .unwrap();
+        sender.send(json!({"id":4,"result":{"data":[{"id":"destination","roots":[{"path":"/b/project"}]}],"nextCursor":null}}).to_string()).unwrap();
+        sender
+            .send(json!({"id":5,"result":{}}).to_string())
+            .unwrap();
+        let mut stdin = Vec::new();
+        assign_imported_threads_to_projects(
+            &mut stdin,
+            &receiver,
+            &[("thread-1".into(), "/b/project".into())],
+        )
+        .unwrap();
+        let requests = String::from_utf8(stdin)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<JsonValue>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(requests[1]["params"]["cursor"], "page-2");
+        assert_eq!(requests[2]["method"], "thread/metadata/update");
+        assert_eq!(requests[2]["params"]["projectId"], "destination");
+        assert_eq!(requests[2]["params"]["threadId"], "thread-1");
+    }
+
+    #[test]
+    fn older_servers_without_project_api_keep_cwd_fallback() {
+        let (sender, receiver) = mpsc::channel();
+        sender
+            .send(
+                json!({"id":3,"error":{"code":-32600,"message":"unknown variant `project/list`"}})
+                    .to_string(),
+            )
+            .unwrap();
+        let mut stdin = Vec::new();
+        assign_imported_threads_to_projects(
+            &mut stdin,
+            &receiver,
+            &[("thread-1".into(), "/b/project".into())],
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8(stdin).unwrap().lines().count(), 1);
+    }
+
+    #[test]
+    fn unmatched_project_returns_warning_without_assigning_arbitrary_project() {
+        let (sender, receiver) = mpsc::channel();
+        sender.send(json!({"id":3,"result":{"data":[{"id":"other","roots":[{"path":"/other"}]}],"nextCursor":null}}).to_string()).unwrap();
+        let mut stdin = Vec::new();
+        let result = assign_imported_threads_to_projects(
+            &mut stdin,
+            &receiver,
+            &[("thread-1".into(), "/b/project".into())],
+        );
+        assert!(result
+            .unwrap_err()
+            .contains("未找到目标目录对应的 Codex 项目"));
+        assert_eq!(String::from_utf8(stdin).unwrap().lines().count(), 1);
+    }
 
     #[test]
     fn maps_macos_launch_binary_to_resources_app_server() {
