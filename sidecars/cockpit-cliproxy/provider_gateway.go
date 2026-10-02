@@ -123,7 +123,7 @@ func (s *relayServer) handleExecutorBody(c *gin.Context, spec *apiKeySpec, body 
 				"",
 			)
 		}
-		s.handleProviderGatewayRequest(c, route.ProviderGateway, body, upstreamModel, sourceFormat, fixedAlt)
+		s.handleProviderGatewayRequest(c, route.ProviderGateway, body, upstreamModel, sourceFormat, fixedAlt, route.ProviderAccountID)
 		return
 	}
 
@@ -134,7 +134,12 @@ func (s *relayServer) handleExecutorBody(c *gin.Context, spec *apiKeySpec, body 
 	}
 
 	if spec.ProviderGateway != nil {
-		s.handleProviderGatewayRequest(c, spec.ProviderGateway, body, model, sourceFormat, fixedAlt)
+		accountIDs := normalizeStringList(spec.AccountIDs)
+		accountID := ""
+		if len(accountIDs) == 1 {
+			accountID = accountIDs[0]
+		}
+		s.handleProviderGatewayRequest(c, spec.ProviderGateway, body, model, sourceFormat, fixedAlt, accountID)
 		return
 	}
 
@@ -246,7 +251,7 @@ func (s *relayServer) providerGatewayUpstreamModel(gateway *providerGatewaySpec,
 	return providerGatewayCanonicalModel(gateway, resolved)
 }
 
-func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *providerGatewaySpec, body []byte, model string, sourceFormat sdktranslator.Format, fixedAlt string) {
+func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *providerGatewaySpec, body []byte, model string, sourceFormat sdktranslator.Format, fixedAlt string, boundAccountIDs ...string) {
 	if gateway == nil {
 		writeAPIError(c, http.StatusBadGateway, "provider gateway is not configured", "bad_gateway")
 		return
@@ -389,12 +394,22 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		applyOpenCodeSessionHeader(req.Header, c.Request.Header, body)
 	}
 
+	accountID := ""
+	if len(boundAccountIDs) == 1 {
+		accountID = boundAccountIDs[0]
+		if !s.admitDirectProviderAccount(c, accountID, gateway, upstreamModel) {
+			return
+		}
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
 		return
 	}
 	defer resp.Body.Close()
+	if len(boundAccountIDs) == 1 && s.manifest != nil && s.manifest.MaxAccountConcurrency > 0 {
+		s.policy.tracker.recordDirectProviderBackoff(accountID, gateway, upstreamModel, resp.StatusCode, resp.Header.Get("Retry-After"), time.Now())
+	}
 	writeUpstreamHeaders(c.Writer.Header(), resp.Header)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		payload, _ := io.ReadAll(resp.Body)

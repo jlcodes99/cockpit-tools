@@ -585,6 +585,7 @@ type requestUsageTracker struct {
 	accountInFlight     map[string]int
 	accountWaiters      int
 	accountSlotsChanged chan struct{}
+	providerBackoffs    map[providerBackoffKey]time.Time
 }
 
 func newRequestUsageTracker() *requestUsageTracker {
@@ -713,6 +714,10 @@ func (t *requestUsageTracker) tryReserveAccountSlot(requestID, authID string, ma
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	return t.tryReserveAccountSlotLocked(requestID, authID, maxConcurrent)
+}
+
+func (t *requestUsageTracker) tryReserveAccountSlotLocked(requestID, authID string, maxConcurrent int) bool {
 	slots := t.accountSlots[requestID]
 	if slots == nil {
 		slots = make(map[string]struct{})
