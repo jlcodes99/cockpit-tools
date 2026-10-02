@@ -1809,6 +1809,7 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 custom_routing_rules: Vec::new(),
                 account_model_rules: Vec::new(),
                 model_aliases: Vec::new(),
+                custom_models: Vec::new(),
                 suppress_oauth_model_alias: false,
                 model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,
                 model_pricings: Vec::new(),

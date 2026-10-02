@@ -502,6 +502,14 @@ pub struct CodexLocalAccessQuotaReserve {
     pub weekly_percent: i32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessCustomModel {
+    pub client_model: String,
+    pub account_id: String,
+    pub upstream_model: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessCollection {
@@ -535,6 +543,8 @@ pub struct CodexLocalAccessCollection {
     pub account_model_rules: Vec<CodexLocalAccessAccountModelRule>,
     #[serde(default)]
     pub model_aliases: Vec<CodexLocalAccessModelAlias>,
+    #[serde(default)]
+    pub custom_models: Vec<CodexLocalAccessCustomModel>,
     /// 仅实例供应商网关使用：不把模型别名写进 sidecar 的 `oauth-model-alias`。
     /// 该别名只用于把对话请求改写到 API Key 供应商；写进 OAuth 通道会把经 ChatGPT 账号
     /// 执行的请求（例如生图转发）改成上游模型名，被 ChatGPT 后端以「不支持该模型」拒绝。

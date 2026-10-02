@@ -2965,3 +2965,8 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   .codex-api-service-panel-head { flex-wrap: wrap; }
   .codex-api-service-panel-head h2 { flex-basis: 100%; }
 }
+.codex-api-custom-models { grid-column: 1 / -1; }
+.codex-api-custom-model-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 32px; gap: 12px; align-items: end; margin-top: 12px; }
+.codex-api-custom-model-row label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; font-weight: 600; }
+.codex-api-custom-model-row input { width: 100%; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); font: inherit; box-sizing: border-box; }
+@media (max-width: 640px) { .codex-api-custom-model-row { grid-template-columns: minmax(0, 1fr) 32px; } .codex-api-custom-model-row label { grid-column: 1; } .codex-api-custom-model-row > button { grid-column: 2; grid-row: 1 / span 3; align-self: end; } }

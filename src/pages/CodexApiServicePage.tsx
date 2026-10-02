@@ -55,6 +55,7 @@ import type {
   CodexLocalAccessCollection,
   CodexLocalAccessImageGenerationPolicy,
   CodexLocalAccessModelAlias,
+  CodexLocalAccessCustomModel,
   CodexLocalAccessModelPricing,
   CodexLocalAccessRequestKind,
   CodexLocalAccessRoutingStrategy,
@@ -2433,6 +2434,15 @@ export function useCodexApiServicePageController() {
     );
   };
 
+  const handleSaveCustomModels = async (models: CodexLocalAccessCustomModel[]) => {
+    await runAction(async () => {
+      const next = await codexLocalAccessService.updateCodexLocalAccessModelRules(
+        collection?.modelAliases ?? [], collection?.excludedModels ?? [], models,
+      );
+      setState(next);
+    }, t("codex.apiService.models.customSaved", "自定义模型已保存"));
+  };
+
   const handleSaveModelRules = async () => {
     await runAction(
       async () => {
@@ -3717,6 +3727,7 @@ export function useCodexApiServicePageController() {
     handleAddGrokMemberToApiService,
     handleSaveModelPricings,
     handleSaveModelRules,
+    handleSaveCustomModels,
     handleSavePort,
     handleSaveProxy,
     handleSaveRoutingOptions,

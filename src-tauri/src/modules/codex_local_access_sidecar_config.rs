@@ -2481,7 +2481,9 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             {
                 if api_service
                     && (!account.api_model_catalog.is_empty()
-                        || !account.api_model_mappings.is_empty())
+                        || !account.api_model_mappings.is_empty()
+                        || !account.api_sync_model_catalog_to_api_service
+                        || collection.custom_models.iter().any(|model| model.account_id == account.id))
                 {
                     config_value["models"] = Value::Array(
                         automatic_api_service_route_models(

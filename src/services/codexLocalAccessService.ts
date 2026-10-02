@@ -8,6 +8,7 @@ import type {
   CodexLocalAccessClientBaseUrlHost,
   CodexLocalAccessGatewayMode,
   CodexLocalAccessModelAlias,
+  CodexLocalAccessCustomModel,
   CodexLocalAccessAccountWindowQuery,
   CodexLocalAccessAccountWindowStats,
   CodexLocalAccessModelPricing,
@@ -186,10 +187,12 @@ export async function updateCodexLocalAccessAccountModelRules(
 export async function updateCodexLocalAccessModelRules(
   modelAliases: CodexLocalAccessModelAlias[],
   excludedModels: string[],
+  customModels?: CodexLocalAccessCustomModel[],
 ): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_update_model_rules", {
     modelAliases,
     excludedModels,
+    customModels: customModels ?? null,
   });
 }
 

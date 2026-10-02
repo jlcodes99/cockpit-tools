@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
 
@@ -50,5 +51,24 @@ func TestGrokProviderAccountsMarkXaiOnlyModels(t *testing.T) {
 
 	if !sidecarOAuthProviderSupported("grok") {
 		t.Fatalf("manifest 里的 grok provider 必须被识别为受支持的 xai provider")
+	}
+}
+
+func TestGrokCustomUpstreamRegistersOnlyForItsBoundAuth(t *testing.T) {
+	for _, catalog := range [][]string{nil, {"grok-4.6"}} {
+		account := &accountSpec{ID: "custom-grok", AuthID: "custom-grok.json", Provider: "grok", ModelIDs: catalog}
+		other := &accountSpec{ID: "other-grok", AuthID: "other-grok.json", Provider: "grok", ModelIDs: []string{"grok-4.6"}}
+		m := &manifest{accountByAuthID: map[string]*accountSpec{account.AuthID: account, other.AuthID: other},
+			APIKeys: []apiKeySpec{{ModelRouting: &modelRoutingSpec{Automatic: true, Routes: []modelRouteSpec{{
+				ProviderAccountID: account.ID, NativeProvider: "xai",
+				Models: []modelRouteModelSpec{{ClientModel: "custom", UpstreamModel: "grok-new-upstream"}},
+			}}}}}}
+		for _, auth := range []*coreauth.Auth{{ID: account.AuthID, Provider: "xai"}, {ID: other.AuthID, Provider: "xai"}} {
+			registry.GetGlobalRegistry().RegisterClient(auth.ID, auth.Provider, manifestModelsForAuth(m, auth))
+			if got := registry.GetGlobalRegistry().ClientSupportsModel(auth.ID, "grok-new-upstream"); got != (auth.ID == account.AuthID) {
+				t.Fatalf("custom upstream support for %s = %v", auth.ID, got)
+			}
+			registry.GetGlobalRegistry().UnregisterClient(auth.ID)
+		}
 	}
 }

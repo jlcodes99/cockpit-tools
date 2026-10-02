@@ -1,5 +1,6 @@
 import { Activity, BadgeDollarSign, ChevronDown, Check, CircleAlert, Copy, Eye, EyeOff, FolderPlus, Gauge, Image, Pin, PinOff, Play, Plus, Power, RefreshCw, Route, Send, ShieldCheck, SlidersHorizontal, Trash2, Undo2, Wrench, X } from "lucide-react";
 import { CodexIcon } from "../components/icons/CodexIcon";
+import { CodexApiCustomModels } from "../components/codex/CodexApiCustomModels";
 import { ManualHelpIconButton } from "../components/ManualHelpIconButton";
 import { PlatformGroupSwitcher } from "../components/platform/PlatformGroupSwitcher";
 import { resolveGroupChildName } from "../stores/usePlatformLayoutStore";
@@ -160,6 +161,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     memberView,
     modelAliasesText,
     modelIds,
+    handleSaveCustomModels,
     normalizeAddressKind,
     normalizeRequestLogPageSize,
     notice,
@@ -1948,6 +1950,12 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
 
         {activeTab === "models" && (
           <div className="codex-api-service-grid two">
+            <CodexApiCustomModels
+              models={collection?.customModels ?? []}
+              accounts={memberAccounts.map((account) => ({ id: account.id, name: accountDisplayNames.get(account.id) ?? account.email }))}
+              disabled={busy || !collection}
+              onSave={handleSaveCustomModels}
+            />
             <section className="codex-api-service-panel">
               <div className="codex-api-service-panel-head">
                 <h2>

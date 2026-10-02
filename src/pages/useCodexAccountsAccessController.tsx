@@ -100,6 +100,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
     editingApiModelContextWindowsInput,
     editingApiProviderPresetId,
     editingApiSyncModelCatalogToCodex,
+    editingApiSyncModelCatalogToApiService,
     editingManagedProviderId,
     editingNewManagedProviderNameInput,
     ensureLocalAccessEntryVisible,
@@ -179,6 +180,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
     setEditingApiModelContextWindowsInput,
     setEditingApiProviderPresetId,
     setEditingApiSyncModelCatalogToCodex,
+    setEditingApiSyncModelCatalogToApiService,
     setEditingManagedProviderApiKeyId,
     setEditingManagedProviderId,
     setEditingNewManagedProviderNameInput,
@@ -3476,6 +3478,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setEditingApiModelCatalogInput("");
       setEditingApiModelContextWindowsInput({});
       setEditingApiSyncModelCatalogToCodex(false);
+      setEditingApiSyncModelCatalogToApiService(false);
       setEditingApiModelCatalogFetching(false);
       setEditingApiModelCatalogError(null);
     }, [savingApiKeyCredentials]);
@@ -3532,6 +3535,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setEditingApiSyncModelCatalogToCodex(
           account.api_sync_model_catalog_to_codex === true,
         );
+        setEditingApiSyncModelCatalogToApiService(account.api_sync_model_catalog_to_api_service !== false);
         setEditingApiModelCatalogFetching(false);
         setEditingApiModelCatalogError(null);
       },
@@ -3687,6 +3691,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           editingApiSyncModelCatalogToCodex,
           accountProviderSnapshot.accountName,
           accountProviderSnapshot.apiModelContextWindows,
+          editingApiSyncModelCatalogToApiService,
         );
         if (accountProvider) {
           const linkedAccountIds = findCodexAccountsReferencingModelProvider(accountProvider, accounts);
@@ -3733,6 +3738,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setEditingNewManagedProviderNameInput("");
         setEditingApiModelCatalogInput("");
         setEditingApiSyncModelCatalogToCodex(false);
+        setEditingApiSyncModelCatalogToApiService(false);
         setEditingApiModelCatalogError(null);
       } catch (e) {
         setEditingApiCredentialsError(`${t("common.failed", "失败")}: ${String(e)}`);
@@ -3751,6 +3757,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       editingApiModelContextWindowsInput,
       editingApiProviderPresetId,
       editingApiSyncModelCatalogToCodex,
+      editingApiSyncModelCatalogToApiService,
       editingManagedProviderId,
       editingNewManagedProviderNameInput,
       reloadManagedProviders,

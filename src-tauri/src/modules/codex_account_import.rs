@@ -190,6 +190,10 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
             api_acc.tags = Some(tags);
             changed = true;
         }
+        if api_acc.api_sync_model_catalog_to_api_service != account.api_sync_model_catalog_to_api_service {
+            api_acc.api_sync_model_catalog_to_api_service = account.api_sync_model_catalog_to_api_service;
+            changed = true;
+        }
         if let Some(note) = account.account_note {
             api_acc.account_note = Some(note);
             changed = true;
