@@ -741,3 +741,30 @@ fn desktop_login_component_cleanup_removes_only_owned_cache_dirs() {
             );
         }
     }
+
+#[test]
+fn verification_window_accepts_profile_without_valid_session() {
+    let profile_dir = std::env::temp_dir().join(format!(
+        "cockpit-claude-verify-profile-{}-{}",
+        std::process::id(),
+        now_ts_ms()
+    ));
+    fs::create_dir_all(&profile_dir).expect("create profile dir");
+    // 目录存在但没有任何 cookie/session：验证窗口的前置校验必须放行，
+    // 否则登录态过期后永远打不开用于重新登录的验证窗口（#2694）。
+    assert!(validate_verification_profile(&profile_dir).is_ok());
+    // 导入路径的登录态检查语义不变：无 session 的 profile 仍拒绝导入。
+    assert!(ensure_desktop_profile_logged_in(&profile_dir).is_err());
+    fs::remove_dir_all(&profile_dir).ok();
+}
+
+#[test]
+fn verification_window_rejects_missing_profile_dir() {
+    let missing = std::env::temp_dir().join(format!(
+        "cockpit-claude-verify-missing-{}-{}",
+        std::process::id(),
+        now_ts_ms()
+    ));
+    let err = validate_verification_profile(&missing).unwrap_err();
+    assert!(err.contains("不存在"));
+}

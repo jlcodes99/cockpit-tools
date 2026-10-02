@@ -687,6 +687,18 @@ pub fn cancel_desktop_login(login_id: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
+// 验证窗口的前置校验只要求 profile 目录存在：登录态过期正是要打开这个窗口
+// 重新登录的场景，先查登录态会形成"未登录→拒开登录窗"的死循环（#2694）。
+// 导入路径（import_desktop_profile_snapshot）仍走 ensure_desktop_profile_logged_in，
+// 那里的语义是"必须已登录才能导入快照"，不受此影响。
+fn validate_verification_profile(profile_dir: &Path) -> Result<(), String> {
+    if profile_dir.exists() {
+        Ok(())
+    } else {
+        Err(format!("Claude profile 不存在: {}", profile_dir.display()))
+    }
+}
+
 pub fn open_desktop_verification_window(account_id: &str) -> Result<(), String> {
     let account = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
     if account.auth_mode != ClaudeAuthMode::DesktopOAuth {
@@ -698,7 +710,7 @@ pub fn open_desktop_verification_window(account_id: &str) -> Result<(), String> 
         .and_then(|value| normalize_non_empty(Some(value)))
         .map(PathBuf::from)
         .ok_or_else(|| "Claude 账号缺少 profile 快照".to_string())?;
-    ensure_desktop_profile_logged_in(&profile_dir)?;
+    validate_verification_profile(&profile_dir)?;
     let status_file = profile_dir.join("claude_desktop_verification_status.json");
     let export_file = desktop_auth_export_path(&profile_dir);
     let _ = remove_path_if_exists(&status_file);
