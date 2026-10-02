@@ -68,7 +68,7 @@ export function CodexSshSyncModal({ open, onClose }: CodexSshSyncModalProps) {
             )}
           </span>
           <button type="button" className="btn btn-primary" onClick={onClose}>
-            {t('common.done', '完成')}
+            {t('common.done')}
           </button>
         </div>
       </div>
