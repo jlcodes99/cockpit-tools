@@ -50,9 +50,48 @@ fn resolve_desktop_cookies_path(profile_dir: &Path) -> Option<PathBuf> {
     first_existing
 }
 
-fn cookies_db_has_required_desktop_session(cookies_path: &Path) -> Result<bool, String> {
-    if !cookies_path.exists() {
-        return Ok(false);
+// 只读打开 Cookies 库并执行查询。快照里若带着未回滚的热 journal（-journal 非零长），
+// 只读连接无法执行 SQLite 的回滚恢复，首个查询会报 "attempt to write a readonly
+// database"（#2696）。此时把 Cookies 和 journal 拷进临时目录，用可写连接打开副本，
+// 让 SQLite 自愈回滚后查询；不对原快照写任何字节，副本在查询完成后删除。
+// 零长 journal 不是热日志（SQLite 直接忽略），保持原样只读打开；
+// journal 拷贝失败（如被占用）时同样退回原样只读打开，维持既有报错行为。
+fn with_cookies_db_readonly<T>(
+    cookies_path: &Path,
+    query: impl FnOnce(&Connection) -> Result<T, String>,
+) -> Result<T, String> {
+    let journal_path = cookies_path.with_file_name(format!(
+        "{}-journal",
+        cookies_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+    ));
+    let journal_len = fs::metadata(&journal_path).map(|meta| meta.len()).unwrap_or(0);
+    if journal_len > 0 {
+        let recovery_dir = std::env::temp_dir().join(format!(
+            "cockpit-claude-cookies-recover-{}-{}",
+            std::process::id(),
+            now_ts_ms()
+        ));
+        let copied_db = recovery_dir.join("Cookies");
+        if fs::create_dir_all(&recovery_dir).is_ok()
+            && fs::copy(cookies_path, &copied_db).is_ok()
+            && fs::copy(&journal_path, recovery_dir.join("Cookies-journal")).is_ok()
+        {
+            let result = Connection::open(&copied_db)
+                .map_err(|e| {
+                    format!(
+                        "读取 Claude Cookies 失败: path={}, error={}",
+                        copied_db.display(),
+                        e
+                    )
+                })
+                .and_then(|conn| query(&conn));
+            let _ = fs::remove_dir_all(&recovery_dir);
+            return result;
+        }
+        let _ = fs::remove_dir_all(&recovery_dir);
     }
     let conn = Connection::open_with_flags(cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| {
@@ -62,17 +101,26 @@ fn cookies_db_has_required_desktop_session(cookies_path: &Path) -> Result<bool, 
                 e
             )
         })?;
-    let count: i64 = conn
-        .query_row(
-            "select count(distinct name) from cookies \
-             where name in ('sessionKey', 'lastActiveOrg') \
-             and (host_key like '%claude.ai' or host_key like '%claude.com') \
-             and (length(value) > 0 or length(encrypted_value) > 0)",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| format!("查询 Claude Cookies 失败: {}", e))?;
-    Ok(count >= 2)
+    query(&conn)
+}
+
+fn cookies_db_has_required_desktop_session(cookies_path: &Path) -> Result<bool, String> {
+    if !cookies_path.exists() {
+        return Ok(false);
+    }
+    with_cookies_db_readonly(cookies_path, |conn| {
+        let count: i64 = conn
+            .query_row(
+                "select count(distinct name) from cookies \
+                 where name in ('sessionKey', 'lastActiveOrg') \
+                 and (host_key like '%claude.ai' or host_key like '%claude.com') \
+                 and (length(value) > 0 or length(encrypted_value) > 0)",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("查询 Claude Cookies 失败: {}", e))?;
+        Ok(count >= 2)
+    })
 }
 
 fn ensure_desktop_profile_logged_in(profile_dir: &Path) -> Result<(), String> {
@@ -154,61 +202,55 @@ fn desktop_profile_metadata_from_cookies_db(
     source: &str,
 ) -> Result<ClaudeDesktopProfileMetadata, String> {
     let cookies_path = desktop_cookies_path(profile_dir);
-    let conn = Connection::open_with_flags(&cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| {
-            format!(
-                "读取 Claude Cookies 失败: path={}, error={}",
-                cookies_path.display(),
-                e
+    with_cookies_db_readonly(&cookies_path, |conn| {
+        let mut stmt = conn
+            .prepare(
+                "select name, value, coalesce(length(encrypted_value), 0), expires_utc from cookies \
+                 where (host_key like '%claude.ai' or host_key like '%claude.com')",
             )
-        })?;
-    let mut stmt = conn
-        .prepare(
-            "select name, value, coalesce(length(encrypted_value), 0), expires_utc from cookies \
-             where (host_key like '%claude.ai' or host_key like '%claude.com')",
-        )
-        .map_err(|e| format!("查询 Claude Cookies 失败: {}", e))?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)?,
-                row.get::<_, i64>(3)?,
-            ))
+            .map_err(|e| format!("查询 Claude Cookies 失败: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            })
+            .map_err(|e| format!("读取 Claude Cookies 失败: {}", e))?;
+
+        let mut cookie_names = BTreeSet::new();
+        let mut has_session_key = false;
+        let mut has_last_active_org = false;
+        let mut last_active_org = None;
+        let mut session_expires_at = None;
+        for row in rows {
+            let (name, value, encrypted_len, expires_utc) =
+                row.map_err(|e| format!("读取 Claude Cookie 行失败: {}", e))?;
+            let has_value = !value.is_empty() || encrypted_len > 0;
+            if !has_value {
+                continue;
+            }
+            cookie_names.insert(name.clone());
+            if name == "sessionKey" {
+                has_session_key = true;
+                session_expires_at = chromium_cookie_expires_utc_to_unix_ms(expires_utc);
+            } else if name == "lastActiveOrg" {
+                has_last_active_org = true;
+                last_active_org = normalize_non_empty(Some(&value));
+            }
+        }
+
+        Ok(ClaudeDesktopProfileMetadata {
+            source: source.to_string(),
+            has_session_key,
+            has_last_active_org,
+            last_active_org,
+            session_expires_at,
+            cookie_names: cookie_names.into_iter().collect(),
+            web_profile: None,
         })
-        .map_err(|e| format!("读取 Claude Cookies 失败: {}", e))?;
-
-    let mut cookie_names = BTreeSet::new();
-    let mut has_session_key = false;
-    let mut has_last_active_org = false;
-    let mut last_active_org = None;
-    let mut session_expires_at = None;
-    for row in rows {
-        let (name, value, encrypted_len, expires_utc) =
-            row.map_err(|e| format!("读取 Claude Cookie 行失败: {}", e))?;
-        let has_value = !value.is_empty() || encrypted_len > 0;
-        if !has_value {
-            continue;
-        }
-        cookie_names.insert(name.clone());
-        if name == "sessionKey" {
-            has_session_key = true;
-            session_expires_at = chromium_cookie_expires_utc_to_unix_ms(expires_utc);
-        } else if name == "lastActiveOrg" {
-            has_last_active_org = true;
-            last_active_org = normalize_non_empty(Some(&value));
-        }
-    }
-
-    Ok(ClaudeDesktopProfileMetadata {
-        source: source.to_string(),
-        has_session_key,
-        has_last_active_org,
-        last_active_org,
-        session_expires_at,
-        cookie_names: cookie_names.into_iter().collect(),
-        web_profile: None,
     })
 }
 
@@ -619,72 +661,66 @@ fn read_decrypted_desktop_cookie_export(
         return Err(format!("Claude Cookies 不存在: {}", cookies_path.display()));
     }
     let password = read_claude_safe_storage_password()?;
-    let conn = Connection::open_with_flags(&cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| {
-            format!(
-                "读取 Claude Cookies 失败: path={}, error={}",
-                cookies_path.display(),
-                e
+    with_cookies_db_readonly(&cookies_path, |conn| {
+        let mut stmt = conn
+            .prepare(
+                "select host_key, path, name, value, encrypted_value, expires_utc, is_secure, is_httponly \
+                 from cookies \
+                 where (host_key like '%claude.ai' or host_key like '%claude.com') \
+                 and (length(value) > 0 or length(encrypted_value) > 0)",
             )
-        })?;
-    let mut stmt = conn
-        .prepare(
-            "select host_key, path, name, value, encrypted_value, expires_utc, is_secure, is_httponly \
-             from cookies \
-             where (host_key like '%claude.ai' or host_key like '%claude.com') \
-             and (length(value) > 0 or length(encrypted_value) > 0)",
-        )
-        .map_err(|e| format!("查询 Claude Cookies 失败: {}", e))?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, Vec<u8>>(4)?,
-                row.get::<_, i64>(5)?,
-                row.get::<_, i64>(6)?,
-                row.get::<_, i64>(7)?,
-            ))
-        })
-        .map_err(|e| format!("读取 Claude Cookies 失败: {}", e))?;
+            .map_err(|e| format!("查询 Claude Cookies 失败: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Vec<u8>>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, i64>(7)?,
+                ))
+            })
+            .map_err(|e| format!("读取 Claude Cookies 失败: {}", e))?;
 
-    let mut cookies = Vec::new();
-    for row in rows {
-        let (domain, path, name, value, encrypted_value, expires_utc, is_secure, is_httponly) =
-            row.map_err(|e| format!("读取 Claude Cookie 行失败: {}", e))?;
-        if !is_claude_cookie_domain(&domain) {
-            continue;
+        let mut cookies = Vec::new();
+        for row in rows {
+            let (domain, path, name, value, encrypted_value, expires_utc, is_secure, is_httponly) =
+                row.map_err(|e| format!("读取 Claude Cookie 行失败: {}", e))?;
+            if !is_claude_cookie_domain(&domain) {
+                continue;
+            }
+            let cookie_value = if !value.is_empty() {
+                value
+            } else if !encrypted_value.is_empty() {
+                decrypt_chromium_v10_cookie(&domain, &encrypted_value, &password)?
+            } else {
+                String::new()
+            };
+            if cookie_value.is_empty() {
+                continue;
+            }
+            cookies.push(ClaudeDesktopAuthCookie {
+                name,
+                value: cookie_value,
+                domain,
+                path,
+                secure: is_secure != 0,
+                http_only: is_httponly != 0,
+                expiration_date: chromium_cookie_expires_utc_to_unix_ms(expires_utc)
+                    .map(|ms| ms as f64 / 1000.0),
+                same_site: None,
+            });
         }
-        let cookie_value = if !value.is_empty() {
-            value
-        } else if !encrypted_value.is_empty() {
-            decrypt_chromium_v10_cookie(&domain, &encrypted_value, &password)?
-        } else {
-            String::new()
+        let export = ClaudeDesktopAuthCookieExport {
+            cookies,
+            web_profile: None,
         };
-        if cookie_value.is_empty() {
-            continue;
-        }
-        cookies.push(ClaudeDesktopAuthCookie {
-            name,
-            value: cookie_value,
-            domain,
-            path,
-            secure: is_secure != 0,
-            http_only: is_httponly != 0,
-            expiration_date: chromium_cookie_expires_utc_to_unix_ms(expires_utc)
-                .map(|ms| ms as f64 / 1000.0),
-            same_site: None,
-        });
-    }
-    let export = ClaudeDesktopAuthCookieExport {
-        cookies,
-        web_profile: None,
-    };
-    ensure_desktop_auth_export_logged_in(&export)?;
-    Ok(export)
+        ensure_desktop_auth_export_logged_in(&export)?;
+        Ok(export)
+    })
 }
 
 fn is_claude_cookie_domain(domain: &str) -> bool {

@@ -741,3 +741,74 @@ fn desktop_login_component_cleanup_removes_only_owned_cache_dirs() {
             );
         }
     }
+
+fn claude_cookies_fixture_db(dir: &std::path::Path, journal_header: Option<&[u8]>) -> std::path::PathBuf {
+    let db_path = dir.join("Cookies");
+    let conn = Connection::open(&db_path).expect("create cookies db");
+    conn.execute_batch(
+        "create table cookies (name text, host_key text, value text, encrypted_value blob, expires_utc integer); \
+         insert into cookies values ('sessionKey','claude.ai','v',x'00',0); \
+         insert into cookies values ('lastActiveOrg','claude.ai','v',x'00',0);",
+    )
+    .expect("seed cookies");
+    drop(conn);
+    if let Some(header) = journal_header {
+        fs::write(dir.join("Cookies-journal"), header).expect("write journal");
+    }
+    db_path
+}
+
+fn claude_hot_journal_header() -> Vec<u8> {
+    // SQLite journal header: magic(8) + nrec(4, 非 0 才视为热日志) + nonce(4) + 首页大小等。
+    // 零长或 magic 不符的 journal 不会触发回滚，只有热日志才会让只读连接报
+    // "attempt to write a readonly database"（#2696 报告者证据链同款）。
+    let magic: [u8; 8] = [0xd9, 0xd5, 0x05, 0xf9, 0x20, 0xa1, 0x63, 0xd7];
+    let mut header = magic.to_vec();
+    header.extend_from_slice(&3u32.to_be_bytes());
+    header.extend_from_slice(&0x12345678u32.to_be_bytes());
+    header.extend_from_slice(&[0u8; 100]);
+    header
+}
+
+#[test]
+fn cookies_db_read_survives_hot_journal_in_snapshot() {
+    let dir = std::env::temp_dir().join(format!(
+        "cockpit-claude-cookies-hotjournal-{}-{}",
+        std::process::id(),
+        now_ts_ms()
+    ));
+    fs::create_dir_all(&dir).expect("create dir");
+    let db = claude_cookies_fixture_db(&dir, Some(&claude_hot_journal_header()));
+    // 快照带着未回滚的热 journal 时，只读打开 + 首查询必须仍然能完成（#2696）。
+    let got = cookies_db_has_required_desktop_session(&db).expect("hot journal read should not fail");
+    assert!(got, "seeded sessionKey+lastActiveOrg should be detected");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn cookies_db_read_ignores_empty_journal() {
+    let dir = std::env::temp_dir().join(format!(
+        "cockpit-claude-cookies-emptyjournal-{}-{}",
+        std::process::id(),
+        now_ts_ms()
+    ));
+    fs::create_dir_all(&dir).expect("create dir");
+    let db = claude_cookies_fixture_db(&dir, Some(&[]));
+    let got = cookies_db_has_required_desktop_session(&db).expect("empty journal read should not fail");
+    assert!(got, "seeded sessionKey+lastActiveOrg should be detected");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn cookies_db_read_without_journal_still_works() {
+    let dir = std::env::temp_dir().join(format!(
+        "cockpit-claude-cookies-nojournal-{}-{}",
+        std::process::id(),
+        now_ts_ms()
+    ));
+    fs::create_dir_all(&dir).expect("create dir");
+    let db = claude_cookies_fixture_db(&dir, None);
+    let got = cookies_db_has_required_desktop_session(&db).expect("plain read should not fail");
+    assert!(got, "seeded sessionKey+lastActiveOrg should be detected");
+    fs::remove_dir_all(&dir).ok();
+}
