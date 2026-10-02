@@ -8,6 +8,7 @@ import { isCodexApiKeyScopeAccountActive, selectCodexApiKeyScopeAccounts } from 
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 import { formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
+import { CODEX_LOCAL_ACCESS_STATUS_KEYS, resolveCodexLocalAccessRuntimeStatus } from "../utils/codexLocalAccessStatus";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CodexLocalAccessModal } from "../components/CodexLocalAccessModal";
 import { CodexAccountPoolHealthModal } from "../components/CodexAccountPoolHealthModal";
@@ -288,6 +289,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     updatePricingDraft,
     updateTimeoutDraft,
   } = props;
+  const localAccessStatus = resolveCodexLocalAccessRuntimeStatus(collection, state);
   return (
     <div className="codex-api-service-page">
       <div className="page-top-strip">
@@ -346,15 +348,11 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                     </span>
                   )}
                   <span
-                    className={`codex-api-service-status ${state?.running ? "running" : collection?.enabled ? "stopped" : "disabled"}`}
+                    className={`codex-api-service-status ${localAccessStatus}`}
                   >
-                    {collection?.enabled
-                      ? state?.preparing
-                        ? t("instances.status.starting", "启动中")
-                        : state?.running
-                        ? t("codex.localAccess.statusRunning", "运行中")
-                        : t("codex.localAccess.statusStopped", "未运行")
-                      : t("codex.localAccess.statusDisabled", "已停用")}
+                    {collection?.enabled && state?.preparing
+                      ? t("instances.status.starting", "启动中")
+                      : t(CODEX_LOCAL_ACCESS_STATUS_KEYS[localAccessStatus])}
                   </span>
                   {state?.preparing && state.preparationTotal > 0 && (
                     <span className="codex-api-service-current-tag">

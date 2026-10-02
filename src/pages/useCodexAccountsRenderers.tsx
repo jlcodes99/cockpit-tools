@@ -14,6 +14,7 @@ import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CODEX_API_SERVICE_BIND_ID } from "../types/instance";
 import { COCKPIT_API_BASE_URL } from "../utils/codexProviderPresets";
 import { formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
+import { CODEX_LOCAL_ACCESS_STATUS_KEYS, resolveCodexLocalAccessRuntimeStatus } from "../utils/codexLocalAccessStatus";
 import { resolveNewApiQuotaSnapshot } from "../services/modelProviderUsageService";
 import { CODEX_LOCAL_ACCESS_FALLBACK_API_KEY_MASK, formatCockpitApiInteger, formatCockpitApiTokenCount, getCockpitApiStatsRecord, getCockpitApiUsageRecord, getCodexAccountNoteTitle, hasCodexAccountNoteDetails, isPendingOAuthCodexAccount, isSponsorModelProvider, readCockpitApiNumber, readCockpitApiString, resolveApiKeyUsageMode, toCockpitApiRecord, type CockpitApiJsonRecord } from "./codexAccountsControllerModel";
 import type { useCodexAccountsBaseController } from "./useCodexAccountsBaseController";
@@ -1242,20 +1243,11 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   )
             }：${quotaReserveStatus.effectiveRemainingPercent}% / ${quotaReserveStatus.effectiveReservePercent}%`
           : null;
-      const localAccessStatusTone = !localAccessCollection
-        ? "disabled"
-        : localAccessState?.running
-          ? "running"
-          : localAccessCollection.enabled
-            ? "stopped"
-            : "disabled";
-      const localAccessStatusText = !localAccessCollection
-        ? t("codex.localAccess.statusDisabled", "已停用")
-        : localAccessState?.running
-          ? t("codex.localAccess.statusRunning", "运行中")
-          : localAccessCollection.enabled
-            ? t("codex.localAccess.statusStopped", "未运行")
-            : t("codex.localAccess.statusDisabled", "已停用");
+      const localAccessStatusTone = resolveCodexLocalAccessRuntimeStatus(
+        localAccessCollection,
+        localAccessState,
+      );
+      const localAccessStatusText = t(CODEX_LOCAL_ACCESS_STATUS_KEYS[localAccessStatusTone]);
       const isLocalAccessCurrent = localAccessLaunchCurrent;
       const localAccessMemberCountLabel = t("codex.localAccess.accountCount", {
         count: localAccessState?.memberCount ?? 0,

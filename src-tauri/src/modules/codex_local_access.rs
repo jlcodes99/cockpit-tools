@@ -56,4 +56,5 @@ mod tests {
     include!("codex_local_access_tests_takeover.rs");
     include!("codex_local_access_tests_takeover_maintenance.rs");
     include!("codex_local_access_tests_internal_service.rs");
+    include!("codex_local_access_tests_service_transitions.rs");
 }
