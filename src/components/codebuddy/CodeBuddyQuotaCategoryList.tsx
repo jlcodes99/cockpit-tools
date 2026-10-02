@@ -31,6 +31,28 @@ function getQuotaClass(remainPercent: number | null): string {
   return 'high';
 }
 
+/**
+ * 详情列表排序：
+ * 1) 未用完的 (remain > 0) 排到最上面，用光了的沉到底部
+ * 2) 同组内最老（最早到期、最久没被用完）的排最上面，优先用掉避免过期浪费
+ * 3) 剩余量多的排前面做兜底
+ */
+function compareQuotaItems(a: CodebuddyOfficialQuotaResource, b: CodebuddyOfficialQuotaResource): number {
+  const aUnused = (a.remain ?? 0) > 0;
+  const bUnused = (b.remain ?? 0) > 0;
+  if (aUnused !== bUnused) return aUnused ? -1 : 1;
+
+  const aExp = a.expireAt ?? 0;
+  const bExp = b.expireAt ?? 0;
+  if (aExp !== bExp) return aExp - bExp;
+
+  return (b.remain ?? 0) - (a.remain ?? 0);
+}
+
+function buildItemKey(groupKey: string, item: CodebuddyOfficialQuotaResource, idx: number): string {
+  return `${groupKey}-${item.packageCode ?? 'x'}-${item.packageName ?? 'x'}-${item.expireAt ?? 'x'}-${idx}`;
+}
+
 export function CodeBuddyQuotaCategoryList({ groups, formatNumber, formatDateTime }: CodeBuddyQuotaCategoryListProps) {
   const { t } = useTranslation();
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
@@ -101,17 +123,20 @@ export function CodeBuddyQuotaCategoryList({ groups, formatNumber, formatDateTim
               />
             </div>
 
-            {/* 详情列表 - 展开时显示 */}
+            {/* 详情列表 - 展开时显示（未用完/最新发放的排前面，用光的沉底） */}
             {isExpanded && hasDetails && (
               <div className="quota-category-details">
-                {group.items.map((item, idx) => (
-                  <QuotaItemDetail
-                    key={`${group.key}-${idx}`}
-                    item={item}
-                    formatNumber={formatNumber}
-                    formatDateTime={formatDateTime}
-                  />
-                ))}
+                {group.items
+                  .slice()
+                  .sort(compareQuotaItems)
+                  .map((item, idx) => (
+                    <QuotaItemDetail
+                      key={buildItemKey(group.key, item, idx)}
+                      item={item}
+                      formatNumber={formatNumber}
+                      formatDateTime={formatDateTime}
+                    />
+                  ))}
               </div>
             )}
           </div>
