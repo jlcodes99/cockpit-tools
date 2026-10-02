@@ -446,12 +446,14 @@ export async function importSessions(
   importFilePath: string,
   targetInstanceId: string,
   sessionIds: string[],
+  cwdMappings: Record<string, string>,
   transferId?: string | null,
 ): Promise<CodexSessionImportSummary> {
   return await invoke("codex_import_sessions", {
     importFilePath,
     targetInstanceId,
     sessionIds,
+    cwdMappings,
     transferId: transferId ?? null,
   });
 }

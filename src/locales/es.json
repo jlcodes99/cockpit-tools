@@ -3328,6 +3328,9 @@
       "importModal": {
         "title": "Importar sesiones",
         "hint": "El paquete de sesiones solo importa archivos rollout y entradas session_index. No incluye cuentas, tokens, API keys ni ajustes de la app; las sesiones con el mismo ID en la instancia destino se omiten.",
+        "cwdMappingTitle": "Asignación de rutas del proyecto (opcional)",
+        "cwdMappingHint": "Asigna cada directorio de trabajo de origen a la ruta de un proyecto ya añadido a Codex en este equipo. Déjalo vacío para conservar la ruta de origen.",
+        "cwdTargetPlaceholder": "Introduce la ruta absoluta de un proyecto en este equipo",
         "noTarget": "No hay ninguna instancia Codex disponible para importar",
         "noPackage": "Selecciona primero un paquete de sesiones",
         "pickOne": "Selecciona al menos una sesión importable",

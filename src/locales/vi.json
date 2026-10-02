@@ -3328,6 +3328,9 @@
       "importModal": {
         "title": "Nhập phiên",
         "hint": "Gói phiên chỉ nhập các tệp rollout và mục session_index. Không bao gồm tài khoản, token, API key hoặc cài đặt ứng dụng; phiên có cùng ID trong instance đích sẽ bị bỏ qua.",
+        "cwdMappingTitle": "Ánh xạ đường dẫn dự án (tùy chọn)",
+        "cwdMappingHint": "Ánh xạ thư mục làm việc nguồn sang đường dẫn dự án đã được thêm vào Codex trên máy tính này. Để trống để giữ nguyên đường dẫn nguồn.",
+        "cwdTargetPlaceholder": "Nhập đường dẫn tuyệt đối đến dự án trên máy tính này",
         "noTarget": "Không có instance Codex nào khả dụng để nhập",
         "noPackage": "Trước tiên hãy chọn gói phiên",
         "pickOne": "Chọn ít nhất một phiên có thể nhập",

@@ -3328,6 +3328,9 @@
       "importModal": {
         "title": "세션 가져오기",
         "hint": "세션 패키지는 rollout 파일과 session_index 항목만 가져옵니다. 계정, Token, API Key, 앱 설정은 포함되지 않으며 대상 인스턴스에 같은 ID 세션이 있으면 건너뜁니다.",
+        "cwdMappingTitle": "프로젝트 경로 매핑(선택 사항)",
+        "cwdMappingHint": "원본 작업 디렉터리를 이 컴퓨터에서 Codex에 이미 추가한 프로젝트 경로에 연결합니다. 원본 경로를 유지하려면 비워 두세요.",
+        "cwdTargetPlaceholder": "이 컴퓨터에 있는 프로젝트의 절대 경로 입력",
         "noTarget": "가져올 수 있는 Codex 인스턴스가 없습니다",
         "noPackage": "먼저 세션 패키지를 선택하세요",
         "pickOne": "가져올 수 있는 세션을 하나 이상 선택하세요",

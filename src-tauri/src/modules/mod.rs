@@ -52,6 +52,7 @@ pub mod codex_temp_login;
 pub(crate) mod codex_quota_refresh_scheduler;
 pub(crate) mod codex_session_display;
 pub mod codex_session_file_time;
+pub(crate) mod codex_session_import_paths;
 pub mod codex_session_history_sanitize;
 pub mod codex_session_rollout_sanitize;
 pub mod codex_session_manager;

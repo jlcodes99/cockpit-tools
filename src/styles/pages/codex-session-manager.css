@@ -1253,6 +1253,70 @@
   color: var(--text-secondary);
 }
 
+.codex-session-import-mappings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+}
+
+.codex-session-import-mappings__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.codex-session-import-mappings__intro p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.codex-session-import-mappings__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codex-session-import-mappings__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.codex-session-import-mappings__source {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.codex-session-import-mappings__target {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.codex-session-import-mappings__target:focus {
+  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  border-color: var(--primary);
+}
+
 .codex-session-export-modal__hint {
   margin: 0;
   font-size: 13px;
@@ -1965,6 +2029,10 @@
   .codex-session-import-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .codex-session-import-mappings__row {
+    grid-template-columns: 1fr;
   }
 
   .codex-session-import-row__right {

@@ -3506,6 +3506,9 @@
       "importModal": {
         "title": "Impor sesi",
         "hint": "Paket sesi hanya mengimpor file rollout dan entri session_index. Akun, token, API key, dan pengaturan aplikasi tidak disertakan; sesi dengan ID yang sama di instance target akan dilewati.",
+        "cwdMappingTitle": "Pemetaan jalur proyek (opsional)",
+        "cwdMappingHint": "Petakan direktori kerja sumber ke jalur proyek yang sudah ditambahkan ke Codex di komputer ini. Kosongkan untuk mempertahankan jalur sumber.",
+        "cwdTargetPlaceholder": "Masukkan jalur absolut proyek di komputer ini",
         "noTarget": "Tidak ada instance Codex yang tersedia untuk impor",
         "noPackage": "Pilih paket sesi terlebih dahulu",
         "pickOne": "Pilih setidaknya satu sesi yang dapat diimpor",
