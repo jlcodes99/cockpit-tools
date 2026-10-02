@@ -54,6 +54,8 @@ fn resolve_provider_current_account_id(platform: &str) -> Result<Option<String>,
             Ok(crate::modules::github_copilot_account::resolve_current_account_id(&accounts))
         }
         "zed" => Ok(crate::modules::zed_account::resolve_current_account_id()),
+        // ZCode 仅做额度展示（凭证只读），没有“当前账号”概念
+        "zcode" => Ok(None),
         other => Err(format!("不支持的平台: {}", other)),
     }
 }

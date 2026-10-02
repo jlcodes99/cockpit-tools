@@ -12,6 +12,7 @@ import * as qoderService from './qoderService';
 import * as traeService from './traeService';
 import * as workbuddyService from './workbuddyService';
 import * as zedService from './zedService';
+import * as zcodeService from '../services/zcodeService';
 
 type AccountWithId = { id: string };
 
@@ -36,6 +37,11 @@ const PLATFORM_ADAPTERS: Record<PlatformId, TransferAdapter> = {
     listAccounts: zedService.listZedAccounts,
     exportAccounts: zedService.exportZedAccounts,
     importFromJson: zedService.importZedFromJson,
+  },
+  zcode: {
+    listAccounts: zcodeService.listZcodeAccounts,
+    exportAccounts: zcodeService.exportZcodeAccounts,
+    importFromJson: zcodeService.importZcodeFromJson,
   },
   'github-copilot': {
     listAccounts: githubCopilotService.listGitHubCopilotAccounts,

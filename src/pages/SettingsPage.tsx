@@ -110,6 +110,7 @@ interface GeneralConfig {
   qoder_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
   zed_auto_refresh_minutes: number;
+  zcode_auto_refresh_minutes: number;
   codebuddy_quota_alert_enabled: boolean;
   codebuddy_quota_alert_threshold: number;
   codebuddy_cn_quota_alert_enabled: boolean;
@@ -193,6 +194,7 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   trae: 10,
   workbuddy: 11,
   zed: 12,
+  zcode: 13,
 };
 type UpdateCheckSource = 'auto' | 'manual';
 type UpdateCheckFinishedDetail = {
@@ -363,6 +365,7 @@ export function SettingsPage() {
   const [qoderAutoRefresh, setQoderAutoRefresh] = useState('10');
   const [traeAutoRefresh, setTraeAutoRefresh] = useState('10');
   const [zedAutoRefresh, setZedAutoRefresh] = useState('10');
+  const [zcodeAutoRefresh, setZcodeAutoRefresh] = useState('10');
   const [currentAccountRefreshMinutes, setCurrentAccountRefreshMinutes] = useState<
     Record<CurrentAccountRefreshPlatform, string>
   >(() =>
@@ -392,6 +395,7 @@ export function SettingsPage() {
   const [traeAutoRefreshCustomMode, setTraeAutoRefreshCustomMode] = useState(false);
   const [traeQuotaAlertThresholdCustomMode, setTraeQuotaAlertThresholdCustomMode] = useState(false);
   const [zedAutoRefreshCustomMode, setZedAutoRefreshCustomMode] = useState(false);
+  const [zcodeAutoRefreshCustomMode, setZcodeAutoRefreshCustomMode] = useState(false);
   const [zedQuotaAlertThresholdCustomMode, setZedQuotaAlertThresholdCustomMode] = useState(false);
   const [codebuddyCnQuotaAlertThresholdCustomMode, setCodebuddyCnQuotaAlertThresholdCustomMode] = useState(false);
   const [workbuddyQuotaAlertThresholdCustomMode, setWorkbuddyQuotaAlertThresholdCustomMode] = useState(false);
@@ -709,6 +713,7 @@ export function SettingsPage() {
       !qoderAutoRefresh.trim() ||
       !traeAutoRefresh.trim() ||
       !zedAutoRefresh.trim() ||
+      !zcodeAutoRefresh.trim() ||
       !cursorAutoRefresh.trim() ||
       !geminiAutoRefresh.trim()
     ) {
@@ -726,6 +731,7 @@ export function SettingsPage() {
     const qoderAutoRefreshNum = parseInt(qoderAutoRefresh, 10) || -1;
     const traeAutoRefreshNum = parseInt(traeAutoRefresh, 10) || -1;
     const zedAutoRefreshNum = parseInt(zedAutoRefresh, 10) || -1;
+    const zcodeAutoRefreshNum = parseInt(zcodeAutoRefresh, 10) || -1;
     const cursorAutoRefreshNum = parseInt(cursorAutoRefresh, 10) || -1;
     const geminiAutoRefreshNum = parseInt(geminiAutoRefresh, 10) || -1;
     const parsedUiScale = Number.parseFloat(uiScale);
@@ -770,6 +776,7 @@ export function SettingsPage() {
           qoderAutoRefreshMinutes: qoderAutoRefreshNum,
           traeAutoRefreshMinutes: traeAutoRefreshNum,
           zedAutoRefreshMinutes: zedAutoRefreshNum,
+          zcodeAutoRefreshMinutes: zcodeAutoRefreshNum,
           cursorAutoRefreshMinutes: cursorAutoRefreshNum,
           geminiAutoRefreshMinutes: geminiAutoRefreshNum,
           closeBehavior,
@@ -880,6 +887,7 @@ export function SettingsPage() {
     kiroAutoRefresh,
     traeAutoRefresh,
     zedAutoRefresh,
+    zcodeAutoRefresh,
     workbuddyAutoRefresh,
     qoderAutoRefresh,
     cursorAutoRefresh,
@@ -1198,6 +1206,7 @@ export function SettingsPage() {
       setQoderAutoRefresh(String(config.qoder_auto_refresh_minutes ?? 10));
       setTraeAutoRefresh(String(config.trae_auto_refresh_minutes ?? 10));
       setZedAutoRefresh(String(config.zed_auto_refresh_minutes ?? 10));
+      setZcodeAutoRefresh(String(config.zcode_auto_refresh_minutes ?? 10));
       setCurrentAccountRefreshMinutes(
         toCurrentAccountRefreshMinutesStringMap(loadCurrentAccountRefreshMinutesMap()),
       );
@@ -1541,6 +1550,9 @@ export function SettingsPage() {
         return parseRefresh(traeAutoRefresh) > 0;
       case 'zed':
         return parseRefresh(zedAutoRefresh) > 0;
+      // ZCode 无“当前账号”概念，不提供当前账号单独刷新
+      case 'zcode':
+        return false;
     }
   };
 
@@ -1651,6 +1663,7 @@ export function SettingsPage() {
   const qoderAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(qoderAutoRefresh);
   const traeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeAutoRefresh);
   const zedAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(zedAutoRefresh);
+  const zcodeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(zcodeAutoRefresh);
   const cursorAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(cursorAutoRefresh);
   const geminiAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(geminiAutoRefresh);
   const autoSwitchThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(autoSwitchThreshold);
@@ -4424,6 +4437,77 @@ export function SettingsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div style={{ order: platformSettingsOrder.zcode }}>
+                <div className="group-title">{t('quickSettings.zcode.title', 'ZCode 设置')}</div>
+                <div className="settings-group">
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('settings.general.zcodeAutoRefresh', 'ZCode 自动刷新配额')}</div>
+                      <div className="row-desc">{t('settings.general.zcodeAutoRefreshDesc', '后台自动更新频率')}</div>
+                    </div>
+                    <div className="row-control">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {zcodeAutoRefreshCustomMode ? (
+                          <div className="settings-inline-input" style={{ minWidth: '120px', width: 'auto' }}>
+                            <input
+                              type="number"
+                              min={1}
+                              max={999}
+                              className="settings-select settings-select--input-mode settings-select--with-unit"
+                              value={zcodeAutoRefresh}
+                              placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                              onChange={(e) => setZcodeAutoRefresh(sanitizeNumberInput(e.target.value))}
+                              onBlur={() => {
+                                const normalized = normalizeNumberInput(zcodeAutoRefresh, 1, 999);
+                                setZcodeAutoRefresh(normalized);
+                                setZcodeAutoRefreshCustomMode(false);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const normalized = normalizeNumberInput(zcodeAutoRefresh, 1, 999);
+                                  setZcodeAutoRefresh(normalized);
+                                  setZcodeAutoRefreshCustomMode(false);
+                                }
+                              }}
+                            />
+                            <span className="settings-input-unit">{t('settings.general.minutes')}</span>
+                          </div>
+                        ) : (
+                          <select
+                            className="settings-select"
+                            style={{ minWidth: '120px', width: 'auto' }}
+                            value={zcodeAutoRefresh}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'custom') {
+                                setZcodeAutoRefreshCustomMode(true);
+                                setZcodeAutoRefresh(zcodeAutoRefresh !== '-1' ? zcodeAutoRefresh : '1');
+                                return;
+                              }
+                              setZcodeAutoRefreshCustomMode(false);
+                              setZcodeAutoRefresh(val);
+                            }}
+                          >
+                            {!zcodeAutoRefreshIsPreset && (
+                              <option value={zcodeAutoRefresh}>
+                                {zcodeAutoRefresh} {t('settings.general.minutes')}
+                              </option>
+                            )}
+                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
+                            <option value="2">2 {t('settings.general.minutes')}</option>
+                            <option value="5">5 {t('settings.general.minutes')}</option>
+                            <option value="10">10 {t('settings.general.minutes')}</option>
+                            <option value="15">15 {t('settings.general.minutes')}</option>
+                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

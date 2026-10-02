@@ -412,6 +412,7 @@ mod imp {
             PlatformId::Antigravity => "#67c27b",
             PlatformId::Codex => "#1976ff",
             PlatformId::Zed => "#8b92a1",
+            PlatformId::Zcode => "#38bdf8",
             PlatformId::GitHubCopilot => "#8b92a1",
             PlatformId::Windsurf => "#21c7b7",
             PlatformId::Kiro => "#8b92a1",
@@ -2648,6 +2649,7 @@ mod imp {
             PlatformId::CodebuddyCn => build_codebuddy_cn_cards(lang),
             PlatformId::Workbuddy => build_workbuddy_cards(lang),
             PlatformId::Zed => build_zed_cards(lang),
+            PlatformId::Zcode => build_zcode_cards(lang),
         }
     }
 
@@ -3746,6 +3748,87 @@ mod imp {
         (cards, current_id, None)
     }
 
+    fn build_zcode_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let mut accounts = modules::zcode_account::list_accounts();
+        accounts
+            .sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
+        let cards = accounts
+            .into_iter()
+            .map(|account| {
+                let mut rows = Vec::new();
+                for item in account.quota_items.iter().take(3) {
+                    let used_percent = item.percent_used.map(|value| value.round() as i32);
+                    let remaining_percent = used_percent.map(|value| (100 - value).clamp(0, 100));
+                    let value = remaining_percent
+                        .map(|value| {
+                            translate_or(
+                                lang,
+                                "common.shared.remaining",
+                                "剩余 {{value}}",
+                                &[("value", format!("{value}%").as_str())],
+                            )
+                        })
+                        .unwrap_or_else(|| "--".to_string());
+                    let used = format_quota_number(item.used.unwrap_or(0.0));
+                    let total = format_quota_number(item.total.unwrap_or(0.0));
+                    rows.push(make_progress_row(
+                        item.name.clone(),
+                        value,
+                        (100 - remaining_percent.unwrap_or(100)).clamp(0, 100),
+                        Some(translate_or(
+                            lang,
+                            "zcode.page.usedOfTotal",
+                            "{{used}} / {{total}}",
+                            &[("used", used.as_str()), ("total", total.as_str())],
+                        )),
+                        cursor_usage_tone(used_percent.unwrap_or(0)),
+                    ));
+                }
+                if let Some(expire) = account
+                    .plan_expire
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                {
+                    rows.push(make_text_row(
+                        translate_or(lang, "zcode.page.planExpire", "套餐有效期", &[]),
+                        expire.to_string(),
+                        None,
+                    ));
+                }
+                if let Some(err) = account
+                    .quota_query_last_error
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                {
+                    rows.push(make_text_row(
+                        translate_or(lang, "common.shared.quota.queryFailed", "查询失败", &[]),
+                        err.to_string(),
+                        None,
+                    ));
+                }
+                AccountCard {
+                    id: account.id.clone(),
+                    title: account
+                        .display_name
+                        .clone()
+                        .filter(|text| !text.trim().is_empty())
+                        .unwrap_or(account.name),
+                    plan: account.plan_tier,
+                    updated_at: display_updated_at(
+                        account.usage_updated_at,
+                        account.last_used,
+                        account.created_at,
+                    ),
+                    quota_rows: rows,
+                }
+            })
+            .collect();
+        // ZCode 无“当前账号”概念（凭证只读），按最近刷新排序展示
+        (cards, None, None)
+    }
+
     fn build_zed_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
         let mut accounts = modules::zed_account::list_accounts();
         let current_id = modules::zed_account::resolve_current_account_id();
@@ -3953,6 +4036,14 @@ mod imp {
                         .map(|_| 0)
                 }
                 (PlatformId::Zed, None) => commands::zed::refresh_all_zed_tokens(app.clone()).await,
+                (PlatformId::Zcode, Some(account_id)) => {
+                    commands::zcode::refresh_zcode_quota(app.clone(), account_id)
+                        .await
+                        .map(|_| 0)
+                }
+                (PlatformId::Zcode, None) => {
+                    commands::zcode::refresh_all_zcode_quotas(app.clone()).await
+                }
             };
             let _ = refresh_result;
             refresh_native_menu_snapshot();
@@ -4028,6 +4119,8 @@ mod imp {
                 PlatformId::Zed => commands::zed::inject_zed_account(app, account_id)
                     .await
                     .map(|_| ()),
+                // ZCode 凭证只读（仅额度展示），不支持切换
+                PlatformId::Zcode => Err("ZCode 暂不支持切换账号".to_string()),
             };
         });
     }

@@ -4,6 +4,7 @@ export type PlatformId =
   | 'antigravity'
   | 'codex'
   | 'zed'
+  | 'zcode'
   | 'github-copilot'
   | 'windsurf'
   | 'kiro'
@@ -19,6 +20,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'antigravity',
   'codex',
   'zed',
+  'zcode',
   'github-copilot',
   'windsurf',
   'kiro',
@@ -45,6 +47,7 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   antigravity: 'overview',
   codex: 'codex',
   zed: 'zed',
+  zcode: 'zcode',
   'github-copilot': 'github-copilot',
   windsurf: 'windsurf',
   kiro: 'kiro',

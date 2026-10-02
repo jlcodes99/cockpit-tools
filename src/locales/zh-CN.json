@@ -304,7 +304,8 @@
     "switchClassicLayoutDesc": "经典布局将展示完整平台导航，并支持可折叠侧边栏。你可在“设置 > 通用 > 侧边栏布局”中随时切换回原始布局。",
     "switchClassicLayoutDontAskAgain": "不再提示此引导",
     "switchClassicLayoutConfirm": "立即切换",
-    "2faManager": "2FA 管理"
+    "2faManager": "2FA 管理",
+    "zcode": "ZCode"
   },
   "platformLayout": {
     "title": "平台布局",
@@ -850,6 +851,8 @@
       "qoderPathReset": "重置默认",
       "zedAutoRefresh": "Zed 自动刷新配额",
       "zedAutoRefreshDesc": "后台自动更新频率",
+      "zcodeAutoRefresh": "ZCode 自动刷新配额",
+      "zcodeAutoRefreshDesc": "后台自动更新频率",
       "zedAppPath": "Zed 启动路径",
       "zedAppPathDesc": "留空则使用默认路径",
       "zedAppPathPlaceholder": "默认路径",
@@ -2835,6 +2838,9 @@
       "title": "Zed 设置",
       "appPath": "Zed 路径"
     },
+    "zcode": {
+      "title": "ZCode 设置"
+    },
     "trae": {
       "title": "Trae 设置",
       "appPath": "Trae 路径"
@@ -3596,6 +3602,21 @@
     "sort": {
       "tokenSpend": "按 Token Spend"
     }
+  },
+  "zcode": {
+    "flowNotice": {
+      "title": "ZCode 额度说明（点击展开/收起）",
+      "desc": "导入本机已有的 ZCode 账号并展示各账号的 Coding/Start Plan 额度。账号来源：zcode-switch 快照（~/.zcode-switch/accounts）或本机已登录的 ZCode 凭证（~/.zcode/v2/credentials.json）。",
+      "permission": "权限范围：只读取本机 ZCode 凭证文件（支持 enc:v1 加密值解密），不写入、不修改 ZCode 配置。",
+      "network": "网络范围：额度查询直连官方接口（open.bigmodel.cn / zcode.z.ai），不上传本地数据。",
+      "noSwitch": "当前版本仅支持额度展示，不支持在应用内切换 ZCode 账号。"
+    },
+    "search": "搜索 ZCode 账号...",
+    "importLocal": "从本机导入",
+    "noAccounts": "暂无 ZCode 账号",
+    "emptyHint": "需要本机存在 zcode-switch 账号快照（~/.zcode-switch/accounts）或已登录的 ZCode（~/.zcode/v2/credentials.json）。",
+    "planExpire": "套餐有效期",
+    "usedOfTotal": "{{used}} / {{total}}"
   },
   "trae": {
     "title": "Trae 账号管理",

@@ -304,7 +304,8 @@
     "switchClassicLayoutDesc": "Tata letak klasik menampilkan navigasi platform secara lengkap dan mendukung penciutan bilah sisi. Anda dapat beralih kembali kapan saja di Pengaturan > Umum > Tata Letak Bilah Sisi.",
     "switchClassicLayoutDontAskAgain": "Jangan tampilkan pesan ini lagi",
     "switchClassicLayoutConfirm": "Beralih sekarang",
-    "2faManager": "2FA"
+    "2faManager": "2FA",
+    "zcode": "ZCode"
   },
   "platformLayout": {
     "title": "Tata Letak Platform",
@@ -737,6 +738,8 @@
       "qoderPathReset": "Atur ulang ke bawaan",
       "zedAutoRefresh": "Penyegaran Otomatis Kuota Zed",
       "zedAutoRefreshDesc": "Frekuensi pembaruan latar belakang",
+      "zcodeAutoRefresh": "ZCode auto refresh quota",
+      "zcodeAutoRefreshDesc": "Background auto update frequency",
       "zedAppPath": "Jalur Peluncuran Zed",
       "zedAppPathDesc": "Biarkan kosong untuk menggunakan jalur bawaan",
       "zedAppPathPlaceholder": "Jalur bawaan",
@@ -2830,6 +2833,9 @@
       "title": "Zed Settings",
       "appPath": "Zed Path"
     },
+    "zcode": {
+      "title": "ZCode settings"
+    },
     "trae": {
       "title": "Trae Settings",
       "appPath": "Trae Path"
@@ -3596,6 +3602,21 @@
     "sort": {
       "tokenSpend": "Urutkan berdasarkan Token Spend"
     }
+  },
+  "zcode": {
+    "flowNotice": {
+      "title": "ZCode quota notice (click to expand/collapse)",
+      "desc": "Import existing ZCode accounts from this machine and show each account's Coding/Start Plan quota. Sources: zcode-switch snapshots (~/.zcode-switch/accounts) or the logged-in ZCode credentials (~/.zcode/v2/credentials.json).",
+      "permission": "Permissions: read-only access to local ZCode credential files (supports enc:v1 encrypted values). ZCode configuration is never written or modified.",
+      "network": "Network: quota queries go directly to official endpoints (open.bigmodel.cn / zcode.z.ai). No local data is uploaded.",
+      "noSwitch": "This version only shows quota; switching ZCode accounts inside the app is not supported."
+    },
+    "search": "Search ZCode accounts...",
+    "importLocal": "Import from this machine",
+    "noAccounts": "No ZCode accounts yet",
+    "emptyHint": "Requires zcode-switch account snapshots (~/.zcode-switch/accounts) or a logged-in ZCode (~/.zcode/v2/credentials.json) on this machine.",
+    "planExpire": "Plan expires",
+    "usedOfTotal": "{{used}} / {{total}}"
   },
   "trae": {
     "title": "Akun Trae",

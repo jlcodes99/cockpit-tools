@@ -258,7 +258,8 @@
     "switchClassicLayoutDesc": "Klasické rozvržení zobrazuje celou navigaci platforem a podporuje sbalení postranního panelu. Kdykoli se můžete vrátit v Nastavení > Obecné > Rozvržení postranního panelu.",
     "switchClassicLayoutDontAskAgain": "Toto upozornění už nezobrazovat",
     "switchClassicLayoutConfirm": "Přepnout nyní",
-    "2faManager": "Správa 2FA"
+    "2faManager": "Správa 2FA",
+    "zcode": "ZCode"
   },
   "platformLayout": {
     "title": "Rozložení platforem",
@@ -677,6 +678,8 @@
       "ghcpLaunchOnSwitch": "Při přepnutí GitHub Copilot automaticky spustit GitHub Copilot App",
       "zedAutoRefresh": "Automatické obnovení kvóty Zed",
       "zedAutoRefreshDesc": "Frekvence aktualizace na pozadí",
+      "zcodeAutoRefresh": "ZCode auto refresh quota",
+      "zcodeAutoRefreshDesc": "Background auto update frequency",
       "zedAppPath": "Spouštěcí cesta Zed",
       "zedAppPathDesc": "Ponechte prázdné pro výchozí cestu",
       "zedAppPathPlaceholder": "Výchozí cesta",
@@ -2695,6 +2698,9 @@
       "title": "Nastavení Zed",
       "appPath": "Cesta k Zed"
     },
+    "zcode": {
+      "title": "ZCode settings"
+    },
     "filterPersistence": {
       "title": "Paměť filtrů",
       "enable": "Pamatovat filtry přehledu účtů (bez vyhledávání)",
@@ -3746,6 +3752,21 @@
     "sort": {
       "tokenSpend": "Seřadit podle spotřeby tokenů"
     }
+  },
+  "zcode": {
+    "flowNotice": {
+      "title": "ZCode quota notice (click to expand/collapse)",
+      "desc": "Import existing ZCode accounts from this machine and show each account's Coding/Start Plan quota. Sources: zcode-switch snapshots (~/.zcode-switch/accounts) or the logged-in ZCode credentials (~/.zcode/v2/credentials.json).",
+      "permission": "Permissions: read-only access to local ZCode credential files (supports enc:v1 encrypted values). ZCode configuration is never written or modified.",
+      "network": "Network: quota queries go directly to official endpoints (open.bigmodel.cn / zcode.z.ai). No local data is uploaded.",
+      "noSwitch": "This version only shows quota; switching ZCode accounts inside the app is not supported."
+    },
+    "search": "Search ZCode accounts...",
+    "importLocal": "Import from this machine",
+    "noAccounts": "No ZCode accounts yet",
+    "emptyHint": "Requires zcode-switch account snapshots (~/.zcode-switch/accounts) or a logged-in ZCode (~/.zcode/v2/credentials.json) on this machine.",
+    "planExpire": "Plan expires",
+    "usedOfTotal": "{{used}} / {{total}}"
   },
   "floatingCard": {
     "selectPlatform": "Přepnout platformu",

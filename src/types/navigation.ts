@@ -4,6 +4,7 @@ export type Page =
   | 'overview'
   | 'codex'
   | 'zed'
+  | 'zcode'
   | 'github-copilot'
   | 'windsurf'
   | 'kiro'

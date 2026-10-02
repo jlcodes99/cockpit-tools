@@ -13,6 +13,7 @@ import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
+import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import {
   loadCurrentAccountRefreshMinutesMap,
   type CurrentAccountRefreshPlatform,
@@ -39,6 +40,7 @@ interface GeneralConfig {
   qoder_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
   zed_auto_refresh_minutes: number;
+  zcode_auto_refresh_minutes: number;
   auto_switch_enabled: boolean;
   codex_auto_switch_enabled?: boolean;
   codex_quota_alert_enabled?: boolean;
@@ -141,6 +143,7 @@ export function useAutoRefresh() {
   const refreshAllZedTokens = useZedAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentZedAccountId = useZedAccountStore((state) => state.fetchCurrentAccountId);
   const refreshZedToken = useZedAccountStore((state) => state.refreshToken);
+  const refreshAllZcodeQuotas = useZcodeAccountStore((state) => state.refreshAllTokens);
 
   const agRefreshingRef = useRef(false);
   const agCurrentRefreshingRef = useRef(false);
@@ -168,6 +171,8 @@ export function useAutoRefresh() {
   const traeCurrentRefreshingRef = useRef(false);
   const zedRefreshingRef = useRef(false);
   const zedCurrentRefreshingRef = useRef(false);
+  const zcodeRefreshingRef = useRef(false);
+  const zcodeCurrentRefreshingRef = useRef(false);
 
   const schedulerRef = useRef<AutoRefreshSchedulerHandle | null>(null);
   const setupRunningRef = useRef(false);
@@ -280,6 +285,7 @@ export function useAutoRefresh() {
                     qoderAutoRefreshMinutes: config.qoder_auto_refresh_minutes,
                     traeAutoRefreshMinutes: config.trae_auto_refresh_minutes,
                     zedAutoRefreshMinutes: config.zed_auto_refresh_minutes,
+                    zcodeAutoRefreshMinutes: config.zcode_auto_refresh_minutes,
                     closeBehavior: config.close_behavior || 'ask',
                     opencodeAppPath: config.opencode_app_path ?? '',
                     antigravityAppPath: config.antigravity_app_path ?? '',
@@ -543,6 +549,19 @@ export function useAutoRefresh() {
                 await runProviderCurrentRefresh(fetchCurrentZedAccountId, refreshZedToken);
               },
             },
+            {
+              key: 'zcode',
+              label: 'ZCode',
+              intervalMinutes: config.zcode_auto_refresh_minutes,
+              currentMinutes: currentRefreshMinutesMap.zcode,
+              fullRefreshingRef: zcodeRefreshingRef,
+              currentRefreshingRef: zcodeCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await refreshAllZcodeQuotas();
+              },
+              // ZCode 无“当前账号”概念，当前账号刷新为空操作
+              runCurrentRefresh: async () => {},
+            },
           ];
 
           const tasks: AutoRefreshSchedulerTask[] = [];
@@ -642,6 +661,7 @@ export function useAutoRefresh() {
     refreshAllWindsurfTokens,
     refreshAllWorkbuddyTokens,
     refreshAllZedTokens,
+    refreshAllZcodeQuotas,
     refreshCodebuddyCnToken,
     refreshCodebuddyToken,
     refreshCursorToken,

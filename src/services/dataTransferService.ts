@@ -47,6 +47,7 @@ import {
 import * as accountService from './accountService';
 import * as codexService from './codexService';
 import * as zedService from './zedService';
+import * as zcodeService from './zcodeService';
 import * as githubCopilotService from './githubCopilotService';
 import * as windsurfService from './windsurfService';
 import * as kiroService from './kiroService';
@@ -253,6 +254,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   antigravity: async () => (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
   codex: async () => (await codexService.listCodexAccounts()) as unknown as TransferAccountRecord[],
   zed: async () => (await zedService.listZedAccounts()) as unknown as TransferAccountRecord[],
+  zcode: async () => (await zcodeService.listZcodeAccounts()) as unknown as TransferAccountRecord[],
   'github-copilot': async () =>
     (await githubCopilotService.listGitHubCopilotAccounts()) as unknown as TransferAccountRecord[],
   windsurf: async () => (await windsurfService.listWindsurfAccounts()) as unknown as TransferAccountRecord[],
@@ -271,6 +273,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   antigravity: accountService.importFromJson,
   codex: codexService.importCodexFromJson,
   zed: zedService.importZedFromJson,
+  zcode: zcodeService.importZcodeFromJson,
   'github-copilot': githubCopilotService.importGitHubCopilotFromJson,
   windsurf: windsurfService.importWindsurfFromJson,
   kiro: kiroService.importKiroFromJson,

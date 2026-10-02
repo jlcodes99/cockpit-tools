@@ -107,6 +107,9 @@ const WorkbuddyAccountsPage = lazy(() =>
 const ZedAccountsPage = lazy(() =>
   import('./pages/ZedAccountsPage').then((module) => ({ default: module.ZedAccountsPage })),
 );
+const ZcodeAccountsPage = lazy(() =>
+  import('./pages/ZcodeAccountsPage').then((module) => ({ default: module.ZcodeAccountsPage })),
+);
 const FingerprintsPage = lazy(() =>
   import('./pages/FingerprintsPage').then((module) => ({ default: module.FingerprintsPage })),
 );
@@ -2745,6 +2748,7 @@ function MainApp() {
             case 'trae':
             case 'workbuddy':
             case 'zed':
+            case 'zcode':
             case 'manual':
             case 'settings':
               setPage(target as Page);
@@ -3170,6 +3174,7 @@ function MainApp() {
           {page === 'trae' && <TraeAccountsPage />}
           {page === 'workbuddy' && <WorkbuddyAccountsPage />}
           {page === 'zed' && <ZedAccountsPage />}
+          {page === 'zcode' && <ZcodeAccountsPage />}
           {page === 'instances' && <InstancesPage onNavigate={setPage} />}
           {page === 'fingerprints' && <FingerprintsPage onNavigate={setPage} />}
           {page === 'wakeup' && <WakeupTasksPage onNavigate={setPage} />}

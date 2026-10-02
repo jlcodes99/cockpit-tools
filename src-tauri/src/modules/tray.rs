@@ -31,6 +31,7 @@ pub(crate) enum PlatformId {
     Antigravity,
     Codex,
     Zed,
+    Zcode,
     GitHubCopilot,
     Windsurf,
     Kiro,
@@ -44,11 +45,12 @@ pub(crate) enum PlatformId {
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 13] {
+    pub(crate) fn default_order() -> [Self; 14] {
         [
             Self::Antigravity,
             Self::Codex,
             Self::Zed,
+            Self::Zcode,
             Self::GitHubCopilot,
             Self::Windsurf,
             Self::Kiro,
@@ -67,6 +69,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_ANTIGRAVITY => Some(Self::Antigravity),
             crate::modules::tray_layout::PLATFORM_CODEX => Some(Self::Codex),
             crate::modules::tray_layout::PLATFORM_ZED => Some(Self::Zed),
+            crate::modules::tray_layout::PLATFORM_ZCODE => Some(Self::Zcode),
             crate::modules::tray_layout::PLATFORM_GITHUB_COPILOT => Some(Self::GitHubCopilot),
             crate::modules::tray_layout::PLATFORM_WINDSURF => Some(Self::Windsurf),
             crate::modules::tray_layout::PLATFORM_KIRO => Some(Self::Kiro),
@@ -86,6 +89,7 @@ impl PlatformId {
             Self::Antigravity => crate::modules::tray_layout::PLATFORM_ANTIGRAVITY,
             Self::Codex => crate::modules::tray_layout::PLATFORM_CODEX,
             Self::Zed => crate::modules::tray_layout::PLATFORM_ZED,
+            Self::Zcode => crate::modules::tray_layout::PLATFORM_ZCODE,
             Self::GitHubCopilot => crate::modules::tray_layout::PLATFORM_GITHUB_COPILOT,
             Self::Windsurf => crate::modules::tray_layout::PLATFORM_WINDSURF,
             Self::Kiro => crate::modules::tray_layout::PLATFORM_KIRO,
@@ -104,6 +108,7 @@ impl PlatformId {
             Self::Antigravity => "Antigravity",
             Self::Codex => "Codex",
             Self::Zed => "Zed",
+            Self::Zcode => "ZCode",
             Self::GitHubCopilot => "GitHub Copilot",
             Self::Windsurf => "Windsurf",
             Self::Kiro => "Kiro",
@@ -122,6 +127,7 @@ impl PlatformId {
             Self::Antigravity => "overview",
             Self::Codex => "codex",
             Self::Zed => "zed",
+            Self::Zcode => "zcode",
             Self::GitHubCopilot => "github-copilot",
             Self::Windsurf => "windsurf",
             Self::Kiro => "kiro",
@@ -610,6 +616,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Antigravity => build_antigravity_display_info(lang),
         PlatformId::Codex => build_codex_display_info(lang),
         PlatformId::Zed => build_zed_display_info(lang),
+        PlatformId::Zcode => build_zcode_display_info(lang),
         PlatformId::GitHubCopilot => build_github_copilot_display_info(lang),
         PlatformId::Windsurf => build_windsurf_display_info(lang),
         PlatformId::Kiro => build_kiro_display_info(lang),
@@ -2299,6 +2306,65 @@ fn resolve_trae_current_account(
             .find(|account| account.id == account_id)
             .cloned()
     })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_zcode_display_info(lang: &str) -> AccountDisplayInfo {
+    let mut accounts = crate::modules::zcode_account::list_accounts();
+    accounts.sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
+    let Some(account) = accounts.into_iter().next() else {
+        return AccountDisplayInfo {
+            account: format!("📧 {}", get_text("not_logged_in", lang)),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+
+    let display_value = first_non_empty(&[
+        account.display_name.as_deref(),
+        Some(account.name.as_str()),
+        Some(account.id.as_str()),
+    ])
+    .unwrap_or("—");
+
+    let mut quota_lines = Vec::new();
+    if let Some(tier) = account
+        .plan_tier
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        quota_lines.push(format!("{}: {}", get_text("plan", lang), tier));
+    }
+    for item in account.quota_items.iter().take(3) {
+        match (item.used, item.total) {
+            (Some(used), Some(total)) if total > 0.0 => {
+                quota_lines.push(format!(
+                    "{}: {} / {} ({}%)",
+                    item.name,
+                    format_quota_number(used),
+                    format_quota_number(total),
+                    (used / total * 100.0).round() as i64
+                ));
+            }
+            _ => quota_lines.push(format!("{}: —", item.name)),
+        }
+    }
+    if let Some(err) = account
+        .quota_query_last_error
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        quota_lines.push(err.to_string());
+    }
+    if quota_lines.is_empty() {
+        quota_lines.push("—".to_string());
+    }
+
+    AccountDisplayInfo {
+        account: format!("📧 {}", display_value),
+        quota_lines,
+    }
 }
 
 #[cfg(not(target_os = "macos"))]

@@ -258,7 +258,8 @@
     "switchClassicLayoutDesc": "Bố cục cổ điển hiển thị đầy đủ điều hướng nền tảng và hỗ trợ thu gọn thanh bên. Bạn có thể chuyển lại bất cứ lúc nào tại Cài đặt > Chung > Bố cục thanh bên.",
     "switchClassicLayoutDontAskAgain": "Không hiển thị lại thông báo này",
     "switchClassicLayoutConfirm": "Chuyển ngay",
-    "2faManager": "Quản lý 2FA"
+    "2faManager": "Quản lý 2FA",
+    "zcode": "ZCode"
   },
   "platformLayout": {
     "title": "Bố cục nền tảng",
@@ -680,6 +681,8 @@
       "ghcpLaunchOnSwitch": "Tự động khởi chạy GitHub Copilot App khi chuyển GitHub Copilot",
       "zedAutoRefresh": "Tự động làm mới hạn mức Zed",
       "zedAutoRefreshDesc": "Tần suất cập nhật nền",
+      "zcodeAutoRefresh": "ZCode auto refresh quota",
+      "zcodeAutoRefreshDesc": "Background auto update frequency",
       "zedAppPath": "Đường dẫn khởi chạy Zed",
       "zedAppPathDesc": "Để trống để dùng đường dẫn mặc định",
       "zedAppPathPlaceholder": "Đường dẫn mặc định",
@@ -2695,6 +2698,9 @@
       "title": "Cài đặt Zed",
       "appPath": "Đường dẫn Zed"
     },
+    "zcode": {
+      "title": "ZCode settings"
+    },
     "filterPersistence": {
       "title": "Ghi nhớ bộ lọc",
       "enable": "Ghi nhớ bộ lọc tổng quan tài khoản (không gồm tìm kiếm)",
@@ -3746,6 +3752,21 @@
     "sort": {
       "tokenSpend": "Sắp xếp theo Token Spend"
     }
+  },
+  "zcode": {
+    "flowNotice": {
+      "title": "ZCode quota notice (click to expand/collapse)",
+      "desc": "Import existing ZCode accounts from this machine and show each account's Coding/Start Plan quota. Sources: zcode-switch snapshots (~/.zcode-switch/accounts) or the logged-in ZCode credentials (~/.zcode/v2/credentials.json).",
+      "permission": "Permissions: read-only access to local ZCode credential files (supports enc:v1 encrypted values). ZCode configuration is never written or modified.",
+      "network": "Network: quota queries go directly to official endpoints (open.bigmodel.cn / zcode.z.ai). No local data is uploaded.",
+      "noSwitch": "This version only shows quota; switching ZCode accounts inside the app is not supported."
+    },
+    "search": "Search ZCode accounts...",
+    "importLocal": "Import from this machine",
+    "noAccounts": "No ZCode accounts yet",
+    "emptyHint": "Requires zcode-switch account snapshots (~/.zcode-switch/accounts) or a logged-in ZCode (~/.zcode/v2/credentials.json) on this machine.",
+    "planExpire": "Plan expires",
+    "usedOfTotal": "{{used}} / {{total}}"
   },
   "floatingCard": {
     "selectPlatform": "Chuyển nền tảng",

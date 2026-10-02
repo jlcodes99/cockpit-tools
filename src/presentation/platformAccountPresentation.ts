@@ -108,6 +108,12 @@ import {
   getWorkbuddyUsage,
 } from "../types/workbuddy";
 import {
+  ZcodeAccount,
+  formatZcodeQuotaCount,
+  getZcodeAccountDisplayName,
+  getZcodePlanBadge,
+} from "../types/zcode";
+import {
   getZedAccountDisplayEmail,
   getZedEditPredictionsMetrics,
   getZedEditPredictionsLabel,
@@ -1582,6 +1588,46 @@ export function buildZedAccountPresentation(
     planClass: resolveSimplePlanClass(planLabel),
     quotaItems,
     sublineText: account.subscription_status?.trim() || undefined,
+  };
+}
+
+export function buildZcodeAccountPresentation(
+  account: ZcodeAccount,
+  _t: Translate,
+): UnifiedAccountPresentation {
+  const planLabel = getZcodePlanBadge(account);
+  const quotaItems: UnifiedQuotaMetric[] = [];
+
+  (account.quota_items ?? []).forEach((item, index) => {
+    const usedPercent =
+      item.percent_used != null && Number.isFinite(item.percent_used)
+        ? clampPercent(item.percent_used)
+        : item.total != null && item.used != null && item.total > 0
+          ? clampPercent((item.used / item.total) * 100)
+          : null;
+    const remainingPercent = usedPercent == null ? null : clampPercent(100 - usedPercent);
+    quotaItems.push({
+      key: `quota_${index}`,
+      label: item.name,
+      percentage: usedPercent ?? 0,
+      progressPercent: usedPercent ?? 0,
+      quotaClass: getRemainingQuotaClass(remainingPercent),
+      valueText: `${formatZcodeQuotaCount(item.used)} / ${formatZcodeQuotaCount(item.total)}`,
+      resetText: item.period_end ?? undefined,
+      used: item.used ?? undefined,
+      total: item.total ?? undefined,
+      left: item.remaining ?? undefined,
+      showProgress: true,
+    });
+  });
+
+  return {
+    id: account.id,
+    displayName: getZcodeAccountDisplayName(account),
+    planLabel,
+    planClass: resolveSimplePlanClass(planLabel),
+    quotaItems,
+    sublineText: account.plan_expire?.trim() || undefined,
   };
 }
 

@@ -19,6 +19,7 @@ import {
   buildWindsurfAccountPresentation,
   buildWorkbuddyAccountPresentation,
   buildZedAccountPresentation,
+  buildZcodeAccountPresentation,
   UnifiedAccountPresentation,
 } from '../presentation/platformAccountPresentation';
 import { DisplayGroup, getDisplayGroups } from '../services/groupService';
@@ -48,6 +49,7 @@ import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
+import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useCodebuddyCnInstanceStore } from '../stores/useCodebuddyCnInstanceStore';
 import { useCodebuddyInstanceStore } from '../stores/useCodebuddyInstanceStore';
 import { useCodexInstanceStore } from '../stores/useCodexInstanceStore';
@@ -181,6 +183,7 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
     case 'workbuddy':
       return useWorkbuddyInstanceStore.getState();
     case 'zed':
+    case 'zcode':
       return null;
   }
 }
@@ -243,6 +246,9 @@ export function FloatingCardWindow() {
     accounts: zedAccounts,
     currentAccountId: zedCurrentId,
   } = useZedAccountStore();
+  const {
+    accounts: zcodeAccounts,
+  } = useZcodeAccountStore();
   const shellRef = useRef<HTMLDivElement | null>(null);
   const previousInstanceContextRef = useRef<FloatingCardInstanceContext | null>(null);
   const [displayGroups, setDisplayGroups] = useState<DisplayGroup[]>([]);
@@ -417,6 +423,9 @@ export function FloatingCardWindow() {
           break;
         case 'zed':
           await useZedAccountStore.getState().fetchAccounts();
+          break;
+        case 'zcode':
+          await useZcodeAccountStore.getState().fetchAccounts();
           break;
       }
     } finally {
@@ -681,6 +690,10 @@ export function FloatingCardWindow() {
     () => resolveCurrentAccountById(zedAccounts, zedCurrentId),
     [zedAccounts, zedCurrentId],
   );
+  const zcodeCurrent = useMemo(
+    () => resolveCurrentAccountById(zcodeAccounts, null),
+    [zcodeAccounts],
+  );
 
   const selectedState = useMemo(() => {
     switch (selectedPlatform) {
@@ -749,6 +762,11 @@ export function FloatingCardWindow() {
           accounts: zedAccounts,
           actualCurrentAccount: zedCurrent,
         };
+      case 'zcode':
+        return {
+          accounts: zcodeAccounts,
+          actualCurrentAccount: zcodeCurrent,
+        };
     }
   }, [
     agAccounts,
@@ -778,6 +796,8 @@ export function FloatingCardWindow() {
     workbuddyCurrent,
     zedAccounts,
     zedCurrent,
+    zcodeAccounts,
+    zcodeCurrent,
   ]);
 
   const accounts = selectedState.accounts as FloatingCardAccount[];
@@ -903,6 +923,8 @@ export function FloatingCardWindow() {
         return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t);
       case 'zed':
         return buildZedAccountPresentation(viewedAccount as typeof zedAccounts[number], t);
+      case 'zcode':
+        return buildZcodeAccountPresentation(viewedAccount as typeof zcodeAccounts[number], t);
     }
   }, [
     agAccounts,
@@ -922,6 +944,7 @@ export function FloatingCardWindow() {
     windsurfAccounts,
     workbuddyAccounts,
     zedAccounts,
+    zcodeAccounts,
   ]);
 
   const isCurrentViewed = Boolean(viewedAccount?.id && viewedAccount.id === currentAccount?.id);

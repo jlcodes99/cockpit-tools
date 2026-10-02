@@ -258,7 +258,8 @@
     "switchClassicLayoutDesc": "經典佈局會完整顯示平台導覽，並支援側邊欄收合。你可以隨時在「設定 > 一般 > 側邊欄佈局」切回。",
     "switchClassicLayoutDontAskAgain": "不再顯示此提示",
     "switchClassicLayoutConfirm": "立即切換",
-    "2faManager": "2FA 管理"
+    "2faManager": "2FA 管理",
+    "zcode": "ZCode"
   },
   "platformLayout": {
     "title": "平台佈局",
@@ -677,6 +678,8 @@
       "ghcpLaunchOnSwitch": "切換 GitHub Copilot 時自動啟動 GitHub Copilot App",
       "zedAutoRefresh": "Zed 自動重新整理配額",
       "zedAutoRefreshDesc": "背景自動更新頻率",
+      "zcodeAutoRefresh": "ZCode 自動重新整理配額",
+      "zcodeAutoRefreshDesc": "背景自動更新頻率",
       "zedAppPath": "Zed 啟動路徑",
       "zedAppPathDesc": "留空則使用預設路徑",
       "zedAppPathPlaceholder": "預設路徑",
@@ -2695,6 +2698,9 @@
       "title": "Zed 設定",
       "appPath": "Zed 路徑"
     },
+    "zcode": {
+      "title": "ZCode 設定"
+    },
     "filterPersistence": {
       "title": "篩選記憶",
       "enable": "記住帳號總覽篩選（不含搜尋）",
@@ -3746,6 +3752,21 @@
     "sort": {
       "tokenSpend": "依 Token 消耗排序"
     }
+  },
+  "zcode": {
+    "flowNotice": {
+      "title": "ZCode 額度說明（點擊展開/收起）",
+      "desc": "匯入本機已有的 ZCode 帳號並展示各帳號的 Coding/Start Plan 額度。帳號來源：zcode-switch 快照（~/.zcode-switch/accounts）或本機已登入的 ZCode 憑證（~/.zcode/v2/credentials.json）。",
+      "permission": "權限範圍：唯讀取本機 ZCode 憑證檔案（支援 enc:v1 加密值解密），不寫入、不修改 ZCode 設定。",
+      "network": "網路範圍：額度查詢直連官方介面（open.bigmodel.cn / zcode.z.ai），不上傳本地資料。",
+      "noSwitch": "目前版本僅支援額度展示，不支援在應用內切換 ZCode 帳號。"
+    },
+    "search": "搜尋 ZCode 帳號...",
+    "importLocal": "從本機匯入",
+    "noAccounts": "尚無 ZCode 帳號",
+    "emptyHint": "需要本機存在 zcode-switch 帳號快照（~/.zcode-switch/accounts）或已登入的 ZCode（~/.zcode/v2/credentials.json）。",
+    "planExpire": "方案有效期",
+    "usedOfTotal": "{{used}} / {{total}}"
   },
   "floatingCard": {
     "selectPlatform": "切換平台",

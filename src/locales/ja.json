@@ -258,7 +258,8 @@
     "switchClassicLayoutDesc": "クラシックレイアウトでは、プラットフォームナビゲーションをすべて表示し、サイドバーの折りたたみに対応します。設定 > 一般 > サイドバーレイアウト からいつでも戻せます。",
     "switchClassicLayoutDontAskAgain": "この案内を今後表示しない",
     "switchClassicLayoutConfirm": "今すぐ切り替える",
-    "2faManager": "2FA管理"
+    "2faManager": "2FA管理",
+    "zcode": "ZCode"
   },
   "platformLayout": {
     "title": "プラットフォームレイアウト",
@@ -680,6 +681,8 @@
       "ghcpLaunchOnSwitch": "GitHub Copilot 切替時に GitHub Copilot App を自動起動",
       "zedAutoRefresh": "Zed クォータの自動更新",
       "zedAutoRefreshDesc": "バックグラウンド更新頻度",
+      "zcodeAutoRefresh": "ZCode auto refresh quota",
+      "zcodeAutoRefreshDesc": "Background auto update frequency",
       "zedAppPath": "Zed 起動パス",
       "zedAppPathDesc": "空欄の場合は既定のパスを使用",
       "zedAppPathPlaceholder": "既定のパス",
@@ -2695,6 +2698,9 @@
       "title": "Zed 設定",
       "appPath": "Zed パス"
     },
+    "zcode": {
+      "title": "ZCode settings"
+    },
     "filterPersistence": {
       "title": "フィルター記憶",
       "enable": "アカウント概要のフィルターを記憶（検索を除く）",
@@ -3746,6 +3752,21 @@
     "sort": {
       "tokenSpend": "Token Spend 順"
     }
+  },
+  "zcode": {
+    "flowNotice": {
+      "title": "ZCode quota notice (click to expand/collapse)",
+      "desc": "Import existing ZCode accounts from this machine and show each account's Coding/Start Plan quota. Sources: zcode-switch snapshots (~/.zcode-switch/accounts) or the logged-in ZCode credentials (~/.zcode/v2/credentials.json).",
+      "permission": "Permissions: read-only access to local ZCode credential files (supports enc:v1 encrypted values). ZCode configuration is never written or modified.",
+      "network": "Network: quota queries go directly to official endpoints (open.bigmodel.cn / zcode.z.ai). No local data is uploaded.",
+      "noSwitch": "This version only shows quota; switching ZCode accounts inside the app is not supported."
+    },
+    "search": "Search ZCode accounts...",
+    "importLocal": "Import from this machine",
+    "noAccounts": "No ZCode accounts yet",
+    "emptyHint": "Requires zcode-switch account snapshots (~/.zcode-switch/accounts) or a logged-in ZCode (~/.zcode/v2/credentials.json) on this machine.",
+    "planExpire": "Plan expires",
+    "usedOfTotal": "{{used}} / {{total}}"
   },
   "floatingCard": {
     "selectPlatform": "プラットフォームを切り替え",

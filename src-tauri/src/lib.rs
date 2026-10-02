@@ -680,6 +680,16 @@ pub fn run() {
             commands::zed::zed_stop_default_session,
             commands::zed::zed_restart_default_session,
             commands::zed::zed_focus_default_session,
+            // Zcode Commands
+            commands::zcode::list_zcode_accounts,
+            commands::zcode::delete_zcode_account,
+            commands::zcode::delete_zcode_accounts,
+            commands::zcode::import_zcode_from_local,
+            commands::zcode::import_zcode_from_json,
+            commands::zcode::export_zcode_accounts,
+            commands::zcode::refresh_zcode_quota,
+            commands::zcode::refresh_all_zcode_quotas,
+            commands::zcode::update_zcode_account_tags,
             // Qoder Instance Commands
             commands::qoder_instance::qoder_get_instance_defaults,
             commands::qoder_instance::qoder_list_instances,

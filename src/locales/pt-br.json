@@ -258,7 +258,8 @@
     "switchClassicLayoutDesc": "O layout clássico exibe toda a navegação de plataformas e permite recolher a barra lateral. Você pode voltar a qualquer momento em Configurações > Geral > Layout da barra lateral.",
     "switchClassicLayoutDontAskAgain": "Não mostrar este aviso novamente",
     "switchClassicLayoutConfirm": "Mudar agora",
-    "2faManager": "Gerenciar 2FA"
+    "2faManager": "Gerenciar 2FA",
+    "zcode": "ZCode"
   },
   "platformLayout": {
     "title": "Layout de plataformas",
@@ -680,6 +681,8 @@
       "ghcpLaunchOnSwitch": "Iniciar GitHub Copilot App ao trocar GitHub Copilot",
       "zedAutoRefresh": "Atualização automática da cota do Zed",
       "zedAutoRefreshDesc": "Frequência de atualização em segundo plano",
+      "zcodeAutoRefresh": "ZCode auto refresh quota",
+      "zcodeAutoRefreshDesc": "Background auto update frequency",
       "zedAppPath": "Caminho de inicialização do Zed",
       "zedAppPathDesc": "Deixe em branco para usar o caminho padrão",
       "zedAppPathPlaceholder": "Caminho padrão",
@@ -2695,6 +2698,9 @@
       "title": "Configurações do Zed",
       "appPath": "Caminho do Zed"
     },
+    "zcode": {
+      "title": "ZCode settings"
+    },
     "filterPersistence": {
       "title": "Memória de filtros",
       "enable": "Lembrar filtros da visão geral de contas (sem busca)",
@@ -3746,6 +3752,21 @@
     "sort": {
       "tokenSpend": "Classificar por gasto de Token"
     }
+  },
+  "zcode": {
+    "flowNotice": {
+      "title": "ZCode quota notice (click to expand/collapse)",
+      "desc": "Import existing ZCode accounts from this machine and show each account's Coding/Start Plan quota. Sources: zcode-switch snapshots (~/.zcode-switch/accounts) or the logged-in ZCode credentials (~/.zcode/v2/credentials.json).",
+      "permission": "Permissions: read-only access to local ZCode credential files (supports enc:v1 encrypted values). ZCode configuration is never written or modified.",
+      "network": "Network: quota queries go directly to official endpoints (open.bigmodel.cn / zcode.z.ai). No local data is uploaded.",
+      "noSwitch": "This version only shows quota; switching ZCode accounts inside the app is not supported."
+    },
+    "search": "Search ZCode accounts...",
+    "importLocal": "Import from this machine",
+    "noAccounts": "No ZCode accounts yet",
+    "emptyHint": "Requires zcode-switch account snapshots (~/.zcode-switch/accounts) or a logged-in ZCode (~/.zcode/v2/credentials.json) on this machine.",
+    "planExpire": "Plan expires",
+    "usedOfTotal": "{{used}} / {{total}}"
   },
   "floatingCard": {
     "selectPlatform": "Trocar plataforma",

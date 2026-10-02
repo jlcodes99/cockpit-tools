@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Github } from 'lucide-react';
+import { Github, Sparkles } from 'lucide-react';
 import { TFunction } from 'i18next';
 import { PlatformId } from '../types/platform';
 import { RobotIcon } from '../components/icons/RobotIcon';
@@ -22,6 +22,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
       return 'Codex';
     case 'zed':
       return 'Zed';
+    case 'zcode':
+      return 'ZCode';
     case 'github-copilot':
       return 'GitHub Copilot';
     case 'windsurf':
@@ -55,6 +57,8 @@ export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode
       return <CodexIcon size={size} />;
     case 'zed':
       return <ZedIcon size={size} />;
+    case 'zcode':
+      return <Sparkles size={size} />;
     case 'github-copilot':
       return <Github size={size} />;
     case 'windsurf':

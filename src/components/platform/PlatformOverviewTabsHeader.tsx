@@ -1,6 +1,6 @@
 import { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Clock3, FolderOpen, Github, Layers, Server } from 'lucide-react';
+import { Bot, Clock3, FolderOpen, Github, Layers, Server, Sparkles } from 'lucide-react';
 import { CodexIcon } from '../icons/CodexIcon';
 import { WindsurfIcon } from '../icons/WindsurfIcon';
 import { KiroIcon } from '../icons/KiroIcon';
@@ -25,6 +25,7 @@ export type PlatformOverviewTab = 'overview' | 'wakeup' | 'instances' | 'session
 export type PlatformOverviewHeaderId =
   | 'codex'
   | 'zed'
+  | 'zcode'
   | 'github-copilot'
   | 'windsurf'
   | 'kiro'
@@ -62,6 +63,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   zed: {
     platformLabel: 'Zed',
     overviewIcon: <ZedIcon className="tab-icon" />,
+  },
+  zcode: {
+    platformLabel: 'ZCode',
+    overviewIcon: <Sparkles className="tab-icon" />,
   },
   'github-copilot': {
     platformLabel: 'GitHub Copilot',

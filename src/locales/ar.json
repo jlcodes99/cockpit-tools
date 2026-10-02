@@ -304,7 +304,8 @@
     "switchClassicLayoutDesc": "يعرض التخطيط الكلاسيكي جميع عناصر التنقل الخاصة بالمنصات ويدعم طي الشريط الجانبي. يمكنك الرجوع في أي وقت من الإعدادات > عام > تخطيط الشريط الجانبي.",
     "switchClassicLayoutDontAskAgain": "عدم إظهار هذا التنبيه مرة أخرى",
     "switchClassicLayoutConfirm": "التبديل الآن",
-    "2faManager": "إدارة 2FA"
+    "2faManager": "إدارة 2FA",
+    "zcode": "ZCode"
   },
   "platformLayout": {
     "title": "تخطيط المنصات",
@@ -723,6 +724,8 @@
       "ghcpLaunchOnSwitch": "تشغيل تطبيق GitHub Copilot App تلقائيًا عند تبديل GitHub Copilot",
       "zedAutoRefresh": "تحديث حصة Zed تلقائيًا",
       "zedAutoRefreshDesc": "تكرار التحديث في الخلفية",
+      "zcodeAutoRefresh": "ZCode auto refresh quota",
+      "zcodeAutoRefreshDesc": "Background auto update frequency",
       "zedAppPath": "مسار تشغيل Zed",
       "zedAppPathDesc": "اتركه فارغًا لاستخدام المسار الافتراضي",
       "zedAppPathPlaceholder": "المسار الافتراضي",
@@ -2741,6 +2744,9 @@
       "title": "إعدادات Zed",
       "appPath": "مسار Zed"
     },
+    "zcode": {
+      "title": "ZCode settings"
+    },
     "filterPersistence": {
       "title": "تذكّر الفلاتر",
       "enable": "تذكّر فلاتر نظرة الحسابات (بدون البحث)",
@@ -3792,6 +3798,21 @@
     "sort": {
       "tokenSpend": "ترتيب حسب إنفاق Token"
     }
+  },
+  "zcode": {
+    "flowNotice": {
+      "title": "ZCode quota notice (click to expand/collapse)",
+      "desc": "Import existing ZCode accounts from this machine and show each account's Coding/Start Plan quota. Sources: zcode-switch snapshots (~/.zcode-switch/accounts) or the logged-in ZCode credentials (~/.zcode/v2/credentials.json).",
+      "permission": "Permissions: read-only access to local ZCode credential files (supports enc:v1 encrypted values). ZCode configuration is never written or modified.",
+      "network": "Network: quota queries go directly to official endpoints (open.bigmodel.cn / zcode.z.ai). No local data is uploaded.",
+      "noSwitch": "This version only shows quota; switching ZCode accounts inside the app is not supported."
+    },
+    "search": "Search ZCode accounts...",
+    "importLocal": "Import from this machine",
+    "noAccounts": "No ZCode accounts yet",
+    "emptyHint": "Requires zcode-switch account snapshots (~/.zcode-switch/accounts) or a logged-in ZCode (~/.zcode/v2/credentials.json) on this machine.",
+    "planExpire": "Plan expires",
+    "usedOfTotal": "{{used}} / {{total}}"
   },
   "twoFactorAuth": {
     "pageTitle": "2FA Query [ar]",

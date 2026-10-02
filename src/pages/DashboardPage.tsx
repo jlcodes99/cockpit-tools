@@ -13,6 +13,7 @@ import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
+import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import {
   parseGroupEntryId,
   PlatformLayoutEntryId,
@@ -61,6 +62,7 @@ import {
   getGeminiTierQuotaSummary,
 } from '../types/gemini';
 import { ZedAccount, getZedUsage } from '../types/zed';
+import { ZcodeAccount } from '../types/zcode';
 import './DashboardPage.css';
 import { RobotIcon } from '../components/icons/RobotIcon';
 import { CodexIcon } from '../components/icons/CodexIcon';
@@ -90,6 +92,7 @@ import {
   buildTraeAccountPresentation,
   buildWorkbuddyAccountPresentation,
   buildZedAccountPresentation,
+  buildZcodeAccountPresentation,
   UnifiedAccountPresentation,
   buildWindsurfAccountPresentation,
   UnifiedQuotaMetric,
@@ -143,6 +146,30 @@ function getZedRecommendationScore(account: ZedAccount): { remainingPercent: num
     usage.totalChat > 0
   ) {
     remainingValues.push((usage.remainingChat / usage.totalChat) * 100);
+  }
+
+  return {
+    remainingPercent:
+      remainingValues.length > 0
+        ? remainingValues.reduce((sum, value) => sum + value, 0) / remainingValues.length
+        : -1,
+    freshness: account.last_used || account.created_at || 0,
+  };
+}
+
+function getZcodeRecommendationScore(account: ZcodeAccount): { remainingPercent: number; freshness: number } {
+  const items = account.quota_items ?? [];
+  const remainingValues: number[] = [];
+  for (const item of items) {
+    const percentUsed =
+      item.percent_used != null && Number.isFinite(item.percent_used)
+        ? item.percent_used
+        : item.total != null && item.used != null && item.total > 0
+          ? (item.used / item.total) * 100
+          : null;
+    if (percentUsed != null) {
+      remainingValues.push(Math.max(0, Math.min(100, 100 - percentUsed)));
+    }
   }
 
   return {
@@ -221,6 +248,9 @@ export function DashboardPage({
           break;
         case 'zed':
           await useZedAccountStore.getState().updateAccountTags(accountId, newTags);
+          break;
+        case 'zcode':
+          await useZcodeAccountStore.getState().updateAccountTags(accountId, newTags);
           break;
       }
       setTagModalState(null);
@@ -373,6 +403,11 @@ export function DashboardPage({
     switchAccount: switchZedAccount,
   } = useZedAccountStore();
 
+  const {
+    accounts: zcodeAccounts,
+    fetchAccounts: fetchZcodeAccounts,
+  } = useZcodeAccountStore();
+
   const agCurrentId = agCurrent?.id;
   const codexCurrentId = codexCurrent?.id;
 
@@ -409,6 +444,7 @@ export function DashboardPage({
       fetchCodexAccounts,
       fetchCodexCurrent,
       fetchZedAccounts,
+      fetchZcodeAccounts,
       fetchGitHubCopilotAccounts,
       fetchWindsurfAccounts,
       fetchKiroAccounts,
@@ -471,6 +507,7 @@ export function DashboardPage({
         agAccounts.length +
         codexAccounts.length +
         zedAccounts.length +
+        zcodeAccounts.length +
         githubCopilotAccounts.length +
         windsurfAccounts.length +
         kiroAccounts.length +
@@ -484,6 +521,7 @@ export function DashboardPage({
       antigravity: agAccounts.length,
       codex: codexAccounts.length,
       zed: zedAccounts.length,
+      zcode: zcodeAccounts.length,
       githubCopilot: githubCopilotAccounts.length,
       windsurf: windsurfAccounts.length,
       kiro: kiroAccounts.length,
@@ -495,7 +533,7 @@ export function DashboardPage({
       trae: traeAccounts.length,
       workbuddy: workbuddyAccounts.length,
     };
-  }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, zedAccounts, zcodeAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
 
   const dashboardAvailableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -503,6 +541,7 @@ export function DashboardPage({
       ...agAccounts,
       ...codexAccounts,
       ...zedAccounts,
+      ...zcodeAccounts,
       ...githubCopilotAccounts,
       ...windsurfAccounts,
       ...kiroAccounts,
@@ -522,7 +561,7 @@ export function DashboardPage({
       }
     }
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [agAccounts, codexAccounts, zedAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
+  }, [agAccounts, codexAccounts, zedAccounts, zcodeAccounts, githubCopilotAccounts, windsurfAccounts, kiroAccounts, cursorAccounts, geminiAccounts, codebuddyAccounts, codebuddyCnAccounts, qoderAccounts, traeAccounts, workbuddyAccounts]);
 
 
   // Refresh States
@@ -542,10 +581,12 @@ export function DashboardPage({
     qoder: boolean;
     trae: boolean;
     workbuddy: boolean;
+    zcode: boolean;
   }>({
     ag: false,
     codex: false,
     zed: false,
+    zcode: false,
     githubCopilot: false,
     windsurf: false,
     kiro: false,
@@ -596,6 +637,22 @@ export function DashboardPage({
     setRefreshing((prev) => new Set(prev).add(accountId));
     try {
       await useZedAccountStore.getState().refreshToken(accountId);
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      setRefreshing((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
+  const handleRefreshZcode = async (accountId: string) => {
+    if (refreshing.has(accountId)) return;
+    setRefreshing((prev) => new Set(prev).add(accountId));
+    try {
+      await useZcodeAccountStore.getState().refreshToken(accountId);
     } catch (error) {
       console.error('Refresh failed:', error);
     } finally {
@@ -729,6 +786,21 @@ export function DashboardPage({
       console.error('Card refresh failed:', error);
     } finally {
       setCardRefreshing((prev) => ({ ...prev, zed: false }));
+    }
+  };
+
+  const handleRefreshZcodeCard = async () => {
+    if (cardRefreshing.zcode) return;
+    setCardRefreshing((prev) => ({ ...prev, zcode: true }));
+    const idsToRefresh = [zcodeCurrent?.id, zcodeRecommended?.id].filter(Boolean) as string[];
+    try {
+      for (const id of idsToRefresh) {
+        await useZcodeAccountStore.getState().refreshToken(id);
+      }
+    } catch (error) {
+      console.error('Card refresh failed:', error);
+    } finally {
+      setCardRefreshing((prev) => ({ ...prev, zcode: false }));
     }
   };
 
@@ -1237,6 +1309,11 @@ export function DashboardPage({
     [workbuddyAccounts, workbuddyCurrentId],
   );
 
+  const zcodeCurrent = useMemo(
+    () => resolveDashboardCurrentAccount(zcodeAccounts, null),
+    [zcodeAccounts],
+  );
+
   const zedCurrent = useMemo(
     () => resolveDashboardCurrentAccount(zedAccounts, zedCurrentId),
     [zedAccounts, zedCurrentId],
@@ -1586,6 +1663,24 @@ export function DashboardPage({
     });
   }, [zedAccounts, zedCurrent?.id]);
 
+  const zcodeRecommended = useMemo(() => {
+    if (zcodeAccounts.length <= 1) return null;
+    const currentId = zcodeCurrent?.id;
+    const others = zcodeAccounts.filter((account) => account.id !== currentId);
+    if (others.length === 0) return null;
+
+    return others.reduce((best, candidate) => {
+      const bestScore = getZcodeRecommendationScore(best);
+      const candidateScore = getZcodeRecommendationScore(candidate);
+      if (candidateScore.remainingPercent !== bestScore.remainingPercent) {
+        return candidateScore.remainingPercent > bestScore.remainingPercent
+          ? candidate
+          : best;
+      }
+      return candidateScore.freshness > bestScore.freshness ? candidate : best;
+    });
+  }, [zcodeAccounts, zcodeCurrent?.id]);
+
   // Render Helpers
   const formatQuotaValue = (value: number) => {
     if (!Number.isFinite(value)) return '0';
@@ -1660,7 +1755,7 @@ export function DashboardPage({
   }: {
     presentation: UnifiedAccountPresentation;
     onRefresh: () => void;
-    onSwitch: () => void;
+    onSwitch?: () => void;
     isRefreshing: boolean;
     isSwitching: boolean;
     switchDisabled?: boolean;
@@ -1716,14 +1811,16 @@ export function DashboardPage({
           >
             <RotateCw size={14} className={isRefreshing ? 'loading-spinner' : ''} />
           </button>
-          <button
-            className="mini-icon-btn"
-            onClick={onSwitch}
-            title={t('dashboard.switch', '切换')}
-            disabled={isSwitching || switchDisabled}
-          >
-            {isSwitching ? <RotateCw size={14} className="loading-spinner" /> : <Play size={14} />}
-          </button>
+          {onSwitch && (
+            <button
+              className="mini-icon-btn"
+              onClick={onSwitch}
+              title={t('dashboard.switch', '切换')}
+              disabled={isSwitching || switchDisabled}
+            >
+              {isSwitching ? <RotateCw size={14} className="loading-spinner" /> : <Play size={14} />}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1823,6 +1920,19 @@ export function DashboardPage({
       isRefreshing: refreshing.has(account.id),
       isSwitching: switching.has(account.id),
       onEditTags: () => setTagModalState({ accountId: account.id, platform: 'zed', tags: account.tags || [] }),
+    });
+  };
+
+  const renderZcodeAccountContent = (account: ZcodeAccount | null) => {
+    if (!account) return <div className="empty-slot">{t('dashboard.noAccount', '无账号')}</div>;
+
+    const presentation = buildZcodeAccountPresentation(account, t);
+    return renderUnifiedAccountCard({
+      presentation,
+      onRefresh: () => handleRefreshZcode(account.id),
+      isRefreshing: refreshing.has(account.id),
+      isSwitching: false,
+      onEditTags: () => setTagModalState({ accountId: account.id, platform: 'zcode', tags: account.tags || [] }),
     });
   };
 
@@ -2014,6 +2124,7 @@ export function DashboardPage({
     antigravity: stats.antigravity,
     codex: stats.codex,
     zed: stats.zed,
+    zcode: stats.zcode,
     'github-copilot': stats.githubCopilot,
     windsurf: stats.windsurf,
     kiro: stats.kiro,
@@ -2203,6 +2314,53 @@ export function DashboardPage({
           </div>
 
           <button className="card-footer-action" onClick={() => onNavigate('zed')}>
+            {t('dashboard.viewAllAccounts', '查看所有账号')}
+          </button>
+        </div>
+      );
+    }
+
+    if (platformId === 'zcode') {
+      return (
+        <div className="main-card codex-card" key={platformId}>
+          <div className="main-card-header">
+            <div className="header-title">
+              {renderPlatformIcon(platformId, 18)}
+              <h3>{getPlatformLabel(platformId, t)}</h3>
+            </div>
+            <div className="header-action-group">
+              <button
+                className="header-action-btn"
+                onClick={handleRefreshZcodeCard}
+                disabled={cardRefreshing.zcode}
+                title={t('common.refresh', '刷新')}
+              >
+                <RotateCw size={14} className={cardRefreshing.zcode ? 'loading-spinner' : ''} />
+                <span>{t('common.refresh', '刷新')}</span>
+              </button>
+              {renderHideCardButton(platformId)}
+            </div>
+          </div>
+
+          <div className="split-content">
+            <div className="split-half current-half">
+              <span className="half-label"><CheckCircle2 size={12} /> {t('dashboard.current', '最近刷新')}</span>
+              {renderZcodeAccountContent(zcodeCurrent)}
+            </div>
+
+            <div className="split-divider"></div>
+
+            <div className="split-half recommend-half">
+              <span className="half-label"><Sparkles size={12} /> {t('dashboard.recommended', '推荐账号')}</span>
+              {zcodeRecommended ? (
+                renderZcodeAccountContent(zcodeRecommended)
+              ) : (
+                <div className="empty-slot-text">{t('dashboard.noRecommendation', '暂无更好推荐')}</div>
+              )}
+            </div>
+          </div>
+
+          <button className="card-footer-action" onClick={() => onNavigate('zcode')}>
             {t('dashboard.viewAllAccounts', '查看所有账号')}
           </button>
         </div>
@@ -2775,7 +2933,9 @@ export function DashboardPage({
                 ? 'info'
                 : platformId === 'zed'
                   ? 'info'
-                  : platformId === 'github-copilot'
+                  : platformId === 'zcode'
+                    ? 'info'
+                    : platformId === 'github-copilot'
                     ? 'github'
                     : platformId === 'kiro'
                       ? 'github'

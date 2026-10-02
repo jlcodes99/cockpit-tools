@@ -65,6 +65,8 @@ pub struct GeneralConfig {
     pub codex_auto_refresh_minutes: i32,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
     pub zed_auto_refresh_minutes: i32,
+    /// ZCode 自动刷新间隔（分钟），-1 表示禁用
+    pub zcode_auto_refresh_minutes: i32,
     /// GitHub Copilot 自动刷新间隔（分钟），-1 表示禁用
     pub ghcp_auto_refresh_minutes: i32,
     /// Windsurf 自动刷新间隔（分钟），-1 表示禁用
@@ -1110,6 +1112,7 @@ pub fn save_network_config(
         auto_refresh_minutes: current.auto_refresh_minutes,
         codex_auto_refresh_minutes: current.codex_auto_refresh_minutes,
         zed_auto_refresh_minutes: current.zed_auto_refresh_minutes,
+        zcode_auto_refresh_minutes: current.zcode_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: current.ghcp_auto_refresh_minutes,
         windsurf_auto_refresh_minutes: current.windsurf_auto_refresh_minutes,
         kiro_auto_refresh_minutes: current.kiro_auto_refresh_minutes,
@@ -1374,6 +1377,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         auto_refresh_minutes: user_config.auto_refresh_minutes,
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
         zed_auto_refresh_minutes: user_config.zed_auto_refresh_minutes,
+        zcode_auto_refresh_minutes: user_config.zcode_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: user_config.ghcp_auto_refresh_minutes,
         windsurf_auto_refresh_minutes: user_config.windsurf_auto_refresh_minutes,
         kiro_auto_refresh_minutes: user_config.kiro_auto_refresh_minutes,
@@ -1473,6 +1477,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         result.auto_refresh_minutes,
         result.codex_auto_refresh_minutes,
         result.zed_auto_refresh_minutes,
+        result.zcode_auto_refresh_minutes,
         result.ghcp_auto_refresh_minutes,
         result.windsurf_auto_refresh_minutes,
         result.kiro_auto_refresh_minutes,
@@ -1500,6 +1505,7 @@ pub fn save_general_config(
     auto_refresh_minutes: i32,
     codex_auto_refresh_minutes: i32,
     zed_auto_refresh_minutes: Option<i32>,
+    zcode_auto_refresh_minutes: Option<i32>,
     ghcp_auto_refresh_minutes: Option<i32>,
     windsurf_auto_refresh_minutes: Option<i32>,
     kiro_auto_refresh_minutes: Option<i32>,
@@ -1698,6 +1704,8 @@ pub fn save_general_config(
         codex_auto_refresh_minutes,
         zed_auto_refresh_minutes: zed_auto_refresh_minutes
             .unwrap_or(current.zed_auto_refresh_minutes),
+        zcode_auto_refresh_minutes: zcode_auto_refresh_minutes
+            .unwrap_or(current.zcode_auto_refresh_minutes),
         ghcp_auto_refresh_minutes: ghcp_auto_refresh_minutes
             .unwrap_or(current.ghcp_auto_refresh_minutes),
         windsurf_auto_refresh_minutes: windsurf_auto_refresh_minutes

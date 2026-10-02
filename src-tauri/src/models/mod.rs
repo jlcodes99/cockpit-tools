@@ -24,3 +24,4 @@ pub use instance::{
 };
 pub use quota::{CreditInfo, QuotaData};
 pub use token::TokenData;
+pub use zcode::{ZcodeAccount, ZcodeAccountIndex, ZcodeQuotaItem, ZcodeStoredAccount};

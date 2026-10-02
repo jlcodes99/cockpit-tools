@@ -85,6 +85,9 @@ pub struct UserConfig {
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zed_auto_refresh")]
     pub zed_auto_refresh_minutes: i32,
+    /// ZCode 自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_zcode_auto_refresh")]
+    pub zcode_auto_refresh_minutes: i32,
     /// GitHub Copilot 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_ghcp_auto_refresh")]
     pub ghcp_auto_refresh_minutes: i32,
@@ -448,6 +451,9 @@ fn default_codex_auto_refresh() -> i32 {
 fn default_zed_auto_refresh() -> i32 {
     10
 }
+fn default_zcode_auto_refresh() -> i32 {
+    10
+}
 fn default_ghcp_auto_refresh() -> i32 {
     10
 } // 默认 10 分钟
@@ -756,6 +762,7 @@ impl Default for UserConfig {
             auto_refresh_minutes: default_auto_refresh(),
             codex_auto_refresh_minutes: default_codex_auto_refresh(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
+            zcode_auto_refresh_minutes: default_zcode_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
             windsurf_auto_refresh_minutes: default_windsurf_auto_refresh(),
             kiro_auto_refresh_minutes: default_kiro_auto_refresh(),
