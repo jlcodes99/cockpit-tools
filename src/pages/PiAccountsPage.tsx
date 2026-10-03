@@ -24,6 +24,8 @@ import {
 } from "../components/codebuddy-suite/CodebuddySuiteAccountsSharedView";
 import { PiSyncToggle } from "../components/pi/PiSyncToggle";
 import { PiAccountDefaultsModal } from "../components/pi/PiAccountDefaultsModal";
+import { PiUsageSection } from "../components/pi/PiUsageSection";
+import { loadPiAccountUsage } from "../services/piUsageCache";
 import {
   PiGatewayFields,
   createPiGatewayState,
@@ -135,8 +137,13 @@ export function PiAccountsPage() {
       fetchAccounts: store.fetchAccounts,
       fetchCurrentAccountId: store.fetchCurrentAccountId,
       deleteAccounts: store.deleteAccounts,
-      refreshToken: store.refreshToken,
-      refreshAllTokens: store.refreshAllTokens,
+      // Refresh re-queries usage; expired OAuth tokens are refreshed and written back.
+      refreshToken: (accountId: string) => loadPiAccountUsage(accountId, true),
+      refreshAllTokens: async () => {
+        await Promise.all(
+          store.accounts.map((account) => loadPiAccountUsage(account.id, true)),
+        );
+      },
       setCurrentAccountId: store.setCurrentAccountId,
       updateAccountTags: store.updateAccountTags,
     },
@@ -734,6 +741,9 @@ export function PiAccountsPage() {
                 ? `${account.default_provider}/${account.default_model}`
                 : account.default_model}
             </div>
+          )}
+          {providers.length > 0 && (
+            <PiUsageSection accountId={account.id} variant={variant} />
           )}
         </div>
       );

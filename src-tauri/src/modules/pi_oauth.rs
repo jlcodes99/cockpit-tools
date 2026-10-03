@@ -927,6 +927,74 @@ pub async fn complete_login(login_id: &str) -> Result<PiAccountView, String> {
     pi_account::add_with_oauth(ready.provider.id(), entry, Some(display_name))
 }
 
+/// Refresh an OAuth `auth.json` entry the same way pi does. Returns `Ok(None)`
+/// for providers whose stored credential never needs refreshing here.
+pub async fn refresh_entry(provider: &str, entry: &Value) -> Result<Option<Value>, String> {
+    let Some(refresh) = entry
+        .get("refresh")
+        .and_then(Value::as_str)
+        .filter(|v| !v.is_empty())
+    else {
+        return Ok(None);
+    };
+    let client = crate::utils::http::create_client(30);
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let mut next = entry.clone();
+    let (data, skew) = match provider {
+        "anthropic" => {
+            let response = client
+                .post(ANTHROPIC_TOKEN_URL)
+                .header("Accept", "application/json")
+                .json(&json!({
+                    "grant_type": "refresh_token",
+                    "client_id": ANTHROPIC_CLIENT_ID,
+                    "refresh_token": refresh,
+                }))
+                .send()
+                .await
+                .map_err(|e| format!("刷新令牌请求失败: {}", e))?;
+            (read_token_json(response).await?, REFRESH_SKEW_MS)
+        }
+        "openai-codex" | "kimi-coding" | "xai" => {
+            let (url, client_id, skew) = match provider {
+                "openai-codex" => (CODEX_TOKEN_URL, CODEX_CLIENT_ID, 0),
+                "kimi-coding" => (KIMI_TOKEN_URL, KIMI_CLIENT_ID, 0),
+                _ => (XAI_TOKEN_URL, XAI_CLIENT_ID, REFRESH_SKEW_MS),
+            };
+            let response = client
+                .post(url)
+                .header("Accept", "application/json")
+                .form(&[
+                    ("grant_type", "refresh_token"),
+                    ("refresh_token", refresh),
+                    ("client_id", client_id),
+                ])
+                .send()
+                .await
+                .map_err(|e| format!("刷新令牌请求失败: {}", e))?;
+            (read_token_json(response).await?, skew)
+        }
+        _ => return Ok(None),
+    };
+    let access = data
+        .get("access_token")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "刷新响应缺少 access_token".to_string())?;
+    let expires_in = data
+        .get("expires_in")
+        .and_then(Value::as_i64)
+        .unwrap_or(3600);
+    next["access"] = json!(access);
+    // xAI may omit refresh_token when it does not rotate it.
+    if let Some(new_refresh) = data.get("refresh_token").and_then(Value::as_str) {
+        next["refresh"] = json!(new_refresh);
+    } else if provider != "xai" {
+        return Err("刷新响应缺少 refresh_token".to_string());
+    }
+    next["expires"] = json!(now_ms + expires_in * 1000 - skew);
+    Ok(Some(next))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

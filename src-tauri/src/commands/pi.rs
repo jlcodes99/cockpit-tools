@@ -421,3 +421,10 @@ pub fn pi_oauth_login_cancel(login_id: Option<String>) {
 pub fn pi_oauth_submit_callback(login_id: String, callback_url: String) -> Result<(), String> {
     pi_oauth::submit_callback(&login_id, &callback_url)
 }
+
+#[tauri::command]
+pub async fn pi_query_account_usage(
+    account_id: String,
+) -> Result<Vec<crate::modules::pi_quota::PiProviderUsage>, String> {
+    crate::modules::pi_quota::query_account_usage(&account_id).await
+}

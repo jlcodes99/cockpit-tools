@@ -1,5 +1,6 @@
 import { usePiAccountStore } from '../stores/usePiAccountStore';
 import { getPiAccountDisplayEmail } from '../types/pi';
+import { loadPiAccountUsage, refreshAllPiUsage } from '../services/piUsageCache';
 import { listenSafely as listen } from "../utils/tauriEventListener";
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -275,6 +276,8 @@ export function useAutoRefresh() {
   const cursorCurrentRefreshingRef = useRef(false);
   const grokRefreshingRef = useRef(false);
   const grokCurrentRefreshingRef = useRef(false);
+  const piRefreshingRef = useRef(false);
+  const piCurrentRefreshingRef = useRef(false);
   const codebuddyRefreshingRef = useRef(false);
   const codebuddyCurrentRefreshingRef = useRef(false);
   const codebuddyCnRefreshingRef = useRef(false);
@@ -613,6 +616,23 @@ export function useAutoRefresh() {
               },
               runCurrentRefresh: async () => {
                 await runProviderCurrentRefresh(fetchCurrentGrokAccountId, refreshGrokToken);
+              },
+            },
+            {
+              key: 'pi',
+              label: 'pi',
+              intervalMinutes: config.pi_auto_refresh_minutes ?? -1,
+              currentMinutes: resolveCurrentMinutes('pi', currentAccountEmails.pi, currentRefreshMinutesMap),
+              fullRefreshingRef: piRefreshingRef,
+              currentRefreshingRef: piCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await refreshAllPiUsage();
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(
+                  () => usePiAccountStore.getState().fetchCurrentAccountId(),
+                  (id: string) => loadPiAccountUsage(id, true),
+                );
               },
             },
             {

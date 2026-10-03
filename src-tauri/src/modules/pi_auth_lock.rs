@@ -65,6 +65,14 @@ pub fn lock(auth_path: &Path) -> Result<AuthLock, String> {
     }
 }
 
+/// Lock several files in a stable order (avoids lock-order deadlocks).
+pub fn lock_all(paths: &[PathBuf]) -> Result<Vec<AuthLock>, String> {
+    let mut sorted: Vec<&PathBuf> = paths.iter().collect();
+    sorted.sort();
+    sorted.dedup();
+    sorted.into_iter().map(|p| lock(p)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

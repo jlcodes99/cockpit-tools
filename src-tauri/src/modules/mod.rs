@@ -82,6 +82,7 @@ pub mod grok_oauth;
 pub mod pi_account;
 pub mod pi_oauth;
 pub mod pi_auth_lock;
+pub mod pi_quota;
 pub mod pi_instance;
 pub mod group_settings;
 pub mod hermes_auth;

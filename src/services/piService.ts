@@ -85,13 +85,18 @@ export async function getPiAccountsIndexPath(): Promise<string> {
   return await invoke('get_pi_accounts_index_path');
 }
 
-/** No remote refresh yet; reload the local account list. */
-export async function refreshPiAccount(_accountId: string): Promise<void> {
-  await listPiAccounts();
+/** Refresh expired tokens and usage for one account. */
+export async function refreshPiAccount(accountId: string): Promise<void> {
+  await queryPiAccountUsage(accountId);
 }
 
+/** Refresh every account; resolves to the number that succeeded. */
 export async function refreshAllPiAccounts(): Promise<number> {
-  return (await listPiAccounts()).length;
+  const accounts = await listPiAccounts();
+  const results = await Promise.allSettled(
+    accounts.map((account) => queryPiAccountUsage(account.id)),
+  );
+  return results.filter((result) => result.status === 'fulfilled').length;
 }
 
 export type PiOAuthProvider =
@@ -133,4 +138,27 @@ export async function cancelPiOAuthLogin(loginId?: string): Promise<void> {
 
 export async function submitPiOAuthCallbackUrl(loginId: string, callbackUrl: string): Promise<void> {
   await invoke('pi_oauth_submit_callback', { loginId, callbackUrl });
+}
+
+export interface PiUsageWindow {
+  key: string;
+  label: string;
+  used_percent: number;
+  reset_at?: number;
+  detail?: string;
+}
+
+export interface PiProviderUsage {
+  provider: string;
+  plan?: string;
+  windows: PiUsageWindow[];
+  balance?: string;
+  gateway?: import('./modelProviderUsageService').ModelProviderUsageSummary;
+  error?: string;
+  unsupported?: boolean;
+}
+
+/** Query usage for every credential on a pi account (credentials are not refreshed). */
+export async function queryPiAccountUsage(accountId: string): Promise<PiProviderUsage[]> {
+  return await invoke('pi_query_account_usage', { accountId });
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { Save } from "lucide-react";
@@ -7,6 +7,7 @@ import type { PiCliStatus } from "../../services/piInstanceService";
 
 interface PiGeneralConfig {
   pi_sync_official_auth_on_switch?: boolean;
+  pi_auto_refresh_minutes?: number;
 }
 
 /** Self-contained pi block for the general settings panel. */
@@ -17,6 +18,8 @@ export function PiSettingsGroup({ order }: { order?: number }) {
   const [cliSaving, setCliSaving] = useState(false);
   const [cliError, setCliError] = useState<string | null>(null);
   const [syncOfficial, setSyncOfficial] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState("10");
+  const loadedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +33,8 @@ export function PiSettingsGroup({ order }: { order?: number }) {
         setCliStatus(status);
         setCliPath(status.configuredPath ?? "");
         setSyncOfficial(config.pi_sync_official_auth_on_switch ?? true);
+        setAutoRefresh(String(config.pi_auto_refresh_minutes ?? 10));
+        loadedRef.current = true;
       } catch (error) {
         if (!cancelled) setCliError(String(error));
       }
@@ -59,6 +64,15 @@ export function PiSettingsGroup({ order }: { order?: number }) {
     } finally {
       setCliSaving(false);
     }
+  };
+
+  const commitAutoRefresh = () => {
+    const parsed = Number.parseInt(autoRefresh, 10);
+    const value = Number.isNaN(parsed) ? -1 : Math.min(999, Math.max(-1, parsed));
+    // 0 is meaningless as an interval; treat it as disabled.
+    const normalized = value === 0 ? -1 : value;
+    setAutoRefresh(String(normalized));
+    if (loadedRef.current) void patch({ pi_auto_refresh_minutes: normalized });
   };
 
   return (
@@ -128,6 +142,31 @@ export function PiSettingsGroup({ order }: { order?: number }) {
           </div>
         </div>
 
+        <div className="settings-row">
+          <div className="row-label">
+            <div className="row-title">{t("quickSettings.piRefreshInterval", "用量自动刷新")}</div>
+            <div className="row-desc">
+              {t("settings.general.windsurfAutoRefreshDesc", "后台自动更新频率")}
+            </div>
+          </div>
+          <div className="row-control">
+            <div className="settings-inline-input">
+              <input
+                type="number"
+                min={-1}
+                max={999}
+                aria-label={t("quickSettings.piRefreshInterval", "用量自动刷新")}
+                className="settings-select settings-select--input-mode settings-select--with-unit"
+                value={autoRefresh}
+                onChange={(event) => {
+                  if (/^-?\d*$/.test(event.target.value)) setAutoRefresh(event.target.value);
+                }}
+                onBlur={commitAutoRefresh}
+              />
+              <span className="settings-input-unit">{t("settings.general.minutes")}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

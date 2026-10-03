@@ -637,6 +637,87 @@ fn sync_back_unlocked(account_id: &str, home: &Path) {
     }
 }
 
+/// Homes where `account_id` may be live: its managed profile dir and, when it
+/// is the current account, the official pi home.
+pub fn live_homes(account_id: &str) -> Vec<PathBuf> {
+    let mut homes = Vec::new();
+    if let Ok(dir) = managed_profile_dir(account_id) {
+        homes.push(dir);
+    }
+    if provider_current_state::get_current_account_id(PLATFORM)
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some(account_id)
+    {
+        if let Ok(home) = default_pi_home() {
+            homes.push(home);
+        }
+    }
+    homes
+}
+
+/// Pull tokens pi refreshed in any live home back into the store.
+pub fn sync_live_credentials(account_id: &str) {
+    for home in live_homes(account_id) {
+        sync_back_credentials(account_id, &home);
+    }
+}
+
+/// Lock every live `auth.json` of `account_id` for a refresh critical section.
+pub fn lock_live_auth(account_id: &str) -> Result<Vec<pi_auth_lock::AuthLock>, String> {
+    let paths: Vec<PathBuf> = live_homes(account_id)
+        .into_iter()
+        .map(|home| home.join(AUTH_FILE))
+        .collect();
+    pi_auth_lock::lock_all(&paths)
+}
+
+/// Like [`sync_live_credentials`], for callers already holding [`lock_live_auth`].
+pub fn sync_live_credentials_locked(account_id: &str) {
+    for home in live_homes(account_id) {
+        sync_back_unlocked(account_id, &home);
+    }
+}
+
+/// Persist a refreshed OAuth entry: the store and every live `auth.json`, but
+/// only where the entry still holds `previous_refresh`, so a token rotated
+/// meanwhile is never overwritten. Caller must hold [`lock_live_auth`].
+pub fn save_refreshed_credential(
+    account_id: &str,
+    provider: &str,
+    previous_refresh: &str,
+    entry: Value,
+) -> Result<(), String> {
+    update_account(account_id, |account| {
+        if let Some(cred) = account.credentials.iter_mut().find(|c| {
+            c.provider == provider
+                && c.entry.get("refresh").and_then(Value::as_str) == Some(previous_refresh)
+        }) {
+            cred.entry = entry.clone();
+        }
+    })?;
+    for home in live_homes(account_id) {
+        let auth_path = home.join(AUTH_FILE);
+        let Ok(mut auth) = read_json_object(&auth_path) else {
+            continue;
+        };
+        let matches = auth
+            .get(provider)
+            .and_then(|live| live.get("refresh"))
+            .and_then(Value::as_str)
+            == Some(previous_refresh);
+        if !matches {
+            continue;
+        }
+        auth.insert(provider.to_string(), entry.clone());
+        let content = serde_json::to_string_pretty(&Value::Object(auth))
+            .map_err(|e| format!("序列化 auth.json 失败: {}", e))?;
+        write_secret_string_atomic(&auth_path, &content)?;
+    }
+    Ok(())
+}
+
 fn touch_last_used(account_id: &str) {
     let _ = update_account(account_id, |account| account.last_used = now_ts());
 }

@@ -99,6 +99,7 @@ mod tests {
         config.kiro_auto_refresh_minutes = -1;
         config.cursor_auto_refresh_minutes = -1;
         config.grok_auto_refresh_minutes = -1;
+        config.pi_auto_refresh_minutes = -1;
         config.claude_auto_refresh_minutes = -1;
         config.codebuddy_auto_refresh_minutes = -1;
         config.codebuddy_cn_auto_refresh_minutes = -1;
@@ -210,6 +211,7 @@ fn has_enabled_periodic_account_refresh(config: &modules::config::UserConfig) ->
         config.kiro_auto_refresh_minutes,
         config.cursor_auto_refresh_minutes,
         config.grok_auto_refresh_minutes,
+        config.pi_auto_refresh_minutes,
         config.claude_auto_refresh_minutes,
         config.codebuddy_auto_refresh_minutes,
         config.codebuddy_cn_auto_refresh_minutes,
@@ -1524,6 +1526,7 @@ pub fn run() {
             commands::pi::import_pi_from_json,
             commands::pi::add_pi_account_with_api_key,
             commands::pi::pi_oauth_login_start, commands::pi::pi_oauth_login_complete, commands::pi::pi_oauth_login_cancel, commands::pi::pi_oauth_submit_callback,
+            commands::pi::pi_query_account_usage,
             commands::pi::import_pi_from_local,
             commands::pi::export_pi_accounts,
             commands::pi::switch_pi_account,
