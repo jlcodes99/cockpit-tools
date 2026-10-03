@@ -1,6 +1,11 @@
 /* ============================================
    Cockpit Tools - Design System
    Brand Direction: floating dashboard with soft gradients
+   Theming: CSS `light-dark()` + `color-scheme`, driven by
+   `data-theme="light" | "dark"` on <html> (see App.tsx applyTheme;
+   `system` is resolved to light/dark before being written).
+   `light-dark()` follows the element's used `color-scheme`,
+   so flipping the attribute re-resolves every variable below.
    ============================================ */
 
 :root {
@@ -8,43 +13,50 @@
   --font-sans: 'Inter', 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', monospace;
 
-  /* Brand Colors */
-  --primary: #1d4ed8;
-  --primary-hover: #1e40af;
-  --primary-light: rgba(29, 78, 216, 0.12);
-  --accent: #0ea5a5;
+  /* Brand Colors - slightly brighter second value for dark mode */
+  --primary: light-dark(#1d4ed8, #3b82f6);
+  --primary-hover: light-dark(#1e40af, #2563eb);
+  --primary-light: light-dark(rgba(29, 78, 216, 0.12), rgba(59, 130, 246, 0.15));
+  --accent: light-dark(#0ea5a5, #14b8a6);
 
-  /* Status Colors */
+  /* Status Colors - identical in both modes */
   --success: #22c55e;
   --warning: #f59e0b;
   --warning-strong: #f97316;
   --danger: #ef4444;
 
   /* Background Colors */
-  --bg-primary: #f6f5f2;
+  --bg-primary: light-dark(#f6f5f2, #0f172a);
   /* Solid surfaces: dialogs / dropdowns / menus (no transparency) */
-  --bg-secondary: #ffffff;
+  --bg-secondary: light-dark(#ffffff, #1e293b);
   --bg-surface: var(--bg-secondary);
   /* Soft panels: cards / list rows (slight transparency to show gradient) */
-  --bg-tertiary: #eef2f7;
-  --bg-card: rgba(255, 255, 255, 0.75);
-  --bg-hover: rgba(15, 23, 42, 0.06);
+  --bg-tertiary: light-dark(#eef2f7, #334155);
+  --bg-card: light-dark(rgba(255, 255, 255, 0.75), rgba(30, 41, 59, 0.85));
+  --bg-hover: light-dark(rgba(15, 23, 42, 0.06), rgba(255, 255, 255, 0.08));
 
   /* Text Colors */
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-primary: light-dark(#0f172a, #f1f5f9);
+  --text-secondary: light-dark(#475569, #94a3b8);
+  --text-muted: light-dark(#94a3b8, #64748b);
 
   /* Border Colors */
-  --border: rgba(15, 23, 42, 0.12);
-  --border-light: rgba(15, 23, 42, 0.08);
+  --border: light-dark(rgba(15, 23, 42, 0.12), rgba(255, 255, 255, 0.12));
+  --border-light: light-dark(rgba(15, 23, 42, 0.08), rgba(255, 255, 255, 0.06));
 
   /* Shadows */
-  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.08);
-  --shadow-md: 0 12px 24px rgba(15, 23, 42, 0.12);
-  --shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.18);
+  --shadow-sm: light-dark(0 2px 6px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(0, 0, 0, 0.25));
+  --shadow-md: light-dark(0 12px 24px rgba(15, 23, 42, 0.12), 0 12px 24px rgba(0, 0, 0, 0.35));
+  --shadow-lg: light-dark(0 20px 40px rgba(15, 23, 42, 0.18), 0 20px 40px rgba(0, 0, 0, 0.45));
 
-  /* Gradients */
+  /* Body backdrop stops (split out: light-dark() only accepts <color> args,
+     so whole gradients can't be passed to it directly) */
+  --body-glow-1: light-dark(rgba(29, 78, 216, 0.12), rgba(59, 130, 246, 0.15));
+  --body-glow-2: light-dark(rgba(14, 165, 165, 0.12), rgba(20, 184, 166, 0.12));
+  --body-bg-start: light-dark(#f8f7f4, #0f172a);
+  --body-bg-end: light-dark(#eef1f6, #1e293b);
+
+  /* Gradients - identical in both modes */
   --gradient-primary: linear-gradient(135deg, #1d4ed8 0%, #0ea5a5 100%);
   --gradient-success: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   --gradient-danger: linear-gradient(135deg, #f97316 0%, #ef4444 100%);
@@ -60,98 +72,79 @@
   --modal-close-icon-size: 16px;
 }
 
-/* === Dark Theme === */
-[data-theme="dark"] {
-  /* Brand Colors - slightly brighter for dark mode */
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --primary-light: rgba(59, 130, 246, 0.15);
-  --accent: #14b8a6;
-
-  /* Status Colors */
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --warning-strong: #f97316;
-  --danger: #ef4444;
-
-  /* Background Colors - dark palette */
-  --bg-primary: #0f172a;
-  /* Solid surfaces: dialogs / dropdowns / menus (no transparency) */
-  --bg-secondary: #1e293b;
-  --bg-surface: var(--bg-secondary);
-  /* Soft panels: cards / list rows (slight transparency to show gradient) */
-  --bg-tertiary: #334155;
-  --bg-card: rgba(30, 41, 59, 0.85);
-  --bg-hover: rgba(255, 255, 255, 0.08);
-
-  /* Text Colors - inverted */
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-
-  /* Border Colors */
-  --border: rgba(255, 255, 255, 0.12);
-  --border-light: rgba(255, 255, 255, 0.06);
-
-  /* Shadows - darker */
-  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 12px 24px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.45);
-
+:root {
+  color-scheme: light;
+}
+/* === Dark mode switch ===
+   Only flips color-scheme; every light-dark() variable above
+   (plus native form controls / scrollbars) follows automatically. */
+:root[data-theme="dark"] {
   color-scheme: dark;
 }
 
-/* Theme color packs (#1399) — layered on light/dark base */
+/* Theme color packs (#1399) — layered on light/dark base.
+   Mode-dependent tokens use light-dark() so each pack needs a single
+   rule now; `color-scheme` (controlled above) picks the dark value. */
 [data-theme-color="nord"] {
   --primary: #5e81ac;
   --primary-hover: #81a1c1;
   --accent: #88c0d0;
-}
-[data-theme-color="nord"][data-theme="dark"] {
-  --bg-primary: #2e3440;
-  --bg-secondary: #3b4252;
-  --bg-tertiary: #434c5e;
-  --text-primary: #eceff4;
-  --text-secondary: #d8dee9;
+  --bg-primary: light-dark(#f6f5f2, #2e3440);
+  --bg-secondary: light-dark(#ffffff, #3b4252);
+  --bg-tertiary: light-dark(#eef2f7, #434c5e);
+  --text-primary: light-dark(#0f172a, #eceff4);
+  --text-secondary: light-dark(#475569, #d8dee9);
 }
 [data-theme-color="tokyo-night"] {
   --primary: #7aa2f7;
   --primary-hover: #89b4fa;
   --accent: #bb9af7;
-}
-[data-theme-color="tokyo-night"][data-theme="dark"] {
-  --bg-primary: #1a1b26;
-  --bg-secondary: #24283b;
-  --bg-tertiary: #414868;
-  --text-primary: #c0caf5;
-  --text-secondary: #a9b1d6;
+  --bg-primary: light-dark(#f6f5f2, #1a1b26);
+  --bg-secondary: light-dark(#ffffff, #24283b);
+  --bg-tertiary: light-dark(#eef2f7, #414868);
+  --text-primary: light-dark(#0f172a, #c0caf5);
+  --text-secondary: light-dark(#475569, #a9b1d6);
 }
 [data-theme-color="catppuccin"] {
   --primary: #89b4fa;
   --accent: #cba6f7;
-}
-[data-theme-color="catppuccin"][data-theme="dark"] {
-  --bg-primary: #1e1e2e;
-  --bg-secondary: #313244;
-  --text-primary: #cdd6f4;
+  --bg-primary: light-dark(#f6f5f2, #1e1e2e);
+  --bg-secondary: light-dark(#ffffff, #313244);
+  --text-primary: light-dark(#0f172a, #cdd6f4);
 }
 [data-theme-color="gruvbox"] {
   --primary: #d79921;
   --accent: #689d6a;
-}
-[data-theme-color="gruvbox"][data-theme="dark"] {
-  --bg-primary: #282828;
-  --bg-secondary: #3c3836;
-  --text-primary: #ebdbb2;
+  --bg-primary: light-dark(#f6f5f2, #282828);
+  --bg-secondary: light-dark(#ffffff, #3c3836);
+  --text-primary: light-dark(#0f172a, #ebdbb2);
 }
 [data-theme-color="everforest"] {
   --primary: #a7c080;
   --accent: #7fbbb3;
+  --bg-primary: light-dark(#f6f5f2, #2d353b);
+  --bg-secondary: light-dark(#ffffff, #343f44);
+  --text-primary: light-dark(#0f172a, #d3c6aa);
 }
-[data-theme-color="everforest"][data-theme="dark"] {
-  --bg-primary: #2d353b;
-  --bg-secondary: #343f44;
-  --text-primary: #d3c6aa;
+[data-theme-color="oled"] {
+  /* True black/white pack: primary/accent inherit the base blue/teal.
+     Borders/shadows keep base values (light borders separate pure surfaces). */
+  --bg-primary: light-dark(#ffffff, #000000);
+  --bg-secondary: light-dark(#ffffff, #000000);
+  --bg-tertiary: light-dark(#ffffff, #000000);
+  --bg-card: light-dark(#ffffff, #000000);
+  --bg-hover: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.08));
+  --text-primary: light-dark(#000000, #ffffff);
+  --text-secondary: light-dark(#3f3f3f, #a3a3a3);
+  --text-muted: #737373;
+  /* Flatten the body backdrop too, otherwise dark stays blue-black gradient */
+  --body-bg-start: light-dark(#ffffff, #000000);
+  --body-bg-end: light-dark(#ffffff, #000000);
+  --body-glow-1: transparent;
+  --body-glow-2: transparent;
+
+  --border: light-dark(#adb4a8, #757d72);
+  --border-light: light-dark(#adb4a8, #757d72);
 }
 
 * {
@@ -162,22 +155,12 @@
 
 body {
   font-family: var(--font-sans);
-  background: radial-gradient(circle at 12% 10%, rgba(29, 78, 216, 0.12), transparent 45%),
-    radial-gradient(circle at 90% 5%, rgba(14, 165, 165, 0.12), transparent 40%),
-    linear-gradient(180deg, #f8f7f4 0%, #eef1f6 100%);
+  background: radial-gradient(circle at 12% 10%, var(--body-glow-1), transparent 45%),
+    radial-gradient(circle at 90% 5%, var(--body-glow-2), transparent 40%),
+    linear-gradient(180deg, var(--body-bg-start) 0%, var(--body-bg-end) 100%);
   color: var(--text-primary);
   line-height: 1.6;
-  color-scheme: light;
   -webkit-font-smoothing: antialiased;
-}
-
-/* Dark mode body background */
-[data-theme="dark"] body,
-html[data-theme="dark"] body {
-  background: radial-gradient(circle at 12% 10%, rgba(59, 130, 246, 0.15), transparent 45%),
-    radial-gradient(circle at 90% 5%, rgba(20, 184, 166, 0.12), transparent 40%),
-    linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-  color-scheme: dark;
 }
 
 html[data-reduced-motion="true"] {
