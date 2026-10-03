@@ -1,5 +1,5 @@
 use crate::models::pi::PiAccountView;
-use crate::modules::{config, pi_account};
+use crate::modules::{config, pi_account, pi_oauth};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -398,4 +398,26 @@ mod tests {
         );
         assert_eq!(parse_version("pi unknown"), None);
     }
+}
+
+#[tauri::command]
+pub async fn pi_oauth_login_start(
+    provider: String,
+) -> Result<pi_oauth::PiOAuthStartResponse, String> {
+    pi_oauth::start_login(&provider).await
+}
+
+#[tauri::command]
+pub async fn pi_oauth_login_complete(login_id: String) -> Result<PiAccountView, String> {
+    pi_oauth::complete_login(&login_id).await
+}
+
+#[tauri::command]
+pub fn pi_oauth_login_cancel(login_id: Option<String>) {
+    pi_oauth::cancel_login(login_id.as_deref());
+}
+
+#[tauri::command]
+pub fn pi_oauth_submit_callback(login_id: String, callback_url: String) -> Result<(), String> {
+    pi_oauth::submit_callback(&login_id, &callback_url)
 }

@@ -363,6 +363,51 @@ pub fn add_with_api_key(
     ))
 }
 
+/// Store a credential obtained by the built-in OAuth login. Re-login of the
+/// same identity (accountId / refresh) updates the existing account.
+pub fn add_with_oauth(
+    provider: &str,
+    entry: Value,
+    display_name: Option<String>,
+) -> Result<PiAccountView, String> {
+    let provider = normalize_provider_id(provider)?;
+    let display_name = normalize_text(display_name.as_deref());
+    // Anthropic rotates refresh tokens, so match a re-login by email instead.
+    if let Some(name) = display_name.as_deref() {
+        let updated = with_store(|store| {
+            let found = store.accounts.iter_mut().find(|account| {
+                account.email == name
+                    && account
+                        .credentials
+                        .iter()
+                        .any(|cred| cred.provider == provider && cred.kind() == "oauth")
+            });
+            Ok(found.map(|account| {
+                for cred in account.credentials.iter_mut() {
+                    if cred.provider == provider {
+                        cred.entry = entry.clone();
+                    }
+                }
+                PiAccountView::from(&*account)
+            }))
+        })?;
+        if let Some(view) = updated {
+            return Ok(view);
+        }
+    }
+    let credentials = vec![PiProviderCredential {
+        provider: provider.clone(),
+        entry,
+    }];
+    upsert(new_account(
+        credentials,
+        display_name,
+        Some(provider),
+        None,
+        None,
+    ))
+}
+
 fn read_json_object(path: &Path) -> Result<Map<String, Value>, String> {
     if !path.exists() {
         return Ok(Map::new());

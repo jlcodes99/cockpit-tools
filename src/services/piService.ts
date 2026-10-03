@@ -93,3 +93,44 @@ export async function refreshPiAccount(_accountId: string): Promise<void> {
 export async function refreshAllPiAccounts(): Promise<number> {
   return (await listPiAccounts()).length;
 }
+
+export type PiOAuthProvider =
+  | 'anthropic'
+  | 'openai-codex'
+  | 'github-copilot'
+  | 'kimi-coding'
+  | 'xai'
+  | 'openrouter';
+
+export interface PiOAuthStartResponse {
+  loginId: string;
+  provider: string;
+  authUrl: string;
+  verificationUri: string;
+  /** Device-code flows (Copilot / Kimi / xAI) only. */
+  userCode?: string;
+  expiresIn: number;
+  intervalSeconds: number;
+  /** Absent for device-code flows. */
+  callbackUrl?: string | null;
+  /** False when the callback port was busy; the redirect URL must be pasted. */
+  listening: boolean;
+}
+
+/** Start pi's built-in login for `provider` (PKCE callback or device code). */
+export async function startPiOAuthLogin(provider: PiOAuthProvider): Promise<PiOAuthStartResponse> {
+  return await invoke('pi_oauth_login_start', { provider });
+}
+
+/** Resolves once the browser callback (or a pasted URL) completes the login. */
+export async function completePiOAuthLogin(loginId: string): Promise<PiAccount> {
+  return await invoke('pi_oauth_login_complete', { loginId });
+}
+
+export async function cancelPiOAuthLogin(loginId?: string): Promise<void> {
+  await invoke('pi_oauth_login_cancel', { loginId: loginId ?? null });
+}
+
+export async function submitPiOAuthCallbackUrl(loginId: string, callbackUrl: string): Promise<void> {
+  await invoke('pi_oauth_submit_callback', { loginId, callbackUrl });
+}

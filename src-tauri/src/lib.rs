@@ -1523,6 +1523,7 @@ pub fn run() {
             commands::pi::delete_pi_accounts,
             commands::pi::import_pi_from_json,
             commands::pi::add_pi_account_with_api_key,
+            commands::pi::pi_oauth_login_start, commands::pi::pi_oauth_login_complete, commands::pi::pi_oauth_login_cancel, commands::pi::pi_oauth_submit_callback,
             commands::pi::import_pi_from_local,
             commands::pi::export_pi_accounts,
             commands::pi::switch_pi_account,

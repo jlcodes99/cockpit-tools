@@ -80,6 +80,7 @@ pub mod grok_account;
 pub mod grok_instance;
 pub mod grok_oauth;
 pub mod pi_account;
+pub mod pi_oauth;
 pub mod pi_auth_lock;
 pub mod pi_instance;
 pub mod group_settings;

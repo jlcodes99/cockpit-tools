@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronLeft,
@@ -98,6 +98,13 @@ export function PiAccountsPage() {
   const [editingDefaultsAccount, setEditingDefaultsAccount] =
     useState<PiAccount | null>(null);
   const store = usePiAccountStore();
+  // "cli" keeps the old pi /login terminal guide as a fallback.
+  const [oauthProvider, setOauthProvider] = useState<
+    piService.PiOAuthProvider | "cli"
+  >("anthropic");
+  const oauthProviderRef = useRef(oauthProvider);
+  oauthProviderRef.current = oauthProvider;
+
   useEscClose(!!launchModal, () => setLaunchModal(null));
 
   const page = useProviderAccountsPage<PiAccount>({
@@ -107,7 +114,19 @@ export function PiAccountsPage() {
     currentAccountIdKey: CURRENT_ACCOUNT_KEY,
     exportFilePrefix: "pi_accounts",
     oauthTabKeys: ["oauth"],
-    oauthAutoPrepare: false,
+    oauthAutoPrepare: () => oauthProviderRef.current !== "cli",
+    oauthService: {
+      startLogin: () => {
+        const provider = oauthProviderRef.current;
+        if (provider === "cli") {
+          return Promise.reject(new Error("cli"));
+        }
+        return piService.startPiOAuthLogin(provider);
+      },
+      completeLogin: piService.completePiOAuthLogin,
+      cancelLogin: piService.cancelPiOAuthLogin,
+      submitCallbackUrl: piService.submitPiOAuthCallbackUrl,
+    },
     store: {
       accounts: store.accounts,
       currentAccountId: store.currentAccountId,
@@ -176,6 +195,17 @@ export function PiAccountsPage() {
     },
     resolveOauthSuccessMessage: () => t("pi.oauth.success", "pi 登录成功"),
   });
+
+  // Switching provider cancels the running login and restarts it. For "cli"
+  // the restart is rejected and the terminal guide is shown instead.
+  const previousOauthProviderRef = useRef(oauthProvider);
+  useEffect(() => {
+    if (previousOauthProviderRef.current === oauthProvider) return;
+    previousOauthProviderRef.current = oauthProvider;
+    if (page.showAddModal && page.addTab === "oauth") {
+      page.handleRetryOauth();
+    }
+  }, [oauthProvider, page.addTab, page.handleRetryOauth, page.showAddModal]);
 
   useEffect(() => {
     if (!page.showAddModal) {
@@ -732,10 +762,40 @@ export function PiAccountsPage() {
     noAccountsDefault: "暂无 pi 账号",
     addAccountTitleKey: "pi.addAccount",
     addAccountTitleDefault: "添加 pi 账号",
-    oauthDescKey: "pi.oauth.desc",
+    oauthDescKey:
+      oauthProvider === "cli" ? "pi.oauth.desc" : "pi.oauth.builtinDesc",
     oauthDescDefault:
-      "pi 的订阅登录（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini 等）通过 pi 内置的 /login 完成。",
-    oauthCustomContent: renderLoginGuide(),
+      oauthProvider === "cli"
+        ? "pi 的订阅登录（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini 等）通过 pi 内置的 /login 完成。"
+        : "在浏览器中完成授权后自动保存为 pi 账号，凭据格式与 pi /login 完全一致。",
+    oauthCustomContent: oauthProvider === "cli" ? renderLoginGuide() : undefined,
+    oauthProviderControl: (
+      <div className="form-group">
+        <div className="pi-segmented">
+          {(
+            [
+              ["anthropic", "Claude Pro/Max"],
+              ["openai-codex", "ChatGPT (Codex)"],
+              ["github-copilot", "GitHub Copilot"],
+              ["kimi-coding", "Kimi Code"],
+              ["xai", "xAI (Grok)"],
+              ["openrouter", "OpenRouter"],
+              ["cli", t("pi.oauth.otherProviders", "其他（pi /login）")],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`claude-provider-endpoint-chip ${oauthProvider === id ? "active" : ""}`}
+              aria-pressed={oauthProvider === id}
+              onClick={() => setOauthProvider(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    ),
     oauthFeatureCardClassName: "grok-oauth-feature-card",
     oauthFeatureTitleKey: "pi.oauth.title",
     oauthFeatureTitleDefault: "pi /login",
