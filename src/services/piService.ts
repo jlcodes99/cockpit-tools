@@ -30,6 +30,73 @@ export async function addPiAccountWithApiKey(
   });
 }
 
+export interface PiGatewayAccountInput {
+  provider: string;
+  name?: string | null;
+  baseUrl: string;
+  api: string;
+  authHeader: boolean;
+  apiKey: string;
+  models: string[];
+  displayName?: string | null;
+  defaultModel?: string | null;
+}
+
+/** Add a third-party gateway (custom models.json provider + auth.json key). */
+export async function addPiAccountWithGateway(
+  input: PiGatewayAccountInput,
+): Promise<PiAccount> {
+  return await invoke('add_pi_account_with_gateway', {
+    provider: input.provider.trim(),
+    name: input.name?.trim() || null,
+    baseUrl: input.baseUrl.trim(),
+    api: input.api,
+    authHeader: input.authHeader,
+    apiKey: input.apiKey,
+    models: input.models,
+    displayName: input.displayName?.trim() || null,
+    defaultModel: input.defaultModel?.trim() || null,
+  });
+}
+
+export async function listPiGatewayModels(input: {
+  baseUrl: string;
+  api: string;
+  apiKey: string;
+  authHeader: boolean;
+  /** When apiKey is blank, reuse the key stored on this account/provider. */
+  accountId?: string;
+  provider?: string;
+}): Promise<string[]> {
+  return await invoke('pi_list_gateway_models', {
+    baseUrl: input.baseUrl.trim(),
+    api: input.api,
+    apiKey: input.apiKey.trim(),
+    authHeader: input.authHeader,
+    accountId: input.accountId ?? null,
+    provider: input.provider ?? null,
+  });
+}
+
+/** Edit a gateway provider; a blank apiKey keeps the stored key. */
+export async function updatePiAccountGateway(
+  accountId: string,
+  input: PiGatewayAccountInput,
+): Promise<PiAccount> {
+  return await invoke('update_pi_account_gateway', {
+    accountId,
+    provider: input.provider.trim(),
+    name: input.name?.trim() || null,
+    baseUrl: input.baseUrl.trim(),
+    api: input.api,
+    authHeader: input.authHeader,
+    apiKey: input.apiKey.trim() || null,
+    models: input.models,
+    displayName: input.displayName?.trim() || null,
+    defaultModel: input.defaultModel?.trim() || null,
+  });
+}
+
 export async function importPiFromLocal(): Promise<PiAccount[]> {
   return await invoke('import_pi_from_local');
 }

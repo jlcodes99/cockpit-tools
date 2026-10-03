@@ -320,6 +320,79 @@ pub fn add_pi_account_with_api_key(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn add_pi_account_with_gateway(
+    provider: String,
+    name: Option<String>,
+    base_url: String,
+    api: String,
+    auth_header: bool,
+    api_key: String,
+    models: Vec<String>,
+    display_name: Option<String>,
+    default_model: Option<String>,
+) -> Result<PiAccountView, String> {
+    pi_account::add_with_gateway(pi_account::GatewayInput {
+        provider,
+        name,
+        base_url,
+        api,
+        auth_header,
+        api_key,
+        models,
+        display_name,
+        default_model,
+    })
+}
+
+#[tauri::command]
+pub async fn pi_list_gateway_models(
+    base_url: String,
+    api: String,
+    api_key: String,
+    auth_header: bool,
+    account_id: Option<String>,
+    provider: Option<String>,
+) -> Result<Vec<String>, String> {
+    let api_key = match (api_key.trim().is_empty(), account_id, provider) {
+        (true, Some(account_id), Some(provider)) => {
+            pi_account::stored_api_key(&account_id, &provider).unwrap_or_default()
+        }
+        _ => api_key,
+    };
+    pi_account::list_gateway_models(&base_url, &api, &api_key, auth_header).await
+}
+
+#[tauri::command]
+pub fn update_pi_account_gateway(
+    account_id: String,
+    provider: String,
+    name: Option<String>,
+    base_url: String,
+    api: String,
+    auth_header: bool,
+    api_key: Option<String>,
+    models: Vec<String>,
+    display_name: Option<String>,
+    default_model: Option<String>,
+) -> Result<PiAccountView, String> {
+    pi_account::update_gateway(
+        &account_id,
+        pi_account::GatewayInput {
+            provider,
+            name,
+            base_url,
+            api,
+            auth_header,
+            api_key: api_key.unwrap_or_default(),
+            models,
+            display_name,
+            default_model,
+        },
+    )
+}
+
+#[tauri::command]
 pub fn import_pi_from_local() -> Result<Vec<PiAccountView>, String> {
     pi_account::import_from_local()
 }

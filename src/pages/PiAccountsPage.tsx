@@ -32,6 +32,7 @@ import {
   isPiGatewayStateReady,
   type PiGatewayState,
 } from "../components/pi/PiGatewayFields";
+import { findPiGatewayPreset } from "../utils/piProviderPresets";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import { useEscClose } from "../hooks/useEscClose";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
@@ -153,10 +154,22 @@ export function PiAccountsPage() {
       exportAccounts: piService.exportPiAccounts,
       injectToVSCode: piService.switchPiAccount,
       addWithToken: (apiKey) =>
-        piService.addPiAccountWithApiKey(gateway.builtinProvider, apiKey, {
-          displayName: gateway.displayName,
-          defaultModel: gateway.defaultModel,
-        }),
+        gateway.mode === "builtin"
+          ? piService.addPiAccountWithApiKey(gateway.builtinProvider, apiKey, {
+              displayName: gateway.displayName,
+              defaultModel: gateway.defaultModel,
+            })
+          : piService.addPiAccountWithGateway({
+              provider: gateway.providerId,
+              name: findPiGatewayPreset(gateway.presetId)?.name ?? null,
+              baseUrl: gateway.baseUrl,
+              api: gateway.api,
+              authHeader: gateway.authHeader,
+              apiKey,
+              models: gateway.models,
+              displayName: gateway.displayName,
+              defaultModel: gateway.defaultModel,
+            }),
     },
     getDisplayEmail: getPiAccountDisplayEmail,
     onInjectSuccess: async ({ accountId, account, displayEmail }) => {
@@ -833,6 +846,7 @@ export function PiAccountsPage() {
     tokenFields: (
       <PiGatewayFields
         state={gateway}
+        apiKey={page.tokenInput}
         onChange={(patch) => {
           setGateway((prev) => ({ ...prev, ...patch }));
           page.setAddStatus("idle");

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::models::pi::{PiAccount, PiAccountView, PiProviderCredential};
+use crate::models::pi::{PiAccount, PiAccountView, PiCustomProvider, PiProviderCredential};
 use crate::modules::atomic_write::{write_secret_string_atomic, write_string_atomic};
 use crate::modules::{account, logger, pi_auth_lock, provider_current_state};
 
@@ -22,6 +22,12 @@ const PROFILES_DIR: &str = "pi_profiles";
 const AUTH_FILE: &str = "auth.json";
 const SETTINGS_FILE: &str = "settings.json";
 const MODELS_FILE: &str = "models.json";
+/// pi `api` values accepted for gateway providers.
+const GATEWAY_APIS: &[&str] = &[
+    "openai-completions",
+    "openai-responses",
+    "anthropic-messages",
+];
 const PLATFORM: &str = "pi";
 pub const PI_HOME_ENV: &str = "PI_CODING_AGENT_DIR";
 
@@ -408,6 +414,226 @@ pub fn add_with_oauth(
     ))
 }
 
+pub struct GatewayInput {
+    pub provider: String,
+    pub name: Option<String>,
+    pub base_url: String,
+    pub api: String,
+    pub auth_header: bool,
+    pub api_key: String,
+    pub models: Vec<String>,
+    pub display_name: Option<String>,
+    pub default_model: Option<String>,
+}
+
+fn normalize_gateway_api(api: &str) -> Result<String, String> {
+    let api = api.trim();
+    if GATEWAY_APIS.contains(&api) {
+        Ok(api.to_string())
+    } else {
+        Err(format!("不支持的协议: {}", api))
+    }
+}
+
+fn normalize_base_url(base_url: &str) -> Result<String, String> {
+    let base_url = base_url.trim().trim_end_matches('/');
+    let parsed = url::Url::parse(base_url).map_err(|_| format!("无效的 Base URL: {}", base_url))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(format!("Base URL 必须是 http(s): {}", base_url));
+    }
+    Ok(base_url.to_string())
+}
+
+fn unique_models(models: Vec<String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    models
+        .into_iter()
+        .filter_map(|model| normalize_text(Some(&model)))
+        .filter(|model| seen.insert(model.clone()))
+        .collect()
+}
+
+/// Validated gateway config: `(provider config, models, default model)`.
+fn build_gateway_config(input: &GatewayInput) -> Result<(Value, Option<String>), String> {
+    let api = normalize_gateway_api(&input.api)?;
+    let base_url = normalize_base_url(&input.base_url)?;
+    let models = unique_models(input.models.clone());
+    if models.is_empty() {
+        return Err("至少需要一个模型".to_string());
+    }
+    let default_model = normalize_text(input.default_model.as_deref())
+        .filter(|model| models.contains(model))
+        .or_else(|| models.first().cloned());
+
+    let mut config = Map::new();
+    if let Some(name) = normalize_text(input.name.as_deref()) {
+        config.insert("name".into(), Value::String(name));
+    }
+    config.insert("baseUrl".into(), Value::String(base_url));
+    config.insert("api".into(), Value::String(api));
+    if input.auth_header {
+        config.insert("authHeader".into(), Value::Bool(true));
+    }
+    let model_defs = models
+        .iter()
+        .map(|id| serde_json::json!({ "id": id }))
+        .collect();
+    config.insert("models".into(), Value::Array(model_defs));
+    Ok((Value::Object(config), default_model))
+}
+
+/// Add a third-party gateway: a custom `models.json` provider plus its key.
+pub fn add_with_gateway(input: GatewayInput) -> Result<PiAccountView, String> {
+    let provider = normalize_provider_id(&input.provider)?;
+    let api_key = input.api_key.trim();
+    if api_key.is_empty() {
+        return Err("API Key 不能为空".to_string());
+    }
+    let (config, default_model) = build_gateway_config(&input)?;
+    let credentials = vec![PiProviderCredential {
+        provider: provider.clone(),
+        entry: serde_json::json!({ "type": "api_key", "key": api_key }),
+    }];
+    let display_name = normalize_text(input.display_name.as_deref())
+        .or_else(|| normalize_text(input.name.as_deref()));
+    let mut account = new_account(
+        credentials,
+        display_name,
+        Some(provider.clone()),
+        default_model,
+        None,
+    );
+    account.custom_providers = vec![PiCustomProvider { provider, config }];
+    upsert(account)
+}
+
+/// Edit an existing gateway provider in place. An empty `api_key` keeps the
+/// stored key; the provider id is fixed so auth.json/models.json stay aligned.
+pub fn update_gateway(account_id: &str, input: GatewayInput) -> Result<PiAccountView, String> {
+    let provider = normalize_provider_id(&input.provider)?;
+    let (config, default_model) = build_gateway_config(&input)?;
+    let api_key = input.api_key.trim().to_string();
+    let display_name = normalize_text(input.display_name.as_deref());
+    with_store(|store| {
+        let account = store
+            .accounts
+            .iter_mut()
+            .find(|account| account.id == account_id)
+            .ok_or_else(|| format!("pi 账号不存在: {}", account_id))?;
+        let custom = account
+            .custom_providers
+            .iter_mut()
+            .find(|item| item.provider == provider)
+            .ok_or_else(|| format!("不是网关提供商: {}", provider))?;
+        custom.config = config;
+        if !api_key.is_empty() {
+            let entry = serde_json::json!({ "type": "api_key", "key": api_key });
+            match account
+                .credentials
+                .iter_mut()
+                .find(|cred| cred.provider == provider)
+            {
+                Some(cred) => cred.entry = entry,
+                None => account.credentials.push(PiProviderCredential {
+                    provider: provider.clone(),
+                    entry,
+                }),
+            }
+        }
+        if let Some(name) = display_name {
+            account.email = name;
+        }
+        if account.default_provider.as_deref() == Some(provider.as_str())
+            || account.default_provider.is_none()
+        {
+            account.default_provider = Some(provider.clone());
+            account.default_model = default_model;
+        }
+        Ok(PiAccountView::from(&*account))
+    })
+}
+
+/// Stored api key for `provider` on `account_id`, used to fetch models while
+/// editing without sending the key to the UI.
+pub fn stored_api_key(account_id: &str, provider: &str) -> Option<String> {
+    load_account(account_id)?
+        .credentials
+        .into_iter()
+        .find(|cred| cred.provider == provider)?
+        .entry
+        .get("key")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// Query `GET {base}/models` on a gateway and return the model ids.
+pub async fn list_gateway_models(
+    base_url: &str,
+    api: &str,
+    api_key: &str,
+    auth_header: bool,
+) -> Result<Vec<String>, String> {
+    let base_url = normalize_base_url(base_url)?;
+    let api = normalize_gateway_api(api)?;
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return Err("请先填写 API Key".to_string());
+    }
+    let is_anthropic = api == "anthropic-messages";
+    // The Anthropic SDK appends `/v1/...`; OpenAI-style bases already include /v1.
+    let url = if is_anthropic && !base_url.ends_with("/v1") {
+        format!("{}/v1/models", base_url)
+    } else {
+        format!("{}/models", base_url)
+    };
+    let client = crate::utils::http::create_client(20);
+    let mut request = client.get(&url).header("Accept", "application/json");
+    if is_anthropic {
+        request = request
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01");
+        if auth_header {
+            request = request.bearer_auth(api_key);
+        }
+    } else {
+        request = request.bearer_auth(api_key);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("请求模型列表失败: {}", e))?;
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!(
+            "获取模型列表失败 (HTTP {}): {}",
+            status.as_u16(),
+            text.chars().take(200).collect::<String>()
+        ));
+    }
+    let value: Value =
+        serde_json::from_str(&text).map_err(|e| format!("解析模型列表失败: {}", e))?;
+    let items = value
+        .get("data")
+        .or_else(|| value.get("models"))
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut models: Vec<String> = items
+        .iter()
+        .filter_map(|item| {
+            item.get("id")
+                .or_else(|| item.get("name"))
+                .and_then(Value::as_str)
+                .or_else(|| item.as_str())
+                .map(str::to_string)
+        })
+        .collect();
+    models.sort();
+    Ok(unique_models(models))
+}
+
 fn read_json_object(path: &Path) -> Result<Map<String, Value>, String> {
     if !path.exists() {
         return Ok(Map::new());
@@ -768,7 +994,6 @@ pub fn current_account_id() -> Result<Option<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::pi::PiCustomProvider;
 
     fn cred(provider: &str, entry: Value) -> PiProviderCredential {
         PiProviderCredential {
