@@ -163,9 +163,9 @@ export function SideNav({
   const setHideClassicSwitchPrompt = useSideNavLayoutStore((state) => state.setHideClassicSwitchPrompt);
   const isClassicLayout = sideNavLayoutMode === 'classic';
   const isClassicCollapsed = isClassicLayout && classicCollapsed;
-  const showClassicLabels = isClassicLayout && !classicCollapsed;
   const rocketIdRef = useRef(0);
   const classicSwitchDontAskAgainRef = useRef(false);
+  const classicCollapseToggleAtRef = useRef(0);
   const sideNavRef = useRef<HTMLElement>(null);
   const updateEntryRef = useRef<HTMLDivElement>(null);
   const brandRef = useRef<HTMLDivElement>(null);
@@ -496,6 +496,12 @@ export function SideNav({
     };
 
     if (Math.abs(nextScale - classicAdaptiveScale) > CLASSIC_NAV_SCALE_EPSILON) {
+      if (Date.now() - classicCollapseToggleAtRef.current < 300) {
+        const overflow = navItemsElement.scrollHeight - navItemsElement.clientHeight;
+        const shouldScroll = overflow > CLASSIC_NAV_SCROLL_EPSILON;
+        setClassicNavNeedsScroll((prev) => (prev === shouldScroll ? prev : shouldScroll));
+        return;
+      }
       setClassicAdaptiveScale(Number(nextScale.toFixed(5)));
       window.requestAnimationFrame(updateScrollNeed);
       return;
@@ -503,6 +509,13 @@ export function SideNav({
 
     updateScrollNeed();
   }, [classicAdaptiveScale, isClassicLayout]);
+
+  useLayoutEffect(() => {
+    if (!isClassicLayout) {
+      return;
+    }
+    classicCollapseToggleAtRef.current = Date.now();
+  }, [classicCollapsed, isClassicLayout]);
 
   useLayoutEffect(() => {
     if (!isClassicLayout || typeof window === 'undefined') {
@@ -907,8 +920,13 @@ export function SideNav({
             )}
           </div>
 
-          {isClassicLayout && !isClassicCollapsed && (
-            <div className="side-nav-brand-title">{APP_DISPLAY_NAME}</div>
+          {isClassicLayout && (
+            <div
+              className={`side-nav-brand-title${isClassicCollapsed ? ' is-collapsed' : ''}`}
+              aria-hidden={isClassicCollapsed}
+            >
+              {APP_DISPLAY_NAME}
+            </div>
           )}
         </div>
 
@@ -945,11 +963,16 @@ export function SideNav({
           title={t('nav.dashboard')}
         >
           <GaugeCircle size={isClassicLayout ? classicMainIconSize : 20} />
-          {showClassicLabels ? (
-            <span className="nav-item-text">{t('nav.dashboard')}</span>
-          ) : !isClassicLayout ? (
+          {isClassicLayout ? (
+            <span
+              className={`nav-item-text${isClassicCollapsed ? ' is-collapsed' : ''}`}
+              aria-hidden={isClassicCollapsed}
+            >
+              {t('nav.dashboard')}
+            </span>
+          ) : (
             <span className="tooltip">{t('nav.dashboard')}</span>
-          ) : null}
+          )}
         </button>
 
         {sidebarMenuEntries.map((entry) => {
@@ -962,11 +985,16 @@ export function SideNav({
               title={entry.label}
             >
               {renderEntryIcon(entry, isClassicLayout ? classicMainIconSize : 20)}
-              {showClassicLabels ? (
-                <span className="nav-item-text">{entry.label}</span>
-              ) : !isClassicLayout ? (
+              {isClassicLayout ? (
+                <span
+                  className={`nav-item-text${isClassicCollapsed ? ' is-collapsed' : ''}`}
+                  aria-hidden={isClassicCollapsed}
+                >
+                  {entry.label}
+                </span>
+              ) : (
                 <span className="tooltip">{entry.label}</span>
-              ) : null}
+              )}
             </button>
           );
         })}
@@ -978,11 +1006,16 @@ export function SideNav({
           title={t('nav.morePlatforms', '更多平台')}
         >
           <LayoutGrid size={isClassicLayout ? classicMainIconSize : 20} />
-          {showClassicLabels ? (
-            <span className="nav-item-text">{t('nav.morePlatforms', '更多平台')}</span>
-          ) : !isClassicLayout ? (
+          {isClassicLayout ? (
+            <span
+              className={`nav-item-text${isClassicCollapsed ? ' is-collapsed' : ''}`}
+              aria-hidden={isClassicCollapsed}
+            >
+              {t('nav.morePlatforms', '更多平台')}
+            </span>
+          ) : (
             <span className="tooltip">{t('nav.morePlatforms', '更多平台')}</span>
-          ) : null}
+          )}
         </button>
 
         {morePopoverContent && (
@@ -1003,9 +1036,12 @@ export function SideNav({
             title={t('nav.2faManager', '2FA / MFA 管理')}
           >
             <ShieldCheck size={isClassicLayout ? classicMainIconSize : 20} />
-            {showClassicLabels ? (
-              <span className="nav-item-text">{t('nav.2faManager', '2FA / MFA 管理')}</span>
-            ) : null}
+            <span
+              className={`nav-item-text${isClassicCollapsed ? ' is-collapsed' : ''}`}
+              aria-hidden={isClassicCollapsed}
+            >
+              {t('nav.2faManager', '2FA / MFA 管理')}
+            </span>
           </button>
 
           <button
@@ -1014,9 +1050,12 @@ export function SideNav({
             title={t('nav.logs', '日志')}
           >
             <FileText size={isClassicLayout ? classicMainIconSize : 20} />
-            {showClassicLabels ? (
-              <span className="nav-item-text">{t('nav.logs', '日志')}</span>
-            ) : null}
+            <span
+              className={`nav-item-text${isClassicCollapsed ? ' is-collapsed' : ''}`}
+              aria-hidden={isClassicCollapsed}
+            >
+              {t('nav.logs', '日志')}
+            </span>
           </button>
 
           <button
@@ -1025,9 +1064,12 @@ export function SideNav({
             title={t('nav.settings')}
           >
             <Settings size={isClassicLayout ? classicMainIconSize : 20} />
-            {showClassicLabels ? (
-              <span className="nav-item-text">{t('nav.settings')}</span>
-            ) : null}
+            <span
+              className={`nav-item-text${isClassicCollapsed ? ' is-collapsed' : ''}`}
+              aria-hidden={isClassicCollapsed}
+            >
+              {t('nav.settings')}
+            </span>
           </button>
         </div>
       )}
