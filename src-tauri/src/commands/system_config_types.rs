@@ -105,6 +105,11 @@ pub struct GeneralConfig {
     pub grok_auto_refresh_minutes: i32,
     /// 默认实例切号时是否同步写入官方 ~/.grok/auth.json
     pub grok_sync_official_auth_on_switch: bool,
+    /// pi 用量自动刷新间隔（分钟），-1 表示禁用
+    pub pi_auto_refresh_minutes: i32,
+    /// 默认实例切号时是否同步写入官方 ~/.pi/agent/auth.json
+    #[serde(default)]
+    pub pi_sync_official_auth_on_switch: bool,
     /// 切换 Grok 时是否自动重启 OpenCode
     pub grok_opencode_sync_on_switch: bool,
     /// 切换 Grok 时是否覆盖 OpenCode 登录信息
@@ -1142,6 +1147,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "cursor_auto_refresh_minutes"
             | "grok_auto_refresh_minutes"
             | "grok_sync_official_auth_on_switch"
+            | "pi_sync_official_auth_on_switch"
+            | "pi_auto_refresh_minutes"
             | "grok_opencode_sync_on_switch"
             | "grok_opencode_auth_overwrite_on_switch"
             | "claude_auto_refresh_minutes"

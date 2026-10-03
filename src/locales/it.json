@@ -5568,6 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "Se attivo, il passaggio dell’istanza predefinita a un account OAuth scrive il file ufficiale ~/.grok/auth.json. Se disattivo, viene usato un GROK_HOME separato. Le chiavi API e le istanze aggiuntive non sovrascrivono l’accesso ufficiale."
     },
     "grokRefreshInterval": "Aggiornamento automatico quota",
+    "piRefreshInterval": "Aggiornamento automatico dell'utilizzo",
     "codebuddy": {
       "title": "Impostazioni CodeBuddy",
       "appPath": "Percorso CodeBuddy"
@@ -5623,6 +5624,15 @@
     "traeSoloCn": {
       "appPath": "Percorso TRAE SOLO CN",
       "title": "Impostazioni TRAE SOLO CN"
+    },
+    "pi": {
+      "title": "Impostazioni CLI di pi",
+      "appPath": "Percorso pi",
+      "cliPath": "Percorso CLI",
+      "cliDetected": "Rilevato {{version}} in {{path}}",
+      "cliMissing": "CLI di pi non rilevata. Inserisci un percorso personalizzato",
+      "syncOfficialAuthOnSwitch": "Sincronizza accesso ufficiale al cambio",
+      "syncOfficialAuthOnSwitchDesc": "Se attivo, il cambio di account unisce le credenziali in ~/.pi/agent/auth.json e imposta il modello predefinito. Se disattivo, viene usato un PI_CODING_AGENT_DIR isolato."
     }
   },
   "quotaAlert": {
@@ -7364,5 +7374,128 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gestisci chiavi OpenCode Go/Zen e filtra per tier."
+  },
+  "pi": {
+    "search": "Cerca account pi...",
+    "flowNotice": {
+      "title": "Informazioni sulla gestione degli account pi",
+      "desc": "Ogni account pi è un insieme di credenziali dei provider più un modello predefinito. Con «Sincronizza accesso ufficiale al cambio» attivo, il cambio unisce le credenziali in ~/.pi/agent/auth.json e aggiorna il modello predefinito; se disattivo, viene usato un PI_CODING_AGENT_DIR isolato.",
+      "permission": "Ambito locale: legge ~/.pi/agent/auth.json e settings.json per l'importazione; il cambio modifica solo i provider dell'account e prima della scrittura viene conservata una copia .cockpit-backup.",
+      "network": "Ambito di rete: questa app non effettua richieste di rete; l'accesso OAuth e il rinnovo dei token sono gestiti direttamente dalla CLI di pi."
+    },
+    "empty": "Nessun account pi",
+    "addAccount": "Aggiungi account pi",
+    "oauth": {
+      "desc": "Gli accessi in abbonamento per pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, ecc.) si effettuano con il /login integrato di pi.",
+      "title": "Accesso con pi /login",
+      "item1": "Usa il flusso di accesso ufficiale di pi; le credenziali vengono scritte da pi stesso.",
+      "item2": "L'importazione salva tutte le credenziali dei provider attuali come un unico account.",
+      "item3": "Ogni account può usare la propria directory, così più istanze restano indipendenti.",
+      "builtinDesc": "Autorizza nel browser e la credenziale viene salvata come account pi, nello stesso formato di pi /login.",
+      "otherProviders": "Altri (pi /login)",
+      "urlPlaceholder": "URL di autorizzazione",
+      "waiting": "In attesa della risposta del browser...",
+      "success": "Accesso a pi riuscito"
+    },
+    "import": {
+      "pasteTab": "Incolla JSON",
+      "pasteDesc": "Incolla l'auth.json di pi o un JSON di account esportato da questa app. Le credenziali vengono elaborate solo in locale.",
+      "pastePlaceholder": "Incolla il JSON dell'account pi",
+      "pasteAction": "Importa JSON",
+      "localDesc": "Importa tutte le credenziali dei provider attuali e il modello predefinito da ~/.pi/agent/auth.json.",
+      "localClient": "Importa da pi locale",
+      "apiKeyTab": "Chiave API",
+      "apiKeyDesc": "Collega un gateway API di terze parti (compatibile con OpenAI / Anthropic) oppure inserisci una chiave API per un provider integrato di pi.",
+      "apiKeyPlaceholder": "Incolla la chiave API",
+      "apiKeyAction": "Aggiungi chiave API",
+      "defaultModel": "Modello predefinito (facoltativo)",
+      "defaultModelPlaceholder": "es. claude-sonnet-4-5",
+      "displayName": "Nome account (facoltativo)",
+      "provider": "ID provider"
+    },
+    "instances": {
+      "unsupported": "Le istanze multiple di pi sono supportate solo su macOS, Windows e Linux.",
+      "launchDialogTitle": "Avvia istanza",
+      "launchHint": "Copia il comando per eseguirlo manualmente o usa il pulsante qui sotto per eseguirlo in un terminale.",
+      "runInTerminal": "Esegui nel terminale",
+      "cliReady": "Rilevato",
+      "cliMissingShort": "Non rilevato",
+      "cliPathInvalid": "Il percorso configurato della CLI di pi non è valido: {{path}}",
+      "saveAndRetry": "Salva e riprova",
+      "installCommand": "Comando di installazione ufficiale",
+      "installHint": "Esegui il comando ufficiale qui sotto in un terminale, poi aggiorna dopo l'installazione.",
+      "selectWorkingDir": "Seleziona la directory di lavoro della CLI di pi",
+      "workingDirAccountHint": "La directory di lavoro è associata a questo account e verrà compilata automaticamente la prossima volta.",
+      "launchCommandPlaceholder": "Seleziona o conferma una directory di lavoro per generare il comando di avvio",
+      "accountHomeReady": "Directory dell'account preparata: {{email}}",
+      "installLaunchHint": "Esegui il comando ufficiale qui sotto in un terminale, poi avvia da un nuovo terminale dopo l'installazione."
+    },
+    "switch": {
+      "success": "Account cambiato"
+    },
+    "usageNormal": "Regolare",
+    "usageAbnormal": "Anomalo",
+    "usageViewDetail": "Vedi dettagli",
+    "usageDetailTitle": "Dettagli utilizzo",
+    "usage": {
+      "title": "Utilizzo",
+      "refresh": "Aggiorna utilizzo",
+      "expired": "Il token non è valido e il rinnovo automatico non è riuscito. Accedi di nuovo",
+      "unsupported": "La consultazione dell'utilizzo non è disponibile per queste credenziali",
+      "spent": "Speso",
+      "resetAt": "Si azzera il"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "Query quota non riuscita",
+      "empty": "Nessun dato sulla quota",
+      "sectionTitle": "Limiti"
+    },
+    "login": {
+      "importAfterLogin": "Importa da locale",
+      "openTerminal": "Apri pi nel terminale",
+      "opened": "Terminale aperto. Digita /login in pi",
+      "step1": "Fai clic sul pulsante qui sotto per avviare pi in un terminale (usa la directory ufficiale ~/.pi/agent).",
+      "step2": "Digita /login in pi, scegli un provider e completa l'autorizzazione nel browser. Ripeti per accedere ad altri provider.",
+      "step3": "Dopo l'accesso, torna qui e fai clic su «Importa da locale» per salvarlo come account."
+    },
+    "noDefaultModel": "Nessun modello predefinito",
+    "providers": {
+      "apiKey": "Chiave API",
+      "defaultModel": "Modello predefinito",
+      "empty": "Nessuna credenziale",
+      "expiredHint": "Token OAuth scaduto; pi lo rinnova automaticamente all'avvio",
+      "oauth": "OAuth",
+      "gateway": "Gateway API"
+    },
+    "defaults": {
+      "title": "Modifica predefiniti",
+      "hint": "Quando passi a questo account, il provider, il modello e il livello di ragionamento predefiniti vengono scritti nel settings.json di pi. Lascia vuoto per non modificare.",
+      "provider": "Provider predefinito",
+      "thinkingLevel": "Livello di ragionamento predefinito",
+      "unset": "Non impostato"
+    },
+    "gateway": {
+      "modeGateway": "Gateway di terze parti",
+      "modeBuiltin": "Provider integrato di pi",
+      "provider": "Fornitore",
+      "custom": "Personalizzato",
+      "getKey": "Ottieni chiave API",
+      "protocol": "Protocollo API",
+      "endpoint": "Endpoint del provider",
+      "baseUrl": "URL di base",
+      "providerId": "ID provider pi",
+      "authScheme": "Schema di autenticazione",
+      "models": "Modelli",
+      "fetchModels": "Recupera modelli",
+      "fetchNeedsKey": "Inserisci prima la chiave API qui sotto",
+      "editTitle": "Modifica gateway",
+      "keepKey": "Lascia vuoto per mantenere la chiave attuale {{hint}}",
+      "modelsEmpty": "Aggiungi almeno un modello",
+      "setDefault": "Imposta come modello predefinito",
+      "fetched": "{{count}} modelli restituiti, fai clic per aggiungere",
+      "addAll": "Aggiungi tutti",
+      "noModels": "Nessun modello restituito, aggiungili manualmente",
+      "modelPlaceholder": "Digita un ID modello e premi Invio"
+    }
   }
 }

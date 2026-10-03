@@ -196,6 +196,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "kiro"
     | "cursor"
     | "grok"
+    | "pi"
     | "codebuddy"
     | "codebuddy_cn"
     | "qoder"
@@ -732,7 +733,7 @@ export function InstancesManager<TAccount extends AccountLike>({
     () => new Set(stoppingInstanceIds),
     [stoppingInstanceIds],
   );
-  const isGrokApp = appType === "grok";
+  const isGrokApp = appType === "grok" || appType === "pi";
   const supportsInstanceInitialization = !isGrokApp;
   const isCodexApp = appType === "codex";
   const isClaudeApp = appType === "claude";
@@ -1742,6 +1743,7 @@ export function InstancesManager<TAccount extends AccountLike>({
       rawApp === "kiro" ||
       rawApp === "cursor" ||
       rawApp === "grok" ||
+      rawApp === "pi" ||
       rawApp === "codebuddy" ||
       rawApp === "codebuddy_cn" ||
       rawApp === "qoder" ||

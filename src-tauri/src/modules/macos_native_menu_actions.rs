@@ -300,6 +300,8 @@ fn spawn_refresh(platform: PlatformId, account_id: Option<String>) {
             (PlatformId::Grok, None) => {
                 commands::grok::refresh_all_grok_accounts(app.clone()).await
             }
+            // pi has no quota API; nothing to refresh.
+            (PlatformId::Pi, _) => Ok(0),
             (PlatformId::Codebuddy, Some(account_id)) => {
                 commands::codebuddy::refresh_codebuddy_token(app.clone(), account_id)
                     .await
@@ -425,6 +427,7 @@ fn spawn_switch_account(platform: PlatformId, account_id: String) {
                 .await
                 .map(|_| ()),
             PlatformId::Grok => commands::grok::switch_grok_account(app, account_id).map(|_| ()),
+            PlatformId::Pi => commands::pi::switch_pi_account(app, account_id).map(|_| ()),
             PlatformId::Codebuddy => {
                 commands::codebuddy::inject_codebuddy_to_vscode(app, account_id)
                     .await

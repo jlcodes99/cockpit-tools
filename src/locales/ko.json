@@ -5568,6 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "켜면 기본 인스턴스에서 OAuth 계정을 전환할 때 공식 ~/.grok/auth.json에 기록합니다. 끄면 별도 GROK_HOME을 사용합니다. API Key와 추가 인스턴스는 공식 로그인을 덮어쓰지 않습니다."
     },
     "grokRefreshInterval": "할당량 자동 새로고침",
+    "piRefreshInterval": "사용량 자동 새로 고침",
     "codebuddy": {
       "title": "CodeBuddy 설정",
       "appPath": "CodeBuddy 경로"
@@ -5623,6 +5624,15 @@
     "traeSoloCn": {
       "appPath": "TRAE SOLO CN 경로",
       "title": "TRAE SOLO CN 설정"
+    },
+    "pi": {
+      "title": "pi CLI 설정",
+      "appPath": "pi 경로",
+      "cliPath": "CLI 경로",
+      "cliDetected": "{{path}}에서 {{version}} 감지됨",
+      "cliMissing": "pi CLI가 감지되지 않았습니다. 사용자 지정 경로를 입력하세요",
+      "syncOfficialAuthOnSwitch": "전환 시 공식 로그인 동기화",
+      "syncOfficialAuthOnSwitchDesc": "활성화하면 계정 전환 시 자격 증명을 ~/.pi/agent/auth.json에 병합하고 기본 모델을 설정합니다. 비활성화하면 격리된 PI_CODING_AGENT_DIR을 사용합니다."
     }
   },
   "quotaAlert": {
@@ -7364,5 +7374,128 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen API 키를 관리하고 티어로 필터합니다."
+  },
+  "pi": {
+    "search": "pi 계정 검색...",
+    "flowNotice": {
+      "title": "pi 계정 관리 안내",
+      "desc": "각 pi 계정은 공급자 자격 증명과 기본 모델의 묶음입니다. \"전환 시 공식 로그인 동기화\"가 켜져 있으면 전환 시 자격 증명을 ~/.pi/agent/auth.json에 병합하고 기본 모델을 업데이트합니다. 꺼져 있으면 격리된 PI_CODING_AGENT_DIR을 사용합니다.",
+      "permission": "로컬 범위: 가져오기 시 ~/.pi/agent/auth.json과 settings.json을 읽습니다. 전환은 계정에 포함된 공급자만 변경하며, 쓰기 전에 .cockpit-backup 사본을 보관합니다.",
+      "network": "네트워크 범위: 이 앱은 네트워크 요청을 하지 않으며, OAuth 로그인과 토큰 갱신은 pi CLI가 직접 처리합니다."
+    },
+    "empty": "pi 계정이 없습니다",
+    "addAccount": "pi 계정 추가",
+    "oauth": {
+      "desc": "pi의 구독 로그인(Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini 등)은 pi 내장 /login으로 진행합니다.",
+      "title": "pi /login 로그인",
+      "item1": "pi 공식 로그인 절차를 사용하며 자격 증명은 pi가 직접 기록합니다.",
+      "item2": "가져오면 현재 모든 공급자 자격 증명이 하나의 계정으로 저장됩니다.",
+      "item3": "계정마다 별도 디렉터리를 사용할 수 있어 여러 인스턴스가 서로 독립적입니다.",
+      "builtinDesc": "브라우저에서 인증하면 자격 증명이 pi /login과 같은 형식으로 pi 계정에 저장됩니다.",
+      "otherProviders": "기타(pi /login)",
+      "urlPlaceholder": "인증 URL",
+      "waiting": "브라우저 콜백을 기다리는 중...",
+      "success": "pi 로그인 성공"
+    },
+    "import": {
+      "pasteTab": "JSON 붙여넣기",
+      "pasteDesc": "pi의 auth.json 또는 이 앱에서 내보낸 계정 JSON을 붙여넣으세요. 자격 증명은 로컬에서만 처리됩니다.",
+      "pastePlaceholder": "pi 계정 JSON 붙여넣기",
+      "pasteAction": "JSON 가져오기",
+      "localDesc": "~/.pi/agent/auth.json에서 현재 모든 공급자 자격 증명과 기본 모델을 가져옵니다.",
+      "localClient": "로컬 pi에서 가져오기",
+      "apiKeyTab": "API 키",
+      "apiKeyDesc": "타사 API 게이트웨이(OpenAI / Anthropic 호환)에 연결하거나 pi 내장 공급자의 API 키를 입력하세요.",
+      "apiKeyPlaceholder": "API 키 붙여넣기",
+      "apiKeyAction": "API 키 추가",
+      "defaultModel": "기본 모델(선택)",
+      "defaultModelPlaceholder": "예: claude-sonnet-4-5",
+      "displayName": "계정 이름(선택)",
+      "provider": "공급자 ID"
+    },
+    "instances": {
+      "unsupported": "pi 다중 인스턴스는 macOS, Windows, Linux만 지원합니다.",
+      "launchDialogTitle": "인스턴스 실행",
+      "launchHint": "명령을 복사해 직접 실행하거나 아래 버튼으로 터미널에서 실행하세요.",
+      "runInTerminal": "터미널에서 실행",
+      "cliReady": "감지됨",
+      "cliMissingShort": "감지되지 않음",
+      "cliPathInvalid": "설정된 pi CLI 경로가 잘못되었습니다: {{path}}",
+      "saveAndRetry": "저장 후 다시 시도",
+      "installCommand": "공식 설치 명령",
+      "installHint": "터미널에서 아래 공식 명령을 실행한 뒤 설치가 끝나면 새로 고침하세요.",
+      "selectWorkingDir": "pi CLI 작업 디렉터리 선택",
+      "workingDirAccountHint": "작업 디렉터리는 이 계정에 연결되어 다음에 자동으로 채워집니다.",
+      "launchCommandPlaceholder": "작업 디렉터리를 선택하거나 확인하면 실행 명령이 생성됩니다",
+      "accountHomeReady": "계정 디렉터리 준비 완료: {{email}}",
+      "installLaunchHint": "터미널에서 아래 공식 명령을 실행한 뒤 설치가 끝나면 새 터미널에서 실행하세요."
+    },
+    "switch": {
+      "success": "계정 전환 완료"
+    },
+    "usageNormal": "정상",
+    "usageAbnormal": "이상",
+    "usageViewDetail": "세부 정보",
+    "usageDetailTitle": "사용량 세부 정보",
+    "usage": {
+      "title": "사용량",
+      "refresh": "사용량 새로 고침",
+      "expired": "토큰이 유효하지 않으며 자동 갱신에 실패했습니다. 다시 로그인하세요",
+      "unsupported": "이 자격 증명으로는 사용량을 조회할 수 없습니다",
+      "spent": "사용 금액",
+      "resetAt": "초기화 시각"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "할당량 조회 실패",
+      "empty": "할당량 데이터 없음",
+      "sectionTitle": "할당량"
+    },
+    "login": {
+      "importAfterLogin": "로컬에서 가져오기",
+      "openTerminal": "터미널에서 pi 열기",
+      "opened": "터미널이 열렸습니다. pi에서 /login을 입력하세요",
+      "step1": "아래 버튼을 클릭해 터미널에서 pi를 시작합니다(공식 디렉터리 ~/.pi/agent 사용).",
+      "step2": "pi에서 /login을 입력하고 공급자를 선택한 뒤 브라우저에서 인증을 완료하세요. 반복하면 다른 공급자에도 로그인할 수 있습니다.",
+      "step3": "로그인 후 돌아와 \"로컬에서 가져오기\"를 클릭하면 계정으로 저장됩니다."
+    },
+    "noDefaultModel": "기본 모델 없음",
+    "providers": {
+      "apiKey": "API 키",
+      "defaultModel": "기본 모델",
+      "empty": "자격 증명 없음",
+      "expiredHint": "OAuth 토큰이 만료되었습니다. pi가 실행 시 자동으로 갱신합니다",
+      "oauth": "OAuth",
+      "gateway": "게이트웨이"
+    },
+    "defaults": {
+      "title": "기본값 편집",
+      "hint": "이 계정으로 전환하면 기본 공급자, 모델 및 사고 수준이 pi의 settings.json에 기록됩니다. 비워 두면 변경하지 않습니다.",
+      "provider": "기본 공급자",
+      "thinkingLevel": "기본 사고 수준",
+      "unset": "설정 안 됨"
+    },
+    "gateway": {
+      "modeGateway": "타사 게이트웨이",
+      "modeBuiltin": "pi 내장 공급자",
+      "provider": "공급자",
+      "custom": "사용자 지정",
+      "getKey": "API 키 발급",
+      "protocol": "API 프로토콜",
+      "endpoint": "공급자 엔드포인트",
+      "baseUrl": "기본 URL",
+      "providerId": "pi 공급자 ID",
+      "authScheme": "인증 방식",
+      "models": "모델",
+      "fetchModels": "모델 가져오기",
+      "fetchNeedsKey": "먼저 아래에 API 키를 입력하세요",
+      "editTitle": "게이트웨이 편집",
+      "keepKey": "비워 두면 현재 키 유지 {{hint}}",
+      "modelsEmpty": "모델을 하나 이상 추가하세요",
+      "setDefault": "기본 모델로 설정",
+      "fetched": "{{count}}개 모델이 반환되었습니다. 클릭하여 추가",
+      "addAll": "모두 추가",
+      "noModels": "반환된 모델이 없습니다. 직접 추가하세요",
+      "modelPlaceholder": "모델 ID를 입력하고 Enter 누르기"
+    }
   }
 }

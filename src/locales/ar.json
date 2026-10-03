@@ -5615,6 +5615,7 @@
       "syncOfficialAuthOnSwitchDesc": "عند التفعيل، يؤدي تبديل حساب OAuth للمثيل الافتراضي إلى الكتابة في الملف الرسمي ~/.grok/auth.json. عند التعطيل، يُستخدم GROK_HOME مستقل. لا تستبدل مفاتيح API والمثيلات الإضافية تسجيل الدخول الرسمي."
     },
     "grokRefreshInterval": "تحديث الحصة تلقائيًا",
+    "piRefreshInterval": "التحديث التلقائي للاستخدام",
     "codebuddy": {
       "title": "إعدادات CodeBuddy",
       "appPath": "مسار CodeBuddy"
@@ -5670,6 +5671,15 @@
     "traeSoloCn": {
       "appPath": "مسار TRAE SOLO CN",
       "title": "إعدادات TRAE SOLO CN"
+    },
+    "pi": {
+      "title": "إعدادات pi CLI",
+      "appPath": "مسار pi",
+      "cliPath": "مسار CLI",
+      "cliDetected": "تم اكتشاف {{version}} في {{path}}",
+      "cliMissing": "لم يتم اكتشاف pi CLI. أدخل مسارًا مخصصًا",
+      "syncOfficialAuthOnSwitch": "مزامنة تسجيل الدخول الرسمي عند التبديل",
+      "syncOfficialAuthOnSwitchDesc": "عند التفعيل، يدمج تبديل الحساب بيانات الاعتماد في ~/.pi/agent/auth.json ويعيّن النموذج الافتراضي. عند التعطيل، يُستخدم PI_CODING_AGENT_DIR معزول."
     }
   },
   "quotaAlert": {
@@ -7364,5 +7374,128 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "إدارة مفاتيح OpenCode Go/Zen والتصفية حسب المستوى."
+  },
+  "pi": {
+    "search": "البحث في حسابات pi...",
+    "flowNotice": {
+      "title": "حول إدارة حسابات pi",
+      "desc": "كل حساب pi هو مجموعة من بيانات اعتماد المزوّدين مع نموذج افتراضي. عند تفعيل \"مزامنة تسجيل الدخول الرسمي عند التبديل\"، يدمج التبديل بيانات الاعتماد في ~/.pi/agent/auth.json ويحدّث النموذج الافتراضي؛ وعند تعطيله، يُستخدم PI_CODING_AGENT_DIR معزول.",
+      "permission": "النطاق المحلي: يقرأ ~/.pi/agent/auth.json وsettings.json للاستيراد؛ يغيّر التبديل مزوّدي الحساب فقط، وتُحفظ نسخة .cockpit-backup قبل الكتابة.",
+      "network": "نطاق الشبكة: لا يُجري هذا التطبيق أي طلبات شبكة؛ تتولى pi CLI نفسها تسجيل الدخول عبر OAuth وتحديث الرموز."
+    },
+    "empty": "لا توجد حسابات pi",
+    "addAccount": "إضافة حساب pi",
+    "oauth": {
+      "desc": "تتم عمليات تسجيل الدخول بالاشتراك لـ pi (Claude Pro/Max وChatGPT وGitHub Copilot وGemini وغيرها) باستخدام الأمر /login المدمج في pi.",
+      "title": "تسجيل الدخول عبر pi /login",
+      "item1": "يستخدم مسار تسجيل الدخول الرسمي لـ pi؛ وتكتب pi بيانات الاعتماد بنفسها.",
+      "item2": "يحفظ الاستيراد جميع بيانات اعتماد المزوّدين الحالية كحساب واحد.",
+      "item3": "يمكن لكل حساب استخدام مجلده الخاص، لتبقى المثيلات المتعددة مستقلة.",
+      "builtinDesc": "قم بالتفويض في متصفحك وستُحفظ بيانات الاعتماد كحساب pi، بنفس تنسيق pi /login.",
+      "otherProviders": "أخرى (pi /login)",
+      "urlPlaceholder": "عنوان URL للتفويض",
+      "waiting": "في انتظار استجابة المتصفح...",
+      "success": "نجح تسجيل الدخول إلى pi"
+    },
+    "import": {
+      "pasteTab": "لصق JSON",
+      "pasteDesc": "الصق ملف auth.json الخاص بـ pi أو JSON حساب مُصدَّر من هذا التطبيق. تتم معالجة بيانات الاعتماد محليًا فقط.",
+      "pastePlaceholder": "الصق JSON حساب pi",
+      "pasteAction": "استيراد JSON",
+      "localDesc": "استيراد جميع بيانات اعتماد المزوّدين الحالية والنموذج الافتراضي من ~/.pi/agent/auth.json.",
+      "localClient": "الاستيراد من pi المحلي",
+      "apiKeyTab": "مفتاح API",
+      "apiKeyDesc": "اربط بوابة API تابعة لطرف ثالث (متوافقة مع OpenAI / Anthropic)، أو أدخل مفتاح API لمزوّد pi مدمج.",
+      "apiKeyPlaceholder": "الصق مفتاح API",
+      "apiKeyAction": "إضافة مفتاح API",
+      "defaultModel": "النموذج الافتراضي (اختياري)",
+      "defaultModelPlaceholder": "مثال: claude-sonnet-4-5",
+      "displayName": "اسم الحساب (اختياري)",
+      "provider": "معرّف المزوّد"
+    },
+    "instances": {
+      "unsupported": "تعدد مثيلات pi مدعوم على macOS وWindows وLinux فقط.",
+      "launchDialogTitle": "تشغيل المثيل",
+      "launchHint": "انسخ الأمر لتشغيله يدويًا، أو استخدم الزر أدناه لتشغيله في الطرفية.",
+      "runInTerminal": "تشغيل في الطرفية",
+      "cliReady": "تم الاكتشاف",
+      "cliMissingShort": "غير مكتشف",
+      "cliPathInvalid": "مسار pi CLI المُعدّ غير صالح: {{path}}",
+      "saveAndRetry": "حفظ وإعادة المحاولة",
+      "installCommand": "أمر التثبيت الرسمي",
+      "installHint": "شغّل الأمر الرسمي أدناه في الطرفية، ثم حدّث بعد التثبيت.",
+      "selectWorkingDir": "اختر مجلد عمل pi CLI",
+      "workingDirAccountHint": "مجلد العمل مرتبط بهذا الحساب وسيُملأ تلقائيًا في المرة القادمة.",
+      "launchCommandPlaceholder": "اختر أو أكّد مجلد العمل لإنشاء أمر التشغيل",
+      "accountHomeReady": "تم تجهيز مجلد الحساب: {{email}}",
+      "installLaunchHint": "شغّل الأمر الرسمي أدناه في الطرفية، ثم شغّل من طرفية جديدة بعد التثبيت."
+    },
+    "switch": {
+      "success": "تم تبديل الحساب"
+    },
+    "usageNormal": "سليم",
+    "usageAbnormal": "غير طبيعي",
+    "usageViewDetail": "عرض التفاصيل",
+    "usageDetailTitle": "تفاصيل الاستخدام",
+    "usage": {
+      "title": "الاستخدام",
+      "refresh": "تحديث الاستخدام",
+      "expired": "الرمز غير صالح وفشل التحديث التلقائي. يرجى تسجيل الدخول مجددًا",
+      "unsupported": "الاستعلام عن الاستخدام غير متاح لبيانات الاعتماد هذه",
+      "spent": "المُنفَق",
+      "resetAt": "يُعاد التعيين في"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "فشل الاستعلام عن الحصة",
+      "empty": "لا توجد بيانات حصة",
+      "sectionTitle": "الحصة"
+    },
+    "login": {
+      "importAfterLogin": "الاستيراد من المحلي",
+      "openTerminal": "فتح pi في الطرفية",
+      "opened": "تم فتح الطرفية. اكتب /login في pi",
+      "step1": "انقر على الزر أدناه لبدء pi في الطرفية (يستخدم المجلد الرسمي ~/.pi/agent).",
+      "step2": "اكتب /login في pi، واختر مزوّدًا وأكمل التفويض في المتصفح. كرّر لتسجيل الدخول إلى مزوّدين آخرين.",
+      "step3": "بعد تسجيل الدخول، عُد وانقر على \"الاستيراد من المحلي\" لحفظه كحساب."
+    },
+    "noDefaultModel": "لا يوجد نموذج افتراضي",
+    "providers": {
+      "apiKey": "مفتاح API",
+      "defaultModel": "النموذج الافتراضي",
+      "empty": "لا توجد بيانات اعتماد",
+      "expiredHint": "انتهت صلاحية رمز OAuth؛ ستحدّثه pi تلقائيًا عند التشغيل",
+      "oauth": "OAuth",
+      "gateway": "البوابة"
+    },
+    "defaults": {
+      "title": "تعديل الإعدادات الافتراضية",
+      "hint": "عند التبديل إلى هذا الحساب، تتم كتابة المزوّد والنموذج ومستوى التفكير الافتراضي في ملف settings.json الخاص بـ pi. اتركه فارغًا لعدم التغيير.",
+      "provider": "المزوّد الافتراضي",
+      "thinkingLevel": "مستوى التفكير الافتراضي",
+      "unset": "غير محدد"
+    },
+    "gateway": {
+      "modeGateway": "بوابة طرف ثالث",
+      "modeBuiltin": "مزوّد pi المدمج",
+      "provider": "المزوّد",
+      "custom": "مخصص",
+      "getKey": "الحصول على مفتاح API",
+      "protocol": "بروتوكول API",
+      "endpoint": "نقطة نهاية المزوّد",
+      "baseUrl": "عنوان URL الأساسي",
+      "providerId": "معرّف مزوّد pi",
+      "authScheme": "نظام المصادقة",
+      "models": "النماذج",
+      "fetchModels": "جلب النماذج",
+      "fetchNeedsKey": "أدخل مفتاح API أدناه أولًا",
+      "editTitle": "تعديل البوابة",
+      "keepKey": "اتركه فارغًا للاحتفاظ بالمفتاح الحالي {{hint}}",
+      "modelsEmpty": "أضف نموذجًا واحدًا على الأقل",
+      "setDefault": "تعيين كنموذج افتراضي",
+      "fetched": "تم إرجاع {{count}} نموذج، انقر للإضافة",
+      "addAll": "إضافة الكل",
+      "noModels": "لم يتم إرجاع أي نماذج، أضفها يدويًا",
+      "modelPlaceholder": "اكتب معرّف النموذج واضغط Enter"
+    }
   }
 }

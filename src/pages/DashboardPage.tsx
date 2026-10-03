@@ -65,6 +65,7 @@ import {
 } from '../types/kiro';
 import { CursorAccount, getCursorUsage } from '../types/cursor';
 import { GrokAccount, getGrokUsage } from '../types/grok';
+import { usePiAccountStore } from '../stores/usePiAccountStore';
 import { ClaudeAccount } from '../types/claude';
 import { ZedAccount, getZedUsage } from '../types/zed';
 import {
@@ -483,6 +484,8 @@ export function DashboardPage({
     fetchAccounts: fetchCursorAccounts,
     switchAccount: switchCursorAccount,
   } = useCursorAccountStore();
+
+  const piAccounts = usePiAccountStore((state) => state.accounts);
 
   // Grok CLI Data
   const {
@@ -2670,6 +2673,7 @@ export function DashboardPage({
     kiro: stats.kiro,
     cursor: stats.cursor,
     grok: stats.grok,
+    pi: piAccounts.length,
     codebuddy: stats.codebuddy,
     codebuddy_cn: stats.codebuddy_cn,
     qoder: stats.qoder,
