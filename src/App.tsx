@@ -138,6 +138,9 @@ const CursorAccountsPage = lazy(() =>
 const GrokAccountsPage = lazy(() =>
   import('./pages/GrokAccountsPage').then((module) => ({ default: module.GrokAccountsPage })),
 );
+const PiAccountsPage = lazy(() =>
+  import('./pages/PiAccountsPage').then((module) => ({ default: module.PiAccountsPage })),
+);
 const CodebuddyAccountsPage = lazy(() =>
   import('./pages/CodebuddyAccountsPage').then((module) => ({ default: module.CodebuddyAccountsPage })),
 );
@@ -217,6 +220,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'kiro',
   'cursor',
   'grok',
+  'pi',
   'codebuddy',
   'codebuddy-cn',
   'qoder',
@@ -253,6 +257,7 @@ const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> 
   kiro: ['kiro'],
   cursor: ['cursor'],
   grok: ['grok'],
+  pi: ['pi'],
   codebuddy: ['codebuddy'],
   'codebuddy-cn': ['codebuddy-cn'],
   qoder: ['qoder'],
@@ -495,6 +500,7 @@ type QuotaAlertPlatform =
   | 'kiro'
   | 'cursor'
   | 'grok'
+  | 'pi'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
@@ -596,6 +602,8 @@ function normalizeQuotaAlertPlatform(platform: string | undefined): QuotaAlertPl
       return 'cursor';
     case 'grok':
       return 'grok';
+    case 'pi':
+      return 'pi';
     case 'codebuddy':
       return 'codebuddy';
     case 'codebuddy_cn':
@@ -636,6 +644,8 @@ function getQuotaAlertPlatformLabel(
       return 'Cursor';
     case 'grok':
       return 'Grok CLI';
+    case 'pi':
+      return 'pi';
     case 'codebuddy':
       return 'CodeBuddy';
     case 'codebuddy_cn':
@@ -667,6 +677,8 @@ function getQuotaAlertTargetPage(platform: QuotaAlertPlatform): Page {
       return 'cursor';
     case 'grok':
       return 'grok';
+    case 'pi':
+      return 'pi';
     case 'codebuddy':
       return 'codebuddy';
     case 'codebuddy_cn':
@@ -4076,6 +4088,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'grok'}>
             <GrokAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'pi'}>
+            <PiAccountsPage />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'codebuddy'}>
             <CodebuddyAccountsPage />

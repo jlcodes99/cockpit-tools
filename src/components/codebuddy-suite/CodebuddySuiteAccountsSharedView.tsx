@@ -172,6 +172,10 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   quotaPrefix: string;
   tableUsageClassName: string;
   oauthProviderControl?: ReactNode;
+  /** Replaces the auto OAuth URL/polling block (e.g. CLI-driven login guides). */
+  oauthCustomContent?: ReactNode;
+  /** Extra toolbar controls rendered after the export button. */
+  toolbarExtra?: ReactNode;
   showMfaQuickCode?: boolean;
   CheckinModal?: ComponentType<CheckinModalProps<TAccount>>;
   getReauthorizationReason?: (account: TAccount) => string | null;
@@ -185,6 +189,13 @@ export interface CodebuddySuiteAccountsPlatformConfig<
     account: TAccount,
     variant: "card" | "table",
   ) => ReactNode;
+  /** Extra per-account action buttons, rendered after the tag button. */
+  renderAccountActions?: (
+    account: TAccount,
+    variant: "card" | "table",
+  ) => ReactNode;
+  /** Hide the per-account refresh button (platforms without remote state). */
+  hideRefreshAction?: boolean;
 }
 
 interface CodebuddySuiteAccountsSharedViewProps<
@@ -758,6 +769,8 @@ export function CodebuddySuiteAccountsSharedView<
               >
                 <Tag size={14} />
               </button>
+              {platformConfig.renderAccountActions?.(account, "card")}
+              {!platformConfig.hideRefreshAction && (
               <button
                 className="card-action-btn"
                 onClick={() => handleRefresh(account.id)}
@@ -769,6 +782,7 @@ export function CodebuddySuiteAccountsSharedView<
                   className={refreshing === account.id ? "loading-spinner" : ""}
                 />
               </button>
+              )}
               <button
                 className="card-action-btn export-btn"
                 onClick={() => handleExportByIds([account.id])}
@@ -867,6 +881,8 @@ export function CodebuddySuiteAccountsSharedView<
               >
                 <Tag size={14} />
               </button>
+              {platformConfig.renderAccountActions?.(account, "table")}
+              {!platformConfig.hideRefreshAction && (
               <button
                 className="action-btn"
                 onClick={() => handleRefresh(account.id)}
@@ -877,6 +893,7 @@ export function CodebuddySuiteAccountsSharedView<
                   className={refreshing === account.id ? "loading-spinner" : ""}
                 />
               </button>
+              )}
               <button
                 className="action-btn"
                 onClick={() => handleExportByIds([account.id])}
@@ -1161,6 +1178,7 @@ export function CodebuddySuiteAccountsSharedView<
           {platformConfig.quickSettingsType && (
             <QuickSettingsPopover type={platformConfig.quickSettingsType} />
           )}
+          {platformConfig.toolbarExtra}
         </div>
       </div>
 
@@ -1475,7 +1493,9 @@ export function CodebuddySuiteAccountsSharedView<
                         platformConfig.oauthDescDefault,
                       )}
                     </p>
-                    {oauthPrepareError ? (
+                    {platformConfig.oauthCustomContent ? (
+                      platformConfig.oauthCustomContent
+                    ) : oauthPrepareError ? (
                       <div className="add-status error">
                         <CircleAlert size={16} />
                         <span>{oauthPrepareError}</span>

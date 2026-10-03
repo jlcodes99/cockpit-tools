@@ -1176,7 +1176,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
         // Grok：以后端为准（关闭「切号同步官方登录」时不应有「当前账号」）。
         // 其他平台仍乐观标记当前账号，避免 resolver 短暂为空导致标识闪烁。
         let resolvedCurrentAccountId: string | null = accountId;
-        if (platformKey === 'grok' && storeFetchCurrentAccountId) {
+        if ((platformKey === 'grok' || platformKey === 'pi') && storeFetchCurrentAccountId) {
           resolvedCurrentAccountId = await storeFetchCurrentAccountId();
         } else {
           setCurrentAccountId(accountId);
@@ -1204,7 +1204,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
         const retrySwitch = async () => {
           await injectFn(accountId);
           let resolvedCurrentAccountId: string | null = accountId;
-          if (platformKey === 'grok' && storeFetchCurrentAccountId) {
+          if ((platformKey === 'grok' || platformKey === 'pi') && storeFetchCurrentAccountId) {
             resolvedCurrentAccountId = await storeFetchCurrentAccountId();
           } else {
             setCurrentAccountId(accountId);

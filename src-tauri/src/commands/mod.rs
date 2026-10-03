@@ -26,6 +26,8 @@ pub mod github_copilot;
 pub mod github_copilot_instance;
 pub mod grok;
 pub mod grok_instance;
+pub mod pi;
+pub mod pi_instance;
 pub mod group;
 pub mod import;
 pub mod instance;

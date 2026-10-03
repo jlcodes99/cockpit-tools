@@ -64,6 +64,7 @@ import { useCodebuddyInstanceStore } from '../stores/useCodebuddyInstanceStore';
 import { useCodexInstanceStore } from '../stores/useCodexInstanceStore';
 import { useCursorInstanceStore } from '../stores/useCursorInstanceStore';
 import { useGrokInstanceStore } from '../stores/useGrokInstanceStore';
+import { usePiInstanceStore } from '../stores/usePiInstanceStore';
 import { useGitHubCopilotInstanceStore } from '../stores/useGitHubCopilotInstanceStore';
 import type { InstanceStoreState } from '../stores/createInstanceStore';
 import { useInstanceStore } from '../stores/useInstanceStore';
@@ -210,6 +211,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useCursorInstanceStore.getState();
     case 'grok':
       return useGrokInstanceStore.getState();
+    case 'pi':
+      return usePiInstanceStore.getState();
     case 'codebuddy':
       return useCodebuddyInstanceStore.getState();
     case 'codebuddy_cn':
