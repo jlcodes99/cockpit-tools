@@ -118,6 +118,10 @@ fn build_service_refresh_policies(cfg: &super::config::UserConfig) -> Vec<Servic
             interval_minutes: cfg.grok_auto_refresh_minutes,
         },
         ServiceRefreshPolicy {
+            key: "pi",
+            interval_minutes: cfg.pi_auto_refresh_minutes,
+        },
+        ServiceRefreshPolicy {
             key: "codebuddy",
             interval_minutes: cfg.codebuddy_auto_refresh_minutes,
         },
@@ -188,6 +192,7 @@ async fn run_refresh_for_service(policy: ServiceRefreshPolicy) -> Result<(), Str
         "grok" => super::grok_account::refresh_all_accounts()
             .await
             .map(|_| ()),
+        "pi" => super::pi_quota::refresh_all_accounts().await,
         "codebuddy" => super::codebuddy_account::refresh_all_tokens()
             .await
             .map(|_| ()),

@@ -5568,6 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "Al activarlo, cambiar la instancia predeterminada a una cuenta OAuth escribe el archivo oficial ~/.grok/auth.json. Al desactivarlo, se usa un GROK_HOME independiente. Las claves API y las instancias adicionales no sobrescriben el inicio oficial."
     },
     "grokRefreshInterval": "Actualización automática de cuota",
+    "piRefreshInterval": "Actualización automática del uso",
     "codebuddy": {
       "title": "Configuración de CodeBuddy",
       "appPath": "Ruta de CodeBuddy"
@@ -5623,6 +5624,15 @@
     "traeSoloCn": {
       "appPath": "Ruta de TRAE SOLO CN",
       "title": "Configuración de TRAE SOLO CN"
+    },
+    "pi": {
+      "title": "Configuración de la CLI de pi",
+      "appPath": "Ruta de pi",
+      "cliPath": "Ruta de la CLI",
+      "cliDetected": "Se detectó {{version}} en {{path}}",
+      "cliMissing": "No se detectó la CLI de pi. Introduce una ruta personalizada",
+      "syncOfficialAuthOnSwitch": "Sincronizar inicio de sesión oficial al cambiar",
+      "syncOfficialAuthOnSwitchDesc": "Si está activado, al cambiar de cuenta se fusionan las credenciales en ~/.pi/agent/auth.json y se establece el modelo predeterminado. Si está desactivado, se usa un PI_CODING_AGENT_DIR aislado."
     }
   },
   "quotaAlert": {
@@ -7364,5 +7374,128 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "Gestiona claves OpenCode Go/Zen y filtra por nivel."
+  },
+  "pi": {
+    "search": "Buscar cuentas de pi...",
+    "flowNotice": {
+      "title": "Acerca de la gestión de cuentas de pi",
+      "desc": "Cada cuenta de pi es un conjunto de credenciales de proveedores más un modelo predeterminado. Con «Sincronizar inicio de sesión oficial al cambiar» activado, al cambiar se fusionan las credenciales en ~/.pi/agent/auth.json y se actualiza el modelo predeterminado; si está desactivado, se usa un PI_CODING_AGENT_DIR aislado.",
+      "permission": "Alcance local: lee ~/.pi/agent/auth.json y settings.json para importar; al cambiar solo se modifican los proveedores de la cuenta, y se guarda una copia .cockpit-backup antes de escribir.",
+      "network": "Alcance de red: esta aplicación no realiza solicitudes de red; el inicio de sesión OAuth y la renovación de tokens los gestiona la propia CLI de pi."
+    },
+    "empty": "No hay cuentas de pi",
+    "addAccount": "Añadir cuenta de pi",
+    "oauth": {
+      "desc": "Los inicios de sesión por suscripción de pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, etc.) se realizan con el /login integrado de pi.",
+      "title": "Inicio de sesión con pi /login",
+      "item1": "Usa el flujo de inicio de sesión oficial de pi; las credenciales las escribe el propio pi.",
+      "item2": "Al importar se guardan todas las credenciales de proveedores actuales como una sola cuenta.",
+      "item3": "Cada cuenta puede usar su propio directorio, de modo que varias instancias se mantienen independientes.",
+      "builtinDesc": "Autoriza en tu navegador y la credencial se guardará como cuenta de pi, con el mismo formato que pi /login.",
+      "otherProviders": "Otros (pi /login)",
+      "urlPlaceholder": "URL de autorización",
+      "waiting": "Esperando la respuesta del navegador...",
+      "success": "Inicio de sesión en pi correcto"
+    },
+    "import": {
+      "pasteTab": "Pegar JSON",
+      "pasteDesc": "Pega el auth.json de pi o un JSON de cuenta exportado por esta aplicación. Las credenciales solo se procesan localmente.",
+      "pastePlaceholder": "Pega el JSON de la cuenta de pi",
+      "pasteAction": "Importar JSON",
+      "localDesc": "Importa todas las credenciales de proveedores actuales y el modelo predeterminado desde ~/.pi/agent/auth.json.",
+      "localClient": "Importar desde pi local",
+      "apiKeyTab": "Clave API",
+      "apiKeyDesc": "Conecta una pasarela API de terceros (compatible con OpenAI / Anthropic) o introduce una clave API para un proveedor integrado de pi.",
+      "apiKeyPlaceholder": "Pega la clave API",
+      "apiKeyAction": "Añadir clave API",
+      "defaultModel": "Modelo predeterminado (opcional)",
+      "defaultModelPlaceholder": "p. ej. claude-sonnet-4-5",
+      "displayName": "Nombre de la cuenta (opcional)",
+      "provider": "ID del proveedor"
+    },
+    "instances": {
+      "unsupported": "El modo multiinstancia de pi solo es compatible con macOS, Windows y Linux.",
+      "launchDialogTitle": "Iniciar instancia",
+      "launchHint": "Copia el comando para ejecutarlo manualmente o usa el botón de abajo para ejecutarlo en una terminal.",
+      "runInTerminal": "Ejecutar en la terminal",
+      "cliReady": "Detectado",
+      "cliMissingShort": "No detectado",
+      "cliPathInvalid": "La ruta configurada de la CLI de pi no es válida: {{path}}",
+      "saveAndRetry": "Guardar y reintentar",
+      "installCommand": "Comando de instalación oficial",
+      "installHint": "Ejecuta el comando oficial de abajo en una terminal y actualiza tras la instalación.",
+      "selectWorkingDir": "Seleccionar directorio de trabajo de la CLI de pi",
+      "workingDirAccountHint": "El directorio de trabajo está vinculado a esta cuenta y se rellenará automáticamente la próxima vez.",
+      "launchCommandPlaceholder": "Selecciona o confirma un directorio de trabajo para generar el comando de inicio",
+      "accountHomeReady": "Directorio de la cuenta preparado: {{email}}",
+      "installLaunchHint": "Ejecuta el comando oficial de abajo en una terminal y, tras la instalación, inicia desde una terminal nueva."
+    },
+    "switch": {
+      "success": "Cuenta cambiada"
+    },
+    "usageNormal": "Correcto",
+    "usageAbnormal": "Anómalo",
+    "usageViewDetail": "Ver detalles",
+    "usageDetailTitle": "Detalles de uso",
+    "usage": {
+      "title": "Uso",
+      "refresh": "Actualizar uso",
+      "expired": "El token no es válido y la renovación automática falló. Vuelve a iniciar sesión",
+      "unsupported": "La consulta de uso no está disponible para estas credenciales",
+      "spent": "Gastado",
+      "resetAt": "Se restablece el"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "Error al consultar la cuota",
+      "empty": "No hay datos de cuota",
+      "sectionTitle": "Cuota"
+    },
+    "login": {
+      "importAfterLogin": "Importar desde local",
+      "openTerminal": "Abrir pi en la terminal",
+      "opened": "Terminal abierta. Escribe /login en pi",
+      "step1": "Haz clic en el botón de abajo para iniciar pi en una terminal (usa el directorio oficial ~/.pi/agent).",
+      "step2": "Escribe /login en pi, elige un proveedor y completa la autorización en el navegador. Repite para iniciar sesión en más proveedores.",
+      "step3": "Tras iniciar sesión, vuelve y haz clic en «Importar desde local» para guardarla como cuenta."
+    },
+    "noDefaultModel": "Sin modelo predeterminado",
+    "providers": {
+      "apiKey": "Clave API",
+      "defaultModel": "Modelo predeterminado",
+      "empty": "Sin credenciales",
+      "expiredHint": "Token OAuth caducado; pi lo renueva automáticamente al iniciarse",
+      "oauth": "OAuth",
+      "gateway": "Pasarela"
+    },
+    "defaults": {
+      "title": "Editar valores predeterminados",
+      "hint": "Al cambiar a esta cuenta, el proveedor, el modelo y el nivel de razonamiento predeterminados se escriben en el settings.json de pi. Déjalo vacío para no cambiar nada.",
+      "provider": "Proveedor predeterminado",
+      "thinkingLevel": "Nivel de razonamiento predeterminado",
+      "unset": "Sin definir"
+    },
+    "gateway": {
+      "modeGateway": "Pasarela de terceros",
+      "modeBuiltin": "Proveedor integrado de pi",
+      "provider": "Proveedor",
+      "custom": "Personalizado",
+      "getKey": "Obtener clave API",
+      "protocol": "Protocolo de API",
+      "endpoint": "Endpoint del proveedor",
+      "baseUrl": "URL base",
+      "providerId": "ID del proveedor de pi",
+      "authScheme": "Esquema de autenticación",
+      "models": "Modelos",
+      "fetchModels": "Obtener modelos",
+      "fetchNeedsKey": "Introduce primero la clave API abajo",
+      "editTitle": "Editar pasarela",
+      "keepKey": "Déjalo en blanco para conservar la clave actual {{hint}}",
+      "modelsEmpty": "Añade al menos un modelo",
+      "setDefault": "Establecer como modelo predeterminado",
+      "fetched": "Se devolvieron {{count}} modelos, haz clic para añadir",
+      "addAll": "Añadir todos",
+      "noModels": "No se devolvieron modelos, añádelos manualmente",
+      "modelPlaceholder": "Escribe un ID de modelo y pulsa Intro"
+    }
   }
 }

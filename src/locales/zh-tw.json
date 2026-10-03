@@ -5568,6 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "開啟後，預設執行個體切換 OAuth 帳號會寫入官方 ~/.grok/auth.json；關閉時使用獨立 GROK_HOME。API Key 與多開執行個體不會覆寫官方登入。"
     },
     "grokRefreshInterval": "配額自動重新整理",
+    "piRefreshInterval": "用量自動刷新",
     "codebuddy": {
       "title": "CodeBuddy 設定",
       "appPath": "CodeBuddy 路徑"
@@ -5623,6 +5624,15 @@
     "traeSoloCn": {
       "appPath": "TRAE SOLO CN 路徑",
       "title": "TRAE SOLO CN 設定"
+    },
+    "pi": {
+      "title": "pi CLI 設定",
+      "appPath": "pi 路徑",
+      "cliPath": "CLI 路徑",
+      "cliDetected": "已檢測 {{version}} · {{path}}",
+      "cliMissing": "未檢測到 pi CLI，可填寫自定義路徑",
+      "syncOfficialAuthOnSwitch": "切號同步官方登入",
+      "syncOfficialAuthOnSwitchDesc": "開啟後，切換賬號會把憑據合併寫入 ~/.pi/agent/auth.json 並更新預設模型；關閉時使用獨立 PI_CODING_AGENT_DIR。"
     }
   },
   "quotaAlert": {
@@ -7364,5 +7374,128 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 檔 API Key，並按檔位篩選列表。金鑰保存在本機應用資料目錄。"
+  },
+  "pi": {
+    "search": "搜尋 pi 賬號...",
+    "flowNotice": {
+      "title": "pi 賬號管理說明",
+      "desc": "每個 pi 賬號是一組提供商憑據和預設模型。開啟「切號同步官方登入」後，切換賬號會把憑據合併寫入 ~/.pi/agent/auth.json 並更新預設模型；關閉時使用獨立 PI_CODING_AGENT_DIR。",
+      "permission": "本地範圍：讀取 ~/.pi/agent/auth.json 與 settings.json 用於匯入；切換時僅修改賬號涉及的提供商條目，寫入前保留一份 .cockpit-backup 備份。",
+      "network": "網路範圍：本應用不發起網路請求；OAuth 登入與令牌重新整理由 pi CLI 自行完成。"
+    },
+    "empty": "暫無 pi 賬號",
+    "addAccount": "新增 pi 賬號",
+    "oauth": {
+      "desc": "pi 的訂閱登入（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini 等）透過 pi 內建的 /login 完成。",
+      "title": "pi /login 登入",
+      "item1": "使用 pi 官方登入流程，憑據由 pi 自行寫入。",
+      "item2": "匯入時會把當前所有提供商憑據儲存為一個賬號。",
+      "item3": "每個賬號可使用獨立目錄，多開互不影響。",
+      "builtinDesc": "在瀏覽器完成授權後自動儲存為 pi 帳號，憑證格式與 pi /login 完全一致。",
+      "otherProviders": "其他（pi /login）",
+      "urlPlaceholder": "授權網址",
+      "waiting": "等待瀏覽器授權回呼...",
+      "success": "pi 登入成功"
+    },
+    "import": {
+      "pasteTab": "貼上 JSON",
+      "pasteDesc": "貼上 pi 的 auth.json，或本應用匯出的賬號 JSON。憑據僅在本機處理。",
+      "pastePlaceholder": "貼上 pi 賬號 JSON",
+      "pasteAction": "匯入 JSON",
+      "localDesc": "從 ~/.pi/agent/auth.json 匯入當前所有提供商憑據和預設模型。",
+      "localClient": "從本機 pi 匯入",
+      "apiKeyTab": "API 金鑰",
+      "apiKeyDesc": "接入三方 API 閘道器（OpenAI / Anthropic 相容），或直接填寫 pi 內建提供商的 API Key。",
+      "apiKeyPlaceholder": "貼上 API Key",
+      "apiKeyAction": "新增 API Key",
+      "defaultModel": "預設模型（可選）",
+      "defaultModelPlaceholder": "例如 claude-sonnet-4-5",
+      "displayName": "賬號名稱（可選）",
+      "provider": "提供商 ID"
+    },
+    "instances": {
+      "unsupported": "pi 多開僅支援 macOS、Windows 和 Linux。",
+      "launchDialogTitle": "啟動例項",
+      "launchHint": "可複製命令手動執行，或點選下方按鈕直接在終端執行。",
+      "runInTerminal": "終端執行",
+      "cliReady": "已檢測",
+      "cliMissingShort": "未檢測",
+      "cliPathInvalid": "配置的 pi CLI 路徑無效：{{path}}",
+      "saveAndRetry": "儲存並重試",
+      "installCommand": "官方安裝命令",
+      "installHint": "可在終端執行以下官方命令，安裝完成後點選重新整理。",
+      "selectWorkingDir": "選擇 pi CLI 工作目錄",
+      "workingDirAccountHint": "工作目錄與該賬號繫結，下次從該賬號啟動會自動回填。",
+      "launchCommandPlaceholder": "選擇或確認工作目錄後生成啟動命令",
+      "accountHomeReady": "已準備獨立目錄：{{email}}",
+      "installLaunchHint": "可在終端執行以下官方命令，安裝完成後重新點選終端執行。"
+    },
+    "switch": {
+      "success": "切換帳號成功"
+    },
+    "usageNormal": "正常",
+    "usageAbnormal": "異常",
+    "usageViewDetail": "檢視詳情",
+    "usageDetailTitle": "用量狀態詳情",
+    "usage": {
+      "title": "用量",
+      "refresh": "重新整理用量",
+      "expired": "權杖已失效且自動重新整理失敗，請重新登入",
+      "unsupported": "目前憑證暫不支援用量查詢",
+      "spent": "已用",
+      "resetAt": "重置於"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "配額查詢失敗",
+      "empty": "暫無可用配額資料",
+      "sectionTitle": "配額查詢"
+    },
+    "login": {
+      "importAfterLogin": "從本機匯入",
+      "openTerminal": "在終端啟動 pi",
+      "opened": "已開啟終端，請在 pi 中輸入 /login",
+      "step1": "點選下方按鈕，在終端中啟動 pi（使用官方目錄 ~/.pi/agent）。",
+      "step2": "在 pi 中輸入 /login，選擇提供商並完成瀏覽器授權；可重複登入多個提供商。",
+      "step3": "登入完成後回到這裡，點選「從本機匯入」儲存為賬號。"
+    },
+    "noDefaultModel": "未設定預設模型",
+    "providers": {
+      "apiKey": "API 金鑰",
+      "defaultModel": "預設模型",
+      "empty": "暫無憑據",
+      "expiredHint": "OAuth 令牌已過期，pi 啟動時會自動重新整理",
+      "oauth": "OAuth",
+      "gateway": "閘道器"
+    },
+    "defaults": {
+      "title": "編輯預設設定",
+      "hint": "切換到此賬號時，會把預設提供商、模型和思考級別寫入 pi 的 settings.json。留空表示不修改。",
+      "provider": "預設提供商",
+      "thinkingLevel": "預設思考級別",
+      "unset": "不設定"
+    },
+    "gateway": {
+      "modeGateway": "三方閘道器",
+      "modeBuiltin": "pi 內建提供商",
+      "provider": "供應商",
+      "custom": "自定義",
+      "getKey": "獲取 API Key",
+      "protocol": "介面協議",
+      "endpoint": "供應商端點",
+      "baseUrl": "基礎 URL",
+      "providerId": "pi 提供商 ID",
+      "authScheme": "認證方式",
+      "models": "模型",
+      "fetchModels": "獲取模型列表",
+      "fetchNeedsKey": "先在下方填寫 API Key",
+      "editTitle": "編輯閘道",
+      "keepKey": "留空則保留目前 Key {{hint}}",
+      "modelsEmpty": "至少新增一個模型",
+      "setDefault": "設為預設模型",
+      "fetched": "介面返回 {{count}} 個模型，點選新增",
+      "addAll": "全部新增",
+      "noModels": "介面未返回模型，請手動新增",
+      "modelPlaceholder": "手動輸入模型 ID，回車新增"
+    }
   }
 }

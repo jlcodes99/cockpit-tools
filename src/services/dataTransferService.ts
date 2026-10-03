@@ -57,6 +57,7 @@ import * as windsurfService from './windsurfService';
 import * as kiroService from './kiroService';
 import * as cursorService from './cursorService';
 import * as grokService from './grokService';
+import * as piService from './piService';
 import * as codebuddyService from './codebuddyService';
 import * as codebuddyCnService from './codebuddyCnService';
 import * as qoderService from './qoderService';
@@ -79,6 +80,7 @@ const INSTANCE_PLATFORMS = [
   'kiro',
   'cursor',
   'grok',
+  'pi',
   'codebuddy',
   'codebuddy_cn',
   'qoder',
@@ -297,6 +299,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   kiro: async () => (await kiroService.listKiroAccounts()) as unknown as TransferAccountRecord[],
   cursor: async () => (await cursorService.listCursorAccounts()) as unknown as TransferAccountRecord[],
   grok: async () => (await grokService.listGrokAccounts()) as unknown as TransferAccountRecord[],
+  pi: async () => (await piService.listPiAccounts()) as unknown as TransferAccountRecord[],
   codebuddy: async () => (await codebuddyService.listCodebuddyAccounts()) as unknown as TransferAccountRecord[],
   codebuddy_cn: async () =>
     (await codebuddyCnService.listCodebuddyCnAccounts()) as unknown as TransferAccountRecord[],
@@ -321,6 +324,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   kiro: kiroService.importKiroFromJson,
   cursor: cursorService.importCursorFromJson,
   grok: undefined,
+  pi: undefined,
   codebuddy: codebuddyService.importCodebuddyFromJson,
   codebuddy_cn: codebuddyCnService.importCodebuddyCnFromJson,
   qoder: qoderService.importQoderFromJson,
@@ -486,6 +490,9 @@ function buildAccountRef(platform: PlatformId, account: TransferAccountRecord): 
       ref.email = normalizeString(account.email) ?? undefined;
       ref.authId = normalizeString(account.auth_id) ?? undefined;
       break;
+    case 'pi':
+      ref.email = normalizeString(account.email) ?? undefined;
+      break;
     case 'grok':
       ref.email = normalizeString(account.email) ?? undefined;
       ref.userId =
@@ -565,6 +572,9 @@ function scoreAccountRef(ref: DataTransferAccountRef, account: TransferAccountRe
       break;
     case 'cursor':
       addStringScore(ref.authId, account.auth_id, 24);
+      addStringScore(ref.email, account.email, 10);
+      break;
+    case 'pi':
       addStringScore(ref.email, account.email, 10);
       break;
     case 'grok':

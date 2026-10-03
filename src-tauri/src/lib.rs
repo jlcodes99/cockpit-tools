@@ -99,6 +99,7 @@ mod tests {
         config.kiro_auto_refresh_minutes = -1;
         config.cursor_auto_refresh_minutes = -1;
         config.grok_auto_refresh_minutes = -1;
+        config.pi_auto_refresh_minutes = -1;
         config.claude_auto_refresh_minutes = -1;
         config.codebuddy_auto_refresh_minutes = -1;
         config.codebuddy_cn_auto_refresh_minutes = -1;
@@ -210,6 +211,7 @@ fn has_enabled_periodic_account_refresh(config: &modules::config::UserConfig) ->
         config.kiro_auto_refresh_minutes,
         config.cursor_auto_refresh_minutes,
         config.grok_auto_refresh_minutes,
+        config.pi_auto_refresh_minutes,
         config.claude_auto_refresh_minutes,
         config.codebuddy_auto_refresh_minutes,
         config.codebuddy_cn_auto_refresh_minutes,
@@ -1514,6 +1516,36 @@ pub fn run() {
             commands::grok_instance::grok_open_instance_window,
             commands::grok_instance::grok_get_instance_launch_command,
             commands::grok_instance::grok_execute_instance_launch_command,
+            commands::pi::pi_get_cli_status,
+            commands::pi::pi_execute_cli_install_command,
+            commands::pi::pi_update_cli_runtime_config,
+            commands::pi::pi_execute_login_command,
+            commands::pi::list_pi_accounts,
+            commands::pi::delete_pi_account,
+            commands::pi::delete_pi_accounts,
+            commands::pi::import_pi_from_json,
+            commands::pi::add_pi_account_with_api_key,
+            commands::pi::pi_oauth_login_start, commands::pi::pi_oauth_login_complete, commands::pi::pi_oauth_login_cancel, commands::pi::pi_oauth_submit_callback,
+            commands::pi::pi_query_account_usage,
+            commands::pi::import_pi_from_local,
+            commands::pi::export_pi_accounts,
+            commands::pi::switch_pi_account,
+            commands::pi::update_pi_account_tags,
+            commands::pi::update_pi_account_working_dir,
+            commands::pi::update_pi_account_defaults,
+            commands::pi::get_pi_current_account_id,
+            commands::pi::get_pi_accounts_index_path,
+            commands::pi_instance::pi_get_instance_defaults,
+            commands::pi_instance::pi_list_instances,
+            commands::pi_instance::pi_create_instance,
+            commands::pi_instance::pi_update_instance,
+            commands::pi_instance::pi_delete_instance,
+            commands::pi_instance::pi_start_instance,
+            commands::pi_instance::pi_stop_instance,
+            commands::pi_instance::pi_close_all_instances,
+            commands::pi_instance::pi_open_instance_window,
+            commands::pi_instance::pi_get_instance_launch_command,
+            commands::pi_instance::pi_execute_instance_launch_command,
             // Cursor Instance Commands
             commands::cursor_instance::cursor_get_instance_defaults,
             commands::cursor_instance::cursor_list_instances,

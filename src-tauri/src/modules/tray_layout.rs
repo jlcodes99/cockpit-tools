@@ -17,6 +17,7 @@ pub const PLATFORM_WINDSURF: &str = "windsurf";
 pub const PLATFORM_KIRO: &str = "kiro";
 pub const PLATFORM_CURSOR: &str = "cursor";
 pub const PLATFORM_GROK: &str = "grok";
+pub const PLATFORM_PI: &str = "pi";
 pub const PLATFORM_CODEBUDDY: &str = "codebuddy";
 pub const PLATFORM_CODEBUDDY_CN: &str = "codebuddy_cn";
 pub const PLATFORM_QODER: &str = "qoder";
@@ -27,7 +28,7 @@ pub const PLATFORM_TRAE_CN: &str = "trae_cn";
 pub const PLATFORM_TRAE_SOLO_CN: &str = "trae_solo_cn";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 19] = [
     PLATFORM_CLAUDE_MANAGER,
     PLATFORM_CODEX,
     PLATFORM_ANTIGRAVITY,
@@ -37,6 +38,7 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
     PLATFORM_KIRO,
     PLATFORM_CURSOR,
     PLATFORM_GROK,
+    PLATFORM_PI,
     PLATFORM_CODEBUDDY,
     PLATFORM_CODEBUDDY_CN,
     PLATFORM_QODER,
@@ -151,6 +153,7 @@ fn normalize_platform_id(id: &str) -> Option<&'static str> {
         PLATFORM_KIRO => Some(PLATFORM_KIRO),
         PLATFORM_CURSOR => Some(PLATFORM_CURSOR),
         PLATFORM_GROK => Some(PLATFORM_GROK),
+        PLATFORM_PI => Some(PLATFORM_PI),
         PLATFORM_CODEBUDDY => Some(PLATFORM_CODEBUDDY),
         PLATFORM_CODEBUDDY_CN => Some(PLATFORM_CODEBUDDY_CN),
         PLATFORM_QODER => Some(PLATFORM_QODER),

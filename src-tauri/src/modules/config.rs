@@ -131,6 +131,12 @@ pub struct UserConfig {
     /// 默认实例切号时是否同步写入官方 ~/.grok/auth.json
     #[serde(default)]
     pub grok_sync_official_auth_on_switch: bool,
+    /// pi 用量自动刷新间隔（分钟），-1 表示禁用
+    #[serde(default = "default_pi_auto_refresh")]
+    pub pi_auto_refresh_minutes: i32,
+    /// 默认实例切号时是否同步写入官方 ~/.pi/agent/auth.json
+    #[serde(default = "default_pi_sync_official_auth_on_switch")]
+    pub pi_sync_official_auth_on_switch: bool,
     /// 切换 Grok 时是否自动重启 OpenCode
     #[serde(default = "default_grok_opencode_sync_on_switch")]
     pub grok_opencode_sync_on_switch: bool,
@@ -299,6 +305,9 @@ pub struct UserConfig {
     /// Grok CLI 路径（为空则自动检测）
     #[serde(default)]
     pub grok_cli_path: Option<String>,
+    /// pi CLI 路径（为空则自动检测）
+    #[serde(default)]
+    pub pi_cli_path: Option<String>,
     /// Claude 桌面应用启动路径（为空则使用默认路径）
     #[serde(default = "default_claude_app_path")]
     pub claude_app_path: String,
@@ -741,6 +750,9 @@ fn default_cursor_auto_refresh() -> i32 {
 fn default_grok_auto_refresh() -> i32 {
     10
 }
+fn default_pi_auto_refresh() -> i32 {
+    10
+}
 fn default_claude_auto_refresh() -> i32 {
     10
 }
@@ -818,6 +830,7 @@ pub fn normalize_startup_page(value: &str) -> String {
         "kiro",
         "cursor",
         "grok",
+        "pi",
         "codebuddy",
         "codebuddy-cn",
         "qoder",
@@ -995,6 +1008,10 @@ fn default_ghcp_opencode_sync_on_switch() -> bool {
 fn default_ghcp_opencode_auth_overwrite_on_switch() -> bool {
     false
 }
+fn default_pi_sync_official_auth_on_switch() -> bool {
+    true
+}
+
 fn default_grok_opencode_sync_on_switch() -> bool {
     false
 }
@@ -1199,7 +1216,9 @@ impl Default for UserConfig {
             kiro_auto_refresh_minutes: default_kiro_auto_refresh(),
             cursor_auto_refresh_minutes: default_cursor_auto_refresh(),
             grok_auto_refresh_minutes: default_grok_auto_refresh(),
+            pi_auto_refresh_minutes: default_pi_auto_refresh(),
             grok_sync_official_auth_on_switch: false,
+            pi_sync_official_auth_on_switch: default_pi_sync_official_auth_on_switch(),
             grok_opencode_sync_on_switch: default_grok_opencode_sync_on_switch(),
             grok_opencode_auth_overwrite_on_switch: default_grok_opencode_auth_overwrite_on_switch(
             ),
@@ -1260,6 +1279,7 @@ impl Default for UserConfig {
             codex_app_path: default_codex_app_path(),
             codex_oauth_app_version: String::new(),
             grok_cli_path: None,
+            pi_cli_path: None,
             claude_app_path: default_claude_app_path(),
             claude_app_scan_roots: default_claude_app_scan_roots(),
             codex_specified_app_path: default_codex_specified_app_path(),
@@ -2463,6 +2483,18 @@ pub fn get_user_config() -> UserConfig {
 }
 
 /// 更新 Grok CLI 路径；空白值恢复为自动检测。
+pub fn set_pi_cli_path(path: Option<String>) -> Result<(), String> {
+    let normalized = path.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        (!trimmed.is_empty()).then_some(trimmed)
+    });
+    patch_user_config(move |config| {
+        config.pi_cli_path = normalized;
+        Ok(())
+    })?;
+    Ok(())
+}
+
 pub fn set_grok_cli_path(path: Option<String>) -> Result<(), String> {
     let normalized = path.and_then(|value| {
         let trimmed = value.trim().to_string();

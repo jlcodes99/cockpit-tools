@@ -20,6 +20,7 @@ type InstancesAppType =
   | 'kiro'
   | 'cursor'
   | 'grok'
+  | 'pi'
   | 'codebuddy'
   | 'codebuddy_cn'
   | 'qoder'
