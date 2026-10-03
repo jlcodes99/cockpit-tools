@@ -35,6 +35,7 @@ const PROVIDER_PAGE_PLATFORM_MAP: Record<string, PlatformId> = {
   kiro: 'kiro',
   cursor: 'cursor',
   grok: 'grok',
+  pi: 'pi',
   codebuddy: 'codebuddy',
   codebuddycn: 'codebuddy_cn',
   codebuddy_cn: 'codebuddy_cn',

@@ -5568,6 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "Açıldığında, varsayılan örnekte OAuth hesabı değiştirildiğinde resmî ~/.grok/auth.json dosyasına yazılır. Kapatıldığında ayrı bir GROK_HOME kullanılır. API anahtarları ve ek örnekler resmî oturumun üzerine yazmaz."
     },
     "grokRefreshInterval": "Kotayı Otomatik Yenile",
+    "piRefreshInterval": "Kullanım otomatik yenileme",
     "codebuddy": {
       "title": "CodeBuddy Ayarları",
       "appPath": "CodeBuddy Yolu"
@@ -5623,6 +5624,15 @@
     "traeSoloCn": {
       "appPath": "TRAE SOLO CN Yolu",
       "title": "TRAE SOLO CN Ayarları"
+    },
+    "pi": {
+      "title": "pi CLI ayarları",
+      "appPath": "pi Yolu",
+      "cliPath": "CLI yolu",
+      "cliDetected": "{{path}} konumunda {{version}} algılandı",
+      "cliMissing": "pi CLI algılanmadı. Özel bir yol girin",
+      "syncOfficialAuthOnSwitch": "Geçişte resmi girişi eşitle",
+      "syncOfficialAuthOnSwitchDesc": "Etkinleştirildiğinde hesap değiştirme, kimlik bilgilerini ~/.pi/agent/auth.json ile birleştirir ve varsayılan modeli ayarlar. Devre dışıyken yalıtılmış bir PI_CODING_AGENT_DIR kullanılır."
     }
   },
   "quotaAlert": {
@@ -7364,5 +7374,128 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "OpenCode Go/Zen anahtarlarını yönetin ve kademeye göre süzün."
+  },
+  "pi": {
+    "search": "pi hesaplarında ara...",
+    "flowNotice": {
+      "title": "pi hesap yönetimi hakkında",
+      "desc": "Her pi hesabı, sağlayıcı kimlik bilgileri ile bir varsayılan modelden oluşur. \"Geçişte resmi girişi eşitle\" açıkken geçiş, kimlik bilgilerini ~/.pi/agent/auth.json ile birleştirir ve varsayılan modeli günceller; kapalıyken yalıtılmış bir PI_CODING_AGENT_DIR kullanılır.",
+      "permission": "Yerel kapsam: içe aktarma için ~/.pi/agent/auth.json ve settings.json okunur; geçiş yalnızca hesaptaki sağlayıcıları etkiler ve yazmadan önce bir .cockpit-backup kopyası tutulur.",
+      "network": "Ağ kapsamı: bu uygulama hiçbir ağ isteği yapmaz; OAuth girişi ve token yenileme pi CLI tarafından yapılır."
+    },
+    "empty": "pi hesabı yok",
+    "addAccount": "pi hesabı ekle",
+    "oauth": {
+      "desc": "pi için abonelik girişleri (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini vb.) pi'nin yerleşik /login komutuyla yapılır.",
+      "title": "pi /login ile giriş",
+      "item1": "pi'nin resmi giriş akışı kullanılır; kimlik bilgilerini pi kendisi yazar.",
+      "item2": "İçe aktarma, mevcut tüm sağlayıcı kimlik bilgilerini tek bir hesap olarak kaydeder.",
+      "item3": "Her hesap kendi dizinini kullanabilir, böylece birden çok örnek bağımsız kalır.",
+      "builtinDesc": "Tarayıcınızda yetkilendirin; kimlik bilgisi pi /login ile aynı biçimde bir pi hesabı olarak kaydedilir.",
+      "otherProviders": "Diğerleri (pi /login)",
+      "urlPlaceholder": "Yetkilendirme URL'si",
+      "waiting": "Tarayıcı geri çağrısı bekleniyor...",
+      "success": "pi girişi başarılı"
+    },
+    "import": {
+      "pasteTab": "JSON Yapıştır",
+      "pasteDesc": "pi'nin auth.json dosyasını veya bu uygulamadan dışa aktarılan hesap JSON'unu yapıştırın. Kimlik bilgileri yalnızca yerelde işlenir.",
+      "pastePlaceholder": "pi hesap JSON'unu yapıştırın",
+      "pasteAction": "JSON içe aktar",
+      "localDesc": "~/.pi/agent/auth.json dosyasından mevcut tüm sağlayıcı kimlik bilgilerini ve varsayılan modeli içe aktarır.",
+      "localClient": "Yerel pi'den içe aktar",
+      "apiKeyTab": "API Anahtarı",
+      "apiKeyDesc": "Üçüncü taraf bir API ağ geçidine (OpenAI / Anthropic uyumlu) bağlanın veya pi yerleşik sağlayıcısı için bir API Anahtarı girin.",
+      "apiKeyPlaceholder": "API anahtarını yapıştırın",
+      "apiKeyAction": "API anahtarı ekle",
+      "defaultModel": "Varsayılan model (isteğe bağlı)",
+      "defaultModelPlaceholder": "örn. claude-sonnet-4-5",
+      "displayName": "Hesap adı (isteğe bağlı)",
+      "provider": "Sağlayıcı kimliği"
+    },
+    "instances": {
+      "unsupported": "pi çoklu örnek yalnızca macOS, Windows ve Linux'u destekler.",
+      "launchDialogTitle": "Örneği başlat",
+      "launchHint": "Komutu kopyalayıp elle çalıştırın veya terminalde çalıştırmak için aşağıdaki düğmeyi kullanın.",
+      "runInTerminal": "Terminalde çalıştır",
+      "cliReady": "Algılandı",
+      "cliMissingShort": "Algılanmadı",
+      "cliPathInvalid": "Yapılandırılan pi CLI yolu geçersiz: {{path}}",
+      "saveAndRetry": "Kaydet ve yeniden dene",
+      "installCommand": "Resmi kurulum komutu",
+      "installHint": "Aşağıdaki resmi komutu bir terminalde çalıştırın, kurulumdan sonra yenileyin.",
+      "selectWorkingDir": "pi CLI çalışma dizinini seçin",
+      "workingDirAccountHint": "Çalışma dizini bu hesaba bağlanır ve bir dahaki sefere otomatik doldurulur.",
+      "launchCommandPlaceholder": "Başlatma komutunu oluşturmak için bir çalışma dizini seçin veya onaylayın",
+      "accountHomeReady": "Hesap dizini hazırlandı: {{email}}",
+      "installLaunchHint": "Aşağıdaki resmi komutu bir terminalde çalıştırın, kurulumdan sonra yeni bir terminalden başlatın."
+    },
+    "switch": {
+      "success": "Hesap değiştirildi"
+    },
+    "usageNormal": "Sorunsuz",
+    "usageAbnormal": "Olağandışı",
+    "usageViewDetail": "Ayrıntıları gör",
+    "usageDetailTitle": "Kullanım ayrıntıları",
+    "usage": {
+      "title": "Kullanım",
+      "refresh": "Kullanımı yenile",
+      "expired": "Token geçersiz ve otomatik yenileme başarısız oldu. Lütfen yeniden giriş yapın",
+      "unsupported": "Bu kimlik bilgileri için kullanım sorgulanamıyor",
+      "spent": "Harcanan",
+      "resetAt": "Sıfırlanma zamanı"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "Kota sorgusu başarısız",
+      "empty": "Kota verisi yok",
+      "sectionTitle": "Kota"
+    },
+    "login": {
+      "importAfterLogin": "Yerelden içe aktar",
+      "openTerminal": "pi'yi terminalde aç",
+      "opened": "Terminal açıldı. pi'de /login yazın",
+      "step1": "pi'yi bir terminalde başlatmak için aşağıdaki düğmeye tıklayın (resmi dizin ~/.pi/agent kullanılır).",
+      "step2": "pi'de /login yazın, bir sağlayıcı seçin ve tarayıcıda yetkilendirmeyi tamamlayın. Diğer sağlayıcılara giriş yapmak için tekrarlayın.",
+      "step3": "Giriş yaptıktan sonra geri dönüp hesap olarak kaydetmek için \"Yerelden içe aktar\"a tıklayın."
+    },
+    "noDefaultModel": "Varsayılan model yok",
+    "providers": {
+      "apiKey": "API Anahtarı",
+      "defaultModel": "Varsayılan model",
+      "empty": "Kimlik bilgisi yok",
+      "expiredHint": "OAuth token süresi doldu; pi başlatıldığında otomatik yeniler",
+      "oauth": "OAuth",
+      "gateway": "Ağ geçidi"
+    },
+    "defaults": {
+      "title": "Varsayılanları düzenle",
+      "hint": "Bu hesaba geçildiğinde varsayılan sağlayıcı, model ve düşünme düzeyi pi'nin settings.json dosyasına yazılır. Değiştirmemek için boş bırakın.",
+      "provider": "Varsayılan sağlayıcı",
+      "thinkingLevel": "Varsayılan düşünme düzeyi",
+      "unset": "Ayarlanmadı"
+    },
+    "gateway": {
+      "modeGateway": "Üçüncü taraf ağ geçidi",
+      "modeBuiltin": "pi yerleşik sağlayıcı",
+      "provider": "Sağlayıcı",
+      "custom": "Özel",
+      "getKey": "API Anahtarı al",
+      "protocol": "API protokolü",
+      "endpoint": "Sağlayıcı uç noktası",
+      "baseUrl": "Temel URL",
+      "providerId": "pi sağlayıcı kimliği",
+      "authScheme": "Kimlik doğrulama şeması",
+      "models": "Modeller",
+      "fetchModels": "Modelleri getir",
+      "fetchNeedsKey": "Önce aşağıya API Anahtarını girin",
+      "editTitle": "Ağ geçidini düzenle",
+      "keepKey": "Mevcut anahtarı korumak için boş bırakın {{hint}}",
+      "modelsEmpty": "En az bir model ekleyin",
+      "setDefault": "Varsayılan model yap",
+      "fetched": "{{count}} model döndü, eklemek için tıklayın",
+      "addAll": "Tümünü ekle",
+      "noModels": "Model dönmedi, elle ekleyin",
+      "modelPlaceholder": "Bir model kimliği yazıp Enter'a basın"
+    }
   }
 }
