@@ -287,6 +287,8 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
   antigravity: async () => (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
   antigravity_ide: async () =>
     (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
+  // Antigravity CLI 复用 Antigravity 账号库，避免重复导出。
+  antigravity_cli: async () => [],
   codex: async () => (await codexService.listCodexAccounts()) as unknown as TransferAccountRecord[],
   codex_api_service: async () => [],
   claude_manager: listClaudeManagerTransferAccounts,
@@ -312,6 +314,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
 const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unknown[]>) | undefined> = {
   antigravity: accountService.importFromJson,
   antigravity_ide: accountService.importFromJson,
+  antigravity_cli: undefined,
   codex: codexService.importCodexFromJson,
   codex_api_service: undefined,
   claude_manager: claudeService.importClaudeFromJson,
@@ -1045,7 +1048,13 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     (async () => {
       const entries: Array<[string, ExportedAccountGroup[]]> = [];
       for (const platform of ALL_PLATFORM_IDS) {
-        if (platform === 'antigravity' || platform === 'antigravity_ide' || platform === 'codex' || platform === 'codex_api_service') {
+        if (
+          platform === 'antigravity'
+          || platform === 'antigravity_ide'
+          || platform === 'antigravity_cli'
+          || platform === 'codex'
+          || platform === 'codex_api_service'
+        ) {
           continue;
         }
         const groups = await getPlatformGroups(platform);

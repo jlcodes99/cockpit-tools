@@ -99,6 +99,9 @@ export function resolvePlatformIdFromPage(page: Page | string): PlatformId | nul
   if (normalized === 'overview' || normalized === 'accounts') {
     return 'antigravity';
   }
+  if (normalized === 'antigravity-cli') {
+    return 'antigravity_cli';
+  }
   if (normalized === 'claude-cli') {
     return 'claude_manager';
   }

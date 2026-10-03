@@ -121,6 +121,7 @@ import {
 import type { AntigravityAccountTarget } from '../utils/antigravityRuntimeTarget'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
 import { useRememberMfaQuery } from '../hooks/useRememberMfaQuery'
+import { useAntigravityCliStatus } from '../hooks/useAntigravityCliStatus'
 import {
   getMfaOtpToken,
   loadSavedMfaRecords,
@@ -169,17 +170,19 @@ import {
 
 interface AccountsPageProps {
   onNavigate?: (page: Page) => void
+  /** 固定为 Antigravity CLI 子平台；缺省时跟随桌面运行时目标（Antigravity / Antigravity IDE）。 */
+  platform?: 'antigravity_cli'
 }
 
 type AntigravitySwitchHistoryItem = accountService.AntigravitySwitchHistoryItem
 
 export type { AccountsFilterType } from './antigravityAccountOverviewModel';
 
-export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
+export function useAccountsPageController({ onNavigate, platform }: AccountsPageProps) {
   const { t, i18n } = useTranslation()
   const desktopRuntimeTarget = useAntigravityRuntimeTarget()
-  const [cliMode, setCliMode] = useState(false)
-  const antigravityRuntimeTarget: AntigravityAccountTarget = cliMode ? 'antigravity_cli' : desktopRuntimeTarget
+  const isCliPlatform = platform === 'antigravity_cli'
+  const antigravityRuntimeTarget: AntigravityAccountTarget = isCliPlatform ? 'antigravity_cli' : desktopRuntimeTarget
   const locale = i18n.language || 'zh-CN'
   const untaggedKey = '__untagged__'
   const {
@@ -198,6 +201,16 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     updateAccountNotes
   } = useAccountStore()
   const currentAccount = currentAccountsByTarget[antigravityRuntimeTarget] ?? null
+  const antigravityCli = useAntigravityCliStatus(
+    isCliPlatform,
+    isCliPlatform ? currentAccount?.id ?? null : null,
+    () => void fetchCurrentAccount('antigravity_cli'),
+  )
+  const { refresh: refreshAntigravityCliStatus } = antigravityCli
+  const refreshAntigravityCli = useCallback(() => {
+    void refreshAntigravityCliStatus()
+    void fetchCurrentAccount('antigravity_cli')
+  }, [fetchCurrentAccount, refreshAntigravityCliStatus])
 
   const formatSwitchError = useCallback((error: unknown) => String(error), [])
 
@@ -1959,7 +1972,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     try {
       const account = await switchAccount(accountId, antigravityRuntimeTarget)
       await fetchCurrentAccount(antigravityRuntimeTarget)
-      setMessage({ text: cliMode
+      setMessage({ text: isCliPlatform
         ? t('antigravityCli.switched', { email: maskAccountText(account.email) })
         : t('messages.switched', { email: maskAccountText(account.email) }) })
     } catch (e) {
@@ -3840,10 +3853,10 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   )
 
   return {
-    switching,
-    cliMode,
-    setCliMode,
-    desktopRuntimeTarget,
+    isCliPlatform,
+    antigravityRuntimeTarget,
+    antigravityCli,
+    refreshAntigravityCli,
     grouping,
     accountGroups: grouping.groups,
     accountNoteCopiedKey,

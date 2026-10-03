@@ -208,6 +208,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'dashboard',
   'api-relay',
   'overview',
+  'antigravity-cli',
   'codex',
   'claude',
   'claude-cli',
@@ -239,6 +240,7 @@ const RENDERABLE_PAGE_SET = new Set<string>(RENDERABLE_PAGE_VALUES);
 const TOP_PROMO_DEFAULT_EXCLUDED_PAGES: readonly Page[] = ['api-relay', 'settings'];
 const TOP_PROMO_PAGE_PLATFORM_TARGETS: Partial<Record<Page, readonly string[]>> = {
   overview: ['antigravity', 'antigravity-ide'],
+  'antigravity-cli': ['antigravity', 'antigravity-cli'],
   instances: ['antigravity', 'antigravity-ide'],
   wakeup: ['antigravity', 'antigravity-ide'],
   verification: ['antigravity', 'antigravity-ide'],
@@ -4030,6 +4032,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'overview'}>
             <AccountsPage onNavigate={setPage} />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'antigravity-cli'}>
+            <AccountsPage onNavigate={setPage} platform="antigravity_cli" />
           </VisibleBootPage>
           {/* Codex suite: keep both pages mounted after first visit to avoid empty flash when switching. */}
           {shouldMountCodexSuite && (

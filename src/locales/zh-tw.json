@@ -1,4 +1,42 @@
 {
+  "antigravityCli": {
+    "importLocal": "匯入 CLI 帳號",
+    "localDesc": "從系統鑰匙圈（gemini / antigravity）讀取 Antigravity CLI 目前登入的帳號。",
+    "switched": "CLI 憑證已切換為 {{email}}，請重新啟動既有的 agy 工作階段以使用此帳號。",
+    "statusLabel": "CLI 登入狀態",
+    "state": {
+      "loading": "偵測中",
+      "error": "狀態讀取失敗",
+      "keyringError": "鑰匙圈異常",
+      "apiKey": "API Key 模式",
+      "managed": "已登入",
+      "notImported": "已登入 · 未匯入",
+      "signedOut": "未登入"
+    },
+    "loading": "正在讀取 CLI 登入狀態…",
+    "managed": "CLI 已登入的帳號在下方列表中標記為「目前」。",
+    "notImported": "已找到 CLI 登入憑證，匯入後即可在此管理與切換。",
+    "notSignedIn": "未找到 CLI 登入憑證。可開啟 agy 登入，或切換到下方已授權帳號。",
+    "apiKeyMode": "目前使用 Gemini API Key。請從 ~/.gemini/antigravity-cli/settings.json 移除 modelProvider 並重新啟動 agy，以使用 Google 帳號。",
+    "notInstalled": "未偵測到 agy",
+    "refresh": "檢查狀態",
+    "launch": "開啟 CLI",
+    "launchTitle": "開啟 Antigravity CLI",
+    "install": "安裝指南",
+    "executable": "可執行檔",
+    "directory": "工作目錄",
+    "homeDirectory": "預設使用使用者主目錄",
+    "chooseDirectory": "選擇工作目錄",
+    "terminalHint": "使用「設定 → 預設終端機」中設定的終端機開啟。",
+    "launched": "已要求開啟終端機，如需登入請在 agy 中完成。",
+    "flowNotice": {
+      "title": "Antigravity CLI 帳號管理說明（點擊展開/收合）",
+      "desc": "Antigravity CLI（agy）與 Antigravity 共用帳號庫。在此切換帳號會寫入 CLI 使用的系統憑證（Linux Secret Service / macOS Keychain / Windows 認證管理員），不影響 IDE 的目前帳號。",
+      "sharedCredential": "CLI 與 Antigravity 桌面版共用同一系統憑證，切換會影響兩者之後的新工作階段。",
+      "switching": "切換前請先結束既有的 agy 工作階段，切換後重新啟動 agy。",
+      "logout": "登出請在 agy 中執行 /logout 後點擊「檢查狀態」；刪除此處的帳號不會使 CLI 登出。"
+    }
+  },
   "pelican": {
     "results": "測試結果",
     "usageTokens": "{{tokens}} Token",

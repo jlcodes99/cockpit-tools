@@ -70,6 +70,7 @@ type PersistedPlatformLayout = {
   antigravityGroupFirstMigrated?: boolean;
   traeSuiteDefaultGroupRestored?: boolean;
   codexApiServiceSuiteMigrated?: boolean;
+  antigravityCliSuiteMigrated?: boolean;
   apiRelaySidebarVisible?: boolean;
   apiRelayDashboardVisible?: boolean;
   apiRelayEntryOrder?: number;
@@ -89,6 +90,7 @@ interface PlatformLayoutState {
   antigravityGroupFirstMigrated: boolean;
   traeSuiteDefaultGroupRestored: boolean;
   codexApiServiceSuiteMigrated: boolean;
+  antigravityCliSuiteMigrated: boolean;
   apiRelaySidebarVisible: boolean;
   apiRelayDashboardVisible: boolean;
   apiRelayEntryOrder: number;
@@ -133,6 +135,7 @@ interface NormalizedLayoutStateData {
   antigravityGroupFirstMigrated: boolean;
   traeSuiteDefaultGroupRestored: boolean;
   codexApiServiceSuiteMigrated: boolean;
+  antigravityCliSuiteMigrated: boolean;
   apiRelaySidebarVisible: boolean;
   apiRelayDashboardVisible: boolean;
   apiRelayEntryOrder: number;
@@ -303,13 +306,14 @@ function defaultPlatformGroups(): PlatformLayoutGroup[] {
     {
       id: DEFAULT_ANTIGRAVITY_GROUP_ID,
       name: 'Antigravity',
-      platformIds: ['antigravity', 'antigravity_ide'],
+      platformIds: ['antigravity', 'antigravity_ide', 'antigravity_cli'],
       defaultPlatformId: 'antigravity_ide',
       iconKind: 'platform',
       iconPlatformId: 'antigravity_ide',
       childConfigs: [
         { platformId: 'antigravity', name: 'Antigravity' },
         { platformId: 'antigravity_ide', name: 'Antigravity IDE' },
+        { platformId: 'antigravity_cli', name: 'Antigravity CLI' },
       ],
     },
     createDefaultCodexSuiteGroup(),
@@ -431,6 +435,9 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   }
   if (fallbackPlatform === 'antigravity_ide') {
     return 'Antigravity IDE';
+  }
+  if (fallbackPlatform === 'antigravity_cli') {
+    return 'Antigravity CLI';
   }
   if (fallbackPlatform === 'codebuddy_cn') {
     return 'CodeBuddy CN';
@@ -592,10 +599,12 @@ function normalizePlatformGroups(
   options: {
     restoreDefaultTraeSuiteGroup?: boolean;
     attachCodexApiServiceToCodexGroup?: boolean;
+    attachAntigravityCliToAntigravityGroup?: boolean;
   } = {},
 ): PlatformLayoutGroup[] {
   const shouldRestoreDefaultTraeSuiteGroup = options.restoreDefaultTraeSuiteGroup === true;
   const shouldAttachCodexApiService = options.attachCodexApiServiceToCodexGroup === true;
+  const shouldAttachAntigravityCli = options.attachAntigravityCliToAntigravityGroup === true;
   const source = Array.isArray(raw) ? raw : (fallbackToDefault ? defaultPlatformGroups() : []);
   const result: PlatformLayoutGroup[] = [];
   const usedPlatformIds = new Set<PlatformId>();
@@ -669,6 +678,24 @@ function normalizePlatformGroups(
         antigravityGroup.platformIds,
       );
       usedPlatformIds.add('antigravity_ide');
+    }
+  }
+
+  // One-time upgrade: attach Antigravity CLI into the existing Antigravity group.
+  // After migration, users can move it out; do not re-attach.
+  if (shouldAttachAntigravityCli && !usedPlatformIds.has('antigravity_cli')) {
+    const antigravityGroup = result.find((group) => group.platformIds.includes('antigravity_ide'))
+      ?? result.find((group) => group.platformIds.includes('antigravity'));
+    if (antigravityGroup) {
+      antigravityGroup.platformIds = [...antigravityGroup.platformIds, 'antigravity_cli'];
+      antigravityGroup.childConfigs = normalizeGroupChildConfigs(
+        [
+          ...(antigravityGroup.childConfigs ?? []),
+          { platformId: 'antigravity_cli', name: 'Antigravity CLI' },
+        ],
+        antigravityGroup.platformIds,
+      );
+      usedPlatformIds.add('antigravity_cli');
     }
   }
 
@@ -1160,6 +1187,7 @@ function normalizeStateData(
     antigravityGroupFirstMigrated?: boolean;
     traeSuiteDefaultGroupRestored?: boolean;
     codexApiServiceSuiteMigrated?: boolean;
+    antigravityCliSuiteMigrated?: boolean;
     apiRelaySidebarVisible?: boolean;
     apiRelayDashboardVisible?: boolean;
     apiRelayEntryOrder?: number;
@@ -1219,6 +1247,7 @@ function normalizeStateData(
       raw.antigravityGroupFirstMigrated !== false || options.promoteAntigravityGroupEntry === true,
     traeSuiteDefaultGroupRestored: raw.traeSuiteDefaultGroupRestored !== false,
     codexApiServiceSuiteMigrated: raw.codexApiServiceSuiteMigrated !== false,
+    antigravityCliSuiteMigrated: raw.antigravityCliSuiteMigrated !== false,
     apiRelaySidebarVisible: raw.apiRelaySidebarVisible !== false,
     apiRelayDashboardVisible: raw.apiRelayDashboardVisible !== false,
     apiRelayEntryOrder: normalizeApiRelayEntryOrder(raw.apiRelayEntryOrder, orderedEntryIds.length),
@@ -1244,6 +1273,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
         antigravityGroupFirstMigrated: true,
         traeSuiteDefaultGroupRestored: true,
         codexApiServiceSuiteMigrated: true,
+        antigravityCliSuiteMigrated: true,
         apiRelaySidebarVisible: true,
         apiRelayDashboardVisible: true,
         apiRelayEntryOrder: 0,
@@ -1255,6 +1285,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
     const antigravityGroupFirstMigrated = parsed.antigravityGroupFirstMigrated === true;
     const traeSuiteDefaultGroupRestored = parsed.traeSuiteDefaultGroupRestored === true;
     const codexApiServiceSuiteMigrated = parsed.codexApiServiceSuiteMigrated === true;
+    const antigravityCliSuiteMigrated = parsed.antigravityCliSuiteMigrated === true;
     const orderedPlatformIds = normalizeOrder(parsed.orderedPlatformIds ?? defaultPlatformOrder());
     const hiddenPlatformIds = normalizeHidden(parsed.hiddenPlatformIds ?? []);
     const sidebarPlatformIds = normalizeSidebar(
@@ -1268,6 +1299,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       {
         restoreDefaultTraeSuiteGroup: !traeSuiteDefaultGroupRestored,
         attachCodexApiServiceToCodexGroup: !codexApiServiceSuiteMigrated,
+        attachAntigravityCliToAntigravityGroup: !antigravityCliSuiteMigrated,
       },
     ).map((group) => sortGroupPlatformsByOrder(group, orderedPlatformIds));
 
@@ -1303,6 +1335,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       antigravityGroupFirstMigrated,
       traeSuiteDefaultGroupRestored: true,
       codexApiServiceSuiteMigrated: true,
+      antigravityCliSuiteMigrated: true,
       apiRelaySidebarVisible: parsed.apiRelaySidebarVisible,
       apiRelayDashboardVisible: parsed.apiRelayDashboardVisible,
       apiRelayEntryOrder: parsed.apiRelayEntryOrder,
@@ -1328,6 +1361,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       antigravityGroupFirstMigrated: true,
       traeSuiteDefaultGroupRestored: true,
       codexApiServiceSuiteMigrated: true,
+      antigravityCliSuiteMigrated: true,
       apiRelaySidebarVisible: true,
       apiRelayDashboardVisible: true,
       apiRelayEntryOrder: 0,
@@ -1350,6 +1384,7 @@ function persist(
     | 'antigravityGroupFirstMigrated'
     | 'traeSuiteDefaultGroupRestored'
     | 'codexApiServiceSuiteMigrated'
+    | 'antigravityCliSuiteMigrated'
     | 'apiRelaySidebarVisible'
     | 'apiRelayDashboardVisible'
     | 'apiRelayEntryOrder'
@@ -1866,6 +1901,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
       antigravityGroupFirstMigrated: true,
       traeSuiteDefaultGroupRestored: true,
       codexApiServiceSuiteMigrated: true,
+      antigravityCliSuiteMigrated: true,
       apiRelaySidebarVisible: true,
       apiRelayDashboardVisible: true,
       apiRelayEntryOrder: 0,
