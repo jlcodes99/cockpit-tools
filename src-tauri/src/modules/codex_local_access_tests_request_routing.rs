@@ -2891,6 +2891,31 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
     }
 
     #[test]
+    fn gateway_requests_preserve_encrypted_reasoning_identity() {
+        let reasoning = json!({
+            "type": "reasoning",
+            "id": format!("rs_{}", "x".repeat(80)),
+            "summary": [],
+            "encrypted_content": "opaque-encrypted-payload"
+        });
+        for target in ["/v1/responses", "/v1/responses/compact"] {
+            let request = ParsedRequest {
+                method: "POST".to_string(),
+                target: target.to_string(),
+                headers: HashMap::new(),
+                body: serde_json::to_vec(&json!({
+                    "model": "gpt-5.4",
+                    "input": [reasoning.clone(), {"role": "user", "content": "continue"}]
+                }))
+                .unwrap(),
+            };
+            let (prepared, _) = prepare_gateway_request(request).unwrap();
+            let body: Value = serde_json::from_slice(&prepared.body).unwrap();
+            assert_eq!(body["input"][0], reasoning, "target: {target}");
+        }
+    }
+
+    #[test]
     fn legacy_codex_sanitizes_invalid_reasoning_encrypted_content() {
         let api_key = ResolvedLocalApiKey {
             id: "client-key-1".to_string(),
