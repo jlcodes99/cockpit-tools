@@ -1523,6 +1523,9 @@
       "pro": "プロ ({{count}})",
       "ultra": "ウルトラ ({{count}})"
     },
+    "filters": {
+      "all": "すべて"
+    },
     "sortLabel": "並べ替え",
     "sort": {
       "default": "デフォルト",

@@ -1523,6 +1523,9 @@
       "pro": "PRO ({{count}})​",
       "ultra": "ULTRA ({{count}})​"
     },
+    "filters": {
+      "all": "Tümü"
+    },
     "sortLabel": "Sırala",
     "sort": {
       "default": "Varsayılan",

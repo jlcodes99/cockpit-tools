@@ -1523,6 +1523,9 @@
       "pro": "PRO ({{count}})​",
       "ultra": "ULTRA ({{count}})​"
     },
+    "filters": {
+      "all": "Tous"
+    },
     "sortLabel": "Trier",
     "sort": {
       "default": "Par défaut",

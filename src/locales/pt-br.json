@@ -1523,6 +1523,9 @@
       "pro": "PRO (__MÁSCARA_0__)",
       "ultra": "ULTRA (__MÁSCARA_0__)"
     },
+    "filters": {
+      "all": "Todos"
+    },
     "sortLabel": "Ordenar",
     "sort": {
       "default": "Padrão",

@@ -1523,6 +1523,9 @@
       "pro": "PRO ({{count}})​",
       "ultra": "ULTRA ({{count}})​"
     },
+    "filters": {
+      "all": "Vše"
+    },
     "sortLabel": "Seřadit",
     "sort": {
       "default": "Výchozí",

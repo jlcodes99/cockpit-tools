@@ -1523,6 +1523,9 @@
       "pro": "ПРО ({{count}})",
       "ultra": "УЛЬТРА ({{count}})"
     },
+    "filters": {
+      "all": "Все"
+    },
     "sortLabel": "Сортировка",
     "sort": {
       "default": "По умолчанию",

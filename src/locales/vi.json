@@ -1523,6 +1523,9 @@
       "pro": "CHUYÊN NGHIỆP ({{count}})",
       "ultra": "SIÊU ({{count}})"
     },
+    "filters": {
+      "all": "Tất cả"
+    },
     "sortLabel": "Sắp xếp",
     "sort": {
       "default": "Mặc định",

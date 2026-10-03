@@ -1743,6 +1743,9 @@
       "pro": "PRO ({{count}})",
       "ultra": "ULTRA ({{count}})"
     },
+    "filters": {
+      "all": "All"
+    },
     "sortLabel": "Sort",
     "sort": {
       "default": "Default",

@@ -1523,6 +1523,9 @@
       "pro": "프로({{count}})",
       "ultra": "울트라({{count}})"
     },
+    "filters": {
+      "all": "전체"
+    },
     "sortLabel": "정렬",
     "sort": {
       "default": "기본값",

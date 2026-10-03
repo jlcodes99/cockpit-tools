@@ -1743,6 +1743,9 @@
       "pro": "专业版 ({{count}})",
       "ultra": "超 ({{count}})"
     },
+    "filters": {
+      "all": "全部"
+    },
     "sortLabel": "排序",
     "sort": {
       "default": "默认排序",
