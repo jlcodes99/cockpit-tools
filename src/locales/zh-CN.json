@@ -5897,6 +5897,7 @@
       "syncOfficialAuthOnSwitchDesc": "开启后，默认实例切换 OAuth 账号会写入官方 ~/.grok/auth.json；关闭时使用独立 GROK_HOME。API Key 和多开实例不改写官方登录。"
     },
     "grokRefreshInterval": "配额自动刷新",
+    "piRefreshInterval": "用量自动刷新",
     "error": {
       "loadFailed": "加载配置失败：{{error}}",
       "saveFailed": "保存配置失败：{{error}}",
@@ -5943,6 +5944,15 @@
     "traeSoloCn": {
       "title": "TRAE SOLO CN 设置",
       "appPath": "TRAE SOLO CN 路径"
+    },
+    "pi": {
+      "title": "pi CLI 设置",
+      "appPath": "pi 路径",
+      "cliPath": "CLI 路径",
+      "cliDetected": "已检测 {{version}} · {{path}}",
+      "cliMissing": "未检测到 pi CLI，可填写自定义路径",
+      "syncOfficialAuthOnSwitch": "切号同步官方登录",
+      "syncOfficialAuthOnSwitchDesc": "开启后，切换账号会把凭据合并写入 ~/.pi/agent/auth.json 并更新默认模型；关闭时使用独立 PI_CODING_AGENT_DIR。"
     }
   },
   "quotaAlert": {
@@ -7364,5 +7374,128 @@
   "opencode": {
     "title": "OpenCode",
     "desc": "管理 OpenCode Go / Zen 档 API Key，并按档位筛选列表。密钥保存在本机应用数据目录。"
+  },
+  "pi": {
+    "search": "搜索 pi 账号...",
+    "flowNotice": {
+      "title": "pi 账号管理说明",
+      "desc": "每个 pi 账号是一组提供商凭据和默认模型。开启「切号同步官方登录」后，切换账号会把凭据合并写入 ~/.pi/agent/auth.json 并更新默认模型；关闭时使用独立 PI_CODING_AGENT_DIR。",
+      "permission": "本地范围：读取 ~/.pi/agent/auth.json 与 settings.json 用于导入；切换时仅修改账号涉及的提供商条目，写入前保留一份 .cockpit-backup 备份。",
+      "network": "网络范围：本应用不发起网络请求；OAuth 登录与令牌刷新由 pi CLI 自行完成。"
+    },
+    "empty": "暂无 pi 账号",
+    "addAccount": "添加 pi 账号",
+    "oauth": {
+      "desc": "pi 的订阅登录（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini 等）通过 pi 内置的 /login 完成。",
+      "title": "pi /login",
+      "item1": "使用 pi 官方登录流程，凭据由 pi 自行写入。",
+      "item2": "导入时会把当前所有提供商凭据保存为一个账号。",
+      "item3": "每个账号可使用独立目录，多开互不影响。",
+      "builtinDesc": "在浏览器中完成授权后自动保存为 pi 账号，凭据格式与 pi /login 完全一致。",
+      "otherProviders": "其他（pi /login）",
+      "urlPlaceholder": "授权地址",
+      "waiting": "等待浏览器授权回调...",
+      "success": "pi 登录成功"
+    },
+    "import": {
+      "pasteTab": "粘贴 JSON",
+      "pasteDesc": "粘贴 pi 的 auth.json，或本应用导出的账号 JSON。凭据仅在本机处理。",
+      "pastePlaceholder": "粘贴 pi 账号 JSON",
+      "pasteAction": "导入 JSON",
+      "localDesc": "从 ~/.pi/agent/auth.json 导入当前所有提供商凭据和默认模型。",
+      "localClient": "从本机 pi 导入",
+      "apiKeyTab": "API Key",
+      "apiKeyDesc": "接入三方 API 网关（OpenAI / Anthropic 兼容），或直接填写 pi 内置提供商的 API Key。",
+      "apiKeyPlaceholder": "粘贴 API Key",
+      "apiKeyAction": "添加 API Key",
+      "defaultModel": "默认模型（可选）",
+      "defaultModelPlaceholder": "例如 claude-sonnet-4-5",
+      "displayName": "账号名称（可选）",
+      "provider": "提供商 ID"
+    },
+    "instances": {
+      "unsupported": "pi 多开仅支持 macOS、Windows 和 Linux。",
+      "launchDialogTitle": "启动实例",
+      "launchHint": "可复制命令手动执行，或点击下方按钮直接在终端执行。",
+      "runInTerminal": "终端执行",
+      "cliReady": "已检测",
+      "cliMissingShort": "未检测",
+      "cliPathInvalid": "配置的 pi CLI 路径无效：{{path}}",
+      "saveAndRetry": "保存并重试",
+      "installCommand": "官方安装命令",
+      "installHint": "可在终端运行以下官方命令，安装完成后点击刷新。",
+      "selectWorkingDir": "选择 pi CLI 工作目录",
+      "workingDirAccountHint": "工作目录与该账号绑定，下次从该账号启动会自动回填。",
+      "launchCommandPlaceholder": "选择或确认工作目录后生成启动命令",
+      "accountHomeReady": "已准备独立目录：{{email}}",
+      "installLaunchHint": "可在终端运行以下官方命令，安装完成后重新点击终端执行。"
+    },
+    "switch": {
+      "success": "切号成功"
+    },
+    "usageNormal": "正常",
+    "usageAbnormal": "异常",
+    "usageViewDetail": "查看详情",
+    "usageDetailTitle": "用量状态详情",
+    "usage": {
+      "title": "用量",
+      "refresh": "刷新用量",
+      "expired": "令牌已失效且自动刷新失败，请重新登录",
+      "unsupported": "当前凭据暂不支持用量查询",
+      "spent": "已用",
+      "resetAt": "重置于"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "配额查询失败",
+      "empty": "暂无可用配额数据",
+      "sectionTitle": "配额查询"
+    },
+    "login": {
+      "importAfterLogin": "从本机导入",
+      "openTerminal": "在终端启动 pi",
+      "opened": "已打开终端，请在 pi 中输入 /login",
+      "step1": "点击下方按钮，在终端中启动 pi（使用官方目录 ~/.pi/agent）。",
+      "step2": "在 pi 中输入 /login，选择提供商并完成浏览器授权；可重复登录多个提供商。",
+      "step3": "登录完成后回到这里，点击「从本机导入」保存为账号。"
+    },
+    "noDefaultModel": "未设置默认模型",
+    "providers": {
+      "apiKey": "API Key",
+      "defaultModel": "默认模型",
+      "empty": "暂无凭据",
+      "expiredHint": "OAuth 令牌已过期，pi 启动时会自动刷新",
+      "oauth": "OAuth",
+      "gateway": "网关"
+    },
+    "defaults": {
+      "title": "编辑默认设置",
+      "hint": "切换到此账号时，会把默认提供商、模型和思考级别写入 pi 的 settings.json。留空表示不修改。",
+      "provider": "默认提供商",
+      "thinkingLevel": "默认思考级别",
+      "unset": "不设置"
+    },
+    "gateway": {
+      "modeGateway": "三方网关",
+      "modeBuiltin": "pi 内置提供商",
+      "provider": "供应商",
+      "custom": "自定义",
+      "getKey": "获取 API Key",
+      "protocol": "接口协议",
+      "endpoint": "供应商端点",
+      "baseUrl": "基础 URL",
+      "providerId": "pi 提供商 ID",
+      "authScheme": "认证方式",
+      "models": "模型",
+      "fetchModels": "获取模型列表",
+      "fetchNeedsKey": "先在下方填写 API Key",
+      "editTitle": "编辑网关",
+      "keepKey": "留空则保留当前 Key {{hint}}",
+      "modelsEmpty": "至少添加一个模型",
+      "setDefault": "设为默认模型",
+      "fetched": "接口返回 {{count}} 个模型，点击添加",
+      "addAll": "全部添加",
+      "noModels": "接口未返回模型，请手动添加",
+      "modelPlaceholder": "手动输入模型 ID，回车添加"
+    }
   }
 }

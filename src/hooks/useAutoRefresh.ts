@@ -1,3 +1,5 @@
+import { usePiAccountStore } from '../stores/usePiAccountStore';
+import { getPiAccountDisplayEmail } from '../types/pi';
 import { listenSafely as listen } from "../utils/tauriEventListener";
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -67,6 +69,7 @@ interface GeneralConfig {
   kiro_auto_refresh_minutes: number;
   cursor_auto_refresh_minutes: number;
   grok_auto_refresh_minutes: number;
+  pi_auto_refresh_minutes?: number;
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
@@ -196,6 +199,7 @@ function getCurrentAccountEmails(): Record<CurrentAccountRefreshPlatform, string
     kiro: getProviderEmail(useKiroAccountStore, getKiroAccountDisplayEmail),
     cursor: getProviderEmail(useCursorAccountStore, getCursorAccountDisplayEmail),
     grok: getProviderEmail(useGrokAccountStore, getGrokAccountDisplayEmail),
+    pi: getProviderEmail(usePiAccountStore, getPiAccountDisplayEmail),
     codebuddy: getProviderEmail(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail),
     codebuddy_cn: getProviderEmail(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail),
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),

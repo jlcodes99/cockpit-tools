@@ -13,6 +13,7 @@ const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'kiro',
   'cursor',
   'grok',
+  'pi',
   'codebuddy',
   'codebuddy_cn',
   'qoder',
@@ -470,6 +471,9 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   }
   if (fallbackPlatform === 'grok') {
     return 'Grok CLI';
+  }
+  if (fallbackPlatform === 'pi') {
+    return 'pi';
   }
   return fallbackPlatform.charAt(0).toUpperCase() + fallbackPlatform.slice(1);
 }

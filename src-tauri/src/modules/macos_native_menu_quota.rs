@@ -477,6 +477,7 @@
             PlatformId::Kiro => "#8b92a1",
             PlatformId::Cursor => "#21c7b7",
             PlatformId::Grok => "#6b7280",
+            PlatformId::Pi => "#0f766e",
             PlatformId::Codebuddy => "#4b74ff",
             PlatformId::CodebuddyCn => "#4b74ff",
             PlatformId::Qoder => "#5664ff",

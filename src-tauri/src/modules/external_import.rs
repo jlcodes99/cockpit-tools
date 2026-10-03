@@ -62,6 +62,7 @@ fn resolve_provider_and_page(value: &str) -> Option<(&'static str, &'static str)
         "kiro" => Some(("kiro", "kiro")),
         "cursor" => Some(("cursor", "cursor")),
         "grok" => Some(("grok", "grok")),
+        "pi" => Some(("pi", "pi")),
         "codebuddy" => Some(("codebuddy", "codebuddy")),
         "codebuddy_cn" | "codebuddycn" => Some(("codebuddy_cn", "codebuddy-cn")),
         "qoder" => Some(("qoder", "qoder")),

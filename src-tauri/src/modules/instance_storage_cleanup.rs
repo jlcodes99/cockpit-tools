@@ -161,6 +161,7 @@ fn roots_and_defaults() -> Result<(Vec<PlatformRoot>, Vec<PathBuf>), String> {
     platform!("workbuddy", workbuddy_instance);
     platform!("zcode", zcode_instance);
     platform!("grok", grok_instance);
+    platform!("pi", pi_instance);
     use modules::trae_account::TraePlatformKind;
     for (name, kind) in [
         ("trae", TraePlatformKind::Trae),
