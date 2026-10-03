@@ -1,4 +1,26 @@
 {
+  "antigravityCli": {
+    "management": "Antigravity CLI account management",
+    "target": "Account switching target",
+    "title": "Antigravity CLI",
+    "refresh": "Check status",
+    "launch": "Open CLI",
+    "install": "Installation guide",
+    "loading": "Reading CLI sign-in status…",
+    "scope": "CLI mode: account switches and local imports below use the CLI system keyring. Add accounts with OAuth as usual.",
+    "sharedCredential": "CLI and Antigravity desktop share this credential. Switching affects future sessions in both apps. Exit existing sessions before switching, then restart agy.",
+    "apiKeyMode": "Gemini API key mode is active. Remove modelProvider from ~/.gemini/antigravity-cli/settings.json and restart agy to use a Google account.",
+    "managed": "The signed-in CLI account is marked Current in the list below.",
+    "notImported": "A CLI credential exists. Use Add account → Import → Import CLI account to save it here.",
+    "notSignedIn": "No CLI credential found. Open agy to sign in, or switch to an authorized account below.",
+    "directory": "Working directory",
+    "homeDirectory": "Home directory (default)",
+    "chooseDirectory": "Choose working directory",
+    "launched": "Terminal launch requested. Complete sign-in in agy if needed.",
+    "switched": "CLI credential switched to {{email}}. Restart existing agy sessions to use this account.",
+    "localDesc": "Read the signed-in Antigravity CLI account from the system keyring (gemini / antigravity).",
+    "importLocal": "Import CLI account"
+  },
   "pelican": {
     "results": "Test results",
     "usageTokens": "{{tokens}} tok",

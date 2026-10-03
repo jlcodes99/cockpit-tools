@@ -4,9 +4,9 @@ import { Account, AccountNoteUpdate, QuotaData, RefreshStats, TokenData } from '
 import * as accountService from '../services/accountService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
 import {
-  AntigravityRuntimeTarget,
+  AntigravityAccountTarget,
   DEFAULT_ANTIGRAVITY_RUNTIME_TARGET,
-  normalizeAntigravityRuntimeTarget,
+  normalizeAntigravityAccountTarget,
 } from '../utils/antigravityRuntimeTarget';
 
 const ACCOUNTS_STORE_KEY = 'agtools.accounts.store.v1';
@@ -121,28 +121,36 @@ function toPersistedAccountSnapshot(account: Account): Account {
 let fetchAccountsPromise: Promise<void> | null = null;
 let fetchAccountsLastTime = 0;
 let fetchAccountsSeq = 0;
-const fetchCurrentPromises: Partial<Record<AntigravityRuntimeTarget, Promise<void>>> = {};
-const fetchCurrentLastTimes: Partial<Record<AntigravityRuntimeTarget, number>> = {};
+const fetchCurrentPromises: Partial<Record<AntigravityAccountTarget, Promise<void>>> = {};
+const fetchCurrentLastTimes: Partial<Record<AntigravityAccountTarget, number>> = {};
+let cliCurrentGeneration = 0;
+
+function invalidateCliCurrentRequest(target: AntigravityAccountTarget): void {
+    if (target !== 'antigravity_cli') return;
+    cliCurrentGeneration += 1;
+    fetchCurrentPromises.antigravity_cli = undefined;
+}
 let allowNextEmptyAccountList = false;
-const allowNextEmptyCurrentAccountByTarget: Partial<Record<AntigravityRuntimeTarget, boolean>> = {};
+const allowNextEmptyCurrentAccountByTarget: Partial<Record<AntigravityAccountTarget, boolean>> = {};
 const DEBOUNCE_MS = 500;
 
-type CurrentAccountsByTarget = Record<AntigravityRuntimeTarget, Account | null>;
+type CurrentAccountsByTarget = Record<AntigravityAccountTarget, Account | null>;
 
 function buildEmptyCurrentAccountsByTarget(): CurrentAccountsByTarget {
     return {
         antigravity: null,
         antigravity_ide: null,
+        antigravity_cli: null,
     };
 }
 
-function resolveRuntimeTarget(runtimeTarget?: AntigravityRuntimeTarget): AntigravityRuntimeTarget {
-    return normalizeAntigravityRuntimeTarget(runtimeTarget ?? DEFAULT_ANTIGRAVITY_RUNTIME_TARGET);
+function resolveRuntimeTarget(runtimeTarget?: AntigravityAccountTarget): AntigravityAccountTarget {
+    return normalizeAntigravityAccountTarget(runtimeTarget ?? DEFAULT_ANTIGRAVITY_RUNTIME_TARGET);
 }
 
 function updateCurrentAccountsByTarget(
     current: CurrentAccountsByTarget | undefined,
-    runtimeTarget: AntigravityRuntimeTarget,
+    runtimeTarget: AntigravityAccountTarget,
     account: Account | null,
 ): CurrentAccountsByTarget {
     return {
@@ -159,16 +167,16 @@ interface AccountState {
     loading: boolean;
     error: string | null;
     fetchAccounts: () => Promise<void>;
-    fetchCurrentAccount: (runtimeTarget?: AntigravityRuntimeTarget) => Promise<void>;
+    fetchCurrentAccount: (runtimeTarget?: AntigravityAccountTarget) => Promise<void>;
     addAccount: (email: string, refreshToken: string) => Promise<Account>;
     deleteAccount: (accountId: string) => Promise<void>;
     deleteAccounts: (accountIds: string[]) => Promise<void>;
-    setCurrentAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<void>;
-    refreshQuota: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<void>;
+    setCurrentAccount: (accountId: string, runtimeTarget?: AntigravityAccountTarget) => Promise<void>;
+    refreshQuota: (accountId: string, runtimeTarget?: AntigravityAccountTarget) => Promise<void>;
     refreshAllQuotas: (trigger?: 'auto' | 'manual') => Promise<RefreshStats>;
     startOAuthLogin: (update?: AccountNoteUpdate) => Promise<Account>;
     reorderAccounts: (accountIds: string[]) => Promise<void>;
-    switchAccount: (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => Promise<Account>;
+    switchAccount: (accountId: string, runtimeTarget?: AntigravityAccountTarget) => Promise<Account>;
     syncCurrentFromClient: () => Promise<void>;
     updateAccountTags: (accountId: string, tags: string[]) => Promise<Account>;
     updateAccountNotes: (accountId: string, update: string | AccountNoteUpdate) => Promise<Account>;
@@ -242,11 +250,14 @@ export const useAccountStore = create<AccountState>()(
           }
           
           fetchCurrentLastTimes[target] = now;
+          const cliGeneration = cliCurrentGeneration;
           
           fetchCurrentPromises[target] = (async () => {
               try {
                   const account = await accountService.getCurrentAccount(target);
+                  if (target === 'antigravity_cli' && cliGeneration !== cliCurrentGeneration) return;
                   if (
+                      target !== 'antigravity_cli' &&
                       !account &&
                       get().currentAccountsByTarget[target] &&
                       get().accounts.length > 0 &&
@@ -257,7 +268,7 @@ export const useAccountStore = create<AccountState>()(
                   }
                   allowNextEmptyCurrentAccountByTarget[target] = false;
                   set((state) => ({
-                      currentAccount: account,
+                      currentAccount: target === 'antigravity_cli' ? state.currentAccount : account,
                       currentAccountsByTarget: updateCurrentAccountsByTarget(
                           state.currentAccountsByTarget,
                           target,
@@ -265,10 +276,15 @@ export const useAccountStore = create<AccountState>()(
                       ),
                   }));
               } catch (e) {
+                  if (target === 'antigravity_cli' && cliGeneration !== cliCurrentGeneration) return;
+                  if (target === 'antigravity_cli') {
+                      set((state) => ({ currentAccountsByTarget: updateCurrentAccountsByTarget(state.currentAccountsByTarget, target, null) }));
+                  }
                   console.error('Failed to fetch current account:', e);
               } finally {
                   allowNextEmptyCurrentAccountByTarget[target] = false;
                   setTimeout(() => {
+                      if (target === 'antigravity_cli' && cliGeneration !== cliCurrentGeneration) return;
                       fetchCurrentPromises[target] = undefined;
                   }, 100);
               }
@@ -300,6 +316,7 @@ export const useAccountStore = create<AccountState>()(
             await Promise.allSettled([
                 get().fetchCurrentAccount('antigravity'),
                 get().fetchCurrentAccount('antigravity_ide'),
+                get().fetchCurrentAccount('antigravity_cli'),
             ]);
         } finally {
             allowNextEmptyAccountList = false;
@@ -310,11 +327,11 @@ export const useAccountStore = create<AccountState>()(
             platformId: 'antigravity',
             reason: 'delete',
         });
-        for (const target of ['antigravity', 'antigravity_ide'] as const) {
+        for (const target of ['antigravity', 'antigravity_ide', 'antigravity_cli'] as const) {
             const previousCurrentAccountId = previousCurrentAccounts[target]?.id ?? null;
             const nextCurrentAccountId = get().currentAccountsByTarget[target]?.id ?? null;
             if (previousCurrentAccountId !== nextCurrentAccountId) {
-                await emitCurrentAccountChanged({
+                if (target !== 'antigravity_cli') await emitCurrentAccountChanged({
                     platformId: target,
                     accountId: nextCurrentAccountId,
                     reason: 'delete',
@@ -341,6 +358,7 @@ export const useAccountStore = create<AccountState>()(
             await Promise.allSettled([
                 get().fetchCurrentAccount('antigravity'),
                 get().fetchCurrentAccount('antigravity_ide'),
+                get().fetchCurrentAccount('antigravity_cli'),
             ]);
         } finally {
             allowNextEmptyAccountList = false;
@@ -351,11 +369,11 @@ export const useAccountStore = create<AccountState>()(
             platformId: 'antigravity',
             reason: 'delete',
         });
-        for (const target of ['antigravity', 'antigravity_ide'] as const) {
+        for (const target of ['antigravity', 'antigravity_ide', 'antigravity_cli'] as const) {
             const previousCurrentAccountId = previousCurrentAccounts[target]?.id ?? null;
             const nextCurrentAccountId = get().currentAccountsByTarget[target]?.id ?? null;
             if (previousCurrentAccountId !== nextCurrentAccountId) {
-                await emitCurrentAccountChanged({
+                if (target !== 'antigravity_cli') await emitCurrentAccountChanged({
                     platformId: target,
                     accountId: nextCurrentAccountId,
                     reason: 'delete',
@@ -367,8 +385,9 @@ export const useAccountStore = create<AccountState>()(
     setCurrentAccount: async (accountId: string, runtimeTarget) => {
         const target = resolveRuntimeTarget(runtimeTarget);
         await accountService.setCurrentAccount(accountId, target);
+        invalidateCliCurrentRequest(target);
         await get().fetchCurrentAccount(target);
-        await emitCurrentAccountChanged({
+        if (target !== 'antigravity_cli') await emitCurrentAccountChanged({
             platformId: target,
             accountId: get().currentAccountsByTarget[target]?.id ?? accountId,
             reason: 'switch',
@@ -388,7 +407,7 @@ export const useAccountStore = create<AccountState>()(
             
             set((state) => {
                 let nextByTarget = state.currentAccountsByTarget;
-                for (const currentTarget of ['antigravity', 'antigravity_ide'] as const) {
+                for (const currentTarget of ['antigravity', 'antigravity_ide', 'antigravity_cli'] as const) {
                     if (nextByTarget[currentTarget]?.id === accountId) {
                         nextByTarget = updateCurrentAccountsByTarget(
                             nextByTarget,
@@ -399,7 +418,7 @@ export const useAccountStore = create<AccountState>()(
                 }
                 return {
                     currentAccount:
-                        nextByTarget[target]?.id === accountId
+                        target !== 'antigravity_cli' && nextByTarget[target]?.id === accountId
                             ? updatedAccount
                             : state.currentAccount?.id === accountId
                               ? updatedAccount
@@ -437,6 +456,7 @@ export const useAccountStore = create<AccountState>()(
         await Promise.allSettled([
             get().fetchCurrentAccount('antigravity'),
             get().fetchCurrentAccount('antigravity_ide'),
+            get().fetchCurrentAccount('antigravity_cli'),
         ]);
         return stats;
     },
@@ -456,13 +476,16 @@ export const useAccountStore = create<AccountState>()(
         await get().fetchAccounts();
     },
 
-    switchAccount: async (accountId: string, runtimeTarget?: AntigravityRuntimeTarget) => {
+    switchAccount: async (accountId: string, runtimeTarget?: AntigravityAccountTarget) => {
         const target = resolveRuntimeTarget(runtimeTarget);
         const previousCurrentAccountId = get().currentAccountsByTarget[target]?.id ?? null;
         try {
             const account = await accountService.switchAccount(accountId, target);
+            // A keyring read started before this write must not replace the new
+            // account after its delayed IPC response arrives.
+            invalidateCliCurrentRequest(target);
             set((state) => ({
-                currentAccount: account,
+                currentAccount: target === 'antigravity_cli' ? state.currentAccount : account,
                 currentAccountsByTarget: updateCurrentAccountsByTarget(
                     state.currentAccountsByTarget,
                     target,
@@ -470,18 +493,19 @@ export const useAccountStore = create<AccountState>()(
                 ),
             }));
             await get().fetchAccounts();
-            await emitCurrentAccountChanged({
+            if (target !== 'antigravity_cli') await emitCurrentAccountChanged({
                 platformId: target,
                 accountId: account.id,
                 reason: 'switch',
             });
             return account;
         } catch (error) {
+            invalidateCliCurrentRequest(target);
             await get().fetchAccounts();
             await get().fetchCurrentAccount(target);
             const nextCurrentAccountId = get().currentAccountsByTarget[target]?.id ?? null;
             if (previousCurrentAccountId !== nextCurrentAccountId) {
-                await emitCurrentAccountChanged({
+                if (target !== 'antigravity_cli') await emitCurrentAccountChanged({
                     platformId: target,
                     accountId: nextCurrentAccountId,
                     reason: 'switch',
@@ -531,6 +555,8 @@ export const useAccountStore = create<AccountState>()(
             accounts: state.accounts.map((item) => item.id === account.id ? account : item),
             currentAccount: state.currentAccount?.id === account.id ? account : state.currentAccount,
             currentAccountsByTarget: {
+                antigravity_cli: state.currentAccountsByTarget.antigravity_cli?.id === account.id
+                    ? account : state.currentAccountsByTarget.antigravity_cli,
                 antigravity:
                     state.currentAccountsByTarget.antigravity?.id === account.id
                         ? account

@@ -118,6 +118,7 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence'
+import type { AntigravityAccountTarget } from '../utils/antigravityRuntimeTarget'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
 import { useRememberMfaQuery } from '../hooks/useRememberMfaQuery'
 import {
@@ -176,7 +177,9 @@ export type { AccountsFilterType } from './antigravityAccountOverviewModel';
 
 export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const { t, i18n } = useTranslation()
-  const antigravityRuntimeTarget = useAntigravityRuntimeTarget()
+  const desktopRuntimeTarget = useAntigravityRuntimeTarget()
+  const [cliMode, setCliMode] = useState(false)
+  const antigravityRuntimeTarget: AntigravityAccountTarget = cliMode ? 'antigravity_cli' : desktopRuntimeTarget
   const locale = i18n.language || 'zh-CN'
   const untaggedKey = '__untagged__'
   const {
@@ -1482,6 +1485,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     loadVerificationHistory()
 
     let unlisten: UnlistenFn | undefined
+    let disposed = false
 
     listen<string>('accounts:refresh', async () => {
       await fetchAccounts()
@@ -1498,13 +1502,15 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       }
       await loadVerificationHistory()
     }).then((fn) => {
-      unlisten = fn
+      if (disposed) fn()
+      else unlisten = fn
     })
 
     return () => {
+      disposed = true
       if (unlisten) unlisten()
     }
-  }, [fetchAccounts, fetchCurrentAccount, loadVerificationHistory, refreshQuota])
+  }, [antigravityRuntimeTarget, fetchAccounts, fetchCurrentAccount, loadVerificationHistory, refreshQuota])
 
   // Click outside to close color picker
   useEffect(() => {
@@ -1953,7 +1959,9 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     try {
       const account = await switchAccount(accountId, antigravityRuntimeTarget)
       await fetchCurrentAccount(antigravityRuntimeTarget)
-      setMessage({ text: t('messages.switched', { email: maskAccountText(account.email) }) })
+      setMessage({ text: cliMode
+        ? t('antigravityCli.switched', { email: maskAccountText(account.email) })
+        : t('messages.switched', { email: maskAccountText(account.email) }) })
     } catch (e) {
       const raw = formatSwitchError(e)
       if (!raw.startsWith('APP_PATH_NOT_FOUND:')) {
@@ -2144,7 +2152,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setAddStatus('loading')
     setAddMessage(t('modals.import.importingLocal'))
     try {
-      const imported = await accountService.importFromLocal()
+      const imported = await accountService.importFromLocal(antigravityRuntimeTarget)
       await fetchAccounts()
       await new Promise((resolve) => setTimeout(resolve, 180))
       await fetchAccounts()
@@ -3832,6 +3840,10 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   )
 
   return {
+    switching,
+    cliMode,
+    setCliMode,
+    desktopRuntimeTarget,
     grouping,
     accountGroups: grouping.groups,
     accountNoteCopiedKey,

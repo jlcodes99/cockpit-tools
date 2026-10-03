@@ -831,6 +831,8 @@ pub fn run() {
             // Import/Export Commands
             commands::import::import_from_old_tools,
             commands::import::import_from_local,
+            commands::antigravity_cli::antigravity_cli_status,
+            commands::antigravity_cli::antigravity_cli_launch,
             commands::import::import_from_json,
             commands::import::import_from_files,
             commands::import::export_accounts,

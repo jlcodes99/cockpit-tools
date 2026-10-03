@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { Account, AccountNoteUpdate, RefreshStats } from '../types/account';
-import { AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
+import { AntigravityAccountTarget } from '../utils/antigravityRuntimeTarget';
 
 
 export async function listAccounts(): Promise<Account[]> {
@@ -35,14 +35,14 @@ export async function reorderAccounts(accountIds: string[]): Promise<void> {
 }
 
 export async function getCurrentAccount(
-    runtimeTarget?: AntigravityRuntimeTarget,
+    runtimeTarget?: AntigravityAccountTarget,
 ): Promise<Account | null> {
     return await invoke('get_current_account', { runtimeTarget });
 }
 
 export async function setCurrentAccount(
     accountId: string,
-    runtimeTarget?: AntigravityRuntimeTarget,
+    runtimeTarget?: AntigravityAccountTarget,
 ): Promise<void> {
     return await invoke('set_current_account', { accountId, runtimeTarget });
 }
@@ -83,7 +83,7 @@ export async function openDataFolder(): Promise<void> {
 
 export async function switchAccount(
     accountId: string,
-    runtimeTarget?: AntigravityRuntimeTarget,
+    runtimeTarget?: AntigravityAccountTarget,
 ): Promise<Account> {
     return await invoke('switch_account', { accountId, runtimeTarget });
 }
@@ -165,8 +165,8 @@ export async function importFromOldTools(): Promise<Account[]> {
 }
 
 
-export async function importFromLocal(): Promise<Account> {
-    return await invoke('import_from_local');
+export async function importFromLocal(runtimeTarget?: AntigravityAccountTarget): Promise<Account> {
+    return await invoke('import_from_local', { runtimeTarget });
 }
 
 export async function importFromJson(jsonContent: string): Promise<Account[]> {

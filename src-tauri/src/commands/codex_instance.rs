@@ -18,7 +18,7 @@ use crate::models::{
 use crate::modules;
 
 #[path = "codex_instance_terminal.rs"]
-mod terminal;
+pub(crate) mod terminal;
 use terminal::build_codex_terminal_launch_plan;
 
 #[cfg(test)]

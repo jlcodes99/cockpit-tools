@@ -10,6 +10,7 @@ import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDrop
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { ANTIGRAVITY_RESET_SORT_PREFIX } from '../utils/antigravityAccountSort';
+import { AntigravityCliPanel } from '../components/AntigravityCliPanel';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
 import { FileCorruptedModal } from '../components/FileCorruptedModal';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
@@ -221,9 +222,17 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
       <main className="main-content accounts-page">
         <OverviewTabsHeader
           active="overview"
+          showInstalledVersion={!props.cliMode}
           onNavigate={onNavigate}
           onOpenManual={() => onNavigate?.('manual')}
           subtitle={t('overview.subtitle')}
+        />
+
+        <AntigravityCliPanel
+          active={props.cliMode}
+          desktopLabel={props.desktopRuntimeTarget === 'antigravity_ide' ? 'Antigravity IDE' : 'Antigravity'}
+          disabled={!!props.switching || props.showAddModal}
+          onChange={props.setCliMode}
         />
 
         {/* 工具栏 */}
@@ -369,7 +378,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 className={refreshingAll ? 'loading-spinner' : ''}
               />
             </button>
-            {antigravitySeamlessSwitchUnlocked && (
+            {!props.cliMode && antigravitySeamlessSwitchUnlocked && (
               <button
                 className="btn btn-secondary icon-only"
                 onClick={openSwitchHistoryModal}
@@ -780,10 +789,10 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                       </div>
                       <div className="import-option-content">
                         <div className="import-option-title">
-                          {t('modals.import.fromLocalDB')}
+                          {t(props.cliMode ? 'antigravityCli.importLocal' : 'modals.import.fromLocalDB')}
                         </div>
                         <div className="import-option-desc">
-                          {t('modals.import.localDBDesc')}
+                          {t(props.cliMode ? 'antigravityCli.localDesc' : 'modals.import.localDBDesc')}
                         </div>
                       </div>
                     </button>
@@ -1077,7 +1086,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
         </div>
       )}
 
-      {antigravitySeamlessSwitchUnlocked && showSwitchHistoryModal && (
+      {!props.cliMode && antigravitySeamlessSwitchUnlocked && showSwitchHistoryModal && (
         <div
           className="modal-overlay"
         >
@@ -1225,7 +1234,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
         </div>
       )}
 
-      {antigravitySeamlessSwitchUnlocked && showSwitchHistoryModal && switchHistoryClearConfirmOpen && (
+      {!props.cliMode && antigravitySeamlessSwitchUnlocked && showSwitchHistoryModal && switchHistoryClearConfirmOpen && (
         <div
           className="modal-overlay"
         >

@@ -19,6 +19,7 @@ interface OverviewTabsHeaderProps {
   onNavigate?: (page: Page) => void;
   subtitle: string;
   title?: string;
+  showInstalledVersion?: boolean;
   onOpenManual?: () => void;
 }
 
@@ -33,6 +34,7 @@ export function OverviewTabsHeader({
   onNavigate,
   subtitle,
   title,
+  showInstalledVersion = true,
   onOpenManual,
 }: OverviewTabsHeaderProps) {
   void subtitle;
@@ -101,7 +103,7 @@ export function OverviewTabsHeader({
           <ManualHelpIconButton className="platform-header-help" onClick={onOpenManual} />
         </div>
         <div className="page-top-strip-right">
-          <AntigravityInstalledVersionBadge />
+          {showInstalledVersion && <AntigravityInstalledVersionBadge />}
         </div>
       </div>
       <div className="page-tabs-row page-tabs-center page-tabs-row-with-leading">

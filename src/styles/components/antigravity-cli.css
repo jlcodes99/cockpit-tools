@@ -1,0 +1,28 @@
+.antigravity-cli-panel {
+  margin: 0 0 16px;
+  border: 1px solid var(--border-color, #d9dce3);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.antigravity-cli-mode, .antigravity-cli-actions, .antigravity-cli-directory {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.antigravity-cli-mode { padding: 8px; }
+.antigravity-cli-mode button { display: inline-flex; align-items: center; gap: 6px; }
+.antigravity-cli-details { padding: 0 16px 16px; font-size: 13px; }
+.antigravity-cli-details p { margin: 8px 0; overflow-wrap: anywhere; }
+.antigravity-cli-actions strong { margin-right: auto; }
+.antigravity-cli-path { color: var(--text-secondary); font-family: monospace; }
+.antigravity-cli-directory input {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #d9dce3);
+  border-radius: 6px;
+  color: inherit;
+  background: var(--bg-primary, transparent);
+}
+.antigravity-cli-error { color: var(--danger-color, #d44343); }

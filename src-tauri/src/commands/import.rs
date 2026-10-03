@@ -8,8 +8,15 @@ pub async fn import_from_old_tools() -> Result<Vec<models::Account>, String> {
 }
 
 #[tauri::command]
-pub async fn import_from_local(app: AppHandle) -> Result<models::Account, String> {
-    let account = modules::import::import_from_local_logic().await?;
+pub async fn import_from_local(
+    app: AppHandle,
+    runtime_target: Option<String>,
+) -> Result<models::Account, String> {
+    let account = if runtime_target.as_deref() == Some("antigravity_cli") {
+        modules::antigravity_cli::import_account().await?
+    } else {
+        modules::import::import_from_local_logic().await?
+    };
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(account)
 }

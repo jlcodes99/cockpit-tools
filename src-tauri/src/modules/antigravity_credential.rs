@@ -12,9 +12,10 @@ struct AntigravityCredentialToken {
 struct AntigravityCredentialPayload {
     token: AntigravityCredentialToken,
     auth_method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id_token: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
 #[derive(Debug, serde::Deserialize)]
 struct StoredAntigravityCredentialToken {
     access_token: Option<String>,
@@ -23,24 +24,23 @@ struct StoredAntigravityCredentialToken {
     expiry: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
 #[derive(Debug, serde::Deserialize)]
 struct StoredAntigravityCredentialPayload {
     token: StoredAntigravityCredentialToken,
     auth_method: Option<String>,
+    id_token: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AntigravitySystemCredential {
     pub access_token: Option<String>,
     pub refresh_token: String,
     pub token_type: Option<String>,
     pub expiry: Option<String>,
     pub auth_method: Option<String>,
+    pub id_token: Option<String>,
 }
 
-#[cfg(target_os = "windows")]
 fn normalize_non_empty(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -48,22 +48,27 @@ fn normalize_non_empty(value: Option<&str>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-#[cfg(target_os = "windows")]
 fn normalize_antigravity_credential_secret(secret: &str) -> Result<String, String> {
     let trimmed = secret.trim();
     if trimmed.is_empty() {
         return Err("Antigravity 系统凭据为空".to_string());
     }
+    if let Some(encoded) = trimmed.strip_prefix("go-keyring-base64:") {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let bytes = STANDARD
+            .decode(encoded)
+            .map_err(|_| "Antigravity 系统凭据 Base64 格式无效".to_string())?;
+        return String::from_utf8(bytes).map_err(|_| "Antigravity 系统凭据编码无效".to_string());
+    }
     Ok(trimmed.to_string())
 }
 
-#[cfg(target_os = "windows")]
 fn parse_antigravity_system_credential(
     secret: &str,
 ) -> Result<AntigravitySystemCredential, String> {
     let payload_json = normalize_antigravity_credential_secret(secret)?;
     let payload: StoredAntigravityCredentialPayload = serde_json::from_str(&payload_json)
-        .map_err(|e| format!("解析 Antigravity 系统凭据失败: {}", e))?;
+        .map_err(|_| "解析 Antigravity 系统凭据失败：凭据 JSON 格式无效".to_string())?;
     let refresh_token = normalize_non_empty(payload.token.refresh_token.as_deref())
         .ok_or_else(|| "Antigravity 系统凭据缺少 refresh_token".to_string())?;
 
@@ -73,12 +78,19 @@ fn parse_antigravity_system_credential(
         token_type: normalize_non_empty(payload.token.token_type.as_deref()),
         expiry: normalize_non_empty(payload.token.expiry.as_deref()),
         auth_method: normalize_non_empty(payload.auth_method.as_deref()),
+        id_token: normalize_non_empty(payload.id_token.as_deref()),
     })
 }
 
 fn build_antigravity_credential_payload(account: &Account) -> Result<String, String> {
+    if account.pending_oauth
+        || account.token.refresh_token.trim().is_empty()
+        || account.token.access_token.trim().is_empty()
+    {
+        return Err("账号尚未完成 OAuth 授权，无法写入系统凭据".to_string());
+    }
     let expiry = chrono::DateTime::from_timestamp(account.token.expiry_timestamp, 0)
-        .unwrap_or_else(chrono::Utc::now)
+        .ok_or_else(|| "账号 Token 到期时间无效".to_string())?
         .to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
 
     serde_json::to_string(&AntigravityCredentialPayload {
@@ -89,6 +101,7 @@ fn build_antigravity_credential_payload(account: &Account) -> Result<String, Str
             expiry,
         },
         auth_method: "consumer".to_string(),
+        id_token: account.token.id_token.clone(),
     })
     .map_err(|e| format!("序列化 Antigravity 系统凭据失败: {}", e))
 }
@@ -109,19 +122,10 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
         let encoded_payload = STANDARD.encode(&payload_json);
         let keychain_value = format!("go-keyring-base64:{}", encoded_payload);
 
-        let _ = Command::new("security")
-            .args([
-                "delete-generic-password",
-                "-s",
-                "gemini",
-                "-a",
-                "antigravity",
-            ])
-            .output();
-
         let output = Command::new("security")
             .args([
                 "add-generic-password",
+                "-U",
                 "-s",
                 "gemini",
                 "-a",
@@ -134,8 +138,7 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
             .map_err(|e| format!("执行 macOS Keychain 写入命令失败: {}", e))?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("写入 macOS Keychain 失败: {}", stderr.trim()));
+            return Err("写入 macOS Keychain 失败，请解锁钥匙串并允许访问".to_string());
         }
     }
 
@@ -169,7 +172,6 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
 
         #[link(name = "advapi32")]
         extern "system" {
-            fn CredDeleteW(target_name: *const u16, type_: u32, flags: u32) -> i32;
             fn CredWriteW(credential: *const CredentialW, flags: u32) -> i32;
         }
 
@@ -205,7 +207,6 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
         };
 
         unsafe {
-            let _ = CredDeleteW(target_wide.as_ptr(), CRED_TYPE_GENERIC, 0);
             if CredWriteW(&credential, 0) == 0 {
                 return Err(format!(
                     "写入 Windows Credential Manager 失败: {}",
@@ -223,7 +224,7 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
         let mut child = Command::new("secret-tool")
             .args([
                 "store",
-                "--label=gemini",
+                "--label=Password for 'antigravity' on 'gemini'",
                 "service",
                 "gemini",
                 "username",
@@ -245,8 +246,7 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
             .wait_with_output()
             .map_err(|e| format!("等待 Linux secret-tool 失败: {}", e))?;
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Linux secret-tool 写入失败: {}", stderr.trim()));
+            return Err("Linux secret-tool 写入失败，请确认钥匙环服务运行中且已解锁".to_string());
         }
     }
 
@@ -345,10 +345,189 @@ fn read_antigravity_system_credential_secret() -> Result<Option<String>, String>
     }
 }
 
-#[cfg(target_os = "windows")]
 pub fn read_antigravity_system_credential() -> Result<Option<AntigravitySystemCredential>, String> {
     let Some(secret) = read_antigravity_system_credential_secret()? else {
         return Ok(None);
     };
     parse_antigravity_system_credential(&secret).map(Some)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn read_antigravity_system_credential_secret() -> Result<Option<String>, String> {
+    use std::process::Command;
+    #[cfg(target_os = "linux")]
+    let output = Command::new("secret-tool")
+        .args(["lookup", "service", "gemini", "username", "antigravity"])
+        .output()
+        .map_err(|e| {
+            format!("无法读取系统钥匙环，请安装 libsecret 的 secret-tool 并解锁登录钥匙环: {e}")
+        })?;
+    #[cfg(target_os = "macos")]
+    let output = Command::new("security")
+        .args([
+            "find-generic-password",
+            "-s",
+            "gemini",
+            "-a",
+            "antigravity",
+            "-w",
+        ])
+        .output()
+        .map_err(|e| format!("无法读取 macOS Keychain: {e}"))?;
+
+    if !output.status.success() {
+        #[cfg(target_os = "linux")]
+        let missing = output.status.code() == Some(1) && output.stderr.is_empty();
+        #[cfg(target_os = "macos")]
+        let missing = output.status.code() == Some(44);
+        if missing {
+            return Ok(None);
+        }
+        // Never echo command output: keyring helpers may include secret content.
+        return Err("无法读取 Antigravity 系统凭据，请确认钥匙环服务运行中且已解锁".to_string());
+    }
+    let secret =
+        String::from_utf8(output.stdout).map_err(|_| "Antigravity 系统凭据编码无效".to_string())?;
+    if secret.trim().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(secret))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::TokenData;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn secret_tool_roundtrip_and_failures_preserve_credentials() {
+        use std::os::unix::fs::PermissionsExt;
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("agy-keyring-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let helper = dir.join("secret-tool");
+        std::fs::write(
+            &helper,
+            r#"#!/bin/sh
+case "$1" in
+  store)
+    test "$3 $4 $5 $6" = 'service gemini username antigravity' || exit 9
+    if test "$AGY_TEST_KEYRING_MODE" = fail; then
+      echo DO_NOT_LOG >&2
+      exit 1
+    fi
+    /bin/cat > "$AGY_TEST_KEYRING_FILE"
+    ;;
+  lookup)
+    test "$2 $3 $4 $5" = 'service gemini username antigravity' || exit 9
+    if test "$AGY_TEST_KEYRING_MODE" = missing; then exit 1; fi
+    if test "$AGY_TEST_KEYRING_MODE" = fail; then
+      echo DO_NOT_LOG >&2
+      exit 1
+    fi
+    /bin/cat "$AGY_TEST_KEYRING_FILE"
+    ;;
+  *) exit 9 ;;
+esac
+"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+        // Restore process environment even if an assertion fails. The helper
+        // isolates this test from the user's real Secret Service and credentials.
+        struct EnvGuard(Vec<(&'static str, Option<std::ffi::OsString>)>);
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                for (key, value) in &self.0 {
+                    match value {
+                        Some(value) => std::env::set_var(key, value),
+                        None => std::env::remove_var(key),
+                    }
+                }
+            }
+        }
+        let _env = EnvGuard(
+            ["PATH", "AGY_TEST_KEYRING_FILE", "AGY_TEST_KEYRING_MODE"]
+                .into_iter()
+                .map(|key| (key, std::env::var_os(key)))
+                .collect(),
+        );
+        std::env::set_var("PATH", &dir);
+        let stored = dir.join("credential.json");
+        std::env::set_var("AGY_TEST_KEYRING_FILE", &stored);
+        std::env::set_var("AGY_TEST_KEYRING_MODE", "ok");
+        let token = TokenData::new("access".into(), "refresh".into(), 3600, None, None, None);
+        let mut account = Account::new("test".into(), "test@example.com".into(), token);
+        write_antigravity_system_credential(&account).unwrap();
+        assert_eq!(
+            read_antigravity_system_credential()
+                .unwrap()
+                .unwrap()
+                .refresh_token,
+            "refresh"
+        );
+        let original = std::fs::read(&stored).unwrap();
+        std::env::set_var("AGY_TEST_KEYRING_MODE", "fail");
+        account.token.refresh_token = "new-refresh".into();
+        let error = write_antigravity_system_credential(&account).unwrap_err();
+        assert!(!error.contains("DO_NOT_LOG"));
+        assert_eq!(std::fs::read(&stored).unwrap(), original);
+        assert!(!read_antigravity_system_credential()
+            .err()
+            .unwrap()
+            .contains("DO_NOT_LOG"));
+        std::env::set_var("AGY_TEST_KEYRING_MODE", "missing");
+        assert!(read_antigravity_system_credential().unwrap().is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn parses_linux_and_windows_json_and_macos_go_keyring_payload() {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let raw = r#"{"token":{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","expiry":"2030-01-01T00:00:00Z"},"auth_method":"consumer","id_token":"identity"}"#;
+        for secret in [
+            raw.to_string(),
+            format!("go-keyring-base64:{}", STANDARD.encode(raw)),
+        ] {
+            let parsed = parse_antigravity_system_credential(&secret).unwrap();
+            assert_eq!(parsed.refresh_token, "refresh");
+            assert_eq!(parsed.id_token.as_deref(), Some("identity"));
+            assert_eq!(parsed.auth_method.as_deref(), Some("consumer"));
+        }
+    }
+
+    #[test]
+    fn invalid_payload_errors_do_not_expose_secret_values() {
+        for raw in [
+            "",
+            "go-keyring-base64:invalid!",
+            r#"{"token":{"refresh_token":" "}}"#,
+            r#"{"token":{"refresh_token":42},"secret":"DO_NOT_LOG"}"#,
+        ] {
+            let error = parse_antigravity_system_credential(raw).err().unwrap();
+            assert!(!error.contains("DO_NOT_LOG"));
+        }
+    }
+
+    #[test]
+    fn written_payload_roundtrips_identity_and_expiry() {
+        let token = TokenData::new("access".into(), "refresh".into(), 3600, None, None, None)
+            .with_oauth_metadata(None, Some("identity".into()));
+        let mut account = Account::new("test".into(), "test@example.com".into(), token);
+        let secret = build_antigravity_credential_payload(&account).unwrap();
+        let parsed = parse_antigravity_system_credential(&secret).unwrap();
+        assert_eq!(parsed.id_token, account.token.id_token);
+        assert_eq!(
+            chrono::DateTime::parse_from_rfc3339(parsed.expiry.as_deref().unwrap())
+                .unwrap()
+                .timestamp(),
+            account.token.expiry_timestamp
+        );
+        account.pending_oauth = true;
+        assert!(build_antigravity_credential_payload(&account).is_err());
+    }
 }

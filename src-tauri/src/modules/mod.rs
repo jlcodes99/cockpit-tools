@@ -3,6 +3,7 @@ pub mod account_index_repair;
 pub mod announcement;
 pub mod apikey_fun_links;
 pub mod antigravity_credential;
+pub mod antigravity_cli;
 pub mod antigravity_legacy_instance;
 pub mod antigravity_paths;
 pub mod antigravity_switch_history;
