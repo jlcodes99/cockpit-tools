@@ -2245,6 +2245,87 @@ fn restore_provider_override_snapshot(base_dir: &Path, doc: &mut Document) -> bo
     true
 }
 
+// #2708：OpenaiBuiltin + base_url=None 的投影会无条件移除 openai_base_url，
+// 连第三方 launcher（codex-chatgpt-web）正在管理的本地 bridge 也会被删。
+// 窄白名单：键带 launcher 管理注释、URL 为 loopback+显式端口+/v1 路径、
+// integration-journal 报 active 且 endpoint/configPath 均匹配——命中即保留
+// 该键（连同注释原样不动），其余维持删除。Windows 分支不适用；通用策略
+// 交由上层另行裁决。
+const CODEX_CHATGPT_WEB_MANAGED_COMMENT: &str = "Managed by codex-chatgpt-web";
+
+fn launcher_integration_journal() -> Option<serde_json::Value> {
+    let path = dirs::home_dir()?
+        .join(".codex-chatgpt-web")
+        .join("codex")
+        .join("integration-journal.json");
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+// 纯逻辑：输入全部可注入，测试直打本函数。
+fn launcher_managed_bridge_from_parts(
+    current_url: &str,
+    key_decor_prefix: &str,
+    journal: &serde_json::Value,
+    config_path: &Path,
+) -> Option<String> {
+    if !key_decor_prefix.contains(CODEX_CHATGPT_WEB_MANAGED_COMMENT) {
+        return None;
+    }
+    let parsed = url::Url::parse(current_url).ok()?;
+    if parsed.scheme() != "http"
+        || !matches!(parsed.host_str()?, "127.0.0.1" | "localhost" | "[::1]")
+        || parsed.port().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || parsed.path() != "/v1"
+    {
+        return None;
+    }
+    if journal.get("active").and_then(|value| value.as_bool()) != Some(true) {
+        return None;
+    }
+    let installed = journal.get("installed")?;
+    if installed
+        .get("openai_base_url")
+        .and_then(|value| value.as_str())
+        != Some(current_url)
+    {
+        return None;
+    }
+    let journal_path =
+        PathBuf::from(installed.get("configPath").and_then(|value| value.as_str())?);
+    let journal_canonical = journal_path.canonicalize().ok()?;
+    let profile_canonical = config_path.canonicalize().ok()?;
+    if journal_canonical.as_path() != profile_canonical.as_path() {
+        return None;
+    }
+    Some(current_url.to_string())
+}
+
+fn launcher_managed_bridge_present(doc: &Document, config_path: &Path) -> bool {
+    let Some((key, item)) = doc.get_key_value(CODEX_CONFIG_OPENAI_BASE_URL_KEY) else {
+        return false;
+    };
+    let Some(current_url) = item.as_str() else {
+        return false;
+    };
+    // 键上方的注释行挂在 key 的 decor 上，不在 value 的 decor 里。
+    let decor_prefix = key
+        .decor()
+        .prefix()
+        .and_then(|prefix| prefix.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let Some(journal) = launcher_integration_journal() else {
+        return false;
+    };
+    launcher_managed_bridge_from_parts(current_url.trim(), &decor_prefix, &journal, config_path)
+        .is_some()
+}
+
 fn write_api_provider_to_config_toml_with_options(
     base_dir: &Path,
     provider_config: &ApiProviderConfig,
@@ -2300,7 +2381,9 @@ fn write_api_provider_to_config_toml_with_options(
                         doc[CODEX_CONFIG_OPENAI_BASE_URL_KEY] = value(base_url);
                     }
                     None => {
-                        let _ = doc.remove(CODEX_CONFIG_OPENAI_BASE_URL_KEY);
+                        if !launcher_managed_bridge_present(&doc, &config_path) {
+                            let _ = doc.remove(CODEX_CONFIG_OPENAI_BASE_URL_KEY);
+                        }
                     }
                 }
             }

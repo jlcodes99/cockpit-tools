@@ -32,6 +32,7 @@ mod tests {
     include!("codex_account_tests_quick_config.rs");
     include!("codex_account_tests_model_vision.rs");
     include!("codex_account_tests_recycle_bin.rs");
+    include!("codex_account_tests_launcher_bridge.rs");
 }
 
 include!("codex_account_mutations_quota.rs");
