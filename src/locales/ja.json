@@ -5568,7 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "有効にすると、デフォルトインスタンスで OAuth アカウントを切り替えた際に公式の ~/.grok/auth.json へ書き込みます。無効時は個別の GROK_HOME を使用します。API Key と追加インスタンスは公式ログインを上書きしません。"
     },
     "grokRefreshInterval": "クォータ自動更新",
-    "piRefreshInterval": "Usage auto refresh",
+    "piRefreshInterval": "使用量の自動更新",
     "codebuddy": {
       "title": "CodeBuddy 設定",
       "appPath": "CodeBuddy パス"
@@ -5626,13 +5626,13 @@
       "title": "TRAE SOLO CN 設定"
     },
     "pi": {
-      "title": "pi CLI settings",
+      "title": "pi CLI 設定",
       "appPath": "pi のパス",
-      "cliPath": "CLI path",
-      "cliDetected": "Detected {{version}} at {{path}}",
-      "cliMissing": "pi CLI not detected. Enter a custom path",
-      "syncOfficialAuthOnSwitch": "Sync official login on switch",
-      "syncOfficialAuthOnSwitchDesc": "When enabled, switching accounts merges credentials into ~/.pi/agent/auth.json and sets the default model. When disabled, an isolated PI_CODING_AGENT_DIR is used."
+      "cliPath": "CLI パス",
+      "cliDetected": "{{path}} で {{version}} を検出しました",
+      "cliMissing": "pi CLI が検出されません。カスタムパスを入力してください",
+      "syncOfficialAuthOnSwitch": "切り替え時に公式ログインを同期",
+      "syncOfficialAuthOnSwitchDesc": "有効にすると、アカウント切り替え時に認証情報を ~/.pi/agent/auth.json にマージしデフォルトモデルを設定します。無効の場合は独立した PI_CODING_AGENT_DIR を使用します。"
     }
   },
   "quotaAlert": {
@@ -7376,59 +7376,59 @@
     "desc": "OpenCode の Go/Zen API キーを管理し、ティアで絞り込みます。"
   },
   "pi": {
-    "search": "Search pi accounts...",
+    "search": "pi アカウントを検索...",
     "flowNotice": {
-      "title": "About pi account management",
-      "desc": "Each pi account is a set of provider credentials plus a default model. With \"Sync official login on switch\" on, switching merges the credentials into ~/.pi/agent/auth.json and updates the default model; when off, an isolated PI_CODING_AGENT_DIR is used.",
-      "permission": "Local scope: reads ~/.pi/agent/auth.json and settings.json for import; switching only touches the providers in the account, and a .cockpit-backup copy is kept before writing.",
-      "network": "Network scope: this app makes no network requests; OAuth login and token refresh are handled by the pi CLI itself."
+      "title": "pi アカウント管理について",
+      "desc": "各 pi アカウントはプロバイダー認証情報とデフォルトモデルのセットです。「切り替え時に公式ログインを同期」がオンの場合、切り替え時に認証情報を ~/.pi/agent/auth.json にマージしデフォルトモデルを更新します。オフの場合は独立した PI_CODING_AGENT_DIR を使用します。",
+      "permission": "ローカル範囲：インポート時に ~/.pi/agent/auth.json と settings.json を読み取ります。切り替えはアカウント内のプロバイダーのみに影響し、書き込み前に .cockpit-backup のコピーを保存します。",
+      "network": "ネットワーク範囲：このアプリはネットワーク要求を行いません。OAuth ログインとトークン更新は pi CLI 自身が処理します。"
     },
-    "empty": "No pi accounts",
-    "addAccount": "Add pi account",
+    "empty": "pi アカウントがありません",
+    "addAccount": "pi アカウントを追加",
     "oauth": {
-      "desc": "Subscription logins for pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, etc.) are done with pi's built-in /login.",
-      "title": "pi /login",
-      "item1": "Uses pi's official login flow; credentials are written by pi itself.",
-      "item2": "Importing saves all current provider credentials as one account.",
-      "item3": "Each account can use its own directory, so multiple instances stay independent.",
-      "builtinDesc": "Authorize in your browser and the credential is saved as a pi account, in the same format as pi /login.",
-      "otherProviders": "Others (pi /login)",
-      "urlPlaceholder": "Authorization URL",
-      "waiting": "Waiting for browser callback...",
-      "success": "pi login succeeded"
+      "desc": "pi のサブスクリプションログイン（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini など）は pi 内蔵の /login で行います。",
+      "title": "pi /login でログイン",
+      "item1": "pi の公式ログインフローを使用し、認証情報は pi 自身が書き込みます。",
+      "item2": "インポートすると現在のすべてのプロバイダー認証情報が1つのアカウントとして保存されます。",
+      "item3": "アカウントごとに専用ディレクトリを使えるため、複数インスタンスが互いに独立します。",
+      "builtinDesc": "ブラウザで認証すると、認証情報が pi /login と同じ形式で pi アカウントとして保存されます。",
+      "otherProviders": "その他（pi /login）",
+      "urlPlaceholder": "認証URL",
+      "waiting": "ブラウザのコールバックを待っています...",
+      "success": "pi へのログインに成功しました"
     },
     "import": {
       "pasteTab": "JSON を貼り付け",
-      "pasteDesc": "Paste pi's auth.json or an account JSON exported by this app. Credentials are processed locally only.",
-      "pastePlaceholder": "Paste pi account JSON",
-      "pasteAction": "Import JSON",
-      "localDesc": "Import all current provider credentials and the default model from ~/.pi/agent/auth.json.",
-      "localClient": "Import from local pi",
-      "apiKeyTab": "API Key",
-      "apiKeyDesc": "Connect a third-party API gateway (OpenAI / Anthropic compatible), or enter an API Key for a pi built-in provider.",
-      "apiKeyPlaceholder": "Paste API key",
-      "apiKeyAction": "Add API key",
-      "defaultModel": "Default model (optional)",
-      "defaultModelPlaceholder": "e.g. claude-sonnet-4-5",
-      "displayName": "Account name (optional)",
-      "provider": "Provider ID"
+      "pasteDesc": "pi の auth.json、またはこのアプリでエクスポートしたアカウント JSON を貼り付けてください。認証情報はローカルでのみ処理されます。",
+      "pastePlaceholder": "pi アカウントの JSON を貼り付け",
+      "pasteAction": "JSONをインポート",
+      "localDesc": "~/.pi/agent/auth.json から現在のすべてのプロバイダー認証情報とデフォルトモデルをインポートします。",
+      "localClient": "ローカルの pi からインポート",
+      "apiKeyTab": "APIキー",
+      "apiKeyDesc": "サードパーティの API ゲートウェイ（OpenAI / Anthropic 互換）に接続するか、pi 内蔵プロバイダーの APIキーを入力します。",
+      "apiKeyPlaceholder": "APIキーを貼り付け",
+      "apiKeyAction": "APIキーを追加",
+      "defaultModel": "デフォルトモデル（任意）",
+      "defaultModelPlaceholder": "例：claude-sonnet-4-5",
+      "displayName": "アカウント名（任意）",
+      "provider": "プロバイダーID"
     },
     "instances": {
-      "unsupported": "pi multi-instance supports macOS, Windows and Linux only.",
-      "launchDialogTitle": "Launch instance",
-      "launchHint": "Copy the command to run it manually, or use the button below to run it in a terminal.",
-      "runInTerminal": "Run in terminal",
-      "cliReady": "Detected",
-      "cliMissingShort": "Not detected",
-      "cliPathInvalid": "Configured pi CLI path is invalid: {{path}}",
-      "saveAndRetry": "Save and retry",
-      "installCommand": "Official install command",
-      "installHint": "Run the official command below in a terminal, then refresh after installation.",
-      "selectWorkingDir": "Select pi CLI working directory",
-      "workingDirAccountHint": "The working directory is bound to this account and is filled in automatically next time.",
-      "launchCommandPlaceholder": "Select or confirm a working directory to generate the launch command",
-      "accountHomeReady": "Account directory prepared: {{email}}",
-      "installLaunchHint": "Run the official command below in a terminal, then launch from a new terminal after installation."
+      "unsupported": "pi のマルチインスタンスは macOS、Windows、Linux のみ対応しています。",
+      "launchDialogTitle": "インスタンスを起動",
+      "launchHint": "コマンドをコピーして手動で実行するか、下のボタンでターミナルで実行します。",
+      "runInTerminal": "ターミナルで実行",
+      "cliReady": "検出済み",
+      "cliMissingShort": "未検出",
+      "cliPathInvalid": "設定された pi CLI のパスが無効です：{{path}}",
+      "saveAndRetry": "保存して再試行",
+      "installCommand": "公式インストールコマンド",
+      "installHint": "ターミナルで下の公式コマンドを実行し、インストール後に更新してください。",
+      "selectWorkingDir": "pi CLI の作業ディレクトリを選択",
+      "workingDirAccountHint": "作業ディレクトリはこのアカウントに紐付けられ、次回は自動入力されます。",
+      "launchCommandPlaceholder": "作業ディレクトリを選択または確認すると起動コマンドが生成されます",
+      "accountHomeReady": "アカウントディレクトリを準備しました：{{email}}",
+      "installLaunchHint": "ターミナルで下の公式コマンドを実行し、インストール後に新しいターミナルから起動してください。"
     },
     "switch": {
       "success": "アカウントを切り替えました"
@@ -7438,12 +7438,12 @@
     "usageViewDetail": "詳細を表示",
     "usageDetailTitle": "使用量の詳細",
     "usage": {
-      "title": "Usage",
-      "refresh": "Refresh usage",
-      "expired": "Token is invalid and auto-refresh failed. Please log in again",
-      "unsupported": "Usage lookup is not available for these credentials",
-      "spent": "Spent",
-      "resetAt": "Resets at"
+      "title": "使用量",
+      "refresh": "使用量を更新",
+      "expired": "トークンが無効で自動更新に失敗しました。再度ログインしてください",
+      "unsupported": "この認証情報では使用量を照会できません",
+      "spent": "使用済み",
+      "resetAt": "リセット時刻"
     },
     "quotaQuery": {
       "failedRefreshCompact": "クォータの照会に失敗しました",
@@ -7451,51 +7451,51 @@
       "sectionTitle": "クォータ"
     },
     "login": {
-      "importAfterLogin": "Import from local",
-      "openTerminal": "Open pi in terminal",
-      "opened": "Terminal opened. Type /login in pi",
-      "step1": "Click the button below to start pi in a terminal (uses the official directory ~/.pi/agent).",
-      "step2": "Type /login in pi, choose a provider and complete authorization in the browser. Repeat to log in to more providers.",
-      "step3": "After logging in, come back and click \"Import from local\" to save it as an account."
+      "importAfterLogin": "ローカルからインポート",
+      "openTerminal": "ターミナルで pi を開く",
+      "opened": "ターミナルを開きました。pi で /login を入力してください",
+      "step1": "下のボタンをクリックしてターミナルで pi を起動します（公式ディレクトリ ~/.pi/agent を使用）。",
+      "step2": "pi で /login を入力し、プロバイダーを選択してブラウザで認証を完了します。繰り返すと他のプロバイダーにもログインできます。",
+      "step3": "ログイン後、戻って「ローカルからインポート」をクリックするとアカウントとして保存されます。"
     },
-    "noDefaultModel": "No default model",
+    "noDefaultModel": "デフォルトモデルなし",
     "providers": {
-      "apiKey": "API Key",
-      "defaultModel": "Default model",
-      "empty": "No credentials",
-      "expiredHint": "OAuth token expired; pi refreshes it automatically on launch",
+      "apiKey": "APIキー",
+      "defaultModel": "デフォルトモデル",
+      "empty": "認証情報なし",
+      "expiredHint": "OAuth トークンの有効期限が切れています。pi は起動時に自動更新します",
       "oauth": "OAuth",
-      "gateway": "Gateway"
+      "gateway": "ゲートウェイ"
     },
     "defaults": {
-      "title": "Edit defaults",
-      "hint": "When switching to this account, the default provider, model and thinking level are written to pi's settings.json. Leave empty to keep unchanged.",
-      "provider": "Default provider",
-      "thinkingLevel": "Default thinking level",
-      "unset": "Not set"
+      "title": "デフォルトを編集",
+      "hint": "このアカウントに切り替えると、デフォルトのプロバイダー、モデル、思考レベルが pi の settings.json に書き込まれます。空欄の場合は変更しません。",
+      "provider": "デフォルトのプロバイダー",
+      "thinkingLevel": "デフォルトの思考レベル",
+      "unset": "未設定"
     },
     "gateway": {
-      "modeGateway": "Third-party gateway",
-      "modeBuiltin": "pi built-in provider",
-      "provider": "Provider",
-      "custom": "Custom",
-      "getKey": "Get API Key",
-      "protocol": "API protocol",
-      "endpoint": "Provider endpoint",
-      "baseUrl": "Base URL",
-      "providerId": "pi provider ID",
-      "authScheme": "Auth scheme",
-      "models": "Models",
-      "fetchModels": "Fetch models",
-      "fetchNeedsKey": "Enter the API Key below first",
-      "editTitle": "Edit gateway",
-      "keepKey": "Leave blank to keep current key {{hint}}",
-      "modelsEmpty": "Add at least one model",
-      "setDefault": "Set as default model",
-      "fetched": "{{count}} models returned, click to add",
-      "addAll": "Add all",
-      "noModels": "No models returned, add them manually",
-      "modelPlaceholder": "Type a model ID and press Enter"
+      "modeGateway": "サードパーティゲートウェイ",
+      "modeBuiltin": "pi 内蔵プロバイダー",
+      "provider": "プロバイダー",
+      "custom": "カスタム",
+      "getKey": "APIキーを取得",
+      "protocol": "APIプロトコル",
+      "endpoint": "プロバイダーのエンドポイント",
+      "baseUrl": "ベースURL",
+      "providerId": "pi プロバイダーID",
+      "authScheme": "認証方式",
+      "models": "モデル",
+      "fetchModels": "モデルを取得",
+      "fetchNeedsKey": "先に下の APIキーを入力してください",
+      "editTitle": "ゲートウェイを編集",
+      "keepKey": "空欄の場合は現在のキーを保持 {{hint}}",
+      "modelsEmpty": "少なくとも1つのモデルを追加してください",
+      "setDefault": "デフォルトモデルに設定",
+      "fetched": "{{count}} 個のモデルが返されました。クリックして追加",
+      "addAll": "すべて追加",
+      "noModels": "モデルが返されませんでした。手動で追加してください",
+      "modelPlaceholder": "モデルIDを入力して Enter を押す"
     }
   }
 }

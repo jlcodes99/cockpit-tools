@@ -1476,6 +1476,7 @@ fn build_pi_display_info(lang: &str) -> AccountDisplayInfo {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn build_grok_display_info(lang: &str) -> AccountDisplayInfo {
     let accounts = crate::modules::grok_account::list_accounts_checked().unwrap_or_default();
     let current_id = crate::modules::grok_account::current_account_id()

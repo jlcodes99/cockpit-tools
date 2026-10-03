@@ -5568,7 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "Khi bật, việc chuyển tài khoản OAuth cho phiên bản mặc định sẽ ghi vào ~/.grok/auth.json chính thức. Khi tắt, một GROK_HOME riêng sẽ được dùng. API Key và các phiên bản bổ sung không ghi đè đăng nhập chính thức."
     },
     "grokRefreshInterval": "Tự động làm mới hạn ngạch",
-    "piRefreshInterval": "Usage auto refresh",
+    "piRefreshInterval": "Tự động làm mới mức sử dụng",
     "codebuddy": {
       "title": "Cài đặt CodeBuddy",
       "appPath": "Đường dẫn CodeBuddy"
@@ -5626,13 +5626,13 @@
       "title": "Cài đặt TRAE SOLO CN"
     },
     "pi": {
-      "title": "pi CLI settings",
+      "title": "Cài đặt pi CLI",
       "appPath": "Đường dẫn pi",
-      "cliPath": "CLI path",
-      "cliDetected": "Detected {{version}} at {{path}}",
-      "cliMissing": "pi CLI not detected. Enter a custom path",
-      "syncOfficialAuthOnSwitch": "Sync official login on switch",
-      "syncOfficialAuthOnSwitchDesc": "When enabled, switching accounts merges credentials into ~/.pi/agent/auth.json and sets the default model. When disabled, an isolated PI_CODING_AGENT_DIR is used."
+      "cliPath": "Đường dẫn CLI",
+      "cliDetected": "Đã phát hiện {{version}} tại {{path}}",
+      "cliMissing": "Không phát hiện pi CLI. Hãy nhập đường dẫn tùy chỉnh",
+      "syncOfficialAuthOnSwitch": "Đồng bộ đăng nhập chính thức khi chuyển",
+      "syncOfficialAuthOnSwitchDesc": "Khi bật, việc chuyển tài khoản sẽ gộp thông tin xác thực vào ~/.pi/agent/auth.json và đặt mô hình mặc định. Khi tắt, một PI_CODING_AGENT_DIR riêng biệt sẽ được dùng."
     }
   },
   "quotaAlert": {
@@ -7376,59 +7376,59 @@
     "desc": "Quản lý key OpenCode Go/Zen và lọc theo tier."
   },
   "pi": {
-    "search": "Search pi accounts...",
+    "search": "Tìm tài khoản pi...",
     "flowNotice": {
-      "title": "About pi account management",
-      "desc": "Each pi account is a set of provider credentials plus a default model. With \"Sync official login on switch\" on, switching merges the credentials into ~/.pi/agent/auth.json and updates the default model; when off, an isolated PI_CODING_AGENT_DIR is used.",
-      "permission": "Local scope: reads ~/.pi/agent/auth.json and settings.json for import; switching only touches the providers in the account, and a .cockpit-backup copy is kept before writing.",
-      "network": "Network scope: this app makes no network requests; OAuth login and token refresh are handled by the pi CLI itself."
+      "title": "Về quản lý tài khoản pi",
+      "desc": "Mỗi tài khoản pi là một bộ thông tin xác thực của các nhà cung cấp kèm một mô hình mặc định. Khi bật \"Đồng bộ đăng nhập chính thức khi chuyển\", việc chuyển sẽ gộp thông tin xác thực vào ~/.pi/agent/auth.json và cập nhật mô hình mặc định; khi tắt, một PI_CODING_AGENT_DIR riêng biệt sẽ được dùng.",
+      "permission": "Phạm vi cục bộ: đọc ~/.pi/agent/auth.json và settings.json để nhập; việc chuyển chỉ tác động đến các nhà cung cấp trong tài khoản và một bản sao .cockpit-backup được giữ trước khi ghi.",
+      "network": "Phạm vi mạng: ứng dụng này không gửi yêu cầu mạng nào; đăng nhập OAuth và làm mới token do chính pi CLI xử lý."
     },
-    "empty": "No pi accounts",
-    "addAccount": "Add pi account",
+    "empty": "Không có tài khoản pi",
+    "addAccount": "Thêm tài khoản pi",
     "oauth": {
-      "desc": "Subscription logins for pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, etc.) are done with pi's built-in /login.",
-      "title": "pi /login",
-      "item1": "Uses pi's official login flow; credentials are written by pi itself.",
-      "item2": "Importing saves all current provider credentials as one account.",
-      "item3": "Each account can use its own directory, so multiple instances stay independent.",
-      "builtinDesc": "Authorize in your browser and the credential is saved as a pi account, in the same format as pi /login.",
-      "otherProviders": "Others (pi /login)",
-      "urlPlaceholder": "Authorization URL",
-      "waiting": "Waiting for browser callback...",
-      "success": "pi login succeeded"
+      "desc": "Đăng nhập theo gói đăng ký cho pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, v.v.) được thực hiện bằng lệnh /login tích hợp của pi.",
+      "title": "Đăng nhập bằng pi /login",
+      "item1": "Dùng quy trình đăng nhập chính thức của pi; thông tin xác thực do chính pi ghi.",
+      "item2": "Khi nhập, tất cả thông tin xác thực nhà cung cấp hiện tại được lưu thành một tài khoản.",
+      "item3": "Mỗi tài khoản có thể dùng thư mục riêng, nhờ đó nhiều phiên bản luôn độc lập.",
+      "builtinDesc": "Ủy quyền trong trình duyệt và thông tin xác thực sẽ được lưu thành tài khoản pi, cùng định dạng với pi /login.",
+      "otherProviders": "Khác (pi /login)",
+      "urlPlaceholder": "URL ủy quyền",
+      "waiting": "Đang chờ phản hồi từ trình duyệt...",
+      "success": "Đăng nhập pi thành công"
     },
     "import": {
       "pasteTab": "Dán JSON",
-      "pasteDesc": "Paste pi's auth.json or an account JSON exported by this app. Credentials are processed locally only.",
-      "pastePlaceholder": "Paste pi account JSON",
-      "pasteAction": "Import JSON",
-      "localDesc": "Import all current provider credentials and the default model from ~/.pi/agent/auth.json.",
-      "localClient": "Import from local pi",
-      "apiKeyTab": "API Key",
-      "apiKeyDesc": "Connect a third-party API gateway (OpenAI / Anthropic compatible), or enter an API Key for a pi built-in provider.",
-      "apiKeyPlaceholder": "Paste API key",
-      "apiKeyAction": "Add API key",
-      "defaultModel": "Default model (optional)",
-      "defaultModelPlaceholder": "e.g. claude-sonnet-4-5",
-      "displayName": "Account name (optional)",
-      "provider": "Provider ID"
+      "pasteDesc": "Dán auth.json của pi hoặc JSON tài khoản được xuất từ ứng dụng này. Thông tin xác thực chỉ được xử lý cục bộ.",
+      "pastePlaceholder": "Dán JSON tài khoản pi",
+      "pasteAction": "Nhập JSON",
+      "localDesc": "Nhập tất cả thông tin xác thực nhà cung cấp hiện tại và mô hình mặc định từ ~/.pi/agent/auth.json.",
+      "localClient": "Nhập từ pi cục bộ",
+      "apiKeyTab": "Khóa API",
+      "apiKeyDesc": "Kết nối cổng API bên thứ ba (tương thích OpenAI / Anthropic) hoặc nhập khóa API cho nhà cung cấp tích hợp của pi.",
+      "apiKeyPlaceholder": "Dán khóa API",
+      "apiKeyAction": "Thêm khóa API",
+      "defaultModel": "Mô hình mặc định (tùy chọn)",
+      "defaultModelPlaceholder": "ví dụ: claude-sonnet-4-5",
+      "displayName": "Tên tài khoản (tùy chọn)",
+      "provider": "ID nhà cung cấp"
     },
     "instances": {
-      "unsupported": "pi multi-instance supports macOS, Windows and Linux only.",
-      "launchDialogTitle": "Launch instance",
-      "launchHint": "Copy the command to run it manually, or use the button below to run it in a terminal.",
-      "runInTerminal": "Run in terminal",
-      "cliReady": "Detected",
-      "cliMissingShort": "Not detected",
-      "cliPathInvalid": "Configured pi CLI path is invalid: {{path}}",
-      "saveAndRetry": "Save and retry",
-      "installCommand": "Official install command",
-      "installHint": "Run the official command below in a terminal, then refresh after installation.",
-      "selectWorkingDir": "Select pi CLI working directory",
-      "workingDirAccountHint": "The working directory is bound to this account and is filled in automatically next time.",
-      "launchCommandPlaceholder": "Select or confirm a working directory to generate the launch command",
-      "accountHomeReady": "Account directory prepared: {{email}}",
-      "installLaunchHint": "Run the official command below in a terminal, then launch from a new terminal after installation."
+      "unsupported": "Đa phiên bản pi chỉ hỗ trợ macOS, Windows và Linux.",
+      "launchDialogTitle": "Khởi chạy phiên bản",
+      "launchHint": "Sao chép lệnh để chạy thủ công hoặc dùng nút bên dưới để chạy trong terminal.",
+      "runInTerminal": "Chạy trong terminal",
+      "cliReady": "Đã phát hiện",
+      "cliMissingShort": "Chưa phát hiện",
+      "cliPathInvalid": "Đường dẫn pi CLI đã cấu hình không hợp lệ: {{path}}",
+      "saveAndRetry": "Lưu và thử lại",
+      "installCommand": "Lệnh cài đặt chính thức",
+      "installHint": "Chạy lệnh chính thức bên dưới trong terminal, sau khi cài đặt hãy làm mới.",
+      "selectWorkingDir": "Chọn thư mục làm việc của pi CLI",
+      "workingDirAccountHint": "Thư mục làm việc được gắn với tài khoản này và sẽ tự động điền vào lần sau.",
+      "launchCommandPlaceholder": "Chọn hoặc xác nhận thư mục làm việc để tạo lệnh khởi chạy",
+      "accountHomeReady": "Đã chuẩn bị thư mục tài khoản: {{email}}",
+      "installLaunchHint": "Chạy lệnh chính thức bên dưới trong terminal, sau khi cài đặt hãy khởi chạy từ một terminal mới."
     },
     "switch": {
       "success": "Đã chuyển tài khoản"
@@ -7438,12 +7438,12 @@
     "usageViewDetail": "Xem chi tiết",
     "usageDetailTitle": "Chi tiết sử dụng",
     "usage": {
-      "title": "Usage",
-      "refresh": "Refresh usage",
-      "expired": "Token is invalid and auto-refresh failed. Please log in again",
-      "unsupported": "Usage lookup is not available for these credentials",
-      "spent": "Spent",
-      "resetAt": "Resets at"
+      "title": "Mức sử dụng",
+      "refresh": "Làm mới mức sử dụng",
+      "expired": "Token không hợp lệ và tự làm mới thất bại. Vui lòng đăng nhập lại",
+      "unsupported": "Không thể tra cứu mức sử dụng cho thông tin xác thực này",
+      "spent": "Đã chi",
+      "resetAt": "Đặt lại lúc"
     },
     "quotaQuery": {
       "failedRefreshCompact": "Truy vấn hạn ngạch thất bại",
@@ -7451,51 +7451,51 @@
       "sectionTitle": "Hạn ngạch"
     },
     "login": {
-      "importAfterLogin": "Import from local",
-      "openTerminal": "Open pi in terminal",
-      "opened": "Terminal opened. Type /login in pi",
-      "step1": "Click the button below to start pi in a terminal (uses the official directory ~/.pi/agent).",
-      "step2": "Type /login in pi, choose a provider and complete authorization in the browser. Repeat to log in to more providers.",
-      "step3": "After logging in, come back and click \"Import from local\" to save it as an account."
+      "importAfterLogin": "Nhập từ cục bộ",
+      "openTerminal": "Mở pi trong terminal",
+      "opened": "Đã mở terminal. Nhập /login trong pi",
+      "step1": "Nhấp nút bên dưới để khởi động pi trong terminal (dùng thư mục chính thức ~/.pi/agent).",
+      "step2": "Nhập /login trong pi, chọn nhà cung cấp và hoàn tất ủy quyền trong trình duyệt. Lặp lại để đăng nhập thêm nhà cung cấp khác.",
+      "step3": "Sau khi đăng nhập, quay lại và nhấp \"Nhập từ cục bộ\" để lưu thành tài khoản."
     },
-    "noDefaultModel": "No default model",
+    "noDefaultModel": "Không có mô hình mặc định",
     "providers": {
-      "apiKey": "API Key",
-      "defaultModel": "Default model",
-      "empty": "No credentials",
-      "expiredHint": "OAuth token expired; pi refreshes it automatically on launch",
+      "apiKey": "Khóa API",
+      "defaultModel": "Mô hình mặc định",
+      "empty": "Không có thông tin xác thực",
+      "expiredHint": "Token OAuth đã hết hạn; pi sẽ tự làm mới khi khởi chạy",
       "oauth": "OAuth",
-      "gateway": "Gateway"
+      "gateway": "Cổng"
     },
     "defaults": {
-      "title": "Edit defaults",
-      "hint": "When switching to this account, the default provider, model and thinking level are written to pi's settings.json. Leave empty to keep unchanged.",
-      "provider": "Default provider",
-      "thinkingLevel": "Default thinking level",
-      "unset": "Not set"
+      "title": "Sửa mặc định",
+      "hint": "Khi chuyển sang tài khoản này, nhà cung cấp, mô hình và mức suy nghĩ mặc định sẽ được ghi vào settings.json của pi. Để trống để giữ nguyên.",
+      "provider": "Nhà cung cấp mặc định",
+      "thinkingLevel": "Mức suy nghĩ mặc định",
+      "unset": "Chưa đặt"
     },
     "gateway": {
-      "modeGateway": "Third-party gateway",
-      "modeBuiltin": "pi built-in provider",
-      "provider": "Provider",
-      "custom": "Custom",
-      "getKey": "Get API Key",
-      "protocol": "API protocol",
-      "endpoint": "Provider endpoint",
-      "baseUrl": "Base URL",
-      "providerId": "pi provider ID",
-      "authScheme": "Auth scheme",
-      "models": "Models",
-      "fetchModels": "Fetch models",
-      "fetchNeedsKey": "Enter the API Key below first",
-      "editTitle": "Edit gateway",
-      "keepKey": "Leave blank to keep current key {{hint}}",
-      "modelsEmpty": "Add at least one model",
-      "setDefault": "Set as default model",
-      "fetched": "{{count}} models returned, click to add",
-      "addAll": "Add all",
-      "noModels": "No models returned, add them manually",
-      "modelPlaceholder": "Type a model ID and press Enter"
+      "modeGateway": "Cổng bên thứ ba",
+      "modeBuiltin": "Nhà cung cấp tích hợp của pi",
+      "provider": "Nhà cung cấp",
+      "custom": "Tùy chỉnh",
+      "getKey": "Lấy khóa API",
+      "protocol": "Giao thức API",
+      "endpoint": "Điểm cuối của nhà cung cấp",
+      "baseUrl": "URL gốc",
+      "providerId": "ID nhà cung cấp pi",
+      "authScheme": "Phương thức xác thực",
+      "models": "Mô hình",
+      "fetchModels": "Lấy danh sách mô hình",
+      "fetchNeedsKey": "Hãy nhập khóa API bên dưới trước",
+      "editTitle": "Sửa cổng",
+      "keepKey": "Để trống để giữ khóa hiện tại {{hint}}",
+      "modelsEmpty": "Thêm ít nhất một mô hình",
+      "setDefault": "Đặt làm mô hình mặc định",
+      "fetched": "Đã trả về {{count}} mô hình, nhấp để thêm",
+      "addAll": "Thêm tất cả",
+      "noModels": "Không có mô hình nào được trả về, hãy thêm thủ công",
+      "modelPlaceholder": "Nhập ID mô hình rồi nhấn Enter"
     }
   }
 }

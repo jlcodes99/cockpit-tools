@@ -5568,7 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "Po włączeniu zmiana konta OAuth w instancji domyślnej zapisuje oficjalny plik ~/.grok/auth.json. Po wyłączeniu używany jest osobny GROK_HOME. Klucze API i dodatkowe instancje nie nadpisują oficjalnego logowania."
     },
     "grokRefreshInterval": "Automatyczne odświeżanie limitu",
-    "piRefreshInterval": "Usage auto refresh",
+    "piRefreshInterval": "Automatyczne odświeżanie użycia",
     "codebuddy": {
       "title": "Ustawienia CodeBuddy",
       "appPath": "Ścieżka CodeBuddy"
@@ -5626,13 +5626,13 @@
       "title": "Ustawienia TRAE SOLO CN"
     },
     "pi": {
-      "title": "pi CLI settings",
+      "title": "Ustawienia pi CLI",
       "appPath": "Ścieżka pi",
-      "cliPath": "CLI path",
-      "cliDetected": "Detected {{version}} at {{path}}",
-      "cliMissing": "pi CLI not detected. Enter a custom path",
-      "syncOfficialAuthOnSwitch": "Sync official login on switch",
-      "syncOfficialAuthOnSwitchDesc": "When enabled, switching accounts merges credentials into ~/.pi/agent/auth.json and sets the default model. When disabled, an isolated PI_CODING_AGENT_DIR is used."
+      "cliPath": "Ścieżka CLI",
+      "cliDetected": "Wykryto {{version}} w {{path}}",
+      "cliMissing": "Nie wykryto pi CLI. Wpisz niestandardową ścieżkę",
+      "syncOfficialAuthOnSwitch": "Synchronizuj oficjalne logowanie przy przełączaniu",
+      "syncOfficialAuthOnSwitchDesc": "Po włączeniu przełączanie kont scala poświadczenia z ~/.pi/agent/auth.json i ustawia model domyślny. Po wyłączeniu używany jest izolowany PI_CODING_AGENT_DIR."
     }
   },
   "quotaAlert": {
@@ -7376,59 +7376,59 @@
     "desc": "Zarządzaj kluczami OpenCode Go/Zen i filtruj po tier."
   },
   "pi": {
-    "search": "Search pi accounts...",
+    "search": "Szukaj kont pi...",
     "flowNotice": {
-      "title": "About pi account management",
-      "desc": "Each pi account is a set of provider credentials plus a default model. With \"Sync official login on switch\" on, switching merges the credentials into ~/.pi/agent/auth.json and updates the default model; when off, an isolated PI_CODING_AGENT_DIR is used.",
-      "permission": "Local scope: reads ~/.pi/agent/auth.json and settings.json for import; switching only touches the providers in the account, and a .cockpit-backup copy is kept before writing.",
-      "network": "Network scope: this app makes no network requests; OAuth login and token refresh are handled by the pi CLI itself."
+      "title": "O zarządzaniu kontami pi",
+      "desc": "Każde konto pi to zestaw poświadczeń dostawców oraz model domyślny. Gdy opcja „Synchronizuj oficjalne logowanie przy przełączaniu” jest włączona, przełączenie scala poświadczenia z ~/.pi/agent/auth.json i aktualizuje model domyślny; gdy jest wyłączona, używany jest izolowany PI_CODING_AGENT_DIR.",
+      "permission": "Zakres lokalny: przy imporcie odczytuje ~/.pi/agent/auth.json i settings.json; przełączanie zmienia tylko dostawców z konta, a przed zapisem tworzona jest kopia .cockpit-backup.",
+      "network": "Zakres sieciowy: aplikacja nie wykonuje żadnych żądań sieciowych; logowanie OAuth i odświeżanie tokenów obsługuje samo pi CLI."
     },
-    "empty": "No pi accounts",
-    "addAccount": "Add pi account",
+    "empty": "Brak kont pi",
+    "addAccount": "Dodaj konto pi",
     "oauth": {
-      "desc": "Subscription logins for pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, etc.) are done with pi's built-in /login.",
-      "title": "pi /login",
-      "item1": "Uses pi's official login flow; credentials are written by pi itself.",
-      "item2": "Importing saves all current provider credentials as one account.",
-      "item3": "Each account can use its own directory, so multiple instances stay independent.",
-      "builtinDesc": "Authorize in your browser and the credential is saved as a pi account, in the same format as pi /login.",
-      "otherProviders": "Others (pi /login)",
-      "urlPlaceholder": "Authorization URL",
-      "waiting": "Waiting for browser callback...",
-      "success": "pi login succeeded"
+      "desc": "Logowanie subskrypcyjne pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini itp.) odbywa się za pomocą wbudowanego /login pi.",
+      "title": "Logowanie pi /login",
+      "item1": "Używa oficjalnego procesu logowania pi; poświadczenia zapisuje samo pi.",
+      "item2": "Import zapisuje wszystkie bieżące poświadczenia dostawców jako jedno konto.",
+      "item3": "Każde konto może mieć własny katalog, dzięki czemu wiele instancji pozostaje niezależnych.",
+      "builtinDesc": "Autoryzuj w przeglądarce, a poświadczenie zostanie zapisane jako konto pi w tym samym formacie co pi /login.",
+      "otherProviders": "Inne (pi /login)",
+      "urlPlaceholder": "URL autoryzacji",
+      "waiting": "Oczekiwanie na odpowiedź przeglądarki...",
+      "success": "Logowanie do pi powiodło się"
     },
     "import": {
       "pasteTab": "Wklej JSON",
-      "pasteDesc": "Paste pi's auth.json or an account JSON exported by this app. Credentials are processed locally only.",
-      "pastePlaceholder": "Paste pi account JSON",
-      "pasteAction": "Import JSON",
-      "localDesc": "Import all current provider credentials and the default model from ~/.pi/agent/auth.json.",
-      "localClient": "Import from local pi",
-      "apiKeyTab": "API Key",
-      "apiKeyDesc": "Connect a third-party API gateway (OpenAI / Anthropic compatible), or enter an API Key for a pi built-in provider.",
-      "apiKeyPlaceholder": "Paste API key",
-      "apiKeyAction": "Add API key",
-      "defaultModel": "Default model (optional)",
-      "defaultModelPlaceholder": "e.g. claude-sonnet-4-5",
-      "displayName": "Account name (optional)",
-      "provider": "Provider ID"
+      "pasteDesc": "Wklej auth.json pi lub JSON konta wyeksportowany z tej aplikacji. Poświadczenia są przetwarzane wyłącznie lokalnie.",
+      "pastePlaceholder": "Wklej JSON konta pi",
+      "pasteAction": "Importuj JSON",
+      "localDesc": "Importuje wszystkie bieżące poświadczenia dostawców i model domyślny z ~/.pi/agent/auth.json.",
+      "localClient": "Importuj z lokalnego pi",
+      "apiKeyTab": "Klucz API",
+      "apiKeyDesc": "Połącz zewnętrzną bramę API (zgodną z OpenAI / Anthropic) lub wpisz klucz API dla wbudowanego dostawcy pi.",
+      "apiKeyPlaceholder": "Wklej klucz API",
+      "apiKeyAction": "Dodaj klucz API",
+      "defaultModel": "Model domyślny (opcjonalnie)",
+      "defaultModelPlaceholder": "np. claude-sonnet-4-5",
+      "displayName": "Nazwa konta (opcjonalnie)",
+      "provider": "ID dostawcy"
     },
     "instances": {
-      "unsupported": "pi multi-instance supports macOS, Windows and Linux only.",
-      "launchDialogTitle": "Launch instance",
-      "launchHint": "Copy the command to run it manually, or use the button below to run it in a terminal.",
-      "runInTerminal": "Run in terminal",
-      "cliReady": "Detected",
-      "cliMissingShort": "Not detected",
-      "cliPathInvalid": "Configured pi CLI path is invalid: {{path}}",
-      "saveAndRetry": "Save and retry",
-      "installCommand": "Official install command",
-      "installHint": "Run the official command below in a terminal, then refresh after installation.",
-      "selectWorkingDir": "Select pi CLI working directory",
-      "workingDirAccountHint": "The working directory is bound to this account and is filled in automatically next time.",
-      "launchCommandPlaceholder": "Select or confirm a working directory to generate the launch command",
-      "accountHomeReady": "Account directory prepared: {{email}}",
-      "installLaunchHint": "Run the official command below in a terminal, then launch from a new terminal after installation."
+      "unsupported": "Wiele instancji pi jest obsługiwanych tylko w systemach macOS, Windows i Linux.",
+      "launchDialogTitle": "Uruchom instancję",
+      "launchHint": "Skopiuj polecenie i uruchom je ręcznie lub użyj przycisku poniżej, aby uruchomić je w terminalu.",
+      "runInTerminal": "Uruchom w terminalu",
+      "cliReady": "Wykryto",
+      "cliMissingShort": "Nie wykryto",
+      "cliPathInvalid": "Skonfigurowana ścieżka pi CLI jest nieprawidłowa: {{path}}",
+      "saveAndRetry": "Zapisz i ponów",
+      "installCommand": "Oficjalne polecenie instalacji",
+      "installHint": "Uruchom poniższe oficjalne polecenie w terminalu, a po instalacji odśwież.",
+      "selectWorkingDir": "Wybierz katalog roboczy pi CLI",
+      "workingDirAccountHint": "Katalog roboczy jest powiązany z tym kontem i zostanie uzupełniony automatycznie następnym razem.",
+      "launchCommandPlaceholder": "Wybierz lub potwierdź katalog roboczy, aby wygenerować polecenie uruchomienia",
+      "accountHomeReady": "Przygotowano katalog konta: {{email}}",
+      "installLaunchHint": "Uruchom poniższe oficjalne polecenie w terminalu, a po instalacji uruchom z nowego terminala."
     },
     "switch": {
       "success": "Konto przełączone"
@@ -7438,12 +7438,12 @@
     "usageViewDetail": "Pokaż szczegóły",
     "usageDetailTitle": "Szczegóły użycia",
     "usage": {
-      "title": "Usage",
-      "refresh": "Refresh usage",
-      "expired": "Token is invalid and auto-refresh failed. Please log in again",
-      "unsupported": "Usage lookup is not available for these credentials",
-      "spent": "Spent",
-      "resetAt": "Resets at"
+      "title": "Użycie",
+      "refresh": "Odśwież użycie",
+      "expired": "Token jest nieprawidłowy, a automatyczne odświeżenie nie powiodło się. Zaloguj się ponownie",
+      "unsupported": "Sprawdzanie użycia nie jest dostępne dla tych poświadczeń",
+      "spent": "Wydano",
+      "resetAt": "Reset o"
     },
     "quotaQuery": {
       "failedRefreshCompact": "Nie udało się sprawdzić limitu",
@@ -7451,51 +7451,51 @@
       "sectionTitle": "Limit"
     },
     "login": {
-      "importAfterLogin": "Import from local",
-      "openTerminal": "Open pi in terminal",
-      "opened": "Terminal opened. Type /login in pi",
-      "step1": "Click the button below to start pi in a terminal (uses the official directory ~/.pi/agent).",
-      "step2": "Type /login in pi, choose a provider and complete authorization in the browser. Repeat to log in to more providers.",
-      "step3": "After logging in, come back and click \"Import from local\" to save it as an account."
+      "importAfterLogin": "Importuj lokalnie",
+      "openTerminal": "Otwórz pi w terminalu",
+      "opened": "Otwarto terminal. Wpisz /login w pi",
+      "step1": "Kliknij przycisk poniżej, aby uruchomić pi w terminalu (używa oficjalnego katalogu ~/.pi/agent).",
+      "step2": "Wpisz /login w pi, wybierz dostawcę i dokończ autoryzację w przeglądarce. Powtórz, aby zalogować się do kolejnych dostawców.",
+      "step3": "Po zalogowaniu wróć i kliknij „Importuj lokalnie”, aby zapisać jako konto."
     },
-    "noDefaultModel": "No default model",
+    "noDefaultModel": "Brak modelu domyślnego",
     "providers": {
-      "apiKey": "API Key",
-      "defaultModel": "Default model",
-      "empty": "No credentials",
-      "expiredHint": "OAuth token expired; pi refreshes it automatically on launch",
+      "apiKey": "Klucz API",
+      "defaultModel": "Model domyślny",
+      "empty": "Brak poświadczeń",
+      "expiredHint": "Token OAuth wygasł; pi odświeży go automatycznie przy uruchomieniu",
       "oauth": "OAuth",
-      "gateway": "Gateway"
+      "gateway": "Brama"
     },
     "defaults": {
-      "title": "Edit defaults",
-      "hint": "When switching to this account, the default provider, model and thinking level are written to pi's settings.json. Leave empty to keep unchanged.",
-      "provider": "Default provider",
-      "thinkingLevel": "Default thinking level",
-      "unset": "Not set"
+      "title": "Edytuj ustawienia domyślne",
+      "hint": "Po przełączeniu na to konto domyślny dostawca, model i poziom myślenia zostaną zapisane w settings.json pi. Pozostaw puste, aby nie zmieniać.",
+      "provider": "Domyślny dostawca",
+      "thinkingLevel": "Domyślny poziom myślenia",
+      "unset": "Nie ustawiono"
     },
     "gateway": {
-      "modeGateway": "Third-party gateway",
-      "modeBuiltin": "pi built-in provider",
-      "provider": "Provider",
-      "custom": "Custom",
-      "getKey": "Get API Key",
-      "protocol": "API protocol",
-      "endpoint": "Provider endpoint",
-      "baseUrl": "Base URL",
-      "providerId": "pi provider ID",
-      "authScheme": "Auth scheme",
-      "models": "Models",
-      "fetchModels": "Fetch models",
-      "fetchNeedsKey": "Enter the API Key below first",
-      "editTitle": "Edit gateway",
-      "keepKey": "Leave blank to keep current key {{hint}}",
-      "modelsEmpty": "Add at least one model",
-      "setDefault": "Set as default model",
-      "fetched": "{{count}} models returned, click to add",
-      "addAll": "Add all",
-      "noModels": "No models returned, add them manually",
-      "modelPlaceholder": "Type a model ID and press Enter"
+      "modeGateway": "Brama zewnętrzna",
+      "modeBuiltin": "Wbudowany dostawca pi",
+      "provider": "Dostawca",
+      "custom": "Niestandardowy",
+      "getKey": "Uzyskaj klucz API",
+      "protocol": "Protokół API",
+      "endpoint": "Punkt końcowy dostawcy",
+      "baseUrl": "Bazowy URL",
+      "providerId": "ID dostawcy pi",
+      "authScheme": "Schemat uwierzytelniania",
+      "models": "Modele",
+      "fetchModels": "Pobierz modele",
+      "fetchNeedsKey": "Najpierw wpisz poniżej klucz API",
+      "editTitle": "Edytuj bramę",
+      "keepKey": "Pozostaw puste, aby zachować obecny klucz {{hint}}",
+      "modelsEmpty": "Dodaj co najmniej jeden model",
+      "setDefault": "Ustaw jako model domyślny",
+      "fetched": "Zwrócono modele: {{count}}, kliknij, aby dodać",
+      "addAll": "Dodaj wszystkie",
+      "noModels": "Nie zwrócono modeli, dodaj je ręcznie",
+      "modelPlaceholder": "Wpisz ID modelu i naciśnij Enter"
     }
   }
 }

@@ -7387,7 +7387,7 @@
     "addAccount": "新增 pi 賬號",
     "oauth": {
       "desc": "pi 的訂閱登入（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini 等）透過 pi 內建的 /login 完成。",
-      "title": "pi /login",
+      "title": "pi /login 登入",
       "item1": "使用 pi 官方登入流程，憑據由 pi 自行寫入。",
       "item2": "匯入時會把當前所有提供商憑據儲存為一個賬號。",
       "item3": "每個賬號可使用獨立目錄，多開互不影響。",
@@ -7404,7 +7404,7 @@
       "pasteAction": "匯入 JSON",
       "localDesc": "從 ~/.pi/agent/auth.json 匯入當前所有提供商憑據和預設模型。",
       "localClient": "從本機 pi 匯入",
-      "apiKeyTab": "API Key",
+      "apiKeyTab": "API 金鑰",
       "apiKeyDesc": "接入三方 API 閘道器（OpenAI / Anthropic 相容），或直接填寫 pi 內建提供商的 API Key。",
       "apiKeyPlaceholder": "貼上 API Key",
       "apiKeyAction": "新增 API Key",
@@ -7460,7 +7460,7 @@
     },
     "noDefaultModel": "未設定預設模型",
     "providers": {
-      "apiKey": "API Key",
+      "apiKey": "API 金鑰",
       "defaultModel": "預設模型",
       "empty": "暫無憑據",
       "expiredHint": "OAuth 令牌已過期，pi 啟動時會自動重新整理",

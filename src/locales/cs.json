@@ -5568,7 +5568,7 @@
       "syncOfficialAuthOnSwitchDesc": "Po zapnutí změna účtu OAuth ve výchozí instanci zapíše oficiální soubor ~/.grok/auth.json. Po vypnutí se použije samostatný GROK_HOME. Klíče API ani další instance oficiální přihlášení nepřepisují."
     },
     "grokRefreshInterval": "Automatická obnova kvóty",
-    "piRefreshInterval": "Usage auto refresh",
+    "piRefreshInterval": "Automatická obnova využití",
     "codebuddy": {
       "title": "Nastavení CodeBuddy",
       "appPath": "Cesta CodeBuddy"
@@ -5626,13 +5626,13 @@
       "title": "Nastavení TRAE SOLO CN"
     },
     "pi": {
-      "title": "pi CLI settings",
+      "title": "Nastavení pi CLI",
       "appPath": "Cesta ke pi",
-      "cliPath": "CLI path",
-      "cliDetected": "Detected {{version}} at {{path}}",
-      "cliMissing": "pi CLI not detected. Enter a custom path",
-      "syncOfficialAuthOnSwitch": "Sync official login on switch",
-      "syncOfficialAuthOnSwitchDesc": "When enabled, switching accounts merges credentials into ~/.pi/agent/auth.json and sets the default model. When disabled, an isolated PI_CODING_AGENT_DIR is used."
+      "cliPath": "Cesta k CLI",
+      "cliDetected": "Zjištěna verze {{version}} v {{path}}",
+      "cliMissing": "pi CLI nebylo zjištěno. Zadejte vlastní cestu",
+      "syncOfficialAuthOnSwitch": "Synchronizovat oficiální přihlášení při přepnutí",
+      "syncOfficialAuthOnSwitchDesc": "Je-li zapnuto, přepnutí účtu sloučí přihlašovací údaje do ~/.pi/agent/auth.json a nastaví výchozí model. Je-li vypnuto, použije se izolovaný PI_CODING_AGENT_DIR."
     }
   },
   "quotaAlert": {
@@ -7376,59 +7376,59 @@
     "desc": "Správa klíčů OpenCode Go/Zen a filtr podle tier."
   },
   "pi": {
-    "search": "Search pi accounts...",
+    "search": "Hledat účty pi...",
     "flowNotice": {
-      "title": "About pi account management",
-      "desc": "Each pi account is a set of provider credentials plus a default model. With \"Sync official login on switch\" on, switching merges the credentials into ~/.pi/agent/auth.json and updates the default model; when off, an isolated PI_CODING_AGENT_DIR is used.",
-      "permission": "Local scope: reads ~/.pi/agent/auth.json and settings.json for import; switching only touches the providers in the account, and a .cockpit-backup copy is kept before writing.",
-      "network": "Network scope: this app makes no network requests; OAuth login and token refresh are handled by the pi CLI itself."
+      "title": "O správě účtů pi",
+      "desc": "Každý účet pi je sada přihlašovacích údajů poskytovatelů a výchozí model. Při zapnuté volbě „Synchronizovat oficiální přihlášení při přepnutí“ se při přepnutí údaje sloučí do ~/.pi/agent/auth.json a aktualizuje se výchozí model; při vypnutí se použije izolovaný PI_CODING_AGENT_DIR.",
+      "permission": "Místní rozsah: pro import čte ~/.pi/agent/auth.json a settings.json; přepnutí mění pouze poskytovatele v účtu a před zápisem se uloží kopie .cockpit-backup.",
+      "network": "Síťový rozsah: tato aplikace neprovádí žádné síťové požadavky; přihlášení OAuth a obnovu tokenů zajišťuje samotné pi CLI."
     },
-    "empty": "No pi accounts",
-    "addAccount": "Add pi account",
+    "empty": "Žádné účty pi",
+    "addAccount": "Přidat účet pi",
     "oauth": {
-      "desc": "Subscription logins for pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, etc.) are done with pi's built-in /login.",
-      "title": "pi /login",
-      "item1": "Uses pi's official login flow; credentials are written by pi itself.",
-      "item2": "Importing saves all current provider credentials as one account.",
-      "item3": "Each account can use its own directory, so multiple instances stay independent.",
-      "builtinDesc": "Authorize in your browser and the credential is saved as a pi account, in the same format as pi /login.",
-      "otherProviders": "Others (pi /login)",
-      "urlPlaceholder": "Authorization URL",
-      "waiting": "Waiting for browser callback...",
-      "success": "pi login succeeded"
+      "desc": "Přihlášení k předplatným pro pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini atd.) se provádí vestavěným příkazem /login v pi.",
+      "title": "Přihlášení přes pi /login",
+      "item1": "Používá oficiální přihlašovací postup pi; přihlašovací údaje zapisuje samotné pi.",
+      "item2": "Import uloží všechny aktuální přihlašovací údaje poskytovatelů jako jeden účet.",
+      "item3": "Každý účet může používat vlastní adresář, takže více instancí zůstává nezávislých.",
+      "builtinDesc": "Autorizujte v prohlížeči a přihlašovací údaj se uloží jako účet pi ve stejném formátu jako pi /login.",
+      "otherProviders": "Ostatní (pi /login)",
+      "urlPlaceholder": "Autorizační URL",
+      "waiting": "Čekání na zpětné volání prohlížeče...",
+      "success": "Přihlášení do pi proběhlo úspěšně"
     },
     "import": {
       "pasteTab": "Vložit JSON",
-      "pasteDesc": "Paste pi's auth.json or an account JSON exported by this app. Credentials are processed locally only.",
-      "pastePlaceholder": "Paste pi account JSON",
-      "pasteAction": "Import JSON",
-      "localDesc": "Import all current provider credentials and the default model from ~/.pi/agent/auth.json.",
-      "localClient": "Import from local pi",
-      "apiKeyTab": "API Key",
-      "apiKeyDesc": "Connect a third-party API gateway (OpenAI / Anthropic compatible), or enter an API Key for a pi built-in provider.",
-      "apiKeyPlaceholder": "Paste API key",
-      "apiKeyAction": "Add API key",
-      "defaultModel": "Default model (optional)",
-      "defaultModelPlaceholder": "e.g. claude-sonnet-4-5",
-      "displayName": "Account name (optional)",
-      "provider": "Provider ID"
+      "pasteDesc": "Vložte auth.json z pi nebo JSON účtu exportovaný touto aplikací. Přihlašovací údaje se zpracovávají pouze lokálně.",
+      "pastePlaceholder": "Vložte JSON účtu pi",
+      "pasteAction": "Importovat JSON",
+      "localDesc": "Importovat všechny aktuální přihlašovací údaje poskytovatelů a výchozí model z ~/.pi/agent/auth.json.",
+      "localClient": "Importovat z místního pi",
+      "apiKeyTab": "Klíč API",
+      "apiKeyDesc": "Připojte bránu API třetí strany (kompatibilní s OpenAI / Anthropic) nebo zadejte klíč API pro vestavěného poskytovatele pi.",
+      "apiKeyPlaceholder": "Vložte klíč API",
+      "apiKeyAction": "Přidat klíč API",
+      "defaultModel": "Výchozí model (volitelné)",
+      "defaultModelPlaceholder": "např. claude-sonnet-4-5",
+      "displayName": "Název účtu (volitelné)",
+      "provider": "ID poskytovatele"
     },
     "instances": {
-      "unsupported": "pi multi-instance supports macOS, Windows and Linux only.",
-      "launchDialogTitle": "Launch instance",
-      "launchHint": "Copy the command to run it manually, or use the button below to run it in a terminal.",
-      "runInTerminal": "Run in terminal",
-      "cliReady": "Detected",
-      "cliMissingShort": "Not detected",
-      "cliPathInvalid": "Configured pi CLI path is invalid: {{path}}",
-      "saveAndRetry": "Save and retry",
-      "installCommand": "Official install command",
-      "installHint": "Run the official command below in a terminal, then refresh after installation.",
-      "selectWorkingDir": "Select pi CLI working directory",
-      "workingDirAccountHint": "The working directory is bound to this account and is filled in automatically next time.",
-      "launchCommandPlaceholder": "Select or confirm a working directory to generate the launch command",
-      "accountHomeReady": "Account directory prepared: {{email}}",
-      "installLaunchHint": "Run the official command below in a terminal, then launch from a new terminal after installation."
+      "unsupported": "Více instancí pi je podporováno pouze v systémech macOS, Windows a Linux.",
+      "launchDialogTitle": "Spustit instanci",
+      "launchHint": "Zkopírujte příkaz a spusťte jej ručně, nebo jej spusťte v terminálu tlačítkem níže.",
+      "runInTerminal": "Spustit v terminálu",
+      "cliReady": "Zjištěno",
+      "cliMissingShort": "Nezjištěno",
+      "cliPathInvalid": "Nastavená cesta k pi CLI je neplatná: {{path}}",
+      "saveAndRetry": "Uložit a zkusit znovu",
+      "installCommand": "Oficiální instalační příkaz",
+      "installHint": "Spusťte níže uvedený oficiální příkaz v terminálu a po instalaci obnovte.",
+      "selectWorkingDir": "Vyberte pracovní adresář pi CLI",
+      "workingDirAccountHint": "Pracovní adresář je svázán s tímto účtem a příště se vyplní automaticky.",
+      "launchCommandPlaceholder": "Vyberte nebo potvrďte pracovní adresář pro vygenerování spouštěcího příkazu",
+      "accountHomeReady": "Adresář účtu připraven: {{email}}",
+      "installLaunchHint": "Spusťte níže uvedený oficiální příkaz v terminálu a po instalaci spusťte z nového terminálu."
     },
     "switch": {
       "success": "Účet přepnut"
@@ -7438,12 +7438,12 @@
     "usageViewDetail": "Zobrazit podrobnosti",
     "usageDetailTitle": "Podrobnosti využití",
     "usage": {
-      "title": "Usage",
-      "refresh": "Refresh usage",
-      "expired": "Token is invalid and auto-refresh failed. Please log in again",
-      "unsupported": "Usage lookup is not available for these credentials",
-      "spent": "Spent",
-      "resetAt": "Resets at"
+      "title": "Využití",
+      "refresh": "Obnovit využití",
+      "expired": "Token je neplatný a automatická obnova selhala. Přihlaste se prosím znovu",
+      "unsupported": "Zjištění využití není pro tyto přihlašovací údaje dostupné",
+      "spent": "Utraceno",
+      "resetAt": "Obnoví se"
     },
     "quotaQuery": {
       "failedRefreshCompact": "Dotaz na kvótu selhal",
@@ -7451,51 +7451,51 @@
       "sectionTitle": "Kvóta"
     },
     "login": {
-      "importAfterLogin": "Import from local",
-      "openTerminal": "Open pi in terminal",
-      "opened": "Terminal opened. Type /login in pi",
-      "step1": "Click the button below to start pi in a terminal (uses the official directory ~/.pi/agent).",
-      "step2": "Type /login in pi, choose a provider and complete authorization in the browser. Repeat to log in to more providers.",
-      "step3": "After logging in, come back and click \"Import from local\" to save it as an account."
+      "importAfterLogin": "Importovat z místního",
+      "openTerminal": "Otevřít pi v terminálu",
+      "opened": "Terminál otevřen. V pi zadejte /login",
+      "step1": "Kliknutím na tlačítko níže spustíte pi v terminálu (používá oficiální adresář ~/.pi/agent).",
+      "step2": "V pi zadejte /login, vyberte poskytovatele a dokončete autorizaci v prohlížeči. Opakujte pro přihlášení k dalším poskytovatelům.",
+      "step3": "Po přihlášení se vraťte a klikněte na „Importovat z místního“ pro uložení jako účet."
     },
-    "noDefaultModel": "No default model",
+    "noDefaultModel": "Žádný výchozí model",
     "providers": {
-      "apiKey": "API Key",
-      "defaultModel": "Default model",
-      "empty": "No credentials",
-      "expiredHint": "OAuth token expired; pi refreshes it automatically on launch",
+      "apiKey": "Klíč API",
+      "defaultModel": "Výchozí model",
+      "empty": "Žádné přihlašovací údaje",
+      "expiredHint": "Platnost tokenu OAuth vypršela; pi jej při spuštění automaticky obnoví",
       "oauth": "OAuth",
-      "gateway": "Gateway"
+      "gateway": "Brána"
     },
     "defaults": {
-      "title": "Edit defaults",
-      "hint": "When switching to this account, the default provider, model and thinking level are written to pi's settings.json. Leave empty to keep unchanged.",
-      "provider": "Default provider",
-      "thinkingLevel": "Default thinking level",
-      "unset": "Not set"
+      "title": "Upravit výchozí hodnoty",
+      "hint": "Při přepnutí na tento účet se výchozí poskytovatel, model a úroveň uvažování zapíší do settings.json aplikace pi. Ponechte prázdné, pokud nechcete nic měnit.",
+      "provider": "Výchozí poskytovatel",
+      "thinkingLevel": "Výchozí úroveň uvažování",
+      "unset": "Nenastaveno"
     },
     "gateway": {
-      "modeGateway": "Third-party gateway",
-      "modeBuiltin": "pi built-in provider",
-      "provider": "Provider",
-      "custom": "Custom",
-      "getKey": "Get API Key",
-      "protocol": "API protocol",
-      "endpoint": "Provider endpoint",
-      "baseUrl": "Base URL",
-      "providerId": "pi provider ID",
-      "authScheme": "Auth scheme",
-      "models": "Models",
-      "fetchModels": "Fetch models",
-      "fetchNeedsKey": "Enter the API Key below first",
-      "editTitle": "Edit gateway",
-      "keepKey": "Leave blank to keep current key {{hint}}",
-      "modelsEmpty": "Add at least one model",
-      "setDefault": "Set as default model",
-      "fetched": "{{count}} models returned, click to add",
-      "addAll": "Add all",
-      "noModels": "No models returned, add them manually",
-      "modelPlaceholder": "Type a model ID and press Enter"
+      "modeGateway": "Brána třetí strany",
+      "modeBuiltin": "Vestavěný poskytovatel pi",
+      "provider": "Poskytovatel",
+      "custom": "Vlastní",
+      "getKey": "Získat klíč API",
+      "protocol": "Protokol API",
+      "endpoint": "Koncový bod poskytovatele",
+      "baseUrl": "Základní URL",
+      "providerId": "ID poskytovatele pi",
+      "authScheme": "Schéma ověřování",
+      "models": "Modely",
+      "fetchModels": "Načíst modely",
+      "fetchNeedsKey": "Nejprve níže zadejte klíč API",
+      "editTitle": "Upravit bránu",
+      "keepKey": "Ponechte prázdné pro zachování aktuálního klíče {{hint}}",
+      "modelsEmpty": "Přidejte alespoň jeden model",
+      "setDefault": "Nastavit jako výchozí model",
+      "fetched": "Vráceno {{count}} modelů, kliknutím přidáte",
+      "addAll": "Přidat vše",
+      "noModels": "Nebyly vráceny žádné modely, přidejte je ručně",
+      "modelPlaceholder": "Zadejte ID modelu a stiskněte Enter"
     }
   }
 }

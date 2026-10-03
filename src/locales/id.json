@@ -5719,7 +5719,7 @@
       "syncOfficialAuthOnSwitchDesc": "Jika aktif, peralihan akun OAuth pada instans default akan menulis ke ~/.grok/auth.json resmi. Jika nonaktif, GROK_HOME terpisah digunakan. API Key dan instans tambahan tidak menimpa login resmi."
     },
     "grokRefreshInterval": "Segarkan kuota otomatis",
-    "piRefreshInterval": "Usage auto refresh",
+    "piRefreshInterval": "Penyegaran otomatis penggunaan",
     "error": {
       "loadFailed": "Gagal memuat konfigurasi: {{error}}",
       "saveFailed": "Gagal menyimpan konfigurasi: {{error}}",
@@ -5773,13 +5773,13 @@
       "title": "Pengaturan TRAE SOLO CN"
     },
     "pi": {
-      "title": "pi CLI settings",
+      "title": "Pengaturan pi CLI",
       "appPath": "Lokasi pi",
-      "cliPath": "CLI path",
-      "cliDetected": "Detected {{version}} at {{path}}",
-      "cliMissing": "pi CLI not detected. Enter a custom path",
-      "syncOfficialAuthOnSwitch": "Sync official login on switch",
-      "syncOfficialAuthOnSwitchDesc": "When enabled, switching accounts merges credentials into ~/.pi/agent/auth.json and sets the default model. When disabled, an isolated PI_CODING_AGENT_DIR is used."
+      "cliPath": "Jalur CLI",
+      "cliDetected": "Terdeteksi {{version}} di {{path}}",
+      "cliMissing": "pi CLI tidak terdeteksi. Masukkan jalur kustom",
+      "syncOfficialAuthOnSwitch": "Sinkronkan login resmi saat beralih",
+      "syncOfficialAuthOnSwitchDesc": "Jika aktif, peralihan akun menggabungkan kredensial ke ~/.pi/agent/auth.json dan menetapkan model default. Jika nonaktif, PI_CODING_AGENT_DIR terisolasi akan digunakan."
     }
   },
   "quotaAlert": {
@@ -7376,59 +7376,59 @@
     "desc": "Kelola key OpenCode Go/Zen dan filter per tier."
   },
   "pi": {
-    "search": "Search pi accounts...",
+    "search": "Cari akun pi...",
     "flowNotice": {
-      "title": "About pi account management",
-      "desc": "Each pi account is a set of provider credentials plus a default model. With \"Sync official login on switch\" on, switching merges the credentials into ~/.pi/agent/auth.json and updates the default model; when off, an isolated PI_CODING_AGENT_DIR is used.",
-      "permission": "Local scope: reads ~/.pi/agent/auth.json and settings.json for import; switching only touches the providers in the account, and a .cockpit-backup copy is kept before writing.",
-      "network": "Network scope: this app makes no network requests; OAuth login and token refresh are handled by the pi CLI itself."
+      "title": "Tentang pengelolaan akun pi",
+      "desc": "Setiap akun pi adalah sekumpulan kredensial penyedia beserta model default. Jika \"Sinkronkan login resmi saat beralih\" aktif, peralihan akan menggabungkan kredensial ke ~/.pi/agent/auth.json dan memperbarui model default; jika nonaktif, PI_CODING_AGENT_DIR terisolasi akan digunakan.",
+      "permission": "Cakupan lokal: membaca ~/.pi/agent/auth.json dan settings.json untuk impor; peralihan hanya mengubah penyedia dalam akun, dan salinan .cockpit-backup disimpan sebelum menulis.",
+      "network": "Cakupan jaringan: aplikasi ini tidak melakukan permintaan jaringan; login OAuth dan penyegaran token ditangani oleh pi CLI sendiri."
     },
-    "empty": "No pi accounts",
-    "addAccount": "Add pi account",
+    "empty": "Tidak ada akun pi",
+    "addAccount": "Tambah akun pi",
     "oauth": {
-      "desc": "Subscription logins for pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, etc.) are done with pi's built-in /login.",
-      "title": "pi /login",
-      "item1": "Uses pi's official login flow; credentials are written by pi itself.",
-      "item2": "Importing saves all current provider credentials as one account.",
-      "item3": "Each account can use its own directory, so multiple instances stay independent.",
-      "builtinDesc": "Authorize in your browser and the credential is saved as a pi account, in the same format as pi /login.",
-      "otherProviders": "Others (pi /login)",
-      "urlPlaceholder": "Authorization URL",
-      "waiting": "Waiting for browser callback...",
-      "success": "pi login succeeded"
+      "desc": "Login langganan untuk pi (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini, dll.) dilakukan dengan /login bawaan pi.",
+      "title": "Masuk dengan pi /login",
+      "item1": "Menggunakan alur login resmi pi; kredensial ditulis oleh pi sendiri.",
+      "item2": "Impor menyimpan semua kredensial penyedia saat ini sebagai satu akun.",
+      "item3": "Setiap akun dapat menggunakan direktorinya sendiri, sehingga beberapa instans tetap independen.",
+      "builtinDesc": "Otorisasi di browser Anda dan kredensial akan disimpan sebagai akun pi, dengan format yang sama seperti pi /login.",
+      "otherProviders": "Lainnya (pi /login)",
+      "urlPlaceholder": "URL otorisasi",
+      "waiting": "Menunggu callback browser...",
+      "success": "Login pi berhasil"
     },
     "import": {
       "pasteTab": "Tempel JSON",
-      "pasteDesc": "Paste pi's auth.json or an account JSON exported by this app. Credentials are processed locally only.",
-      "pastePlaceholder": "Paste pi account JSON",
-      "pasteAction": "Import JSON",
-      "localDesc": "Import all current provider credentials and the default model from ~/.pi/agent/auth.json.",
-      "localClient": "Import from local pi",
-      "apiKeyTab": "API Key",
-      "apiKeyDesc": "Connect a third-party API gateway (OpenAI / Anthropic compatible), or enter an API Key for a pi built-in provider.",
-      "apiKeyPlaceholder": "Paste API key",
-      "apiKeyAction": "Add API key",
-      "defaultModel": "Default model (optional)",
-      "defaultModelPlaceholder": "e.g. claude-sonnet-4-5",
-      "displayName": "Account name (optional)",
-      "provider": "Provider ID"
+      "pasteDesc": "Tempel auth.json milik pi atau JSON akun yang diekspor oleh aplikasi ini. Kredensial hanya diproses secara lokal.",
+      "pastePlaceholder": "Tempel JSON akun pi",
+      "pasteAction": "Impor JSON",
+      "localDesc": "Impor semua kredensial penyedia saat ini dan model default dari ~/.pi/agent/auth.json.",
+      "localClient": "Impor dari pi lokal",
+      "apiKeyTab": "Kunci API",
+      "apiKeyDesc": "Hubungkan gerbang API pihak ketiga (kompatibel OpenAI / Anthropic), atau masukkan kunci API untuk penyedia bawaan pi.",
+      "apiKeyPlaceholder": "Tempel kunci API",
+      "apiKeyAction": "Tambah kunci API",
+      "defaultModel": "Model default (opsional)",
+      "defaultModelPlaceholder": "mis. claude-sonnet-4-5",
+      "displayName": "Nama akun (opsional)",
+      "provider": "ID penyedia"
     },
     "instances": {
-      "unsupported": "pi multi-instance supports macOS, Windows and Linux only.",
-      "launchDialogTitle": "Launch instance",
-      "launchHint": "Copy the command to run it manually, or use the button below to run it in a terminal.",
-      "runInTerminal": "Run in terminal",
-      "cliReady": "Detected",
-      "cliMissingShort": "Not detected",
-      "cliPathInvalid": "Configured pi CLI path is invalid: {{path}}",
-      "saveAndRetry": "Save and retry",
-      "installCommand": "Official install command",
-      "installHint": "Run the official command below in a terminal, then refresh after installation.",
-      "selectWorkingDir": "Select pi CLI working directory",
-      "workingDirAccountHint": "The working directory is bound to this account and is filled in automatically next time.",
-      "launchCommandPlaceholder": "Select or confirm a working directory to generate the launch command",
-      "accountHomeReady": "Account directory prepared: {{email}}",
-      "installLaunchHint": "Run the official command below in a terminal, then launch from a new terminal after installation."
+      "unsupported": "Multi-instans pi hanya mendukung macOS, Windows, dan Linux.",
+      "launchDialogTitle": "Luncurkan instans",
+      "launchHint": "Salin perintah untuk menjalankannya secara manual, atau gunakan tombol di bawah untuk menjalankannya di terminal.",
+      "runInTerminal": "Jalankan di terminal",
+      "cliReady": "Terdeteksi",
+      "cliMissingShort": "Tidak terdeteksi",
+      "cliPathInvalid": "Jalur pi CLI yang dikonfigurasi tidak valid: {{path}}",
+      "saveAndRetry": "Simpan dan coba lagi",
+      "installCommand": "Perintah instalasi resmi",
+      "installHint": "Jalankan perintah resmi di bawah di terminal, lalu segarkan setelah instalasi.",
+      "selectWorkingDir": "Pilih direktori kerja pi CLI",
+      "workingDirAccountHint": "Direktori kerja terikat ke akun ini dan akan terisi otomatis lain kali.",
+      "launchCommandPlaceholder": "Pilih atau konfirmasi direktori kerja untuk membuat perintah peluncuran",
+      "accountHomeReady": "Direktori akun telah disiapkan: {{email}}",
+      "installLaunchHint": "Jalankan perintah resmi di bawah di terminal, lalu jalankan dari terminal baru setelah instalasi."
     },
     "switch": {
       "success": "Akun diganti"
@@ -7438,12 +7438,12 @@
     "usageViewDetail": "Lihat detail",
     "usageDetailTitle": "Detail penggunaan",
     "usage": {
-      "title": "Usage",
-      "refresh": "Refresh usage",
-      "expired": "Token is invalid and auto-refresh failed. Please log in again",
-      "unsupported": "Usage lookup is not available for these credentials",
-      "spent": "Spent",
-      "resetAt": "Resets at"
+      "title": "Penggunaan",
+      "refresh": "Segarkan penggunaan",
+      "expired": "Token tidak valid dan penyegaran otomatis gagal. Silakan masuk lagi",
+      "unsupported": "Pemeriksaan penggunaan tidak tersedia untuk kredensial ini",
+      "spent": "Terpakai",
+      "resetAt": "Direset pada"
     },
     "quotaQuery": {
       "failedRefreshCompact": "Kueri kuota gagal",
@@ -7451,51 +7451,51 @@
       "sectionTitle": "Kuota"
     },
     "login": {
-      "importAfterLogin": "Import from local",
-      "openTerminal": "Open pi in terminal",
-      "opened": "Terminal opened. Type /login in pi",
-      "step1": "Click the button below to start pi in a terminal (uses the official directory ~/.pi/agent).",
-      "step2": "Type /login in pi, choose a provider and complete authorization in the browser. Repeat to log in to more providers.",
-      "step3": "After logging in, come back and click \"Import from local\" to save it as an account."
+      "importAfterLogin": "Impor dari lokal",
+      "openTerminal": "Buka pi di terminal",
+      "opened": "Terminal dibuka. Ketik /login di pi",
+      "step1": "Klik tombol di bawah untuk memulai pi di terminal (menggunakan direktori resmi ~/.pi/agent).",
+      "step2": "Ketik /login di pi, pilih penyedia, dan selesaikan otorisasi di browser. Ulangi untuk masuk ke penyedia lain.",
+      "step3": "Setelah masuk, kembali ke sini dan klik \"Impor dari lokal\" untuk menyimpannya sebagai akun."
     },
-    "noDefaultModel": "No default model",
+    "noDefaultModel": "Tidak ada model default",
     "providers": {
-      "apiKey": "API Key",
-      "defaultModel": "Default model",
-      "empty": "No credentials",
-      "expiredHint": "OAuth token expired; pi refreshes it automatically on launch",
+      "apiKey": "Kunci API",
+      "defaultModel": "Model default",
+      "empty": "Tidak ada kredensial",
+      "expiredHint": "Token OAuth kedaluwarsa; pi menyegarkannya otomatis saat diluncurkan",
       "oauth": "OAuth",
-      "gateway": "Gateway"
+      "gateway": "Gerbang"
     },
     "defaults": {
-      "title": "Edit defaults",
-      "hint": "When switching to this account, the default provider, model and thinking level are written to pi's settings.json. Leave empty to keep unchanged.",
-      "provider": "Default provider",
-      "thinkingLevel": "Default thinking level",
-      "unset": "Not set"
+      "title": "Edit default",
+      "hint": "Saat beralih ke akun ini, penyedia, model, dan tingkat penalaran default ditulis ke settings.json milik pi. Biarkan kosong agar tidak berubah.",
+      "provider": "Penyedia default",
+      "thinkingLevel": "Tingkat penalaran default",
+      "unset": "Belum diatur"
     },
     "gateway": {
-      "modeGateway": "Third-party gateway",
-      "modeBuiltin": "pi built-in provider",
-      "provider": "Provider",
-      "custom": "Custom",
-      "getKey": "Get API Key",
-      "protocol": "API protocol",
-      "endpoint": "Provider endpoint",
-      "baseUrl": "Base URL",
-      "providerId": "pi provider ID",
-      "authScheme": "Auth scheme",
-      "models": "Models",
-      "fetchModels": "Fetch models",
-      "fetchNeedsKey": "Enter the API Key below first",
-      "editTitle": "Edit gateway",
-      "keepKey": "Leave blank to keep current key {{hint}}",
-      "modelsEmpty": "Add at least one model",
-      "setDefault": "Set as default model",
-      "fetched": "{{count}} models returned, click to add",
-      "addAll": "Add all",
-      "noModels": "No models returned, add them manually",
-      "modelPlaceholder": "Type a model ID and press Enter"
+      "modeGateway": "Gerbang pihak ketiga",
+      "modeBuiltin": "Penyedia bawaan pi",
+      "provider": "Penyedia",
+      "custom": "Kustom",
+      "getKey": "Dapatkan kunci API",
+      "protocol": "Protokol API",
+      "endpoint": "Endpoint penyedia",
+      "baseUrl": "URL dasar",
+      "providerId": "ID penyedia pi",
+      "authScheme": "Skema autentikasi",
+      "models": "Daftar model",
+      "fetchModels": "Ambil model",
+      "fetchNeedsKey": "Masukkan kunci API di bawah terlebih dahulu",
+      "editTitle": "Edit gerbang",
+      "keepKey": "Biarkan kosong untuk mempertahankan kunci saat ini {{hint}}",
+      "modelsEmpty": "Tambahkan setidaknya satu model",
+      "setDefault": "Jadikan model default",
+      "fetched": "{{count}} model ditemukan, klik untuk menambahkan",
+      "addAll": "Tambah semua",
+      "noModels": "Tidak ada model ditemukan, tambahkan secara manual",
+      "modelPlaceholder": "Ketik ID model lalu tekan Enter"
     }
   }
 }
