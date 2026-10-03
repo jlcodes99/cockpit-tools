@@ -60,6 +60,7 @@ export interface PlatformLayoutGroup {
 type PersistedPlatformLayout = {
   orderedPlatformIds?: PlatformId[];
   hiddenPlatformIds?: PlatformId[];
+  disabledPlatformIds?: PlatformId[];
   sidebarPlatformIds?: PlatformId[];
   trayPlatformIds?: PlatformId[];
   traySortMode?: 'auto' | 'manual';
@@ -78,6 +79,7 @@ type PersistedPlatformLayout = {
 interface PlatformLayoutState {
   orderedPlatformIds: PlatformId[];
   hiddenPlatformIds: PlatformId[];
+  disabledPlatformIds: PlatformId[];
   sidebarPlatformIds: PlatformId[];
   trayPlatformIds: PlatformId[];
   traySortMode: 'auto' | 'manual';
@@ -96,6 +98,8 @@ interface PlatformLayoutState {
   movePlatform: (fromIndex: number, toIndex: number) => void;
   toggleHiddenPlatform: (id: PlatformId) => void;
   setHiddenPlatform: (id: PlatformId, hidden: boolean) => void;
+  toggleDisabledPlatform: (id: PlatformId) => void;
+  setDisabledPlatform: (id: PlatformId, disabled: boolean) => void;
   toggleSidebarPlatform: (id: PlatformId) => void;
   setSidebarPlatform: (id: PlatformId, enabled: boolean) => void;
 
@@ -123,6 +127,7 @@ interface PlatformLayoutState {
 interface NormalizedLayoutStateData {
   orderedPlatformIds: PlatformId[];
   hiddenPlatformIds: PlatformId[];
+  disabledPlatformIds: PlatformId[];
   sidebarPlatformIds: PlatformId[];
   trayPlatformIds: PlatformId[];
   traySortMode: 'auto' | 'manual';
@@ -146,6 +151,14 @@ export function makePlatformEntryId(platformId: PlatformId): PlatformLayoutEntry
 
 export function makeGroupEntryId(groupId: string): PlatformLayoutEntryId {
   return `${GROUP_ENTRY_PREFIX}${groupId}` as PlatformLayoutEntryId;
+}
+
+/**
+ * 平台是否在「平台布局」中被禁用（隐藏即禁用）。
+ * 后台自动活动统一用这个入口判断是否跳过某平台，避免各处重复读取 store。
+ */
+export function isPlatformDisabled(platformId: string): boolean {
+  return (usePlatformLayoutStore.getState().disabledPlatformIds as readonly string[]).includes(platformId);
 }
 
 export function parsePlatformEntryId(entryId: string): PlatformId | null {
@@ -1114,7 +1127,13 @@ function toTrayGroupPayload(groups: PlatformLayoutGroup[]) {
 function syncTrayLayoutToBackend(
   state: Pick<
     PlatformLayoutState,
-    'orderedPlatformIds' | 'trayPlatformIds' | 'traySortMode' | 'orderedEntryIds' | 'platformGroups'
+    | 'orderedPlatformIds'
+    | 'trayPlatformIds'
+    | 'traySortMode'
+    | 'orderedEntryIds'
+    | 'platformGroups'
+    | 'hiddenPlatformIds'
+    | 'disabledPlatformIds'
   >,
 ) {
   invoke('save_tray_platform_layout', {
@@ -1123,6 +1142,8 @@ function syncTrayLayoutToBackend(
     trayPlatformIds: state.trayPlatformIds,
     orderedEntryIds: state.orderedEntryIds,
     platformGroups: toTrayGroupPayload(state.platformGroups),
+    hiddenPlatformIds: state.hiddenPlatformIds,
+    disabledPlatformIds: state.disabledPlatformIds,
   }).catch((error) => {
     console.error('同步托盘平台布局失败:', error);
   });
@@ -1131,7 +1152,13 @@ function syncTrayLayoutToBackend(
 function scheduleTrayLayoutSync(
   state: Pick<
     PlatformLayoutState,
-    'orderedPlatformIds' | 'trayPlatformIds' | 'traySortMode' | 'orderedEntryIds' | 'platformGroups'
+    | 'orderedPlatformIds'
+    | 'trayPlatformIds'
+    | 'traySortMode'
+    | 'orderedEntryIds'
+    | 'platformGroups'
+    | 'hiddenPlatformIds'
+    | 'disabledPlatformIds'
   >,
 ) {
   if (typeof window === 'undefined') {
@@ -1150,6 +1177,7 @@ function normalizeStateData(
   raw: {
     orderedPlatformIds: PlatformId[];
     hiddenPlatformIds: PlatformId[];
+    disabledPlatformIds?: PlatformId[];
     sidebarPlatformIds: PlatformId[];
     trayPlatformIds: PlatformId[];
     traySortMode: 'auto' | 'manual';
@@ -1204,6 +1232,9 @@ function normalizeStateData(
   return {
     orderedPlatformIds,
     hiddenPlatformIds,
+    // 禁用集合与「隐藏」正交：隐藏只影响显示，禁用才停止自动活动。
+    // 只接受裸平台 ID，调用方需先用 parsePlatformEntryId 从 `platform:xxx` 解析。
+    disabledPlatformIds: sanitizePlatformIds(raw.disabledPlatformIds ?? []),
     sidebarPlatformIds,
     trayPlatformIds: normalizeTray(
       raw.trayPlatformIds,
@@ -1234,6 +1265,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
       const defaults = normalizeStateData({
         orderedPlatformIds: defaultOrder,
         hiddenPlatformIds: [],
+        disabledPlatformIds: [],
         sidebarPlatformIds: defaultSidebarPlatformIds(),
         trayPlatformIds: defaultOrder,
         traySortMode: 'auto',
@@ -1318,6 +1350,7 @@ function loadPersistedState(): NormalizedLayoutStateData {
     return normalizeStateData({
       orderedPlatformIds: defaultOrder,
       hiddenPlatformIds: [],
+      disabledPlatformIds: [],
       sidebarPlatformIds: defaultSidebarPlatformIds(),
       trayPlatformIds: defaultOrder,
       traySortMode: 'auto',
@@ -1340,6 +1373,7 @@ function persist(
     PlatformLayoutState,
     | 'orderedPlatformIds'
     | 'hiddenPlatformIds'
+    | 'disabledPlatformIds'
     | 'sidebarPlatformIds'
     | 'trayPlatformIds'
     | 'traySortMode'
@@ -1379,6 +1413,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds: current,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: 'manual',
@@ -1404,6 +1439,37 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
   setHiddenPlatform: (id, hidden) => {
     const entryId = resolveEntryIdForPlatform(id, get().platformGroups);
     get().setHiddenEntry(entryId, hidden);
+  },
+
+  toggleDisabledPlatform: (id) => {
+    get().setDisabledPlatform(id, !get().disabledPlatformIds.includes(id));
+  },
+
+  setDisabledPlatform: (id, disabled) => {
+    const current = get().disabledPlatformIds;
+    if (current.includes(id) === disabled) return;
+
+    const next = normalizeStateData({
+      orderedPlatformIds: get().orderedPlatformIds,
+      hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: disabled
+        ? [...current, id]
+        : current.filter((item) => item !== id),
+      sidebarPlatformIds: get().sidebarPlatformIds,
+      trayPlatformIds: get().trayPlatformIds,
+      traySortMode: get().traySortMode,
+      platformGroups: get().platformGroups,
+      orderedEntryIds: get().orderedEntryIds,
+      hiddenEntryIds: get().hiddenEntryIds,
+      sidebarEntryIds: get().sidebarEntryIds,
+      apiRelaySidebarVisible: get().apiRelaySidebarVisible,
+      apiRelayDashboardVisible: get().apiRelayDashboardVisible,
+      apiRelayEntryOrder: get().apiRelayEntryOrder,
+    });
+
+    set(next);
+    persist(next);
+    scheduleTrayLayoutSync(next);
   },
 
   toggleSidebarPlatform: (id) => {
@@ -1435,6 +1501,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: 'manual',
@@ -1475,6 +1542,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: 'manual',
@@ -1561,6 +1629,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: 'manual',
@@ -1586,6 +1655,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds: get().orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: get().traySortMode,
@@ -1621,6 +1691,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds: get().orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: get().traySortMode,
@@ -1694,6 +1765,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds: get().orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: get().traySortMode,
@@ -1756,6 +1828,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: get().traySortMode,
@@ -1789,6 +1862,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: get().trayPlatformIds,
       traySortMode: get().traySortMode,
@@ -1816,6 +1890,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds: get().orderedPlatformIds,
       hiddenPlatformIds: get().hiddenPlatformIds,
+      disabledPlatformIds: get().disabledPlatformIds,
       sidebarPlatformIds: get().sidebarPlatformIds,
       trayPlatformIds: normalizeTray(nextTray),
       traySortMode: get().traySortMode,
@@ -1847,6 +1922,8 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
       traySortMode: state.traySortMode,
       orderedEntryIds: state.orderedEntryIds,
       platformGroups: state.platformGroups,
+      hiddenPlatformIds: state.hiddenPlatformIds,
+      disabledPlatformIds: state.disabledPlatformIds,
     });
   },
 
@@ -1856,6 +1933,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
     const next = normalizeStateData({
       orderedPlatformIds: defaultOrder,
       hiddenPlatformIds: [],
+      disabledPlatformIds: [],
       sidebarPlatformIds: defaultSidebarPlatformIds(),
       trayPlatformIds: defaultOrder,
       traySortMode: 'auto',
