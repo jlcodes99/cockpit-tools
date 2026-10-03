@@ -462,12 +462,14 @@ async fn refresh_expired(account_id: &str, account: &mut PiAccount) {
 
 /// Query usage for every credential on `account_id`.
 pub async fn query_account_usage(account_id: &str) -> Result<Vec<PiProviderUsage>, String> {
-    pi_account::sync_live_credentials(account_id);
     let stale = pi_account::load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
     if needs_refresh(&stale) {
+        // Syncs pi's tokens under the lock before deciding to refresh.
         if let Err(e) = refresh_expired_locked(account_id).await {
             crate::modules::logger::log_warn(&format!("[pi] 刷新令牌跳过: {}", e));
         }
+    } else {
+        pi_account::sync_live_credentials(account_id);
     }
     let account: PiAccount =
         pi_account::load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;

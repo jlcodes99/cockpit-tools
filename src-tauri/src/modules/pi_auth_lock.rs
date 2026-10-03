@@ -10,8 +10,9 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-/// pi's sync lock uses proper-lockfile's 10s default `stale`; stay below it.
-const STALE_AFTER: Duration = Duration::from_secs(10);
+/// pi's refresh path locks with `stale: 30s` and touches the lock every 15s,
+/// so only a lock untouched for longer than that is really abandoned.
+const STALE_AFTER: Duration = Duration::from_secs(30);
 const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const RETRY_DELAY: Duration = Duration::from_millis(50);
 
