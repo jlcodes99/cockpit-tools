@@ -3,8 +3,7 @@ import test from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { loadHookModule, deferred, settlePromises } from './helpers/reactHookHarness';
 import type { AntigravityCliStatus } from '../src/services/antigravityCliService';
-import type { AntigravityCliStatusController } from '../src/hooks/useAntigravityCliStatus';
-import { resolveAntigravityCliState } from '../src/hooks/useAntigravityCliStatus';
+import { resolveAntigravityCliAlert, resolveAntigravityCliState } from '../src/hooks/useAntigravityCliStatus';
 import { PLATFORM_PAGE_MAP } from '../src/types/platform';
 import { resolvePlatformIdFromPage } from '../src/utils/accountSyncEvents';
 
@@ -46,42 +45,64 @@ test('failed status lookup surfaces the error instead of a signed-out state', as
   view.unmount();
 });
 
-function renderPanel(cli: AntigravityCliStatusController) {
-  const view = loadHookModule(new URL('../src/components/antigravity-cli/AntigravityCliOverviewPanel.tsx', import.meta.url), {
-    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
-    '@tauri-apps/plugin-opener': { openUrl: async () => {} },
-    './AntigravityCliLaunchModal': { AntigravityCliLaunchModal: () => null },
+test('only abnormal CLI states raise an alert, keyed so each problem is shown once', () => {
+  assert.equal(resolveAntigravityCliAlert(null, null), null);
+  assert.equal(resolveAntigravityCliAlert(status, null), null);
+  assert.equal(resolveAntigravityCliAlert({ ...status, current_account_id: null }, null), null);
+  assert.equal(resolveAntigravityCliAlert({ ...status, credential_present: false, current_account_id: null }, null), null);
+  assert.deepEqual(resolveAntigravityCliAlert({ ...status, api_key_mode: true }, null), { key: 'apiKey', kind: 'apiKey', detail: null });
+  assert.deepEqual(
+    resolveAntigravityCliAlert({ ...status, credential_error: 'Keyring locked' }, null),
+    { key: 'keyringError:Keyring locked', kind: 'keyringError', detail: 'Keyring locked' },
+  );
+  assert.deepEqual(
+    resolveAntigravityCliAlert(null, 'Configuration unreadable'),
+    { key: 'error:Configuration unreadable', kind: 'error', detail: 'Configuration unreadable' },
+  );
+});
+
+const t = (key: string) => key;
+
+test('CLI flow notice uses the standard desc / permission / network structure', () => {
+  const view = loadHookModule(new URL('../src/components/antigravity-cli/AntigravityCliFlowNotice.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t }) },
   }, { localStorage: { getItem: () => null, setItem() {} } });
-  const html = renderToStaticMarkup(view.render(() => view.exports.AntigravityCliOverviewPanel({
-    cli, disabled: false, onRefresh() {}, onImport() {},
+  const html = renderToStaticMarkup(view.render(() => view.exports.AntigravityCliFlowNotice()));
+  view.unmount();
+  assert.ok(html.includes('ghcp-flow-notice'));
+  for (const key of ['title', 'desc', 'permission', 'network']) {
+    assert.ok(html.includes(`antigravityCli.flowNotice.${key}`), key);
+  }
+});
+
+function renderLaunchModal(executable: string | null, detecting = false) {
+  const view = loadHookModule(new URL('../src/components/antigravity-cli/AntigravityCliLaunchModal.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t }) },
+    '@tauri-apps/plugin-dialog': { open: async () => null },
+    '@tauri-apps/plugin-opener': { openUrl: async () => {} },
+    '../../services/antigravityCliService': { launchAntigravityCli: async () => {} },
+    '../../hooks/useEscClose': { useEscCloseTopmost() {} },
+    '../../hooks/useModalFocusTrap': { useModalFocusTrap() {} },
+  }, { localStorage: { getItem: () => null, setItem() {}, removeItem() {} } });
+  const html = renderToStaticMarkup(view.render(() => view.exports.AntigravityCliLaunchModal({
+    executable, detecting, onClose() {},
   })));
   view.unmount();
   return html;
 }
 
-const controller = (value: AntigravityCliStatus | null, error: string | null = null): AntigravityCliStatusController => ({
-  status: value, error, loading: false, refresh: async () => {},
-  state: resolveAntigravityCliState(value, error),
-});
+test('CLI launch dialog launches when installed and guides installation otherwise', () => {
+  const installed = renderLaunchModal(status.executable);
+  assert.ok(installed.includes('antigravityCli.directory'));
+  assert.ok(installed.includes('antigravityCli.launch<'));
+  assert.ok(!installed.includes('antigravityCli.install<'));
 
-test('CLI panel shows each sign-in state with the matching action', () => {
-  const managed = renderPanel(controller(status));
-  assert.ok(managed.includes('antigravityCli.state.managed'));
-  assert.ok(managed.includes('antigravityCli.launch'));
-  assert.ok(!managed.includes('antigravityCli.importLocal'));
+  const missing = renderLaunchModal(null);
+  assert.ok(missing.includes('antigravityCli.installHint'));
+  assert.ok(missing.includes('antigravityCli.install<'));
+  assert.ok(!missing.includes('antigravityCli.directory'));
 
-  const notImported = renderPanel(controller({ ...status, current_account_id: null }));
-  assert.ok(notImported.includes('antigravityCli.notImported'));
-  assert.ok(notImported.includes('antigravityCli.importLocal'));
-
-  assert.ok(renderPanel(controller({ ...status, api_key_mode: true })).includes('antigravityCli.apiKeyMode'));
-  assert.ok(renderPanel(controller({ ...status, credential_error: 'Keyring locked' })).includes('Keyring locked'));
-
-  const missing = renderPanel(controller({ ...status, executable: null, version: null }));
-  assert.ok(missing.includes('antigravityCli.install'));
-  assert.ok(!missing.includes('antigravityCli.launch<'));
-
-  const failed = renderPanel(controller(null, 'Configuration unreadable'));
-  assert.ok(failed.includes('Configuration unreadable'));
-  assert.ok(!failed.includes('antigravityCli.notSignedIn'));
+  const detecting = renderLaunchModal(null, true);
+  assert.ok(!detecting.includes('antigravityCli.install<'));
+  assert.match(detecting, /<button[^>]*disabled=""[^>]*>.*antigravityCli\.launch</);
 });

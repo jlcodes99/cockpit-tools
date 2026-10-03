@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { Plus, RefreshCw, Upload, Trash2, Rocket, X, Globe, KeyRound, Database, Plug, Copy, Check, LayoutGrid, List, Search, CircleAlert, Info, RotateCw, History, ArrowDownWideNarrow, ArrowUp, ArrowDown, Wrench, Rows3, GripVertical, Eye, EyeOff, BookOpen, FileUp, ExternalLink, FolderOpen, FolderPlus, FileText, ChevronDown } from 'lucide-react';
+import { Plus, RefreshCw, Upload, Trash2, Rocket, X, Globe, KeyRound, Database, Plug, Copy, Check, LayoutGrid, List, Search, CircleAlert, Info, RotateCw, History, ArrowDownWideNarrow, ArrowUp, ArrowDown, Wrench, Rows3, GripVertical, Eye, EyeOff, BookOpen, FileUp, ExternalLink, FolderOpen, FolderPlus, FileText, ChevronDown, SquareTerminal } from 'lucide-react';
 import * as accountService from '../services/accountService';
 import { getAntigravityTierBadge, getQuotaClass, formatResetTimeDisplay } from '../utils/account';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -10,7 +10,8 @@ import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDrop
 import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { ANTIGRAVITY_RESET_SORT_PREFIX } from '../utils/antigravityAccountSort';
-import { AntigravityCliOverviewPanel } from '../components/antigravity-cli/AntigravityCliOverviewPanel';
+import { AntigravityCliFlowNotice } from '../components/antigravity-cli/AntigravityCliFlowNotice';
+import { AntigravityCliLaunchModal } from '../components/antigravity-cli/AntigravityCliLaunchModal';
 import { AntigravityCliVersionBadge } from '../components/antigravity-cli/AntigravityCliVersionBadge';
 import { OverviewTabsHeader } from '../components/OverviewTabsHeader';
 import { FileCorruptedModal } from '../components/FileCorruptedModal';
@@ -123,7 +124,8 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
     includeExportSensitiveNotesRef,
     isCliPlatform,
     isCustomSortActive,
-    refreshAntigravityCli,
+    setShowCliLaunchModal,
+    showCliLaunchModal,
     loading,
     locale,
     maskAccountText,
@@ -236,14 +238,7 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
           subtitle={t('overview.subtitle')}
         />
 
-        {isCliPlatform && (
-          <AntigravityCliOverviewPanel
-            cli={antigravityCli}
-            disabled={showAddModal}
-            onRefresh={refreshAntigravityCli}
-            onImport={() => openAddModal('import')}
-          />
-        )}
+        {isCliPlatform && <AntigravityCliFlowNotice />}
 
         {/* 工具栏 */}
         <div className="toolbar">
@@ -388,6 +383,16 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
                 className={refreshingAll ? 'loading-spinner' : ''}
               />
             </button>
+            {isCliPlatform && (
+              <button
+                className="btn btn-secondary icon-only"
+                onClick={() => setShowCliLaunchModal(true)}
+                title={t('antigravityCli.launch', '打开 CLI')}
+                aria-label={t('antigravityCli.launch', '打开 CLI')}
+              >
+                <SquareTerminal size={14} />
+              </button>
+            )}
             {!isCliPlatform && antigravitySeamlessSwitchUnlocked && (
               <button
                 className="btn btn-secondary icon-only"
@@ -1094,6 +1099,14 @@ export function AccountsOverviewView(props: AccountsOverviewViewProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {isCliPlatform && showCliLaunchModal && (
+        <AntigravityCliLaunchModal
+          executable={antigravityCli.status?.executable ?? null}
+          detecting={!antigravityCli.status && !antigravityCli.error}
+          onClose={() => setShowCliLaunchModal(false)}
+        />
       )}
 
       {!isCliPlatform && antigravitySeamlessSwitchUnlocked && showSwitchHistoryModal && (

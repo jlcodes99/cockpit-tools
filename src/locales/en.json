@@ -3,26 +3,12 @@
     "importLocal": "Import CLI account",
     "localDesc": "Read the signed-in Antigravity CLI account from the system keyring (gemini / antigravity).",
     "switched": "CLI credential switched to {{email}}. Restart existing agy sessions to use this account.",
-    "statusLabel": "CLI sign-in status",
-    "state": {
-      "loading": "Detecting",
-      "error": "Status unavailable",
-      "keyringError": "Keyring error",
-      "apiKey": "API key mode",
-      "managed": "Signed in",
-      "notImported": "Signed in · Not imported",
-      "signedOut": "Signed out"
-    },
-    "loading": "Reading CLI sign-in status…",
-    "managed": "The signed-in CLI account is marked Current in the list below.",
-    "notImported": "A CLI credential exists. Import it to manage and switch it here.",
-    "notSignedIn": "No CLI credential found. Open agy to sign in, or switch to an authorized account below.",
     "apiKeyMode": "Gemini API key mode is active. Remove modelProvider from ~/.gemini/antigravity-cli/settings.json and restart agy to use a Google account.",
     "notInstalled": "agy not detected",
-    "refresh": "Check status",
     "launch": "Open CLI",
     "launchTitle": "Open Antigravity CLI",
     "install": "Installation guide",
+    "installHint": "agy was not found on PATH. Install Antigravity CLI using the install guide first.",
     "executable": "Executable",
     "directory": "Working directory",
     "homeDirectory": "Home directory (default)",
@@ -31,11 +17,12 @@
     "launched": "Terminal launch requested. Complete sign-in in agy if needed.",
     "flowNotice": {
       "title": "About Antigravity CLI account management (click to expand/collapse)",
-      "desc": "Antigravity CLI (agy) shares the Antigravity account library. Switching here writes the system credential used by the CLI (Linux Secret Service / macOS Keychain / Windows Credential Manager) and does not change the IDE's current account.",
-      "sharedCredential": "The CLI and Antigravity desktop share this system credential, so switching affects future sessions in both.",
-      "switching": "Exit existing agy sessions before switching, then restart agy.",
-      "logout": "To sign out, run /logout in agy and click Check status. Deleting an account here does not sign the CLI out."
-    }
+      "desc": "Antigravity CLI (agy) shares the Antigravity account library. Switching here writes the system credential used by the CLI; restart existing agy sessions afterwards. The IDE's current account is not affected. An account already signed in to the CLI can be added via Add account → Import.",
+      "permission": "Permission scope: read/write the gemini / antigravity entry in the system credential store (Linux Secret Service / macOS Keychain / Windows Credential Manager), and read ~/.gemini/antigravity-cli/settings.json to detect API key mode. All data is processed locally.",
+      "network": "Network scope: token refresh and quota queries call Google OAuth and the official Antigravity APIs. No local keys or credentials are uploaded."
+    },
+    "keyringError": "Failed to read the CLI system credential: {{error}}",
+    "statusError": "Failed to read CLI status: {{error}}"
   },
   "pelican": {
     "results": "Test results",

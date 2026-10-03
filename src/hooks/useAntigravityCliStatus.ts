@@ -24,6 +24,28 @@ export function resolveAntigravityCliState(
   return 'signedOut';
 }
 
+export interface AntigravityCliAlert {
+  /** 用于去重：同一异常只提示一次，状态恢复后再次出现时重新提示。 */
+  key: string;
+  kind: 'apiKey' | 'keyringError' | 'error';
+  detail: string | null;
+}
+
+/** 仅异常状态需要提示；正常登录态由账号卡片的「当前」标记表达。 */
+export function resolveAntigravityCliAlert(
+  status: AntigravityCliStatus | null,
+  error: string | null,
+): AntigravityCliAlert | null {
+  const state = resolveAntigravityCliState(status, error);
+  if (state === 'error') return { key: `error:${error}`, kind: 'error', detail: error };
+  if (state === 'keyringError') {
+    const detail = status?.credential_error ?? null;
+    return { key: `keyringError:${detail}`, kind: 'keyringError', detail };
+  }
+  if (state === 'apiKey') return { key: 'apiKey', kind: 'apiKey', detail: null };
+  return null;
+}
+
 export interface AntigravityCliStatusController {
   status: AntigravityCliStatus | null;
   state: AntigravityCliState;

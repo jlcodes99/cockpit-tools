@@ -121,7 +121,7 @@ import {
 import type { AntigravityAccountTarget } from '../utils/antigravityRuntimeTarget'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
 import { useRememberMfaQuery } from '../hooks/useRememberMfaQuery'
-import { useAntigravityCliStatus } from '../hooks/useAntigravityCliStatus'
+import { resolveAntigravityCliAlert, useAntigravityCliStatus } from '../hooks/useAntigravityCliStatus'
 import {
   getMfaOtpToken,
   loadSavedMfaRecords,
@@ -419,8 +419,28 @@ export function useAccountsPageController({ onNavigate, platform }: AccountsPage
   const [refreshResult, setRefreshResult] = useState<Record<string, 'success' | 'error'>>({})
   const [message, setMessage] = useState<{
     text: string
-    tone?: 'error'
+    tone?: 'error' | 'warning'
   } | null>(null)
+  const [showCliLaunchModal, setShowCliLaunchModal] = useState(false)
+  // CLI 异常走统一的提示条；同一异常只提示一次，恢复正常后再出现时重新提示
+  const cliAlertKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    // 检测中不改变去重状态，否则持续存在的异常会在每次回到窗口时重复提示
+    if (!isCliPlatform || (!antigravityCli.status && !antigravityCli.error)) return
+    const alert = resolveAntigravityCliAlert(antigravityCli.status, antigravityCli.error)
+    if (!alert) {
+      cliAlertKeyRef.current = null
+      return
+    }
+    if (alert.key === cliAlertKeyRef.current) return
+    cliAlertKeyRef.current = alert.key
+    if (alert.kind === 'apiKey') {
+      setMessage({ text: t('antigravityCli.apiKeyMode'), tone: 'warning' })
+    } else {
+      const titleKey = alert.kind === 'keyringError' ? 'antigravityCli.keyringError' : 'antigravityCli.statusError'
+      setMessage({ text: t(titleKey, { error: alert.detail ?? '' }), tone: 'error' })
+    }
+  }, [antigravityCli.error, antigravityCli.status, isCliPlatform, t])
   const [includeExportSensitiveNotes, setIncludeExportSensitiveNotes] = useState(false)
   const includeExportSensitiveNotesRef = useRef(false)
   const exportAccountIdsRef = useRef<string[]>([])
@@ -1655,6 +1675,7 @@ export function useAccountsPageController({ onNavigate, platform }: AccountsPage
     } catch (e) {
       console.error(e)
     } finally {
+      if (isCliPlatform) refreshAntigravityCli()
       await loadVerificationHistory()
       setRefreshingAll(false)
     }
@@ -3856,7 +3877,8 @@ export function useAccountsPageController({ onNavigate, platform }: AccountsPage
     isCliPlatform,
     antigravityRuntimeTarget,
     antigravityCli,
-    refreshAntigravityCli,
+    showCliLaunchModal,
+    setShowCliLaunchModal,
     grouping,
     accountGroups: grouping.groups,
     accountNoteCopiedKey,
