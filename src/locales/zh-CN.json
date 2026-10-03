@@ -1,4 +1,29 @@
 {
+  "antigravityCli": {
+    "importLocal": "导入 CLI 账号",
+    "localDesc": "从系统钥匙环（gemini / antigravity）读取 Antigravity CLI 当前登录账号。",
+    "switched": "CLI 凭据已切换为 {{email}}，请重启已有 agy 会话以使用该账号。",
+    "apiKeyMode": "当前使用 Gemini API Key。请从 ~/.gemini/antigravity-cli/settings.json 移除 modelProvider 并重启 agy，以使用 Google 账号。",
+    "notInstalled": "未检测到 agy",
+    "launch": "打开 CLI",
+    "launchTitle": "打开 Antigravity CLI",
+    "install": "安装指南",
+    "installHint": "未在 PATH 中找到 agy，请先按安装指南安装 Antigravity CLI。",
+    "executable": "可执行文件",
+    "directory": "工作目录",
+    "homeDirectory": "默认使用用户主目录",
+    "chooseDirectory": "选择工作目录",
+    "terminalHint": "使用「设置 → 默认终端」中配置的终端打开。",
+    "launched": "已请求打开终端，如需登录请在 agy 中完成。",
+    "flowNotice": {
+      "title": "Antigravity CLI 账号管理说明（点击展开/收起）",
+      "desc": "Antigravity CLI（agy）与 Antigravity 共用账号库。在此切换账号会写入 CLI 使用的系统凭据，切换后需重启已有 agy 会话；不影响 IDE 的当前账号。CLI 中已登录的账号可通过「添加账号 → 导入」加入列表。",
+      "permission": "权限范围：读写系统凭据中的 gemini / antigravity 条目（Linux Secret Service / macOS Keychain / Windows 凭据管理器），读取 ~/.gemini/antigravity-cli/settings.json 以检测 API Key 模式；所有数据仅在本机处理。",
+      "network": "网络范围：Token 刷新与配额查询需联网请求 Google OAuth 与 Antigravity 官方接口。不上传本地密钥或凭证。"
+    },
+    "keyringError": "读取 CLI 系统凭据失败：{{error}}",
+    "statusError": "读取 CLI 状态失败：{{error}}"
+  },
   "pelican": {
     "results": "测试结果",
     "usageTokens": "{{tokens}} Token",

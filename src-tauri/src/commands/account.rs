@@ -8,12 +8,14 @@ use tauri::Emitter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AntigravityRuntimeTarget {
+    Cli,
     Legacy,
     Ide,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AntigravitySwitchFlow {
+    Cli,
     Legacy,
     LocalNoLaunch,
     DualNoRestart,
@@ -28,6 +30,7 @@ enum AntigravityDesktopAuthMode {
 
 fn normalize_antigravity_runtime_target(raw: Option<&str>) -> AntigravityRuntimeTarget {
     match raw.unwrap_or("").trim().to_ascii_lowercase().as_str() {
+        "antigravity_cli" => AntigravityRuntimeTarget::Cli,
         "antigravity" => AntigravityRuntimeTarget::Legacy,
         _ => AntigravityRuntimeTarget::Ide,
     }
@@ -39,6 +42,7 @@ fn resolve_antigravity_switch_flow(
     dual_switch_no_restart_enabled: bool,
 ) -> AntigravitySwitchFlow {
     match runtime_target {
+        AntigravityRuntimeTarget::Cli => AntigravitySwitchFlow::Cli,
         AntigravityRuntimeTarget::Legacy => AntigravitySwitchFlow::Legacy,
         AntigravityRuntimeTarget::Ide if !launch_on_switch => AntigravitySwitchFlow::LocalNoLaunch,
         AntigravityRuntimeTarget::Ide if dual_switch_no_restart_enabled => {
@@ -311,6 +315,7 @@ pub async fn get_current_account(
 ) -> Result<Option<models::Account>, String> {
     let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
     let bound_account_id = match runtime_target {
+        AntigravityRuntimeTarget::Cli => return modules::antigravity_cli::current_account().await,
         AntigravityRuntimeTarget::Legacy => {
             modules::antigravity_legacy_instance::load_default_settings()
                 .ok()
@@ -345,6 +350,10 @@ pub async fn set_current_account(
 ) -> Result<(), String> {
     let runtime_target = normalize_antigravity_runtime_target(runtime_target.as_deref());
     match runtime_target {
+        AntigravityRuntimeTarget::Cli => {
+            modules::antigravity_cli::switch_account(&account_id).await?;
+            return Ok(());
+        }
         AntigravityRuntimeTarget::Legacy => {
             let _ = modules::antigravity_legacy_instance::update_default_settings(
                 Some(Some(account_id.clone())),
@@ -563,6 +572,9 @@ pub async fn switch_account(
         user_config.antigravity_launch_on_switch,
         user_config.antigravity_dual_switch_no_restart_enabled,
     ) {
+        AntigravitySwitchFlow::Cli => {
+            return modules::antigravity_cli::switch_account(&account_id).await;
+        }
         AntigravitySwitchFlow::Legacy => {
             return switch_account_legacy_antigravity(app, account_id).await;
         }
@@ -902,6 +914,22 @@ mod tests {
             resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Ide, true, false),
             AntigravitySwitchFlow::Restart
         );
+    }
+
+    #[test]
+    fn antigravity_cli_switch_never_uses_desktop_or_ide_flow() {
+        assert_eq!(
+            normalize_antigravity_runtime_target(Some("antigravity_cli")),
+            AntigravityRuntimeTarget::Cli
+        );
+        for launch in [false, true] {
+            for seamless in [false, true] {
+                assert_eq!(
+                    resolve_antigravity_switch_flow(AntigravityRuntimeTarget::Cli, launch, seamless),
+                    AntigravitySwitchFlow::Cli
+                );
+            }
+        }
     }
 
     #[test]

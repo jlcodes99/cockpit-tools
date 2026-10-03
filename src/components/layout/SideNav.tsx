@@ -59,6 +59,7 @@ interface SideNavEntry {
 
 const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   overview: 'antigravity',
+  'antigravity-cli': 'antigravity_cli',
   codex: 'codex',
   'codex-api-service': 'codex_api_service',
   claude: 'claude_manager',

@@ -346,7 +346,7 @@ pub async fn import_from_local_logic() -> Result<models::Account, String> {
     import_from_local_state_db_logic().await
 }
 
-async fn import_from_refresh_token(
+pub(crate) async fn import_from_refresh_token(
     refresh_token: String,
     source_label: &str,
 ) -> Result<models::Account, String> {

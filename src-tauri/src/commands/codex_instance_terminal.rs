@@ -1,11 +1,11 @@
 //! Terminal launch plans shared by Codex command previews and execution.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct CodexTerminalLaunchPlan {
-    pub(super) program: String,
-    pub(super) args: Vec<String>,
-    pub(super) display_command: String,
-    pub(super) terminal_name: String,
+pub(crate) struct CodexTerminalLaunchPlan {
+    pub(crate) program: String,
+    pub(crate) args: Vec<String>,
+    pub(crate) display_command: String,
+    pub(crate) terminal_name: String,
 }
 
 fn escape_applescript(value: &str) -> String {
@@ -246,7 +246,7 @@ fn build_linux_codex_terminal_launch_plan(
     }
 }
 
-pub(super) fn build_codex_terminal_launch_plan(
+pub(crate) fn build_codex_terminal_launch_plan(
     command: &str,
     terminal: &str,
 ) -> Result<CodexTerminalLaunchPlan, String> {

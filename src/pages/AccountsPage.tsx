@@ -118,8 +118,10 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence'
+import type { AntigravityAccountTarget } from '../utils/antigravityRuntimeTarget'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
 import { useRememberMfaQuery } from '../hooks/useRememberMfaQuery'
+import { resolveAntigravityCliAlert, useAntigravityCliStatus } from '../hooks/useAntigravityCliStatus'
 import {
   getMfaOtpToken,
   loadSavedMfaRecords,
@@ -168,15 +170,19 @@ import {
 
 interface AccountsPageProps {
   onNavigate?: (page: Page) => void
+  /** 固定为 Antigravity CLI 子平台；缺省时跟随桌面运行时目标（Antigravity / Antigravity IDE）。 */
+  platform?: 'antigravity_cli'
 }
 
 type AntigravitySwitchHistoryItem = accountService.AntigravitySwitchHistoryItem
 
 export type { AccountsFilterType } from './antigravityAccountOverviewModel';
 
-export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
+export function useAccountsPageController({ onNavigate, platform }: AccountsPageProps) {
   const { t, i18n } = useTranslation()
-  const antigravityRuntimeTarget = useAntigravityRuntimeTarget()
+  const desktopRuntimeTarget = useAntigravityRuntimeTarget()
+  const isCliPlatform = platform === 'antigravity_cli'
+  const antigravityRuntimeTarget: AntigravityAccountTarget = isCliPlatform ? 'antigravity_cli' : desktopRuntimeTarget
   const locale = i18n.language || 'zh-CN'
   const untaggedKey = '__untagged__'
   const {
@@ -195,6 +201,16 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     updateAccountNotes
   } = useAccountStore()
   const currentAccount = currentAccountsByTarget[antigravityRuntimeTarget] ?? null
+  const antigravityCli = useAntigravityCliStatus(
+    isCliPlatform,
+    isCliPlatform ? currentAccount?.id ?? null : null,
+    () => void fetchCurrentAccount('antigravity_cli'),
+  )
+  const { refresh: refreshAntigravityCliStatus } = antigravityCli
+  const refreshAntigravityCli = useCallback(() => {
+    void refreshAntigravityCliStatus()
+    void fetchCurrentAccount('antigravity_cli')
+  }, [fetchCurrentAccount, refreshAntigravityCliStatus])
 
   const formatSwitchError = useCallback((error: unknown) => String(error), [])
 
@@ -403,8 +419,28 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const [refreshResult, setRefreshResult] = useState<Record<string, 'success' | 'error'>>({})
   const [message, setMessage] = useState<{
     text: string
-    tone?: 'error'
+    tone?: 'error' | 'warning'
   } | null>(null)
+  const [showCliLaunchModal, setShowCliLaunchModal] = useState(false)
+  // CLI 异常走统一的提示条；同一异常只提示一次，恢复正常后再出现时重新提示
+  const cliAlertKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    // 检测中不改变去重状态，否则持续存在的异常会在每次回到窗口时重复提示
+    if (!isCliPlatform || (!antigravityCli.status && !antigravityCli.error)) return
+    const alert = resolveAntigravityCliAlert(antigravityCli.status, antigravityCli.error)
+    if (!alert) {
+      cliAlertKeyRef.current = null
+      return
+    }
+    if (alert.key === cliAlertKeyRef.current) return
+    cliAlertKeyRef.current = alert.key
+    if (alert.kind === 'apiKey') {
+      setMessage({ text: t('antigravityCli.apiKeyMode'), tone: 'warning' })
+    } else {
+      const titleKey = alert.kind === 'keyringError' ? 'antigravityCli.keyringError' : 'antigravityCli.statusError'
+      setMessage({ text: t(titleKey, { error: alert.detail ?? '' }), tone: 'error' })
+    }
+  }, [antigravityCli.error, antigravityCli.status, isCliPlatform, t])
   const [includeExportSensitiveNotes, setIncludeExportSensitiveNotes] = useState(false)
   const includeExportSensitiveNotesRef = useRef(false)
   const exportAccountIdsRef = useRef<string[]>([])
@@ -1482,6 +1518,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     loadVerificationHistory()
 
     let unlisten: UnlistenFn | undefined
+    let disposed = false
 
     listen<string>('accounts:refresh', async () => {
       await fetchAccounts()
@@ -1498,13 +1535,15 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       }
       await loadVerificationHistory()
     }).then((fn) => {
-      unlisten = fn
+      if (disposed) fn()
+      else unlisten = fn
     })
 
     return () => {
+      disposed = true
       if (unlisten) unlisten()
     }
-  }, [fetchAccounts, fetchCurrentAccount, loadVerificationHistory, refreshQuota])
+  }, [antigravityRuntimeTarget, fetchAccounts, fetchCurrentAccount, loadVerificationHistory, refreshQuota])
 
   // Click outside to close color picker
   useEffect(() => {
@@ -1636,6 +1675,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     } catch (e) {
       console.error(e)
     } finally {
+      if (isCliPlatform) refreshAntigravityCli()
       await loadVerificationHistory()
       setRefreshingAll(false)
     }
@@ -1953,7 +1993,9 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     try {
       const account = await switchAccount(accountId, antigravityRuntimeTarget)
       await fetchCurrentAccount(antigravityRuntimeTarget)
-      setMessage({ text: t('messages.switched', { email: maskAccountText(account.email) }) })
+      setMessage({ text: isCliPlatform
+        ? t('antigravityCli.switched', { email: maskAccountText(account.email) })
+        : t('messages.switched', { email: maskAccountText(account.email) }) })
     } catch (e) {
       const raw = formatSwitchError(e)
       if (!raw.startsWith('APP_PATH_NOT_FOUND:')) {
@@ -2144,7 +2186,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setAddStatus('loading')
     setAddMessage(t('modals.import.importingLocal'))
     try {
-      const imported = await accountService.importFromLocal()
+      const imported = await accountService.importFromLocal(antigravityRuntimeTarget)
       await fetchAccounts()
       await new Promise((resolve) => setTimeout(resolve, 180))
       await fetchAccounts()
@@ -3832,6 +3874,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   )
 
   return {
+    isCliPlatform,
+    antigravityRuntimeTarget,
+    antigravityCli,
+    showCliLaunchModal,
+    setShowCliLaunchModal,
     grouping,
     accountGroups: grouping.groups,
     accountNoteCopiedKey,

@@ -13,12 +13,17 @@ import {
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
 import { PlatformGroupSwitcher } from './platform/PlatformGroupSwitcher';
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget';
+import type { AntigravityAccountTarget } from '../utils/antigravityRuntimeTarget';
 
 interface OverviewTabsHeaderProps {
   active: Page;
   onNavigate?: (page: Page) => void;
   subtitle: string;
   title?: string;
+  /** 固定的 Antigravity 子平台；缺省时跟随桌面运行时目标。 */
+  platformId?: AntigravityAccountTarget;
+  /** 替换右上角默认的桌面版安装版本徽章。 */
+  installedVersion?: ReactNode;
   onOpenManual?: () => void;
 }
 
@@ -33,12 +38,16 @@ export function OverviewTabsHeader({
   onNavigate,
   subtitle,
   title,
+  platformId,
+  installedVersion,
   onOpenManual,
 }: OverviewTabsHeaderProps) {
   void subtitle;
   const { t } = useTranslation();
   const { platformGroups } = usePlatformLayoutStore();
-  const currentPlatformId: PlatformId = useAntigravityRuntimeTarget();
+  const runtimeTarget = useAntigravityRuntimeTarget();
+  const currentPlatformId: PlatformId = platformId ?? runtimeTarget;
+  const isCliPlatform = currentPlatformId === 'antigravity_cli';
   const currentGroup = useMemo(
     () => findGroupByPlatform(platformGroups, currentPlatformId),
     [platformGroups, currentPlatformId],
@@ -66,7 +75,7 @@ export function OverviewTabsHeader({
   );
   const tabs: TabSpec[] = [
     {
-      key: 'overview',
+      key: isCliPlatform ? 'antigravity-cli' : 'overview',
       label: t('overview.title'),
       icon: <span className="tab-icon">{renderPlatformIcon(currentPlatformId, 16)}</span>,
     },
@@ -101,7 +110,7 @@ export function OverviewTabsHeader({
           <ManualHelpIconButton className="platform-header-help" onClick={onOpenManual} />
         </div>
         <div className="page-top-strip-right">
-          <AntigravityInstalledVersionBadge />
+          {installedVersion ?? <AntigravityInstalledVersionBadge />}
         </div>
       </div>
       <div className="page-tabs-row page-tabs-center page-tabs-row-with-leading">

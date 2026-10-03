@@ -1,0 +1,45 @@
+/* Antigravity CLI 子平台：启动弹窗 */
+.antigravity-cli-launch-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.antigravity-cli-directory-row {
+  display: flex;
+  gap: 8px;
+}
+
+.antigravity-cli-directory-row .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.antigravity-cli-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.antigravity-cli-hint {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.antigravity-cli-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.antigravity-cli-feedback.success {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
+.antigravity-cli-feedback.error {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
