@@ -175,3 +175,72 @@
     max-height: 48vh;
   }
 }
+
+.log-viewer-content-filter-input {
+  width: 220px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border, #3a3a3a);
+  border-radius: 4px;
+  background: var(--color-bg-input, #1e1e1e);
+  color: var(--color-text, #e0e0e0);
+  font-size: 12px;
+  outline: none;
+}
+
+.log-viewer-content-filter-input:focus {
+  border-color: var(--color-accent, #4a9eff);
+}
+
+.log-viewer-content-filter-input.has-error {
+  border-color: #ff5c5c;
+}
+
+.log-viewer-content-filter-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.log-viewer-regex-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-muted, #9a9a9a);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.log-viewer-regex-toggle input {
+  cursor: pointer;
+}
+
+.log-viewer-content-filter-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-bg-hover, #333);
+  color: var(--color-text-muted, #9a9a9a);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.log-viewer-content-filter-clear:hover {
+  background: var(--color-bg-hover-strong, #444);
+  color: var(--color-text, #e0e0e0);
+}
+
+.log-viewer-content-filter-error {
+  flex-basis: 100%;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #ff5c5c;
+}
