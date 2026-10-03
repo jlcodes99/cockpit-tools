@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { PiSettingsGroup } from '../components/pi/PiSettingsGroup';
 import { normalizeLanguage } from '../i18n';
 import * as accountService from '../services/accountService';
 import { showFloatingCardWindow } from '../services/floatingCardService';
@@ -3890,6 +3891,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
               )}
             </div>
               </div>
+<PiSettingsGroup order={platformSettingsOrder.pi} />
 <div style={{ order: platformSettingsOrder.grok }}>
                 <div className="group-title">{t('quickSettings.grok.title', 'Grok CLI 设置')}</div>
                 <div className="settings-group">

@@ -679,6 +679,7 @@
             PlatformId::Kiro => build_kiro_cards(lang),
             PlatformId::Cursor => build_cursor_cards(lang),
             PlatformId::Grok => build_grok_cards(lang),
+            PlatformId::Pi => build_pi_cards(lang),
             PlatformId::Qoder => build_qoder_cards(lang),
             PlatformId::Zcode => build_zcode_cards(lang),
             PlatformId::Trae
@@ -1522,6 +1523,32 @@
             })
             .collect();
         (cards, current_id, recommended)
+    }
+
+    fn build_pi_cards(_lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let mut accounts = modules::pi_account::list_accounts().unwrap_or_default();
+        let current_id = modules::pi_account::current_account_id().ok().flatten();
+        accounts
+            .sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
+        let cards = accounts
+            .into_iter()
+            .map(|account| {
+                let providers: Vec<String> = account
+                    .providers
+                    .iter()
+                    .map(|provider| provider.provider.clone())
+                    .collect();
+                AccountCard {
+                    id: account.id,
+                    title: account.email,
+                    plan: (!providers.is_empty()).then(|| providers.join(", ")),
+                    updated_at: Some(account.last_used.max(account.created_at)),
+                    quota_rows: Vec::new(),
+                    remaining_percent: None,
+                }
+            })
+            .collect();
+        (cards, current_id, None)
     }
 
     fn build_grok_cards(lang: &str) -> (Vec<AccountCard>, Option<String>, Option<String>) {

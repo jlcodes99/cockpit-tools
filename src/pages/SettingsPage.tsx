@@ -58,6 +58,7 @@ import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useKiroAccountStore } from '../stores/useKiroAccountStore';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import { useGrokAccountStore } from '../stores/useGrokAccountStore';
+import { usePiAccountStore } from '../stores/usePiAccountStore';
 import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
@@ -71,6 +72,7 @@ import { getWindsurfAccountDisplayEmail } from '../types/windsurf';
 import { getKiroAccountDisplayEmail } from '../types/kiro';
 import { getCursorAccountDisplayEmail } from '../types/cursor';
 import { getGrokAccountDisplayEmail } from '../types/grok';
+import { getPiAccountDisplayEmail } from '../types/pi';
 import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
@@ -313,6 +315,7 @@ const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   kiro: 7,
   cursor: 8,
   grok: 9,
+  pi: 9,
   codebuddy: 10,
   codebuddy_cn: 11,
   qoder: 12,
@@ -2387,6 +2390,8 @@ export function useSettingsPageController() {
         return parseRefresh(cursorAutoRefresh) > 0;
       case 'grok':
         return parseRefresh(grokAutoRefresh) > 0;
+      case 'pi':
+        return false;
       case 'codebuddy':
         return parseRefresh(codebuddyAutoRefresh) > 0;
       case 'codebuddy_cn':
@@ -2543,6 +2548,8 @@ export function useSettingsPageController() {
         return getProviderAccounts(useCursorAccountStore, getCursorAccountDisplayEmail);
       case 'grok':
         return getProviderAccounts(useGrokAccountStore, getGrokAccountDisplayEmail);
+      case 'pi':
+        return getProviderAccounts(usePiAccountStore, getPiAccountDisplayEmail);
       case 'codebuddy':
         return getProviderAccounts(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail);
       case 'codebuddy_cn':

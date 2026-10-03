@@ -281,6 +281,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         cursor_auto_refresh_minutes: user_config.cursor_auto_refresh_minutes,
         grok_auto_refresh_minutes: user_config.grok_auto_refresh_minutes,
         grok_sync_official_auth_on_switch: user_config.grok_sync_official_auth_on_switch,
+        pi_sync_official_auth_on_switch: user_config.pi_sync_official_auth_on_switch,
+        pi_auto_refresh_minutes: user_config.pi_auto_refresh_minutes,
         grok_opencode_sync_on_switch: user_config.grok_opencode_sync_on_switch,
         grok_opencode_auth_overwrite_on_switch: user_config.grok_opencode_auth_overwrite_on_switch,
         claude_auto_refresh_minutes: user_config.claude_auto_refresh_minutes,

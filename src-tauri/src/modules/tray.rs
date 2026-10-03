@@ -204,6 +204,7 @@ pub(crate) enum PlatformId {
     Cursor,
 
     Grok,
+    Pi,
     Codebuddy,
     CodebuddyCn,
     Qoder,
@@ -216,7 +217,7 @@ pub(crate) enum PlatformId {
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 18] {
+    pub(crate) fn default_order() -> [Self; 19] {
         [
             Self::Claude,
             Self::Codex,
@@ -227,6 +228,7 @@ impl PlatformId {
             Self::Kiro,
             Self::Cursor,
             Self::Grok,
+            Self::Pi,
             Self::Codebuddy,
             Self::CodebuddyCn,
             Self::Qoder,
@@ -250,6 +252,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_KIRO => Some(Self::Kiro),
             crate::modules::tray_layout::PLATFORM_CURSOR => Some(Self::Cursor),
             crate::modules::tray_layout::PLATFORM_GROK => Some(Self::Grok),
+            crate::modules::tray_layout::PLATFORM_PI => Some(Self::Pi),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY => Some(Self::Codebuddy),
             crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN => Some(Self::CodebuddyCn),
             crate::modules::tray_layout::PLATFORM_QODER => Some(Self::Qoder),
@@ -274,6 +277,7 @@ impl PlatformId {
             Self::Kiro => crate::modules::tray_layout::PLATFORM_KIRO,
             Self::Cursor => crate::modules::tray_layout::PLATFORM_CURSOR,
             Self::Grok => crate::modules::tray_layout::PLATFORM_GROK,
+            Self::Pi => crate::modules::tray_layout::PLATFORM_PI,
             Self::Codebuddy => crate::modules::tray_layout::PLATFORM_CODEBUDDY,
             Self::CodebuddyCn => crate::modules::tray_layout::PLATFORM_CODEBUDDY_CN,
             Self::Qoder => crate::modules::tray_layout::PLATFORM_QODER,
@@ -297,6 +301,7 @@ impl PlatformId {
             Self::Kiro => "Kiro",
             Self::Cursor => "Cursor",
             Self::Grok => "Grok CLI",
+            Self::Pi => "pi",
             Self::Codebuddy => "CodeBuddy",
             Self::CodebuddyCn => "CodeBuddy CN",
             Self::Qoder => "Qoder",
@@ -320,6 +325,7 @@ impl PlatformId {
             Self::Kiro => "kiro",
             Self::Cursor => "cursor",
             Self::Grok => "grok",
+            Self::Pi => "pi",
             Self::Codebuddy => "codebuddy",
             Self::CodebuddyCn => "codebuddy-cn",
             Self::Qoder => "qoder",
@@ -926,6 +932,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
         PlatformId::Kiro => build_kiro_display_info(lang),
         PlatformId::Cursor => build_cursor_display_info(lang),
         PlatformId::Grok => build_grok_display_info(lang),
+        PlatformId::Pi => build_pi_display_info(lang),
         PlatformId::Codebuddy => build_codebuddy_display_info(lang),
         PlatformId::CodebuddyCn => build_codebuddy_cn_display_info(lang),
         PlatformId::Qoder => build_qoder_display_info(lang),
@@ -1435,6 +1442,40 @@ fn build_cursor_display_info(lang: &str) -> AccountDisplayInfo {
 }
 
 #[cfg(not(target_os = "macos"))]
+fn build_pi_display_info(lang: &str) -> AccountDisplayInfo {
+    let accounts = crate::modules::pi_account::list_accounts().unwrap_or_default();
+    let current_id = crate::modules::pi_account::current_account_id()
+        .ok()
+        .flatten();
+    let account = current_id
+        .as_deref()
+        .and_then(|id| accounts.iter().find(|account| account.id == id))
+        .or_else(|| accounts.iter().max_by_key(|account| account.last_used));
+    let Some(account) = account else {
+        return AccountDisplayInfo {
+            account: format!("📧 {}", get_text("not_logged_in", lang)),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+    let providers: Vec<&str> = account
+        .providers
+        .iter()
+        .map(|provider| provider.provider.as_str())
+        .collect();
+    let mut quota_lines = vec![if providers.is_empty() {
+        "—".to_string()
+    } else {
+        providers.join(", ")
+    }];
+    if let Some(model) = account.default_model.as_deref() {
+        quota_lines.push(model.to_string());
+    }
+    AccountDisplayInfo {
+        account: format!("📧 {}", account.email),
+        quota_lines,
+    }
+}
+
 fn build_grok_display_info(lang: &str) -> AccountDisplayInfo {
     let accounts = crate::modules::grok_account::list_accounts_checked().unwrap_or_default();
     let current_id = crate::modules::grok_account::current_account_id()
