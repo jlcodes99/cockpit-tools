@@ -345,6 +345,55 @@ fn managed_and_default_commands_keep_selected_profiles_and_proxy_environment() {
 }
 
 #[test]
+fn default_windows_exe_launch_overrides_stale_profile_environment_and_arguments() {
+    let mut command = Command::new("ChatGPT.exe");
+    command
+        .env("CODEX_HOME", "stale-home")
+        .env("CODEX_ELECTRON_USER_DATA_PATH", "stale-data");
+    apply_codex_windows_profile_to_command(
+        &mut command,
+        "default-home",
+        Some(r"C:\Users\User\AppData\Roaming\Codex\web\Codex"),
+    );
+
+    let env = command
+        .get_envs()
+        .map(|(key, value)| {
+            (
+                key.to_string_lossy().into_owned(),
+                value.map(|value| value.to_string_lossy().into_owned()),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(env["CODEX_HOME"].as_deref(), Some("default-home"));
+    assert_eq!(
+        env["CODEX_ELECTRON_USER_DATA_PATH"].as_deref(),
+        Some(r"C:\Users\User\AppData\Roaming\Codex\web\Codex")
+    );
+
+    let args = build_codex_windows_profile_args(
+        &[
+            "--user-data-dir=stale-data".into(),
+            "--user-data-dir".into(),
+            "stale split value".into(),
+            "--remote-debugging-port=9222".into(),
+        ],
+        Some(Path::new(r"C:\Users\User\AppData\Roaming\Codex\web\Codex")),
+    );
+    assert_eq!(
+        args.iter()
+            .filter(|arg| arg.starts_with("--user-data-dir"))
+            .count(),
+        1
+    );
+    assert!(args.contains(
+        &r"--user-data-dir=C:\Users\User\AppData\Roaming\Codex\web\Codex".into()
+    ));
+    assert!(!args.iter().any(|arg| arg == "stale split value"));
+    assert!(args.contains(&"--remote-debugging-port=9222".into()));
+}
+
+#[test]
 fn activation_only_invokes_gui_helper_and_does_not_query_registration() {
     let request = request(
         Some("home"),
