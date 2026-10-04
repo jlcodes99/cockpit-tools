@@ -1,6 +1,6 @@
 // Process 模块：Codex process discovery, startup and port-process management。
 // 通过 include! 保持原 modules::process 作用域和平台分支行为。
-/// 启动 Codex 默认桌面实例（不注入 CODEX_HOME，支持附加参数）。
+/// 启动 Codex 默认桌面实例，并使用 Cockpit 当前默认 profile。
 pub fn start_codex_default(extra_args: &[String]) -> Result<u32, String> {
     start_codex_default_internal(extra_args, false, None)
 }
@@ -34,6 +34,32 @@ fn build_codex_app_launch_args(extra_args: &[String]) -> Vec<String> {
 
 fn build_codex_default_launch_args(extra_args: &[String]) -> Vec<String> {
     build_codex_app_launch_args(extra_args)
+}
+
+#[cfg(target_os = "windows")]
+fn default_codex_windows_launch_profile() -> (String, Option<String>) {
+    let codex_home = crate::modules::codex_account::get_codex_home()
+        .to_string_lossy()
+        .to_string();
+    let app_user_data_dir = get_default_codex_windows_app_user_data_dir();
+    (codex_home, app_user_data_dir)
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn apply_codex_windows_profile_to_command(
+    command: &mut Command,
+    codex_home: &str,
+    app_user_data_dir: Option<&str>,
+) {
+    command.env("CODEX_HOME", codex_home);
+    match app_user_data_dir {
+        Some(path) => {
+            command.env("CODEX_ELECTRON_USER_DATA_PATH", path);
+        }
+        None => {
+            command.env_remove("CODEX_ELECTRON_USER_DATA_PATH");
+        }
+    }
 }
 
 #[cfg(any(test, target_os = "windows"))]
@@ -248,9 +274,9 @@ fn start_codex_default_internal(
 
         let mut launch_path_for_probe = resolve_codex_launch_path().ok();
         let before_probe_started = Instant::now();
-        let default_home = crate::modules::codex_account::get_codex_home()
-            .to_string_lossy()
-            .to_string();
+        let (default_home, default_app_user_data_dir) = default_codex_windows_launch_profile();
+        // Store activation runs outside Cockpit's process environment, so carry
+        // the default profile explicitly instead of inheriting a stale profile.
         let default_app_dirs = get_default_codex_windows_app_user_data_dirs(default_home.as_str());
         let before_pids: HashSet<u32> = launch_path_for_probe
             .as_ref()
@@ -292,8 +318,8 @@ fn start_codex_default_internal(
                 .as_secs();
             match launch_codex_via_store_app_user_model_id(
                 &app_user_model_id,
-                None,
-                None,
+                Some(default_home.as_str()),
+                default_app_user_data_dir.as_deref(),
                 &args,
                 &launch_env,
             ) {
@@ -365,6 +391,11 @@ fn start_codex_default_internal(
         ));
         let mut cmd = Command::new(&launch_path);
         apply_effective_proxy_env_to_command(&mut cmd, egress_proxy_url);
+        apply_codex_windows_profile_to_command(
+            &mut cmd,
+            &default_home,
+            default_app_user_data_dir.as_deref(),
+        );
         if should_detach_child() {
             cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
             cmd.stdin(Stdio::null())
@@ -372,7 +403,10 @@ fn start_codex_default_internal(
                 .stderr(Stdio::null());
         }
         // Codex 是 GUI 应用，不设置 CREATE_NO_WINDOW，否则会导致其内部 spawn CLI 子进程失败。
-        let args = build_codex_default_launch_args(extra_args);
+        let args = build_codex_windows_profile_args(
+            &build_codex_default_launch_args(extra_args),
+            default_app_user_data_dir.as_deref().map(Path::new),
+        );
         for arg in args {
             cmd.arg(arg);
         }
