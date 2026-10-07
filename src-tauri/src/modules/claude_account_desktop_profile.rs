@@ -1871,6 +1871,12 @@ pub fn restore_desktop_account_to_profile(
     target_dir: &Path,
     backup_existing: bool,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let _handoff_gate = {
+        let gate = crate::modules::claude_session_handoff::profile_operation()?;
+        crate::modules::claude_session_handoff::require_default_profile_ready(target_dir)?;
+        gate
+    };
     let account = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
     if account.auth_mode != ClaudeAuthMode::DesktopOAuth {
         return Err("绑定账号不是 Claude 登录态，无法写入 Claude profile。".to_string());
@@ -1900,6 +1906,12 @@ pub fn restore_desktop_gateway_account_to_profile(
     target_dir: &Path,
     backup_existing: bool,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let _handoff_gate = {
+        let gate = crate::modules::claude_session_handoff::profile_operation()?;
+        crate::modules::claude_session_handoff::require_default_profile_ready(target_dir)?;
+        gate
+    };
     let account = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
     if account.auth_mode != ClaudeAuthMode::DesktopGateway {
         return Err("绑定账号不是 Claude Gateway 类型。".to_string());

@@ -53,3 +53,8 @@ junction = "2.0"
 # Backport only the upstream Windows input-lock fix; see vendor/tao/COCKPIT-PATCH.md.
 [patch.crates-io]
 tao = { path = "vendor/tao" }
+
+# Local preview bundles use dev mode. Keep multi-gigabyte content witnesses
+# fast without enabling optimizations for application code or weakening checks.
+[profile.dev.package.sha2]
+opt-level = 3
