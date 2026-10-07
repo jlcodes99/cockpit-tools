@@ -550,14 +550,12 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 			}
 		}
 	}
-	if strings.EqualFold(strings.TrimSpace(modelID), codexBuiltinGPT6AstraModelID) {
-		return cloneModelInfo(codexBuiltinGPT6AstraModelInfo())
-	}
-	if strings.EqualFold(strings.TrimSpace(modelID), codexBuiltinGPT6SolModelID) {
-		return cloneModelInfo(codexBuiltinGPT6SolModelInfo())
-	}
-	if strings.EqualFold(strings.TrimSpace(modelID), codexBuiltinGPT6LunaModelID) {
-		return cloneModelInfo(codexBuiltinGPT6LunaModelInfo())
+	for _, models := range [][]*ModelInfo{withCodexPaidBuiltins(nil), WithXAIBuiltins(nil)} {
+		for _, model := range models {
+			if strings.EqualFold(strings.TrimSpace(modelID), model.ID) {
+				return cloneModelInfo(model)
+			}
+		}
 	}
 
 	return nil

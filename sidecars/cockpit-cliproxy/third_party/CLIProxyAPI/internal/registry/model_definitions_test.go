@@ -1,6 +1,35 @@
 package registry
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestFallbackModelsMatchShippedCapabilities(t *testing.T) {
+	// A stale remote catalog must not remove the shipped capability fallback.
+	modelsCatalogStore.mu.Lock()
+	original := modelsCatalogStore.data
+	modelsCatalogStore.data = &staticModelsJSON{}
+	modelsCatalogStore.mu.Unlock()
+	t.Cleanup(func() {
+		modelsCatalogStore.mu.Lock()
+		modelsCatalogStore.data = original
+		modelsCatalogStore.mu.Unlock()
+	})
+	for _, models := range [][]*ModelInfo{withCodexPaidBuiltins(nil), WithXAIBuiltins(nil)} {
+		for _, want := range models {
+			for _, id := range []string{want.ID, " " + strings.ToUpper(want.ID) + " "} {
+				if got := LookupStaticModelInfo(id); !reflect.DeepEqual(got, want) {
+					t.Fatalf("LookupStaticModelInfo(%q) = %#v, want shipped capabilities %#v", id, got, want)
+				}
+			}
+		}
+	}
+	if got := LookupStaticModelInfo("gpt-6-unknown"); got != nil {
+		t.Fatalf("unknown model acquired capabilities: %#v", got)
+	}
+}
 
 func TestGetStaticModelDefinitionsByChannelSupportsGeminiInteractions(t *testing.T) {
 	models := GetStaticModelDefinitionsByChannel("gemini-interactions")

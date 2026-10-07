@@ -4,7 +4,27 @@ import (
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/thinking"
+	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/thinking/provider/codex"
+	"github.com/tidwall/gjson"
 )
+
+func TestConfiguredGPT6ModelsPreserveResponsesLiteReasoning(t *testing.T) {
+	for _, model := range []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"} {
+		info := ResolveModelInfo(model, "codex", nil)
+		if info.Thinking == nil {
+			t.Fatalf("%s has no reasoning capabilities", model)
+		}
+		body := []byte(`{"reasoning":{"effort":"high","context":"all_turns"}}`)
+		out, err := thinking.ApplyThinkingWithModelInfo(body, body, model, "openai-response", "codex", "codex", info)
+		if err != nil {
+			t.Fatalf("%s: %v", model, err)
+		}
+		if gjson.GetBytes(out, "reasoning.context").String() != "all_turns" || gjson.GetBytes(out, "reasoning.effort").String() != "high" {
+			t.Fatalf("%s lost Responses Lite reasoning: %s", model, out)
+		}
+	}
+}
 
 func TestResolveModelInfoUsesSuffixFreeStaticCapabilities(t *testing.T) {
 	info := ResolveModelInfo("claude-opus-4-6(high)", "claude", nil)
