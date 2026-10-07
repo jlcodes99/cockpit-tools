@@ -11,7 +11,11 @@ use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "macos")]
 const CODEX_APP_SERVER_MACOS_EXECUTABLES: &[&str] = &[
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",
     "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex",
     "/Applications/Codex.app/Contents/Resources/codex",
 ];
 const CODEX_APP_SERVER_EXECUTABLE_ENV: &str = "CODEX_APP_SERVER_EXECUTABLE";
@@ -377,21 +381,35 @@ pub(crate) fn official_app_server_executable() -> Result<PathBuf, String> {
 fn add_codex_app_server_candidates(candidates: &mut Vec<PathBuf>) {
     let configured_path = crate::modules::config::get_user_config().codex_app_path;
     if !configured_path.trim().is_empty() {
-        push_candidate_from_codex_launch_path(candidates, Path::new(configured_path.trim()));
+        push_candidates_from_codex_launch_path(candidates, Path::new(configured_path.trim()));
     }
 
     if let Some(detected_path) = crate::modules::process::detect_codex_exec_path() {
-        push_candidate_from_codex_launch_path(candidates, &detected_path);
+        push_candidates_from_codex_launch_path(candidates, &detected_path);
     }
 
     #[cfg(target_os = "macos")]
-    for executable in CODEX_APP_SERVER_MACOS_EXECUTABLES {
-        push_candidate(candidates, PathBuf::from(executable));
+    {
+        for executable in CODEX_APP_SERVER_MACOS_EXECUTABLES {
+            push_candidate(candidates, PathBuf::from(executable));
+        }
+        if let Some(home) = dirs::home_dir() {
+            for subpath in [
+                "Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+                "Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",
+                "Applications/ChatGPT.app/Contents/Resources/codex",
+                "Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+                "Applications/Codex.app/Contents/Resources/codex-cli/bin/codex",
+                "Applications/Codex.app/Contents/Resources/codex",
+            ] {
+                push_candidate(candidates, home.join(subpath));
+            }
+        }
     }
 }
 
-fn push_candidate_from_codex_launch_path(candidates: &mut Vec<PathBuf>, launch_path: &Path) {
-    if let Some(app_server_path) = app_server_executable_from_codex_launch_path(launch_path) {
+fn push_candidates_from_codex_launch_path(candidates: &mut Vec<PathBuf>, launch_path: &Path) {
+    for app_server_path in app_server_candidates_from_codex_launch_path(launch_path) {
         push_candidate(candidates, app_server_path);
     }
 }
@@ -403,52 +421,86 @@ fn push_candidate(candidates: &mut Vec<PathBuf>, path: PathBuf) {
     candidates.push(path);
 }
 
-fn app_server_executable_from_codex_launch_path(path: &Path) -> Option<PathBuf> {
+fn app_server_candidates_from_codex_launch_path(path: &Path) -> Vec<PathBuf> {
     if path.as_os_str().is_empty() {
-        return None;
+        return Vec::new();
     }
 
     if is_existing_app_server_path_shape(path) {
-        return Some(path.to_path_buf());
+        return vec![path.to_path_buf()];
     }
 
-    if path_file_name_eq(path, "codex.app") {
-        return Some(path.join("Contents").join("Resources").join("codex"));
+    let contents_dir =
+        if path_file_name_eq(path, "codex.app") || path_file_name_eq(path, "chatgpt.app") {
+            Some(path.join("Contents"))
+        } else if (path_file_name_eq(path, "codex") || path_file_name_eq(path, "chatgpt"))
+            && parent_file_name_eq(path, "macos")
+        {
+            path.parent().and_then(Path::parent).map(Path::to_path_buf)
+        } else {
+            None
+        };
+
+    if let Some(contents) = contents_dir {
+        return vec![
+            contents
+                .join("Resources")
+                .join("codex-cli")
+                .join("CodexCLI.app")
+                .join("Contents")
+                .join("MacOS")
+                .join("codex"),
+            contents
+                .join("Resources")
+                .join("codex-cli")
+                .join("bin")
+                .join("codex"),
+            contents.join("Resources").join("codex"),
+        ];
     }
 
-    if path_file_name_eq(path, "chatgpt.app") {
-        return Some(path.join("Contents").join("Resources").join("codex"));
-    }
-
-    if path_file_name_eq(path, "codex") && parent_file_name_eq(path, "macos") {
-        let contents_dir = path.parent()?.parent()?;
-        return Some(contents_dir.join("Resources").join("codex"));
-    }
-
-    if path_file_name_eq(path, "chatgpt") && parent_file_name_eq(path, "macos") {
-        let contents_dir = path.parent()?.parent()?;
-        return Some(contents_dir.join("Resources").join("codex"));
-    }
+    let mut candidates = Vec::new();
 
     let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     if path_file_name_eq(&resolved, "chatgpt") && parent_file_name_eq(&resolved, "chatgpt") {
-        return Some(resolved.parent()?.join("resources").join("codex"));
+        if let Some(parent) = resolved.parent() {
+            candidates.push(parent.join("resources").join("codex"));
+        }
     }
 
-    if path_file_name_eq(path, "codex.exe") {
-        return Some(path.parent()?.join("resources").join("codex.exe"));
+    if path_file_name_eq(path, "codex.exe") || path_file_name_eq(path, "chatgpt.exe") {
+        if let Some(parent) = path.parent() {
+            candidates.push(parent.join("resources").join("codex.exe"));
+        }
     }
 
-    if path_file_name_eq(path, "chatgpt.exe") {
-        return Some(path.parent()?.join("resources").join("codex.exe"));
-    }
+    candidates
+}
 
-    None
+fn app_server_executable_from_codex_launch_path(path: &Path) -> Option<PathBuf> {
+    let candidates = app_server_candidates_from_codex_launch_path(path);
+    candidates
+        .iter()
+        .find(|candidate| candidate.exists())
+        .cloned()
+        .or_else(|| candidates.into_iter().next())
 }
 
 fn is_existing_app_server_path_shape(path: &Path) -> bool {
-    if path_file_name_eq(path, "codex") && parent_file_name_eq(path, "resources") {
-        return true;
+    if path_file_name_eq(path, "codex") {
+        if parent_file_name_eq(path, "resources") || parent_file_name_eq(path, "bin") {
+            return true;
+        }
+        if parent_file_name_eq(path, "macos") {
+            let in_codex_cli = path
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::parent)
+                .is_some_and(|ancestor| path_file_name_eq(ancestor, "codexcli.app"));
+            if in_codex_cli {
+                return true;
+            }
+        }
     }
     path_file_name_eq(path, "codex.exe") && parent_file_name_eq(path, "resources")
 }
@@ -583,7 +635,9 @@ mod tests {
 
         assert_eq!(
             app_server_path,
-            PathBuf::from("/Applications/Codex.app/Contents/Resources/codex")
+            PathBuf::from(
+                "/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+            )
         );
     }
 
@@ -595,7 +649,9 @@ mod tests {
 
         assert_eq!(
             app_server_path,
-            PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex")
+            PathBuf::from(
+                "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+            )
         );
     }
 
@@ -607,7 +663,9 @@ mod tests {
 
         assert_eq!(
             app_server_path,
-            PathBuf::from("/Applications/Codex.app/Contents/Resources/codex")
+            PathBuf::from(
+                "/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+            )
         );
     }
 
@@ -619,7 +677,46 @@ mod tests {
 
         assert_eq!(
             app_server_path,
-            PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex")
+            PathBuf::from(
+                "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+            )
+        );
+    }
+
+    #[test]
+    fn resolves_all_macos_bundle_app_server_candidates() {
+        let launch_path = PathBuf::from("/Applications/ChatGPT.app");
+        let candidates = app_server_candidates_from_codex_launch_path(&launch_path);
+        assert_eq!(
+            candidates,
+            vec![
+                PathBuf::from(
+                    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+                ),
+                PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"),
+                PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex"),
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_existing_macos_codex_cli_helper_app_server_path() {
+        let app_server_path = PathBuf::from(
+            "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+        );
+        assert_eq!(
+            app_server_executable_from_codex_launch_path(&app_server_path),
+            Some(app_server_path)
+        );
+    }
+
+    #[test]
+    fn keeps_existing_macos_bin_codex_app_server_path() {
+        let app_server_path =
+            PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex");
+        assert_eq!(
+            app_server_executable_from_codex_launch_path(&app_server_path),
+            Some(app_server_path)
         );
     }
 
