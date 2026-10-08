@@ -55,6 +55,11 @@ interface CodexPortableAgentIdentityStorage extends JsonRecord {
 
 interface CodexExportBuildOptions {
   includeSensitiveNotes?: boolean;
+  /**
+   * 账号 id → 分组（文件夹）名称。
+   * 仅用于 `cockpit_tools` 格式：导出时写入 `group`，导入方据此恢复分组归类。
+   */
+  accountGroupNames?: Record<string, string>;
 }
 
 export interface CodexExportDocument {
@@ -572,13 +577,48 @@ function toCockpitToolsPortableStorage(
   account: CodexAccount,
   options: CodexExportBuildOptions = {},
 ): CodexPortableTokenStorage | JsonRecord {
-  if (hasAgentIdentity(account)) {
-    return toPortableAgentIdentityStorage(account, options);
+  const payload: JsonRecord = hasAgentIdentity(account)
+    ? toPortableAgentIdentityStorage(account, options)
+    : isCodexApiKeyAccount(account)
+      ? toPortableApiKeyStorage(account, options)
+      : toPortableTokenStorage(account, options);
+
+  // 社区 #2213：Cockpit Tools 格式随账号一起带上标签、备注名与分组（文件夹），
+  // 便于其他设备/其他用户导入后直接沿用同一套分类管理。
+  appendCockpitToolsAccountMetadata(payload, account, options);
+  return payload;
+}
+
+function appendCockpitToolsAccountMetadata(
+  payload: JsonRecord,
+  account: CodexAccount,
+  options: CodexExportBuildOptions,
+): void {
+  const tags = Array.from(
+    new Set(
+      (account.tags || [])
+        .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+        .filter(Boolean),
+    ),
+  );
+  if (tags.length > 0) {
+    payload.tags = tags;
   }
-  if (isCodexApiKeyAccount(account)) {
-    return toPortableApiKeyStorage(account, options);
+
+  const accountName = account.account_name?.trim();
+  if (accountName) {
+    payload.account_name = accountName;
   }
-  return toPortableTokenStorage(account, options);
+
+  const accountStructure = account.account_structure?.trim();
+  if (accountStructure) {
+    payload.account_structure = accountStructure;
+  }
+
+  const groupName = options.accountGroupNames?.[account.id]?.trim();
+  if (groupName) {
+    payload.group = groupName;
+  }
 }
 
 export function parseCockpitToolsCodexExport(rawJson: string): CodexAccount[] {

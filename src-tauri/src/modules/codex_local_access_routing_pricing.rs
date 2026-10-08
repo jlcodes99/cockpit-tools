@@ -124,7 +124,11 @@ fn resolve_remaining_quota(account: &CodexAccount) -> Option<i32> {
     if quota.weekly_window_present.unwrap_or(true) {
         percentages.push(quota.weekly_percentage.clamp(0, 100));
     }
-    percentages.into_iter().min()
+    let remaining = percentages.into_iter().min();
+    if remaining == Some(0) && quota_has_usable_credits(quota) {
+        return Some(1);
+    }
+    remaining
 }
 
 fn resolve_subscription_expiry_ms(account: &CodexAccount) -> Option<i64> {
@@ -375,6 +379,83 @@ fn normalize_quota_limit_name_to_model_pattern(limit_name: &str) -> Option<Strin
     Some(trimmed.to_ascii_lowercase().replace(' ', "-"))
 }
 
+fn normalize_quota_entitlement_key(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['_', ' '], "-")
+}
+
+fn is_gpt_reserve_entitlement_name(value: &str) -> bool {
+    let normalized = normalize_quota_entitlement_key(value);
+    normalized == CODEX_GPT_RESERVE_MODEL_ID
+        || normalized == "gptreserve"
+        || normalized.starts_with("gpt-reserve-")
+        || normalized.starts_with("gptreserve-")
+}
+
+fn additional_rate_limit_allowed(entry: &Value) -> Option<bool> {
+    entry
+        .get("rate_limit")
+        .or_else(|| entry.get("rateLimit"))
+        .and_then(|rate_limit| rate_limit.get("allowed"))
+        .and_then(Value::as_bool)
+        .or_else(|| entry.get("allowed").and_then(Value::as_bool))
+}
+
+fn additional_rate_limit_matches_gpt_reserve(entry: &Value, object_key: Option<&str>) -> bool {
+    [
+        object_key,
+        entry.get("limit_name").and_then(Value::as_str),
+        entry.get("limitName").and_then(Value::as_str),
+        entry.get("name").and_then(Value::as_str),
+        entry.get("metered_feature").and_then(Value::as_str),
+        entry.get("meteredFeature").and_then(Value::as_str),
+    ]
+    .into_iter()
+    .flatten()
+    .any(is_gpt_reserve_entitlement_name)
+}
+
+fn account_has_gpt_reserve_entitlement(account: &CodexAccount) -> bool {
+    // Listing is independent of eligibility. Dispatch follows the official
+    // quota-side predicate, without emulating desktop UI feature gates.
+    if account.is_api_key_auth() {
+        return false;
+    }
+    let Some(raw) = account
+        .quota
+        .as_ref()
+        .and_then(|quota| quota.raw_data.as_ref())
+    else {
+        return false;
+    };
+    if raw.pointer("/rate_limit/allowed").and_then(Value::as_bool) != Some(false)
+        || raw.pointer("/rate_limit_upsell/banner_type").and_then(Value::as_str)
+            != Some("luna_reserve")
+    {
+        return false;
+    }
+    let Some(additional) = raw
+        .get("additional_rate_limits")
+        .or_else(|| raw.get("additionalRateLimits"))
+    else {
+        return false;
+    };
+
+    match additional {
+        Value::Array(entries) => entries.iter().any(|entry| {
+            additional_rate_limit_matches_gpt_reserve(entry, None)
+                && additional_rate_limit_allowed(entry) == Some(true)
+        }),
+        Value::Object(entries) => entries.iter().any(|(name, entry)| {
+            additional_rate_limit_matches_gpt_reserve(entry, Some(name))
+                && additional_rate_limit_allowed(entry) == Some(true)
+        }),
+        _ => false,
+    }
+}
+
 fn metered_features_in_quota_raw(raw: &Value) -> HashSet<String> {
     let mut features = HashSet::new();
     let Some(limits) = raw.get("additional_rate_limits").and_then(Value::as_array) else {
@@ -501,6 +582,9 @@ fn sidecar_excluded_models_for_account(
         account,
         metered_feature_patterns,
     ));
+    if !account_has_gpt_reserve_entitlement(account) {
+        excluded.push(CODEX_GPT_RESERVE_MODEL_ID.to_string());
+    }
     if !account.api_model_mappings.is_empty() {
         let mapped = account_api_model_mapping_ids(account);
         excluded.extend(
@@ -829,6 +913,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         weekly: CodexLocalAccessStatsWindow {
             since: window_starts.week,
@@ -837,6 +923,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         monthly: CodexLocalAccessStatsWindow {
             since: window_starts.month,
@@ -845,6 +933,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         events: Vec::new(),
     }
@@ -904,6 +994,8 @@ fn empty_stats_window(since: i64, updated_at: i64) -> CodexLocalAccessStatsWindo
         accounts: Vec::new(),
         models: Vec::new(),
         api_keys: Vec::new(),
+        trend: Vec::new(),
+        trend_hourly: false,
     }
 }
 
@@ -992,6 +1084,7 @@ fn model_pricing(
 ) -> CodexLocalAccessModelPricing {
     CodexLocalAccessModelPricing {
         model_id: model_id.to_string(),
+        standard_long_price_override: false,
         long_context_threshold_tokens,
         input_usd_per_million: standard.input_usd_per_million,
         output_usd_per_million: standard.output_usd_per_million,
@@ -1060,22 +1153,48 @@ const fn codex_price(
 }
 
 /// Default Codex/OpenAI price book for local cost estimation (USD / 1M tokens).
-/// Bump `DEFAULT_MODEL_PRICING_VERSION` when defaults change so saved overrides
-/// reseal and historical estimates reprice.
+/// Bump `DEFAULT_MODEL_PRICING_VERSION` when defaults change so former presets
+/// can be replaced and historical estimates reprice.
 const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
     // Keep in sync with supported Codex models and public OpenAI rates.
+    // OpenAI Standard/Fast prices, USD per 1M tokens:
+    // https://developers.openai.com/api/docs/models/gpt-6.1-sol
+    CodexLocalAccessPriceBookEntry {
+        model_id: "gpt-6.1-sol",
+        session_long_context: true,
+        standard: codex_price(2.0, 0.1, 10.0),
+        priority: Some(codex_price(4.0, 0.2, 20.0)),
+    },
+    CodexLocalAccessPriceBookEntry {
+        model_id: "gpt-6-astra",
+        session_long_context: true,
+        standard: codex_price(10.0, 1.0, 50.0),
+        priority: Some(codex_price(20.0, 2.0, 100.0)),
+    },
+    CodexLocalAccessPriceBookEntry {
+        model_id: "gpt-6-sol",
+        session_long_context: true,
+        standard: codex_price(2.0, 0.2, 10.0),
+        priority: Some(codex_price(4.0, 0.4, 20.0)),
+    },
+    CodexLocalAccessPriceBookEntry {
+        model_id: "gpt-6-luna",
+        session_long_context: true,
+        standard: codex_price(0.1, 0.01, 0.5),
+        priority: Some(codex_price(0.2, 0.02, 1.0)),
+    },
     CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.6-sol",
         session_long_context: true,
-        standard: codex_price(5.0, 0.5, 30.0),
-        priority: Some(codex_price(10.0, 1.0, 60.0)),
+        standard: codex_price(4.0, 0.4, 20.0),
+        priority: Some(codex_price(8.0, 0.8, 40.0)),
     },
     CodexLocalAccessPriceBookEntry {
         // Bare gpt-5.6 uses sol-tier rates.
         model_id: "gpt-5.6",
         session_long_context: true,
-        standard: codex_price(5.0, 0.5, 30.0),
-        priority: Some(codex_price(10.0, 1.0, 60.0)),
+        standard: codex_price(4.0, 0.4, 20.0),
+        priority: Some(codex_price(8.0, 0.8, 40.0)),
     },
     CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.6-terra",
@@ -1101,73 +1220,7 @@ const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
         standard: codex_price(5.0, 0.5, 30.0),
         priority: Some(codex_price(10.0, 1.0, 60.0)),
     },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.4",
-        session_long_context: true,
-        standard: codex_price(2.5, 0.25, 15.0),
-        priority: Some(codex_price(5.0, 0.5, 30.0)),
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.4-mini",
-        session_long_context: false,
-        standard: codex_price(0.75, 0.075, 4.5),
-        priority: Some(codex_price(1.5, 0.15, 9.0)),
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.4-nano",
-        session_long_context: false,
-        standard: codex_price(0.2, 0.02, 1.25),
-        priority: None,
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.3-codex",
-        session_long_context: false,
-        standard: codex_price(1.75, 0.175, 14.0),
-        priority: Some(codex_price(3.5, 0.35, 28.0)),
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.3-codex-spark",
-        session_long_context: false,
-        standard: codex_price(1.75, 0.175, 14.0),
-        priority: Some(codex_price(3.5, 0.35, 28.0)),
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.2",
-        session_long_context: false,
-        standard: codex_price(1.75, 0.175, 14.0),
-        priority: Some(codex_price(3.5, 0.35, 28.0)),
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.2-codex",
-        session_long_context: false,
-        standard: codex_price(1.75, 0.175, 14.0),
-        priority: Some(codex_price(3.5, 0.35, 28.0)),
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.1-codex",
-        session_long_context: false,
-        standard: codex_price(1.25, 0.125, 10.0),
-        priority: Some(codex_price(2.5, 0.25, 20.0)),
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.1-codex-max",
-        session_long_context: false,
-        standard: codex_price(1.25, 0.125, 10.0),
-        // No explicit priority rates -> fall back to x2 at billing time.
-        priority: None,
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.1-codex-mini",
-        session_long_context: false,
-        standard: codex_price(0.25, 0.025, 2.0),
-        priority: Some(codex_price(0.45, 0.045, 3.6)),
-    },
-    CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5-codex",
-        session_long_context: false,
-        standard: codex_price(1.25, 0.125, 10.0),
-        priority: None,
-    },
+
 ];
 
 fn derived_standard_long_price(standard: CodexLocalAccessPrice) -> CodexLocalAccessPrice {
@@ -1262,6 +1315,18 @@ fn normalize_known_openai_codex_model(model: &str) -> Option<String> {
         }
     }
 
+    if normalized.contains("gpt-6.1-sol") {
+        return Some("gpt-6.1-sol".to_string());
+    }
+    if normalized.contains("gpt-6-astra") {
+        return Some("gpt-6-astra".to_string());
+    }
+    if normalized.contains("gpt-6-sol") {
+        return Some("gpt-6-sol".to_string());
+    }
+    if normalized.contains("gpt-6-luna") {
+        return Some("gpt-6-luna".to_string());
+    }
     if normalized.contains("gpt-5.6-sol") {
         return Some("gpt-5.6-sol".to_string());
     }
@@ -1312,12 +1377,6 @@ fn normalize_known_openai_codex_model(model: &str) -> Option<String> {
     if normalized.contains("gpt-5-codex") || normalized == "gpt-5-codex" {
         return Some("gpt-5-codex".to_string());
     }
-    if normalized.contains("codex") {
-        return Some("gpt-5.3-codex".to_string());
-    }
-    if normalized.contains("gpt-5") {
-        return Some("gpt-5.4".to_string());
-    }
     None
 }
 
@@ -1328,6 +1387,7 @@ fn price_book_entry_for_model(model_id: &str) -> Option<&'static CodexLocalAcces
     }
     if let Some(entry) = CODEX_LOCAL_ACCESS_PRICE_BOOK
         .iter()
+        .chain(HISTORICAL_CODEX_MODEL_PRICE_BOOK.iter())
         .find(|item| item.model_id.eq_ignore_ascii_case(trimmed))
     {
         return Some(entry);
@@ -1335,12 +1395,16 @@ fn price_book_entry_for_model(model_id: &str) -> Option<&'static CodexLocalAcces
     let normalized = normalize_known_openai_codex_model(trimmed)?;
     CODEX_LOCAL_ACCESS_PRICE_BOOK
         .iter()
+        .chain(HISTORICAL_CODEX_MODEL_PRICE_BOOK.iter())
         .find(|item| item.model_id == normalized.as_str())
 }
 
 fn parse_billing_service_tier(service_tier: Option<&str>) -> CodexBillingServiceTier {
     match service_tier.and_then(normalize_proxy_service_tier) {
         Some("priority") => CodexBillingServiceTier::Priority,
+        // “超高速”（ultrafast）目前没有公开的独立费率，按官方快速档同档估算，
+        // 避免落回标准档导致费用被明显低估。
+        Some("ultrafast") => CodexBillingServiceTier::Priority,
         Some("flex") => CodexBillingServiceTier::Flex,
         _ => CodexBillingServiceTier::Standard,
     }
@@ -1351,8 +1415,12 @@ fn is_openai_session_long_context_model(model_id: &str) -> bool {
         .unwrap_or_else(|| model_id.trim().to_ascii_lowercase());
     matches!(
         normalized.as_str(),
-        "gpt-5.4"
+        "gpt-6.1-sol"
+            | "gpt-5.4"
             | "gpt-5.5"
+            | "gpt-6-astra"
+            | "gpt-6-sol"
+            | "gpt-6-luna"
             | "gpt-5.6"
             | "gpt-5.6-sol"
             | "gpt-5.6-terra"
@@ -1407,7 +1475,10 @@ fn compute_effective_unit_prices(
         .unwrap_or(pricing.input_usd_per_million);
     let mut tier_multiplier = 1.0_f64;
 
-    match parse_billing_service_tier(service_tier) {
+    let tier = parse_billing_service_tier(service_tier);
+    let use_priority_rates = tier == CodexBillingServiceTier::Priority
+        && pricing_has_explicit_priority_rates(pricing);
+    match tier {
         CodexBillingServiceTier::Priority if pricing_has_explicit_priority_rates(pricing) => {
             if let Some(value) = pricing
                 .priority_input_usd_per_million
@@ -1438,9 +1509,21 @@ fn compute_effective_unit_prices(
     }
 
     if should_apply_session_long_context(model_id, pricing, usage) {
-        input_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_INPUT_MULTIPLIER;
-        cache_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_CACHE_MULTIPLIER;
-        output_price *= CODEX_LOCAL_ACCESS_LONG_CONTEXT_OUTPUT_MULTIPLIER;
+        // Explicit Priority rates compose with the long-context multipliers.
+        // Standard/Flex (and multiplier-based Priority) use the user's long prices.
+        let derived = derived_standard_long_price(codex_price(input_price, cache_price, output_price));
+        if pricing.standard_long_price_override && !use_priority_rates {
+            input_price = pricing.standard_long_input_usd_per_million
+                .unwrap_or(derived.input_usd_per_million);
+            cache_price = pricing.standard_long_cached_input_usd_per_million
+                .unwrap_or(derived.cached_input_usd_per_million);
+            output_price = pricing.standard_long_output_usd_per_million
+                .unwrap_or(derived.output_usd_per_million);
+        } else {
+            input_price = derived.input_usd_per_million;
+            cache_price = derived.cached_input_usd_per_million;
+            output_price = derived.output_usd_per_million;
+        }
     }
 
     CodexLocalAccessPrice {
@@ -1508,7 +1591,8 @@ fn normalize_model_pricings(
             continue;
         }
         let preset = price_book_entry_for_model(&model_id);
-        let has_custom_rates = pricing.long_context_threshold_tokens.is_some()
+        let has_custom_rates = pricing.standard_long_price_override
+            || pricing.long_context_threshold_tokens.is_some()
             || pricing.priority_input_usd_per_million.is_some()
             || pricing.priority_cached_input_usd_per_million.is_some()
             || pricing.priority_output_usd_per_million.is_some()
@@ -1518,7 +1602,8 @@ fn normalize_model_pricings(
             continue;
         }
 
-        let session_long = is_openai_session_long_context_model(&model_id)
+        let session_long = normalize_positive_tokens(pricing.long_context_threshold_tokens).is_some()
+            || is_openai_session_long_context_model(&model_id)
             || preset
                 .map(|item| item.session_long_context)
                 .unwrap_or(false);
@@ -1544,12 +1629,29 @@ fn normalize_model_pricings(
                 .map(normalize_price_value),
             normalize_price_value(pricing.output_usd_per_million),
         );
-        // standard_long absolute fields are display-only / legacy; billing uses
-        // multipliers. Persist derived display values for session-long models.
-        let standard_long = session_long.then(|| derived_standard_long_price(standard));
+        let standard_long_price_override = session_long && pricing.standard_long_price_override
+            && (pricing.standard_long_input_usd_per_million.is_some()
+                || pricing.standard_long_cached_input_usd_per_million.is_some()
+                || pricing.standard_long_output_usd_per_million.is_some());
+        let standard_long = session_long.then(|| {
+            let derived = derived_standard_long_price(standard);
+            if standard_long_price_override {
+                codex_price(
+                    pricing.standard_long_input_usd_per_million.map(normalize_price_value)
+                        .unwrap_or(derived.input_usd_per_million),
+                    pricing.standard_long_cached_input_usd_per_million.map(normalize_price_value)
+                        .unwrap_or(derived.cached_input_usd_per_million),
+                    pricing.standard_long_output_usd_per_million.map(normalize_price_value)
+                        .unwrap_or(derived.output_usd_per_million),
+                )
+            } else {
+                derived
+            }
+        });
 
         normalized.push(CodexLocalAccessModelPricing {
             model_id,
+            standard_long_price_override,
             long_context_threshold_tokens,
             input_usd_per_million: standard.input_usd_per_million,
             output_usd_per_million: standard.output_usd_per_million,
@@ -1588,13 +1690,17 @@ fn optional_price_matches_legacy(value: Option<f64>, expected: f64) -> bool {
     }
 }
 
-/// Previous official book rates that should follow the new book going forward.
+/// Former built-in rates that should follow the new book going forward.
 /// Custom overrides that are not these snapshots are kept.
 fn is_superseded_default_56_pricing(pricing: &CodexLocalAccessModelPricing) -> bool {
+    if pricing.standard_long_price_override {
+        return false;
+    }
     let model_id = normalize_known_openai_codex_model(&pricing.model_id)
         .unwrap_or_else(|| pricing.model_id.trim().to_ascii_lowercase());
     let (input, cached, output, priority_input, priority_cached, priority_output) =
         match model_id.as_str() {
+            "gpt-5.6" | "gpt-5.6-sol" => (5.0, 0.5, 30.0, 10.0, 1.0, 60.0),
             "gpt-5.6-terra" => (2.5, 0.25, 15.0, 5.0, 0.5, 30.0),
             "gpt-5.6-luna" => (1.0, 0.1, 6.0, 2.0, 0.2, 12.0),
             _ => return false,
@@ -1613,12 +1719,25 @@ fn is_superseded_default_56_pricing(pricing: &CodexLocalAccessModelPricing) -> b
         && optional_price_matches_legacy(pricing.priority_output_usd_per_million, priority_output)
 }
 
+// Remove retired preset snapshots on upgrade; preserve actual user overrides.
+fn is_retired_builtin_model_pricing(pricing: &CodexLocalAccessModelPricing) -> bool {
+    let Some(entry) = HISTORICAL_CODEX_MODEL_PRICE_BOOK
+        .iter()
+        .find(|entry| entry.model_id.eq_ignore_ascii_case(&pricing.model_id))
+    else {
+        return false;
+    };
+    same_model_pricing_fields(pricing, &price_book_entry_to_model_pricing(entry))
+}
+
 fn drop_superseded_default_56_model_pricings(
     model_pricings: Vec<CodexLocalAccessModelPricing>,
 ) -> Vec<CodexLocalAccessModelPricing> {
     model_pricings
         .into_iter()
-        .filter(|pricing| !is_superseded_default_56_pricing(pricing))
+        .filter(|pricing| {
+            !is_superseded_default_56_pricing(pricing) && !is_retired_builtin_model_pricing(pricing)
+        })
         .collect()
 }
 
@@ -1650,6 +1769,7 @@ fn same_model_pricing_fields(
     right: &CodexLocalAccessModelPricing,
 ) -> bool {
     left.long_context_threshold_tokens == right.long_context_threshold_tokens
+        && left.standard_long_price_override == right.standard_long_price_override
         && left.input_usd_per_million == right.input_usd_per_million
         && left.output_usd_per_million == right.output_usd_per_million
         && left.cached_input_usd_per_million == right.cached_input_usd_per_million
@@ -1795,9 +1915,19 @@ fn calculate_usage_cost_usd(
             let cached_input_price = pricing
                 .cached_input_usd_per_million
                 .unwrap_or(pricing.input_usd_per_million);
+            let cache_write_multiplier =
+                match normalize_known_openai_codex_model(&pricing.model_id).as_deref() {
+                    Some(
+                        "gpt-5.6" | "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna"
+                        | "gpt-6.1-sol" | "gpt-6-astra" | "gpt-6-sol" | "gpt-6-luna",
+                    ) => 1.25,
+                    _ => 1.0,
+                };
             let cost = (breakdown.input.uncached_tokens as f64 * pricing.input_usd_per_million
                 + breakdown.input.cache_read_tokens as f64 * cached_input_price
-                + breakdown.input.cache_write_tokens as f64 * pricing.input_usd_per_million
+                + breakdown.input.cache_write_tokens as f64
+                    * pricing.input_usd_per_million
+                    * cache_write_multiplier
                 + breakdown.output.total_tokens as f64 * pricing.output_usd_per_million)
                 / 1_000_000.0;
             return if cost.is_finite() && cost > 0.0 {
@@ -1816,15 +1946,17 @@ fn calculate_usage_cost_usd(
 }
 
 pub fn estimate_model_token_cost_usd(
-    model: &str,
-    input_tokens: u64,
-    cached_input_tokens: u64,
-    output_tokens: u64,
+    model: &str, input_tokens: u64, cached_input_tokens: u64, output_tokens: u64,
 ) -> f64 {
-    let Some(pricing) = resolve_base_model_pricing(None, model) else {
-        return 0.0;
-    };
-    calculate_usage_cost_usd_from_tokens(input_tokens, output_tokens, cached_input_tokens, &pricing)
+    estimate_known_model_token_cost_usd(model, input_tokens, cached_input_tokens, output_tokens)
+        .unwrap_or(0.0)
+}
+
+pub fn estimate_known_model_token_cost_usd(
+    model: &str, input_tokens: u64, cached_input_tokens: u64, output_tokens: u64,
+) -> Option<f64> {
+    let pricing = resolve_base_model_pricing(None, model)?;
+    Some(calculate_usage_cost_usd_from_tokens(input_tokens, output_tokens, cached_input_tokens, &pricing))
 }
 
 fn calculate_usage_cost_usd_from_tokens(
@@ -1853,4 +1985,3 @@ fn trim_recent_events(events: &mut Vec<CodexLocalAccessUsageEvent>, retention_si
     events.retain(|event| event.timestamp > 0 && event.timestamp >= retention_since);
     events.sort_by_key(|event| event.timestamp);
 }
-

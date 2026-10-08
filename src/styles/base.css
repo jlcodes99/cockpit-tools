@@ -198,3 +198,32 @@ html[data-reduced-motion="true"] *:not(.loading-spinner):not(.spin):not(.icon-sp
   -webkit-backdrop-filter: none !important;
   scroll-behavior: auto !important;
 }
+
+/* Optional OLED palette; independent of the existing theme packs. */
+html[data-theme-color="oled"] {
+  --bg-primary: #fff;
+  --bg-secondary: #fff;
+  --bg-tertiary: #f5f5f5;
+  --bg-card: #fff;
+  --bg-hover: rgba(0, 0, 0, 0.06);
+  --text-primary: #000;
+  --text-secondary: #333;
+  --text-muted: #666;
+  --border: rgba(0, 0, 0, 0.2);
+  --border-light: rgba(0, 0, 0, 0.1);
+}
+html[data-theme-color="oled"][data-theme="dark"] {
+  --bg-primary: #000;
+  --bg-secondary: #000;
+  --bg-tertiary: #111;
+  --bg-card: #000;
+  --bg-hover: rgba(255, 255, 255, 0.1);
+  --text-primary: #fff;
+  --text-secondary: #ddd;
+  --text-muted: #aaa;
+  --border: rgba(255, 255, 255, 0.25);
+  --border-light: rgba(255, 255, 255, 0.12);
+}
+html[data-theme-color="oled"] body {
+  background: var(--bg-primary);
+}

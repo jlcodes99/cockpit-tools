@@ -1258,8 +1258,10 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
 .codex-speed-menu {
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-secondary));
-  backdrop-filter: blur(12px);
+  /* Dropdowns are solid surfaces; translucent card tokens let the page bleed through. */
+  background: var(--bg-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow:
     0 12px 28px rgba(15, 23, 42, 0.12),
     0 1px 0 rgba(255, 255, 255, 0.72) inset;
@@ -1682,7 +1684,9 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
    Modal
    ============================================ */
 
-.modal-overlay {
+/* 基类用 :where() 降到零优先级：组件自己的 .xxx-modal / .xxx-overlay 单类规则
+   永远能覆盖这里的默认值，不再依赖打包后的 CSS 加载顺序（同优先级互相覆盖）。 */
+:where(.modal-overlay) {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.6);
@@ -1691,12 +1695,16 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 兜底：弹框再高也要能滚动到全部内容；safe center 在溢出时自动改为顶部对齐，
+     避免居中导致顶部（标题/关闭按钮）无法滚到。 */
+  align-items: safe center;
+  overflow-y: auto;
   z-index: 10000;
   -webkit-app-region: no-drag;
   animation: fadeIn 0.2s ease-out;
 }
 
-.modal {
+:where(.modal) {
   background: var(--bg-surface);
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1713,7 +1721,9 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.modal.modal-lg {
+/* 尺寸工具类同样降到零优先级：弹框自己的类（如 .modal.platform-account-add-modal）
+   永远优先，避免工具类和组件类互相覆盖、结果取决于加载顺序。 */
+:where(.modal-lg) {
   max-width: 720px;
 }
 

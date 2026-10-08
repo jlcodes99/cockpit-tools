@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mapCodexSwitchProgressToLaunch } from './codexLaunchProgress.ts';
+import { codexLaunchErrorKey, mapCodexSwitchProgressToLaunch } from './codexLaunchProgress.ts';
+
+test('lifecycle and proxy failures remain distinct from authorization errors', () => {
+  assert.equal(codexLaunchErrorKey('CODEX_SWITCH_BINDING_FAILED'), 'codex.launchErrors.bindingFailed');
+  assert.equal(codexLaunchErrorKey(new Error('CODEX_PROCESS_SCAN_FAILED')), 'codex.launchErrors.processScanFailed');
+  assert.equal(codexLaunchErrorKey('PROXY_ENTRY_PORT_UNAVAILABLE'), 'codex.launchErrors.proxyEntryFailed');
+  assert.equal(codexLaunchErrorKey('CODEX_SWITCH_AUTH_REQUIRED:{}'), null);
+  assert.equal(codexLaunchErrorKey('unknown error or private diagnostic data'), null);
+});
 
 test('maps account overview access_token progress to shared launch fields', () => {
   const result = mapCodexSwitchProgressToLaunch({
@@ -21,7 +29,7 @@ test('maps account overview access_token progress to shared launch fields', () =
   });
 });
 
-test('merges id_token and refresh progress into the shared launch protocol', () => {
+test('preserves id_token details and normalizes refresh progress into the shared launch protocol', () => {
   const idToken = mapCodexSwitchProgressToLaunch({
     accountId: 'account-1',
     step: 'idToken',
@@ -40,8 +48,8 @@ test('merges id_token and refresh progress into the shared launch protocol', () 
 
   assert.deepEqual(idToken?.details, {
     accountId: 'account-1',
-    idTokenExpiresAt: 1_800_003_600,
-    idTokenRefreshDue: true,
+    expiresAt: 1_800_003_600,
+    refreshDue: true,
   });
   assert.deepEqual(refresh?.details, {
     accountId: 'account-1',

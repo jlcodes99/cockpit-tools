@@ -96,7 +96,7 @@ export function OverviewTabsHeader({
       <div className="page-top-strip">
         <div className="page-top-strip-left">
           <span className="page-top-strip-label">
-            {t('settings.general.account', 'Accounts')}
+            {t('settings.general.accountManagement', 'Account')}
           </span>
           <ManualHelpIconButton className="platform-header-help" onClick={onOpenManual} />
         </div>

@@ -35,19 +35,20 @@ export function CodexGroupAccountPickerModal({
   const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen || !targetGroup) return
     setQuery('')
-    setSelected(new Set())
+    const validIds = new Set(accounts.map((a) => a.id))
+    setSelected(new Set((targetGroup.accountIds || []).filter((id) => validIds.has(id))))
     setError('')
-  }, [isOpen, targetGroup])
+  }, [isOpen, targetGroup, accounts])
 
-  const groupByAccountId = useMemo(() => {
-    const result = new Map<string, CodexAccountGroup>()
+  const groupsByAccountId = useMemo(() => {
+    const result = new Map<string, CodexAccountGroup[]>()
     for (const group of accountGroups) {
       for (const accountId of group.accountIds) {
-        if (!result.has(accountId)) {
-          result.set(accountId, group)
-        }
+        const list = result.get(accountId) || []
+        list.push(group)
+        result.set(accountId, list)
       }
     }
     return result
@@ -57,10 +58,7 @@ export function CodexGroupAccountPickerModal({
     if (!targetGroup) return []
 
     const queryText = query.trim().toLowerCase()
-    const existingIds = new Set(targetGroup.accountIds)
-    let next = accounts.filter((account) => !existingIds.has(account.id))
-
-    next = next.sort((a, b) => {
+    let next = [...accounts].sort((a, b) => {
       const aName = buildCodexAccountPresentation(a, t).displayName.toLowerCase()
       const bName = buildCodexAccountPresentation(b, t).displayName.toLowerCase()
       return aName.localeCompare(bName)
@@ -70,13 +68,15 @@ export function CodexGroupAccountPickerModal({
 
     return next.filter((account) => {
       const presentation = buildCodexAccountPresentation(account, t)
-      const currentGroupName = groupByAccountId.get(account.id)?.name?.toLowerCase() || ''
+      const groupNames = (groupsByAccountId.get(account.id) || [])
+        .map((g) => g.name.toLowerCase())
+        .join(' ')
       return (
         presentation.displayName.toLowerCase().includes(queryText)
-        || currentGroupName.includes(queryText)
+        || groupNames.includes(queryText)
       )
     })
-  }, [accounts, groupByAccountId, query, t, targetGroup])
+  }, [accounts, groupsByAccountId, query, t, targetGroup])
 
   const selectedVisibleCount = useMemo(
     () =>
@@ -116,6 +116,7 @@ export function CodexGroupAccountPickerModal({
 
   const toggleSelect = (accountId: string) => {
     if (saving) return
+
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(accountId)) {
@@ -128,7 +129,7 @@ export function CodexGroupAccountPickerModal({
   }
 
   const handleConfirm = async () => {
-    if (!targetGroup || selected.size === 0 || saving) return
+    if (!targetGroup || saving) return
 
     setSaving(true)
     setError('')
@@ -185,7 +186,11 @@ export function CodexGroupAccountPickerModal({
               onChange={toggleSelectAllVisible}
               disabled={saving || visibleAccounts.length === 0}
             />
-            <div className="group-account-main" />
+            <div className="group-account-main">
+              <span className="group-account-email" style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {t('common.selectAll', '全选')} ({selectedVisibleCount}/{visibleAccounts.length})
+              </span>
+            </div>
           </div>
 
           <div className="group-account-list">
@@ -193,10 +198,10 @@ export function CodexGroupAccountPickerModal({
               <div className="group-account-empty">{t('accounts.groups.accountPickerEmpty')}</div>
             ) : (
               visibleAccounts.map((account) => {
-                const currentGroup = groupByAccountId.get(account.id) || null
+                const currentGroups = groupsByAccountId.get(account.id) || []
                 const presentation = buildCodexAccountPresentation(account, t)
                 const isChecked = selected.has(account.id)
-                const isUngrouped = !currentGroup
+                const isUngrouped = currentGroups.length === 0
 
                 return (
                   <label
@@ -220,9 +225,20 @@ export function CodexGroupAccountPickerModal({
                         <span className={`tier-badge ${presentation.planClass} group-account-tier-badge`}>
                           {presentation.planLabel}
                         </span>
-                        <span className={`group-account-badge${isUngrouped ? ' is-ungrouped' : ''}`}>
-                          {isUngrouped ? t('accounts.groups.ungrouped') : currentGroup.name}
-                        </span>
+                        {isUngrouped ? (
+                          <span className="group-account-badge is-ungrouped">
+                            {t('accounts.groups.ungrouped')}
+                          </span>
+                        ) : (
+                          currentGroups.map((g) => (
+                            <span
+                              key={g.id}
+                              className={`group-account-badge${g.id === targetGroup.id ? ' is-current-target' : ''}`}
+                            >
+                              {g.name}
+                            </span>
+                          ))
+                        )}
                       </div>
                     </div>
                   </label>
@@ -241,9 +257,9 @@ export function CodexGroupAccountPickerModal({
           <button
             className="btn btn-primary"
             onClick={handleConfirm}
-            disabled={selected.size === 0 || saving}
+            disabled={saving}
           >
-            {saving ? t('common.saving') : `${t('accounts.groups.addAccounts')} (${selected.size})`}
+            {saving ? t('common.saving') : `${t('common.save', '保存')} (${selected.size})`}
           </button>
         </div>
       </div>

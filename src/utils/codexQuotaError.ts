@@ -1,5 +1,6 @@
 import type { CodexAccount, CodexQuotaErrorInfo } from "../types/codex";
 import { isCodexClientReauthNoticeOnly } from "./codexSwitchAuthFailure";
+import { getCodexAccountQuotaError } from "./codexProxyRuntimeError";
 
 const BLOCKING_STATUS_CODES = new Set(["401", "403", "429"]);
 const BLOCKING_ERROR_CODES = new Set([
@@ -87,7 +88,7 @@ export function summarizeCodexQuotaErrorMessage(
 export function isBlockingCodexQuotaError(
   quotaError?: CodexQuotaErrorInfo | null,
 ): boolean {
-  const rawMessage = quotaError?.message?.trim();
+  const rawMessage = getCodexAccountQuotaError(quotaError)?.message?.trim();
   if (!rawMessage) return false;
 
   const lower = rawMessage.toLowerCase();

@@ -454,6 +454,13 @@
   border: 1px solid var(--plan-unknown-border);
 }
 
+/* GCP ToS shared-project account badge (aicode-consumers) */
+.tier-badge.gcp-tos {
+  background: var(--plan-team-bg);
+  color: var(--plan-team-color);
+  border: 1px solid var(--plan-team-border);
+}
+
 /* Inline Folder Cards (inside accounts-grid) */
 .folder-inline-card {
   cursor: pointer;

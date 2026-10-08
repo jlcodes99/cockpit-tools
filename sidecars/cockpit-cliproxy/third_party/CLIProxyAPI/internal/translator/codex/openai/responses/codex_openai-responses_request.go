@@ -3,6 +3,7 @@ package responses
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	translatorcommon "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/common"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
@@ -27,8 +28,23 @@ func ConvertOpenAIResponsesRequestToCodex(modelName string, inputRawJSON []byte,
 	rawJSON = setCodexRequiredInclude(rawJSON)
 	// Codex Responses rejects token limit fields, so strip them out before forwarding.
 	rawJSON = deleteCodexRequestFields(rawJSON, "max_output_tokens", "max_completion_tokens", "temperature", "top_p")
-	if serviceTier := gjson.GetBytes(rawJSON, "service_tier"); serviceTier.Exists() && serviceTier.String() != "priority" {
-		rawJSON = deleteCodexRequestFields(rawJSON, "service_tier")
+	if serviceTier := gjson.GetBytes(rawJSON, "service_tier"); serviceTier.Exists() {
+		if serviceTier.Type == gjson.String {
+			switch strings.ToLower(strings.TrimSpace(serviceTier.String())) {
+			case "priority", "fast":
+				if serviceTier.String() != "priority" {
+					rawJSON, _ = sjson.SetBytes(rawJSON, "service_tier", "priority")
+				}
+			case "ultrafast":
+				if serviceTier.String() != "ultrafast" {
+					rawJSON, _ = sjson.SetBytes(rawJSON, "service_tier", "ultrafast")
+				}
+			default:
+				rawJSON = deleteCodexRequestFields(rawJSON, "service_tier")
+			}
+		} else {
+			rawJSON = deleteCodexRequestFields(rawJSON, "service_tier")
+		}
 	}
 
 	rawJSON = deleteCodexRequestFields(rawJSON, "truncation", "prompt_cache_options", "prompt_cache_retention")
@@ -60,12 +76,30 @@ func setCodexRequiredBool(rawJSON []byte, path string, value bool) []byte {
 
 func setCodexRequiredInclude(rawJSON []byte) []byte {
 	current := gjson.GetBytes(rawJSON, "include")
-	values := current.Array()
-	if current.IsArray() && len(values) == 1 && values[0].Type == gjson.String && values[0].String() == "reasoning.encrypted_content" {
-		return rawJSON
+	includeSources := false
+	if current.IsArray() {
+		values := current.Array()
+		for _, value := range values {
+			if value.Type == gjson.String && value.String() == "web_search_call.action.sources" {
+				includeSources = true
+				break
+			}
+		}
+		if !includeSources && len(values) == 1 && values[0].Type == gjson.String && values[0].String() == "reasoning.encrypted_content" {
+			return rawJSON
+		}
+		if includeSources && len(values) == 2 &&
+			values[0].Type == gjson.String && values[0].String() == "reasoning.encrypted_content" &&
+			values[1].Type == gjson.String && values[1].String() == "web_search_call.action.sources" {
+			return rawJSON
+		}
 	}
 
-	updated, errSet := sjson.SetRawBytes(rawJSON, "include", []byte(`["reasoning.encrypted_content"]`))
+	encoded := []byte(`["reasoning.encrypted_content"]`)
+	if includeSources {
+		encoded = []byte(`["reasoning.encrypted_content","web_search_call.action.sources"]`)
+	}
+	updated, errSet := sjson.SetRawBytes(rawJSON, "include", encoded)
 	if errSet != nil {
 		return rawJSON
 	}

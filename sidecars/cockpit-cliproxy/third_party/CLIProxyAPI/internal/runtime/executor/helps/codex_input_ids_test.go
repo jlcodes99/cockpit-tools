@@ -76,7 +76,7 @@ func TestSanitizeCodexInputItemIDsNormalizesResponseItemIDs(t *testing.T) {
 		"msg_" + messageID,
 		"rs_" + reasoningID,
 		"fc_" + functionCallID,
-		functionCallOutputID,
+		"fc_" + functionCallOutputID,
 		"rs-existing",
 		"fc-existing",
 		"msg-existing",
@@ -103,6 +103,7 @@ func TestSanitizeCodexInputItemIDsAvoidsNormalizationCollisions(t *testing.T) {
 		{name: "message", itemType: "message", prefix: "msg_"},
 		{name: "reasoning", itemType: "reasoning", prefix: "rs_"},
 		{name: "function call", itemType: "function_call", prefix: "fc_"},
+		{name: "function call output", itemType: "function_call_output", prefix: "fc_"},
 		{name: "custom tool call", itemType: "custom_tool_call", prefix: "ctc_"},
 		{name: "custom tool call output", itemType: "custom_tool_call_output", prefix: "ctco_"},
 	} {
@@ -159,6 +160,32 @@ func TestSanitizeCodexInputItemIDsAvoidsNormalizationCollisions(t *testing.T) {
 	}
 }
 
+func TestSanitizeCodexInputItemIDsNormalizesPromotedCustomToolOutput(t *testing.T) {
+	const outputID = "ctco_01a0d5bd-3a2e-70b0-910a-f9f593ec2214"
+	body := []byte(`{"input":[` +
+		`{"type":"function_call_output","id":"` + outputID + `","call_id":"call-image","output":[{"type":"input_text","text":"before"},{"type":"input_image","image_url":"opaque-image-not-decoded"},{"type":"input_text","text":"after"}]},` +
+		`{"type":"function_call_output","id":"fco_existing","call_id":"call-existing","output":"ok"},` +
+		`{"type":"function_call_output","call_id":"call-no-id","output":"ok"},` +
+		`{"type":"custom_tool_call_output","id":"ctco_untouched","call_id":"call-custom","output":"ok"}` +
+		`]}`)
+	got := SanitizeCodexInputItemIDs(body)
+	if id := gjson.GetBytes(got, "input.0.id").String(); id != "fc_"+outputID {
+		t.Fatalf("promoted custom result ID = %q, want fc-prefixed wire ID", id)
+	}
+	if gjson.GetBytes(got, "input.0.call_id").String() != "call-image" ||
+		gjson.GetBytes(got, "input.0.output").Raw != gjson.GetBytes(body, "input.0.output").Raw {
+		t.Fatal("normalization changed the call association or opaque image result")
+	}
+	if gjson.GetBytes(got, "input.1.id").String() != "fco_existing" ||
+		gjson.GetBytes(got, "input.2.id").Exists() ||
+		gjson.GetBytes(got, "input.3.id").String() != "ctco_untouched" {
+		t.Fatal("normalization changed valid, absent, or unpromoted custom IDs")
+	}
+	if string(SanitizeCodexInputItemIDs(got)) != string(got) {
+		t.Fatal("promoted custom result normalization is not idempotent")
+	}
+}
+
 func TestSanitizeCodexInputItemIDsNormalizesCustomToolCallIDs(t *testing.T) {
 	const invalidID = "item_44e13caebc1ddf25f1337cbe"
 	body := []byte(`{"input":[{"type":"custom_tool_call","id":"` + invalidID + `","call_id":"call-1","name":"lookup","input":"{}"}]}`)
@@ -194,6 +221,25 @@ func TestSanitizeCodexInputItemIDsNormalizesCustomToolCallOutputIDs(t *testing.T
 	}
 	if string(first) != string(normalizedAgain) {
 		t.Fatalf("custom_tool_call_output ID normalization is not idempotent: first=%s normalized_again=%s", first, normalizedAgain)
+	}
+}
+
+func TestSanitizeCodexInputItemIDsPreservesEncryptedReasoningIdentity(t *testing.T) {
+	for _, id := range []string{"third-party-id", strings.Repeat("a", 64), "rs_original"} {
+		t.Run(id, func(t *testing.T) {
+			item := fmt.Sprintf(`{"type":"reasoning","id":%q,"encrypted_content":"opaque-ciphertext","summary":[]}`, id)
+			body := []byte(`{"input":[` + item + `,{"type":"reasoning","id":"rs_` + id + `"},{"type":"message","id":"user"}]}`)
+			got := SanitizeCodexInputItemIDs(body)
+			if actual := gjson.GetBytes(got, "input.0").Raw; actual != item {
+				t.Fatalf("encrypted reasoning changed: %s", actual)
+			}
+			if actual := gjson.GetBytes(got, "input.2.id").String(); actual != "msg_user" {
+				t.Fatalf("message normalization lost: %q", actual)
+			}
+			if again := SanitizeCodexInputItemIDs(got); string(again) != string(got) {
+				t.Fatalf("repeated sanitization changed history: %s", again)
+			}
+		})
 	}
 }
 

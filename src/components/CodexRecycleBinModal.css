@@ -1,0 +1,78 @@
+.codex-recycle-bin-overlay {
+  overflow-y: auto;
+  align-items: safe center;
+  padding: 16px;
+}
+.modal.codex-recycle-bin-modal {
+  width: min(800px, calc(100vw - 32px));
+  max-width: 800px;
+  max-height: calc(100vh - 32px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px #0003;
+}
+.codex-recycle-bin-modal .modal-header,
+.codex-recycle-bin-modal .modal-footer { flex: 0 0 auto; padding: 14px 20px; }
+.codex-recycle-bin-modal .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); }
+.codex-recycle-bin-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.codex-recycle-bin-heading h2 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.codex-recycle-bin-icon { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; background: var(--bg-secondary); color: var(--text-secondary); }
+.codex-recycle-bin-modal .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px; }
+.codex-recycle-bin-modal .modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border); }
+.codex-recycle-bin-modal .btn {
+  appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 30px; max-width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px;
+  font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1.4; letter-spacing: normal; text-transform: none;
+  background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; white-space: normal; overflow-wrap: anywhere;
+}
+.codex-recycle-bin-modal .btn svg { flex-shrink: 0; }
+.codex-recycle-bin-modal .btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); border-color: var(--text-muted); }
+.codex-recycle-bin-modal .btn:disabled { opacity: .45; cursor: not-allowed; }
+.codex-recycle-bin-modal .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.codex-recycle-bin-modal .btn-secondary { background: var(--bg-surface); color: var(--text-secondary); }
+.codex-recycle-bin-modal .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.codex-recycle-bin-modal .btn-secondary:disabled { background: var(--bg-surface); color: var(--text-secondary); }
+.codex-recycle-bin-modal .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.codex-recycle-bin-modal .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 88%, #000); color: #fff; border-color: var(--primary); }
+.codex-recycle-bin-modal .btn-primary:disabled { background: var(--primary); color: #fff; }
+.codex-recycle-bin-modal .btn-danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 22%, var(--border)); }
+.codex-recycle-bin-modal .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 8%, var(--bg-surface)); color: var(--danger); border-color: var(--danger); }
+.codex-recycle-bin-modal .btn-danger:disabled { background: transparent; color: var(--danger); }
+.codex-recycle-bin-modal .btn.icon-only { width: 30px; height: 30px; padding: 0; flex-shrink: 0; }
+.codex-recycle-bin-description { margin: 0 0 14px; color: var(--text-secondary); font-size: 12px; line-height: 1.65; }
+.codex-recycle-bin-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
+.codex-recycle-bin-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.codex-recycle-bin-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; padding: 12px; border-bottom: 1px solid var(--border); }
+.codex-recycle-bin-row:last-child { border-bottom: 0; }
+.codex-recycle-bin-account { min-width: 0; flex: 1 1 220px; overflow-wrap: anywhere; }
+.codex-recycle-bin-identity { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.codex-recycle-bin-account strong { font-size: 13px; font-weight: 500; }
+.codex-recycle-bin-account small { display: block; margin-top: 5px; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.codex-recycle-bin-plan { padding: 1px 5px; border-radius: 4px; background: var(--bg-secondary); font-size: 10px; color: var(--text-secondary); }
+.codex-recycle-bin-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.codex-recycle-bin-empty { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; padding: 36px 0; color: var(--text-muted); font-size: 13px; }
+.codex-recycle-bin-empty p { margin: 0; }
+.codex-recycle-bin-confirm { padding: 20px; border: 1px solid color-mix(in srgb, var(--danger) 20%, var(--border)); background: color-mix(in srgb, var(--danger) 3%, var(--bg-surface)); border-radius: 10px; overflow-wrap: anywhere; }
+.codex-recycle-bin-confirm > svg { color: var(--danger); }
+.codex-recycle-bin-confirm h3 { margin: 10px 0 8px; font-size: 14px; font-weight: 600; }
+.codex-recycle-bin-confirm p { margin: 0; font-size: 13px; line-height: 1.65; }
+.codex-recycle-bin-modal .codex-recycle-bin-export-hint { margin: 12px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.65; }
+.codex-recycle-bin-notice { display: flex; align-items: center; gap: 7px; padding: 9px 11px; margin: 0 0 12px; border-radius: 7px; background: var(--primary-light); color: var(--primary); font-size: 12px; }
+.codex-recycle-bin-progress { display: flex; align-items: center; gap: 6px; margin-inline-end: auto; color: var(--text-secondary); font-size: 12px; }
+@media (max-width: 600px) {
+  .codex-recycle-bin-modal .modal-header,
+  .codex-recycle-bin-modal .modal-footer { padding: 12px; }
+  .codex-recycle-bin-modal .modal-body { padding: 12px; }
+  .codex-recycle-bin-row { align-items: stretch; flex-direction: column; gap: 10px; }
+  .codex-recycle-bin-account { flex-basis: auto; }
+}
+@media (max-height: 600px) {
+  .codex-recycle-bin-modal .modal-header,
+  .codex-recycle-bin-modal .modal-footer { padding-top: 10px; padding-bottom: 10px; }
+}

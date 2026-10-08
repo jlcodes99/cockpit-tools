@@ -1,5 +1,8 @@
 // Codex 账号模块：Auth projection, bundle writing and managed sidecar persistence。
 // 通过 include! 保持原 modules::codex_account 作用域，完整保留私有调用关系。
+#[path = "codex_external_bridge.rs"]
+mod external_bridge;
+
 /// 获取当前激活的账号（基于 Tools 显式 current_account_id）
 pub fn get_current_account() -> Option<CodexAccount> {
     let base_dir = get_codex_home();
@@ -22,15 +25,6 @@ fn get_current_account_from_loaded(
         sync_api_key_account_from_local_state(&mut account, base_dir);
     }
     Some(account)
-}
-
-fn mark_codex_auth_type(value: &mut serde_json::Value) {
-    if let Some(obj) = value.as_object_mut() {
-        obj.insert(
-            "type".to_string(),
-            serde_json::Value::String(CODEX_AUTH_TYPE.to_string()),
-        );
-    }
 }
 
 fn is_codex_auth_token_payload_key(key: &str) -> bool {
@@ -88,8 +82,7 @@ fn should_drop_existing_auth_metadata_key(key: &str) -> bool {
 fn read_existing_auth_file_object(
     base_dir: &Path,
 ) -> Option<serde_json::Map<String, serde_json::Value>> {
-    let content = fs::read_to_string(base_dir.join("auth.json")).ok()?;
-    match serde_json::from_str(&content).ok()? {
+    match read_configured_codex_auth_value(base_dir).ok()?? {
         serde_json::Value::Object(map) => Some(map),
         _ => None,
     }
@@ -119,12 +112,23 @@ fn merge_existing_auth_file_value(
 fn build_merged_auth_file_value(
     base_dir: &Path,
     account: &CodexAccount,
-) -> Result<serde_json::Value, String> {
+) -> Result<(serde_json::Value, bool), String> {
     let next = build_auth_file_value(account)?;
-    Ok(merge_existing_auth_file_value(
-        read_existing_auth_file_object(base_dir),
-        next,
-    ))
+    let existing = read_existing_auth_file_object(base_dir);
+    // A normal launch rewrites last_refresh even when the actual credentials are
+    // unchanged. It must not repeatedly ask users to restart the same daemon.
+    let changed = existing.as_ref().is_none_or(|previous| {
+        [
+            "auth_mode",
+            "OPENAI_API_KEY",
+            "tokens",
+            "agent_identity",
+            "personal_access_token",
+        ]
+        .iter()
+        .any(|key| previous.get(*key) != next.get(*key))
+    });
+    Ok((merge_existing_auth_file_value(existing, next), changed))
 }
 
 fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, String> {
@@ -138,12 +142,10 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
     }
 
     if let Some(identity) = account.agent_identity.clone() {
-        let mut value = serde_json::json!({
+        return Ok(serde_json::json!({
             "auth_mode": "agentIdentity",
             "agent_identity": normalize_agent_identity(identity)?,
-        });
-        mark_codex_auth_type(&mut value);
-        return Ok(value);
+        }));
     }
 
     if account.tokens.access_token.trim().is_empty() {
@@ -155,20 +157,20 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
     if account.tokens.id_token.trim().is_empty()
         && normalize_optional_ref(account.tokens.refresh_token.as_deref()).is_none()
     {
-        let mut value = serde_json::json!({
+        // 官方 personal access token 形态：只写凭据字段，不写 auth_mode（兼容旧版 Codex 反序列化）。
+        return Ok(serde_json::json!({
             "OPENAI_API_KEY": null,
             "personal_access_token": account.tokens.access_token,
-        });
-        mark_codex_auth_type(&mut value);
-        return Ok(value);
+        }));
     }
 
+    // 与官方 codex `AuthDotJson` 一致：last_refresh 由 chrono 默认序列化（纳秒为 0 时不带小数位）。
     let last_refresh = account
         .token_updated_at
         .and_then(|timestamp| chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0))
-        .map(|value| serde_json::Value::String(value.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()));
-    let mut value = serde_json::to_value(CodexAuthFile {
-        auth_mode: None,
+        .and_then(|value| serde_json::to_value(value).ok());
+    let value = serde_json::to_value(CodexAuthFile {
+        auth_mode: Some(CODEX_AUTH_MODE_CHATGPT.to_string()),
         openai_api_key: Some(serde_json::Value::Null),
         base_url: None,
         tokens: Some(CodexAuthTokens {
@@ -181,14 +183,17 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
             refresh_token: Some(
                 normalize_optional_ref(account.tokens.refresh_token.as_deref()).unwrap_or_default(),
             ),
-            account_id: account.account_id.clone(),
+            // Missing id_token metadata must not discard an available workspace identity.
+            // Preserve an explicit stored identity; otherwise use the access-token claim.
+            account_id: normalize_optional_ref(account.account_id.as_deref()).or_else(|| {
+                extract_chatgpt_account_id_from_access_token(&account.tokens.access_token)
+            }),
         }),
         agent_identity: None,
         personal_access_token: None,
         last_refresh,
     })
     .map_err(|e| format!("auth.json 序列化失败: {}", e))?;
-    mark_codex_auth_type(&mut value);
     Ok(value)
 }
 
@@ -200,6 +205,89 @@ fn build_codex_keychain_account(base_dir: &Path) -> String {
     let digest = hasher.finalize();
     let digest_hex = format!("{:x}", digest);
     format!("cli|{}", &digest_hex[..16])
+}
+
+/// 判断指定 profile 是否已有官方安全存储凭据。
+///
+/// macOS 只查询条目是否存在，不读取密钥。Windows 检查加密文件或直接凭据条目，
+/// 不解密加密文件；仅用于失败后的凭据保留判断。
+pub(crate) fn codex_keychain_entry_exists_for_dir(base_dir: &Path) -> bool {
+    #[cfg(all(target_os = "macos", not(test)))]
+    {
+        let keychain_account = build_codex_keychain_account(base_dir);
+        if let Ok(output) = std::process::Command::new("security")
+            .arg("find-generic-password")
+            .arg("-s")
+            .arg(CODEX_KEYCHAIN_SERVICE)
+            .arg("-a")
+            .arg(&keychain_account)
+            .output()
+        {
+            if output.status.success() {
+                return true;
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return windows_auth_store::credentials_present(base_dir);
+    }
+    #[cfg(not(any(target_os = "windows", all(target_os = "macos", not(test)))))]
+    {
+        let _ = base_dir;
+    }
+    false
+}
+
+/// 删除指定 profile 目录对应的官方钥匙串条目（macOS）。
+///
+/// 返回值表示「本次确实删除了一条」：条目不存在时按“无需删除”处理，
+/// 供临时登录结束后清理使用，避免登录凭据残留在钥匙串里。
+pub(crate) fn delete_codex_keychain_entry_for_dir(base_dir: &Path) -> Result<bool, String> {
+    #[cfg(all(target_os = "macos", not(test)))]
+    {
+        let keychain_account = build_codex_keychain_account(base_dir);
+        let output = std::process::Command::new("security")
+            .arg("delete-generic-password")
+            .arg("-s")
+            .arg(CODEX_KEYCHAIN_SERVICE)
+            .arg("-a")
+            .arg(&keychain_account)
+            .output()
+            .map_err(|e| format!("执行 security 命令失败: {}", e))?;
+        if output.status.success() {
+            logger::log_info(&format!(
+                "[Codex临时登录] 已清理 keychain 登录信息: service={}, account={}",
+                CODEX_KEYCHAIN_SERVICE, keychain_account
+            ));
+            return Ok(true);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
+        if stderr.contains("could not be found")
+            || stderr.contains("item not found")
+            || stderr.contains("secitemnotfound")
+        {
+            return Ok(false);
+        }
+        return Err(format!(
+            "删除 Codex keychain 失败: status={}, stderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return windows_auth_store::delete(base_dir);
+    }
+    #[cfg(not(any(target_os = "windows", all(target_os = "macos", not(test)))))]
+    {
+        let _ = base_dir;
+    }
+    #[allow(unreachable_code)]
+    Ok(false)
 }
 
 #[cfg(all(target_os = "macos", not(test)))]
@@ -257,12 +345,20 @@ fn write_codex_keychain_value_to_dir(
     Err("测试环境不写入 macOS keychain".to_string())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn write_codex_keychain_value_to_dir(
     _base_dir: &Path,
     _payload: &serde_json::Value,
 ) -> Result<(), String> {
     Err("当前平台尚未实现 Codex keyring 写入".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn write_codex_keychain_value_to_dir(
+    base_dir: &Path,
+    payload: &serde_json::Value,
+) -> Result<(), String> {
+    windows_auth_store::write(base_dir, payload)
 }
 
 fn is_disk_full_io_error(error: &std::io::Error) -> bool {
@@ -441,6 +537,91 @@ pub fn read_managed_projection_account_id_from_dir(base_dir: &Path) -> Option<St
     read_managed_projection_from_dir(base_dir).map(|projection| projection.account_id)
 }
 
+/// Recognize the OAuth credential owner, not token bytes: the official client may
+/// have rotated its refresh token since takeover. A stale projection alone is not
+/// sufficient to claim a different account signed in by the user.
+pub(crate) fn preserve_owned_oauth_auth_for_runtime(
+    base_dir: &Path,
+    runtime_account_id: &str,
+    auth_text: &str,
+) -> Result<bool, String> {
+    let Some(projection) = read_managed_projection_from_dir(base_dir)
+        .filter(|projection| projection.account_id == runtime_account_id)
+    else {
+        return Ok(false);
+    };
+    // Older combined projections without a credential owner cannot prove which
+    // OAuth login the takeover wrote. Preserve such unknown credentials.
+    let Some(owner_id) = projection.credential_account_id.as_deref() else {
+        return Ok(false);
+    };
+    let Some(mut owner) = load_account(owner_id).filter(|account| !account.is_api_key_auth())
+    else {
+        return Ok(false);
+    };
+    let Some(snapshot) = serde_json::from_str::<CodexAuthFile>(auth_text)
+        .ok()
+        .and_then(load_local_oauth_snapshot_from_auth_file)
+    else {
+        return Ok(false);
+    };
+    if !local_oauth_snapshot_matches_account(&snapshot, &owner) {
+        return Ok(false);
+    }
+    // Keep a rotated RT in the account authority before removing this projection.
+    if should_accept_managed_authority_snapshot(&owner, &snapshot, base_dir)
+        && apply_local_oauth_snapshot(&mut owner, &snapshot)
+    {
+        save_account(&owner)?;
+    }
+    Ok(true)
+}
+
+/// Restore identity from the backup without replaying an old refresh token when
+/// that same identity is still live here or has newer credentials in the account store.
+pub(crate) fn resolve_oauth_auth_backup_for_restore(
+    backup_text: &str,
+    current_text: Option<&str>,
+) -> Result<String, String> {
+    let snapshot_from_text = |text: &str| {
+        serde_json::from_str::<CodexAuthFile>(text)
+            .ok()
+            .and_then(load_local_oauth_snapshot_from_auth_file)
+    };
+    let Some(backup) = snapshot_from_text(backup_text) else {
+        return Ok(backup_text.to_string());
+    };
+    if let Some(current) = current_text.and_then(snapshot_from_text) {
+        if current.email.eq_ignore_ascii_case(&backup.email)
+            && current.account_id == backup.account_id
+            && current.organization_id == backup.organization_id
+            && current.user_id == backup.user_id
+        {
+            return Ok(current_text.unwrap_or(backup_text).to_string());
+        }
+    }
+    let stored = load_account_index()
+        .accounts
+        .into_iter()
+        .filter(|entry| entry.email.eq_ignore_ascii_case(&backup.email))
+        .filter_map(|entry| load_account(&entry.id))
+        .find(|account| {
+            !account.is_api_key_auth() && local_oauth_snapshot_matches_account(&backup, account)
+        });
+    if let Some(account) = stored {
+        if !should_accept_authority_snapshot(&account, &backup) {
+            let existing = serde_json::from_str::<serde_json::Value>(backup_text)
+                .ok()
+                .and_then(|value| value.as_object().cloned());
+            let restored =
+                merge_existing_auth_file_value(existing, build_auth_file_value(&account)?);
+            return serde_json::to_string_pretty(&restored)
+                .map_err(|error| format!("序列化恢复的 OAuth 凭据失败: {error}"));
+        }
+    }
+    Ok(backup_text.to_string())
+}
+
 fn ensure_directory_writable_for_import(path: &Path) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format_io_error("创建导入目录", path, &e))?;
     let probe_path = build_temp_file_path(path, path, "import-probe");
@@ -477,8 +658,43 @@ fn write_auth_json_value(auth_path: &Path, auth_value: &serde_json::Value) -> Re
             auth_path.display(),
             e
         )
-    })
+    })?;
+    restrict_auth_file_permissions(auth_path);
+    Ok(())
 }
+
+/// 官方 codex 以 0600 创建 `auth.json`（含 keyring 兜底文件），这里保持同等权限。
+///
+/// 原子写先落临时文件再 rename，权限受 umask 影响，因此写完必须显式收敛；
+/// 备份文件保存同一份凭据，一并收敛。权限收敛失败只告警，不回滚已写入的凭据。
+#[cfg(unix)]
+fn restrict_auth_file_permissions(auth_path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let backup_path = auth_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| auth_path.with_file_name(format!("{}.bak", name)));
+
+    for path in [Some(auth_path.to_path_buf()), backup_path]
+        .into_iter()
+        .flatten()
+    {
+        if !path.exists() {
+            continue;
+        }
+        if let Err(error) = fs::set_permissions(&path, fs::Permissions::from_mode(0o600)) {
+            logger::log_warn(&format!(
+                "[Codex切号] 收敛凭据文件权限失败: path={}, error={}",
+                path.display(),
+                error
+            ));
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn restrict_auth_file_permissions(_auth_path: &Path) {}
 
 fn remove_auth_json_after_keyring_write(auth_path: &Path) {
     match fs::remove_file(auth_path) {
@@ -500,48 +716,67 @@ fn write_auth_value_to_configured_store(
     auth_path: &Path,
     auth_value: &serde_json::Value,
 ) -> Result<&'static str, String> {
-    let mode = codex_auth_credentials_store_mode(base_dir);
-
-    #[cfg(target_os = "macos")]
-    match mode {
+    match codex_auth_credentials_store_mode(base_dir) {
         CodexAuthCredentialsStoreMode::File => {
             write_auth_json_value(auth_path, auth_value)?;
-            return Ok("file");
+            Ok("file")
         }
+        CodexAuthCredentialsStoreMode::Ephemeral => Err("CODEX_AUTH_STORE_EPHEMERAL".to_string()),
         CodexAuthCredentialsStoreMode::Keyring => {
             write_codex_keychain_value_to_dir(base_dir, auth_value)?;
             remove_auth_json_after_keyring_write(auth_path);
-            return Ok("keyring");
+            Ok("keyring")
         }
         CodexAuthCredentialsStoreMode::Auto => {
             match write_codex_keychain_value_to_dir(base_dir, auth_value) {
                 Ok(()) => {
                     remove_auth_json_after_keyring_write(auth_path);
-                    return Ok("auto:keyring");
+                    Ok("auto:keyring")
                 }
-                Err(error) => logger::log_warn(&format!(
-                    "[Codex切号] auto 模式写入 keyring 失败，回退 auth.json: {}",
-                    error
-                )),
+                Err(error) => {
+                    // A valid old secure-store entry would win over a new auth.json.
+                    // Never report a successful fallback while that old entry exists.
+                    if read_codex_keychain_auth_file_from_dir(base_dir)?.is_some() {
+                        return Err(error);
+                    }
+                    write_auth_json_value(auth_path, auth_value)?;
+                    Ok("auto:file")
+                }
             }
-            write_auth_json_value(auth_path, auth_value)?;
-            return Ok("auto:file");
         }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        if mode != CodexAuthCredentialsStoreMode::File {
-            logger::log_warn(
-                "[Codex切号] 当前平台暂不支持直接写入 Codex keyring，保留 auth.json 兼容写入",
-            );
-        }
-        write_auth_json_value(auth_path, auth_value)?;
-        Ok("file")
     }
 }
 
 pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result<(), String> {
+    write_auth_file_to_dir_with_after_commit(base_dir, account, || {
+        crate::modules::codex_cli_daemon::after_auth_commit(base_dir);
+    })
+}
+
+fn write_auth_file_to_dir_with_after_commit(
+    base_dir: &Path,
+    account: &CodexAccount,
+    after_commit: impl FnOnce(),
+) -> Result<(), String> {
+    let preserve_bridge = crate::modules::config::get_user_config()
+        .codex_preserve_verified_external_bridge;
+    // Inspect the previous auth before replacing it: this compatibility policy
+    // applies only to OAuth -> OAuth, never to an old API Service/key route.
+    let bridge_url = if preserve_bridge {
+        let existing_auth = read_configured_codex_auth_value(base_dir).ok().flatten();
+        external_bridge::preserved_url(base_dir, account, existing_auth.as_ref(), true)
+    } else {
+        None
+    };
+    write_auth_file_to_dir_with_after_commit_and_bridge(base_dir, account, after_commit, bridge_url)
+}
+
+fn write_auth_file_to_dir_with_after_commit_and_bridge(
+    base_dir: &Path,
+    account: &CodexAccount,
+    after_commit: impl FnOnce(),
+    bridge_url: Option<String>,
+) -> Result<(), String> {
     let auth_path = base_dir.join("auth.json");
     logger::log_info(&format!(
         "[Codex切号] 准备写入登录信息: account_id={}, email={}, target_dir={}, target_file={}",
@@ -553,8 +788,11 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
 
     crate::modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(base_dir)?;
 
-    let auth_file = build_merged_auth_file_value(base_dir, account)?;
+    let (auth_file, credentials_changed) = build_merged_auth_file_value(base_dir, account)?;
     let auth_store = write_auth_value_to_configured_store(base_dir, &auth_path, &auth_file)?;
+    if credentials_changed {
+        after_commit();
+    }
 
     let provider_config = if account.is_api_key_auth() {
         let provider_config = infer_api_provider_config(
@@ -574,7 +812,7 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
     } else {
         let provider_config = ApiProviderConfig {
             mode: CodexApiProviderMode::OpenaiBuiltin,
-            base_url: None,
+            base_url: bridge_url,
             provider_id: None,
             provider_name: None,
         };
@@ -582,12 +820,18 @@ pub fn write_auth_file_to_dir(base_dir: &Path, account: &CodexAccount) -> Result
         provider_config
     };
 
+    // auth.json 与官方 forced_login_method 必须同为本次账号的登录方式，否则客户端会把
+    // 有效凭据判定成未登录（切号直接不可用）。键值一致时不重复落盘。
+    let login_method_aligned = apply_forced_login_method_to_config_toml(base_dir, account)?;
+
     logger::log_info(&format!(
-        "[Codex切号] 已写入登录信息: account_id={}, auth_store={}, target_file={}, has_base_url={}",
+        "[Codex切号] 已写入登录信息: account_id={}, auth_store={}, target_file={}, has_base_url={}, forced_login_method={}, login_method_aligned={}",
         account.id,
         auth_store,
         auth_path.display(),
-        provider_config.base_url.is_some()
+        provider_config.base_url.is_some(),
+        forced_login_method_for_account(account),
+        login_method_aligned
     ));
 
     Ok(())
@@ -1184,9 +1428,17 @@ pub async fn sync_bound_oauth_consumers_after_reauth(account_id: &str) -> Result
     if account_id.is_empty() {
         return Err("OAuth 账号 ID 为空".to_string());
     }
-    let account = load_account(account_id)
-        .ok_or_else(|| format!("重新授权后找不到 OAuth 账号: {}", account_id))?;
-
-    sync_managed_account_sidecar_checked(&account)
+    let account_id = account_id.to_string();
+    let account = tauri::async_runtime::spawn_blocking(move || {
+        load_account(&account_id)
+            .ok_or_else(|| format!("重新授权后找不到 OAuth 账号: {}", account_id))
+    })
+    .await
+    .map_err(|_| "PROXY_RUNTIME_FAILED".to_string())??;
+    // The authorization callback only loads shared proxy state. Runtime startup
+    // belongs to the background writer for an already-running profile gateway.
+    crate::modules::codex_proxy_runtime::ensure_account_proxy_state(&account).await?;
+    tauri::async_runtime::spawn_blocking(move || sync_managed_account_sidecar_checked(&account))
+        .await
+        .map_err(|_| "PROXY_RUNTIME_FAILED".to_string())?
 }
-

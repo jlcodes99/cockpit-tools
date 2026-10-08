@@ -13,6 +13,10 @@ import (
 )
 
 func sanitizeOpenAIResponsesReasoningEncryptedContent(ctx context.Context, provider string, body []byte) []byte {
+	return sanitizeOpenAIResponsesReasoningEncryptedContentWithCompat(ctx, provider, body, false)
+}
+
+func sanitizeOpenAIResponsesReasoningEncryptedContentWithCompat(ctx context.Context, provider string, body []byte, isCompat bool) []byte {
 	inputResult := util.GetGJSONBytesNoCopy(body, "input")
 	if !inputResult.Exists() || !inputResult.IsArray() {
 		return body
@@ -97,7 +101,9 @@ func sanitizeOpenAIResponsesReasoningEncryptedContent(ctx context.Context, provi
 			if rawSignature != strings.TrimSpace(rawSignature) {
 				reason = "encrypted_content has leading or trailing whitespace"
 			} else if _, err := signature.InspectGPTReasoningSignature(rawSignature); err != nil {
-				reason = err.Error()
+				if !isCompat || rawSignature == "" || signature.DetectSignatureProvider(rawSignature) != signature.SignatureProviderUnknown {
+					reason = err.Error()
+				}
 			}
 		case gjson.Null:
 			reason = "encrypted_content is null"

@@ -51,7 +51,13 @@ func tryRefreshCodexClientModels(ctx context.Context, label string) {
 		return
 	}
 
-	changed, err := loadCodexClientModelsFromBytes(data, sourceURL)
+	mergedData, err := mergeLocallyPinnedCodexClientModels(data)
+	if err != nil {
+		log.Warnf("%s: locally pinned model merge failed, keeping current data: %v", label, err)
+		return
+	}
+
+	changed, err := loadCodexClientModelsFromBytes(mergedData, sourceURL)
 	if err != nil {
 		log.Warnf("%s: fetched catalog rejected, keeping current data: %v", label, err)
 		return

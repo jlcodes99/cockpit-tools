@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::collections::HashSet;
 
 use chrono::Utc;
 use uuid::Uuid;
@@ -16,6 +17,11 @@ use crate::modules::instance_store;
 
 static CODEX_INSTANCE_STORE_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
+static CODEX_INSTANCE_SAVE_NOTIFY_LOCK: Mutex<()> = Mutex::new(());
+
+#[cfg(test)]
+#[path = "codex_instance_switch_tests.rs"]
+mod switch_tests;
 
 const CODEX_INSTANCES_FILE: &str = "codex_instances.json";
 pub const CODEX_API_SERVICE_BIND_ACCOUNT_ID: &str = "__api_service__";
@@ -59,6 +65,41 @@ pub fn provider_gateway_bind_account_id(account_id: &str) -> Option<String> {
     ))
 }
 
+/// 解析实例绑定账号的出口代理。API 服务聚合入口不直接访问 OpenAI，不需要账号代理。
+pub async fn preflight_egress_proxy_for_bind_account(bind_account_id: Option<&str>) -> Result<(), String> {
+    let Some(bound) = bind_account_id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    if is_api_service_bind_account_id(bound) {
+        return Ok(());
+    }
+    let account_id = parse_provider_gateway_bind_account_id(bound).unwrap_or_else(|| bound.to_owned());
+    crate::modules::codex_proxy_engine_preflight::for_account(
+        &account_id,
+        crate::modules::codex_proxy_engine_preflight::Usage::Desktop,
+    ).await?;
+    // Prepare the local listener before stopping a working desktop or writing
+    // credentials. This opens no upstream connection and does not test a model.
+    crate::modules::codex_proxy_desktop_router::ensure(&account_id).await?;
+    Ok(())
+}
+
+/// 解析实例绑定账号的出口代理。API 服务聚合入口不直接访问 OpenAI，不需要账号代理。
+///
+/// 受管客户端启动时统一走 `codex_proxy_desktop_router::ensure`：账号符合资格且已有
+/// 生效出口（账号绑定或统一代理）时才注入固定入口。已接入入口的客户端换节点或解绑
+/// 只影响新连接；尚未接入的客户端首次绑定后需重启。未绑定账号的新启动沿用原有出口。
+/// 已配置出口的入口创建失败时返回错误，禁止静默沿用其他代理或系统出口。
+pub async fn resolve_egress_proxy_for_bind_account(bind_account_id: Option<&str>) -> Result<Option<String>, String> {
+    let Some(bind_account_id) = bind_account_id.map(str::trim).filter(|value| !value.is_empty()) else { return Ok(None); };
+    if is_api_service_bind_account_id(bind_account_id) {
+        return Ok(None);
+    }
+    let account_id =
+        parse_provider_gateway_bind_account_id(bind_account_id).unwrap_or_else(|| bind_account_id.to_string());
+    crate::modules::codex_proxy_desktop_router::ensure(&account_id).await
+}
+
 #[derive(Debug, Clone)]
 pub struct CreateInstanceParams {
     pub name: String,
@@ -91,15 +132,25 @@ fn instances_path() -> Result<PathBuf, String> {
 }
 
 pub fn load_instance_store() -> Result<InstanceStore, String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let path = instances_path()?;
     let mut store = instance_store::load_instance_store(&path, CODEX_INSTANCES_FILE)?;
     if normalize_managed_instance_dirs(&mut store)? {
-        save_instance_store(&store)?;
+        save_instance_store_raw(&store)?;
     }
     Ok(store)
 }
 
 pub fn save_instance_store(store: &InstanceStore) -> Result<(), String> {
+    let _guard = CODEX_INSTANCE_SAVE_NOTIFY_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    save_instance_store_raw(store)?;
+    crate::commands::codex_instance_gateway_watchdog::instance_store_saved(store);
+    Ok(())
+}
+
+fn save_instance_store_raw(store: &InstanceStore) -> Result<(), String> {
     let path = instances_path()?;
     instance_store::save_instance_store(&path, CODEX_INSTANCES_FILE, store)
 }
@@ -107,6 +158,36 @@ pub fn save_instance_store(store: &InstanceStore) -> Result<(), String> {
 pub fn load_default_settings() -> Result<DefaultInstanceSettings, String> {
     let store = load_instance_store()?;
     Ok(store.default_settings)
+}
+
+/// A prepared profile must not launch through a different account's proxy.
+pub(crate) fn verify_prepared_launch_binding(
+    expected: Option<&str>,
+    actual: Option<&str>,
+) -> Result<(), String> {
+    if expected.is_some() && expected != actual {
+        return Err("CODEX_SWITCH_BINDING_FAILED".into());
+    }
+    Ok(())
+}
+
+pub(crate) fn bind_default_account_for_switch(account_id: &str) -> Result<(), String> {
+    let updated = update_default_settings(
+        Some(Some(account_id.to_owned())), None, None, Some(false), None, None,
+    ).map_err(|error| {
+        modules::logger::log_warn(&format!("更新 Codex 默认实例绑定失败，停止启动: {error}"));
+        "CODEX_SWITCH_BINDING_FAILED".to_owned()
+    })?;
+    verify_prepared_launch_binding(Some(account_id), updated.bind_account_id.as_deref())?;
+    let persisted = load_default_settings().map_err(|_| "CODEX_SWITCH_BINDING_FAILED")?;
+    verify_prepared_launch_binding(Some(account_id), persisted.bind_account_id.as_deref())
+}
+
+/// Persist and verify the API Service binding before returning the expected launch identity.
+/// The caller's pre-activation account snapshot is no longer valid after this switch.
+pub(crate) fn bind_default_api_service_for_launch() -> Result<&'static str, String> {
+    bind_default_account_for_switch(CODEX_API_SERVICE_BIND_ACCOUNT_ID)?;
+    Ok(CODEX_API_SERVICE_BIND_ACCOUNT_ID)
 }
 
 pub fn update_default_settings(
@@ -668,22 +749,14 @@ fn sync_shared_directory(
         return create_directory_symlink(&global_dir, &instance_dir);
     }
 
-    fs::remove_dir_all(&instance_dir).map_err(|e| {
-        format!(
-            "强制重建实例共享目录链接前清理实例目录失败 ({}): {}",
-            display_abs_path(&instance_dir),
-            e
-        )
-    })?;
-    create_directory_symlink(&global_dir, &instance_dir).map_err(|e| {
-        format!(
-            "强制重建实例共享目录链接失败 ({} -> {}, {}): {}",
-            display_abs_path(&global_dir),
-            display_abs_path(&instance_dir),
-            relative_display,
-            e
-        )
-    })
+    // Both directories contain different user data. Keep the instance's local
+    // skills/rules intact instead of replacing them with the default profile.
+    modules::logger::log_info(&format!(
+        "[Codex Instance] Preserving distinct instance directory: path={}, shared={}",
+        display_abs_path(&instance_dir),
+        relative_display,
+    ));
+    Ok(())
 }
 
 fn sync_shared_file(
@@ -814,22 +887,17 @@ fn sync_shared_file(
         return create_file_symlink(&global_file, &instance_file);
     }
 
-    fs::remove_file(&instance_file).map_err(|e| {
-        format!(
-            "强制重建实例共享文件链接前清理实例文件失败 ({}): {}",
-            display_abs_path(&instance_file),
-            e
-        )
-    })?;
-    create_file_symlink(&global_file, &instance_file).map_err(|e| {
-        format!(
-            "强制重建实例共享文件链接失败 ({} -> {}, {}): {}",
-            display_abs_path(&global_file),
-            display_abs_path(&instance_file),
-            relative_display,
-            e
-        )
-    })
+    modules::logger::log_info(&format!(
+        "[Codex Instance] Preserving distinct instance file: path={}, shared={}",
+        display_abs_path(&instance_file),
+        relative_display,
+    ));
+    Ok(())
+}
+
+#[cfg(test)]
+mod shared_preservation_tests {
+    include!("codex_instance_shared_preservation_tests.rs");
 }
 
 pub fn ensure_instance_shared_skills(profile_dir: &Path) -> Result<(), String> {
@@ -863,117 +931,7 @@ pub fn ensure_instance_shared_skills(profile_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
-    let _lock = CODEX_INSTANCE_STORE_LOCK
-        .lock()
-        .map_err(|_| "无法获取实例锁")?;
-    let mut store = load_instance_store()?;
-
-    let name = instance_store::normalize_name(&params.name)?;
-    let user_data_dir = params.user_data_dir.trim().to_string();
-    if user_data_dir.is_empty() {
-        return Err("实例目录不能为空".to_string());
-    }
-
-    instance_store::ensure_unique(&store, &name, &user_data_dir, None)?;
-
-    let user_dir_path = PathBuf::from(&user_data_dir);
-    let init_mode = params
-        .init_mode
-        .as_deref()
-        .unwrap_or("copy")
-        .to_ascii_lowercase();
-    let create_empty = init_mode == "empty";
-    let use_existing_dir = init_mode == "existingdir" || init_mode == "existing_dir";
-
-    if use_existing_dir {
-        if !user_dir_path.exists() {
-            let resolved = instance_store::display_path(&user_dir_path);
-            return Err(format!("所选目录不存在: {}", resolved));
-        }
-        if !user_dir_path.is_dir() {
-            return Err("所选路径不是目录".to_string());
-        }
-    } else if create_empty {
-        if user_dir_path.exists() {
-            let mut has_entries = false;
-            if let Ok(mut iter) = fs::read_dir(&user_dir_path) {
-                if iter.next().is_some() {
-                    has_entries = true;
-                }
-            }
-            if has_entries {
-                let resolved_path = instance_store::display_path(&user_dir_path);
-                return Err(format!("空白实例需要目标目录为空: {}", resolved_path));
-            }
-        }
-        fs::create_dir_all(&user_dir_path).map_err(|e| format!("创建实例目录失败: {}", e))?;
-    } else {
-        let source_dir = match params.copy_source_instance_id.as_deref() {
-            Some("__default__") | None => get_default_codex_home()?,
-            Some(source_id) => {
-                let source_instance = store
-                    .instances
-                    .iter()
-                    .find(|item| item.id == source_id)
-                    .ok_or("复制来源实例不存在")?;
-                PathBuf::from(&source_instance.user_data_dir)
-            }
-        };
-
-        if user_dir_path.exists() {
-            let mut has_entries = false;
-            if let Ok(mut iter) = fs::read_dir(&user_dir_path) {
-                if iter.next().is_some() {
-                    has_entries = true;
-                }
-            }
-            if has_entries {
-                let resolved_path = instance_store::display_path(&user_dir_path);
-                modules::logger::log_info(&format!(
-                    "[Codex Instance] 复制来源实例需要空目录，但目标已存在: {}",
-                    resolved_path
-                ));
-                return Err(format!("复制来源实例需要目标目录为空: {}", resolved_path));
-            }
-        }
-
-        if !source_dir.exists() {
-            return Err("未找到复制来源目录，请先确保来源实例已初始化".to_string());
-        }
-
-        instance_store::copy_dir_recursive(&source_dir, &user_dir_path)?;
-    }
-
-    ensure_instance_shared_skills(&user_dir_path)?;
-
-    let instance = InstanceProfile {
-        id: Uuid::new_v4().to_string(),
-        name,
-        user_data_dir,
-        working_dir: params.working_dir,
-        extra_args: params.extra_args.trim().to_string(),
-        bind_account_id: if create_empty {
-            None
-        } else {
-            params.bind_account_id
-        },
-        model_routing: if create_empty {
-            None
-        } else {
-            params.model_routing
-        },
-        launch_mode: params.launch_mode.unwrap_or_default(),
-        app_speed: params.app_speed.unwrap_or_default(),
-        created_at: Utc::now().timestamp_millis(),
-        last_launched_at: None,
-        last_pid: None,
-    };
-
-    store.instances.push(instance.clone());
-    save_instance_store(&store)?;
-    Ok(instance)
-}
+include!("codex_instance_creation.rs");
 
 pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, String> {
     let _lock = CODEX_INSTANCE_STORE_LOCK
@@ -1065,6 +1023,7 @@ pub fn update_bound_instances_app_speed(
 }
 
 pub fn delete_instance(instance_id: &str) -> Result<(), String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = CODEX_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;
@@ -1078,11 +1037,17 @@ pub fn delete_instance(instance_id: &str) -> Result<(), String> {
 
     if !user_data_dir.trim().is_empty() {
         let dir_path = PathBuf::from(&user_data_dir);
-        modules::instance::delete_instance_directory(&dir_path)?;
+        // Resolve the canonical home before moving it to the trash: desktop data
+        // is keyed by the original resolved path, including symlinked homes.
         #[cfg(target_os = "windows")]
-        delete_windows_app_user_data_dir(&dir_path)?;
+        let app_user_data_dir = get_windows_app_user_data_dir(&dir_path)?;
+        #[cfg(target_os = "macos")]
+        let app_user_data_dir = get_macos_app_user_data_dir(&dir_path)?;
         #[cfg(target_os = "linux")]
-        delete_linux_app_user_data_dir(&dir_path)?;
+        let app_user_data_dir = get_linux_app_user_data_dir(&dir_path)?;
+        modules::instance::delete_instance_directory(&dir_path)?;
+        #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+        modules::instance::delete_instance_directory(&app_user_data_dir)?;
     }
 
     store.instances.remove(index);
@@ -1146,6 +1111,158 @@ pub fn update_instance_pid(instance_id: &str, pid: Option<u32>) -> Result<Instan
     Ok(updated)
 }
 
+/// 默认实例 ID（与前端和其他模块保持一致）。
+pub(crate) const CODEX_DEFAULT_INSTANCE_ID: &str = "__default__";
+
+/// 关闭指定实例（或默认实例）的混合模型路由，保留渠道配置。
+///
+/// 混合路由只在实例绑定「可直接登录的 OAuth 订阅账号」时才有意义。绑定账号换成普通
+/// API Key / API 服务账号，或用户手动停止实例网关时调用它：路由必须自动让位，不能拦住
+/// 普通的账号切换、实例启动和其他功能。
+pub fn disable_model_routing(instance_id: &str) -> Result<bool, String> {
+    let instance_id = instance_id.trim();
+    if instance_id.is_empty() {
+        return Ok(false);
+    }
+    if instance_id == CODEX_DEFAULT_INSTANCE_ID {
+        let current = load_default_settings()?;
+        let Some(routing) = current.model_routing.clone().filter(|routing| routing.enabled) else {
+            return Ok(false);
+        };
+        update_default_settings(
+            None,
+            Some(Some(CodexInstanceModelRouting {
+                enabled: false,
+                ..routing
+            })),
+            None,
+            None,
+            None,
+            None,
+        )?;
+        return Ok(true);
+    }
+    let store = load_instance_store()?;
+    let Some(routing) = store
+        .instances
+        .iter()
+        .find(|item| item.id == instance_id)
+        .and_then(|item| item.model_routing.clone())
+        .filter(|routing| routing.enabled)
+    else {
+        return Ok(false);
+    };
+    update_instance(UpdateInstanceParams {
+        instance_id: instance_id.to_string(),
+        name: None,
+        working_dir: None,
+        extra_args: None,
+        bind_account_id: None,
+        model_routing: Some(Some(CodexInstanceModelRouting {
+            enabled: false,
+            ..routing
+        })),
+        launch_mode: None,
+        app_speed: None,
+    })?;
+    Ok(true)
+}
+
+/// 读取指定实例（或默认实例）当前启用中的混合模型路由配置。
+pub fn load_enabled_model_routing(
+    instance_id: &str,
+) -> Result<CodexInstanceModelRouting, String> {
+    let instance_id = instance_id.trim();
+    if instance_id == CODEX_DEFAULT_INSTANCE_ID {
+        return load_default_settings()?
+            .model_routing
+            .filter(|routing| routing.enabled)
+            .ok_or_else(|| "该实例未启用混合模型路由".to_string());
+    }
+    load_instance_store()?
+        .instances
+        .into_iter()
+        .find(|item| item.id == instance_id)
+        .and_then(|item| item.model_routing)
+        .filter(|routing| routing.enabled)
+        .ok_or_else(|| "该实例未启用混合模型路由".to_string())
+}
+
+/// 指定实例（或默认实例）的 profile 目录。
+pub fn profile_dir_for_instance(instance_id: &str) -> Result<PathBuf, String> {
+    let instance_id = instance_id.trim();
+    if instance_id == CODEX_DEFAULT_INSTANCE_ID {
+        return get_default_codex_home();
+    }
+    load_instance_store()?
+        .instances
+        .into_iter()
+        .find(|item| item.id == instance_id)
+        .map(|item| PathBuf::from(item.user_data_dir))
+        .ok_or_else(|| "实例不存在".to_string())
+}
+
+/// 路由（含底座账号）是否引用了给定账号集合。
+fn routing_references_accounts(
+    routing: &CodexInstanceModelRouting,
+    bind_account_id: Option<&str>,
+    deleted: &HashSet<&str>,
+) -> bool {
+    if let Some(bind_account_id) = bind_account_id.map(str::trim).filter(|value| !value.is_empty()) {
+        let resolved = parse_provider_gateway_bind_account_id(bind_account_id)
+            .unwrap_or_else(|| bind_account_id.to_string());
+        if deleted.contains(resolved.trim()) {
+            return true;
+        }
+    }
+    routing
+        .routes
+        .iter()
+        .any(|route| deleted.contains(route.provider_account_id.trim()))
+}
+
+/// 账号被删除后，自动关闭引用了这些账号的混合模型路由（渠道配置保留），
+/// 返回被关闭路由的实例 ID 列表。
+///
+/// 底座账号或路由里的 API 账号消失后，继续保留启用状态只会让后台监控反复尝试恢复
+/// 注定失败的网关，并弹出与本意无关的报错。
+pub fn disable_model_routing_for_deleted_accounts(
+    deleted_account_ids: &[String],
+) -> Result<Vec<String>, String> {
+    let deleted: HashSet<&str> = deleted_account_ids
+        .iter()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .collect();
+    if deleted.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut affected = Vec::new();
+    let settings = load_default_settings()?;
+    if settings.model_routing.as_ref().is_some_and(|routing| {
+        routing.enabled
+            && routing_references_accounts(
+                routing,
+                settings.bind_account_id.as_deref(),
+                &deleted,
+            )
+    }) {
+        disable_model_routing(CODEX_DEFAULT_INSTANCE_ID)?;
+        affected.push(CODEX_DEFAULT_INSTANCE_ID.to_string());
+    }
+    for instance in load_instance_store()?.instances {
+        let Some(routing) = instance.model_routing.as_ref().filter(|r| r.enabled) else {
+            continue;
+        };
+        if routing_references_accounts(routing, instance.bind_account_id.as_deref(), &deleted) {
+            disable_model_routing(&instance.id)?;
+            affected.push(instance.id.clone());
+        }
+    }
+    Ok(affected)
+}
+
 pub fn update_default_pid(pid: Option<u32>) -> Result<DefaultInstanceSettings, String> {
     let _lock = CODEX_INSTANCE_STORE_LOCK
         .lock()
@@ -1170,41 +1287,56 @@ pub fn clear_all_pids() -> Result<(), String> {
     Ok(())
 }
 
-pub fn replace_bind_account_references(
-    old_account_id: &str,
-    new_account_id: &str,
-) -> Result<(), String> {
-    let old_id = old_account_id.trim();
-    let new_id = new_account_id.trim();
-    if old_id.is_empty() || new_id.is_empty() || old_id == new_id {
-        return Ok(());
-    }
+fn replace_instance_account_reference(value: &mut Option<String>, old_id: &str, new_id: &str) -> bool {
+    let Some(current) = value.as_deref() else { return false; };
+    let replacement = if current.trim() == old_id {
+        Some(new_id.to_string())
+    } else if parse_provider_gateway_bind_account_id(current).as_deref() == Some(old_id) {
+        provider_gateway_bind_account_id(new_id)
+    } else { None };
+    if let Some(replacement) = replacement { *value = Some(replacement); true } else { false }
+}
 
-    let _lock = CODEX_INSTANCE_STORE_LOCK
-        .lock()
-        .map_err(|_| "无法获取实例锁")?;
-    let mut store = load_instance_store()?;
+fn replace_instance_routing_references(routing: &mut Option<CodexInstanceModelRouting>, old_id: &str, new_id: &str) -> bool {
     let mut changed = false;
-
-    if store.default_settings.bind_account_id.as_deref() == Some(old_id) {
-        store.default_settings.bind_account_id = Some(new_id.to_string());
-        store.default_settings.follow_local_account = false;
-        changed = true;
-    }
-
-    for instance in &mut store.instances {
-        if instance.bind_account_id.as_deref() == Some(old_id) {
-            instance.bind_account_id = Some(new_id.to_string());
-            changed = true;
+    if let Some(routing) = routing {
+        for route in &mut routing.routes {
+            if route.provider_account_id.trim() == old_id {
+                route.provider_account_id = new_id.to_string();
+                changed = true;
+            }
         }
     }
+    changed
+}
 
-    if changed {
+fn replace_instance_store_account_references(store: &mut InstanceStore, old_id: &str, new_id: &str) -> bool {
+    let settings = &mut store.default_settings;
+    let mut changed = replace_instance_account_reference(&mut settings.bind_account_id, old_id, new_id);
+    if changed { settings.follow_local_account = false; }
+    changed |= replace_instance_routing_references(&mut settings.model_routing, old_id, new_id);
+    for instance in &mut store.instances {
+        changed |= replace_instance_account_reference(&mut instance.bind_account_id, old_id, new_id);
+        changed |= replace_instance_routing_references(&mut instance.model_routing, old_id, new_id);
+    }
+    changed
+}
+
+pub fn replace_bind_account_references(old_account_id: &str, new_account_id: &str) -> Result<(), String> {
+    let old_id = old_account_id.trim();
+    let new_id = new_account_id.trim();
+    if old_id.is_empty() || new_id.is_empty() || old_id == new_id { return Ok(()); }
+    let _lock = CODEX_INSTANCE_STORE_LOCK.lock().map_err(|_| "无法获取实例锁")?;
+    let mut store = load_instance_store()?;
+    if replace_instance_store_account_references(&mut store, old_id, new_id) {
         save_instance_store(&store)?;
     }
-
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "codex_instance_account_reference_tests.rs"]
+mod account_reference_tests;
 
 pub async fn inject_account_to_profile(profile_dir: &Path, account_id: &str) -> Result<(), String> {
     modules::codex_account::prepare_account_for_injection_from_auth_dir(
@@ -1268,3 +1400,6 @@ mod windows_shared_directory_tests {
         fs::remove_dir_all(root).expect("remove test directory");
     }
 }
+
+#[cfg(test)]
+include!("codex_instance_profile_copy_tests.rs");

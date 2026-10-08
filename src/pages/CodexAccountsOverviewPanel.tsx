@@ -1,21 +1,22 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus, RefreshCw, Download, Upload, Trash2, X, Globe, KeyRound, Power, Copy, Check, Play, Pause, RotateCw, CircleAlert, Info, Rows3, LayoutGrid, List, Search, ArrowDownWideNarrow, ArrowUp, ArrowDown, GripVertical, Clock, Tag, Star, Eye, EyeOff, BookOpen, FileText, ExternalLink, Pencil, FolderOpen, FolderPlus, ChevronRight, LogOut, Terminal, ChevronDown } from "lucide-react";
+import { useModalScrollLock } from "../hooks/useModalScrollLock";
+import "./CodexAccountDialogs.css";
+import { Plus, RefreshCw, Upload, Trash2, X, Globe, KeyRound, Power, Copy, Check, Play, Pause, RotateCw, CircleAlert, Info, Rows3, LayoutGrid, List, Search, ArrowDownWideNarrow, ArrowUp, ArrowDown, GripVertical, Clock, Tag, Star, Eye, EyeOff, BookOpen, FileText, ExternalLink, FolderOpen, FolderPlus, LogOut, Terminal, ChevronDown } from "lucide-react";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { TagEditModal } from "../components/TagEditModal";
 import { ExportJsonModal } from "../components/ExportJsonModal";
 import { ModalErrorMessage } from "../components/ModalErrorMessage";
 import { PaginationControls } from "../components/PaginationControls";
-import { CodexAccountGroupModal, CodexAddToGroupModal } from "../components/CodexAccountGroupModal";
+import { PlatformGroupTabs } from "../components/PlatformGroupTabs";
+import { AccountGroupModal, AddToGroupModal } from "../components/AccountGroupModal";
 import { CodexGroupAccountPickerModal } from "../components/CodexGroupAccountPickerModal";
 import { CodexLocalAccessModal } from "../components/CodexLocalAccessModal";
+import { CodexInstanceGatewaysModal } from "../components/CodexInstanceGatewaysModal";
 import { CodexAccountPoolHealthModal } from "../components/CodexAccountPoolHealthModal";
-import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexWebSessionAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
-import { isCodexOAuthBindingEligibleAccount } from "../utils/codexLocalAccessAccounts";
-import { CodexModelContextWindowTable } from "../components/codex/CodexModelContextWindowTable";
+import { isCodexApiKeyAccount, isCodexChatCompletionsApiKeyAccount, isCodexNewApiAccount } from "../types/codex";
 import { QuickSettingsPopover } from "../components/QuickSettingsPopover";
 import { MultiSelectFilterDropdown } from "../components/MultiSelectFilterDropdown";
-import { AccountTagFilterDropdown } from "../components/AccountTagFilterDropdown";
 import { SingleSelectFilterDropdown } from "../components/SingleSelectFilterDropdown";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, COCKPIT_API_PROVIDER_ID } from "../utils/codexProviderPresets";
@@ -25,7 +26,10 @@ import { getMfaOtpToken } from "../utils/mfaVault";
 import type { CodexExportFormat } from "../utils/codexExportFormats";
 import type { CodexAccountsViewProps } from "./CodexAccountsView";
 import { CodexAddAccountDialog } from "./CodexAddAccountDialog";
-import { parseCodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
+import { useCodexPelicanStore } from "../stores/useCodexPelicanStore";
+import { CodexRecycleBinModal } from "../components/CodexRecycleBinModal";
+import { emitAccountsChanged } from "../utils/accountSyncEvents";
+import { PELICAN_GROUPS_CHANGED } from "../components/codex/pelican/PelicanResults";
 
 
 /** 渲染 CodexAccountsView 的 activeTab === "overview" 业务面板。 */
@@ -51,7 +55,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     activeAccountUsesPersonalAccessToken,
     activeGroup,
     activeGroupId,
-    authFailedExportAccountIds,
     availableTags,
     batchDeleteBusy,
     batchDeleteJob,
@@ -71,8 +74,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     closeAccountNoteModal,
     closeApiKeyCredentialsModal,
     closeLocalAccessRiskNotice,
-    closeOAuthBindingModal,
-    closeOAuthBindingQuotaReserveEditor,
     closeQuickSwitchModal,
     closeResetCreditConfirmModal,
     codexAccountSortOptions,
@@ -82,7 +83,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     confirmDeleteGroup,
     confirmDeleteTag,
     confirmHideLocalAccessEntry,
-    confirmOAuthBindingQuotaReserveEditor,
     copyAccountNoteValue,
     copyFormattedExportJson,
     copyFormattedExportSavedPath,
@@ -99,11 +99,16 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     editingApiKeyCredentialsValue,
     editingApiKeyCredentialsVisible,
     editingApiModelCatalogDraft,
+    editingApiWireApi,
+    editingApiSupportsWebsockets,
+    editingApiCredentialsError,
+    setEditingApiWireApi,
+    setEditingApiSupportsWebsockets,
+    setEditingApiCredentialsError,
     editingApiModelCatalogError,
     editingApiModelCatalogFetching,
     editingApiModelCatalogInput,
     editingApiModelCatalogSyncAvailable,
-    editingApiModelContextWindowsInput,
     editingApiProviderPresetId,
     editingApiSyncModelCatalogToCodex,
     editingManagedProviderApiKeyId,
@@ -147,7 +152,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     handleClearBatchDelete,
     handleClearErrorAccounts,
     handleClearLocalAccessStats,
-    handleClearOAuthBinding,
     handleClearOverviewSelection,
     handleCloseExportModal,
     handleCodexBatchDelete,
@@ -158,19 +162,18 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     handleEditingApiBaseUrlCredentialsChange,
     handleEditingApiKeyCredentialsChange,
     handleExport,
-    handleExportAuthFailedAccounts,
     handleFetchEditingApiModelCatalog,
     handleKillLocalAccessPort,
+    handleEnterGroup,
     handleLeaveGroup,
     handleLocalAccessAddressKindChange,
-    handleOAuthBindingQuotaReserveToggle,
     handleOpenAccountNoteMailUrl,
     handleOpenProviderLink,
     handlePauseBatchDelete,
     handlePendingOAuthEmailInputChange,
     handleQuickAddAccountsToGroup,
-    handleReauthorizeOAuthBinding,
     handleRecoverLocalAccessAccounts,
+    handleCreateGrokUpstreamAccount,
     handleRefreshAccountNoteMailPreview,
     handleRefreshAll,
     handleRemoveFromGroup,
@@ -189,7 +192,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     handleSortByChange,
     handleSubmitAccountNote,
     handleSubmitApiKeyCredentials,
-    handleSubmitOAuthBinding,
     handleSubmitQuickSwitch,
     handleToggleExportJsonHidden,
     handleToggleLocalAccessEnabled,
@@ -202,12 +204,19 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     hasActiveOverviewFilters,
     hasDetectableFullQuotaWakeupAccounts,
     hasGroupEntryCards,
+    instanceGateways,
+    instanceGatewaysError,
+    instanceGatewaysLoading,
+    instanceGatewaysOpen,
+    closeInstanceGateways,
+    refreshInstanceGateways,
+    stopInstanceGateway,
+    restartInstanceGateway,
     includeExportSensitiveNotes,
     inlineFolderCards,
     isAllFilteredSelectionActive,
     isAllPaginatedSelected,
     isCustomSortActive,
-    isLocalAccessOAuthBinding,
     isResetCreditConfirmSubmitting,
     loading,
     localAccessAddressOptions,
@@ -231,40 +240,14 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     message,
     mfaTimeRemaining,
     moveCustomSortAccount,
-    oauthAccounts,
-    oauthBindingAccount,
-    oauthBindingAvailableTags,
-    oauthBindingEligibleAccounts,
-    oauthBindingError,
-    oauthBindingErrorScrollKey,
-    oauthBindingFilteredAccounts,
-    oauthBindingHasExistingBinding,
-    oauthBindingHourlyReserveDraft,
-    oauthBindingHourlyReserveInputRef,
-    oauthBindingPagination,
-    oauthBindingQuotaReserve,
-    oauthBindingQuotaReserveEditorOpen,
-    oauthBindingQuotaReserveFieldErrors,
-    oauthBindingSaving,
-    oauthBindingSelectedAccountId,
-    oauthBindingTargetActive,
-    oauthBindingTargetKind,
-    oauthBindingTierCounts,
-    oauthBindingTierFilterOptions,
-    oauthBindingWeeklyReserveDraft,
-    oauthBindingWeeklyReserveInputRef,
     OPENAI_OFFICIAL_PRESET_ID,
     openCodexAddModal,
     openCodexApiServicePage,
     openFormattedExportSavedDirectory,
     openFullQuotaWakeupTestModal,
-    openOAuthBindingQuotaReserveEditor,
     overviewAccounts,
     overviewCurrentAccountId,
-    overviewFilterChips,
     overviewLayoutMode,
-    overviewTotalCount,
-    overviewVisibleCount,
     page,
     paginatedAccounts,
     paginatedGroupedAccounts,
@@ -301,7 +284,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     resetCustomSortOrder,
     resolveGroupLabel,
     resolvePresentation,
-    resolveSubscriptionPresentation,
     savedMfaRecords,
     saveFormattedExportJson,
     savingApiKeyCredentials,
@@ -310,7 +292,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     selectedEditingApiProviderPreset,
     selectedEditingManagedProvider,
     selectedLocalAccessAddressKind,
-    selectedOAuthBindingAccount,
     selectedQuickSwitchApiKey,
     selectedQuickSwitchProvider,
     setAccountNoteMfaPickerOpen,
@@ -322,7 +303,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     setEditingApiKeyCredentialsVisible,
     setEditingApiModelCatalogError,
     setEditingApiModelCatalogInput,
-    setEditingApiModelContextWindowsInput,
     setEditingApiSyncModelCatalogToCodex,
     setEditingNewManagedProviderNameInput,
     setExportFormat,
@@ -334,11 +314,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     setLocalAccessRiskNoticeRemember,
     setLocalAccessState,
     setMessage,
-    setOauthBindingError,
-    setOauthBindingHourlyReserveDraft,
-    setOauthBindingQuotaReserveFieldErrors,
-    setOauthBindingSelectedAccountId,
-    setOauthBindingWeeklyReserveDraft,
     setPendingWebSessionImport,
     setSearchQuery,
     setShowAddToCodexGroupModal,
@@ -350,7 +325,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     setShowLocalAccessQuotaStatsModal,
     setShowTagFilter,
     setShowTagModal,
-    setSortBy,
     setSortDirection,
     setTagDeleteConfirm,
     showAddToCodexGroupModal,
@@ -361,7 +335,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     showLocalAccessHideConfirm,
     showLocalAccessModal,
     showLocalAccessQuotaStatsModal,
-    showOverviewFilterBanner,
     showOverviewSelectionBar,
     showTagFilter,
     showTagModal,
@@ -382,11 +355,39 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     togglePrivacyMode,
     toggleTagFilterValue,
     updateActiveAccountNoteForm,
-    validateOAuthBindingQuotaReserveField,
     viewMode,
   } = props;
+  const noteMfaInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!activeAccountNoteMode || !accountNoteFieldErrors.twoFactorSecret) return;
+    const frame = window.requestAnimationFrame(() => {
+      noteMfaInputRef.current?.scrollIntoView({ block: "nearest" });
+      noteMfaInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeAccountNoteMode, accountNoteFieldErrors.twoFactorSecret]);
+  const [recycleBinOpen, setRecycleBinOpen] = useState(false);
+  const recycleBinButton = (
+    <button type="button" className="btn btn-secondary" onClick={() => setRecycleBinOpen(true)}>
+      <Trash2 size={14} /><span>{t("common.recycleBin.title")}</span>
+    </button>
+  );
+  useEffect(() => {
+    const reload = () => { void reloadCodexGroups(); };
+    window.addEventListener(PELICAN_GROUPS_CHANGED, reload);
+    return () => window.removeEventListener(PELICAN_GROUPS_CHANGED, reload);
+  }, [reloadCodexGroups]);
+  useModalScrollLock(Boolean(quickSwitchAccountId || editingApiKeyCredentialsId));
   return (
         <>
+          {recycleBinOpen && <CodexRecycleBinModal
+            onClose={() => setRecycleBinOpen(false)}
+            maskAccountText={maskAccountText}
+            onRestored={async () => {
+              await store.fetchAccounts();
+              await emitAccountsChanged({ platformId: "codex", reason: "restore" });
+            }}
+          />}
           {message && (
             <div
               className={`message-bar ${message.tone === "error" ? "error" : "success"}`}
@@ -395,40 +396,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
               <button onClick={() => setMessage(null)}>
                 <X size={14} />
               </button>
-            </div>
-          )}
-
-          {activeGroup && (
-            <div className="folder-breadcrumb">
-              <button className="breadcrumb-back" onClick={handleLeaveGroup}>
-                <FolderOpen size={14} />
-                {t("accounts.groups.allGroups")}
-              </button>
-              <ChevronRight size={14} className="breadcrumb-sep" />
-              <span className="breadcrumb-current">
-                {activeGroup.name}
-                <span className="breadcrumb-count">
-                  ({filteredAccounts.length})
-                </span>
-              </span>
-              <button
-                className="btn btn-secondary breadcrumb-remove-btn"
-                onClick={() => setGroupQuickAddGroupId(activeGroup.id)}
-                title={t("accounts.groups.addAccounts")}
-              >
-                <FolderPlus size={14} />
-                {t("accounts.groups.addAccounts")}
-              </button>
-              {selected.size > 0 && (
-                <button
-                  className="btn btn-secondary breadcrumb-remove-btn"
-                  onClick={() => void handleRemoveFromGroup()}
-                  title={t("accounts.groups.removeFromGroup")}
-                >
-                  <LogOut size={14} />
-                  {t("accounts.groups.removeFromGroup")} ({selected.size})
-                </button>
-              )}
             </div>
           )}
 
@@ -596,7 +563,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             <div className="toolbar-right">
               <button
                 className="btn btn-primary icon-only"
-                onClick={() => openCodexAddModal("oauth")}
+                onClick={() => openCodexAddModal("tempLogin")}
                 title={t("common.shared.addAccount", "添加账号")}
               >
                 <Plus size={14} />
@@ -652,44 +619,145 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             </div>
           </div>
 
-          {(showOverviewFilterBanner || hasActiveOverviewFilters) && (
-            <div
-              className={`codex-overview-filter-banner${
-                showOverviewFilterBanner ? " is-active" : ""
-              }`}
-              role="status"
-            >
-              <div className="codex-overview-filter-banner-main">
-                <span className="codex-overview-filter-banner-count">
-                  {t("codex.filters.visibleOfTotal", {
-                    visible: overviewVisibleCount,
-                    total: overviewTotalCount,
-                    defaultValue: "显示 {{visible}} / 共 {{total}}",
-                  })}
-                </span>
-                {showOverviewFilterBanner && (
-                  <span className="codex-overview-filter-banner-text">
-                    {t("codex.filters.activeBanner", {
-                      visible: overviewVisibleCount,
-                      total: overviewTotalCount,
-                      defaultValue:
-                        "当前筛选仅显示 {{visible}}/{{total}} 个账号",
-                    })}
-                  </span>
+          {(accounts.length > 0 || codexGroups.length > 0) && (
+            <div className="codex-overview-selection-bar account-selection-toolbar has-middle">
+              <div className="codex-overview-selection-left">
+                <label className="codex-overview-select-all">
+                  <input
+                    type="checkbox"
+                    checked={isAllPaginatedSelected}
+                    onChange={handleToggleSelectAllPaginated}
+                    disabled={paginatedAccounts.length === 0}
+                  />
+                  <span>{t("common.selectAll", "全选")}</span>
+                </label>
+                {selected.size > 0 && !isAllFilteredSelectionActive && (
+                  <>
+                    <span className="codex-overview-selected-count">
+                      {t(
+                        "codex.apiService.customRoutingSelected",
+                        "已选 {{count}}",
+                      ).replace("{{count}}", String(selected.size))}
+                    </span>
+                    <button
+                      type="button"
+                      className="codex-overview-clear-selection-btn"
+                      onClick={handleClearOverviewSelection}
+                    >
+                      {t("messages.clearSelection", "取消选择")}
+                    </button>
+                  </>
                 )}
-                {overviewFilterChips.length > 0 && (
-                  <span className="codex-overview-filter-banner-chips">
-                    {overviewFilterChips.join(" · ")}
-                  </span>
+                {canSelectAllFilteredAccounts && (
+                  <button
+                    type="button"
+                    className="codex-overview-select-filtered-btn"
+                    onClick={handleSelectAllFilteredAccounts}
+                  >
+                    {t("messages.selectAllFilteredAccounts", {
+                      count: filteredIds.length,
+                      defaultValue: "选择全部符合条件 {{count}} 条",
+                    })}
+                  </button>
+                )}
+                {isAllFilteredSelectionActive && (
+                  <>
+                    <span className="codex-overview-selected-count">
+                      {t("messages.selectedAllFilteredAccounts", {
+                        count: filteredIds.length,
+                        defaultValue: "已选择全部符合条件 {{count}} 条",
+                      })}
+                    </span>
+                    <button
+                      type="button"
+                      className="codex-overview-clear-selection-btn"
+                      onClick={handleClearOverviewSelection}
+                    >
+                      {t("messages.clearSelection", "取消选择")}
+                    </button>
+                  </>
                 )}
               </div>
-              <button
-                type="button"
-                className="btn btn-secondary codex-overview-filter-clear-btn"
-                onClick={clearAllOverviewFilters}
-              >
-                {t("codex.filters.clearAll", "清除筛选")}
-              </button>
+
+              <div className="account-selection-toolbar-middle">
+                <PlatformGroupTabs
+                  groups={codexGroups}
+                  activeGroupId={activeGroupId}
+                  accounts={accounts}
+                  onSelectGroup={(groupId) => {
+                    if (groupId === null) {
+                      handleLeaveGroup();
+                    } else {
+                      handleEnterGroup(groupId);
+                    }
+                  }}
+                  onOpenManage={() => setShowCodexGroupModal(true)}
+                />
+              </div>
+
+              <div className="codex-overview-selection-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => useCodexPelicanStore.getState().open([...selected])}>
+                  <Play size={14} /><span>{t('pelican.title')}</span>
+                </button>
+                {recycleBinButton}
+                {hasDetectableFullQuotaWakeupAccounts && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary codex-overview-full-quota-wakeup-btn"
+                    onClick={openFullQuotaWakeupTestModal}
+                    title={t(
+                      "codex.wakeup.fullQuotaActionTitle",
+                      "打开账号唤醒测试，账号默认按 5h 额度从高到低排序。",
+                    )}
+                  >
+                    <Power size={14} />
+                    <span>
+                      {t("codex.wakeup.fullQuotaAction", "唤醒账号")}
+                    </span>
+                  </button>
+                )}
+                {errorAccountIds.length > 0 && (
+                  <button
+                    className="btn btn-danger icon-only codex-overview-clear-error-btn"
+                    onClick={handleClearErrorAccounts}
+                    title={`${t("messages.cleanErrorAccountsAction", "清理 ERROR 账号")} (${errorAccountIds.length})`}
+                  >
+                    <CircleAlert size={14} />
+                  </button>
+                )}
+                {selected.size > 0 && (
+                  <>
+                    <button
+                      className="btn btn-secondary icon-only"
+                      onClick={() => setShowAddToCodexGroupModal(true)}
+                      title={
+                        activeGroupId
+                          ? `${t("accounts.groups.moveToGroup")} (${selected.size})`
+                          : `${t("codex.groups.addToGroup", "添加至分组")} (${selected.size})`
+                      }
+                    >
+                      <FolderPlus size={14} />
+                    </button>
+                    {activeGroup && (
+                      <button
+                        className="btn btn-secondary icon-only"
+                        onClick={() => void handleRemoveFromGroup()}
+                        title={t("accounts.groups.removeFromGroup")}
+                        aria-label={t("accounts.groups.removeFromGroup")}
+                      >
+                        <LogOut size={14} />
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-danger icon-only"
+                      onClick={handleCodexBatchDelete}
+                      title={`${t("common.delete", "删除")} (${selected.size})`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -718,11 +786,12 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
               >
                 <button
                   className="btn btn-primary"
-                  onClick={() => openCodexAddModal("oauth")}
+                  onClick={() => openCodexAddModal("tempLogin")}
                 >
                   <Plus size={16} />
                   {t("common.shared.addAccount", "添加账号")}
                 </button>
+                {recycleBinButton}
                 <button
                   className="btn btn-secondary"
                   onClick={() =>
@@ -741,6 +810,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
           ) : filteredAccounts.length === 0 && !hasGroupEntryCards ? (
             <div className="empty-state">
               <h3>{t("common.shared.noMatch.title", "没有匹配的账号")}</h3>
+              {recycleBinButton}
               <p>
                 {t("common.shared.noMatch.desc", "请尝试调整搜索或筛选条件")}
               </p>
@@ -756,133 +826,11 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             </div>
           ) : (
             <>
-              {showOverviewSelectionBar && (
-                <div className="codex-overview-selection-bar">
-                  <div className="codex-overview-selection-left">
-                    <label className="codex-overview-select-all">
-                      <input
-                        type="checkbox"
-                        checked={isAllPaginatedSelected}
-                        onChange={handleToggleSelectAllPaginated}
-                      />
-                      <span>{t("common.selectAll", "全选")}</span>
-                    </label>
-                    {selected.size > 0 && !isAllFilteredSelectionActive && (
-                      <span className="codex-overview-selected-count">
-                        {t(
-                          "codex.apiService.customRoutingSelected",
-                          "已选 {{count}}",
-                        ).replace("{{count}}", String(selected.size))}
-                      </span>
-                    )}
-                    {canSelectAllFilteredAccounts && (
-                      <button
-                        type="button"
-                        className="codex-overview-select-filtered-btn"
-                        onClick={handleSelectAllFilteredAccounts}
-                      >
-                        {t("messages.selectAllFilteredAccounts", {
-                          count: filteredIds.length,
-                          defaultValue: "选择全部符合条件 {{count}} 条",
-                        })}
-                      </button>
-                    )}
-                    {isAllFilteredSelectionActive && (
-                      <>
-                        <span className="codex-overview-selected-count">
-                          {t("messages.selectedAllFilteredAccounts", {
-                            count: filteredIds.length,
-                            defaultValue: "已选择全部符合条件 {{count}} 条",
-                          })}
-                        </span>
-                        <button
-                          type="button"
-                          className="codex-overview-clear-selection-btn"
-                          onClick={handleClearOverviewSelection}
-                        >
-                          {t("messages.clearSelection", "取消选择")}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {(selected.size > 0 ||
-                    errorAccountIds.length > 0 ||
-                    authFailedExportAccountIds.length > 0 ||
-                    hasDetectableFullQuotaWakeupAccounts) && (
-                    <div className="codex-overview-selection-actions">
-                      <button
-                        type="button"
-                        className="btn btn-secondary codex-overview-full-quota-wakeup-btn"
-                        onClick={openFullQuotaWakeupTestModal}
-                        disabled={!hasDetectableFullQuotaWakeupAccounts}
-                        title={t(
-                          "codex.wakeup.fullQuotaActionTitle",
-                          "打开账号唤醒测试，账号默认按 5h 额度从高到低排序。",
-                        )}
-                      >
-                        <Power size={14} />
-                        <span>
-                          {t("codex.wakeup.fullQuotaAction", "唤醒账号")}
-                        </span>
-                      </button>
-                      {authFailedExportAccountIds.length > 0 && (
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={handleExportAuthFailedAccounts}
-                          disabled={exporting}
-                          title={t(
-                            "codex.exportAuthFailedTitle",
-                            "导出全部授权失败账号",
-                          )}
-                        >
-                          <Download size={14} />
-                          <span>
-                            {t("codex.exportAuthFailed", "导出失败账号")}
-                            {` (${authFailedExportAccountIds.length})`}
-                          </span>
-                        </button>
-                      )}
-                      {errorAccountIds.length > 0 && (
-                        <button
-                          className="btn btn-danger icon-only codex-overview-clear-error-btn"
-                          onClick={handleClearErrorAccounts}
-                          title={`${t("messages.cleanErrorAccountsAction", "清理 ERROR 账号")} (${errorAccountIds.length})`}
-                        >
-                          <CircleAlert size={14} />
-                        </button>
-                      )}
-                      {selected.size > 0 && (
-                        <>
-                          <button
-                            className="btn btn-secondary icon-only"
-                            onClick={() => setShowAddToCodexGroupModal(true)}
-                            title={
-                              activeGroupId
-                                ? `${t("accounts.groups.moveToGroup")} (${selected.size})`
-                                : `${t("codex.groups.addToGroup", "添加至分组")} (${selected.size})`
-                            }
-                          >
-                            <FolderPlus size={14} />
-                          </button>
-                          <button
-                            className="btn btn-danger icon-only"
-                            onClick={handleCodexBatchDelete}
-                            title={`${t("common.delete", "删除")} (${selected.size})`}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
               {batchDeleteJob && (
                 <div className="codex-batch-delete-job">
                   <div className="codex-batch-delete-job__head">
                     <div>
-                      <strong>{t("codex.batchDelete.title")}</strong>
+                      <strong>{t("common.recycleBin.move")}</strong>
                       <span>
                         {t("codex.batchDelete.summary", {
                           completed: batchDeleteJob.completed,
@@ -1254,10 +1202,10 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
 
           {<CodexAddAccountDialog {...props} />}
 
-          {quickSwitchAccountId && (
-            <div className="modal-overlay">
+          {quickSwitchAccountId && createPortal(
+            <div className="modal-overlay codex-account-dialog-overlay">
               <div
-                className="modal-content codex-add-modal codex-api-key-edit-modal"
+                className="modal-content codex-add-modal codex-api-key-edit-modal codex-account-dialog"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="modal-header">
@@ -1395,7 +1343,9 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                       </div>
                     )}
 
-                    <div className="api-key-edit-actions">
+                  </div>
+                </div>
+                    <div className="modal-footer api-key-edit-actions">
                       <button
                         className="btn btn-secondary"
                         onClick={() => {
@@ -1421,584 +1371,17 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                           : t("codex.quickSwitch.apply", "立即切换")}
                       </button>
                     </div>
-                  </div>
-                </div>
               </div>
-            </div>
+            </div>,
+            document.body,
           )}
 
-          {oauthBindingTargetActive && (
-            <div className="modal-overlay">
-              <div
-                className="modal-content codex-add-modal codex-oauth-binding-modal"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="modal-header">
-                  <h2>
-                    {t("codex.api.oauthBinding.title", "绑定 OAuth 账号")}
-                  </h2>
-                  <button
-                    className="modal-close"
-                    onClick={closeOAuthBindingModal}
-                    aria-label={t("common.close", "关闭")}
-                    disabled={oauthBindingSaving}
-                  >
-                    <X />
-                  </button>
-                </div>
-                <div className="modal-body">
-                  <ModalErrorMessage
-                    message={oauthBindingError}
-                    scrollKey={oauthBindingErrorScrollKey}
-                  />
-                  {parseCodexSwitchAuthFailure(oauthBindingError) && (
-                    <div className="codex-oauth-binding-reauthorize">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={handleReauthorizeOAuthBinding}
-                        disabled={oauthBindingSaving}
-                      >
-                        {t("common.reauthorize", "重新授权")}
-                      </button>
-                    </div>
-                  )}
-                  <div className="add-section">
-                    <div className="codex-oauth-binding-context">
-                      <p className="section-desc codex-oauth-binding-desc">
-                        {oauthBindingTargetKind === "local_access"
-                          ? t(
-                              "codex.localAccess.oauthBinding.desc",
-                              "可选绑定。只要 OAuth 账号带 refresh_token 即可选择；未绑定时 API 服务按原 API Key 逻辑运行；绑定后登录态使用 OAuth 账号，Provider 使用当前 API 服务配置。",
-                            )
-                          : t(
-                              "codex.api.oauthBinding.desc",
-                              "可选绑定。只要 OAuth 账号带 refresh_token 即可选择；未绑定时该账号按原 API Key 逻辑切换；绑定后登录态使用 OAuth 账号，Provider 使用当前 API Key 账号配置。",
-                            )}
-                      </p>
-                      <div className="section-desc codex-oauth-binding-current-target">
-                        {oauthBindingTargetKind === "local_access"
-                          ? t("codex.localAccess.oauthBinding.currentService", {
-                              defaultValue: "API 服务：{{name}}",
-                              name: t("codex.localAccess.title", "API 服务"),
-                            })
-                          : oauthBindingAccount
-                            ? t("codex.api.oauthBinding.currentAccount", {
-                                defaultValue: "API Key 账号：{{name}}",
-                                name: maskAccountText(
-                                  resolvePresentation(oauthBindingAccount)
-                                    .displayName,
-                                ),
-                              })
-                            : null}
-                      </div>
-                    </div>
-                    <div className="codex-oauth-binding-picker">
-                      <div className="codex-oauth-binding-picker-header">
-                        <label>
-                          {t(
-                            "codex.api.oauthBinding.selectLabel",
-                            "选择 OAuth 账号",
-                          )}
-                        </label>
-                        <div className="codex-oauth-binding-picker-controls">
-                          {isLocalAccessOAuthBinding && (
-                            <div className="codex-oauth-binding-quota-control">
-                              <label
-                                className="codex-oauth-binding-gateway-toggle codex-oauth-binding-quota-toggle"
-                                title={t(
-                                  "codex.localAccess.oauthBinding.quotaReserveDesc",
-                                  "API 服务仅在 5 小时和周剩余额度均高于保留值时使用该 OAuth 账号。",
-                                )}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(oauthBindingQuotaReserve)}
-                                  onChange={(event) =>
-                                    handleOAuthBindingQuotaReserveToggle(
-                                      event.target.checked,
-                                    )
-                                  }
-                                  disabled={oauthBindingSaving}
-                                />
-                                <span
-                                  className="codex-oauth-binding-checkbox-ui"
-                                  aria-hidden="true"
-                                />
-                                <span>
-                                  {t(
-                                    "codex.localAccess.oauthBinding.quotaReserveToggle",
-                                    "保留 OAuth 额度",
-                                  )}
-                                </span>
-                              </label>
-                              {oauthBindingQuotaReserve && (
-                                <button
-                                  type="button"
-                                  className="btn btn-icon codex-oauth-binding-quota-edit"
-                                  onClick={openOAuthBindingQuotaReserveEditor}
-                                  disabled={oauthBindingSaving}
-                                  title={`${t(
-                                    "codex.localAccess.oauthBinding.quotaReserveHourlyLabel",
-                                    "5 小时保留",
-                                  )} ${oauthBindingQuotaReserve.hourlyPercent}% · ${t(
-                                    "codex.localAccess.oauthBinding.quotaReserveWeeklyLabel",
-                                    "周保留",
-                                  )} ${oauthBindingQuotaReserve.weeklyPercent}%`}
-                                  aria-label={`${t("instances.actions.edit", "编辑")} ${t(
-                                    "codex.localAccess.oauthBinding.quotaReserveToggle",
-                                    "保留 OAuth 额度",
-                                  )}`}
-                                >
-                                  <Pencil size={12} />
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {oauthAccounts.length === 0 ? (
-                        <div className="add-status error">
-                          <CircleAlert size={16} />
-                          <span>
-                            {t(
-                              "codex.api.oauthBinding.empty",
-                              "暂无 OAuth 账号，请先添加 OAuth 授权账号。",
-                            )}
-                          </span>
-                        </div>
-                      ) : (
-                        <>
-                          {oauthBindingEligibleAccounts.length === 0 && (
-                            <div className="add-status error">
-                              <CircleAlert size={16} />
-                              <span>
-                                {t(
-                                  "codex.api.oauthBinding.emptyEligible",
-                                  "没有带 refresh_token 的 OAuth 账号，请重新 OAuth 授权或添加符合条件的 OAuth 账号。",
-                                )}
-                              </span>
-                            </div>
-                          )}
-                          <div className="codex-oauth-binding-toolbar">
-                            <div className="search-box codex-oauth-binding-search">
-                              <Search size={16} className="search-icon" />
-                              <input
-                                type="text"
-                                placeholder={t(
-                                  "common.shared.search",
-                                  "搜索账号...",
-                                )}
-                                value={searchQuery}
-                                onChange={(event) =>
-                                  setSearchQuery(event.target.value)
-                                }
-                                disabled={oauthBindingSaving}
-                              />
-                            </div>
-                            <MultiSelectFilterDropdown
-                              options={oauthBindingTierFilterOptions}
-                              selectedValues={filterTypes}
-                              allLabel={t("common.shared.filter.all", {
-                                count: oauthBindingTierCounts.all,
-                              })}
-                              filterLabel={t(
-                                "common.shared.filterLabel",
-                                "筛选",
-                              )}
-                              clearLabel={t("accounts.clearFilter", "清空筛选")}
-                              emptyLabel={t("common.none", "暂无")}
-                              ariaLabel={t("common.shared.filterLabel", "筛选")}
-                              onToggleValue={toggleFilterTypeValue}
-                              onClear={clearFilterTypes}
-                            />
-                            <AccountTagFilterDropdown
-                              availableTags={oauthBindingAvailableTags}
-                              selectedTags={tagFilter}
-                              onToggleTag={toggleTagFilterValue}
-                              onClear={clearTagFilter}
-                            />
-                            <SingleSelectFilterDropdown
-                              value={sortBy}
-                              options={codexAccountSortOptions}
-                              ariaLabel={t("common.shared.sortLabel", "排序")}
-                              icon={<ArrowDownWideNarrow size={14} />}
-                              disabled={oauthBindingSaving}
-                              onChange={setSortBy}
-                            />
-                            {sortBy !== "custom" && (
-                              <button
-                                type="button"
-                                className="sort-direction-btn"
-                                onClick={() =>
-                                  setSortDirection((prev) =>
-                                    prev === "desc" ? "asc" : "desc",
-                                  )
-                                }
-                                disabled={oauthBindingSaving}
-                                title={
-                                  sortDirection === "desc"
-                                    ? t(
-                                        "common.shared.sort.descTooltip",
-                                        "当前：降序，点击切换为升序",
-                                      )
-                                    : t(
-                                        "common.shared.sort.ascTooltip",
-                                        "当前：升序，点击切换为降序",
-                                      )
-                                }
-                                aria-label={t(
-                                  "common.shared.sort.toggleDirection",
-                                  "切换排序方向",
-                                )}
-                              >
-                                {sortDirection === "desc" ? (
-                                  <ArrowDown size={15} />
-                                ) : (
-                                  <ArrowUp size={15} />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                          {oauthBindingFilteredAccounts.length === 0 ? (
-                            <div className="group-account-empty">
-                              <span>
-                                {t(
-                                  "common.shared.noMatch.title",
-                                  "没有匹配的账号",
-                                )}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="codex-oauth-binding-list">
-                              {oauthBindingPagination.pageItems.map(
-                                (account) => {
-                                  const presentation =
-                                    resolvePresentation(account);
-                                  const subscriptionInfo =
-                                    resolveSubscriptionPresentation(account);
-                                  const selected =
-                                    oauthBindingSelectedAccountId ===
-                                    account.id;
-                                  const eligible =
-                                    isCodexOAuthBindingEligibleAccount(account);
-                                  const rowDisabled =
-                                    oauthBindingSaving || !eligible;
-                                  const emailText = maskAccountText(
-                                    account.email ||
-                                      account.account_name ||
-                                      presentation.displayName ||
-                                      account.id,
-                                  );
-                                  return (
-                                    <label
-                                      key={account.id}
-                                      className={`codex-oauth-binding-row ${selected ? "is-selected" : ""}`}
-                                      aria-label={emailText}
-                                      aria-disabled={rowDisabled}
-                                      title={
-                                        eligible
-                                          ? emailText
-                                          : isCodexAgentIdentityAccount(account)
-                                            ? t(
-                                                "codex.agentIdentityRegistration.oauthBindingUnsupported",
-                                                "Agent Identity 账号仅用于 API 服务，不能作为 OAuth 绑定账号。",
-                                              )
-                                            : isCodexWebSessionAccount(account)
-                                              ? t(
-                                                  "codex.webSessionImport.oauthBindingUnsupported",
-                                                  "Web Session 账号仅支持查看额度，不能作为 OAuth 绑定账号。",
-                                                )
-                                              : t(
-                                                  "codex.api.oauthBinding.validationSubscriptionRequired",
-                                                  "只能绑定带 refresh_token 的 OAuth 账号",
-                                                )
-                                      }
-                                      onClick={(event) => {
-                                        if (rowDisabled) {
-                                          event.preventDefault();
-                                          return;
-                                        }
-                                        setOauthBindingSelectedAccountId(
-                                          account.id,
-                                        );
-                                        setOauthBindingError(null);
-                                      }}
-                                    >
-                                      <input
-                                        type="radio"
-                                        name="codex-oauth-binding-account"
-                                        checked={selected}
-                                        onChange={() => {
-                                          setOauthBindingSelectedAccountId(
-                                            account.id,
-                                          );
-                                          setOauthBindingError(null);
-                                        }}
-                                        disabled={rowDisabled}
-                                      />
-                                      <div className="codex-oauth-binding-row-main">
-                                        <span
-                                          className="codex-oauth-binding-row-name"
-                                          title={emailText}
-                                        >
-                                          {emailText}
-                                        </span>
-                                        <span
-                                          className={`tier-badge codex-oauth-binding-row-plan ${presentation.planClass || "unknown"}`}
-                                          title={presentation.planLabel}
-                                        >
-                                          {presentation.planLabel}
-                                        </span>
-                                        <span
-                                          className={`codex-oauth-binding-row-term ${subscriptionInfo.tone}`}
-                                          title={subscriptionInfo.titleText}
-                                        >
-                                          <Clock size={12} />
-                                          <span>
-                                            {t(
-                                              "codex.subscription.label",
-                                              "有效期",
-                                            )}
-                                          </span>
-                                          <strong>
-                                            {subscriptionInfo.valueText}
-                                          </strong>
-                                          <span>
-                                            {subscriptionInfo.detailText}
-                                          </span>
-                                        </span>
-                                      </div>
-                                    </label>
-                                  );
-                                },
-                              )}
-                            </div>
-                          )}
-                          <PaginationControls
-                            totalItems={oauthBindingPagination.totalItems}
-                            currentPage={oauthBindingPagination.currentPage}
-                            totalPages={oauthBindingPagination.totalPages}
-                            pageSize={oauthBindingPagination.pageSize}
-                            pageSizeOptions={
-                              oauthBindingPagination.pageSizeOptions
-                            }
-                            rangeStart={oauthBindingPagination.rangeStart}
-                            rangeEnd={oauthBindingPagination.rangeEnd}
-                            canGoPrevious={oauthBindingPagination.canGoPrevious}
-                            canGoNext={oauthBindingPagination.canGoNext}
-                            onPageSizeChange={
-                              oauthBindingPagination.setPageSize
-                            }
-                            onPreviousPage={
-                              oauthBindingPagination.goToPreviousPage
-                            }
-                            onNextPage={oauthBindingPagination.goToNextPage}
-                          />
-                        </>
-                      )}
-                    </div>
-                    <div className="api-key-edit-actions">
-                      {oauthAccounts.length === 0 && (
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => {
-                            closeOAuthBindingModal();
-                            openCodexAddModal("oauth");
-                          }}
-                          disabled={oauthBindingSaving}
-                        >
-                          {t("codex.addModal.oauth", "OAuth 授权")}
-                        </button>
-                      )}
-                      {oauthBindingHasExistingBinding && (
-                        <button
-                          className="btn btn-secondary codex-oauth-binding-clear"
-                          onClick={() => void handleClearOAuthBinding()}
-                          disabled={oauthBindingSaving}
-                        >
-                          {t("codex.api.oauthBinding.clearAction", "解除绑定")}
-                        </button>
-                      )}
-                      <button
-                        className="btn btn-secondary"
-                        onClick={closeOAuthBindingModal}
-                        disabled={oauthBindingSaving}
-                      >
-                        {t("common.cancel")}
-                      </button>
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => void handleSubmitOAuthBinding()}
-                        disabled={
-                          oauthBindingSaving ||
-                          !selectedOAuthBindingAccount ||
-                          oauthBindingEligibleAccounts.length === 0
-                        }
-                      >
-                        {oauthBindingSaving
-                          ? t("common.saving", "保存中...")
-                          : t("common.save")}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {oauthBindingQuotaReserveEditorOpen && isLocalAccessOAuthBinding && (
-            <div className="modal-overlay codex-oauth-binding-quota-overlay">
-              <div
-                className="modal-content codex-add-modal codex-oauth-binding-quota-modal"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="modal-header">
-                  <h2>
-                    {t(
-                      "codex.localAccess.oauthBinding.quotaReserveToggle",
-                      "保留 OAuth 额度",
-                    )}
-                  </h2>
-                  <button
-                    type="button"
-                    className="modal-close"
-                    onClick={closeOAuthBindingQuotaReserveEditor}
-                    aria-label={t("common.close", "关闭")}
-                  >
-                    <X />
-                  </button>
-                </div>
-                <div className="modal-body">
-                  <div className="add-section">
-                    <p className="section-desc codex-oauth-binding-quota-desc">
-                      {t(
-                        "codex.localAccess.oauthBinding.quotaReserveDesc",
-                        "API 服务仅在 5 小时和周剩余额度均高于保留值时使用该 OAuth 账号。",
-                      )}
-                    </p>
-                    <div className="codex-oauth-binding-quota-fields">
-                      <label className="codex-oauth-binding-quota-field">
-                        <span>
-                          {t(
-                            "codex.localAccess.oauthBinding.quotaReserveHourlyLabel",
-                            "5 小时保留",
-                          )}
-                        </span>
-                        <div className="codex-oauth-binding-quota-input-wrap">
-                          <input
-                            ref={oauthBindingHourlyReserveInputRef}
-                            className={
-                              oauthBindingQuotaReserveFieldErrors.hourlyPercent
-                                ? "codex-account-note-input has-error"
-                                : "codex-account-note-input"
-                            }
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            maxLength={3}
-                            value={oauthBindingHourlyReserveDraft}
-                            onChange={(event) => {
-                              if (!/^\d*$/.test(event.target.value)) return;
-                              setOauthBindingHourlyReserveDraft(
-                                event.target.value,
-                              );
-                              setOauthBindingQuotaReserveFieldErrors(
-                                (prev) => ({
-                                  ...prev,
-                                  hourlyPercent: undefined,
-                                }),
-                              );
-                            }}
-                            onBlur={() =>
-                              validateOAuthBindingQuotaReserveField(
-                                "hourlyPercent",
-                                oauthBindingHourlyReserveDraft,
-                              )
-                            }
-                          />
-                          <span aria-hidden="true">%</span>
-                        </div>
-                        {oauthBindingQuotaReserveFieldErrors.hourlyPercent && (
-                          <span className="codex-account-note-field-error codex-oauth-binding-quota-error">
-                            {oauthBindingQuotaReserveFieldErrors.hourlyPercent}
-                          </span>
-                        )}
-                      </label>
-                      <label className="codex-oauth-binding-quota-field">
-                        <span>
-                          {t(
-                            "codex.localAccess.oauthBinding.quotaReserveWeeklyLabel",
-                            "周保留",
-                          )}
-                        </span>
-                        <div className="codex-oauth-binding-quota-input-wrap">
-                          <input
-                            ref={oauthBindingWeeklyReserveInputRef}
-                            className={
-                              oauthBindingQuotaReserveFieldErrors.weeklyPercent
-                                ? "codex-account-note-input has-error"
-                                : "codex-account-note-input"
-                            }
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            maxLength={3}
-                            value={oauthBindingWeeklyReserveDraft}
-                            onChange={(event) => {
-                              if (!/^\d*$/.test(event.target.value)) return;
-                              setOauthBindingWeeklyReserveDraft(
-                                event.target.value,
-                              );
-                              setOauthBindingQuotaReserveFieldErrors(
-                                (prev) => ({
-                                  ...prev,
-                                  weeklyPercent: undefined,
-                                }),
-                              );
-                            }}
-                            onBlur={() =>
-                              validateOAuthBindingQuotaReserveField(
-                                "weeklyPercent",
-                                oauthBindingWeeklyReserveDraft,
-                              )
-                            }
-                          />
-                          <span aria-hidden="true">%</span>
-                        </div>
-                        {oauthBindingQuotaReserveFieldErrors.weeklyPercent && (
-                          <span className="codex-account-note-field-error codex-oauth-binding-quota-error">
-                            {oauthBindingQuotaReserveFieldErrors.weeklyPercent}
-                          </span>
-                        )}
-                      </label>
-                    </div>
-                    <div className="api-key-edit-actions">
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={closeOAuthBindingQuotaReserveEditor}
-                      >
-                        {t("common.cancel", "取消")}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={confirmOAuthBindingQuotaReserveEditor}
-                      >
-                        {t("common.confirm", "确认")}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {editingApiKeyCredentialsId && (
-            <div className="modal-overlay">
+          {editingApiKeyCredentialsId && createPortal(
+            <div className="modal-overlay codex-account-dialog-overlay">
               <div
-                className="modal-content codex-add-modal codex-api-key-edit-modal"
+                className="modal-content codex-add-modal codex-api-key-edit-modal codex-provider-modal codex-account-dialog"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="modal-header">
@@ -2287,6 +1670,41 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                         />
                       </div>
                     </div>
+                    <div className="oauth-link">
+                      <label>{t("codex.modelProviders.fields.wireApi", "协议")}</label>
+                      <div className="api-provider-chip-list">
+                        <button type="button" className={`api-provider-chip ${editingApiWireApi === "responses" ? "active" : ""}`}
+                          disabled={savingApiKeyCredentials} aria-pressed={editingApiWireApi === "responses"}
+                          onClick={() => { setEditingApiWireApi("responses"); setEditingApiCredentialsError(null); }}>
+                          {t("codex.modelProviders.wireApi.responses", "Responses 原生")}
+                        </button>
+                        <button type="button" className={`api-provider-chip ${editingApiWireApi === "chat_completions" ? "active" : ""}`}
+                          disabled={savingApiKeyCredentials} aria-pressed={editingApiWireApi === "chat_completions"}
+                          onClick={() => { setEditingApiWireApi("chat_completions"); setEditingApiSupportsWebsockets(false); setEditingApiCredentialsError(null); }}>
+                          {t("codex.modelProviders.wireApi.chatCompletions", "Chat Completions 协议")}
+                        </button>
+                      </div>
+                    </div>
+                    {editingApiWireApi === "responses" && (
+                      <div className="oauth-link">
+                        <label>{t("codex.modelProviders.fields.supportsWebsockets", "WebSocket 传输")}</label>
+                        <label className="provider-vision-toggle">
+                          <span className="provider-vision-toggle-copy">
+                            <span className="provider-vision-toggle-title">
+                              {t("codex.modelProviders.websockets.title", "允许 Codex 使用 Responses WebSocket")}
+                            </span>
+                            <span className="provider-vision-toggle-desc">
+                              {t("codex.modelProviders.websockets.help", "仅在供应商明确支持 Responses WebSocket 时开启；连接方式可通过 Codex 或代理服务日志确认。")}
+                            </span>
+                          </span>
+                          <span className="provider-vision-switch">
+                            <input type="checkbox" checked={editingApiSupportsWebsockets} disabled={savingApiKeyCredentials}
+                              onChange={(event) => { setEditingApiSupportsWebsockets(event.target.checked); setEditingApiCredentialsError(null); }} />
+                            <span className="provider-vision-switch-track" />
+                          </span>
+                        </label>
+                      </div>
+                    )}
                     {editingApiProviderPresetId !== COCKPIT_API_PROVIDER_ID && (
                       <div className="oauth-link">
                         <label>
@@ -2345,20 +1763,6 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                             )}
                             disabled={savingApiKeyCredentials}
                             aria-describedby="codex-api-model-catalog-edit-hint"
-                          />
-                          <CodexModelContextWindowTable
-                            models={editingApiModelCatalogDraft}
-                            drafts={editingApiModelContextWindowsInput}
-                            onChange={(model, value) => {
-                              setEditingApiModelContextWindowsInput(
-                                (current) => ({
-                                  ...current,
-                                  [model]: value,
-                                }),
-                              );
-                              setEditingApiModelCatalogError(null);
-                            }}
-                            disabled={savingApiKeyCredentials}
                           />
                           <div className="api-model-catalog-toolbar">
                             <p
@@ -2440,7 +1844,10 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                         )}
                       </>
                     )}
-                    <div className="api-key-edit-actions">
+                  </div>
+                </div>
+                    <ModalErrorMessage message={editingApiCredentialsError} position="bottom" />
+                    <div className="modal-footer api-key-edit-actions">
                       <button
                         className="btn btn-secondary"
                         onClick={closeApiKeyCredentialsModal}
@@ -2462,10 +1869,9 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                           : t("common.save")}
                       </button>
                     </div>
-                  </div>
-                </div>
               </div>
-            </div>
+            </div>,
+            document.body,
           )}
 
           {showCustomSortModal && (
@@ -3210,7 +2616,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             <div className="modal-overlay">
               <div className="modal" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
-                  <h2>{t("common.confirm")}</h2>
+                  <h2>{t("common.recycleBin.move")}</h2>
                   <button
                     className="modal-close"
                     onClick={() => !batchDeleteBusy && setDeleteConfirm(null)}
@@ -3224,7 +2630,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                     message={batchDeleteModalError || deleteConfirmError}
                     scrollKey={deleteConfirmErrorScrollKey}
                   />
-                  <p>{deleteConfirm.message}</p>
+                  <p>{t("common.recycleBin.confirmMove", { count: deleteConfirm.ids.length })}</p>
                 </div>
                 <div className="modal-footer">
                   <button
@@ -3241,7 +2647,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                   >
                     {batchDeleteBusy
                       ? t("common.processing", "处理中...")
-                      : t("common.confirm")}
+                      : t("common.recycleBin.move")}
                   </button>
                 </div>
               </div>
@@ -3618,6 +3024,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                       </span>
                       <div className="codex-account-note-input-row">
                         <input
+                          ref={noteMfaInputRef}
                           className={`codex-account-note-input ${
                             accountNoteFieldErrors.twoFactorSecret
                               ? "has-error"
@@ -4086,6 +3493,9 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             accounts={accounts}
             accountHealth={localAccessState?.accountHealth ?? []}
             accountPoolHealth={localAccessState?.accountPoolHealth ?? []}
+            recoverySuppressedAccountIds={
+              localAccessState?.recoverySuppressedAccountIds ?? []
+            }
             actionBusy={localAccessHealthActionBusy}
             maskAccountText={maskAccountText}
             onClose={() => setShowLocalAccessHealthModal(false)}
@@ -4093,6 +3503,12 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
               handleRecoverLocalAccessAccounts([accountId])
             }
             onRecoverAll={handleRecoverLocalAccessAccounts}
+            onReauthorize={(accountId) => {
+              const account = accounts.find((item) => item.id === accountId);
+              if (!account) return;
+              setShowLocalAccessHealthModal(false);
+              openCodexAddModal("tempLogin", account);
+            }}
           />
 
           <CodexLocalAccessModal
@@ -4105,6 +3521,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             accounts={accounts}
             accountsLoaded={store.accountsLoaded}
             accountGroups={codexGroups}
+            onAddGrokMember={handleCreateGrokUpstreamAccount}
             memberView={
               localAccessModalMode === "members"
                 ? {
@@ -4162,6 +3579,19 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                 .updateCodexLocalAccessDebugLogs(debugLogs)
                 .then(setLocalAccessState)
             }
+            onUpdateImageGenerationModel={(model) =>
+              codexLocalAccessService
+                .updateCodexLocalAccessImageGenerationModel(model)
+                .then(setLocalAccessState)
+            }
+            onUpdateImageGenerationMainModel={(model) =>
+              codexLocalAccessService.updateCodexLocalAccessImageGenerationMainModel(model).then(setLocalAccessState)
+            }
+            onUpdateImageGenerationAccounts={(accountIds) =>
+              codexLocalAccessService
+                .updateCodexLocalAccessImageGenerationAccounts(accountIds)
+                .then(setLocalAccessState)
+            }
             onUpdateUpstreamProxyConfig={
               handleUpdateLocalAccessUpstreamProxyConfig
             }
@@ -4185,24 +3615,40 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             sidecarRestarting={localAccessSidecarRestarting}
           />
 
+          <CodexInstanceGatewaysModal
+            isOpen={instanceGatewaysOpen}
+            gateways={instanceGateways}
+            loading={instanceGatewaysLoading}
+            error={instanceGatewaysError}
+            maskAccountText={maskAccountText}
+            onRefresh={() => void refreshInstanceGateways()}
+            onStopGateway={stopInstanceGateway}
+            onRestartGateway={restartInstanceGateway}
+            onClose={closeInstanceGateways}
+          />
+
           {/* Codex 分组管理弹窗 */}
-          <CodexAccountGroupModal
+          <AccountGroupModal
             isOpen={showCodexGroupModal}
             onClose={() => setShowCodexGroupModal(false)}
             onGroupsChanged={reloadCodexGroups}
-            groupFilter={groupFilter}
-            onToggleGroupFilter={toggleGroupFilterValue}
-            onClearGroupFilter={clearGroupFilter}
+            platform="codex"
+            onAddAccounts={(group) => {
+              setShowCodexGroupModal(false);
+              setGroupQuickAddGroupId(group.id);
+            }}
           />
 
           {/* Codex 添加到分组弹窗 */}
-          <CodexAddToGroupModal
+          <AddToGroupModal
             isOpen={showAddToCodexGroupModal}
             onClose={() => setShowAddToCodexGroupModal(false)}
+            platform="codex"
             accountIds={Array.from(selected)}
             sourceGroupId={activeGroupId ?? undefined}
             onAdded={reloadCodexGroups}
           />
+
         </>
       );
 }

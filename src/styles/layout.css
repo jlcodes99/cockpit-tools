@@ -24,8 +24,8 @@
 }
 
 .app-container-windows .drag-region {
-  /* Windows 上拖拽层不能压过侧边菜单，否则缩放/布局变化后图标会被透明层截获点击。 */
-  z-index: 900;
+  /* Windows 使用原生标题栏；隐藏 WebView 拖拽层，避免其截获滚动到顶部的控件点击。 */
+  display: none;
 }
 
 .app-container-windows .side-nav,

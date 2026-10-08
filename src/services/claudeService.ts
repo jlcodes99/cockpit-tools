@@ -79,6 +79,18 @@ export async function deleteClaudeAccounts(accountIds: string[]): Promise<void> 
   return await invoke('delete_claude_accounts', { accountIds });
 }
 
+export async function uninstallClaudeDesktopLoginComponent(): Promise<void> {
+  return await invoke('claude_uninstall_desktop_login_component');
+}
+
+export async function getClaudeDesktopLoginComponentStorage(): Promise<{ sizeBytes: number }> {
+  const raw = await invoke<{ sizeBytes?: number; size_bytes?: number }>(
+    'claude_get_desktop_login_component_storage',
+  );
+  const sizeBytes = Number(raw.sizeBytes ?? raw.size_bytes ?? 0);
+  return { sizeBytes: Number.isFinite(sizeBytes) && sizeBytes >= 0 ? sizeBytes : 0 };
+}
+
 export async function importClaudeFromJson(jsonContent: string): Promise<ClaudeAccount[]> {
   return await invoke('import_claude_from_json', { jsonContent });
 }

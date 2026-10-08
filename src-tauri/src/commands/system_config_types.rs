@@ -85,12 +85,11 @@ pub struct GeneralConfig {
     pub auto_refresh_minutes: i32,
     /// Codex 自动刷新间隔（分钟），-1 表示禁用
     pub codex_auto_refresh_minutes: i32,
+    pub codex_auto_refresh_plan_types: Vec<String>,
     /// Codex 切号时是否同步覆盖 WSL 配置 (Windows Only)
     pub codex_sync_wsl: bool,
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     pub codex_app_ui_injection_enabled: bool,
-    /// 是否全局允许 Codex app-server 第三方客户端（账户级开关仍可单独放行）
-    pub codex_cli_only_allow_app_server_clients: bool,
     /// Codex WSL 配置目录 (Windows Only)
     pub codex_wsl_config_dir: String,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
@@ -152,6 +151,8 @@ pub struct GeneralConfig {
     pub startup_page: String,
     /// 悬浮卡片是否默认置顶
     pub floating_card_always_on_top: bool,
+    pub floating_card_minimal: bool,
+    pub floating_card_background_opacity: f64,
     /// 是否启用应用开机自启动
     pub app_auto_launch_enabled: bool,
     /// 是否启用后台账号授权保活
@@ -237,6 +238,8 @@ pub struct GeneralConfig {
     pub hermes_auth_overwrite_on_switch: bool,
     /// 切换 Codex 时是否自动启动/重启 Codex App
     pub codex_launch_on_switch: bool,
+    pub codex_auto_restore_takeover_on_launch: bool,
+    pub codex_preserve_verified_external_bridge: bool,
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
     pub antigravity_launch_on_switch: bool,
     /// 切换 Codex 时是否自动重启指定应用
@@ -267,9 +270,9 @@ pub struct GeneralConfig {
     pub auto_switch_selected_account_ids: Vec<String>,
     /// 是否启用 Codex 自动切号
     pub codex_auto_switch_enabled: bool,
-    /// Codex primary_window 自动切号阈值（百分比）
+    /// Codex 短周期自动切号阈值；缺少时长时用于 primary_window（百分比）
     pub codex_auto_switch_primary_threshold: i32,
-    /// Codex secondary_window 自动切号阈值（百分比）
+    /// Codex 周额度自动切号阈值；缺少时长时用于 secondary_window（百分比）
     pub codex_auto_switch_secondary_threshold: i32,
     /// Codex 自动切号账号范围模式：all_accounts | selected_accounts
     pub codex_auto_switch_account_scope_mode: String,
@@ -287,9 +290,9 @@ pub struct GeneralConfig {
     pub zed_quota_alert_enabled: bool,
     /// Zed 配额预警阈值（百分比）
     pub zed_quota_alert_threshold: i32,
-    /// Codex primary_window 配额预警阈值（百分比）
+    /// Codex 短周期预警阈值；缺少时长时用于 primary_window（百分比）
     pub codex_quota_alert_primary_threshold: i32,
-    /// Codex secondary_window 配额预警阈值（百分比）
+    /// Codex 周额度预警阈值；缺少时长时用于 secondary_window（百分比）
     pub codex_quota_alert_secondary_threshold: i32,
     /// 是否启用 GitHub Copilot 配额预警通知
     pub ghcp_quota_alert_enabled: bool,
@@ -976,7 +979,9 @@ fn antigravity_metadata_candidates(
             }
         }
         for path in roots {
-            if path.exists() {
+            if crate::modules::process::can_probe_passive_windows_path(&path.to_string_lossy())
+                && path.exists()
+            {
                 push_unique_antigravity_candidate(&mut candidates, path);
             }
         }
@@ -1132,9 +1137,9 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "ui_scale"
             | "auto_refresh_minutes"
             | "codex_auto_refresh_minutes"
+            | "codex_auto_refresh_plan_types"
             | "codex_sync_wsl"
             | "codex_app_ui_injection_enabled"
-            | "codex_cli_only_allow_app_server_clients"
             | "codex_wsl_config_dir"
             | "zed_auto_refresh_minutes"
             | "ghcp_auto_refresh_minutes"
@@ -1167,6 +1172,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "remember_main_window_state"
             | "startup_page"
             | "floating_card_always_on_top"
+            | "floating_card_minimal"
+            | "floating_card_background_opacity"
             | "app_auto_launch_enabled"
             | "token_keeper_enabled"
             | "auto_import_from_local_enabled"
@@ -1215,6 +1222,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "openclaw_auth_overwrite_on_switch"
             | "hermes_auth_overwrite_on_switch"
             | "codex_launch_on_switch"
+            | "codex_auto_restore_takeover_on_launch"
+            | "codex_preserve_verified_external_bridge"
             | "antigravity_launch_on_switch"
             | "codex_restart_specified_app_on_switch"
             | "codex_local_access_entry_visible"
@@ -1322,6 +1331,9 @@ fn apply_general_config_updates(
     }
     if updates.contains_key("startup_page") {
         next.startup_page = config::normalize_startup_page(&next.startup_page);
+    }
+    if updates.contains_key("floating_card_background_opacity") {
+        next.floating_card_background_opacity = config::normalize_floating_card_background_opacity(next.floating_card_background_opacity);
     }
     if updates.contains_key("theme_color") {
         next.theme_color = config::normalize_theme_color(&next.theme_color);

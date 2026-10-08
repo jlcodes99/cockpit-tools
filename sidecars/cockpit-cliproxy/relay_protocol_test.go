@@ -221,6 +221,27 @@ func TestRelayServerProviderGatewayRoutesResponsesToChatCompletions(t *testing.T
 	}
 }
 
+func TestApplyOpenCodeSessionHeaderPreservesAndDerivesSession(t *testing.T) {
+	src := http.Header{"Session_id": []string{"codex-conversation-1"}}
+	dst := make(http.Header)
+	applyOpenCodeSessionHeader(dst, src, []byte(`{"model":"x"}`))
+	if got := dst.Get("x-opencode-session"); got != "codex:codex-conversation-1" {
+		t.Fatalf("derived session = %q", got)
+	}
+	preserved := http.Header{"X-Opencode-Session": []string{"client-session"}}
+	dst = make(http.Header)
+	applyOpenCodeSessionHeader(dst, preserved, nil)
+	if got := dst.Get("x-opencode-session"); got != "client-session" {
+		t.Fatalf("preserved session = %q", got)
+	}
+}
+
+func TestIsOpenCodeGoGateway(t *testing.T) {
+	if !isOpenCodeGoGateway("https://opencode.ai/zen/go/v1") || isOpenCodeGoGateway("https://api.deepseek.com/v1") {
+		t.Fatal("unexpected OpenCode Go gateway detection")
+	}
+}
+
 func TestRelayServerProviderGatewayPreservesVersionedBaseURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	var upstreamPath string
@@ -395,51 +416,85 @@ func TestRelayServerProviderGatewayChatStreamTerminatesResponsesSSEFrames(t *tes
 	if !strings.Contains(body, "event: response.completed\n") || !strings.Contains(body, "\n\n") {
 		t.Fatalf("stream should emit complete SSE frames separated by a blank line: %q", body)
 	}
+	assertProviderGatewayMessageIdentity(t, body, "ok")
 }
 
-func TestRelayServerProviderGatewayFallsBackToDefaultUpstreamModel(t *testing.T) {
+func TestRelayServerProviderGatewayModelResolution(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	var upstreamBody string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		upstreamBody = string(body)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"chatcmpl_1","object":"chat.completion","created":1,"model":"deepseek-v4-flash","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
-	}))
-	defer upstream.Close()
 
-	gateway := &providerGatewaySpec{
-		BaseURL:        upstream.URL,
-		APIKey:         "deepseek-key",
-		UpstreamModel:  "deepseek-v4-flash",
-		UpstreamModels: []string{"deepseek-v4-flash", "deepseek-v4-pro"},
-		WireAPI:        "chat_completions",
-	}
-	m := &manifest{
-		APIKeys:  []apiKeySpec{{ID: "provider_gateway_account_1", Label: "Provider Gateway", Key: "client-key", Enabled: true, ProviderGateway: gateway}},
-		ModelIDs: []string{"deepseek-v4-flash", "deepseek-v4-pro"},
-		apiKeyByValue: map[string]*apiKeySpec{
-			"client-key": {ID: "provider_gateway_account_1", Label: "Provider Gateway", Key: "client-key", Enabled: true, ProviderGateway: gateway},
-		},
-	}
-	router := (&relayServer{
-		runtime:  &fakeRuntime{},
-		cfg:      &config.Config{},
-		manifest: m,
-		policy:   &requestPolicy{manifest: m},
-	}).router()
+	serve := func(t *testing.T, requestModel string, aliases map[string]string) (int, string, string) {
+		t.Helper()
+		upstreamBody := ""
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			upstreamBody = string(body)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"chatcmpl_1","object":"chat.completion","created":1,"model":"deepseek-v4-flash","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+		}))
+		defer upstream.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5.4","input":"hello","stream":false}`))
-	req.Header.Set("Authorization", "Bearer client-key")
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+		gateway := &providerGatewaySpec{
+			BaseURL:        upstream.URL,
+			APIKey:         "deepseek-key",
+			UpstreamModel:  "deepseek-v4-flash",
+			UpstreamModels: []string{"deepseek-v4-flash", "deepseek-v4-pro"},
+			WireAPI:        "chat_completions",
+		}
+		aliasToSource := map[string]string{}
+		modelAliases := make([]modelAliasSpec, 0, len(aliases))
+		for alias, source := range aliases {
+			aliasToSource[strings.ToLower(alias)] = source
+			modelAliases = append(modelAliases, modelAliasSpec{SourceModel: source, Alias: alias})
+		}
+		spec := &apiKeySpec{ID: "provider_gateway_account_1", Label: "Provider Gateway", Key: "client-key", Enabled: true, ProviderGateway: gateway}
+		m := &manifest{
+			APIKeys:       []apiKeySpec{*spec},
+			ModelIDs:      []string{"deepseek-v4-flash", "deepseek-v4-pro"},
+			ModelAliases:  modelAliases,
+			aliasToSource: aliasToSource,
+			apiKeyByValue: map[string]*apiKeySpec{"client-key": spec},
+		}
+		router := (&relayServer{
+			runtime:  &fakeRuntime{},
+			cfg:      &config.Config{},
+			manifest: m,
+			policy:   &requestPolicy{manifest: m},
+		}).router()
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status: %d body=%s", w.Code, w.Body.String())
+		req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"`+requestModel+`","input":"hello","stream":false}`))
+		req.Header.Set("Authorization", "Bearer client-key")
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w.Code, w.Body.String(), upstreamBody
 	}
-	if !strings.Contains(upstreamBody, `"model":"deepseek-v4-flash"`) || strings.Contains(upstreamBody, `"model":"gpt-5.4"`) {
-		t.Fatalf("request should fall back to provider default upstream model: %s", upstreamBody)
+
+	// 目录壳位（客户端可见名）有别名声明时，按别名改写上游模型。
+	status, body, upstreamBody := serve(t, "gpt-5.4", map[string]string{"gpt-5.4": "deepseek-v4-pro"})
+	if status != http.StatusOK {
+		t.Fatalf("declared alias should be routable, got status=%d body=%s", status, body)
+	}
+	if !strings.Contains(upstreamBody, `"model":"deepseek-v4-pro"`) {
+		t.Fatalf("declared alias should resolve to its upstream model: %s", upstreamBody)
+	}
+
+	// 未声明的 Codex/GPT 模型 id 不能再静默落到默认上游模型：DeepSeek 之类的上游只能把
+	// 工具调用写成文本标记返回，客户端无法解析。
+	status, body, upstreamBody = serve(t, "gpt-5.6-sol", nil)
+	if status != http.StatusNotFound {
+		t.Fatalf("undeclared codex shell model should be rejected, got status=%d body=%s", status, body)
+	}
+	if upstreamBody != "" {
+		t.Fatalf("undeclared codex shell model must not reach upstream: %s", upstreamBody)
+	}
+
+	// 非 Codex/GPT 的未知模型名保留原有兜底行为。
+	status, body, upstreamBody = serve(t, "custom-model", nil)
+	if status != http.StatusOK {
+		t.Fatalf("custom model keeps fallback, got status=%d body=%s", status, body)
+	}
+	if !strings.Contains(upstreamBody, `"model":"deepseek-v4-flash"`) {
+		t.Fatalf("custom model should fall back to provider default upstream model: %s", upstreamBody)
 	}
 }
 
@@ -581,7 +636,7 @@ func TestRelayServerMixedRoutingBareModelUsesOAuthRuntime(t *testing.T) {
 	spec := mixedRoutingAPIKey(&providerGatewaySpec{
 		BaseURL:        upstream.URL,
 		APIKey:         "cpa-secret",
-		UpstreamModels: []string{"gpt-5.5", "grok-4.6"},
+		UpstreamModels: []string{"gpt-5.5", "gpt-6-astra", "grok-4.6"},
 		WireAPI:        "responses",
 	})
 	m := mixedRoutingManifest(spec)
@@ -635,7 +690,7 @@ func TestRelayServerMixedRoutingNamespacedModelsUseProviderAndStripPrefix(t *tes
 	spec := mixedRoutingAPIKey(&providerGatewaySpec{
 		BaseURL:        upstream.URL,
 		APIKey:         "cpa-secret",
-		UpstreamModels: []string{"gpt-5.5", "grok-4.6"},
+		UpstreamModels: []string{"gpt-5.5", "gpt-6-astra", "grok-4.6"},
 		WireAPI:        "responses",
 	})
 	m := mixedRoutingManifest(spec)
@@ -651,12 +706,13 @@ func TestRelayServerMixedRoutingNamespacedModelsUseProviderAndStripPrefix(t *tes
 		upstreamModel string
 	}{
 		{clientModel: "cpa/gpt-5.5", upstreamModel: "gpt-5.5"},
+		{clientModel: "cpa/gpt-6-astra", upstreamModel: "gpt-6-astra"},
 		{clientModel: "cpa/grok-4.6", upstreamModel: "grok-4.6"},
 	} {
 		upstreamHits = 0
 		upstreamAuth = ""
 		upstreamBody = ""
-		req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(fmt.Sprintf(`{"model":%q,"input":"hello","stream":false}`, tc.clientModel)))
+		req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(fmt.Sprintf(`{"model":%q,"input":"hello","stream":false,"reasoning":{"effort":"ultra"},"service_tier":"priority"}`, tc.clientModel)))
 		req.Header.Set("Authorization", "Bearer client-key")
 		req.Header.Set("Chatgpt-Account-Id", "oauth-account")
 		req.Header.Set("Content-Type", "application/json")
@@ -680,6 +736,13 @@ func TestRelayServerMixedRoutingNamespacedModelsUseProviderAndStripPrefix(t *tes
 		}
 		if !strings.Contains(upstreamBody, fmt.Sprintf(`"model":"%s"`, tc.upstreamModel)) || strings.Contains(upstreamBody, tc.clientModel) {
 			t.Fatalf("%s should strip namespace before upstream: %s", tc.clientModel, upstreamBody)
+		}
+		var forwarded map[string]any
+		if err := json.Unmarshal([]byte(upstreamBody), &forwarded); err != nil {
+			t.Fatal(err)
+		}
+		if forwarded["service_tier"] != "priority" || forwarded["reasoning"].(map[string]any)["effort"] != "ultra" {
+			t.Fatalf("routing dropped requested capabilities: %s", upstreamBody)
 		}
 	}
 }
@@ -1118,6 +1181,65 @@ func TestRelayServerResetAuthStateClearsSelectedAccountCooldown(t *testing.T) {
 	}
 }
 
+func TestRelayServerResetsQuotaExhaustedAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	manager := coreauth.NewManager(nil, &coreauth.RoundRobinSelector{}, nil)
+	if _, err := manager.Register(context.Background(), &coreauth.Auth{
+		ID:       "auth-quota.json",
+		Provider: "codex",
+		Metadata: map[string]any{"type": "codex"},
+		ModelStates: map[string]*coreauth.ModelState{
+			"gpt-5.5": {
+				Status:         coreauth.StatusError,
+				Unavailable:    true,
+				NextRetryAfter: time.Now().Add(30 * time.Minute),
+			},
+		},
+	}); err != nil {
+		t.Fatalf("register auth: %v", err)
+	}
+	zero := 0
+	spec := &apiKeySpec{ID: "key_quota", Key: "client-key", Enabled: true, AccountIDs: []string{"account-quota"}}
+	account := &accountSpec{
+		ID:             "account-quota",
+		AuthID:         "auth-quota.json",
+		AuthKind:       "oauth",
+		RemainingQuota: &zero,
+		QuotaCooldown:  &quotaCooldownState{Exhausted: true, UpdatedAtMS: time.Now().UnixMilli()},
+	}
+	m := &manifest{
+		APIKeys:         []apiKeySpec{*spec},
+		Accounts:        []accountSpec{*account},
+		apiKeyByValue:   map[string]*apiKeySpec{"client-key": spec},
+		accountByID:     map[string]*accountSpec{"account-quota": account},
+		accountByAuthID: map[string]*accountSpec{"auth-quota.json": account},
+	}
+	router := (&relayServer{
+		runtime:     &fakeRuntime{},
+		cfg:         &config.Config{},
+		manifest:    m,
+		authManager: manager,
+		policy:      &requestPolicy{manifest: m},
+	}).router()
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/cockpit/auth/reset", strings.NewReader(`{"accountIds":["account-quota"]}`))
+	req.Header.Set("Authorization", "Bearer client-key")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("quota-exhausted account reset status = %d body=%s", w.Code, w.Body.String())
+	}
+	updated, ok := manager.GetByID("auth-quota.json")
+	if !ok || updated == nil || len(updated.ModelStates) != 0 || updated.Unavailable {
+		t.Fatalf("quota-exhausted account was not reset: %#v", updated)
+	}
+	if accountQuotaExhausted(m, account, time.Now()) {
+		t.Fatal("quota cooldown should be cleared after manual recovery")
+	}
+}
+
 func TestRelayServerResetSchedulerStateAcceptsAPIKeyAccountWithoutAuthID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	manager := coreauth.NewManager(nil, &coreauth.RoundRobinSelector{}, nil)
@@ -1339,7 +1461,7 @@ data: {"type":"response.completed","response":{"created_at":1710000000,"output":
 			Chunks:  stream,
 		},
 	}
-	router := testRelayRouter(runtime)
+	router := testRelayRouterWithImageModel(runtime, "custom-image-model")
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"gpt-image-2","prompt":"draw","response_format":"b64_json"}`))
 	req.Header.Set("Authorization", "Bearer client-key")
@@ -1356,6 +1478,15 @@ data: {"type":"response.completed","response":{"created_at":1710000000,"output":
 	if runtime.lastReq.Model != defaultImagesMainModel {
 		t.Fatalf("image endpoint should execute via main model, got %q", runtime.lastReq.Model)
 	}
+	var forwarded map[string]any
+	if err := json.Unmarshal(runtime.lastReq.Payload, &forwarded); err != nil {
+		t.Fatalf("forwarded image request should be json: %v", err)
+	}
+	tools, _ := forwarded["tools"].([]any)
+	tool, _ := tools[0].(map[string]any)
+	if tool["model"] != "custom-image-model" {
+		t.Fatalf("configured image model was not forwarded: %#v", tool)
+	}
 	var body map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("response should be json: %v body=%s", err, w.Body.String())
@@ -1367,6 +1498,44 @@ data: {"type":"response.completed","response":{"created_at":1710000000,"output":
 	first, _ := data[0].(map[string]any)
 	if first["b64_json"] != "ZmFrZS1wbmc=" {
 		t.Fatalf("unexpected image payload: %#v", body)
+	}
+}
+
+func TestBuildImageToolUsesConfiguredModel(t *testing.T) {
+	tool, err := buildImageToolWithModel(
+		map[string]any{"model": "gpt-image-2", "prompt": "draw"},
+		"generate",
+		"custom-image-model",
+		false,
+	)
+	if err != nil {
+		t.Fatalf("build image tool: %v", err)
+	}
+	if got := tool["model"]; got != "custom-image-model" {
+		t.Fatalf("configured image model = %#v, want custom-image-model", got)
+	}
+}
+
+func TestBuildImageToolFallsBackToConfiguredModelWhenPoolConfigured(t *testing.T) {
+	tool, err := buildImageToolWithModel(
+		map[string]any{"model": "deepseek-flash", "prompt": "draw"},
+		"generate",
+		"gpt-image-2.5",
+		true,
+	)
+	if err != nil {
+		t.Fatalf("build image tool with fallback: %v", err)
+	}
+	if got := tool["model"]; got != "gpt-image-2.5" {
+		t.Fatalf("fallback image model = %#v, want gpt-image-2.5", got)
+	}
+	if _, err := buildImageToolWithModel(
+		map[string]any{"model": "deepseek-flash", "prompt": "draw"},
+		"generate",
+		"gpt-image-2.5",
+		false,
+	); err == nil {
+		t.Fatal("strict mode must keep rejecting unsupported image models")
 	}
 }
 
@@ -1440,6 +1609,112 @@ func TestRelayServerKeepsStreamContextOpenAfterOpen(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "[DONE]") {
 		t.Fatalf("stream context should stay alive after opening: %s", w.Body.String())
+	}
+}
+
+func TestExecuteStreamKeepsAttemptContextUntilStreamEnds(t *testing.T) {
+	runtime := &fakeRuntime{
+		streamResultFromContext: true,
+		streamResultDelay:       10 * time.Millisecond,
+		streamResultPayload:     []byte(`[DONE]`),
+	}
+	server := &relayServer{runtime: runtime}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	result, err := server.executeStreamWithOpenTimeout(
+		nil,
+		ctx,
+		[]string{"codex"},
+		cliproxyexecutor.Request{Model: "gpt-5.5"},
+		cliproxyexecutor.Options{},
+		"gpt-5.5",
+		time.Now(),
+		time.Second,
+	)
+	if err != nil {
+		t.Fatalf("unexpected open error: %v", err)
+	}
+	if result == nil || result.Chunks == nil {
+		t.Fatal("expected an opened stream result")
+	}
+	attemptCtx := runtime.lastStreamCtx
+	if attemptCtx == nil {
+		t.Fatal("expected runtime to receive the attempt context")
+	}
+	if errAttempt := attemptCtx.Err(); errAttempt != nil {
+		t.Fatalf("attempt context must stay open while the stream runs, got %v", errAttempt)
+	}
+
+	var payloads []string
+	for chunk := range result.Chunks {
+		payloads = append(payloads, string(chunk.Payload))
+	}
+	if len(payloads) != 1 || !strings.Contains(payloads[0], "[DONE]") {
+		t.Fatalf("chunks produced on the attempt context must still be forwarded: %#v", payloads)
+	}
+
+	select {
+	case <-attemptCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("attempt context must be released once the stream ends")
+	}
+}
+
+func TestExecuteStreamReleasesAttemptContextOnOpenFailure(t *testing.T) {
+	runtime := &fakeRuntime{err: fmt.Errorf("upstream refused")}
+	server := &relayServer{runtime: runtime}
+
+	result, err := server.executeStreamWithOpenTimeout(
+		nil,
+		context.Background(),
+		[]string{"codex"},
+		cliproxyexecutor.Request{Model: "gpt-5.5"},
+		cliproxyexecutor.Options{},
+		"gpt-5.5",
+		time.Now(),
+		time.Second,
+	)
+	if err == nil {
+		t.Fatal("expected a failed stream open")
+	}
+	if result != nil {
+		t.Fatalf("failed open must not return a stream result: %#v", result)
+	}
+	attemptCtx := runtime.lastStreamCtx
+	if attemptCtx == nil {
+		t.Fatal("expected runtime to receive the attempt context")
+	}
+	if errAttempt := attemptCtx.Err(); errAttempt == nil {
+		t.Fatal("failed attempt must release its context")
+	}
+}
+
+func TestReleaseAttemptOnStreamEndStopsWhenDownstreamEnds(t *testing.T) {
+	upstream := make(chan cliproxyexecutor.StreamChunk)
+	released := make(chan struct{})
+	ctx, cancelDownstream := context.WithCancel(context.Background())
+	defer cancelDownstream()
+
+	result := releaseAttemptOnStreamEnd(
+		ctx,
+		&cliproxyexecutor.StreamResult{Headers: http.Header{"Content-Type": []string{"text/event-stream"}}, Chunks: upstream},
+		func() { close(released) },
+	)
+	if result == nil || result.Chunks == nil {
+		t.Fatal("expected a wrapped stream result")
+	}
+	if result.Headers.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("upstream headers must be preserved: %#v", result.Headers)
+	}
+
+	// 下游结束（客户端断开 / idle 超时）时，即使没人再读通道也必须释放 attempt，
+	// 并且不能把转发 goroutine 卡在通道上。
+	cancelDownstream()
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("downstream cancellation must release the attempt context")
 	}
 }
 
@@ -1642,9 +1917,14 @@ func TestRelayServerHandlesCORSPreflight(t *testing.T) {
 }
 
 func testRelayRouter(runtime executorRuntime) *gin.Engine {
+	return testRelayRouterWithImageModel(runtime, "")
+}
+
+func testRelayRouterWithImageModel(runtime executorRuntime, imageModel string) *gin.Engine {
 	m := &manifest{
-		APIKeys:  []apiKeySpec{{ID: "key_1", Label: "Test key", Key: "client-key", Enabled: true}},
-		ModelIDs: []string{"gpt-5.5", "gpt-image-2"},
+		APIKeys:              []apiKeySpec{{ID: "key_1", Label: "Test key", Key: "client-key", Enabled: true}},
+		ModelIDs:             []string{"gpt-5.5", "gpt-image-2"},
+		ImageGenerationModel: imageModel,
 		apiKeyByValue: map[string]*apiKeySpec{
 			"client-key": {ID: "key_1", Label: "Test key", Key: "client-key", Enabled: true},
 		},
@@ -1669,10 +1949,11 @@ type fakeRuntime struct {
 	streamResultDelay       time.Duration
 	streamResultPayload     []byte
 
-	executeCalls int
-	streamCalls  int
-	lastReq      cliproxyexecutor.Request
-	lastOpts     cliproxyexecutor.Options
+	executeCalls  int
+	streamCalls   int
+	lastReq       cliproxyexecutor.Request
+	lastOpts      cliproxyexecutor.Options
+	lastStreamCtx context.Context
 
 	alphaSearchStatus  int
 	alphaSearchHeaders http.Header
@@ -1711,6 +1992,7 @@ func (r *fakeRuntime) CodexAlphaSearch(_ context.Context, model string, body []b
 
 func (r *fakeRuntime) ExecuteStream(ctx context.Context, _ []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
 	r.streamCalls++
+	r.lastStreamCtx = ctx
 	r.lastReq = req
 	r.lastOpts = opts
 	if r.streamWaitForContext || r.streamCalls <= r.streamWaitAttempts {
@@ -1855,6 +2137,47 @@ func TestRelayRegistersCodexLiveRoutesAndSkipsModelRewriting(t *testing.T) {
 	router.ServeHTTP(realtimeRecorder, realtimeCall)
 	if realtimeRecorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("realtime call status = %d, want %d; body=%s", realtimeRecorder.Code, http.StatusServiceUnavailable, realtimeRecorder.Body.String())
+	}
+}
+
+func TestMixedRoutingRealtimeRoutesIgnoreResponsesWebsocketFlag(t *testing.T) {
+	t.Parallel()
+	spec := &apiKeySpec{
+		ID: "mixed-voice", Key: "mixed-voice-key", Enabled: true,
+		BoundOAuth: true, ResponsesWebsockets: false,
+		ModelRouting:  &modelRoutingSpec{DefaultRoute: "oauth", FailurePolicy: "strict"},
+		AllowedModels: []string{"gpt-6-astra"},
+	}
+	m := &manifest{
+		APIKeys: []apiKeySpec{*spec}, ModelIDs: []string{"gpt-6-astra"},
+		apiKeyByValue: map[string]*apiKeySpec{spec.Key: spec},
+	}
+	router := (&relayServer{
+		manifest: m,
+		policy:   &requestPolicy{manifest: m, tokenLimiter: newAPIKeyTokenLimiter(m)},
+	}).router()
+	for _, endpoint := range []struct{ method, path string }{
+		{http.MethodPost, "/v1/realtime/calls"},
+		{http.MethodGet, "/v1/live/rtc_test"},
+		{http.MethodGet, "/v1/realtime?call_id=rtc_test"},
+		{http.MethodGet, "/v1/realtime/calls/rtc_test"},
+	} {
+		for _, authorized := range []bool{false, true} {
+			req := httptest.NewRequest(endpoint.method, endpoint.path, strings.NewReader(`{"model":"gpt-live-1-codex"}`))
+			req.Header.Set("Content-Type", "application/json")
+			want := http.StatusUnauthorized
+			if authorized {
+				req.Header.Set("Authorization", "Bearer "+spec.Key)
+				// No handler is installed in this routing-only fixture.
+				want = http.StatusServiceUnavailable
+			}
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != want {
+				t.Fatalf("%s %s authorized=%v: got %d, want %d: %s",
+					endpoint.method, endpoint.path, authorized, recorder.Code, want, recorder.Body.String())
+			}
+		}
 	}
 }
 
@@ -2195,7 +2518,7 @@ func TestExcludedModelsForAuthMergesManifestAndMetadata(t *testing.T) {
 
 func TestRegisterManifestModelsForAuthRespectsPerAccountExclusions(t *testing.T) {
 	m := &manifest{
-		ModelIDs: []string{"gpt-5.3-codex", codexSparkModel, "gpt-5.4"},
+		ModelIDs: []string{"gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.4"},
 		Accounts: []accountSpec{{
 			ID:     "plus-account",
 			AuthID: "plus-auth",
@@ -2206,7 +2529,7 @@ func TestRegisterManifestModelsForAuthRespectsPerAccountExclusions(t *testing.T)
 	auth := &coreauth.Auth{
 		ID: "plus-auth",
 		Metadata: map[string]any{
-			"excluded_models": []string{codexSparkModel},
+			"excluded_models": []string{"gpt-5.3-codex-spark"},
 		},
 		Attributes: map[string]string{
 			"account_id": "plus-account",
@@ -2219,7 +2542,7 @@ func TestRegisterManifestModelsForAuthRespectsPerAccountExclusions(t *testing.T)
 	registerManifestModelsForAuth(manager, m, auth)
 	models := registry.GetGlobalRegistry().GetModelsForClient(auth.ID)
 	for _, model := range models {
-		if strings.EqualFold(model.ID, codexSparkModel) {
+		if strings.EqualFold(model.ID, "gpt-5.3-codex-spark") {
 			t.Fatalf("spark should not be registered for excluded auth: %#v", models)
 		}
 	}
@@ -2250,7 +2573,7 @@ func TestCoreAuthSelectorFiltersNewModelExclusionsBeforeSessionAffinity(t *testi
 		Headers: http.Header{"Session_id": []string{"spark-session"}},
 	}
 
-	first, err := selector.Pick(context.Background(), "codex", codexSparkModel, opts, auths)
+	first, err := selector.Pick(context.Background(), "codex", "gpt-5.3-codex-spark", opts, auths)
 	if err != nil {
 		t.Fatalf("initial Pick: %v", err)
 	}
@@ -2258,8 +2581,8 @@ func TestCoreAuthSelectorFiltersNewModelExclusionsBeforeSessionAffinity(t *testi
 		t.Fatalf("initial Pick = %#v, want %q", first, plus.ID)
 	}
 
-	plus.Metadata["excluded_models"] = []any{codexSparkModel}
-	second, err := selector.Pick(context.Background(), "codex", codexSparkModel, opts, auths)
+	plus.Metadata["excluded_models"] = []any{"gpt-5.3-codex-spark"}
+	second, err := selector.Pick(context.Background(), "codex", "gpt-5.3-codex-spark", opts, auths)
 	if err != nil {
 		t.Fatalf("Pick after exclusion: %v", err)
 	}

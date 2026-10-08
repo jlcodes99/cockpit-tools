@@ -634,6 +634,8 @@
   border-top: 1px solid var(--border);
   background: var(--bg-tertiary);
   padding: 8px 12px;
+  max-height: 240px;
+  overflow-y: auto;
 }
 
 .quota-category-detail-item {

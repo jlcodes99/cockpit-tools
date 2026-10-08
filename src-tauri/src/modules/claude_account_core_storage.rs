@@ -406,6 +406,47 @@ fn write_account_file(account: &ClaudeAccount) -> Result<(), String> {
     atomic_write::write_string_atomic(&path, &content)
 }
 
+fn migrate_legacy_apikey_fun_urls(account: &mut ClaudeAccount) -> bool {
+    let mut changed = false;
+    for value in [
+        &mut account.api_base_url,
+        &mut account.api_provider_website,
+        &mut account.api_provider_api_key_url,
+    ] {
+        let Some(current) = value.as_deref() else {
+            continue;
+        };
+        let Some(next) = crate::modules::apikey_fun_links::normalize_legacy_apikey_fun_url(current)
+        else {
+            continue;
+        };
+        if next != current {
+            *value = Some(next);
+            changed = true;
+        }
+    }
+    changed
+}
+
+pub fn sync_sponsor_base_urls(
+    rules: &[crate::modules::sponsor_route_sync::SponsorRouteRule],
+) -> Result<usize, String> {
+    let accounts = list_accounts_checked()?;
+    let mut changed = 0;
+    for mut account in accounts {
+        let Some(next) = crate::modules::sponsor_route_sync::resolve_sponsor_base_url(
+            account.api_base_url.as_deref(),
+            rules,
+        ) else {
+            continue;
+        };
+        account.api_base_url = Some(next);
+        write_account_file(&account)?;
+        changed += 1;
+    }
+    Ok(changed)
+}
+
 fn load_account_file(account_id: &str) -> Option<ClaudeAccount> {
     let path = account_file_path(account_id).ok()?;
     if !path.exists() {
@@ -415,8 +456,9 @@ fn load_account_file(account_id: &str) -> Option<ClaudeAccount> {
     match crate::modules::secure_account_storage::deserialize_account_file::<ClaudeAccount>(
         &path, &content,
     ) {
-        Ok((account, needs_rotation)) => {
-            if needs_rotation {
+        Ok((mut account, needs_rotation)) => {
+            let migrated_apikey_fun = migrate_legacy_apikey_fun_urls(&mut account);
+            if needs_rotation || migrated_apikey_fun {
                 let account_for_rewrite = account.clone();
                 crate::modules::deferred_account_rewrite::schedule_account_rewrite_if_unchanged(
                     "claude",
@@ -799,6 +841,11 @@ fn save_account_and_index(mut account: ClaudeAccount) -> Result<ClaudeAccount, S
             ));
         }
     }
+    let _lock = CLAUDE_ACCOUNT_INDEX_LOCK.lock().map_err(|_| "无法获取 Claude 账号锁")?;
+    save_account_and_index_locked(account)
+}
+
+fn save_account_and_index_locked(mut account: ClaudeAccount) -> Result<ClaudeAccount, String> {
     slim_claude_account_snapshots(&mut account);
     write_account_file(&account)?;
     let mut index = load_index()?;
@@ -1450,4 +1497,3 @@ fn clear_pending_desktop_login_if_matches(login_id: &str) {
         set_pending_desktop_login(None);
     }
 }
-

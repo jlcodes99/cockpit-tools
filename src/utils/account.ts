@@ -1,4 +1,4 @@
-import { QuotaData } from '../types/account';
+import { Account, QuotaData } from '../types/account';
 import {
   AUTH_RECOMMENDED_LABELS,
   getAntigravityDisplayModelsFromQuota,
@@ -58,6 +58,22 @@ export function getAntigravityTierBadge(quota?: QuotaData): {
     label: tier,
     className: tier.toLowerCase(),
   };
+}
+
+/**
+ * 判定账号是否属于 GCP ToS 体系（服务端挂在共享 'aicode-consumers' 项目）。
+ * quota 上已沉淀的 is_gcp_tos 优先，回退到 token 上同步的标记。
+ */
+export function isGcpTosAccount(account?: Account | null): boolean {
+  if (!account) return false;
+  if (account.quota?.is_gcp_tos != null) return account.quota.is_gcp_tos;
+  return account.token?.is_gcp_tos === true;
+}
+
+/** 取账号的 GCP / Enterprise 项目 ID（quota 优先，回退 token）。 */
+export function getAccountProjectId(account?: Account | null): string | undefined {
+  if (!account) return undefined;
+  return account.quota?.project_id || account.token?.project_id || undefined;
 }
 
 export function getQuotaClass(percentage: number): string {

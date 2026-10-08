@@ -154,6 +154,8 @@ export const TagEditModal = ({ isOpen, initialTags, initialNotes, availableTags 
     try {
       await onSave(nextTags, notes.trim());
       onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSaving(false);
     }

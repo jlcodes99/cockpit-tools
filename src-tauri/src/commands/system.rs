@@ -7,18 +7,22 @@ include!("system_network_general.rs");
 include!("system_app_commands.rs");
 
 #[tauri::command]
-pub fn load_ui_preferences() -> Result<modules::ui_preferences::UiPreferences, String> {
-    modules::ui_preferences::load_ui_preferences()
+pub async fn load_ui_preferences() -> Result<modules::ui_preferences::UiPreferences, String> {
+    tauri::async_runtime::spawn_blocking(modules::ui_preferences::load_ui_preferences)
+        .await.map_err(|error| format!("读取界面偏好任务失败: {}", error))?
 }
 
 #[tauri::command]
-pub fn save_ui_preferences(
+pub async fn save_ui_preferences(
     values: std::collections::BTreeMap<String, String>,
 ) -> Result<modules::ui_preferences::UiPreferences, String> {
-    modules::ui_preferences::save_ui_preferences(values)
+    tauri::async_runtime::spawn_blocking(move || modules::ui_preferences::save_ui_preferences(values))
+        .await.map_err(|error| format!("保存界面偏好任务失败: {}", error))?
 }
 
 #[cfg(test)]
 mod tests {
     include!("system_tests.rs");
+    include!("system_tests_floating_appearance.rs");
+    include!("system_tests_codex_refresh_scope.rs");
 }

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{OnceLock, RwLock};
+use std::sync::{Mutex, OnceLock, RwLock};
 
 /// 默认 WebSocket 端口
 pub const DEFAULT_WS_PORT: u16 = 19528;
@@ -101,15 +101,15 @@ pub struct UserConfig {
     /// Codex 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_codex_auto_refresh")]
     pub codex_auto_refresh_minutes: i32,
+    /// OAuth 套餐范围；旧配置默认全部，显式空数组关闭套餐额度轮询。
+    #[serde(default = "default_codex_auto_refresh_plan_types")]
+    pub codex_auto_refresh_plan_types: Vec<String>,
     /// Codex 切号时是否同步覆盖 WSL 配置 (Windows Only)
     #[serde(default = "default_codex_sync_wsl")]
     pub codex_sync_wsl: bool,
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     #[serde(default = "default_codex_app_ui_injection_enabled")]
     pub codex_app_ui_injection_enabled: bool,
-    /// 是否全局允许 Codex app-server 第三方客户端（账户级开关仍可单独放行）
-    #[serde(default = "default_codex_cli_only_allow_app_server_clients")]
-    pub codex_cli_only_allow_app_server_clients: bool,
     /// Codex WSL 配置目录 (Windows Only)
     #[serde(default = "default_codex_wsl_config_dir")]
     pub codex_wsl_config_dir: String,
@@ -194,6 +194,9 @@ pub struct UserConfig {
     /// 是否在启动后自动最小化主窗口
     #[serde(default = "default_startup_minimized")]
     pub startup_minimized: bool,
+    /// 是否已将「启动后自动最小化」一次性默认关闭
+    #[serde(default = "default_startup_minimized_default_off_migrated")]
+    pub startup_minimized_default_off_migrated: bool,
     /// 是否记住主窗口尺寸和位置
     #[serde(default = "default_remember_main_window_state")]
     pub remember_main_window_state: bool,
@@ -203,6 +206,10 @@ pub struct UserConfig {
     /// 悬浮卡片是否默认置顶
     #[serde(default = "default_floating_card_always_on_top")]
     pub floating_card_always_on_top: bool,
+    #[serde(default)]
+    pub floating_card_minimal: bool,
+    #[serde(default = "default_floating_card_background_opacity")]
+    pub floating_card_background_opacity: f64,
     /// 是否启用应用开机自启动
     #[serde(default = "default_app_auto_launch_enabled")]
     pub app_auto_launch_enabled: bool,
@@ -400,6 +407,9 @@ pub struct UserConfig {
     /// 启动时是否自动恢复 Codex 代理接管状态
     #[serde(default = "default_codex_auto_restore_takeover_on_launch")]
     pub codex_auto_restore_takeover_on_launch: bool,
+    /// OAuth 切号时保留经过本地集成记录验证的外部桥接（默认关闭）。
+    #[serde(default)]
+    pub codex_preserve_verified_external_bridge: bool,
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
     #[serde(default = "default_antigravity_launch_on_switch")]
     pub antigravity_launch_on_switch: bool,
@@ -445,10 +455,10 @@ pub struct UserConfig {
     /// 是否启用 Codex 自动切号
     #[serde(default = "default_codex_auto_switch_enabled")]
     pub codex_auto_switch_enabled: bool,
-    /// Codex primary_window 自动切号阈值（百分比）
+    /// Codex 短周期自动切号阈值；缺少时长时用于 primary_window（百分比）
     #[serde(default = "default_codex_auto_switch_primary_threshold")]
     pub codex_auto_switch_primary_threshold: i32,
-    /// Codex secondary_window 自动切号阈值（百分比）
+    /// Codex 周额度自动切号阈值；缺少时长时用于 secondary_window（百分比）
     #[serde(default = "default_codex_auto_switch_secondary_threshold")]
     pub codex_auto_switch_secondary_threshold: i32,
     /// Codex 自动切号账号范围模式：all_accounts | selected_accounts
@@ -475,10 +485,10 @@ pub struct UserConfig {
     /// Zed 配额预警阈值（百分比）
     #[serde(default = "default_zed_quota_alert_threshold")]
     pub zed_quota_alert_threshold: i32,
-    /// Codex primary_window 配额预警阈值（百分比）
+    /// Codex 短周期预警阈值；缺少时长时用于 primary_window（百分比）
     #[serde(default = "default_codex_quota_alert_primary_threshold")]
     pub codex_quota_alert_primary_threshold: i32,
-    /// Codex secondary_window 配额预警阈值（百分比）
+    /// Codex 周额度预警阈值；缺少时长时用于 secondary_window（百分比）
     #[serde(default = "default_codex_quota_alert_secondary_threshold")]
     pub codex_quota_alert_secondary_threshold: i32,
     /// 是否启用 GitHub Copilot 配额预警通知
@@ -690,7 +700,7 @@ pub fn normalize_theme_color(raw: &str) -> String {
                 v
             }
         }
-        "catppuccin" | "gruvbox" | "everforest" | "ayu" | "one-dark" | "onedark" => {
+        "catppuccin" | "gruvbox" | "everforest" | "oled" | "ayu" | "one-dark" | "onedark" => {
             if v == "onedark" {
                 "one-dark".to_string()
             } else {
@@ -713,6 +723,10 @@ fn default_auto_refresh() -> i32 {
 fn default_codex_auto_refresh() -> i32 {
     10
 } // 默认 10 分钟
+fn default_codex_auto_refresh_plan_types() -> Vec<String> {
+    ["free", "go", "plus", "pro", "team", "business", "enterprise", "edu_k12", "unknown"]
+        .into_iter().map(str::to_string).collect()
+}
 fn default_codex_sync_wsl() -> bool {
     false
 }
@@ -720,9 +734,6 @@ fn default_codex_app_ui_injection_enabled() -> bool {
     true
 }
 
-fn default_codex_cli_only_allow_app_server_clients() -> bool {
-    false
-}
 fn default_codex_wsl_config_dir() -> String {
     String::new()
 }
@@ -792,6 +803,9 @@ fn default_floating_card_show_on_startup() -> bool {
 fn default_startup_minimized() -> bool {
     false
 }
+fn default_startup_minimized_default_off_migrated() -> bool {
+    true
+}
 fn default_remember_main_window_state() -> bool {
     false
 }
@@ -809,6 +823,8 @@ pub fn normalize_startup_page(value: &str) -> String {
         "dashboard",
         "api-relay",
         "overview",
+        "antigravity",
+        "antigravity-ide",
         "codex",
         "claude",
         "claude-cli",
@@ -843,6 +859,11 @@ pub fn normalize_startup_page(value: &str) -> String {
 }
 fn default_floating_card_always_on_top() -> bool {
     false
+}
+fn default_floating_card_background_opacity() -> f64 { 1.0 }
+
+pub fn normalize_floating_card_background_opacity(value: f64) -> f64 {
+    if value.is_finite() { value.clamp(0.0, 1.0) } else { 1.0 }
 }
 fn default_app_auto_launch_enabled() -> bool {
     false
@@ -1190,10 +1211,9 @@ impl Default for UserConfig {
             ui_scale: default_ui_scale(),
             auto_refresh_minutes: default_auto_refresh(),
             codex_auto_refresh_minutes: default_codex_auto_refresh(),
+            codex_auto_refresh_plan_types: default_codex_auto_refresh_plan_types(),
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
-            codex_cli_only_allow_app_server_clients:
-                default_codex_cli_only_allow_app_server_clients(),
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
@@ -1224,9 +1244,13 @@ impl Default for UserConfig {
             menu_bar_quota_platform: default_menu_bar_quota_platform(),
             floating_card_show_on_startup: default_floating_card_show_on_startup(),
             startup_minimized: default_startup_minimized(),
+            startup_minimized_default_off_migrated:
+                default_startup_minimized_default_off_migrated(),
             remember_main_window_state: default_remember_main_window_state(),
             startup_page: default_startup_page(),
             floating_card_always_on_top: default_floating_card_always_on_top(),
+            floating_card_minimal: false,
+            floating_card_background_opacity: default_floating_card_background_opacity(),
             app_auto_launch_enabled: default_app_auto_launch_enabled(),
             token_keeper_enabled: default_token_keeper_enabled(),
             auto_import_from_local_enabled: default_auto_import_from_local_enabled(),
@@ -1299,6 +1323,7 @@ impl Default for UserConfig {
             codex_launch_on_switch: default_codex_launch_on_switch(),
             codex_auto_restore_takeover_on_launch:
                 default_codex_auto_restore_takeover_on_launch(),
+            codex_preserve_verified_external_bridge: false,
             antigravity_launch_on_switch: default_antigravity_launch_on_switch(),
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
             codex_local_access_entry_visible: default_codex_local_access_entry_visible(),
@@ -1495,7 +1520,7 @@ pub fn get_data_dir() -> Result<PathBuf, String> {
 /// 与 get_data_dir 相同，但不返回 Result
 pub fn get_shared_dir() -> PathBuf {
     crate::modules::account::resolve_data_dir()
-        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"))
+        .unwrap_or_else(|_| crate::modules::data_paths::fallback_data_dir())
 }
 
 /// 获取服务状态文件路径
@@ -1727,6 +1752,13 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             obj.insert(
                 "startup_minimized".to_string(),
                 json!(default_startup_minimized()),
+            );
+        }
+        if !obj.contains_key("startup_minimized_default_off_migrated") {
+            // 老配置没有该标记时，默认视为“尚未迁移”，以便执行一次默认关闭。
+            obj.insert(
+                "startup_minimized_default_off_migrated".to_string(),
+                json!(false),
             );
         }
 
@@ -2295,6 +2327,7 @@ pub fn load_user_config() -> Result<UserConfig, String> {
         }
         config.auto_backup_retention_days_migrated = true;
     }
+    let startup_minimized_migrated = apply_startup_minimized_default_off_migration(&mut config);
     config.auto_backup_retention_days =
         sanitize_auto_backup_retention_days(config.auto_backup_retention_days);
     config.webdav_sync_retention_days =
@@ -2308,7 +2341,25 @@ pub fn load_user_config() -> Result<UserConfig, String> {
         }
     });
 
+    if startup_minimized_migrated {
+        if let Err(error) = persist_user_config(&config) {
+            crate::modules::logger::log_warn(&format!(
+                "关闭启动后自动最小化失败，已在本次运行生效，下次启动将重试: {}",
+                error
+            ));
+        }
+    }
+
     Ok(config)
+}
+
+fn apply_startup_minimized_default_off_migration(config: &mut UserConfig) -> bool {
+    if config.startup_minimized_default_off_migrated {
+        return false;
+    }
+    config.startup_minimized = false;
+    config.startup_minimized_default_off_migrated = true;
+    true
 }
 
 /// 保存用户配置
@@ -2340,8 +2391,15 @@ fn acquire_config_file_lock(path: &Path) -> Result<fs::File, String> {
         .create(true)
         .open(path)
         .map_err(|error| format!("打开配置锁文件失败: {}", error))?;
-    file.lock()
-        .map_err(|error| format!("锁定配置文件失败: {}", error))?;
+    let started = std::time::Instant::now();
+    loop {
+        match file.try_lock() {
+            Ok(()) => break,
+            Err(std::fs::TryLockError::WouldBlock) if started.elapsed() < std::time::Duration::from_secs(5) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(std::fs::TryLockError::WouldBlock) => return Err("common.configSaveTimeout".into()),
+            Err(error) => return Err(format!("锁定配置文件失败: {}", error)),
+        }
+    }
     Ok(file)
 }
 
@@ -2367,15 +2425,30 @@ where
     P: FnOnce(&UserConfig) -> Result<(), String>,
     C: FnOnce(&UserConfig),
 {
-    let mut state = state
-        .write()
+    // Serialize writers independently of the cache lock. Disk/file-lock waits
+    // must never block account/startup readers of the last committed config.
+    static TRANSACTION_LOCK: Mutex<()> = Mutex::new(());
+    let started = std::time::Instant::now();
+    let _transaction = loop {
+        match TRANSACTION_LOCK.try_lock() {
+            Ok(guard) => break guard,
+            Err(std::sync::TryLockError::WouldBlock) if started.elapsed() < std::time::Duration::from_secs(5) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(std::sync::TryLockError::WouldBlock) => return Err("common.configSaveTimeout".into()),
+            Err(_) => return Err("用户配置事务锁已损坏".into()),
+        }
+    };
+    let cached = state
+        .read()
         .map_err(|_| "用户配置状态锁已损坏".to_string())?;
-    let (mut next_config, _file_lock_guard) = load_latest(&state.user_config)?;
+    let cached_config = cached.user_config.clone();
+    drop(cached);
+    let (mut next_config, _file_lock_guard) = load_latest(&cached_config)?;
     patch(&mut next_config)?;
 
-    // 同时持有运行态写锁与跨进程文件锁，保证重读、落盘、内存提交和副作用顺序一致。
+    // Keep the writer transaction and cross-process file lock through commit,
+    // while only holding the cache write lock for the in-memory assignment.
     persist(&next_config)?;
-    state.user_config = next_config.clone();
+    state.write().map_err(|_| "用户配置状态锁已损坏".to_string())?.user_config = next_config.clone();
     commit(&next_config);
 
     Ok(next_config)
@@ -2392,7 +2465,7 @@ fn finish_user_config_update(config: &UserConfig) {
 
 /// 基于最新运行态原子修改并保存用户配置。
 ///
-/// patch 在配置写锁内执行。调用方应只修改自己负责的字段，避免用读取到的旧快照覆盖
+/// patch 在写入事务内执行，磁盘操作不占用配置读取锁。调用方应只修改自己负责的字段，避免用读取到的旧快照覆盖
 /// 其他并发设置更新。
 pub fn patch_user_config<F>(patch: F) -> Result<UserConfig, String>
 where
@@ -2509,12 +2582,39 @@ pub fn init_server_status(actual_port: u16, auth_token: String) -> Result<(), St
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn codex_refresh_scope_legacy_defaults_and_explicit_empty_round_trip() {
+        let defaults = UserConfig::default();
+        let expected = vec!["free", "go", "plus", "pro", "team", "business", "enterprise", "edu_k12", "unknown"];
+        assert_eq!(defaults.codex_auto_refresh_plan_types, expected);
+        let mut legacy = serde_json::to_value(defaults).unwrap();
+        legacy.as_object_mut().unwrap().remove("codex_auto_refresh_plan_types");
+        let mut restored: UserConfig = serde_json::from_value(legacy).unwrap();
+        assert_eq!(restored.codex_auto_refresh_plan_types, expected);
+        restored.codex_auto_refresh_plan_types.clear();
+        let empty: UserConfig = serde_json::from_value(serde_json::to_value(restored).unwrap()).unwrap();
+        assert!(empty.codex_auto_refresh_plan_types.is_empty());
+    }
+
+    include!("config_tests_nonblocking.rs");
+    #[test]
+    fn startup_client_preferences_preserve_app_ide_and_legacy_overview() {
+        for value in ["antigravity", "antigravity-ide", "overview", "last"] {
+            assert_eq!(super::normalize_startup_page(value), value);
+        }
+        assert_eq!(
+            super::normalize_startup_page(" Antigravity "),
+            "antigravity"
+        );
+        assert_eq!(super::normalize_startup_page("unknown"), "last");
+    }
 
     #[test]
     fn normalize_theme_color_maps_aliases() {
         assert_eq!(super::normalize_theme_color("TokyoNight"), "tokyo-night");
         assert_eq!(super::normalize_theme_color("onedark"), "one-dark");
         assert_eq!(super::normalize_theme_color("nope"), "default");
+        assert_eq!(super::normalize_theme_color(" OLED "), "oled");
     }
     use super::{acquire_config_file_lock, patch_runtime_state, RuntimeState, UserConfig};
     use std::fs;
@@ -2572,6 +2672,20 @@ mod tests {
     }
 
     #[test]
+    fn retired_codex_client_policy_is_ignored_when_loading_old_config() {
+        for enabled in [false, true] {
+            let cfg: UserConfig = serde_json::from_value(serde_json::json!({
+                "theme": "dark",
+                "codex_cli_only_allow_app_server_clients": enabled,
+            }))
+            .expect("old config remains readable");
+            let encoded = serde_json::to_value(&cfg).expect("serialize config");
+            assert_eq!(cfg.theme, "dark");
+            assert!(encoded.get("codex_cli_only_allow_app_server_clients").is_none());
+        }
+    }
+
+    #[test]
     fn openclaw_auth_overwrite_missing_field_falls_back_to_disabled() {
         let cfg: UserConfig =
             serde_json::from_value(serde_json::json!({})).expect("反序列化默认配置应成功");
@@ -2598,6 +2712,89 @@ mod tests {
             serde_json::from_value(serde_json::json!({})).expect("旧配置反序列化应成功");
         assert!(!migrated_cfg.grok_opencode_sync_on_switch);
         assert!(!migrated_cfg.grok_opencode_auth_overwrite_on_switch);
+    }
+
+    #[test]
+    fn startup_minimized_defaults_to_disabled() {
+        let default_cfg = UserConfig::default();
+        assert!(!default_cfg.startup_minimized);
+        assert!(default_cfg.startup_minimized_default_off_migrated);
+
+        let missing_field_cfg: UserConfig =
+            serde_json::from_value(serde_json::json!({})).expect("缺字段配置反序列化应成功");
+        assert!(!missing_field_cfg.startup_minimized);
+        assert!(missing_field_cfg.startup_minimized_default_off_migrated);
+    }
+
+    #[test]
+    fn startup_minimized_legacy_enabled_is_turned_off_once() {
+        let mut legacy_cfg: UserConfig = serde_json::from_value(serde_json::json!({
+            "startup_minimized": true,
+            "startup_minimized_default_off_migrated": false,
+        }))
+        .expect("旧配置反序列化应成功");
+
+        assert!(super::apply_startup_minimized_default_off_migration(
+            &mut legacy_cfg
+        ));
+        assert!(!legacy_cfg.startup_minimized);
+        assert!(legacy_cfg.startup_minimized_default_off_migrated);
+
+        legacy_cfg.startup_minimized = true;
+        assert!(!super::apply_startup_minimized_default_off_migration(
+            &mut legacy_cfg
+        ));
+        assert!(legacy_cfg.startup_minimized);
+        assert!(legacy_cfg.startup_minimized_default_off_migrated);
+    }
+
+    #[test]
+    fn load_user_config_turns_off_legacy_startup_minimized_once() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let data_dir = make_temp_dir("config_startup_minimized_migrate");
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &data_dir);
+
+        let config_path = data_dir.join("config.json");
+        fs::write(
+            &config_path,
+            r#"{
+  "startup_minimized": true
+}
+"#,
+        )
+        .expect("write legacy config");
+
+        let loaded = super::load_user_config().expect("load legacy config");
+        assert!(!loaded.startup_minimized);
+        assert!(loaded.startup_minimized_default_off_migrated);
+
+        let persisted: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).expect("read persisted config"))
+                .expect("parse persisted config");
+        assert_eq!(
+            persisted.get("startup_minimized").and_then(|value| value.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            persisted
+                .get("startup_minimized_default_off_migrated")
+                .and_then(|value| value.as_bool()),
+            Some(true)
+        );
+
+        let mut persisted_cfg: UserConfig =
+            serde_json::from_value(persisted).expect("deserialize persisted config");
+        persisted_cfg.startup_minimized = true;
+        persist_test_config(&config_path, &persisted_cfg).expect("rewrite user-enabled config");
+
+        let reloaded = super::load_user_config().expect("reload user-enabled config");
+        assert!(reloaded.startup_minimized);
+        assert!(reloaded.startup_minimized_default_off_migrated);
+
+        std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+        fs::remove_dir_all(data_dir).expect("remove temp dir");
     }
 
     #[test]

@@ -18,6 +18,12 @@ const DefaultServiceTier = "default"
 // historical direct-SDK default.
 const AutoServiceTier = "auto"
 
+// ProxyRoute is the safe route snapshot for a single upstream connection.
+type ProxyRoute struct {
+	Kind string `json:"kind"`
+	Name string `json:"name,omitempty"`
+}
+
 // Record contains the usage statistics captured for a single provider request.
 type Record struct {
 	Provider string
@@ -44,7 +50,9 @@ type Record struct {
 	// Generate reports whether the client requested actual generation.
 	// nil or true means generation is enabled; only an explicit false disables generation.
 	// Use GenerateFlag to set the value and GenerateEnabled to read it with the default.
-	Generate    *bool
+	Generate *bool
+	// Stream reports whether the request was executed in streaming mode.
+	Stream      bool
 	RequestedAt time.Time
 	Latency     time.Duration
 	TTFT        time.Duration
@@ -53,6 +61,7 @@ type Record struct {
 	Detail      Detail
 	// ResponseHeaders stores a snapshot of upstream response headers for usage sinks.
 	ResponseHeaders http.Header
+	ProxyRoute      *ProxyRoute `json:"proxyRoute,omitempty"`
 }
 
 // Failure holds HTTP failure metadata for an upstream request attempt.
@@ -78,6 +87,7 @@ type requestedModelAliasContextKey struct{}
 type reasoningEffortContextKey struct{}
 type serviceTierContextKey struct{}
 type generateContextKey struct{}
+type streamContextKey struct{}
 
 // WithRequestedModelAlias stores the client-requested model name for usage sinks.
 func WithRequestedModelAlias(ctx context.Context, alias string) context.Context {
@@ -192,6 +202,29 @@ func GenerateFromContext(ctx context.Context) bool {
 		return value
 	default:
 		return true
+	}
+}
+
+// WithStream stores whether the request was executed in streaming mode for usage sinks.
+func WithStream(ctx context.Context, stream bool) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, streamContextKey{}, stream)
+}
+
+// StreamFromContext returns whether the request was executed in streaming mode.
+// Missing values default to false.
+func StreamFromContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	raw := ctx.Value(streamContextKey{})
+	switch value := raw.(type) {
+	case bool:
+		return value
+	default:
+		return false
 	}
 }
 

@@ -59,17 +59,19 @@ async fn perform_managed_token_refresh(
         account.id, account.email, reason
     ));
 
-    match codex_oauth::refresh_access_token_with_fallback(
+    match codex_oauth::refresh_access_token_with_account_proxy(
         &refresh_token,
         Some(account.tokens.id_token.as_str()),
+        Some(&account),
     )
     .await
     {
         Ok(new_tokens) => {
-            account.tokens = new_tokens;
-            sync_identity_from_tokens(&mut account);
-            mark_token_chain_updated(&mut account);
-            save_account(&account)?;
+            let (current, saved) = persist_refreshed_account(&account, new_tokens)?;
+            account = current;
+            if !saved {
+                return Ok(account);
+            }
             sync_managed_account_sidecar(&account);
             crate::modules::codex_auth_diagnostic::log_event(
                 "managed_token_refresh_saved",
@@ -88,6 +90,15 @@ async fn perform_managed_token_refresh(
             Ok(account)
         }
         Err(err) => {
+            // Another authorization/import may have replaced the chain while
+            // this request was in flight. A stale failure (including reused)
+            // must neither return old credentials nor invalidate the new chain.
+            let current = load_account(&account.id)
+                .ok_or_else(|| format!("账号已删除或无法读取，拒绝刷新写回: account_id={}", account.id))?;
+            if !account_matches_refresh_snapshot(&current, &account) {
+                return Ok(current);
+            }
+            account = current;
             let user_error = format_refresh_error_for_user(&err);
             crate::modules::codex_auth_diagnostic::log_event(
                 "managed_token_refresh_error",
@@ -111,7 +122,16 @@ async fn perform_managed_token_refresh(
                 return Ok(account);
             }
             if is_reauth_required_refresh_error(&err) {
-                let _ = mark_account_requires_reauth(&mut account, &user_error);
+                let (current, marked) = update_account_after_refresh_if_current(
+                    &account,
+                    |current| {
+                        current.requires_reauth = true;
+                        current.reauth_reason = Some(user_error.clone());
+                    },
+                )?;
+                if !marked {
+                    return Ok(current);
+                }
                 return Err(user_error);
             }
             Err(user_error)
@@ -144,6 +164,7 @@ async fn validate_managed_account_for_client_locked(
     if codex_oauth::is_token_expired(&account.tokens.access_token) {
         return Err("access_token 已过期，无法启动，请重新授权".to_string());
     }
+    reject_known_access_token_revocation(&account)?;
     logger::log_info(&format!(
         "本地 Codex 启动凭据校验通过: account_id={}, email={}, reason={}",
         account.id, account.email, reason
@@ -255,6 +276,13 @@ async fn refresh_managed_account_with_authority(
     // a second time.
     let observed_generation =
         observed_generation.or_else(|| loaded_account_token_generation(account_id));
+    let mut account = load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    if !force && !managed_account_refresh_needed_for_request(&account, false, false) {
+        clear_refresh_token_reused_state(&mut account)?;
+        clear_stale_missing_refresh_token_reauth(&mut account)?;
+        clear_stale_id_token_reauth(&mut account)?;
+        return finish_managed_runtime_account_refresh(account, false);
+    }
     let lock = codex_token_lock_for(account_id);
     let _guard = lock.lock().await;
     let _file_guard = acquire_codex_token_refresh_file_lock(account_id, reason).await?;
@@ -275,6 +303,19 @@ async fn refresh_bound_oauth_account_for_api_key(
         .to_string();
     let _ = validate_api_key_bound_oauth_account(api_key_account, &bound_id)?;
     let observed_generation = loaded_account_token_generation(&bound_id);
+    let account = load_account(&bound_id).ok_or_else(|| format!("账号不存在: {}", bound_id))?;
+    let needs_refresh = managed_account_refresh_needed_for_request(
+        &account,
+        validate_for_client,
+        retry_known_reauth,
+    );
+    if !needs_refresh {
+        return if validate_for_client {
+            validate_managed_account_for_client_locked(account, reason).await
+        } else {
+            Ok(account)
+        };
+    }
     let lock = codex_token_lock_for(&bound_id);
     let _guard = lock.lock().await;
     let _file_guard = acquire_codex_token_refresh_file_lock(&bound_id, reason).await?;
@@ -348,12 +389,18 @@ pub async fn keepalive_managed_account(
 ) -> Result<CodexAccount, String> {
     let lock = codex_token_lock_for(account_id);
     let _guard = lock.lock().await;
-    let _file_guard = acquire_codex_token_refresh_file_lock(account_id, reason).await?;
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
     if account.is_api_key_auth() || account.is_agent_identity_auth() {
         return Ok(account);
     }
+    if !is_managed_auth_refresh_due(&account) {
+        return Ok(account);
+    }
+    let Some(_file_guard) = try_acquire_codex_token_refresh_file_lock(account_id, reason).await?
+    else {
+        return Ok(account);
+    };
     let official_runtime_has_account = running_codex_oauth_account_ids()
         .map(|account_ids| account_ids.contains(&account.id))
         .unwrap_or(false);
@@ -463,8 +510,7 @@ pub async fn prepare_account_for_injection_from_auth_dir(
     account_id: &str,
     auth_dir: Option<&Path>,
 ) -> Result<CodexAccount, String> {
-    prepare_account_for_injection_from_auth_dir_impl(account_id, auth_dir, false)
-    .await
+    prepare_account_for_injection_from_auth_dir_impl(account_id, auth_dir, false).await
 }
 
 /// 实例启动专用凭据准备。
@@ -493,21 +539,13 @@ pub async fn prepare_account_for_instance_launch_preflight(
     if account.is_api_key_auth() {
         if let Some(bound_id) = normalize_optional_ref(account.bound_oauth_account_id.as_deref()) {
             let _ = validate_api_key_bound_oauth_account(&account, &bound_id)?;
-            let observed_generation = loaded_account_token_generation(&bound_id);
-            let lock = codex_token_lock_for(&bound_id);
-            let _guard = lock.lock().await;
-            let _file_guard = acquire_codex_token_refresh_file_lock(&bound_id, "prepare").await?;
-            refresh_managed_account_locked(
-                &bound_id,
-                false,
-                "prepare",
-                observed_generation,
-                true,
-                true,
-            )
-            .await?;
+            let _ =
+                refresh_bound_oauth_account_for_api_key(&account, "prepare", true, true).await?;
         }
         return Ok(account);
+    }
+    if !managed_account_refresh_needed_for_request(&account, true, true) {
+        return validate_managed_account_for_client_locked(account, "prepare").await;
     }
 
     let lock = codex_token_lock_for(account_id);
@@ -528,6 +566,23 @@ pub async fn project_preflighted_account_for_instance_launch(
     }
     if account.is_web_session_auth() {
         return Err("Web Session 账号仅支持查看额度，无法用于客户端或 CLI 启动".to_string());
+    }
+
+    if !managed_account_refresh_needed_for_request(&account, false, false) {
+        if account.is_api_key_auth() {
+            if let Some(bound_id) =
+                normalize_optional_ref(account.bound_oauth_account_id.as_deref())
+            {
+                let oauth_account = load_account(&bound_id)
+                    .ok_or_else(|| format!("绑定的 OAuth 账号不存在: {}", bound_id))?;
+                write_api_key_account_bundle_with_oauth_to_dir(auth_dir, &account, &oauth_account)?;
+            } else {
+                write_prepared_account_bundle_to_dir(auth_dir, &account)?;
+            }
+        } else {
+            write_prepared_account_bundle_to_dir(auth_dir, &account)?;
+        }
+        return Ok(account);
     }
 
     let lock_account_id = if account.is_api_key_auth() {
@@ -559,12 +614,26 @@ async fn prepare_account_for_injection_from_auth_dir_impl(
     auth_dir: Option<&Path>,
     retry_known_reauth: bool,
 ) -> Result<CodexAccount, String> {
-    let account = load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    let mut account =
+        load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
     if account.is_agent_identity_auth() {
         return Err("Agent Identity 账号仅支持 API 服务，无法用于客户端或 CLI 启动".to_string());
     }
     if account.is_web_session_auth() {
         return Err("Web Session 账号仅支持查看额度，无法用于客户端或 CLI 启动".to_string());
+    }
+    clear_refresh_token_reused_state(&mut account)?;
+    if let Err(err) = clear_stale_missing_refresh_token_reauth(&mut account) {
+        logger::log_warn(&format!(
+            "清理缺失 refresh_token 的过期重登标记失败，继续准备账号凭据: account_id={}, error={}",
+            account.id, err
+        ));
+    }
+    if let Err(err) = clear_stale_id_token_reauth(&mut account) {
+        logger::log_warn(&format!(
+            "清理旧版 id_token 重登标记失败，继续准备账号凭据: account_id={}, error={}",
+            account.id, err
+        ));
     }
     if account.is_api_key_auth() {
         if let Some(dir) = auth_dir {
@@ -583,11 +652,25 @@ async fn prepare_account_for_injection_from_auth_dir_impl(
         }
         return Ok(account);
     }
+    if !managed_account_refresh_needed_for_request(&account, false, retry_known_reauth) {
+        if let Some(dir) = auth_dir {
+            write_prepared_account_bundle_to_dir(dir, &account)?;
+        }
+        return Ok(account);
+    }
 
     let lock = codex_token_lock_for(account_id);
     let _guard = lock.lock().await;
     let _file_guard = acquire_codex_token_refresh_file_lock(account_id, "prepare").await?;
-    let account = refresh_managed_account_locked(account_id, false, "prepare", None, false, retry_known_reauth).await?;
+    let account = refresh_managed_account_locked(
+        account_id,
+        false,
+        "prepare",
+        None,
+        false,
+        retry_known_reauth,
+    )
+    .await?;
     if let Some(dir) = auth_dir {
         write_prepared_account_bundle_to_dir(dir, &account)?;
     }
@@ -745,15 +828,9 @@ async fn prepare_account_switch_locked(
         });
     }
 
-    let account = refresh_managed_account_locked(
-        account_id,
-        false,
-        "switch",
-        None,
-        true,
-        retry_known_reauth,
-    )
-    .await?;
+    let account =
+        refresh_managed_account_locked(account_id, false, "switch", None, true, retry_known_reauth)
+            .await?;
     let account = validate_managed_account_for_client_locked(account, "switch").await?;
     Ok(PreparedCodexAccountSwitch::Account(account))
 }
@@ -859,8 +936,7 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
-    switch_account_managed_with_before_commit_options(account_id, false, before_commit)
-    .await
+    switch_account_managed_with_before_commit_options(account_id, false, before_commit).await
 }
 
 /// 用户从账号页主动切号时使用：每次都重新读取当前凭据，并按统一 Token Authority
@@ -885,8 +961,7 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
-    switch_account_managed_with_before_commit_options(account_id, true, before_commit)
-    .await
+    switch_account_managed_with_before_commit_options(account_id, true, before_commit).await
 }
 
 /// OAuth 重新授权成功后的受控切号。
@@ -965,7 +1040,11 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
-    switch_account_managed_with_before_commit_internal(account_id, retry_known_reauth, before_commit)
+    switch_account_managed_with_before_commit_internal(
+        account_id,
+        retry_known_reauth,
+        before_commit,
+    )
     .await
 }
 async fn switch_account_managed_with_before_commit_internal<F, Fut>(
@@ -1002,11 +1081,7 @@ where
         acquire_codex_token_refresh_file_lock(&switch_lock_account_id, "switch").await?;
     // 先完成目标凭据准备；账号级 Token 锁会串行化刷新与最终投影，
     // 但不会因为同一 OAuth 正被其它官方实例使用而阻断切换。
-    let prepared = prepare_account_switch_locked(
-        account_id,
-        retry_known_reauth,
-    )
-    .await?;
+    let prepared = prepare_account_switch_locked(account_id, retry_known_reauth).await?;
     // 目标凭据已经通过检查并在账号库中落稳，才关闭旧运行态并提交到官方目录。
     before_commit().await?;
     commit_account_switch_locked(account_id, prepared).await

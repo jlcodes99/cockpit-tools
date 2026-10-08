@@ -1,4 +1,7 @@
+import { CodexRefreshPlanScopeControl } from '../components/CodexRefreshPlanScopeControl';
+import { CodexRequestPayloadSetting } from '../components/codex/CodexRequestPayloadSetting';
 import { AutoSwitchAccountScopeSelector } from '../components/AutoSwitchAccountScopeSelector';
+import { CodexContextManagementControl } from '../components/codex/CodexContextManagementControl';
 import { CodexSshSyncSettingsControl } from '../components/codex/CodexSshSyncSettingsControl';
 import './settings/Settings.css';
 import { RefreshCw } from 'lucide-react';
@@ -13,6 +16,8 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
     codexAppUiInjectionEnabled,
     codexOAuthAppVersion,
     codexAutoRefresh,
+    codexAutoRefreshPlanTypes,
+    setCodexAutoRefreshPlanTypes,
     codexAutoRefreshCustomMode,
     codexAutoRefreshIsPreset,
     codexAutoSwitchAccountScopeMode,
@@ -23,6 +28,8 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
     codexLaunchCandidates,
     codexLaunchOnSwitch,
     codexAutoRestoreTakeoverOnLaunch,
+    codexPreserveVerifiedExternalBridge,
+    setCodexPreserveVerifiedExternalBridge,
     setCodexAutoRestoreTakeoverOnLaunch,
     codexLocalAccessEntryVisible,
     codexQuotaAlertEnabled,
@@ -172,6 +179,16 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                 </div>
               </div>
 
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">{t('codex.autoRefreshScope.label')}</div>
+                  <div className="row-desc">{t('codex.autoRefreshScope.description')}</div>
+                </div>
+                <div className="row-control row-control--grow">
+                  <CodexRefreshPlanScopeControl value={codexAutoRefreshPlanTypes} onChange={setCodexAutoRefreshPlanTypes} />
+                </div>
+              </div>
+              <CodexRequestPayloadSetting />
               {renderCurrentAccountRefreshRow('codex')}
               {renderAccountLevelRefreshConfig('codex')}
 
@@ -259,6 +276,8 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
 
               <CodexSshSyncSettingsControl variant="settings" />
 
+              <CodexContextManagementControl variant="settings" />
+
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">{t('settings.general.codexAppPath', 'Codex 启动路径')}</div>
@@ -345,16 +364,10 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">
-                    {t(
-                      'settings.general.codexAutoRestoreTakeoverOnLaunch',
-                      '启动时自动恢复 Codex 代理接管',
-                    )}
+                    {t('settings.general.codexAutoRestoreTakeoverOnLaunch')}
                   </div>
                   <div className="row-desc">
-                    {t(
-                      'settings.general.codexAutoRestoreTakeoverOnLaunchDesc',
-                      '工具启动时自动恢复上次的可见模型与代理接管，保持 1M 上下文且无需手动切换',
-                    )}
+                    {t('settings.general.codexAutoRestoreTakeoverOnLaunchDesc')}
                   </div>
                 </div>
                 <div className="row-control">
@@ -364,6 +377,20 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                       checked={codexAutoRestoreTakeoverOnLaunch}
                       onChange={(e) => setCodexAutoRestoreTakeoverOnLaunch(e.target.checked)}
                     />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-row">
+                <div className="row-label">
+                  <div className="row-title">{t('settings.general.codexPreserveExternalBridge')}</div>
+                  <div className="row-desc">{t('settings.general.codexPreserveExternalBridgeDesc')}</div>
+                </div>
+                <div className="row-control">
+                  <label className="switch">
+                    <input type="checkbox" checked={codexPreserveVerifiedExternalBridge}
+                      onChange={(event) => setCodexPreserveVerifiedExternalBridge(event.target.checked)} />
                     <span className="slider"></span>
                   </label>
                 </div>
@@ -442,6 +469,7 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
                       status: codexAutoSwitchEnabled ? t('common.enabled') : t('common.disabled'),
                     })}
                   </div>
+                  <div className="row-desc">{t('codex.thresholds.windowHint')}</div>
                 </div>
                 <div className="row-control row-control--grow">
                   <AutoSwitchAccountScopeSelector

@@ -420,7 +420,7 @@ func (s *relayServer) handleOllamaProviderGatewayChat(c *gin.Context, gateway *p
 		writeAPIError(c, http.StatusBadRequest, "Ollama bridge requires provider gateway wire API chat_completions", "invalid_request")
 		return
 	}
-	upstreamModel := providerGatewayCanonicalModel(gateway, model)
+	upstreamModel := s.providerGatewayUpstreamModel(gateway, model)
 	if strings.TrimSpace(upstreamModel) == "" {
 		writeAPIError(c, http.StatusNotFound, fmt.Sprintf("model %s is not available for this provider gateway", model), "model_not_available")
 		return
@@ -435,6 +435,12 @@ func (s *relayServer) handleOllamaProviderGatewayChat(c *gin.Context, gateway *p
 		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
 		return
 	}
+	backoffKey := providerGatewayBackoffKey{account: providerGatewayBoundAccount(c), gateway: strings.TrimRight(gateway.BaseURL, "/"), model: upstreamModel}
+	release, admitted := s.admitProviderGateway(c, backoffKey)
+	if !admitted {
+		return
+	}
+	defer release()
 	req, err := http.NewRequestWithContext(relayContext(c), http.MethodPost, upstreamURL, bytes.NewReader(upstreamBody))
 	if err != nil {
 		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
@@ -447,13 +453,20 @@ func (s *relayServer) handleOllamaProviderGatewayChat(c *gin.Context, gateway *p
 		req.Header.Set("Accept", "text/event-stream")
 	}
 	copyProviderGatewayDiagnosticHeaders(req.Header, c.Request.Header)
+	observeDirectGatewayRequest(req.Context(), providerGatewayBoundAccount(c), upstreamModel, req.Header, upstreamBody)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		if observer := requestDiagnosticsFromContext(req.Context()); observer != nil {
+			observer.UpstreamError(req.Context(), "dial", err)
+		}
 		writeAPIError(c, http.StatusBadGateway, err.Error(), "bad_gateway")
 		return
 	}
 	defer resp.Body.Close()
+	observeDirectGatewayResponse(req.Context(), resp)
+	s.providerBackoff.observe(backoffKey, resp.StatusCode, resp.Header.Get("Retry-After"), time.Now())
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		writeUpstreamHeaders(c.Writer.Header(), resp.Header)
 		payload, _ := io.ReadAll(resp.Body)
 		contentType := resp.Header.Get("Content-Type")
 		if contentType == "" {

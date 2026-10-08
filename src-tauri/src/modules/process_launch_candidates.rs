@@ -40,9 +40,6 @@ const DETACHED_PROCESS: u32 = 0x0000_0008;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 #[cfg(target_os = "windows")]
 const WINDOWS_PROCESS_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
-#[cfg(target_os = "windows")]
-static CODEX_STORE_APP_USER_MODEL_ID_CACHE: std::sync::OnceLock<String> =
-    std::sync::OnceLock::new();
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AppLaunchCandidate {
@@ -208,7 +205,7 @@ fn format_command_preview(command: &Command) -> String {
     summarize_text_for_process_log(&preview, 600)
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(test, target_os = "windows"))]
 fn escape_powershell_single_quoted(value: &str) -> String {
     value.replace('\'', "''")
 }
@@ -376,8 +373,33 @@ fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<Child> {
     result
 }
 
+#[cfg(any(test, target_os = "windows"))]
+fn windows_powershell_executable_candidates(system_root: Option<&str>) -> Vec<PathBuf> {
+    // Appx/StartApps 探测依赖 Windows PowerShell 模块，因此绝对路径优先于 pwsh。
+    let mut candidates = vec![PathBuf::from("powershell.exe")];
+    let system_root = system_root
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(r"C:\Windows");
+    let system_root = system_root.trim_end_matches(['\\', '/']);
+    candidates.push(PathBuf::from(format!(
+        r"{}\System32\WindowsPowerShell\v1.0\powershell.exe",
+        system_root
+    )));
+    candidates.push(PathBuf::from("pwsh.exe"));
+    candidates
+}
+
 #[cfg(target_os = "windows")]
-fn build_powershell_command(args: &[&str]) -> Command {
+fn windows_powershell_executable_candidates_for_host() -> Vec<PathBuf> {
+    let system_root = std::env::var("SystemRoot")
+        .ok()
+        .or_else(|| std::env::var("windir").ok());
+    windows_powershell_executable_candidates(system_root.as_deref())
+}
+
+#[cfg(target_os = "windows")]
+fn build_powershell_command(executable: &Path, args: &[&str]) -> Command {
     use std::os::windows::process::CommandExt;
 
     let mut final_args: Vec<String> = vec![
@@ -412,24 +434,45 @@ fn build_powershell_command(args: &[&str]) -> Command {
         index += 1;
     }
 
-    let mut command = Command::new("powershell");
+    let mut command = Command::new(executable);
     command.creation_flags(CREATE_NO_WINDOW).args(final_args);
     command
 }
 
 #[cfg(target_os = "windows")]
 fn powershell_output(args: &[&str]) -> std::io::Result<std::process::Output> {
-    let spawn_guard = crate::modules::app_lifecycle::acquire_process_spawn_guard("PowerShell")?;
-    let mut command = build_powershell_command(args);
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let preview = format_command_preview(&command);
-    log_command_trace_exec(&preview);
-    let start = Instant::now();
-    let child = command.spawn();
-    drop(spawn_guard);
-    let result = child.and_then(Child::wait_with_output);
-    log_command_trace_result(&preview, &result, start.elapsed());
-    result
+    let mut last_error = None;
+    for executable in windows_powershell_executable_candidates_for_host() {
+        let spawn_guard = crate::modules::app_lifecycle::acquire_process_spawn_guard("PowerShell")?;
+        let mut command = build_powershell_command(&executable, args);
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let preview = format_command_preview(&command);
+        log_command_trace_exec(&preview);
+        let start = Instant::now();
+        match command.spawn() {
+            Ok(child) => {
+                drop(spawn_guard);
+                let result = child.wait_with_output();
+                log_command_trace_result(&preview, &result, start.elapsed());
+                return result;
+            }
+            Err(error) => {
+                drop(spawn_guard);
+                crate::modules::logger::log_warn(&format!(
+                    "[PowerShell] 启动候选失败，尝试下一个: exe={} error={}",
+                    executable.display(),
+                    error
+                ));
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "未找到可用的 PowerShell（powershell.exe / pwsh.exe）",
+        )
+    }))
 }
 
 #[cfg(target_os = "windows")]
@@ -437,64 +480,31 @@ fn powershell_output_with_timeout(
     args: &[&str],
     timeout: Duration,
 ) -> std::io::Result<std::process::Output> {
-    use std::io::{Error, ErrorKind, Read};
-
-    let spawn_guard = crate::modules::app_lifecycle::acquire_process_spawn_guard("PowerShell")?;
-    let mut command = build_powershell_command(args);
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let preview = format_command_preview(&command);
-    log_command_trace_exec(&preview);
-    let child = command.spawn();
-    drop(spawn_guard);
-    let mut child = match child {
-        Ok(child) => child,
-        Err(err) => {
-            if command_trace_enabled() {
-                crate::modules::logger::log_warn(&format!(
-                    "[CmdTrace] SPAWN_ERROR elapsed=0ms cmd={} err={}",
-                    preview, err
-                ));
+    let mut last_error = None;
+    for executable in windows_powershell_executable_candidates_for_host() {
+        let mut command = build_powershell_command(&executable, args);
+        let preview = format_command_preview(&command);
+        log_command_trace_exec(&preview);
+        let start = Instant::now();
+        // Drain both pipes while the process runs. Waiting for exit first blocks
+        // CIM probes once their output fills a pipe, producing false timeouts.
+        // The shared helper also bounds drains held open by descendants and
+        // acquires the lifecycle spawn guard itself.
+        let result = crate::modules::process_timeout::output_with_timeout(&mut command, timeout);
+        log_command_trace_result(&preview, &result, start.elapsed());
+        match result {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                last_error = Some(error);
             }
-            return Err(err);
+            result => return result,
         }
-    };
-    let start = Instant::now();
-
-    loop {
-        if let Some(status) = child.try_wait()? {
-            let mut stdout = Vec::new();
-            let mut stderr = Vec::new();
-            if let Some(mut out) = child.stdout.take() {
-                let _ = out.read_to_end(&mut stdout);
-            }
-            if let Some(mut err) = child.stderr.take() {
-                let _ = err.read_to_end(&mut stderr);
-            }
-            let result = Ok(std::process::Output {
-                status,
-                stdout,
-                stderr,
-            });
-            log_command_trace_result(&preview, &result, start.elapsed());
-            return result;
-        }
-
-        if start.elapsed() >= timeout {
-            let _ = child.kill();
-            let _ = child.wait();
-            let result = Err(Error::new(
-                ErrorKind::TimedOut,
-                format!("PowerShell 进程探测超时（{}ms）", timeout.as_millis()),
-            ));
-            log_command_trace_result(&preview, &result, start.elapsed());
-            return result;
-        }
-
-        thread::sleep(Duration::from_millis(100));
     }
+    Err(last_error.unwrap_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "未找到可用的 PowerShell（powershell.exe / pwsh.exe）",
+        )
+    }))
 }
 
 #[cfg(target_os = "windows")]
@@ -544,7 +554,7 @@ fn normalize_windows_candidate_path(raw: &str) -> Option<std::path::PathBuf> {
         .trim_end_matches(',')
         .trim()
         .to_string();
-    if normalized.is_empty() {
+    if normalized.is_empty() || !can_probe_passive_windows_path(&normalized) {
         return None;
     }
 
@@ -587,9 +597,9 @@ fn score_windows_candidate(
         return Some(score);
     }
 
-    // The legacy Codex and current ChatGPT clients share this scanner. Do not
-    // accept helper executables whose paths merely contain one of those names.
-    if exe_names_lower.contains("chatgpt.exe") && exe_names_lower.contains("codex.exe") {
+    // The ChatGPT scanner must not accept helper executables whose paths merely
+    // contain "chatgpt" or the old "codex" GUI name.
+    if exe_names_lower.contains("chatgpt.exe") {
         return None;
     }
 
@@ -723,17 +733,12 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             supports_multi_instance: true,
         }),
         "codex" => Some(WindowsAppLaunchSignature {
-            label: "ChatGPT / Codex",
-            exe_names: &["ChatGPT.exe", "Codex.exe"],
+            label: "ChatGPT",
+            exe_names: &["ChatGPT.exe"],
             command_names: &["chatgpt", "codex"],
             protocol_names: &["chatgpt", "codex"],
-            display_keywords: &["chatgpt", "codex", "openai chatgpt", "openai codex"],
-            common_paths: &[
-                "ChatGPT\\ChatGPT.exe",
-                "OpenAI ChatGPT\\ChatGPT.exe",
-                "Codex\\Codex.exe",
-                "OpenAI Codex\\Codex.exe",
-            ],
+            display_keywords: &["chatgpt", "openai chatgpt"],
+            common_paths: &["ChatGPT\\ChatGPT.exe", "OpenAI ChatGPT\\ChatGPT.exe"],
             supports_multi_instance: true,
         }),
         "claude" => Some(WindowsAppLaunchSignature {
@@ -936,14 +941,17 @@ fn push_app_launch_candidate(
         return;
     }
 
-    let normalized_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let target = normalized_path.to_string_lossy().to_string();
-    let dedupe_key = target.to_lowercase();
+    // canonicalize 只用于去重：它会加上 \\?\ 前缀并把 junction 解析成真实卷路径
+    // （C:\Program Files\WindowsApps\... → \\?\E:\WindowsApps\...），
+    // 不能拿它的结果去做展示或写回配置。
+    let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let target = normalize_windows_user_facing_path(&path.to_string_lossy());
+    let dedupe_key = canonical_path.to_string_lossy().to_lowercase();
     if !seen.insert(dedupe_key) {
         return;
     }
 
-    let file_name = normalized_path
+    let file_name = canonical_path
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("");
@@ -1274,7 +1282,9 @@ fn detect_vscode_exec_path_by_registry() -> Option<std::path::PathBuf> {
             }
             if let Some(path_root) = reg_query_value(&key, "Path") {
                 let candidate = std::path::PathBuf::from(path_root).join(exe);
-                if candidate.exists() {
+                if can_probe_passive_windows_path(&candidate.to_string_lossy())
+                    && candidate.exists()
+                {
                     crate::modules::logger::log_info(&format!(
                         "[Path Detect] vscode registry hit: {}",
                         candidate.to_string_lossy()
@@ -1339,7 +1349,9 @@ fn detect_vscode_exec_path_by_registry() -> Option<std::path::PathBuf> {
             if let Some(install_root) = reg_query_value(&key, "InstallLocation") {
                 for exe in exe_names {
                     let candidate = std::path::PathBuf::from(&install_root).join(exe);
-                    if candidate.exists() {
+                    if can_probe_passive_windows_path(&candidate.to_string_lossy())
+                        && candidate.exists()
+                    {
                         crate::modules::logger::log_info(&format!(
                             "[Path Detect] vscode registry hit: {}",
                             candidate.to_string_lossy()
@@ -1355,6 +1367,92 @@ fn detect_vscode_exec_path_by_registry() -> Option<std::path::PathBuf> {
 }
 
 #[cfg(target_os = "windows")]
+const WINDOWS_EXEC_CANDIDATE_FUNCTIONS: &str = r#"
+function Normalize-Candidate([string]$raw) {
+  if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+  $text = $raw.Trim()
+  if ($text -match '(?i)(?<p>[A-Za-z]:\\.+?\.exe)') {
+    $text = $matches['p']
+  }
+  $text = $text.Trim().Trim('"').Trim("'")
+  if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+  return $text
+}
+
+function Test-WslCandidate([string]$candidate) {
+  $path = $candidate.Replace('/', '\')
+  if ($path.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
+    $path = '\\' + $path.Substring(8)
+  }
+  foreach ($hostName in @('\\wsl.localhost', '\\wsl$')) {
+    if ($path.Equals($hostName, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $path.StartsWith(($hostName + '\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function Get-RunningWslNames {
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo.FileName = 'wsl.exe'
+  $process.StartInfo.Arguments = '--list --running --quiet'
+  $process.StartInfo.UseShellExecute = $false
+  $process.StartInfo.CreateNoWindow = $true
+  $process.StartInfo.RedirectStandardOutput = $true
+  $process.StartInfo.RedirectStandardError = $true
+  $process.StartInfo.StandardOutputEncoding = [System.Text.Encoding]::Unicode
+  try {
+    if (-not $process.Start()) { return @{ Success = $false; Names = @() } }
+    $stdout = $process.StandardOutput.ReadToEndAsync()
+    $stderr = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit(2000)) {
+      $process.Kill()
+      return @{ Success = $false; Names = @() }
+    }
+    if ($process.ExitCode -ne 0 -or -not $stdout.Wait(500)) {
+      return @{ Success = $false; Names = @() }
+    }
+    return @{ Success = $true; Names = @($stdout.Result -split "`n") }
+  } catch {
+    return @{ Success = $false; Names = @() }
+  } finally {
+    $process.Dispose()
+  }
+}
+
+function Test-RunningWslCandidate([string]$candidate) {
+  if (-not (Test-WslCandidate $candidate)) { return $true }
+  $path = $candidate.Replace('/', '\')
+  if ($path.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
+    $path = '\\' + $path.Substring(8)
+  }
+  $parts = $path.Split('\')
+  if ($parts.Length -lt 4 -or [string]::IsNullOrWhiteSpace($parts[3])) { return $false }
+  if (-not $script:wslStatusQueried) {
+    $script:wslStatusQueried = $true
+    $probe = Get-RunningWslNames
+    $script:wslRunningNames = @($probe.Names)
+    $script:wslStatusReady = $probe.Success
+  }
+  if (-not $script:wslStatusReady) { return $false }
+  foreach ($name in $script:wslRunningNames) {
+    if (($name -replace "`0", '').Trim().Equals($parts[3], [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function Emit-Candidate([string]$raw) {
+  $candidate = Normalize-Candidate $raw
+  if ([string]::IsNullOrWhiteSpace($candidate)) { return }
+  if (-not (Test-RunningWslCandidate $candidate)) { return }
+  if (Test-Path -LiteralPath $candidate) { Write-Output $candidate }
+}
+"#;
+
+#[cfg(target_os = "windows")]
 pub fn detect_windows_exec_path_by_signatures(
     app_label: &str,
     exe_names: &[&str],
@@ -1366,35 +1464,62 @@ pub fn detect_windows_exec_path_by_signatures(
         return None;
     }
 
+    let script = build_windows_exec_path_scan_script(
+        exe_names,
+        command_names,
+        protocol_names,
+        display_keywords,
+    );
+
+    let output =
+        match powershell_output_with_timeout(&["-Command", &script], WINDOWS_PROCESS_PROBE_TIMEOUT)
+        {
+            Ok(value) => value,
+            Err(err) => {
+                crate::modules::logger::log_warn(&format!(
+                    "[Path Detect] {} PowerShell detect failed: {}",
+                    app_label, err
+                ));
+                return None;
+            }
+        };
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        crate::modules::logger::log_warn(&format!(
+            "[Path Detect] {} PowerShell command failed(-Command): status={}, stdout_head={}, stderr_head={}",
+            app_label,
+            output.status,
+            stdout.chars().take(400).collect::<String>(),
+            stderr.chars().take(400).collect::<String>()
+        ));
+        return None;
+    }
+
+    parse_windows_exec_candidates(app_label, exe_names, display_keywords, output)
+}
+
+#[cfg(target_os = "windows")]
+fn build_windows_exec_path_scan_script(
+    exe_names: &[&str],
+    command_names: &[&str],
+    protocol_names: &[&str],
+    display_keywords: &[&str],
+) -> String {
     let exe_array = powershell_array_literal(exe_names);
     let command_array = powershell_array_literal(command_names);
     let protocol_array = powershell_array_literal(protocol_names);
     let keyword_array = powershell_array_literal(display_keywords);
+    let candidate_functions = WINDOWS_EXEC_CANDIDATE_FUNCTIONS;
 
-    let script = format!(
+    format!(
         r#"$ErrorActionPreference='SilentlyContinue'
 Write-Output 'STAGE:BEGIN'
 $exeNames=@({exe_array})
 $commandNames=@({command_array})
 $protocolNames=@({protocol_array})
 $keywords=@({keyword_array})
-
-function Normalize-Candidate([string]$raw) {{
-  if ([string]::IsNullOrWhiteSpace($raw)) {{ return $null }}
-  $text = $raw.Trim()
-  if ($text -match '(?i)(?<p>[A-Za-z]:\\.+?\.exe)') {{
-    $text = $matches['p']
-  }}
-  $text = $text.Trim().Trim('"').Trim("'")
-  if ([string]::IsNullOrWhiteSpace($text)) {{ return $null }}
-  return $text
-}}
-
-function Emit-Candidate([string]$raw) {{
-  $candidate = Normalize-Candidate $raw
-  if ([string]::IsNullOrWhiteSpace($candidate)) {{ return }}
-  if (Test-Path -LiteralPath $candidate) {{ Write-Output $candidate }}
-}}
+{candidate_functions}
 
 Write-Output 'STAGE:APP_PATHS'
 $appPathRoots=@(
@@ -1466,7 +1591,7 @@ $shell = $null
 try {{ $shell = New-Object -ComObject WScript.Shell }} catch {{}}
 if ($shell) {{
   foreach ($root in $shortcutRoots) {{
-    if (-not (Test-Path -LiteralPath $root)) {{ continue }}
+    if (-not (Test-RunningWslCandidate $root) -or -not (Test-Path -LiteralPath $root)) {{ continue }}
     Get-ChildItem -Path $root -Filter *.lnk -Recurse -ErrorAction SilentlyContinue | ForEach-Object {{
       try {{
         $shortcut = $shell.CreateShortcut($_.FullName)
@@ -1488,34 +1613,7 @@ foreach ($commandName in $commandNames) {{
 Write-Output 'STAGE:END'
 exit 0
 "#
-    );
-
-    let output =
-        match powershell_output_with_timeout(&["-Command", &script], WINDOWS_PROCESS_PROBE_TIMEOUT)
-        {
-            Ok(value) => value,
-            Err(err) => {
-                crate::modules::logger::log_warn(&format!(
-                    "[Path Detect] {} PowerShell detect failed: {}",
-                    app_label, err
-                ));
-                return None;
-            }
-        };
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        crate::modules::logger::log_warn(&format!(
-            "[Path Detect] {} PowerShell command failed(-Command): status={}, stdout_head={}, stderr_head={}",
-            app_label,
-            output.status,
-            stdout.chars().take(400).collect::<String>(),
-            stderr.chars().take(400).collect::<String>()
-        ));
-        return None;
-    }
-
-    parse_windows_exec_candidates(app_label, exe_names, display_keywords, output)
+    )
 }
 
 fn should_detach_child() -> bool {
@@ -1577,10 +1675,39 @@ fn sanitize_linux_gui_launch_env(cmd: &mut Command) {
 
 fn managed_proxy_env_pairs() -> Vec<(&'static str, String)> {
     let config = config::get_user_config();
-    let mut pairs = Vec::new();
+    if config.global_proxy_enabled && config.global_proxy_url.trim().is_empty() {
+        crate::modules::logger::log_warn("[Proxy] 全局代理已启用，但代理地址为空，跳过注入");
+    }
+    let inherited = [
+        "http_proxy",
+        "https_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "all_proxy",
+        "ALL_PROXY",
+    ]
+    .map(|key| std::env::var(key).unwrap_or_default());
+    build_managed_proxy_env_pairs(
+        config.global_proxy_enabled,
+        &config.global_proxy_url,
+        &config.global_proxy_no_proxy,
+        &inherited,
+        &std::env::var("no_proxy").unwrap_or_default(),
+        &std::env::var("NO_PROXY").unwrap_or_default(),
+    )
+}
 
-    let proxy_url = config.global_proxy_url.trim();
-    if config.global_proxy_enabled && !proxy_url.is_empty() {
+fn build_managed_proxy_env_pairs(
+    enabled: bool,
+    proxy_url: &str,
+    configured_no_proxy: &str,
+    inherited_proxies: &[String],
+    inherited_lower: &str,
+    inherited_upper: &str,
+) -> Vec<(&'static str, String)> {
+    let mut pairs = Vec::new();
+    let proxy_url = proxy_url.trim();
+    if enabled && !proxy_url.is_empty() {
         pairs.extend([
             ("http_proxy", proxy_url.to_string()),
             ("https_proxy", proxy_url.to_string()),
@@ -1589,19 +1716,21 @@ fn managed_proxy_env_pairs() -> Vec<(&'static str, String)> {
             ("all_proxy", proxy_url.to_string()),
             ("ALL_PROXY", proxy_url.to_string()),
         ]);
-    } else if config.global_proxy_enabled {
-        crate::modules::logger::log_warn("[Proxy] 全局代理已启用，但代理地址为空，跳过注入");
+    }
+    // Do not alter direct launches with a standalone bypass list.
+    if pairs.is_empty()
+        && !inherited_proxies
+            .iter()
+            .any(|value| !value.trim().is_empty())
+    {
+        return pairs;
     }
 
-    let no_proxy_seed = [
-        std::env::var("no_proxy").unwrap_or_default(),
-        std::env::var("NO_PROXY").unwrap_or_default(),
-        config.global_proxy_no_proxy,
-    ]
-    .into_iter()
-    .filter(|value| !value.trim().is_empty())
-    .collect::<Vec<_>>()
-    .join(",");
+    let no_proxy_seed = [inherited_lower, inherited_upper, configured_no_proxy]
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(",");
     let no_proxy = crate::modules::codex_protocol::merge_local_no_proxy(&no_proxy_seed);
     if !no_proxy.is_empty() {
         pairs.push(("no_proxy", no_proxy.clone()));
@@ -1644,7 +1773,7 @@ fn log_managed_proxy_injection(mode: &str, cmd: &Command, pairs: &[(&'static str
         if proxy_url.is_empty() {
             "<none>"
         } else {
-            proxy_url
+            "<configured; credentials redacted>"
         },
         if no_proxy.is_empty() {
             "<empty>"
@@ -1666,6 +1795,191 @@ pub fn apply_managed_proxy_env_to_command(cmd: &mut Command) {
     }
 }
 
+fn account_proxy_env_pairs(proxy_url: &str) -> Vec<(&'static str, String)> {
+    let proxy_url = proxy_url.trim();
+    if proxy_url.is_empty() {
+        return Vec::new();
+    }
+
+    let mut pairs = vec![
+        ("http_proxy", proxy_url.to_string()),
+        ("https_proxy", proxy_url.to_string()),
+        ("HTTP_PROXY", proxy_url.to_string()),
+        ("HTTPS_PROXY", proxy_url.to_string()),
+        ("all_proxy", proxy_url.to_string()),
+        ("ALL_PROXY", proxy_url.to_string()),
+    ];
+    let no_proxy = crate::modules::codex_protocol::merge_local_no_proxy("");
+    if !no_proxy.is_empty() {
+        pairs.push(("no_proxy", no_proxy.clone()));
+        pairs.push(("NO_PROXY", no_proxy));
+    }
+    pairs
+}
+
+pub fn apply_effective_proxy_env_to_command(cmd: &mut Command, egress_proxy_url: Option<&str>) {
+    let Some(proxy_url) = egress_proxy_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        apply_managed_proxy_env_to_command(cmd);
+        return;
+    };
+
+    let pairs = account_proxy_env_pairs(proxy_url);
+    log_managed_proxy_injection("account-env", cmd, &pairs);
+    for (key, value) in pairs {
+        cmd.env(key, value);
+    }
+}
+
+#[cfg(test)]
+mod account_egress_proxy_tests {
+    use super::*;
+
+    #[test]
+    fn proxy_env_preserves_local_gateway_bypass() {
+        assert!(account_proxy_env_pairs("  ").is_empty());
+        let pairs = account_proxy_env_pairs(" socks5://127.0.0.1:1080 ");
+        for key in [
+            "http_proxy",
+            "https_proxy",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "all_proxy",
+            "ALL_PROXY",
+        ] {
+            assert!(pairs
+                .iter()
+                .any(|(name, value)| *name == key && value == "socks5://127.0.0.1:1080"));
+        }
+        for key in ["no_proxy", "NO_PROXY"] {
+            let value = &pairs.iter().find(|(name, _)| *name == key).unwrap().1;
+            assert!(value.contains("localhost"));
+            assert!(value.contains("127.0.0.1"));
+        }
+    }
+
+    #[test]
+    fn global_proxy_launch_args_respect_enabled_state_and_protocol() {
+        for (enabled, proxy) in [
+            (false, "http://127.0.0.1:7897"),
+            (true, "  "),
+            (true, "http://user:secret@127.0.0.1:7897"),
+        ] {
+            let mut args = vec!["--other".to_string()];
+            append_global_electron_proxy_args_from_config(&mut args, enabled, proxy);
+            assert_eq!(args, vec!["--other"]);
+        }
+        for (proxy, expected) in [
+            ("http://127.0.0.1:7897", "http://127.0.0.1:7897"),
+            ("socks5h://127.0.0.1:7897", "socks5://127.0.0.1:7897"),
+        ] {
+            let mut args = vec!["--other".to_string()];
+            append_global_electron_proxy_args_from_config(&mut args, true, proxy);
+            assert_eq!(
+                args,
+                vec![
+                    "--other".to_string(),
+                    format!("--proxy-server={expected}"),
+                    "--proxy-bypass-list=localhost;127.0.0.1;[::1]".to_string()
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn bound_account_proxy_cannot_be_bypassed_by_extra_arguments() {
+        let mut args = [
+            "--proxy-server=http://127.0.0.1:8080",
+            "--proxy-bypass-list=*",
+            "--no-proxy-server",
+            "--proxy-pac-url",
+            "http://pac.invalid",
+            "--other",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        append_electron_proxy_args(&mut args, "socks5://127.0.0.1:1080");
+        assert_eq!(
+            args,
+            vec![
+                "--other",
+                "--proxy-server=socks5://127.0.0.1:1080",
+                "--proxy-bypass-list=localhost;127.0.0.1;[::1]"
+            ]
+        );
+        let mut args = Vec::new();
+        append_electron_proxy_args(&mut args, "socks5h://127.0.0.1:1080");
+        assert_eq!(args[0], "--proxy-server=socks5://127.0.0.1:1080");
+        assert!(args[1].contains("127.0.0.1"));
+    }
+}
+
+pub fn append_global_electron_proxy_args(args: &mut Vec<String>) {
+    let config = config::get_user_config();
+    append_global_electron_proxy_args_from_config(
+        args,
+        config.global_proxy_enabled,
+        &config.global_proxy_url,
+    );
+}
+
+fn append_global_electron_proxy_args_from_config(
+    args: &mut Vec<String>,
+    enabled: bool,
+    proxy_url: &str,
+) {
+    if !enabled || proxy_url.trim().is_empty() {
+        return;
+    }
+    // Chromium does not support credentials in --proxy-server. Keep the existing
+    // environment-only behavior for those URLs instead of exposing credentials.
+    if let Ok(url) = url::Url::parse(proxy_url.trim()) {
+        if !url.username().is_empty() || url.password().is_some() {
+            return;
+        }
+    }
+    append_electron_proxy_args(args, proxy_url);
+}
+
+pub fn append_electron_proxy_args(args: &mut Vec<String>, proxy_url: &str) {
+    let proxy_url = proxy_url.trim();
+    if proxy_url.is_empty() {
+        return;
+    }
+    // An explicitly selected account or global proxy takes precedence over old
+    // launch flags; otherwise Chromium can bypass it.
+    let mut cleaned = Vec::with_capacity(args.len());
+    let mut iter = args.drain(..).peekable();
+    while let Some(arg) = iter.next() {
+        let name = arg.trim_start().split('=').next().unwrap_or("");
+        if [
+            "--proxy-server",
+            "--proxy-pac-url",
+            "--proxy-bypass-list",
+            "--no-proxy-server",
+            "--proxy-auto-detect",
+        ]
+        .contains(&name)
+        {
+            if !arg.contains('=')
+                && ["--proxy-server", "--proxy-pac-url", "--proxy-bypass-list"].contains(&name)
+                && iter.peek().is_some_and(|next| !next.starts_with('-'))
+            {
+                iter.next();
+            }
+            continue;
+        }
+        cleaned.push(arg);
+    }
+    drop(iter);
+    *args = cleaned;
+    let chromium_proxy_url = proxy_url.replace("socks5h://", "socks5://");
+    args.push(format!("--proxy-server={chromium_proxy_url}"));
+    args.push("--proxy-bypass-list=localhost;127.0.0.1;[::1]".to_string());
+}
+
 #[cfg(target_os = "macos")]
 pub fn append_managed_proxy_env_to_open_args(cmd: &mut Command) {
     let pairs = managed_proxy_env_pairs();
@@ -1678,8 +1992,32 @@ pub fn append_managed_proxy_env_to_open_args(cmd: &mut Command) {
     }
 }
 
+#[cfg(target_os = "macos")]
+pub fn append_effective_proxy_env_to_open_args(cmd: &mut Command, egress_proxy_url: Option<&str>) {
+    let Some(proxy_url) = egress_proxy_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        append_managed_proxy_env_to_open_args(cmd);
+        return;
+    };
+
+    let pairs = account_proxy_env_pairs(proxy_url);
+    log_managed_proxy_injection("account-open-arg", cmd, &pairs);
+    for (key, value) in pairs {
+        cmd.arg("--env").arg(format!("{}={}", key, value));
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
 pub fn append_managed_proxy_env_to_open_args(_cmd: &mut Command) {}
+
+#[cfg(not(target_os = "macos"))]
+pub fn append_effective_proxy_env_to_open_args(
+    _cmd: &mut Command,
+    _egress_proxy_url: Option<&str>,
+) {
+}
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn spawn_detached_unix(cmd: &mut Command) -> Result<Child, String> {
@@ -1816,4 +2154,3 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
         Ok(())
     });
 }
-

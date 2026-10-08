@@ -14,6 +14,7 @@ import type {
   CodexLocalAccessOAuthQuotaReserve,
   CodexLocalAccessPortCleanupResult,
   CodexLocalAccessRequestLogQuery,
+  CodexLocalAccessRequestDetail,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
   CodexLocalAccessState,
@@ -23,6 +24,7 @@ import type {
   CodexLocalAccessTimeouts,
   CodexLocalAccessUsageEventPage,
   CodexLocalAccessImageGenerationPolicy,
+  CodexInstanceGatewayView,
 } from "../types/codexLocalAccess";
 
 export async function getCodexLocalAccessState(): Promise<CodexLocalAccessState> {
@@ -67,6 +69,17 @@ export async function recoverCodexLocalAccessAccounts(
   return await invoke("codex_local_access_recover_accounts", { accountIds });
 }
 
+/** Remove only this diagnostic; false means a newer failure must remain visible. */
+export async function clearCodexLocalAccessPoolFailure(
+  apiKeyId: string,
+  lastFailureAt: number,
+): Promise<boolean> {
+  return await invoke("codex_local_access_clear_pool_failure", {
+    apiKeyId,
+    lastFailureAt,
+  });
+}
+
 export async function rotateCodexLocalAccessApiKey(): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_rotate_api_key");
 }
@@ -83,6 +96,28 @@ export async function updateCodexLocalAccessBoundOAuthAccount(
 
 export async function clearCodexLocalAccessStats(): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_clear_stats");
+}
+
+export async function listCodexInstanceGateways(): Promise<
+  CodexInstanceGatewayView[]
+> {
+  return await invoke("codex_list_instance_gateways");
+}
+
+/** 停止某个实例网关；混合模型路由网关会同时关闭该实例的路由（渠道配置保留）。 */
+export async function stopCodexInstanceGateway(
+  instanceId: string,
+  kind: string,
+): Promise<void> {
+  await invoke("codex_stop_instance_gateway", { instanceId, kind });
+}
+
+/** 重新启动某个实例网关。 */
+export async function restartCodexInstanceGateway(
+  instanceId: string,
+  kind: string,
+): Promise<void> {
+  await invoke("codex_restart_instance_gateway", { instanceId, kind });
 }
 
 export async function queryCodexLocalAccessRequestLogs(
@@ -110,6 +145,30 @@ export async function queryCodexLocalAccessStats(
   endAt: number,
 ): Promise<CodexLocalAccessStatsWindow> {
   return await invoke("codex_local_access_query_stats", { startAt, endAt });
+}
+
+export async function getCodexLocalAccessRequestDetail(
+  requestId: string,
+): Promise<CodexLocalAccessRequestDetail | null> {
+  return await invoke("codex_local_access_get_request_detail", { requestId });
+}
+
+export async function getCodexLocalAccessRequestPayloadLogging(): Promise<boolean> {
+  return await invoke("codex_local_access_get_request_payload_logging");
+}
+
+export async function getCodexLocalAccessRequestPayloadLoggingStatus(): Promise<{ pending: boolean; error?: string | null }> {
+  return await invoke("codex_local_access_get_request_payload_logging_status");
+}
+
+export async function updateCodexLocalAccessRequestPayloadLogging(
+  enabled: boolean,
+): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_update_request_payload_logging", { enabled });
+}
+
+export async function clearCodexLocalAccessRequestPayloads(): Promise<number> {
+  return await invoke("codex_local_access_clear_request_payloads");
 }
 
 export async function queryCodexLocalAccessAccountWindowStats(
@@ -191,6 +250,8 @@ export async function updateCodexLocalAccessRoutingOptions(payload: {
   disableCooling: boolean;
   immediateSseResponse: boolean;
   maxConcurrentImageRequests: number;
+  maxAccountConcurrency: number;
+  accountConcurrencyWaitMs: number;
 }): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_update_routing_options", payload);
 }
@@ -236,6 +297,30 @@ export async function updateCodexLocalAccessDebugLogs(
 ): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_update_debug_logs", {
     debugLogs,
+  });
+}
+
+export async function updateCodexLocalAccessImageGenerationMainModel(
+  imageGenerationMainModel: string | null,
+): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_update_image_generation_main_model", {
+    imageGenerationMainModel,
+  });
+}
+
+export async function updateCodexLocalAccessImageGenerationModel(
+  imageGenerationModel: string,
+): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_update_image_generation_model", {
+    imageGenerationModel,
+  });
+}
+
+export async function updateCodexLocalAccessImageGenerationAccounts(
+  accountIds: string[],
+): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_update_image_generation_accounts", {
+    accountIds,
   });
 }
 

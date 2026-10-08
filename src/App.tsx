@@ -1,3 +1,4 @@
+import { listenSafely as listen } from "./utils/tauriEventListener";
 import {
   Suspense,
   lazy,
@@ -11,7 +12,7 @@ import {
 import './App.css';
 import { getVersion } from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
@@ -21,7 +22,9 @@ import { BootReadyMarker, VisibleBootPage } from './components/BootReadyMarker';
 import { GlobalModal } from './components/GlobalModal';
 import { WindowsOperationDialog } from './components/WindowsOperationDialog';
 import { CodexSwitchProgressModal } from './components/CodexSwitchProgressModal';
+import { CodexCliDaemonNotice } from './components/CodexCliDaemonNotice';
 import { CodexInstanceLaunchProgressModal } from './components/CodexInstanceLaunchProgressModal';
+import { CodexPelicanHost } from './components/codex/pelican/CodexPelicanHost';
 import { AnnouncementHost } from './components/AnnouncementCenter';
 import { TopCenterPromoBanner } from './components/TopCenterPromoBanner';
 import type { QuickSettingsType } from './components/QuickSettingsPopover';
@@ -47,6 +50,8 @@ import { useWorkbuddyAccountStore } from './stores/useWorkbuddyAccountStore';
 import { useZedAccountStore } from './stores/useZedAccountStore';
 import { useSideNavLayoutStore } from './stores/useSideNavLayoutStore';
 import { usePlatformLayoutStore } from './stores/usePlatformLayoutStore';
+import { initializeClassicSidebar } from './utils/classicSidebarStartup';
+import { getAntigravityRuntimeTarget, resolveAntigravityStartupTarget, setAntigravityRuntimeTarget } from './utils/antigravityRuntimeTarget';
 import { useTopRightAdStore } from './stores/useTopRightAdStore';
 import { useSponsorStore } from './stores/useSponsorStore';
 import { useRemoteConfigStore } from './stores/useRemoteConfigStore';
@@ -69,6 +74,7 @@ import {
   UPDATE_DOWNLOAD_RETRY_DELAYS_MS,
 } from './utils/updaterRetry';
 import { loadWakeupOfficialLsVersionMode } from './utils/wakeupOfficialLsVersion';
+import { UpdatePromptPolicy } from './utils/updatePromptPolicy';
 import {
   dispatchExternalProviderImportEvent,
   normalizeExternalProviderImportPayload,
@@ -338,6 +344,7 @@ function normalizeStoredActivePage(value: string | null): Page | null {
 
 /** 启动页偏好：`last` 表示恢复上次页面，其它为具体 Page id */
 function normalizeStartupPagePreference(value: string | null | undefined): 'last' | Page {
+  if (resolveAntigravityStartupTarget(value)) return 'overview';
   const normalized = value?.trim().toLowerCase();
   if (!normalized || normalized === 'last') {
     return 'last';
@@ -813,6 +820,8 @@ function MainApp() {
           return;
         }
         const preferred = normalizeStartupPagePreference(config.startup_page);
+        const antigravityTarget = resolveAntigravityStartupTarget(config.startup_page);
+        if (antigravityTarget) setAntigravityRuntimeTarget(antigravityTarget);
         if (preferred !== 'last') {
           setPage(preferred);
         }
@@ -869,7 +878,7 @@ function MainApp() {
   const [updateRuntimeInfoLoaded, setUpdateRuntimeInfoLoaded] = useState(false);
   const [updateNotificationInfo, setUpdateNotificationInfo] = useState<UpdateInfo | null>(null);
   const [updateNotificationChecking, setUpdateNotificationChecking] = useState(false);
-  const [updateRemindersEnabled, setUpdateRemindersEnabled] = useState(true);
+  const [updateRemindersEnabled, setUpdateRemindersEnabled] = useState(false);
   const [updateSkipError, setUpdateSkipError] = useState('');
   const [silentUpdateVersion, setSilentUpdateVersion] = useState<string | null>(null);
   const [updateAction, setUpdateAction] = useState<UpdateAction>({
@@ -887,7 +896,7 @@ function MainApp() {
   const updateDownloadTaskIdRef = useRef(0);
   const updateDownloadOwnerRef = useRef<'none' | 'shared' | 'silent'>('none');
   const updateCheckRequestIdRef = useRef(0);
-  const autoPromptedUpdateVersionsRef = useRef<Set<string>>(new Set());
+  const updatePromptPolicyRef = useRef(new UpdatePromptPolicy());
   const externalImportHandledAtRef = useRef<Map<string, number>>(new Map());
   const { showModal, closeModal } = useGlobalModal();
   const topRightAdState = useTopRightAdStore((state) => state.state);
@@ -1276,6 +1285,17 @@ function MainApp() {
   }, [fetchSponsorModuleState, fetchTopRightAdState]);
 
   useEffect(() => {
+    const handleSponsorRoutesUpdated = () => {
+      void useCodexAccountStore.getState().fetchAccounts();
+      void useClaudeAccountStore.getState().fetchAccounts();
+    };
+    window.addEventListener('sponsor-routes-updated', handleSponsorRoutesUpdated);
+    return () => {
+      window.removeEventListener('sponsor-routes-updated', handleSponsorRoutesUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
     if (sponsorModuleInitialized && page === 'api-relay' && !sponsorEntryVisible) {
       setPage('dashboard');
     }
@@ -1285,8 +1305,13 @@ function MainApp() {
     if (sideNavLayoutMode !== 'classic' || sideNavClassicFirstSyncDone) {
       return;
     }
-    syncSidebarEntriesFromDashboard();
-    markSideNavClassicFirstSyncDone();
+    let current = true;
+    void initializeClassicSidebar({
+      isCurrent: () => current,
+      initialize: syncSidebarEntriesFromDashboard,
+      markInitialized: markSideNavClassicFirstSyncDone,
+    });
+    return () => { current = false; };
   }, [
     sideNavLayoutMode,
     sideNavClassicFirstSyncDone,
@@ -1294,7 +1319,8 @@ function MainApp() {
     markSideNavClassicFirstSyncDone,
   ]);
 
-  const openUpdateNotificationDetails = useCallback(() => {
+  const openUpdateNotificationDetails = useCallback((source: UpdateCheckSource = 'manual') => {
+    if (source === 'manual') updatePromptPolicyRef.current.openManual();
     setUpdateSkipError('');
     setUpdateNotificationKey(Date.now());
     setShowUpdateNotification(true);
@@ -1308,6 +1334,7 @@ function MainApp() {
   }, [openUpdateNotificationDetails]);
 
   const closeUpdateNotification = useCallback(() => {
+    updatePromptPolicyRef.current.close();
     setShowUpdateNotification(false);
     setUpdateSkipError('');
     if (updateAction.state === 'hidden') {
@@ -1326,13 +1353,23 @@ function MainApp() {
     version: string,
     mode: RemoteUpdatePromptMode,
   ) => {
-    if (mode !== 'popup' || autoPromptedUpdateVersionsRef.current.has(version)) {
-      return;
+    if (!updatePromptPolicyRef.current.openAutomatic(version, mode)) {
+      return false;
     }
-    autoPromptedUpdateVersionsRef.current.add(version);
-    openUpdateNotificationDetails();
+    openUpdateNotificationDetails('auto');
     writeUpdateLog('info', `远端更新策略已自动打开更新弹框: version=${version}`);
+    return true;
   }, [openUpdateNotificationDetails, writeUpdateLog]);
+
+  const applyUpdateReminderPreference = useCallback((enabled: boolean, revision?: number) => {
+    const policy = updatePromptPolicyRef.current;
+    if (!policy.applyPreference(enabled, revision)) return;
+    setUpdateRemindersEnabled(policy.enabled);
+    if (policy.shouldCloseAutomaticPrompt()) {
+      policy.close();
+      setShowUpdateNotification(false);
+    }
+  }, []);
 
   const prepareCodexLocalAccessBeforeRelaunch = useCallback(async () => {
     setUpdateRetryStatus(
@@ -1453,6 +1490,7 @@ function MainApp() {
 
   useEffect(() => {
     let cancelled = false;
+    const preferenceRevision = updatePromptPolicyRef.current.revision;
     invoke<{
       auto_check?: boolean;
       check_interval_hours?: number;
@@ -1465,26 +1503,26 @@ function MainApp() {
         if (cancelled) {
           return;
         }
-        setUpdateRemindersEnabled(settings?.remind_on_update ?? true);
+        applyUpdateReminderPreference(settings?.remind_on_update ?? true, preferenceRevision);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyUpdateReminderPreference]);
 
   useEffect(() => {
     const handleUpdateReminderChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ enabled?: boolean }>).detail;
       if (typeof detail?.enabled === 'boolean') {
-        setUpdateRemindersEnabled(detail.enabled);
+        applyUpdateReminderPreference(detail.enabled);
       }
     };
     window.addEventListener('update-reminder-changed', handleUpdateReminderChanged as EventListener);
     return () => {
       window.removeEventListener('update-reminder-changed', handleUpdateReminderChanged as EventListener);
     };
-  }, []);
+  }, [applyUpdateReminderPreference]);
 
   const isLinuxManagedUpdate = updateRuntimeInfo?.platform === 'linux'
     && updateRuntimeInfo.linux_managed_install_supported;
@@ -1573,6 +1611,7 @@ function MainApp() {
       if (updateCheckRequestIdRef.current !== requestId) {
         return;
       }
+      updatePromptPolicyRef.current.close();
       setShowUpdateNotification(false);
       setUpdateNotificationInfo(null);
       handleUpdateCheckResult({
@@ -1590,6 +1629,7 @@ function MainApp() {
         'warn',
         `交互式更新检查失败，关闭弹窗: error=${sanitizeUpdaterErrorMessage(error)}`,
       );
+      updatePromptPolicyRef.current.close();
       setShowUpdateNotification(false);
       setUpdateNotificationInfo(null);
       handleUpdateCheckResult({
@@ -1984,6 +2024,7 @@ function MainApp() {
   }, [closeUpdaterHandle, updateAction.state, updateAction.version, writeUpdateLog]);
 
   const handleUpdatePrimaryAction = useCallback(async () => {
+    updatePromptPolicyRef.current.openManual();
     if (updateAction.state === 'downloading') {
       openUpdateNotificationDetails();
       return;
@@ -2085,6 +2126,7 @@ function MainApp() {
         }
         return prev;
       });
+      updatePromptPolicyRef.current.close();
       setShowUpdateNotification(false);
       setUpdateNotificationInfo(null);
       setUpdateRetryStatus('');
@@ -2304,6 +2346,7 @@ function MainApp() {
         writeUpdateLog('info', `${triggerLabel}触发自动更新检查流程`);
 
         const settingsInvokeStartedAt = performance.now();
+        const preferenceRevision = updatePromptPolicyRef.current.revision;
         const settings = await invoke<{
           auto_check?: boolean;
           check_interval_hours?: number;
@@ -2316,12 +2359,10 @@ function MainApp() {
           `[StartupPerf][UpdateCheck] get_update_settings completed in ${settingsInvokeElapsed.toFixed(2)}ms`,
         );
         const autoInstall = settings?.auto_install ?? false;
-        const remindOnUpdate = settings?.remind_on_update ?? true;
+        applyUpdateReminderPreference(settings?.remind_on_update ?? true, preferenceRevision);
         const skippedVersion = (settings?.skipped_version ?? '').trim();
         const remoteConfigState = await fetchRemoteConfigState(false);
         const updatePromptMode = remoteConfigState.updatePromptMode;
-        const shouldAutoOpenUpdatePrompt = updatePromptMode === 'popup';
-        setUpdateRemindersEnabled(remindOnUpdate);
         writeUpdateLog(
           'info',
           `读取更新设置: auto_install=${autoInstall}, update_prompt_mode=${updatePromptMode}；启动始终执行更新检查`,
@@ -2375,15 +2416,13 @@ function MainApp() {
                 });
               } else {
                 preparedUpdateInfo = await prepareUpdateNotificationInfo(update);
-                if (remindOnUpdate || shouldAutoOpenUpdatePrompt) {
-                  setUpdateNotificationInfo(preparedUpdateInfo);
-                  handleUpdateCheckResult({
-                    source: 'auto',
-                    status: 'has_update',
-                    currentVersion: preparedUpdateInfo.current_version,
-                    latestVersion: preparedUpdateInfo.latest_version,
-                  });
-                }
+                setUpdateNotificationInfo(preparedUpdateInfo);
+                handleUpdateCheckResult({
+                  source: 'auto',
+                  status: 'has_update',
+                  currentVersion: preparedUpdateInfo.current_version,
+                  latestVersion: preparedUpdateInfo.latest_version,
+                });
                 openAutomaticUpdatePrompt(update.version, updatePromptMode);
                 console.log('[App] Update found, downloading silently with retry...');
                 writeUpdateLog('info', `检测到新版本，开始静默下载: version=${update.version}`);
@@ -2528,7 +2567,7 @@ function MainApp() {
                   progress: 100,
                   requiresInstall: true,
                 });
-                if (remindOnUpdate) {
+                if (updatePromptPolicyRef.current.enabled) {
                   writeUpdateLog('info', `静默更新已在左上角显示待重启入口: version=${downloadedUpdate.version}`);
                 }
               }
@@ -2558,7 +2597,7 @@ function MainApp() {
               'error',
               `静默更新失败，保留左上角更新入口: error=${sanitizeUpdaterErrorMessage(err)}`,
             );
-            if (!remindOnUpdate) {
+            if (!updatePromptPolicyRef.current.enabled) {
               setUpdateRetryStatus('');
               setUpdateDownloadError('');
               setUpdateErrorDetails('');
@@ -2574,7 +2613,7 @@ function MainApp() {
                 return prev;
               });
             }
-            if (preparedUpdateInfo && remindOnUpdate) {
+            if (preparedUpdateInfo && updatePromptPolicyRef.current.enabled) {
               setUpdateNotificationInfo(preparedUpdateInfo);
               setUpdateAction({
                 state: 'available',
@@ -2636,19 +2675,17 @@ function MainApp() {
                 });
               } else {
                 const info = await prepareUpdateNotificationInfo(update);
-                if (remindOnUpdate || shouldAutoOpenUpdatePrompt) {
-                  setUpdateNotificationInfo(info);
-                }
+                setUpdateNotificationInfo(info);
                 handleUpdateCheckResult({
                   source: 'auto',
                   status: 'has_update',
                   currentVersion: info.current_version,
                   latestVersion: info.latest_version,
                 });
-                openAutomaticUpdatePrompt(update.version, updatePromptMode);
+                const openedPrompt = openAutomaticUpdatePrompt(update.version, updatePromptMode);
                 writeUpdateLog(
                   'info',
-                  shouldAutoOpenUpdatePrompt
+                  openedPrompt
                     ? `检测到新版本，已按远端策略打开更新弹框: version=${update.version}`
                     : `检测到新版本，已在左上角显示更新入口: version=${update.version}`,
                 );
@@ -2712,6 +2749,7 @@ function MainApp() {
       }
     };
   }, [
+    applyUpdateReminderPreference,
     closeUpdaterHandle,
     fetchRemoteConfigState,
     handleUpdateCheckResult,
@@ -2998,8 +3036,9 @@ function MainApp() {
   useEffect(() => {
     const handleUpdateRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ source?: UpdateCheckSource }>).detail;
-      const source: UpdateCheckSource = detail?.source === 'manual' ? 'manual' : 'auto';
-      void runModalUpdateCheck(source);
+      // Automatic checks use the background flow and its local-preference gate.
+      if (detail?.source !== 'manual') return;
+      void runModalUpdateCheck('manual');
     };
     window.addEventListener('update-check-requested', handleUpdateRequest as EventListener);
     return () => {
@@ -3154,7 +3193,9 @@ function MainApp() {
       try {
         await Promise.all(
           refreshTasks.map(({ command, errorMessage }) =>
-            invoke(command).catch((error) => {
+            invoke(command, command === 'refresh_current_quota'
+              ? { runtimeTarget: getAntigravityRuntimeTarget() }
+              : undefined).catch((error) => {
               console.error(errorMessage, error);
             }),
           ),
@@ -3720,7 +3761,9 @@ function MainApp() {
       )}
       <GlobalModal />
       <CodexSwitchProgressModal />
+      <CodexCliDaemonNotice />
       <CodexInstanceLaunchProgressModal />
+      <CodexPelicanHost />
       <WindowsOperationDialog />
 
       {/* 关闭确认对话框 */}

@@ -4,8 +4,40 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
+
+func TestSaveTokenToFileAtomicallyReplacesExisting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "codex.json")
+	storage := &CodexTokenStorage{Type: "codex", AccessToken: "old"}
+	if err := storage.SaveTokenToFile(path); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storage.AccessToken = strings.Repeat("n", 1<<20)
+	if err := storage.SaveTokenToFile(path); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && os.SameFile(before, after) {
+		t.Fatal("credential was overwritten in place instead of atomically replaced")
+	}
+	if runtime.GOOS != "windows" && after.Mode().Perm()&0077 != 0 {
+		t.Fatalf("credential permissions are too broad: %v", after.Mode().Perm())
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || !json.Valid(raw) {
+		t.Fatalf("replacement is not complete JSON: %v", err)
+	}
+}
 
 func TestSaveTokenToFile_PreservesCustomMetadata(t *testing.T) {
 	tempDir := t.TempDir()

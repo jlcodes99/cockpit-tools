@@ -4,7 +4,6 @@
 package cmd
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/auth/gemini"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/misc"
 	sdkAuth "github.com/router-for-me/CLIProxyAPI/v7/sdk/auth"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
@@ -31,6 +29,16 @@ const (
 	geminiCLIEndpoint = "https://cloudcode-pa.googleapis.com"
 	geminiCLIVersion  = "v1internal"
 )
+
+// Project discovery belongs to this login flow, not translator interfaces.
+type gcpProject struct {
+	ProjectID string `json:"projectId"`
+	Name      string `json:"name"`
+}
+
+type gcpProjectList struct {
+	Projects []gcpProject `json:"projects"`
+}
 
 type projectSelectionRequiredError struct{}
 
@@ -404,7 +412,7 @@ func callGeminiCLI(ctx context.Context, httpClient *http.Client, endpoint string
 	return nil
 }
 
-func fetchGCPProjects(ctx context.Context, httpClient *http.Client) ([]interfaces.GCPProjectProjects, error) {
+func fetchGCPProjects(ctx context.Context, httpClient *http.Client) ([]gcpProject, error) {
 	req, errRequest := http.NewRequestWithContext(ctx, http.MethodGet, "https://cloudresourcemanager.googleapis.com/v1/projects", nil)
 	if errRequest != nil {
 		return nil, fmt.Errorf("could not create project list request: %w", errRequest)
@@ -425,7 +433,7 @@ func fetchGCPProjects(ctx context.Context, httpClient *http.Client) ([]interface
 		return nil, fmt.Errorf("project list request failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 
-	var projects interfaces.GCPProject
+	var projects gcpProjectList
 	if errDecode := json.NewDecoder(resp.Body).Decode(&projects); errDecode != nil {
 		return nil, fmt.Errorf("failed to unmarshal project list: %w", errDecode)
 	}
@@ -434,7 +442,7 @@ func fetchGCPProjects(ctx context.Context, httpClient *http.Client) ([]interface
 }
 
 // promptForProjectSelection prints available projects and returns the chosen project ID.
-func promptForProjectSelection(projects []interfaces.GCPProjectProjects, presetID string, promptFn func(string) (string, error)) string {
+func promptForProjectSelection(projects []gcpProject, presetID string, promptFn func(string) (string, error)) string {
 	trimmedPreset := strings.TrimSpace(presetID)
 	if len(projects) == 0 {
 		if trimmedPreset != "" {
@@ -499,7 +507,7 @@ func promptForProjectSelection(projects []interfaces.GCPProjectProjects, presetI
 	}
 }
 
-func resolveProjectSelections(selection string, projects []interfaces.GCPProjectProjects) ([]string, error) {
+func resolveProjectSelections(selection string, projects []gcpProject) ([]string, error) {
 	trimmed := strings.TrimSpace(selection)
 	if trimmed == "" {
 		return nil, nil
@@ -545,22 +553,7 @@ func resolveProjectSelections(selection string, projects []interfaces.GCPProject
 	return selections, nil
 }
 
-func defaultProjectPrompt() func(string) (string, error) {
-	reader := bufio.NewReader(os.Stdin)
-	return func(prompt string) (string, error) {
-		fmt.Print(prompt)
-		line, errRead := reader.ReadString('\n')
-		if errRead != nil {
-			if errors.Is(errRead, io.EOF) {
-				return strings.TrimSpace(line), nil
-			}
-			return "", errRead
-		}
-		return strings.TrimSpace(line), nil
-	}
-}
-
-func showProjectSelectionHelp(email string, projects []interfaces.GCPProjectProjects) {
+func showProjectSelectionHelp(email string, projects []gcpProject) {
 	if email != "" {
 		log.Infof("Your account %s needs to specify a project ID.", email)
 	} else {

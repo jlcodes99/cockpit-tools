@@ -69,17 +69,51 @@ pub fn inject_token_to_path(
     )
 }
 
+/// 推导账号的 is_gcp_tos 属性（优先使用 token 中的显式字段，若缺失则通过配额层级返回的 is_gcp_tos 判定）
+pub fn resolve_account_is_gcp_tos(account: &Account) -> Option<bool> {
+    if let Some(is_gcp_tos) = account.token.is_gcp_tos {
+        return Some(is_gcp_tos);
+    }
+    if let Some(ref quota) = account.quota {
+        if let Some(is_gcp_tos) = quota.is_gcp_tos {
+            return Some(is_gcp_tos);
+        }
+    }
+    None
+}
+
+/// 推导账号的 project_id 属性（优先 token，其次 quota；无合法项目则返回 None，严格过滤无效的 aicode-consumers）
+pub fn resolve_account_project_id(account: &Account) -> Option<String> {
+    if let Some(ref project_id) = account.token.project_id {
+        let trimmed = project_id.trim();
+        if !trimmed.is_empty() && trimmed != "aicode-consumers" {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(ref quota) = account.quota {
+        if let Some(ref project_id) = quota.project_id {
+            let trimmed = project_id.trim();
+            if !trimmed.is_empty() && trimmed != "aicode-consumers" {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// 按账号数据注入 Token 到指定数据库路径。
 pub fn inject_account_token_to_path(db_path: &Path, account: &Account) -> Result<String, String> {
+    let resolved_is_gcp_tos = resolve_account_is_gcp_tos(account);
+    let resolved_project_id = resolve_account_project_id(account);
     inject_token_to_path_with_metadata(
         db_path,
         &account.token.access_token,
         &account.token.refresh_token,
         account.token.expiry_timestamp,
-        account.token.is_gcp_tos,
+        resolved_is_gcp_tos,
         account.token.id_token.as_deref(),
         Some(account.email.as_str()),
-        account.token.project_id.as_deref(),
+        resolved_project_id.as_deref(),
     )
 }
 
@@ -165,6 +199,7 @@ fn inject_unified_oauth_token(
         .unwrap_or_default();
     let mut topic =
         protobuf::remove_unified_topic_entry(&current_topic, "oauthTokenInfoSentinelKey")?;
+    topic = protobuf::remove_unified_topic_entry(&topic, "authStateWithContextSentinelKey")?;
 
     // 创建 OAuthTokenInfo（二进制）
     let oauth_info = protobuf::create_oauth_info_with_metadata(
@@ -193,6 +228,22 @@ fn inject_unified_oauth_token(
 }
 
 fn inject_user_status(conn: &Connection, email: &str) -> Result<(), String> {
+    // 检查是否已存在 userStatus；如果已存在完整配置，绝不覆盖，避免抹掉已缓存的模型与特性
+    let existing_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM ItemTable WHERE key = 'antigravityUnifiedStateSync.userStatus'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    if existing_count > 0 {
+        crate::modules::logger::log_info(
+            "antigravityUnifiedStateSync.userStatus 已存在，保留完整配置由 Language Server 动态同步",
+        );
+        return Ok(());
+    }
+
     let payload = protobuf::create_minimal_user_status_payload(email);
     let topic = protobuf::create_unified_topic_entry("userStatusSentinelKey", &payload);
     let topic_b64 = general_purpose::STANDARD.encode(topic);
@@ -242,3 +293,90 @@ pub fn write_service_machine_id(service_machine_id: &str) -> Result<(), String> 
     crate::modules::logger::log_info(&format!("serviceMachineId 已写入: {}", service_machine_id));
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Account, QuotaData, TokenData};
+
+    fn make_test_account(is_gcp_tos: Option<bool>, quota: Option<QuotaData>) -> Account {
+        let mut token = TokenData::new(
+            "access".to_string(),
+            "refresh".to_string(),
+            3600,
+            Some("test@example.com".to_string()),
+            None,
+            None,
+        );
+        token.is_gcp_tos = is_gcp_tos;
+        let mut account = Account::new("id-1".to_string(), "test@example.com".to_string(), token);
+        account.quota = quota;
+        account
+    }
+
+    #[test]
+    fn test_resolve_account_is_gcp_tos_from_token() {
+        let acc_true = make_test_account(Some(true), None);
+        assert_eq!(resolve_account_is_gcp_tos(&acc_true), Some(true));
+
+        let acc_false = make_test_account(Some(false), None);
+        assert_eq!(resolve_account_is_gcp_tos(&acc_false), Some(false));
+    }
+
+    #[test]
+    fn test_resolve_account_is_gcp_tos_from_quota() {
+        let mut quota = QuotaData::new();
+        quota.is_gcp_tos = Some(true);
+        let acc = make_test_account(None, Some(quota));
+        assert_eq!(resolve_account_is_gcp_tos(&acc), Some(true));
+
+        let mut quota_tier = QuotaData::new();
+        quota_tier.tier_id = Some("standard-tier".to_string());
+        let acc_tier = make_test_account(None, Some(quota_tier));
+        assert_eq!(resolve_account_is_gcp_tos(&acc_tier), None);
+
+        let mut quota_sub = QuotaData::new();
+        quota_sub.subscription_tier = Some("standard-tier".to_string());
+        let acc_sub = make_test_account(None, Some(quota_sub));
+        assert_eq!(resolve_account_is_gcp_tos(&acc_sub), None);
+
+        let mut quota_free = QuotaData::new();
+        quota_free.tier_id = Some("free-tier".to_string());
+        let acc_free = make_test_account(None, Some(quota_free));
+        assert_eq!(resolve_account_is_gcp_tos(&acc_free), None);
+    }
+
+    #[test]
+    fn test_resolve_account_project_id() {
+        // 1. Token 显式设置优先
+        let mut acc_token = make_test_account(Some(true), None);
+        acc_token.token.project_id = Some("custom-project".to_string());
+        assert_eq!(
+            resolve_account_project_id(&acc_token),
+            Some("custom-project".to_string())
+        );
+
+        // 2. 配额中设置的 project_id 次之
+        let mut quota = QuotaData::new();
+        quota.project_id = Some("quota-project".to_string());
+        let acc_quota = make_test_account(Some(false), Some(quota));
+        assert_eq!(
+            resolve_account_project_id(&acc_quota),
+            Some("quota-project".to_string())
+        );
+
+        // 3. 过滤历史脏数据 aicode-consumers
+        let mut acc_dirty = make_test_account(Some(true), None);
+        acc_dirty.token.project_id = Some("aicode-consumers".to_string());
+        assert_eq!(resolve_account_project_id(&acc_dirty), None);
+
+        // 4. GCP ToS 账号若无真实项目 ID 也返回 None，绝不凭空捏造假项目
+        let acc_tos = make_test_account(Some(true), None);
+        assert_eq!(resolve_account_project_id(&acc_tos), None);
+
+        // 5. 普通非 GCP ToS 个人账号返回 None
+        let acc_personal = make_test_account(Some(false), None);
+        assert_eq!(resolve_account_project_id(&acc_personal), None);
+    }
+}
+

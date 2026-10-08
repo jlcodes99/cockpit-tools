@@ -101,6 +101,8 @@ type reviewedInPlaceByteWrite struct {
 }
 
 var reviewedInPlaceByteWrites = map[string]reviewedInPlaceByteWrite{
+	"internal/registry/model_definitions.go":                {1, "shifts []*ModelInfo entries within a model slice; it does not rewrite payload bytes"},
+	"internal/runtime/executor/codex_agent_identity.go":     {2, "copies derived key material into function-local fixed-size arrays; no request payload buffer is involved"},
 	"internal/runtime/executor/claude_signing.go":           {2, "writes CCH digits into bytes.Clone(body); the caller's body is never touched"},
 	"internal/runtime/executor/claude_executor_cloaking.go": {1, "shifts []string headers to prepend a block; no byte of any payload is rewritten"},
 	"internal/runtime/executor/claude_executor_request.go":  {2, "shifts []string headers to insert a part; no byte of any payload is rewritten"},

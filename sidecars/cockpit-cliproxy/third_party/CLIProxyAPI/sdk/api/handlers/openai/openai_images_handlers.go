@@ -26,9 +26,12 @@ import (
 )
 
 const (
-	defaultImagesMainModel      = "gpt-5.4-mini"
+	defaultImagesMainModel      = "gpt-5.5"
 	gptImage15Model             = "gpt-image-1.5"
-	defaultImagesToolModel      = "gpt-image-2"
+	defaultImagesToolModel      = "gpt-image-2.5"
+	legacyImagesToolModel       = "gpt-image-2"
+	gptImage25FlareModel        = "gpt-image-2.5-flare"
+	gptImage25SunburstModel     = "gpt-image-2.5-sunburst"
 	defaultXAIImagesModel       = "grok-imagine-image"
 	xaiImagesQualityModel       = "grok-imagine-image-quality"
 	xaiImages20Model            = "grok-imagine-image-2.0"
@@ -238,8 +241,12 @@ func isSupportedImagesModel(model string) bool {
 }
 
 func isCodexImagesToolModel(model string) bool {
-	baseModel := imagesModelBase(model)
-	return baseModel == gptImage15Model || baseModel == defaultImagesToolModel
+	switch imagesModelBase(model) {
+	case gptImage15Model, legacyImagesToolModel, defaultImagesToolModel, gptImage25FlareModel, gptImage25SunburstModel:
+		return true
+	default:
+		return false
+	}
 }
 
 func isOpenAICompatImagesModel(model string) bool {
@@ -258,7 +265,7 @@ func rejectUnsupportedImagesModel(c *gin.Context, model string) bool {
 
 	c.JSON(http.StatusBadRequest, handlers.ErrorResponse{
 		Error: handlers.ErrorDetail{
-			Message: fmt.Sprintf("Model %s is not supported on %s or %s. Use %s, %s, %s, %s, %s, or a configured openai-compatibility image model.", model, imagesGenerationsPath, imagesEditsPath, gptImage15Model, defaultImagesToolModel, defaultXAIImagesModel, xaiImagesQualityModel, xaiImages20Model),
+			Message: fmt.Sprintf("Model %s is not supported on %s or %s. Use %s, %s, %s, %s, %s, %s, %s, %s, or a configured openai-compatibility image model.", model, imagesGenerationsPath, imagesEditsPath, gptImage15Model, legacyImagesToolModel, defaultImagesToolModel, gptImage25FlareModel, gptImage25SunburstModel, defaultXAIImagesModel, xaiImagesQualityModel, xaiImages20Model),
 			Type:    "invalid_request_error",
 		},
 	})

@@ -61,6 +61,24 @@ type oaiToResponsesState struct {
 	UsageSeen        bool
 }
 
+// CanFinalizeResponseStream validates clean EOF without a source [DONE] marker.
+func (st *oaiToResponsesState) CanFinalizeResponseStream() bool {
+	if !st.Started || st.CompletedEmitted || st.FinishReason == "" || len(st.MsgItemAdded)+len(st.FuncItemAdded) == 0 || st.ReasoningID != "" {
+		return false
+	}
+	for idx := range st.MsgItemAdded {
+		if !st.MsgItemDone[idx] {
+			return false
+		}
+	}
+	for key := range st.FuncItemAdded {
+		if !st.FuncItemDone[key] {
+			return false
+		}
+	}
+	return true
+}
+
 // responseIDCounter provides a process-wide unique counter for synthesized response identifiers.
 var responseIDCounter uint64
 
@@ -341,7 +359,8 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 			return
 		}
 		callID := st.FuncCallIDs[key]
-		name := st.FuncNames[key]
+		name := canonicalResponsesToolName(requestForNamespace, st.FuncNames[key])
+		st.FuncNames[key] = name
 		if !force && (callID == "" || name == "") {
 			return
 		}
@@ -762,7 +781,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 			// finish_reason triggers item-level finalization. response.completed is
 			// deferred until the terminal [DONE] marker so late usage-only chunks can
 			// still populate response.usage.
-			if fr := choice.Get("finish_reason"); fr.Exists() && fr.String() != "" {
+			if fr := choice.Get("finish_reason"); fr.Exists() && fr.Type != gjson.Null && fr.String() != "" {
 				st.FinishReason = fr.String()
 				finalizeOpenItems()
 			}
@@ -938,7 +957,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponsesNonStream(_ context.Co
 							// function_call item stays usable for Codex round-trips.
 							callID = fmt.Sprintf("call_%s_%d_%d", id, choice.Get("index").Int(), tcIndex.Int())
 						}
-						name := tc.Get("function.name").String()
+						name := canonicalResponsesToolName(requestForNamespace, tc.Get("function.name").String())
 						args := tc.Get("function.arguments").String()
 						toolStatus := "completed"
 						if isIncomplete {

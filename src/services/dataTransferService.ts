@@ -21,6 +21,10 @@ import {
   invalidateCodexGroupCache,
 } from './codexAccountGroupService';
 import {
+  getPlatformGroups,
+  invalidatePlatformGroupCache,
+} from './platformGroupService';
+import {
   CodexModelProvider,
   invalidateCodexModelProviderCache,
   listCodexModelProviders,
@@ -226,6 +230,7 @@ export interface DataTransferConfigBundle {
   group_settings: GroupSettings;
   account_groups: ExportedAccountGroup[];
   codex_account_groups: ExportedCodexAccountGroup[];
+  platform_account_groups?: Record<string, ExportedAccountGroup[]>;
   codex_model_providers: CodexModelProvider[];
   instance_stores: Partial<Record<InstancePlatform, ExportedInstanceStore>>;
   antigravity_wakeup: ExportedAntigravityWakeupState;
@@ -1027,6 +1032,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     groupSettings,
     accountGroups,
     codexAccountGroups,
+    platformAccountGroups,
     codexModelProviders,
     codexWakeupState,
     codexWakeupCliStatus,
@@ -1036,6 +1042,27 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     getGroupSettings(),
     getAccountGroups(),
     getCodexAccountGroups(),
+    (async () => {
+      const entries: Array<[string, ExportedAccountGroup[]]> = [];
+      for (const platform of ALL_PLATFORM_IDS) {
+        if (platform === 'antigravity' || platform === 'antigravity_ide' || platform === 'codex' || platform === 'codex_api_service') {
+          continue;
+        }
+        const groups = await getPlatformGroups(platform);
+        if (groups.length > 0) {
+          entries.push([
+            platform,
+            groups.map((g) => ({
+              id: g.id,
+              name: g.name,
+              createdAt: g.createdAt,
+              accountRefs: mapAccountIdsToRefs(platform, g.accountIds, registry),
+            })),
+          ]);
+        }
+      }
+      return Object.fromEntries(entries);
+    })(),
     listCodexModelProviders(),
     getCodexWakeupState(),
     getCodexWakeupCliStatus(),
@@ -1054,6 +1081,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     group_settings: groupSettings,
     account_groups: exportAccountGroups(accountGroups, registry),
     codex_account_groups: exportCodexAccountGroups(codexAccountGroups, registry),
+    platform_account_groups: platformAccountGroups,
     codex_model_providers: codexModelProviders,
     instance_stores: Object.fromEntries(instanceStoreEntries) as Partial<
       Record<InstancePlatform, ExportedInstanceStore>
@@ -1110,6 +1138,27 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
     data: JSON.stringify(codexAccountGroupsImport.groups, null, 2),
   });
   invalidateCodexGroupCache();
+
+  if (bundle.platform_account_groups) {
+    for (const [platform, exportedGroups] of Object.entries(bundle.platform_account_groups)) {
+      if (!Array.isArray(exportedGroups)) continue;
+      const restored = exportedGroups.map((group) => {
+        const resolved = resolveAccountRefsToIds(group.accountRefs, registry);
+        unresolvedAccountRefs += resolved.unresolved;
+        return {
+          id: group.id,
+          name: group.name,
+          createdAt: group.createdAt,
+          accountIds: resolved.ids,
+        };
+      });
+      await invoke('save_platform_account_groups', {
+        platform,
+        data: JSON.stringify(restored, null, 2),
+      });
+      invalidatePlatformGroupCache(platform);
+    }
+  }
 
   await invoke('save_codex_model_providers', {
     data: JSON.stringify(bundle.codex_model_providers, null, 2),

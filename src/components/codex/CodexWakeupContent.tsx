@@ -32,6 +32,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEscClose } from '../../hooks/useEscClose';
+import { DEFAULT_WAKEUP_MODEL } from '../../utils/codexTestModel';
 import {
   CodexAccount,
   getCodexEffectiveQuotaPercentages,
@@ -167,15 +168,6 @@ interface RuntimeConfigDraft {
   nodePath: string;
 }
 
-const CODEX_WAKEUP_OFFICIAL_RUNTIME: CodexWakeupBatchResult['runtime'] = {
-  available: true,
-  source: 'official_chat',
-  message: 'official_chat',
-  required_runtime_paths: [],
-  checked_at: 0,
-  install_hints: [],
-};
-
 interface WakeupQuotaBadge {
   key: 'primary' | 'secondary';
   valueText: string;
@@ -248,8 +240,8 @@ const WEEKDAY_OPTIONS = [
 
 const DEFAULT_PROMPT = 'hi';
 const QUICK_TIME_OPTIONS = ['07:00', '08:00', '09:00', '10:00', '14:00', '18:00', '22:00'];
-const REASONING_EFFORT_OPTIONS: CodexWakeupReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'];
-const DEFAULT_WAKEUP_MODEL = 'gpt-5.3-codex';
+const REASONING_EFFORT_OPTIONS: CodexWakeupReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+// 所有唤醒默认落在 GPT-5.6 Luna；5.5 之前的模型不再作为唤醒目标。
 const DEFAULT_WAKEUP_REASONING_EFFORT: CodexWakeupReasoningEffort = 'medium';
 const QUOTA_RESET_MIN_REFRESH_MINUTES = 2;
 const MAX_STARTUP_DELAY_MINUTES = 1440;
@@ -395,7 +387,7 @@ function createEmptyPresetDraft(): PresetDraft {
   return {
     name: '',
     model: '',
-    allowedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
+    allowedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     defaultReasoningEffort: 'medium',
   };
 }
@@ -1138,7 +1130,7 @@ export function CodexWakeupContent({
   const showCodexCliInput = true;
   const showNodeInput = true;
   const showRuntimeConfigCard = true;
-  const runtimeGuideNeedInstall = false;
+  const runtimeGuideNeedInstall = Boolean(runtime && !runtime.available);
   const runtimeGuideTitle = runtimeGuideNeedInstall
     ? t('codex.wakeup.installTitle')
     : t('codex.wakeup.runtimeConfigTitle');
@@ -1348,10 +1340,7 @@ export function CodexWakeupContent({
         triggerType === 'test'
           ? t('codex.wakeup.testTitle')
           : taskName || t('codex.wakeup.resultsTitle'),
-      runtime: {
-        ...CODEX_WAKEUP_OFFICIAL_RUNTIME,
-        checked_at: Date.now(),
-      },
+      runtime,
       startedAt: Date.now(),
       durationMs: undefined,
       total: accountIds.length,
@@ -1379,7 +1368,7 @@ export function CodexWakeupContent({
         };
       }),
     }),
-    [accountMap, t, wakeupAccountMetaMap],
+    [accountMap, runtime, t, wakeupAccountMetaMap],
   );
 
   const buildExecutionSessionFromHistory = useCallback(
@@ -1392,10 +1381,15 @@ export function CodexWakeupContent({
         (batch.triggerType === 'test'
           ? t('codex.wakeup.testTitle')
           : t('codex.wakeup.resultsTitle')),
-      runtime: {
-        ...CODEX_WAKEUP_OFFICIAL_RUNTIME,
-        checked_at: batch.timestamp,
-      },
+      runtime: batch.cliPath
+        ? {
+            available: true,
+            binary_path: batch.cliPath,
+            checked_at: batch.timestamp,
+            required_runtime_paths: [],
+            install_hints: [],
+          }
+        : runtime,
       startedAt: batch.timestamp,
       durationMs: batch.durationMs,
       total: batch.total,
@@ -1423,7 +1417,7 @@ export function CodexWakeupContent({
         durationMs: item.duration_ms,
       })),
     }),
-    [t],
+    [runtime, t],
   );
 
   const buildTaskPreviewSession = useCallback(
@@ -1434,10 +1428,7 @@ export function CodexWakeupContent({
         taskId: task.id,
         triggerType: 'scheduled',
         title: task.name,
-        runtime: {
-          ...CODEX_WAKEUP_OFFICIAL_RUNTIME,
-          checked_at: Date.now(),
-        },
+        runtime,
         startedAt: 0,
         durationMs: undefined,
         total: accountIds.length,
@@ -2158,6 +2149,7 @@ export function CodexWakeupContent({
     setTestModelPresetId(resolvedModelSelection.modelPresetId);
     setTestModel(resolvedModelSelection.model);
     setTestModelReasoningEffort(resolvedModelSelection.modelReasoningEffort);
+    // 每次打开都回到默认通道，避免沿用上次选过的 CLI。
     setShowTestModal(true);
   }, [resolvedModelSelection]);
 
@@ -3649,7 +3641,8 @@ export function CodexWakeupContent({
               <button className="btn btn-secondary" onClick={closeTestModal} disabled={testing}>
                 {t('common.cancel')}
               </button>
-              <button className="btn btn-primary" onClick={() => void handleRunTest()} disabled={testing || !runtime?.available}>
+              {/* 手动测试默认走 API 直连，不要求本机安装 Codex CLI。 */}
+              <button className="btn btn-primary" onClick={() => void handleRunTest()} disabled={testing}>
                 {testing ? <RefreshCw size={16} className="loading-spinner" /> : <Play size={16} />}
                 {testing ? t('codex.wakeup.testing') : t('codex.wakeup.startTest')}
               </button>
@@ -3848,16 +3841,25 @@ export function CodexWakeupContent({
               </div>
 
               <div className="codex-wakeup-results-runtime-meta">
-                <span>{t('codex.wakeup.officialChatRuntimeTitle')}</span>
+                <span>{t('codex.wakeup.runtimeCardTitle')}</span>
                 <strong className="codex-wakeup-runtime-path">
-                  {t('codex.wakeup.officialChatRuntimePath')}
+                  {executionSession.runtime?.binary_path ||
+                    executionSession.runtime?.message ||
+                    t('codex.wakeup.runtimeUnknownPath')}
                 </strong>
-                <span>
-                  {[
-                    t('codex.wakeup.officialChatRuntimeSource'),
-                    t('codex.wakeup.officialChatRuntimeMessage'),
-                  ].join(' · ')}
-                </span>
+                {(executionSession.runtime?.version ||
+                  executionSession.runtime?.source ||
+                  executionSession.runtime?.message) && (
+                  <span>
+                    {[
+                      executionSession.runtime?.version,
+                      executionSession.runtime?.source,
+                      executionSession.runtime?.message,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                )}
               </div>
 
               {executionSession.runtime && !executionSession.runtime.available && (

@@ -10,6 +10,56 @@ pub async fn codex_local_access_get_state() -> Result<CodexLocalAccessState, Str
 }
 
 #[tauri::command]
+pub async fn codex_local_access_get_request_detail(
+    request_id: String,
+) -> Result<Option<crate::models::codex_local_access::CodexLocalAccessRequestDetail>, String> {
+    codex_local_access::get_local_access_request_detail(request_id).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_get_request_payload_logging() -> Result<bool, String> {
+    codex_local_access::get_local_access_request_payload_logging().await
+}
+
+#[tauri::command]
+pub fn codex_local_access_get_request_payload_logging_status() -> codex_local_access::RequestPayloadLoggingStatus {
+    codex_local_access::get_local_access_request_payload_logging_status()
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_request_payload_logging(
+    enabled: bool,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_request_payload_logging(enabled).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_clear_request_payloads() -> Result<u64, String> {
+    codex_local_access::clear_local_access_request_payloads().await
+}
+
+/// 列出实例级本地网关（provider gateway / 混合模型路由 / 绑定 OAuth 本地网关）的只读快照。
+#[tauri::command]
+pub async fn codex_list_instance_gateways() -> Result<Vec<CodexInstanceGatewayView>, String> {
+    codex_local_access::snapshot_instance_gateways().await
+}
+
+/// 停止某个实例网关；混合模型路由网关会同时关闭该实例的路由（渠道配置保留）。
+#[tauri::command]
+pub async fn codex_stop_instance_gateway(instance_id: String, kind: String) -> Result<(), String> {
+    codex_local_access::stop_instance_gateway_for(&instance_id, &kind).await
+}
+
+/// 重新启动某个实例网关。
+#[tauri::command]
+pub async fn codex_restart_instance_gateway(
+    instance_id: String,
+    kind: String,
+) -> Result<(), String> {
+    codex_local_access::restart_instance_gateway_for(&instance_id, &kind).await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_save_accounts(
     account_ids: Vec<String>,
     restrict_free_accounts: Option<bool>,
@@ -52,6 +102,14 @@ pub async fn codex_local_access_recover_accounts(
     account_ids: Vec<String>,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::recover_local_access_accounts(account_ids).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_clear_pool_failure(
+    api_key_id: String,
+    last_failure_at: i64,
+) -> Result<bool, String> {
+    codex_local_access::clear_local_access_pool_failure(api_key_id, last_failure_at).await
 }
 
 #[tauri::command]
@@ -108,6 +166,13 @@ pub async fn codex_local_access_query_request_logs(
         error_category,
     )
     .await
+}
+
+#[tauri::command]
+pub async fn codex_account_proxy_recent_requests(
+    account_id: String,
+) -> Result<Vec<codex_local_access::CodexAccountProxyRecentRequest>, String> {
+    codex_local_access::query_recent_account_proxy_requests(account_id).await
 }
 
 #[tauri::command]
@@ -197,6 +262,8 @@ pub async fn codex_local_access_update_routing_options(
     disable_cooling: bool,
     immediate_sse_response: bool,
     max_concurrent_image_requests: u16,
+    max_account_concurrency: u16,
+    account_concurrency_wait_ms: u64,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_routing_options(
         session_affinity,
@@ -207,6 +274,8 @@ pub async fn codex_local_access_update_routing_options(
         disable_cooling,
         immediate_sse_response,
         max_concurrent_image_requests,
+        max_account_concurrency,
+        account_concurrency_wait_ms,
     )
     .await
 }
@@ -250,6 +319,28 @@ pub async fn codex_local_access_update_debug_logs(
     debug_logs: bool,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_debug_logs(debug_logs).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_image_generation_main_model(
+    image_generation_main_model: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_image_generation_main_model(image_generation_main_model).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_image_generation_model(
+    image_generation_model: String,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_image_generation_model(image_generation_model).await
+}
+
+/// 更新 API 服务的生图转发账号池（生图请求交给所选 OAuth 账号执行）。
+#[tauri::command]
+pub async fn codex_local_access_update_image_generation_accounts(
+    account_ids: Vec<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_image_generation_accounts(account_ids).await
 }
 
 #[tauri::command]
@@ -419,32 +510,22 @@ pub async fn codex_local_access_activate(
     ));
 
     let default_settings_started = Instant::now();
-    if launch_target.is_default {
-        if let Err(e) = crate::modules::codex_instance::update_default_settings(
-            Some(Some(
-                crate::modules::codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID.to_string(),
-            )),
-            None,
-            None,
-            Some(false),
-            None,
-            None,
-        ) {
-            logger::log_warn(&format!("更新 Codex 默认实例为 API 服务模式失败: {}", e));
-        } else {
-            logger::log_info("已同步更新 Codex 默认实例为 API 服务模式");
-        }
+    let expected_prepared_binding = if launch_target.is_default {
+        let binding = crate::modules::codex_instance::bind_default_api_service_for_launch()?;
+        logger::log_info("已同步更新 Codex 默认实例为 API 服务模式");
         if let Err(e) =
             crate::modules::codex_instance::update_default_app_speed(api_service_speed.clone())
         {
             logger::log_warn(&format!("更新 Codex 默认实例 API 服务速度失败: {}", e));
         }
+        Some(binding)
     } else {
         logger::log_info(&format!(
             "已保留非默认实例绑定，不修改 Codex 默认实例: instance_id={}",
             target_instance_id
         ));
-    }
+        None
+    };
     logger::log_info(&format!(
         "[Codex API Service Switch][Backend] default settings update finished: elapsed_ms={}, total_ms={}",
         default_settings_started.elapsed().as_millis(),
@@ -487,6 +568,7 @@ pub async fn codex_local_access_activate(
                 true,
                 Some("instance-launch"),
                 None,
+                expected_prepared_binding,
             )
             .await
         } else {

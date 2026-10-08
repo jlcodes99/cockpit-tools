@@ -1,0 +1,88 @@
+.codex-proxy-batch-overlay {
+  padding: 24px;
+  overflow-y: auto;
+  align-items: safe center;
+}
+
+/* Sizing stays on one semantic class so it never depends on CSS load order. */
+.modal.codex-proxy-batch {
+  --bg-card: var(--bg-surface);
+  width: min(720px, calc(100vw - 48px));
+  max-width: 720px;
+  /* Auto height keeps short content compact; long batches still scroll inside the body. */
+  height: auto;
+  max-height: min(820px, calc(100vh - 48px));
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 28px 90px #0003;
+}
+
+.codex-proxy-batch .modal-header,
+.codex-proxy-batch .modal-footer { flex: 0 0 auto; padding: 14px 20px; }
+.codex-proxy-batch .modal-header { background: radial-gradient(ellipse at 100% 0, #3154a4 0, transparent 58%), linear-gradient(115deg, #18253f, #213862); border-bottom: 1px solid #344e83; color: #f5f8ff; }
+.codex-proxy-batch .modal-header .btn-secondary { background: #afcaff14; border-color: #b4ceff50; color: #e5efff; }
+.codex-proxy-batch .modal-header .btn-secondary:hover:not(:disabled) { background: #afcaff30; border-color: #b4ceff90; color: #fff; }
+.codex-proxy-batch .modal-header .btn:focus-visible { outline-color: #c5d5f2; }
+.codex-proxy-batch .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px 20px; overscroll-behavior: contain; }
+.codex-proxy-batch .modal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); background: var(--bg-card); }
+.codex-proxy-batch .modal-footer > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.codex-proxy-batch .btn { appearance: none; font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1.4; display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 36px; padding: 8px 13px; border-radius: 9px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); cursor: pointer; }
+.codex-proxy-batch .btn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--primary); }
+.codex-proxy-batch .btn:disabled { opacity: .5; cursor: not-allowed; }
+.codex-proxy-batch .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.codex-proxy-batch .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 88%, #000); }
+.codex-proxy-batch .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.codex-proxy-batch .codex-proxy-preview-close { flex-shrink: 0; padding: 8px; }
+.codex-proxy-batch-choice { display: grid; gap: 12px; }
+.codex-proxy-batch-choice .codex-proxy-field { display: grid; gap: 6px; font-size: 12px; font-weight: 500; }
+.codex-proxy-batch-choice .codex-proxy-field > span { color: var(--text-secondary); font-weight: 500; }
+.codex-proxy-batch-choice .codex-picker { margin: 0; }
+.codex-proxy-batch-test { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.codex-proxy-batch-probe { display: inline-flex; align-items: center; gap: 6px; color: #047857; font-size: 12px; }
+[data-theme="dark"] .codex-proxy-batch-probe { color: #6ee7b7; }
+.codex-proxy-batch-summary { margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: var(--text-primary); overflow-wrap: anywhere; }
+.codex-proxy-batch-notes { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
+.codex-proxy-batch-notes > span { display: inline-flex; align-items: center; gap: 6px; }
+.codex-proxy-batch-notes .is-warning { color: #b45309; }
+[data-theme="dark"] .codex-proxy-batch-notes .is-warning { color: #fbbf24; }
+.codex-proxy-batch-results { margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-secondary); }
+.codex-proxy-batch-results strong { font-size: 13px; }
+.codex-proxy-batch-results ul { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.codex-proxy-batch-results li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; }
+.codex-proxy-batch-results .is-failure { color: var(--danger); }
+.codex-proxy-batch-progress { font-size: 12px; color: var(--text-secondary); }
+.codex-proxy-batch .codex-proxy-preview-notice { margin: 14px 0 0; font-size: 11px; line-height: 1.6; color: var(--text-secondary); }
+
+/* Page-side batch selection: the account list keeps its shape, rows just become checkboxes. */
+.codex-proxy-batch-toggle { display: flex; }
+.codex-proxy-batch-toggle .btn { width: 100%; }
+.codex-tool-page .codex-proxy-batch-toggle .btn.active { background: color-mix(in srgb, var(--primary) 12%, var(--bg-card)); border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); color: var(--primary); }
+.codex-proxy-batch-selection { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.codex-proxy-batch-select-all { appearance: none; padding: 2px 0; border: 0; background: transparent; color: var(--primary); font: inherit; font-size: 12px; font-weight: 600; line-height: 1.4; cursor: pointer; white-space: nowrap; }
+.codex-proxy-batch-select-all:hover:not(:disabled) { text-decoration: underline; }
+.codex-proxy-batch-select-all:disabled { color: var(--text-muted); cursor: not-allowed; }
+.codex-proxy-batch-select-all:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
+.codex-proxy-page-sidebar .codex-proxy-account-item.is-batch { gap: 8px; }
+.codex-proxy-page-sidebar .codex-proxy-account-item.is-selected { background: color-mix(in srgb, var(--primary) 10%, var(--bg-card)); border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); box-shadow: inset 3px 0 var(--primary); }
+.codex-proxy-account-check { display: grid; place-items: center; flex: 0 0 auto; color: var(--text-muted); }
+.codex-proxy-page-sidebar .codex-proxy-account-item.is-selected .codex-proxy-account-check { color: var(--primary); }
+.codex-proxy-batch-bar { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.codex-proxy-batch-bar .btn { flex: 1 1 auto; }
+.codex-proxy-batch-bar .codex-proxy-remove:not(:disabled) { color: var(--danger); }
+.codex-proxy-batch-notice { flex-basis: 100%; margin: 2px 0 0; font-size: 12px; color: var(--text-secondary); }
+.codex-proxy-batch-bar-errors { display: grid; gap: 4px; flex-basis: 100%; margin: 4px 0 0; padding: 0; list-style: none; font-size: 11px; }
+.codex-proxy-batch-bar-errors li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; }
+.codex-proxy-batch-bar-errors .is-failure { color: var(--danger); }
+
+/* The sidebar becomes a two-column grid on narrow windows; batch controls keep the full row. */
+@container (max-width: 760px) {
+  .codex-proxy-batch-toggle,
+  .codex-proxy-batch-selection,
+  .codex-proxy-batch-bar { grid-column: 1 / -1; }
+}

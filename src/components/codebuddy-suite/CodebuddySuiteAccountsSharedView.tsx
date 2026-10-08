@@ -43,6 +43,7 @@ import { MfaQuickCodeSelect } from "../MfaQuickCodeSelect";
 import { QuickSettingsPopover } from "../QuickSettingsPopover";
 import { PaginationControls } from "../PaginationControls";
 import { AccountSelectionToolbar } from "../AccountSelectionToolbar";
+import { usePlatformAccountGroups } from "../../hooks/usePlatformAccountGroups";
 import { useEscClose } from "../../hooks/useEscClose";
 import { useEnterConfirm } from "../../hooks/useEnterConfirm";
 import { useCodebuddySuitePage } from "../../hooks/useCodebuddySuitePage";
@@ -427,8 +428,21 @@ export function CodebuddySuiteAccountsSharedView<
     [platformConfig],
   );
 
+  const platformKey = useMemo(() => {
+    if (platformConfig.quickSettingsType) return platformConfig.quickSettingsType;
+    const match = platformConfig.pageClassName.replace(/-accounts-page$/, '');
+    return match || 'workbuddy';
+  }, [platformConfig.pageClassName, platformConfig.quickSettingsType]);
+
+  const grouping = usePlatformAccountGroups(platformKey, () => toggleSelectAll(Array.from(selected)));
+
+  const groupFilteredAccounts = useMemo(
+    () => grouping.filterAccountsByGroup(accounts),
+    [accounts, grouping.filterAccountsByGroup],
+  );
+
   const suitePage = useCodebuddySuitePage({
-    accounts,
+    accounts: groupFilteredAccounts,
     currentAccountId,
     searchQuery,
     filterTypes,
@@ -1001,7 +1015,7 @@ export function CodebuddySuiteAccountsSharedView<
           <MultiSelectFilterDropdown
             options={tierFilterOptions}
             selectedValues={filterTypes}
-            allLabel={`ALL (${tierSummary.all})`}
+            allLabel={t('common.shared.filter.all', '全部 ({{count}})', { count: tierSummary.all })}
             filterLabel={t("common.shared.filterLabel", "筛选")}
             clearLabel={t("accounts.clearFilter", "清空筛选")}
             emptyLabel={t("common.none", "暂无")}
@@ -1150,13 +1164,16 @@ export function CodebuddySuiteAccountsSharedView<
         </div>
       </div>
 
-      {filteredAccounts.length > 0 && (
+      {(accounts.length > 0 || grouping.groups.length > 0) && (
         <AccountSelectionToolbar
           selectedCount={selected.size}
           allSelected={isAllPaginatedSelected}
           disabled={paginatedIds.length === 0}
           onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
           onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          grouping={grouping}
+          accounts={accounts}
+          selectedIds={Array.from(selected)}
           actions={
             <button
               className="btn btn-danger icon-only"

@@ -70,6 +70,7 @@ test('stages only whitelisted macOS release artifacts', () => {
 
 test('whitelist accepts release packages and rejects bundle helpers', () => {
   assert.equal(isAllowedReleaseAsset('windows', 'Cockpit Tools_1.2.3_x64_en-US.msi'), true);
+  assert.equal(isAllowedReleaseAsset('windows', 'Cockpit.Tools_1.2.3_x64-portable.zip'), true);
   assert.equal(isAllowedReleaseAsset('windows', 'bundle.wxs'), false);
   assert.equal(isAllowedReleaseAsset('linux', 'Cockpit Tools_1.2.3_amd64.AppImage.sig'), true);
   assert.equal(isAllowedReleaseAsset('linux', 'AppRun'), false);

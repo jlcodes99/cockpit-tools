@@ -1,10 +1,12 @@
+import { getCodexAccountQuotaError } from "../utils/codexProxyRuntimeError";
+import { summarizeCodexInstanceGateways } from "../utils/codexInstanceGatewaySummary";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { RefreshCw, X, CircleAlert, Info, Link2 } from "lucide-react";
 import * as codexService from "../services/codexService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { presentWindowsOperationError } from "../utils/windowsOperationDialog";
-import { assignAccountsToCodexGroup, deleteCodexGroup, removeAccountsFromCodexGroup } from "../services/codexAccountGroupService";
+import { setCodexGroupAccounts, deleteCodexGroup, removeAccountsFromCodexGroup } from "../services/codexAccountGroupService";
 import { formatCodexLoginProvider, getCodexAuthMetadata, getCodexPlanFilterKey, getCodexSubscriptionPresentationForAccount, isCodexApiKeyAccount, isCodexNewApiAccount, isCodexTeamLikePlan, type CodexQuotaErrorInfo } from "../types/codex";
 import { canAddCodexAccountToLocalAccess, filterCodexLocalAccessAccountIds } from "../utils/codexLocalAccessAccounts";
 import { extractCodexQuotaErrorCode, extractCodexQuotaErrorStatusCode, isBlockingCodexAccountQuotaError, isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
@@ -14,10 +16,14 @@ import { CODEX_PLAN_BADGE_STYLE_CHANGED_EVENT, getCodexPlanBadgeStyle, type Code
 import { invoke } from "@tauri-apps/api/core";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { DEFAULT_CODEX_INSTANCE_ID } from "../components/codex/CodexLaunchPreviewModal";
+import {
+  CODEX_LAUNCH_PREVIEW_API_SERVICE_CARD_KEY,
+  persistCodexLaunchPreviewLastInstanceId,
+} from "../utils/codexLaunchPreviewInstancePreference";
 import type { MultiSelectFilterOption } from "../components/MultiSelectFilterDropdown";
 import type { SingleSelectFilterOption } from "../components/SingleSelectFilterDropdown";
 import type { CodexAccount } from "../types/codex";
-import type { CodexLocalAccessAddressKind, CodexLocalAccessCustomRoutingRule, CodexLocalAccessImageGenerationPolicy, CodexLocalAccessRoutingStrategy, CodexLocalAccessScope } from "../types/codexLocalAccess";
+import type { CodexInstanceGatewayView, CodexLocalAccessAddressKind, CodexLocalAccessCustomRoutingRule, CodexLocalAccessImageGenerationPolicy, CodexLocalAccessRoutingStrategy, CodexLocalAccessScope } from "../types/codexLocalAccess";
 import { CODEX_API_SERVICE_BIND_ID } from "../types/instance";
 import { buildCodexOverviewGroupFilterOptions, buildCodexOverviewSortOptions, buildCodexPlanFilterOptions, createCodexOverviewAccountComparator, createCodexPlanFilterCounts, filterAndSortCodexOverviewAccounts, incrementCodexPlanFilterCount, isCodexOverviewAccountAbnormal, isCodexOverviewAccountSubscriptionExpired, isCodexOverviewAccountZeroQuota } from "../utils/codexAccountOverview";
 import { summarizeCodexQuotaPool } from "../utils/codexQuotaPool";
@@ -187,8 +193,15 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   const [clearClientAuthError, setClearClientAuthError] = useState<string | null>(
     null,
   );
+  const [instanceGateways, setInstanceGateways] = useState<
+    CodexInstanceGatewayView[]
+  >([]);
+  const [instanceGatewaysOpen, setInstanceGatewaysOpen] = useState(false);
+  const [instanceGatewaysLoading, setInstanceGatewaysLoading] = useState(false);
+  const [instanceGatewaysError, setInstanceGatewaysError] = useState("");
   const resolveQuotaErrorMeta = useCallback(
       (quotaError?: CodexQuotaErrorInfo) => {
+        quotaError = getCodexAccountQuotaError(quotaError);
         if (!quotaError?.message) {
           return {
             statusCode: "",
@@ -362,9 +375,9 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
                 type="button"
                 className="btn btn-sm btn-outline quota-error-action"
                 onClick={onReauthorize}
-                title={t("common.shared.addModal.oauth", "OAuth 授权")}
+                title={t("common.reauthorize", "重新授权")}
               >
-                {t("common.shared.addModal.oauth", "OAuth 授权")}
+                {t("common.reauthorize", "重新授权")}
               </button>
             )}
           </div>
@@ -708,6 +721,12 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
             health,
           ]),
         );
+        // 手动恢复后仍在抑制窗口内的账号：与账号状态弹框一致，暂时不计入异常。
+        const suppressedAccountIds = new Set(
+          (localAccessState?.recoverySuppressedAccountIds ?? [])
+            .map((accountId) => accountId.trim())
+            .filter(Boolean),
+        );
         const poolUnavailableAccountIds = new Set<string>();
         (localAccessState?.accountPoolHealth ?? []).forEach((pool) => {
           const statuses = (pool.accountStatuses ?? []).filter((member) =>
@@ -736,6 +755,10 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
         };
   
         (localAccessCollection?.accountIds ?? []).forEach((accountId) => {
+          if (suppressedAccountIds.has(accountId)) {
+            summary.available += 1;
+            return;
+          }
           const account = accountById.get(accountId);
           const health = healthById.get(accountId);
           if (!account) {
@@ -770,6 +793,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
         localAccessCollection?.accountIds,
         localAccessState?.accountHealth,
         localAccessState?.accountPoolHealth,
+        localAccessState?.recoverySuppressedAccountIds,
       ]);
     const localAccessAccountPoolHealthHasIssue =
       localAccessAccountPoolHealthSummary.available <
@@ -792,7 +816,15 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       localAccessQuotaPoolSummary.visiblePlans.length -
         localAccessQuotaPreviewItems.length,
     );
-    const overviewAccounts = accounts;
+    // Grok 供应商账号在「添加至 API 服务」里以 Grok 平台行呈现，
+    // 不在账号总览里单独占一行（成员弹框仍拿到完整账号列表）。
+    const overviewAccounts = useMemo(
+      () =>
+        accounts.filter(
+          (account) => !account.upstream_grok_account_id?.trim(),
+        ),
+      [accounts],
+    );
     const localAccessScope = localAccessCollection?.accessScope ?? "localhost";
     const localAccessScopeLabel =
       localAccessScope === "lan"
@@ -876,6 +908,105 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       setLocalAccessModalMode("panel");
       setShowLocalAccessModal(true);
     }, []);
+
+    const refreshInstanceGateways = useCallback(async () => {
+      setInstanceGatewaysLoading(true);
+      setInstanceGatewaysError("");
+      try {
+        const gateways =
+          await codexLocalAccessService.listCodexInstanceGateways();
+        setInstanceGateways(gateways);
+      } catch (error) {
+        console.error("Failed to load Codex instance gateways:", error);
+        setInstanceGateways([]);
+        setInstanceGatewaysError(String(error).replace(/^Error:\s*/, ""));
+      } finally {
+        setInstanceGatewaysLoading(false);
+      }
+    }, []);
+
+    const openInstanceGateways = useCallback(() => {
+      setInstanceGatewaysOpen(true);
+      void refreshInstanceGateways();
+    }, [refreshInstanceGateways]);
+
+    /** 关闭单个实例网关；混合模型路由网关会同时关闭该实例的路由（渠道配置保留）。 */
+    const stopInstanceGateway = useCallback(
+      async (gateway: CodexInstanceGatewayView): Promise<boolean> => {
+        const confirmed = await confirmDialog(
+          t(
+            "codex.instanceGateways.stopConfirmDescription",
+            "混合模型路由网关会同时停用该实例的混合模型路由（渠道配置保留）；其他网关关闭后可在需要时点击“重启”。",
+          ),
+          {
+            title: t(
+              "codex.instanceGateways.stopConfirmTitle",
+              "关闭该实例网关？",
+            ),
+            okLabel: t("codex.instanceGateways.stop", "关闭"),
+            cancelLabel: t("common.cancel", "取消"),
+            kind: "warning",
+          },
+        );
+        if (!confirmed) return false;
+        setInstanceGatewaysError("");
+        try {
+          await codexLocalAccessService.stopCodexInstanceGateway(
+            gateway.instanceId,
+            gateway.kind,
+          );
+          await refreshInstanceGateways();
+          return true;
+        } catch (actionError) {
+          setInstanceGatewaysError(
+            t("codex.instanceGateways.stopFailed", {
+              defaultValue: "关闭网关失败：{{error}}",
+              error: String(actionError).replace(/^Error:\s*/, ""),
+            }),
+          );
+          return false;
+        }
+      },
+      [refreshInstanceGateways, t],
+    );
+
+    /** 重启单个实例网关（按当前绑定账号 / 混合路由配置重建）。 */
+    const restartInstanceGateway = useCallback(
+      async (gateway: CodexInstanceGatewayView): Promise<boolean> => {
+        setInstanceGatewaysError("");
+        try {
+          await codexLocalAccessService.restartCodexInstanceGateway(
+            gateway.instanceId,
+            gateway.kind,
+          );
+          await refreshInstanceGateways();
+          return true;
+        } catch (actionError) {
+          setInstanceGatewaysError(
+            t("codex.instanceGateways.restartFailed", {
+              defaultValue: "重启网关失败：{{error}}",
+              error: String(actionError).replace(/^Error:\s*/, ""),
+            }),
+          );
+          return false;
+        }
+      },
+      [refreshInstanceGateways, t],
+    );
+
+    const closeInstanceGateways = useCallback(() => {
+      setInstanceGatewaysOpen(false);
+    }, []);
+
+    // 卡片入口需要先拿到概览状态，才能在打开弹框前显示数量与异常提示。
+    useEffect(() => {
+      void refreshInstanceGateways();
+    }, [refreshInstanceGateways]);
+
+    const instanceGatewaySummary = useMemo(
+      () => summarizeCodexInstanceGateways(instanceGateways),
+      [instanceGateways],
+    );
   
     const openCodexApiServicePage = useCallback(() => {
       setShowLocalAccessModal(false);
@@ -1028,7 +1159,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
           setAddingLocalAccessAccountId(null);
         }
       },
-      [addingLocalAccessAccountId, ensureLocalAccessEntryVisible, setMessage, t],
+      [accounts, addingLocalAccessAccountId, ensureLocalAccessEntryVisible, setMessage, t],
     );
   
     const handleRemoveLocalAccessAccount = useCallback(
@@ -1443,8 +1574,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   
     const handleQuickAddAccountsToGroup = useCallback(
       async (groupId: string, accountIds: string[]) => {
-        if (accountIds.length === 0) return;
-        await assignAccountsToCodexGroup(groupId, accountIds);
+        await setCodexGroupAccounts(groupId, accountIds);
         await reloadCodexGroups();
       },
       [reloadCodexGroups],
@@ -1703,10 +1833,10 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     );
   
     const handleToggleLocalAccessEnabled = useCallback(async () => {
-      if (!localAccessCollection) return;
+      if (!localAccessCollection) return false;
       if (!localAccessCollection.enabled) {
         const confirmed = await requestLocalAccessRiskNotice("service");
-        if (!confirmed) return;
+        if (!confirmed) return false;
       }
       setLocalAccessSaving(true);
       try {
@@ -1825,6 +1955,10 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   
     const handleExecuteLocalAccessLaunchPreview =
       useCallback(async (): Promise<boolean> => {
+        persistCodexLaunchPreviewLastInstanceId(
+          CODEX_LAUNCH_PREVIEW_API_SERVICE_CARD_KEY,
+          launchPreviewInstanceId,
+        );
         const activateSelectedTarget = async () => {
           if (launchPreviewInstanceId !== DEFAULT_CODEX_INSTANCE_ID) {
             await codexInstanceStore.updateInstance({
@@ -1976,6 +2110,16 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
     handleUpdateLocalAccessRoutingStrategy,
     handleUpdateLocalAccessUpstreamProxyConfig,
     isAbnormalAccount,
+    instanceGatewaySummary,
+    instanceGateways,
+    instanceGatewaysError,
+    instanceGatewaysLoading,
+    instanceGatewaysOpen,
+    closeInstanceGateways,
+    openInstanceGateways,
+    refreshInstanceGateways,
+    stopInstanceGateway,
+    restartInstanceGateway,
     localAccessAccountIdSet,
     localAccessAccountPoolHealthHasIssue,
     localAccessAccountPoolHealthSummary,

@@ -27,7 +27,6 @@ export const MFA_STORAGE_KEY_HISTORY = 'agtools.2fa.query.history.v1';
 const LEGACY_STORAGE_KEY_SAVED_MFA = 'agtools.mfa.vault.v1';
 const LEGACY_STORAGE_KEY_SAVED_2FA = 'agtools.two_factor_auth.saved.v2';
 const LEGACY_STORAGE_KEY_HISTORY_2FA = 'agtools.two_factor_auth.history.v2';
-const MAX_HISTORY = 50;
 
 interface GoogleAuthenticatorMigrationOtp {
   secret?: Uint8Array;
@@ -343,7 +342,55 @@ export function loadMfaHistoryRecords(): MfaRecord[] {
     .map(normalizeMfaRecord)
     .filter((item): item is MfaRecord => !!item);
 
-  return dedupeMfaRecordsBySecret(merged).slice(0, MAX_HISTORY);
+  return dedupeMfaRecordsBySecret(merged);
+}
+
+export function rememberMfaQuery(input: {
+  secret: string;
+  accountName?: string | null;
+  remark?: string | null;
+}): MfaRecord[] {
+  const parsed = parseMfaCredentialInput(input.secret);
+  if (!parsed?.secret || !getMfaOtpToken(input.secret)) {
+    return loadMfaHistoryRecords();
+  }
+
+  const now = Date.now();
+  const records = loadMfaHistoryRecords();
+  const identity = toMfaSecretIdentity(parsed.secret);
+  const existing = records.find(
+    (record) => toMfaSecretIdentity(record.secret) === identity,
+  );
+  const accountName = input.accountName?.trim() || parsed.accountName || '';
+  const remark = input.remark?.trim() || '';
+  const nextRecord: MfaRecord = existing
+    ? {
+        ...existing,
+        secret: parsed.secret,
+        accountName: accountName || existing.accountName,
+        remark: remark || existing.remark,
+        time: now,
+      }
+    : {
+        id: createMfaRecordId(),
+        secret: parsed.secret,
+        accountName,
+        remark,
+        time: now,
+      };
+  const nextRecords = dedupeMfaRecordsBySecret([
+    nextRecord,
+    ...records.filter(
+      (record) => toMfaSecretIdentity(record.secret) !== identity,
+    ),
+  ]);
+
+  try {
+    localStorage.setItem(MFA_STORAGE_KEY_HISTORY, JSON.stringify(nextRecords));
+  } catch {
+    // Local 2FA query history sync is best effort.
+  }
+  return nextRecords;
 }
 
 export function upsertSavedMfaRecord(input: {

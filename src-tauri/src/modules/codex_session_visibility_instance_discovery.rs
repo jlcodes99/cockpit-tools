@@ -586,6 +586,12 @@ fn rewrite_rollout_session_meta_providers(
                             .map_err(|error| format!("序列化 session_meta 失败: {}", error))?;
                         rewrite.rewrite_needed = true;
                     }
+                } else if record.get("type").and_then(JsonValue::as_str) == Some("response_item")
+                    && normalize_rollout_response_item_id(&mut record)
+                {
+                    next_line = serde_json::to_string(&record)
+                        .map_err(|error| format!("序列化 response_item 失败: {}", error))?;
+                    rewrite.rewrite_needed = true;
                 }
             }
         }
@@ -599,6 +605,48 @@ fn rewrite_rollout_session_meta_providers(
         rewrite.updated_content = Some(RolloutProviderUpdate::FullContent(next_content));
     }
     Ok(rewrite)
+}
+
+/// Codes 客户端会把上游返回的 item id 原样落盘。第三方上游经常返回不带官方前缀
+/// 的 id，或在自定义工具调用上返回 `fc_` 前缀。切回官方账号后重放这类历史会被
+/// 官方接口以 `invalid_id_prefix` 整包拒绝，所以这里按条目类型补齐官方前缀。
+fn normalize_rollout_response_item_id(record: &mut JsonValue) -> bool {
+    let Some(payload) = record.get_mut("payload").and_then(JsonValue::as_object_mut) else {
+        return false;
+    };
+    let Some(prefix) = payload
+        .get("type")
+        .and_then(JsonValue::as_str)
+        .and_then(rollout_response_item_id_prefix)
+    else {
+        return false;
+    };
+    let Some(id) = payload
+        .get("id")
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return false;
+    };
+    if id.starts_with(&format!("{prefix}_")) {
+        return false;
+    }
+    let normalized = format!("{prefix}_{id}");
+    payload.insert("id".to_string(), JsonValue::String(normalized));
+    true
+}
+
+fn rollout_response_item_id_prefix(item_type: &str) -> Option<&'static str> {
+    match item_type {
+        "message" => Some("msg"),
+        "reasoning" => Some("rs"),
+        "function_call" => Some("fc"),
+        "function_call_output" => Some("fco"),
+        "custom_tool_call" => Some("ctc"),
+        "custom_tool_call_output" => Some("ctco"),
+        _ => None,
+    }
 }
 
 fn rewrite_rollout_first_session_meta_provider(
@@ -967,4 +1015,3 @@ fn normalized_global_state_entries(
     }
     normalized
 }
-

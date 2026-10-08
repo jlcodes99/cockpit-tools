@@ -1,0 +1,43 @@
+.codex-proxy-switch-overlay {
+  z-index: 10010;
+  padding: 24px;
+  overflow-y: auto;
+  align-items: safe center;
+}
+
+.modal.codex-proxy-switch-dialog {
+  --bg-card: var(--bg-surface);
+  width: min(720px, calc(100vw - 48px));
+  max-width: 720px;
+  max-height: calc(100vh - 48px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.codex-proxy-switch-dialog > .modal-header,
+.codex-proxy-switch-dialog > .modal-footer { flex: 0 0 auto; padding: 16px 20px; }
+.codex-proxy-switch-dialog > .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.codex-proxy-switch-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.codex-proxy-switch-heading > div { min-width: 0; }
+.codex-proxy-switch-heading h2 { margin: 0; font-size: 17px; }
+.codex-proxy-switch-heading p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.codex-proxy-switch-icon { display: grid; place-items: center; flex: 0 0 40px; height: 40px; border-radius: 12px; color: var(--primary); background: var(--primary-light); }
+.codex-proxy-switch-dialog > .modal-header > .btn { flex-shrink: 0; }
+.codex-proxy-switch-dialog > .modal-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 18px 20px; gap: 14px; }
+.codex-proxy-switch-dialog > .modal-body > * { flex-shrink: 0; }
+.codex-proxy-switch-fields { display: grid; gap: 14px; min-width: 0; }
+.codex-proxy-switch-source { display: grid; gap: 7px; min-width: 0; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.codex-proxy-switch-note { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.codex-proxy-switch-dialog > .modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); }
+
+@media (max-width: 480px) {
+  .codex-proxy-switch-overlay { padding: 12px; }
+  .modal.codex-proxy-switch-dialog { width: calc(100vw - 24px); max-height: calc(100vh - 24px); }
+  .codex-proxy-switch-dialog > .modal-header,
+  .codex-proxy-switch-dialog > .modal-body,
+  .codex-proxy-switch-dialog > .modal-footer { padding: 14px; }
+}

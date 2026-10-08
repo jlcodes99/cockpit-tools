@@ -1,4 +1,9 @@
-export type CodexStatsRangeKey = "daily" | "weekly" | "monthly" | "custom";
+export type CodexStatsRangeKey =
+  | "daily"
+  | "rolling7d"
+  | "weekly"
+  | "monthly"
+  | "custom";
 
 export interface CodexStatsTimeRange {
   startAt: number;
@@ -30,6 +35,11 @@ export function buildCodexStatsTimeRange(
   const todayEnd = new Date(todayStart);
   todayEnd.setHours(23, 59, 59, 999);
   if (key === "daily" || key === "custom") return buildRange(todayStart, todayEnd);
+  if (key === "rolling7d") {
+    const rangeStart = new Date(todayStart);
+    rangeStart.setDate(rangeStart.getDate() - 6);
+    return buildRange(rangeStart, todayEnd);
+  }
   if (key === "weekly") {
     const weekStart = new Date(todayStart);
     const mondayOffset = (weekStart.getDay() + 6) % 7;
@@ -44,8 +54,13 @@ export function parseCodexStatsTimeRange(
   startInput: string,
   endInput: string,
 ): CodexStatsTimeRange | null {
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!datePattern.test(startInput) || !datePattern.test(endInput)) return null;
   const startDate = new Date(`${startInput}T00:00:00`);
   const endDate = new Date(`${endInput}T00:00:00`);
+  if (formatDateInput(startDate) !== startInput || formatDateInput(endDate) !== endInput) {
+    return null;
+  }
   const startAt = startDate.getTime();
   endDate.setHours(23, 59, 59, 999);
   const endAt = endDate.getTime();

@@ -2,6 +2,14 @@ package common
 
 import "testing"
 
+func TestWrapGeminiCLIResponsePreservesResponseBody(t *testing.T) {
+	response := []byte(`{"candidates":[{"content":{"parts":[{"text":"hello"}]}}],"usageMetadata":{"totalTokenCount":3}}`)
+	want := `{"response":` + string(response) + `}`
+	if got := string(WrapGeminiCLIResponse(response)); got != want {
+		t.Fatalf("WrapGeminiCLIResponse() = %s, want %s", got, want)
+	}
+}
+
 func TestJoinRawArray(t *testing.T) {
 	tests := []struct {
 		name  string

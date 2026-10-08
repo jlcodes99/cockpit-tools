@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"strings"
+	"sync"
 
 	"time"
 
@@ -29,25 +30,34 @@ import (
 )
 
 type relayServer struct {
-	runtime            executorRuntime
-	cfg                *config.Config
-	manifest           *manifest
-	authManager        *coreauth.Manager
-	emitter            *eventEmitter
-	policy             *requestPolicy
-	responsesWebsocket gin.HandlerFunc
-	codexLive          *codexlive.Handler
-	quotaPoolStatePath string
+	automaticSelector     coreauth.Selector
+	automaticSelectorOnce sync.Once
+	runtime               executorRuntime
+	cfg                   *config.Config
+	manifest              *manifest
+	authManager           *coreauth.Manager
+	emitter               *eventEmitter
+	policy                *requestPolicy
+	responsesWebsocket    gin.HandlerFunc
+	codexLive             *codexlive.Handler
+	quotaPoolStatePath    string
+	providerBackoff       providerGatewayBackoffState
 }
 
 func (s *relayServer) router() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(corsMiddleware())
+	router.Use(func(c *gin.Context) {
+		s.bindRelayContext(c)
+		c.Next()
+	})
 	router.Use(s.policy.middleware())
 	router.GET("/v1/models", s.handleModels)
 	router.GET(cockpitQuotaPath, s.handleCockpitQuota)
 	router.POST("/v1/cockpit/auth/reset", s.handleResetAuthState)
+	router.POST(requestDiagnosticsConfigPath, s.handleRequestDiagnosticsConfig)
+	router.GET(requestDiagnosticsEventsPath, s.handleRequestDiagnosticsEvents)
 	router.POST("/v1/cockpit/accounts/reset-scheduler", s.handleResetSchedulerState)
 	router.POST("/v1/live", s.handleCodexLive)
 	router.GET("/v1/live/:call_id", s.handleCodexLiveSideband)
@@ -65,6 +75,7 @@ func (s *relayServer) router() *gin.Engine {
 	router.POST("/v1/realtime/calls/:call_id/accept", s.handleCodexSIPControl)
 	router.POST("/v1/realtime/calls/:call_id/reject", s.handleCodexSIPControl)
 	router.POST("/v1/realtime/calls/:call_id/refer", s.handleCodexSIPControl)
+	s.registerVoiceAliases(router)
 	// Codex Responses WebSocket upgrade uses GET /v1/responses (not POST/SSE).
 	router.GET("/v1/responses", s.handleResponsesWebsocket)
 	router.POST("/v1/responses", s.handleResponses)
@@ -101,9 +112,11 @@ type quotaPoolWindowState struct {
 }
 
 type quotaPoolAccountState struct {
+	PlanType  string                `json:"planType,omitempty"`
 	Primary   *quotaPoolWindowState `json:"primary,omitempty"`
 	Secondary *quotaPoolWindowState `json:"secondary,omitempty"`
 	UpdatedAt *int64                `json:"updatedAt,omitempty"`
+	Cooldown  *quotaCooldownState   `json:"cooldown,omitempty"`
 }
 
 type quotaPoolStateFile struct {
@@ -164,12 +177,15 @@ func quotaWindowValue(window *quotaPoolWindowState) (int, int64, bool) {
 	return *window.RemainingPercent, minutes, true
 }
 
-func quotaPlanLabel(account *accountSpec) string {
+func quotaPlanLabel(account *accountSpec, snapshot quotaPoolAccountState) string {
+	if account != nil && strings.EqualFold(strings.TrimSpace(account.AuthKind), "api_key") {
+		return "API_KEY"
+	}
+	if plan := strings.TrimSpace(snapshot.PlanType); plan != "" {
+		return strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(plan, "-", "_"), " ", "_"))
+	}
 	if account == nil {
 		return "UNKNOWN"
-	}
-	if strings.EqualFold(strings.TrimSpace(account.AuthKind), "api_key") {
-		return "API_KEY"
 	}
 	plan := strings.TrimSpace(account.PlanType)
 	if plan == "" {
@@ -216,7 +232,8 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 		if accounts != nil {
 			account = accounts[accountID]
 		}
-		plan := quotaPlanLabel(account)
+		item := state.Accounts[accountID]
+		plan := quotaPlanLabel(account, item)
 		index, exists := planIndex[plan]
 		if !exists {
 			index = len(result.Plans)
@@ -240,6 +257,13 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 		}
 		primaryValue, primaryMinutes, primaryOK := quotaWindowValue(item.Primary)
 		secondaryValue, secondaryMinutes, secondaryOK := quotaWindowValue(item.Secondary)
+		// The API Service account view treats an exhausted weekly window as
+		// blocking the shorter window too. Keep the CDP quota endpoint on the
+		// same effective-quota semantics instead of exposing raw primary values
+		// such as 400% for a four-account pool.
+		if primaryOK && secondaryOK && secondaryValue == 0 {
+			primaryValue = 0
+		}
 		value, ok := 0, false
 		switch {
 		case primaryOK && secondaryOK && primaryMinutes <= secondaryMinutes:
@@ -279,7 +303,7 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 		if accounts != nil {
 			account = accounts[accountID]
 		}
-		if index, exists := planIndex[quotaPlanLabel(account)]; exists {
+		if index, exists := planIndex[quotaPlanLabel(account, item)]; exists {
 			planSummary := &result.Plans[index]
 			if primaryOK && primaryMinutes >= 5*24*60 {
 				planSummary.WeeklyRemainingPercent = addQuotaPercent(planSummary.WeeklyRemainingPercent, primaryValue)
@@ -463,6 +487,7 @@ func (s *relayServer) handleResetAuthState(c *gin.Context) {
 			resetAccountIDs = append(resetAccountIDs, target.accountID)
 		}
 	}
+	clearQuotaCooldownForAccounts(s.manifest, resetAccountIDs, time.Now())
 	c.JSON(http.StatusOK, gin.H{
 		"status":     "ok",
 		"reset":      len(resetAccountIDs),
@@ -558,6 +583,7 @@ func (s *relayServer) handleResetSchedulerState(c *gin.Context) {
 			resetAuthCount++
 		}
 	}
+	clearQuotaCooldownForAccounts(s.manifest, selected, time.Now())
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":         "ok",
@@ -588,7 +614,7 @@ func (s *relayServer) handleModels(c *gin.Context) {
 	}
 	models := clientCatalogModelsForAPIKey(s.manifest, spec)
 	if isCodexClientModelsRequest(c.Request) {
-		c.JSON(http.StatusOK, buildCodexClientModelsResponse(models, spec, contextWindowsForAPIKey(s.manifest, spec)))
+		c.JSON(http.StatusOK, buildCodexClientModelsResponse(models, spec, contextWindowsForAPIKey(s.manifest, spec), s.manifest))
 		return
 	}
 	c.JSON(http.StatusOK, buildModelsResponse(models))
@@ -868,7 +894,8 @@ func (s *relayServer) handleGeminiAction(c *gin.Context) {
 }
 
 func (s *relayServer) handleImagesGenerations(c *gin.Context) {
-	if _, ok := s.requireAPIKey(c); !ok {
+	spec, ok := s.requireAPIKey(c)
+	if !ok {
 		return
 	}
 	rawJSON, err := c.GetRawData()
@@ -876,7 +903,11 @@ func (s *relayServer) handleImagesGenerations(c *gin.Context) {
 		writeAPIError(c, http.StatusBadRequest, "failed to read request body", "invalid_request")
 		return
 	}
-	imageReq, err := buildImageGenerationRelayRequest(rawJSON)
+	imageReq, err := buildImageGenerationRelayRequestWithModel(
+		rawJSON,
+		configuredImagesToolModel(s.manifest),
+		len(imageGenerationAccountIDsForSpec(spec)) > 0,
+	)
 	if err != nil {
 		writeAPIError(c, http.StatusBadRequest, err.Error(), "invalid_request")
 		return
@@ -885,10 +916,15 @@ func (s *relayServer) handleImagesGenerations(c *gin.Context) {
 }
 
 func (s *relayServer) handleImagesEdits(c *gin.Context) {
-	if _, ok := s.requireAPIKey(c); !ok {
+	spec, ok := s.requireAPIKey(c)
+	if !ok {
 		return
 	}
-	imageReq, err := buildImageEditRelayRequest(c)
+	imageReq, err := buildImageEditRelayRequestWithModel(
+		c,
+		configuredImagesToolModel(s.manifest),
+		len(imageGenerationAccountIDsForSpec(spec)) > 0,
+	)
 	if err != nil {
 		writeAPIError(c, http.StatusBadRequest, err.Error(), "invalid_request")
 		return

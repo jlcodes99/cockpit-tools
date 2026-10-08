@@ -5,12 +5,40 @@ fn build_lan_base_url(port: u16) -> Option<String> {
 }
 
 fn sidecar_config_fingerprint(config_content: &str, manifest_content: &str) -> String {
+    sidecar_config_fingerprint_with_account_proxies(config_content, manifest_content, &[])
+}
+
+/// 账号本地代理地址只写在各账号 auth 文件中，不属于 config/manifest，因此必须显式参与指纹：
+/// 否则隧道重启换到新的随机本地端口后，运行中的 sidecar 会继续拨已经消失的旧端口。
+fn sidecar_config_fingerprint_with_account_proxies(
+    config_content: &str,
+    manifest_content: &str,
+    account_proxies: &[String],
+) -> String {
     let stable_config_content = stable_sidecar_config_for_fingerprint(config_content);
     let stable_manifest_content = stable_sidecar_manifest_for_fingerprint(manifest_content);
     let mut hasher = Sha1::new();
     hasher.update(stable_config_content.as_bytes());
     hasher.update(b"\n--manifest--\n");
     hasher.update(stable_manifest_content.as_bytes());
+    hasher.update(b"\n--account-proxies--\n");
+    // 账号池顺序变化不应导致网关重启：按摘要排序后参与哈希。
+    let mut ordered = account_proxies.iter().collect::<Vec<_>>();
+    ordered.sort();
+    for entry in ordered {
+        hasher.update(entry.as_bytes());
+        hasher.update(b"\n");
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+/// 只取摘要，不保留原文：本地代理地址带有回环专用凭据，不能落到 manifest 或日志里。
+fn account_proxy_fingerprint(proxy_url: Option<&str>) -> String {
+    let Some(proxy_url) = proxy_url.map(str::trim).filter(|value| !value.is_empty()) else {
+        return String::new();
+    };
+    let mut hasher = Sha1::new();
+    hasher.update(proxy_url.as_bytes());
     format!("{:x}", hasher.finalize())
 }
 
@@ -44,6 +72,9 @@ fn stable_sidecar_manifest_for_fingerprint(manifest_content: &str) -> String {
     let Ok(mut manifest) = serde_json::from_str::<Value>(manifest_content) else {
         return manifest_content.to_string();
     };
+    // This field uses a dedicated local control endpoint and applies to new requests.
+    // A toggle must not restart or disconnect active gateway streams.
+    if let Some(object) = manifest.as_object_mut() { object.remove("requestPayloadLogging"); }
     if let Some(accounts) = manifest.get_mut("accounts").and_then(Value::as_array_mut) {
         for account in accounts {
             if let Some(account) = account.as_object_mut() {
@@ -123,11 +154,21 @@ struct SidecarUsageDetails {
 #[serde(rename_all = "camelCase")]
 struct SidecarUsageEvent {
     #[serde(default)]
+    proxy_route: Option<CodexLocalAccessProxyRoute>,
+    #[serde(default)]
     request_id: String,
     #[serde(default)]
     model: String,
     #[serde(default)]
     alias: String,
+    /// 客户端原始请求模型（宿主请求上下文透传，含路由命名空间）。
+    #[serde(default)]
+    #[serde(alias = "requested_model")]
+    requested_model: String,
+    /// 实际发送给上游的模型。
+    #[serde(default)]
+    #[serde(alias = "upstream_model")]
+    upstream_model: String,
     #[serde(default)]
     account_id: String,
     #[serde(default)]
@@ -157,12 +198,18 @@ struct SidecarUsageEvent {
     #[serde(default)]
     latency_ms: u64,
     #[serde(default)]
+    first_response_ms: Option<u64>,
+    #[serde(default)]
     usage: SidecarUsageDetails,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SidecarAuthResultEvent {
+    #[serde(default)]
+    request_id: String,
+    #[serde(default)]
+    started_at_ms: i64,
     #[serde(default)]
     api_key_id: String,
     #[serde(default)]
@@ -207,6 +254,8 @@ struct SidecarAuthResultEvent {
     image_policy_blocked_auths: usize,
     #[serde(default)]
     account_statuses: Vec<SidecarAccountStatus>,
+    #[serde(default)]
+    scope_diagnostics: Vec<CodexLocalAccessAccountPoolScopeDiagnostic>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -386,6 +435,33 @@ fn harden_sidecar_auth_file_permissions(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn sidecar_auth_backup_path(path: &Path) -> Result<PathBuf, String> {
+    let parent = path.parent().ok_or("无法定位 sidecar 认证目录")?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("无法解析 sidecar 认证文件名: {}", path.display()))?;
+    let mut backup_name = file_name.to_os_string();
+    backup_name.push(".bak");
+    Ok(parent.join(backup_name))
+}
+
+fn remove_sidecar_auth_file_and_backup(path: &Path) -> Result<(), String> {
+    for candidate in [path.to_path_buf(), sidecar_auth_backup_path(path)?] {
+        match std::fs::remove_file(&candidate) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "清理 sidecar 认证文件失败: path={}, error={}",
+                    candidate.display(),
+                    error
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn remove_stale_sidecar_auth_files(
     auths_dir: &Path,
     expected_file_names: &HashSet<String>,
@@ -398,7 +474,23 @@ fn remove_stale_sidecar_auth_files(
     for entry in entries {
         let entry = entry.map_err(|e| format!("读取 API 服务 sidecar 认证文件失败: {}", e))?;
         let path = entry.path();
-        if !path.is_file() || path.extension().and_then(|item| item.to_str()) != Some("json") {
+        if !path.is_file() {
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|item| item.to_str()) else {
+            continue;
+        };
+        if file_name.ends_with(".json.bak") {
+            std::fs::remove_file(&path).map_err(|e| {
+                format!(
+                    "清理 sidecar 认证备份失败: path={}, error={}",
+                    path.display(),
+                    e
+                )
+            })?;
+            continue;
+        }
+        if path.extension().and_then(|item| item.to_str()) != Some("json") {
             continue;
         }
         let Some(file_name) = path
@@ -408,6 +500,18 @@ fn remove_stale_sidecar_auth_files(
         else {
             continue;
         };
+        let backup_path = sidecar_auth_backup_path(&path)?;
+        match std::fs::remove_file(&backup_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "清理 sidecar 认证备份失败: path={}, error={}",
+                    backup_path.display(),
+                    error
+                ));
+            }
+        }
         if expected_file_names.contains(&file_name) {
             continue;
         }
@@ -449,6 +553,10 @@ fn sidecar_codex_api_key_auth_id(account: &CodexAccount) -> Option<String> {
 }
 
 fn sidecar_auth_id_for_account(account: &CodexAccount) -> Option<String> {
+    if codex_account::is_grok_upstream_provider(account) {
+        // Grok 供应商账号在 sidecar 里是 xai OAuth 账号，认证文件即账号 ID 对应文件。
+        return Some(codex_account::grok_sidecar_auth_file_name(&account.id));
+    }
     if account.is_api_key_auth() {
         return sidecar_codex_api_key_auth_id(account);
     }
@@ -571,16 +679,26 @@ fn legacy_api_key_is_active(collection: &CodexLocalAccessCollection) -> bool {
 }
 
 fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> Vec<Value> {
+    sidecar_api_key_manifest_values_with_internal(collection, false)
+}
+
+fn sidecar_api_key_manifest_values_with_internal(
+    collection: &CodexLocalAccessCollection,
+    include_internal: bool,
+) -> Vec<Value> {
     let mut values = Vec::new();
     let bound_oauth =
         normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref()).is_some();
-    if legacy_api_key_is_active(collection) {
+    if collection.enabled && legacy_api_key_is_active(collection) {
         values.push(json!({
             "id": "legacy",
             "label": default_local_api_key_label(),
             "key": collection.api_key.trim(),
             "enabled": true,
             "boundOAuth": bound_oauth,
+            "imageGenerationAccountIds": normalize_account_id_list(
+                collection.image_generation_account_ids.clone(),
+            ),
             "accountIds": collection.account_ids.clone(),
             "responsesWebsockets": collection.responses_websockets_enabled,
             "allowedModels": [],
@@ -589,7 +707,12 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
             "tokenUsed": 0,
         }));
     }
-    for item in &collection.api_keys {
+    for item in collection
+        .enabled
+        .then_some(&collection.api_keys)
+        .into_iter()
+        .flatten()
+    {
         if !item.enabled || item.key.trim().is_empty() {
             continue;
         }
@@ -604,6 +727,9 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
             "providerGateway": item.provider_gateway.clone(),
             "modelRouting": item.model_routing.clone(),
             "boundOAuth": bound_oauth,
+            "imageGenerationAccountIds": normalize_account_id_list(
+                collection.image_generation_account_ids.clone(),
+            ),
             "responsesWebsockets": collection.responses_websockets_enabled
                 && item.provider_gateway.is_none()
                 && item.model_routing.is_none(),
@@ -614,6 +740,21 @@ fn sidecar_api_key_manifest_values(collection: &CodexLocalAccessCollection) -> V
             "tokenLimit": item.token_limit,
             "tokenUsed": item.token_used,
             "enabled": item.enabled,
+        }));
+    }
+    let internal_account_ids = internal_api_account_ids();
+    if include_internal && !internal_account_ids.is_empty() {
+        values.push(json!({
+            "id": "__cockpit_internal__",
+            "label": "Cockpit internal",
+            "key": internal_api_service_key(),
+            "internal": true,
+            "enabled": true,
+            "accountIds": internal_account_ids,
+            "allowedModels": [],
+            "excludedModels": [],
+            "tokenLimit": null,
+            "tokenUsed": 0,
         }));
     }
     values
@@ -751,6 +892,18 @@ fn codex_app_speed_service_tier(speed: &CodexAppSpeed) -> Option<&'static str> {
     }
 }
 
+#[test]
+fn removed_app_speed_does_not_inject_a_service_tier() {
+    let legacy_speed: CodexAppSpeed =
+        serde_json::from_str(r#""ultrafast""#).expect("read legacy speed");
+    assert_eq!(codex_app_speed_service_tier(&legacy_speed), None);
+    assert_eq!(codex_app_speed_service_tier(&CodexAppSpeed::Standard), None);
+    assert_eq!(
+        codex_app_speed_service_tier(&CodexAppSpeed::Fast),
+        Some("priority")
+    );
+}
+
 fn effective_api_key_account_ids(
     collection: &CodexLocalAccessCollection,
     api_key: &CodexLocalAccessApiKey,
@@ -763,10 +916,59 @@ fn effective_api_key_account_ids(
 }
 
 fn effective_sidecar_account_ids(collection: &CodexLocalAccessCollection) -> Vec<String> {
+    effective_sidecar_account_ids_with_internal(collection, false)
+}
+
+fn effective_sidecar_account_ids_with_internal(
+    collection: &CodexLocalAccessCollection,
+    include_internal: bool,
+) -> Vec<String> {
+    let mut account_ids = collection.account_ids.clone();
+    let mut seen: HashSet<String> = account_ids.iter().cloned().collect();
+    if include_internal {
+        for account_id in internal_api_account_ids() {
+            if seen.insert(account_id.clone()) {
+                account_ids.push(account_id);
+            }
+        }
+    }
+    // 生图转发账号不参与对话路由，但必须进入 sidecar 账号清单才能拿到凭据。
+    for account_id in &collection.image_generation_account_ids {
+        if seen.insert(account_id.clone()) {
+            account_ids.push(account_id.clone());
+        }
+    }
+    for api_key in &collection.api_keys {
+        for account_id in &api_key.account_ids {
+            if seen.insert(account_id.clone()) {
+                account_ids.push(account_id.clone());
+            }
+        }
+        if let Some(model_routing) = &api_key.model_routing {
+            for route in &model_routing.routes {
+                if seen.insert(route.provider_account_id.clone()) {
+                    account_ids.push(route.provider_account_id.clone());
+                }
+            }
+        }
+    }
+    account_ids
+}
+
+/// 参与对话路由的账号范围（`effective_sidecar_account_ids` 去掉纯生图转发账号）。
+///
+/// `image_generation_account_ids` 只承接生图 / 图片编辑请求（见 sidecar 的
+/// `filterAuthsForAPIKeyScope`：图片请求才切换到生图账号池），对话请求永远只走
+/// `account_ids` 与各 API Key 自己的账号范围。因此判断「账号池能否承接官方 GPT /
+/// Codex 对话模型」时必须排除仅用于生图转发的 OAuth 账号，否则只加了 DeepSeek /
+/// Grok 的账号池会因为「绑定 OAuth 生图账号」而错误地展示整套官方 GPT 模型。
+///
+/// 同一账号既在对话池、又在生图池时，仍按对话账号参与判断。
+fn conversation_sidecar_account_ids(collection: &CodexLocalAccessCollection) -> Vec<String> {
     let mut account_ids = collection.account_ids.clone();
     let mut seen: HashSet<String> = account_ids.iter().cloned().collect();
     for api_key in &collection.api_keys {
-        for account_id in &api_key.account_ids {
+        for account_id in effective_api_key_account_ids(collection, api_key) {
             if seen.insert(account_id.clone()) {
                 account_ids.push(account_id.clone());
             }
@@ -1015,9 +1217,18 @@ fn sidecar_client_api_keys(
     collection: &CodexLocalAccessCollection,
     account_overrides: &HashMap<String, CodexAccount>,
 ) -> Vec<String> {
+    sidecar_client_api_keys_with_internal(collection, account_overrides, false)
+}
+
+fn sidecar_client_api_keys_with_internal(
+    collection: &CodexLocalAccessCollection,
+    account_overrides: &HashMap<String, CodexAccount>,
+    include_internal: bool,
+) -> Vec<String> {
     let mut keys = Vec::new();
     let mut seen = HashSet::new();
-    if legacy_api_key_is_active(collection)
+    if collection.enabled
+        && legacy_api_key_is_active(collection)
         && !sidecar_auth_ids_for_account_ids_with_overrides(
             collection.account_ids.clone(),
             account_overrides,
@@ -1027,9 +1238,18 @@ fn sidecar_client_api_keys(
     {
         keys.push(collection.api_key.trim().to_string());
     }
-    for item in &collection.api_keys {
+    for item in collection
+        .enabled
+        .then_some(&collection.api_keys)
+        .into_iter()
+        .flatten()
+    {
         let key = item.key.trim();
+        // Explicit model routes remain usable while the bound OAuth account is
+        // temporarily unavailable. Their credentials were validated when saved.
         let has_resolvable_scope = item.provider_gateway.is_some()
+            || (item.model_routing.as_ref().is_some_and(|routing| !routing.routes.is_empty())
+                && !effective_api_key_account_ids(collection, item).is_empty())
             || !sidecar_auth_ids_for_account_ids_with_overrides(
                 effective_api_key_account_ids(collection, item),
                 account_overrides,
@@ -1039,6 +1259,14 @@ fn sidecar_client_api_keys(
             keys.push(key.to_string());
         }
     }
+    let internal_account_ids = internal_api_account_ids();
+    if include_internal
+        && !internal_account_ids.is_empty()
+        && !sidecar_auth_ids_for_account_ids_with_overrides(internal_account_ids, account_overrides)
+            .is_empty()
+    {
+        keys.push(internal_api_service_key().to_string());
+    }
     keys
 }
 
@@ -1046,8 +1274,16 @@ fn sidecar_api_key_account_scope_values(
     collection: &CodexLocalAccessCollection,
     account_overrides: &HashMap<String, CodexAccount>,
 ) -> Value {
+    sidecar_api_key_account_scope_values_with_internal(collection, account_overrides, false)
+}
+
+fn sidecar_api_key_account_scope_values_with_internal(
+    collection: &CodexLocalAccessCollection,
+    account_overrides: &HashMap<String, CodexAccount>,
+    include_internal: bool,
+) -> Value {
     let mut values = Map::new();
-    if legacy_api_key_is_active(collection) {
+    if collection.enabled && legacy_api_key_is_active(collection) {
         let auth_ids = sidecar_auth_ids_for_account_ids_with_overrides(
             collection.account_ids.clone(),
             account_overrides,
@@ -1056,7 +1292,12 @@ fn sidecar_api_key_account_scope_values(
             values.insert(collection.api_key.trim().to_string(), json!(auth_ids));
         }
     }
-    for item in &collection.api_keys {
+    for item in collection
+        .enabled
+        .then_some(&collection.api_keys)
+        .into_iter()
+        .flatten()
+    {
         let key = item.key.trim();
         if !item.enabled || key.is_empty() {
             continue;
@@ -1064,14 +1305,38 @@ fn sidecar_api_key_account_scope_values(
         if item.provider_gateway.is_some() {
             continue;
         }
-        let auth_ids = sidecar_auth_ids_for_account_ids_with_overrides(
+        let mut auth_ids = sidecar_auth_ids_for_account_ids_with_overrides(
             effective_api_key_account_ids(collection, item),
             account_overrides,
         );
+        if auth_ids.is_empty() && item.model_routing.is_some()
+            && item.inherit_account_pool == Some(false)
+        {
+            // Keep the missing OAuth projection as an explicit restrictive scope.
+            // Omitting the scope must never grant this key the whole global pool.
+            if let Some(bound_id) = collection.bound_oauth_account_id.as_deref() {
+                if item.account_ids.iter().any(|id| id == bound_id) {
+                    auth_ids.push(sidecar_auth_file_name(bound_id));
+                }
+            }
+        }
         if auth_ids.is_empty() {
             continue;
         }
         values.insert(key.to_string(), json!(auth_ids));
+    }
+    if include_internal {
+        let internal_account_ids = internal_api_account_ids();
+        let internal_auth_ids = sidecar_auth_ids_for_account_ids_with_overrides(
+            internal_account_ids,
+            account_overrides,
+        );
+        if !internal_auth_ids.is_empty() {
+            values.insert(
+                internal_api_service_key().to_string(),
+                json!(internal_auth_ids),
+            );
+        }
     }
     Value::Object(values)
 }
@@ -1149,15 +1414,7 @@ fn sidecar_auth_json_for_account_with_metered_feature_patterns(
         "excluded_models": excluded_models,
         "disable_cooling": collection.disable_cooling,
         "websockets": collection.responses_websockets_enabled,
-        "codex_cli_only": account.codex_cli_only,
-        "codex_cli_only_allow_app_server": account.codex_cli_only_allow_app_server,
-        "codex_cli_only_allow_app_server_clients": config::get_user_config()
-            .codex_cli_only_allow_app_server_clients,
     });
-    if account_uses_codex_fingerprint_convergence(account) {
-        value["codex_fingerprint_mode"] =
-            json!(crate::modules::codex_account::resolved_codex_fingerprint_mode(account));
-    }
     if let Some(account_id) = account_id {
         value["account_id"] = json!(account_id);
     }
@@ -1283,14 +1540,16 @@ fn sync_sidecar_auth_file_for_account_with_task_source(
     if !prefer_account_task {
         adopt_sidecar_agent_identity_task(&mut effective_account, &auth_path)?;
     }
+    let effective_proxy_url =
+        sidecar_proxy_url_for_account(&effective_account, proxy_signature.proxy_url.as_deref())?;
     let auth_json = sidecar_auth_json_for_account(
         &effective_account,
         &collection,
-        proxy_signature.proxy_url.as_deref(),
+        effective_proxy_url.as_deref(),
     );
     let auth_content = serde_json::to_string_pretty(&auth_json)
         .map_err(|e| format!("序列化 sidecar Codex OAuth 认证失败: {}", e))?;
-    write_string_atomic(&auth_path, &auth_content)?;
+    write_secret_string_atomic(&auth_path, &auth_content)?;
     harden_sidecar_auth_file_permissions(&auth_path)?;
     invalidate_prepared_account_if_unlocked(&account.id);
     logger::log_codex_api_info(&format!(
@@ -1304,31 +1563,6 @@ pub fn sync_sidecar_auth_file_for_account(account: &CodexAccount) -> Result<(), 
     let result = sync_sidecar_auth_file_for_account_with_task_source(account, false);
     sync_provider_gateway_auth_files_for_account_in_background(account.clone());
     result
-}
-
-/// 通用设置中的 Codex 客户端策略变更后，后台刷新正在使用的 OAuth auth 文件。
-/// 账号列表与文件写入不阻塞设置页保存；sidecar 文件观察器会随后加载新元数据。
-pub fn schedule_codex_client_policy_sync() {
-    if CODEX_CLIENT_POLICY_SYNC_RUNNING
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        return;
-    }
-    std::thread::spawn(|| {
-        for account in crate::modules::codex_account::list_accounts() {
-            if account.is_api_key_auth() || account.is_agent_identity_auth() {
-                continue;
-            }
-            if let Err(error) = sync_sidecar_auth_file_for_account(&account) {
-                logger::log_codex_api_warn(&format!(
-                    "[CodexLocalAccess] 后台刷新 Codex 客户端策略失败: account_id={}, error={}",
-                    account.id, error
-                ));
-            }
-        }
-        CODEX_CLIENT_POLICY_SYNC_RUNNING.store(false, Ordering::Release);
-    });
 }
 
 pub fn sync_sidecar_auth_file_for_account_with_current_task(
@@ -1441,6 +1675,10 @@ fn sidecar_quota_pool_state_value(collection: &CodexLocalAccessCollection) -> Va
         accounts.insert(
             account_id,
             json!({
+                "planType": account
+                    .plan_type
+                    .clone()
+                    .or_else(|| account.auth_file_plan_type.clone()),
                 "primary": sidecar_quota_pool_window_value(
                     quota.hourly_percentage,
                     quota.hourly_window_minutes,
@@ -1454,6 +1692,7 @@ fn sidecar_quota_pool_state_value(collection: &CodexLocalAccessCollection) -> Va
                     quota.weekly_reset_time,
                 ),
                 "updatedAt": account.usage_updated_at,
+                "cooldown": account_quota_cooldown(&account, now_ms()),
             }),
         );
     }
@@ -1505,7 +1744,9 @@ fn sidecar_account_manifest_value(
         "upstreamApiKey": account.openai_api_key.as_deref().unwrap_or_default(),
         "planRank": resolve_plan_rank(account),
         "remainingQuota": resolve_remaining_quota(account),
+        "quotaCooldown": account_quota_cooldown(account, now_ms()),
         "subscriptionExpiryMs": resolve_subscription_expiry_ms(account),
+        "gptReserveAllowed": account_has_gpt_reserve_entitlement(account),
         "imageGenerationPolicy": match collection.image_generation_account_policies.get(&account.id) {
             Some(CodexLocalAccessImageGenerationPolicy::Enabled) => "enabled",
             Some(CodexLocalAccessImageGenerationPolicy::Disabled) => "disabled",
@@ -1519,6 +1760,24 @@ fn sidecar_account_manifest_value(
         value["modelContextWindows"] = json!(account.api_model_context_windows);
     }
     value
+}
+
+/// Grok 供应商账号在 sidecar 里的账号条目。
+///
+/// 该账号的上游是 Grok(xAI) provider，因此显式声明 `provider` 与 `modelIds`，
+/// 让 sidecar 只把绑定的 Grok 模型注册到这个账号上。
+fn grok_sidecar_account_manifest_value(account: &CodexAccount, auth_id: &str) -> Value {
+    let mut models = account.api_model_catalog.clone();
+    models.retain(|model| !model.trim().is_empty());
+    json!({
+        "id": account.id.clone(),
+        "email": account.email.clone(),
+        "authId": auth_id,
+        "authKind": "oauth",
+        "provider": codex_account::GROK_PROVIDER_ID,
+        "modelIds": models,
+        "planType": account.plan_type.as_deref(),
+    })
 }
 
 /// Hosts that must not be treated as a real upstream for the local API sidecar.
@@ -1772,6 +2031,23 @@ fn sidecar_effective_proxy_signature(
     Ok(signature)
 }
 
+fn sidecar_proxy_url_for_account(
+    account: &CodexAccount,
+    default_proxy_url: Option<&str>,
+) -> Result<Option<String>, String> {
+    if crate::modules::codex_account_proxy::eligible(account) && account.egress_proxy_disabled {
+        // CLIProxyAPI recognizes this as an explicit bypass of global/environment proxies.
+        return Ok(Some("direct".into()));
+    }
+    if crate::modules::codex_account_proxy::has_configured_url(account)? {
+        return crate::modules::codex_proxy_runtime::prepared_sidecar_url(account);
+    }
+    Ok(default_proxy_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string))
+}
+
 fn gateway_mode_label(mode: CodexLocalAccessGatewayMode) -> &'static str {
     gateway_mode_to_db_value(mode)
 }
@@ -1945,78 +2221,6 @@ fn format_upstream_response_failed_error(signal: &UpstreamResponseFailedSignal) 
     )
 }
 
-async fn start_legacy_gateway_locked(
-    collection: &CodexLocalAccessCollection,
-) -> Result<(), String> {
-    let bind_host = bind_host_for_collection(collection).to_string();
-    let port = collection.port;
-    let listener = bind_gateway_listener(&bind_host, port)
-        .await
-        .map_err(|error| format_gateway_bind_error(&bind_host, port, &error))?;
-    let (shutdown_sender, mut shutdown_receiver) = watch::channel(false);
-    let task = tokio::spawn(async move {
-        let listener = listener;
-        loop {
-            tokio::select! {
-                changed = shutdown_receiver.changed() => {
-                    if changed.is_ok() && *shutdown_receiver.borrow() {
-                        break;
-                    }
-                    if changed.is_err() {
-                        break;
-                    }
-                }
-                accept_result = listener.accept() => {
-                    match accept_result {
-                        Ok((stream, addr)) => {
-                            tokio::spawn(async move {
-                                if let Err(error) = handle_connection(stream, addr).await {
-                                    if is_client_disconnect_error_message(&error) {
-                                        logger::log_codex_api_info(&format!(
-                                            "[CodexLocalAccess][legacy] 客户端已断开，停止写入响应: {}",
-                                            error
-                                        ));
-                                    } else {
-                                        logger::log_codex_api_warn(&format!(
-                                            "[CodexLocalAccess][legacy] 处理网关请求失败: {}",
-                                            error
-                                        ));
-                                    }
-                                }
-                            });
-                        }
-                        Err(error) => {
-                            logger::log_codex_api_warn(&format!(
-                                "[CodexLocalAccess][legacy] 网关监听 accept 失败: {}",
-                                error
-                            ));
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    logger::log_codex_api_info(&format!(
-        "[CodexLocalAccess][legacy] API 服务 legacy 网关已启动: bind={}:{} base={}",
-        bind_host,
-        port,
-        build_base_url(port)
-    ));
-
-    let mut runtime = gateway_runtime().lock().await;
-    runtime.running = true;
-    runtime.actual_port = Some(port);
-    runtime.actual_bind_host = Some(bind_host);
-    runtime.sidecar_config_fingerprint = None;
-    runtime.last_error = None;
-    runtime.shutdown_sender = Some(shutdown_sender);
-    runtime.task = Some(task);
-    runtime.sidecar_child = None;
-    Ok(())
-}
-
 fn sidecar_local_account_usable_for_start(account: &CodexAccount) -> bool {
     account.is_api_key_auth()
         || account.is_agent_identity_auth()
@@ -2032,10 +2236,53 @@ fn load_sidecar_account_for_start(account_id: &str) -> Option<CodexAccount> {
     codex_account::load_account(account_id).filter(sidecar_local_account_usable_for_start)
 }
 
+// Serialize Grok auth reads/writes with revocation. A refresh that started before deletion must
+// finish before cleanup, and a later refresh must observe the missing source credential.
+static GROK_SIDECAR_AUTH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Returns whether the source credential is usable. Missing/broken members are isolated, while
+/// failures to remove or write a credential remain errors so revocation cannot silently fail.
+fn prepare_grok_sidecar_auth_file(
+    account: &CodexAccount,
+    auth_path: &Path,
+    proxy_url: Option<&str>,
+) -> Result<bool, String> {
+    let _guard = GROK_SIDECAR_AUTH_LOCK
+        .lock()
+        .map_err(|_| "获取 Grok sidecar 凭据锁失败".to_string())?;
+    let auth_json = match codex_account::grok_sidecar_auth_json(account, proxy_url) {
+        Ok(value) => value,
+        Err(error) => {
+            remove_sidecar_auth_file_and_backup(auth_path).map_err(|error| {
+                format!(
+                    "清理失效 Grok sidecar 凭据失败: path={}, error={}",
+                    auth_path.display(),
+                    error
+                )
+            })?;
+            logger::log_codex_api_warn(&format!(
+                "[CodexLocalAccess] 隔离不可用的 Grok 上游账号: account_id={}, error={}",
+                account.id, error
+            ));
+            return Ok(false);
+        }
+    };
+    let auth_content = serde_json::to_string_pretty(&auth_json)
+        .map_err(|error| format!("序列化 sidecar Grok 认证失败: {}", error))?;
+    write_secret_string_atomic_if_changed(auth_path, &auth_content)?;
+    harden_sidecar_auth_file_permissions(auth_path)?;
+    Ok(true)
+}
+
 async fn prepare_sidecar_launch_config(
     collection: &CodexLocalAccessCollection,
     preparation: GatewayPreparationContext,
 ) -> Result<SidecarLaunchConfig, String> {
+    crate::modules::codex_proxy_runtime::prepare_accounts(effective_sidecar_account_ids(
+        collection,
+    ))
+    .await?;
+    refresh_grok_upstream_accounts_for_collection(collection).await;
     let health_snapshot = {
         let runtime = gateway_runtime().lock().await;
         runtime.account_health.clone()
@@ -2050,6 +2297,7 @@ async fn prepare_sidecar_launch_config(
             health_snapshot,
             default_service_tier,
             HashMap::new(),
+            true,
             Some(preparation),
         )
     })
@@ -2064,14 +2312,56 @@ async fn prepare_sidecar_launch_config_in_dir(
     default_service_tier: Option<&str>,
     account_overrides: HashMap<String, CodexAccount>,
 ) -> Result<SidecarLaunchConfig, String> {
+    // Overrides are authoritative for this configuration and may not be in the
+    // persisted account list yet. Prepare their shared-proxy state as well.
+    for account in account_overrides.values() {
+        crate::modules::codex_proxy_runtime::ensure_account_proxy_state(account).await?;
+    }
+    crate::modules::codex_proxy_runtime::prepare_accounts(effective_sidecar_account_ids(
+        collection,
+    ))
+    .await?;
+    refresh_grok_upstream_accounts_for_collection(collection).await;
     prepare_sidecar_launch_config_in_dir_sync(
         collection,
         base_dir,
         health_snapshot,
         default_service_tier,
         account_overrides,
+        false,
         None,
     )
+}
+
+/// 启动网关前刷新 Grok 供应商账号绑定的 Grok 平台账号令牌。
+///
+/// 令牌快过期（或已过期）时先刷新再写 xai auth 文件，避免 sidecar 拿着失效令牌
+/// 启动；刷新失败只记日志，仍写入当前令牌，由后续保活与写穿补齐。
+async fn refresh_grok_upstream_accounts_for_collection(collection: &CodexLocalAccessCollection) {
+    for account_id in effective_sidecar_account_ids(collection) {
+        let Some(account) = codex_account::load_account(&account_id) else {
+            continue;
+        };
+        if !codex_account::is_grok_upstream_provider(&account) {
+            continue;
+        }
+        let Some(grok_account_id) = account
+            .upstream_grok_account_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        if let Err(error) =
+            crate::modules::grok_account::prepare_account_for_injection(grok_account_id).await
+        {
+            logger::log_codex_api_warn(&format!(
+                "[CodexLocalAccess][provider-gateway] Grok 账号令牌刷新失败（继续使用当前令牌）: account_id={}, grok_account_id={}, error={}",
+                account.id, grok_account_id, error
+            ));
+        }
+    }
 }
 
 fn prepare_sidecar_launch_config_in_dir_sync(
@@ -2080,21 +2370,39 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     health_snapshot: HashMap<String, RuntimeAccountHealth>,
     default_service_tier: Option<&str>,
     account_overrides: HashMap<String, CodexAccount>,
+    api_service: bool,
     preparation: Option<GatewayPreparationContext>,
 ) -> Result<SidecarLaunchConfig, String> {
+    // Validate public keys before changing authentication files or the existing config.
+    // An internal maintenance key cannot stand in for an unresolved declared public key.
+    let public_client_keys = sidecar_client_api_keys(collection, &account_overrides);
+    if preparation.is_some_and(|context| gateway_lifecycle_generation_changed(context.generation)) {
+        return Err(GATEWAY_PREPARATION_CANCELLED.to_string());
+    }
+    if collection.enabled
+        && public_client_keys.is_empty()
+        && collection.api_keys.iter().any(|key| key.enabled && !key.key.trim().is_empty())
+    {
+        return Err("网关无法解析入站 API Key，已保留原配置；请恢复被引用的账号后重试".to_string());
+    }
+    let client_api_keys = sidecar_client_api_keys_with_internal(collection, &account_overrides, api_service);
     let auths_dir = sidecar_auths_dir(&base_dir);
     std::fs::create_dir_all(&auths_dir)
         .map_err(|e| format!("创建 API 服务 sidecar 认证目录失败: {}", e))?;
 
     let proxy_signature = sidecar_effective_proxy_signature(collection)?;
-    let effective_proxy_url_ref = proxy_signature.proxy_url.as_deref();
+    let default_proxy_url = proxy_signature.proxy_url.as_deref();
 
     let mut manifest_accounts = Vec::new();
+    let mut proxy_route_observers = Vec::new();
     let mut codex_keys = Vec::new();
     let mut expected_auth_files = HashSet::new();
+    let mut routing_accounts = HashMap::new();
+    // 账号级本地代理摘要，用于让隧道换端口后触发 sidecar 重建。
+    let mut account_proxy_fingerprints = Vec::new();
     let metered_feature_patterns =
         metered_feature_model_patterns_for_pool(collection, &account_overrides);
-    for (index, account_id) in effective_sidecar_account_ids(collection)
+    for (index, account_id) in effective_sidecar_account_ids_with_internal(collection, api_service)
         .into_iter()
         .enumerate()
     {
@@ -2133,7 +2441,12 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             ));
             continue;
         }
-        let eligible = if collection_uses_provider_gateway_account(collection, &account.id) {
+        let internal_account = internal_api_account_ids()
+            .iter()
+            .any(|internal_id| internal_id == &account.id);
+        let eligible = if internal_account {
+            sidecar_local_account_usable_for_start(&account)
+        } else if collection_uses_provider_gateway_account(collection, &account.id) {
             is_override_account || is_provider_gateway_eligible_account(&account)
         } else {
             is_local_access_eligible_account(&account, collection.restrict_free_accounts)
@@ -2141,14 +2454,74 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         if !eligible {
             continue;
         }
+        let account_proxy_url = sidecar_proxy_url_for_account(&account, default_proxy_url)?;
+        let account_proxy_url_ref = account_proxy_url.as_deref();
+        if let Some(observer) = account_proxy_url_ref.and_then(|url| {
+            crate::modules::codex_proxy_runtime::prepared_request_route_observer(&account, url)
+        }) {
+            proxy_route_observers.push(observer);
+        }
+        account_proxy_fingerprints.push(account_proxy_fingerprint(account_proxy_url_ref));
+        if codex_account::is_grok_upstream_provider(&account) {
+            // Grok 供应商账号：把绑定的 Grok 平台账号令牌写成 xai auth 文件，
+            // sidecar 用 Grok(xAI) 执行器承接该账号的模型。
+            let file_name = codex_account::grok_sidecar_auth_file_name(&account.id);
+            let auth_path = auths_dir.join(&file_name);
+            if !prepare_grok_sidecar_auth_file(&account, &auth_path, account_proxy_url_ref)? {
+                continue;
+            }
+            routing_accounts.insert(account.id.clone(), account.clone());
+            expected_auth_files.insert(file_name.clone());
+            manifest_accounts.push(grok_sidecar_account_manifest_value(&account, &file_name));
+            continue;
+        }
+
+        routing_accounts.insert(account.id.clone(), account.clone());
 
         if account.is_api_key_auth() {
-            if let Some(config_value) = sidecar_codex_key_config_value_with_metered_feature_patterns(
-                &account,
-                collection,
-                effective_proxy_url_ref,
-                &metered_feature_patterns,
-            ) {
+            // 与自动混合路由的判定保持一致：Chat 协议账号、以及具备逐模型识图能力的账号
+            // （例如 DeepSeek）走 provider 路由，这样带图片的请求才能自动转到识图模型。
+            let provider_route_models =
+                if api_service && automatic_api_service_provider_route_eligible(&account) {
+                    automatic_api_service_route_models(
+                        collection,
+                        &account,
+                        &api_service_supported_codex_model_ids(),
+                    )
+                } else {
+                    Vec::new()
+                };
+            if !provider_route_models.is_empty() {
+                manifest_accounts.push(sidecar_account_manifest_value(&account, None, collection));
+                continue;
+            }
+            if let Some(mut config_value) =
+                sidecar_codex_key_config_value_with_metered_feature_patterns(
+                    &account,
+                    collection,
+                    account_proxy_url_ref,
+                    &metered_feature_patterns,
+                )
+            {
+                if api_service
+                    && (!account.api_model_catalog.is_empty()
+                        || !account.api_model_mappings.is_empty())
+                {
+                    config_value["models"] = Value::Array(
+                        automatic_api_service_route_models(
+                            collection,
+                            &account,
+                            &api_service_supported_codex_model_ids(),
+                        )
+                        .into_iter()
+                        .map(|model| {
+                            json!({
+                                "name": model["upstreamModel"], "alias": model["clientModel"],
+                            })
+                        })
+                        .collect(),
+                    );
+                }
                 codex_keys.push(config_value);
                 manifest_accounts.push(sidecar_account_manifest_value(&account, None, collection));
             } else {
@@ -2177,12 +2550,12 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         let auth_json = sidecar_auth_json_for_account_with_metered_feature_patterns(
             &account,
             collection,
-            effective_proxy_url_ref,
+            account_proxy_url_ref,
             &metered_feature_patterns,
         );
         let auth_content = serde_json::to_string_pretty(&auth_json)
             .map_err(|e| format!("序列化 sidecar Codex OAuth 认证失败: {}", e))?;
-        write_string_atomic_if_changed(&auth_path, &auth_content)?;
+        write_secret_string_atomic_if_changed(&auth_path, &auth_content)?;
         harden_sidecar_auth_file_permissions(&auth_path)?;
         manifest_accounts.push(sidecar_account_manifest_value(
             &account,
@@ -2192,12 +2565,43 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     }
     remove_stale_sidecar_auth_files(&auths_dir, &expected_auth_files)?;
 
-    let mut model_ids = visible_codex_model_ids_for_collection(collection, Some(&health_snapshot));
+    // Explicit native routes must not advertise or select a revoked xAI credential. Keep the
+    // persisted route and key account scopes intact so recovery cannot broaden access scopes.
+    let mut runtime_collection = collection.clone();
+    for api_key in &mut runtime_collection.api_keys {
+        if let Some(routing) = api_key.model_routing.as_mut() {
+            routing.routes.retain(|route| {
+                route.native_provider.as_deref() != Some("xai")
+                    || routing_accounts.contains_key(&route.provider_account_id)
+            });
+        }
+    }
+    let mut model_collection = runtime_collection.clone();
+    model_collection
+        .account_ids
+        .retain(|id| routing_accounts.contains_key(id));
+    let mut model_ids =
+        visible_codex_model_ids_for_collection(&model_collection, Some(&health_snapshot));
     let mut model_id_keys = model_ids
         .iter()
         .map(|model| model.trim().to_ascii_lowercase())
         .collect::<HashSet<_>>();
-    for api_key in &collection.api_keys {
+    // Grok 供应商账号自带模型目录：客户端可以直接请求这些模型名。
+    for account_id in effective_sidecar_account_ids(collection) {
+        let Some(account) = routing_accounts.get(&account_id) else {
+            continue;
+        };
+        if !codex_account::is_grok_upstream_provider(&account) {
+            continue;
+        }
+        for model in &account.api_model_catalog {
+            let model = model.trim();
+            if !model.is_empty() && model_id_keys.insert(model.to_ascii_lowercase()) {
+                model_ids.push(model.to_string());
+            }
+        }
+    }
+    for api_key in &runtime_collection.api_keys {
         let Some(model_routing) = api_key.model_routing.as_ref() else {
             continue;
         };
@@ -2213,11 +2617,38 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         }
     }
     let app_locale = crate::modules::config::get_user_config().language;
+    let mut api_key_manifest_values =
+        sidecar_api_key_manifest_values_with_internal(&runtime_collection, api_service);
+    if api_service {
+        apply_automatic_api_service_model_routing(
+            &mut api_key_manifest_values,
+            &runtime_collection,
+            &routing_accounts,
+        );
+    }
     let manifest = json!({
         "locale": app_locale,
-        "apiKeys": sidecar_api_key_manifest_values(collection),
+        "gatewayErrorMessages": {
+            "pool_unavailable": sidecar_localized_messages("codex.localAccess.accountPoolHealth.dialog.poolUnavailable"),
+            "pool_diagnostic_detail": sidecar_localized_messages("codex.localAccess.accountPoolHealth.dialog.poolDiagnosticDetail"),
+            "scope_mismatch": sidecar_localized_messages("codex.localAccess.accountPoolHealth.dialog.scopeMismatchDetail"),
+            "account_mapping_missing": sidecar_localized_messages("codex.localAccess.accountPoolHealth.dialog.accountMappingMissingDetail"),
+            "bound_account_not_loaded": sidecar_localized_messages("codex.localAccess.accountPoolHealth.dialog.boundAccountNotLoadedDetail"),
+            "bound_account_not_candidate": sidecar_localized_messages("codex.localAccess.accountPoolHealth.dialog.boundAccountNotCandidateDetail"),
+            "account_concurrency_exceeded": sidecar_localized_messages("codex.localAccess.gatewayErrors.accountConcurrencyExceeded"),
+            "provider_retry_after": sidecar_localized_messages("codex.localAccess.gatewayErrors.providerRetryAfter"),
+            "audio_invalid_request": sidecar_localized_messages("codex.localAccess.gatewayErrors.audioInvalidRequest"),
+            "audio_too_large": sidecar_localized_messages("codex.localAccess.gatewayErrors.audioTooLarge"),
+            "audio_not_supported": sidecar_localized_messages("codex.localAccess.gatewayErrors.audioNotSupported"),
+            "audio_unavailable": sidecar_localized_messages("codex.localAccess.gatewayErrors.audioUnavailable"),
+            "audio_upstream_failed": sidecar_localized_messages("codex.localAccess.gatewayErrors.audioUpstreamFailed"),
+        },
+        "apiKeys": api_key_manifest_values,
         "accounts": manifest_accounts,
+        "proxyRouteObservers": proxy_route_observers,
         "modelIds": model_ids,
+        "imageGenerationModel": collection.image_generation_model.clone(),
+        "imageGenerationMainModel": collection.image_generation_main_model.clone(),
         "modelAliases": collection.model_aliases.iter().map(|alias| json!({
             "sourceModel": alias.source_model.clone(),
             "alias": alias.alias.clone(),
@@ -2237,8 +2668,12 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             "excludedModels": rule.excluded_models.clone(),
         })).collect::<Vec<_>>(),
         "debugLogs": collection.debug_logs,
+        "requestPayloadLogging": collection.request_payload_logging,
+        "diagnosticsControlKey": internal_api_service_key(),
         "immediateSseResponse": collection.immediate_sse_response,
         "maxConcurrentImageRequests": collection.max_concurrent_image_requests,
+        "maxAccountConcurrency": collection.max_account_concurrency,
+        "accountConcurrencyWaitMs": collection.account_concurrency_wait_ms,
     });
 
     let mut config = Map::new();
@@ -2254,11 +2689,15 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     config.insert("debug".to_string(), json!(collection.debug_logs));
     config.insert(
         "api-keys".to_string(),
-        json!(sidecar_client_api_keys(collection, &account_overrides)),
+        json!(client_api_keys),
     );
     config.insert(
         "api-key-account-ids".to_string(),
-        sidecar_api_key_account_scope_values(collection, &account_overrides),
+        sidecar_api_key_account_scope_values_with_internal(
+            collection,
+            &account_overrides,
+            api_service,
+        ),
     );
     config.insert(
         "auth-error-localization".to_string(),
@@ -2277,7 +2716,10 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     config.insert("commercial-mode".to_string(), json!(true));
     config.insert(
         "codex".to_string(),
-        json!({ "optimize-multi-agent-v2": true }),
+        json!({
+            "optimize-multi-agent-v2": true,
+            "stream-bootstrap-buffering": api_service,
+        }),
     );
     config.insert("ws-auth".to_string(), json!(true));
     config.insert("disable-auth-auto-refresh".to_string(), json!(true));
@@ -2321,7 +2763,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             "session-affinity-ttl": sidecar_duration_ms(collection.session_affinity_ttl_ms),
         }),
     );
-    if let Some(proxy_url) = effective_proxy_url_ref {
+    if let Some(proxy_url) = default_proxy_url {
         config.insert("proxy-url".to_string(), json!(proxy_url));
     }
     if !codex_keys.is_empty() {
@@ -2333,7 +2775,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             json!({ "codex": collection.excluded_models.clone() }),
         );
     }
-    if !collection.model_aliases.is_empty() {
+    if !collection.model_aliases.is_empty() && !collection.suppress_oauth_model_alias {
         config.insert(
             "oauth-model-alias".to_string(),
             json!({ "codex": sidecar_model_alias_values(collection) }),
@@ -2358,9 +2800,13 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         .map_err(|e| format!("序列化 sidecar 配置失败: {}", e))?;
     let manifest_content = serde_json::to_string_pretty(&manifest)
         .map_err(|e| format!("序列化 sidecar manifest 失败: {}", e))?;
-    let fingerprint = sidecar_config_fingerprint(&config_content, &manifest_content);
+    let fingerprint = sidecar_config_fingerprint_with_account_proxies(
+        &config_content,
+        &manifest_content,
+        &account_proxy_fingerprints,
+    );
     write_string_atomic_if_changed(&config_path, &config_content)?;
-    write_string_atomic_if_changed(&manifest_path, &manifest_content)?;
+    write_secret_string_atomic_if_changed(&manifest_path, &manifest_content)?;
     write_sidecar_api_key_priority_state_in_dir(collection, &base_dir)?;
     write_sidecar_quota_reserve_state_in_dir(collection, &base_dir)?;
     write_sidecar_quota_pool_state_in_dir(collection, &base_dir)?;

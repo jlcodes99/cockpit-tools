@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v7/internal/config"
@@ -37,19 +37,13 @@ const (
 
 // StartAutoRefresh launches a background loop that evaluates auth freshness
 // every few seconds and triggers refresh operations when required.
-// Only one loop is kept alive; starting a new one cancels the previous run.
+// Only one loop remains active; starting a new one cancels the previous run.
 func (m *Manager) StartAutoRefresh(parent context.Context, interval time.Duration) {
+	if parent == nil {
+		parent = context.Background()
+	}
 	if interval <= 0 {
 		interval = refreshCheckInterval
-	}
-
-	m.mu.Lock()
-	cancelPrev := m.refreshCancel
-	m.refreshCancel = nil
-	m.refreshLoop = nil
-	m.mu.Unlock()
-	if cancelPrev != nil {
-		cancelPrev()
 	}
 
 	ctx, cancelCtx := context.WithCancel(parent)
@@ -60,27 +54,66 @@ func (m *Manager) StartAutoRefresh(parent context.Context, interval time.Duratio
 	loop := newAuthAutoRefreshLoop(m, interval, workers)
 
 	m.mu.Lock()
+	cancelPrev := m.refreshCancel
 	m.refreshCancel = cancelCtx
 	m.refreshLoop = loop
+	if m.refreshRuns == nil {
+		m.refreshRuns = make(map[*authAutoRefreshLoop]context.CancelFunc)
+	}
+	m.refreshRuns[loop] = cancelCtx
 	m.mu.Unlock()
+	if cancelPrev != nil {
+		cancelPrev()
+	}
 
-	loop.rebuild(time.Now())
-	go loop.run(ctx)
+	go func() {
+		defer func() {
+			cancelCtx()
+			m.mu.Lock()
+			delete(m.refreshRuns, loop)
+			if m.refreshLoop == loop {
+				m.refreshLoop = nil
+				m.refreshCancel = nil
+			}
+			m.mu.Unlock()
+		}()
+		loop.run(ctx)
+	}()
 }
 
 // StopAutoRefresh cancels the background refresh loop, if running.
+// It waits up to ten seconds for in-flight workers across all cancelled runs.
+// Executors and stores must honor cancellation; a timeout is logged if they do not.
 // It also stops the selector if it implements StoppableSelector.
 func (m *Manager) StopAutoRefresh() {
 	m.mu.Lock()
 	cancel := m.refreshCancel
+	runs := make(map[*authAutoRefreshLoop]context.CancelFunc, len(m.refreshRuns))
+	for loop, cancelRun := range m.refreshRuns {
+		runs[loop] = cancelRun
+	}
+	selector := m.selector
 	m.refreshCancel = nil
 	m.refreshLoop = nil
 	m.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
+	for _, cancelRun := range runs {
+		cancelRun()
+	}
+	// Share one deadline across all generations, including runs replaced by a
+	// concurrent start and runs another stop is already waiting for.
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelWait()
+	for loop := range runs {
+		if errWait := loop.wait(waitCtx); errWait != nil {
+			log.WithError(errWait).Warn("auth refresh workers did not stop within the shutdown timeout")
+			break
+		}
+	}
 	// Stop selector if it implements StoppableSelector (e.g., SessionAffinitySelector)
-	if stoppable, ok := m.selector.(StoppableSelector); ok {
+	if stoppable, ok := selector.(StoppableSelector); ok {
 		stoppable.Stop()
 	}
 }
@@ -120,6 +153,9 @@ func (m *Manager) shouldRefresh(a *Auth, now time.Time) bool {
 	}
 	if !a.NextRefreshAfter.IsZero() && now.Before(a.NextRefreshAfter) {
 		return false
+	}
+	if a.RejectedAccessToken != "" && authAccessToken(a) == a.RejectedAccessToken {
+		return true
 	}
 	if evaluator, ok := a.Runtime.(RefreshEvaluator); ok && evaluator != nil {
 		return evaluator.ShouldRefresh(now, a)
@@ -339,7 +375,24 @@ func (m *Manager) markRefreshPending(id string, now time.Time) bool {
 }
 
 type authRefreshLock struct {
-	mu sync.Mutex
+	gate chan struct{}
+}
+
+func newAuthRefreshLock() *authRefreshLock {
+	return &authRefreshLock{gate: make(chan struct{}, 1)}
+}
+
+func (l *authRefreshLock) acquire(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case l.gate <- struct{}{}:
+		return nil
+	}
+}
+
+func (l *authRefreshLock) release() {
+	<-l.gate
 }
 
 func authAccessToken(auth *Auth) string {
@@ -356,11 +409,39 @@ func authHasRefreshCredential(auth *Auth) bool {
 	return authMetadataString(auth, "refreshToken") != ""
 }
 
+// CredentialsChanged excludes runtime availability and refresh timestamps.
+func CredentialsChanged(existing, incoming *Auth) bool {
+	if existing == nil || incoming == nil {
+		return false
+	}
+	for _, keys := range [][2]string{
+		{"access_token", "accessToken"}, {"refresh_token", "refreshToken"}, {"id_token", "idToken"},
+	} {
+		value := func(auth *Auth) string {
+			if token := authMetadataString(auth, keys[0]); token != "" {
+				return token
+			}
+			return authMetadataString(auth, keys[1])
+		}
+		if value(existing) != value(incoming) {
+			return true
+		}
+	}
+	key := func(auth *Auth) string {
+		if value := authAttribute(auth, AttributeAPIKey); value != "" {
+			return value
+		}
+		return authMetadataString(auth, "api_key")
+	}
+	return key(existing) != key(incoming)
+}
+
 func clearUnauthorizedModelStates(auth *Auth, now time.Time) []string {
 	if auth == nil || len(auth.ModelStates) == 0 {
 		return nil
 	}
 	var resumed []string
+	changed := false
 	for model, state := range auth.ModelStates {
 		if state == nil || state.LastError == nil {
 			continue
@@ -368,10 +449,17 @@ func clearUnauthorizedModelStates(auth *Auth, now time.Time) []string {
 		if state.LastError.StatusCode() != http.StatusUnauthorized && !strings.EqualFold(state.LastError.Code, "unauthorized") {
 			continue
 		}
+		changed = true
+		if state.Quota.Exceeded && (state.Quota.NextRecoverAt.IsZero() || state.Quota.NextRecoverAt.After(now)) {
+			state.LastError = nil
+			state.StatusMessage = state.Quota.Reason
+			state.UpdatedAt = now
+			continue
+		}
 		resetModelState(state, now)
 		resumed = append(resumed, model)
 	}
-	if len(resumed) > 0 {
+	if changed {
 		updateAggregatedAvailability(auth, now)
 	}
 	return resumed
@@ -404,7 +492,8 @@ func (m *Manager) tryRefreshExecutionAuthAfterUnauthorized(ctx context.Context, 
 		return auth, false, nil
 	}
 	if updated == nil {
-		updated = target
+		log.Debugf("Home credential refresh returned no credential for %s (%s)", auth.Provider, auth.ID)
+		return auth, false, nil
 	}
 	if updated.ID == "" {
 		updated.ID = auth.ID
@@ -503,15 +592,31 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	if id == "" {
 		return nil, errors.New("auth id is empty")
 	}
+	if failedAccessToken != "" {
+		m.mu.Lock()
+		if current := m.auths[id]; current != nil && authAccessToken(current) == failedAccessToken {
+			current.RejectedAccessToken = failedAccessToken
+			current.Generation++
+			if m.scheduler != nil {
+				m.scheduler.upsertAuth(current.Clone())
+			}
+		}
+		m.mu.Unlock()
+	}
 
-	lockValue, _ := m.refreshLocks.LoadOrStore(id, &authRefreshLock{})
+	lockValue, _ := m.refreshLocks.LoadOrStore(id, newAuthRefreshLock())
 	lock, _ := lockValue.(*authRefreshLock)
 	if lock == nil {
-		lock = &authRefreshLock{}
+		lock = newAuthRefreshLock()
 		m.refreshLocks.Store(id, lock)
 	}
-	lock.mu.Lock()
-	defer lock.mu.Unlock()
+	if errLock := lock.acquire(ctx); errLock != nil {
+		return nil, errLock
+	}
+	defer lock.release()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	m.mu.RLock()
 	auth := m.auths[id]
@@ -520,6 +625,7 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 		// Use the same effective provider key as request execution so OpenAI-compat
 		// auths registered under namespaced keys still resolve for refresh.
 		exec = m.executors[executorKeyFromAuth(auth)]
+		auth = auth.Clone()
 	}
 	m.mu.RUnlock()
 	if auth == nil || exec == nil {
@@ -533,8 +639,19 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 		}
 	}
 
-	cloned := auth.Clone()
-	updated, err := exec.Refresh(ctx, cloned)
+	base := auth.Clone()
+	updated, err := exec.Refresh(ctx, base.Clone())
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+		m.mu.Lock()
+		if current := m.auths[id]; current != nil && current.RegistrationEpoch == base.RegistrationEpoch && current.CredentialVersion == base.CredentialVersion && !CredentialsChanged(base, current) {
+			current.NextRefreshAfter = time.Now().Add(time.Second)
+		}
+		m.mu.Unlock()
+		m.queueRefreshReschedule(id)
+	}
+	if canceled := ctx.Err(); canceled != nil {
+		return nil, canceled
+	}
 	if err != nil && errors.Is(err, context.Canceled) {
 		log.Debugf("refresh canceled for %s, %s", auth.Provider, auth.ID)
 		return nil, err
@@ -542,18 +659,41 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	log.Debugf("refreshed %s, %s, %v", auth.Provider, auth.ID, err)
 	now := time.Now()
 	if err != nil {
-		unauthorized := isUnauthorizedError(err)
+		unauthorized := isUnauthorizedError(err) || isInvalidGrantError(err)
 		shouldReschedule := false
 		m.mu.Lock()
+		if errCanceled := ctx.Err(); errCanceled != nil {
+			m.mu.Unlock()
+			return nil, errCanceled
+		}
 		if current := m.auths[id]; current != nil {
+			if current.RegistrationEpoch != base.RegistrationEpoch || current.CredentialVersion != base.CredentialVersion || CredentialsChanged(base, current) {
+				latest := current.Clone()
+				m.mu.Unlock()
+				return latest, nil
+			}
+			current.Generation++
+			current.UpdatedAt = now
 			current.LastError = refreshErrorFromError(err)
-			if unauthorized {
-				current.NextRefreshAfter = time.Time{}
+			hasValidAccessToken := current.HasValidAccessToken(now)
+			if !hasValidAccessToken {
 				current.Unavailable = true
 				current.Status = StatusError
-				current.StatusMessage = "unauthorized"
+				if unauthorized {
+					current.LastError.Code = "unauthorized"
+					current.LastError.HTTPStatus = http.StatusUnauthorized
+					current.NextRefreshAfter = time.Time{}
+					current.StatusMessage = "unauthorized"
+				} else {
+					current.NextRefreshAfter = now.Add(refreshFailureBackoff)
+					current.StatusMessage = "token expired"
+				}
 			} else {
-				current.NextRefreshAfter = now.Add(refreshFailureBackoff)
+				nextRetry := now.Add(refreshFailureBackoff)
+				if exp, ok := current.AccessTokenExpirationTime(); ok && !exp.IsZero() && nextRetry.After(exp) {
+					nextRetry = exp
+				}
+				current.NextRefreshAfter = nextRetry
 			}
 			m.auths[id] = current
 			shouldReschedule = true
@@ -568,7 +708,7 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 		return nil, err
 	}
 	if updated == nil {
-		updated = cloned
+		updated = base.Clone()
 	}
 	// Preserve runtime created by the executor during Refresh.
 	// If executor didn't set one, fall back to the previous runtime.
@@ -580,7 +720,8 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	updated.LastError = nil
 	updated.StatusMessage = ""
 	updated.Unavailable = false
-	if updated.Status == StatusError {
+	updated.RejectedAccessToken = ""
+	if updated.Status == StatusError || updated.Status == "" {
 		updated.Status = StatusActive
 	}
 	updated.UpdatedAt = now
@@ -588,9 +729,17 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	if m.shouldRefresh(updated, now) {
 		updated.NextRefreshAfter = now.Add(refreshIneffectiveBackoff)
 	}
-	saved, errUpdate := m.Update(ctx, updated)
-	for _, model := range modelsToResume {
-		registry.GetGlobalRegistry().ResumeClientModel(id, model)
+	saved, errUpdate := m.UpdateRefreshedAuth(ctx, base, updated)
+	if errUpdate != nil && (errors.Is(errUpdate, context.Canceled) || errors.Is(errUpdate, context.DeadlineExceeded)) {
+		return nil, errUpdate
+	}
+	if saved != nil && saved.RegistrationEpoch == base.RegistrationEpoch && !CredentialsChanged(saved, updated) {
+		for _, model := range modelsToResume {
+			state := saved.ModelStates[model]
+			if state == nil || (!state.Unavailable && !state.Quota.Exceeded) {
+				registry.GetGlobalRegistry().ResumeClientModel(id, model)
+			}
+		}
 	}
 	if errUpdate != nil {
 		log.Debugf("persist refreshed auth %s (%s) failed: %v", auth.Provider, auth.ID, errUpdate)
@@ -598,5 +747,5 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	if saved != nil {
 		return saved, nil
 	}
-	return updated.Clone(), nil
+	return nil, fmt.Errorf("auth %s not found", id)
 }

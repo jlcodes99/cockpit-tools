@@ -1,4 +1,5 @@
-import { ArrowDownWideNarrow, ArrowDown, ArrowUp, Check, CircleAlert, ChevronDown, Copy, Clock, Database, ExternalLink, GripVertical, HelpCircle, KeyRound, Link2, LayoutGrid, Pencil, Plus, Rows3, Star, Trash2, X, Search, Settings, Activity, RefreshCw, RotateCw, Play } from "lucide-react";
+import { ModalErrorMessage } from "../ModalErrorMessage";
+import { Bird, ArrowDownWideNarrow, ArrowDown, ArrowUp, Check, CircleAlert, ChevronDown, Copy, Clock, Database, ExternalLink, GripVertical, HelpCircle, KeyRound, Link2, LayoutGrid, Pencil, Plus, Rows3, Star, Trash2, X, Search, Settings, Activity, RefreshCw, RotateCw, Play } from "lucide-react";
 import { MultiSelectFilterDropdown } from "../MultiSelectFilterDropdown";
 import { SingleSelectFilterDropdown } from "../SingleSelectFilterDropdown";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
@@ -7,9 +8,10 @@ import { PaginationControls } from "../PaginationControls";
 import { CodexModelContextWindowTable } from "./CodexModelContextWindowTable";
 import { resolveNewApiQuotaSnapshot } from "../../services/modelProviderUsageService";
 import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, DEEPSEEK_API_PROVIDER_ID, resolveCodexApiProviderPresetId } from "../../utils/codexProviderPresets";
+import { resolveCodexModelProviderForApiKey } from "../../utils/codexModelProviderKeyConfig";
 import { normalizeApiKeyFunOfficialUrl } from "../../utils/apikeyFunLinks";
 import { getCodexSubscriptionPresentation } from "../../types/codex";
-import { resolveCodexProviderCapabilityProfile } from "../../utils/codexProviderGateway";
+import { canConfigureCodexProviderVision, resolveCodexProviderCapabilityProfile } from "../../utils/codexProviderGateway";
 import { CodexQuickConfigCard } from "./CodexQuickConfigCard";
 import {
   CodexServicePanelModal,
@@ -27,6 +29,7 @@ export type CodexModelProviderManagerViewProps = ReturnType<typeof useCodexModel
 export function CodexModelProviderManagerView(props: CodexModelProviderManagerViewProps) {
   const {
     apiKeyPickerProviderId,
+    openProviderPelican,
     batchTestCancelling,
     batchTestDeleting,
     batchTestError,
@@ -44,7 +47,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
     closeBatchTestModal,
     closeModal,
     currentEditingProvider,
-    deepSeekStart,
+    providerLaunchDialog,
     displayInstances,
     draggedProviderCustomSortId,
     editingApiKey,
@@ -366,6 +369,10 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
             )}
           </div>
           <div className="codex-overview-selection-actions">
+            <button type="button" className="btn btn-secondary" onClick={openProviderPelican}
+              disabled={filteredProviders.every((provider) => !getSelectedProviderApiKey(provider))}>
+              <Bird size={14} />{t("pelican.title")}
+            </button>
             <button
               type="button"
               className="btn btn-secondary"
@@ -926,7 +933,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                         }
                         placeholder={t(
                           "codex.modelProviders.batchTest.modelCustomPlaceholder",
-                          "输入模型 ID，例如 gpt-4.1-mini",
+                          "输入模型 ID，例如 gpt-6.1-sol",
                         )}
                         style={{ marginTop: 8 }}
                       />
@@ -1820,7 +1827,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                     {form.wireApi === "responses"
                       ? t(
                           "codex.modelProviders.wireApi.deepseekResponsesHint",
-                          "原生 Responses 直连官方 API，写入官方 models.json（工具/shell/apply_patch），默认模型 deepseek-v4-flash。",
+                          "原生 Responses 直连官方 API，写入官方 models.json（工具/shell/apply_patch），默认模型 deepseek-flash。",
                         )
                       : t(
                           "codex.modelProviders.wireApi.deepseekChatHint",
@@ -1829,7 +1836,9 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                   </p>
                 )}
               </div>
-              {form.wireApi === "responses" && (
+              {/* DeepSeek 官方 Responses 强制直连、不支持 WebSocket：不展示该开关。 */}
+              {form.wireApi === "responses" &&
+                selectedPresetId !== DEEPSEEK_API_PROVIDER_ID && (
                 <div className="form-group">
                   <label>
                     {t(
@@ -1870,7 +1879,8 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                   </label>
                 </div>
               )}
-              {form.wireApi === "chat_completions" && (
+              {(canConfigureCodexProviderVision({ presetId: selectedPresetId, wireApi: form.wireApi }) ||
+                selectedPresetId === DEEPSEEK_API_PROVIDER_ID) && (
                 <>
                   <div className="form-group">
                     <label>
@@ -1883,12 +1893,13 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                       onChange={(event) =>
                         mutateForm({ modelCatalogText: event.target.value })
                       }
-                      placeholder={"deepseek-v4-flash\ndeepseek-v4-pro"}
+                      placeholder={"deepseek-flash\ndeepseek-v4-pro"}
                       disabled={saving}
                     />
                     <CodexModelContextWindowTable
                       models={parseModelCatalogText(form.modelCatalogText)}
                       drafts={form.modelContextWindowsDraft}
+                      showContextWindow={false}
                       onChange={(model, value) =>
                         mutateForm({
                           modelContextWindowsDraft: {
@@ -1897,9 +1908,22 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                           },
                         })
                       }
+                      visionStates={form.visionModelStates}
+                      visionDefault={form.supportsVision}
+                      onVisionChange={(model, value) =>
+                        mutateForm({
+                          visionModelStates: {
+                            ...form.visionModelStates,
+                            [model]: value,
+                          },
+                        })
+                      }
                       disabled={saving}
                     />
                   </div>
+                  {/* DeepSeek Responses 只保留逐模型能力；其他第三方协议均可配置默认值。 */}
+                  {canConfigureCodexProviderVision({ presetId: selectedPresetId, wireApi: form.wireApi }) && (
+                    <>
                   <div className="form-group">
                     <label>
                       {t(
@@ -1918,7 +1942,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                         <span className="provider-vision-toggle-desc">
                           {t(
                             "codex.modelProviders.vision.providerDefaultHint",
-                            "关闭时，只有下方列出的模型会允许图片输入；其他模型会在本地网关直接提示不支持。",
+                            "未单独设置的模型使用此默认值，GPT-5.5 及更新模型默认支持图片。可在模型列表中单独关闭。网关无法匹配视觉模型时会省略图片并继续处理文本。",
                           )}
                         </span>
                       </span>
@@ -1942,22 +1966,26 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                         "支持图片的模型",
                       )}
                     </label>
-                    <textarea
-                      className="form-input"
-                      rows={3}
-                      value={form.visionModelText}
-                      onChange={(event) =>
-                        mutateForm({ visionModelText: event.target.value })
-                      }
-                      placeholder={"qwen-vl-plus\ngpt-4o"}
-                      disabled={saving}
-                    />
-                  <p className="api-provider-hint">
-                    {t(
-                      "codex.modelProviders.vision.modelsHint",
-                      "每行一个模型名。适合同一供应商里只有部分视觉模型支持粘贴图片的情况。",
-                    )}
-                  </p>
+                    {parseModelCatalogText(form.modelCatalogText).length === 0 ? (
+                      <>
+                        <textarea
+                          className="form-input"
+                          rows={3}
+                          value={form.visionModelText}
+                          onChange={(event) =>
+                            mutateForm({ visionModelText: event.target.value })
+                          }
+                          placeholder={"qwen-vl-plus\ngpt-6.1-sol"}
+                          disabled={saving}
+                        />
+                        <p className="api-provider-hint">
+                          {t(
+                            "codex.modelProviders.vision.modelsHint",
+                            "每行一个模型名。适合同一供应商里只有部分视觉模型支持粘贴图片的情况。",
+                          )}
+                        </p>
+                      </>
+                    ) : null}
                 </div>
                 <div className="form-group">
                   <label>
@@ -1978,16 +2006,20 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                   <p className="api-provider-hint">
                     {t(
                       "codex.modelProviders.vision.routingModelHint",
-                      "当前模型不支持图片时，带图片的请求会改用该模型；留空则直接提示不支持。",
+                      "当前模型不支持图片时，网关会改用该模型；留空时自动使用唯一视觉模型，否则省略图片并继续处理文本。",
                     )}
                   </p>
                 </div>
-                <p className="api-provider-hint">
-                  {t(
-                    "codex.modelProviders.gatewayHint",
+                    </>
+                  )}
+                {form.wireApi === "chat_completions" && (
+                  <p className="api-provider-hint">
+                    {t(
+                      "codex.modelProviders.gatewayHint",
                       "第三方供应商启动时会使用本地网关隔离实例并完成协议转换；OpenAI 官方供应商保持直连。",
                     )}
                   </p>
+                )}
                 </>
               )}
               <div className="form-group">
@@ -2320,12 +2352,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                 </div>
               </div>
 
-              {formError && (
-                <div className="add-status error">
-                  <CircleAlert size={16} />
-                  <span>{formError}</span>
-                </div>
-              )}
+              <ModalErrorMessage message={formError} position="bottom" />
             </div>
 
             <div className="modal-footer">
@@ -2773,7 +2800,8 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
       )}
 
       {providerDetailId && (() => {
-        const provider = providers.find((item) => item.id === providerDetailId);
+        const storedProvider = providers.find((item) => item.id === providerDetailId);
+        const provider = storedProvider ? resolveCodexModelProviderForApiKey(storedProvider, getSelectedProviderApiKey(storedProvider)?.apiKey) : null;
         if (!provider) return null;
         const usageState = providerUsageMap[provider.id];
         const primaryApiKey = getSelectedProviderApiKey(provider);
@@ -3058,7 +3086,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
           />
         );
       })()}
-      {deepSeekStart.modal}
+      {providerLaunchDialog}
     </div>
   );
 }

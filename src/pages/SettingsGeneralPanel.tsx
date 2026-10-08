@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeLanguage } from '../i18n';
 import * as accountService from '../services/accountService';
-import { showFloatingCardWindow } from '../services/floatingCardService';
 import { AutoSwitchAccountScopeSelector } from '../components/AutoSwitchAccountScopeSelector';
 import { UI_SCALE_OPTION_STRINGS as UI_SCALE_OPTIONS } from '../utils/uiScale';
 import { setClaudeQuotaDisplayRemainingEnabled } from '../utils/claudeQuotaDisplayPreference';
@@ -10,6 +9,9 @@ import type { SideNavLayoutMode } from '../stores/useSideNavLayoutStore';
 import './settings/Settings.css';
 import { Save, FolderOpen, AlertCircle, RefreshCw } from 'lucide-react';
 import type { SettingsPageViewProps } from "./SettingsPageView";
+import { FloatingCardSettings, FloatingCardShowSetting } from "./settings/FloatingCardSettings";
+import { StartupPageSetting } from "./settings/StartupPageSetting";
+import { ThemeColorSetting } from './settings/ThemeColorSetting';
 import { SettingsCodexPlatformPanel } from "./SettingsCodexPlatformPanel";
 
 
@@ -735,39 +737,10 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 </>
               )}
 
-              <div className="settings-row">
-                <div className="row-label">
-                  <div className="row-title">{t('settings.general.floatingCardStartup', '启动时显示悬浮卡片')}</div>
-                  <div className="row-desc">{t('settings.general.floatingCardStartupDesc', '应用启动后默认展示悬浮账号卡片')}</div>
-                </div>
-                <div className="row-control">
-                  <select
-                    className="settings-select"
-                    value={floatingCardShowOnStartup ? 'true' : 'false'}
-                    onChange={(e) => setFloatingCardShowOnStartup(e.target.value === 'true')}
-                  >
-                    <option value="true">{t('common.enable', '启用')}</option>
-                    <option value="false">{t('common.disable', '停用')}</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="settings-row">
-                <div className="row-label">
-                  <div className="row-title">{t('settings.general.floatingCardAlwaysOnTop', '悬浮卡片默认置顶')}</div>
-                  <div className="row-desc">{t('settings.general.floatingCardAlwaysOnTopDesc', '新打开的悬浮卡片窗口默认保持置顶')}</div>
-                </div>
-                <div className="row-control">
-                  <select
-                    className="settings-select"
-                    value={floatingCardAlwaysOnTop ? 'true' : 'false'}
-                    onChange={(e) => setFloatingCardAlwaysOnTop(e.target.value === 'true')}
-                  >
-                    <option value="false">{t('common.disable', '停用')}</option>
-                    <option value="true">{t('common.enable', '启用')}</option>
-                  </select>
-                </div>
-              </div>
+              <FloatingCardSettings
+                startup={floatingCardShowOnStartup} onTop={floatingCardAlwaysOnTop}
+                onStartupChange={setFloatingCardShowOnStartup} onTopChange={setFloatingCardAlwaysOnTop}
+              />
 
               <div className="settings-row">
                 <div className="row-label">
@@ -952,17 +925,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 </div>
               </div>
 
-              <div className="settings-row">
-                <div className="row-label">
-                  <div className="row-title">{t('settings.general.floatingCardShowNow', '立即显示悬浮卡片')}</div>
-                  <div className="row-desc">{t('settings.general.floatingCardShowNowDesc', '关闭后可在这里或托盘菜单中重新打开')}</div>
-                </div>
-                <div className="row-control">
-                  <button className="btn btn-secondary" onClick={() => void showFloatingCardWindow()}>
-                    {t('settings.general.floatingCardShowNowAction', '显示悬浮卡片')}
-                  </button>
-                </div>
-              </div>
+              <FloatingCardShowSetting />
 
               <div className="settings-row">
                 <div className="row-label">
@@ -1000,58 +963,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                 </div>
               </div>
 
-              <div className="settings-row">
-                <div className="row-label">
-                  <div className="row-title">
-                    {t('settings.general.startupPage', '启动默认页')}
-                  </div>
-                  <div className="row-desc">
-                    {t(
-                      'settings.general.startupPageDesc',
-                      '应用冷启动时打开的页面；选“记住上次”则恢复上次离开时的页面'
-                    )}
-                  </div>
-                </div>
-                <div className="row-control">
-                  <select
-                    className="settings-select"
-                    value={startupPage}
-                    onChange={(e) => setStartupPage(e.target.value)}
-                  >
-                    <option value="last">
-                      {t('settings.general.startupPageLast', '记住上次')}
-                    </option>
-                    <option value="dashboard">{t('nav.dashboard', '仪表盘')}</option>
-                    <option value="overview">{t('nav.overview', 'Antigravity IDE')}</option>
-                    <option value="codex">{t('nav.codex', 'Codex')}</option>
-                    <option value="codex-api-service">
-                      {t('settings.general.startupPageCodexApi', 'Codex API 服务')}
-                    </option>
-                    <option value="claude">{t('nav.claude', 'Claude')}</option>
-                    <option value="github-copilot">{t('nav.githubCopilot', 'GitHub Copilot')}</option>
-                    <option value="windsurf">{t('nav.windsurf', 'Devin')}</option>
-                    <option value="kiro">Kiro</option>
-                    <option value="cursor">Cursor</option>
-                    <option value="grok">Grok CLI</option>
-                    <option value="codebuddy">{t('nav.codebuddy', 'CodeBuddy')}</option>
-                    <option value="codebuddy-cn">{t('nav.codebuddyCn', 'CodeBuddy CN')}</option>
-                    <option value="qoder">{t('nav.qoder', 'Qoder')}</option>
-                    <option value="zcode">ZCode</option>
-                    <option value="trae">{t('nav.trae', 'Trae')}</option>
-                    <option value="trae-solo">{t('nav.traeSolo', 'TRAE SOLO')}</option>
-                    <option value="trae-cn">{t('nav.traeCn', 'Trae CN')}</option>
-                    <option value="trae-solo-cn">{t('nav.traeSoloCn', 'TRAE SOLO CN')}</option>
-                    <option value="workbuddy">WorkBuddy</option>
-                    <option value="zed">{t('nav.zed', 'Zed')}</option>
-                    <option value="instances">{t('nav.instances', '应用多开')}</option>
-                    <option value="wakeup">{t('nav.wakeup', '唤醒任务')}</option>
-                    <option value="2fa">{t('nav.2faManager', '2FA 管理')}</option>
-                    <option value="api-relay">{t('nav.apiRelay', '中转站')}</option>
-                    <option value="manual">{t('nav.manual', '使用手册')}</option>
-                    <option value="settings">{t('nav.settings', '设置')}</option>
-                  </select>
-                </div>
-              </div>
+              <StartupPageSetting value={startupPage} onChange={setStartupPage} />
 
               <div className="settings-row">
                 <div className="row-label">
@@ -1066,34 +978,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                   </div>
                 </div>
                 <div className="row-control">
-                  <select
-                    className="settings-select"
-                    value={themeColor}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setThemeColor(next);
-                      try {
-                        document.documentElement.setAttribute('data-theme-color', next);
-                      } catch {
-                        /* ignore */
-                      }
-                    }}
-                  >
-                    <option value="default">{t('settings.general.themeColorDefault', '默认')}</option>
-                    <option value="nord">{t('settings.general.themeColorNord', 'Nord')}</option>
-                    <option value="tokyo-night">
-                      {t('settings.general.themeColorTokyoNight', 'Tokyo Night')}
-                    </option>
-                    <option value="catppuccin">
-                      {t('settings.general.themeColorCatppuccin', 'Catppuccin')}
-                    </option>
-                    <option value="gruvbox">
-                      {t('settings.general.themeColorGruvbox', 'Gruvbox')}
-                    </option>
-                    <option value="everforest">
-                      {t('settings.general.themeColorEverforest', 'Everforest')}
-                    </option>
-                  </select>
+                  <ThemeColorSetting value={themeColor} onChange={setThemeColor} />
                 </div>
               </div>
 

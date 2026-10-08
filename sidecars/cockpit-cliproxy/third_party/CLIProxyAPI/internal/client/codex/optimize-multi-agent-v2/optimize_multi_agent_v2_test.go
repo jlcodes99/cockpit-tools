@@ -433,6 +433,7 @@ func TestRestoreCodexMultiAgentV2Response(t *testing.T) {
 		}
 	}`)
 	got := RestoreCodexMultiAgentV2Response(payload, true)
+	t.Logf("restored=%s", got)
 	if namespace := gjson.GetBytes(got, "response.output.0.namespace").String(); namespace != codexCollaborationNamespace {
 		t.Fatalf("function namespace = %q, want collaboration", namespace)
 	}
@@ -453,6 +454,17 @@ func TestRestoreCodexMultiAgentV2Response(t *testing.T) {
 	}
 	if unchanged := RestoreCodexMultiAgentV2Response(payload, false); string(unchanged) != string(payload) {
 		t.Fatalf("inactive restore changed payload: %s", unchanged)
+	}
+}
+
+func TestRestoreCodexMultiAgentV2ResponseRestoresDottedToolName(t *testing.T) {
+	payload := []byte(`{"type":"response.completed","response":{"output":[{"type":"custom_tool_call","name":"collaboration-optimize.send_message","input":"{}"}]}}`)
+	got := RestoreCodexMultiAgentV2Response(payload, true)
+	if name := gjson.GetBytes(got, "response.output.0.name").String(); name != "send_message" {
+		t.Fatalf("dotted collaboration tool name = %q, want send_message", name)
+	}
+	if namespace := gjson.GetBytes(got, "response.output.0.namespace").String(); namespace != "collaboration" {
+		t.Fatalf("dotted collaboration namespace = %q, want collaboration", namespace)
 	}
 }
 
@@ -489,11 +501,14 @@ func TestRewriteCodexMultiAgentV2InputRewritesAgentMessage(t *testing.T) {
 	if encrypted := gjson.GetBytes(got, "input.0.content.1.encrypted_content"); encrypted.Exists() {
 		t.Fatalf("content[1].encrypted_content was preserved: %s", got)
 	}
-	if author := gjson.GetBytes(got, "input.0.author").String(); author != "/root" {
-		t.Fatalf("author = %q, want /root", author)
+	for _, field := range []string{"author", "recipient", "id", "internal_chat_message_metadata_passthrough"} {
+		if gjson.GetBytes(got, "input.0."+field).Exists() {
+			t.Fatalf("private field %s must not reach standard Responses upstream: %s", field, got)
+		}
 	}
-	if turnID := gjson.GetBytes(got, "input.0.internal_chat_message_metadata_passthrough.turn_id").String(); turnID != "019f92ae-7eae-7371-957e-8f6f734edddc" {
-		t.Fatalf("turn_id = %q", turnID)
+	metadata := strings.TrimPrefix(gjson.GetBytes(got, "input.0.content.2.text").String(), "Agent routing metadata: ")
+	if gjson.Get(metadata, "author").String() != "/root" || gjson.Get(metadata, "internal_chat_message_metadata_passthrough.turn_id").String() != "019f92ae-7eae-7371-957e-8f6f734edddc" {
+		t.Fatalf("routing metadata lost: %s", metadata)
 	}
 }
 
@@ -1005,5 +1020,63 @@ func BenchmarkOptimizeCodexMultiAgentV2Request(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		OptimizeCodexMultiAgentV2Request(ctx, headers, payload, cfg)
+	}
+}
+
+func TestRestoreCodexCollaborationFlatToolNames(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		tool string
+	}{
+		{name: "double colon", tool: "collaboration::spawn_agent"},
+		{name: "dotted", tool: "collaboration.spawn_agent"},
+		{name: "double underscore", tool: "collaboration__spawn_agent"},
+		{name: "optimized double colon", tool: "collaboration-optimize::wait_agent"},
+		{name: "optimized dotted", tool: "collaboration-optimize.wait_agent"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			payload := []byte(`{"type":"response.output_item.done","item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"` + testCase.tool + `","arguments":"{}"}}`)
+			got := RestoreCodexCollaborationFlatToolNames(payload)
+			name := gjson.GetBytes(got, "item.name").String()
+			if name == "" || name == testCase.tool || strings.Contains(name, ":") || strings.Contains(name, ".") {
+				t.Fatalf("flat tool name was not normalized: %s", got)
+			}
+			if namespace := gjson.GetBytes(got, "item.namespace").String(); namespace != codexCollaborationNamespace {
+				t.Fatalf("namespace = %q, want %q; payload=%s", namespace, codexCollaborationNamespace, got)
+			}
+		})
+	}
+
+	plain := []byte(`{"type":"function_call","name":"exec_command","arguments":"{}"}`)
+	if got := RestoreCodexCollaborationFlatToolNames(plain); string(got) != string(plain) {
+		t.Fatalf("ordinary tool call mutated: %s", got)
+	}
+
+	structured := []byte(`{"type":"function_call","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}`)
+	if got := RestoreCodexCollaborationFlatToolNames(structured); string(got) != string(structured) {
+		t.Fatalf("structured tool call mutated: %s", got)
+	}
+}
+
+func TestNormalizeCodexCollaborationArguments(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"wait_agent","arguments":"{\"timeout_ms\":180000.0}"}}`)
+	got := NormalizeCodexCollaborationArguments(payload)
+	if args := gjson.GetBytes(got, "item.arguments").String(); args != `{"timeout_ms":180000}` {
+		t.Fatalf("arguments = %q, want integral timeout_ms; payload=%s", args, got)
+	}
+
+	nonIntegral := []byte(`{"type":"function_call","name":"wait_agent","arguments":"{\"timeout_ms\":1.5}"}`)
+	if out := NormalizeCodexCollaborationArguments(nonIntegral); string(out) != string(nonIntegral) {
+		t.Fatalf("non-integral float must stay unchanged: %s", out)
+	}
+
+	otherTool := []byte(`{"type":"function_call","name":"exec_command","arguments":"{\"timeout_ms\":180000.0}"}`)
+	if out := NormalizeCodexCollaborationArguments(otherTool); string(out) != string(otherTool) {
+		t.Fatalf("non-collaboration tool must stay unchanged: %s", out)
 	}
 }

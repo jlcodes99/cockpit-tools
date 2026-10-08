@@ -1,6 +1,7 @@
 .codex-local-access-modal-overlay {
+  --codex-local-access-overlay-padding: clamp(16px, 2.6vw, 32px);
   overflow-y: auto;
-  padding: clamp(16px, 2.6vw, 32px);
+  padding: var(--codex-local-access-overlay-padding);
   background:
     radial-gradient(
       circle at top left,
@@ -19,7 +20,7 @@
   align-items: flex-start;
 }
 
-.codex-local-access-modal {
+.modal.codex-local-access-modal {
   --codex-local-border: color-mix(in srgb, var(--primary) 14%, var(--border));
   --codex-local-border-strong: color-mix(
     in srgb,
@@ -40,7 +41,14 @@
     0 34px 90px rgba(2, 6, 23, 0.24), 0 10px 32px rgba(15, 23, 42, 0.14);
   width: 100%;
   max-width: min(1120px, calc(100vw - 32px));
-  max-height: none;
+  max-height: calc(
+    100vh - var(--codex-local-access-overlay-padding) -
+      var(--codex-local-access-overlay-padding)
+  );
+  max-height: calc(
+    100dvh - var(--codex-local-access-overlay-padding) -
+      var(--codex-local-access-overlay-padding)
+  );
   margin: 0 auto;
   border-radius: 28px;
   border: 1px solid var(--codex-local-border);
@@ -87,13 +95,14 @@
   z-index: 1;
 }
 
-.codex-local-access-modal-members {
+.modal.codex-local-access-modal-members {
   max-width: min(1080px, calc(100vw - 24px));
 }
 
-.codex-local-access-modal .modal-header {
+.modal.codex-local-access-modal > .modal-header {
   position: relative;
   display: block;
+  flex: 0 0 auto;
   padding: 24px 28px 18px;
   border-bottom: 1px solid
     color-mix(in srgb, var(--primary) 8%, var(--border-light));
@@ -331,26 +340,27 @@
   transform: rotate(90deg) translateY(-1px);
 }
 
-.codex-local-access-modal .modal-body {
+.modal.codex-local-access-modal > .modal-body.codex-local-access-modal-body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  gap: 18px;
   min-height: 0;
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 18px 28px 24px;
   background: transparent;
 }
 
-.codex-local-access-modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  min-height: 0;
-  max-height: none;
-  overflow: visible;
+/* 弹框高度受限后，正文自身是滚动容器：直接子项必须按内容高度排布。
+   flex 默认 shrink 会在窗口高度不足时把「总量统计」等卡片压扁并裁掉。 */
+.codex-local-access-modal-body > * {
+  flex: 0 0 auto;
 }
 
-.codex-local-access-modal .modal-footer {
+.modal.codex-local-access-modal > .modal-footer {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
@@ -1855,6 +1865,95 @@
   gap: 14px;
 }
 
+.codex-local-access-image-model-error {
+  color: var(--error-color, #dc2626);
+  font-size: 12px;
+}
+
+.codex-local-access-config-hint {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.codex-local-access-config-card-image-forward {
+  gap: 10px;
+}
+
+/* 紧凑版生图模型：与「选择生图账号」同排的一行下拉，不占整张卡片。 */
+.codex-image-model-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codex-image-model-inline-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.codex-image-model-inline-select {
+  min-width: 150px;
+}
+
+.codex-image-model-inline-input {
+  width: 170px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+}
+
+.codex-image-model-inline-input:focus {
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.codex-image-model-inline-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+/* 生图转发：勾选开关与已选账号标签，窄宽度下自动换行。 */
+.codex-local-access-image-forward-toggle {
+  align-self: flex-start;
+  color: var(--text-secondary);
+}
+
+.codex-local-access-image-forward-status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.codex-local-access-image-forward-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codex-local-access-image-forward-tag {
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-secondary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 启动预览里的独立行：状态标签在上，勾选与「选择 GPT 账号」在下。 */
 .codex-local-access-port-card {
   gap: 14px;
 }
@@ -2544,9 +2643,9 @@
 }
 
 .codex-local-access-member-mainline
-  .tier-badge.pro:not(.codex-pro-lite):not(.codex-pro-max),
+  .tier-badge.pro:not(.codex-pro-lite):not(.codex-pro-max):not(.codex-pro-500),
 .codex-local-access-account-stat-main
-  .tier-badge.pro:not(.codex-pro-lite):not(.codex-pro-max) {
+  .tier-badge.pro:not(.codex-pro-lite):not(.codex-pro-max):not(.codex-pro-500) {
   background: var(--plan-pro-bg);
   color: var(--plan-pro-color);
   border: 1px solid var(--plan-pro-border);
@@ -2626,17 +2725,18 @@
 
 @media (max-width: 760px) {
   .codex-local-access-modal-overlay {
-    padding: 12px;
+    --codex-local-access-overlay-padding: 12px;
   }
 
-  .codex-local-access-modal {
+  .modal.codex-local-access-modal {
     max-width: 100%;
     border-radius: 24px;
   }
 
-  .codex-local-access-modal .modal-header,
-  .codex-local-access-modal .modal-body,
-  .codex-local-access-modal .modal-footer {
+  .modal.codex-local-access-modal > .modal-header,
+  .modal.codex-local-access-modal
+    > .modal-body.codex-local-access-modal-body,
+  .modal.codex-local-access-modal > .modal-footer {
     padding-left: 18px;
     padding-right: 18px;
   }
@@ -2732,7 +2832,7 @@
     grid-template-columns: 1fr;
   }
 
-  .codex-local-access-modal .modal-footer {
+  .modal.codex-local-access-modal > .modal-footer {
     flex-wrap: nowrap;
   }
 
@@ -2963,6 +3063,12 @@
 
 [data-theme="dark"] .codex-local-access-free-toggle,
 [data-theme="dark"] .codex-local-access-session-affinity-settings {
+  background: rgba(15, 23, 42, 0.62);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-muted));
+}
+
+[data-theme="dark"] .codex-local-access-image-forward-tag {
   background: rgba(15, 23, 42, 0.62);
   border-color: rgba(148, 163, 184, 0.2);
   color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-muted));
@@ -3266,4 +3372,25 @@
 [data-theme="dark"] .codex-local-access-panel-grid .group-account-empty {
   background: rgba(15, 23, 42, 0.42);
   border-color: rgba(148, 163, 184, 0.16);
+}
+
+/* 跨平台成员：Grok 平台账号分组（与 Codex 列表同款行样式）。 */
+/* 跨平台成员：Grok 平台账号行与 Codex 行共用同一列表，仅错误提示单独着色。 */
+.codex-local-access-grok-member-error {
+  color: var(--danger, #dc2626);
+}
+
+/* Keep action failures visible while the settings body scrolls. */
+.codex-local-access-error-area {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: min(25vh, 160px);
+  margin: 0 20px 12px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+
+.codex-local-access-error-area .codex-local-access-inline-error {
+  margin-bottom: 0;
 }

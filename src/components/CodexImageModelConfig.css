@@ -1,0 +1,8 @@
+.codex-image-model-config { display: flex; flex-direction: column; gap: 8px; min-width: 0; width: 100%; }
+.codex-image-main-model { min-width: 0; }
+.codex-image-main-model .codex-image-model-inline-label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.codex-image-main-model-hint { display: block; margin-top: 6px; color: var(--text-secondary); line-height: 1.5; overflow-wrap: anywhere; }
+.codex-image-main-model input[aria-invalid="true"] { border-color: var(--danger, #dc2626); }
+.codex-image-account-picker .codex-oauth-binding-picker-header { flex-wrap: wrap; align-items: flex-start; }
+.codex-image-account-picker .codex-oauth-binding-picker-controls { flex: 1 1 320px; }
+.codex-image-model-inline-input { max-width: 100%; }

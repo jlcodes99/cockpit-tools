@@ -27,3 +27,20 @@ The user wants native Responses without a local remapping gateway. Official slug
 - Chat Completions still uses the instance provider gateway for protocol conversion.
 - Existing DeepSeek accounts with explicit Chat Completions are **not** auto-migrated away from Chat.
 - Accounts without a wire protocol still default to Responses for DeepSeek.
+
+## Update: direct / CDP catalogs use the official entries verbatim
+
+The shell-template decision above only still applies to **gateway** mode, where the instance
+provider gateway rewrites the model name. The **direct** and **CDP** catalogs no longer derive
+their metadata from a Codex built-in model shell:
+
+- Entries written to `{instance_dir}/cockpit-model-catalog.json` are the complete official
+  `models.json` entries, so `multi_agent_version`, `minimal_client_version`,
+  `effective_context_window_percent` and friends match DeepSeek's declaration instead of the
+  shell's, and shell-only fields (pricing tiers, plan gating, apps/plugins instruction switches)
+  no longer leak onto a DeepSeek model.
+- Switching to DeepSeek also writes `web_search = "disabled"` and temporarily removes the
+  top-level keys that contradict the official model declaration (the `DEL_B` list of DeepSeek's
+  `codex-deepseek-setup.sh`), recording original values so switching away restores them.
+  `model_context_window` / `model_auto_compact_token_limit` are intentionally *not* in that list:
+  Cockpit's context-management feature owns them as an explicit user setting.

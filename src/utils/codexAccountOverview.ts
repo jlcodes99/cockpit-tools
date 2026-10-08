@@ -1,7 +1,9 @@
+import { getCodexAccountQuotaError } from "./codexProxyRuntimeError";
 import type { TFunction } from "i18next";
 import type { CodexAccount } from "../types/codex";
 import {
   getCodexPlanFilterKey,
+  getCodexQuotaWindows,
   isCodexApiKeyAccount,
   isCodexNewApiAccount,
   isCodexPendingOAuthAccount,
@@ -302,7 +304,7 @@ export function isCodexOverviewAccountAbnormal(
   if (isCodexClientReauthNoticeOnly(account)) return false;
   if (account.requires_reauth === true) return true;
 
-  const rawMessage = account.quota_error?.message?.trim() ?? "";
+  const rawMessage = getCodexAccountQuotaError(account.quota_error)?.message?.trim() ?? "";
   if (!rawMessage) return false;
   const lowerRawMessage = rawMessage.toLowerCase();
   const statusCode =
@@ -357,6 +359,13 @@ interface CodexOverviewComparatorOptions {
   resolveSubscriptionTimestamp: (account: CodexAccount) => number | null;
 }
 
+function getQuotaSortWindow(account: CodexAccount, weekly: boolean) {
+  return getCodexQuotaWindows(account.quota).find((window) => {
+    const minutes = window.windowMinutes ?? (window.id === 'secondary' ? 10_080 : 300);
+    return (minutes >= 10_079) === weekly;
+  });
+}
+
 export function createCodexOverviewAccountComparator({
   sortBy,
   sortDirection,
@@ -405,14 +414,8 @@ export function createCodexOverviewAccountComparator({
       return sortDirection === "desc" ? diff : -diff;
     }
     if (sortBy === "weekly_reset" || sortBy === "hourly_reset") {
-      const leftReset =
-        sortBy === "weekly_reset"
-          ? (left.quota?.weekly_reset_time ?? null)
-          : (left.quota?.hourly_reset_time ?? null);
-      const rightReset =
-        sortBy === "weekly_reset"
-          ? (right.quota?.weekly_reset_time ?? null)
-          : (right.quota?.hourly_reset_time ?? null);
+      const leftReset = getQuotaSortWindow(left, sortBy === "weekly_reset")?.resetTime ?? null;
+      const rightReset = getQuotaSortWindow(right, sortBy === "weekly_reset")?.resetTime ?? null;
       if (leftReset == null && rightReset == null) return 0;
       if (leftReset == null) return 1;
       if (rightReset == null) return -1;
@@ -431,14 +434,11 @@ export function createCodexOverviewAccountComparator({
         : leftExpiry - rightExpiry;
     }
 
-    const leftValue =
-      sortBy === "weekly"
-        ? (left.quota?.weekly_percentage ?? -1)
-        : (left.quota?.hourly_percentage ?? -1);
-    const rightValue =
-      sortBy === "weekly"
-        ? (right.quota?.weekly_percentage ?? -1)
-        : (right.quota?.hourly_percentage ?? -1);
+    const leftValue = getQuotaSortWindow(left, sortBy === "weekly")?.percentage;
+    const rightValue = getQuotaSortWindow(right, sortBy === "weekly")?.percentage;
+    if (leftValue == null && rightValue == null) return 0;
+    if (leftValue == null) return 1;
+    if (rightValue == null) return -1;
     return sortDirection === "desc"
       ? rightValue - leftValue
       : leftValue - rightValue;

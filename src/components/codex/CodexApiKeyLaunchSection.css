@@ -1,0 +1,192 @@
+.codex-api-key-launch {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.codex-api-key-launch-dialog .modal-body {
+  overflow-y: auto;
+}
+
+.codex-api-key-launch-dialog .codex-launch-preview-tool-section {
+  padding: 16px 4px;
+}
+
+.codex-api-key-launch-dialog .codex-launch-preview-tool-section
+  .codex-api-key-launch {
+  gap: 16px;
+}
+
+.codex-api-key-launch-context-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.codex-api-key-launch-context-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-secondary, rgba(248, 250, 252, 0.9));
+  font-size: 12px;
+}
+
+.codex-api-key-launch-context-model {
+  color: var(--text-primary);
+}
+
+.codex-api-key-launch-context-value {
+  color: var(--text-muted);
+}
+
+.codex-api-key-launch-mode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codex-api-key-launch-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.codex-api-key-launch-mode:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+}
+
+.codex-api-key-launch-mode.active {
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface, #fff));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codex-api-key-launch-mode:disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
+}
+
+.codex-api-key-launch-mode-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.codex-api-key-launch-mode-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.codex-api-key-launch-imagegen {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.codex-api-key-launch-imagegen-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.codex-api-key-launch-imagegen-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.codex-api-key-launch-imagegen-head input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 2px solid color-mix(in srgb, var(--text-muted) 72%, transparent);
+  border-radius: 5px;
+  background: rgba(248, 250, 252, 0.86);
+  position: relative;
+  flex-shrink: 0;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.codex-api-key-launch-imagegen-head input[type="checkbox"]:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 58%, transparent);
+}
+
+.codex-api-key-launch-imagegen-head input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.codex-api-key-launch-imagegen-head input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 2px 4px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.codex-api-key-launch-imagegen-head input[type="checkbox"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.codex-api-key-launch-imagegen-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.codex-api-key-launch-imagegen-status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.codex-api-key-launch-imagegen-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.codex-api-key-launch-imagegen-tag {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--text-secondary, var(--text-muted));
+  font-size: 11px;
+}
+
+[data-theme="dark"] .codex-api-key-launch-mode {
+  background: rgba(30, 41, 59, 0.7);
+}
+
+[data-theme="dark"] .codex-api-key-launch-imagegen-head input[type="checkbox"] {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(148, 163, 184, 0.6);
+}

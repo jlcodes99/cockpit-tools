@@ -225,6 +225,35 @@
         assert_eq!(normalized.routes[0].namespace, "cpa");
         assert_eq!(normalized.routes[0].provider_account_id, api_account.id);
 
+        let legacy_internal_namespace = crate::models::CodexInstanceModelRouting {
+            routes: vec![crate::models::CodexInstanceApiRoute {
+                namespace: "__provider_gateway__".to_string(),
+                ..routing.routes[0].clone()
+            }],
+            ..routing.clone()
+        };
+        let normalized_legacy =
+            crate::modules::codex_local_access::validate_mixed_model_routing_config(
+                Some(&oauth_account.id),
+                &legacy_internal_namespace,
+            )
+            .expect("migrate legacy provider gateway namespace");
+        assert_eq!(normalized_legacy.routes[0].namespace, "api");
+
+        let mut gateway_api_account = api_account.clone();
+        gateway_api_account.bound_oauth_account_id = Some(oauth_account.id.clone());
+        save_account(&gateway_api_account).expect("save provider gateway API account");
+        let provider_gateway_bind_id =
+            crate::modules::codex_instance::provider_gateway_bind_account_id(
+                &gateway_api_account.id,
+            )
+            .expect("provider gateway bind id");
+        crate::modules::codex_local_access::validate_mixed_model_routing_config(
+            Some(&provider_gateway_bind_id),
+            &routing,
+        )
+        .expect("resolve provider gateway binding to its OAuth account");
+
         let empty_selection = crate::models::CodexInstanceModelRouting {
             routes: vec![crate::models::CodexInstanceApiRoute {
                 selected_models: Some(Vec::new()),
@@ -560,6 +589,118 @@ multi_agent = true
     }
 
     #[test]
+    fn switch_aligns_user_locked_forced_login_method_with_written_credentials() {
+        // API Key 账号：用户锁成 chatgpt 时官方客户端会把 api key 判定为未登录。
+        let api_key_dir = make_temp_dir("codex-forced-login-method-api-key");
+        fs::write(
+            api_key_dir.join("config.toml"),
+            "model = \"gpt-5\"\nforced_login_method = \"chatgpt\"\n",
+        )
+        .expect("write api key config");
+        let api_key_account = CodexAccount::new_api_key(
+            "openai-api-key".to_string(),
+            "openai@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::OpenaiBuiltin,
+            Some("https://api.openai.com/v1/".to_string()),
+            None,
+            None,
+            Vec::new(),
+        );
+
+        write_auth_file_to_dir(&api_key_dir, &api_key_account).expect("write api key bundle");
+
+        let api_key_config =
+            fs::read_to_string(api_key_dir.join("config.toml")).expect("read api key config");
+        assert!(api_key_config.contains("forced_login_method = \"api\""));
+        assert!(!api_key_config.contains("forced_login_method = \"chatgpt\""));
+        assert!(api_key_config.contains("model = \"gpt-5\""));
+        fs::remove_dir_all(&api_key_dir).expect("cleanup temp dir");
+
+        // OAuth 账号：用户锁成 api 时同样要回到 chatgpt。
+        let oauth_dir = make_temp_dir("codex-forced-login-method-oauth");
+        fs::write(
+            oauth_dir.join("config.toml"),
+            "model = \"gpt-5\"\nforced_login_method = \"api\"\n",
+        )
+        .expect("write oauth config");
+        let oauth_account = build_test_oauth_account(make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            "forced-login-method",
+            "rt-forced-login-method",
+        ));
+
+        write_auth_file_to_dir(&oauth_dir, &oauth_account).expect("write oauth bundle");
+
+        let oauth_config =
+            fs::read_to_string(oauth_dir.join("config.toml")).expect("read oauth config");
+        assert!(oauth_config.contains("forced_login_method = \"chatgpt\""));
+        assert!(!oauth_config.contains("forced_login_method = \"api\""));
+        fs::remove_dir_all(&oauth_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn switch_keeps_forced_login_method_untouched_when_user_never_locked_it() {
+        // 用户没有设置该键：官方客户端本来就会按 auth.json 自动识别，工具不新增锁定。
+        let base_dir = make_temp_dir("codex-forced-login-method-unset");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5\"\n").expect("write config");
+        let account = CodexAccount::new_api_key(
+            "openai-api-key".to_string(),
+            "openai@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::OpenaiBuiltin,
+            Some("https://api.openai.com/v1/".to_string()),
+            None,
+            None,
+            Vec::new(),
+        );
+
+        write_auth_file_to_dir(&base_dir, &account).expect("write bundle");
+
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(!config.contains("forced_login_method"));
+        assert!(config.contains("model = \"gpt-5\""));
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+
+        // 目录里没有 config.toml 时也不为该键新建文件。
+        let empty_dir = make_temp_dir("codex-forced-login-method-no-config");
+        write_auth_file_to_dir(&empty_dir, &account).expect("write bundle without config");
+        assert!(!empty_dir.join("config.toml").exists());
+        fs::remove_dir_all(&empty_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn switch_skips_forced_login_method_rewrite_when_value_already_matches() {
+        let base_dir = make_temp_dir("codex-forced-login-method-stable");
+        let config_path = base_dir.join("config.toml");
+        fs::write(
+            &config_path,
+            "model = \"gpt-5\"\nforced_login_method = \"chatgpt\"\n",
+        )
+        .expect("write config");
+        let account = build_test_oauth_account(make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            "forced-login-method-stable",
+            "rt-forced-login-method-stable",
+        ));
+
+        assert!(!super::apply_forced_login_method_to_config_toml(&base_dir, &account)
+            .expect("align forced_login_method"));
+
+        let config = fs::read_to_string(&config_path).expect("read config");
+        assert_eq!(
+            config,
+            "model = \"gpt-5\"\nforced_login_method = \"chatgpt\"\n",
+            "值一致时不应重复落盘"
+        );
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
     fn api_key_config_toml_uses_http_only_provider_for_relay_without_websocket_support() {
         let base_dir = make_temp_dir("codex-api-key-config-custom-provider-test");
         let mut account = CodexAccount::new_api_key(
@@ -798,6 +939,49 @@ X-Custom = "keep-me"
     }
 
     #[test]
+    fn migrates_legacy_apikey_fun_provider_base_url_and_wire_api() {
+        let mut account = CodexAccount::new_api_key(
+            "legacy-apikey-account-id".to_string(),
+            "relay@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.apikey.fun/v1".to_string()),
+            Some("apikey_fun".to_string()),
+            Some("APIKEY.FUN".to_string()),
+            vec!["gpt-5.5".to_string()],
+        );
+        account.api_wire_api = Some("chat_completions".to_string());
+
+        assert!(migrate_apikey_fun_account(&mut account));
+        assert_eq!(
+            account.api_base_url.as_deref(),
+            Some("https://api.apikey.fan/v1")
+        );
+        assert_eq!(account.api_wire_api.as_deref(), Some("responses"));
+    }
+
+    #[test]
+    fn keeps_current_apikey_fan_provider_base_url() {
+        let mut account = CodexAccount::new_api_key(
+            "current-apikey-account-id".to_string(),
+            "relay@example.com".to_string(),
+            "sk-test".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.apikey.fan/v1".to_string()),
+            Some("apikey_fun".to_string()),
+            Some("APIKEY.FUN".to_string()),
+            vec!["gpt-5.5".to_string()],
+        );
+        account.api_wire_api = Some("responses".to_string());
+
+        assert!(!migrate_apikey_fun_account(&mut account));
+        assert_eq!(
+            account.api_base_url.as_deref(),
+            Some("https://api.apikey.fan/v1")
+        );
+    }
+
+    #[test]
     fn remote_api_key_imagegen_does_not_disable_hosted_chat_tool() {
         let base_dir = make_temp_dir("codex-remote-api-key-imagegen-test");
         let provider_config = resolve_api_provider_config(
@@ -910,7 +1094,7 @@ http_headers = { "x-openai-actor-authorization" = "legacy", "X-Custom" = "keep-m
     }
 
     #[test]
-    fn pure_responses_relay_without_image_catalog_uses_builtin_openai() {
+    fn pure_responses_relay_without_image_catalog_uses_http_only_provider() {
         let base_dir = make_temp_dir("codex-third-party-clear-stale-actor");
         let config_path = base_dir.join("config.toml");
         fs::write(
@@ -947,9 +1131,10 @@ supports_websockets = false
             !content.contains(CODEX_IMAGEGEN_ACTOR_HEADER),
             "stale actor must be cleared when catalog has no gpt-image-2: {content}"
         );
-        assert!(content.contains("openai_base_url = \"https://relay.example.com/v1\""));
-        assert!(!content.contains("experimental_bearer_token"));
-        assert!(!content.contains("codex_local_access"));
+        assert!(content.contains("model_provider = \"codex_local_access\""));
+        assert!(content.contains("supports_websockets = false"));
+        assert!(content.contains("experimental_bearer_token = \"sk-new\""));
+        assert!(!content.contains("openai_base_url"));
         let auth: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(base_dir.join("auth.json")).expect("read auth"),
         )
@@ -1303,7 +1488,10 @@ supports_websockets = false
             &fs::read_to_string(profile_dir.join("auth.json")).expect("read auth file"),
         )
         .expect("parse auth file");
-        assert!(auth_file.get("auth_mode").is_none());
+        assert_eq!(
+            auth_file.get("auth_mode").and_then(|value| value.as_str()),
+            Some("chatgpt")
+        );
         assert_eq!(
             auth_file.get("OPENAI_API_KEY"),
             Some(&serde_json::Value::Null)
@@ -1323,6 +1511,57 @@ supports_websockets = false
         // local-access loopback + bound OAuth → also write imagegen headers
         assert!(config.contains(CODEX_IMAGEGEN_ACTOR_HEADER));
         assert!(config.contains(CODEX_DISABLE_HOSTED_IMAGE_GENERATION_HEADER));
+    }
+
+    #[test]
+    fn api_key_bundle_bound_to_full_oauth_aligns_forced_login_method_to_oauth() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let env = TestEnvGuard::new("codex-api-key-bound-oauth-forced-login-method-test");
+        let oauth_account = seed_oauth_account(make_codex_tokens(
+            "demo@example.com",
+            "acc-current",
+            "org-current",
+            "bound-forced-login-method",
+            "rt-bound-forced-login-method",
+        ));
+        let mut api_key_account = CodexAccount::new_api_key(
+            "bound-forced-login-method".to_string(),
+            "bound-forced-login-method@example.com".to_string(),
+            "sk-bound-forced-login-method".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://relay.example.com/v1".to_string()),
+            Some("relay".to_string()),
+            Some("Relay".to_string()),
+            Vec::new(),
+        );
+        api_key_account.bound_oauth_account_id = Some(oauth_account.id.clone());
+        let profile_dir = env.home_dir.join("managed-profile");
+        fs::create_dir_all(&profile_dir).expect("create profile dir");
+        // 用户此前把官方客户端锁在 api 登录方式。
+        fs::write(
+            profile_dir.join("config.toml"),
+            "model = \"gpt-5\"\nforced_login_method = \"api\"\n",
+        )
+        .expect("write config");
+
+        write_account_bundle_to_dir(&profile_dir, &api_key_account).expect("write account bundle");
+
+        // auth.json 放的是绑定 OAuth 的凭据，登录方式必须跟着变成 chatgpt，否则官方会判未登录。
+        let auth_file: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(profile_dir.join("auth.json")).expect("read auth file"),
+        )
+        .expect("parse auth file");
+        assert!(
+            auth_file.get("tokens").is_some(),
+            "bound OAuth 应写入 OAuth 凭据: {}",
+            auth_file
+        );
+        let config = fs::read_to_string(profile_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("forced_login_method = \"chatgpt\""));
+        assert!(config.contains("https://relay.example.com/v1"));
+        assert!(config.contains("model = \"gpt-5\""));
     }
 
     #[test]
@@ -1681,7 +1920,10 @@ supports_websockets = false
             auth_file.get("tokens").is_some(),
             "auth.json should keep bound OAuth tokens"
         );
-        assert!(auth_file.get("auth_mode").is_none());
+        assert_eq!(
+            auth_file.get("auth_mode").and_then(|value| value.as_str()),
+            Some("chatgpt")
+        );
 
         let _ = remove_accounts(&[oauth_account.id]);
     }
@@ -1712,10 +1954,13 @@ supports_websockets = false
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
-        // Catalog sync maps custom display models onto official slugs; relays use openai_base_url.
+        // Catalog sync maps custom display models onto official slugs. HTTP-only relays
+        // must keep their managed provider so supports_websockets=false stays effective.
         assert!(config.contains("model = \"gpt-5.6-sol\""));
-        assert!(config.contains("openai_base_url = \"https://relay.example.com/v1\""));
-        assert!(!config.contains("codex_local_access"));
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://relay.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
+        assert!(!config.contains("openai_base_url"));
         let catalog: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
                 .expect("read managed catalog"),
@@ -1741,6 +1986,38 @@ supports_websockets = false
                     == Some("custom-b")
                 && model.get("visibility").and_then(serde_json::Value::as_str) == Some("list")
         }));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn responses_api_key_bundle_defaults_missing_wire_api_to_http_only_provider() {
+        let base_dir = make_temp_dir("codex-api-key-default-wire-api-http-only-test");
+        let mut account = CodexAccount::new_api_key(
+            "custom-api-key".to_string(),
+            "custom@example.com".to_string(),
+            "sk-custom".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://relay.example.com/v1".to_string()),
+            Some("relay".to_string()),
+            Some("Relay".to_string()),
+            vec!["custom-a".to_string()],
+        );
+        account.api_wire_api = None;
+        account.api_supports_websockets = false;
+        account.api_sync_model_catalog_to_codex = true;
+
+        write_account_bundle_to_dir(&base_dir, &account).expect("write account bundle");
+
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
+        assert!(config.contains("base_url = \"https://relay.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
+        assert!(!config.contains("openai_base_url"));
+        assert!(base_dir
+            .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
+            .exists());
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -1830,10 +2107,13 @@ supports_websockets = false
             .expect("write multi-instance account projection");
         let config = fs::read_to_string(profile_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
-        // Catalog sync maps custom display models onto official slugs; relays use openai_base_url.
+        // Catalog sync maps custom display models onto official slugs. HTTP-only relays
+        // must keep their managed provider so supports_websockets=false stays effective.
         assert!(config.contains("model = \"gpt-5.6-sol\""));
-        assert!(config.contains("openai_base_url = \"https://relay.example.com/v1\""));
-        assert!(!config.contains("codex_local_access"));
+        assert!(config.contains("model_provider = \"codex_local_access\""));
+        assert!(config.contains("base_url = \"https://relay.example.com/v1\""));
+        assert!(config.contains("supports_websockets = false"));
+        assert!(!config.contains("openai_base_url"));
         let auth: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(profile_dir.join("auth.json")).expect("read instance auth"),
         )

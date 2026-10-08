@@ -89,6 +89,9 @@ func TestNewCodexStatusErrTreatsUsageLimitAsRetryableRateLimit(t *testing.T) {
 	if *retryAfter != 120*time.Second {
 		t.Fatalf("retryAfter = %v, want %v", *retryAfter, 120*time.Second)
 	}
+	if !err.IsCredentialScoped() {
+		t.Fatal("usage_limit_reached should be credential scoped")
+	}
 }
 
 func TestIsCodexUsageLimitError(t *testing.T) {
@@ -143,7 +146,7 @@ func TestNewCodexStatusErrClassifiesKnownCodexFailures(t *testing.T) {
 			body:       []byte(`{"error":{"message":"context length exceeded","type":"invalid_request_error","code":"context_length_exceeded"}}`),
 			wantStatus: http.StatusRequestEntityTooLarge,
 			wantType:   "invalid_request_error",
-			wantCode:   "context_too_large",
+			wantCode:   "context_length_exceeded",
 		},
 		{
 			name:       "thinking signature",

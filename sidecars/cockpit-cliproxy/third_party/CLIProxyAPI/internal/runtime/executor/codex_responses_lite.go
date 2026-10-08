@@ -1,16 +1,39 @@
 package executor
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
 const codexResponsesLiteHeaderName = "X-OpenAI-Internal-Codex-Responses-Lite"
+
+func codexRequestHeadersWithGinResponsesLite(ctx context.Context, headers http.Header) http.Header {
+	if strings.TrimSpace(headerValueCaseInsensitive(headers, codexResponsesLiteHeaderName)) != "" || ctx == nil {
+		return headers
+	}
+	ginCtx, ok := ctx.Value("gin").(*gin.Context)
+	if !ok || ginCtx == nil || ginCtx.Request == nil {
+		return headers
+	}
+	value := strings.TrimSpace(headerValueCaseInsensitive(ginCtx.Request.Header, codexResponsesLiteHeaderName))
+	if value == "" {
+		return headers
+	}
+	if headers == nil {
+		headers = make(http.Header)
+	} else {
+		headers = headers.Clone()
+	}
+	headers.Set(codexResponsesLiteHeaderName, value)
+	return headers
+}
 
 func codexResponsesLiteEnabled(headers http.Header) bool {
 	for name := range headers {
@@ -32,11 +55,23 @@ func removeCodexResponsesLiteHeaderForFullResponse(headers http.Header, full boo
 	}
 }
 
+// Responses Lite is an internal Codex transport hint. Do not forward it to
+// third-party API-key gateways; official OAuth requests keep the header.
+func removeCodexResponsesLiteHeaderForAPIKey(headers http.Header, auth *cliproxyauth.Auth) {
+	if !codexAuthUsesAPIKey(auth) {
+		return
+	}
+	removeCodexResponsesLiteHeaderForFullResponse(headers, true)
+}
+
 func normalizeCodexResponsesLiteRequest(body []byte, headers http.Header, auth *cliproxyauth.Auth, allowFullResponsesForImage bool) ([]byte, bool) {
-	if (!codexResponsesLiteEnabled(headers) && !isCodexResponsesLiteRequest(body, headers)) || auth == nil || codexAuthUsesAPIKey(auth) {
+	if (!codexResponsesLiteEnabled(headers) && !isCodexResponsesLiteRequest(body, headers)) || auth == nil {
 		return body, false
 	}
 	body, _ = sjson.SetBytes(body, "parallel_tool_calls", false)
+	if codexAuthUsesAPIKey(auth) {
+		return body, false
+	}
 	if allowFullResponsesForImage && codexRequestUsesImageGeneration(body) {
 		return body, true
 	}

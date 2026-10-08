@@ -1,6 +1,6 @@
 [package]
 name = "cockpit-tools"
-version = "1.3.36"
+version = "1.3.66"
 description = "Cockpit Tools"
 authors = ["jlcodes"]
 license = "CC-BY-NC-SA-4.0"
@@ -19,8 +19,11 @@ swift-rs = { version = "1.0.7", features = ["build"] }
 openssl = "0.10.80"
 rustls-webpki = "0.103.13"
 
-tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "unstable"] }
+# Reuse Tauri's web engine without its IPC bridge for untrusted generated HTML.
+wry = { version = "0.54", default-features = false, features = ["os-webview"] }
 tauri-plugin-opener = "2"
+tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-notification = "2"
@@ -28,6 +31,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
 serde_json = "1"
 toml_edit = "0.20"
 uuid = { version = "1.10", features = ["v4", "serde"] }
@@ -48,10 +52,14 @@ minisign-verify = "0.2"
 tokio = { version = "1", features = ["full"] }
 tokio-rustls = "0.26"
 rustls = "0.23"
+rustls-native-certs = "0.8"
 rcgen = "0.13"
 thiserror = "2"
 anyhow = "1.0"
 sha2 = "0.10"
+flate2 = "1"
+tar = "0.4"
+fs2 = "0.4"
 ring = "0.17"
 ed25519-dalek = { version = "2.2", features = ["pkcs8", "rand_core"] }
 crypto_box = { version = "0.9.1", features = ["seal", "std"] }
@@ -81,7 +89,10 @@ pbkdf2 = "0.12"
 sha1 = "0.10"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+age = { version = "0.11", default-features = false }
+keyring = { version = "3.6", features = ["windows-native"] }
+tempfile = "3"
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_Storage_Packaging_Appx", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 junction.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]

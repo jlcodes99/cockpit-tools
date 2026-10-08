@@ -3,6 +3,29 @@
 use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    #[test]
+    fn deep_repair_normalizes_replayed_response_item_ids() {
+        let content = concat!(
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"old\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"id\":\"fc_de28d1b9-9d75-9d1f-a581-a32e81c8494a_0\",\"call_id\":\"call-a9610ddc\",\"name\":\"apply_patch\",\"input\":\"patch\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"id\":\"b45f0d9b-159f-4517-b432-7adf31be8189\",\"call_id\":\"call_1\",\"name\":\"exec_command\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"reasoning\",\"id\":\"rs_ok\"}}\n"
+        );
+
+        let rewrite = rewrite_rollout_session_meta_providers(content, "openai")
+            .expect("rewrite rollout session meta providers");
+
+        assert!(rewrite.rewrite_needed);
+        let updated = match rewrite.updated_content.expect("updated content") {
+            RolloutProviderUpdate::FullContent(content) => content,
+            other => panic!("unexpected rollout update: {:?}", other),
+        };
+        assert!(updated.contains("\"ctc_fc_de28d1b9-9d75-9d1f-a581-a32e81c8494a_0\""));
+        assert!(updated.contains("\"fc_b45f0d9b-159f-4517-b432-7adf31be8189\""));
+        assert!(updated.contains("\"rs_ok\""));
+        assert!(!updated.contains("\"fc_de28d1b9"));
+    }
+
     fn make_temp_dir(prefix: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)

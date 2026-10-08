@@ -417,6 +417,7 @@ struct CodexQuotaMetric {
     key: &'static str,
     label: String,
     percentage: i32,
+    window_minutes: Option<i64>,
 }
 
 fn extract_quota_metrics(account: &CodexAccount) -> Vec<CodexQuotaMetric> {
@@ -433,6 +434,7 @@ fn extract_quota_metrics(account: &CodexAccount) -> Vec<CodexQuotaMetric> {
             key: "primary_window",
             label: format_codex_quota_metric_label(quota.hourly_window_minutes, "5h"),
             percentage: quota.hourly_percentage.clamp(0, 100),
+            window_minutes: quota.hourly_window_minutes,
         });
     }
 
@@ -441,14 +443,7 @@ fn extract_quota_metrics(account: &CodexAccount) -> Vec<CodexQuotaMetric> {
             key: "secondary_window",
             label: format_codex_quota_metric_label(quota.weekly_window_minutes, "Weekly"),
             percentage: quota.weekly_percentage.clamp(0, 100),
-        });
-    }
-
-    if metrics.is_empty() {
-        metrics.push(CodexQuotaMetric {
-            key: "primary_window",
-            label: format_codex_quota_metric_label(quota.hourly_window_minutes, "5h"),
-            percentage: quota.hourly_percentage.clamp(0, 100),
+            window_minutes: quota.weekly_window_minutes,
         });
     }
 
@@ -463,16 +458,33 @@ fn average_quota_percentage(metrics: &[CodexQuotaMetric]) -> f64 {
     sum as f64 / metrics.len() as f64
 }
 
+fn quota_metric_threshold(
+    metric: &CodexQuotaMetric,
+    primary_threshold: i32,
+    secondary_threshold: i32,
+) -> Option<i32> {
+    // Match the existing quota-label tolerance for a weekly window.
+    if let Some(minutes) = metric.window_minutes.filter(|minutes| *minutes > 0) {
+        return Some(if minutes >= 7 * 24 * 60 - 1 {
+            secondary_threshold
+        } else {
+            primary_threshold
+        });
+    }
+    match metric.key {
+        "primary_window" => Some(primary_threshold),
+        "secondary_window" => Some(secondary_threshold),
+        _ => None,
+    }
+}
+
 fn metric_crossed_threshold(
     metric: &CodexQuotaMetric,
     primary_threshold: i32,
     secondary_threshold: i32,
 ) -> bool {
-    match metric.key {
-        "primary_window" => metric.percentage <= primary_threshold,
-        "secondary_window" => metric.percentage <= secondary_threshold,
-        _ => false,
-    }
+    quota_metric_threshold(metric, primary_threshold, secondary_threshold)
+        .is_some_and(|threshold| metric.percentage <= threshold)
 }
 
 fn metric_above_threshold(
@@ -480,11 +492,8 @@ fn metric_above_threshold(
     primary_threshold: i32,
     secondary_threshold: i32,
 ) -> bool {
-    match metric.key {
-        "primary_window" => metric.percentage > primary_threshold,
-        "secondary_window" => metric.percentage > secondary_threshold,
-        _ => true,
-    }
+    quota_metric_threshold(metric, primary_threshold, secondary_threshold)
+        .is_none_or(|threshold| metric.percentage > threshold)
 }
 
 fn metric_margin_over_threshold(
@@ -492,11 +501,8 @@ fn metric_margin_over_threshold(
     primary_threshold: i32,
     secondary_threshold: i32,
 ) -> Option<i32> {
-    match metric.key {
-        "primary_window" => Some(metric.percentage - primary_threshold),
-        "secondary_window" => Some(metric.percentage - secondary_threshold),
-        _ => None,
-    }
+    quota_metric_threshold(metric, primary_threshold, secondary_threshold)
+        .map(|threshold| metric.percentage - threshold)
 }
 
 #[derive(Debug, Clone)]
@@ -708,7 +714,7 @@ pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, Strin
 
         if candidates.is_empty() {
             logger::log_warn(&format!(
-                "[AutoSwitch][Codex] 当前账号命中阈值 (primary<={}%, secondary<={}%)，但没有可切换候选账号",
+                "[AutoSwitch][Codex] 当前账号命中阈值 (short_cycle<={}%, weekly<={}%)，但没有可切换候选账号",
                 primary_threshold, secondary_threshold
             ));
             return Ok(None);
@@ -775,7 +781,7 @@ pub fn run_quota_alert_if_needed(
         current_email: current.email.clone(),
         threshold: primary_threshold,
         threshold_display: Some(format!(
-            "primary_window<={}%, secondary_window<={}%",
+            "short_cycle<={}%, weekly<={}%",
             primary_threshold, secondary_threshold
         )),
         lowest_percentage,

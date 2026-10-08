@@ -163,6 +163,9 @@ pub struct SponsorIntegration {
     pub integration_type: String,
     #[serde(default)]
     pub base_url: String,
+    /// 已废弃的历史线路；命中时自动改写为当前 `base_url`。
+    #[serde(default)]
+    pub base_url_aliases: Vec<String>,
     #[serde(default)]
     pub wire_api: Option<String>,
     #[serde(default)]
@@ -1158,6 +1161,23 @@ pub async fn get_sponsor_module_state() -> Result<SponsorModuleState, String> {
     let sponsor_module =
         filter_sponsor_module(raw_payload.sponsor_module, current_version, &locale);
     Ok(SponsorModuleState { sponsor_module })
+}
+
+pub async fn sync_sponsor_routes_from_announcements(
+) -> Result<crate::modules::sponsor_route_sync::SponsorRouteSyncSummary, String> {
+    let raw_payload = load_announcements_raw().await?;
+    if !raw_payload.api_relay_enabled {
+        return Ok(Default::default());
+    }
+    let Some(module) = raw_payload.sponsor_module else {
+        return Ok(Default::default());
+    };
+    let sponsors = module.sponsors;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::modules::sponsor_route_sync::sync_sponsor_routes(&sponsors)
+    })
+    .await
+    .map_err(|error| format!("赞助商线路同步任务失败: {}", error))?
 }
 
 pub async fn force_refresh_sponsor_module() -> Result<SponsorModuleState, String> {

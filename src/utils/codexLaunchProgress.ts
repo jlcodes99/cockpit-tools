@@ -1,5 +1,16 @@
 import type { CodexSwitchAuthFailure } from './codexSwitchAuthFailure';
 
+/** Lifecycle failures are retryable setup errors, not requests to reauthorize. */
+export function codexLaunchErrorKey(error: unknown): string | null {
+  const code = String(error ?? '').replace(/^Error:\s*/, '');
+  if (code === 'CODEX_SWITCH_BINDING_FAILED') return 'codex.launchErrors.bindingFailed';
+  if (code === 'CODEX_PROCESS_SCAN_FAILED') return 'codex.launchErrors.processScanFailed';
+  if (code === 'PROXY_ENTRY_PORT_UNAVAILABLE' || code === 'PROXY_RUNTIME_NOT_READY') {
+    return 'codex.launchErrors.proxyEntryFailed';
+  }
+  return null;
+}
+
 export type CodexLaunchOperation = 'instance-launch' | 'switch-and-start';
 
 export type CodexLaunchStepId =

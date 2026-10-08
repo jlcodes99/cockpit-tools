@@ -7,6 +7,7 @@ import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import {
   CodexLaunchPreviewModal,
   type CodexLaunchPreviewAction,
+  type CodexLaunchPreviewLaunchOptions,
   type CodexLaunchPreviewSummary,
 } from "../components/codex/CodexLaunchPreviewModal";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
@@ -38,7 +39,6 @@ import {
   resolveCodexApiProviderPresetId,
 } from "../utils/codexProviderPresets";
 import { useEscClose } from "../hooks/useEscClose";
-import { useDeepSeekDirectModelPrompt } from "../components/codex/DeepSeekDirectModelModal";
 import {
   isDeepSeekAccount,
   parseCodexBoundAccountId,
@@ -132,7 +132,6 @@ export function CodexInstancesContent({
     text: string;
     tone?: "error";
   } | null>(null);
-  const deepSeekStart = useDeepSeekDirectModelPrompt();
 
   useEscClose(!!launchModal, () => setLaunchModal(null));
   useEscClose(showSyncSettingsModal, () => setShowSyncSettingsModal(false));
@@ -285,41 +284,45 @@ export function CodexInstancesContent({
     setLaunchPreview(null);
   }, []);
 
-  const executeLaunchPreview = useCallback(async () => {
-    const preview = launchPreview;
-    const resolve = pendingLaunchResolve.current;
-    if (!preview || !resolve) return false;
-    const { instance, account } = preview;
-    if (account && isDeepSeekAccount(account)) {
-      const instanceName = instance.isDefault
-        ? t("instances.defaultName", "默认实例")
-        : instance.name || t("instances.defaultName", "默认实例");
-      const updated = await deepSeekStart.confirmStart(
-        account,
-        updateAccountInstanceAccess,
-        instanceName,
-      );
-      if (!updated) return false;
-      const nextBindId = resolveDeepSeekBindAccountId(updated);
-      if ((instance.bindAccountId || null) !== nextBindId) {
-        await instanceStore.updateInstance({
-          instanceId: instance.id,
-          bindAccountId: nextBindId,
-          followLocalAccount: false,
-        });
+  const executeLaunchPreview = useCallback(
+    async (
+      _launchAfterSwitch: boolean,
+      launchOptions?: CodexLaunchPreviewLaunchOptions,
+    ) => {
+      const preview = launchPreview;
+      const resolve = pendingLaunchResolve.current;
+      if (!preview || !resolve) return false;
+      const { instance, account } = preview;
+      let launchAccount = account;
+      if (
+        account &&
+        isDeepSeekAccount(account) &&
+        launchOptions?.deepSeekAccessMode
+      ) {
+        launchAccount = await updateAccountInstanceAccess(
+          account.id,
+          launchOptions.deepSeekAccessMode,
+          null,
+          launchOptions.imageGenerationAccountIds ?? [],
+        );
       }
-    }
-    pendingLaunchResolve.current = null;
-    setLaunchPreview(null);
-    resolve(true);
-    return true;
-  }, [
-    deepSeekStart,
-    instanceStore,
-    launchPreview,
-    t,
-    updateAccountInstanceAccess,
-  ]);
+      if (launchAccount && isDeepSeekAccount(launchAccount)) {
+        const nextBindId = resolveDeepSeekBindAccountId(launchAccount);
+        if ((instance.bindAccountId || null) !== nextBindId) {
+          await instanceStore.updateInstance({
+            instanceId: instance.id,
+            bindAccountId: nextBindId,
+            followLocalAccount: false,
+          });
+        }
+      }
+      pendingLaunchResolve.current = null;
+      setLaunchPreview(null);
+      resolve(true);
+      return true;
+    },
+    [instanceStore, launchPreview, updateAccountInstanceAccess],
+  );
 
   const defaultInstance = useMemo(
     () =>
@@ -838,7 +841,6 @@ export function CodexInstancesContent({
           onExecute={executeLaunchPreview}
         />
       )}
-      {deepSeekStart.modal}
     </>
   );
 }

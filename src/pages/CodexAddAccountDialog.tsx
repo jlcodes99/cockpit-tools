@@ -1,9 +1,16 @@
 import { createPortal } from "react-dom";
-import { RefreshCw, Download, X, Globe, KeyRound, Database, Copy, Check, RotateCw, CircleAlert, Info, Star, Eye, EyeOff, FileUp, FileText, ExternalLink, FolderPlus, Terminal, ShieldCheck } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { RefreshCw, Download, X, Globe, KeyRound, Database, Copy, Check, RotateCw, CircleAlert, Info, Star, Eye, EyeOff, FileUp, FileText, ExternalLink, FolderPlus, Monitor, Terminal, ShieldCheck } from "lucide-react";
+import { ModalErrorMessage } from "../components/ModalErrorMessage";
+import { scrollElementIntoView } from "../utils/reducedMotion";
 import { MfaQuickCodeSelect } from "../components/MfaQuickCodeSelect";
-import { CodexModelContextWindowTable } from "../components/codex/CodexModelContextWindowTable";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
+import { useEscCloseTopmost } from "../hooks/useEscClose";
+import { useModalScrollLock } from "../hooks/useModalScrollLock";
+import "./CodexAccountDialogs.css";
+import { CODEX_TEMP_LOGIN_STEPS } from "../services/codexTempLoginService";
 import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, COCKPIT_API_PROVIDER_ID } from "../utils/codexProviderPresets";
+import { canUseCodexAccountProxy } from "../utils/codexAccountProxy";
 import type { CodexAccountsViewProps } from "./CodexAccountsView";
 
 /** 渲染 CodexAccountsOverviewPanel 的 expr:showAddModal && 业务面板。 */
@@ -20,7 +27,6 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     apiModelCatalogFetching,
     apiModelCatalogInput,
     apiModelCatalogSyncAvailable,
-    apiModelContextWindowsInput,
     apiProviderPresetId,
     apiSyncModelCatalogToCodex,
     closeCodexAddModal,
@@ -40,12 +46,17 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     handleCopyOauthUrl,
     handleCopyReauthEmail,
     handleFetchApiModelCatalog,
+    handleCloseLocalImportInstancePicker,
     handleImportFromFiles,
     handleImportFromLocal,
+    handleCancelCodexTempLogin,
     handleOpenCodexSecuritySettings,
     handleOpenDeviceAuthUrl,
     handleOpenOauthIncognitoWindow,
     handleOpenOauthUrl,
+    handleOauthProxyToggle,
+    handleOauthProxyInputChange,
+    handleOauthProxyStart,
     handleOpenProviderLink,
     handlePendingOAuthEmailInputChange,
     handleReleaseOauthPort,
@@ -53,9 +64,11 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     handleRetryOauthTokenExchange,
     handleSavePendingOAuthAccount,
     handleSelectApiProviderPreset,
+    handleSelectLocalImportInstance,
     handleSelectManagedProvider,
     handleSelectManagedProviderApiKey,
     handleStartDeviceAuth,
+    handleStartCodexTempLogin,
     handleSubmitOauthCallbackUrl,
     handleSwitchBrowserOAuth,
     handleSyncImportedToApiServiceChange,
@@ -64,6 +77,9 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     isMacOS,
     isOauthTimeoutState,
     isOauthTokenExchangeErrorState,
+    localImportBusy,
+    localImportError,
+    localImportInstances,
     managedProviderApiKeyId,
     managedProviderId,
     managedProviders,
@@ -75,6 +91,12 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     oauthCompletingRef,
     oauthLoginIdRef,
     oauthMethod,
+    oauthProxyEnabled,
+    oauthProxyInput,
+    oauthProxyReady,
+    oauthProxyFieldError,
+    oauthProxyUsesAccountExit,
+    oauthProxyExitLabel,
     oauthPortInUse,
     oauthPrepareError,
     oauthTimeoutInfo,
@@ -97,7 +119,6 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     setApiKeyInputVisible,
     setApiModelCatalogError,
     setApiModelCatalogInput,
-    setApiModelContextWindowsInput,
     setApiSyncModelCatalogToCodex,
     setNewManagedProviderNameInput,
     setOauthCallbackInput,
@@ -107,22 +128,60 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
     sponsorApiProviderTemplates,
     syncImportedToApiService,
     t,
+    tempLoginRecoverable,
+    tempLoginCancelling,
+    tempLoginNotice,
+    tempLoginPhase,
+    tempLoginPhaseMessage,
+    tempLoginRunning,
     tokenImportProgress,
     tokenInput,
   } = props;
+  const addStatusRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showAddModal || addStatus !== "error" || !addMessage) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (addStatusRef.current) scrollElementIntoView(addStatusRef.current, { block: "end" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [showAddModal, addStatus, addMessage]);
+  useEffect(() => {
+    if (oauthProxyFieldError) {
+      document.getElementById("codex-oauth-proxy-url")?.focus();
+    }
+  }, [oauthProxyFieldError]);
+  // 选实例弹框叠加在添加账号弹框之上：只让最上层响应 ESC。
+  useEscCloseTopmost(
+    Boolean(localImportInstances),
+    handleCloseLocalImportInstancePicker,
+  );
+  useModalScrollLock(Boolean(showAddModal));
+  // 官方登录进行中时，ESC 先取消登录再关闭弹框，避免留下无人接管的临时 profile。
+  useEscCloseTopmost(tempLoginRunning, () => {
+    void handleCancelCodexTempLogin();
+    closeCodexAddModal();
+  });
   return showAddModal &&
             createPortal(
-              <div className="modal-overlay">
+              <>
+                <div className="modal-overlay codex-account-dialog-overlay">
                 <div
-                  className="modal-content codex-add-modal codex-account-add-modal platform-account-add-modal"
+                  className="modal-content codex-add-modal codex-account-add-modal codex-provider-modal codex-account-dialog"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="modal-header">
                     <h2>{t("codex.addModal.title", "添加 Codex 账号")}</h2>
                     <button
                       className="modal-close"
-                      onClick={closeCodexAddModal}
-                      disabled={importing}
+                      onClick={
+                        tempLoginRunning
+                          ? () => {
+                              void handleCancelCodexTempLogin();
+                              closeCodexAddModal();
+                            }
+                          : closeCodexAddModal
+                      }
+                      disabled={importing || tempLoginCancelling}
                       aria-label={t("common.close", "关闭")}
                     >
                       <X />
@@ -130,9 +189,19 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                   </div>
                   <div className="modal-tabs">
                     <button
+                      className={`modal-tab ${addTab === "tempLogin" ? "active" : ""}`}
+                      onClick={() => openCodexAddModal("tempLogin")}
+                      disabled={importing || tempLoginRunning}
+                    >
+                      <Monitor size={14} />
+                      <span className="modal-tab-label">
+                        {t("codex.tempLogin.tab", "官方登录")}
+                      </span>
+                    </button>
+                    <button
                       className={`modal-tab ${addTab === "oauth" ? "active" : ""}`}
                       onClick={() => openCodexAddModal("oauth")}
-                      disabled={importing}
+                      disabled={importing || tempLoginRunning}
                     >
                       <Globe size={14} />
                       <span className="modal-tab-label">
@@ -145,7 +214,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                     <button
                       className={`modal-tab ${addTab === "token" ? "active" : ""}`}
                       onClick={() => openCodexAddModal("token")}
-                      disabled={importing}
+                      disabled={importing || tempLoginRunning}
                     >
                       <FileText size={14} />
                       <span className="modal-tab-label">
@@ -155,7 +224,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                     <button
                       className={`modal-tab ${addTab === "apikey" ? "active" : ""}`}
                       onClick={() => openCodexAddModal("apikey")}
-                      disabled={importing}
+                      disabled={importing || tempLoginRunning}
                     >
                       <KeyRound size={14} />
                       <span className="modal-tab-label">
@@ -165,7 +234,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                     <button
                       className={`modal-tab ${addTab === "import" ? "active" : ""}`}
                       onClick={() => openCodexAddModal("import")}
-                      disabled={importing}
+                      disabled={importing || tempLoginRunning}
                     >
                       <Database size={14} />
                       <span className="modal-tab-label">
@@ -185,9 +254,8 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                         </span>
                       </div>
                     )}
-                    {addTab !== "oauth" && <MfaQuickCodeSelect />}
-                    {addTab === "oauth" && (
-                      <div className="add-section">
+                    {reauthTargetAccount && (
+                      <div className="codex-reauth-target-summary">
                         {reauthTargetEmail && (
                           <div className="oauth-link codex-reauth-email-block">
                             <label>
@@ -229,11 +297,103 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             </div>
                           </div>
                         )}
-                        {reauthTargetAccount && (
-                          <div className="codex-reauth-note-summary">
-                            {renderAccountNoteButton(reauthTargetAccount)}
-                          </div>
+                        <div className="codex-reauth-note-summary">
+                          {renderAccountNoteButton(reauthTargetAccount)}
+                        </div>
+                      </div>
+                    )}
+                    {addTab !== "oauth" && <MfaQuickCodeSelect />}
+                    {addTab === "tempLogin" && (
+                      <div className="add-section">
+                        <p className="section-desc">
+                          {t(
+                            "codex.tempLogin.desc",
+                            "由官方客户端打开浏览器完成登录并处理授权回调。Cockpit 在临时客户端关闭后读取最终凭据并导入。",
+                          )}
+                        </p>
+                        <ol className="codex-temp-login-steps">
+                          {CODEX_TEMP_LOGIN_STEPS.map((step, index) => {
+                            const currentIndex = tempLoginPhase
+                              ? CODEX_TEMP_LOGIN_STEPS.indexOf(tempLoginPhase)
+                              : -1;
+                            const state =
+                              currentIndex < 0
+                                ? "idle"
+                                : index < currentIndex
+                                  ? "done"
+                                  : index === currentIndex
+                                    ? "active"
+                                    : "idle";
+                            return (
+                              <li
+                                key={step}
+                                className={`codex-temp-login-step ${state}`}
+                              >
+                                <span className="codex-temp-login-step-index">
+                                  {index + 1}
+                                </span>
+                                <span className="codex-temp-login-step-label">
+                                  {tempLoginPhaseMessage(step)}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                        {tempLoginRunning && !tempLoginCancelling && (
+                          <p className="section-desc codex-temp-login-hint">
+                            {t(
+                              "codex.tempLogin.waitingHint",
+                              "请在官方客户端打开的浏览器中完成登录；检测到完整凭据后会自动关闭临时客户端并导入（最长等待 10 分钟）。",
+                            )}
+                          </p>
                         )}
+                        {tempLoginNotice && (
+                          <p className="section-desc codex-temp-login-hint">
+                            {tempLoginNotice}
+                          </p>
+                        )}
+                        <button
+                          className="btn btn-primary btn-full"
+                          onClick={() => void handleStartCodexTempLogin()}
+                          disabled={tempLoginRunning || importing}
+                        >
+                          {tempLoginRunning ? (
+                            <RefreshCw size={16} className="loading-spinner" />
+                          ) : (
+                            <Monitor size={16} />
+                          )}
+                          {tempLoginRecoverable ? t("codex.tempLogin.retryImport") : t("codex.tempLogin.start", "打开官方客户端并登录")}
+                        </button>
+                        {tempLoginRecoverable && !tempLoginRunning && (
+                          <button className="btn btn-secondary btn-full" onClick={() => void handleStartCodexTempLogin(true)} disabled={importing}>
+                            <Monitor size={16} />
+                            {t("codex.tempLogin.start", "打开官方客户端并登录")}
+                          </button>
+                        )}
+                        {tempLoginRunning && (
+                          <button
+                            className="btn btn-secondary btn-full"
+                            onClick={() => void handleCancelCodexTempLogin()}
+                            disabled={tempLoginCancelling}
+                          >
+                            {tempLoginCancelling ? (
+                              <RefreshCw size={16} className="loading-spinner" />
+                            ) : (
+                              <X size={16} />
+                            )}
+                            {t("codex.tempLogin.cancel", "取消登录")}
+                          </button>
+                        )}
+                        <p className="section-desc codex-temp-login-note">
+                          {t(
+                            "codex.tempLogin.note",
+                            "导入成功后清理临时配置与认证条目；导入失败保留凭据供重试。默认实例和多开实例不受影响。",
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {addTab === "oauth" && (
+                      <div className="add-section">
                         {shouldShowPendingOAuthDraftForm && (
                           <div className="codex-pending-oauth-draft">
                             <div className="oauth-link">
@@ -315,6 +475,74 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             "通过 OpenAI 官方 OAuth 授权您的 Codex 账号。",
                           )}
                         </p>
+                        {/* 重新授权已有账号时，只有后端确认了实际出口或出现错误才显示代理区，
+                            避免在没有生效出口时闪出一个用不上的开关。 */}
+                        {(!reauthTargetAccount ||
+                          (!isMacOS &&
+                            (Boolean(oauthProxyExitLabel) ||
+                              Boolean(oauthPrepareError) ||
+                              (oauthProxyEnabled && !oauthProxyUsesAccountExit)))) && (
+                          <div className="codex-oauth-proxy-setup">
+                            <label className="codex-import-api-service-toggle">
+                              <span className="codex-import-api-service-toggle-copy">
+                                <strong>{t("codex.oauthProxy.toggle")}</strong>
+                                <small>
+                                  {reauthTargetAccount
+                                    ? t("codex.oauthProxy.hint")
+                                    : t(isMacOS ? "codex.oauthProxy.macUnavailable" : "codex.oauthProxy.hint")}
+                                </small>
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={oauthProxyEnabled}
+                                disabled={isMacOS || deviceAuthStarting || oauthCompletingRef.current}
+                                onChange={(event) => void handleOauthProxyToggle(event.target.checked)}
+                              />
+                              <span className="codex-import-api-service-switch" />
+                            </label>
+                            {oauthProxyEnabled && (
+                              <>
+                                {oauthProxyExitLabel && oauthProxyUsesAccountExit && (
+                                  <p className="section-desc">
+                                    {t("codex.oauthProxy.reauthExit", { name: oauthProxyExitLabel })}
+                                  </p>
+                                )}
+                                <div className="codex-oauth-proxy-field">
+                                  <label htmlFor="codex-oauth-proxy-url">{t("codex.oauthProxy.urlLabel")}</label>
+                                  <input
+                                    id="codex-oauth-proxy-url"
+                                    className={oauthProxyFieldError ? "input-error" : ""}
+                                    type="password"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    value={oauthProxyInput}
+                                    onChange={(event) => handleOauthProxyInputChange(event.target.value)}
+                                    placeholder={t("codex.oauthProxy.urlPlaceholder")}
+                                    aria-invalid={Boolean(oauthProxyFieldError)}
+                                    aria-describedby={oauthProxyFieldError ? "codex-oauth-proxy-error" : undefined}
+                                  />
+                                  {oauthProxyFieldError && <span id="codex-oauth-proxy-error" className="field-error">{oauthProxyFieldError}</span>}
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={handleOauthProxyStart}
+                                    disabled={oauthProxyReady || oauthCompletingRef.current}
+                                  >
+                                    {t(oauthProxyReady ? "codex.oauthProxy.active" : "codex.oauthProxy.start")}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {/* macOS 当前构建不支持内置授权窗口代理：如实说明，不让重新授权看起来已走该出口。 */}
+                        {reauthTargetAccount &&
+                          isMacOS &&
+                          canUseCodexAccountProxy(reauthTargetAccount) && (
+                            <p className="section-desc">
+                              {t("codex.oauthProxy.macUnavailable")}
+                            </p>
+                          )}
                         <div
                           className="codex-oauth-method-switch"
                           role="tablist"
@@ -341,7 +569,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             className={oauthMethod === "device" ? "active" : ""}
                             onClick={() => void handleStartDeviceAuth()}
                             disabled={
-                              deviceAuthStarting || oauthCompletingRef.current
+                              deviceAuthStarting || oauthCompletingRef.current || oauthProxyEnabled
                             }
                             role="tab"
                             aria-selected={oauthMethod === "device"}
@@ -492,7 +720,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             </div>
                           ) : oauthUrl ? (
                             <div className="oauth-url-section">
-                              <div className="oauth-link">
+                              {!oauthProxyEnabled && <div className="oauth-link">
                                 <label>
                                   {t("accounts.oauth.linkLabel", "授权链接")}
                                 </label>
@@ -510,7 +738,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                     )}
                                   </button>
                                 </div>
-                              </div>
+                              </div>}
                               <button
                                 className="btn btn-primary btn-full"
                                 onClick={
@@ -529,12 +757,14 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                       "codex.oauth.timeoutRetry",
                                       "刷新授权链接",
                                     )
-                                  : t(
+                                  : oauthProxyEnabled
+                                    ? t("codex.oauthProxy.openWindow")
+                                    : t(
                                       "common.shared.oauth.openBrowser",
                                       "Open in Browser",
                                     )}
                               </button>
-                              {!isOauthTimeoutState && isMacOS && (
+                              {!isOauthTimeoutState && isMacOS && !oauthProxyEnabled && (
                                 <button
                                   type="button"
                                   className="btn btn-secondary btn-full"
@@ -620,7 +850,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                 )}
                               </div>
                             </div>
-                          ) : (
+                          ) : oauthProxyEnabled && !oauthProxyReady ? null : (
                             <div className="oauth-loading">
                               <RefreshCw
                                 size={24}
@@ -1007,18 +1237,6 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                                 disabled={addStatus === "loading"}
                                 aria-describedby="codex-api-model-catalog-add-hint"
                               />
-                              <CodexModelContextWindowTable
-                                models={apiModelCatalogDraft}
-                                drafts={apiModelContextWindowsInput}
-                                onChange={(model, value) => {
-                                  setApiModelContextWindowsInput((current) => ({
-                                    ...current,
-                                    [model]: value,
-                                  }));
-                                  setApiModelCatalogError(null);
-                                }}
-                                disabled={addStatus === "loading"}
-                              />
                               <div className="api-model-catalog-toolbar">
                                 <p
                                   id="codex-api-model-catalog-add-hint"
@@ -1099,28 +1317,6 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                             )}
                           </>
                         )}
-                        <div className="api-key-add-actions">
-                          <button
-                            className="btn btn-primary"
-                            onClick={() => void handleApiKeyLogin()}
-                            disabled={
-                              importing ||
-                              addStatus === "loading" ||
-                              apiModelCatalogFetching ||
-                              !apiKeyInput.trim()
-                            }
-                          >
-                            {addStatus === "loading" ? (
-                              <RefreshCw
-                                size={16}
-                                className="loading-spinner"
-                              />
-                            ) : (
-                              <KeyRound size={16} />
-                            )}
-                            {t("common.shared.addAccount", "添加账号")}
-                          </button>
-                        </div>
                       </div>
                     )}
                     {addTab === "token" && (
@@ -1296,7 +1492,7 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                       </div>
                     )}
                     {addStatus !== "idle" && (
-                      <div className={`add-status ${addStatus}`}>
+                      <div ref={addStatusRef} role={addStatus === "error" ? "alert" : "status"} className={`add-status ${addStatus}`}>
                         {addStatus === "success" ? (
                           <Check size={16} />
                         ) : addStatus === "loading" ? (
@@ -1330,8 +1526,104 @@ export function CodexAddAccountDialog(props: CodexAccountsViewProps) {
                       </div>
                     )}
                   </div>
+                {addTab === "apikey" && (
+                  <div className="modal-footer api-key-add-actions">
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => void handleApiKeyLogin()}
+                      disabled={importing || addStatus === "loading" || apiModelCatalogFetching || !apiKeyInput.trim()}
+                    >
+                      {addStatus === "loading" ? <RefreshCw size={16} className="loading-spinner" /> : <KeyRound size={16} />}
+                      {t("common.shared.addAccount", "添加账号")}
+                    </button>
+                  </div>
+                )}
                 </div>
-              </div>,
+              </div>
+              {localImportInstances ? (
+                <div className="modal-overlay codex-local-import-instance-overlay">
+                  <div
+                    className="modal codex-local-import-instance-modal"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="modal-header">
+                      <h2>
+                        {t("codex.import.localInstanceTitle", "选择实例")}
+                      </h2>
+                      <button
+                        className="modal-close"
+                        onClick={handleCloseLocalImportInstancePicker}
+                        disabled={localImportBusy}
+                        aria-label={t("common.close", "关闭")}
+                      >
+                        <X />
+                      </button>
+                    </div>
+                    <div className="modal-body">
+                      <ModalErrorMessage message={localImportError} />
+                      <p className="codex-local-import-instance-modal__hint">
+                        {t(
+                          "codex.import.localInstanceDesc",
+                          "检测到多个 Codex 实例，请选择要从哪个实例获取本地账号：",
+                        )}
+                      </p>
+                      {localImportBusy ? (
+                        <div className="codex-local-import-instance-modal__busy">
+                          <RefreshCw size={14} className="loading-spinner" />
+                          <span>
+                            {t(
+                              "codex.import.importing",
+                              "正在导入本地账号...",
+                            )}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="codex-local-import-instance-modal__list">
+                        {localImportInstances.map((instance) => (
+                          <button
+                            key={instance.id}
+                            className="codex-local-import-instance-modal__option"
+                            type="button"
+                            onClick={() =>
+                              void handleSelectLocalImportInstance(instance.id)
+                            }
+                            disabled={localImportBusy}
+                          >
+                            <span className="codex-local-import-instance-modal__option-name">
+                              {instance.isDefault
+                                ? t("instances.defaultName", "默认实例")
+                                : instance.name ||
+                                  t("instances.defaultName", "默认实例")}
+                            </span>
+                            <span className="codex-local-import-instance-modal__option-dir">
+                              {instance.userDataDir}
+                            </span>
+                            {instance.running ? (
+                              <span className="codex-local-import-instance-modal__option-badge">
+                                {t(
+                                  "codex.sessionManager.locationPicker.running",
+                                  "运行中",
+                                )}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="modal-footer">
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={handleCloseLocalImportInstancePicker}
+                        disabled={localImportBusy}
+                      >
+                        {t("common.cancel", "取消")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              </>,
               document.body,
             );
 }

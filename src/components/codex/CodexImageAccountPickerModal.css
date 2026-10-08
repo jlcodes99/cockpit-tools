@@ -1,0 +1,116 @@
+/* 选择生图账号：沿用「绑定 OAuth 账号」弹框样式，选项改为多选复选框。
+   尺寸与其它账号弹框对齐，并用三段式(头/滚动正文/底)保证内容再长也能操作。 */
+.modal-content.codex-oauth-binding-modal.codex-image-account-picker {
+  width: min(760px, calc(100vw - 32px));
+  max-width: 760px;
+  max-height: min(760px, calc(100vh - 32px));
+}
+
+.modal-content.codex-oauth-binding-modal.codex-image-account-picker .modal-body {
+  overflow-y: auto;
+}
+
+.modal-content.codex-oauth-binding-modal.codex-image-account-picker .add-section {
+  overflow: visible;
+}
+
+.modal-content.codex-oauth-binding-modal.codex-image-account-picker
+  .codex-oauth-binding-picker {
+  overflow: visible;
+}
+
+/* 正文自身滚动，账号列表不再单独滚动，避免出现两层滚动条。 */
+.modal-content.codex-oauth-binding-modal.codex-image-account-picker
+  .codex-oauth-binding-list {
+  max-height: none;
+}
+
+/* 底部操作区固定在弹框底部：正文滚动时取消/保存始终可见。 */
+.modal-content.codex-oauth-binding-modal.codex-image-account-picker
+  .codex-image-account-picker-actions {
+  padding: 13px 24px 18px;
+  background: rgba(236, 244, 250, 0.46);
+}
+
+[data-theme="dark"]
+  .modal-content.codex-oauth-binding-modal.codex-image-account-picker
+  .codex-image-account-picker-actions {
+  background: rgba(2, 6, 23, 0.22);
+}
+
+@media (max-width: 640px) {
+  .modal-content.codex-oauth-binding-modal.codex-image-account-picker
+    .codex-image-account-picker-actions {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+.codex-image-account-picker .codex-oauth-binding-row input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin: 0;
+  border: 2px solid color-mix(in srgb, var(--text-muted) 72%, transparent);
+  border-radius: 5px;
+  background: rgba(248, 250, 252, 0.86);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+
+.codex-image-account-picker
+  .codex-oauth-binding-row
+  input[type="checkbox"]:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 58%, transparent);
+}
+
+.codex-image-account-picker
+  .codex-oauth-binding-row
+  input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.codex-image-account-picker
+  .codex-oauth-binding-row
+  input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 2px 4px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.codex-image-account-picker
+  .codex-oauth-binding-row
+  input[type="checkbox"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.codex-image-account-picker .codex-oauth-binding-picker-header .btn {
+  min-height: 30px;
+  padding-inline: 12px;
+}
+
+.codex-image-account-picker-count {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+[data-theme="dark"]
+  .codex-image-account-picker
+  .codex-oauth-binding-row
+  input[type="checkbox"] {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(148, 163, 184, 0.6);
+}

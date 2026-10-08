@@ -1,5 +1,6 @@
 // Codex 账号模块：Account metadata mutations, OAuth binding and quota auto-switch alerts。
 // 通过 include! 保持原 modules::codex_account 作用域，完整保留私有调用关系。
+include!("codex_account_api_key_edit.rs");
 /// 从本地文件导入 Codex 账号（支持多种 JSON 格式）
 pub async fn import_from_files(file_paths: Vec<String>) -> Result<CodexFileImportResult, String> {
     use std::path::Path;
@@ -214,110 +215,7 @@ pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<CodexA
     Ok(account)
 }
 
-fn spawn_fingerprint_default_session_resync() {
-    if std::env::var("COCKPIT_TOOLS_TEST_DATA_DIR").is_ok() {
-        return;
-    }
-    if CODEX_FINGERPRINT_DEFAULT_SESSION_RESYNC_STARTED.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    std::thread::spawn(|| {
-        if let Err(error) = resync_sidecar_fingerprint_after_default_session() {
-            logger::log_warn(&format!(
-                "[Codex Fingerprint] 默认会话回写 sidecar 失败: {}",
-                error
-            ));
-        }
-    });
-}
 
-fn resync_sidecar_fingerprint_after_default_session() -> Result<(), String> {
-    let marker = account::get_data_dir()?.join(CODEX_FINGERPRINT_DEFAULT_SESSION_MARKER);
-    if marker.exists() {
-        return Ok(());
-    }
-    for account in list_accounts() {
-        if !is_standard_oauth_account(&account) {
-            continue;
-        }
-        if let Err(error) =
-            crate::modules::codex_local_access::sync_sidecar_auth_file_for_account(&account)
-        {
-            logger::log_warn(&format!(
-                "[Codex Fingerprint] 同步会话默认到 API Service 失败: account_id={}, error={}",
-                account.id, error
-            ));
-        }
-    }
-    if let Some(parent) = marker.parent() {
-        fs::create_dir_all(parent).map_err(|error| format!("创建数据目录失败: {error}"))?;
-    }
-    fs::write(&marker, "1").map_err(|error| format!("写入指纹回写标记失败: {error}"))?;
-    Ok(())
-}
-
-pub fn update_accounts_fingerprint_mode(
-    account_ids: &[String],
-    mode: String,
-) -> Result<Vec<CodexAccount>, String> {
-    let normalized = mode.trim().to_ascii_lowercase();
-    if !matches!(normalized.as_str(), "off" | "device" | "session" | "full") {
-        return Err("设备指纹模式无效".to_string());
-    }
-    let mut accounts = Vec::with_capacity(account_ids.len());
-    for account_id in account_ids {
-        let account =
-            load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
-        if !is_standard_oauth_account(&account) {
-            return Err(format!("账号不支持设备指纹设置: {}", account_id));
-        }
-        accounts.push(account);
-    }
-
-    let mut updated = Vec::with_capacity(accounts.len());
-    for mut account in accounts {
-        account.codex_fingerprint_mode = if normalized == "session" {
-            None
-        } else {
-            Some(normalized.clone())
-        };
-        save_account(&account)?;
-        if let Err(error) =
-            crate::modules::codex_local_access::sync_sidecar_auth_file_for_account(&account)
-        {
-            logger::log_warn(&format!(
-                "同步设备指纹模式到 API Service sidecar 失败: account_id={}, error={}",
-                account.id, error
-            ));
-        }
-        updated.push(account);
-    }
-    Ok(updated)
-}
-
-pub fn update_account_client_policy(
-    account_id: &str,
-    codex_cli_only: bool,
-    allow_app_server: bool,
-) -> Result<CodexAccount, String> {
-    let mut account =
-        load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
-    if !is_standard_oauth_account(&account) {
-        return Err(format!("账号不支持 Codex 客户端策略设置: {}", account_id));
-    }
-    account.codex_cli_only = codex_cli_only;
-    account.codex_cli_only_allow_app_server = codex_cli_only && allow_app_server;
-    save_account(&account)?;
-    if let Err(error) =
-        crate::modules::codex_local_access::sync_sidecar_auth_file_for_account(&account)
-    {
-        logger::log_warn(&format!(
-            "同步 Codex 客户端策略到 API Service sidecar 失败: account_id={}, error={}",
-            account.id, error
-        ));
-    }
-    Ok(account)
-}
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct CodexAccountNoteUpdate {
@@ -596,6 +494,16 @@ pub fn update_api_key_credentials(
     account_name: Option<String>,
     api_model_context_windows: Option<HashMap<String, i64>>,
 ) -> Result<CodexAccount, String> {
+    // Serialize overlapping old/new IDs without holding the global account lock
+    // through profile or gateway reference migration. Different accounts remain parallel.
+    let (normalized_key, normalized_base_url) =
+        validate_api_key_credentials(&api_key, api_base_url.as_deref())?;
+    let new_id = build_api_key_account_id(&normalized_key);
+    let edit_locks = api_key_credential_edit_locks(account_id, &new_id)?;
+    let _edit_guards = edit_locks
+        .iter()
+        .map(|lock| lock.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
 
@@ -603,8 +511,6 @@ pub fn update_api_key_credentials(
         return Err("仅 API Key 账号支持编辑凭据".to_string());
     }
 
-    let (normalized_key, normalized_base_url) =
-        validate_api_key_credentials(&api_key, api_base_url.as_deref())?;
     let provider_config = resolve_api_provider_config(
         normalized_base_url.as_deref(),
         api_provider_mode,
@@ -612,8 +518,7 @@ pub fn update_api_key_credentials(
         api_provider_name.as_deref(),
     )?;
     let old_id = account.id.clone();
-    let new_id = build_api_key_account_id(&normalized_key);
-    let mut index = load_account_index();
+    let index = load_account_index();
     let was_current = get_current_account()
         .map(|current| current.id == old_id)
         .unwrap_or(false);
@@ -647,54 +552,17 @@ pub fn update_api_key_credentials(
     account.update_last_used();
     save_account(&account)?;
 
+    // Keep the old detail readable until all references and the client projection succeed.
+    // A failed migration is retryable and must never be reported as a successful credential edit.
     if old_id != account.id {
-        delete_account_file(&old_id)?;
+        crate::modules::codex_instance::replace_bind_account_references(&old_id, &account.id)?;
+        crate::modules::codex_local_access::replace_account_references_after_key_edit(&old_id, &account.id)?;
     }
-
-    let mut summary_found = false;
-    for summary in &mut index.accounts {
-        if summary.id == old_id {
-            summary.id = account.id.clone();
-            summary.email = account.email.clone();
-            summary.plan_type = account.plan_type.clone();
-            summary.subscription_active_until = account.subscription_active_until.clone();
-            summary.last_used = account.last_used;
-            summary_found = true;
-            break;
-        }
-    }
-
-    if !summary_found {
-        index.accounts.push(CodexAccountSummary {
-            id: account.id.clone(),
-            email: account.email.clone(),
-            plan_type: account.plan_type.clone(),
-            subscription_active_until: account.subscription_active_until.clone(),
-            created_at: account.created_at,
-            last_used: account.last_used,
-        });
-    }
-
-    if index.current_account_id.as_deref() == Some(old_id.as_str()) {
-        index.current_account_id = Some(account.id.clone());
-    }
-    save_account_index(&index)?;
-
-    if old_id != account.id {
-        if let Err(err) =
-            crate::modules::codex_instance::replace_bind_account_references(&old_id, &account.id)
-        {
-            logger::log_warn(&format!(
-                "Codex API Key 账号编辑后同步实例绑定失败: old_id={}, new_id={}, error={}",
-                old_id, account.id, err
-            ));
-        }
-    }
-
     if was_current {
         let codex_home = get_codex_home();
         write_account_bundle_to_dir(&codex_home, &account)?;
     }
+    commit_api_key_credential_index(&old_id, &account)?;
 
     logger::log_info(&format!(
         "Codex API Key 账号凭据已更新: old_id={}, new_id={}, has_base_url={}",
@@ -784,6 +652,45 @@ pub fn update_account_name(account_id: &str, name: String) -> Result<CodexAccoun
     Ok(account)
 }
 
+/// 更新账号级出口代理。
+///
+/// 空值且 disabled=false 恢复跟随；disabled=true 清除独立绑定并明确跳过代理。
+pub fn update_account_egress_proxy(
+    account_id: &str,
+    egress_proxy_url: Option<String>,
+    disabled: bool,
+) -> Result<CodexAccount, String> {
+    let mut account =
+        load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
+    if !crate::modules::codex_account_proxy::eligible(&account) {
+        return Err("PROXY_ACCOUNT_UNSUPPORTED".into());
+    }
+    if disabled && egress_proxy_url.is_some() { return Err("PROXY_INVALID_URL".into()); }
+    account.egress_proxy_disabled = disabled;
+    let normalized = normalize_optional_value(egress_proxy_url);
+    account.egress_proxy_url = normalized.as_deref()
+        .map(crate::modules::codex_proxy_runtime::normalize_binding).transpose()?;
+    save_account(&account)?;
+    Ok(account)
+}
+
+/// Remove a deleted source's saved binding, including any legacy account whose
+/// authentication type later changed. The caller holds this account's token lock.
+pub fn clear_account_egress_proxy_for_source(
+    account_id: &str,
+    source_id: &str,
+) -> Result<Option<CodexAccount>, String> {
+    let mut account = load_account(account_id).ok_or("PROXY_SAVE_FAILED")?;
+    if !account.egress_proxy_url.as_deref().is_some_and(|raw| {
+        crate::modules::codex_proxy_catalog_binding::belongs_to_source(raw, source_id)
+    }) {
+        return Ok(None);
+    }
+    account.egress_proxy_url = None;
+    save_account(&account)?;
+    Ok(Some(account))
+}
+
 fn normalize_quota_alert_threshold(raw: i32) -> i32 {
     raw.clamp(0, 100)
 }
@@ -871,6 +778,7 @@ struct CodexQuotaMetric {
     key: &'static str,
     label: String,
     percentage: i32,
+    window_minutes: Option<i64>,
 }
 
 fn extract_quota_metrics(account: &CodexAccount) -> Vec<CodexQuotaMetric> {
@@ -887,6 +795,7 @@ fn extract_quota_metrics(account: &CodexAccount) -> Vec<CodexQuotaMetric> {
             key: "primary_window",
             label: format_codex_quota_metric_label(quota.hourly_window_minutes, "5h"),
             percentage: quota.hourly_percentage.clamp(0, 100),
+            window_minutes: quota.hourly_window_minutes,
         });
     }
 
@@ -895,14 +804,7 @@ fn extract_quota_metrics(account: &CodexAccount) -> Vec<CodexQuotaMetric> {
             key: "secondary_window",
             label: format_codex_quota_metric_label(quota.weekly_window_minutes, "Weekly"),
             percentage: quota.weekly_percentage.clamp(0, 100),
-        });
-    }
-
-    if metrics.is_empty() {
-        metrics.push(CodexQuotaMetric {
-            key: "primary_window",
-            label: format_codex_quota_metric_label(quota.hourly_window_minutes, "5h"),
-            percentage: quota.hourly_percentage.clamp(0, 100),
+            window_minutes: quota.weekly_window_minutes,
         });
     }
 
@@ -917,16 +819,33 @@ fn average_quota_percentage(metrics: &[CodexQuotaMetric]) -> f64 {
     sum as f64 / metrics.len() as f64
 }
 
+fn quota_metric_threshold(
+    metric: &CodexQuotaMetric,
+    primary_threshold: i32,
+    secondary_threshold: i32,
+) -> Option<i32> {
+    // Match the existing quota-label tolerance for a weekly window.
+    if let Some(minutes) = metric.window_minutes.filter(|minutes| *minutes > 0) {
+        return Some(if minutes >= 7 * 24 * 60 - 1 {
+            secondary_threshold
+        } else {
+            primary_threshold
+        });
+    }
+    match metric.key {
+        "primary_window" => Some(primary_threshold),
+        "secondary_window" => Some(secondary_threshold),
+        _ => None,
+    }
+}
+
 fn metric_crossed_threshold(
     metric: &CodexQuotaMetric,
     primary_threshold: i32,
     secondary_threshold: i32,
 ) -> bool {
-    match metric.key {
-        "primary_window" => metric.percentage <= primary_threshold,
-        "secondary_window" => metric.percentage <= secondary_threshold,
-        _ => false,
-    }
+    quota_metric_threshold(metric, primary_threshold, secondary_threshold)
+        .is_some_and(|threshold| metric.percentage <= threshold)
 }
 
 fn metric_above_threshold(
@@ -934,11 +853,8 @@ fn metric_above_threshold(
     primary_threshold: i32,
     secondary_threshold: i32,
 ) -> bool {
-    match metric.key {
-        "primary_window" => metric.percentage > primary_threshold,
-        "secondary_window" => metric.percentage > secondary_threshold,
-        _ => true,
-    }
+    quota_metric_threshold(metric, primary_threshold, secondary_threshold)
+        .is_none_or(|threshold| metric.percentage > threshold)
 }
 
 fn metric_margin_over_threshold(
@@ -946,11 +862,8 @@ fn metric_margin_over_threshold(
     primary_threshold: i32,
     secondary_threshold: i32,
 ) -> Option<i32> {
-    match metric.key {
-        "primary_window" => Some(metric.percentage - primary_threshold),
-        "secondary_window" => Some(metric.percentage - secondary_threshold),
-        _ => None,
-    }
+    quota_metric_threshold(metric, primary_threshold, secondary_threshold)
+        .map(|threshold| metric.percentage - threshold)
 }
 
 #[derive(Debug, Clone)]
@@ -1150,7 +1063,7 @@ pub fn pick_auto_switch_target_if_needed() -> Result<Option<CodexAccount>, Strin
 
         if candidates.is_empty() {
             logger::log_warn(&format!(
-                "[AutoSwitch][Codex] 当前账号命中阈值 (primary<={}%, secondary<={}%)，但没有可切换候选账号",
+                "[AutoSwitch][Codex] 当前账号命中阈值 (short_cycle<={}%, weekly<={}%)，但没有可切换候选账号",
                 primary_threshold, secondary_threshold
             ));
             return Ok(None);
@@ -1217,7 +1130,7 @@ pub fn run_quota_alert_if_needed(
         current_email: current.email.clone(),
         threshold: primary_threshold,
         threshold_display: Some(format!(
-            "primary_window<={}%, secondary_window<={}%",
+            "short_cycle<={}%, weekly<={}%",
             primary_threshold, secondary_threshold
         )),
         lowest_percentage,

@@ -307,8 +307,10 @@ fn inspect_local_access_profile_attachment(
         uses_bound_oauth_auth || is_codex_local_access_auth_text(text, expected_api_key)
     });
 
-    match read_optional_profile_file(&profile_config_path(profile_dir)) {
-        Ok(Some(config_text)) => match inspect_local_access_profile_config(
+    match crate::modules::codex_config_format::load_codex_config_doc(&profile_config_path(profile_dir))
+        .map(|mut doc| crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc))
+    {
+        Ok(config_text) if !config_text.trim().is_empty() => match inspect_local_access_profile_config(
             &config_text,
             &expected_base_url,
             expected_api_key,
@@ -329,7 +331,7 @@ fn inspect_local_access_profile_attachment(
                 });
             }
         },
-        Ok(None) => {}
+        Ok(_) => {}
         Err(error) => {
             attachment.error = Some(match attachment.error.take() {
                 Some(existing) => format!("{}；{}", existing, error),
@@ -380,6 +382,25 @@ fn set_provider_header_value(
     }
 }
 
+fn has_managed_realtime_sideband_override(doc: &Document) -> bool {
+    let base_url = doc
+        .get("model_providers")
+        .and_then(|item| item.get(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID))
+        .and_then(|item| item.get("base_url"))
+        .and_then(|item| item.as_str());
+    let sideband_url = doc
+        .get("experimental_realtime_ws_base_url")
+        .and_then(|item| item.as_str());
+    match (base_url, sideband_url) {
+        (Some(base), Some(sideband)) if base.trim_end_matches('/') == sideband.trim_end_matches('/') => {
+            url::Url::parse(base).ok().is_some_and(|url| {
+                matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+            })
+        }
+        _ => false,
+    }
+}
+
 fn remove_codex_local_access_config(config_text: &str) -> Result<String, String> {
     if config_text.trim().is_empty() {
         return Ok(String::new());
@@ -396,6 +417,9 @@ fn remove_codex_local_access_config(config_text: &str) -> Result<String, String>
         return Ok(config_text.to_string());
     }
 
+    if has_managed_realtime_sideband_override(&doc) {
+        doc.remove("experimental_realtime_ws_base_url");
+    }
     let _ = doc.remove("model_provider");
     if doc
         .get("model_catalog_json")
@@ -507,6 +531,7 @@ fn restore_config_toml_from_takeover_backup(
         .and_then(|item| item.as_str())
         .is_some_and(is_cockpit_managed_model_catalog_name);
     if current_selected_local_access {
+        let restore_realtime_sideband = has_managed_realtime_sideband_override(&current_doc);
         let cleaned = remove_codex_local_access_config(
             &crate::modules::codex_config_format::codex_config_doc_to_string(&mut current_doc),
         )?;
@@ -516,6 +541,15 @@ fn restore_config_toml_from_takeover_backup(
             crate::modules::codex_config_format::read_codex_config_doc_from_str(&cleaned)
                 .map_err(|e| format!("解析清理后的 Codex config.toml 失败: {}", e))?
         };
+
+        if restore_realtime_sideband {
+            if let Some(original) = backup_doc
+                .as_ref()
+                .and_then(|doc| doc.get("experimental_realtime_ws_base_url"))
+            {
+                current_doc["experimental_realtime_ws_base_url"] = original.clone();
+            }
+        }
 
         if let Some(backup_provider) = backup_doc
             .as_ref()
@@ -579,11 +613,49 @@ fn restore_config_toml_from_takeover_backup(
         }
     }
 
+    // 迁移旧接管记录：恢复仍有效的用户设置，禁止从备份复活已移除的开关。
+    cleanup_legacy_compaction_overrides(&mut current_doc, backup_doc.as_ref());
+
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut current_doc);
     if content.trim().is_empty() {
         Ok(None)
     } else {
         Ok(Some(content))
+    }
+}
+
+/// 清理旧受管开关，并恢复旧接管曾移除的 token_budget；其它 features 原样保留。
+/// remote_compaction_v2 无论备份原值如何都不重放，当前用户显式设置的 true 也不覆盖。
+fn cleanup_legacy_compaction_overrides(current_doc: &mut Document, backup_doc: Option<&Document>) {
+    let backup_remote_compaction = backup_doc
+        .and_then(|doc| doc.get("features"))
+        .and_then(|item| item.get("remote_compaction_v2"))
+        .and_then(|item| item.as_bool());
+    // 备份本就为 false 时无法断定是工具写入，保留用户的当前配置。
+    let had_legacy_override = backup_doc.is_some()
+        && backup_remote_compaction != Some(false)
+        && codex_account::remove_legacy_remote_compaction_override(current_doc);
+    let backup_token_budget = backup_doc
+        .and_then(|doc| doc.get("features"))
+        .and_then(|item| item.get("token_budget"))
+        .cloned();
+    let current_token_budget = current_doc
+        .get("features")
+        .and_then(|item| item.get("token_budget"));
+    // 当前值未被旧开关标记为受管时，保留用户在接管期间的新设置。
+    if !had_legacy_override || current_token_budget.is_some() {
+        return;
+    }
+    if let Some(original) = backup_token_budget {
+        if current_doc.get("features").is_none() {
+            current_doc["features"] = toml_edit::table();
+        }
+        if let Some(features) = current_doc
+            .get_mut("features")
+            .and_then(|item| item.as_table_mut())
+        {
+            features["token_budget"] = original;
+        }
     }
 }
 
@@ -757,6 +829,7 @@ fn save_profile_takeover_backup(profile_dir: &Path, api_key: &str) -> Result<(),
 fn cleanup_profile_takeover_artifacts(profile_dir: &Path) -> Result<bool, String> {
     let mut changed = false;
     for (file_name, label) in [
+        (TAKEOVER_OWNERSHIP_FILE, "Codex API ownership record"),
         (
             CODEX_LOCAL_ACCESS_AUTH_PROJECTION_FILE,
             "Codex API 服务账号投影",
@@ -794,6 +867,14 @@ fn restore_profile_takeover_backup(
     let auth_path = profile_auth_path(&profile_dir);
     let current_config = read_optional_profile_file(&config_path)?;
     let current_auth = read_optional_profile_file(&auth_path)?;
+    if let Some(config) = current_config.as_deref() {
+        let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(config)?;
+        if recorded_takeover_ownership_matches(&profile_dir, &doc)? == Some(false) {
+            return Ok(false);
+        }
+    } else if profile_dir.join(TAKEOVER_OWNERSHIP_FILE).exists() {
+        return Ok(false);
+    }
     let config_is_managed = current_config
         .as_deref()
         .map(|content| {
@@ -801,13 +882,29 @@ fn restore_profile_takeover_backup(
                 || (allow_rotated_managed_key && is_cockpit_managed_local_access_config(content))
         })
         .unwrap_or(false);
-    let auth_is_managed = current_auth
+    let api_key_auth_is_managed = current_auth
         .as_deref()
         .map(|content| {
             is_exact_codex_local_access_auth_text(content, api_key)
                 || (allow_rotated_managed_key && is_codex_local_access_auth_text(content, api_key))
         })
         .unwrap_or(false);
+    let oauth_auth_is_managed = if config_is_managed {
+        current_auth
+            .as_deref()
+            .map(|auth| {
+                codex_account::preserve_owned_oauth_auth_for_runtime(
+                    &profile_dir,
+                    CODEX_LOCAL_ACCESS_RUNTIME_ACCOUNT_ID,
+                    auth,
+                )
+            })
+            .transpose()?
+            .unwrap_or(false)
+    } else {
+        false
+    };
+    let auth_is_managed = api_key_auth_is_managed || oauth_auth_is_managed;
 
     if !config_is_managed && !auth_is_managed {
         return Ok(false);
@@ -817,7 +914,18 @@ fn restore_profile_takeover_backup(
         current_config.as_deref(),
         backup.config_toml.as_deref(),
     )?;
-    write_optional_profile_file(&auth_path, backup.auth_json.as_deref())?;
+    // A user may have signed in independently while keeping the local provider.
+    // Restore only credentials that still belong to this takeover.
+    if auth_is_managed {
+        let restored_auth = backup
+            .auth_json
+            .as_deref()
+            .map(|auth| {
+                codex_account::resolve_oauth_auth_backup_for_restore(auth, current_auth.as_deref())
+            })
+            .transpose()?;
+        write_optional_profile_file(&auth_path, restored_auth.as_deref())?;
+    }
     write_optional_profile_file(&config_path, restored_config.as_deref())?;
     let _ = cleanup_profile_takeover_artifacts(&profile_dir)?;
     Ok(true)
@@ -832,6 +940,13 @@ fn cleanup_profile_takeover_without_backup(
     let auth_path = profile_auth_path(profile_dir);
     let mut changed = false;
     let mut managed = false;
+
+    if allow_rotated_managed_key && profile_dir.join(TAKEOVER_OWNERSHIP_FILE).exists() {
+        let doc = crate::modules::codex_config_format::load_codex_config_doc(&config_path)?;
+        if recorded_takeover_ownership_matches(profile_dir, &doc)? != Some(true) {
+            return Ok(false);
+        }
+    }
 
     if let Some(config_text) = read_optional_profile_file(&config_path)? {
         if is_codex_local_access_config_for_api_key(&config_text, api_key)
@@ -869,6 +984,14 @@ fn cleanup_profile_takeover_without_backup(
 fn restore_takeover_profiles_after_disable(
     collection: &CodexLocalAccessCollection,
 ) -> Result<(), String> {
+    restore_takeover_profiles_after_disable_checked(collection, || Ok(()))
+}
+
+fn restore_takeover_profiles_after_disable_checked(
+    collection: &CodexLocalAccessCollection,
+    check: impl Fn() -> Result<(), String>,
+) -> Result<(), String> {
+    check()?;
     let backups = load_takeover_backups()?;
     let default_profile = codex_account::get_codex_home();
     let default_key = normalize_profile_dir_key(&default_profile);
@@ -898,11 +1021,14 @@ fn restore_takeover_profiles_after_disable(
     let mut restored_profiles = HashSet::new();
     let mut remaining_backups = Vec::new();
     for backup in backups.profiles {
+        check()?;
         if protect_default_profile && backup.profile_dir == default_key {
             remaining_backups.push(backup);
             continue;
         }
-        if !target_profiles.contains_key(&backup.profile_dir) {
+        if !target_profiles.contains_key(&backup.profile_dir)
+            || !profile_still_owned_for_collection(Path::new(&backup.profile_dir), collection)?
+        {
             remaining_backups.push(backup);
             continue;
         }
@@ -914,6 +1040,7 @@ fn restore_takeover_profiles_after_disable(
         }
     }
 
+    check()?;
     save_takeover_backups(&CodexLocalAccessTakeoverBackups {
         version: CODEX_LOCAL_ACCESS_TAKEOVER_BACKUP_VERSION,
         profiles: remaining_backups,
@@ -921,7 +1048,11 @@ fn restore_takeover_profiles_after_disable(
 
     let mut cleaned_without_backup = 0usize;
     for (profile_key, profile_dir) in target_profiles {
+        check()?;
         if restored_profiles.contains(&profile_key) {
+            continue;
+        }
+        if !profile_still_owned_for_collection(&profile_dir, collection)? {
             continue;
         }
         if cleanup_profile_takeover_without_backup(&profile_dir, &collection.api_key, true)? {

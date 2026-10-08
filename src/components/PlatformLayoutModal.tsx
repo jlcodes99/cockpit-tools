@@ -43,6 +43,10 @@ import { CLASSIC_SIDEBAR_ENTRY_LIMIT, ORIGINAL_SIDEBAR_ENTRY_LIMIT, useSideNavLa
 import { getPlatformLabel, renderPlatformIcon } from '../utils/platformMeta';
 import { useEscClose } from '../hooks/useEscClose';
 import {
+  getPlatformLayoutPersistenceError,
+  retryPlatformLayoutPersistence,
+} from '../utils/uiPreferences';
+import {
   PLATFORM_LAYOUT_ICON_STORAGE_KEY,
   persistPlatformLayoutCustomIcons,
 } from '../utils/platformLayoutIconStorage';
@@ -390,6 +394,33 @@ export function PlatformLayoutModal({
 
   const [customIcons, setCustomIcons] = useState<PlatformLayoutCustomIcon[]>(() => loadCustomIcons());
   const [customIconStorageFailed, setCustomIconStorageFailed] = useState(false);
+  const [persistenceError, setPersistenceError] = useState(getPlatformLayoutPersistenceError);
+  const [retryingPersistence, setRetryingPersistence] = useState(false);
+  const persistenceErrorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const refresh = () => setPersistenceError(getPlatformLayoutPersistenceError());
+    window.addEventListener('agtools:platform-layout-persistence-changed', refresh);
+    refresh();
+    return () => window.removeEventListener('agtools:platform-layout-persistence-changed', refresh);
+  }, []);
+
+  useEffect(() => {
+    if (open && persistenceError) {
+      persistenceErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [open, persistenceError]);
+
+  const retryPersistence = async () => {
+    setPersistenceError(null);
+    setRetryingPersistence(true);
+    try {
+      await retryPlatformLayoutPersistence();
+    } finally {
+      setPersistenceError(getPlatformLayoutPersistenceError());
+      setRetryingPersistence(false);
+    }
+  };
 
   const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
   const [addingChildGroupId, setAddingChildGroupId] = useState<string | null>(null);
@@ -1105,6 +1136,14 @@ export function PlatformLayoutModal({
         </div>
 
         <div className="modal-body platform-layout-modal-body">
+          {persistenceError && (
+            <div ref={persistenceErrorRef} className="platform-layout-group-error" role="alert">
+              <span>{t('common.failed')}: {persistenceError}</span>
+              <button className="btn btn-secondary" disabled={retryingPersistence} onClick={() => void retryPersistence()}>
+                {t('common.windowsOperation.retry')}
+              </button>
+            </div>
+          )}
           <div className="platform-layout-summary">
             <span>
               {t('platformLayout.sidebarSelected', {

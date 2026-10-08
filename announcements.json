@@ -9,7 +9,7 @@
   "topRightAds": [
     {
       "id": "top-right-ad-2026-04-shop",
-      "enabled": false,
+      "enabled": true,
       "relayRelated": false,
       "priority": 100,
       "text": "GPT Plus 30天成品号｜各套餐实付代充 可续费 需要的了解下 感谢支持",
@@ -68,20 +68,25 @@
         "name": "APIKEY.FUN",
         "priority": 100,
         "logoUrl": "https://raw.githubusercontent.com/BigPizzaV3/CodexPlusPlus/main/docs/images/sponsor-apikey-fun.png",
-        "url": "https://apikey.fun/register?aff=cockpit",
+        "url": "https://apikey.fan/register?aff=cockpit",
         "badge": "AI 中转",
-        "description": "APIKEY.FUN 面向开发者提供多模型 API 接入与中转服务，覆盖 Claude、OpenAI、Gemini 等常用模型，适合需要统一密钥、稳定调用和成本优化的工具链场景。",
+        "description": "APIKEY.FUN 面向开发者提供多模型 API 接入与中转服务，覆盖 Claude / ChatGPT / Grok / Gemini / 智谱 GLM / Kimi / DeepSeek 等平台（每平台一把密钥、按分组计价），适合在 Codex、Claude Code、Gemini CLI 等工具中统一配置使用。",
         "integration": {
           "enabled": true,
           "type": "sub2api",
-          "baseUrl": "https://api.apikey.fun/v1",
+          "baseUrl": "https://api.apikey.fan/v1",
+          "baseUrlAliases": [
+            "https://api.apikey.fun/v1",
+            "https://api.apikey.fun",
+            "https://slb.apikey.fun"
+          ],
           "wireApi": "responses",
           "quickConfigure": true,
           "dashboardCard": true,
           "models": [],
           "supportsVision": false,
-          "website": "https://apikey.fun/register?aff=cockpit",
-          "apiKeyUrl": "https://apikey.fun/register?aff=cockpit"
+          "website": "https://apikey.fan/register?aff=cockpit",
+          "apiKeyUrl": "https://apikey.fan/register?aff=cockpit"
         },
         "targetVersions": ">=0.25.2",
         "targetLanguages": [
@@ -92,15 +97,18 @@
         "locales": {
           "zh-CN": {
             "badge": "AI 中转",
-            "description": "APIKEY.FUN 面向开发者提供多模型 API 接入与中转服务，覆盖 Claude、OpenAI、Gemini 等常用模型，适合需要统一密钥、稳定调用和成本优化的工具链场景。"
+            "description": "APIKEY.FUN 面向开发者提供多模型 API 接入与中转服务，覆盖 Claude / ChatGPT / Grok / Gemini / 智谱 GLM / Kimi / DeepSeek 等平台（每平台一把密钥、按分组计价），适合在 Codex、Claude Code、Gemini CLI 等工具中统一配置使用。"
           },
           "en": {
             "badge": "AI Relay",
-            "description": "APIKEY.FUN provides multi-model API access and relay services for developers, covering popular models such as Claude, OpenAI, and Gemini. It fits workflows that need unified keys, stable calls, and better cost control."
+            "description": "APIKEY.FUN provides multi-model API relay services for developers, covering Claude / ChatGPT / Grok / Gemini / Zhipu GLM / Kimi / DeepSeek (one key per platform, group-based pricing) for Codex, Claude Code, Gemini CLI and more."
           },
           "en-US": {
             "badge": "AI Relay",
-            "description": "APIKEY.FUN provides multi-model API access and relay services for developers, covering popular models such as Claude, OpenAI, and Gemini. It fits workflows that need unified keys, stable calls, and better cost control."
+            "description": "APIKEY.FUN provides multi-model API relay services for developers, covering Claude / ChatGPT / Grok / Gemini / Zhipu GLM / Kimi / DeepSeek (one key per platform, group-based pricing) for Codex, Claude Code, Gemini CLI and more."
+          },
+          "zh-tw": {
+            "description": "APIKEY.FUN 為開發者提供多模型 API 接入與中轉服務，覆蓋 Claude / ChatGPT / Grok / Gemini / 智譜 GLM / Kimi / DeepSeek 等平台（每平台一把密鑰、依分組計價），適合在 Codex、Claude Code、Gemini CLI 等工具中統一設定使用。"
           }
         }
       }

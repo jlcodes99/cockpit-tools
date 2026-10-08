@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -149,6 +150,18 @@ func (w *responsesWebsocketWriter) closeWithoutError() (bool, error) {
 	return true, w.conn.Close()
 }
 
+func (w *responsesWebsocketWriter) writePing() error {
+	if w == nil || w.conn == nil {
+		return errors.New("responses websocket: writer is nil")
+	}
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
+	if w.closing.Load() {
+		return websocket.ErrCloseSent
+	}
+	return w.conn.WriteControl(websocket.PingMessage, nil, time.Time{})
+}
+
 func (w *responsesWebsocketWriter) closeWithPayload(payload []byte) (bool, error) {
 	if w == nil || w.conn == nil {
 		return false, nil
@@ -257,8 +270,12 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		return
 	}
 	writer := newResponsesWebsocketWriter(conn)
+	readPump := newResponsesWebsocketReadPump(c.Request.Context(), conn, writer)
+	defer readPump.stop()
+	c.Request = c.Request.WithContext(readPump.ctx)
 	passthroughSessionID := uuid.NewString()
 	downstreamSessionKey := websocketDownstreamSessionKey(c.Request)
+	toolCacheBaseKey := downstreamSessionKey
 	retainResponsesWebsocketToolCaches(downstreamSessionKey)
 	clientIP := websocketClientAddress(c)
 	log.Infof("responses websocket: client connected id=%s remote=%s", passthroughSessionID, clientIP)
@@ -316,6 +333,9 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 	var lastRequest []byte
 	lastResponseOutput := []byte("[]")
 	lastResponseID := ""
+	lastWindowID := ""
+	// Remains pending until a generating request commits successfully.
+	pendingPrewarmID := ""
 	var lastResponsePendingToolCallIDs []string
 	pinnedAuthID := ""
 	// Preserve independent upstream auth affinity when a downstream session switches providers.
@@ -373,7 +393,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 	}
 
 	for {
-		msgType, payload, errReadMessage := conn.ReadMessage()
+		msgType, payload, errReadMessage := readPump.next()
 		if errReadMessage != nil {
 			wsTerminateErr = errReadMessage
 			if websocket.IsCloseError(errReadMessage, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
@@ -405,6 +425,9 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			requestModelName = strings.TrimSpace(gjson.GetBytes(lastRequest, "model").String())
 		}
 		executionParent := context.WithValue(c.Request.Context(), "gin", c)
+		if observer := cliproxyexecutor.DiagnosticsObserver(executionParent); observer != nil {
+			observer.ClientPayload(executionParent, payload, c.Request.Header, "websocket")
+		}
 		executionParent, routeOverridesModelResolution := h.PrepareStreamModelRoute(
 			executionParent,
 			h.HandlerType(),
@@ -435,6 +458,26 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 					}
 				}
 			}
+		}
+		windowPayload, windowID, windowChanged, errWindow := normalizeResponsesWebsocketContextWindow(payload, lastWindowID)
+		if errWindow != nil {
+			wsTerminateErr = errWindow
+			return
+		}
+		if windowChanged {
+			payload = windowPayload
+			lastRequest = nil
+			lastResponseOutput = []byte("[]")
+			lastResponseID = ""
+			lastResponsePendingToolCallIDs = nil
+			pendingPrewarmID = ""
+		}
+		if windowID != "" && windowID != lastWindowID {
+			// Keep other connections' tool caches intact while isolating this window.
+			releaseResponsesWebsocketToolCaches(downstreamSessionKey)
+			downstreamSessionKey = toolCacheBaseKey + ":window:" + windowID
+			retainResponsesWebsocketToolCaches(downstreamSessionKey)
+			lastWindowID = windowID
 		}
 		useUpstreamWebsocketPassthrough := h.responsesWebsocketUsesUpstreamWebsocketPassthrough(requestModelName)
 		if pinnedAuthID != "" {
@@ -483,7 +526,25 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		var requestJSON []byte
 		var updatedLastRequest []byte
 		var errMsg *interfaces.ErrorMessage
-		if nativeWebsocketPassthrough {
+		previousResponseID := strings.TrimSpace(gjson.GetBytes(payload, "previous_response_id").String())
+		if pendingPrewarmID != "" && previousResponseID != "" {
+			if previousResponseID != pendingPrewarmID {
+				errMsg = responsesWebsocketPreviousResponseNotFoundError()
+			} else {
+				requestJSON, updatedLastRequest, errMsg = normalizeResponsesWebsocketPrewarmFollowup(payload, lastRequest)
+			}
+		} else if pendingPrewarmID != "" && gjson.GetBytes(payload, "type").String() == wsRequestTypeCreate {
+			input := gjson.GetBytes(payload, "input")
+			if input.Exists() && !input.IsArray() {
+				errMsg = &interfaces.ErrorMessage{
+					StatusCode: http.StatusBadRequest,
+					Error:      fmt.Errorf("websocket request requires array field: input"),
+				}
+			} else {
+				// No parent reference means a self-contained replacement, not a delta.
+				requestJSON, updatedLastRequest, errMsg = normalizeResponseCreateRequest(normalizeResponseTranscriptReplacement(payload, lastRequest))
+			}
+		} else if nativeWebsocketPassthrough {
 			requestJSON, errMsg = normalizeResponsesWebsocketPassthroughRequest(payload, requestModelName)
 		} else if len(lastRequest) == 0 && strings.TrimSpace(gjson.GetBytes(payload, "previous_response_id").String()) != "" {
 			errMsg = responsesWebsocketPreviousResponseNotFoundError()
@@ -522,6 +583,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		}
 
 		requestJSON = h.prepareCodexMultiAgentV2Tools(c, requestJSON)
+		requestJSON = h.prepareCodexOrphanDelegation(c, requestJSON)
 
 		if !useUpstreamWebsocketPassthrough && shouldHandleResponsesWebsocketPrewarmLocally(payload, lastRequest, false) {
 			if updated, errDelete := sjson.DeleteBytes(requestJSON, "generate"); errDelete == nil {
@@ -534,10 +596,12 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			lastResponseOutput = []byte("[]")
 			lastResponseID = ""
 			lastResponsePendingToolCallIDs = nil
-			if errWrite := writeResponsesWebsocketSyntheticPrewarm(c, writer, requestJSON, wsTimelineLog, passthroughSessionID); errWrite != nil {
+			prewarmID, errWrite := writeResponsesWebsocketSyntheticPrewarm(c, writer, requestJSON, wsTimelineLog, passthroughSessionID)
+			if errWrite != nil {
 				wsTerminateErr = errWrite
 				return
 			}
+			pendingPrewarmID = prewarmID
 			continue
 		}
 
@@ -638,6 +702,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		}
 
 		toolCacheTurn.commit()
+		pendingPrewarmID = ""
 		upstreamMode = attemptedUpstreamMode
 		if upstreamMode == responsesWebsocketUpstreamModeWS {
 			upstreamWebsocketAuthID = lastAttemptedAuthID

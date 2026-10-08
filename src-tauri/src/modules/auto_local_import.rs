@@ -514,8 +514,12 @@ async fn enrich_workbuddy_payload(
 
 fn import_workbuddy() -> ImportFuture {
     Box::pin(async {
-        let local_payload = workbuddy_account::import_payload_from_local()?
-            .ok_or_else(|| "未在本机 WorkBuddy 客户端中找到登录信息".to_string())?;
+        let local_payload = tauri::async_runtime::spawn_blocking(
+            workbuddy_account::import_payload_from_local_prepared,
+        )
+        .await
+        .map_err(|error| format!("WorkBuddy 本机导入后台任务失败: {}", error))??
+        .ok_or_else(|| "未在本机 WorkBuddy 客户端中找到登录信息".to_string())?;
         let access_token = local_payload.access_token.clone();
         let payload = enrich_workbuddy_payload(
             local_payload,

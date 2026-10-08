@@ -1,10 +1,26 @@
 // Codex 账号模块：Local import, token candidate parsing and batch import workflow。
 // 通过 include! 保持原 modules::codex_account 作用域，完整保留私有调用关系。
-/// 从官方 Codex 本机凭据存储导入账号（auth.json / macOS Keychain）
+/// 从官方 Codex 本机凭据存储导入账号（默认实例的 auth.json / macOS Keychain）
 pub fn import_from_local() -> Result<CodexAccount, String> {
-    let codex_home = get_codex_home();
+    import_from_local_at(&get_codex_home())
+}
+
+/// 从指定 profile 目录导入官方 Codex 本机凭据（auth.json / macOS Keychain）。
+///
+/// `codex_home` 既可以是默认实例的 `CODEX_HOME`，也可以是某个多开实例自己的 profile
+/// 目录（官方客户端按 `CODEX_HOME` 落盘凭据），因此多开实例的本地账号同样可以被读取。
+pub fn import_from_local_at(codex_home: &Path) -> Result<CodexAccount, String> {
+    let account = import_from_local_at_inner(codex_home)?;
+    // 重新授权 / 本机导入后立即把新凭据推给运行中的本地网关，并清掉该账号的旧失败状态。
+    crate::modules::codex_local_access::notify_account_credentials_updated(&account);
+    Ok(account)
+}
+
+fn import_from_local_at_inner(codex_home: &Path) -> Result<CodexAccount, String> {
+    let codex_home = codex_home.to_path_buf();
     let auth_path = codex_home.join("auth.json");
-    let content = fs::read_to_string(&auth_path).ok();
+    let content = read_configured_codex_auth_value(&codex_home)?
+        .map(|value| serde_json::to_string(&value).map_err(|e| e.to_string())).transpose()?;
     let raw_value = content
         .as_deref()
         .and_then(|value| serde_json::from_str::<serde_json::Value>(value).ok());
@@ -292,6 +308,168 @@ enum CodexJsonImportCandidate {
         refresh_token: String,
         note_update: CodexAccountNoteUpdate,
     },
+}
+
+static CODEX_IMPORTED_GROUP_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Cockpit Tools 导出格式附带的可迁移元数据（社区 #2213）。
+///
+/// 标签/账号名/账号结构写回账号本身；分组名称用于恢复分组（文件夹）归类。
+/// 旧版本导出的文件没有这些字段，解析结果全为空，导入行为保持不变。
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+struct CodexPortableAccountMetadata {
+    #[serde(default)]
+    tags: Option<Vec<String>>,
+    #[serde(default)]
+    account_name: Option<String>,
+    #[serde(default)]
+    account_structure: Option<String>,
+    #[serde(default)]
+    group_name: Option<String>,
+}
+
+impl CodexPortableAccountMetadata {
+    fn from_value(value: &serde_json::Value) -> Self {
+        Self {
+            tags: read_json_string_array(value, &["tags"]),
+            account_name: read_json_string(value, &["account_name", "accountName"]),
+            account_structure: read_json_string(value, &["account_structure", "accountStructure"]),
+            group_name: read_json_string(
+                value,
+                &[
+                    "group",
+                    "group_name",
+                    "groupName",
+                    "folder",
+                    "folder_name",
+                    "folderName",
+                ],
+            ),
+        }
+    }
+}
+
+/// 把导出文件里的标签/账号名/账号结构写回账号，返回是否发生变更。
+fn apply_portable_account_metadata(
+    account: &mut CodexAccount,
+    metadata: &CodexPortableAccountMetadata,
+) -> bool {
+    let mut changed = false;
+    if let Some(tags) = metadata.tags.as_ref() {
+        account.tags = Some(tags.clone());
+        changed = true;
+    }
+    if let Some(account_name) = metadata.account_name.as_ref() {
+        account.account_name = Some(account_name.clone());
+        changed = true;
+    }
+    if let Some(account_structure) = metadata.account_structure.as_ref() {
+        account.account_structure = Some(account_structure.clone());
+        changed = true;
+    }
+    changed
+}
+
+/// 按名称把导入账号归入分组（文件夹）：同名分组直接复用，缺失时新建。
+/// 账号会先移出其他分组，保持「一个账号一个分组」的既有语义。
+fn assign_imported_account_to_group_by_name(
+    account_id: &str,
+    group_name: &str,
+) -> Result<(), String> {
+    let account_id = account_id.trim();
+    let group_name = group_name.trim();
+    if account_id.is_empty() || group_name.is_empty() {
+        return Ok(());
+    }
+
+    let path = account::get_data_dir()?.join(CODEX_ACCOUNT_GROUPS_FILE);
+    let mut groups: Vec<serde_json::Value> = if path.exists() {
+        match fs::read_to_string(&path) {
+            Ok(raw) => serde_json::from_str::<serde_json::Value>(&raw)
+                .ok()
+                .and_then(|value| value.as_array().cloned())
+                .unwrap_or_default(),
+            Err(_) => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+
+    for group in groups.iter_mut() {
+        let Some(ids) = group
+            .get_mut("accountIds")
+            .and_then(|value| value.as_array_mut())
+        else {
+            continue;
+        };
+        ids.retain(|item| item.as_str().map(str::trim) != Some(account_id));
+    }
+
+    let existing_index = groups.iter().position(|group| {
+        group
+            .get("name")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            == Some(group_name)
+    });
+
+    match existing_index {
+        Some(index) => {
+            if let Some(ids) = groups[index]
+                .get_mut("accountIds")
+                .and_then(|value| value.as_array_mut())
+            {
+                ids.push(serde_json::Value::String(account_id.to_string()));
+            }
+        }
+        None => {
+            let next_sort_order = groups
+                .iter()
+                .filter_map(|group| group.get("sortOrder").and_then(|value| value.as_i64()))
+                .max()
+                .unwrap_or(-1)
+                + 1;
+            let counter = CODEX_IMPORTED_GROUP_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+            groups.push(serde_json::json!({
+                "id": format!(
+                    "cgrp_{}_{}",
+                    chrono::Utc::now().timestamp_millis(),
+                    counter
+                ),
+                "name": group_name,
+                "sortOrder": next_sort_order,
+                "accountIds": [account_id],
+                "createdAt": now_timestamp(),
+                "quotaAutoRefreshMinutes": serde_json::Value::Null,
+            }));
+        }
+    }
+
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("创建 Codex 分组目录失败: {}", error))?;
+        }
+    }
+    let serialized = serde_json::to_string_pretty(&groups)
+        .map_err(|error| format!("序列化 Codex 分组失败: {}", error))?;
+    fs::write(&path, serialized).map_err(|error| format!("写入 Codex 分组失败: {}", error))
+}
+
+/// 分组归类属于附带信息，失败只记日志，不影响账号本身导入成功。
+fn apply_imported_group_assignment(
+    account: &CodexAccount,
+    metadata: &CodexPortableAccountMetadata,
+) {
+    let Some(group_name) = metadata.group_name.as_deref() else {
+        return;
+    };
+    if let Err(error) = assign_imported_account_to_group_by_name(&account.id, group_name) {
+        logger::log_warn(&format!(
+            "Codex 导入分组归类失败: account_id={}, group={}, error={}",
+            account.id, group_name, error
+        ));
+    }
 }
 
 fn codex_account_note_update_from_value(value: &serde_json::Value) -> CodexAccountNoteUpdate {
@@ -1127,6 +1305,7 @@ fn upsert_account_from_access_token_with_hints(
         acc.tokens = tokens;
         mark_token_chain_updated(&mut acc);
         acc.auth_mode = CodexAuthMode::OAuth;
+        acc.upstream_grok_account_id = None;
         acc.authorization_status = None;
         acc.openai_api_key = None;
         acc.api_base_url = None;
@@ -1153,6 +1332,7 @@ fn upsert_account_from_access_token_with_hints(
         let mut acc = CodexAccount::new(existing_id.clone(), email.clone(), tokens);
         mark_token_chain_updated(&mut acc);
         acc.auth_mode = CodexAuthMode::OAuth;
+        acc.upstream_grok_account_id = None;
         acc.authorization_status = None;
         acc.openai_api_key = None;
         acc.api_base_url = None;
@@ -1402,6 +1582,21 @@ async fn import_sub2api_export_from_value(
 }
 
 async fn import_account_from_json_value(
+    value: serde_json::Value,
+) -> Result<Option<CodexAccount>, String> {
+    let metadata = CodexPortableAccountMetadata::from_value(&value);
+    let Some(mut account) = import_account_core_from_json_value(value).await? else {
+        return Ok(None);
+    };
+
+    if apply_portable_account_metadata(&mut account, &metadata) {
+        save_account(&account)?;
+    }
+    apply_imported_group_assignment(&account, &metadata);
+    Ok(Some(account))
+}
+
+async fn import_account_core_from_json_value(
     value: serde_json::Value,
 ) -> Result<Option<CodexAccount>, String> {
     let is_web_session = normalize_codex_session_value(&value, 0).is_some();
@@ -1674,7 +1869,11 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
         .filter_map(|id| load_account(id))
         .collect();
 
-    serde_json::to_string_pretty(&accounts).map_err(|e| format!("序列化失败: {}", e))
+    serialize_accounts_for_export(&accounts)
+}
+
+fn serialize_accounts_for_export(accounts: &[CodexAccount]) -> Result<String, String> {
+    serde_json::to_string_pretty(accounts).map_err(|e| format!("序列化失败: {}", e))
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -1754,6 +1953,7 @@ struct CodexBatchImportSession {
     status: String,
     check_quota: bool,
     cancel: Arc<AtomicBool>,
+    scan_lock: Arc<tokio::sync::Mutex<()>>,
     source_items: Vec<CodexBatchImportSourceItem>,
     next_index: usize,
     total: usize,
@@ -1771,6 +1971,9 @@ struct CodexBatchImportCachedItem {
     preview: CodexBatchImportItem,
     draft: Option<CodexBatchImportDraft>,
     quota: Option<crate::models::codex::CodexQuota>,
+    /// 导出文件附带的标签/账号名/分组元数据（社区 #2213）。
+    #[serde(default)]
+    metadata: CodexPortableAccountMetadata,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -1815,7 +2018,7 @@ fn next_codex_batch_import_session_id() -> String {
 fn get_codex_batch_import_sessions_dir() -> PathBuf {
     let data_dir = account::get_data_dir()
         .or_else(|_| account::resolve_data_dir())
-        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"));
+        .unwrap_or_else(|_| crate::modules::data_paths::fallback_data_dir());
     data_dir.join(CODEX_BATCH_IMPORT_SESSIONS_DIR)
 }
 
@@ -1884,6 +2087,7 @@ fn codex_batch_import_session_from_snapshot(
         status,
         check_quota: snapshot.check_quota,
         cancel: Arc::new(AtomicBool::new(false)),
+        scan_lock: Arc::new(tokio::sync::Mutex::new(())),
         source_items: snapshot.source_items,
         next_index: snapshot.next_index,
         total: snapshot.total,
@@ -1929,6 +2133,61 @@ fn save_codex_batch_import_session_snapshot_best_effort(
             "[Codex Batch Import] 保存导入会话快照失败: session_id={}, error={}",
             session_id, error
         ));
+    }
+}
+
+/// Serialize and write large checkpoints outside the async runtime and session lock.
+async fn save_codex_batch_import_checkpoint(session_id: String, session: CodexBatchImportSession) {
+    if let Err(error) = tokio::task::spawn_blocking(move || {
+        save_codex_batch_import_session_snapshot_best_effort(&session_id, &session);
+    })
+    .await
+    {
+        logger::log_warn(&format!(
+            "[Codex Batch Import] checkpoint worker failed: {}",
+            error
+        ));
+    }
+}
+
+struct CodexBatchImportUpdateBudget {
+    checkpoint_index: usize,
+    checkpoint_at: Duration,
+    preview_at: Duration,
+}
+
+impl CodexBatchImportUpdateBudget {
+    fn new(start_index: usize) -> Self {
+        Self {
+            checkpoint_index: start_index,
+            checkpoint_at: Duration::ZERO,
+            preview_at: Duration::ZERO,
+        }
+    }
+
+    fn checkpoint_due(&mut self, index: usize, total: usize, elapsed: Duration) -> bool {
+        // The terminal status is persisted separately, including cancel/failure recovery.
+        if index == total {
+            return false;
+        }
+        let stride = (total / 20).max(25);
+        if index.saturating_sub(self.checkpoint_index) >= stride
+            || elapsed.saturating_sub(self.checkpoint_at) >= Duration::from_secs(2)
+        {
+            self.checkpoint_index = index;
+            self.checkpoint_at = elapsed;
+            return true;
+        }
+        false
+    }
+
+    fn preview_due(&mut self, current: usize, total: usize, elapsed: Duration) -> bool {
+        if current == total || elapsed.saturating_sub(self.preview_at) >= Duration::from_millis(250)
+        {
+            self.preview_at = elapsed;
+            return true;
+        }
+        false
     }
 }
 
@@ -2416,6 +2675,7 @@ async fn build_codex_batch_import_item(
     check_quota: bool,
 ) -> CodexBatchImportCachedItem {
     let item_id = format!("{}-item-{}", session_id, index + 1);
+    let metadata = CodexPortableAccountMetadata::from_value(&value);
     let draft = match codex_batch_import_draft_from_value(value).await {
         Ok(Some(draft)) => draft,
         Ok(None) => {
@@ -2438,6 +2698,7 @@ async fn build_codex_batch_import_item(
                 },
                 draft: None,
                 quota: None,
+                metadata,
             };
         }
         Err(error) => {
@@ -2460,11 +2721,12 @@ async fn build_codex_batch_import_item(
                 },
                 draft: None,
                 quota: None,
+                metadata,
             };
         }
     };
 
-    let account = match preview_account_for_draft(&draft) {
+    let mut account = match preview_account_for_draft(&draft) {
         Ok(account) => account,
         Err(error) => {
             return CodexBatchImportCachedItem {
@@ -2486,9 +2748,12 @@ async fn build_codex_batch_import_item(
                 },
                 draft: None,
                 quota: None,
+                metadata,
             };
         }
     };
+    // 预览同样使用文件里的标签与账号名，列表标签与实际导入结果保持一致。
+    apply_portable_account_metadata(&mut account, &metadata);
 
     let existing = load_account(&account.id).is_some();
     let (quota_status, quota_error, quota, status) = if check_quota
@@ -2539,6 +2804,7 @@ async fn build_codex_batch_import_item(
         },
         draft: Some(draft),
         quota,
+        metadata,
     }
 }
 
@@ -2548,6 +2814,16 @@ async fn run_codex_batch_import_scan(
     file_paths: Vec<String>,
     check_quota: bool,
 ) {
+    let scan_lock = {
+        let sessions = CODEX_BATCH_IMPORT_SESSIONS.lock().unwrap();
+        sessions
+            .get(&session_id)
+            .map(|session| session.scan_lock.clone())
+    };
+    let Some(scan_lock) = scan_lock else {
+        return;
+    };
+    let scan_guard = scan_lock.lock().await;
     let cancel = {
         let sessions = CODEX_BATCH_IMPORT_SESSIONS.lock().unwrap();
         sessions
@@ -2568,8 +2844,13 @@ async fn run_codex_batch_import_scan(
             .and_then(|item| item.to_str())
             .unwrap_or(&file_path)
             .to_string();
-        match fs::read_to_string(path) {
-            Ok(content) => match codex_batch_import_values_from_content(&content) {
+        match tokio::fs::read_to_string(path).await {
+            Ok(content) => match tokio::task::spawn_blocking(move || {
+                codex_batch_import_values_from_content(&content)
+            })
+            .await
+            .unwrap_or_else(|error| Err(error.to_string()))
+            {
                 Ok(items) => {
                     values.extend(items.into_iter().map(|item| CodexBatchImportSourceItem {
                         source: source.clone(),
@@ -2595,6 +2876,7 @@ async fn run_codex_batch_import_scan(
                     },
                     draft: None,
                     quota: None,
+                    metadata: CodexPortableAccountMetadata::default(),
                 }),
             },
             Err(error) => read_failures.push(CodexBatchImportCachedItem {
@@ -2616,6 +2898,7 @@ async fn run_codex_batch_import_scan(
                 },
                 draft: None,
                 quota: None,
+                metadata: CodexPortableAccountMetadata::default(),
             }),
         }
     }
@@ -2635,18 +2918,29 @@ async fn run_codex_batch_import_scan(
         }
     };
     if let Some(session) = session_snapshot {
-        save_codex_batch_import_session_snapshot_best_effort(&session_id, &session);
+        save_codex_batch_import_checkpoint(session_id.clone(), session).await;
     }
+    drop(scan_guard);
     run_codex_batch_import_resume(app, session_id).await;
 }
 
 async fn run_codex_batch_import_resume(app: tauri::AppHandle, session_id: String) {
+    let scan_lock = {
+        let sessions = CODEX_BATCH_IMPORT_SESSIONS.lock().unwrap();
+        sessions
+            .get(&session_id)
+            .map(|session| session.scan_lock.clone())
+    };
+    let Some(scan_lock) = scan_lock else {
+        return;
+    };
+    // Resume may arrive before the cancelled worker has returned; never scan twice.
+    let _scan_guard = scan_lock.lock().await;
     let (cancel, check_quota, source_items, start_index, mut items, total, session_snapshot) = {
         let mut sessions = CODEX_BATCH_IMPORT_SESSIONS.lock().unwrap();
         let Some(session) = sessions.get_mut(&session_id) else {
             return;
         };
-        session.cancel.store(false, Ordering::SeqCst);
         session.status = "scanning".to_string();
         (
             session.cancel.clone(),
@@ -2658,7 +2952,7 @@ async fn run_codex_batch_import_resume(app: tauri::AppHandle, session_id: String
             session.clone(),
         )
     };
-    save_codex_batch_import_session_snapshot_best_effort(&session_id, &session_snapshot);
+    save_codex_batch_import_checkpoint(session_id.clone(), session_snapshot).await;
 
     emit_codex_batch_import_progress(
         &app,
@@ -2673,6 +2967,9 @@ async fn run_codex_batch_import_resume(app: tauri::AppHandle, session_id: String
         ),
     );
 
+    let source_total = source_items.len();
+    let started = std::time::Instant::now();
+    let mut update_budget = CodexBatchImportUpdateBudget::new(start_index);
     for (index, source_item) in source_items.into_iter().enumerate().skip(start_index) {
         if cancel.load(Ordering::SeqCst) {
             break;
@@ -2686,41 +2983,52 @@ async fn run_codex_batch_import_resume(app: tauri::AppHandle, session_id: String
         )
         .await;
         let current_label = Some(cached.preview.label.clone());
-        items.push(cached);
+        items.push(cached.clone());
+        let elapsed = started.elapsed();
+        let checkpoint_due = update_budget.checkpoint_due(index + 1, source_total, elapsed);
+        let preview_due = update_budget.preview_due(items.len(), total, elapsed);
         let session_snapshot = {
             let mut sessions = CODEX_BATCH_IMPORT_SESSIONS.lock().unwrap();
             if let Some(session) = sessions.get_mut(&session_id) {
                 session.next_index = index + 1;
-                session.items = items.clone();
-                Some(session.clone())
+                session.items.push(cached);
+                if checkpoint_due {
+                    Some(session.clone())
+                } else {
+                    None
+                }
             } else {
                 None
             }
         };
         if let Some(session) = session_snapshot {
-            save_codex_batch_import_session_snapshot_best_effort(&session_id, &session);
+            save_codex_batch_import_checkpoint(session_id.clone(), session).await;
         }
-        emit_codex_batch_import_progress(
-            &app,
-            codex_batch_import_progress_from_items(
-                &session_id,
-                "scanning",
-                check_quota,
-                items.len(),
-                total,
-                &items,
-                current_label,
-            ),
-        );
-        let preview = {
-            let sessions = CODEX_BATCH_IMPORT_SESSIONS.lock().unwrap();
-            sessions
-                .get(&session_id)
-                .map(|session| codex_batch_import_preview_from_session(&session_id, session))
-        };
-        if let Some(preview) = preview {
-            emit_codex_batch_import_preview(&app, preview);
+        if preview_due {
+            emit_codex_batch_import_progress(
+                &app,
+                codex_batch_import_progress_from_items(
+                    &session_id,
+                    "scanning",
+                    check_quota,
+                    items.len(),
+                    total,
+                    &items,
+                    current_label,
+                ),
+            );
+            let preview = {
+                let sessions = CODEX_BATCH_IMPORT_SESSIONS.lock().unwrap();
+                sessions
+                    .get(&session_id)
+                    .map(|session| codex_batch_import_preview_from_session(&session_id, session))
+            };
+            if let Some(preview) = preview {
+                emit_codex_batch_import_preview(&app, preview);
+            }
         }
+        // A fast local import must still let cancel requests and other tasks run.
+        tokio::task::yield_now().await;
     }
 
     let status = if cancel.load(Ordering::SeqCst) {
@@ -2745,6 +3053,7 @@ async fn run_codex_batch_import_resume(app: tauri::AppHandle, session_id: String
                     status: status.to_string(),
                     check_quota,
                     cancel: cancel.clone(),
+                    scan_lock: scan_lock.clone(),
                     source_items: Vec::new(),
                     next_index: 0,
                     total: items.len(),
@@ -2757,7 +3066,7 @@ async fn run_codex_batch_import_resume(app: tauri::AppHandle, session_id: String
             session.clone(),
         )
     };
-    save_codex_batch_import_session_snapshot_best_effort(&session_id, &session_snapshot);
+    save_codex_batch_import_checkpoint(session_id.clone(), session_snapshot).await;
     emit_codex_batch_import_completed(&app, preview);
 }
 
@@ -2776,6 +3085,7 @@ pub fn start_codex_batch_import_from_files(
         status: "scanning".to_string(),
         check_quota,
         cancel,
+        scan_lock: Arc::new(tokio::sync::Mutex::new(())),
         source_items: Vec::new(),
         next_index: 0,
         total: 0,
@@ -2948,15 +3258,22 @@ pub fn confirm_codex_batch_import(
                 } => upsert_account_from_access_token_with_hints(access_token, hints)?,
             };
             if let Some(quota) = cached.quota.clone() {
-                account.quota = Some(quota);
+                account
+                    .replace_quota_preserving_team_history(quota, chrono::Utc::now().timestamp());
                 account.quota_error = None;
                 account.usage_updated_at = Some(chrono::Utc::now().timestamp());
+                save_account(&account)?;
+            }
+            if apply_portable_account_metadata(&mut account, &cached.metadata) {
                 save_account(&account)?;
             }
             Ok(account)
         })();
         match result {
-            Ok(account) => imported.push(account),
+            Ok(account) => {
+                apply_imported_group_assignment(&account, &cached.metadata);
+                imported.push(account);
+            }
             Err(error) => failed.push(CodexFileImportFailure {
                 email: cached.preview.label,
                 error,
@@ -3157,4 +3474,3 @@ fn extract_codex_tokens_from_credentials_value(
 
     None
 }
-

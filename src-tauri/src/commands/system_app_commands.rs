@@ -351,6 +351,56 @@ pub fn set_floating_card_confirm_on_close(confirm_on_close: bool) -> Result<(), 
 }
 
 #[tauri::command]
+pub async fn update_floating_card_appearance(
+    app: tauri::AppHandle,
+    minimal: Option<bool>,
+    background_opacity: Option<f64>,
+) -> Result<modules::floating_card_window::FloatingCardAppearance, String> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static SAVING: AtomicBool = AtomicBool::new(false);
+    if SAVING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
+        return Err("common.configSaveTimeout".into());
+    }
+    struct SaveGuard;
+    impl Drop for SaveGuard { fn drop(&mut self) { SAVING.store(false, Ordering::Release); } }
+    let task = tauri::async_runtime::spawn_blocking(move || {
+        let _save_guard = SaveGuard;
+        let updated = config::patch_user_config(|current| {
+            if let Some(value) = minimal { current.floating_card_minimal = value; }
+            if let Some(value) = background_opacity {
+                current.floating_card_background_opacity = config::normalize_floating_card_background_opacity(value);
+            }
+            Ok(())
+        })?;
+        let appearance = modules::floating_card_window::FloatingCardAppearance::from(&updated);
+        use tauri::Emitter;
+        // Notify even if a slow disk completes after the caller's timeout.
+        if let Err(err) = app.emit(modules::floating_card_window::FLOATING_CARD_APPEARANCE_CHANGED_EVENT, &appearance) {
+            modules::logger::log_warn(&format!("[FloatingCard] 外观更新通知失败: {}", err));
+        }
+        Ok::<_, String>(appearance)
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(5), task).await
+        .map_err(|_| "common.configSaveTimeout".to_string())?
+        .map_err(|err| err.to_string())?
+}
+
+#[tauri::command]
+pub fn resize_current_floating_card_window(window: tauri::Window, height: f64) -> Result<(), String> {
+    let label = window.label();
+    if label != modules::floating_card_window::FLOATING_CARD_WINDOW_LABEL
+        && !label.starts_with(modules::floating_card_window::INSTANCE_FLOATING_CARD_WINDOW_LABEL_PREFIX) {
+        return Err("invalid_floating_card_window".to_string());
+    }
+    let minimal = config::get_user_config().floating_card_minimal;
+    let min_height = if minimal { 110.0 } else { 290.0 };
+    let height = if height.is_finite() { height.clamp(min_height, 520.0) } else { min_height };
+    window.set_min_size(Some(tauri::LogicalSize::new(250.0, min_height))).map_err(|err| err.to_string())?;
+    let size = window.inner_size().map_err(|err| err.to_string())?.to_logical::<f64>(window.scale_factor().map_err(|err| err.to_string())?);
+    window.set_size(tauri::LogicalSize::new(size.width.max(250.0), height)).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 pub fn save_floating_card_position(x: i32, y: i32) -> Result<(), String> {
     config::patch_user_config(|current| {
         current.floating_card_position_x = Some(x);

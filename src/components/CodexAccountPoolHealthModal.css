@@ -3,7 +3,7 @@
   background: rgba(15, 23, 42, 0.62);
 }
 
-.codex-account-pool-health-modal {
+.modal.codex-account-pool-health-modal {
   width: min(760px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 48px));
   display: flex;
@@ -45,8 +45,26 @@
 }
 
 .codex-account-pool-health-body {
-  min-height: 180px;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.codex-account-pool-health-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--success, #16a34a) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--success, #16a34a) 12%, transparent);
+  color: var(--success, #16a34a);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.codex-account-pool-health-success svg {
+  flex-shrink: 0;
 }
 
 .codex-account-pool-health-list {
@@ -185,6 +203,24 @@
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.codex-account-pool-health-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codex-account-pool-health-request > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-account-pool-health-request > .btn {
+  flex-shrink: 0;
 }
 
 .codex-account-pool-health-empty {

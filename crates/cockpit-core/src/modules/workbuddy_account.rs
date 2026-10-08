@@ -951,6 +951,8 @@ fn payload_from_import_value(raw: Value) -> Result<WorkbuddyOAuthCompletePayload
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    let expires_at = json_object_i64_field(obj, &["expires_at", "expiresAt"]);
+
     Ok(WorkbuddyOAuthCompletePayload {
         email,
         uid,
@@ -960,7 +962,7 @@ fn payload_from_import_value(raw: Value) -> Result<WorkbuddyOAuthCompletePayload
         access_token,
         refresh_token,
         token_type: Some("Bearer".to_string()),
-        expires_at: None,
+        expires_at,
         domain,
         plan_type: None,
         dosage_notify_code: None,

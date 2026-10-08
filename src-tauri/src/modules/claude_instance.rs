@@ -146,27 +146,7 @@ pub fn get_default_claude_cli_config_dir() -> Result<PathBuf, String> {
 }
 
 pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/claude"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let appdata =
-            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join(".antigravity_cockpit\\instances\\claude"));
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/claude"));
-    }
-
-    #[allow(unreachable_code)]
-    Err("Claude 应用多开仅支持 macOS、Windows 和 Linux".to_string())
+    crate::modules::data_paths::managed_instances_root_dir("claude")
 }
 
 pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
@@ -222,6 +202,7 @@ fn resolve_copy_source_config_dir(
 }
 
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = CLAUDE_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;
@@ -348,6 +329,7 @@ pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, 
 }
 
 pub fn delete_instance(instance_id: &str) -> Result<(), String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = CLAUDE_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;
@@ -1980,6 +1962,93 @@ pub fn close_claude(user_data_dirs: &[String], timeout_secs: u64) -> Result<(), 
     Ok(())
 }
 
+/// 结束仍占用 Claude profile 的 Store / MSIX 版 Claude Desktop 进程（含 Electron 子进程）。
+///
+/// `collect_claude_process_entries` 只按用户配置的启动路径匹配、并过滤命令行含 `--type=`
+/// 的子进程，而真正持有 `Network\Cookies` 独占锁的正是 network utility 子进程；MSIX 安装还会
+/// 把 user-data 虚拟化到 `Packages\Claude_*\LocalCache`，路径匹配更容易漏。这里只按包路径兜底，
+/// 并显式排除 Claude Code CLI，既不动用户配置的执行路径，也不会误伤用户自建的 Claude 实例。
+///
+/// 进程判定拆成 `is_store_claude_desktop_process`，便于在非 Windows 平台做静态覆盖。
+#[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
+fn is_store_claude_desktop_process(name: &str, exe_path: &str, args_line: &str) -> bool {
+    if name != "claude.exe" {
+        return false;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if is_windows_claude_code_cli_process(exe_path, args_line) {
+            return false;
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = args_line;
+    }
+    exe_path.contains("\\windowsapps\\claude") || exe_path.contains("/windowsapps/claude")
+}
+
+#[cfg(target_os = "windows")]
+pub fn force_close_windows_claude_desktop_processes(timeout_secs: u64) -> Result<usize, String> {
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_exe(UpdateKind::OnlyIfNotSet)
+            .with_cmd(UpdateKind::OnlyIfNotSet),
+    );
+
+    let current_pid = std::process::id();
+    let mut pids: Vec<u32> = Vec::new();
+    for (pid, process) in system.processes() {
+        let pid_u32 = pid.as_u32();
+        if pid_u32 == current_pid {
+            continue;
+        }
+        let name = process.name().to_string_lossy().to_ascii_lowercase();
+        let exe_path = process
+            .exe()
+            .and_then(|path| path.to_str())
+            .map(normalize_path_for_compare)
+            .unwrap_or_default();
+        let args_line = process
+            .cmd()
+            .iter()
+            .map(|arg| arg.to_string_lossy().to_lowercase())
+            .collect::<Vec<String>>()
+            .join(" ");
+        if !is_store_claude_desktop_process(&name, &exe_path, &args_line) {
+            continue;
+        }
+        pids.push(pid_u32);
+    }
+
+    pids.sort();
+    pids.dedup();
+    if pids.is_empty() {
+        return Ok(0);
+    }
+
+    for pid in &pids {
+        let _ = modules::process::close_pid(*pid, timeout_secs);
+    }
+
+    let still_running: Vec<u32> = pids
+        .iter()
+        .copied()
+        .filter(|pid| modules::process::is_pid_running(*pid))
+        .collect();
+    if !still_running.is_empty() {
+        return Err(format!(
+            "无法结束仍占用 Claude 登录态的 Store 版进程: {}",
+            modules::process::summarize_pid_list_for_log(&still_running)
+        ));
+    }
+
+    Ok(pids.len())
+}
+
 #[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
@@ -1995,5 +2064,50 @@ mod tests {
         assert!(!is_windows_claude_code_cli_path(Path::new(
             r"C:\Program Files\WindowsApps\Claude_1.0.0.0_x64__pzs8sxrjxfjjc\app\Claude.exe"
         )));
+    }
+}
+
+#[cfg(test)]
+mod store_claude_process_match_tests {
+    use super::*;
+
+    #[test]
+    fn store_claude_desktop_processes_are_matched_including_children() {
+        // exe 路径按 normalize_path_for_compare 的 Windows 形态（小写 + 反斜杠）断言。
+        let store_exe = r"c:\program files\windowsapps\claude_1.40609.0.0_x64__pzs8sxrjxfjjc\app\claude.exe";
+        assert!(is_store_claude_desktop_process("claude.exe", store_exe, ""));
+        // Electron 子进程（真正持有 Network\Cookies 的是 network service）也必须命中。
+        assert!(is_store_claude_desktop_process(
+            "claude.exe",
+            store_exe,
+            "--type=utility --utility-sub-type=network.mojom.networkservice"
+        ));
+        assert!(is_store_claude_desktop_process(
+            "claude.exe",
+            store_exe,
+            "--type=renderer"
+        ));
+    }
+
+    #[test]
+    fn store_claude_process_match_ignores_cli_and_other_packages() {
+        // Claude Code CLI 不是 Claude Desktop，结束它会影响用户在用的命令行会话。
+        assert!(!is_store_claude_desktop_process(
+            "claude.exe",
+            r"c:\users\me\appdata\roaming\claude\claude-code\2.1.177\claude.exe",
+            ""
+        ));
+        // 其它应用的 WindowsApps 包不能被误伤。
+        assert!(!is_store_claude_desktop_process(
+            "claude.exe",
+            r"c:\program files\windowsapps\codex_1.0.0.0_x64__abc\app\claude.exe",
+            ""
+        ));
+        // 非 claude.exe 进程名。
+        assert!(!is_store_claude_desktop_process(
+            "code.exe",
+            r"c:\program files\windowsapps\claude_1.0.0.0\app\claude.exe",
+            ""
+        ));
     }
 }

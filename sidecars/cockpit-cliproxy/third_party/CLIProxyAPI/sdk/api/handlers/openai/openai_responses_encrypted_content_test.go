@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
@@ -97,55 +97,7 @@ func newEncryptedContentRetryTestHandler(t *testing.T) (*OpenAIResponsesAPIHandl
 	return NewOpenAIResponsesAPIHandler(handlers.NewBaseAPIHandlers(&sdkconfig.SDKConfig{}, manager)), executor
 }
 
-func TestSanitizeInvalidEncryptedContentRetryBody(t *testing.T) {
-	body := []byte(`{
-		"model":"gpt-5.5",
-		"sequence":900719925474099312345,
-		"input":[
-			{"type":"compaction","encrypted_content":"expired","summary":[{"text":"drop"}]},
-			{"type":"compaction_summary","summary":[{"text":"keep"}]},
-			{"type":"reasoning","id":"rs_1","encrypted_content":"expired","content":null,"summary":[]},
-			{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}
-		]
-	}`)
-
-	got, changed := sanitizeInvalidEncryptedContentRetryBody(body)
-	if !changed {
-		t.Fatal("expected encrypted replay content to be sanitized")
-	}
-	if value := gjson.GetBytes(got, "sequence").Raw; value != "900719925474099312345" {
-		t.Fatalf("large integer = %s, want exact original value", value)
-	}
-	if value := gjson.GetBytes(got, "input.#").Int(); value != 3 {
-		t.Fatalf("input length = %d, want 3: %s", value, got)
-	}
-	if value := gjson.GetBytes(got, "input.0.type").String(); value != "compaction_summary" {
-		t.Fatalf("unencrypted compaction type = %q, want compaction_summary", value)
-	}
-	if gjson.GetBytes(got, "input.1.encrypted_content").Exists() || gjson.GetBytes(got, "input.1.content").Exists() {
-		t.Fatalf("reasoning encrypted/null content was not removed: %s", got)
-	}
-	if value := gjson.GetBytes(got, "input.1.id").String(); value != "rs_1" {
-		t.Fatalf("reasoning id = %q, want rs_1", value)
-	}
-}
-
-func TestSanitizeInvalidEncryptedContentRetryBodyNoChange(t *testing.T) {
-	body := []byte(`{"input":[{"type":"reasoning","summary":[]},{"type":"compaction","summary":[]}]}`)
-	got, changed := sanitizeInvalidEncryptedContentRetryBody(body)
-	if changed {
-		t.Fatalf("unexpected change: %s", got)
-	}
-}
-
-func TestIsInvalidEncryptedContentError(t *testing.T) {
-	errMsg := &interfaces.ErrorMessage{StatusCode: 400, Error: errors.New(`{"error":{"code":"invalid_encrypted_content"}}`)}
-	if !isInvalidEncryptedContentError(errMsg) {
-		t.Fatal("expected invalid_encrypted_content error to match")
-	}
-}
-
-func TestResponsesRetriesInvalidEncryptedContentNonStreaming(t *testing.T) {
+func TestResponsesPreservesInvalidEncryptedContentFailureNonStreaming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, executor := newEncryptedContentRetryTestHandler(t)
 	router := gin.New()
@@ -156,13 +108,13 @@ func TestResponsesRetriesInvalidEncryptedContentNonStreaming(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusOK || gjson.Get(recorder.Body.String(), "id").String() != "resp-recovered" {
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "invalid_encrypted_content") {
 		t.Fatalf("unexpected response status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 	assertEncryptedContentRetryPayloads(t, executor.Payloads())
 }
 
-func TestResponsesCompactRetriesInvalidEncryptedContent(t *testing.T) {
+func TestResponsesCompactPreservesInvalidEncryptedContentFailure(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, executor := newEncryptedContentRetryTestHandler(t)
 	router := gin.New()
@@ -173,13 +125,13 @@ func TestResponsesCompactRetriesInvalidEncryptedContent(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusOK || gjson.Get(recorder.Body.String(), "id").String() != "resp-recovered" {
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "invalid_encrypted_content") {
 		t.Fatalf("unexpected compact response status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 	assertEncryptedContentRetryPayloads(t, executor.Payloads())
 }
 
-func TestResponsesRetriesInvalidEncryptedContentBeforeFirstStreamChunk(t *testing.T) {
+func TestResponsesPreservesInvalidEncryptedContentFailureBeforeFirstChunk(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, executor := newEncryptedContentRetryTestHandler(t)
 	router := gin.New()
@@ -190,13 +142,13 @@ func TestResponsesRetriesInvalidEncryptedContentBeforeFirstStreamChunk(t *testin
 	request.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "resp-recovered") {
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "invalid_encrypted_content") {
 		t.Fatalf("unexpected stream response status=%d body=%s payloads=%q", recorder.Code, recorder.Body.String(), executor.Payloads())
 	}
 	assertEncryptedContentRetryPayloads(t, executor.Payloads())
 }
 
-func TestResponsesWebsocketRetriesInvalidEncryptedContentOnce(t *testing.T) {
+func TestResponsesWebsocketPreservesInvalidEncryptedContentFailure(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, executor := newEncryptedContentRetryTestHandler(t)
 	router := gin.New()
@@ -209,6 +161,9 @@ func TestResponsesWebsocketRetriesInvalidEncryptedContentOnce(t *testing.T) {
 		t.Fatalf("dial websocket: %v", err)
 	}
 	defer func() { _ = conn.Close() }()
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	body := `{"type":"response.create","model":"retry-model","input":[{"type":"reasoning","id":"rs_1","encrypted_content":"expired","summary":[]},{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}]}`
 	if errWrite := conn.WriteMessage(websocket.TextMessage, []byte(body)); errWrite != nil {
 		t.Fatalf("write websocket request: %v", errWrite)
@@ -217,7 +172,7 @@ func TestResponsesWebsocketRetriesInvalidEncryptedContentOnce(t *testing.T) {
 	if errRead != nil {
 		t.Fatalf("read websocket response: %v", errRead)
 	}
-	if gjson.GetBytes(payload, "type").String() != "response.completed" {
+	if !strings.Contains(string(payload), "invalid_encrypted_content") || strings.Contains(string(payload), "resp-recovered") {
 		t.Fatalf("unexpected websocket payload: %s", payload)
 	}
 	assertEncryptedContentRetryPayloads(t, executor.Payloads())
@@ -225,13 +180,10 @@ func TestResponsesWebsocketRetriesInvalidEncryptedContentOnce(t *testing.T) {
 
 func assertEncryptedContentRetryPayloads(t *testing.T, payloads [][]byte) {
 	t.Helper()
-	if len(payloads) != 2 {
-		t.Fatalf("attempt count = %d, want 2", len(payloads))
+	if len(payloads) != 1 {
+		t.Fatalf("unexpected encrypted-content replay: attempts=%d", len(payloads))
 	}
-	if !gjson.GetBytes(payloads[0], "input.0.encrypted_content").Exists() {
-		t.Fatalf("first request lost encrypted content: %s", payloads[0])
-	}
-	if gjson.GetBytes(payloads[1], "input.0.encrypted_content").Exists() {
-		t.Fatalf("retry still contains encrypted content: %s", payloads[1])
+	if gjson.GetBytes(payloads[0], "input.0.encrypted_content").String() != "expired" {
+		t.Fatalf("canonical history was changed: %s", payloads[0])
 	}
 }

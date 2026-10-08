@@ -3,6 +3,16 @@
    ========================================================================== */
 
 /* Main Card Container (for InstancesManager or card variant) */
+:where(
+  .codex-model-routing-summary__manage-btn,
+  .codex-model-routing-card__delete,
+  .codex-model-routing-card__action-btn,
+  .codex-model-routing-card__pill-remove
+) {
+  appearance: none;
+  font: inherit;
+}
+
 .codex-model-routing {
   display: flex;
   flex-direction: column;
@@ -84,6 +94,20 @@
   transform: translateX(14px);
 }
 
+.codex-model-routing__switch input:focus-visible + .codex-model-routing__switch-track {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.codex-model-routing__switch:has(input:disabled),
+.codex-model-routing__switch input:disabled {
+  cursor: not-allowed;
+}
+
+.codex-model-routing__switch input:disabled + .codex-model-routing__switch-track {
+  opacity: 0.5;
+}
+
 /* Summary Card View (when enabled inside instance card or standalone) */
 .codex-model-routing-summary {
   display: flex;
@@ -142,7 +166,7 @@
   transition: all 0.15s ease;
 }
 
-.codex-model-routing-summary__manage-btn:hover {
+.codex-model-routing-summary__manage-btn:hover:not(:disabled) {
   border-color: var(--primary);
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, var(--bg-tertiary));
@@ -178,7 +202,7 @@
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.codex-model-routing-summary__row:hover {
+.codex-model-routing-summary__row:hover:not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--primary) 6%, var(--bg-tertiary));
   border-color: color-mix(in srgb, var(--primary) 20%, transparent);
 }
@@ -325,11 +349,28 @@
   min-width: 0;
 }
 
-.codex-model-routing-card__provider .single-select-dropdown__trigger {
+.codex-model-routing-card__provider .single-select-dropdown-trigger {
   height: 32px;
   min-height: 32px;
-  padding: 4px 10px;
+  padding: 0 8px 0 10px;
+  gap: 8px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.codex-model-routing-card__provider .single-select-dropdown-trigger:hover:not(:disabled),
+.codex-model-routing-card__provider .single-select-dropdown-trigger.open {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.codex-model-routing-card__provider .single-select-dropdown-value {
   font-size: 12px;
+  font-weight: 600;
+}
+
+.codex-model-routing-card__provider .single-select-dropdown-arrow {
+  width: 18px;
+  height: 18px;
 }
 
 .codex-model-routing-card__namespace-wrap {
@@ -384,7 +425,7 @@
   transition: all 0.15s ease;
 }
 
-.codex-model-routing-card__delete:hover {
+.codex-model-routing-card__delete:hover:not(:disabled) {
   border-color: var(--danger, #ef4444);
   color: var(--danger, #ef4444);
   background: color-mix(in srgb, var(--danger, #ef4444) 10%, var(--bg-secondary));
@@ -531,7 +572,7 @@
   transition: all 0.15s ease;
 }
 
-.codex-model-routing-card__pill:hover {
+.codex-model-routing-card__pill:hover:not([aria-disabled="true"]) {
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary) 6%, var(--bg-secondary));
   color: var(--primary);
@@ -562,7 +603,7 @@
   transition: all 0.15s ease;
 }
 
-.codex-model-routing-card__pill:hover .codex-model-routing-card__pill-checkbox {
+.codex-model-routing-card__pill:hover:not([aria-disabled="true"]) .codex-model-routing-card__pill-checkbox {
   border-color: var(--primary);
 }
 
@@ -588,7 +629,7 @@
   transition: all 0.15s ease;
 }
 
-.codex-model-routing-card__pill-remove:hover {
+.codex-model-routing-card__pill-remove:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger, #ef4444) 15%, transparent);
   color: var(--danger, #ef4444);
 }
@@ -612,6 +653,22 @@
 
 .codex-model-routing-empty-accounts p {
   margin: 0;
+}
+
+.codex-model-routing-summary__manage-btn:disabled,
+.codex-model-routing-card__delete:disabled,
+.codex-model-routing-card__pill-remove:disabled,
+.codex-model-routing-summary__row[aria-disabled="true"],
+.codex-model-routing-card__pill[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.codex-model-routing-card__namespace-input:disabled,
+.codex-model-routing-card__manual-input:disabled {
+  color: var(--text-muted);
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Animations */

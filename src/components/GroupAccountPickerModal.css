@@ -1,9 +1,24 @@
-.group-account-picker-modal .modal-body {
-  overflow: visible;
+.modal.group-account-picker-modal {
+  max-width: 640px;
 }
 
-.group-account-picker-modal {
-  max-width: 640px;
+.modal.group-account-picker-modal > .modal-header,
+.modal.group-account-picker-modal > .modal-footer {
+  flex: 0 0 auto;
+}
+
+.modal.group-account-picker-modal
+  > .modal-body.group-account-picker-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.group-account-picker-body > * {
+  flex: 0 0 auto;
 }
 
 .group-account-picker-title {
@@ -19,14 +34,6 @@
   color: var(--primary);
   font-size: 12px;
   font-weight: 600;
-}
-
-.group-account-picker-body {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-height: none;
-  overflow: visible;
 }
 
 .group-account-name-field {
@@ -198,6 +205,12 @@
   color: #b45309;
 }
 
+.group-account-badge.is-current-target {
+  background: rgba(59, 130, 246, 0.16);
+  color: var(--primary, #3b82f6);
+  font-weight: 700;
+}
+
 .group-account-tier-badge {
   flex-shrink: 0;
 }
@@ -237,6 +250,11 @@
 
 [data-theme="dark"] .group-account-badge.is-ungrouped {
   color: #fbbf24;
+}
+
+[data-theme="dark"] .group-account-badge.is-current-target {
+  background: rgba(59, 130, 246, 0.25);
+  color: #60a5fa;
 }
 
 [data-theme="dark"] .group-account-status {

@@ -17,6 +17,8 @@ export interface SponsorIntegration {
   enabled: boolean;
   type?: 'sub2api' | 'new_api' | null;
   baseUrl: string;
+  /** 旧线路地址；命中后自动替换为当前 baseUrl。 */
+  baseUrlAliases?: string[];
   wireApi?: 'responses' | 'chat_completions' | null;
   quickConfigure?: boolean;
   dashboardCard?: boolean;
@@ -40,4 +42,11 @@ export interface SponsorModule {
 
 export interface SponsorModuleState {
   sponsorModule: SponsorModule | null;
+}
+
+export interface SponsorRouteSyncSummary {
+  changed: boolean;
+  codexProviders: number;
+  codexAccounts: number;
+  claudeAccounts: number;
 }

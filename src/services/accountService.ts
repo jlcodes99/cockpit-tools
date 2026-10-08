@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { Account, AccountNoteUpdate, RefreshStats } from '../types/account';
-import { AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
+import { AntigravityRuntimeTarget, getAntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 
 
 export async function listAccounts(): Promise<Account[]> {
@@ -54,7 +54,7 @@ export async function fetchAccountQuota(accountId: string): Promise<Account> {
 export async function refreshAllQuotas(
     trigger?: 'auto' | 'manual',
 ): Promise<RefreshStats> {
-    return await invoke('refresh_all_quotas', { trigger });
+    return await invoke('refresh_all_quotas', { trigger, runtimeTarget: getAntigravityRuntimeTarget() });
 }
 
 export async function startOAuthLogin(update?: AccountNoteUpdate): Promise<Account> {

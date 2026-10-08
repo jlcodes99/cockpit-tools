@@ -226,8 +226,8 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
         modules::process::close_antigravity_instances(&[default_dir_str.clone()], 20)?;
         let _ = modules::instance::update_default_pid(None)?;
         if let Some(ref account_id) = default_bind_account_id {
-            let _ = modules::prepare_account_for_injection(account_id).await?;
-            modules::instance::inject_account_to_profile(&default_dir, account_id)?;
+            let account = modules::prepare_account_for_injection(account_id).await?;
+            modules::instance::inject_account_to_profile_with_account(&default_dir, &account)?;
         }
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
         let pid = modules::process::start_antigravity_with_args("", &extra_args)?;
@@ -267,9 +267,9 @@ pub async fn start_instance(instance_id: String) -> Result<InstanceProfileView, 
     let _ = modules::instance::update_instance_pid(&instance.id, None)?;
 
     if let Some(ref account_id) = instance.bind_account_id {
-        let _ = modules::prepare_account_for_injection(account_id).await?;
+        let account = modules::prepare_account_for_injection(account_id).await?;
         let profile_dir = std::path::PathBuf::from(&instance.user_data_dir);
-        modules::instance::inject_account_to_profile(&profile_dir, account_id)?;
+        modules::instance::inject_account_to_profile_with_account(&profile_dir, &account)?;
     }
 
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);

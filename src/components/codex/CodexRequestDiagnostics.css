@@ -1,0 +1,22 @@
+.codex-request-payload-setting { min-width: 0; padding: 12px 0; }
+.codex-request-payload-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.codex-request-payload-row > strong { font-size: 13px; }
+.codex-request-payload-row .single-select-dropdown { width: 140px; max-width: 100%; }
+.codex-request-diagnostics-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.6; margin: 8px 0; overflow-wrap: anywhere; }
+.codex-request-payload-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.codex-request-detail-overlay { z-index: 12040; }
+.modal.codex-request-detail-modal { width: min(960px, calc(100vw - 32px)); max-width: 960px; max-height: calc(100vh - 32px); }
+.codex-request-detail-body { min-height: 0; overflow: auto; }
+.codex-request-detail-summary { display: grid; gap: 8px; }
+.codex-request-detail-summary > div, .codex-request-attempts li > div, .codex-request-payload-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.codex-request-detail-summary code, .codex-request-attempts code { overflow-wrap: anywhere; }
+.codex-request-detail-summary > div > span:first-child { color: var(--text-secondary); }
+.codex-request-attempts { margin: 8px 0; padding-left: 24px; }
+.codex-request-attempts li { padding: 12px; border-bottom: 1px solid var(--border); }
+.codex-request-attempts time { color: var(--text-secondary); font-size: 12px; }
+.codex-request-attempt-error { color: var(--danger); white-space: pre-wrap; overflow-wrap: anywhere; }
+.codex-request-detail-body pre { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-secondary); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 45vh; overflow: auto; }
+.codex-request-payload-meta { margin: 10px 0; color: var(--text-secondary); font-size: 12px; }
+.codex-request-payload-hash { font-size: 11px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.codex-request-headers-toggle svg { transition: transform 150ms ease; }
+.codex-request-headers-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }

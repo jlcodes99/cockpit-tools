@@ -4,6 +4,7 @@ import {
   ANTIGRAVITY_RUNTIME_TARGET_STORAGE_KEY,
   AntigravityRuntimeTarget,
   getAntigravityRuntimeTarget,
+  hasSavedAntigravityRuntimeTarget,
   normalizeAntigravityRuntimeTarget,
   setAntigravityRuntimeTarget,
 } from '../utils/antigravityRuntimeTarget';
@@ -42,9 +43,15 @@ export function useAntigravityRuntimeTarget(): AntigravityRuntimeTarget {
     }
     antigravityRuntimeTargetAutoResolveStarted = true;
 
+    // Installation discovery is a fallback, never an override of a saved choice.
+    if (hasSavedAntigravityRuntimeTarget()) return;
+
     const initialTarget = getAntigravityRuntimeTarget();
     void resolvePreferredAntigravityRuntimeTarget(initialTarget)
       .then((preferredTarget) => {
+        if (hasSavedAntigravityRuntimeTarget()) {
+          return;
+        }
         if (preferredTarget === initialTarget) {
           return;
         }

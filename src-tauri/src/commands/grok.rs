@@ -302,18 +302,49 @@ mod tests {
 }
 
 #[tauri::command]
-pub fn list_grok_accounts() -> Result<Vec<GrokAccountView>, String> {
-    grok_account::list_accounts_checked()
+pub async fn list_grok_accounts() -> Result<Vec<GrokAccountView>, String> {
+    // Disk/key access and recovery scans must not run on the UI thread. Keep
+    // the permit in the worker after a timeout so retries cannot pile up jobs.
+    static LIST_GATE: std::sync::LazyLock<std::sync::Arc<tokio::sync::Semaphore>> =
+        std::sync::LazyLock::new(|| std::sync::Arc::new(tokio::sync::Semaphore::new(1)));
+    let permit = LIST_GATE
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| "Grok 账号正在读取，请稍后重试".to_string())?;
+    let worker = tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        grok_account::list_accounts_checked()
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(15), worker)
+        .await
+        .map_err(|_| "读取 Grok 账号超时，请重试；原数据未修改".to_string())?
+        .map_err(|error| format!("读取 Grok 账号任务失败: {}", error))?
 }
 
 #[tauri::command]
-pub fn delete_grok_account(account_id: String) -> Result<(), String> {
-    grok_account::remove_account(&account_id)
+pub async fn delete_grok_account(account_id: String) -> Result<(), String> {
+    let source_id = account_id.clone();
+    let deletion =
+        tauri::async_runtime::spawn_blocking(move || grok_account::remove_account(&source_id))
+            .await
+            .map_err(|error| format!("删除 Grok 账号任务失败: {}", error))?;
+    // Even a partial delete (for example an index-write failure after file removal) must revoke
+    // the old runtime credential. Retrying is safe because removal is idempotent.
+    let revocation =
+        crate::modules::codex_local_access::sync_grok_upstream_auth_files(account_id).await;
+    match (deletion, revocation) {
+        (Err(first), Err(second)) => Err(format!("{}; {}", first, second)),
+        (Err(error), _) | (_, Err(error)) => Err(error),
+        (Ok(()), Ok(())) => Ok(()),
+    }
 }
 
 #[tauri::command]
-pub fn delete_grok_accounts(account_ids: Vec<String>) -> Result<(), String> {
-    grok_account::remove_accounts(&account_ids)
+pub async fn delete_grok_accounts(account_ids: Vec<String>) -> Result<(), String> {
+    for account_id in account_ids {
+        delete_grok_account(account_id).await?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

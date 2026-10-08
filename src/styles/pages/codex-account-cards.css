@@ -123,6 +123,7 @@
 }
 
 .codex-account-card .tier-badge,
+.pelican-account-summary .tier-badge,
 .codex-accounts-page .account-table .tier-badge,
 .codex-oauth-binding-row .tier-badge {
   display: inline-flex;
@@ -140,12 +141,14 @@
 }
 
 .codex-account-card .tier-badge::before,
+.pelican-account-summary .tier-badge::before,
 .codex-accounts-page .account-table .tier-badge::before,
 .codex-oauth-binding-row .tier-badge::before {
   display: none;
 }
 
 .codex-account-card .tier-badge.free,
+.pelican-account-summary .tier-badge.free,
 .codex-accounts-page .account-table .tier-badge.free,
 .codex-oauth-binding-row .tier-badge.free {
   background: var(--plan-free-bg);
@@ -165,6 +168,7 @@
 }
 
 .codex-account-card .tier-badge.plus,
+.pelican-account-summary .tier-badge.plus,
 .codex-accounts-page .account-table .tier-badge.plus,
 .codex-oauth-binding-row .tier-badge.plus {
   background: var(--plan-plus-bg);
@@ -174,6 +178,7 @@
 
 .tier-badge.codex-plus,
 .codex-account-card .tier-badge.codex-plus,
+.pelican-account-summary .tier-badge.codex-plus,
 .codex-accounts-page .account-table .tier-badge.codex-plus,
 .codex-oauth-binding-row .tier-badge.codex-plus,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-plus,
@@ -188,6 +193,7 @@
 }
 
 .codex-account-card .tier-badge.team,
+.pelican-account-summary .tier-badge.team,
 .codex-accounts-page .account-table .tier-badge.team,
 .codex-oauth-binding-row .tier-badge.team {
   background: var(--plan-team-bg);
@@ -196,6 +202,7 @@
 }
 
 .codex-account-card .tier-badge.enterprise,
+.pelican-account-summary .tier-badge.enterprise,
 .codex-accounts-page .account-table .tier-badge.enterprise,
 .codex-oauth-binding-row .tier-badge.enterprise {
   background: var(--plan-enterprise-bg);
@@ -204,6 +211,7 @@
 }
 
 .codex-account-card .tier-badge.pro,
+.pelican-account-summary .tier-badge.pro,
 .codex-accounts-page .account-table .tier-badge.pro,
 .codex-oauth-binding-row .tier-badge.pro {
   background: var(--plan-pro-bg);
@@ -213,6 +221,7 @@
 
 .tier-badge.codex-pro-lite,
 .codex-account-card .tier-badge.codex-pro-lite,
+.pelican-account-summary .tier-badge.codex-pro-lite,
 .codex-accounts-page .account-table .tier-badge.codex-pro-lite,
 .codex-oauth-binding-row .tier-badge.codex-pro-lite,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-pro-lite,
@@ -227,16 +236,17 @@
 
 .tier-badge.codex-pro-max,
 .codex-account-card .tier-badge.codex-pro-max,
+.pelican-account-summary .tier-badge.codex-pro-max,
 .codex-accounts-page .account-table .tier-badge.codex-pro-max,
 .codex-oauth-binding-row .tier-badge.codex-pro-max,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-pro-max,
 .codex-wakeup-account-chip .tier-badge.codex-pro-max {
-  background: linear-gradient(135deg, #fff7cc 0%, #f6d365 42%, #d99b16 100%);
+  background: linear-gradient(135deg, #fff4d4 0%, #efd394 42%, #d4aa54 100%);
   color: #5a3700;
-  border: 1px solid rgba(180, 116, 11, 0.42);
+  border: 1px solid rgba(180, 116, 11, 0.34);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 1px 3px rgba(180, 116, 11, 0.2);
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 1px 3px rgba(180, 116, 11, 0.12);
 }
 
 .tier-badge.new-api-exclusive,
@@ -357,6 +367,39 @@
   white-space: nowrap;
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.codex-team-quota-history {
+  grid-column: 1 / -1;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.codex-team-history-window {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  min-width: 0;
+}
+
+.codex-accounts-page .codex-team-history-reset.pending {
+  background: rgba(59, 130, 246, 0.07);
+  border-color: rgba(59, 130, 246, 0.22);
+}
+
+.codex-accounts-page .codex-team-history-reset {
+  flex-wrap: wrap;
+}
+
+.codex-accounts-page .codex-team-history-reset .codex-subscription-footer-main {
+  white-space: normal;
+}
+
+.codex-accounts-page .codex-team-history-reset .codex-subscription-footer-date {
+  margin-left: auto;
 }
 
 .codex-accounts-page .codex-subscription-footer {
@@ -1394,7 +1437,7 @@
   margin-top: 8px;
 }
 
-.codex-api-key-usage-detail-modal {
+.modal-content.codex-api-key-usage-detail-modal {
   width: min(760px, calc(100vw - 32px));
 }
 

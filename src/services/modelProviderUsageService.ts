@@ -23,6 +23,7 @@ export interface ModelProviderUsageSummary {
   planName?: string | null;
   remaining?: number | null;
   balance?: number | null;
+  /** Empty string explicitly means the source did not identify its unit. */
   unit?: string | null;
   quotaUnlimited?: boolean | null;
   quotaLimit?: number | null;
@@ -193,11 +194,12 @@ export function formatModelProviderUsageMoney(
   unit?: string | null,
 ): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  const normalizedUnit = unit?.trim() || 'USD';
+  const normalizedUnit = unit === '' ? '' : unit?.trim() || 'USD';
   if (normalizedUnit === '%') {
     return `${Math.round(value)}%`;
   }
   const formatted = value.toFixed(value >= 100 ? 0 : 2);
+  if (normalizedUnit === '') return formatted;
   if (normalizedUnit === 'USD') return `$${formatted}`;
   if (normalizedUnit === 'CNY') return `¥${formatted}`;
   return `${formatted} ${normalizedUnit}`;

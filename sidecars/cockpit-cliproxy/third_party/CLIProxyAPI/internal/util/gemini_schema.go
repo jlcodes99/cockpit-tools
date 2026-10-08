@@ -581,6 +581,13 @@ func mergeStringSlices(existing, promoted []string) []string {
 	return res
 }
 
+// InlineLocalRefs resolves JSON Pointer references against the original schema before definition
+// containers are stripped. Each expansion receives its own copy, sibling keywords override the
+// referenced definition, and cycles terminate as a typed hint instead of recursing forever.
+func InlineLocalRefs(jsonStr string) string {
+	return inlineLocalRefs(jsonStr)
+}
+
 // inlineLocalRefs resolves JSON Pointer references against the original schema before definition
 // containers are stripped. Each expansion receives its own copy, sibling keywords override the
 // referenced definition, and cycles terminate as a typed hint instead of recursing forever.

@@ -75,5 +75,6 @@ func buildProxyTransport(proxyURL string) *http.Transport {
 		log.Errorf("%v", errBuild)
 		return nil
 	}
+	annotateProxyTransport(transport, proxyURL)
 	return transport
 }

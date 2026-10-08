@@ -32,9 +32,9 @@ fn read_preferences_from_path(path: &PathBuf) -> Result<UiPreferences, String> {
     let raw =
         std::fs::read_to_string(path).map_err(|error| format!("读取界面偏好失败: {error}"))?;
     if raw.trim().is_empty() {
-        return Ok(UiPreferences::default());
+        return Err("界面偏好文件为空，已保留原文件".into());
     }
-    serde_json::from_str(&raw).or_else(|_| Ok(UiPreferences::default()))
+    serde_json::from_str(&raw).map_err(|error| format!("界面偏好格式无效: {error}"))
 }
 
 fn write_preferences_to_path(path: &PathBuf, preferences: &UiPreferences) -> Result<(), String> {
@@ -45,8 +45,8 @@ fn write_preferences_to_path(path: &PathBuf, preferences: &UiPreferences) -> Res
 
 pub fn load_ui_preferences() -> Result<UiPreferences, String> {
     let _guard = PREFERENCES_LOCK
-        .lock()
-        .map_err(|_| "界面偏好锁已损坏".to_string())?;
+        .try_lock()
+        .map_err(|_| "界面偏好正在读写，请重试".to_string())?;
     read_preferences_from_path(&preferences_path()?)
 }
 
@@ -61,12 +61,34 @@ fn apply_values(preferences: &mut UiPreferences, values: BTreeMap<String, String
     changed
 }
 
+fn check_layout_revision(
+    preferences: &UiPreferences,
+    values: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    const KEY: &str = "agtools.platform_layout.v1";
+    let revision = |raw: Option<&String>| -> u64 {
+        raw.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+            .and_then(|value| {
+                value
+                    .get("_layoutUpdatedAt")
+                    .and_then(|value| value.as_u64())
+            })
+            .unwrap_or(0)
+    };
+    if values.contains_key(KEY) && revision(values.get(KEY)) < revision(preferences.values.get(KEY))
+    {
+        return Err("平台布局已在其他窗口更新，已保留较新设置，请重新加载后重试".into());
+    }
+    Ok(())
+}
+
 pub fn save_ui_preferences(values: BTreeMap<String, String>) -> Result<UiPreferences, String> {
     let _guard = PREFERENCES_LOCK
-        .lock()
-        .map_err(|_| "界面偏好锁已损坏".to_string())?;
+        .try_lock()
+        .map_err(|_| "界面偏好正在读写，请重试".to_string())?;
     let path = preferences_path()?;
     let mut preferences = read_preferences_from_path(&path)?;
+    check_layout_revision(&preferences, &values)?;
     if apply_values(&mut preferences, values) {
         write_preferences_to_path(&path, &preferences)?;
     }
@@ -78,6 +100,24 @@ mod tests {
     use super::{read_preferences_from_path, write_preferences_to_path, UiPreferences};
     use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn stale_window_cannot_overwrite_newer_layout() {
+        let key = "agtools.platform_layout.v1".to_string();
+        let preferences = UiPreferences {
+            values: BTreeMap::from([(key.clone(), r#"{"_layoutUpdatedAt":200}"#.into())]),
+        };
+        assert!(super::check_layout_revision(
+            &preferences,
+            &BTreeMap::from([(key.clone(), r#"{"_layoutUpdatedAt":100}"#.into())])
+        )
+        .is_err());
+        assert!(super::check_layout_revision(
+            &preferences,
+            &BTreeMap::from([(key, r#"{"_layoutUpdatedAt":201}"#.into())])
+        )
+        .is_ok());
+    }
 
     #[test]
     fn roundtrip_preference_values() {
@@ -108,19 +148,17 @@ mod tests {
     }
 
     #[test]
-    fn empty_or_invalid_file_returns_default() {
+    fn empty_or_invalid_file_errors_without_overwriting_data() {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!("cockpit-ui-preferences-bad-{stamp}.json"));
         std::fs::write(&path, "   ").expect("write empty");
-        let empty = read_preferences_from_path(&path).expect("empty file");
-        assert!(empty.values.is_empty());
+        assert!(read_preferences_from_path(&path).is_err());
 
         std::fs::write(&path, "{not-json").expect("write invalid");
-        let invalid = read_preferences_from_path(&path).expect("invalid file");
-        assert!(invalid.values.is_empty());
+        assert!(read_preferences_from_path(&path).is_err());
         let _ = std::fs::remove_file(&path);
     }
 

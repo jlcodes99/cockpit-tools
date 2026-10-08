@@ -237,6 +237,11 @@ fn apply_explicit_context_windows_to_client_models(
         if let Some(object) = model.as_object_mut() {
             object.insert("context_window".to_string(), json!(window));
             object.insert("max_context_window".to_string(), json!(window));
+            // 统一口径：写窗口时必须同时写压缩阈值（90%），避免目录里出现半边配置。
+            object.insert(
+                "auto_compact_token_limit".to_string(),
+                json!(codex_protocol::derived_auto_compact_token_limit(window)),
+            );
         }
     }
     catalog
@@ -2247,7 +2252,15 @@ async fn send_upstream_request_with_authorization_url(
 ) -> Result<reqwest::Response, String> {
     let method =
         Method::from_bytes(method.as_bytes()).map_err(|e| format!("不支持的请求方法: {}", e))?;
-    let client = upstream_http_client(upstream_proxy_url, connect_timeout)?;
+    crate::modules::codex_proxy_runtime::ensure_account_proxy_state(account).await?;
+    let client = if (crate::modules::codex_account_proxy::eligible(account) && account.egress_proxy_disabled)
+        || crate::modules::codex_account_proxy::has_configured_url(account)? {
+        crate::modules::codex_proxy_runtime::client_builder(account,
+            Client::builder().connect_timeout(connect_timeout)).await?
+            .build().map_err(|_| "PROXY_CLIENT_FAILED")?
+    } else {
+        upstream_http_client(upstream_proxy_url, connect_timeout)?
+    };
     let upstream_body = build_account_scoped_upstream_body(
         target,
         body,
@@ -2337,140 +2350,4 @@ async fn send_upstream_request_with_authorization_url(
     }
 
     Err("请求 Codex 上游失败: 未知错误".to_string())
-}
-
-const MAX_OPENAI_RESPONSES_REJECTED_FIELD_RETRIES: usize = 6;
-
-struct OpenAIResponsesRejectedFieldRetryState {
-    attempts: usize,
-    seen_body_hashes: HashSet<[u8; 32]>,
-}
-
-impl OpenAIResponsesRejectedFieldRetryState {
-    fn new(initial_body: &[u8]) -> Self {
-        let mut state = Self {
-            attempts: 0,
-            seen_body_hashes: HashSet::with_capacity(
-                MAX_OPENAI_RESPONSES_REJECTED_FIELD_RETRIES + 1,
-            ),
-        };
-        state.remember(initial_body);
-        state
-    }
-
-    fn allow(&mut self, next_body: &[u8]) -> bool {
-        if next_body.is_empty() || self.attempts >= MAX_OPENAI_RESPONSES_REJECTED_FIELD_RETRIES {
-            return false;
-        }
-        let body_hash: [u8; 32] = Sha256::digest(next_body).into();
-        if !self.seen_body_hashes.insert(body_hash) {
-            return false;
-        }
-        self.attempts += 1;
-        true
-    }
-
-    fn remember(&mut self, body: &[u8]) {
-        if !body.is_empty() {
-            self.seen_body_hashes.insert(Sha256::digest(body).into());
-        }
-    }
-}
-
-fn normalize_openai_responses_rejected_field_retry_body(
-    status: StatusCode,
-    body: &[u8],
-    response_body: &[u8],
-) -> Result<Option<(Vec<u8>, &'static str)>, String> {
-    if status != StatusCode::BAD_REQUEST || body.is_empty() || response_body.is_empty() {
-        return Ok(None);
-    }
-    let response: Value = match serde_json::from_slice(response_body) {
-        Ok(response) => response,
-        Err(_) => return Ok(None),
-    };
-    let code = response
-        .pointer("/error/code")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    let message = response
-        .pointer("/error/message")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    if code != "unknown_parameter"
-        && code != "unsupported_parameter"
-        && !message.contains("unknown parameter")
-        && !message.contains("unsupported parameter")
-    {
-        return Ok(None);
-    }
-    let mut param = response
-        .pointer("/error/param")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    if param.is_empty() {
-        let pattern = regex::Regex::new(
-            r#"(?i)(?:unknown|unsupported)[ _-]+parameter\s*(?::|=|is)?\s*[\"']?(max_output_tokens|input\[\d+\]\.namespace)(?:[\"']|\b)"#,
-        )
-        .map_err(|error| format!("编译 Responses 拒绝字段匹配规则失败: {error}"))?;
-        param = pattern
-            .captures(&message)
-            .and_then(|captures| captures.get(1))
-            .map(|value| value.as_str().trim().to_ascii_lowercase())
-            .unwrap_or_default();
-    }
-
-    let mut request: Value = serde_json::from_slice(body)
-        .map_err(|error| format!("解析 Responses 拒绝字段重试请求失败: {error}"))?;
-    if param == "max_output_tokens" {
-        let Some(object) = request.as_object_mut() else {
-            return Ok(None);
-        };
-        if object.remove("max_output_tokens").is_none() {
-            return Ok(None);
-        }
-        return serde_json::to_vec(&request)
-            .map(|body| Some((body, "max_output_tokens parameter rejection")))
-            .map_err(|error| format!("序列化 Responses 拒绝字段重试请求失败: {error}"));
-    }
-
-    let namespace_pattern = regex::Regex::new(r"(?i)^input\[(\d+)\]\.namespace$")
-        .map_err(|error| format!("编译 Responses namespace 匹配规则失败: {error}"))?;
-    let Some(index) = namespace_pattern
-        .captures(&param)
-        .and_then(|captures| captures.get(1))
-        .and_then(|value| value.as_str().parse::<usize>().ok())
-    else {
-        return Ok(None);
-    };
-    let Some(item) = request
-        .get_mut("input")
-        .and_then(Value::as_array_mut)
-        .and_then(|input| input.get_mut(index))
-        .and_then(Value::as_object_mut)
-    else {
-        return Ok(None);
-    };
-    let item_type = item
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    if !matches!(
-        item_type.as_str(),
-        "function_call" | "tool_call" | "custom_tool_call" | "mcp_tool_call"
-    ) || item.remove("namespace").is_none()
-    {
-        return Ok(None);
-    }
-    serde_json::to_vec(&request)
-        .map(|body| Some((body, "indexed namespace parameter rejection")))
-        .map_err(|error| format!("序列化 Responses namespace 重试请求失败: {error}"))
 }

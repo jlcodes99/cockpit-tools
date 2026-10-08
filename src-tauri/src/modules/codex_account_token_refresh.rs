@@ -23,6 +23,7 @@ fn classify_refresh_error(message: &str) -> CodexRefreshErrorKind {
     }
     if lower.contains("refresh_token_invalidated")
         || lower.contains("token_invalidated")
+        || lower.contains("token_revoked")
         || lower.contains("authentication token has been invalidated")
         || lower.contains("服务端撤销")
     {
@@ -65,7 +66,10 @@ fn clear_refresh_token_reused_state(account: &mut CodexAccount) -> Result<(), St
         .as_deref()
         .is_some_and(is_refresh_token_reused_error);
     let quota_reused = account.quota_error.as_ref().is_some_and(|error| {
-        error.code.as_deref().is_some_and(is_refresh_token_reused_error)
+        error
+            .code
+            .as_deref()
+            .is_some_and(is_refresh_token_reused_error)
             || is_refresh_token_reused_error(&error.message)
     });
     if !reauth_reused && !quota_reused {
@@ -137,9 +141,19 @@ fn switch_auth_reason_code(reason: &str) -> &'static str {
 /// 只有账号已经被 Token Authority 明确标记为需要重新授权时才包装错误；
 /// 其它启动、落盘或网络地区错误仍保持原错误，避免误导用户重新登录。
 pub(crate) fn format_account_switch_error(account_id: &str, error: String) -> String {
+    // An engine prerequisite is independent of a previously recorded reauth state.
+    if super::codex_proxy_engine_preflight::is_prerequisite_error(&error)
+        || matches!(error.as_str(), "CODEX_SWITCH_BINDING_FAILED" | "CODEX_PROCESS_SCAN_FAILED"
+            | "PROXY_ENTRY_PORT_UNAVAILABLE" | "PROXY_RUNTIME_NOT_READY")
+    {
+        return error;
+    }
     // 统一错误可能经过账号切换、默认实例和 API 服务多层转发；已经带有结构化
     // 授权标记时直接透传，避免重复嵌套并破坏前端解析。
-    if error.trim_start().starts_with(CODEX_SWITCH_AUTH_REQUIRED_PREFIX) {
+    if error
+        .trim_start()
+        .starts_with(CODEX_SWITCH_AUTH_REQUIRED_PREFIX)
+    {
         return error;
     }
     let Some(account) = load_account(account_id) else {
@@ -209,7 +223,11 @@ pub(crate) async fn update_client_auth_observation(
 ) -> Result<(), String> {
     let token_lock = codex_token_lock_for(account_id);
     let _token_guard = token_lock.lock().await;
-    let _file_guard = acquire_codex_token_refresh_file_lock(account_id, "client-auth-observation").await?;
+    let Some(_file_guard) =
+        try_acquire_codex_token_refresh_file_lock(account_id, "client-auth-observation").await?
+    else {
+        return Ok(());
+    };
     let _guard = CODEX_ACCOUNT_MUTATION_LOCK
         .lock()
         .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
@@ -234,8 +252,11 @@ pub(crate) async fn record_client_launch(
 ) -> Result<(), String> {
     let token_lock = codex_token_lock_for(account_id);
     let _token_guard = token_lock.lock().await;
-    let _file_guard =
-        acquire_codex_token_refresh_file_lock(account_id, "client-launch-observation").await?;
+    let Some(_file_guard) =
+        try_acquire_codex_token_refresh_file_lock(account_id, "client-launch-observation").await?
+    else {
+        return Ok(());
+    };
     let _guard = CODEX_ACCOUNT_MUTATION_LOCK
         .lock()
         .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
@@ -252,13 +273,15 @@ pub(crate) async fn record_client_launch(
 /// 这里只清理 CDP 观察字段，不清理 Token Authority 明确写入的
 /// `requires_reauth`/`reauth_reason`，也不修改任何 Token，避免把真实的远端凭据
 /// 失效伪装成正常。客户端观测状态只用于账号卡片展示，用户可随时手动清理。
-pub(crate) async fn clear_client_auth_observation(
-    account_id: &str,
-) -> Result<bool, String> {
+pub(crate) async fn clear_client_auth_observation(account_id: &str) -> Result<bool, String> {
     let token_lock = codex_token_lock_for(account_id);
     let _token_guard = token_lock.lock().await;
-    let _file_guard =
-        acquire_codex_token_refresh_file_lock(account_id, "clear-client-auth-observation").await?;
+    let Some(_file_guard) =
+        try_acquire_codex_token_refresh_file_lock(account_id, "clear-client-auth-observation")
+            .await?
+    else {
+        return Ok(false);
+    };
     let _guard = CODEX_ACCOUNT_MUTATION_LOCK
         .lock()
         .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
@@ -322,14 +345,21 @@ pub(crate) fn account_has_remote_api_auth_rejection(account: &CodexAccount) -> b
     if lower.contains("api 返回错误 401")
         || lower.contains("api 返回错误 403")
         || lower.contains("token_invalidated")
+        || lower.contains("token_revoked")
         || lower.contains("invalid_token")
         || lower.contains("your authentication token has been invalidated")
     {
         return !refresh_failure
-            && !matches!(code.as_str(), "refresh_token_reused" | "refresh_token_expired");
+            && !matches!(
+                code.as_str(),
+                "refresh_token_reused" | "refresh_token_expired"
+            );
     }
     !refresh_failure
-        && matches!(code.as_str(), "token_invalidated" | "invalid_token")
+        && matches!(
+            code.as_str(),
+            "token_revoked" | "token_invalidated" | "invalid_token"
+        )
 }
 
 /// 额度查询只依赖 access_token。官方客户端占用 refresh_token 时，属于内部协调状态，
@@ -448,6 +478,7 @@ pub(crate) async fn prepare_account_for_quota_query_with_runtime_snapshot(
 
     clear_refresh_token_reused_state(&mut account)?;
 
+    reject_known_access_token_revocation(&account)?;
     if account
         .quota_error
         .as_ref()
@@ -868,6 +899,15 @@ fn build_account_storage_id(
     format!("codex_{:x}", md5::compute(seed.as_bytes()))
 }
 
+// OAuth 的邮箱兼容去重只能在自己的身份域内进行。Grok 的保留 ID
+// 也要排除：历史版本可能已把其 auth_mode 错改成 OAuth。
+fn is_oauth_identity_candidate(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth()
+        && !account.is_agent_identity_auth()
+        && !account.id.starts_with("codex_grok_")
+        && normalize_optional_ref(account.upstream_grok_account_id.as_deref()).is_none()
+}
+
 fn find_existing_account_id(
     index: &CodexAccountIndex,
     email: &str,
@@ -886,14 +926,16 @@ fn find_existing_account_id(
         if !summary.email.eq_ignore_ascii_case(email) {
             continue;
         }
+        let Some(account) = load_account(&summary.id) else {
+            continue;
+        };
+        if !is_oauth_identity_candidate(&account) {
+            continue;
+        }
         email_match_count += 1;
         if first_email_match.is_none() {
             first_email_match = Some(summary.id.clone());
         }
-
-        let Some(account) = load_account(&summary.id) else {
-            continue;
-        };
 
         let current_account_id = normalize_optional_ref(account.account_id.as_deref());
         let current_org_id = normalize_optional_ref(account.organization_id.as_deref());
@@ -939,3 +981,50 @@ fn find_existing_account_id(
 
     None
 }
+
+/// 网络刷新结束后，重新读取账号并校验发起请求时的凭据链。
+/// 只合并本次刷新负责的字段，保留请求期间更新的配额、备注和设置；
+/// 重新授权或删除优先于已经在途的旧请求结果。
+fn update_account_after_refresh_if_current<F>(
+    expected: &CodexAccount,
+    update: F,
+) -> Result<(CodexAccount, bool), String>
+where
+    F: FnOnce(&mut CodexAccount),
+{
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
+        .lock()
+        .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut current = load_account(&expected.id)
+        .ok_or_else(|| format!("账号已删除或无法读取，拒绝刷新写回: account_id={}", expected.id))?;
+    if !account_matches_refresh_snapshot(&current, expected) {
+        logger::log_info(&format!(
+            "Codex Token Authority 保留更新的凭据链，忽略旧刷新结果: account_id={}, expected_generation={}, current_generation={}",
+            expected.id, expected.token_generation, current.token_generation
+        ));
+        return Ok((current, false));
+    }
+    update(&mut current);
+    save_account_with_tombstone_guard(&current)?;
+    Ok((current, true))
+}
+
+fn account_matches_refresh_snapshot(current: &CodexAccount, expected: &CodexAccount) -> bool {
+    current.token_generation == expected.token_generation
+        && account_credential_hash(current) == account_credential_hash(expected)
+}
+
+fn persist_refreshed_account(
+    expected: &CodexAccount,
+    tokens: CodexTokens,
+) -> Result<(CodexAccount, bool), String> {
+    update_account_after_refresh_if_current(expected, |current| {
+        current.tokens = tokens;
+        sync_identity_from_tokens(current);
+        mark_token_chain_updated(current);
+    })
+}
+
+#[cfg(test)]
+#[path = "codex_account_tests_token_persistence.rs"]
+mod token_refresh_persistence_tests;

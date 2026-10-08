@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { presentProxyEnginePrerequisite, withProxyEnginePrerequisite } from '../utils/codexProxyEnginePrerequisite';
 import {
   CodexAccount,
   CodexAccountNoteUpdate,
@@ -6,19 +7,24 @@ import {
   CodexApiProviderMode,
   CodexAppSpeed,
   CodexAppSpeedConfig,
-  CodexFingerprintMode,
   CodexBatchDeleteJobStatus,
   CodexProviderWireApi,
   CodexQuickConfig,
   CodexExperimentalModelDefinition,
+  CodexModelConfigImportPreview,
+  CodexReasoningEffort,
   CodexQuota,
   CodexResetCreditsSnapshot,
 } from '../types/codex';
 import { normalizeCodexSwitchError } from '../utils/codexSwitchAuthFailure';
+import type { CodexOAuthProxyUse } from '../utils/codexOAuthReauthProxy';
+import { getCachedCodexLaunchPreviewConfig, rememberCodexLaunchPreviewConfig } from './codexLaunchPreviewConfigService';
 
 export interface CodexOAuthLoginStartResponse {
   loginId: string;
   authUrl: string;
+  /** 本次登录实际使用的出口；缺席表示走默认出口。 */
+  proxy?: CodexOAuthProxyUse;
 }
 
 export interface CodexDeviceAuthStartResponse {
@@ -43,6 +49,16 @@ export async function getCodexConfigTomlPath(): Promise<string> {
   return await invoke('get_codex_config_toml_path');
 }
 
+export interface CodexStoragePaths {
+  providerStorePath: string;
+  configPath: string;
+  authPath: string;
+}
+
+export async function getCodexStoragePaths(): Promise<CodexStoragePaths> {
+  return await invoke('get_codex_storage_paths');
+}
+
 /** 打开当前 Codex config.toml */
 export async function openCodexConfigToml(): Promise<void> {
   return await invoke('open_codex_config_toml');
@@ -51,6 +67,13 @@ export async function openCodexConfigToml(): Promise<void> {
 /** 获取 Codex config.toml 快捷配置 */
 export async function getCodexQuickConfig(): Promise<CodexQuickConfig> {
   return await invoke('get_codex_quick_config');
+}
+
+/** 保存官方 Codex 实验性上下文管理开关。 */
+export async function saveCodexContextManagement(
+  experimentalMode: boolean,
+): Promise<CodexQuickConfig> {
+  return await invoke('save_codex_context_management', { experimentalMode });
 }
 
 /** 保存 Codex config.toml 快捷配置 */
@@ -81,6 +104,48 @@ export async function saveCodexModelCatalog(
     experimentalModelCatalogModels,
     experimentalModelCatalogDefaultModelId: experimentalModelCatalogDefaultModelId ?? null,
   });
+}
+
+export async function getCodexModelReasoningEfforts(
+  models: CodexExperimentalModelDefinition[],
+  instanceId = '__default__',
+): Promise<Record<string, CodexReasoningEffort[]>> {
+  return await invoke('get_codex_model_reasoning_efforts', { models, instanceId });
+}
+
+export async function previewCodexModelConfigImport(input: {
+  instanceId: string;
+  jsonContent: string;
+  conflictStrategy?: 'keep_existing' | 'replace';
+}): Promise<CodexModelConfigImportPreview> {
+  return await invoke('preview_codex_model_config_import', {
+    ...input, conflictStrategy: input.conflictStrategy ?? 'keep_existing',
+  });
+}
+
+export async function importCodexModelConfig(input: {
+  instanceId: string;
+  jsonContent: string;
+  conflictStrategy?: 'keep_existing' | 'replace';
+  expectedRevision: string;
+}): Promise<CodexModelConfigImportPreview> {
+  const result = await invoke<CodexModelConfigImportPreview>('import_codex_model_config', {
+    ...input, conflictStrategy: input.conflictStrategy ?? 'keep_existing',
+  });
+  // A confirmed transaction can finish after its dialog closes. Update only its target cache.
+  const cached = getCachedCodexLaunchPreviewConfig(input.instanceId);
+  if (cached && result.committed > 0) {
+    rememberCodexLaunchPreviewConfig(input.instanceId, {
+      ...cached,
+      experimental_model_catalog_models: result.models,
+      experimental_model_catalog_default_model_id: result.defaultModelId,
+    });
+  }
+  return result;
+}
+
+export async function exportCodexModelConfig(instanceId: string): Promise<string> {
+  return await invoke('export_codex_model_config', { instanceId });
 }
 
 /** 获取 Codex 官方 App 速度配置 */
@@ -200,6 +265,7 @@ export async function switchCodexAccount(
     }
     return account;
   } catch (error) {
+    presentProxyEnginePrerequisite(error);
     if (String(error).includes('CODEX_START_CANCELLED')) {
       const cancelledPayload = {
         type: 'cancelled' as const,
@@ -310,8 +376,16 @@ export async function importCodexAccessTokenAccount(
   });
 }
 
-export async function importCodexFromLocal(): Promise<CodexAccount> {
-  return await invoke('import_codex_from_local');
+/**
+ * 从官方 Codex 本机凭据存储导入账号。
+ *
+ * `instanceId` 省略或为 `null` 时读取默认实例；传入多开实例 ID 时读取该实例的
+ * profile 目录（官方客户端按 `CODEX_HOME` 分别落盘凭据）。
+ */
+export async function importCodexFromLocal(
+  instanceId?: string | null,
+): Promise<CodexAccount> {
+  return await invoke('import_codex_from_local', { instanceId: instanceId ?? null });
 }
 
 /** 从 JSON 字符串导入账号 */
@@ -443,18 +517,26 @@ export async function refreshAllCodexQuotas(): Promise<number> {
 /** 按 ID 列表限流并发刷新配额（分组/本地访问批量）；后端统一限流并只做一次 tray 更新 */
 export async function refreshCodexQuotasBatch(
   accountIds: string[],
-  options?: { respectGroupQuotaRefresh?: boolean },
+  options?: { respectGroupQuotaRefresh?: boolean; background?: boolean },
 ): Promise<number> {
   return await invoke('refresh_codex_quotas_batch', {
     accountIds,
     // 缺省 true：遵守分组「额度刷新」开关；显式刷新分组时传 false
     respectGroupQuotaRefresh: options?.respectGroupQuotaRefresh ?? true,
+    background: options?.background ?? false,
   });
 }
 
 /** 新 OAuth 流程：开始登录 */
-export async function startCodexOAuthLogin(): Promise<CodexOAuthLoginStartResponse> {
-  return await invoke('codex_oauth_login_start');
+/** `reauthAccountId` 仅在未显式提供 `proxyUrl` 时用于解析该账号的生效出口。 */
+export async function startCodexOAuthLogin(
+  proxyUrl?: string,
+  reauthAccountId?: string,
+): Promise<CodexOAuthLoginStartResponse> {
+  return await invoke('codex_oauth_login_start', {
+    proxyUrl: proxyUrl ?? null,
+    reauthAccountId: reauthAccountId ?? null,
+  });
 }
 
 /** 官方 Codex device-auth 流程：返回设备码并在后端轮询授权结果 */
@@ -547,6 +629,26 @@ export async function updateCodexAccountName(
   name: string,
 ): Promise<CodexAccount> {
   return await invoke('update_codex_account_name', { accountId, name });
+}
+
+/**
+ * 通过 Grok 平台账号添加 Codex 供应商账号。
+ *
+ * 账号本身不保存上游 API Key：运行态使用绑定的 Grok 账号 OAuth 令牌，
+ * 并由 Grok 账号的模型目录决定客户端可见模型。
+ */
+export async function addCodexAccountFromGrok(
+  grokAccountId: string,
+  options?: {
+    apiModelCatalog?: string[] | null;
+    accountName?: string | null;
+  },
+): Promise<CodexAccount> {
+  return await invoke('add_codex_account_from_grok', {
+    grokAccountId,
+    apiModelCatalog: options?.apiModelCatalog ?? null,
+    accountName: options?.accountName ?? null,
+  });
 }
 
 export async function updateCodexApiKeyCredentials(
@@ -642,37 +744,31 @@ export async function updateCodexAccountTags(
   return await invoke('update_codex_account_tags', { accountId, tags });
 }
 
-export async function updateCodexAccountsFingerprintMode(
-  accountIds: string[],
-  mode: CodexFingerprintMode,
-): Promise<CodexAccount[]> {
-  return await invoke('update_codex_accounts_fingerprint_mode', {
-    accountIds,
-    mode,
+export async function updateCodexAccountEgressProxy(
+  accountId: string,
+  egressProxyUrl: string | null,
+  disabled = false,
+): Promise<CodexAccount> {
+  const request = invoke<CodexAccount>('update_codex_account_egress_proxy', {
+    accountId,
+    egressProxyUrl,
+    disabled,
   });
+  return egressProxyUrl ? withProxyEnginePrerequisite(request) : request;
 }
 
-export async function updateCodexAccountClientPolicy(
-  accountId: string,
-  codexCliOnly: boolean,
-  allowAppServer: boolean,
-): Promise<CodexAccount> {
-  return await invoke('update_codex_account_client_policy', {
-    accountId,
-    codexCliOnly,
-    allowAppServer,
-  });
-}
 
 export async function updateCodexAccountInstanceAccess(
   accountId: string,
   accessMode?: string | null,
   startupModel?: string | null,
+  imageGenerationAccountIds?: string[] | null,
 ): Promise<CodexAccount> {
   return await invoke('update_codex_account_instance_access', {
     accountId,
     accessMode: accessMode ?? null,
     startupModel: startupModel ?? null,
+    imageGenerationAccountIds: imageGenerationAccountIds ?? null,
   });
 }
 

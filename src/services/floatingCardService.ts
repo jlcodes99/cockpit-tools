@@ -9,6 +9,24 @@ export interface FloatingCardInstanceContext {
   boundAccountId: string;
 }
 
+export interface FloatingCardAppearance {
+  minimal: boolean;
+  backgroundOpacity: number;
+}
+
+export const FLOATING_CARD_APPEARANCE_CHANGED_EVENT = 'floating-card:appearance-changed';
+
+export async function updateFloatingCardAppearance(patch: Partial<FloatingCardAppearance>): Promise<FloatingCardAppearance> {
+  return await invoke('update_floating_card_appearance', {
+    minimal: patch.minimal ?? null,
+    backgroundOpacity: patch.backgroundOpacity ?? null,
+  });
+}
+
+export async function resizeCurrentFloatingCardWindow(height: number): Promise<void> {
+  return await invoke('resize_current_floating_card_window', { height });
+}
+
 export async function showFloatingCardWindow(): Promise<void> {
   return await invoke('show_floating_card_window');
 }

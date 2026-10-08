@@ -97,6 +97,27 @@ func TestToolCallSimple(t *testing.T) {
 	}
 }
 
+func TestFunctionToolStrictDefaultsToFalse(t *testing.T) {
+	input := []byte(`{
+		"model":"gpt-5.5",
+		"messages":[{"role":"user","content":"hello"}],
+		"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{}}}}]
+	}`)
+	out := ConvertOpenAIRequestToCodex("gpt-5.5", input, true)
+	if got := gjson.GetBytes(out, "tools.0.strict"); !got.Exists() || got.Bool() {
+		t.Fatalf("tools.0.strict = %v, want false; output=%s", got.Value(), out)
+	}
+}
+
+func TestSanitizeToolName(t *testing.T) {
+	if got := shortenNameIfNeeded("mcp.server:search tool"); got != "mcp_server_search_tool" {
+		t.Fatalf("sanitized tool name = %q, want mcp_server_search_tool", got)
+	}
+	if got := shortenNameIfNeeded("工具_run"); got != "___run" {
+		t.Fatalf("sanitized non-ASCII tool name = %q, want ___run", got)
+	}
+}
+
 // Assistant has both text content and tool_calls — the message should
 // be emitted (non-empty content), followed by function_call items.
 func TestToolCallWithContent(t *testing.T) {

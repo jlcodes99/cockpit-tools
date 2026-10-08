@@ -1375,3 +1375,36 @@ requires_openai_auth = false
             );
         }
     }
+
+    #[test]
+    fn identity_isolation_core_excludes_provider_from_oauth_import() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        for mixed in [false, true] {
+            let _env = TestEnvGuard::new("core-identity-isolation");
+            let mut provider = CodexAccount::new_api_key(
+                "codex_grok_test".into(), "shared@example.com".into(),
+                String::new(), CodexApiProviderMode::Custom,
+                Some("https://example.test/v1".into()), Some("grok".into()), Some("Grok".into()),
+            );
+            if mixed {
+                provider.auth_mode = crate::models::codex::CodexAuthMode::OAuth;
+                provider.account_id = Some("acc-shared".into());
+                provider.organization_id = Some("org-shared".into());
+            }
+            super::save_account(&provider).unwrap();
+            let mut index = CodexAccountIndex::new();
+            index.accounts.push(CodexAccountSummary {
+                id: provider.id.clone(), email: provider.email.clone(),
+                plan_type: provider.plan_type.clone(), created_at: provider.created_at,
+                last_used: provider.last_used,
+            });
+            super::save_account_index(&index).unwrap();
+            assert!(super::find_existing_account_id(&index, &provider.email, None, None).is_none());
+            let imported = super::upsert_account(make_codex_tokens(
+                "shared@example.com", "acc-shared", "org-shared", "new", "rt-new",
+            )).unwrap();
+            assert_ne!(imported.id, provider.id);
+            assert_eq!(load_account_index().accounts.len(), 2);
+            assert_eq!(load_account(&provider.id).unwrap().auth_mode, provider.auth_mode);
+        }
+    }

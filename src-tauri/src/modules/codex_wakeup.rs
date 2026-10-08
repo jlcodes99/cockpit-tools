@@ -27,12 +27,21 @@ const REASONING_EFFORT_LOW: &str = "low";
 const REASONING_EFFORT_MEDIUM: &str = "medium";
 const REASONING_EFFORT_HIGH: &str = "high";
 const REASONING_EFFORT_XHIGH: &str = "xhigh";
+const REASONING_EFFORT_MAX: &str = "max";
 const CODEX_WAKEUP_TEST_CANCELLED_MESSAGE: &str = "Codex 唤醒测试已取消";
 const CODEX_WAKEUP_CANCEL_POLL_MS: u64 = 120;
 const GPT_5_6_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-5-6-model-presets";
 const GPT_5_5_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-5-5-model-preset";
+const GPT_6_1_SOL_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-1-sol-model-preset";
+const GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-astra-model-preset";
+const GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-6-sol-luna-model-presets";
+const PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID: &str = "prefix-builtin-model-preset-names";
 const PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID: &str =
     "prune-legacy-codex-model-presets-before-gpt-5-4";
+const PRUNE_PRE_5_5_MODEL_PRESETS_MIGRATION_ID: &str = "prune-pre-5-5-model-presets";
+/// 唤醒默认模型：所有新建/未指定模型的唤醒都落在 GPT-5.6 Luna。
+pub const DEFAULT_WAKEUP_MODEL: &str = "gpt-5.6-luna";
+pub const DEFAULT_WAKEUP_MODEL_NAME: &str = "GPT-5.6 Luna";
 const LEGACY_CODEX_MODEL_PRESET_IDS: &[&str] = &[
     "preset-gpt-5-3-codex",
     "preset-gpt-5-2-codex",
@@ -50,6 +59,10 @@ const LEGACY_CODEX_MODEL_PRESET_MODELS: &[&str] = &[
     "gpt-5.1-codex-max",
     "gpt-5.1-codex-mini",
 ];
+
+#[path = "codex_wakeup_task_state.rs"]
+mod task_state;
+pub use task_state::{claim_task_run, mark_task_run_failed, try_task_run_lease};
 
 static TASKS_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
 static HISTORY_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
@@ -370,6 +383,9 @@ impl Default for CodexWakeupState {
             model_preset_migrations: vec![
                 GPT_5_6_MODEL_PRESETS_MIGRATION_ID.to_string(),
                 GPT_5_5_MODEL_PRESET_MIGRATION_ID.to_string(),
+                GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string(),
+                GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID.to_string(),
+                PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID.to_string(),
                 PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID.to_string(),
             ],
         }
@@ -394,7 +410,9 @@ fn is_scope_cancelled(cancel_flag: Option<&Arc<AtomicBool>>) -> bool {
         .unwrap_or(false)
 }
 
-fn resolve_cancel_flag(cancel_scope_id: Option<&str>) -> Result<Option<Arc<AtomicBool>>, String> {
+pub(super) fn resolve_cancel_flag(
+    cancel_scope_id: Option<&str>,
+) -> Result<Option<Arc<AtomicBool>>, String> {
     let Some(scope_id) = cancel_scope_id
         .map(str::trim)
         .filter(|item| !item.is_empty())
@@ -422,12 +440,15 @@ pub fn cancel_wakeup_scope(cancel_scope_id: &str) -> Result<(), String> {
         let mut guard = TEST_CANCEL_SCOPES
             .lock()
             .map_err(|_| "Codex 唤醒取消作用域锁已损坏".to_string())?;
-        guard.remove(scope_id)
+        guard
+            .entry(scope_id.to_string())
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+            .clone()
     };
 
-    if let Some(flag) = flag {
-        flag.store(true, Ordering::SeqCst);
-    }
+    // Keep the flag until release: cancelling before run_batch resolves its
+    // scope must not silently create a new, uncancelled run.
+    flag.store(true, Ordering::SeqCst);
     Ok(())
 }
 
@@ -450,12 +471,13 @@ fn supported_reasoning_efforts() -> &'static [&'static str] {
         REASONING_EFFORT_MEDIUM,
         REASONING_EFFORT_HIGH,
         REASONING_EFFORT_XHIGH,
+        REASONING_EFFORT_MAX,
     ]
 }
 
 fn normalize_reasoning_effort(value: &str) -> Option<String> {
     let normalized = value.trim().to_ascii_lowercase();
-    if supported_reasoning_efforts().contains(&normalized.as_str()) {
+    if supported_reasoning_efforts().contains(&normalized.as_str()) || normalized == "ultra" {
         Some(normalized)
     } else {
         None
@@ -463,14 +485,15 @@ fn normalize_reasoning_effort(value: &str) -> Option<String> {
 }
 
 pub fn wakeup_runtime_status() -> CodexCliStatus {
+    // 唤醒固定走宿主直连官方接口：不需要本机 Codex CLI，也不经过 API 服务进程。
     CodexCliStatus {
         available: true,
         binary_path: None,
         configured_codex_cli_path: None,
         configured_node_path: None,
         version: None,
-        source: Some("official_chat".to_string()),
-        message: Some("官方直连对话".to_string()),
+        source: Some("api_direct".to_string()),
+        message: Some("API 直连".to_string()),
         required_runtime_paths: Vec::new(),
         checked_at: now_ms(),
         install_hints: Vec::new(),
@@ -483,8 +506,21 @@ fn default_reasoning_efforts_for_model(model: &str) -> Vec<String> {
             REASONING_EFFORT_MEDIUM.to_string(),
             REASONING_EFFORT_HIGH.to_string(),
         ]
-    } else {
+    } else if model.trim().eq_ignore_ascii_case("gpt-6.1-sol") {
+        vec!["low", "medium", "high", "xhigh", "max", "ultra"]
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+    } else if model.trim().starts_with("gpt-6-")
+        || model.trim().eq_ignore_ascii_case("gpt-6-astra")
+        || model.trim().starts_with("gpt-5.6-")
+    {
         supported_reasoning_efforts()
+            .iter()
+            .map(|item| item.to_string())
+            .collect()
+    } else {
+        supported_reasoning_efforts()[..4]
             .iter()
             .map(|item| item.to_string())
             .collect()
@@ -493,12 +529,14 @@ fn default_reasoning_efforts_for_model(model: &str) -> Vec<String> {
 
 fn default_model_presets() -> Vec<CodexWakeupModelPreset> {
     let items = [
+        ("preset-gpt-6-1-sol", "GPT-6.1 Sol", "gpt-6.1-sol"),
+        ("preset-gpt-6-astra", "GPT-6 Astra", "gpt-6-astra"),
+        ("preset-gpt-6-sol", "GPT-6 Sol", "gpt-6-sol"),
+        ("preset-gpt-6-luna", "GPT-6 Luna", "gpt-6-luna"),
         ("preset-gpt-5-6-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
         ("preset-gpt-5-6-terra", "GPT-5.6 Terra", "gpt-5.6-terra"),
         ("preset-gpt-5-6-luna", "GPT-5.6 Luna", "gpt-5.6-luna"),
         ("preset-gpt-5-5", "GPT-5.5", "gpt-5.5"),
-        ("preset-gpt-5-4", "GPT-5.4", "gpt-5.4"),
-        ("preset-gpt-5-4-mini", "GPT-5.4-Mini", "gpt-5.4-mini"),
     ];
 
     items
@@ -612,6 +650,146 @@ fn ensure_gpt_5_5_model_preset(state: &mut CodexWakeupState) -> bool {
     true
 }
 
+fn ensure_gpt_6_astra_model_preset(state: &mut CodexWakeupState) -> bool {
+    let mut changed = false;
+    if !state
+        .model_preset_migrations
+        .iter()
+        .any(|item| item == GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID)
+    {
+        state
+            .model_preset_migrations
+            .push(GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string());
+        changed = true;
+    }
+
+    if let Some(index) = state
+        .model_presets
+        .iter()
+        .position(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-6-astra"))
+    {
+        let target = usize::from(
+            state
+                .model_presets
+                .iter()
+                .any(|preset| preset.model == "gpt-6.1-sol"),
+        );
+        if index != target {
+            let astra = state.model_presets.remove(index);
+            state.model_presets.insert(target, astra);
+            changed = true;
+        }
+    } else if let Some(preset) = default_model_presets()
+        .into_iter()
+        .find(|preset| preset.model.eq_ignore_ascii_case("gpt-6-astra"))
+    {
+        let target = usize::from(
+            state
+                .model_presets
+                .iter()
+                .any(|preset| preset.model == "gpt-6.1-sol"),
+        );
+        state.model_presets.insert(target, preset);
+        changed = true;
+    }
+
+    changed
+}
+
+/// 把 `gpt-6-sol` / `gpt-6-luna` 补进唤醒预设，并保持 astra → sol → luna 的官方顺序。
+fn ensure_gpt_6_sol_luna_model_presets(state: &mut CodexWakeupState) -> bool {
+    let mut changed = false;
+    if !state
+        .model_preset_migrations
+        .iter()
+        .any(|item| item == GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID)
+    {
+        state
+            .model_preset_migrations
+            .push(GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID.to_string());
+        changed = true;
+    }
+
+    let defaults = default_model_presets();
+    let mut insert_at = state
+        .model_presets
+        .iter()
+        .position(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-6-astra"))
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    for model in ["gpt-6-sol", "gpt-6-luna"] {
+        if let Some(index) = state
+            .model_presets
+            .iter()
+            .position(|preset| preset.model.trim().eq_ignore_ascii_case(model))
+        {
+            if index > insert_at {
+                let preset = state.model_presets.remove(index);
+                state.model_presets.insert(insert_at, preset);
+                changed = true;
+            }
+        } else if let Some(preset) = defaults
+            .iter()
+            .find(|preset| preset.model.eq_ignore_ascii_case(model))
+            .cloned()
+        {
+            state.model_presets.insert(insert_at, preset);
+            changed = true;
+        }
+        insert_at += 1;
+    }
+
+    changed
+}
+
+/// 内建预设的历史短名 → 带官方 `GPT-` 前缀的名字。
+///
+/// 只有「模型 ID 与短名同时匹配」的内建预设才会改名，用户自己改过的名字不受影响。
+const BUILTIN_MODEL_PRESET_NAME_MIGRATIONS: &[(&str, &str, &str)] = &[
+    ("gpt-6-astra", "6 Astra", "GPT-6 Astra"),
+    ("gpt-6-sol", "6 Sol", "GPT-6 Sol"),
+    ("gpt-6-luna", "6 Luna", "GPT-6 Luna"),
+    ("gpt-5.6-sol", "5.6 Sol", "GPT-5.6 Sol"),
+    ("gpt-5.6-terra", "5.6 Terra", "GPT-5.6 Terra"),
+    ("gpt-5.6-luna", "5.6 Luna", "GPT-5.6 Luna"),
+];
+
+/// 把早先版本的短名预设（`6 Astra`、`5.6 Sol` 等）统一成 `GPT-` 前缀名。
+fn prefix_builtin_model_preset_names(state: &mut CodexWakeupState) -> bool {
+    let mut changed = false;
+    if !state
+        .model_preset_migrations
+        .iter()
+        .any(|item| item == PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID)
+    {
+        state
+            .model_preset_migrations
+            .push(PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID.to_string());
+        changed = true;
+    }
+
+    for preset in &mut state.model_presets {
+        let model = preset.model.trim();
+        let current = preset.name.trim();
+        let Some((_, _, canonical)) =
+            BUILTIN_MODEL_PRESET_NAME_MIGRATIONS
+                .iter()
+                .find(|(builtin_model, legacy_name, _)| {
+                    builtin_model.eq_ignore_ascii_case(model)
+                        && legacy_name.eq_ignore_ascii_case(current)
+                })
+        else {
+            continue;
+        };
+        if preset.name != *canonical {
+            preset.name = (*canonical).to_string();
+            changed = true;
+        }
+    }
+
+    changed
+}
+
 fn is_legacy_codex_model_preset(preset: &CodexWakeupModelPreset) -> bool {
     let id = preset.id.trim();
     let model = preset.model.trim();
@@ -641,11 +819,113 @@ fn prune_legacy_model_presets(state: &mut CodexWakeupState) -> bool {
     true
 }
 
+/// 解析 `gpt-<major>.<minor>` 形式的主次版本号，用于判断模型是否早于 5.5。
+fn wakeup_model_version(model: &str) -> Option<(u32, u32)> {
+    let normalized = model.trim().to_ascii_lowercase();
+    let rest = normalized.strip_prefix("gpt-")?;
+    let head = rest
+        .split(|c: char| !c.is_ascii_digit() && c != '.')
+        .next()?;
+    let mut parts = head.split('.');
+    let major = parts.next()?.parse::<u32>().ok()?;
+    let minor = parts
+        .next()
+        .and_then(|item| item.parse::<u32>().ok())
+        .unwrap_or(0);
+    Some((major, minor))
+}
+
+/// 通用判定：`gpt-<major>.<minor>` 早于 5.5 的模型（含 `gpt-5-codex` 这类不带次版本号的写法）。
+/// 模型目录与唤醒预设共用同一口径，避免两处过滤规则各自漂移。
+pub(crate) fn is_codex_model_before_5_5(model: &str) -> bool {
+    wakeup_model_version(model).is_some_and(|version| version < (5, 5))
+}
+
+/// 5.5 之前的模型（含 `gpt-5-codex` 这类不带次版本号的写法）不再作为唤醒目标。
+fn is_wakeup_model_before_5_5(model: &str) -> bool {
+    is_codex_model_before_5_5(model)
+}
+
+fn prune_pre_5_5_model_presets(state: &mut CodexWakeupState) -> bool {
+    if state
+        .model_preset_migrations
+        .iter()
+        .any(|item| item == PRUNE_PRE_5_5_MODEL_PRESETS_MIGRATION_ID)
+    {
+        return false;
+    }
+
+    state
+        .model_preset_migrations
+        .push(PRUNE_PRE_5_5_MODEL_PRESETS_MIGRATION_ID.to_string());
+    let before = state.model_presets.len();
+    state
+        .model_presets
+        .retain(|preset| !is_wakeup_model_before_5_5(&preset.model));
+    before != state.model_presets.len()
+}
+
+/// 引用了 5.5 之前模型的任务统一改到默认的 GPT-5.6 Luna，避免任务继续指向已下架模型。
+fn retarget_pre_5_5_wakeup_tasks(state: &mut CodexWakeupState) -> bool {
+    let mut changed = false;
+    for task in &mut state.tasks {
+        let Some(model) = task.model.as_deref() else {
+            continue;
+        };
+        if !is_wakeup_model_before_5_5(model) {
+            continue;
+        }
+        task.model = Some(DEFAULT_WAKEUP_MODEL.to_string());
+        task.model_display_name = Some(DEFAULT_WAKEUP_MODEL_NAME.to_string());
+        task.model_reasoning_effort = None;
+        changed = true;
+    }
+    changed
+}
+
+fn ensure_gpt_6_1_sol_model_preset(state: &mut CodexWakeupState) -> bool {
+    if state
+        .model_preset_migrations
+        .iter()
+        .any(|id| id == GPT_6_1_SOL_MODEL_PRESET_MIGRATION_ID)
+    {
+        return false;
+    }
+    state
+        .model_preset_migrations
+        .push(GPT_6_1_SOL_MODEL_PRESET_MIGRATION_ID.to_string());
+    let defaults = default_model_presets();
+    let unchanged = defaults
+        .iter()
+        .filter(|preset| preset.model != "gpt-6.1-sol")
+        .all(|preset| {
+            state
+                .model_presets
+                .iter()
+                .any(|existing| existing.model == preset.model)
+        });
+    if unchanged
+        && !state
+            .model_presets
+            .iter()
+            .any(|preset| preset.model == "gpt-6.1-sol")
+    {
+        state.model_presets.insert(0, defaults[0].clone());
+    }
+    true
+}
+
 fn apply_model_preset_migrations(state: &mut CodexWakeupState) -> bool {
     let mut changed = false;
     changed |= prune_legacy_model_presets(state);
+    changed |= prune_pre_5_5_model_presets(state);
+    changed |= retarget_pre_5_5_wakeup_tasks(state);
     changed |= ensure_gpt_5_6_model_presets(state);
     changed |= ensure_gpt_5_5_model_preset(state);
+    changed |= ensure_gpt_6_astra_model_preset(state);
+    changed |= ensure_gpt_6_sol_luna_model_presets(state);
+    changed |= ensure_gpt_6_1_sol_model_preset(state);
+    changed |= prefix_builtin_model_preset_names(state);
     state.model_preset_migrations.sort();
     state.model_preset_migrations.dedup();
     changed
@@ -1750,6 +2030,7 @@ pub fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), 
     }
 
     let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = task_state::lock_task_state()?;
     let path = tasks_path()?;
     if !path.exists() {
         return Ok(());
@@ -1795,6 +2076,7 @@ pub fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), 
     let _ = prune_missing_accounts_from_state(&mut state, &existing);
     refresh_next_run_at(&mut state);
     save_json_atomic(&path, &state)?;
+    crate::modules::codex_wakeup_scheduler::cancel_disabled_tasks(&state);
     logger::log_info(&format!(
         "[CodexWakeup] 已从唤醒任务中移除已删除账号引用: removed={}, remaining_tasks={}",
         remove_ids.len(),
@@ -1922,7 +2204,8 @@ pub fn save_runtime_config(
     Ok(normalized)
 }
 
-fn load_state_inner() -> Result<CodexWakeupState, String> {
+// Caller owns TASKS_LOCK and the cross-process state lock.
+fn read_state_file() -> Result<CodexWakeupState, String> {
     let path = tasks_path()?;
     if !path.exists() {
         return Ok(CodexWakeupState::default());
@@ -1959,11 +2242,17 @@ fn load_state_inner() -> Result<CodexWakeupState, String> {
     let existing_accounts = existing_codex_account_id_set();
     let account_prune_changed = prune_missing_accounts_from_state(&mut state, &existing_accounts);
     refresh_next_run_at(&mut state);
-    if migration_changed || account_prune_changed {
-        let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let interrupted_changed = task_state::recover_interrupted_runs(&mut state)?;
+    if migration_changed || account_prune_changed || interrupted_changed {
         save_json_atomic(&path, &state)?;
     }
     Ok(state)
+}
+
+fn load_state_inner() -> Result<CodexWakeupState, String> {
+    let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = task_state::lock_task_state()?;
+    read_state_file()
 }
 
 pub fn load_state() -> Result<CodexWakeupState, String> {
@@ -1987,6 +2276,8 @@ pub fn load_overview() -> Result<CodexWakeupOverview, String> {
 
 pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, String> {
     let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = task_state::lock_task_state()?;
+    let current_state = read_state_file()?;
     let mut seen = HashSet::new();
     let mut preset_seen = HashSet::new();
     let mut state = CodexWakeupState {
@@ -2018,9 +2309,12 @@ pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, Str
     let existing_accounts = existing_codex_account_id_set();
     let _ = prune_missing_accounts_from_state(&mut state, &existing_accounts);
 
+    // UI snapshots own configuration, never the scheduler's newer run results.
+    task_state::preserve_run_metadata(&mut state, &current_state);
     refresh_next_run_at(&mut state);
 
     save_json_atomic(&tasks_path()?, &state)?;
+    crate::modules::codex_wakeup_scheduler::cancel_disabled_tasks(&state);
     Ok(state)
 }
 
@@ -2460,7 +2754,30 @@ fn create_cancelled_record(
     )
 }
 
+/// 唤醒执行入口：固定走 API 直连（宿主带上账号凭据直接请求官方接口），
+/// 既不要求本机 Codex CLI，也不经过本地 API 服务进程。
 async fn run_single_account(
+    run_id: &str,
+    context: &TaskRunContext,
+    account_id: &str,
+    prompt: &str,
+    execution_config: &CodexWakeupExecutionConfig,
+    cancel_flag: Option<&Arc<AtomicBool>>,
+) -> CodexWakeupHistoryItem {
+    run_api_single_account(
+        run_id,
+        context,
+        account_id,
+        prompt,
+        execution_config,
+        cancel_flag,
+    )
+    .await
+}
+
+/// API 直连唤醒：宿主带上所选账号凭据直接请求官方上游，不需要本机 Codex CLI，
+/// 也不经过本地 API 服务进程。
+async fn run_api_single_account(
     run_id: &str,
     context: &TaskRunContext,
     account_id: &str,
@@ -2499,8 +2816,7 @@ async fn run_single_account(
         }
     };
     let existing_context_text = resolve_account_context_text(&existing);
-
-    if existing.is_api_key_auth() {
+    if existing.is_api_key_auth() || existing.is_web_session_auth() {
         return create_failure_record(
             run_id,
             &context.trigger_type,
@@ -2511,17 +2827,20 @@ async fn run_single_account(
             existing_context_text,
             prompt_value,
             execution_config,
-            "Codex 官方直连唤醒仅支持 OAuth 账号。".to_string(),
+            "Codex API 直连唤醒仅支持 OAuth / Agent Identity 账号。".to_string(),
             None,
         );
     }
 
     let started_at = std::time::Instant::now();
-    match codex_local_access::run_official_wakeup_chat(
-        account_id,
-        execution_config.model.as_deref(),
-        execution_config.model_reasoning_effort.as_deref(),
-        prompt,
+    match task_state::await_with_cancel(
+        cancel_flag,
+        codex_local_access::run_official_wakeup_chat(
+            account_id,
+            execution_config.model.as_deref(),
+            execution_config.model_reasoning_effort.as_deref(),
+            prompt,
+        ),
     )
     .await
     {
@@ -2578,6 +2897,185 @@ async fn run_single_account(
             );
             record.duration_ms = Some(started_at.elapsed().as_millis() as u64);
             record
+        }
+    }
+}
+
+/// CLI 唤醒：在受管 `CODEX_HOME` 中写入所选账号后执行 `codex exec`。
+async fn run_cli_single_account(
+    binary: &ResolvedBinary,
+    run_id: &str,
+    context: &TaskRunContext,
+    account_id: &str,
+    prompt: &str,
+    execution_config: &CodexWakeupExecutionConfig,
+    cancel_flag: Option<&Arc<AtomicBool>>,
+) -> CodexWakeupHistoryItem {
+    let prompt_value = Some(prompt.to_string());
+    let cli_path = Some(binary.path.display().to_string());
+    if is_scope_cancelled(cancel_flag) {
+        return create_cancelled_record(
+            run_id,
+            context,
+            account_id,
+            prompt_value,
+            execution_config,
+            cli_path,
+        );
+    }
+
+    let existing = match codex_account::load_account(account_id) {
+        Some(account) => account,
+        None => {
+            return create_failure_record(
+                run_id,
+                &context.trigger_type,
+                context.task_id.as_deref(),
+                context.task_name.as_deref(),
+                account_id,
+                account_id.to_string(),
+                None,
+                prompt_value,
+                execution_config,
+                "账号不存在".to_string(),
+                cli_path,
+            )
+        }
+    };
+    let existing_context_text = resolve_account_context_text(&existing);
+
+    if existing.is_api_key_auth()
+        || existing.is_agent_identity_auth()
+        || existing.is_web_session_auth()
+    {
+        return create_failure_record(
+            run_id,
+            &context.trigger_type,
+            context.task_id.as_deref(),
+            context.task_name.as_deref(),
+            account_id,
+            existing.email,
+            existing_context_text,
+            prompt_value,
+            execution_config,
+            "Codex CLI 唤醒仅支持 OAuth 账号。".to_string(),
+            cli_path,
+        );
+    }
+
+    let managed_home = match managed_home_path(account_id) {
+        Ok(path) => path,
+        Err(err) => {
+            return create_failure_record(
+                run_id,
+                &context.trigger_type,
+                context.task_id.as_deref(),
+                context.task_name.as_deref(),
+                account_id,
+                existing.email,
+                existing_context_text,
+                prompt_value,
+                execution_config,
+                err,
+                cli_path,
+            )
+        }
+    };
+    if let Err(err) = fs::create_dir_all(&managed_home) {
+        return create_failure_record(
+            run_id,
+            &context.trigger_type,
+            context.task_id.as_deref(),
+            context.task_name.as_deref(),
+            account_id,
+            existing.email,
+            existing_context_text,
+            prompt_value,
+            execution_config,
+            format!("创建受管 CODEX_HOME 失败: {}", err),
+            cli_path,
+        );
+    }
+
+    let (account, command_result, sync_error) =
+        match codex_account::execute_with_managed_account_projection(
+            account_id,
+            &managed_home,
+            "Codex 唤醒执行",
+            |_| run_codex_exec_sync(binary, &managed_home, prompt, execution_config, cancel_flag),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(err) => {
+                return create_failure_record(
+                    run_id,
+                    &context.trigger_type,
+                    context.task_id.as_deref(),
+                    context.task_name.as_deref(),
+                    account_id,
+                    existing.email,
+                    existing_context_text,
+                    prompt_value,
+                    execution_config,
+                    err,
+                    cli_path,
+                )
+            }
+        };
+    if let Some(err) = sync_error {
+        logger::log_warn(&format!(
+            "Codex 唤醒执行后同步受管目录 Token 失败: account_id={}, managed_home={}, error={}",
+            account_id,
+            managed_home.display(),
+            err
+        ));
+    }
+
+    match command_result {
+        Ok(output) => {
+            let account_context_text = resolve_account_context_text(&account);
+            let account_email = account.email;
+            CodexWakeupHistoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                run_id: run_id.to_string(),
+                timestamp: now_ms(),
+                trigger_type: context.trigger_type.clone(),
+                task_id: context.task_id.clone(),
+                task_name: context.task_name.clone(),
+                account_id: account_id.to_string(),
+                account_email,
+                account_context_text,
+                success: true,
+                prompt: prompt_value,
+                model: execution_config.model.clone(),
+                model_display_name: execution_config.model_display_name.clone(),
+                model_reasoning_effort: execution_config.model_reasoning_effort.clone(),
+                reply: Some(output.reply),
+                error: None,
+                quota_refresh_error: None,
+                duration_ms: Some(output.duration_ms),
+                cli_path,
+                quota_before: None,
+                quota_after: None,
+            }
+        }
+        Err(err) => {
+            let account_context_text = resolve_account_context_text(&account);
+            let account_email = account.email;
+            create_failure_record(
+                run_id,
+                &context.trigger_type,
+                context.task_id.as_deref(),
+                context.task_name.as_deref(),
+                account_id,
+                account_email,
+                account_context_text,
+                prompt_value,
+                execution_config,
+                err,
+                cli_path,
+            )
         }
     }
 }
@@ -2747,7 +3245,9 @@ pub fn update_task_after_run(
     task_id: &str,
     records: &[CodexWakeupHistoryItem],
 ) -> Result<(), String> {
-    let mut state = load_state()?;
+    let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = task_state::lock_task_state()?;
+    let mut state = read_state_file()?;
     let Some(task) = state.tasks.iter_mut().find(|item| item.id == task_id) else {
         return Ok(());
     };
@@ -2771,8 +3271,8 @@ pub fn update_task_after_run(
     };
     task.last_duration_ms = total_duration;
     task.updated_at = now_ts();
-    task.next_run_at = crate::modules::codex_wakeup_scheduler::calculate_next_run_at(task);
-    save_state(&state)?;
+    refresh_next_run_at(&mut state);
+    save_json_atomic(&tasks_path()?, &state)?;
     Ok(())
 }
 
@@ -2787,14 +3287,24 @@ pub fn get_task(task_id: &str) -> Result<Option<CodexWakeupTask>, String> {
 mod tests {
     use super::{
         append_version_manager_cli_dirs, apply_model_preset_migrations,
-        build_usable_resolved_binary, default_model_presets, prune_missing_accounts_from_state,
-        retain_existing_account_ids, CodexWakeupModelPreset, CodexWakeupSchedule, CodexWakeupState,
-        CodexWakeupTask, GPT_5_5_MODEL_PRESET_MIGRATION_ID, GPT_5_6_MODEL_PRESETS_MIGRATION_ID,
-        PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID, REASONING_EFFORT_MEDIUM,
+        build_usable_resolved_binary, default_model_presets, is_wakeup_model_before_5_5,
+        prune_missing_accounts_from_state, retain_existing_account_ids, wakeup_runtime_status,
+        CodexWakeupModelPreset, CodexWakeupSchedule, CodexWakeupState, CodexWakeupTask,
+        GPT_5_5_MODEL_PRESET_MIGRATION_ID, GPT_5_6_MODEL_PRESETS_MIGRATION_ID,
+        GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID, GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID,
+        PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID, PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID,
+        PRUNE_PRE_5_5_MODEL_PRESETS_MIGRATION_ID, REASONING_EFFORT_MEDIUM,
     };
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
+
+    #[test]
+    fn wakeup_runtime_status_reports_cli_instead_of_official_chat() {
+        let status = wakeup_runtime_status();
+        assert_ne!(status.source.as_deref(), Some("official_chat"));
+        assert_ne!(status.message.as_deref(), Some("官方直连对话"));
+    }
 
     fn model_preset(id: &str, name: &str, model: &str) -> CodexWakeupModelPreset {
         CodexWakeupModelPreset {
@@ -2876,6 +3386,34 @@ mod tests {
     }
 
     #[test]
+    fn gpt_6_1_sol_wakeup_upgrade_is_idempotent_and_respects_removal() {
+        let mut state = CodexWakeupState {
+            enabled: false,
+            tasks: vec![],
+            model_presets: default_model_presets(),
+            model_preset_migrations: vec![],
+        };
+        state
+            .model_presets
+            .retain(|preset| preset.model != "gpt-6.1-sol");
+        assert!(apply_model_preset_migrations(&mut state));
+        assert_eq!(state.model_presets[0].model, "gpt-6.1-sol");
+        assert!(state.model_presets[0]
+            .allowed_reasoning_efforts
+            .contains(&"ultra".into()));
+        assert!(!apply_model_preset_migrations(&mut state));
+        state
+            .model_presets
+            .retain(|preset| preset.model != "gpt-6.1-sol");
+        assert!(!apply_model_preset_migrations(&mut state));
+        assert!(!state
+            .model_presets
+            .iter()
+            .any(|preset| preset.model == "gpt-6.1-sol"));
+        assert_eq!(super::DEFAULT_WAKEUP_MODEL, "gpt-5.6-luna");
+    }
+
+    #[test]
     fn default_model_presets_include_gpt_5_6_models() {
         let models: Vec<String> = default_model_presets()
             .into_iter()
@@ -2885,18 +3423,47 @@ mod tests {
         assert_eq!(
             models,
             vec![
+                "gpt-6.1-sol",
+                "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
-                "gpt-5.5",
-                "gpt-5.4",
-                "gpt-5.4-mini"
+                "gpt-5.5"
             ]
         );
+        let astra = default_model_presets()
+            .into_iter()
+            .find(|preset| preset.model == "gpt-6-astra")
+            .expect("Astra preset");
+        assert_eq!(
+            astra.allowed_reasoning_efforts,
+            vec!["low", "medium", "high", "xhigh", "max"]
+        );
+        for model in ["gpt-6-sol", "gpt-6-luna"] {
+            let preset = default_model_presets()
+                .into_iter()
+                .find(|preset| preset.model == model)
+                .unwrap_or_else(|| panic!("{model} preset"));
+            assert_eq!(
+                preset.allowed_reasoning_efforts,
+                vec!["low", "medium", "high", "xhigh", "max"]
+            );
+        }
     }
 
     #[test]
     fn model_preset_migration_prunes_legacy_codex_defaults() {
+        assert!(is_wakeup_model_before_5_5("gpt-5.4"));
+        assert!(is_wakeup_model_before_5_5("gpt-5.4-mini"));
+        assert!(is_wakeup_model_before_5_5("gpt-5-codex"));
+        assert!(!is_wakeup_model_before_5_5("gpt-5.5"));
+        assert!(!is_wakeup_model_before_5_5("gpt-5.6-luna"));
+        assert!(!is_wakeup_model_before_5_5("gpt-6-astra"));
+        assert!(!is_wakeup_model_before_5_5("gpt-6-sol"));
+        assert!(!is_wakeup_model_before_5_5("gpt-6-luna"));
+
         let mut state = CodexWakeupState {
             enabled: false,
             tasks: Vec::new(),
@@ -2919,11 +3486,14 @@ mod tests {
         assert_eq!(
             models,
             vec![
+                "gpt-6.1-sol",
+                "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
-                "gpt-5.5",
-                "gpt-5.4"
+                "gpt-5.5"
             ]
         );
         assert!(state
@@ -2934,6 +3504,43 @@ mod tests {
             .model_preset_migrations
             .iter()
             .any(|item| item == GPT_5_6_MODEL_PRESETS_MIGRATION_ID));
+        assert!(state
+            .model_preset_migrations
+            .iter()
+            .any(|item| item == GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID));
+        assert!(state
+            .model_preset_migrations
+            .iter()
+            .any(|item| item == GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID));
+        assert!(state
+            .model_preset_migrations
+            .iter()
+            .any(|item| item == PRUNE_PRE_5_5_MODEL_PRESETS_MIGRATION_ID));
+    }
+
+    #[test]
+    fn wakeup_tasks_pointing_below_5_5_fall_back_to_default_model() {
+        let mut legacy_task = sample_task("legacy", &["account-a"]);
+        legacy_task.model = Some("gpt-5.4-mini".to_string());
+        legacy_task.model_display_name = Some("GPT-5.4-Mini".to_string());
+        legacy_task.model_reasoning_effort = Some(REASONING_EFFORT_MEDIUM.to_string());
+        let mut kept_task = sample_task("kept", &["account-a"]);
+        kept_task.model = Some("gpt-5.5".to_string());
+        let mut state = CodexWakeupState {
+            enabled: false,
+            tasks: vec![legacy_task, kept_task],
+            model_presets: Vec::new(),
+            model_preset_migrations: Vec::new(),
+        };
+
+        assert!(apply_model_preset_migrations(&mut state));
+        assert_eq!(state.tasks[0].model.as_deref(), Some("gpt-5.6-luna"));
+        assert_eq!(
+            state.tasks[0].model_display_name.as_deref(),
+            Some("GPT-5.6 Luna")
+        );
+        assert_eq!(state.tasks[0].model_reasoning_effort, None);
+        assert_eq!(state.tasks[1].model.as_deref(), Some("gpt-5.5"));
     }
 
     #[test]
@@ -2961,12 +3568,79 @@ mod tests {
         assert_eq!(
             models,
             vec![
+                "gpt-6-astra",
+                "gpt-6-sol",
+                "gpt-6-luna",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
                 "gpt-5.6-sol",
                 "custom-model"
             ]
         );
+        assert!(!apply_model_preset_migrations(&mut state));
+    }
+
+    #[test]
+    fn model_preset_migration_moves_existing_astra_to_first() {
+        let mut state = CodexWakeupState {
+            enabled: false,
+            tasks: Vec::new(),
+            model_presets: vec![
+                model_preset("preset-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
+                model_preset("preset-astra", "6 Astra", "gpt-6-astra"),
+            ],
+            model_preset_migrations: vec![GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string()],
+        };
+
+        assert!(apply_model_preset_migrations(&mut state));
+        assert_eq!(state.model_presets[0].model, "gpt-6.1-sol");
+        assert_eq!(state.model_presets[1].model, "gpt-6-astra");
+        assert_eq!(state.model_presets[2].model, "gpt-6-sol");
+        assert_eq!(state.model_presets[3].model, "gpt-6-luna");
+        // 旧短名（6 Astra）在迁移中补上 GPT- 前缀。
+        assert_eq!(state.model_presets[1].name, "GPT-6 Astra");
+        assert!(state
+            .model_presets
+            .iter()
+            .any(|preset| preset.model == "gpt-5.6-sol"));
+        assert!(!apply_model_preset_migrations(&mut state));
+    }
+
+    #[test]
+    fn model_preset_migration_prefixes_builtin_names_only() {
+        let mut state = CodexWakeupState {
+            enabled: false,
+            tasks: Vec::new(),
+            model_presets: vec![
+                model_preset("preset-astra", "6 Astra", "gpt-6-astra"),
+                model_preset("preset-5-6-sol", "5.6 Sol", "gpt-5.6-sol"),
+                model_preset("preset-5-6-terra", "My Terra", "gpt-5.6-terra"),
+                model_preset("preset-custom", "6 Luna", "custom-model"),
+            ],
+            model_preset_migrations: vec![
+                GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string(),
+                GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID.to_string(),
+            ],
+        };
+
+        assert!(apply_model_preset_migrations(&mut state));
+        let name_for = |model: &str| {
+            state
+                .model_presets
+                .iter()
+                .find(|preset| preset.model == model)
+                .map(|preset| preset.name.clone())
+                .unwrap_or_default()
+        };
+        assert_eq!(name_for("gpt-6-astra"), "GPT-6 Astra");
+        assert_eq!(name_for("gpt-5.6-sol"), "GPT-5.6 Sol");
+        // 用户自定义的展示名保持原样。
+        assert_eq!(name_for("gpt-5.6-terra"), "My Terra");
+        assert_eq!(name_for("custom-model"), "6 Luna");
+        assert!(state
+            .model_preset_migrations
+            .iter()
+            .any(|item| item == PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID));
         assert!(!apply_model_preset_migrations(&mut state));
     }
 

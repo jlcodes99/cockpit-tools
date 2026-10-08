@@ -15,6 +15,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )
@@ -62,6 +63,9 @@ func requestLogCaptureEnabled(cfg *config.Config) bool {
 
 // RecordAPIRequest stores the upstream request metadata in Gin context for request logging.
 func RecordAPIRequest(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
+	if observer := cliproxyexecutor.DiagnosticsObserver(ctx); observer != nil {
+		observer.UpstreamRequest(ctx, cliproxyexecutor.DiagnosticRequest{Provider: info.Provider, AuthID: info.AuthID, Transport: "http", Headers: info.Headers, Body: info.Body})
+	}
 	if cfg == nil || cfg.CommercialMode {
 		return
 	}
@@ -188,7 +192,12 @@ func newAPIRequestLogBuilder(index int, info UpstreamRequestLog, timestamp time.
 
 // RecordAPIResponseMetadata captures upstream response status/header information for the latest attempt.
 func RecordAPIResponseMetadata(ctx context.Context, cfg *config.Config, status int, headers http.Header) {
+	if observer := cliproxyexecutor.DiagnosticsObserver(ctx); observer != nil {
+		observer.UpstreamResponse(ctx, status, headers)
+	}
 	logging.SetResponseHeaders(ctx, headers)
+	// 上游响应头里的 turn state 观测与日志开关无关，业务转发本身就能采到。
+	ObserveTurnStateFromHeaders(ctx, status, headers)
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
@@ -217,6 +226,9 @@ func RecordAPIResponseMetadata(ctx context.Context, cfg *config.Config, status i
 
 // RecordAPIResponseError adds an error entry for the latest attempt when no HTTP response is available.
 func RecordAPIResponseError(ctx context.Context, cfg *config.Config, err error) {
+	if observer := cliproxyexecutor.DiagnosticsObserver(ctx); observer != nil && err != nil {
+		observer.UpstreamError(ctx, "", err)
+	}
 	if !requestLogCaptureEnabled(cfg) || err == nil {
 		return
 	}
@@ -242,6 +254,9 @@ func RecordAPIResponseError(ctx context.Context, cfg *config.Config, err error) 
 
 // AppendAPIResponseChunk appends an upstream response chunk to Gin context for request logging.
 func AppendAPIResponseChunk(ctx context.Context, cfg *config.Config, chunk []byte) {
+	if len(chunk) > 0 {
+		cliproxyexecutor.ObserveUpstreamChunk(ctx)
+	}
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
@@ -286,6 +301,9 @@ func AppendAPIResponseChunk(ctx context.Context, cfg *config.Config, chunk []byt
 
 // RecordAPIWebsocketRequest stores an upstream websocket request event in Gin context.
 func RecordAPIWebsocketRequest(ctx context.Context, cfg *config.Config, info UpstreamRequestLog) {
+	if observer := cliproxyexecutor.DiagnosticsObserver(ctx); observer != nil {
+		observer.UpstreamRequest(ctx, cliproxyexecutor.DiagnosticRequest{Provider: info.Provider, AuthID: info.AuthID, Transport: "websocket", Headers: info.Headers, Body: info.Body})
+	}
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
@@ -318,6 +336,9 @@ func RecordAPIWebsocketRequest(ctx context.Context, cfg *config.Config, info Ups
 
 // RecordAPIWebsocketHandshake stores the upstream websocket handshake response metadata.
 func RecordAPIWebsocketHandshake(ctx context.Context, cfg *config.Config, status int, headers http.Header) {
+	if observer := cliproxyexecutor.DiagnosticsObserver(ctx); observer != nil {
+		observer.UpstreamResponse(ctx, status, headers)
+	}
 	logging.SetResponseHeaders(ctx, headers)
 	if !requestLogCaptureEnabled(cfg) {
 		return
@@ -343,6 +364,14 @@ func RecordAPIWebsocketHandshake(ctx context.Context, cfg *config.Config, status
 // RecordAPIWebsocketUpgradeRejection stores a rejected websocket upgrade as an HTTP attempt.
 func RecordAPIWebsocketUpgradeRejection(ctx context.Context, cfg *config.Config, info UpstreamRequestLog, status int, headers http.Header, body []byte) {
 	logging.SetResponseHeaders(ctx, headers)
+	if observer := cliproxyexecutor.DiagnosticsObserver(ctx); observer != nil {
+		observer.UpstreamResponse(ctx, status, headers)
+		if len(body) > 0 {
+			observer.UpstreamChunk(ctx)
+		}
+	}
+	// The file-log representation is not an additional transport attempt.
+	ctx = cliproxyexecutor.WithRequestDiagnosticsObserver(ctx, nil)
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
@@ -377,6 +406,9 @@ func WebsocketUpgradeRequestURL(rawURL string) string {
 
 // AppendAPIWebsocketResponse stores an upstream websocket response frame in Gin context.
 func AppendAPIWebsocketResponse(ctx context.Context, cfg *config.Config, payload []byte) {
+	if len(payload) > 0 {
+		cliproxyexecutor.ObserveUpstreamChunk(ctx)
+	}
 	if !requestLogCaptureEnabled(cfg) {
 		return
 	}
@@ -399,8 +431,18 @@ func AppendAPIWebsocketResponse(ctx context.Context, cfg *config.Config, payload
 	appendAPIWebsocketTimeline(ginCtx, []byte(builder.String()))
 }
 
+// AppendCodexAPIWebsocketResponse stores a Codex upstream WebSocket response frame and
+// merges quota event headers into the request log response metadata.
+func AppendCodexAPIWebsocketResponse(ctx context.Context, cfg *config.Config, payload []byte) {
+	logging.MergeResponseHeaders(ctx, ParseCodexQuotaEventHeaders(payload))
+	AppendAPIWebsocketResponse(ctx, cfg, payload)
+}
+
 // RecordAPIWebsocketError stores an upstream websocket error event in Gin context.
 func RecordAPIWebsocketError(ctx context.Context, cfg *config.Config, stage string, err error) {
+	if observer := cliproxyexecutor.DiagnosticsObserver(ctx); observer != nil && err != nil {
+		observer.UpstreamError(ctx, stage, err)
+	}
 	if !requestLogCaptureEnabled(cfg) || err == nil {
 		return
 	}

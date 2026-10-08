@@ -22,6 +22,11 @@ type authAutoRefreshLoop struct {
 
 	wakeCh chan struct{}
 	jobs   chan string
+
+	// done is closed when run (and all its workers) have fully exited. It lets
+	// StopAutoRefresh wait for in-flight refresh writes to finish instead of
+	// racing them against callers that tear down storage right after stopping.
+	done chan struct{}
 }
 
 func newAuthAutoRefreshLoop(manager *Manager, interval time.Duration, concurrency int) *authAutoRefreshLoop {
@@ -43,6 +48,7 @@ func newAuthAutoRefreshLoop(manager *Manager, interval time.Duration, concurrenc
 		dirty:       make(map[string]struct{}),
 		wakeCh:      make(chan struct{}, 1),
 		jobs:        make(chan string, jobBuffer),
+		done:        make(chan struct{}),
 	}
 }
 
@@ -60,23 +66,61 @@ func (l *authAutoRefreshLoop) queueReschedule(authID string) {
 }
 
 func (l *authAutoRefreshLoop) run(ctx context.Context) {
-	if l == nil || l.manager == nil {
+	if l == nil {
 		return
 	}
+	defer close(l.done)
+	if l.manager == nil || ctx.Err() != nil {
+		return
+	}
+	l.rebuild(time.Now())
 
 	workers := l.concurrency
 	if workers <= 0 {
 		workers = refreshMaxConcurrency
 	}
+	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
-		go l.worker(ctx)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.worker(ctx)
+		}()
 	}
 
 	l.loop(ctx)
+	// Publish completion only after workers exit. Stop callers wait for this
+	// signal within a bounded deadline; cancellation fences reject late results.
+	wg.Wait()
 }
+
+// wait blocks until the refresh loop and its workers have exited or the
+// caller's shared shutdown deadline expires.
+func (l *authAutoRefreshLoop) wait(ctx context.Context) error {
+	if l == nil || l.done == nil {
+		return nil
+	}
+	select {
+	case <-l.done:
+		return nil
+	default:
+	}
+	select {
+	case <-l.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// wait blocks until the loop and all workers have exited. It must be called
+// after the loop's context has been cancelled.
 
 func (l *authAutoRefreshLoop) worker(ctx context.Context) {
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -349,6 +393,9 @@ func nextRefreshCheckAt(now time.Time, auth *Auth, interval time.Duration) (time
 
 	if !auth.NextRefreshAfter.IsZero() && now.Before(auth.NextRefreshAfter) {
 		return auth.NextRefreshAfter, true
+	}
+	if auth.RejectedAccessToken != "" && authAccessToken(auth) == auth.RejectedAccessToken {
+		return now, true
 	}
 
 	if evaluator, ok := auth.Runtime.(RefreshEvaluator); ok && evaluator != nil {

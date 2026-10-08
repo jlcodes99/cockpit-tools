@@ -6,7 +6,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::{DefaultInstanceSettings, InstanceProfile, InstanceStore};
+use crate::models::{Account, DefaultInstanceSettings, InstanceProfile, InstanceStore};
 use crate::modules;
 use crate::modules::instance_store;
 
@@ -78,6 +78,10 @@ pub fn update_default_settings(
 
 pub fn get_default_user_data_dir() -> Result<PathBuf, String> {
     modules::antigravity_paths::default_user_data_dir()
+}
+
+pub fn get_all_antigravity_user_data_dirs() -> Vec<PathBuf> {
+    modules::antigravity_paths::all_antigravity_user_data_dirs()
 }
 
 pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
@@ -167,11 +171,19 @@ fn ensure_state_db_for_injection(profile_dir: &Path) -> Result<PathBuf, String> 
 
 pub fn inject_account_to_profile(profile_dir: &Path, account_id: &str) -> Result<(), String> {
     let account = modules::load_account(account_id)?;
+    inject_account_to_profile_with_account(profile_dir, &account)
+}
+
+pub fn inject_account_to_profile_with_account(
+    profile_dir: &Path,
+    account: &Account,
+) -> Result<(), String> {
     let db_path = ensure_state_db_for_injection(profile_dir)?;
-    modules::db::inject_account_token_to_path(&db_path, &account).map(|_| ())
+    modules::db::inject_account_token_to_path(&db_path, account).map(|_| ())
 }
 
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = INSTANCE_STORE_LOCK.lock().map_err(|_| "无法获取实例锁")?;
     let mut store = load_instance_store()?;
 
@@ -317,6 +329,7 @@ pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, 
 }
 
 pub fn delete_instance(instance_id: &str) -> Result<(), String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = INSTANCE_STORE_LOCK.lock().map_err(|_| "无法获取实例锁")?;
     let mut store = load_instance_store()?;
     let index = store
@@ -338,6 +351,14 @@ pub fn delete_instance(instance_id: &str) -> Result<(), String> {
 
 pub fn delete_instance_directory(dir_path: &Path) -> Result<(), String> {
     if !dir_path.exists() {
+        return Ok(());
+    }
+
+    if !modules::instance_storage_cleanup::can_delete_registered_instance_directory(dir_path)? {
+        modules::logger::log_warn(&format!(
+            "[Instance] Preserving directory outside owned instance storage; removing only its registration: {}",
+            dir_path.display()
+        ));
         return Ok(());
     }
 

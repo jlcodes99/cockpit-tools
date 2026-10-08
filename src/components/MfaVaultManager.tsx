@@ -17,6 +17,7 @@ import {
   parseGoogleAuthenticatorMigrationBatch,
   parseMfaCredentialInput,
   parseMfaCredentialInputs,
+  rememberMfaQuery,
   toMfaSecretIdentity,
   type GoogleAuthenticatorMigrationBatch,
   type MfaRecord,
@@ -28,7 +29,6 @@ type ListTab = 'saved' | 'history';
 type MigrationBatchState = GoogleAuthenticatorMigrationBatch & {
   credentialsByIndex: Record<number, ParsedMfaCredential[]>;
 };
-const MAX_HISTORY = 50;
 
 async function decodeQrTextFromImage(file: Blob): Promise<string | null> {
   const imageUrl = URL.createObjectURL(file);
@@ -129,19 +129,7 @@ export function MfaVaultManager() {
   const applyQueryResult = (parsed: ParsedMfaCredential) => {
     setActiveQuery(parsed);
     setInputError('');
-
-    setHistoryRecords(prev => {
-      const next: MfaRecord = {
-        id: createMfaRecordId(),
-        accountName: parsed.accountName,
-        secret: parsed.secret,
-        remark: '',
-        time: Date.now(),
-      };
-      const nextIdentity = toMfaSecretIdentity(next.secret);
-      const filtered = prev.filter(record => toMfaSecretIdentity(record.secret) !== nextIdentity);
-      return [next, ...filtered].slice(0, MAX_HISTORY);
-    });
+    setHistoryRecords(rememberMfaQuery(parsed));
   };
 
   const collectMigrationBatch = (batch: GoogleAuthenticatorMigrationBatch) => {

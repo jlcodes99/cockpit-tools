@@ -9,6 +9,8 @@ include!("codex_account_core_runtime_import.rs");
 #[cfg(test)]
 mod tests {
     include!("codex_account_core_tests.rs");
+    include!("codex_account_core_tests_optional_identity.rs");
+    include!("codex_account_quota_window_tests.rs");
 }
 
 include!("codex_account_core_mutations_quota.rs");

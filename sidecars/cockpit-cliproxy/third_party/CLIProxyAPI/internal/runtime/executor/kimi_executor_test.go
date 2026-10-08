@@ -86,7 +86,7 @@ func TestKimiExecutorClaudeRequestPreservesInternalModelSemantics(t *testing.T) 
 		Metadata:   map[string]any{"access_token": "test-token"},
 	}
 	const model = "kimi-k2.5(max)"
-	payload := []byte(`{"model":"kimi-k2.5(max)","max_tokens":32,"messages":[{"role":"user","content":"hello"}]}`)
+	payload := []byte(`{"model":"kimi-k2.5(max)","max_tokens":32768,"messages":[{"role":"user","content":"hello"}]}`)
 	response, err := executor.Execute(ctx, auth, cliproxyexecutor.Request{
 		Model:   model,
 		Payload: payload,
@@ -100,8 +100,15 @@ func TestKimiExecutorClaudeRequestPreservesInternalModelSemantics(t *testing.T) 
 	if got := gjson.GetBytes(upstreamBody, "model").String(); got != "k2.5" {
 		t.Fatalf("upstream model = %q, want k2.5", got)
 	}
-	if got := gjson.GetBytes(upstreamBody, "output_config.effort").String(); got != "high" {
-		t.Fatalf("upstream output_config.effort = %q, want high", got)
+	// K2.5 advertises a token budget, not Claude adaptive effort levels.
+	if got := gjson.GetBytes(upstreamBody, "thinking.type").String(); got != "enabled" {
+		t.Fatalf("upstream thinking.type = %q, want enabled; body=%s", got, upstreamBody)
+	}
+	if got := gjson.GetBytes(upstreamBody, "thinking.budget_tokens").Int(); got != 32000 {
+		t.Fatalf("upstream thinking.budget_tokens = %d, want 32000; body=%s", got, upstreamBody)
+	}
+	if gjson.GetBytes(upstreamBody, "output_config.effort").Exists() {
+		t.Fatalf("budget-based model received adaptive effort; body=%s", upstreamBody)
 	}
 	if got := gjson.GetBytes(response.Payload, "model").String(); got != model {
 		t.Fatalf("response model = %q, want %q", got, model)

@@ -14,6 +14,25 @@ export function normalizeAntigravityRuntimeTarget(value: unknown): AntigravityRu
   return isAntigravityRuntimeTarget(value) ? value : DEFAULT_ANTIGRAVITY_RUNTIME_TARGET;
 }
 
+export function hasSavedAntigravityRuntimeTarget(): boolean {
+  try {
+    return typeof window !== 'undefined' && isAntigravityRuntimeTarget(
+      window.localStorage.getItem(ANTIGRAVITY_RUNTIME_TARGET_STORAGE_KEY),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Startup preferences distinguish the two clients while sharing the account page. */
+export function resolveAntigravityStartupTarget(value: unknown): AntigravityRuntimeTarget | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'antigravity') return 'antigravity';
+  if (normalized === 'antigravity-ide') return 'antigravity_ide';
+  return null;
+}
+
 export function getAntigravityRuntimeTarget(): AntigravityRuntimeTarget {
   if (typeof window === 'undefined') {
     return DEFAULT_ANTIGRAVITY_RUNTIME_TARGET;
@@ -47,4 +66,3 @@ export function setAntigravityRuntimeTargetFromPlatform(platformId: PlatformId):
   }
   setAntigravityRuntimeTarget(platformId);
 }
-

@@ -1,23 +1,19 @@
 // cockpit-core Codex 账号：Token identity, refresh state, account index and lifecycle。
 // 通过 include! 保持原模块作用域和凭据调用路径。
-/// 获取我们的多账号存储路径（统一使用 ~/.antigravity_cockpit/）
+/// 获取我们的多账号存储路径（使用公共数据目录入口 ~/.cockpit_tools/，兼容旧目录）
 fn get_accounts_storage_path() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
-        dirs::home_dir()
-            .expect("无法获取用户目录")
-            .join(".antigravity_cockpit")
+        crate::modules::data_paths::fallback_data_dir()
     });
     fs::create_dir_all(&data_dir).ok();
     migrate_codex_data_if_needed(&data_dir);
     data_dir.join("codex_accounts.json")
 }
 
-/// 获取账号详情存储目录（统一使用 ~/.antigravity_cockpit/codex_accounts/）
+/// 获取账号详情存储目录（使用公共数据目录入口 ~/.cockpit_tools/，兼容旧目录；账号文件位于 codex_accounts/）
 fn get_accounts_dir() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
-        dirs::home_dir()
-            .expect("无法获取用户目录")
-            .join(".antigravity_cockpit")
+        crate::modules::data_paths::fallback_data_dir()
     });
     let accounts_dir = data_dir.join("codex_accounts");
     fs::create_dir_all(&accounts_dir).ok();
@@ -291,14 +287,19 @@ fn find_existing_account_id(
         if !summary.email.eq_ignore_ascii_case(email) {
             continue;
         }
+        let Some(account) = load_account(&summary.id) else {
+            continue;
+        };
+        if account.is_api_key_auth()
+            || account.is_agent_identity_auth()
+            || account.id.starts_with("codex_grok_")
+        {
+            continue;
+        }
         email_match_count += 1;
         if first_email_match.is_none() {
             first_email_match = Some(summary.id.clone());
         }
-
-        let Some(account) = load_account(&summary.id) else {
-            continue;
-        };
 
         let current_account_id = normalize_optional_ref(account.account_id.as_deref());
         let current_org_id = normalize_optional_ref(account.organization_id.as_deref());
@@ -831,6 +832,9 @@ fn resolve_reauth_target_account_id(
             target.email, email
         ));
     }
+    if target.is_agent_identity_auth() || target.id.starts_with("codex_grok_") {
+        return Ok(None);
+    }
     Ok(Some(if target.id.trim().is_empty() {
         target_id
     } else {
@@ -860,10 +864,11 @@ fn upsert_account_with_hints_and_reauth_target(
     let mut index = load_account_index();
     let generated_id =
         build_account_storage_id(&email, account_id.as_deref(), organization_id.as_deref());
-    let has_reauth_target = normalize_optional_ref(reauth_target_account_id).is_some();
+    let reauth_target = resolve_reauth_target_account_id(reauth_target_account_id, &email)?;
+    let has_reauth_target = reauth_target.is_some();
 
     // 明确的重新授权来自某个旧账号卡片，必须优先覆盖该旧账号。
-    let existing_id = resolve_reauth_target_account_id(reauth_target_account_id, &email)?
+    let existing_id = reauth_target
         .or_else(|| {
             find_existing_account_id(
                 &index,

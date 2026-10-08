@@ -16,14 +16,17 @@ import {
 import {
   APIKEY_FUN_DEFAULT_MODEL_CATALOG,
   isApiKeyFunProviderBaseUrl,
+  normalizeApiKeyFunProviderBaseUrl,
 } from '../utils/apikeyFunLinks';
 import {
   queryModelProviderUsage,
   type ModelProviderUsageSummary,
 } from './modelProviderUsageService';
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
+import { expandLegacyProviderVisionCapabilities } from '../utils/codexModelProviderVision';
+import { cloneCodexProviderModelConfig, type CodexProviderModelConfig } from '../utils/codexModelProviderKeyConfig';
 
-export interface CodexModelProviderApiKey {
+export interface CodexModelProviderApiKey extends CodexProviderModelConfig {
   id: string;
   name: string;
   apiKey: string;
@@ -50,6 +53,8 @@ export interface CodexModelProvider {
   enableModePreference?: CodexProviderEnableModePreference;
   boundOauthAccountId?: string | null;
   apiKeys: CodexModelProviderApiKey[];
+  /** Explicit removals must survive background account-to-provider reconciliation. */
+  excludedApiKeyHashes?: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -79,6 +84,31 @@ interface UpsertFromCredentialInput {
 let providerIdCounter = 0;
 let keyIdCounter = 0;
 let cachedProviders: CodexModelProvider[] | null = null;
+let providerMutationTail: Promise<unknown> = Promise.resolve();
+
+function serializeProviderMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = providerMutationTail.then(operation, operation);
+  providerMutationTail = result.catch(() => undefined);
+  return result;
+}
+
+function serializedProviderMutation<Args extends unknown[], Result>(
+  operation: (...args: Args) => Promise<Result>,
+): (...args: Args) => Promise<Result> {
+  return (...args) => serializeProviderMutation(() => operation(...args));
+}
+
+async function apiKeyFingerprint(apiKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey.trim()));
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function allowExplicitApiKey(provider: CodexModelProvider, apiKey: string): Promise<void> {
+  if (!provider.excludedApiKeyHashes?.length) return;
+  const hash = await apiKeyFingerprint(apiKey);
+  provider.excludedApiKeyHashes = provider.excludedApiKeyHashes.filter((item) => item !== hash);
+}
+
 
 function createProviderId(): string {
   return `cmp_${Date.now()}_${++providerIdCounter}`;
@@ -188,11 +218,20 @@ function normalizeIntegrationType(value: unknown): 'sub2api' | 'new_api' | undef
   return value === 'sub2api' || value === 'new_api' ? value : undefined;
 }
 
-function migrateApiKeyFunProviderWireApi(
+function migrateApiKeyFunProvider(
   providers: CodexModelProvider[],
 ): { providers: CodexModelProvider[]; changed: boolean } {
   let changed = false;
   const next = providers.map((provider) => {
+    const baseUrl = normalizeApiKeyFunProviderBaseUrl(provider.baseUrl);
+    if (baseUrl !== provider.baseUrl) {
+      changed = true;
+      provider = {
+        ...provider,
+        baseUrl,
+        updatedAt: Date.now(),
+      };
+    }
     if (
       isApiKeyFunProviderBaseUrl(provider.baseUrl) &&
       provider.wireApi === 'chat_completions'
@@ -240,21 +279,21 @@ function enforceDeepSeekProvider(provider: CodexModelProvider): boolean {
       provider.supportsWebsockets = false;
       changed = true;
     }
-    // DeepSeek Responses supports vision only through the dedicated
-    // `deepseek-v4-flash-vision-exp` model. Keep provider-level vision off and
-    // preserve per-model capability metadata for that model.
+    // DeepSeek Responses 的识图按模型声明，走 per-model 能力位。供应商级默认保持关闭，
+    // 官方模型只补默认值，用户在模型列表里的开关（含手动关闭）原样保留。
     if (provider.supportsVision === true) {
       provider.supportsVision = false;
       changed = true;
     }
-    const visionModel = DEEPSEEK_CODEX_VISION_MODEL_CATALOG[0];
     const capabilities = provider.modelCapabilities ?? {};
-    const nextCapabilities = Object.fromEntries(
-      Object.entries(capabilities).filter(
-        ([model]) => model.trim().toLowerCase() !== visionModel.toLowerCase(),
-      ),
-    );
-    nextCapabilities[visionModel] = { supportsVision: true };
+    const nextCapabilities = { ...capabilities };
+    for (const visionModel of DEEPSEEK_CODEX_VISION_MODEL_CATALOG) {
+      if (!Object.keys(nextCapabilities).some(
+        (model) => model.trim().toLowerCase() === visionModel.toLowerCase(),
+      )) {
+        nextCapabilities[visionModel] = { supportsVision: true };
+      }
+    }
     if (JSON.stringify(provider.modelCapabilities ?? {}) !== JSON.stringify(nextCapabilities)) {
       provider.modelCapabilities = nextCapabilities;
       changed = true;
@@ -263,10 +302,8 @@ function enforceDeepSeekProvider(provider: CodexModelProvider): boolean {
       provider.visionRoutingModel = undefined;
       changed = true;
     }
-    if (
-      provider.modelCatalog?.length !== modelCatalog.length ||
-      modelCatalog.some((model, index) => provider.modelCatalog?.[index] !== model)
-    ) {
+    // 模型列表以用户维护的为准，仅在为空时补官方默认。
+    if (!provider.modelCatalog?.length) {
       provider.modelCatalog = modelCatalog;
       changed = true;
     }
@@ -343,8 +380,21 @@ function cloneProviders(providers: CodexModelProvider[]): CodexModelProvider[] {
         )
       : undefined,
     visionRoutingModel: sanitizeName(provider.visionRoutingModel ?? '') || undefined,
-    apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })),
+    apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey, ...cloneCodexProviderModelConfig(apiKey) })),
+    excludedApiKeyHashes: provider.excludedApiKeyHashes ? [...provider.excludedApiKeyHashes] : undefined,
   }));
+}
+
+function normalizeApiKeyModelConfig(value: CodexProviderModelConfig): CodexProviderModelConfig {
+  const config: CodexProviderModelConfig = {};
+  if (Array.isArray(value.modelCatalog)) config.modelCatalog = normalizeModelCatalog(value.modelCatalog) ?? [];
+  if (value.modelContextWindows !== undefined) {
+    config.modelContextWindows = normalizeModelContextWindows(value.modelContextWindows, config.modelCatalog ?? []) ?? {};
+  }
+  if (typeof value.supportsVision === 'boolean') config.supportsVision = value.supportsVision;
+  if (value.modelCapabilities !== undefined) config.modelCapabilities = normalizeModelCapabilities(value.modelCapabilities) ?? {};
+  if (value.visionRoutingModel !== undefined) config.visionRoutingModel = sanitizeName(value.visionRoutingModel ?? '') || null;
+  return config;
 }
 
 function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[] {
@@ -358,6 +408,7 @@ function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[]
       id: String((item as { id?: unknown }).id ?? createApiKeyId()),
       name: sanitizeName(String((item as { name?: unknown }).name ?? '')),
       apiKey: rawKey,
+      ...normalizeApiKeyModelConfig(item as CodexProviderModelConfig),
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
     });
@@ -422,6 +473,10 @@ function toValidProviderList(raw: unknown): CodexModelProvider[] {
       ),
       boundOauthAccountId,
       apiKeys: toValidApiKeys((item as { apiKeys?: unknown }).apiKeys, now),
+      excludedApiKeyHashes: Array.isArray((item as { excludedApiKeyHashes?: unknown }).excludedApiKeyHashes)
+        ? [...new Set(((item as { excludedApiKeyHashes: unknown[] }).excludedApiKeyHashes)
+            .filter((value): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)))]
+        : undefined,
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
     });
@@ -469,11 +524,7 @@ async function saveProvidersToDisk(providers: CodexModelProvider[]): Promise<voi
 
 async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   if (cachedProviders !== null) return cloneProviders(cachedProviders);
-  const loadResult = await loadProvidersFromDisk().catch(() => ({
-    providers: [],
-    removedImageGenerationSetting: false,
-    migratedSupportsWebsockets: false,
-  }));
+  const loadResult = await loadProvidersFromDisk();
   const loadedProviders = loadResult.providers;
   let loaded = loadedProviders.filter((provider) => {
     // 兼容清理：移除旧版本自动注入但未配置 API Key 的默认预设项
@@ -482,16 +533,23 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
     }
     return true;
   });
-  const migration = migrateApiKeyFunProviderWireApi(loaded);
+  const migration = migrateApiKeyFunProvider(loaded);
   loaded = migration.providers;
   let migratedDeepSeek = false;
+  let migratedLegacyVision = false;
   for (const provider of loaded) {
     migratedDeepSeek = enforceDeepSeekProvider(provider) || migratedDeepSeek;
+    // 旧版本的供应商级识图开关展开成逐模型能力，避免网关把图片当 text-only 丢弃。
+    if (expandLegacyProviderVisionCapabilities(provider)) {
+      provider.updatedAt = Date.now();
+      migratedLegacyVision = true;
+    }
   }
   if (
     loaded.length !== loadedProviders.length ||
     migration.changed ||
     migratedDeepSeek ||
+    migratedLegacyVision ||
     loadResult.removedImageGenerationSetting ||
     loadResult.migratedSupportsWebsockets
   ) {
@@ -503,13 +561,55 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
 
 async function writeProviders(providers: CodexModelProvider[]): Promise<void> {
   const next = cloneProviders(providers);
-  cachedProviders = next;
   await saveProvidersToDisk(next);
+  cachedProviders = next;
 }
 
 export async function listCodexModelProviders(): Promise<CodexModelProvider[]> {
-  return ensureProvidersLoaded();
+  return serializeProviderMutation(ensureProvidersLoaded);
 }
+
+/** Merge API Key accounts into the provider key list without changing provider metadata. */
+export const mergeCodexModelProviderApiKeysFromAccounts = serializedProviderMutation(async function (
+  accounts: CodexAccount[],
+): Promise<CodexModelProvider[]> {
+  const providers = await ensureProvidersLoaded();
+  let changed = false;
+  const now = Date.now();
+
+  for (const provider of providers) {
+    const providerBaseUrl = normalizeCodexModelProviderBaseUrl(provider.baseUrl);
+    const linkedAccounts = accounts.filter((account) => {
+      if ((account.auth_mode ?? '').toLowerCase() !== 'apikey') return false;
+      const accountBaseUrl = normalizeCodexModelProviderBaseUrl(account.api_base_url ?? '');
+      return (
+        (account.api_provider_id?.trim() === provider.id && provider.id.length > 0) ||
+        (providerBaseUrl !== null && accountBaseUrl === providerBaseUrl)
+      );
+    });
+
+    for (const account of linkedAccounts) {
+      const apiKey = sanitizeApiKey(account.openai_api_key ?? '');
+      if (!apiKey || provider.apiKeys.some((item) => sanitizeApiKey(item.apiKey) === apiKey)) {
+        continue;
+      }
+      if (provider.excludedApiKeyHashes?.length &&
+          provider.excludedApiKeyHashes.includes(await apiKeyFingerprint(apiKey))) continue;
+      provider.apiKeys.push({
+        id: createApiKeyId(),
+        name: sanitizeName(account.account_name ?? ''),
+        apiKey,
+        createdAt: now,
+        updatedAt: now,
+      });
+      provider.updatedAt = now;
+      changed = true;
+    }
+  }
+
+  if (changed) await writeProviders(providers);
+  return cloneProviders(providers);
+});
 
 export function invalidateCodexModelProviderCache(): void {
   cachedProviders = null;
@@ -559,7 +659,7 @@ function ensureApiKeyOnProvider(
   });
 }
 
-export async function createCodexModelProvider(input: {
+export const createCodexModelProvider = serializedProviderMutation(async function (input: {
   name: string;
   baseUrl: string;
   sourceTag?: string;
@@ -626,9 +726,9 @@ export async function createCodexModelProvider(input: {
   providers.push(provider);
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })) };
-}
+});
 
-export async function updateCodexModelProvider(
+export const updateCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   patch: {
     name?: string;
@@ -751,9 +851,9 @@ export async function updateCodexModelProvider(
   provider.updatedAt = Date.now();
   await writeProviders(providers);
   return { ...provider, apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })) };
-}
+});
 
-export async function addApiKeyToCodexModelProvider(
+export const addApiKeyToCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   apiKey: string,
   apiKeyName?: string,
@@ -762,30 +862,37 @@ export async function addApiKeyToCodexModelProvider(
   const provider = providers.find((item) => item.id === providerId);
   if (!provider) throw new Error('PROVIDER_NOT_FOUND');
   ensureApiKeyOnProvider(provider, apiKey, apiKeyName);
+  await allowExplicitApiKey(provider, apiKey);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
-export async function removeApiKeyFromCodexModelProvider(
+export const removeApiKeyFromCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   apiKeyId: string,
 ): Promise<CodexModelProvider> {
   const providers = await ensureProvidersLoaded();
   const provider = providers.find((item) => item.id === providerId);
   if (!provider) throw new Error('PROVIDER_NOT_FOUND');
+  const removedKey = provider.apiKeys.find((item) => item.id === apiKeyId);
   const nextApiKeys = provider.apiKeys.filter((item) => item.id !== apiKeyId);
   if (nextApiKeys.length === provider.apiKeys.length) {
-    return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+    return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
   }
   provider.apiKeys = nextApiKeys;
+  if (removedKey) {
+    provider.excludedApiKeyHashes = [...new Set([
+      ...(provider.excludedApiKeyHashes ?? []), await apiKeyFingerprint(removedKey.apiKey),
+    ])];
+  }
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
 /** Explicit rename for an existing provider API key (#1510). Does not rewrite key material. */
-export async function renameApiKeyOnCodexModelProvider(
+export const renameApiKeyOnCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   apiKeyId: string,
   name: string,
@@ -801,11 +908,11 @@ export async function renameApiKeyOnCodexModelProvider(
   apiKey.updatedAt = now;
   provider.updatedAt = now;
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
 /** Replace the secret for an existing provider API key without changing its id. */
-export async function updateApiKeyOnCodexModelProvider(
+export const updateApiKeyOnCodexModelProvider = serializedProviderMutation(async function (
   providerId: string,
   apiKeyId: string,
   apiKey: string,
@@ -827,14 +934,15 @@ export async function updateApiKeyOnCodexModelProvider(
 
   const now = Date.now();
   existing.apiKey = normalizedApiKey;
+  await allowExplicitApiKey(provider, normalizedApiKey);
   if (name !== undefined) {
     existing.name = sanitizeName(name);
   }
   existing.updatedAt = now;
   provider.updatedAt = now;
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
 export async function testCodexModelProviderConnection(input: {
   baseUrl: string;
@@ -932,14 +1040,14 @@ export async function saveCodexModelProviderDetectedIntegrationType(
   return updateCodexModelProvider(providerId, { integrationType });
 }
 
-export async function deleteCodexModelProvider(providerId: string): Promise<void> {
+export const deleteCodexModelProvider = serializedProviderMutation(async function (providerId: string): Promise<void> {
   const providers = await ensureProvidersLoaded();
   const next = providers.filter((item) => item.id !== providerId);
   if (next.length === providers.length) return;
   await writeProviders(next);
-}
+});
 
-export async function upsertCodexModelProviderFromCredential(
+export const upsertCodexModelProviderFromCredential = serializedProviderMutation(async function (
   input: UpsertFromCredentialInput,
 ): Promise<CodexModelProvider> {
   const apiBaseUrl = normalizeBaseUrlForStore(input.apiBaseUrl);
@@ -1000,31 +1108,11 @@ export async function upsertCodexModelProviderFromCredential(
   if (moveResult === 'not_moved' || moveResult === 'name_conflict') {
     ensureApiKeyOnProvider(provider, apiKey, input.apiKeyName);
   }
+  await allowExplicitApiKey(provider, apiKey);
   provider.baseUrl = apiBaseUrl;
-  provider.modelCatalog =
-    normalizeModelCatalog(input.modelCatalog) ??
-    provider.modelCatalog ??
-    presetModelCatalogForBaseUrl(apiBaseUrl);
-  if (input.modelContextWindows !== undefined) {
-    provider.modelContextWindows = normalizeModelContextWindows(
-      input.modelContextWindows,
-      provider.modelCatalog ?? [],
-    );
-  } else {
-    provider.modelContextWindows = normalizeModelContextWindows(
-      provider.modelContextWindows,
-      provider.modelCatalog ?? [],
-    );
-  }
-  if (input.supportsVision !== undefined) {
-    provider.supportsVision = input.supportsVision === true;
-  }
-  if (input.modelCapabilities !== undefined) {
-    provider.modelCapabilities = normalizeModelCapabilities(input.modelCapabilities);
-  }
-  if (input.visionRoutingModel !== undefined) {
-    provider.visionRoutingModel = sanitizeName(input.visionRoutingModel ?? '') || undefined;
-  }
+  const key = provider.apiKeys.find((item) => sanitizeApiKey(item.apiKey) === apiKey)!;
+  Object.assign(key, normalizeApiKeyModelConfig(input));
+  key.updatedAt = Date.now();
   if (input.website !== undefined) {
     provider.website = sanitizeName(input.website ?? '') || undefined;
   }
@@ -1047,8 +1135,8 @@ export async function upsertCodexModelProviderFromCredential(
   enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
-}
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
+});
 
 function normalizeOptionalForCompare(value?: string | null): string {
   return value?.trim().toLowerCase() ?? '';

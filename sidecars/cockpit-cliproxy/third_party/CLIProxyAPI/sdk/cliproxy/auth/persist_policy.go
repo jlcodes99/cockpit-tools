@@ -3,6 +3,7 @@ package auth
 import "context"
 
 type skipPersistContextKey struct{}
+type skipPersistWithoutWatermarkContextKey struct{}
 type deferAPIKeyModelAliasRebuildContextKey struct{}
 
 // WithSkipPersist returns a derived context that disables persistence for Manager Update/Register calls.
@@ -20,6 +21,25 @@ func shouldSkipPersist(ctx context.Context) bool {
 		return false
 	}
 	v := ctx.Value(skipPersistContextKey{})
+	enabled, ok := v.(bool)
+	return ok && enabled
+}
+
+// withSkipPersistWithoutWatermark is reserved for runtime-only mutations that
+// immediately enqueue a newer durable snapshot. Unlike WithSkipPersist, it
+// must not wait for the per-auth persistence lock.
+func withSkipPersistWithoutWatermark(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, skipPersistWithoutWatermarkContextKey{}, true)
+}
+
+func shouldSkipPersistWithoutWatermark(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	v := ctx.Value(skipPersistWithoutWatermarkContextKey{})
 	enabled, ok := v.(bool)
 	return ok && enabled
 }

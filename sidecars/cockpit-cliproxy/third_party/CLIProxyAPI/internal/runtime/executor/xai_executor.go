@@ -15,6 +15,36 @@ import (
 var (
 	xaiDataTag  = []byte("data:")
 	xaiEventTag = []byte("event:")
+	// Codex 的 apply_patch 是 freeform(custom) 工具，声明里带 lark grammar 而不是
+	// JSON parameters，xAI 的 Responses 端点只接受 function 形态。请求侧降级为
+	// 单字段 JSON function，并把官方信封写进每轮 tool description；响应侧再还原
+	// 成客户端期望的 custom_tool_call，同时把独立成行的错误头尾改回官方信封。
+	xaiApplyPatchDescription = strings.Join([]string{
+		"Use apply_patch to edit local files. The input is freeform patch text, not JSON.",
+		"",
+		"The first line MUST be exactly:",
+		xaiApplyPatchBeginMarker,
+		"The last line MUST be exactly:",
+		xaiApplyPatchEndMarker,
+		"",
+		"Do not wrap the markers with extra asterisks. These are invalid and will fail:",
+		xaiApplyPatchBeginWrong,
+		xaiApplyPatchEndWrong,
+		"",
+		"Example:",
+		xaiApplyPatchBeginMarker,
+		"*** Add File: hello.txt",
+		"+hello",
+		xaiApplyPatchEndMarker,
+	}, "\n")
+	xaiApplyPatchParameters          = `{"type":"object","properties":{"input":{"type":"string","description":"The complete apply_patch patch text. First line must be exactly *** Begin Patch. Last line must be exactly *** End Patch. Do not write *** Begin Patch *** or *** End Patch ***."}},"required":["input"],"additionalProperties":false}`
+	xaiApplyPatchInstructionReminder = strings.Join([]string{
+		"When calling apply_patch, the first line MUST be exactly:",
+		xaiApplyPatchBeginMarker,
+		"The last line MUST be exactly:",
+		xaiApplyPatchEndMarker,
+		"Do not write " + xaiApplyPatchBeginWrong + " or " + xaiApplyPatchEndWrong + ".",
+	}, "\n")
 )
 
 const (
@@ -22,11 +52,13 @@ const (
 	xaiVideoHandlerType        = "openai-video"
 	xaiCustomToolType          = "custom"
 	xaiFunctionToolType        = "function"
+	xaiApplyPatchToolName      = "apply_patch"
 	xaiImageGenerationToolType = "image_generation"
 	xaiNamespaceToolType       = "namespace"
 	xaiToolSearchType          = "tool_search"
 	xaiWebSearchToolType       = "web_search"
 	xaiXSearchToolType         = "x_search"
+	xaiMaxTools                = 200
 	// Codex Desktop injects codex_app.automation_update with a large oneOf+$ref
 	// schema. xAI's free/build Responses path accepts the HTTP request but never
 	// emits SSE when that schema is present, so Desktop hangs on "thinking".
@@ -34,6 +66,10 @@ const (
 	xaiAutomationUpdateToolName = "automation_update"
 	// Permissive placeholder schema: keeps the tool callable without the hang.
 	xaiSafeFunctionParameters   = `{"type":"object","properties":{},"additionalProperties":true}`
+	xaiApplyPatchBeginMarker    = "*** Begin Patch"
+	xaiApplyPatchEndMarker      = "*** End Patch"
+	xaiApplyPatchBeginWrong     = "*** Begin Patch ***"
+	xaiApplyPatchEndWrong       = "*** End Patch ***"
 	xaiImagesGenerationsPath    = "/images/generations"
 	xaiImagesEditsPath          = "/images/edits"
 	xaiDefaultImageEndpointPath = xaiImagesGenerationsPath
@@ -52,7 +88,7 @@ const (
 	xaiClientIdentifierValue      = "grok-shell"
 	xaiAuthenticateResponseHeader = "x-authenticateresponse"
 	xaiAuthenticateResponseValue  = "authenticate-response"
-	// xaiUsingAPIAttr enables the official API path for non-media HTTP chat.
+	// xaiUsingAPIAttr enables the official API path for HTTP chat and media.
 	xaiUsingAPIAttr = "using_api"
 )
 

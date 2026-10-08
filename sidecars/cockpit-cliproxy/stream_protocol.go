@@ -75,7 +75,7 @@ func (s *relayServer) streamTimeoutsForRequest(r *http.Request, body []byte, mod
 }
 
 func isImageGenerationRequest(r *http.Request, body []byte, model string) bool {
-	if modelBase(model) == "gpt-image-2" {
+	if modelBase(model) == defaultImagesToolModel || modelBase(model) == legacyImagesToolModel {
 		return true
 	}
 	if r != nil && r.URL != nil {
@@ -193,6 +193,9 @@ func buildExecutorRequest(c *gin.Context, body []byte, model string, sourceForma
 }
 
 func writeAPIError(c *gin.Context, status int, message, code string) {
+	if relayServerFromContext(c).tryWriteModerationNotice(c, status, message, sourceFormatFromRequest(c), requestPrefersStream(c)) {
+		return
+	}
 	if status <= 0 {
 		status = http.StatusInternalServerError
 	}
@@ -212,6 +215,9 @@ func writeAPIError(c *gin.Context, status int, message, code string) {
 }
 
 func (s *relayServer) writeExecutorError(c *gin.Context, err error) {
+	if s.tryWriteModerationNoticeFromError(c, err, sourceFormatFromRequest(c), requestPrefersStream(c)) {
+		return
+	}
 	status := statusCodeFromError(err)
 	code := "upstream_error"
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
@@ -383,6 +389,9 @@ func writeStreamTerminalError(c *gin.Context, err error) {
 
 func writeStreamTerminalErrorForFormat(c *gin.Context, err error, sourceFormat sdktranslator.Format) {
 	if c == nil {
+		return
+	}
+	if relayServerFromContext(c).tryWriteModerationNoticeFromError(c, err, sourceFormat, true) {
 		return
 	}
 	if !sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse) {
@@ -616,6 +625,8 @@ func splitResponsesConcatenatedJSONDocuments(payload []byte) ([][]byte, bool) {
 }
 
 func writeResponsesSSEFrame(w io.Writer, chunk []byte) error {
+	// 出口统一清洗第三方推理项，避免客户端把不兼容的 reasoning content 落盘。
+	chunk = normalizeResponsesReasoningContentSSE(chunk)
 	payload, ok := responsesSSEDataPayload(chunk)
 	if !ok {
 		return writeResponsesSSEChunk(w, chunk)

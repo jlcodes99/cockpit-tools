@@ -1,5 +1,15 @@
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { RefreshCw, Download, X, Database, Copy, Check, CircleAlert, Minimize2 } from "lucide-react";
+import {
+  RefreshCw,
+  Download,
+  X,
+  Database,
+  Copy,
+  Check,
+  CircleAlert,
+  Minimize2,
+} from "lucide-react";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
 import { CodexOverviewTabsHeader } from "../components/CodexOverviewTabsHeader";
 import { CodexInstancesContent } from "./CodexInstancesPage";
@@ -8,9 +18,22 @@ import { CodexSessionManager } from "../components/codex/CodexSessionManager";
 import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import { CodexWakeupContent } from "../components/codex/CodexWakeupContent";
 import { CodexModelProviderManager } from "../components/codex/CodexModelProviderManager";
+import { isCodexApiKeyAccount, type CodexAccount } from "../types/codex";
 import type { useCodexAccountsPageController } from "./CodexAccountsPage";
+import { CodexOAuthBindingModal } from "./CodexOAuthBindingModal";
 import { CodexAccountsOverviewPanel } from "./CodexAccountsOverviewPanel";
+import { CodexTopLayoutPage } from "../components/codex/CodexTopLayoutPage";
+import { CodexEgressProxyPage } from "../components/codex/CodexEgressProxyPage";
+import { CodexAccountProxyPreview } from "../components/codex/CodexAccountProxyPreview";
+import { CODEX_OPEN_PROXY_EVENT, canUseCodexAccountProxy } from "../utils/codexAccountProxy";
+import {
+  normalizeCodexTopLayout,
+  readCodexTopLayoutPreference,
+  writeCodexTopLayoutPreference,
+} from "../utils/codexTopLayoutPreferences";
 
+
+import { codexPageRegistry } from '../components/codex/codexPageRegistry';
 
 export type CodexAccountsViewProps = ReturnType<typeof useCodexAccountsPageController>;
 
@@ -39,6 +62,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     batchImportSelectedSelectableCount,
     batchImportTagsInput,
     batchImportVisibleItems,
+    boundLocalAccessOAuthAccount,
     buildAccountLaunchPreviewActions,
     buildAccountLaunchPreviewSummary,
     buildLocalAccessLaunchPreviewActions,
@@ -47,7 +71,6 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     cliLaunchModal,
     closeCliLaunchModal,
     closeExternalImportProgressModal,
-    deepSeekStart,
     externalImportPercent,
     externalImportProgress,
     externalImportRunning,
@@ -77,8 +100,12 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     localAccessLaunchPreviewOpen,
     localAccessSaving,
     maskAccountText,
+    openCodexAddModal,
+    openLocalAccessOAuthBindingModal,
+    openOAuthBindingModal,
     overviewLayoutMode,
     prepareCodexCliLaunch,
+    resolveBoundOAuthAccount,
     renderApiKeyUsageDetailModal,
     renderCockpitApiServicePanel,
     renderQuotaErrorDetailModal,
@@ -87,10 +114,10 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     selectReadyBatchImportAccounts,
     setActiveTab,
     setBatchImportOpen,
-    setBatchImportTagsInput,
-    setLaunchPreviewAccount,
-    setLaunchPreviewInstanceId,
-    setLocalAccessLaunchPreviewOpen,
+     setBatchImportTagsInput,
+     setLaunchPreviewAccount,
+     handleLaunchPreviewInstanceChange,
+     setLocalAccessLaunchPreviewOpen,
     setManagedProviders,
     setSelectedTerminal,
     setWakeupPresetManagerSignal,
@@ -102,15 +129,122 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     updateCodexCliWorkingDir,
     wakeupPresetManagerSignal,
   } = props;
+  const [savedTopLayout, setTopLayout] = useState(readCodexTopLayoutPreference);
+  const pageRegistry = useMemo(() => codexPageRegistry(t), [t]);
+  const topLayout = useMemo(() => normalizeCodexTopLayout(savedTopLayout, pageRegistry.map(page => page.id)), [savedTopLayout, pageRegistry]);
+  useEffect(() => {
+    if (!pageRegistry.some(page => page.id === activeTab)) setActiveTab('overview');
+  }, [activeTab, pageRegistry, setActiveTab]);
+  useEffect(() => {
+    const openPage = (event: Event) => {
+      const id = (event as CustomEvent).detail;
+      if (pageRegistry.some(page => page.id === id)) setActiveTab(id);
+    };
+    window.addEventListener('codex:open-builtin-page', openPage);
+    return () => window.removeEventListener('codex:open-builtin-page', openPage);
+  }, [pageRegistry, setActiveTab]);
+  const [proxyAccountId, setProxyAccountId] = useState<string | null>(null);
+  const [proxyPreviewId, setProxyPreviewId] = useState<string | null>(null);
+  // The shortcut opens a read-only summary; only its explicit action leaves for the page.
+  const proxyPreviewAccount = accounts.find(
+    (account) => account.id === proxyPreviewId && canUseCodexAccountProxy(account),
+  );
+  useEffect(() => {
+    const openProxy = (event: Event) => {
+      const accountId: unknown = (event as CustomEvent).detail;
+      if (typeof accountId !== 'string' || !accounts.some((account) =>
+        account.id === accountId && canUseCodexAccountProxy(account))) return;
+      // Card and table shortcuts open the account's proxy preview without leaving the list.
+      setProxyPreviewId(accountId);
+    };
+    window.addEventListener(CODEX_OPEN_PROXY_EVENT, openProxy);
+    return () => window.removeEventListener(CODEX_OPEN_PROXY_EVENT, openProxy);
+  }, [accounts]);
+
+  useEffect(() => {
+    writeCodexTopLayoutPreference(savedTopLayout);
+  }, [savedTopLayout]);
+
+  /** 启动预览里的 OAuth 绑定信息（仅 API Key 账号展示）。 */
+  const launchPreviewOAuthBindingAccount =
+    activeLaunchPreviewAccount && isCodexApiKeyAccount(activeLaunchPreviewAccount)
+      ? resolveBoundOAuthAccount(activeLaunchPreviewAccount)
+      : null;
+  const launchPreviewOAuthBinding =
+    activeLaunchPreviewAccount && isCodexApiKeyAccount(activeLaunchPreviewAccount)
+      ? {
+          boundAccountLabel: launchPreviewOAuthBindingAccount
+            ? maskAccountText(
+                launchPreviewOAuthBindingAccount.account_name ||
+                  launchPreviewOAuthBindingAccount.email ||
+                  launchPreviewOAuthBindingAccount.id,
+              )
+            : null,
+          needsReauth: Boolean(
+            launchPreviewOAuthBindingAccount?.requires_reauth,
+          ),
+          reauthDescription:
+            launchPreviewOAuthBindingAccount?.reauth_reason?.trim() || null,
+        }
+      : null;
+
+  /** API 服务启动预览的 OAuth 绑定信息；与卡片里的绑定状态共用同一数据源。 */
+  const localAccessLaunchPreviewOAuthBindingAccount =
+    boundLocalAccessOAuthAccount ?? null;
+  const localAccessLaunchPreviewOAuthBinding = {
+    boundAccountLabel: localAccessLaunchPreviewOAuthBindingAccount
+      ? maskAccountText(
+          localAccessLaunchPreviewOAuthBindingAccount.account_name ||
+            localAccessLaunchPreviewOAuthBindingAccount.email ||
+            localAccessLaunchPreviewOAuthBindingAccount.id,
+        )
+      : null,
+    needsReauth: Boolean(
+      localAccessLaunchPreviewOAuthBindingAccount?.requires_reauth,
+    ),
+    reauthDescription:
+      localAccessLaunchPreviewOAuthBindingAccount?.reauth_reason?.trim() || null,
+  };
+
+  /** 打开账号级 OAuth 绑定弹框；弹框已提升到视图层，任意页签都能显示。 */
+  const handlePreviewBindOAuth = (account: CodexAccount) => {
+    openOAuthBindingModal(account);
+  };
+
+  /** 绑定的 OAuth 账号需要重新授权时，沿用账号卡片的重新授权入口。 */
+  const handlePreviewReauthorizeOAuth = (account: CodexAccount) => {
+    const boundAccount = resolveBoundOAuthAccount(account);
+    if (boundAccount) {
+      openCodexAddModal("oauth", boundAccount);
+    }
+  };
+
   return (
     <div
       className={`codex-accounts-page codex-accounts-page--${overviewLayoutMode}`}
     >
       <CodexOverviewTabsHeader
+        pageRegistry={pageRegistry}
         active={activeTab}
         onTabChange={setActiveTab}
-        tabs={["overview", "providers", "wakeup", "instances", "sessions"]}
+        tabs={topLayout.order}
+        tabPlacement={topLayout.placement}
       />
+
+      {activeTab === "top-layout" && <CodexTopLayoutPage
+        pages={pageRegistry}
+        layout={topLayout}
+        onChange={setTopLayout}
+        onBack={() => setActiveTab("overview")}
+      />}
+      {activeTab === "proxy" && <CodexEgressProxyPage
+        accounts={accounts}
+        accountId={proxyAccountId}
+        resolveDisplayName={(account) =>
+          maskAccountText(account.account_name || account.email || account.id)
+        }
+        onBack={() => setActiveTab("overview")}
+      />}
 
       {batchImportOpen &&
         createPortal(
@@ -813,10 +947,17 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           )}
           summary={buildAccountLaunchPreviewSummary(activeLaunchPreviewAccount)}
           actions={buildAccountLaunchPreviewActions(activeLaunchPreviewAccount)}
+          oauthBinding={launchPreviewOAuthBinding}
+          onBindOAuth={() => handlePreviewBindOAuth(activeLaunchPreviewAccount)}
+          onReauthorizeOAuth={
+            launchPreviewOAuthBinding?.needsReauth
+              ? () => handlePreviewReauthorizeOAuth(activeLaunchPreviewAccount)
+              : undefined
+          }
           instanceId={launchPreviewInstanceId}
           instanceLabel={launchPreviewInstanceLabel}
           instanceOptions={launchPreviewInstanceOptions}
-          onInstanceChange={setLaunchPreviewInstanceId}
+          onInstanceChange={handleLaunchPreviewInstanceChange}
           onClose={() => setLaunchPreviewAccount(null)}
           onExecute={handleExecuteLaunchPreview}
         />
@@ -830,13 +971,26 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           instanceId={launchPreviewInstanceId}
           instanceLabel={launchPreviewInstanceLabel}
           instanceOptions={launchPreviewInstanceOptions}
-          onInstanceChange={setLaunchPreviewInstanceId}
+          onInstanceChange={handleLaunchPreviewInstanceChange}
           mode="apiService"
+          oauthBinding={localAccessLaunchPreviewOAuthBinding}
+          onBindOAuth={() => openLocalAccessOAuthBindingModal()}
+          onReauthorizeOAuth={
+            localAccessLaunchPreviewOAuthBindingAccount?.requires_reauth
+              ? () =>
+                  openCodexAddModal(
+                    "oauth",
+                    localAccessLaunchPreviewOAuthBindingAccount,
+                  )
+              : undefined
+          }
           onClose={() => setLocalAccessLaunchPreviewOpen(false)}
           onExecute={handleExecuteLocalAccessLaunchPreview}
         />
       )}
-      {deepSeekStart.modal}
+
+      {/* 账号级 OAuth 绑定弹框放在启动预览之后，保证从预览里打开时显示在最上层。 */}
+      <CodexOAuthBindingModal {...props} />
 
       {activeTab === "instances" && (
         <CodexInstancesContent
@@ -866,6 +1020,11 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
             setActiveTab("wakeup");
             setWakeupPresetManagerSignal((value) => value + 1);
           }}
+          resolveLaunchPreviewSummary={buildAccountLaunchPreviewSummary}
+          resolveLaunchPreviewActions={buildAccountLaunchPreviewActions}
+          resolveBoundOAuthAccount={resolveBoundOAuthAccount}
+          onBindOAuth={handlePreviewBindOAuth}
+          onReauthorizeOAuth={handlePreviewReauthorizeOAuth}
         />
       )}
 
@@ -888,6 +1047,24 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           onRefreshAccounts={async () => {
             await fetchAccounts();
             await fetchCurrentAccount();
+          }}
+        />
+      )}
+
+      {proxyPreviewAccount && (
+        <CodexAccountProxyPreview
+          key={`${proxyPreviewAccount.id}:${JSON.stringify(proxyPreviewAccount.egress_proxy)}`}
+          account={proxyPreviewAccount}
+          displayName={maskAccountText(
+            proxyPreviewAccount.account_name ||
+              proxyPreviewAccount.email ||
+              proxyPreviewAccount.id,
+          )}
+          onClose={() => setProxyPreviewId(null)}
+          onManage={() => {
+            setProxyAccountId(proxyPreviewAccount.id);
+            setProxyPreviewId(null);
+            setActiveTab("proxy");
           }}
         />
       )}
