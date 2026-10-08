@@ -9,7 +9,7 @@ use super::engine::Identity;
 use chrono::{Local, NaiveDateTime, TimeZone};
 
 // Exact-version adapters for the narrow ordinary-local contract; see
-// docs/development/claude-desktop-2.16120.0-static-review.md for latest evidence.
+// docs/development/claude-desktop-2.26454.2-static-review.md for latest evidence.
 const REVIEWED_VERSIONS: &[&str] = &[
     "1.52386.6",
     "2.110.0",
@@ -19,6 +19,7 @@ const REVIEWED_VERSIONS: &[&str] = &[
     "2.9939.4",
     "2.16120.0",
     "2.26454.0",
+    "2.26454.2",
 ];
 
 pub(super) fn supported_profile() -> Result<(), String> {
@@ -674,6 +675,16 @@ mod tests {
         assert_eq!(check_version("2.9939.2", Some("2.9939.2")), Ok(()));
         assert_eq!(check_version("2.9939.4", Some("2.9939.4")), Ok(()));
         assert_eq!(check_version("2.16120.0", Some("2.16120.0")), Ok(()));
+        assert_eq!(check_version("2.26454.2", Some("2.26454.2")), Ok(()));
+        assert_eq!(check_version("2.26454.2", None), Ok(()));
+        assert_eq!(
+            check_version("2.26454.2", Some("2.26454.0")),
+            Err("DESKTOP_VERSION_CHANGED".into())
+        );
+        assert_eq!(
+            check_version("2.26454.3", None),
+            Err("DESKTOP_VERSION_REQUIRES_REVIEW".into())
+        );
         assert_eq!(
             check_version("2.9939.5", None),
             Err("DESKTOP_VERSION_REQUIRES_REVIEW".into())

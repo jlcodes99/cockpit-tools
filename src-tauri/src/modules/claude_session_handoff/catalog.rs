@@ -42,6 +42,10 @@ pub(super) fn external_index() -> Result<Option<PathBuf>, String> {
 }
 
 fn read_index(path: &Path) -> Result<Vec<SavedAccount>, String> {
+    // Upstream creates .cockpit_tools as a verified alias of the legacy store.
+    // Remove only that prefix; linked index files and nested directories remain
+    // subject to the existing no-follow checks below.
+    let path = crate::modules::data_paths::without_compatibility_alias(path);
     let read = || -> Result<Vec<SavedAccount>, ()> {
         super::runtime::regular_directory(path.parent().ok_or(())?).map_err(|_| ())?;
         let mut options = OpenOptions::new();
@@ -51,7 +55,7 @@ fn read_index(path: &Path) -> Result<Vec<SavedAccount>, String> {
             use std::os::unix::fs::OpenOptionsExt;
             options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
         }
-        let file = options.open(path).map_err(|_| ())?;
+        let file = options.open(&path).map_err(|_| ())?;
         let stat = file.metadata().map_err(|_| ())?;
         if !stat.is_file() || stat.len() > MAX_INDEX_BYTES {
             return Err(());
@@ -179,6 +183,18 @@ mod tests {
         std::fs::write(&actual, r#"{"accounts":[]}"#).unwrap();
         std::os::unix::fs::symlink(&actual, &path).unwrap();
         assert!(read_index(&path).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn linked_index_ancestors_are_rejected() {
+        let path = fixture();
+        let actual = path.parent().unwrap().join("actual");
+        std::fs::create_dir(&actual).unwrap();
+        std::fs::write(actual.join("claude_accounts.json"), r#"{"accounts":[]}"#).unwrap();
+        let linked = path.parent().unwrap().join("linked");
+        std::os::unix::fs::symlink(&actual, &linked).unwrap();
+        assert!(read_index(&linked.join("claude_accounts.json")).is_err());
     }
 
     #[test]

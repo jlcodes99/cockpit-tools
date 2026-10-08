@@ -129,6 +129,12 @@ pub struct Outcome {
     pub(crate) account_switched: Option<bool>,
 }
 
+fn handoff_state_dir() -> Result<PathBuf, String> {
+    Ok(crate::modules::data_paths::without_compatibility_alias(
+        &account::resolve_data_dir()?.join("claude_session_handoff"),
+    ))
+}
+
 fn roots() -> Result<Roots, String> {
     runtime::supported_profile()?;
     let home = dirs::home_dir().ok_or("HOME_UNAVAILABLE")?;
@@ -137,13 +143,13 @@ fn roots() -> Result<Roots, String> {
             .join("claude-code-sessions"),
         pool: home.join(".claude/projects"),
         // Durable journals are not pruned by the configurable behavior-backup policy.
-        state: account::resolve_data_dir()?.join("claude_session_handoff"),
+        state: handoff_state_dir()?,
     })
 }
 
 /// Desktop profile changes must not consume a partially written sidebar.
 pub(crate) fn require_no_pending_before_switch() -> Result<(), String> {
-    let state = account::resolve_data_dir()?.join("claude_session_handoff");
+    let state = handoff_state_dir()?;
     engine::require_no_pending_state(&state)
 }
 
@@ -170,7 +176,7 @@ pub(crate) fn require_default_profile_ready(target: &std::path::Path) -> Result<
     require_no_pending_for_profile(
         target,
         &claude_account::get_default_claude_desktop_user_data_dir()?,
-        &account::resolve_data_dir()?.join("claude_session_handoff"),
+        &handoff_state_dir()?,
     )
 }
 
@@ -483,6 +489,7 @@ fn apply_locked(
         "claude-handoff",
         &uuid::Uuid::new_v4().to_string(),
     )
+    .map(|path| crate::modules::data_paths::without_compatibility_alias(&path))
     .map_err(|code| {
         if was_running {
             let _ = runtime::reopen_if_closed(&app);
