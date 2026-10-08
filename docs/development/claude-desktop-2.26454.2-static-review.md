@@ -20,8 +20,12 @@ The record projection module is `.vite/build/index.chunk-DWp6lQwJ.js`, SHA-256
 `0c1f60f5900948b471a7f6bd1ed211ec8436308f050acb807b6eed94f5b960e7`.
 
 The ordinary local adapter and limitations from the 2.26454.0 review apply
-unchanged. This review permits exactly 2.26454.2; it does not permit arbitrary
-future patch releases or a version change during an approved transaction.
+unchanged. This dated inspection originally supported an exact-version gate.
+That gate is superseded by the version-independent storage-contract detector
+described in [the continuity design](claude-session-handoff.md#scope). These
+hashes remain historical evidence; they are not a runtime admission allowlist.
+An application replacement during an approved transaction still invalidates
+that preview; a fresh compatible-contract preview is accepted automatically.
 The fixture normalizer, filesystem, lease/resume, and scheduler remain mocked.
 Actual installation and account handoff acceptance are separate checks.
 

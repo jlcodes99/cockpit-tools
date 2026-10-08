@@ -750,3 +750,161 @@ fn continuity_child_references_the_actual_source_parent_branch_after_projection(
     assert_eq!(r["spawnedFrom"]["sessionId"], r["forkedFromSessionId"]);
     assert_eq!(rows[&name(1)].value["cliSessionId"], id(500));
 }
+
+#[test]
+fn continuity_new_optional_native_fields_do_not_block_compatible_storage() {
+    let unknown = unknown_persisted_fields(&BTreeSet::from([
+        "sessionId".into(),
+        "cliSessionId".into(),
+        "futureNativeState".into(),
+    ]));
+    assert_eq!(unknown, BTreeSet::from(["futureNativeState".into()]));
+    for empty in [Value::Null, json!(false), json!(""), json!([]), json!({})] {
+        let f = Fixture::new();
+        let mut source = record(1);
+        source["futureNativeState"] = empty;
+        f.put(&f.a, &source, true);
+        let accounts = [f.a.clone(), f.b.clone()];
+        let p = preview_continuity_with_fields(&f.roots, &f.a, &f.b, &accounts, &unknown).unwrap();
+        assert_eq!(p.missing, 0);
+        let run = apply_continuity_with_fields_and_progress(
+            &f.roots,
+            &f.a,
+            &f.b,
+            &accounts,
+            &unknown,
+            &p.fingerprint,
+            &f.backup(),
+            &mut || Ok(()),
+            None,
+            &mut |_| {},
+            &mut |_, _, _| {},
+        )
+        .unwrap();
+        assert_eq!(run.created, 1);
+        assert_eq!(f.get(&f.b, 1)["cliSessionId"], source["cliSessionId"]);
+    }
+}
+
+#[test]
+fn continuity_meaningful_new_native_state_reports_the_affected_session_and_writes_nothing() {
+    let unknown = BTreeSet::from(["futureNativeState".into()]);
+    let f = Fixture::new();
+    let mut source = record(1);
+    source["futureNativeState"] = json!({"newExecutionRoute":"synthetic"});
+    f.put(&f.a, &source, true);
+    f.put(&f.a, &record(2), true);
+    let accounts = [f.a.clone(), f.b.clone()];
+    let p = preview_continuity_with_fields(&f.roots, &f.a, &f.b, &accounts, &unknown).unwrap();
+    assert_eq!(p.missing, 1);
+    assert_eq!(p.issues.len(), 1);
+    assert_eq!(p.issues[0].session_id, sid(1));
+    assert_eq!(p.issues[0].reason, "UNSUPPORTED_PERSISTED_FIELD");
+    assert_eq!(p.created, 1);
+    let result = apply_continuity_with_fields_and_progress(
+        &f.roots,
+        &f.a,
+        &f.b,
+        &accounts,
+        &unknown,
+        &p.fingerprint,
+        &f.backup(),
+        &mut || Ok(()),
+        None,
+        &mut |_| {},
+        &mut |_, _, _| {},
+    );
+    assert_eq!(result.unwrap_err(), "UNRESOLVED_SOURCE_ROWS");
+    assert!(records(&f.dir(&f.b)).unwrap().is_empty());
+    assert_eq!(f.get(&f.a, 1), source);
+}
+
+#[test]
+fn continuity_rechecks_new_native_state_when_freezing_the_apply_plan() {
+    let unknown = BTreeSet::from(["futureNativeState".into()]);
+    let f = Fixture::new();
+    let mut source = record(1);
+    f.put(&f.a, &source, true);
+    let accounts = [f.a.clone(), f.b.clone()];
+    let p = preview_continuity_with_fields(&f.roots, &f.a, &f.b, &accounts, &unknown).unwrap();
+    source["futureNativeState"] = json!("became meaningful after preview");
+    f.put(&f.a, &source, false);
+    let result = apply_continuity_with_fields_and_progress(
+        &f.roots,
+        &f.a,
+        &f.b,
+        &accounts,
+        &unknown,
+        &p.fingerprint,
+        &f.backup(),
+        &mut || Ok(()),
+        None,
+        &mut |_| {},
+        &mut |_, _, _| {},
+    );
+    assert_eq!(result.unwrap_err(), "PREVIEW_CHANGED");
+    assert!(records(&f.dir(&f.b)).unwrap().is_empty());
+}
+
+#[test]
+fn continuity_storage_contract_drift_at_commit_leaves_recoverable_receipt() {
+    let f = Fixture::new();
+    f.put(&f.a, &record(1), true);
+    let accounts = [f.a.clone(), f.b.clone()];
+    let p = preview_continuity(&f.roots, &f.a, &f.b, &accounts).unwrap();
+    let changed = std::cell::Cell::new(false);
+    let result = apply_continuity_with_progress(
+        &f.roots,
+        &f.a,
+        &f.b,
+        &accounts,
+        &p.fingerprint,
+        &f.backup(),
+        &mut || {
+            if changed.get() {
+                Err("DESKTOP_CONTRACT_CHANGED".into())
+            } else {
+                Ok(())
+            }
+        },
+        Some(&mut || Ok(())),
+        &mut |_| {},
+        &mut |stage, _, _| {
+            if stage == "verifying" {
+                changed.set(true);
+            }
+        },
+    );
+    assert_eq!(result.unwrap_err(), "DESKTOP_CONTRACT_CHANGED");
+    let pending = f.pending();
+    rollback(&f.roots, &pending.summary.id, &mut || Ok(())).unwrap();
+    assert!(records(&f.dir(&f.b)).unwrap().is_empty());
+    assert_eq!(f.get(&f.a, 1), record(1));
+}
+
+#[test]
+fn continuity_reports_unknown_native_state_in_older_source_or_retained_target() {
+    let unknown = BTreeSet::from(["futureNativeState".into()]);
+    for in_source in [true, false] {
+        let f = Fixture::new();
+        let mut source = record(1);
+        let mut target = record(1);
+        if in_source {
+            source["futureNativeState"] = json!({"unknownRoute":"synthetic"});
+            target["lastActivityAt"] = json!(20);
+        } else {
+            target["futureNativeState"] = json!({"unknownGrant":"synthetic"});
+            source["lastActivityAt"] = json!(20);
+            source["cwd"] = json!("/synthetic/changed-workspace");
+        }
+        f.put(&f.a, &source, true);
+        f.put(&f.b, &target, false);
+        let accounts = [f.a.clone(), f.b.clone()];
+        let p = preview_continuity_with_fields(&f.roots, &f.a, &f.b, &accounts, &unknown).unwrap();
+        assert_eq!(p.missing, 1);
+        assert_eq!(p.issues[0].reason, "UNSUPPORTED_PERSISTED_FIELD");
+        assert_eq!(p.created + p.updated, 0);
+        assert_eq!(f.get(&f.a, 1), source);
+        assert_eq!(f.get(&f.b, 1), target);
+    }
+}

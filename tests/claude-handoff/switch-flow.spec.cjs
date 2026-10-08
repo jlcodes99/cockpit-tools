@@ -133,7 +133,7 @@ async function run() {
         assert.equal(await copyButton.isDisabled(), true);
         assert.equal(await page.evaluate(() => window.__switchCalls.length), 0);
       } else if (scenario === 'switch-unsupported') {
-        assert.match(await dialog.innerText(), /尚未通過交接審查/);
+        assert.match(await dialog.innerText(), /需要重新檢查 Claude Desktop 的相容性/);
         await page.locator('[data-testid="claude-switch-only"]').click();
         await dialog.waitFor({ state: 'detached' });
         assert.deepEqual(await page.evaluate(() => window.__switchCalls), ['account-2']);

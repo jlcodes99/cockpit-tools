@@ -32,6 +32,7 @@ export interface ClaudeHandoffStatus {
   usesSavedAccountIndex?: boolean;
   supported: boolean;
   reason: string | null;
+  // Diagnostic only. Storage-contract support is reported by supported/reason.
   desktopVersion: string | null;
   accounts: ClaudeHandoffAccount[];
   runs: ClaudeHandoffRunSummary[];
@@ -44,6 +45,7 @@ export interface ClaudeHandoffIssue {
 }
 
 export interface ClaudeHandoffPreview {
+  // Opaque backend approval token. Never derive it from the version or plan.
   fingerprint: string;
   created: number;
   updated: number;
@@ -56,6 +58,7 @@ export interface ClaudeHandoffPreview {
   warnings: ClaudeHandoffIssue[];
   quotaPausesCleared: number;
   preservedBranches?: number;
+  // Retained for IPC compatibility; an empty diagnostic version is valid.
   desktopVersion: string;
 }
 
@@ -66,6 +69,7 @@ export interface ClaudeHandoffPair {
 
 export interface ClaudeHandoffApplyInput extends ClaudeHandoffPair {
   fingerprint: string;
+  // Echo the preview diagnostic for older backends; it does not grant eligibility.
   desktopVersion: string;
 }
 
@@ -104,11 +108,17 @@ export function getClaudeHandoffRunAction(state: string): 'rollback' | 'recover'
 }
 
 export function canRollbackClaudeHandoff(status: ClaudeHandoffStatus | null): boolean {
-  return Boolean(status && (status.supported || status.reason === 'DESKTOP_VERSION_REQUIRES_REVIEW'));
+  // These contract errors come after the backend's default-profile checks.
+  // Recovery validates the saved preimages independently of the current format.
+  return Boolean(status && (status.supported
+    || status.reason === 'DESKTOP_CONTRACT_UNAVAILABLE'
+    || status.reason === 'DESKTOP_CONTRACT_UNSUPPORTED'
+    || status.reason === 'DESKTOP_CONTRACT_CHANGED'
+    || status.reason === 'DESKTOP_VERSION_REQUIRES_REVIEW'));
 }
 
 export function canApplyClaudeHandoffPreview(preview: ClaudeHandoffPreview | null): boolean {
-  return Boolean(preview?.fingerprint && preview.desktopVersion
+  return Boolean(preview?.fingerprint
     && preview.missing === 0 && preview.stale === 0 && preview.replacedBranches === 0
     && (preview.created + preview.updated > 0 || preview.baselineChanged === true));
 }
@@ -117,7 +127,7 @@ export function canPreviewClaudeHandoff(
   status: ClaudeHandoffStatus | null,
   pair: ClaudeHandoffPair,
 ): boolean {
-  if (!status?.supported || !status.desktopVersion || !pair.sourceAccountId || !pair.targetAccountId) return false;
+  if (!status?.supported || !pair.sourceAccountId || !pair.targetAccountId) return false;
   if (pair.sourceAccountId === pair.targetAccountId) return false;
   return [pair.sourceAccountId, pair.targetAccountId].every((id) =>
     status.accounts.some((account) => account.id === id && account.eligible),

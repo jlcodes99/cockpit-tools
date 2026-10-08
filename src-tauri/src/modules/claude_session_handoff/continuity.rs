@@ -307,11 +307,31 @@ fn unsupported(value: &Value) -> Option<&'static str> {
     None
 }
 
+fn unsupported_persisted_fields(
+    value: &Value,
+    unknown_fields: &BTreeSet<String>,
+) -> Option<&'static str> {
+    unknown_fields
+        .iter()
+        .any(|key| value.get(key).is_some_and(nonempty))
+        .then_some("UNSUPPORTED_PERSISTED_FIELD")
+}
+
 pub(super) fn build_plan(
     roots: &Roots,
     source: &Identity,
     target: &Identity,
     accounts: &[Identity],
+) -> Result<Plan> {
+    build_plan_with_fields(roots, source, target, accounts, &BTreeSet::new())
+}
+
+pub(super) fn build_plan_with_fields(
+    roots: &Roots,
+    source: &Identity,
+    target: &Identity,
+    accounts: &[Identity],
+    unknown_fields: &BTreeSet<String>,
 ) -> Result<Plan> {
     let (source_dir, target_dir) = validate_roots(roots, source, target)?;
     let baseline_path = state_path(roots);
@@ -458,7 +478,15 @@ pub(super) fn build_plan(
             .clone();
         preserved_branches += branches.len().saturating_sub(1);
         for (pointer, (input_dir, source_name, row)) in best {
-            let reason = unsupported(&row.value)
+            // Unknown native state cannot be classified as obsolete merely by
+            // activity order. Check every snapshot of this branch, including
+            // destination state retained across a workspace change.
+            let reason = branches[&pointer]
+                .iter()
+                .find_map(|(_, _, snapshot)| {
+                    unsupported_persisted_fields(&snapshot.value, unknown_fields)
+                })
+                .or_else(|| unsupported(&row.value))
                 .or_else(|| transcript_issue(&index, &pointer))
                 .or_else(|| rewind_issue(&row.value, &index));
             if let Some(reason) = reason {
@@ -520,7 +548,10 @@ pub(super) fn build_plan(
             if let Some(reason) = dst
                 .get(&name)
                 .filter(|target| activity(&row.value) <= activity(&target.value))
-                .and_then(|target| unsupported(&target.value))
+                .and_then(|target| {
+                    unsupported_persisted_fields(&target.value, unknown_fields)
+                        .or_else(|| unsupported(&target.value))
+                })
             {
                 issues.push(Issue {
                     session_id: name.trim_end_matches(".json").into(),

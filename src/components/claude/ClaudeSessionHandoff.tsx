@@ -387,7 +387,7 @@ export function ClaudeSessionHandoff({
       if (previewGeneration.current === request) previewGeneration.current += 1;
     };
   }, [open, switchMode, validPair, busy, disabled, statusLoading, needsRecovery, result, switchCompleted, autoPreviewPaused,
-    sourceAccountId, targetAccountId, status?.desktopVersion, t]);
+    sourceAccountId, targetAccountId, t]);
 
   const mutate = async (run?: ClaudeHandoffRunSummary) => {
     if (busyRef.current || disabled || statusLoading) return;
@@ -518,8 +518,8 @@ export function ClaudeSessionHandoff({
                 </button>
               </div>
               {statusError && <p role="alert" className="claude-handoff-notice">{statusError}</p>}
-              {status && (!status.supported || !status.desktopVersion) && (
-                <p role="alert" className="claude-handoff-notice">{explainError(status.reason, 'UNSUPPORTED_VERSION')}</p>
+              {status && !status.supported && (
+                <p role="alert" className="claude-handoff-notice">{explainError(status.reason, 'DESKTOP_CONTRACT_UNSUPPORTED')}</p>
               )}
               {!completedSuccess && <>
               {status && eligibleAccounts.length < 2 && <p className="claude-handoff-notice">{t('claude.handoff.needAccounts')}</p>}

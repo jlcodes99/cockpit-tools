@@ -8,20 +8,6 @@ use std::time::{Duration, Instant};
 use super::engine::Identity;
 use chrono::{Local, NaiveDateTime, TimeZone};
 
-// Exact-version adapters for the narrow ordinary-local contract; see
-// docs/development/claude-desktop-2.26454.2-static-review.md for latest evidence.
-const REVIEWED_VERSIONS: &[&str] = &[
-    "1.52386.6",
-    "2.110.0",
-    "2.2553.1",
-    "2.2553.13",
-    "2.9939.2",
-    "2.9939.4",
-    "2.16120.0",
-    "2.26454.0",
-    "2.26454.2",
-];
-
 pub(super) fn supported_profile() -> Result<(), String> {
     if !cfg!(target_os = "macos") {
         return Err("MACOS_REQUIRED".into());
@@ -94,16 +80,6 @@ pub(super) fn desktop_version() -> Result<String, String> {
         return Err("DESKTOP_VERSION_UNAVAILABLE".into());
     }
     Ok(version)
-}
-
-pub(super) fn check_version(actual: &str, expected: Option<&str>) -> Result<(), String> {
-    if expected.is_some_and(|v| v != actual) {
-        return Err("DESKTOP_VERSION_CHANGED".into());
-    }
-    if !REVIEWED_VERSIONS.contains(&actual) {
-        return Err("DESKTOP_VERSION_REQUIRES_REVIEW".into());
-    }
-    Ok(())
 }
 
 fn identity_from_log(text: &str, minimum_at: i64) -> Option<Identity> {
@@ -665,41 +641,6 @@ mod tests {
         assert!(can_quit(&[child], app).is_err());
         let recycled = process(101, 100, 9, "claude");
         assert!(can_quit(&[main, recycled], app).is_err());
-    }
-    #[test]
-    fn unknown_and_mid_operation_versions_fail_closed() {
-        assert!(check_version("2.110.0", Some("2.110.0")).is_ok());
-        assert!(check_version("2.2553.1", Some("2.2553.1")).is_ok());
-        assert_eq!(check_version("2.2553.13", None), Ok(()));
-        assert_eq!(check_version("2.2553.13", Some("2.2553.13")), Ok(()));
-        assert_eq!(check_version("2.9939.2", Some("2.9939.2")), Ok(()));
-        assert_eq!(check_version("2.9939.4", Some("2.9939.4")), Ok(()));
-        assert_eq!(check_version("2.16120.0", Some("2.16120.0")), Ok(()));
-        assert_eq!(check_version("2.26454.2", Some("2.26454.2")), Ok(()));
-        assert_eq!(check_version("2.26454.2", None), Ok(()));
-        assert_eq!(
-            check_version("2.26454.2", Some("2.26454.0")),
-            Err("DESKTOP_VERSION_CHANGED".into())
-        );
-        assert_eq!(
-            check_version("2.26454.3", None),
-            Err("DESKTOP_VERSION_REQUIRES_REVIEW".into())
-        );
-        assert_eq!(
-            check_version("2.9939.5", None),
-            Err("DESKTOP_VERSION_REQUIRES_REVIEW".into())
-        );
-        assert_eq!(
-            check_version("2.2553.14", None),
-            Err("DESKTOP_VERSION_REQUIRES_REVIEW".into())
-        );
-        assert_eq!(
-            check_version("2.2553.13", Some("2.2553.1")),
-            Err("DESKTOP_VERSION_CHANGED".into())
-        );
-        assert!(check_version("2.2553.2", None).is_err());
-        assert!(check_version("2.111.0", None).is_err());
-        assert!(check_version("2.110.0", Some("1.52386.6")).is_err());
     }
     #[test]
     fn process_names_preserve_spaces_and_reject_bad_inventory() {

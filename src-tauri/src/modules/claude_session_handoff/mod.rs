@@ -2,6 +2,7 @@
 mod catalog;
 pub mod engine;
 mod runtime;
+mod storage_contract;
 
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
@@ -21,7 +22,9 @@ struct PreviewContext {
     source: Identity,
     target: Identity,
     accounts: Vec<Identity>,
-    version: String,
+    archive: String,
+    roots: [PathBuf; 3],
+    app: PathBuf,
     created: std::time::Instant,
 }
 
@@ -30,7 +33,9 @@ fn remember_preview(
     source: &Identity,
     target: &Identity,
     accounts: &[Identity],
-    version: &str,
+    archive: &str,
+    roots: &[PathBuf; 3],
+    app: &std::path::Path,
 ) -> Result<(), String> {
     let mut previews = APPROVED_PREVIEWS.lock().map_err(|_| "HANDOFF_BUSY")?;
     previews.retain(|_, context| context.created.elapsed() < Duration::from_secs(600));
@@ -49,7 +54,9 @@ fn remember_preview(
             source: source.clone(),
             target: target.clone(),
             accounts: accounts.to_vec(),
-            version: version.into(),
+            archive: archive.into(),
+            roots: roots.clone(),
+            app: app.to_owned(),
             created: std::time::Instant::now(),
         },
     );
@@ -61,19 +68,39 @@ fn require_preview_context(
     source: &Identity,
     target: &Identity,
     accounts: &[Identity],
-    version: &str,
+    archive: &str,
+    roots: &[PathBuf; 3],
+    app: &std::path::Path,
 ) -> Result<(), String> {
     let previews = APPROVED_PREVIEWS.lock().map_err(|_| "HANDOFF_BUSY")?;
     let context = previews.get(fingerprint).ok_or("PREVIEW_CHANGED")?;
     if context.source != *source
         || context.target != *target
         || context.accounts != accounts
-        || context.version != version
+        || context.roots != *roots
+        || context.app != app
         || context.created.elapsed() >= Duration::from_secs(600)
     {
         return Err("PREVIEW_CHANGED".into());
     }
+    if context.archive != archive {
+        return Err("DESKTOP_CONTRACT_CHANGED".into());
+    }
     Ok(())
+}
+
+fn approval_token() -> String {
+    // A new preview must never silently rebind an older approval to a new App.
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(uuid::Uuid::new_v4().as_bytes()))
+}
+
+fn root_binding(roots: &Roots) -> [PathBuf; 3] {
+    [
+        roots.records.clone(),
+        roots.pool.clone(),
+        roots.state.clone(),
+    ]
 }
 
 pub(crate) struct ProfileOperation {
@@ -254,8 +281,8 @@ pub fn status() -> Result<Status, String> {
         .as_ref()
         .map(|_| ())
         .map_err(Clone::clone)
-        .and_then(|_| version.as_ref().map(|_| ()).map_err(Clone::clone))
-        .and_then(|_| runtime::check_version(version.as_ref().unwrap(), None));
+        .and_then(|_| runtime::app_bundle())
+        .and_then(|app| storage_contract::inspect(&app).map(|_| ()));
     let accounts: Vec<AccountChoice> = catalog::accounts()?
         .into_iter()
         .map(|a| {
@@ -296,12 +323,30 @@ pub fn status() -> Result<Status, String> {
 pub fn preview(source_id: &str, target_id: &str) -> Result<HandoffPreview, String> {
     let _operation = profile_operation()?;
     let roots = roots()?;
-    let version = runtime::desktop_version()?;
-    runtime::check_version(&version, None)?;
+    let app = runtime::app_bundle()?;
+    let contract = storage_contract::inspect(&app)?;
     let (source, target) = selection(&roots, source_id, target_id)?;
     let accounts = continuity_accounts(&roots)?;
-    let preview = engine::preview_continuity(&roots, &source, &target, &accounts)?;
-    remember_preview(&preview.fingerprint, &source, &target, &accounts, &version)?;
+    let unknown_fields = engine::unknown_persisted_fields(&contract.projected_fields);
+    let mut preview = engine::preview_continuity_with_fields(
+        &roots,
+        &source,
+        &target,
+        &accounts,
+        &unknown_fields,
+    )?;
+    contract.assert_unchanged()?;
+    preview.fingerprint = approval_token();
+    remember_preview(
+        &preview.fingerprint,
+        &source,
+        &target,
+        &accounts,
+        &contract.fingerprint,
+        &root_binding(&roots),
+        &app,
+    )?;
+    let version = runtime::desktop_version().unwrap_or_default();
     Ok(HandoffPreview {
         preview,
         desktop_version: version,
@@ -421,21 +466,37 @@ fn apply_locked(
     source_id: &str,
     target_id: &str,
     fingerprint: &str,
-    version: &str,
+    _version: &str,
     reopen_after_apply: bool,
     progress: &mut dyn FnMut(&str, usize, usize),
 ) -> Result<Outcome, String> {
     progress("checking", 0, 0);
     let roots = roots()?;
-    runtime::check_version(&runtime::desktop_version()?, Some(version))?;
+    let app = runtime::app_bundle()?;
+    let contract = storage_contract::inspect(&app)?;
+    let unknown_fields = engine::unknown_persisted_fields(&contract.projected_fields);
     catalog::assert_other_manager_closed()?;
     let (source, target) = selection(&roots, source_id, target_id)?;
     let accounts = continuity_accounts(&roots)?;
-    require_preview_context(fingerprint, &source, &target, &accounts, version)?;
+    require_preview_context(
+        fingerprint,
+        &source,
+        &target,
+        &accounts,
+        &contract.fingerprint,
+        &root_binding(&roots),
+        &app,
+    )?;
     // The user's scope is the complete saved-account catalog, not a fixed list
     // of byte images. Desktop can legitimately flush newer state on quit.
     // Validate the preview token, then freeze a fresh complete plan after quit.
-    let plan_preview = engine::preview_continuity(&roots, &source, &target, &accounts)?;
+    let plan_preview = engine::preview_continuity_with_fields(
+        &roots,
+        &source,
+        &target,
+        &accounts,
+        &unknown_fields,
+    )?;
     if fingerprint.len() != 64 || !fingerprint.bytes().all(|c| c.is_ascii_hexdigit()) {
         return Err("PREVIEW_CHANGED".into());
     }
@@ -448,13 +509,16 @@ fn apply_locked(
     if plan_preview.stale > 0 || plan_preview.replaced_branches > 0 {
         return Err("UNRESOLVED_ACTIVE_BRANCHES".into());
     }
-    let app = runtime::app_bundle()?;
+    contract.assert_unchanged()?;
     progress("stopping", 0, 0);
     let was_running = runtime::quit_normally(&app)?;
     let mut guard = || {
         catalog::assert_other_manager_closed()?;
         runtime::assert_quiet_with_evidence()?;
-        runtime::check_version(&runtime::desktop_version()?, Some(version))?;
+        contract.assert_unchanged()?;
+        if runtime::app_bundle()? != app || root_binding(&self::roots()?) != root_binding(&roots) {
+            return Err("DESKTOP_CONTRACT_CHANGED".into());
+        }
         if selection(&roots, source_id, target_id)? != (source.clone(), target.clone()) {
             return Err("ACCOUNT_IDENTITY_CHANGED".into());
         }
@@ -471,20 +535,26 @@ fn apply_locked(
         }
         return Err(code);
     }
-    let frozen_preview = engine::preview_continuity(&roots, &source, &target, &accounts)
-        .and_then(|preview| {
-            if preview.missing > 0 || preview.stale > 0 || preview.replaced_branches > 0 {
-                Err("UNRESOLVED_SOURCE_ROWS".into())
-            } else {
-                Ok(preview)
-            }
-        })
-        .map_err(|code| {
-            if was_running {
-                let _ = runtime::reopen_if_closed(&app);
-            }
-            code
-        })?;
+    let frozen_preview = engine::preview_continuity_with_fields(
+        &roots,
+        &source,
+        &target,
+        &accounts,
+        &unknown_fields,
+    )
+    .and_then(|preview| {
+        if preview.missing > 0 || preview.stale > 0 || preview.replaced_branches > 0 {
+            Err("UNRESOLVED_SOURCE_ROWS".into())
+        } else {
+            Ok(preview)
+        }
+    })
+    .map_err(|code| {
+        if was_running {
+            let _ = runtime::reopen_if_closed(&app);
+        }
+        code
+    })?;
     let backup = backup_storage::transaction_recovery_dir(
         "claude-handoff",
         &uuid::Uuid::new_v4().to_string(),
@@ -499,13 +569,15 @@ fn apply_locked(
     let mut published_run = None;
     let mut quick_guard = || {
         catalog::assert_other_manager_closed()?;
-        runtime::assert_quiet_with_evidence()
+        runtime::assert_quiet_with_evidence()?;
+        contract.assert_unchanged_fast()
     };
-    let attempt = engine::apply_continuity_with_progress(
+    let attempt = engine::apply_continuity_with_fields_and_progress(
         &roots,
         &source,
         &target,
         &accounts,
+        &unknown_fields,
         &frozen_preview.fingerprint,
         &backup,
         &mut guard,
@@ -623,42 +695,144 @@ mod tests {
     }
 
     #[test]
-    fn refreshed_data_keeps_approval_but_changed_target_roster_or_version_does_not() {
+    fn approval_binds_archive_roots_and_roster_without_version_allowlist() {
         let identity = |n| Identity {
             account: format!("00000000-0000-4000-8000-{n:012}"),
             org: "00000000-0000-4000-8000-000000000009".into(),
         };
         let (source, target) = (identity(1), identity(2));
         let accounts = vec![source.clone(), target.clone()];
-        let fingerprint = "approval-context-synthetic";
-        remember_preview(fingerprint, &source, &target, &accounts, "2.16120.0").unwrap();
-        assert!(
-            require_preview_context(fingerprint, &source, &target, &accounts, "2.16120.0").is_ok()
-        );
-        assert_eq!(
-            require_preview_context(fingerprint, &source, &identity(3), &accounts, "2.16120.0")
-                .unwrap_err(),
-            "PREVIEW_CHANGED"
-        );
+        let roots = [
+            PathBuf::from("/records"),
+            PathBuf::from("/pool"),
+            PathBuf::from("/state"),
+        ];
+        let app = std::path::Path::new("/synthetic/Claude.app");
+        let old_token = approval_token();
+        let new_token = approval_token();
+        assert_ne!(old_token, new_token);
+        remember_preview(
+            &old_token,
+            &source,
+            &target,
+            &accounts,
+            "archive-A",
+            &roots,
+            app,
+        )
+        .unwrap();
+        remember_preview(
+            &new_token,
+            &source,
+            &target,
+            &accounts,
+            "archive-B",
+            &roots,
+            app,
+        )
+        .unwrap();
+        assert!(require_preview_context(
+            &old_token,
+            &source,
+            &target,
+            &accounts,
+            "archive-A",
+            &roots,
+            app
+        )
+        .is_ok());
+        // Identical sidebar data after an update cannot rebind the prior token.
         assert_eq!(
             require_preview_context(
-                fingerprint,
+                &old_token,
                 &source,
                 &target,
-                &[source.clone(), target.clone(), identity(3)],
-                "2.16120.0"
+                &accounts,
+                "archive-B",
+                &roots,
+                app
+            )
+            .unwrap_err(),
+            "DESKTOP_CONTRACT_CHANGED"
+        );
+        assert!(require_preview_context(
+            &new_token,
+            &source,
+            &target,
+            &accounts,
+            "archive-B",
+            &roots,
+            app
+        )
+        .is_ok());
+        assert_eq!(
+            require_preview_context(
+                &new_token,
+                &source,
+                &identity(3),
+                &accounts,
+                "archive-B",
+                &roots,
+                app
             )
             .unwrap_err(),
             "PREVIEW_CHANGED"
         );
         assert_eq!(
-            require_preview_context(fingerprint, &source, &target, &accounts, "2.16120.1")
-                .unwrap_err(),
+            require_preview_context(
+                &new_token,
+                &source,
+                &target,
+                &[source.clone(), target.clone(), identity(3)],
+                "archive-B",
+                &roots,
+                app
+            )
+            .unwrap_err(),
+            "PREVIEW_CHANGED"
+        );
+        let changed = [
+            PathBuf::from("/other-records"),
+            roots[1].clone(),
+            roots[2].clone(),
+        ];
+        assert_eq!(
+            require_preview_context(
+                &new_token,
+                &source,
+                &target,
+                &accounts,
+                "archive-B",
+                &changed,
+                app
+            )
+            .unwrap_err(),
             "PREVIEW_CHANGED"
         );
         assert_eq!(
-            require_preview_context("unknown", &source, &target, &accounts, "2.16120.0")
-                .unwrap_err(),
+            require_preview_context(
+                &new_token,
+                &source,
+                &target,
+                &accounts,
+                "archive-B",
+                &roots,
+                std::path::Path::new("/other/Claude.app")
+            )
+            .unwrap_err(),
+            "PREVIEW_CHANGED"
+        );
+        assert_eq!(
+            require_preview_context(
+                "unknown",
+                &source,
+                &target,
+                &accounts,
+                "archive-B",
+                &roots,
+                app
+            )
+            .unwrap_err(),
             "PREVIEW_CHANGED"
         );
     }

@@ -1,4 +1,4 @@
-//! Metadata-only local Code handoff. The caller owns Desktop/version guards.
+//! Metadata-only local Code handoff. The caller owns Desktop/storage-contract guards.
 //! No transcript is parsed or written, and no account/authentication state is used.
 
 use serde::{Deserialize, Serialize};
@@ -2088,8 +2088,31 @@ pub fn preview_continuity(
     target: &Identity,
     accounts: &[Identity],
 ) -> Result<Preview> {
+    preview_continuity_with_fields(roots, source, target, accounts, &BTreeSet::new())
+}
+
+/// Known adapter field names, independent of a Desktop release number. New
+/// optional fields do not change admission; meaningful unknown native state
+/// is surfaced as an affected-session issue instead of silently discarded.
+pub(super) fn unknown_persisted_fields(projected: &BTreeSet<String>) -> BTreeSet<String> {
+    let known: BTreeSet<String> =
+        serde_json::from_str(include_str!("supported_persisted_fields.json"))
+            .expect("valid adapter field inventory");
+    projected.difference(&known).cloned().collect()
+}
+
+pub(super) fn preview_continuity_with_fields(
+    roots: &Roots,
+    source: &Identity,
+    target: &Identity,
+    accounts: &[Identity],
+    unknown_fields: &BTreeSet<String>,
+) -> Result<Preview> {
     no_pending(roots, None)?;
-    Ok(continuity::build_plan(roots, source, target, accounts)?.preview)
+    Ok(
+        continuity::build_plan_with_fields(roots, source, target, accounts, unknown_fields)?
+            .preview,
+    )
 }
 
 /// Content-free read-only timing of the actual per-publication witnesses.
@@ -2529,6 +2552,7 @@ pub fn apply_continuity_observed(
         on_journal_published,
         None,
         Some(accounts),
+        None,
         &mut |_, _, _| {},
     )
 }
@@ -2538,6 +2562,34 @@ pub fn apply_continuity_with_progress(
     source: &Identity,
     target: &Identity,
     accounts: &[Identity],
+    expected_fingerprint: &str,
+    backup_dir: &Path,
+    guard: &mut dyn FnMut() -> Result<()>,
+    quick_guard: Option<&mut dyn FnMut() -> Result<()>>,
+    on_journal_published: &mut dyn FnMut(&str),
+    progress: &mut dyn FnMut(&str, usize, usize),
+) -> Result<RunSummary> {
+    apply_continuity_with_fields_and_progress(
+        roots,
+        source,
+        target,
+        accounts,
+        &BTreeSet::new(),
+        expected_fingerprint,
+        backup_dir,
+        guard,
+        quick_guard,
+        on_journal_published,
+        progress,
+    )
+}
+
+pub(super) fn apply_continuity_with_fields_and_progress(
+    roots: &Roots,
+    source: &Identity,
+    target: &Identity,
+    accounts: &[Identity],
+    unknown_fields: &BTreeSet<String>,
     expected_fingerprint: &str,
     backup_dir: &Path,
     guard: &mut dyn FnMut() -> Result<()>,
@@ -2556,6 +2608,7 @@ pub fn apply_continuity_with_progress(
         on_journal_published,
         None,
         Some(accounts),
+        Some(unknown_fields),
         progress,
     )
 }
@@ -2582,6 +2635,7 @@ fn apply_observed_filtered(
         on_journal_published,
         source_only,
         None,
+        None,
         &mut |_, _, _| {},
     )
 }
@@ -2597,6 +2651,7 @@ fn apply_planned(
     on_journal_published: &mut dyn FnMut(&str),
     source_only: Option<&str>,
     accounts: Option<&[Identity]>,
+    unknown_fields: Option<&BTreeSet<String>>,
     progress: &mut dyn FnMut(&str, usize, usize),
 ) -> Result<RunSummary> {
     validate_roots(roots, source, target)?;
@@ -2605,7 +2660,13 @@ fn apply_planned(
     no_pending(roots, None)?;
     guard_call(guard)?;
     let mut plan = match accounts {
-        Some(accounts) => continuity::build_plan(roots, source, target, accounts)?,
+        Some(accounts) => continuity::build_plan_with_fields(
+            roots,
+            source,
+            target,
+            accounts,
+            unknown_fields.unwrap_or(&BTreeSet::new()),
+        )?,
         None => build_plan_filtered(roots, source, target, source_only)?,
     };
     check(

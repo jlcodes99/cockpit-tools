@@ -83,6 +83,8 @@ aes = "0.8"
 cbc = "0.1"
 pbkdf2 = "0.12"
 sha1 = "0.10"
+tree-sitter = "0.25.10"
+tree-sitter-javascript = "0.25.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 age = { version = "0.11", default-features = false }

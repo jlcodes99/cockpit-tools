@@ -23,10 +23,23 @@ a progress event alone cannot display success.
 
 ## Scope
 
-The adapter currently supports the default Claude Desktop profile on macOS and
-explicitly reviewed Desktop versions. See [the 2.26454.0 record contract](claude-desktop-2.26454.0-static-review.md)
-for the most recent review. Unknown or mid-operation version changes stop the
-handoff. Other platforms can still use the existing account-only switch.
+The adapter supports the default Claude Desktop profile on macOS when the
+installed application exposes the compatible local record storage contract.
+The release number is diagnostic only. A bounded parser inspects the installed
+application archive without executing vendor code or reading account data:
+account/org namespace selection, local JSON record loading and filename/map
+keys, separate Desktop row and CLI transcript IDs, and native record projection.
+Formatting, chunk names and release numbers do not determine support. An
+unreadable archive or an unsupported storage contract stops publication before
+Desktop is closed. Other platforms retain the existing account-only switch.
+
+The archive fingerprint binds one preview to one installed application; it is
+not an admission allowlist. If the App changes after preview, refresh the
+preview against the new contract. Meaningful newly projected native fields
+outside the adapter's field inventory produce an affected-session issue rather
+than being silently dropped. Absent or empty optional additions do not require
+a new Cockpit release. Structural detection cannot prove arbitrary future
+behavior, so unsupported architecture changes require an adapter update.
 
 Only local Code records and their local history references are transferred.
 Cloud Chat, Cowork, cloud Artifact ownership, remote sessions and unsupported
@@ -62,8 +75,14 @@ recovery descriptors are unresolved.
 React communicates with Rust through the existing Tauri command boundary. The
 coordinator shares an operation lock with account/profile injection. Preview
 uses the identity index without repairing profiles or reading authentication
-stores. Approval binds source/target identities, the saved namespace roster and
-Desktop version; applying rebuilds the plan after normal shutdown.
+stores. A unique approval token binds source/target identities, the saved namespace
+roster, profile roots, application path and archive fingerprint. A later preview
+cannot rebind an earlier token to a replacement application. Applying rebuilds
+the complete data plan after normal shutdown. Full archive fingerprints are
+checked before shutdown, after shutdown and at commit; anchored metadata
+witnesses are checked before each publication. A detected in-flight change
+aborts and conditionally recovers its own writes. Recovery does not depend on
+whether the current storage contract is supported.
 
 Before the first publication and at commit, the engine hashes the input records
 and referenced transcripts. Per-write directory/file identity, size and timestamp
@@ -90,7 +109,8 @@ The default native suite uses temporary synthetic roots. It covers multi-account
 catalog collection, branch preservation, both transfer directions, pointer
 rollover, permission isolation, source preservation, source/destination recovery
 validation, drift, symlinks, interrupted writes, conditional undo and lifecycle
-process classification. Workstation-specific live acceptance scripts are not
+process classification, release-independent storage fixtures, archive drift and
+meaningful new native fields. Workstation-specific live acceptance scripts are not
 part of the contributed test suite.
 
 The browser fixture uses the actual React component with synthetic Tauri IPC.

@@ -8,6 +8,14 @@ import '../../src/App.css';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const scenario = new URLSearchParams(location.search).get('scenario') || 'normal';
+const contractScenario = scenario.startsWith('switch-contract-');
+const contractReason = scenario.startsWith('switch-contract-unavailable-') ? 'DESKTOP_CONTRACT_UNAVAILABLE'
+  : scenario.startsWith('switch-contract-unsupported-') ? 'DESKTOP_CONTRACT_UNSUPPORTED'
+    : scenario === 'switch-contract-changed-pending' ? 'DESKTOP_CONTRACT_CHANGED'
+      : scenario === 'switch-contract-default-profile-pending' ? 'DEFAULT_PROFILE_REQUIRED' : null;
+const diagnosticVersion = scenario === 'switch-contract-version-unavailable' ? ''
+  : scenario === 'switch-contract-future' ? '999.0.future'
+    : scenario.includes('unsupported') ? '2.999.0' : '2.110.0';
 const accounts = (scenario === 'switch-race' ? [1, 2, 3] : [1, 2]).map(n => ({ id: `account-${n}`, email: `account-${n}@example.test`, auth_mode: 'desktop_oauth' as const,
   account_uuid: id(n), organization_uuid: id(n + 10), created_at: 1, last_used: 1 }));
 const initialRun = { id: `run-${id(99)}`, state: 'applied', createdAt: 1789800000000, created: 1, updated: 0, skippedMissing: 0, skippedStale: 0, replacedBranches: 0,
@@ -24,7 +32,8 @@ const startWarning = scenario === 'switch-continuity-start-failed' ? 'DESKTOP_ST
 // These counts do not claim a mutation or verification of any live account.
 const continuityCounts = { created: 172, updated: 0, unchanged: 0, preservedBranches: 6 };
 const usesSavedAccountIndex = scenario.startsWith('saved-index');
-let run: ClaudeHandoffRunSummary | null = scenario.includes('pending') ? { ...initialRun, state: 'applying', lastError: 'CLAUDE_WRITER_RUNNING' } : null;
+let run: ClaudeHandoffRunSummary | null = scenario.includes('pending') ? { ...initialRun, state: 'applying', lastError: 'CLAUDE_WRITER_RUNNING' }
+  : contractScenario && scenario.endsWith('-applied') ? { ...initialRun } : null;
 let mutated = false;
 let recoveryFailed = false;
 const calls: { command: string; args: unknown }[] = [];
@@ -38,6 +47,8 @@ const busyTransitions: { busy: boolean; at: number }[] = [];
 let nextCallback = 1;
 let nextListener = 1;
 let applyAttempts = 0;
+let previewApprovals = 0;
+let contractApproval: string | null = null;
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const emitProgress = (payload: Progress) => {
   let delivered = 0;
@@ -125,8 +136,9 @@ Object.assign(window, { __TAURI_INTERNALS__: {
       if (scenario === 'saved-index-unavailable') throw 'ACCOUNT_INDEX_UNAVAILABLE: /private/synthetic/index.json account-private';
       if (scenario === 'refresh-error' && mutated) throw 'STATUS_FAILED';
       if (scenario === 'partial-rollback-refresh-error' && recoveryFailed) throw 'STATUS_FAILED';
-      return { supported: !scenario.includes('unsupported'), reason: scenario.includes('unsupported') ? 'DESKTOP_VERSION_REQUIRES_REVIEW' : null,
-        desktopVersion: scenario.includes('unsupported') ? '2.999.0' : '2.110.0',
+      return { supported: contractScenario ? !contractReason : !scenario.includes('unsupported'),
+        reason: contractScenario ? contractReason : scenario.includes('unsupported') ? 'DESKTOP_VERSION_REQUIRES_REVIEW' : null,
+        desktopVersion: diagnosticVersion,
         // Only this scenario supplies a synthetic optional process-identity hint. Legacy scenarios
         // intentionally omit the field and still require manual source selection.
         ...(verifiedSource ? {
@@ -138,24 +150,33 @@ Object.assign(window, { __TAURI_INTERNALS__: {
           ...(usesSavedAccountIndex ? { identity: { account: a.account_uuid, org: a.organization_uuid } } : {}) })), runs: run ? [run] : [] };
     }
     if (command === 'claude_handoff_preview') {
+      if (contractReason) throw contractReason;
       if (scenario === 'slow-preview') await new Promise(resolve => setTimeout(resolve, 800));
       if (scenario === 'switch-race' && args.sourceAccountId === 'account-1') await new Promise(resolve => setTimeout(resolve, 800));
       if (args.sourceAccountId === args.targetAccountId) throw 'SAME_ACCOUNT';
       const conflicting = scenario === 'switch-conflict' || scenario === 'conflict' || scenario === 'privacy-conflict';
       const missingOnly = scenario === 'switch-missing';
-      return { fingerprint: args.sourceAccountId === 'account-3' ? 'third-plan' : 'synthetic-plan', baselineChanged: true,
-        desktopVersion: '2.110.0', created: args.sourceAccountId === 'account-3' ? 7 : 1, updated: conflicting ? 1 : 0, unchanged: 3,
-        missing: conflicting || missingOnly ? 1 : 0, stale: conflicting ? 1 : 0, replacedBranches: conflicting ? 1 : 0,
-        issues: conflicting ? [{ sessionId: `local_${id(40)}`, title: 'Synthetic planning conversation', reason: 'DIVERGENT_METADATA' }] : [],
+      const unsupportedState = scenario === 'switch-contract-native-state';
+      // Approval is an opaque nonce independent of the unchanged synthetic plan.
+      if (contractScenario) contractApproval = `synthetic-approval-${++previewApprovals}`;
+      return { fingerprint: contractApproval ?? (args.sourceAccountId === 'account-3' ? 'third-plan' : 'synthetic-plan'), baselineChanged: true,
+        desktopVersion: diagnosticVersion ?? '', created: args.sourceAccountId === 'account-3' ? 7 : 1, updated: conflicting ? 1 : 0, unchanged: 3,
+        missing: conflicting || missingOnly || unsupportedState ? 1 : 0, stale: conflicting ? 1 : 0, replacedBranches: conflicting ? 1 : 0,
+        issues: unsupportedState ? [{ sessionId: `local_${id(40)}`, title: 'Synthetic conversation with new native state', reason: 'UNSUPPORTED_PERSISTED_FIELD' }]
+          : conflicting ? [{ sessionId: `local_${id(40)}`, title: 'Synthetic planning conversation', reason: 'DIVERGENT_METADATA' }] : [],
         warnings: conflicting ? [{ sessionId: `local_${id(41)}`, title: 'Synthetic source continuation', reason: 'SOURCE_BRANCH_SELECTED' }] : [], quotaPausesCleared: 1,
         ...(continuityFlow ? continuityCounts : {}) };
     }
     if (command === 'claude_handoff_apply' || command === 'claude_handoff_apply_and_switch') {
-      if (args.fingerprint !== 'synthetic-plan' || args.sourceAccountId !== 'account-1' || args.targetAccountId !== 'account-2'
+      if (contractReason) throw contractReason;
+      if (args.fingerprint !== (contractScenario ? contractApproval : 'synthetic-plan') || args.sourceAccountId !== 'account-1' || args.targetAccountId !== 'account-2'
         || (switchFlow !== (command === 'claude_handoff_apply_and_switch'))) throw 'INVALID_FIXTURE_INPUT';
       applyAttempts += 1;
       if (continuityFlow) await simulateProgress();
       else await delay(250);
+      if (scenario === 'switch-contract-changed' && applyAttempts === 1) {
+        throw JSON.stringify({ code: 'DESKTOP_CONTRACT_CHANGED', message: '/private/synthetic/storage account-private' });
+      }
       if (scenario === 'saved-index-running') throw { code: 'EXTERNAL_COCKPIT_RUNNING', message: '/private/synthetic/Cockpit account-private' };
       if (scenario === 'switch-rejected') throw 'DESKTOP_QUIT_FAILED';
       if (scenario === 'stale') throw 'PREVIEW_CHANGED';
