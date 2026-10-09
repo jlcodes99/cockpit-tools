@@ -2412,8 +2412,8 @@ func TestResponsesWebsocketRouteDisabledByDefault(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer client-key")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusUpgradeRequired {
+		t.Fatalf("status = %d, want 426 body=%s", w.Code, w.Body.String())
 	}
 	if called {
 		t.Fatal("websocket handler should not run when disabled")

@@ -719,7 +719,7 @@ func (s *relayServer) handleResponsesWebsocket(c *gin.Context) {
 		return
 	}
 	if !spec.ResponsesWebsockets {
-		writeAPIError(c, http.StatusBadRequest, "responses websocket is disabled", "websocket_disabled")
+		writeAPIError(c, http.StatusUpgradeRequired, "responses websocket is disabled", "websocket_disabled")
 		return
 	}
 	if s.responsesWebsocket == nil {
