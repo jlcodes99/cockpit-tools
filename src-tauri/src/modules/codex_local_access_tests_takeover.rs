@@ -219,17 +219,20 @@
     }
 
     #[test]
-    fn mixed_realtime_override_ignores_non_mixed_or_wrong_keys() {
+    fn realtime_override_supports_pool_and_ignores_wrong_keys() {
         let profile_dir = make_temp_dir("mixed-realtime-key-scope");
         let mut collection = realtime_mixed_test_collection();
         let original = "model = \"gpt-6-astra\"\n";
         fs::write(profile_dir.join(CODEX_PROFILE_CONFIG_FILE), original).expect("write original");
-        super::write_mixed_model_realtime_sideband_override(&profile_dir, &collection, "different-key")
+        super::write_local_access_realtime_sideband_override(&profile_dir, &collection, "different-key")
             .expect("wrong key no-op");
-        collection.api_keys[0].model_routing = None;
-        super::write_mixed_model_realtime_sideband_override(&profile_dir, &collection, &collection.api_key)
-            .expect("non-mixed no-op");
         assert_eq!(fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read"), original);
+        collection.api_keys[0].model_routing = None;
+        super::write_local_access_realtime_sideband_override(&profile_dir, &collection, &collection.api_key)
+            .expect("pool override");
+        let config = fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read");
+        let doc = config.parse::<Document>().expect("parse");
+        assert_eq!(doc["experimental_realtime_ws_base_url"].as_str(), Some(build_collection_base_url(&collection).as_str()));
         fs::remove_dir_all(profile_dir).expect("cleanup fixture");
     }
 

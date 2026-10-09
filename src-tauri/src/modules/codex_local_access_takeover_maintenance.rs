@@ -137,6 +137,7 @@ fn maintain_local_access_profile(
     if !owned {
         return Ok(());
     }
+    let managed_realtime_sideband = has_managed_realtime_sideband_override(&doc);
     let provider = doc["model_providers"][CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID]
         .as_table_mut()
         .ok_or("Invalid API service provider table")?;
@@ -169,11 +170,10 @@ fn maintain_local_access_profile(
     {
         provider["supports_websockets"] = value(supports_websockets);
     }
-    if old_base != next_base
-        && doc
-            .get("experimental_realtime_ws_base_url")
-            .and_then(|item| item.as_str())
-            == Some(old_base.as_str())
+    if doc.get("experimental_realtime_webrtc_call_base_url").is_none()
+        && ((old_base != next_base && managed_realtime_sideband)
+            || (doc.get("experimental_realtime_ws_base_url").is_none()
+                && profile_api_key_uses_oauth_realtime(collection, &collection.api_key)))
     {
         doc["experimental_realtime_ws_base_url"] = value(next_base);
     }
