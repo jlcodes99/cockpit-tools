@@ -1,9 +1,29 @@
 package executor
 
 import (
+	"context"
 	"errors"
 	"net/http"
 )
+
+// ErrNoActiveUpstreamWebsocket means response.interrupt has no live upstream socket.
+var ErrNoActiveUpstreamWebsocket = errors.New("no active upstream websocket for response.interrupt")
+
+// WithWebsocketAuthCheck supplies the live account-state check for a bound
+// connection. It may reject further frames but never select another account.
+type websocketAuthCheckKey struct{}
+
+func WithWebsocketAuthCheck(ctx context.Context, check func(string) bool) context.Context {
+	return context.WithValue(ctx, websocketAuthCheckKey{}, check)
+}
+
+func WebsocketAuthEnabled(ctx context.Context, authID string) bool {
+	if ctx == nil {
+		return true
+	}
+	check, _ := ctx.Value(websocketAuthCheckKey{}).(func(string) bool)
+	return check == nil || check(authID)
+}
 
 // UpstreamWebsocketReplayRequiredError indicates that an incremental request
 // cannot safely continue because its upstream websocket is no longer reusable.

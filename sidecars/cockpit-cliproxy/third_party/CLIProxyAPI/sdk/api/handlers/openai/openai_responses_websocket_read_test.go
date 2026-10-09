@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tidwall/gjson"
 )
 
 func TestResponsesWebsocketReadPumpKeepsFIFOAndStopsOnRealClosure(t *testing.T) {
@@ -21,7 +22,7 @@ func TestResponsesWebsocketReadPumpKeepsFIFOAndStopsOnRealClosure(t *testing.T) 
 			t.Error(err)
 			return
 		}
-		pump := newResponsesWebsocketReadPump(r.Context(), conn)
+		pump := newResponsesWebsocketReadPump(r.Context(), conn, nil, nil)
 		defer pump.stop()
 		var received []string
 		for range 3 {
@@ -70,7 +71,7 @@ func TestResponsesWebsocketReadPumpBoundsPendingFrames(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		pump := newResponsesWebsocketReadPump(r.Context(), conn)
+		pump := newResponsesWebsocketReadPump(r.Context(), conn, nil, nil)
 		defer func() {
 			pump.stop()
 			close(stopped)
@@ -119,7 +120,7 @@ func TestResponsesWebsocketReadPumpPreservesSingleLargeFrame(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		pump := newResponsesWebsocketReadPump(r.Context(), conn)
+		pump := newResponsesWebsocketReadPump(r.Context(), conn, nil, nil)
 		defer pump.stop()
 		_, payload, errNext := pump.next()
 		if errNext != nil {
@@ -145,5 +146,78 @@ func TestResponsesWebsocketReadPumpPreservesSingleLargeFrame(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("single large frame was rejected by pending-message budget")
+	}
+}
+
+func TestResponsesWebsocketReadPumpInterruptBypassesQueueAndSurvivesError(t *testing.T) {
+	interrupt := []byte(`{"type":"response.interrupt","response_id":"r1","mode":"discard_partial_items","extension":"keep"}`)
+	create := []byte(`{"type":"response.create","model":"test","input":[]}`)
+	delivered := make(chan []byte, 2)
+	pumps := make(chan *responsesWebsocketReadPump, 1)
+	stopped := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := responsesWebsocketUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		pump := newResponsesWebsocketReadPump(r.Context(), conn, func(ctx context.Context, payload []byte) error {
+			delivered <- bytes.Clone(payload)
+			return errors.New("interrupt write failed")
+		}, nil)
+		defer close(stopped)
+		defer pump.stop()
+		pumps <- pump
+		// Leave response.create queued while the reader processes the interrupt.
+		<-pump.ctx.Done()
+	}))
+	defer server.Close()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	pump := <-pumps
+	if err := conn.WriteMessage(websocket.TextMessage, create); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := conn.WriteMessage(websocket.TextMessage, interrupt); err != nil {
+			t.Fatal(err)
+		}
+		_, payload, errRead := conn.ReadMessage()
+		if errRead != nil {
+			t.Fatal(errRead)
+		}
+		if gjson.GetBytes(payload, "type").String() != "error" || gjson.GetBytes(payload, "status").Int() != http.StatusBadRequest || gjson.GetBytes(payload, "error.message").String() != "interrupt write failed" {
+			t.Fatalf("interrupt error = %s", payload)
+		}
+		select {
+		case got := <-delivered:
+			if !bytes.Equal(got, interrupt) {
+				t.Fatalf("interrupt changed: %s", got)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("interrupt was queued behind response.create")
+		}
+	}
+	if len(pump.messages) != 1 || pump.bytes.Load() != int64(len(create)) {
+		t.Fatal("interrupt changed the ordinary request queue or byte budget")
+	}
+	kind, got, errNext := pump.next()
+	if errNext != nil || kind != websocket.TextMessage || !bytes.Equal(got, create) {
+		t.Fatalf("queued create = %s, kind = %d, error = %v", got, kind, errNext)
+	}
+	_ = conn.Close()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("client disconnect did not stop the reader after interrupt errors")
+	}
+	if len(pump.messages) != 0 || pump.bytes.Load() != 0 {
+		t.Fatal("reader did not release queued data")
 	}
 }

@@ -27,6 +27,7 @@ import (
 const (
 	wsRequestTypeCreate                   = "response.create"
 	wsRequestTypeAppend                   = "response.append"
+	wsRequestTypeInterrupt                = "response.interrupt"
 	wsEventTypeError                      = "error"
 	wsEventTypeCompleted                  = "response.completed"
 	wsEventTypeDone                       = "response.done"
@@ -262,7 +263,7 @@ func truncateWebsocketCloseReason(reason string, maxBytes int) string {
 }
 
 // ResponsesWebsocket handles websocket requests for /v1/responses.
-// It accepts `response.create` and `response.append` requests and streams
+// It accepts `response.create`, `response.append`, and `response.interrupt` requests and streams
 // response events back as JSON websocket text messages.
 func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 	conn, err := responsesWebsocketUpgrader.Upgrade(c.Writer, c.Request, websocketUpgradeHeaders(c.Request))
@@ -270,10 +271,13 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		return
 	}
 	writer := newResponsesWebsocketWriter(conn)
-	readPump := newResponsesWebsocketReadPump(c.Request.Context(), conn, writer)
+	passthroughSessionID := uuid.NewString()
+	localInterrupt := newResponsesLocalInterrupt()
+	readPump := newResponsesWebsocketReadPump(c.Request.Context(), conn, func(ctx context.Context, payload []byte) error {
+		return h.forwardResponsesWebsocketInterrupt(ctx, passthroughSessionID, payload)
+	}, localInterrupt, writer)
 	defer readPump.stop()
 	c.Request = c.Request.WithContext(readPump.ctx)
-	passthroughSessionID := uuid.NewString()
 	downstreamSessionKey := websocketDownstreamSessionKey(c.Request)
 	toolCacheBaseKey := downstreamSessionKey
 	retainResponsesWebsocketToolCaches(downstreamSessionKey)
@@ -666,8 +670,9 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			wsTimelineLog,
 			passthroughSessionID,
 			responsesWebsocketForwardOptions{
-				toolCacheTurn: toolCacheTurn,
-				suppressError: replayPinnedAuthFailure,
+				toolCacheTurn:  toolCacheTurn,
+				suppressError:  replayPinnedAuthFailure,
+				localInterrupt: localInterrupt,
 			},
 		)
 		if errForward != nil {
@@ -726,6 +731,35 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 
 func responsesWebsocketHTTPReplayRequiredError() error {
 	return cliproxyexecutor.NewUpstreamWebsocketReplayRequiredError()
+}
+
+func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocketInterrupt(ctx context.Context, sessionID string, payload []byte) error {
+	responseID := gjson.GetBytes(payload, "response_id")
+	if responseID.Type != gjson.String || strings.TrimSpace(responseID.String()) == "" {
+		return fmt.Errorf("response.interrupt requires response_id")
+	}
+	if h == nil || h.AuthManager == nil {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	exec, ok := h.AuthManager.Executor("codex")
+	if !ok || exec == nil {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	sender, ok := exec.(interface {
+		InterruptExecutionSession(context.Context, string, []byte) error
+	})
+	if !ok || sender == nil {
+		return fmt.Errorf("upstream executor does not support response.interrupt")
+	}
+	ctx = cliproxyexecutor.WithWebsocketAuthCheck(ctx, func(authID string) bool {
+		// Home runtime credentials live on the execution session, not in the global map.
+		auth, found := h.AuthManager.GetByID(authID)
+		if !found || auth == nil {
+			auth, found = h.AuthManager.GetExecutionSessionAuthByID(sessionID, authID)
+		}
+		return found && auth != nil && !auth.Disabled && auth.Status != coreauth.StatusDisabled
+	})
+	return sender.InterruptExecutionSession(ctx, sessionID, payload)
 }
 
 func responsesWebsocketRequestRequiresCurrentUpstream(payload []byte) bool {
