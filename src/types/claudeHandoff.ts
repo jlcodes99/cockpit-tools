@@ -82,29 +82,64 @@ export interface ClaudeHandoffMutationResult {
 
 // IPC errors may be structured, JSON-encoded, or CODE: detail strings. Never
 // render the raw detail: it can contain local paths and private account IDs.
+function unwrapClaudeHandoffError(error: unknown): unknown {
+  let current = error;
+  // Bound both wrapper depth and JSON input; malformed metadata fails closed.
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (typeof current === 'string') {
+      if (current.length > 16_384) return null;
+      const message = current.trim().replace(/^Error:\s*/, '');
+      if (!message.startsWith('{')) return message;
+      try { current = JSON.parse(message); } catch { return null; }
+      continue;
+    }
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return null;
+    const value = current as { code?: unknown; message?: unknown };
+    if (typeof value.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(value.code)) return current;
+    if (typeof value.message !== 'string') return current;
+    current = value.message;
+  }
+  return null;
+}
+
 export function getClaudeHandoffErrorCode(error: unknown): string | null {
-  if (error && typeof error === 'object') {
-    const value = error as { code?: unknown; message?: unknown };
-    if (typeof value.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(value.code)) {
-      return value.code;
-    }
-    return typeof value.message === 'string' ? getClaudeHandoffErrorCode(value.message) : null;
-  }
-  if (typeof error !== 'string') return null;
-  const message = error.trim().replace(/^Error:\s*/, '');
-  if (message.startsWith('{')) {
-    try {
-      return getClaudeHandoffErrorCode(JSON.parse(message));
-    } catch {
-      return null;
+  const value = unwrapClaudeHandoffError(error);
+  if (typeof value === 'string') return value.match(/^\[?([A-Z][A-Z0-9_]+)(?:\]|:|\s|$)/)?.[1] ?? null;
+  if (value && typeof value === 'object') {
+    const code = (value as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(code)) {
+      return code;
     }
   }
-  return message.match(/^\[?([A-Z][A-Z0-9_]+)(?:\]|:|\s|$)/)?.[1] ?? null;
+  return null;
 }
 
 export function getClaudeHandoffRunAction(state: string): 'rollback' | 'recover' | null {
   if (state === 'rolled_back') return null;
   return state === 'applied' ? 'rollback' : 'recover';
+}
+
+export interface ClaudeHandoffProcessDiagnostic {
+  processId: number;
+  processRole: 'desktop-main' | 'claude-cli' | 'desktop-helper' | 'desktop-updater';
+  processName: string;
+}
+
+// Only consume the backend's bounded process metadata, never message/args/path.
+export function getClaudeHandoffProcessDiagnostic(error: unknown): ClaudeHandoffProcessDiagnostic | null {
+  const unwrapped = unwrapClaudeHandoffError(error);
+  if (!unwrapped || typeof unwrapped !== 'object') return null;
+  const value = unwrapped as Record<string, unknown>;
+  if (value.code !== 'CLAUDE_WRITER_RUNNING' && value.code !== 'DESKTOP_UPDATE_TIMEOUT'
+    && value.code !== 'DESKTOP_CONTRACT_CHANGED') return null;
+  if (typeof value.processId !== 'number' || !Number.isInteger(value.processId)
+    || value.processId < 1 || value.processId > 0xffffffff) return null;
+  if (typeof value.processRole !== 'string'
+    || !['desktop-main', 'claude-cli', 'desktop-helper', 'desktop-updater'].includes(value.processRole)) return null;
+  if (typeof value.processName !== 'string' || !/^[\p{L}\p{N}._()+ -]{1,128}$/u.test(value.processName)
+    || value.processName !== value.processName.trim() || /^[-. ]+$/.test(value.processName)
+    || value.processName.startsWith('-') || /\s-\S/.test(value.processName)) return null;
+  return { processId: value.processId, processRole: value.processRole as ClaudeHandoffProcessDiagnostic['processRole'], processName: value.processName };
 }
 
 export function canRollbackClaudeHandoff(status: ClaudeHandoffStatus | null): boolean {

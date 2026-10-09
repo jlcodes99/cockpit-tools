@@ -25,6 +25,7 @@ struct PreviewContext {
     archive: String,
     roots: [PathBuf; 3],
     app: PathBuf,
+    allow_bundled_update: bool,
     created: std::time::Instant,
 }
 
@@ -57,6 +58,9 @@ fn remember_preview(
             archive: archive.into(),
             roots: roots.clone(),
             app: app.to_owned(),
+            // The dialog explains that a bundled update triggered by normal
+            // shutdown can settle and be rechecked before any publication.
+            allow_bundled_update: true,
             created: std::time::Instant::now(),
         },
     );
@@ -71,7 +75,7 @@ fn require_preview_context(
     archive: &str,
     roots: &[PathBuf; 3],
     app: &std::path::Path,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let previews = APPROVED_PREVIEWS.lock().map_err(|_| "HANDOFF_BUSY")?;
     let context = previews.get(fingerprint).ok_or("PREVIEW_CHANGED")?;
     if context.source != *source
@@ -86,7 +90,37 @@ fn require_preview_context(
     if context.archive != archive {
         return Err("DESKTOP_CONTRACT_CHANGED".into());
     }
-    Ok(())
+    Ok(context.allow_bundled_update)
+}
+
+fn contract_after_shutdown(
+    initial: &storage_contract::Contract,
+    shutdown: &runtime::ShutdownReceipt,
+    allow_bundled_update: bool,
+    app: &std::path::Path,
+) -> Result<storage_contract::Contract, String> {
+    if !initial.belongs_to_app(app) {
+        return Err("DESKTOP_CONTRACT_CHANGED".into());
+    }
+    if shutdown.bundled_update_settled && allow_bundled_update {
+        let final_contract = shutdown
+            .settled_contract
+            .as_ref()
+            .ok_or("DESKTOP_CONTRACT_CHANGED")?
+            .clone();
+        if !final_contract.belongs_to_app(app) {
+            return Err("DESKTOP_CONTRACT_CHANGED".into());
+        }
+        final_contract.assert_unchanged()?;
+        tracing::info!(
+            initial_archive = initial.fingerprint,
+            final_archive = final_contract.fingerprint,
+            "Claude handoff rechecked storage after controlled bundled update"
+        );
+        return Ok(final_contract);
+    }
+    initial.assert_unchanged()?;
+    Ok(initial.clone())
 }
 
 fn approval_token() -> String {
@@ -478,7 +512,7 @@ fn apply_locked(
     catalog::assert_other_manager_closed()?;
     let (source, target) = selection(&roots, source_id, target_id)?;
     let accounts = continuity_accounts(&roots)?;
-    require_preview_context(
+    let allow_bundled_update = require_preview_context(
         fingerprint,
         &source,
         &target,
@@ -511,10 +545,37 @@ fn apply_locked(
     }
     contract.assert_unchanged()?;
     progress("stopping", 0, 0);
-    let was_running = runtime::quit_normally(&app)?;
+    let shutdown = runtime::quit_and_settle(&app, allow_bundled_update, &mut || {
+        progress("updating", 0, 0)
+    })?;
+    let was_running = shutdown.was_running;
+    let contract = runtime::assert_publication_quiet(&app)
+        .and_then(|_| {
+            if runtime::app_bundle()? != app
+                || root_binding(&self::roots()?) != root_binding(&roots)
+            {
+                return Err("DESKTOP_CONTRACT_CHANGED".into());
+            }
+            if selection(&roots, source_id, target_id)? != (source.clone(), target.clone())
+                || continuity_accounts(&roots)? != accounts
+            {
+                return Err("ACCOUNT_IDENTITY_CHANGED".into());
+            }
+            contract_after_shutdown(&contract, &shutdown, allow_bundled_update, &app)
+        })
+        .map_err(|code| {
+            if was_running {
+                let _ = runtime::reopen_if_closed(&app);
+            }
+            code
+        })?;
+    // This final binding is distinct from the immutable initial preview. It may
+    // be renewed only after the approved shutdown update, never after writes.
+    let unknown_fields = engine::unknown_persisted_fields(&contract.projected_fields);
+    progress("checking", 0, 0);
     let mut guard = || {
         catalog::assert_other_manager_closed()?;
-        runtime::assert_quiet_with_evidence()?;
+        runtime::assert_publication_quiet(&app)?;
         contract.assert_unchanged()?;
         if runtime::app_bundle()? != app || root_binding(&self::roots()?) != root_binding(&roots) {
             return Err("DESKTOP_CONTRACT_CHANGED".into());
@@ -569,7 +630,7 @@ fn apply_locked(
     let mut published_run = None;
     let mut quick_guard = || {
         catalog::assert_other_manager_closed()?;
-        runtime::assert_quiet_with_evidence()?;
+        runtime::assert_publication_quiet(&app)?;
         contract.assert_unchanged_fast()
     };
     let attempt = engine::apply_continuity_with_fields_and_progress(
@@ -593,7 +654,9 @@ fn apply_locked(
                 published_run.is_some()
             );
             if let Some(id) = published_run {
-                if let Err(reason) = engine::record_failure(&roots, &id, &code) {
+                if let Err(reason) =
+                    engine::record_failure(&roots, &id, &runtime::diagnostic_code(&code))
+                {
                     tracing::warn!("Claude handoff failure receipt unavailable: code={reason}");
                 }
                 // A failed copy is not a usable account switch. While its own

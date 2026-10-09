@@ -1,5 +1,20 @@
 //! Synthetic fixtures only. Every path is under a UUID-owned temporary root.
 use super::*;
+
+#[test]
+fn guard_preserves_only_bounded_public_process_diagnostics() {
+    let diagnostic = json!({"code":"CLAUDE_WRITER_RUNNING","processId":300,"processRole":"desktop-helper","processName":"Claude Helper","privateExtra":"synthetic excluded payload"}).to_string();
+    let error = guard_call(&mut || Err(diagnostic.clone())).unwrap_err();
+    let value: Value = serde_json::from_str(&error).unwrap();
+    assert_eq!(value["code"], "CLAUDE_WRITER_RUNNING");
+    assert_eq!(value["processId"], 300);
+    assert!(value.get("privateExtra").is_none());
+    let unsafe_name = json!({"code":"CLAUDE_WRITER_RUNNING","processId":300,"processRole":"desktop-helper","processName":"/synthetic/private/path"}).to_string();
+    assert_eq!(
+        guard_call(&mut || Err(unsafe_name.clone())).unwrap_err(),
+        "GUARD_FAILED"
+    );
+}
 #[path = "continuity_tests.rs"]
 mod continuity_tests;
 use std::fs;

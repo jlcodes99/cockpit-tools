@@ -34,8 +34,11 @@ unreadable archive or an unsupported storage contract stops publication before
 Desktop is closed. Other platforms retain the existing account-only switch.
 
 The archive fingerprint binds one preview to one installed application; it is
-not an admission allowlist. If the App changes after preview, refresh the
-preview against the new contract. Meaningful newly projected native fields
+not an admission allowlist. If the App changes before applying, refresh the preview. The dialog also
+approves a bounded bundled-update window during its own normal shutdown: wait
+for the selected Squirrel updater, capture a fresh compatible contract at
+settlement, revalidate account scope, then freeze the complete data plan. This
+final binding is separate from the immutable initial approval. Meaningful newly projected native fields
 outside the adapter's field inventory produce an affected-session issue rather
 than being silently dropped. Absent or empty optional additions do not require
 a new Cockpit release. Structural detection cannot prove arbitrary future
@@ -77,8 +80,16 @@ coordinator shares an operation lock with account/profile injection. Preview
 uses the identity index without repairing profiles or reading authentication
 stores. A unique approval token binds source/target identities, the saved namespace
 roster, profile roots, application path and archive fingerprint. A later preview
-cannot rebind an earlier token to a replacement application. Applying rebuilds
-the complete data plan after normal shutdown. Full archive fingerprints are
+cannot rebind an earlier token to a replacement application. Applying rebuilds the complete data plan after normal shutdown. The selected
+bundled ShipIt updater is not a metadata writer; it can be captured during this
+shutdown before the first quiet boundary. Its wait is bounded to 90 seconds,
+independently of the 15-second writer wait. One updater-induced default App
+relaunch can be closed normally after revalidating ownership and profile. An
+update timeout never reopens an App still being installed. The settled archive
+contract is captured before returning the shutdown receipt, checked against
+later replacement, and cannot be renewed during publication. Publication guards
+also reject a newly active selected updater; recovery remains metadata-only.
+Full archive fingerprints are
 checked before shutdown, after shutdown and at commit; anchored metadata
 witnesses are checked before each publication. A detected in-flight change
 aborts and conditionally recovers its own writes. Recovery does not depend on
@@ -88,7 +99,8 @@ Before the first publication and at commit, the engine hashes the input records
 and referenced transcripts. Per-write directory/file identity, size and timestamp
 witnesses prevent replacement or concurrent-write races without repeatedly
 hashing the entire transcript pool. Files are accessed through anchored,
-non-following directory handles. No process is force-killed.
+non-following directory handles. No process is force-killed. Process failures expose only a bounded error code,
+PID, role and executable basename; arguments, paths and account data are omitted.
 
 A write-ahead journal records preimages and expected published images. Required
 backups live in the central backup module's durable transaction-recovery area,

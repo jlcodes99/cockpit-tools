@@ -366,7 +366,7 @@ fn writer(p: &Process, all: &[Process]) -> bool {
     // survive the Desktop main process, but it is not a Code sidebar writer.
     // Keep an unknown or reparented host blocked rather than ignoring every
     // process inside Claude.app by basename alone.
-    if browser_owned_native_host(p, all) {
+    if browser_owned_native_host(p, all) || bundled_updater(p).is_some() {
         return false;
     }
     main_process(p) || cli_process(p) || {
@@ -376,6 +376,49 @@ fn writer(p: &Process, all: &[Process]) -> bool {
             || lower.ends_with("/contents/helpers/disclaimer"))
             && !lower.contains("chrome_crashpad_handler")
     }
+}
+
+fn bundled_updater(p: &Process) -> Option<&Path> {
+    let path = Path::new(&p.executable);
+    let suffix = Path::new("Contents/Frameworks/Squirrel.framework/Resources/ShipIt");
+    if !path.ends_with(suffix) {
+        return None;
+    }
+    let mut app = path;
+    for _ in suffix.components() {
+        app = app.parent()?;
+    }
+    (app.is_absolute() && app.extension().is_some_and(|extension| extension == "app"))
+        .then_some(app)
+}
+
+fn updater_for(p: &Process, app: &Path) -> bool {
+    bundled_updater(p) == Some(app)
+}
+
+fn process_error(code: &str, p: &Process) -> String {
+    let role = if main_process(p) {
+        "desktop-main"
+    } else if cli_process(p) {
+        "claude-cli"
+    } else if bundled_updater(p).is_some() {
+        "desktop-updater"
+    } else {
+        "desktop-helper"
+    };
+    let name = Path::new(&p.executable)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Claude");
+    serde_json::json!({"code":code,"processId":p.pid,"processRole":role,"processName":name})
+        .to_string()
+}
+
+pub(super) fn diagnostic_code(error: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(error)
+        .ok()
+        .and_then(|value| value.get("code")?.as_str().map(str::to_owned))
+        .unwrap_or_else(|| error.to_owned())
 }
 
 fn owned(worker: &Process, main: &Process, all: &[Process]) -> bool {
@@ -467,7 +510,7 @@ fn check_quiet(log_blocker: bool) -> Result<(), String> {
                 "Claude handoff blocked by active process"
             );
         }
-        return Err("CLAUDE_WRITER_RUNNING".into());
+        return Err(process_error("CLAUDE_WRITER_RUNNING", blocker));
     }
     Ok(())
 }
@@ -480,12 +523,29 @@ pub(super) fn assert_quiet_with_evidence() -> Result<(), String> {
     check_quiet(true)
 }
 
+fn publication_quiet(all: &[Process], app: &Path) -> Result<(), String> {
+    if let Some(writer) = all.iter().find(|p| writer(p, all)) {
+        return Err(process_error("CLAUDE_WRITER_RUNNING", writer));
+    }
+    if let Some(updater) = all.iter().find(|p| updater_for(p, app)) {
+        return Err(process_error("DESKTOP_CONTRACT_CHANGED", updater));
+    }
+    Ok(())
+}
+
+pub(super) fn assert_publication_quiet(app: &Path) -> Result<(), String> {
+    publication_quiet(&processes()?, app)
+}
+
 pub(super) fn wait_until_quiet(timeout: Duration) -> Result<(), String> {
     let deadline = Instant::now() + timeout;
     loop {
         match assert_quiet() {
             Ok(()) => return Ok(()),
-            Err(code) if code == "CLAUDE_WRITER_RUNNING" && Instant::now() < deadline => {
+            Err(code)
+                if diagnostic_code(&code) == "CLAUDE_WRITER_RUNNING"
+                    && Instant::now() < deadline =>
+            {
                 std::thread::sleep(Duration::from_millis(250));
             }
             Err(code) => return Err(code),
@@ -493,43 +553,212 @@ pub(super) fn wait_until_quiet(timeout: Duration) -> Result<(), String> {
     }
 }
 
-pub(super) fn quit_normally(app: &Path) -> Result<bool, String> {
-    let all = processes()?;
-    let running = can_quit(&all, app)?;
-    if running {
-        let main = all.iter().find(|p| main_process(p)).unwrap();
-        // Reject custom profiles without printing the command line or reading their stores.
-        let args = Command::new("/bin/ps")
-            .args(["-p", &main.pid.to_string(), "-o", "args="])
-            .output()
-            .map_err(|_| "PROCESS_INVENTORY_UNAVAILABLE")?;
-        if !args.status.success() {
-            return Err("PROCESS_INVENTORY_UNAVAILABLE".into());
-        }
-        let args = String::from_utf8_lossy(&args.stdout);
-        if args.contains("--user-data-dir") || args.contains("--profile-directory") {
-            return Err("DEFAULT_PROFILE_REQUIRED".into());
-        }
-        #[cfg(target_os = "macos")]
-        request_normal_quit(main, app)?;
+fn quit_validated_main(main: &Process, app: &Path) -> Result<(), String> {
+    // Reject custom profiles without printing the command line or reading their stores.
+    let args = Command::new("/bin/ps")
+        .args(["-p", &main.pid.to_string(), "-o", "args="])
+        .output()
+        .map_err(|_| "PROCESS_INVENTORY_UNAVAILABLE")?;
+    if !args.status.success() {
+        return Err("PROCESS_INVENTORY_UNAVAILABLE".into());
     }
-    let deadline = Instant::now() + Duration::from_secs(15);
-    loop {
-        let failure = match assert_quiet() {
-            Ok(()) => return Ok(running),
-            Err(code) if code == "CLAUDE_WRITER_RUNNING" => {
-                if Instant::now() >= deadline {
-                    Some(code)
-                } else {
-                    None
+    let args = String::from_utf8_lossy(&args.stdout);
+    if args.contains("--user-data-dir") || args.contains("--profile-directory") {
+        return Err("DEFAULT_PROFILE_REQUIRED".into());
+    }
+    #[cfg(target_os = "macos")]
+    request_normal_quit(main, app)?;
+    Ok(())
+}
+
+#[derive(Debug)]
+pub(super) struct ShutdownReceipt {
+    pub was_running: bool,
+    /// This operation observed a selected bundled updater before its first quiet
+    /// boundary, and waited until no selected updater remained. Not attribution of
+    /// every archive change to that process.
+    pub bundled_update_settled: bool,
+    pub settled_contract: Option<super::storage_contract::Contract>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ShutdownAction {
+    Updating,
+    Waiting,
+    QuitRelaunched(u32),
+    Ready,
+}
+
+struct ShutdownWait {
+    original_main: Option<(u32, i64)>,
+    initial_updaters: Vec<(u32, i64)>,
+    update_since: Option<Duration>,
+    waiting_since: Duration,
+    update_settled: bool,
+    requit: bool,
+}
+
+impl ShutdownWait {
+    fn new(all: &[Process], app: &Path) -> Self {
+        let initial_updaters: Vec<_> = all
+            .iter()
+            .filter(|p| updater_for(p, app))
+            .map(|p| (p.pid, p.started))
+            .collect();
+        let update_since = (!initial_updaters.is_empty()).then_some(Duration::ZERO);
+        Self {
+            original_main: all
+                .iter()
+                .find(|p| main_process(p))
+                .map(|p| (p.pid, p.started)),
+            initial_updaters,
+            waiting_since: Duration::ZERO,
+            update_since,
+            update_settled: false,
+            requit: false,
+        }
+    }
+
+    fn step(
+        &mut self,
+        all: &[Process],
+        app: &Path,
+        elapsed: Duration,
+    ) -> Result<ShutdownAction, String> {
+        if let Some(updater) = all.iter().find(|p| updater_for(p, app)) {
+            if self.initial_updaters.is_empty() {
+                // Capture the exact bundled updater while closing the initially
+                // observed Desktop, before the first quiet boundary. A closed
+                // App operation grants no late-capture window.
+                if self.original_main.is_none() || self.update_settled {
+                    return Err(process_error("DESKTOP_CONTRACT_CHANGED", updater));
+                }
+                self.initial_updaters.push((updater.pid, updater.started));
+            }
+            let update_since = *self.update_since.get_or_insert(elapsed);
+            if elapsed.saturating_sub(update_since) >= Duration::from_secs(90) {
+                return Err(process_error("DESKTOP_UPDATE_TIMEOUT", updater));
+            }
+            if let Some(original) = all
+                .iter()
+                .find(|p| Some((p.pid, p.started)) == self.original_main)
+            {
+                if elapsed >= Duration::from_secs(15) {
+                    return Err(process_error("CLAUDE_WRITER_RUNNING", original));
                 }
             }
+            return Ok(ShutdownAction::Updating);
+        }
+        if !self.initial_updaters.is_empty() && !self.update_settled {
+            self.update_settled = true;
+            self.waiting_since = elapsed;
+        }
+        if self.update_settled && !self.requit {
+            if let Some(main) = all.iter().find(|p| main_process(p)) {
+                let relaunched = self.original_main.map_or_else(
+                    || {
+                        self.initial_updaters
+                            .iter()
+                            .any(|updater| main.started >= updater.1)
+                    },
+                    |original| (main.pid, main.started) != original && main.started >= original.1,
+                );
+                if relaunched {
+                    // Squirrel can relaunch the same default App when updating.
+                    // One normal quit is allowed, with the same strict profile,
+                    // ownership and process-identity checks as the first quit.
+                    can_quit(all, app)?;
+                    self.requit = true;
+                    self.waiting_since = elapsed;
+                    return Ok(ShutdownAction::QuitRelaunched(main.pid));
+                }
+            }
+        }
+        let Some(blocker) = all.iter().find(|p| writer(p, all)) else {
+            return Ok(ShutdownAction::Ready);
+        };
+        if elapsed.saturating_sub(self.waiting_since) >= Duration::from_secs(15) {
+            return Err(process_error("CLAUDE_WRITER_RUNNING", blocker));
+        }
+        Ok(ShutdownAction::Waiting)
+    }
+}
+
+pub(super) fn quit_normally(app: &Path) -> Result<bool, String> {
+    quit_and_settle(app, false, &mut || {}).map(|receipt| receipt.was_running)
+}
+
+pub(super) fn quit_and_settle(
+    app: &Path,
+    bind_updated_storage: bool,
+    updating: &mut dyn FnMut(),
+) -> Result<ShutdownReceipt, String> {
+    let all = processes()?;
+    let running = can_quit(&all, app)?;
+    let mut waiting = ShutdownWait::new(&all, app);
+    if let Some(main) = all.iter().find(|p| main_process(p)) {
+        quit_validated_main(main, app)?;
+    }
+    let started = Instant::now();
+    let mut update_reported = false;
+    loop {
+        let observed = processes()?;
+        let result = waiting.step(&observed, app, started.elapsed());
+        let failure = match result {
+            Ok(ShutdownAction::Ready) => {
+                let settled_contract = if waiting.update_settled && bind_updated_storage {
+                    let binding = (|| {
+                        publication_quiet(&observed, app)?;
+                        let contract = super::storage_contract::inspect(app)?;
+                        assert_publication_quiet(app)?;
+                        contract.assert_unchanged()?;
+                        Ok::<_, String>(contract)
+                    })();
+                    match binding {
+                        Ok(contract) => Some(contract),
+                        Err(code) => {
+                            if running {
+                                let _ = reopen_if_closed(app);
+                            }
+                            return Err(code);
+                        }
+                    }
+                } else {
+                    None
+                };
+                return Ok(ShutdownReceipt {
+                    was_running: running,
+                    bundled_update_settled: waiting.update_settled,
+                    settled_contract,
+                });
+            }
+            Ok(ShutdownAction::Updating) => {
+                if !update_reported {
+                    updating();
+                    update_reported = true;
+                }
+                None
+            }
+            Ok(ShutdownAction::QuitRelaunched(pid)) => quit_validated_main(
+                observed
+                    .iter()
+                    .find(|p| p.pid == pid)
+                    .ok_or("PROCESS_INVENTORY_UNAVAILABLE")?,
+                app,
+            )
+            .err(),
+            Ok(ShutdownAction::Waiting) => None,
             Err(code) => Some(code),
         };
         if let Some(code) = failure {
-            // No handoff write has started. Restore the Desktop session when a
-            // post-quit safety check refuses to continue.
-            if running {
+            tracing::warn!(
+                code = diagnostic_code(&code),
+                diagnostics = code,
+                "Claude handoff lifecycle stopped before publication"
+            );
+            // Reopening during Squirrel installation interrupted the updater in
+            // the real failure. Leave it undisturbed until it finishes.
+            if running && !observed.iter().any(|p| updater_for(p, app)) {
                 let _ = reopen_if_closed(app);
             }
             return Err(code);
@@ -541,7 +770,8 @@ pub(super) fn quit_normally(app: &Path) -> Result<bool, String> {
 pub(super) fn reopen_if_closed(app: &Path) -> Result<bool, String> {
     // `open -a` can merely activate a still-exiting instance. Only launch a
     // replacement after the Desktop main process is actually absent.
-    if processes()?.iter().any(main_process) {
+    let observed = processes()?;
+    if observed.iter().any(main_process) || observed.iter().any(|p| updater_for(p, app)) {
         return Ok(false);
     }
     reopen(app)?;
@@ -549,6 +779,9 @@ pub(super) fn reopen_if_closed(app: &Path) -> Result<bool, String> {
 }
 
 pub(super) fn reopen(app: &Path) -> Result<(), String> {
+    if let Some(updater) = processes()?.iter().find(|p| updater_for(p, app)) {
+        return Err(process_error("DESKTOP_UPDATE_TIMEOUT", updater));
+    }
     let status = Command::new("/usr/bin/open")
         .arg("-a")
         .arg(app)
@@ -576,6 +809,187 @@ pub(super) fn reopen(app: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quit_triggered_late_updater_is_captured_before_first_quiet_boundary() {
+        let app = Path::new("/Applications/Claude.app");
+        let main = process(100, 1, 10, "/Applications/Claude.app/Contents/MacOS/Claude");
+        let updater = process(
+            200,
+            1,
+            20,
+            "/Applications/Claude.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt",
+        );
+        let mut wait = ShutdownWait::new(&[main.clone()], app);
+        assert_eq!(
+            wait.step(&[main], app, Duration::from_secs(1)),
+            Ok(ShutdownAction::Waiting)
+        );
+        assert_eq!(
+            wait.step(&[updater.clone()], app, Duration::from_secs(2)),
+            Ok(ShutdownAction::Updating)
+        );
+        assert_eq!(
+            wait.step(&[updater], app, Duration::from_secs(40)),
+            Ok(ShutdownAction::Updating)
+        );
+        assert_eq!(
+            wait.step(&[], app, Duration::from_secs(41)),
+            Ok(ShutdownAction::Ready)
+        );
+        assert!(wait.update_settled);
+    }
+
+    #[test]
+    fn configured_bundle_name_and_post_settlement_updater_use_distinct_guards() {
+        let app = Path::new("/Applications/Claude Preview.app");
+        let updater = process(200, 1, 10, "/Applications/Claude Preview.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt");
+        assert!(updater_for(&updater, app));
+        assert!(!updater_for(
+            &updater,
+            Path::new("/Applications/Claude.app")
+        ));
+        assert!(!writer(&updater, &[updater.clone()]));
+        assert_eq!(
+            diagnostic_code(&publication_quiet(&[updater], app).unwrap_err()),
+            "DESKTOP_CONTRACT_CHANGED"
+        );
+        assert!(publication_quiet(&[], app).is_ok());
+    }
+
+    #[test]
+    fn updater_is_not_a_sidebar_writer_but_still_requires_settlement() {
+        let app = Path::new("/Applications/Claude.app");
+        let main = process(100, 1, 10, "/Applications/Claude.app/Contents/MacOS/Claude");
+        let updater = process(
+            29011,
+            1,
+            9,
+            "/Applications/Claude.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt",
+        );
+        assert!(!writer(&updater, &[updater.clone()]));
+        let mut wait = ShutdownWait::new(&[main, updater.clone()], app);
+        for elapsed in [1, 15, 38] {
+            assert_eq!(
+                wait.step(&[updater.clone()], app, Duration::from_secs(elapsed)),
+                Ok(ShutdownAction::Updating)
+            );
+            assert!(!wait.update_settled);
+        }
+        assert_eq!(
+            wait.step(&[], app, Duration::from_secs(39)),
+            Ok(ShutdownAction::Ready)
+        );
+        assert!(wait.update_settled);
+        for executable in [
+            "/Applications/Claude.app/Contents/Helpers/ShipIt",
+            "/Applications/Claude.app/Contents/Frameworks/Unknown.framework/Resources/ShipIt",
+            "/Applications/Claude.app/Contents/Helpers/unknown-code-worker",
+        ] {
+            let unknown = process(200, 1, 9, executable);
+            assert!(writer(&unknown, &[unknown.clone()]));
+        }
+    }
+
+    #[test]
+    fn updater_timeout_is_specific_and_never_marks_shutdown_complete() {
+        let app = Path::new("/Applications/Claude.app");
+        let updater = process(
+            29011,
+            1,
+            9,
+            "/Applications/Claude.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt",
+        );
+        let mut wait = ShutdownWait::new(&[updater.clone()], app);
+        let error = wait
+            .step(&[updater], app, Duration::from_secs(90))
+            .unwrap_err();
+        let details: serde_json::Value = serde_json::from_str(&error).unwrap();
+        assert_eq!(details["code"], "DESKTOP_UPDATE_TIMEOUT");
+        assert_eq!(details["processId"], 29011);
+        assert_eq!(details["processRole"], "desktop-updater");
+        assert_eq!(details["processName"], "ShipIt");
+        assert!(!wait.update_settled);
+    }
+
+    #[test]
+    fn updater_relaunch_gets_one_validated_normal_quit_and_other_restarts_stay_blocked() {
+        let app = Path::new("/Applications/Claude.app");
+        let main = process(100, 1, 10, "/Applications/Claude.app/Contents/MacOS/Claude");
+        let updater = process(
+            200,
+            1,
+            9,
+            "/Applications/Claude.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt",
+        );
+        let relaunched = process(300, 1, 20, "/Applications/Claude.app/Contents/MacOS/Claude");
+        let mut wait = ShutdownWait::new(&[main.clone(), updater.clone()], app);
+        assert_eq!(
+            wait.step(&[updater], app, Duration::from_secs(38)),
+            Ok(ShutdownAction::Updating)
+        );
+        assert_eq!(
+            wait.step(&[relaunched.clone()], app, Duration::from_secs(39)),
+            Ok(ShutdownAction::QuitRelaunched(300))
+        );
+        assert_eq!(
+            wait.step(&[], app, Duration::from_secs(40)),
+            Ok(ShutdownAction::Ready)
+        );
+        let twice = process(400, 1, 30, &relaunched.executable);
+        let error = wait
+            .step(&[twice], app, Duration::from_secs(54))
+            .unwrap_err();
+        assert_eq!(diagnostic_code(&error), "CLAUDE_WRITER_RUNNING");
+        let mut ordinary = ShutdownWait::new(&[main], app);
+        let error = ordinary
+            .step(&[relaunched], app, Duration::from_secs(15))
+            .unwrap_err();
+        assert_eq!(diagnostic_code(&error), "CLAUDE_WRITER_RUNNING");
+        let mut unexpected = ShutdownWait::new(&[], app);
+        let updater = process(
+            500,
+            1,
+            31,
+            "/Applications/Claude.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt",
+        );
+        assert_eq!(
+            diagnostic_code(
+                &unexpected
+                    .step(&[updater], app, Duration::from_secs(1))
+                    .unwrap_err()
+            ),
+            "DESKTOP_CONTRACT_CHANGED"
+        );
+    }
+
+    #[test]
+    fn lingering_real_writer_has_safe_diagnostics_and_remains_blocked_after_update() {
+        let app = Path::new("/Applications/Claude.app");
+        let updater = process(
+            200,
+            1,
+            9,
+            "/Applications/Claude.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt",
+        );
+        let helper = process(300, 1, 20, "/Applications/Claude.app/Contents/Frameworks/Claude Helper.app/Contents/MacOS/Claude Helper");
+        let mut wait = ShutdownWait::new(&[updater], app);
+        assert_eq!(
+            wait.step(&[helper.clone()], app, Duration::from_secs(39)),
+            Ok(ShutdownAction::Waiting)
+        );
+        let error = wait
+            .step(&[helper], app, Duration::from_secs(54))
+            .unwrap_err();
+        assert_eq!(diagnostic_code(&error), "CLAUDE_WRITER_RUNNING");
+        let details: serde_json::Value = serde_json::from_str(&error).unwrap();
+        assert_eq!(details["processName"], "Claude Helper");
+        assert!(!error.contains("/Applications/"));
+        assert_eq!(
+            diagnostic_code("CLAUDE_WRITER_RUNNING"),
+            "CLAUDE_WRITER_RUNNING"
+        );
+    }
 
     #[test]
     fn login_identity_requires_fresh_success_and_rejects_logout_or_failed_reinit() {

@@ -7321,7 +7321,7 @@
       "title": "대화 인계",
       "description": "저장된 Claude Desktop 계정 사이에서 로컬 Code 대화를 복사합니다. 적용 전에 두 계정과 미리보기를 확인하세요.",
       "scopeTitle": "범위 및 안전",
-      "scope": "macOS의 Claude Desktop 기본 프로필과 로컬 Code 대화만 지원합니다. Chat, Cowork, 클라우드 기록, 사용자 지정 프로필은 제외됩니다. 인계는 로컬 Code 저장 형식의 호환성에 따라 결정됩니다. 형식을 확인할 수 없거나 호환되지 않으면 인계를 중단합니다.",
+      "scope": "macOS의 Claude Desktop 기본 프로필과 로컬 Code 대화만 지원합니다. Chat, Cowork, 클라우드 기록, 사용자 지정 프로필은 제외됩니다. 인계는 로컬 Code 저장 형식의 호환성에 따라 결정됩니다. 형식을 확인할 수 없거나 호환되지 않으면 인계를 중단합니다. 같은 인계 요청에서 Claude Desktop의 내장 업데이트를 기다리고 저장 형식의 호환성을 다시 확인한 뒤, 지원이 확인되면 같은 계정 간 인계를 계속할 수 있습니다. 복사가 시작된 후 앱이나 파일이 변경되면 인계가 중단되고 복구가 필요합니다.",
       "safety": "가져온 권한은 Ask(물어보기)로 시작합니다. 대화 본문은 바뀌지 않습니다. 계정을 전환하거나 프롬프트를 보내지 않습니다.",
       "version": "Claude Desktop 버전 {{version}}",
       "source": "원본 계정",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Desktop을 정상 종료하지 못했습니다. 작업을 마치거나 저장하고 Desktop을 직접 종료한 후 다시 미리 보세요.",
         "INDEPENDENT_CLI_RUNNING": "독립적인 Claude Code 프로세스가 실행 중입니다. 인계를 적용하거나 되돌리기 전에 종료하세요.",
         "CLAUDE_WRITER_RUNNING": "Claude 프로세스가 아직 대화를 기록하고 있을 수 있습니다. 종료될 때까지 기다린 후 다시 미리 보세요.",
+        "DESKTOP_UPDATE_TIMEOUT": "대기 시간 내에 Claude Desktop 업데이트가 완료되지 않았습니다. 인계는 적용되지 않았습니다. 업데이트가 완료된 후 다시 시도하세요.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Claude가 기록을 중단했는지 확인하지 못해 인계가 차단됐습니다. Claude를 종료한 후 다시 시도하세요.",
         "DESKTOP_REOPEN_FAILED": "인계는 저장됐지만 Desktop을 다시 열지 못했습니다. 준비되면 직접 여세요.",
         "RECOVERED_APP_CLOSED": "복구가 완료됐으며 Desktop은 닫힌 상태입니다. 준비되면 직접 여세요.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "대화 {{number}}",
       "preservedBranches": "추가 대화 분기 {{count}}개를 모두 보존합니다. 최신 분기는 원래 제목을 사용하고 나머지는 보존된 분기로 표시됩니다.",
       "elapsed": "{{seconds}}초 경과",
+      "processDetail": "차단 프로세스: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Desktop 메인 프로세스",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Desktop 도우미",
+        "desktop-updater": "Desktop 업데이트 프로그램"
+      },
       "progress": {
         "checking": "저장된 대화 확인 중",
+        "updating": "Claude Desktop 업데이트가 완료되면 인계를 계속합니다",
         "stopping": "Claude Desktop 정상 종료 중",
         "hashing": "대화 파일 내용 검증 중",
         "backup": "변경할 사이드바 기록 백업 중",

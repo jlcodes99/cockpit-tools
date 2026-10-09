@@ -22,6 +22,7 @@ const initialRun = { id: `run-${id(99)}`, state: 'applied', createdAt: 178980000
   source: { account: id(1), org: id(11) }, target: { account: id(2), org: id(12) }, backupDir: '/synthetic/backup' };
 const switchFlow = scenario.startsWith('switch');
 const continuityFlow = scenario.startsWith('switch-continuity');
+const updaterFlow = scenario.startsWith('switch-updater-');
 const verifiedSource = scenario === 'switch-continuity-verified-source';
 // Put the CLI row first and give it exactly the Desktop account/org identity.
 // Neither row order nor a legacy currentAccountId may substitute for auth mode.
@@ -85,6 +86,24 @@ const simulateProgress = async () => {
       run = { ...initialRun, ...continuityCounts, state: 'applying', lastError: 'POST_IMAGE_MISMATCH' };
       throw 'POST_IMAGE_MISMATCH';
     }
+  }
+};
+const simulateUpdater = async () => {
+  emitProgress({ stage: 'updating', completed: 0, total: 0 });
+  await delay(1000);
+  if (scenario === 'switch-updater-timeout') throw JSON.stringify({ code: 'DESKTOP_UPDATE_TIMEOUT',
+    processId: 4242, processRole: 'desktop-updater', processName: 'ShipIt' });
+  if (scenario === 'switch-updater-writer-blocked') throw JSON.stringify({ code: 'CLAUDE_WRITER_RUNNING',
+    processId: 4343, processRole: 'desktop-helper', processName: 'Claude Helper' });
+  if (scenario === 'switch-updater-late') {
+    emitProgress({ stage: 'checking', completed: 0, total: 0 });
+    await delay(180);
+    throw { message: `Error: ${JSON.stringify({ code: 'DESKTOP_CONTRACT_CHANGED',
+      processId: 4444, processRole: 'desktop-updater', processName: 'ShipIt' })}` };
+  }
+  for (const stage of ['checking', 'hashing', 'backup', 'writing', 'verifying', 'switching', 'confirming']) {
+    emitProgress({ stage, completed: 0, total: 0 });
+    await delay(180);
   }
 };
 Object.assign(window, {
@@ -172,7 +191,8 @@ Object.assign(window, { __TAURI_INTERNALS__: {
       if (args.fingerprint !== (contractScenario ? contractApproval : 'synthetic-plan') || args.sourceAccountId !== 'account-1' || args.targetAccountId !== 'account-2'
         || (switchFlow !== (command === 'claude_handoff_apply_and_switch'))) throw 'INVALID_FIXTURE_INPUT';
       applyAttempts += 1;
-      if (continuityFlow) await simulateProgress();
+      if (updaterFlow) await simulateUpdater();
+      else if (continuityFlow) await simulateProgress();
       else await delay(250);
       if (scenario === 'switch-contract-changed' && applyAttempts === 1) {
         throw JSON.stringify({ code: 'DESKTOP_CONTRACT_CHANGED', message: '/private/synthetic/storage account-private' });
@@ -182,7 +202,7 @@ Object.assign(window, { __TAURI_INTERNALS__: {
       if (scenario === 'stale') throw 'PREVIEW_CHANGED';
       run = { ...initialRun, ...(continuityFlow ? continuityCounts : {}) }; mutated = true;
       const uncertain = scenario.includes('fail') || scenario === 'switch-continuity-uncertain';
-      if (continuityFlow && !uncertain && !startWarning) emitProgress({ stage: 'complete', completed: 0, total: 0 });
+      if ((continuityFlow || updaterFlow) && !uncertain && !startWarning) emitProgress({ stage: 'complete', completed: 0, total: 0 });
       return { run, reopened: !uncertain && !startWarning, warning: startWarning ?? (uncertain ? 'ACCOUNT_SWITCH_UNCERTAIN' : null),
         ...(switchFlow ? { accountSwitched: !uncertain && !startWarning } : {}) };
     }

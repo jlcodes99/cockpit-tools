@@ -7321,7 +7321,7 @@
       "title": "Předat konverzace",
       "description": "Zkopírujte místní konverzace Code mezi dvěma uloženými účty Claude Desktop. Před použitím zkontrolujte oba účty a náhled.",
       "scopeTitle": "Rozsah a bezpečnost",
-      "scope": "Pouze macOS, výchozí profil Claude Desktop a místní konverzace Code. Chat, Cowork, historie v cloudu a vlastní profily nejsou zahrnuty. Předání se řídí kompatibilitou formátu místního úložiště Code; pokud formát nelze ověřit nebo není kompatibilní, předání se zastaví.",
+      "scope": "Pouze macOS, výchozí profil Claude Desktop a místní konverzace Code. Chat, Cowork, historie v cloudu a vlastní profily nejsou zahrnuty. Předání se řídí kompatibilitou formátu místního úložiště Code; pokud formát nelze ověřit nebo není kompatibilní, předání se zastaví. Stejné předání může počkat na integrovanou aktualizaci Claude Desktop, znovu ověřit kompatibilitu úložiště a při potvrzené podpoře pokračovat mezi stejnými účty. Změny aplikace nebo souborů po zahájení kopírování předání zastaví a vyžadují obnovu.",
       "safety": "Importovaná oprávnění začínají v režimu Ask (zeptat se). Obsah konverzací se nemění. Předání nepřepíná účet ani neodesílá zadání.",
       "version": "Claude Desktop · verze {{version}}",
       "source": "Zdrojový účet",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Desktop se nepodařilo běžně ukončit. Dokončete nebo uložte práci, zavřete Desktop ručně a vytvořte nový náhled.",
         "INDEPENDENT_CLI_RUNNING": "Běží samostatný proces Claude Code. Ukončete jej před použitím nebo vrácením předání.",
         "CLAUDE_WRITER_RUNNING": "Proces Claude možná stále zapisuje konverzace. Počkejte na jeho ukončení a vytvořte nový náhled.",
+        "DESKTOP_UPDATE_TIMEOUT": "Aktualizace Claude Desktop nebyla dokončena během čekací lhůty. Žádné předání nebylo použito. Zkuste to znovu po dokončení aktualizace.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit nemohl ověřit, že Claude přestal zapisovat. Předání bylo zablokováno. Ukončete Claude a zkuste to znovu.",
         "DESKTOP_REOPEN_FAILED": "Předání bylo uloženo, ale Desktop se nepodařilo otevřít. Až budete připraveni, otevřete jej ručně.",
         "RECOVERED_APP_CLOSED": "Obnova dokončena; Desktop zůstává zavřený. Až budete připraveni, otevřete jej ručně.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "Konverzace {{number}}",
       "preservedBranches": "Zachová se všech {{count}} dalších větví konverzací. Nejnovější používá původní název; ostatní jsou označeny jako zachované větve.",
       "elapsed": "Uplynulo {{seconds}} sekund",
+      "processDetail": "Blokující proces: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Hlavní proces Desktopu",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Pomocný proces Desktopu",
+        "desktop-updater": "Aktualizátor Desktopu"
+      },
       "progress": {
         "checking": "Kontrola uložených konverzací",
+        "updating": "Čekání na dokončení aktualizace Claude Desktop, poté bude předání pokračovat",
         "stopping": "Řádné zavírání Claude Desktop",
         "hashing": "Ověřování souborů konverzací",
         "backup": "Zálohování dotčených záznamů postranního panelu",

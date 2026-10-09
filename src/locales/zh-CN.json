@@ -7321,7 +7321,7 @@
       "title": "交接对话",
       "description": "将本地 Code 对话从一个已保存的 Claude Desktop 账号复制到另一个账号。应用前请核对账号和预览。",
       "scopeTitle": "范围与安全说明",
-      "scope": "仅支持 macOS 默认 Claude Desktop 配置中的本地 Code 对话，不包含 Chat、Cowork、云端历史或自定义配置。依据本地 Code 存储格式是否兼容判定；格式无法确认或不兼容时停止交接。",
+      "scope": "仅支持 macOS 默认 Claude Desktop 配置中的本地 Code 对话，不包含 Chat、Cowork、云端历史或自定义配置。依据本地 Code 存储格式是否兼容判定；格式无法确认或不兼容时停止交接。 同一次交接可等待 Claude Desktop 内置更新；更新完成后会重新检查兼容性，确认支持后继续原账号间的交接。开始复制后若应用程序或文件变更，仍会停止交接并要求恢复。",
       "safety": "导入的权限设为 Ask（每次询问）。对话正文保持不变。交接不会切换登录账号或发送提示词。",
       "version": "Claude Desktop 版本 {{version}}",
       "source": "来源账号",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Claude Desktop 无法正常退出。请完成或保存当前工作，手动退出 Desktop 后重新预览。",
         "INDEPENDENT_CLI_RUNNING": "独立的 Claude Code 进程正在运行，请结束后再应用或回退交接。",
         "CLAUDE_WRITER_RUNNING": "Claude 进程可能仍在写入对话，请等待停止后重新预览。",
+        "DESKTOP_UPDATE_TIMEOUT": "Claude Desktop 更新未能在等待期限内完成，尚未应用任何交接。请等更新完成后再重试。",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit 无法确认 Claude 已停止写入，已阻止交接。请退出 Claude 后重试。",
         "DESKTOP_REOPEN_FAILED": "交接已保存，但 Claude Desktop 无法重新打开。请在准备好后手动打开。",
         "RECOVERED_APP_CLOSED": "恢复已完成，Desktop 保持关闭。请在准备好后手动打开。",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "对话 {{number}}",
       "preservedBranches": "保留全部 {{count}} 个额外对话分支。最新分支使用原始标题，其他分支标为“保留分支”。",
       "elapsed": "已运行 {{seconds}} 秒",
+      "processDetail": "阻挡进程：{{name}}（PID {{pid}}，{{role}}）",
+      "processRoles": {
+        "desktop-main": "Desktop 主进程",
+        "claude-cli": "Claude 命令行工具",
+        "desktop-helper": "Desktop 辅助进程",
+        "desktop-updater": "Desktop 更新程序"
+      },
       "progress": {
         "checking": "检查已保存的对话",
+        "updating": "正在完成 Claude Desktop 更新；完成后会继续交接",
         "stopping": "正常退出 Claude Desktop",
         "hashing": "核对对话文件内容",
         "backup": "备份将修改的侧边栏记录",

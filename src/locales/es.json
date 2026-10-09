@@ -7321,7 +7321,7 @@
       "title": "Transferir conversaciones",
       "description": "Copia conversaciones locales de Code entre dos cuentas guardadas de Claude Desktop. Revisa las cuentas y la vista previa antes de aplicar.",
       "scopeTitle": "Alcance y seguridad",
-      "scope": "Solo macOS, el perfil predeterminado de Claude Desktop y conversaciones locales de Code. No incluye Chat, Cowork, historial en la nube ni perfiles personalizados. La transferencia depende de la compatibilidad del formato del almacenamiento local de Code; se detiene si el formato no se puede verificar o es incompatible.",
+      "scope": "Solo macOS, el perfil predeterminado de Claude Desktop y conversaciones locales de Code. No incluye Chat, Cowork, historial en la nube ni perfiles personalizados. La transferencia depende de la compatibilidad del formato del almacenamiento local de Code; se detiene si el formato no se puede verificar o es incompatible. La misma transferencia puede esperar la actualización integrada de Claude Desktop, volver a comprobar la compatibilidad del almacenamiento y continuar entre las mismas cuentas si se confirma el soporte. Los cambios en la aplicación o los archivos después de empezar a copiar siguen deteniendo la transferencia y requieren recuperación.",
       "safety": "Los permisos importados se establecen en Ask (preguntar). El contenido de las conversaciones no cambia. No se cambia de cuenta ni se envían instrucciones.",
       "version": "Claude Desktop · versión {{version}}",
       "source": "Cuenta de origen",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Desktop no pudo cerrarse normalmente. Termina o guarda tu trabajo, cierra Desktop manualmente y vuelve a generar la vista previa.",
         "INDEPENDENT_CLI_RUNNING": "Hay un proceso independiente de Claude Code en ejecución. Finalízalo antes de aplicar o revertir una transferencia.",
         "CLAUDE_WRITER_RUNNING": "Un proceso de Claude podría seguir escribiendo conversaciones. Espera a que se detenga y genera otra vista previa.",
+        "DESKTOP_UPDATE_TIMEOUT": "La actualización de Claude Desktop no terminó dentro del plazo de espera. No se aplicó ninguna transferencia. Reintenta cuando termine la actualización.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit no pudo comprobar que Claude dejó de escribir. La transferencia se bloqueó; cierra Claude y reintenta.",
         "DESKTOP_REOPEN_FAILED": "La transferencia se guardó, pero Desktop no pudo volver a abrirse. Ábrelo manualmente cuando quieras.",
         "RECOVERED_APP_CLOSED": "Recuperación completada; Desktop queda cerrado. Ábrelo manualmente cuando quieras.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "Conversación {{number}}",
       "preservedBranches": "Se conservan las {{count}} ramas adicionales de conversación. La más reciente usa el título original; las demás se identifican como ramas conservadas.",
       "elapsed": "Han transcurrido {{seconds}} segundos",
+      "processDetail": "Proceso que bloquea: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Proceso principal de Desktop",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Proceso auxiliar de Desktop",
+        "desktop-updater": "Actualizador de Desktop"
+      },
       "progress": {
         "checking": "Comprobando las conversaciones guardadas",
+        "updating": "Esperando a que termine la actualización de Claude Desktop para continuar la transferencia",
         "stopping": "Cerrando Claude Desktop de forma normal",
         "hashing": "Verificando los archivos de conversación",
         "backup": "Creando una copia de seguridad de los registros afectados de la barra lateral",

@@ -152,9 +152,47 @@ fn guard_call(guard: &mut dyn FnMut() -> Result<()>) -> Result<()> {
         if safe_code(&code) {
             code
         } else {
-            "GUARD_FAILED".into()
+            public_process_diagnostic(&code).unwrap_or_else(|| "GUARD_FAILED".into())
         }
     })
+}
+
+fn public_process_diagnostic(error: &str) -> Option<String> {
+    if error.len() > 1024 {
+        return None;
+    }
+    let value: Value = serde_json::from_str(error).ok()?;
+    let code = value.get("code")?.as_str()?;
+    if ![
+        "CLAUDE_WRITER_RUNNING",
+        "DESKTOP_UPDATE_TIMEOUT",
+        "DESKTOP_CONTRACT_CHANGED",
+    ]
+    .contains(&code)
+    {
+        return None;
+    }
+    let pid = value.get("processId")?.as_u64()?;
+    let role = value.get("processRole")?.as_str()?;
+    let name = value.get("processName")?.as_str()?;
+    if pid == 0
+        || pid > u32::MAX as u64
+        || ![
+            "desktop-main",
+            "desktop-helper",
+            "desktop-updater",
+            "claude-cli",
+        ]
+        .contains(&role)
+        || name.is_empty()
+        || name.len() > 128
+        || !name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b" ._()-".contains(&c))
+    {
+        return None;
+    }
+    Some(json!({"code":code,"processId":pid,"processRole":role,"processName":name}).to_string())
 }
 
 fn guard_call_quick(

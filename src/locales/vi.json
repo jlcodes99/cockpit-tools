@@ -7321,7 +7321,7 @@
       "title": "Bàn giao cuộc trò chuyện",
       "description": "Sao chép các cuộc trò chuyện Code cục bộ giữa hai tài khoản Claude Desktop đã lưu. Kiểm tra cặp tài khoản và bản xem trước trước khi áp dụng.",
       "scopeTitle": "Phạm vi và an toàn",
-      "scope": "Chỉ hỗ trợ macOS, hồ sơ mặc định của Claude Desktop và cuộc trò chuyện Code cục bộ. Không gồm Chat, Cowork, lịch sử đám mây hay hồ sơ tùy chỉnh. Bàn giao được quyết định dựa trên tính tương thích của định dạng lưu trữ Code cục bộ; quá trình sẽ dừng nếu không thể xác minh định dạng hoặc định dạng không tương thích.",
+      "scope": "Chỉ hỗ trợ macOS, hồ sơ mặc định của Claude Desktop và cuộc trò chuyện Code cục bộ. Không gồm Chat, Cowork, lịch sử đám mây hay hồ sơ tùy chỉnh. Bàn giao được quyết định dựa trên tính tương thích của định dạng lưu trữ Code cục bộ; quá trình sẽ dừng nếu không thể xác minh định dạng hoặc định dạng không tương thích. Cùng yêu cầu bàn giao có thể chờ bản cập nhật tích hợp của Claude Desktop, kiểm tra lại tính tương thích của lưu trữ rồi tiếp tục giữa các tài khoản ban đầu nếu xác nhận hỗ trợ. Thay đổi ứng dụng hoặc tệp sau khi bắt đầu sao chép vẫn dừng bàn giao và yêu cầu khôi phục.",
       "safety": "Quyền được nhập bắt đầu ở chế độ Ask (hỏi). Nội dung cuộc trò chuyện giữ nguyên. Bàn giao không đổi tài khoản hoặc gửi lời nhắc.",
       "version": "Claude Desktop · phiên bản {{version}}",
       "source": "Tài khoản nguồn",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Desktop không thể thoát bình thường. Hoàn tất hoặc lưu công việc, tự đóng Desktop rồi xem trước lại.",
         "INDEPENDENT_CLI_RUNNING": "Một tiến trình Claude Code độc lập đang chạy. Dừng tiến trình trước khi áp dụng hoặc hoàn tác bàn giao.",
         "CLAUDE_WRITER_RUNNING": "Một tiến trình Claude có thể vẫn đang ghi cuộc trò chuyện. Chờ tiến trình dừng rồi xem trước lại.",
+        "DESKTOP_UPDATE_TIMEOUT": "Claude Desktop chưa cập nhật xong trong thời gian chờ. Chưa áp dụng bàn giao nào. Hãy thử lại sau khi cập nhật hoàn tất.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit không thể xác nhận Claude đã ngừng ghi. Bàn giao bị chặn; thoát Claude rồi thử lại.",
         "DESKTOP_REOPEN_FAILED": "Bàn giao đã được lưu nhưng Desktop không mở lại được. Hãy mở thủ công khi sẵn sàng.",
         "RECOVERED_APP_CLOSED": "Khôi phục hoàn tất; Desktop vẫn đóng. Hãy mở thủ công khi sẵn sàng.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "Cuộc trò chuyện {{number}}",
       "preservedBranches": "Giữ lại toàn bộ {{count}} nhánh trò chuyện bổ sung. Nhánh mới nhất dùng tiêu đề gốc; các nhánh khác được ghi là nhánh được bảo tồn.",
       "elapsed": "Đã chạy {{seconds}} giây",
+      "processDetail": "Tiến trình chặn: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Tiến trình Desktop chính",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Tiến trình hỗ trợ Desktop",
+        "desktop-updater": "Trình cập nhật Desktop"
+      },
       "progress": {
         "checking": "Đang kiểm tra các cuộc trò chuyện đã lưu",
+        "updating": "Đang chờ Claude Desktop cập nhật xong, sau đó sẽ tiếp tục bàn giao",
         "stopping": "Đang đóng Claude Desktop theo cách thông thường",
         "hashing": "Đang xác minh các tệp trò chuyện",
         "backup": "Đang sao lưu các bản ghi thanh bên bị ảnh hưởng",

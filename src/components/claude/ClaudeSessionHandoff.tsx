@@ -10,6 +10,8 @@ import {
   canApplyClaudeHandoffPreview,
   canRollbackClaudeHandoff,
   getClaudeHandoffErrorCode,
+  getClaudeHandoffProcessDiagnostic,
+  type ClaudeHandoffProcessDiagnostic,
   getClaudeHandoffRunAction,
   type ClaudeHandoffIdentity,
   type ClaudeHandoffMutationResult,
@@ -58,6 +60,7 @@ export function ClaudeSessionHandoff({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [autoPreviewPaused, setAutoPreviewPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorProcess, setErrorProcess] = useState<ClaudeHandoffProcessDiagnostic | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<handoffService.ClaudeHandoffProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -245,6 +248,7 @@ export function ClaudeSessionHandoff({
     setAutoPreviewPaused(false);
     setResult(null);
     setError(null);
+    setErrorProcess(null);
     setOpen(true);
     void loadStatus(choosingSwitch ? undefined : currentAccountId, choosingSwitch ? switchTarget : undefined);
   };
@@ -263,6 +267,7 @@ export function ClaudeSessionHandoff({
     setProgress({ stage: 'switching', completed: 0, total: 0 });
     busyCallback.current?.(true);
     setError(null);
+    setErrorProcess(null);
     try {
       if (await onSwitchAccount(targetAccountId)) {
         openRef.current = false;
@@ -287,6 +292,7 @@ export function ClaudeSessionHandoff({
     setPreviewLoading(false);
     setAutoPreviewPaused(false);
     setError(null);
+    setErrorProcess(null);
     if (side === 'source') setSourceAccountId(id);
     else setTargetAccountId(id);
     // An option click unmounts the portal; restore focus to its owning control.
@@ -342,6 +348,7 @@ export function ClaudeSessionHandoff({
     setPreviewLoading(false);
     setAutoPreviewPaused(false);
     setError(null);
+    setErrorProcess(null);
     void loadStatus();
   };
 
@@ -350,12 +357,16 @@ export function ClaudeSessionHandoff({
     const request = ++previewGeneration.current;
     setPreview(null);
     setError(null);
+    setErrorProcess(null);
     setPreviewLoading(true);
     try {
       const next = await handoffService.previewClaudeHandoff(pair);
       if (mountedRef.current && openRef.current && request === previewGeneration.current) setPreview(next);
     } catch (failure) {
-      if (mountedRef.current && openRef.current && request === previewGeneration.current) setError(explainError(failure));
+      if (mountedRef.current && openRef.current && request === previewGeneration.current) {
+        setError(explainError(failure));
+        setErrorProcess(getClaudeHandoffProcessDiagnostic(failure));
+      }
     } finally {
       if (mountedRef.current && openRef.current && request === previewGeneration.current) setPreviewLoading(false);
     }
@@ -375,6 +386,7 @@ export function ClaudeSessionHandoff({
       .catch((failure) => {
         if (mountedRef.current && openRef.current && request === previewGeneration.current) {
           const code = getClaudeHandoffErrorCode(failure);
+          setErrorProcess(getClaudeHandoffProcessDiagnostic(failure));
           setError(t(`claude.handoff.errors.${code ?? 'UNKNOWN'}`, {
             defaultValue: t('claude.handoff.errors.UNKNOWN'),
           }));
@@ -400,6 +412,7 @@ export function ClaudeSessionHandoff({
     setProgress({ stage: run ? 'recovering' : 'checking', completed: 0, total: 0 });
     busyCallback.current?.(true);
     setError(null);
+    setErrorProcess(null);
     const confirmedPair = run ? `${labelForIdentity(run.source)} → ${labelForIdentity(run.target)}` : pairLabel;
     let attemptedMutation = false;
     try {
@@ -444,6 +457,7 @@ export function ClaudeSessionHandoff({
       if (!mountedRef.current) return;
       setPreview(null);
       setError(explainError(failure));
+      setErrorProcess(getClaudeHandoffProcessDiagnostic(failure));
       // A partially completed operation invalidates the old run inventory.
       // If refresh also fails, require a fresh status instead of showing success.
       if (attemptedMutation) setStatus(null);
@@ -555,6 +569,10 @@ export function ClaudeSessionHandoff({
               </>}
               {needsRecovery && <p role="alert" className="claude-handoff-notice">{t('claude.handoff.errors.RECOVERY_REQUIRED')}</p>}
               {error && <p role="alert" className="claude-handoff-notice" data-testid="claude-handoff-error">{error}</p>}
+              {error && errorProcess && <p className="claude-handoff-hint" data-testid="claude-handoff-process-detail">
+                {t('claude.handoff.processDetail', { name: errorProcess.processName, pid: errorProcess.processId,
+                  role: t(`claude.handoff.processRoles.${errorProcess.processRole}`) })}
+              </p>}
               {previewLoading && <p role="status">{t('claude.handoff.previewLoading')}</p>}
               {preview && (
                 <section className="claude-handoff-preview" data-testid="claude-handoff-preview" aria-label={t('claude.handoff.previewTitle')}>

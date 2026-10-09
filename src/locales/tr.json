@@ -7321,7 +7321,7 @@
       "title": "Görüşmeleri devret",
       "description": "Yerel Code görüşmelerini kayıtlı iki Claude Desktop hesabı arasında kopyalayın. Uygulamadan önce hesap çiftini ve önizlemeyi kontrol edin.",
       "scopeTitle": "Kapsam ve güvenlik",
-      "scope": "Yalnızca macOS, varsayılan Claude Desktop profili ve yerel Code görüşmeleri desteklenir. Chat, Cowork, bulut geçmişi ve özel profiller kapsam dışıdır. Devir, yerel Code depolama biçiminin uyumluluğuna göre belirlenir; biçim doğrulanamıyorsa veya uyumsuzsa devir durdurulur.",
+      "scope": "Yalnızca macOS, varsayılan Claude Desktop profili ve yerel Code görüşmeleri desteklenir. Chat, Cowork, bulut geçmişi ve özel profiller kapsam dışıdır. Devir, yerel Code depolama biçiminin uyumluluğuna göre belirlenir; biçim doğrulanamıyorsa veya uyumsuzsa devir durdurulur. Aynı devir, Claude Desktop’ın yerleşik güncellemesini bekleyebilir, depolama uyumluluğunu yeniden denetleyebilir ve destek doğrulanırsa aynı hesaplar arasında devam edebilir. Kopyalama başladıktan sonra uygulama veya dosya değişiklikleri devri yine durdurur ve kurtarma gerektirir.",
       "safety": "İçe aktarılan izinler Ask (sor) ile başlar. Görüşme içeriği değişmez. Devir, hesabı değiştirmez ve istem göndermez.",
       "version": "Claude Desktop · sürüm {{version}}",
       "source": "Kaynak hesap",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Desktop normal şekilde kapanamadı. Çalışmanızı bitirin veya kaydedin, Desktop'ı elle kapatıp yeniden önizleyin.",
         "INDEPENDENT_CLI_RUNNING": "Bağımsız bir Claude Code işlemi çalışıyor. Devri uygulamadan veya geri almadan önce durdurun.",
         "CLAUDE_WRITER_RUNNING": "Bir Claude işlemi hâlâ görüşme yazıyor olabilir. Durmasını bekleyip yeniden önizleyin.",
+        "DESKTOP_UPDATE_TIMEOUT": "Claude Desktop güncellemesi bekleme süresi içinde tamamlanmadı. Hiçbir devir uygulanmadı. Güncelleme tamamlandıktan sonra yeniden deneyin.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit, Claude'un yazmayı bıraktığını doğrulayamadı. Devir engellendi; Claude'u kapatıp yeniden deneyin.",
         "DESKTOP_REOPEN_FAILED": "Devir kaydedildi ancak Desktop yeniden açılamadı. Hazır olduğunuzda elle açın.",
         "RECOVERED_APP_CLOSED": "Kurtarma tamamlandı; Desktop kapalı kaldı. Hazır olduğunuzda elle açın.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "Görüşme {{number}}",
       "preservedBranches": "Ek {{count}} konuşma dalının tümü korunur. En güncel dal özgün başlığı kullanır; diğerleri korunmuş dal olarak işaretlenir.",
       "elapsed": "{{seconds}} saniye geçti",
+      "processDetail": "Engelleyen süreç: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Desktop ana süreci",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Desktop yardımcı süreci",
+        "desktop-updater": "Desktop güncelleyicisi"
+      },
       "progress": {
         "checking": "Kaydedilmiş konuşmalar denetleniyor",
+        "updating": "Claude Desktop güncellemesinin tamamlanması bekleniyor, ardından devir devam edecek",
         "stopping": "Claude Desktop normal şekilde kapatılıyor",
         "hashing": "Konuşma dosyaları doğrulanıyor",
         "backup": "Etkilenen kenar çubuğu kayıtları yedekleniyor",

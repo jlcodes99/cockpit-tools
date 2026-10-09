@@ -39,6 +39,10 @@ pub(super) struct Contract {
 }
 
 impl Contract {
+    pub(super) fn belongs_to_app(&self, app: &Path) -> bool {
+        self.archive == app.join("Contents/Resources/app.asar")
+    }
+
     /// Reopen through no-follow directory anchors, then hash the entire archive.
     pub(super) fn assert_unchanged(&self) -> Result<()> {
         let (mut file, before) = open_archive(&self.archive).map_err(|_| CHANGED)?;
@@ -2090,6 +2094,17 @@ fn detect(bytes: &[u8]) -> Result<BTreeSet<String>> {
 }
 
 #[cfg(test)]
+pub(super) fn synthetic_archive_for_test(extra_projection: &str) -> Vec<u8> {
+    tests::fixture(
+        tests::MAIN,
+        &tests::PROJECTION.replace(
+            "title:state.title",
+            &format!("title:state.title{extra_projection}"),
+        ),
+    )
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     fn asar(files: &[(&str, &str)]) -> Vec<u8> {
@@ -2119,7 +2134,7 @@ mod tests {
         out.extend(data);
         out
     }
-    const MAIN: &str = r#"
+    pub(super) const MAIN: &str = r#"
 const p=require('node:path'), f=require('node:fs'), electron=require('electron'), x=require('./projection.js');
 class Manager {
  constructor(){this.userDataPath=electron.app.getPath('userData');this.baseDir='claude-code-sessions';}
@@ -2134,12 +2149,12 @@ class Manager {
 }
 new Manager();
 "#;
-    const PROJECTION: &str = r#"
+    pub(super) const PROJECTION: &str = r#"
 function persist(state){return {sessionId:state.sessionId,cliSessionId:state.cliSessionId,cwd:state.cwd,title:state.title};}
 function load(raw){return {sessionId:raw.sessionId,cliSessionId:raw.cliSessionId,cwd:raw.cwd};}
 exports.persist=persist;exports.load=load;
 "#;
-    fn fixture(main: &str, projection: &str) -> Vec<u8> {
+    pub(super) fn fixture(main: &str, projection: &str) -> Vec<u8> {
         asar(&[
             ("package.json", r#"{"main":"entry.js"}"#),
             ("entry.js", main),

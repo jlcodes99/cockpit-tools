@@ -7321,7 +7321,7 @@
       "title": "Hand off conversations",
       "description": "Copy local Code conversations from one saved Claude Desktop account to another. Review the account pair and preview before applying.",
       "scopeTitle": "Scope and safety",
-      "scope": "macOS only, using the default Claude Desktop profile and local Code conversations. Chat, Cowork, cloud history and custom profiles are outside this handoff. Handoff is determined by compatibility with the local Code storage format; it stops if that format cannot be verified or is incompatible.",
+      "scope": "macOS only, using the default Claude Desktop profile and local Code conversations. Chat, Cowork, cloud history and custom profiles are outside this handoff. Handoff is determined by compatibility with the local Code storage format; it stops if that format cannot be verified or is incompatible. The same handoff can wait for Claude Desktop's bundled update, recheck storage compatibility, then continue between the same accounts if supported. App or file changes after copying starts still stop the handoff and require recovery.",
       "safety": "Imported permissions start at Ask. Transcript content stays unchanged. Handoff does not switch the signed-in account or send prompts.",
       "version": "Claude Desktop {{version}}",
       "source": "Source account",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Claude Desktop could not quit normally. Finish or save active work, quit Desktop yourself, then preview again.",
         "INDEPENDENT_CLI_RUNNING": "An independent Claude Code process is running. Finish it before applying or rolling back a handoff.",
         "CLAUDE_WRITER_RUNNING": "A Claude process may still be writing conversations. Wait for it to stop, then preview again.",
+        "DESKTOP_UPDATE_TIMEOUT": "Claude Desktop's update did not finish within the wait period. No handoff was applied. Retry after the updater finishes.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit could not verify that Claude has stopped writing. Handoff has been blocked; try again after quitting Claude.",
         "DESKTOP_REOPEN_FAILED": "The handoff was saved, but Claude Desktop could not reopen. Open it manually when ready.",
         "RECOVERED_APP_CLOSED": "Recovery completed with Desktop left closed. Open it manually when ready.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "Conversation {{number}}",
       "preservedBranches": "Keep all {{count}} additional conversation branches. The latest branch uses the original title; others are labeled as preserved branches.",
       "elapsed": "{{seconds}} seconds elapsed",
+      "processDetail": "Blocking process: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Desktop main process",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Desktop helper",
+        "desktop-updater": "Desktop updater"
+      },
       "progress": {
         "checking": "Checking saved conversations",
+        "updating": "Waiting for Claude Desktop's update to finish, then continuing the handoff",
         "stopping": "Closing Claude Desktop normally",
         "hashing": "Verifying conversation files",
         "backup": "Backing up affected sidebar records",

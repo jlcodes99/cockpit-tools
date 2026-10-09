@@ -7321,7 +7321,7 @@
       "title": "Unterhaltungen übergeben",
       "description": "Lokale Code-Unterhaltungen zwischen gespeicherten Claude-Desktop-Konten kopieren. Prüfen Sie vor dem Anwenden die Konten und die Vorschau.",
       "scopeTitle": "Umfang und Sicherheit",
-      "scope": "Nur für macOS, das Standardprofil von Claude Desktop und lokale Code-Unterhaltungen. Chat, Cowork, Cloud-Verläufe und eigene Profile sind ausgeschlossen. Die Übergabe richtet sich nach der Kompatibilität des lokalen Code-Speicherformats; sie wird gestoppt, wenn das Format nicht geprüft werden kann oder inkompatibel ist.",
+      "scope": "Nur für macOS, das Standardprofil von Claude Desktop und lokale Code-Unterhaltungen. Chat, Cowork, Cloud-Verläufe und eigene Profile sind ausgeschlossen. Die Übergabe richtet sich nach der Kompatibilität des lokalen Code-Speicherformats; sie wird gestoppt, wenn das Format nicht geprüft werden kann oder inkompatibel ist. Dieselbe Übergabe kann auf das integrierte Claude-Desktop-Update warten, die Speicherkompatibilität erneut prüfen und bei bestätigter Unterstützung zwischen denselben Konten fortfahren. Änderungen an App oder Dateien nach Beginn des Kopierens stoppen die Übergabe weiterhin und erfordern eine Wiederherstellung.",
       "safety": "Importierte Berechtigungen stehen auf Ask (nachfragen). Gesprächsinhalte bleiben unverändert. Die Übergabe wechselt kein Konto und sendet keine Prompts.",
       "version": "Claude Desktop · Version {{version}}",
       "source": "Quellkonto",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Desktop konnte nicht regulär beendet werden. Speichern oder beenden Sie laufende Arbeit, schließen Sie Desktop selbst und erstellen Sie eine neue Vorschau.",
         "INDEPENDENT_CLI_RUNNING": "Ein unabhängiger Claude-Code-Prozess läuft. Beenden Sie ihn vor dem Anwenden oder Rückgängigmachen.",
         "CLAUDE_WRITER_RUNNING": "Ein Claude-Prozess schreibt möglicherweise noch Unterhaltungen. Warten Sie auf sein Ende und erstellen Sie eine neue Vorschau.",
+        "DESKTOP_UPDATE_TIMEOUT": "Das Claude-Desktop-Update wurde innerhalb der Wartezeit nicht abgeschlossen. Es wurde keine Übergabe durchgeführt. Versuchen Sie es nach Abschluss des Updates erneut.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit konnte nicht bestätigen, dass Claude nicht mehr schreibt. Die Übergabe wurde blockiert. Beenden Sie Claude und versuchen Sie es erneut.",
         "DESKTOP_REOPEN_FAILED": "Die Übergabe wurde gespeichert, Desktop konnte aber nicht geöffnet werden. Öffnen Sie es bei Bedarf manuell.",
         "RECOVERED_APP_CLOSED": "Wiederherstellung abgeschlossen; Desktop bleibt geschlossen. Öffnen Sie es bei Bedarf manuell.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "Unterhaltung {{number}}",
       "preservedBranches": "Alle {{count}} zusätzlichen Gesprächszweige bleiben erhalten. Der neueste Zweig verwendet den ursprünglichen Titel; die anderen werden als erhaltene Zweige gekennzeichnet.",
       "elapsed": "{{seconds}} Sekunden vergangen",
+      "processDetail": "Blockierender Prozess: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Desktop-Hauptprozess",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Desktop-Hilfsprozess",
+        "desktop-updater": "Desktop-Updater"
+      },
       "progress": {
         "checking": "Gespeicherte Gespräche werden geprüft",
+        "updating": "Warten auf den Abschluss des Claude-Desktop-Updates, danach wird die Übergabe fortgesetzt",
         "stopping": "Claude Desktop wird regulär geschlossen",
         "hashing": "Gesprächsdateien werden überprüft",
         "backup": "Betroffene Seitenleisteneinträge werden gesichert",

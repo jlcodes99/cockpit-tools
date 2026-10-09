@@ -1,5 +1,181 @@
 use super::*;
 
+fn updater_test_archive(f: &Fixture, extra: &str) -> PathBuf {
+    let app = f.root.join("Claude.app");
+    let resources = app.join("Contents/Resources");
+    fs::create_dir_all(&resources).unwrap();
+    fs::write(
+        resources.join("app.asar"),
+        super::super::super::storage_contract::synthetic_archive_for_test(extra),
+    )
+    .unwrap();
+    app
+}
+
+#[test]
+fn settled_binding_cannot_be_renewed_after_a_later_archive_replacement() {
+    let f = Fixture::new();
+    let app = updater_test_archive(&f, "");
+    let initial = super::super::super::storage_contract::inspect(&app).unwrap();
+    updater_test_archive(&f, ",futureOptional:state.futureOptional");
+    let shutdown = super::super::super::runtime::ShutdownReceipt {
+        was_running: true,
+        bundled_update_settled: true,
+        settled_contract: Some(super::super::super::storage_contract::inspect(&app).unwrap()),
+    };
+    super::super::super::contract_after_shutdown(&initial, &shutdown, true, &app).unwrap();
+    updater_test_archive(&f, ",differentLaterField:state.differentLaterField");
+    assert_eq!(
+        super::super::super::contract_after_shutdown(&initial, &shutdown, true, &app).unwrap_err(),
+        "DESKTOP_CONTRACT_CHANGED"
+    );
+    assert!(list_runs(&f.roots).unwrap().is_empty());
+}
+
+#[test]
+fn settled_update_rechecks_storage_before_copying_latest_content_and_preserves_sources() {
+    let f = Fixture::new();
+    let mut latest = record(1);
+    latest["lastActivityAt"] = json!(50);
+    latest["completedTurns"] = json!(9);
+    f.put(&f.a, &latest, true);
+    f.put(&f.b, &record(1), false);
+    let source = fs::read(f.path(&f.a, 1)).unwrap();
+    let transcript = fs::read(f.transcript(&latest)).unwrap();
+    let app = updater_test_archive(&f, "");
+    let initial = super::super::super::storage_contract::inspect(&app).unwrap();
+    updater_test_archive(&f, ",futureOptional:state.futureOptional");
+    assert!(initial.assert_unchanged().is_err());
+    let shutdown = super::super::super::runtime::ShutdownReceipt {
+        was_running: true,
+        bundled_update_settled: true,
+        settled_contract: Some(super::super::super::storage_contract::inspect(&app).unwrap()),
+    };
+    let final_contract =
+        super::super::super::contract_after_shutdown(&initial, &shutdown, true, &app).unwrap();
+    assert_ne!(initial.fingerprint, final_contract.fingerprint);
+    let unknown = unknown_persisted_fields(&final_contract.projected_fields);
+    assert!(unknown.contains("futureOptional"));
+    let accounts = [f.a.clone(), f.b.clone()];
+    let p = preview_continuity_with_fields(&f.roots, &f.a, &f.b, &accounts, &unknown).unwrap();
+    assert_eq!(p.missing, 0);
+    let run = apply_continuity_with_fields_and_progress(
+        &f.roots,
+        &f.a,
+        &f.b,
+        &accounts,
+        &unknown,
+        &p.fingerprint,
+        &f.backup(),
+        &mut || final_contract.assert_unchanged(),
+        Some(&mut || final_contract.assert_unchanged_fast()),
+        &mut |_| {},
+        &mut |_, _, _| {},
+    )
+    .unwrap();
+    assert_eq!(run.state, "applied");
+    assert_eq!(f.get(&f.b, 1)["completedTurns"], 9);
+    assert_eq!(f.get(&f.b, 1)["cliSessionId"], latest["cliSessionId"]);
+    assert_eq!(fs::read(f.path(&f.a, 1)).unwrap(), source);
+    assert_eq!(fs::read(f.transcript(&latest)).unwrap(), transcript);
+    // An unchanged initial approval cannot be reused for the final archive.
+    assert!(
+        super::super::super::contract_after_shutdown(&initial, &shutdown, false, &app).is_err()
+    );
+    let no_update = super::super::super::runtime::ShutdownReceipt {
+        was_running: true,
+        bundled_update_settled: false,
+        settled_contract: None,
+    };
+    assert!(
+        super::super::super::contract_after_shutdown(&initial, &no_update, true, &app).is_err()
+    );
+}
+
+#[test]
+fn settled_update_with_meaningful_new_state_blocks_before_any_publication() {
+    let f = Fixture::new();
+    let mut source = record(1);
+    source["futureExecution"] = json!({"pending":true});
+    f.put(&f.a, &source, true);
+    let bytes = fs::read(f.path(&f.a, 1)).unwrap();
+    let app = updater_test_archive(&f, "");
+    let initial = super::super::super::storage_contract::inspect(&app).unwrap();
+    updater_test_archive(&f, ",futureExecution:state.futureExecution");
+    let shutdown = super::super::super::runtime::ShutdownReceipt {
+        was_running: true,
+        bundled_update_settled: true,
+        settled_contract: Some(super::super::super::storage_contract::inspect(&app).unwrap()),
+    };
+    let final_contract =
+        super::super::super::contract_after_shutdown(&initial, &shutdown, true, &app).unwrap();
+    let unknown = unknown_persisted_fields(&final_contract.projected_fields);
+    let accounts = [f.a.clone(), f.b.clone()];
+    let p = preview_continuity_with_fields(&f.roots, &f.a, &f.b, &accounts, &unknown).unwrap();
+    assert_eq!(p.missing, 1);
+    assert!(p
+        .issues
+        .iter()
+        .any(|issue| issue.reason == "UNSUPPORTED_PERSISTED_FIELD"));
+    let mut published = false;
+    assert!(apply_continuity_with_fields_and_progress(
+        &f.roots,
+        &f.a,
+        &f.b,
+        &accounts,
+        &unknown,
+        &p.fingerprint,
+        &f.backup(),
+        &mut || final_contract.assert_unchanged(),
+        None,
+        &mut |_| published = true,
+        &mut |_, _, _| {}
+    )
+    .is_err());
+    assert!(!published);
+    assert!(!f.path(&f.b, 1).exists());
+    assert_eq!(fs::read(f.path(&f.a, 1)).unwrap(), bytes);
+    assert!(list_runs(&f.roots).unwrap().is_empty());
+}
+
+#[test]
+fn archive_update_after_publication_does_not_refresh_binding_and_is_recoverable() {
+    let f = Fixture::new();
+    f.put(&f.a, &record(1), true);
+    f.put(&f.a, &record(2), true);
+    let app = updater_test_archive(&f, "");
+    let binding = super::super::super::storage_contract::inspect(&app).unwrap();
+    let unknown = unknown_persisted_fields(&binding.projected_fields);
+    let accounts = [f.a.clone(), f.b.clone()];
+    let p = preview_continuity_with_fields(&f.roots, &f.a, &f.b, &accounts, &unknown).unwrap();
+    let mut run_id = None;
+    let error = apply_continuity_with_fields_and_progress(
+        &f.roots,
+        &f.a,
+        &f.b,
+        &accounts,
+        &unknown,
+        &p.fingerprint,
+        &f.backup(),
+        &mut || binding.assert_unchanged(),
+        Some(&mut || binding.assert_unchanged_fast()),
+        &mut |id| run_id = Some(id.to_owned()),
+        &mut |stage, completed, _| {
+            if stage == "writing" && completed == 1 {
+                updater_test_archive(&f, ",futureOptional:state.futureOptional");
+            }
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error, "DESKTOP_CONTRACT_CHANGED");
+    let run = rollback(&f.roots, &run_id.unwrap(), &mut || Ok(())).unwrap();
+    assert_eq!(run.state, "rolled_back");
+    assert!(!f.path(&f.b, 1).exists());
+    assert!(!f.path(&f.b, 2).exists());
+    assert_eq!(f.get(&f.a, 1), record(1));
+    assert_eq!(f.get(&f.a, 2), record(2));
+}
+
 #[test]
 fn continuity_preserves_destination_owned_queued_work_and_quit_markers() {
     let f = Fixture::new();

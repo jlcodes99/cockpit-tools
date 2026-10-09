@@ -7321,7 +7321,7 @@
       "title": "交接對話",
       "description": "將本機 Code 對話從一個已儲存的 Claude Desktop 帳號複製到另一個帳號。套用前請核對帳號與預覽。",
       "scopeTitle": "範圍與安全說明",
-      "scope": "僅支援 macOS 預設 Claude Desktop 設定中的本機 Code 對話，不包含 Chat、Cowork、雲端歷史或自訂設定。以本機 Code 儲存格式是否相容判定；格式無法確認或不相容時停止交接。",
+      "scope": "僅支援 macOS 預設 Claude Desktop 設定中的本機 Code 對話，不包含 Chat、Cowork、雲端歷史或自訂設定。以本機 Code 儲存格式是否相容判定；格式無法確認或不相容時停止交接。 同一次交接可等待 Claude Desktop 內建更新；更新完成後會重新檢查相容性，確認支援後繼續原帳號間的交接。開始複製後若應用程式或檔案變更，仍會停止交接並要求復原。",
       "safety": "匯入的權限設為 Ask（每次詢問）。對話正文保持不變。交接不會切換登入帳號或傳送提示詞。",
       "version": "Claude Desktop 版本 {{version}}",
       "source": "來源帳號",
@@ -7414,6 +7414,7 @@
         "DESKTOP_QUIT_FAILED": "Claude Desktop 無法正常結束。請完成或儲存目前工作，手動結束 Desktop 後重新預覽。",
         "INDEPENDENT_CLI_RUNNING": "獨立的 Claude Code 程序正在執行，請結束後再套用或回復交接。",
         "CLAUDE_WRITER_RUNNING": "交接期間偵測到 Claude 程序仍在執行，操作已停止。請查看下方交接紀錄；若顯示待還原，先完成還原。",
+        "DESKTOP_UPDATE_TIMEOUT": "Claude Desktop 更新未能在等待期限內完成，尚未套用任何交接。請等更新完成後再重試。",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit 無法確認 Claude 已停止寫入，已阻擋交接。請結束 Claude 後重試。",
         "DESKTOP_REOPEN_FAILED": "交接已儲存，但 Claude Desktop 無法重新開啟。請在準備好後手動開啟。",
         "RECOVERED_APP_CLOSED": "還原已完成，Desktop 保持關閉。請在準備好後手動開啟。",
@@ -7497,8 +7498,16 @@
       "sessionLabel": "對話 {{number}}",
       "preservedBranches": "保留全部 {{count}} 個額外對話分支。最新分支使用原標題，其他分支標示為「保留分支」。",
       "elapsed": "已執行 {{seconds}} 秒",
+      "processDetail": "阻擋程序：{{name}}（PID {{pid}}，{{role}}）",
+      "processRoles": {
+        "desktop-main": "Desktop 主程序",
+        "claude-cli": "Claude 命令列工具",
+        "desktop-helper": "Desktop 輔助程序",
+        "desktop-updater": "Desktop 更新程序"
+      },
       "progress": {
         "checking": "檢查已儲存帳號的對話",
+        "updating": "正在完成 Claude Desktop 更新；完成後會繼續交接",
         "stopping": "正常結束 Claude Desktop",
         "hashing": "核對對話檔案內容",
         "backup": "備份即將修改的側欄紀錄",

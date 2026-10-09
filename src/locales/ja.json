@@ -7321,7 +7321,7 @@
       "title": "会話を引き継ぐ",
       "description": "保存済みの Claude Desktop アカウント間でローカルの Code 会話をコピーします。適用前に両アカウントとプレビューを確認してください。",
       "scopeTitle": "対象範囲と安全性",
-      "scope": "macOS の Claude Desktop の標準プロファイルとローカル Code 会話のみが対象です。Chat、Cowork、クラウド履歴、カスタムプロファイルは対象外です。引き継ぎはローカル Code ストレージ形式の互換性に基づいて判断されます。形式を確認できない場合や互換性がない場合は引き継ぎを停止します。",
+      "scope": "macOS の Claude Desktop の標準プロファイルとローカル Code 会話のみが対象です。Chat、Cowork、クラウド履歴、カスタムプロファイルは対象外です。引き継ぎはローカル Code ストレージ形式の互換性に基づいて判断されます。形式を確認できない場合や互換性がない場合は引き継ぎを停止します。 同じ引き継ぎ処理で Claude Desktop の組み込み更新を待ち、ストレージの互換性を再確認し、対応が確認できれば同じアカウント間で続行できます。コピー開始後にアプリやファイルが変わった場合は引き継ぎを停止し、復元が必要になります。",
       "safety": "インポートした権限は Ask（確認する）から始まります。会話本文は変更されません。アカウントの切り替えやプロンプトの送信は行いません。",
       "version": "Claude Desktop バージョン {{version}}",
       "source": "引き継ぎ元アカウント",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Desktop を通常終了できませんでした。作業を終了または保存し、手動で Desktop を閉じてから再プレビューしてください。",
         "INDEPENDENT_CLI_RUNNING": "独立した Claude Code プロセスが動作中です。引き継ぎの適用や取り消しの前に終了してください。",
         "CLAUDE_WRITER_RUNNING": "Claude がまだ会話を書き込んでいる可能性があります。停止を待って再プレビューしてください。",
+        "DESKTOP_UPDATE_TIMEOUT": "待機時間内に Claude Desktop の更新が完了しませんでした。引き継ぎは適用されていません。更新完了後に再試行してください。",
         "PROCESS_INVENTORY_UNAVAILABLE": "Claude の書き込み停止を確認できなかったため、引き継ぎを中止しました。Claude を終了して再試行してください。",
         "DESKTOP_REOPEN_FAILED": "引き継ぎは保存されましたが、Desktop を再び開けませんでした。準備ができたら手動で開いてください。",
         "RECOVERED_APP_CLOSED": "復旧が完了しました。Desktop は閉じたままです。準備ができたら手動で開いてください。",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "会話 {{number}}",
       "preservedBranches": "追加の会話ブランチ {{count}} 件をすべて保持します。最新のブランチには元のタイトルを使い、他は保持されたブランチと表示します。",
       "elapsed": "{{seconds}} 秒経過",
+      "processDetail": "妨げているプロセス：{{name}}（PID {{pid}}、{{role}}）",
+      "processRoles": {
+        "desktop-main": "Desktop メインプロセス",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Desktop ヘルパー",
+        "desktop-updater": "Desktop 更新プログラム"
+      },
       "progress": {
         "checking": "保存済みの会話を確認中",
+        "updating": "Claude Desktop の更新完了を待っています。完了後に引き継ぎを続行します",
         "stopping": "Claude Desktop を通常終了中",
         "hashing": "会話ファイルの内容を検証中",
         "backup": "変更対象のサイドバー記録をバックアップ中",

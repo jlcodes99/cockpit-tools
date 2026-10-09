@@ -5,6 +5,7 @@ import {
   canApplyClaudeHandoffPreview,
   canRollbackClaudeHandoff,
   getClaudeHandoffErrorCode,
+  getClaudeHandoffProcessDiagnostic,
   getClaudeHandoffRunAction,
   type ClaudeHandoffStatus,
   type ClaudeHandoffPreview,
@@ -44,6 +45,41 @@ test('equal conversations can remember shared state without rewriting records', 
   assert.equal(canApplyClaudeHandoffPreview({ ...preview, created: 1, stale: 1 }), false);
   assert.equal(canApplyClaudeHandoffPreview({ ...preview, created: 1, replacedBranches: 1 }), false);
   assert.equal(canApplyClaudeHandoffPreview(null), false);
+});
+
+test('process diagnostics accept only bounded metadata and discard raw backend details', () => {
+  const valid = { code: 'DESKTOP_UPDATE_TIMEOUT', processId: 4242, processRole: 'desktop-updater', processName: 'ShipIt' };
+  const expected = { processId: 4242, processRole: 'desktop-updater', processName: 'ShipIt' };
+  assert.deepEqual(getClaudeHandoffProcessDiagnostic(JSON.stringify({ ...valid, message: 'ignored', args: '--ignored' })), expected);
+  for (const code of ['CLAUDE_WRITER_RUNNING', 'DESKTOP_UPDATE_TIMEOUT', 'DESKTOP_CONTRACT_CHANGED']) {
+    const payload = JSON.stringify({ ...valid, code, args: '--ignored', executable: '/ignored/path' });
+    for (const error of [payload, `Error: ${payload}`, { message: payload }, new Error(payload), { message: `Error: ${payload}` }]) {
+      assert.equal(getClaudeHandoffErrorCode(error), code);
+      assert.deepEqual(getClaudeHandoffProcessDiagnostic(error), expected);
+    }
+  }
+  for (const processRole of ['desktop-main', 'claude-cli', 'desktop-helper', 'desktop-updater']) {
+    assert.deepEqual(getClaudeHandoffProcessDiagnostic({ ...valid, code: 'CLAUDE_WRITER_RUNNING', processRole }), { ...expected, processRole });
+  }
+  for (const processName of ['/private/ShipIt', 'C:\\ShipIt', 'ShipIt --token secret', 'ShipIt\nsecret', '..', 'x'.repeat(129), ' ShipIt', 'ShipIt\u202esecret']) {
+    assert.equal(getClaudeHandoffProcessDiagnostic({ ...valid, processName }), null);
+  }
+  for (const processId of [0, -1, 1.5, NaN, Infinity, 0x100000000, '4242', null]) {
+    assert.equal(getClaudeHandoffProcessDiagnostic({ ...valid, processId }), null);
+  }
+  for (const value of [null, [], 'CLAUDE_WRITER_RUNNING: pid=4242', '{bad', { ...valid, code: 'UNKNOWN' }, { ...valid, processRole: 'unknown' }, { ...valid, processName: null }]) {
+    assert.equal(getClaudeHandoffProcessDiagnostic(value), null);
+  }
+  for (const processName of ['ShipIt -x secret', 'ShipIt --flag=value', 'ShipIt; secret', 'ShipIt\tsecret', 'ShipIt\u0000secret']) {
+    const wrapper = { message: `Error: ${JSON.stringify({ ...valid, code: 'DESKTOP_CONTRACT_CHANGED', processName })}` };
+    assert.equal(getClaudeHandoffProcessDiagnostic(wrapper), null);
+  }
+  let nested: unknown = valid;
+  for (let i = 0; i < 10; i += 1) nested = { message: JSON.stringify(nested) };
+  for (const error of [nested, 'Error: {' + ' '.repeat(16_384) + '}']) {
+    assert.equal(getClaudeHandoffProcessDiagnostic(error), null);
+    assert.equal(getClaudeHandoffErrorCode(error), null);
+  }
 });
 
 test('supported storage permits preview regardless of the diagnostic Desktop version', () => {
@@ -93,6 +129,8 @@ test('extracts stable IPC error codes without exposing private backend details',
   assert.equal(getClaudeHandoffErrorCode('Error: SIDEBAR_NOT_INITIALIZED: /private/account/path'), 'SIDEBAR_NOT_INITIALIZED');
   assert.equal(getClaudeHandoffErrorCode('[ACCOUNT_NOT_FOUND] private-account-id'), 'ACCOUNT_NOT_FOUND');
   assert.equal(getClaudeHandoffErrorCode(new Error('HANDOFF_BUSY')), 'HANDOFF_BUSY');
+  assert.equal(getClaudeHandoffErrorCode('CLAUDE_WRITER_RUNNING: pid=4242 role=shipit executable=ShipIt'), 'CLAUDE_WRITER_RUNNING');
+  assert.equal(getClaudeHandoffErrorCode({ code: 'DESKTOP_UPDATE_TIMEOUT' }), 'DESKTOP_UPDATE_TIMEOUT');
   assert.equal(getClaudeHandoffErrorCode({ code: 'DESKTOP_VERSION_CHANGED', message: 'Private detail' }), 'DESKTOP_VERSION_CHANGED');
   for (const code of ['DESKTOP_CONTRACT_UNAVAILABLE', 'DESKTOP_CONTRACT_UNSUPPORTED', 'DESKTOP_CONTRACT_CHANGED', 'UNSUPPORTED_PERSISTED_FIELD']) {
     assert.equal(getClaudeHandoffErrorCode({ code, message: '/private/account/storage' }), code);

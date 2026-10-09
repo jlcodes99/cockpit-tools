@@ -7321,7 +7321,7 @@
       "title": "Pindahkan percakapan",
       "description": "Salin percakapan Code lokal antara dua akun Claude Desktop tersimpan. Periksa pasangan akun dan pratinjau sebelum menerapkan.",
       "scopeTitle": "Cakupan dan keamanan",
-      "scope": "Hanya macOS, profil bawaan Claude Desktop, dan percakapan Code lokal. Chat, Cowork, riwayat cloud, serta profil khusus tidak termasuk. Pemindahan ditentukan oleh kompatibilitas format penyimpanan Code lokal; pemindahan dihentikan jika format tidak dapat diverifikasi atau tidak kompatibel.",
+      "scope": "Hanya macOS, profil bawaan Claude Desktop, dan percakapan Code lokal. Chat, Cowork, riwayat cloud, serta profil khusus tidak termasuk. Pemindahan ditentukan oleh kompatibilitas format penyimpanan Code lokal; pemindahan dihentikan jika format tidak dapat diverifikasi atau tidak kompatibel. Pemindahan yang sama dapat menunggu pembaruan bawaan Claude Desktop, memeriksa ulang kompatibilitas penyimpanan, lalu melanjutkan antar akun yang sama jika dukungan terkonfirmasi. Perubahan aplikasi atau file setelah penyalinan dimulai tetap menghentikan pemindahan dan memerlukan pemulihan.",
       "safety": "Izin yang diimpor dimulai dengan Ask (tanyakan). Isi percakapan tidak berubah. Pemindahan tidak mengganti akun atau mengirim perintah.",
       "version": "Claude Desktop · versi {{version}}",
       "source": "Akun sumber",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Desktop tidak dapat ditutup secara normal. Selesaikan atau simpan pekerjaan, tutup Desktop sendiri, lalu buat pratinjau lagi.",
         "INDEPENDENT_CLI_RUNNING": "Proses Claude Code terpisah sedang berjalan. Hentikan sebelum menerapkan atau membatalkan pemindahan.",
         "CLAUDE_WRITER_RUNNING": "Proses Claude mungkin masih menulis percakapan. Tunggu berhenti, lalu buat pratinjau lagi.",
+        "DESKTOP_UPDATE_TIMEOUT": "Pembaruan Claude Desktop tidak selesai dalam batas waktu tunggu. Tidak ada pemindahan yang diterapkan. Coba lagi setelah pembaruan selesai.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit tidak dapat memastikan Claude sudah berhenti menulis. Pemindahan diblokir; tutup Claude lalu coba lagi.",
         "DESKTOP_REOPEN_FAILED": "Pemindahan tersimpan, tetapi Desktop tidak dapat dibuka kembali. Buka secara manual saat siap.",
         "RECOVERED_APP_CLOSED": "Pemulihan selesai; Desktop tetap tertutup. Buka secara manual saat siap.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "Percakapan {{number}}",
       "preservedBranches": "Semua {{count}} cabang percakapan tambahan dipertahankan. Cabang terbaru memakai judul asli; lainnya ditandai sebagai cabang yang dipertahankan.",
       "elapsed": "{{seconds}} detik berlalu",
+      "processDetail": "Proses penghalang: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Proses utama Desktop",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Proses pembantu Desktop",
+        "desktop-updater": "Pembaruan Desktop"
+      },
       "progress": {
         "checking": "Memeriksa percakapan tersimpan",
+        "updating": "Menunggu pembaruan Claude Desktop selesai, lalu melanjutkan pemindahan",
         "stopping": "Menutup Claude Desktop secara normal",
         "hashing": "Memverifikasi berkas percakapan",
         "backup": "Mencadangkan catatan bilah samping yang terpengaruh",

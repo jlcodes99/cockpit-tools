@@ -7321,7 +7321,7 @@
       "title": "Przekaż rozmowy",
       "description": "Skopiuj lokalne rozmowy Code między dwoma zapisanymi kontami Claude Desktop. Przed zastosowaniem sprawdź oba konta i podgląd.",
       "scopeTitle": "Zakres i bezpieczeństwo",
-      "scope": "Tylko macOS, domyślny profil Claude Desktop i lokalne rozmowy Code. Chat, Cowork, historia w chmurze i profile niestandardowe są wyłączone. Przekazanie zależy od zgodności formatu lokalnego magazynu Code; zostaje zatrzymane, jeśli formatu nie można zweryfikować lub jest niezgodny.",
+      "scope": "Tylko macOS, domyślny profil Claude Desktop i lokalne rozmowy Code. Chat, Cowork, historia w chmurze i profile niestandardowe są wyłączone. Przekazanie zależy od zgodności formatu lokalnego magazynu Code; zostaje zatrzymane, jeśli formatu nie można zweryfikować lub jest niezgodny. To samo przekazanie może zaczekać na wbudowaną aktualizację Claude Desktop, ponownie sprawdzić zgodność magazynu i kontynuować między tymi samymi kontami po potwierdzeniu obsługi. Zmiany aplikacji lub plików po rozpoczęciu kopiowania nadal zatrzymują przekazanie i wymagają odzyskania.",
       "safety": "Importowane uprawnienia zaczynają w trybie Ask (pytaj). Treść rozmów pozostaje bez zmian. Przekazanie nie przełącza konta ani nie wysyła poleceń.",
       "version": "Claude Desktop · wersja {{version}}",
       "source": "Konto źródłowe",
@@ -7404,6 +7404,7 @@
         "DESKTOP_QUIT_FAILED": "Nie udało się normalnie zamknąć Desktop. Zakończ lub zapisz pracę, zamknij Desktop ręcznie i ponów podgląd.",
         "INDEPENDENT_CLI_RUNNING": "Działa niezależny proces Claude Code. Zakończ go przed zastosowaniem lub cofnięciem przekazania.",
         "CLAUDE_WRITER_RUNNING": "Proces Claude może nadal zapisywać rozmowy. Poczekaj na jego zatrzymanie i ponów podgląd.",
+        "DESKTOP_UPDATE_TIMEOUT": "Aktualizacja Claude Desktop nie zakończyła się w wyznaczonym czasie oczekiwania. Nie zastosowano żadnego przekazania. Spróbuj ponownie po zakończeniu aktualizacji.",
         "PROCESS_INVENTORY_UNAVAILABLE": "Cockpit nie potwierdził zatrzymania zapisów Claude. Przekazanie zostało zablokowane. Zamknij Claude i spróbuj ponownie.",
         "DESKTOP_REOPEN_FAILED": "Przekazanie zapisano, ale Desktop nie udało się otworzyć. Otwórz go ręcznie, gdy zechcesz.",
         "RECOVERED_APP_CLOSED": "Odzyskiwanie zakończone; Desktop pozostaje zamknięty. Otwórz go ręcznie, gdy zechcesz.",
@@ -7489,8 +7490,16 @@
       "sessionLabel": "Rozmowa {{number}}",
       "preservedBranches": "Wszystkie dodatkowe gałęzie rozmów ({{count}}) zostaną zachowane. Najnowsza używa oryginalnego tytułu; pozostałe są oznaczone jako zachowane gałęzie.",
       "elapsed": "Upłynęło {{seconds}} sekund",
+      "processDetail": "Proces blokujący: {{name}} (PID {{pid}}, {{role}})",
+      "processRoles": {
+        "desktop-main": "Główny proces Desktop",
+        "claude-cli": "Claude CLI",
+        "desktop-helper": "Proces pomocniczy Desktop",
+        "desktop-updater": "Aktualizator Desktop"
+      },
       "progress": {
         "checking": "Sprawdzanie zapisanych rozmów",
+        "updating": "Oczekiwanie na zakończenie aktualizacji Claude Desktop, następnie przekazanie będzie kontynuowane",
         "stopping": "Prawidłowe zamykanie Claude Desktop",
         "hashing": "Weryfikacja plików rozmów",
         "backup": "Tworzenie kopii zapasowej zmienianych wpisów panelu bocznego",
