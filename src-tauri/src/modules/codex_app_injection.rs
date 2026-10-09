@@ -1645,7 +1645,8 @@ fn injection_script(
       if (handledRefreshToken && root.refreshRequestToken === handledRefreshToken) root.refreshRequestToken = null;
       const render = () => {{
         let host = document.querySelector('[data-cockpit-quota-footer]');
-        const permissions = document.querySelector('[data-composer-navigation-target="permissions"]');
+        // 页面会保留隐藏的聊天框；按固定导航标记选择有布局的权限按钮，不依赖权限模式文字。
+        const permissions = [...document.querySelectorAll('[data-composer-navigation-target="permissions"]')].find((node) => node.getClientRects().length > 0);
         const footer = permissions?.closest('[class*="_ComposerLayoutFooter_"]') || permissions?.closest('[class*="_footer_"]') || permissions?.parentElement;
         if (!footer || !permissions) {{
           if (host) host.style.display = 'none';
@@ -1674,10 +1675,10 @@ fn injection_script(
         }}
         const footerRect = footer.getBoundingClientRect();
         const permissionsRect = permissions.getBoundingClientRect();
-        // 底部徽章水平居中在「访问权限（完全访问）」和它右侧的「背景信息 / 模型」之间：
+        // 底部徽章水平居中在当前聊天框的权限按钮和它右侧的「背景信息 / 模型」之间：
         // 先找背景信息（上下文用量）元素，找不到就用模型选择器，取两个元素之间空档的中点。
         const contextUsageRect = () => {{
-          const nodes = document.querySelectorAll('[aria-label*="上下文用量"], [aria-label*="背景信息"], [aria-label*="context usage" i], [aria-label*="context window" i]');
+          const nodes = footer.querySelectorAll('[aria-label*="上下文用量"], [aria-label*="背景信息"], [aria-label*="context usage" i], [aria-label*="context window" i]');
           for (const node of nodes) {{
             const rect = node.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) return rect;
@@ -1685,7 +1686,7 @@ fn injection_script(
           return null;
         }};
         const contextRect = contextUsageRect();
-        const modelAnchorNode = contextRect ? null : document.querySelector('[data-composer-navigation-target="reasoning"]');
+        const modelAnchorNode = contextRect ? null : footer.querySelector('[data-composer-navigation-target="reasoning"]');
         const rightAnchorRect = contextRect || (modelAnchorNode ? modelAnchorNode.getBoundingClientRect() : null);
         const permissionsRight = permissionsRect.left + permissionsRect.width;
         const badgeAnchorLeft = rightAnchorRect && rightAnchorRect.left > permissionsRight
@@ -2043,7 +2044,7 @@ fn deepseek_balance_injection_script(
       const render = () => {{
         let host = document.querySelector('[data-cockpit-deepseek-balance]');
         let details = document.querySelector('[data-cockpit-deepseek-balance-details]');
-        const permissions = document.querySelector('[data-composer-navigation-target="permissions"]');
+        const permissions = [...document.querySelectorAll('[data-composer-navigation-target="permissions"]')].find((node) => node.getClientRects().length > 0);
         const footer = permissions?.closest('[class*="_ComposerLayoutFooter_"]') || permissions?.closest('[class*="_footer_"]') || permissions?.parentElement;
         if (!permissions || !footer || !balance) {{
           if (host) host.style.display = 'none';
@@ -2065,7 +2066,7 @@ fn deepseek_balance_injection_script(
         const permissionsRect = permissions.getBoundingClientRect();
         // 与 API 服务额度注入同一套锚点：居中在「访问权限」和右侧「背景信息 / 模型」之间。
         const contextUsageRect = () => {{
-          const nodes = document.querySelectorAll('[aria-label*="上下文用量"], [aria-label*="背景信息"], [aria-label*="context usage" i], [aria-label*="context window" i]');
+          const nodes = footer.querySelectorAll('[aria-label*="上下文用量"], [aria-label*="背景信息"], [aria-label*="context usage" i], [aria-label*="context window" i]');
           for (const node of nodes) {{
             const rect = node.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) return rect;
@@ -2073,7 +2074,7 @@ fn deepseek_balance_injection_script(
           return null;
         }};
         const contextRect = contextUsageRect();
-        const modelAnchorNode = contextRect ? null : document.querySelector('[data-composer-navigation-target="reasoning"]');
+        const modelAnchorNode = contextRect ? null : footer.querySelector('[data-composer-navigation-target="reasoning"]');
         const rightAnchorRect = contextRect || (modelAnchorNode ? modelAnchorNode.getBoundingClientRect() : null);
         const permissionsRight = permissionsRect.left + permissionsRect.width;
         const badgeAnchorLeft = rightAnchorRect && rightAnchorRect.left > permissionsRight
