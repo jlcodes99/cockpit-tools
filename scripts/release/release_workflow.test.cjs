@@ -41,19 +41,18 @@ test("public updater verification and Homebrew run only after publication", () =
 
 test("every release upload uses the draft-safe retry helper", () => {
   assert.doesNotMatch(workflow, /gh release upload/);
-  assert.equal((workflow.match(/node scripts\/release\/upload_release_assets\.cjs /g) || []).length, 11);
+  assert.equal((workflow.match(/node scripts\/release\/upload_release_assets\.cjs /g) || []).length, 9);
   for (const [job, next] of [
-    ["build-windows", "build-macos-aarch64"],
-    ["build-macos-aarch64", "build-macos-x86_64"],
-    ["build-macos-x86_64", "build-macos-universal"],
+    ["build-windows", "macos-native"],
+    ["macos-native", "build-macos-universal"],
     ["build-macos-universal", "build-linux"],
-    ["build-linux", "finalize-legacy-latest"],
+    ["build-linux", "validate-release-artifacts"],
     ["finalize-legacy-latest", "upload-checksums"],
     ["upload-checksums", "publish-release"],
   ]) {
     const body = jobBody(job, next);
-    assert.match(body, /actions\/checkout@v4/);
-    assert.match(body, /actions\/setup-node@v4/);
+    assert.match(body, /actions\/checkout@v[45]/);
+    assert.match(body, /actions\/setup-node@v[45]/);
     assert.match(body, /node scripts\/release\/upload_release_assets\.cjs/);
   }
 });
