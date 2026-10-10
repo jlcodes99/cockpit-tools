@@ -422,6 +422,9 @@
       "weeklyWindow": "أسبوع"
     },
     "optional": "(اختياري)",
+    "done": "تم",
+    "saved": "تم الحفظ",
+    "edit": "تعديل",
     "hide": "إخفاء",
     "show": "إظهار",
     "configSaveTimeout": "انتهت المهلة. حدّث للتحقق من النتيجة قبل المحاولة مجددًا.",
@@ -1196,6 +1199,14 @@
       "menuBarQuotaConfirmEnable": "تفعيل",
       "codexHideRelayQuota": "إخفاء حصة الترحيل",
       "codexHideRelayQuotaDesc": "يخفي لوحات حصة الترحيل / New API في نظرة حسابات Codex.",
+      "accountLevelRefreshTitle": "إعدادات التحديث لكل حساب",
+      "accountLevelRefreshDesc": "اضبط فترات تحديث تلقائي مختلفة لكل حساب، مع تجاوز القيمة الافتراضية للمنصة.",
+      "accountLevelRefreshSummaryActive": "تم إعداد {{count}} حسابًا",
+      "accountLevelRefreshSummary": "توسيع الإعدادات",
+      "accountLevelRefreshInherit": "توريث إعدادات المنصة",
+      "accountLevelRefreshDisabled": "معطل",
+      "errorReporting": "تشخيص القياس عن بُعد",
+      "errorReportingDesc": "مفعّل افتراضيًا ويستخدم فقط لاستكشاف مشكلات بدء التشغيل والواجهة. عند إيقافه، لا يتم إرسال أي أحداث قياس عن بُعد. يتم إخفاء البيانات قبل الإرسال؛ ولا يتم رفع كلمات مرور الحسابات أو token أو أسرار 2FA أو أرقام الهواتف أو أي معلومات حساسة أخرى.",
       "floatingCardStyle": "نمط النافذة العائمة",
       "floatingCardStyleDesc": "يُطبّق على جميع النوافذ العائمة، ويمكن تغييره من داخل النافذة أيضًا.",
       "floatingCardFull": "بطاقة كاملة",
@@ -1521,7 +1532,8 @@
       "windowsApp": "تطبيق Microsoft Store",
       "defaultOnly": "لسطح المكتب الافتراضي فقط؛ اختر Claude.exe الحقيقي للملفات متعددة المثيلات.",
       "claudeScanEmpty": "لم يتم العثور على هدف Claude Desktop. اختر Claude.exe يدويا أو عدل نطاقات الفحص.",
-      "claudeTargetPlaceholder": "مسار Claude.exe أو shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "مسار Claude.exe أو shell:AppsFolder\\...",
+      "scanEmptyGeneric": "لم يتم العثور على {{app}} قيد التشغيل. شغّل التطبيق ثم أعد المحاولة، أو حدد المسار يدويًا."
     },
     "modal": {
       "desc": "لم يتم العثور على مسار تطبيق {{app}}. يرجى الضبط الآن للمتابعة."

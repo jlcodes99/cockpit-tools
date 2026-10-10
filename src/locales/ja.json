@@ -422,6 +422,9 @@
       "weeklyWindow": "週間"
     },
     "optional": "（任意）",
+    "done": "完了",
+    "saved": "保存済み",
+    "edit": "編集",
     "hide": "非表示",
     "show": "表示",
     "configSaveTimeout": "操作がタイムアウトしました。更新して結果を確認してから再試行してください。",
@@ -1149,6 +1152,14 @@
       "menuBarQuotaConfirmEnable": "有効にする",
       "codexHideRelayQuota": "中継クォータを隠す",
       "codexHideRelayQuotaDesc": "オンにすると、Codex アカウント一覧で中継 / New API 系の残高パネルを非表示にし、表示の重なりを減らします。",
+      "accountLevelRefreshTitle": "アカウントごとの更新設定",
+      "accountLevelRefreshDesc": "アカウントごとに異なる自動更新間隔を設定し、プラットフォームの既定値を上書きします。",
+      "accountLevelRefreshSummaryActive": "{{count}}件のアカウントを設定済み",
+      "accountLevelRefreshSummary": "設定を展開",
+      "accountLevelRefreshInherit": "プラットフォーム設定を継承",
+      "accountLevelRefreshDisabled": "無効",
+      "errorReporting": "テレメトリ診断",
+      "errorReportingDesc": "デフォルトで有効で、起動や画面の問題のトラブルシューティングにのみ使用されます。無効にするとテレメトリイベントは送信されません。報告前にデータをマスクするため、アカウントのパスワード、トークン、2FAシークレット、電話番号などの機密情報はアップロードされません。",
       "floatingCardStyle": "フロート表示",
       "floatingCardStyleDesc": "すべてのフロートウィンドウに適用されます。ウィンドウ内でも切り替えられます。",
       "floatingCardFull": "全項目",
@@ -1474,7 +1485,8 @@
       "windowsApp": "Microsoft Store アプリ",
       "defaultOnly": "既定のデスクトップ用のみ。複数インスタンスには実際の Claude.exe を選択してください。",
       "claudeScanEmpty": "Claude Desktop ターゲットが見つかりません。Claude.exe を手動で選ぶか、スキャン範囲を調整してください。",
-      "claudeTargetPlaceholder": "Claude.exe のパスまたは shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe のパスまたは shell:AppsFolder\\...",
+      "scanEmptyGeneric": "実行中の {{app}} が見つかりませんでした。アプリを起動してから再試行するか、パスを手動で選択してください。"
     },
     "modal": {
       "desc": "{{app}} のアプリパスが見つかりません。続行するには今すぐ設定してください。"

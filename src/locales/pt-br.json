@@ -422,6 +422,9 @@
       "weeklyWindow": "Semana"
     },
     "optional": " (opcional)",
+    "done": "Concluído",
+    "saved": "Salvo",
+    "edit": "Editar",
     "hide": "Ocultar",
     "show": "Mostrar",
     "configSaveTimeout": "Tempo esgotado. Atualize para confirmar o resultado antes de tentar novamente.",
@@ -1149,6 +1152,14 @@
       "menuBarQuotaConfirmEnable": "Ativar",
       "codexHideRelayQuota": "Ocultar cota relay",
       "codexHideRelayQuotaDesc": "Oculta painéis de cota relay / New API na visão de contas Codex.",
+      "accountLevelRefreshTitle": "Configurações de atualização por conta",
+      "accountLevelRefreshDesc": "Defina intervalos de atualização automática diferentes para cada conta, substituindo o padrão da plataforma.",
+      "accountLevelRefreshSummaryActive": "{{count}} contas configuradas",
+      "accountLevelRefreshSummary": "Expandir configurações",
+      "accountLevelRefreshInherit": "Herdar configurações da plataforma",
+      "accountLevelRefreshDisabled": "Desativado",
+      "errorReporting": "Diagnóstico de telemetria",
+      "errorReportingDesc": "Ativado por padrão e usado apenas para diagnosticar problemas de inicialização e da interface. Quando desativado, nenhum evento de telemetria é enviado. Os dados sensíveis são removidos antes do envio; senhas de conta, tokens, segredos 2FA, números de telefone e outras informações sensíveis nunca são enviados.",
       "floatingCardStyle": "Estilo flutuante",
       "floatingCardStyleDesc": "Compartilhado por todas as janelas flutuantes. Também pode ser alterado na janela.",
       "floatingCardFull": "Cartão completo",
@@ -1474,7 +1485,8 @@
       "windowsApp": "App da Microsoft Store",
       "defaultOnly": "Apenas desktop padrão; escolha o Claude.exe real para perfis multi-instância.",
       "claudeScanEmpty": "Nenhum alvo do Claude Desktop foi encontrado. Escolha o Claude.exe manualmente ou ajuste as raízes de escaneamento.",
-      "claudeTargetPlaceholder": "Caminho do Claude.exe ou shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Caminho do Claude.exe ou shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Nenhum {{app}} em execução foi detectado. Inicie o aplicativo e tente novamente ou selecione o caminho manualmente."
     },
     "modal": {
       "desc": "O caminho do aplicativo {{app}} não foi encontrado. Configure-o agora para continuar."

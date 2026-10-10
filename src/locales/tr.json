@@ -422,6 +422,9 @@
       "weeklyWindow": "Hafta"
     },
     "optional": " (isteğe bağlı)",
+    "done": "Tamam",
+    "saved": "Kaydedildi",
+    "edit": "Düzenle",
     "hide": "Gizle",
     "show": "Göster",
     "configSaveTimeout": "İşlem zaman aşımına uğradı. Yeniden denemeden önce sonucu yenileyerek doğrulayın.",
@@ -1149,6 +1152,14 @@
       "menuBarQuotaConfirmEnable": "Etkinleştir",
       "codexHideRelayQuota": "Relay kotasını gizle",
       "codexHideRelayQuotaDesc": "Codex hesap özetinde relay / New API kota panellerini gizler.",
+      "accountLevelRefreshTitle": "Hesap bazında yenileme ayarları",
+      "accountLevelRefreshDesc": "Her hesap için farklı otomatik yenileme aralıkları ayarlanabilir ve bu ayarlar platform varsayılanını geçersiz kılar.",
+      "accountLevelRefreshSummaryActive": "{{count}} hesap yapılandırıldı",
+      "accountLevelRefreshSummary": "Ayarları genişlet",
+      "accountLevelRefreshInherit": "Platform ayarlarını devral",
+      "accountLevelRefreshDisabled": "Devre dışı",
+      "errorReporting": "Telemetri tanılama",
+      "errorReportingDesc": "Varsayılan olarak etkindir ve yalnızca başlatma ve arayüz sorunlarını gidermek için kullanılır. Kapatıldığında telemetri olayı gönderilmez. Veriler gönderilmeden önce maskelenir; hesap parolaları, token'lar, 2FA sırları, telefon numaraları ve diğer hassas bilgiler yüklenmez.",
       "floatingCardStyle": "Yüzen görünüm",
       "floatingCardStyleDesc": "Tüm yüzen pencerelerde ortak kullanılır. Pencereden de değiştirilebilir.",
       "floatingCardFull": "Tam kart",
@@ -1474,7 +1485,8 @@
       "windowsApp": "Microsoft Store uygulaması",
       "defaultOnly": "Yalnızca varsayılan masaüstü; çoklu örnekler için gerçek Claude.exe seçin.",
       "claudeScanEmpty": "Claude Desktop hedefi bulunamadı. Claude.exe dosyasını elle seçin veya tarama kapsamını değiştirin.",
-      "claudeTargetPlaceholder": "Claude.exe yolu veya shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Claude.exe yolu veya shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Çalışan {{app}} bulunamadı. Uygulamayı başlatıp yeniden deneyin veya yolu elle seçin."
     },
     "modal": {
       "desc": "{{app}} uygulama yolu bulunamadı. Devam etmek için lütfen şimdi yapılandırın."
