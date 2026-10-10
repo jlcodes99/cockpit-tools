@@ -1717,13 +1717,445 @@ fn object_members<'a>(
     }
     Some(fields)
 }
-fn identity_projection(function: Node<'_>, m: &Module, writer: bool) -> Option<BTreeSet<String>> {
+// Follow only the core fields through a locally resolved loader preprocessor.
+// Every return must preserve both IDs; only cwd may pass through the existing
+// one-argument path normalization rule. Unknown spreads/aliases fail closed.
+fn binding_is_written(function: Node<'_>, name: &str, m: &Module) -> bool {
+    find(function, "assignment_expression")
+        .into_iter()
+        .chain(find(function, "update_expression"))
+        .filter(|n| owner(*n) == Some(function))
+        .any(|n| {
+            n.child_by_field_name("left")
+                .or_else(|| n.child_by_field_name("argument"))
+                .and_then(|n| chain(n, m))
+                .is_some_and(|c| c.first().is_some_and(|first| first == name))
+        })
+}
+
+fn original_parameter_reference(
+    reference: Node<'_>,
+    function: Node<'_>,
+    name: &str,
+    m: &Module,
+) -> bool {
+    let mentions = |pattern: Node<'_>| {
+        let mut found = false;
+        walk(pattern, |n, _| {
+            if matches!(
+                n.kind(),
+                "identifier" | "shorthand_property_identifier_pattern"
+            ) && m.text(n) == name
+            {
+                found = true;
+            }
+            true
+        });
+        found
+    };
+    let mut scope = reference.parent();
+    while let Some(node) = scope {
+        if node == function {
+            return params(function, m).is_some_and(|p| p.iter().any(|p| p == name));
+        }
+        if node.kind() == "catch_clause"
+            && node.child_by_field_name("parameter").is_some_and(mentions)
+        {
+            return false;
+        }
+        if node.kind() == "statement_block" {
+            let mut shadowed = false;
+            walk_with(
+                node,
+                |declaration, _| {
+                    if declaration.kind() == "variable_declarator"
+                        && declaration
+                            .child_by_field_name("name")
+                            .is_some_and(mentions)
+                    {
+                        shadowed = true;
+                    }
+                    if matches!(
+                        declaration.kind(),
+                        "function_declaration" | "class_declaration"
+                    ) && declaration
+                        .child_by_field_name("name")
+                        .is_some_and(mentions)
+                    {
+                        shadowed = true;
+                    }
+                    true
+                },
+                |n| {
+                    n == node
+                        || !matches!(
+                            n.kind(),
+                            "statement_block"
+                                | "function_declaration"
+                                | "function_expression"
+                                | "arrow_function"
+                                | "method_definition"
+                                | "class"
+                                | "class_declaration"
+                        )
+                },
+            );
+            if shadowed {
+                return false;
+            }
+        }
+        scope = node.parent();
+    }
+    false
+}
+
+// Preprocessors must be observational for the input record. Decline all direct
+// writes and passing the whole record (including lexical aliases) to another
+// call. Field-only path helpers such as normalize(input.cwd) remain admissible.
+fn observational_preprocessor(function: Node<'_>, input: &str, m: &Module) -> bool {
+    if find(function, "assignment_expression")
+        .into_iter()
+        .chain(find(function, "update_expression"))
+        .next()
+        .is_some()
+        || find(function, "unary_expression").into_iter().any(|n| {
+            n.child_by_field_name("operator")
+                .is_some_and(|n| m.text(n) == "delete")
+        })
+    {
+        return false;
+    }
+    let mut aliases = BTreeSet::from([input.to_owned()]);
+    let declarations = find(function, "variable_declarator");
+    for _ in 0..8 {
+        let previous = aliases.len();
+        for declaration in &declarations {
+            if owner(*declaration) != Some(function) {
+                continue;
+            }
+            if let (Some(name), Some(value)) = (
+                declaration.child_by_field_name("name"),
+                declaration.child_by_field_name("value"),
+            ) {
+                if name.kind() == "identifier"
+                    && unwrap(value).kind() == "identifier"
+                    && aliases.contains(m.text(unwrap(value)))
+                {
+                    aliases.insert(m.text(name).to_owned());
+                }
+            }
+        }
+        if aliases.len() == previous {
+            break;
+        }
+    }
+    let captured = |reference: Node<'_>| {
+        let name = m.text(reference);
+        if !aliases.contains(name) {
+            return false;
+        }
+        let mut scope = reference.parent();
+        while let Some(node) = scope {
+            if node == function {
+                return true;
+            }
+            if matches!(
+                node.kind(),
+                "function_declaration"
+                    | "function_expression"
+                    | "arrow_function"
+                    | "method_definition"
+            ) && params(node, m).is_none_or(|p| p.iter().any(|p| p == name))
+            {
+                return false;
+            }
+            if node.kind() == "statement_block" && owner(node) != Some(function) {
+                let mut shadowed = false;
+                walk_with(
+                    node,
+                    |n, _| {
+                        if n.kind() == "variable_declarator"
+                            && n.child_by_field_name("name")
+                                .is_some_and(|n| m.text(n) == name)
+                        {
+                            shadowed = true;
+                        }
+                        true
+                    },
+                    |n| {
+                        n == node
+                            || !matches!(
+                                n.kind(),
+                                "statement_block"
+                                    | "function_declaration"
+                                    | "function_expression"
+                                    | "arrow_function"
+                                    | "method_definition"
+                            )
+                    },
+                );
+                if shadowed {
+                    return false;
+                }
+            }
+            scope = node.parent();
+        }
+        false
+    };
+    for declaration in declarations {
+        let Some(value) = declaration.child_by_field_name("value") else {
+            continue;
+        };
+        let value = unwrap(value);
+        if value.kind() == "identifier" && owner(declaration) == Some(function) {
+            continue;
+        }
+        if find(value, "identifier")
+            .into_iter()
+            .chain(find(value, "shorthand_property_identifier"))
+            .chain((value.kind() == "identifier").then_some(value))
+            .any(|reference| {
+                captured(reference)
+                    && !reference.parent().is_some_and(|parent| {
+                        matches!(parent.kind(), "member_expression" | "subscript_expression")
+                            && parent.child_by_field_name("object") == Some(reference)
+                    })
+            })
+        {
+            return false;
+        }
+    }
+    !find(function, "call_expression").into_iter().any(|call| {
+        if is_call(call, &["eval"], m) {
+            return true;
+        }
+        arguments(call).iter().any(|arg| {
+            if unwrap(*arg).kind() == "spread_element" {
+                return true;
+            }
+            find(*arg, "identifier")
+                .into_iter()
+                .chain(find(*arg, "shorthand_property_identifier"))
+                .chain((arg.kind() == "identifier").then_some(*arg))
+                .any(|reference| {
+                    captured(reference)
+                        && !reference.parent().is_some_and(|parent| {
+                            matches!(parent.kind(), "member_expression" | "subscript_expression")
+                                && parent.child_by_field_name("object") == Some(reference)
+                        })
+                })
+        }) || call.child_by_field_name("function").is_some_and(|fun| {
+            let mut object = unwrap(fun);
+            while matches!(object.kind(), "member_expression" | "subscript_expression") {
+                let Some(next) = object.child_by_field_name("object") else {
+                    return true;
+                };
+                object = unwrap(next);
+            }
+            object.kind() == "identifier" && captured(object)
+        })
+    })
+}
+
+fn loader_value_origin(
+    value: Node<'_>,
+    key: &str,
+    function: Node<'_>,
+    input: &str,
+    path: &str,
+    graph: &Graph,
+    archive: &Archive<'_>,
+    depth: usize,
+) -> bool {
+    if depth > 8 {
+        return false;
+    }
+    let m = &graph.modules[path];
+    let value = unwrap(value);
+    if let Some(c) = chain(value, m).filter(|c| c.len() == 2 && c[1] == key) {
+        let Some(record) = value.child_by_field_name("object") else {
+            return false;
+        };
+        return loader_record_origin(
+            record,
+            key,
+            function,
+            input,
+            path,
+            graph,
+            archive,
+            depth + 1,
+        ) && !binding_is_written(function, &c[0], m);
+    }
+    let args = arguments(value);
+    key == "cwd"
+        && value.kind() == "call_expression"
+        && args.len() == 1
+        && loader_value_origin(
+            args[0],
+            key,
+            function,
+            input,
+            path,
+            graph,
+            archive,
+            depth + 1,
+        )
+}
+
+fn loader_record_origin(
+    record: Node<'_>,
+    key: &str,
+    function: Node<'_>,
+    input: &str,
+    path: &str,
+    graph: &Graph,
+    archive: &Archive<'_>,
+    depth: usize,
+) -> bool {
+    if depth > 8 {
+        return false;
+    }
+    let m = &graph.modules[path];
+    let record = unwrap(record);
+    if record.kind() == "identifier" {
+        let name = m.text(record);
+        if binding_is_written(function, name, m) {
+            return false;
+        }
+        if name == input && owner(record) == Some(function) {
+            return original_parameter_reference(record, function, input, m);
+        }
+        return initializer(record, name, m).is_some_and(|value| {
+            owner(value) == Some(function)
+                && loader_record_origin(
+                    value,
+                    key,
+                    function,
+                    input,
+                    path,
+                    graph,
+                    archive,
+                    depth + 1,
+                )
+        });
+    }
+    if record.kind() == "object" {
+        let mut preserved = false;
+        for i in 0..record.named_child_count() {
+            let Some(member) = record.named_child(i) else {
+                return false;
+            };
+            match member.kind() {
+                "comment" => (),
+                "pair" => {
+                    let Some(name) = member
+                        .child_by_field_name("key")
+                        .and_then(|n| property_key(n, m))
+                    else {
+                        return false;
+                    };
+                    if name == key {
+                        preserved = member.child_by_field_name("value").is_some_and(|value| {
+                            loader_value_origin(
+                                value,
+                                key,
+                                function,
+                                input,
+                                path,
+                                graph,
+                                archive,
+                                depth + 1,
+                            )
+                        });
+                    }
+                }
+                "spread_element" => {
+                    preserved = member.named_child(0).is_some_and(|value| {
+                        loader_record_origin(
+                            value,
+                            key,
+                            function,
+                            input,
+                            path,
+                            graph,
+                            archive,
+                            depth + 1,
+                        )
+                    });
+                }
+                _ => return false,
+            }
+        }
+        return preserved;
+    }
+    if record.kind() == "call_expression" {
+        let args = arguments(record);
+        if args.len() != 1
+            || !loader_record_origin(
+                args[0],
+                key,
+                function,
+                input,
+                path,
+                graph,
+                archive,
+                depth + 1,
+            )
+        {
+            return false;
+        }
+        let Some((target, helper)) = record
+            .child_by_field_name("function")
+            .and_then(|fun| graph.resolve(archive, path, fun))
+        else {
+            return false;
+        };
+        let Some(helper_input) =
+            params(helper, &graph.modules[target]).and_then(|p| p.into_iter().next())
+        else {
+            return false;
+        };
+        if !observational_preprocessor(helper, &helper_input, &graph.modules[target]) {
+            return false;
+        }
+        let returns = own_returns(helper);
+        return !returns.is_empty()
+            && returns.into_iter().all(|ret| {
+                ret.named_child(0).is_some_and(|value| {
+                    loader_record_origin(
+                        value,
+                        key,
+                        helper,
+                        &helper_input,
+                        target,
+                        graph,
+                        archive,
+                        depth + 1,
+                    )
+                })
+            });
+    }
+    false
+}
+
+fn identity_projection(
+    function: Node<'_>,
+    path: &str,
+    graph: &Graph,
+    archive: &Archive<'_>,
+    writer: bool,
+) -> Option<BTreeSet<String>> {
+    let m = &graph.modules[path];
     let input = params(function, m)?.into_iter().next()?;
     let object = returned_object(function, m)?;
     let members = object_members(object, m, 0)?;
     for key in ["sessionId", "cliSessionId", "cwd"] {
         let value = *members.get(key)?;
         if chain(value, m).as_deref() == Some(&[input.clone(), key.into()]) {
+            continue;
+        }
+        if !writer && loader_value_origin(value, key, function, &input, path, graph, archive, 0) {
             continue;
         }
         // Loader cwd may be normalized by a local path helper, but its only
@@ -1918,7 +2350,7 @@ fn loader(
         let Some((target, function)) = graph.resolve(archive, path, fun) else {
             continue;
         };
-        if identity_projection(function, &graph.modules[target], false).is_none() {
+        if identity_projection(function, target, graph, archive, false).is_none() {
             continue;
         }
         // Associate the parsed text with a read of a row path in this namespace.
@@ -2007,7 +2439,7 @@ fn writer(
             .ok_or(UNSUPPORTED)?;
         let (target, function) = graph.resolve(archive, path, fun).ok_or(UNSUPPORTED)?;
         let fields =
-            identity_projection(function, &graph.modules[target], true).ok_or(UNSUPPORTED)?;
+            identity_projection(function, target, graph, archive, true).ok_or(UNSUPPORTED)?;
         return Ok(Some(fields));
     }
     Ok(None)
@@ -2166,6 +2598,76 @@ exports.persist=persist;exports.load=load;
         let fields = detect(&fixture(MAIN, PROJECTION)).unwrap();
         assert_eq!(fields.len(), 4);
         assert!(fields.contains("cwd"));
+    }
+    fn preprocessing_projection(helper: &str) -> String {
+        PROJECTION.replace(
+            "function load(raw){return {sessionId:raw.sessionId,cliSessionId:raw.cliSessionId,cwd:raw.cwd};}",
+            &format!("{helper}\nfunction load(raw){{const normalized=preprocess(raw);return {{sessionId:normalized.sessionId,cliSessionId:normalized.cliSessionId,cwd:normalize(normalized.cwd)}};}}"),
+        )
+    }
+    #[test]
+    fn loader_preprocessing_preserves_ids_on_every_return() {
+        let projection = preprocessing_projection(
+            "function preprocess(raw){if(!raw.cwd)return raw;const path=value=>value;return {...raw,cwd:path(raw.cwd)};}",
+        );
+        assert_eq!(detect(&fixture(MAIN, &projection)).unwrap().len(), 4);
+    }
+    #[test]
+    fn loader_preprocessing_rejects_changed_ids_unknown_spreads_and_mutation() {
+        for helper in [
+            "function preprocess(raw){if(raw.flag)return {...raw,sessionId:'changed'};return raw;}",
+            "function preprocess(raw){return {...raw,cliSessionId:raw.sessionId};}",
+            "function preprocess(raw){return {...raw,...unknown};}",
+            "function preprocess(raw){raw.sessionId='changed';return raw;}",
+            "function preprocess(raw){return unknown(raw);}",
+            "function preprocess(raw){const alias=raw;alias.sessionId='changed';return {...raw};}",
+            "function preprocess(raw){raw[key]='changed';return raw;}",
+            "function preprocess(raw){Object.assign(raw,{sessionId:'changed'});return raw;}",
+            "function preprocess(raw){delete raw.sessionId;return raw;}",
+            "function preprocess(raw){{const {raw}=other;return raw;}}",
+            "function preprocess(raw){{let raw;return raw;}}",
+            "function preprocess(raw){try{return raw;}catch(raw){return raw;}}",
+            "function preprocess(raw){(()=>{raw.sessionId='changed';})();return raw;}",
+            "function preprocess(raw){{function raw(){}return raw;}}",
+            "function preprocess(raw){{class raw{}return raw;}}",
+            "function preprocess(raw){(()=>Object.assign(raw,{sessionId:'changed'}))();return raw;}",
+            "function preprocess(raw){const alias=raw;(()=>Object.assign(alias,{sessionId:'changed'}))();return raw;}",
+            "function preprocess(raw){mutate({record:raw});return raw;}",
+            "function preprocess(raw){(()=>{const alias=raw;Object.assign(alias,{sessionId:'changed'});})();return raw;}",
+            "function preprocess(raw){const container=[raw];Object.assign(container[0],{sessionId:'changed'});return raw;}",
+            "function preprocess(raw){eval('raw.sessionId=1');return raw;}",
+            "function preprocess(raw){Object.assign(({raw}).raw,{sessionId:'changed'});return raw;}",
+            "function preprocess(raw){const box={raw};Object.assign(box.raw,{sessionId:'changed'});return raw;}",
+        ] {
+            assert_eq!(
+                detect(&fixture(MAIN, &preprocessing_projection(helper))).unwrap_err(),
+                UNSUPPORTED
+            );
+        }
+    }
+    #[test]
+    fn loader_preprocessing_rejects_shadowed_input_and_reassigned_alias() {
+        for load in [
+            "function load(raw){{const raw={};const normalized=preprocess(raw);return {sessionId:normalized.sessionId,cliSessionId:normalized.cliSessionId,cwd:normalized.cwd};}}",
+            "function load(raw){let normalized=preprocess(raw);normalized=unknown;return {sessionId:normalized.sessionId,cliSessionId:normalized.cliSessionId,cwd:normalized.cwd};}",
+        ] {
+            let projection = PROJECTION.replace(
+                "function load(raw){return {sessionId:raw.sessionId,cliSessionId:raw.cliSessionId,cwd:raw.cwd};}",
+                &format!("function preprocess(raw){{return raw;}}{load}"),
+            );
+            assert_eq!(detect(&fixture(MAIN, &projection)).unwrap_err(), UNSUPPORTED);
+        }
+    }
+    #[test]
+    fn writer_does_not_inherit_loader_preprocessing_permission() {
+        let projection = PROJECTION.replace(
+            "function persist(state){return {sessionId:state.sessionId,cliSessionId:state.cliSessionId,cwd:state.cwd,title:state.title};}",
+            "function preprocess(raw){return raw;}function persist(state){const normalized=preprocess(state);return {sessionId:normalized.sessionId,cliSessionId:normalized.cliSessionId,cwd:normalized.cwd};}",
+        );
+        assert_eq!(
+            detect(&fixture(MAIN, &projection)).unwrap_err(),
+            UNSUPPORTED
+        );
     }
     #[test]
     fn formatting_chunks_identifiers_and_version_are_not_gates() {
