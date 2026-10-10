@@ -8,6 +8,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func TestProviderGatewayChatStreamFailsWhenNothingTranslates(t *testing.T) {
+	// 上游每个 chunk 都不满足 chat→responses 转换器的形状门控（object 不是
+	// chat.completion.chunk），随后正常 [DONE]：现状是 doneSeen=true 且
+	// converted_event_count=0，客户端收到 200 + 空 SSE 体，完全无法诊断。
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	stream := "data: {\"object\":\"chat.completion\",\"choices\":[]}\n\ndata: [DONE]\n\n"
+	(&relayServer{}).writeProviderGatewayChatStream(c, strings.NewReader(stream), "gpt-6.1-sol", []byte(`{}`), []byte(`{}`), false)
+	out := w.Body.String()
+	if failed := strings.Count(out, "event: response.failed\n"); failed != 1 {
+		t.Fatalf("expected exactly one terminal response.failed for a stream with zero translated events, got %d: %s", failed, out)
+	}
+	if strings.Contains(out, "event: response.completed\n") {
+		t.Fatalf("must not emit response.completed when nothing translated: %s", out)
+	}
+}
+
 func TestProviderGatewayChatStreamRequiresDone(t *testing.T) {
 	for _, tc := range []struct {
 		name, suffix string
