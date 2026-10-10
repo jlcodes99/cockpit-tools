@@ -100,6 +100,7 @@
     "failureTime": "Hata zamanı",
     "clearRecord": "Kaydı sil",
     "clearingRecord": "Siliniyor…",
+    "to": "ile",
     "dragSortHint": "Sıralamayı değiştirmek için soldaki tutamacı sürükleyin. Bıraktığınızda otomatik kaydedilir.",
     "dragSortFilteredHint": "Sıralamayı değiştirmek için aramayı temizleyin.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Kullandikca odeme: etkin",
       "payAsYouGoEmpty": "Kullandikca odeme: --",
       "payAsYouGoLabel": "Istege bagli kullanim",
-      "statusSynced": "Durum: senkron",
-      "statusSyncedPending": "Durum: senkron, kalan belirsiz",
-      "fastAvailable": "Hızlı: {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "Sınırsız",
-      "fastPerMonth": "Hızlı/ay: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/ay",
-      "fastChannelStatus": "Hızlı kanal: {{status}}",
-      "freeRemainingUnknown": "Free kalan: --",
-      "timesRemainingUnknown": "Kalan: --",
-      "soloParallel": "Paket: Solo ×{{count}}"
+      "creditsMember": "Üyelik kredileri",
+      "creditsBonus": "Bonus kredileri"
     },
     "flowNotice": {
       "title": "Trae hesap kilavuzu (genisletmek/daraltmak icin tiklayin)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Tam Trae CN hesap JSON yapıştırın. Ham token desteklenmez.",
       "jsonOnlyPlaceholder": "Tam Trae CN JSON..."
+    },
+    "checkin": {
+      "modalTitle": "Günlük giriş",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} sn",
+      "durationTitle": "Toplam check-in süresi",
+      "logSuccess": "Başarılı ({{done}}/{{total}})",
+      "logPartial": "Kısmi ({{done}}/{{total}})",
+      "logIncomplete": "Tamamlanmadı",
+      "detailSuccess": "Check-in başarılı",
+      "detailAlreadyClaimed": "Bugün zaten alındı",
+      "detailError": "Check-in hatası"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Başlangıç Zamanı",
       "endTime": "Bitiş Zamanı",
       "timeRangeHint": "Arka planda girişi tamamlamak için her gün bu aralıkta rastgele bir zaman seçer.",
+      "errors": "Hatalar",
+      "tabSettings": "Otomatik giriş ayarları",
+      "tabHistory": "Otomatik giriş geçmişi",
+      "manualTest": "Test çalıştır",
+      "clearLogs": "Temizle",
+      "clearLogsFailed": "Check-in kayıtları temizlenemedi: {{message}}",
+      "historyLoading": "Otomatik check-in kayıtları okunuyor...",
+      "historyLoadFailed": "Otomatik check-in kayıtları okunamadı: {{message}}",
+      "totalCredits": "{{credits}} kredi",
+      "historyRangeHint": "Yalnızca son 30 güne ait otomatik giriş kayıtları saklanır (toplam {{count}})",
+      "noHistory": "Son 30 günde otomatik giriş kaydı yok",
+      "saveFailed": "Otomatik giriş ayarları kaydedilemedi: {{message}}",
+      "manualTestPartialFailure": "Bazı hesaplar için giriş başarısız oldu. Kayıtlara bakın; arka planda daha sonra tekrar denenecek.",
+      "manualTestAlreadyRunning": "Bir otomatik giriş görevi çalışıyor. Lütfen kayıtları daha sonra kontrol edin.",
+      "manualTestFailed": "Test çalıştırılamadı: {{message}}",
       "timeRangeError": "Başlangıç zamanı bitiş zamanından sonra olamaz"
     }
   },

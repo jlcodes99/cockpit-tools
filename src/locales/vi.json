@@ -100,6 +100,7 @@
     "failureTime": "Thời điểm lỗi",
     "clearRecord": "Xóa bản ghi",
     "clearingRecord": "Đang xóa…",
+    "to": "đến",
     "dragSortHint": "Kéo tay nắm bên trái để đổi thứ tự. Thay đổi tự động lưu khi thả.",
     "dragSortFilteredHint": "Xóa nội dung tìm kiếm để đổi thứ tự.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Thanh toan theo muc dung: da bat",
       "payAsYouGoEmpty": "Thanh toan theo muc dung: --",
       "payAsYouGoLabel": "Su dung theo nhu cau",
-      "statusSynced": "Trạng thái: đã đồng bộ",
-      "statusSyncedPending": "Trạng thái: đã đồng bộ, còn lại chưa xác nhận",
-      "fastAvailable": "Nhanh còn {{times}}",
-      "fastTimes": "{{count}} lần",
-      "fastUnlimited": "Không giới hạn",
-      "fastPerMonth": "Nhanh/tháng: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/tháng",
-      "fastChannelStatus": "Kênh nhanh: {{status}}",
-      "freeRemainingUnknown": "Free còn: --",
-      "timesRemainingUnknown": "Còn lại: --",
-      "soloParallel": "Gói: Solo ×{{count}}"
+      "creditsMember": "Tín dụng thành viên",
+      "creditsBonus": "Tín dụng thưởng"
     },
     "flowNotice": {
       "title": "Huong dan tai khoan Trae (nhan de mo rong/thu gon)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Dán JSON tài khoản Trae CN đầy đủ. Không hỗ trợ token thô.",
       "jsonOnlyPlaceholder": "JSON Trae CN đầy đủ..."
+    },
+    "checkin": {
+      "modalTitle": "Điểm danh hàng ngày",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} giây",
+      "durationTitle": "Tổng thời gian check-in",
+      "logSuccess": "Thành công ({{done}}/{{total}})",
+      "logPartial": "Một phần ({{done}}/{{total}})",
+      "logIncomplete": "Chưa hoàn tất",
+      "detailSuccess": "Check-in thành công",
+      "detailAlreadyClaimed": "Đã nhận hôm nay",
+      "detailError": "Lỗi check-in"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Thời gian bắt đầu",
       "endTime": "Thời gian kết thúc",
       "timeRangeHint": "Tự động chọn một thời điểm ngẫu nhiên mỗi ngày trong khoảng này để điểm danh chạy ngầm.",
+      "errors": "Lỗi",
+      "tabSettings": "Cài đặt điểm danh tự động",
+      "tabHistory": "Lịch sử điểm danh tự động",
+      "manualTest": "Chạy thử",
+      "clearLogs": "Xóa",
+      "clearLogsFailed": "Xóa lịch sử điểm danh thất bại: {{message}}",
+      "historyLoading": "Đang đọc lịch sử điểm danh tự động...",
+      "historyLoadFailed": "Đọc lịch sử điểm danh tự động thất bại: {{message}}",
+      "totalCredits": "{{credits}} điểm",
+      "historyRangeHint": "Chỉ giữ lại lịch sử điểm danh tự động trong 30 ngày gần đây (tổng cộng {{count}})",
+      "noHistory": "Không có lịch sử điểm danh tự động trong 30 ngày gần đây",
+      "saveFailed": "Lưu cài đặt điểm danh tự động thất bại: {{message}}",
+      "manualTestPartialFailure": "Điểm danh thất bại cho một số tài khoản. Xem lịch sử; hệ thống sẽ tự động thử lại sau.",
+      "manualTestAlreadyRunning": "Tác vụ điểm danh tự động đang chạy. Vui lòng xem lịch sử sau.",
+      "manualTestFailed": "Chạy thử thất bại: {{message}}",
       "timeRangeError": "Thời gian bắt đầu không thể sau thời gian kết thúc"
     }
   },

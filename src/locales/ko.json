@@ -100,6 +100,7 @@
     "failureTime": "실패 시간",
     "clearRecord": "기록 삭제",
     "clearingRecord": "삭제 중…",
+    "to": "~",
     "dragSortHint": "왼쪽 핸들을 드래그해 순서를 변경하세요. 놓으면 자동 저장됩니다.",
     "dragSortFilteredHint": "순서를 변경하려면 검색을 지우세요.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "종량제 사용: 활성화됨",
       "payAsYouGoEmpty": "종량제 사용: --",
       "payAsYouGoLabel": "종량제 사용",
-      "statusSynced": "상태: 동기화됨",
-      "statusSyncedPending": "상태: 동기화됨, 잔여량 확인 중",
-      "fastAvailable": "빠른 요청 {{times}}",
-      "fastTimes": "{{count}}회",
-      "fastUnlimited": "무제한",
-      "fastPerMonth": "빠른 요청/월: {{count}}",
-      "fastChannelPerMonth": "빠른 채널: {{count}}/월",
-      "fastChannelStatus": "빠른 채널: {{status}}",
-      "freeRemainingUnknown": "무료 잔여: --",
-      "timesRemainingUnknown": "남은 횟수: --",
-      "soloParallel": "혜택: Solo 병렬 {{count}}"
+      "creditsMember": "멤버십 크레딧",
+      "creditsBonus": "보너스 크레딧"
     },
     "flowNotice": {
       "title": "Trae 계정 안내 (클릭하여 펼치기/접기)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "전체 Trae CN 계정 JSON을 붙여넣으세요. 불안정한 식별·로그인 상태를 피하기 위해 원시 토큰은 지원하지 않습니다.",
       "jsonOnlyPlaceholder": "전체 Trae CN JSON 붙여넣기..."
+    },
+    "checkin": {
+      "modalTitle": "매일 체크인",
+      "durationMs": "{{ms}}밀리초",
+      "durationSeconds": "{{seconds}}초",
+      "durationTitle": "총 체크인 소요 시간",
+      "logSuccess": "성공 ({{done}}/{{total}})",
+      "logPartial": "일부 성공 ({{done}}/{{total}})",
+      "logIncomplete": "미완료",
+      "detailSuccess": "체크인 성공",
+      "detailAlreadyClaimed": "오늘 이미 받음",
+      "detailError": "체크인 오류"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "시작 시간",
       "endTime": "종료 시간",
       "timeRangeHint": "매일 이 시간대 내에서 무작위 시간을 선택하여 백그라운드 출석 체크를 완료합니다.",
+      "errors": "오류",
+      "tabSettings": "자동 출석 체크 설정",
+      "tabHistory": "자동 출석 체크 기록",
+      "manualTest": "테스트 실행",
+      "clearLogs": "지우기",
+      "clearLogsFailed": "체크인 기록 삭제 실패: {{message}}",
+      "historyLoading": "자동 체크인 기록을 불러오는 중...",
+      "historyLoadFailed": "자동 체크인 기록을 불러오지 못했습니다: {{message}}",
+      "totalCredits": "{{credits}} 크레딧",
+      "historyRangeHint": "최근 30일간의 자동 출석 체크 기록만 유지됩니다 (총 {{count}}건)",
+      "noHistory": "최근 30일간 자동 출석 체크 기록이 없습니다",
+      "saveFailed": "자동 출석 체크 설정 저장 실패: {{message}}",
+      "manualTestPartialFailure": "일부 계정 출석 체크에 실패했습니다. 기록을 확인하세요. 잠시 후 백그라운드에서 자동으로 재시도됩니다.",
+      "manualTestAlreadyRunning": "자동 출석 체크 작업이 실행 중입니다. 잠시 후 기록을 확인해 주세요.",
+      "manualTestFailed": "테스트 실행 실패: {{message}}",
       "timeRangeError": "시작 시간은 종료 시간보다 늦을 수 없습니다"
     }
   },

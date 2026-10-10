@@ -100,6 +100,7 @@
     "failureTime": "وقت الفشل",
     "clearRecord": "مسح السجل",
     "clearingRecord": "جارٍ المسح…",
+    "to": "إلى",
     "dragSortHint": "اسحب المقبض الأيسر لتغيير الترتيب. يُحفظ تلقائيًا عند الإفلات.",
     "dragSortFilteredHint": "امسح البحث لتغيير الترتيب.",
     "recycleBin": {
@@ -6591,17 +6592,8 @@
       "payAsYouGoEnabled": "الاستخدام حسب الطلب: مفعل",
       "payAsYouGoEmpty": "الاستخدام حسب الطلب: --",
       "payAsYouGoLabel": "الاستخدام حسب الطلب",
-      "statusSynced": "الحالة: متزامن",
-      "statusSyncedPending": "الحالة: متزامن، المتبقي قيد التأكيد",
-      "fastAvailable": "سريع متبقي {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "غير محدود",
-      "fastPerMonth": "سريع/شهر: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/شهر",
-      "fastChannelStatus": "قناة سريعة: {{status}}",
-      "freeRemainingUnknown": "Free متبقي: --",
-      "timesRemainingUnknown": "المتبقي: --",
-      "soloParallel": "حزمة: Solo ×{{count}}"
+      "creditsMember": "رصيد العضوية",
+      "creditsBonus": "رصيد المكافآت"
     },
     "flowNotice": {
       "title": "دليل حساب Trae (انقر للتوسيع أو الطي)",
@@ -6617,6 +6609,18 @@
     "token": {
       "jsonOnlyDesc": "الصق JSON حساب Trae CN الكامل. الرمز الخام غير مدعوم.",
       "jsonOnlyPlaceholder": "JSON Trae CN كامل..."
+    },
+    "checkin": {
+      "modalTitle": "تسجيل يومي",
+      "durationMs": "{{ms}} مللي ثانية",
+      "durationSeconds": "{{seconds}} ثانية",
+      "durationTitle": "إجمالي وقت التسجيل",
+      "logSuccess": "نجاح ({{done}}/{{total}})",
+      "logPartial": "نجاح جزئي ({{done}}/{{total}})",
+      "logIncomplete": "غير مكتمل",
+      "detailSuccess": "تم التسجيل بنجاح",
+      "detailAlreadyClaimed": "تم الاستلام اليوم",
+      "detailError": "خطأ في التسجيل"
     }
   },
   "codebuddyCn": {
@@ -6787,6 +6791,21 @@
       "startTime": "وقت البدء",
       "endTime": "وقت الانتهاء",
       "timeRangeHint": "يختار وقتًا عشوائيًا يوميًا ضمن هذا النطاق لإكمال تسجيل الوصول في الخلفية.",
+      "errors": "أخطاء",
+      "tabSettings": "إعدادات تسجيل الوصول التلقائي",
+      "tabHistory": "سجل تسجيل الوصول التلقائي",
+      "manualTest": "تشغيل تجريبي",
+      "clearLogs": "مسح",
+      "clearLogsFailed": "فشل مسح سجلات تسجيل الحضور: {{message}}",
+      "historyLoading": "جارٍ قراءة سجلات تسجيل الحضور التلقائي...",
+      "historyLoadFailed": "فشل قراءة سجلات تسجيل الحضور التلقائي: {{message}}",
+      "totalCredits": "{{credits}} نقطة",
+      "historyRangeHint": "يتم الاحتفاظ بسجلات تسجيل الوصول التلقائي لآخر 30 يومًا فقط (الإجمالي: {{count}})",
+      "noHistory": "لا توجد سجلات تسجيل الوصول التلقائي خلال آخر 30 يومًا",
+      "saveFailed": "فشل حفظ إعدادات تسجيل الوصول التلقائي: {{message}}",
+      "manualTestPartialFailure": "فشل تسجيل الوصول لبعض الحسابات. راجع السجلات؛ ستتم إعادة المحاولة في الخلفية لاحقًا.",
+      "manualTestAlreadyRunning": "مهمة تسجيل الوصول التلقائي قيد التشغيل بالفعل. يرجى مراجعة السجلات لاحقًا.",
+      "manualTestFailed": "فشل التشغيل التجريبي: {{message}}",
       "timeRangeError": "لا يمكن أن يكون وقت البدء متأخرًا عن وقت الانتهاء"
     }
   },

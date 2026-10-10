@@ -100,6 +100,7 @@
     "failureTime": "Failure time",
     "clearRecord": "Clear record",
     "clearingRecord": "Clearing…",
+    "to": "to",
     "dragSortHint": "Drag the left handle to reorder. Changes save automatically on release.",
     "dragSortFilteredHint": "Clear the search to reorder.",
     "recycleBin": {
@@ -6892,17 +6893,8 @@
       "payAsYouGoConsuming": "On-Demand Usage: Consuming",
       "payAsYouGoEnabled": "On-Demand Usage: Enabled",
       "payAsYouGoEmpty": "On-Demand Usage: --",
-      "statusSynced": "Status: Synced",
-      "statusSyncedPending": "Status: Synced, remaining pending",
-      "fastAvailable": "Fast left: {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "Unlimited",
-      "fastPerMonth": "Fast/mo: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/mo",
-      "fastChannelStatus": "Express: {{status}}",
-      "freeRemainingUnknown": "Free left: --",
-      "timesRemainingUnknown": "Left: --",
-      "soloParallel": "Pack: Solo x{{count}}"
+      "creditsMember": "Membership credits",
+      "creditsBonus": "Bonus credits"
     },
     "flowNotice": {
       "title": "Trae account guide (click to expand/collapse)",
@@ -6918,6 +6910,18 @@
     "token": {
       "jsonOnlyDesc": "Paste full Trae CN account JSON. Raw tokens are unsupported to avoid unstable identity or unusable local login state.",
       "jsonOnlyPlaceholder": "Paste full Trae CN JSON..."
+    },
+    "checkin": {
+      "modalTitle": "Daily Check-in",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s",
+      "durationTitle": "Total check-in time",
+      "logSuccess": "Success ({{done}}/{{total}})",
+      "logPartial": "Partial ({{done}}/{{total}})",
+      "logIncomplete": "Incomplete",
+      "detailSuccess": "Checked in",
+      "detailAlreadyClaimed": "Claimed today",
+      "detailError": "Check-in error"
     }
   },
   "codebuddyCn": {
@@ -6989,6 +6993,21 @@
       "startTime": "Start Time",
       "endTime": "End Time",
       "timeRangeHint": "While the app is running, it selects a random time within this range daily to complete background check-in.",
+      "errors": "Errors",
+      "tabSettings": "Auto Check-in Settings",
+      "tabHistory": "Auto Check-in History",
+      "manualTest": "Test Run",
+      "clearLogs": "Clear",
+      "clearLogsFailed": "Failed to clear check-in records: {{message}}",
+      "historyLoading": "Loading auto check-in records...",
+      "historyLoadFailed": "Failed to load auto check-in records: {{message}}",
+      "totalCredits": "{{credits}} credits",
+      "historyRangeHint": "Only the last 30 days of auto check-in records are kept ({{count}} total)",
+      "noHistory": "No auto check-in records in the last 30 days",
+      "saveFailed": "Failed to save auto check-in settings: {{message}}",
+      "manualTestPartialFailure": "Some accounts failed to check in. See the records; a background retry will run later.",
+      "manualTestAlreadyRunning": "An auto check-in task is already running. Please check the records later.",
+      "manualTestFailed": "Test run failed: {{message}}",
       "timeRangeError": "Start time cannot be later than end time"
     },
     "flowNotice": {

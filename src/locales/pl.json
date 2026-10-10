@@ -100,6 +100,7 @@
     "failureTime": "Czas błędu",
     "clearRecord": "Usuń wpis",
     "clearingRecord": "Usuwanie…",
+    "to": "do",
     "dragSortHint": "Przeciągnij lewy uchwyt, aby zmienić kolejność. Zmiany zapiszą się po puszczeniu.",
     "dragSortFilteredHint": "Wyczyść wyszukiwanie, aby zmienić kolejność.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Rozliczanie za uzycie: wlaczone",
       "payAsYouGoEmpty": "Rozliczanie za uzycie: --",
       "payAsYouGoLabel": "Uzycie na zadanie",
-      "statusSynced": "Status: sync",
-      "statusSyncedPending": "Status: sync, reszta do potw.",
-      "fastAvailable": "Szybkie: {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "Bez limitu",
-      "fastPerMonth": "Szybkie/mc: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/mc",
-      "fastChannelStatus": "Szybki kanał: {{status}}",
-      "freeRemainingUnknown": "Free zostało: --",
-      "timesRemainingUnknown": "Zostało: --",
-      "soloParallel": "Pakiet: Solo ×{{count}}"
+      "creditsMember": "Kredyty członkowskie",
+      "creditsBonus": "Kredyty bonusowe"
     },
     "flowNotice": {
       "title": "Przewodnik po kontach Trae (kliknij, aby rozwinac/zwinac)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Wklej pełny JSON konta Trae CN. Surowy token nie jest obsługiwany.",
       "jsonOnlyPlaceholder": "Pełny JSON Trae CN..."
+    },
+    "checkin": {
+      "modalTitle": "Codzienne zameldowanie",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s",
+      "durationTitle": "Łączny czas check-in",
+      "logSuccess": "Sukces ({{done}}/{{total}})",
+      "logPartial": "Częściowy ({{done}}/{{total}})",
+      "logIncomplete": "Nieukończone",
+      "detailSuccess": "Check-in zakończony",
+      "detailAlreadyClaimed": "Już odebrane dzisiaj",
+      "detailError": "Błąd check-in"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Czas rozpoczęcia",
       "endTime": "Czas zakończenia",
       "timeRangeHint": "Wybiera codziennie losową godzinę w tym przedziale, aby dokończyć meldowanie w tle.",
+      "errors": "Błędy",
+      "tabSettings": "Ustawienia automatycznego meldowania",
+      "tabHistory": "Historia automatycznego meldowania",
+      "manualTest": "Uruchom test",
+      "clearLogs": "Wyczyść",
+      "clearLogsFailed": "Nie udało się wyczyścić historii odpraw: {{message}}",
+      "historyLoading": "Wczytywanie historii automatycznych odpraw...",
+      "historyLoadFailed": "Nie udało się wczytać historii automatycznych odpraw: {{message}}",
+      "totalCredits": "{{credits}} kredytów",
+      "historyRangeHint": "Przechowywane są tylko wpisy automatycznego meldowania z ostatnich 30 dni (łącznie: {{count}})",
+      "noHistory": "Brak wpisów automatycznego meldowania z ostatnich 30 dni",
+      "saveFailed": "Nie udało się zapisać ustawień automatycznego meldowania: {{message}}",
+      "manualTestPartialFailure": "Meldowanie nie powiodło się dla niektórych kont. Zobacz wpisy; ponowna próba odbędzie się później w tle.",
+      "manualTestAlreadyRunning": "Zadanie automatycznego meldowania jest już uruchomione. Sprawdź wpisy później.",
+      "manualTestFailed": "Test nie powiódł się: {{message}}",
       "timeRangeError": "Czas rozpoczęcia nie może być późniejszy niż czas zakończenia"
     }
   },

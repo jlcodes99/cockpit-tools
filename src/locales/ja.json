@@ -100,6 +100,7 @@
     "failureTime": "失敗日時",
     "clearRecord": "記録を消去",
     "clearingRecord": "消去中…",
+    "to": "〜",
     "dragSortHint": "左のハンドルをドラッグして並べ替えます。離すと自動保存されます。",
     "dragSortFilteredHint": "並べ替えるには検索をクリアしてください。",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "従量課金：有効",
       "payAsYouGoEmpty": "従量課金：--",
       "payAsYouGoLabel": "従量課金",
-      "statusSynced": "状態：同期済み",
-      "statusSyncedPending": "状態：同期済み、残量未確定",
-      "fastAvailable": "高速枠 {{times}}",
-      "fastTimes": "{{count}} 回",
-      "fastUnlimited": "無制限",
-      "fastPerMonth": "高速/月：{{count}}",
-      "fastChannelPerMonth": "高速枠: {{count}}/月",
-      "fastChannelStatus": "高速枠: {{status}}",
-      "freeRemainingUnknown": "無料残量：--",
-      "timesRemainingUnknown": "残回数：--",
-      "soloParallel": "特典: Solo 並列 {{count}}"
+      "creditsMember": "会員クレジット",
+      "creditsBonus": "ボーナスクレジット"
     },
     "flowNotice": {
       "title": "Trae アカウントガイド（クリックで展開/折りたたみ）",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "完全な Trae CN アカウント JSON を貼り付けてください。生トークンは不安定な識別や利用不能なログイン状態を避けるため非対応です。",
       "jsonOnlyPlaceholder": "完全な Trae CN JSON を貼り付け..."
+    },
+    "checkin": {
+      "modalTitle": "毎日チェックイン",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} 秒",
+      "durationTitle": "合計チェックイン時間",
+      "logSuccess": "成功 ({{done}}/{{total}})",
+      "logPartial": "一部成功 ({{done}}/{{total}})",
+      "logIncomplete": "未完了",
+      "detailSuccess": "チェックイン成功",
+      "detailAlreadyClaimed": "本日受領済み",
+      "detailError": "チェックインエラー"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "開始時間",
       "endTime": "終了時間",
       "timeRangeHint": "バックグラウンドチェックインを完了するため、この時間帯から毎日ランダムな時間を自動選択します。",
+      "errors": "エラー",
+      "tabSettings": "自動チェックイン設定",
+      "tabHistory": "自動チェックイン履歴",
+      "manualTest": "テスト実行",
+      "clearLogs": "クリア",
+      "clearLogsFailed": "チェックイン履歴のクリアに失敗しました：{{message}}",
+      "historyLoading": "自動チェックイン履歴を読み込んでいます...",
+      "historyLoadFailed": "自動チェックイン履歴の読み込みに失敗しました：{{message}}",
+      "totalCredits": "{{credits}} ポイント",
+      "historyRangeHint": "直近 30 日間の自動チェックイン記録のみ保持されます（全 {{count}} 件）",
+      "noHistory": "直近 30 日間の自動チェックイン記録はありません",
+      "saveFailed": "自動チェックイン設定の保存に失敗しました：{{message}}",
+      "manualTestPartialFailure": "一部のアカウントのチェックインに失敗しました。記録を確認してください。後ほどバックグラウンドで再試行されます。",
+      "manualTestAlreadyRunning": "自動チェックインタスクが実行中です。後ほど記録を確認してください。",
+      "manualTestFailed": "テスト実行に失敗しました：{{message}}",
       "timeRangeError": "開始時間は終了時間より後にできません"
     }
   },

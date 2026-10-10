@@ -100,6 +100,7 @@
     "failureTime": "失敗時間",
     "clearRecord": "清除紀錄",
     "clearingRecord": "清除中…",
+    "to": "至",
     "dragSortHint": "拖曳左側把手調整順序，放開後自動儲存。",
     "dragSortFilteredHint": "清除搜尋後可調整順序。",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "超額自動扣費：已開啟",
       "payAsYouGoEmpty": "超額自動扣費：--",
       "payAsYouGoLabel": "超額自動扣費",
-      "statusSynced": "狀態：已同步",
-      "statusSyncedPending": "狀態：已同步，剩餘額待確認",
-      "fastAvailable": "速通可用 {{times}}",
-      "fastTimes": "{{count}} 次",
-      "fastUnlimited": "無限次",
-      "fastPerMonth": "快請求/月：{{count}}",
-      "fastChannelPerMonth": "快通道: {{count}}/月",
-      "fastChannelStatus": "快通道: {{status}}",
-      "freeRemainingUnknown": "免費剩餘：--",
-      "timesRemainingUnknown": "剩餘次數：--",
-      "soloParallel": "權益包: Solo 並發 {{count}}"
+      "creditsMember": "會員積分",
+      "creditsBonus": "獎勵積分"
     },
     "flowNotice": {
       "title": "Trae 帳號接入說明（點擊展開/收起）",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "貼上完整 Trae CN 帳號 JSON。暫不支援裸 Token，避免匯入後無法穩定識別帳號或寫入不可用登入態。",
       "jsonOnlyPlaceholder": "貼上完整 Trae CN JSON..."
+    },
+    "checkin": {
+      "modalTitle": "每日簽到",
+      "durationMs": "{{ms}} 毫秒",
+      "durationSeconds": "{{seconds}} 秒",
+      "durationTitle": "累計簽到耗時",
+      "logSuccess": "成功 ({{done}}/{{total}})",
+      "logPartial": "部分成功 ({{done}}/{{total}})",
+      "logIncomplete": "未完成",
+      "detailSuccess": "簽到成功",
+      "detailAlreadyClaimed": "今日已領",
+      "detailError": "簽到異常"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "開始時間",
       "endTime": "結束時間",
       "timeRangeHint": "應用程式保持執行時，會在這個時間段內隨機選取一個時間點完成背景自動簽到。",
+      "errors": "異常",
+      "tabSettings": "自動簽到設定",
+      "tabHistory": "自動簽到紀錄",
+      "manualTest": "測試執行",
+      "clearLogs": "清空",
+      "clearLogsFailed": "清空簽到記錄失敗：{{message}}",
+      "historyLoading": "正在讀取自動簽到記錄...",
+      "historyLoadFailed": "讀取自動簽到記錄失敗：{{message}}",
+      "totalCredits": "{{credits}} 積分",
+      "historyRangeHint": "僅保留近 30 天的自動簽到紀錄（共 {{count}} 條）",
+      "noHistory": "暫無近 30 天的自動簽到紀錄",
+      "saveFailed": "自動簽到設定儲存失敗：{{message}}",
+      "manualTestPartialFailure": "部分帳號簽到失敗，請查看紀錄；背景稍後會自動重試。",
+      "manualTestAlreadyRunning": "自動簽到任務正在執行，請稍後查看紀錄。",
+      "manualTestFailed": "測試執行失敗：{{message}}",
       "timeRangeError": "開始時間不能晚於結束時間"
     }
   },

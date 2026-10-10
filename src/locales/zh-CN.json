@@ -100,6 +100,7 @@
     "failureTime": "失败时间",
     "clearRecord": "清除记录",
     "clearingRecord": "清除中…",
+    "to": "至",
     "dragSortHint": "拖动左侧手柄调整顺序，松开后自动保存。",
     "dragSortFilteredHint": "清除搜索后可调整顺序。",
     "recycleBin": {
@@ -6880,8 +6881,6 @@
       "resetUnknown": "订阅重置：--",
       "statusUnknown": "状态：--",
       "statusNormal": "状态：正常",
-      "statusSynced": "状态：已同步",
-      "statusSyncedPending": "状态：已同步，剩余额待确认",
       "statusExhaustedFree": "状态：用量已耗尽，建议升级方案",
       "statusExhaustedPro": "状态：用量已耗尽，建议升级方案或开启超额自动扣费",
       "bonusUsed": "Bonus：+{{amount}}",
@@ -6894,15 +6893,8 @@
       "payAsYouGoConsuming": "超额自动扣费：消耗中",
       "payAsYouGoEnabled": "超额自动扣费：已开启",
       "payAsYouGoEmpty": "超额自动扣费：--",
-      "fastAvailable": "速通可用 {{times}}",
-      "fastTimes": "{{count}} 次",
-      "fastUnlimited": "无限次",
-      "fastPerMonth": "快请求/月：{{count}}",
-      "fastChannelPerMonth": "快通道: {{count}}/月",
-      "fastChannelStatus": "快通道: {{status}}",
-      "freeRemainingUnknown": "免费剩余：--",
-      "timesRemainingUnknown": "剩余次数：--",
-      "soloParallel": "权益包: Solo 并发 {{count}}"
+      "creditsMember": "会员积分",
+      "creditsBonus": "奖励积分"
     },
     "token": {
       "jsonOnlyDesc": "粘贴完整 Trae CN 账号 JSON。暂不支持裸 Token，避免导入后无法稳定识别账号或写入不可用登录态。",
@@ -6918,6 +6910,18 @@
       "permissionWithPlatform": "权限范围：读取并写入本机 {{platform}} 配置目录中的 storage.json 登录相关字段，用于账号导入、切号注入与套餐信息展示；所有数据仅在本机处理。",
       "networkGlobal": "网络范围：{{platform}} OAuth 登录、令牌刷新和套餐查询会请求 trae.ai / traeapi.us 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。",
       "networkCn": "网络范围：{{platform}} OAuth 登录、令牌刷新和套餐查询会请求 trae.cn / trae.com.cn 官方接口；不会向第三方服务上传本地账号文件或原始存储内容。"
+    },
+    "checkin": {
+      "modalTitle": "每日签到",
+      "durationMs": "{{ms}} 毫秒",
+      "durationSeconds": "{{seconds}} 秒",
+      "durationTitle": "累计签到耗时",
+      "logSuccess": "成功 ({{done}}/{{total}})",
+      "logPartial": "部分成功 ({{done}}/{{total}})",
+      "logIncomplete": "未完成",
+      "detailSuccess": "签到成功",
+      "detailAlreadyClaimed": "今日已领",
+      "detailError": "签到异常"
     }
   },
   "codebuddyCn": {
@@ -6989,6 +6993,21 @@
       "startTime": "开始时间",
       "endTime": "结束时间",
       "timeRangeHint": "应用保持运行时，会在这个时间段内随机选取一个时间点完成后台自动签到。",
+      "errors": "异常",
+      "tabSettings": "自动签到设置",
+      "tabHistory": "自动签到记录",
+      "manualTest": "测试执行",
+      "clearLogs": "清空",
+      "clearLogsFailed": "清空签到记录失败：{{message}}",
+      "historyLoading": "正在读取自动签到记录...",
+      "historyLoadFailed": "读取自动签到记录失败：{{message}}",
+      "totalCredits": "{{credits}} 积分",
+      "historyRangeHint": "仅保留近 30 天的自动签到记录（共 {{count}} 条）",
+      "noHistory": "暂无近 30 天的自动签到记录",
+      "saveFailed": "自动签到设置保存失败：{{message}}",
+      "manualTestPartialFailure": "部分账号签到失败，请查看记录；后台稍后会自动重试。",
+      "manualTestAlreadyRunning": "自动签到任务正在执行，请稍后查看记录。",
+      "manualTestFailed": "测试执行失败：{{message}}",
       "timeRangeError": "开始时间不能晚于结束时间"
     },
     "flowNotice": {

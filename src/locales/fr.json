@@ -100,6 +100,7 @@
     "failureTime": "Heure de l’échec",
     "clearRecord": "Effacer",
     "clearingRecord": "Effacement…",
+    "to": "à",
     "dragSortHint": "Faites glisser la poignée à gauche pour réordonner. L’ordre est enregistré au relâchement.",
     "dragSortFilteredHint": "Effacez la recherche pour réordonner.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Paiement a l'usage : active",
       "payAsYouGoEmpty": "Paiement a l'usage : --",
       "payAsYouGoLabel": "Utilisation a la demande",
-      "statusSynced": "État : sync",
-      "statusSyncedPending": "État : sync, reste à confirmer",
-      "fastAvailable": "Rapide : {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "Illimité",
-      "fastPerMonth": "Rapide/mois : {{count}}",
-      "fastChannelPerMonth": "Express : {{count}}/mois",
-      "fastChannelStatus": "Express : {{status}}",
-      "freeRemainingUnknown": "Free restant : --",
-      "timesRemainingUnknown": "Restant : --",
-      "soloParallel": "Pack : Solo ×{{count}}"
+      "creditsMember": "Crédits d'abonnement",
+      "creditsBonus": "Crédits bonus"
     },
     "flowNotice": {
       "title": "Guide du compte Trae (cliquez pour developper/reduire)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Collez le JSON complet du compte Trae CN. Les tokens bruts ne sont pas pris en charge.",
       "jsonOnlyPlaceholder": "JSON Trae CN complet..."
+    },
+    "checkin": {
+      "modalTitle": "Check-in quotidien",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s",
+      "durationTitle": "Durée totale du check-in",
+      "logSuccess": "Succès ({{done}}/{{total}})",
+      "logPartial": "Partiel ({{done}}/{{total}})",
+      "logIncomplete": "Incomplet",
+      "detailSuccess": "Check-in réussi",
+      "detailAlreadyClaimed": "Déjà réclamé aujourd'hui",
+      "detailError": "Erreur de check-in"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Heure de début",
       "endTime": "Heure de fin",
       "timeRangeHint": "Sélectionne quotidiennement une heure aléatoire dans cette plage pour effectuer le pointage.",
+      "errors": "Erreurs",
+      "tabSettings": "Paramètres du pointage automatique",
+      "tabHistory": "Historique du pointage automatique",
+      "manualTest": "Test",
+      "clearLogs": "Effacer",
+      "clearLogsFailed": "Échec de l'effacement des enregistrements de pointage : {{message}}",
+      "historyLoading": "Chargement de l'historique de pointage automatique...",
+      "historyLoadFailed": "Échec du chargement de l'historique de pointage automatique : {{message}}",
+      "totalCredits": "{{credits}} crédits",
+      "historyRangeHint": "Seuls les enregistrements de pointage automatique des 30 derniers jours sont conservés ({{count}} au total)",
+      "noHistory": "Aucun enregistrement de pointage automatique au cours des 30 derniers jours",
+      "saveFailed": "Échec de l'enregistrement des paramètres de pointage automatique : {{message}}",
+      "manualTestPartialFailure": "Le pointage a échoué pour certains comptes. Consultez les enregistrements ; une nouvelle tentative aura lieu en arrière-plan plus tard.",
+      "manualTestAlreadyRunning": "Une tâche de pointage automatique est en cours. Veuillez consulter les enregistrements plus tard.",
+      "manualTestFailed": "Échec du test : {{message}}",
       "timeRangeError": "L'heure de début ne peut pas être postérieure à l'heure de fin"
     }
   },

@@ -100,6 +100,7 @@
     "failureTime": "Waktu gagal",
     "clearRecord": "Hapus catatan",
     "clearingRecord": "Menghapus…",
+    "to": "sampai",
     "dragSortHint": "Seret pegangan kiri untuk mengubah urutan. Perubahan otomatis disimpan saat dilepas.",
     "dragSortFilteredHint": "Hapus pencarian untuk mengubah urutan.",
     "recycleBin": {
@@ -6719,17 +6720,8 @@
       "payAsYouGoConsuming": "Penggunaan On-Demand: Mengonsumsi",
       "payAsYouGoEnabled": "Penggunaan On-Demand: Diaktifkan",
       "payAsYouGoEmpty": "Penggunaan On-Demand: --",
-      "statusSynced": "Status: tersinkron",
-      "statusSyncedPending": "Status: sinkron, sisa menunggu",
-      "fastAvailable": "Cepat sisa {{times}}",
-      "fastTimes": "{{count}}×",
-      "fastUnlimited": "Tak terbatas",
-      "fastPerMonth": "Cepat/bln: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/bln",
-      "fastChannelStatus": "Saluran cepat: {{status}}",
-      "freeRemainingUnknown": "Free sisa: --",
-      "timesRemainingUnknown": "Sisa: --",
-      "soloParallel": "Paket: Solo ×{{count}}"
+      "creditsMember": "Kredit keanggotaan",
+      "creditsBonus": "Kredit bonus"
     },
     "flowNotice": {
       "title": "Panduan akun Trae (klik untuk perluas/ciutkan)",
@@ -6745,6 +6737,18 @@
     "token": {
       "jsonOnlyDesc": "Tempel JSON akun Trae CN lengkap. Token mentah tidak didukung.",
       "jsonOnlyPlaceholder": "JSON Trae CN lengkap..."
+    },
+    "checkin": {
+      "modalTitle": "Check-in harian",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} detik",
+      "durationTitle": "Total waktu check-in",
+      "logSuccess": "Berhasil ({{done}}/{{total}})",
+      "logPartial": "Sebagian ({{done}}/{{total}})",
+      "logIncomplete": "Tidak selesai",
+      "detailSuccess": "Check-in berhasil",
+      "detailAlreadyClaimed": "Sudah diklaim hari ini",
+      "detailError": "Kesalahan check-in"
     }
   },
   "codebuddyCn": {
@@ -6915,6 +6919,21 @@
       "startTime": "Waktu Mulai",
       "endTime": "Waktu Selesai",
       "timeRangeHint": "Memilih waktu acak dalam rentang ini setiap hari untuk menyelesaikan check-in latar belakang.",
+      "errors": "Error",
+      "tabSettings": "Pengaturan Check-in Otomatis",
+      "tabHistory": "Riwayat Check-in Otomatis",
+      "manualTest": "Jalankan Uji Coba",
+      "clearLogs": "Hapus",
+      "clearLogsFailed": "Gagal menghapus riwayat check-in: {{message}}",
+      "historyLoading": "Memuat riwayat check-in otomatis...",
+      "historyLoadFailed": "Gagal memuat riwayat check-in otomatis: {{message}}",
+      "totalCredits": "{{credits}} kredit",
+      "historyRangeHint": "Hanya catatan check-in otomatis 30 hari terakhir yang disimpan (total {{count}})",
+      "noHistory": "Tidak ada catatan check-in otomatis dalam 30 hari terakhir",
+      "saveFailed": "Gagal menyimpan pengaturan check-in otomatis: {{message}}",
+      "manualTestPartialFailure": "Check-in gagal untuk beberapa akun. Lihat catatan; percobaan ulang akan dijalankan di latar belakang nanti.",
+      "manualTestAlreadyRunning": "Tugas check-in otomatis sedang berjalan. Periksa catatan nanti.",
+      "manualTestFailed": "Uji coba gagal: {{message}}",
       "timeRangeError": "Waktu mulai tidak boleh lebih lambat dari waktu selesai"
     }
   },

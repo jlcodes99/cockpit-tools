@@ -100,6 +100,7 @@
     "failureTime": "Ora dell’errore",
     "clearRecord": "Cancella",
     "clearingRecord": "Cancellazione…",
+    "to": "a",
     "dragSortHint": "Trascina la maniglia a sinistra per riordinare. Le modifiche vengono salvate al rilascio.",
     "dragSortFilteredHint": "Cancella la ricerca per riordinare.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Consumo on-demand: attivo",
       "payAsYouGoEmpty": "Consumo on-demand: --",
       "payAsYouGoLabel": "Utilizzo on-demand",
-      "statusSynced": "Stato: sync",
-      "statusSyncedPending": "Stato: sync, residuo da conf.",
-      "fastAvailable": "Fast: {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "Illimitato",
-      "fastPerMonth": "Fast/mese: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/mese",
-      "fastChannelStatus": "Canale rapido: {{status}}",
-      "freeRemainingUnknown": "Free residuo: --",
-      "timesRemainingUnknown": "Residuo: --",
-      "soloParallel": "Pack: Solo ×{{count}}"
+      "creditsMember": "Crediti abbonamento",
+      "creditsBonus": "Crediti bonus"
     },
     "flowNotice": {
       "title": "Guida account Trae (clicca per espandere/ridurre)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Incolla il JSON completo dell'account Trae CN. Token grezzi non supportati.",
       "jsonOnlyPlaceholder": "JSON Trae CN completo..."
+    },
+    "checkin": {
+      "modalTitle": "Check-in giornaliero",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s",
+      "durationTitle": "Tempo totale di check-in",
+      "logSuccess": "Successo ({{done}}/{{total}})",
+      "logPartial": "Parziale ({{done}}/{{total}})",
+      "logIncomplete": "Incompleto",
+      "detailSuccess": "Check-in riuscito",
+      "detailAlreadyClaimed": "Già riscattato oggi",
+      "detailError": "Errore di check-in"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Ora di inizio",
       "endTime": "Ora di fine",
       "timeRangeHint": "Seleziona ogni giorno un orario casuale in questo intervallo per completare il check-in.",
+      "errors": "Errori",
+      "tabSettings": "Impostazioni check-in automatico",
+      "tabHistory": "Cronologia check-in automatico",
+      "manualTest": "Esegui test",
+      "clearLogs": "Svuota",
+      "clearLogsFailed": "Cancellazione dei record di check-in non riuscita: {{message}}",
+      "historyLoading": "Caricamento dei record di check-in automatico...",
+      "historyLoadFailed": "Caricamento dei record di check-in automatico non riuscito: {{message}}",
+      "totalCredits": "{{credits}} crediti",
+      "historyRangeHint": "Vengono conservati solo i registri dei check-in automatici degli ultimi 30 giorni ({{count}} in totale)",
+      "noHistory": "Nessun registro di check-in automatico negli ultimi 30 giorni",
+      "saveFailed": "Salvataggio delle impostazioni di check-in automatico non riuscito: {{message}}",
+      "manualTestPartialFailure": "Il check-in non è riuscito per alcuni account. Consulta i registri; verrà eseguito un nuovo tentativo in background più tardi.",
+      "manualTestAlreadyRunning": "Un'attività di check-in automatico è in esecuzione. Controlla i registri più tardi.",
+      "manualTestFailed": "Test non riuscito: {{message}}",
       "timeRangeError": "L'ora di inizio non può essere successiva all'ora di fine"
     }
   },

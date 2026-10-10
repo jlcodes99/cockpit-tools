@@ -100,6 +100,7 @@
     "failureTime": "Hora del fallo",
     "clearRecord": "Borrar registro",
     "clearingRecord": "Borrando…",
+    "to": "a",
     "dragSortHint": "Arrastra el asa izquierda para reordenar. Se guarda automáticamente al soltar.",
     "dragSortFilteredHint": "Borra la búsqueda para reordenar.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Uso bajo demanda: activado",
       "payAsYouGoEmpty": "Uso bajo demanda: --",
       "payAsYouGoLabel": "Uso bajo demanda",
-      "statusSynced": "Estado: sync",
-      "statusSyncedPending": "Estado: sync, resto pendiente",
-      "fastAvailable": "Rápido: {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "Ilimitado",
-      "fastPerMonth": "Rápido/mes: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/mes",
-      "fastChannelStatus": "Canal rápido: {{status}}",
-      "freeRemainingUnknown": "Free resto: --",
-      "timesRemainingUnknown": "Resto: --",
-      "soloParallel": "Pack: Solo ×{{count}}"
+      "creditsMember": "Créditos de suscripción",
+      "creditsBonus": "Créditos de regalo"
     },
     "flowNotice": {
       "title": "Guia de cuentas de Trae (haz clic para expandir o contraer)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Pega el JSON completo de Trae CN. No se admiten tokens sin formato.",
       "jsonOnlyPlaceholder": "JSON completo de Trae CN..."
+    },
+    "checkin": {
+      "modalTitle": "Registro diario",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s",
+      "durationTitle": "Tiempo total de check-in",
+      "logSuccess": "Éxito ({{done}}/{{total}})",
+      "logPartial": "Parcial ({{done}}/{{total}})",
+      "logIncomplete": "Incompleto",
+      "detailSuccess": "Check-in correcto",
+      "detailAlreadyClaimed": "Ya reclamado hoy",
+      "detailError": "Error de check-in"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Hora de inicio",
       "endTime": "Hora de finalización",
       "timeRangeHint": "Selecciona diariamente una hora aleatoria dentro de este rango para completar el registro.",
+      "errors": "Errores",
+      "tabSettings": "Ajustes del registro automático",
+      "tabHistory": "Historial del registro automático",
+      "manualTest": "Ejecutar prueba",
+      "clearLogs": "Vaciar",
+      "clearLogsFailed": "Error al borrar los registros de check-in: {{message}}",
+      "historyLoading": "Cargando registros de check-in automático...",
+      "historyLoadFailed": "Error al cargar los registros de check-in automático: {{message}}",
+      "totalCredits": "{{credits}} créditos",
+      "historyRangeHint": "Solo se conservan los registros de los últimos 30 días ({{count}} en total)",
+      "noHistory": "No hay registros de los últimos 30 días",
+      "saveFailed": "Error al guardar los ajustes del registro automático: {{message}}",
+      "manualTestPartialFailure": "El registro automático falló para algunas cuentas. Consulte los registros; se reintentará en segundo plano más tarde.",
+      "manualTestAlreadyRunning": "Hay una tarea de registro automático en ejecución. Consulte los registros más tarde.",
+      "manualTestFailed": "La prueba falló: {{message}}",
       "timeRangeError": "La hora de inicio no puede ser posterior a la hora de finalización"
     }
   },

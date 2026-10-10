@@ -100,6 +100,7 @@
     "failureTime": "Čas selhání",
     "clearRecord": "Smazat záznam",
     "clearingRecord": "Mazání…",
+    "to": "do",
     "dragSortHint": "Přetažením úchytu vlevo změňte pořadí. Po uvolnění se automaticky uloží.",
     "dragSortFilteredHint": "Pro změnu pořadí vymažte vyhledávání.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Prubezne uctovani: zapnuto",
       "payAsYouGoEmpty": "Prubezne uctovani: --",
       "payAsYouGoLabel": "Pouziti na vyzadani",
-      "statusSynced": "Stav: sync",
-      "statusSyncedPending": "Stav: sync, zbytek nejasný",
-      "fastAvailable": "Rychlé: {{times}}",
-      "fastTimes": "{{count}}×",
-      "fastUnlimited": "Neomezeně",
-      "fastPerMonth": "Rychlé/měs: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/měs",
-      "fastChannelStatus": "Rychlý kanál: {{status}}",
-      "freeRemainingUnknown": "Free zbývá: --",
-      "timesRemainingUnknown": "Zbývá: --",
-      "soloParallel": "Balíček: Solo ×{{count}}"
+      "creditsMember": "Členské kredity",
+      "creditsBonus": "Bonusové kredity"
     },
     "flowNotice": {
       "title": "Prirucka k uctu Trae (kliknutim rozbalit/sbalit)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Vložte úplné JSON účtu Trae CN. Holý token není podporován.",
       "jsonOnlyPlaceholder": "Úplné Trae CN JSON..."
+    },
+    "checkin": {
+      "modalTitle": "Denní check-in",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s",
+      "durationTitle": "Celková doba check-inu",
+      "logSuccess": "Úspěch ({{done}}/{{total}})",
+      "logPartial": "Částečný úspěch ({{done}}/{{total}})",
+      "logIncomplete": "Nedokončeno",
+      "detailSuccess": "Check-in proběhl",
+      "detailAlreadyClaimed": "Dnes již získáno",
+      "detailError": "Chyba check-inu"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Počáteční čas",
       "endTime": "Koncový čas",
       "timeRangeHint": "Vybere denně náhodný čas v tomto rozsahu k dokončení přihlášení na pozadí.",
+      "errors": "Chyby",
+      "tabSettings": "Nastavení automatického přihlášení",
+      "tabHistory": "Historie automatického přihlášení",
+      "manualTest": "Testovací spuštění",
+      "clearLogs": "Vymazat",
+      "clearLogsFailed": "Vymazání záznamů o přihlášení se nezdařilo: {{message}}",
+      "historyLoading": "Načítání záznamů automatického přihlašování...",
+      "historyLoadFailed": "Načtení záznamů automatického přihlašování se nezdařilo: {{message}}",
+      "totalCredits": "{{credits}} kreditů",
+      "historyRangeHint": "Uchovávají se pouze záznamy automatického přihlášení za posledních 30 dní (celkem: {{count}})",
+      "noHistory": "Žádné záznamy automatického přihlášení za posledních 30 dní",
+      "saveFailed": "Uložení nastavení automatického přihlášení se nezdařilo: {{message}}",
+      "manualTestPartialFailure": "Přihlášení se pro některé účty nezdařilo. Podívejte se do záznamů; opakování proběhne později na pozadí.",
+      "manualTestAlreadyRunning": "Úloha automatického přihlášení již běží. Záznamy si projděte později.",
+      "manualTestFailed": "Testovací spuštění se nezdařilo: {{message}}",
       "timeRangeError": "Počáteční čas nesmí být pozdější než koncový čas"
     }
   },

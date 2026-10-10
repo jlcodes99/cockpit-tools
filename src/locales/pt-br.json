@@ -100,6 +100,7 @@
     "failureTime": "Hora da falha",
     "clearRecord": "Limpar registro",
     "clearingRecord": "Limpando…",
+    "to": "até",
     "dragSortHint": "Arraste a alça à esquerda para reordenar. As alterações são salvas ao soltar.",
     "dragSortFilteredHint": "Limpe a busca para reordenar.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Uso sob demanda: ativado",
       "payAsYouGoEmpty": "Uso sob demanda: --",
       "payAsYouGoLabel": "Uso sob demanda",
-      "statusSynced": "Status: sync",
-      "statusSyncedPending": "Status: sync, saldo pendente",
-      "fastAvailable": "Rápido: {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "Ilimitado",
-      "fastPerMonth": "Rápido/mês: {{count}}",
-      "fastChannelPerMonth": "Express: {{count}}/mês",
-      "fastChannelStatus": "Canal rápido: {{status}}",
-      "freeRemainingUnknown": "Free resto: --",
-      "timesRemainingUnknown": "Resto: --",
-      "soloParallel": "Pacote: Solo ×{{count}}"
+      "creditsMember": "Créditos de assinatura",
+      "creditsBonus": "Créditos de bônus"
     },
     "flowNotice": {
       "title": "Guia de contas Trae (clique para expandir/recolher)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Cole o JSON completo da conta Trae CN. Token puro não é suportado.",
       "jsonOnlyPlaceholder": "JSON completo Trae CN..."
+    },
+    "checkin": {
+      "modalTitle": "Check-in diário",
+      "durationMs": "{{ms}} ms",
+      "durationSeconds": "{{seconds}} s",
+      "durationTitle": "Tempo total de check-in",
+      "logSuccess": "Sucesso ({{done}}/{{total}})",
+      "logPartial": "Parcial ({{done}}/{{total}})",
+      "logIncomplete": "Incompleto",
+      "detailSuccess": "Check-in realizado",
+      "detailAlreadyClaimed": "Já resgatado hoje",
+      "detailError": "Erro de check-in"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Horário de início",
       "endTime": "Horário de término",
       "timeRangeHint": "Seleciona diariamente um horário aleatório dentro deste intervalo para concluir o check-in.",
+      "errors": "Erros",
+      "tabSettings": "Configurações de check-in automático",
+      "tabHistory": "Histórico de check-in automático",
+      "manualTest": "Executar teste",
+      "clearLogs": "Limpar",
+      "clearLogsFailed": "Falha ao limpar os registros de check-in: {{message}}",
+      "historyLoading": "Carregando registros de check-in automático...",
+      "historyLoadFailed": "Falha ao carregar os registros de check-in automático: {{message}}",
+      "totalCredits": "{{credits}} créditos",
+      "historyRangeHint": "Apenas os registros de check-in automático dos últimos 30 dias são mantidos ({{count}} no total)",
+      "noHistory": "Nenhum registro de check-in automático nos últimos 30 dias",
+      "saveFailed": "Falha ao salvar as configurações de check-in automático: {{message}}",
+      "manualTestPartialFailure": "O check-in falhou para algumas contas. Veja os registros; uma nova tentativa ocorrerá em segundo plano mais tarde.",
+      "manualTestAlreadyRunning": "Uma tarefa de check-in automático está em execução. Verifique os registros mais tarde.",
+      "manualTestFailed": "Falha no teste: {{message}}",
       "timeRangeError": "O horário de início não pode ser posterior ao horário de término"
     }
   },

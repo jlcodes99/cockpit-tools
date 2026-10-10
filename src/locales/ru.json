@@ -100,6 +100,7 @@
     "failureTime": "Время ошибки",
     "clearRecord": "Удалить запись",
     "clearingRecord": "Удаление…",
+    "to": "до",
     "dragSortHint": "Перетащите маркер слева, чтобы изменить порядок. Изменения сохраняются при отпускании.",
     "dragSortFilteredHint": "Очистите поиск, чтобы изменить порядок.",
     "recycleBin": {
@@ -6544,17 +6545,8 @@
       "payAsYouGoEnabled": "Оплата по факту: включена",
       "payAsYouGoEmpty": "Оплата по факту: --",
       "payAsYouGoLabel": "Использование по требованию",
-      "statusSynced": "Статус: синхр.",
-      "statusSyncedPending": "Статус: синхр., остаток уточн.",
-      "fastAvailable": "Быстрые: {{times}}",
-      "fastTimes": "{{count}}",
-      "fastUnlimited": "Безлимит",
-      "fastPerMonth": "Быстрые/мес: {{count}}",
-      "fastChannelPerMonth": "Экспресс: {{count}}/мес",
-      "fastChannelStatus": "Экспресс: {{status}}",
-      "freeRemainingUnknown": "Free ост.: --",
-      "timesRemainingUnknown": "Ост.: --",
-      "soloParallel": "Пакет: Solo ×{{count}}"
+      "creditsMember": "Кредиты подписки",
+      "creditsBonus": "Бонусные кредиты"
     },
     "flowNotice": {
       "title": "Руководство по аккаунту Trae (нажмите, чтобы развернуть или свернуть)",
@@ -6570,6 +6562,18 @@
     "token": {
       "jsonOnlyDesc": "Вставьте полный JSON аккаунта Trae CN. Сырой token не поддерживается.",
       "jsonOnlyPlaceholder": "Полный Trae CN JSON..."
+    },
+    "checkin": {
+      "modalTitle": "Ежедневный чек-ин",
+      "durationMs": "{{ms}} мс",
+      "durationSeconds": "{{seconds}} с",
+      "durationTitle": "Общее время check-in",
+      "logSuccess": "Успешно ({{done}}/{{total}})",
+      "logPartial": "Частично ({{done}}/{{total}})",
+      "logIncomplete": "Не завершено",
+      "detailSuccess": "Check-in выполнен",
+      "detailAlreadyClaimed": "Уже получено сегодня",
+      "detailError": "Ошибка check-in"
     }
   },
   "codebuddyCn": {
@@ -6740,6 +6744,21 @@
       "startTime": "Время начала",
       "endTime": "Время окончания",
       "timeRangeHint": "Ежедневно выбирает случайное время в этом интервале для выполнения фоновой отметки.",
+      "errors": "Ошибки",
+      "tabSettings": "Настройки авто-отметки",
+      "tabHistory": "Журнал авто-отметки",
+      "manualTest": "Тестовый запуск",
+      "clearLogs": "Очистить",
+      "clearLogsFailed": "Не удалось очистить записи о check-in: {{message}}",
+      "historyLoading": "Загрузка записей автоматического check-in...",
+      "historyLoadFailed": "Не удалось загрузить записи автоматического check-in: {{message}}",
+      "totalCredits": "{{credits}} кредитов",
+      "historyRangeHint": "Хранятся только записи авто-отметки за последние 30 дней (всего: {{count}})",
+      "noHistory": "Нет записей авто-отметки за последние 30 дней",
+      "saveFailed": "Не удалось сохранить настройки авто-отметки: {{message}}",
+      "manualTestPartialFailure": "Отметка для некоторых аккаунтов не выполнена. Смотрите журнал; повторная попытка произойдёт позже в фоне.",
+      "manualTestAlreadyRunning": "Задача авто-отметки уже выполняется. Проверьте журнал позже.",
+      "manualTestFailed": "Ошибка тестового запуска: {{message}}",
       "timeRangeError": "Время начала не может быть позже времени окончания"
     }
   },
