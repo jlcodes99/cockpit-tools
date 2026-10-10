@@ -1,0 +1,34 @@
+.codex-reset-credit-expiry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.codex-reset-credit-expiry svg { flex-shrink: 0; }
+.codex-reset-credit-expiry span { overflow-wrap: anywhere; }
+.codex-reset-credit-expiry.is-urgent,
+.codex-reset-credit-expiry.is-error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--border-light));
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-secondary));
+  font-weight: 700;
+}
+.codex-reset-credit-expiry.is-urgent {
+  border-left: 4px solid var(--danger);
+}
+.codex-reset-credit-expiry:disabled { cursor: wait; opacity: 0.7; }
+
+.codex-account-reset-expiry-line {
+  margin: 6px 0;
+  min-width: 0;
+}

@@ -922,3 +922,21 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(29, 78, 216, 0.15);
 }
+
+.account-mini-reset-credits {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0;
+  min-width: 0;
+}
+
+.account-mini-reset-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
