@@ -314,6 +314,10 @@ fn default_sidecar_streaming_bootstrap_retries() -> u8 {
     1
 }
 
+fn default_auto_retry_when_overload() -> bool {
+    false
+}
+
 fn default_timeout_preset_long_wait() -> String {
     "long_wait".to_string()
 }
@@ -363,6 +367,8 @@ pub struct CodexLocalAccessTimeouts {
     pub single_account_status_retry_max_delay_ms: u64,
     #[serde(default = "default_sidecar_streaming_bootstrap_retries")]
     pub sidecar_streaming_bootstrap_retries: u8,
+    #[serde(default = "default_auto_retry_when_overload")]
+    pub auto_retry_when_overload: bool,
 }
 
 impl Default for CodexLocalAccessTimeouts {
@@ -391,6 +397,7 @@ impl Default for CodexLocalAccessTimeouts {
             single_account_status_retry_max_delay_ms:
                 default_single_account_status_retry_max_delay_ms(),
             sidecar_streaming_bootstrap_retries: default_sidecar_streaming_bootstrap_retries(),
+            auto_retry_when_overload: default_auto_retry_when_overload(),
         }
     }
 }

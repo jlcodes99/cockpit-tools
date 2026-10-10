@@ -214,7 +214,14 @@ func codexTerminalFailureBody(eventData []byte) ([]byte, bool) {
 			body = codexTerminalErrorBody(eventData, "error")
 		}
 	default:
-		return nil, false
+		if gjson.GetBytes(eventData, "error").Exists() {
+			body = codexTerminalErrorBody(eventData, "error")
+			if len(body) == 0 {
+				body = codexTerminalTopLevelErrorBody(eventData)
+			}
+		} else {
+			return nil, false
+		}
 	}
 	if len(body) == 0 {
 		body = []byte(`{"error":{"message":"upstream stream failed without error details"}}`)

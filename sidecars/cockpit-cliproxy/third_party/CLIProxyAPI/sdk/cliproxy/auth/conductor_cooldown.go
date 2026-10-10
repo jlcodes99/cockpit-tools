@@ -289,6 +289,36 @@ func (m *Manager) clearDisabledCooldownStates(cfg *internalconfig.Config) bool {
 	return len(snapshots) > 0
 }
 
+// ClearOverloadCooldowns clears cooldown and unavailability states across all active auths,
+// allowing immediate retries when upstream services recover or overload retries are triggered.
+func (m *Manager) ClearOverloadCooldowns() bool {
+	if m == nil {
+		return false
+	}
+	now := time.Now()
+	snapshots := make([]*Auth, 0)
+	m.mu.Lock()
+	for _, auth := range m.auths {
+		if auth == nil {
+			continue
+		}
+		if auth.Disabled || auth.Status == StatusDisabled {
+			continue
+		}
+		if clearCooldownStateForAuth(auth, now) {
+			snapshots = append(snapshots, auth.Clone())
+		}
+	}
+	m.mu.Unlock()
+
+	if m.scheduler != nil {
+		for _, snapshot := range snapshots {
+			m.scheduler.upsertAuth(snapshot)
+		}
+	}
+	return len(snapshots) > 0
+}
+
 // RestoreCooldownStates restores unexpired persisted cooldown records into registered auths.
 func (m *Manager) RestoreCooldownStates(ctx context.Context) error {
 	if m == nil {
@@ -401,8 +431,13 @@ func clearCooldownStateForAuth(auth *Auth, now time.Time) bool {
 		return false
 	}
 	changed := false
-	if auth.Unavailable || !auth.NextRetryAfter.IsZero() || auth.Quota.Exceeded || !auth.Quota.NextRecoverAt.IsZero() {
+	if auth.Unavailable || !auth.NextRetryAfter.IsZero() || auth.Quota.Exceeded || !auth.Quota.NextRecoverAt.IsZero() || auth.Status == StatusError || auth.LastError != nil {
 		auth.Unavailable = false
+		if auth.Status == StatusError {
+			auth.Status = StatusActive
+		}
+		auth.StatusMessage = ""
+		auth.LastError = nil
 		auth.NextRetryAfter = time.Time{}
 		applyCooldownFields(&auth.Quota, QuotaState{})
 		auth.UpdatedAt = now
@@ -412,8 +447,13 @@ func clearCooldownStateForAuth(auth *Auth, now time.Time) bool {
 		if state == nil {
 			continue
 		}
-		if state.Unavailable || !state.NextRetryAfter.IsZero() || state.Quota.Exceeded || !state.Quota.NextRecoverAt.IsZero() {
+		if state.Unavailable || !state.NextRetryAfter.IsZero() || state.Quota.Exceeded || !state.Quota.NextRecoverAt.IsZero() || state.Status == StatusError || state.LastError != nil {
 			state.Unavailable = false
+			if state.Status == StatusError {
+				state.Status = StatusActive
+			}
+			state.StatusMessage = ""
+			state.LastError = nil
 			state.NextRetryAfter = time.Time{}
 			applyCooldownFields(&state.Quota, QuotaState{})
 			state.UpdatedAt = now

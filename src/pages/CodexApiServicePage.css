@@ -1986,6 +1986,57 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   grid-template-columns: repeat(2, minmax(180px, 1fr));
 }
 
+.codex-api-service-policy-grid .codex-api-service-toggle-label {
+  grid-column: 1 / -1;
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light, rgba(255, 255, 255, 0.08));
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.03));
+  cursor: pointer;
+  height: auto !important;
+  margin-top: 4px;
+  transition: all 0.2s ease;
+}
+
+.codex-api-service-policy-grid .codex-api-service-toggle-label:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  border-color: var(--primary, #3b82f6);
+}
+
+.codex-api-service-policy-grid .codex-api-service-toggle-label > .toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.codex-api-service-policy-grid .codex-api-service-toggle-label > .toggle-text > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.codex-api-service-policy-grid .codex-api-service-toggle-label > .toggle-text > small {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.codex-api-service-policy-grid .codex-api-service-toggle-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary, #3b82f6);
+  flex-shrink: 0;
+  margin: 0;
+}
+
 .codex-api-service-timeout-preset-section {
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border-light);

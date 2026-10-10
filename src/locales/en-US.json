@@ -4674,6 +4674,8 @@
         "singleStatusAttempts": "Single-account retries",
         "singleStatusBaseDelay": "Single base delay (ms)",
         "singleStatusMaxDelay": "Single max delay (ms)",
+        "autoRetryWhenOverload": "Auto retry when overload",
+        "autoRetryWhenOverloadHint": "Automatically retry upstream requests when overloaded (e.g. server_is_overloaded / 502 / 503) without immediately returning errors to client",
         "maxDelayGteBase": "Max delay cannot be less than base delay",
         "longWaitPreset": "Long wait preset",
         "shortWaitPreset": "Short wait preset",

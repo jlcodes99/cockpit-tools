@@ -89,6 +89,7 @@ type StreamingConfig struct {
 	StreamIdleTimeoutMS       int `yaml:"stream-idle-timeout-ms,omitempty" json:"stream-idle-timeout-ms,omitempty"`
 	ImageStreamOpenTimeoutMS  int `yaml:"image-stream-open-timeout-ms,omitempty" json:"image-stream-open-timeout-ms,omitempty"`
 	ImageStreamIdleTimeoutMS  int `yaml:"image-stream-idle-timeout-ms,omitempty" json:"image-stream-idle-timeout-ms,omitempty"`
-	BootstrapRetryBaseDelayMS int `yaml:"bootstrap-retry-base-delay-ms,omitempty" json:"bootstrap-retry-base-delay-ms,omitempty"`
-	BootstrapRetryMaxDelayMS  int `yaml:"bootstrap-retry-max-delay-ms,omitempty" json:"bootstrap-retry-max-delay-ms,omitempty"`
+	BootstrapRetryBaseDelayMS int  `yaml:"bootstrap-retry-base-delay-ms,omitempty" json:"bootstrap-retry-base-delay-ms,omitempty"`
+	BootstrapRetryMaxDelayMS  int  `yaml:"bootstrap-retry-max-delay-ms,omitempty" json:"bootstrap-retry-max-delay-ms,omitempty"`
+	AutoRetryWhenOverload     bool `yaml:"auto-retry-when-overload,omitempty" json:"auto-retry-when-overload,omitempty"`
 }

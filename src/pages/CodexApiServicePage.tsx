@@ -547,6 +547,7 @@ function defaultCodexLocalAccessTimeouts(): CodexLocalAccessTimeouts {
     singleAccountStatusRetryBaseDelayMs: 300,
     singleAccountStatusRetryMaxDelayMs: 1500,
     sidecarStreamingBootstrapRetries: 1,
+    autoRetryWhenOverload: false,
   };
 }
 
@@ -623,6 +624,7 @@ function timeoutDraftsFromValue(
     sidecarStreamingBootstrapRetries: String(
       timeouts.sidecarStreamingBootstrapRetries,
     ),
+    autoRetryWhenOverload: String(Boolean(timeouts.autoRetryWhenOverload)),
   };
 }
 
@@ -3248,6 +3250,7 @@ export function useCodexApiServicePageController() {
       singleAccountStatusRetryBaseDelayMs,
       singleAccountStatusRetryMaxDelayMs,
       sidecarStreamingBootstrapRetries: sidecarBootstrapRetries,
+      autoRetryWhenOverload: timeoutDrafts.autoRetryWhenOverload === "true",
     };
     return payload;
   };

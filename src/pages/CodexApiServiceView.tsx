@@ -2626,6 +2626,32 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                       }
                     />
                   </label>
+                  <label className="codex-api-service-toggle-label">
+                    <div className="toggle-text">
+                      <span>
+                        {t(
+                          "codex.apiService.timeouts.autoRetryWhenOverload",
+                          "过载时自动重试",
+                        )}
+                      </span>
+                      <small>
+                        {t(
+                          "codex.apiService.timeouts.autoRetryWhenOverloadHint",
+                          "遇到服务器过载（server_is_overloaded / 502 / 503）时自动重试，不立即向客户端报错",
+                        )}
+                      </small>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={timeoutDrafts.autoRetryWhenOverload === "true"}
+                      onChange={(event) =>
+                        updateTimeoutDraft(
+                          "autoRetryWhenOverload",
+                          event.target.checked ? "true" : "false",
+                        )
+                      }
+                    />
+                  </label>
                 </div>
               </section>
               <section className="codex-api-service-timeout-section">

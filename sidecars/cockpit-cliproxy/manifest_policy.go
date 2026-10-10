@@ -110,6 +110,7 @@ type manifest struct {
 	RoutingStrategy            string                       `json:"routingStrategy"`
 	CustomRoutingRules         []customRoutingRule          `json:"customRoutingRules"`
 	ImmediateSSEResponse       bool                         `json:"immediateSseResponse"`
+	AutoRetryWhenOverload      bool                         `json:"autoRetryWhenOverload"`
 	MaxConcurrentImageRequests int                          `json:"maxConcurrentImageRequests"`
 	// MaxAccountConcurrency 限制单个账号同时处理的会话数；0 表示不限制。
 	MaxAccountConcurrency int `json:"maxAccountConcurrency"`

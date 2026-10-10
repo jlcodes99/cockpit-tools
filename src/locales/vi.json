@@ -4443,6 +4443,8 @@
         "singleStatusAttempts": "Thử lại một tài khoản",
         "singleStatusBaseDelay": "Trễ cơ bản tài khoản (ms)",
         "singleStatusMaxDelay": "Trễ tối đa tài khoản (ms)",
+        "autoRetryWhenOverload": "Tự động thử lại khi quá tải",
+        "autoRetryWhenOverloadHint": "Tự động thử lại yêu cầu lên upstream khi máy chủ quá tải (server_is_overloaded / 502 / 503) thay vì trả lỗi về ngay cho người dùng",
         "maxDelayGteBase": "Độ trễ tối đa không được nhỏ hơn độ trễ cơ bản",
         "longWaitPreset": "Mẫu chờ lâu",
         "shortWaitPreset": "Mẫu chờ ngắn",

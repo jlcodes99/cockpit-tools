@@ -4674,6 +4674,8 @@
         "singleStatusAttempts": "单账号重试",
         "singleStatusBaseDelay": "单账号基础延迟(ms)",
         "singleStatusMaxDelay": "单账号最大延迟(ms)",
+        "autoRetryWhenOverload": "过载时自动重试",
+        "autoRetryWhenOverloadHint": "遇到上游服务器过载（如 server_is_overloaded / 502 / 503）时自动重试，不立即向客户端返回错误",
         "maxDelayGteBase": "最大延迟不能小于基础延迟",
         "longWaitPreset": "长等待方案",
         "shortWaitPreset": "短等待方案",

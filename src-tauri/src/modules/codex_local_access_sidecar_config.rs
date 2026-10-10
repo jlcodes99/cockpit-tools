@@ -2626,6 +2626,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             &routing_accounts,
         );
     }
+    let timeouts = collection_timeouts(collection);
     let manifest = json!({
         "locale": app_locale,
         "gatewayErrorMessages": {
@@ -2671,6 +2672,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         "requestPayloadLogging": collection.request_payload_logging,
         "diagnosticsControlKey": internal_api_service_key(),
         "immediateSseResponse": collection.immediate_sse_response,
+        "autoRetryWhenOverload": timeouts.auto_retry_when_overload,
         "maxConcurrentImageRequests": collection.max_concurrent_image_requests,
         "maxAccountConcurrency": collection.max_account_concurrency,
         "accountConcurrencyWaitMs": collection.account_concurrency_wait_ms,
@@ -2728,7 +2730,6 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         "request-retry".to_string(),
         json!(MAX_REQUEST_RETRY_ATTEMPTS as i32),
     );
-    let timeouts = collection_timeouts(collection);
     config.insert(
         "streaming".to_string(),
         json!({
@@ -2741,6 +2742,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             "image-stream-open-timeout-ms": timeouts.sidecar_image_stream_open_timeout_ms,
             "image-stream-idle-timeout-ms": timeouts.sidecar_image_stream_idle_timeout_ms,
             "stream-open-max-attempts": timeouts.sidecar_stream_open_max_attempts,
+            "auto-retry-when-overload": timeouts.auto_retry_when_overload,
         }),
     );
     config.insert(
