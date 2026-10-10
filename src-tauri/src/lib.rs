@@ -392,11 +392,18 @@ pub fn run() {
 
             // 启动时清理 WebKit LocalStorage WAL，防止无限膨胀
             std::thread::spawn(|| {
+                // Development builds must not maintain the installed application's stores.
+                if modules::account::is_dev_profile() {
+                    return;
+                }
                 modules::webkit_cache_maintenance::checkpoint_webkit_localstorage();
             });
 
             // 当前主线不再使用 platform-packages；启动时回收旧版本遗留的孤儿 adapter。
             std::thread::spawn(|| {
+                if modules::account::is_dev_profile() {
+                    return;
+                }
                 match modules::process::close_orphaned_legacy_platform_adapter_processes(5) {
                     Ok(0) => {}
                     Ok(count) => logger::log_info(&format!(
@@ -412,6 +419,9 @@ pub fn run() {
 
             // 一次性迁移：历史版本可能被自动开启的「模型管理」统一关闭，之后由用户自己决定。
             std::thread::spawn(|| {
+                if modules::account::is_dev_profile() {
+                    return;
+                }
                 // Recover interrupted explicit imports before other model maintenance
                 // can touch the same profiles. None of this gates the main window.
                 modules::codex_account::recover_pending_model_config_imports_for_known_profiles();
@@ -494,6 +504,9 @@ pub fn run() {
             // content / 假 encrypted_content。每个 profile 目录只做一次，后台执行，不阻塞启动；
             // 新的脏数据已由网关响应出口拦截。
             std::thread::spawn(|| {
+                if modules::account::is_dev_profile() {
+                    return;
+                }
                 match modules::codex_session_history_sanitize::run_one_time_reasoning_history_sanitize()
                 {
                     Ok(outcome) => {
@@ -872,6 +885,11 @@ pub fn run() {
             commands::claude::claude_execute_cli_launch_command,
             commands::claude::claude_launch_cli,
             commands::claude::switch_claude_account,
+            commands::claude_handoff::claude_handoff_status,
+            commands::claude_handoff::claude_handoff_preview,
+            commands::claude_handoff::claude_handoff_apply,
+            commands::claude_handoff::claude_handoff_apply_and_switch,
+            commands::claude_handoff::claude_handoff_rollback,
             // Claude Instance Commands
             commands::claude_instance::claude_get_instance_defaults,
             commands::claude_instance::claude_list_instances,
