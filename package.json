@@ -7,6 +7,7 @@
     "dev": "vite",
     "test": "node scripts/run_ts_tests.cjs",
     "test:release": "node --test scripts/release/*.test.cjs",
+    "test:codex-model-catalog-refresh": "node --test scripts/refresh-codex-model-catalog.test.cjs",
     "proxy-engine:prepare": "node scripts/prepare-proxy-engine.cjs",
     "proxy-engine:bundle-config": "node scripts/proxy-engine-bundle-config.cjs",
     "test:go": "cd sidecars/cockpit-cliproxy && go test ./...",
