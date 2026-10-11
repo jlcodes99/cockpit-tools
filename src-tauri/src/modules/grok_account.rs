@@ -26,7 +26,9 @@ const BILLING_URL: &str = "https://cli-chat-proxy.grok.com/v1/billing?format=cre
 const CLI_USER_URL: &str = "https://cli-chat-proxy.grok.com/v1/user?include=subscription";
 const SUBSCRIPTIONS_URL: &str = "https://grok.com/rest/subscriptions";
 const TASK_USAGE_URL: &str = "https://grok.com/rest/tasks/usage";
-const FALLBACK_GROK_CLIENT_VERSION: &str = "0.2.93";
+/// detect 失败时的兜底 client version：chat-proxy 服务端下限 1.0.13（更老版本 426，
+/// 见 #2745），取值与 vendored CLIProxyAPI 的 pin（PR #2746）对齐到 1.0.44
+const FALLBACK_GROK_CLIENT_VERSION: &str = "1.0.44";
 /// billing / user / task_usage 传输层瞬时失败（SSL EOF、断连、超时）重试次数
 const TRANSPORT_MAX_ATTEMPTS: usize = 3;
 const FILE_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
@@ -2980,6 +2982,7 @@ mod tests {
         should_retry_quota_after_unauthorized, string_field, validate_api_provider_config,
         write_account_to_auth_path_if_token_matches, write_account_to_official_auth_path,
         write_account_to_profile, GrokCredSource, LiveCredentialCandidate,
+        FALLBACK_GROK_CLIENT_VERSION,
     };
     use crate::models::grok::{
         GrokAccount, GrokAccountView, GrokAuthMode, GrokProductUsage, GrokQuota,
@@ -3883,6 +3886,31 @@ mod tests {
         assert_eq!(
             string_field(entry, "refresh_token").as_deref(),
             Some("new-refresh")
+        );
+    }
+
+    fn parse_version_tuple(version: &str) -> Option<(u64, u64, u64)> {
+        let mut parts = version.split('.');
+        let major = parts.next()?.parse::<u64>().ok()?;
+        let minor = parts.next()?.parse::<u64>().ok()?;
+        let patch = parts.next()?.parse::<u64>().ok()?;
+        if parts.next().is_some() {
+            return None;
+        }
+        Some((major, minor, patch))
+    }
+
+    #[test]
+    fn fallback_client_version_meets_chat_proxy_floor() {
+        // cli-chat-proxy.grok.com 对 x-grok-client-version 设服务端下限 1.0.13，
+        // 更老版本一律 426（#2745）；query_quota 在 detect 失败时兜底使用
+        // FALLBACK_GROK_CLIENT_VERSION，兜底值低于下限会让配额查询固定 426。
+        let parsed = parse_version_tuple(FALLBACK_GROK_CLIENT_VERSION)
+            .expect("FALLBACK_GROK_CLIENT_VERSION must parse as major.minor.patch");
+        assert!(
+            parsed >= (1, 0, 13),
+            "fallback client version {} is below the chat-proxy floor 1.0.13",
+            FALLBACK_GROK_CLIENT_VERSION
         );
     }
 }
