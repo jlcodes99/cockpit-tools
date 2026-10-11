@@ -616,6 +616,18 @@ func (s *relayServer) writeProviderGatewayChatStream(c *gin.Context, body io.Rea
 		flusher.Flush()
 		return
 	}
+	if convertedEventCount == 0 {
+		// 上游流"正常"结束但没有任何一行能被翻译成 responses 事件——这通常是上游对
+		// 该模型返回的 chunk 形状与 chat_completions 约定不符（例如 gpt 系模型被上游
+		// 网关走了另一套后端）。此时静默关闭 200 空体对客户端就是无解的挂起，必须
+		// 终结成显式错误；raw_line_count 帮助区分"上游没给数据"和"给了但形状不识别"。
+		err := relayStatusError{status: http.StatusBadGateway, message: "provider gateway produced no events while translating chat stream to responses"}
+		s.emitExecutorDiagnostic(c, "provider_gateway_stream_empty_translation", model, "provider_gateway_chat_stream", startedAt,
+			fmt.Sprintf("raw_line_count=%d done_seen=%t", rawLineCount, doneSeen))
+		writeStreamTerminalErrorForFormat(c, err, sdktranslator.FormatOpenAIResponse)
+		flusher.Flush()
+		return
+	}
 	s.emitExecutorDiagnostic(
 		c,
 		"provider_gateway_stream_completed",
