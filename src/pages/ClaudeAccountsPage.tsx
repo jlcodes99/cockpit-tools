@@ -50,6 +50,7 @@ import { SingleSelectDropdown } from '../components/SingleSelectDropdown';
 import { TagEditModal } from '../components/TagEditModal';
 import { ClaudeIcon } from '../components/icons/ClaudeIcon';
 import { ClaudeDesktopRuntimeManager } from '../components/claude/ClaudeDesktopRuntimeManager';
+import { ClaudeSessionHandoff } from '../components/claude/ClaudeSessionHandoff';
 import { ModelProviderUsagePanel } from '../components/model-provider/ModelProviderUsagePanel';
 import { PlatformGroupSwitcher } from '../components/platform/PlatformGroupSwitcher';
 import { useEscClose } from '../hooks/useEscClose';
@@ -817,6 +818,13 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
   const desktopLoginProgressUnlistenRef = useRef<UnlistenFn | null>(null);
   const oauthPrepareAttemptedRef = useRef(false);
   const [switching, setSwitching] = useState<string | null>(null);
+  const [handoffSwitchRequest, setHandoffSwitchRequest] = useState<{ targetAccountId: string; sequence: number } | null>(null);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const handoffBusyRef = useRef(false);
+  const handleHandoffBusyChange = useCallback((busy: boolean) => {
+    handoffBusyRef.current = busy;
+    setHandoffBusy(busy);
+  }, []);
   const [cliLaunchingAccountId, setCliLaunchingAccountId] = useState<string | null>(null);
   const [cliLaunchModal, setCliLaunchModal] = useState<ClaudeCliLaunchModalState | null>(null);
   const [currentAccountId, setCurrentAccountId] = useState<string | null>(null);
@@ -1950,7 +1958,8 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
     await importJsonContent(text);
   };
 
-  const handleSwitch = async (account: ClaudeAccount) => {
+  const handleSwitch = async (account: ClaudeAccount, fromHandoff = false): Promise<boolean> => {
+    if (handoffBusyRef.current && !fromHandoff) return false;
     setSwitching(account.id);
     setMessage(null);
     try {
@@ -1968,6 +1977,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
             email: displayName,
           }),
       });
+      return true;
     } catch (error) {
       if (String(error ?? '').startsWith('APP_PATH_NOT_FOUND:claude')) {
         window.dispatchEvent(
@@ -1978,7 +1988,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
             },
           }),
         );
-        return;
+        return false;
       }
       setMessage({
         text: t('messages.switchFailed', {
@@ -1986,6 +1996,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
         }),
         tone: 'error',
       });
+      return false;
     } finally {
       setSwitching(null);
     }
@@ -2530,11 +2541,16 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
         )}
         <button
           className={`${buttonClass} ${!isCurrent ? 'success' : ''}`}
-          onClick={() => void (isCliSubPlatform ? handleLaunchClaudeCli(account) : handleSwitch(account))}
+          onClick={() => {
+            if (isCliSubPlatform) void handleLaunchClaudeCli(account);
+            else if (isClaudeDesktopOAuthAccount(account)) {
+              setHandoffSwitchRequest((previous) => ({ targetAccountId: account.id, sequence: (previous?.sequence ?? 0) + 1 }));
+            } else void handleSwitch(account);
+          }}
           disabled={
             isCliSubPlatform
               ? Boolean(cliLaunchingAccountId) || isDesktopRuntime
-              : Boolean(switching) || isApiKey
+              : Boolean(switching) || handoffBusy || isApiKey
           }
           title={
             isCliSubPlatform
@@ -2958,6 +2974,24 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                 >
                   <Upload size={14} />
                 </button>
+              )}
+              {isDesktopSubPlatform && (
+                <ClaudeSessionHandoff
+                  accounts={store.accounts}
+                  currentAccountId={currentAccountId}
+                  switchRequest={handoffSwitchRequest}
+                  onSwitchAccount={async (accountId) => {
+                    const account = store.accounts.find((item) => item.id === accountId);
+                    return account ? handleSwitch(account, true) : false;
+                  }}
+                  onSwitchCompleted={(accountId) => {
+                    setCurrentAccountId(accountId);
+                    void store.fetchAccounts();
+                  }}
+                  privacyModeEnabled={privacyModeEnabled}
+                  disabled={Boolean(switching)}
+                  onBusyChange={handleHandoffBusyChange}
+                />
               )}
               {isDesktopSubPlatform && <QuickSettingsPopover type="claude" />}
             </div>

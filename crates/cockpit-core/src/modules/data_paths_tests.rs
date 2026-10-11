@@ -32,6 +32,51 @@ impl Drop for TestRoot {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn verified_alias_preserves_handoff_index_and_journal_paths() {
+    let root = TestRoot::new();
+    root.seed_legacy();
+    ensure_compatibility_link(&root.current(), &root.legacy()).unwrap();
+    for relative in [
+        "claude_accounts.json",
+        "claude_session_handoff/continuity/catalog.json",
+        "claude_session_handoff/run-synthetic/journal.json",
+        "transaction_recovery/claude-handoff/synthetic",
+    ] {
+        assert_eq!(
+            without_compatibility_alias_at(&root.current().join(relative), &root.0),
+            root.legacy().join(relative)
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn unverified_alias_and_nested_profile_links_are_not_canonicalized() {
+    let root = TestRoot::new();
+    root.seed_legacy();
+    let other = root.0.join("unrelated-store");
+    fs::create_dir(&other).unwrap();
+    create_directory_link(&other, &root.current()).unwrap();
+    let index = root.current().join("claude_accounts.json");
+    assert_eq!(without_compatibility_alias_at(&index, &root.0), index);
+
+    let verified = TestRoot::new();
+    verified.seed_legacy();
+    ensure_compatibility_link(&verified.current(), &verified.legacy()).unwrap();
+    create_directory_link(&other, &verified.legacy().join("linked-child")).unwrap();
+    assert_eq!(
+        without_compatibility_alias_at(
+            &verified.current().join("linked-child/claude_accounts.json"),
+            &verified.0
+        ),
+        verified.legacy().join("linked-child/claude_accounts.json")
+    );
+    // The nested link is still visible to the handoff's component-by-component
+    // no-follow checks; only the verified upstream root prefix was removed.
+}
+
 #[test]
 fn fresh_install_selects_new_root_without_creating_or_scanning() {
     let root = TestRoot::new();

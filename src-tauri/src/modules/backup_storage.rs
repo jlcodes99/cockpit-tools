@@ -16,6 +16,7 @@ use crate::modules::{account, codex_account, codex_instance, config};
 
 const DEFAULT_BACKUP_DIR_NAME: &str = "backups";
 const BEHAVIOR_DIR_NAME: &str = "behavior";
+const TRANSACTION_RECOVERY_DIR_NAME: &str = "transaction-recovery";
 const MIGRATION_STAGING_PREFIX: &str = ".cockpit-backup-migration-";
 
 static ACTIVE_MIGRATION_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
@@ -197,6 +198,44 @@ pub fn scope_for_path(path: &Path) -> String {
     format!("{:x}", md5::compute(path.to_string_lossy().as_bytes()))
 }
 
+/// Required transaction preimages are durable application state, not disposable
+/// behavior snapshots. Keep them outside the movable/prunable backup root.
+/// The transaction engine creates this directory with private permissions.
+pub fn transaction_recovery_dir(source: &str, operation_id: &str) -> Result<PathBuf, String> {
+    let data = account::resolve_data_dir()?;
+    let recovery = data.join(TRANSACTION_RECOVERY_DIR_NAME);
+    ensure_recovery_separation(&get_backup_root_dir()?, &recovery)?;
+    transaction_recovery_dir_in(&data, source, operation_id)
+}
+
+fn transaction_recovery_dir_in(
+    data: &Path,
+    source: &str,
+    operation_id: &str,
+) -> Result<PathBuf, String> {
+    if source.is_empty()
+        || !source
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+    {
+        return Err("UNSAFE_PATH".into());
+    }
+    let operation_id = uuid::Uuid::parse_str(operation_id).map_err(|_| "UNSAFE_PATH")?;
+    Ok(data
+        .join(TRANSACTION_RECOVERY_DIR_NAME)
+        .join(source)
+        .join(operation_id.to_string()))
+}
+
+fn ensure_recovery_separation(backup: &Path, recovery: &Path) -> Result<(), String> {
+    let backup = normalize_comparison_path(backup);
+    let recovery = normalize_comparison_path(recovery);
+    if backup.starts_with(&recovery) || recovery.starts_with(&backup) {
+        return Err("OVERLAPPING_ROOTS".into());
+    }
+    Ok(())
+}
+
 pub fn prune_behavior_backups(source: &str, scope: &str) -> Result<BackupCleanupResult, String> {
     let root = get_backup_root_dir()?
         .join(BEHAVIOR_DIR_NAME)
@@ -244,6 +283,11 @@ fn validate_backup_target(target_directory: &str) -> Result<(PathBuf, PathBuf), 
         return Err("备份目录必须是非空绝对路径".to_string());
     }
     let current = get_backup_root_dir()?;
+    let recovery = account::resolve_data_dir()?.join(TRANSACTION_RECOVERY_DIR_NAME);
+    // Reserve the location even before the first transaction. Otherwise a
+    // concurrent directory change could capture newly created recovery data.
+    ensure_recovery_separation(&target, &recovery)
+        .map_err(|_| "备份目录不能覆盖交接事务的恢复数据，请选择独立目录。".to_string())?;
     let current_cmp = normalize_comparison_path(&current);
     let target_cmp = normalize_comparison_path(&target);
     if target_cmp != current_cmp
@@ -345,6 +389,13 @@ fn build_migration_manifest(
     cancellable: bool,
 ) -> Result<MigrationManifest, String> {
     let (current_root, target_root) = validate_backup_target(target_directory)?;
+    let recovery = account::resolve_data_dir()?.join(TRANSACTION_RECOVERY_DIR_NAME);
+    if recovery.exists() {
+        ensure_recovery_separation(&current_root, &recovery).map_err(|_| {
+            "原备份目录包含交接事务的恢复数据，不能自动迁移；可选择不迁移并更改备份目录。"
+                .to_string()
+        })?;
+    }
     let target_cmp = normalize_comparison_path(&target_root);
     if normalize_comparison_path(&current_root) == target_cmp {
         return Ok(MigrationManifest {
@@ -1420,6 +1471,163 @@ mod tests {
         ));
         fs::create_dir_all(&path).expect("create temp dir");
         path
+    }
+
+    #[test]
+    fn claude_handoff_recovery_location_is_reserved_and_rejects_path_components() {
+        let root = make_temp_dir("handoff-location").canonicalize().unwrap();
+        let recovery = root.join(TRANSACTION_RECOVERY_DIR_NAME);
+        let id = uuid::Uuid::new_v4().to_string();
+        let path = transaction_recovery_dir_in(&root, "claude-handoff", &id).unwrap();
+        assert!(path.starts_with(&recovery));
+        assert!(!path.exists(), "resolving a location is read-only");
+        assert!(ensure_recovery_separation(&root.join("backups"), &recovery).is_ok());
+        for path in [&root, &recovery, &recovery.join("nested")] {
+            assert_eq!(
+                ensure_recovery_separation(path, &recovery),
+                Err("OVERLAPPING_ROOTS".into())
+            );
+        }
+        for source in ["", ".", "..", "../claude", "claude/nested"] {
+            assert!(transaction_recovery_dir_in(&root, source, &id).is_err());
+        }
+        assert!(transaction_recovery_dir_in(&root, "claude-handoff", "../invalid").is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn claude_handoff_recovery_survives_real_backup_migration_helpers_and_cleanup() {
+        use crate::modules::claude_session_handoff::engine::{self, Identity, Roots};
+        for scenario in ["applied", "pending", "during-copy"] {
+            let root = make_temp_dir("handoff-migration").canonicalize().unwrap();
+            let data = root.join("data");
+            let roots = Roots {
+                records: root.join("records"),
+                pool: root.join("pool"),
+                state: data.join("claude_session_handoff"),
+            };
+            let identity = || Identity {
+                account: uuid::Uuid::new_v4().to_string(),
+                org: uuid::Uuid::new_v4().to_string(),
+            };
+            let source = identity();
+            let target = identity();
+            let namespace = |id: &Identity| roots.records.join(&id.account).join(&id.org);
+            let source_dir = namespace(&source);
+            let target_dir = namespace(&target);
+            let project = roots.pool.join("synthetic-project");
+            for path in [&source_dir, &target_dir, &project] {
+                fs::create_dir_all(path).unwrap();
+            }
+            let session = format!("local_{}", uuid::Uuid::new_v4());
+            let cli = uuid::Uuid::new_v4().to_string();
+            let name = format!("{session}.json");
+            let source_bytes = serde_json::to_vec(&serde_json::json!({
+                "sessionId": session, "cliSessionId": cli, "cwd": root.join("workspace"), "title": "Synthetic migration"
+            })).unwrap();
+            fs::write(source_dir.join(&name), &source_bytes).unwrap();
+            let transcript = project.join(format!("{cli}.jsonl"));
+            fs::write(&transcript, b"{\"synthetic\":true}\n").unwrap();
+            let recovery = transaction_recovery_dir_in(
+                &data,
+                "claude-handoff",
+                &uuid::Uuid::new_v4().to_string(),
+            )
+            .unwrap();
+            let apply = || {
+                let preview = engine::preview(&roots, &source, &target).unwrap();
+                let mut calls = 0;
+                let result = engine::apply(
+                    &roots,
+                    &source,
+                    &target,
+                    &preview.fingerprint,
+                    &recovery,
+                    &mut || {
+                        calls += 1;
+                        if scenario == "pending" && calls == 4 {
+                            Err("SYNTHETIC_INTERRUPTION".into())
+                        } else {
+                            Ok(())
+                        }
+                    },
+                );
+                if scenario == "pending" {
+                    assert_eq!(result.unwrap_err(), "SYNTHETIC_INTERRUPTION");
+                } else {
+                    assert_eq!(result.unwrap().state, "applied");
+                }
+                assert!(target_dir.join(&name).exists());
+                engine::list_runs(&roots).unwrap().remove(0)
+            };
+            let mut run = if scenario == "during-copy" {
+                None
+            } else {
+                Some(apply())
+            };
+            let managed = data.join("backups");
+            let old_file = managed.join("behavior/fixture/scope/snapshot/data.json");
+            fs::create_dir_all(old_file.parent().unwrap()).unwrap();
+            fs::write(&old_file, b"synthetic managed backup").unwrap();
+            let moved = root.join("moved-backups");
+            let mut files = Vec::new();
+            collect_migration_tree(
+                &managed,
+                &managed,
+                Path::new(""),
+                "managed",
+                false,
+                &mut files,
+                &mut HashSet::new(),
+            )
+            .unwrap();
+            assert_eq!(files.len(), 1);
+            for file in &files {
+                let destination = moved.join(&file.relative_target);
+                fs::create_dir_all(destination.parent().unwrap()).unwrap();
+                copy_file_with_progress(&file.source_path, &destination, |_| {
+                    if run.is_none() {
+                        run = Some(apply());
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            }
+            let manifest = MigrationManifest {
+                current_root: managed.clone(),
+                target_root: moved.clone(),
+                files,
+                cleanup_paths: vec![managed],
+            };
+            assert_eq!(cleanup_migrated_sources(&manifest).0, 1);
+            cleanup_managed_behavior_backups_at_root(&moved).unwrap();
+            assert!(!old_file.exists());
+            // This run creates the target record, so recovery needs the durable
+            // directory witness but no record preimage or source-file backup.
+            assert!(recovery.is_dir());
+            assert!(!recovery.join("source").exists());
+            let run = run.unwrap();
+            assert_eq!(
+                run.state,
+                if scenario == "pending" {
+                    "applying"
+                } else {
+                    "applied"
+                }
+            );
+            assert_eq!(
+                engine::rollback(&roots, &run.id, &mut || Ok(()))
+                    .unwrap()
+                    .state,
+                "rolled_back"
+            );
+            assert!(!target_dir.join(&name).exists());
+            assert_eq!(fs::read(source_dir.join(&name)).unwrap(), source_bytes);
+            assert_eq!(fs::read(&transcript).unwrap(), b"{\"synthetic\":true}\n");
+            assert!(engine::preview(&roots, &source, &target).is_ok());
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 
     #[test]

@@ -1857,6 +1857,8 @@ pub fn start_claude_with_args_with_new_window(
     extra_args: &[String],
     use_new_window: bool,
 ) -> Result<u32, String> {
+    #[cfg(target_os = "macos")]
+    let _handoff_gate = crate::modules::claude_session_handoff::profile_operation()?;
     let target = user_data_dir.trim();
     if target.is_empty() {
         return Err("实例目录为空，无法启动".to_string());
@@ -1888,6 +1890,12 @@ pub fn start_claude_default_with_args_with_new_window(
     extra_args: &[String],
     use_new_window: bool,
 ) -> Result<u32, String> {
+    #[cfg(target_os = "macos")]
+    let _handoff_gate = {
+        let gate = crate::modules::claude_session_handoff::profile_operation()?;
+        crate::modules::claude_session_handoff::require_no_pending_before_switch()?;
+        gate
+    };
     #[cfg(target_os = "windows")]
     {
         let launch_target = resolve_claude_windows_launch_target()?;

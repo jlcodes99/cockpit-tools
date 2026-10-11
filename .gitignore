@@ -53,3 +53,6 @@ docs/plugin-architecture-proposal.md
 .qoder/
 
 sidecars/mihomo/bin/
+
+# Local synthetic Claude handoff acceptance artifacts
+/tests/claude-handoff/evidence-*/

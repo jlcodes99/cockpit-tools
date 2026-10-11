@@ -381,11 +381,22 @@ fn quit_claude_desktop_for_profile_write() -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn launch_default_claude_desktop() -> Result<(), String> {
-    std::process::Command::new("open")
+    let status = std::process::Command::new("/usr/bin/open")
         .args(["-b", CLAUDE_DESKTOP_BUNDLE_ID_MACOS])
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Failed to launch Claude Desktop: {}", e))
+        .status()
+        .map_err(|_| "DESKTOP_REOPEN_FAILED".to_string())?;
+    if !status.success() {
+        return Err("DESKTOP_REOPEN_FAILED".into());
+    }
+    // Launch Services can accept an open request before the application exists.
+    // Report success only after the Desktop process actually appears.
+    for _ in 0..40 {
+        if is_claude_desktop_running() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    Err("DESKTOP_REOPEN_FAILED".into())
 }
 
 #[cfg(target_os = "windows")]
@@ -3158,6 +3169,42 @@ fn inject_oauth_account_to_claude_code(
 
 pub fn inject_to_claude_config(account_id: &str, config_dir: Option<&Path>) -> Result<(), String> {
     let account = load_account(account_id).ok_or_else(|| "Claude 账号不存在".to_string())?;
+    #[cfg(target_os = "macos")]
+    let _handoff_gate = if config_dir.is_none()
+        && matches!(
+            account.auth_mode,
+            ClaudeAuthMode::DesktopOAuth | ClaudeAuthMode::DesktopGateway
+        ) {
+        Some(crate::modules::claude_session_handoff::profile_operation()?)
+    } else {
+        None
+    };
+    #[cfg(target_os = "macos")]
+    if _handoff_gate.is_some() {
+        crate::modules::claude_session_handoff::require_no_pending_before_switch()?;
+    }
+    inject_to_claude_config_inner(account, config_dir)
+}
+
+/// The handoff owns PROFILE_OPERATION for its entire copy-and-switch transaction.
+/// This entry point must only be called while that guard is held.
+pub(crate) fn inject_to_claude_with_profile_gate(
+    account_id: &str,
+    _operation: &crate::modules::claude_session_handoff::ProfileOperation,
+) -> Result<(), String> {
+    let account = load_account(account_id).ok_or("ACCOUNT_NOT_FOUND")?;
+    if account.auth_mode != ClaudeAuthMode::DesktopOAuth {
+        return Err("ACCOUNT_NOT_ELIGIBLE".into());
+    }
+    crate::modules::claude_session_handoff::require_no_pending_before_switch()?;
+    inject_to_claude_config_inner(account, None)
+}
+
+fn inject_to_claude_config_inner(
+    account: ClaudeAccount,
+    config_dir: Option<&Path>,
+) -> Result<(), String> {
+    let account_id = account.id.as_str();
     if account.auth_mode == ClaudeAuthMode::DesktopGateway {
         if let Some(target_dir) = config_dir {
             restore_desktop_gateway_account_to_profile(account_id, target_dir, false)?;

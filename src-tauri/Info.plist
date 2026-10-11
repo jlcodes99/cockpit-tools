@@ -6,6 +6,8 @@
   <string>Cockpit Tools</string>
   <key>CFBundleName</key>
   <string>Cockpit Tools</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Cockpit Tools asks Claude Desktop to quit normally before switching accounts and transferring local Code conversations.</string>
   <key>LSRequiresCarbon</key>
   <false/>
 </dict>
