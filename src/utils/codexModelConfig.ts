@@ -1,5 +1,9 @@
 import type { CodexExperimentalModelDefinition, CodexReasoningEffort } from '../types/codex';
 
+export const REASONING_EFFORT_OPTIONS: readonly CodexReasoningEffort[] = [
+  'low', 'medium', 'high', 'xhigh', 'max', 'ultra',
+];
+
 const ERROR_KEYS: Record<string, string> = {
   MODEL_CONFIG_JSON_INVALID: 'json', MODEL_CONFIG_VERSION_UNSUPPORTED: 'version',
   MODEL_CONFIG_FIELDS_UNSUPPORTED: 'fields', MODEL_CONFIG_TOO_LARGE: 'tooLarge',
@@ -32,16 +36,18 @@ export function codexModelConfigErrorKey(error: unknown, fallback = 'invalid'): 
   return `codex.modelConfig.errors.${code ? ERROR_KEYS[code] : fallback}`;
 }
 
-/** Capability updates clear an invalid override while preserving inherited behavior. */
+/** Supported efforts follow increasing strength and clear unsupported explicit defaults. */
 export function withSupportedReasoningEfforts(
   model: CodexExperimentalModelDefinition,
   reasoningEfforts: CodexReasoningEffort[] | undefined,
   inheritedEfforts?: readonly CodexReasoningEffort[],
 ): CodexExperimentalModelDefinition {
-  const supported = reasoningEfforts?.length ? reasoningEfforts : inheritedEfforts;
+  const orderedEfforts = reasoningEfforts?.length
+    ? REASONING_EFFORT_OPTIONS.filter((effort) => reasoningEfforts.includes(effort)) : undefined;
+  const supported = orderedEfforts ?? inheritedEfforts;
   return {
     ...model,
-    reasoning_efforts: reasoningEfforts?.length ? reasoningEfforts : undefined,
+    reasoning_efforts: orderedEfforts,
     default_reasoning_effort: model.default_reasoning_effort && supported
       && !supported.includes(model.default_reasoning_effort) ? undefined : model.default_reasoning_effort,
   };

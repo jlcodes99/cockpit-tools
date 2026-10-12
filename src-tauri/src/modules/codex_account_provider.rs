@@ -105,7 +105,7 @@ const PRE_GPT_6_SOL_LUNA_SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
     "gpt-5.3-codex-spark",
 ];
 const EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION: u32 = 4;
-const CODEX_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
+pub(crate) const CODEX_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
 const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
     GPT_6_1_SOL_MODEL_ID,
     GPT_6_ASTRA_MODEL_ID,

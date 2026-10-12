@@ -30,7 +30,7 @@ import {
   validateModelContext,
 } from "../../utils/codexModelContext";
 import { getCodexModelReasoningEfforts } from "../../services/codexService";
-import { withSupportedReasoningEfforts } from "../../utils/codexModelConfig";
+import { REASONING_EFFORT_OPTIONS, withSupportedReasoningEfforts } from "../../utils/codexModelConfig";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import { CodexModelConfigTransferModal } from "./CodexModelConfigTransferModal";
 import "./CodexExperimentalModelEditor.css";
@@ -66,14 +66,6 @@ interface CodexExperimentalModelEditorProps {
 }
 
 const MODEL_ID_PATTERN = /^[A-Za-z0-9._:/-]+$/;
-const REASONING_EFFORT_OPTIONS: CodexReasoningEffort[] = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-];
 const CONTEXT_PRESETS = {
   preset_516k: { context_window: 516000, auto_compact_token_limit: 464400 },
   preset_1m: { context_window: 1000000, auto_compact_token_limit: 900000 },

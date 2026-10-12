@@ -832,6 +832,9 @@ fn normalize_reasoning_efforts(
     if normalized.is_empty() {
         return Ok(None);
     }
+    normalized.sort_by_key(|effort| {
+        CODEX_REASONING_EFFORTS.iter().position(|supported| *supported == effort.as_str())
+    });
     Ok(Some(normalized))
 }
 

@@ -243,12 +243,13 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
                 .cloned()
         })
         .unwrap_or_default();
-    let selected = efforts
+    let selected = crate::modules::codex_account::CODEX_REASONING_EFFORTS
         .iter()
+        .filter(|effort| efforts.iter().any(|selected| selected == **effort))
         .filter_map(|effort| {
             levels
                 .iter()
-                .find(|level| level.get("effort").and_then(Value::as_str) == Some(effort))
+                .find(|level| level.get("effort").and_then(Value::as_str) == Some(*effort))
                 .cloned()
         })
         .collect::<Vec<_>>();
@@ -2236,11 +2237,39 @@ mod tests {
             .iter()
             .filter_map(|level| level.get("effort").and_then(Value::as_str))
             .collect::<Vec<_>>();
-        assert_eq!(efforts, vec!["low", "ultra", "max"]);
+        assert_eq!(efforts, vec!["low", "max", "ultra"]);
         assert_eq!(
             model.get("default_reasoning_level").and_then(Value::as_str),
             Some("low")
         );
+    }
+
+    #[test]
+    fn reasoning_effort_override_orders_existing_selections_by_strength() {
+        for (selected, expected) in [
+            (vec!["high", "medium"], vec!["medium", "high"]),
+            (
+                vec!["ultra", "max", "xhigh", "high", "medium", "low"],
+                vec!["low", "medium", "high", "xhigh", "max", "ultra"],
+            ),
+        ] {
+            let catalog = build_codex_client_models_response_with_model_definitions_and_reasoning(&[
+                (
+                    "gpt-6-astra".into(),
+                    "Astra".into(),
+                    Some(selected.into_iter().map(String::from).collect()),
+                ),
+            ]);
+            let model = &catalog["models"][0];
+            let efforts = model["supported_reasoning_levels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|level| level["effort"].as_str().unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(efforts, expected);
+            assert_eq!(model["default_reasoning_level"], "medium");
+        }
     }
 
     #[test]

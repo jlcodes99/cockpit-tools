@@ -4,12 +4,44 @@ import { loadHookModule } from '../../../tests/helpers/reactHookHarness.ts';
 import * as order from '../../utils/codexExperimentalModelOrder.ts';
 import * as context from '../../utils/codexModelContext.ts';
 import * as modelConfig from '../../utils/codexModelConfig.ts';
+import type { CodexExperimentalModelDefinition } from '../../types/codex.ts';
 
 function elements(value: any): any[] {
   if (!value || typeof value !== 'object') return [];
   if (Array.isArray(value)) return value.flatMap(elements);
   return [value, ...elements(value.props?.children)];
 }
+
+test('reasoning selections stay in strength order when selected and reselected', () => {
+  const h = loadHookModule(new URL('./CodexExperimentalModelEditor.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+    '../../utils/codexExperimentalModelOrder': order,
+    '../../utils/codexModelContext': context,
+    '../../utils/codexModelConfig': modelConfig,
+    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
+    './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
+    'react-dom': { createPortal: (child: any) => child },
+  }, { document: { addEventListener() {}, removeEventListener() {} }, window: { addEventListener() {}, removeEventListener() {} } });
+  let models: CodexExperimentalModelDefinition[] = [{ model_id: 'gpt-6-astra', display_name: 'Astra' }];
+  let tree = h.render(() => h.exports.CodexExperimentalModelEditor({ models, mode: 'inline', onChange: (next: typeof models) => { models = next; } }));
+  elements(tree).find((node) => node.props?.className === 'codex-experimental-model-editor__reasoning-trigger').props.onClick();
+  tree = h.flush();
+  const select = (effort: string) => {
+    const option = elements(tree).find((node) => node.type === 'button' && node.key === effort);
+    assert.ok(option, effort);
+    option.props.onClick();
+    tree = h.flush();
+  };
+  select('high');
+  select('medium');
+  assert.deepEqual(models[0].reasoning_efforts, ['medium', 'high']);
+  select('low');
+  select('medium');
+  select('medium');
+  assert.deepEqual(models[0].reasoning_efforts, ['low', 'medium', 'high']);
+  h.unmount();
+});
 
 test('editing model IDs and names retains row identity through edits, sorting and deletion', () => {
   const h = loadHookModule(new URL('./CodexExperimentalModelEditor.tsx', import.meta.url), {

@@ -1,6 +1,18 @@
 // Codex 账号测试：DeepSeek and model catalog behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
     #[test]
+    fn reasoning_effort_normalization_orders_existing_and_imported_selections() {
+        let efforts = super::normalize_reasoning_efforts(Some(
+            ["ultra", " HIGH ", "medium", "max", "low", "xhigh", "high"]
+                .into_iter().map(String::from).collect(),
+        )).unwrap().unwrap();
+        assert_eq!(efforts, ["low", "medium", "high", "xhigh", "max", "ultra"]);
+        assert_eq!(super::normalize_reasoning_efforts(None).unwrap(), None);
+        assert_eq!(super::normalize_reasoning_efforts(Some(vec![])).unwrap(), None);
+        assert!(super::normalize_reasoning_efforts(Some(vec!["invalid".into()])).is_err());
+    }
+
+    #[test]
     fn deepseek_account_normalize_defaults_to_official_responses_profile() {
         let mut account = CodexAccount::new_api_key(
             "deepseek-api-key".to_string(),

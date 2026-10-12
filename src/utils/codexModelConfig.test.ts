@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { codexModelConfigErrorKey, withSupportedReasoningEfforts } from './codexModelConfig.ts';
-import type { CodexExperimentalModelDefinition } from '../types/codex.ts';
+import type { CodexExperimentalModelDefinition, CodexReasoningEffort } from '../types/codex.ts';
 
 test('changing supported reasoning efforts clears only unsupported explicit defaults', () => {
   const model: CodexExperimentalModelDefinition = { model_id: 'custom', display_name: 'Custom',
@@ -14,6 +14,18 @@ test('changing supported reasoning efforts clears only unsupported explicit defa
   assert.equal(inherited.default_reasoning_effort, undefined);
   assert.equal(inherited.context_window, 1000);
   assert.equal(model.default_reasoning_effort, 'high');
+});
+
+test('supported reasoning efforts use increasing strength regardless of selection order', () => {
+  const model: CodexExperimentalModelDefinition = { model_id: 'gpt-6-astra', display_name: 'Astra',
+    default_reasoning_effort: 'high' };
+  assert.deepEqual(withSupportedReasoningEfforts(model, ['high', 'medium']).reasoning_efforts, ['medium', 'high']);
+  const selected: CodexReasoningEffort[] = ['ultra', 'max', 'xhigh', 'high', 'medium', 'low'];
+  const result = withSupportedReasoningEfforts(model, selected);
+  assert.deepEqual(result.reasoning_efforts, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+  assert.equal(result.default_reasoning_effort, 'high');
+  assert.deepEqual(selected, ['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
+  assert.equal(withSupportedReasoningEfforts(model, []).reasoning_efforts, undefined);
 });
 
 test('import errors are localized without exposing unknown raw diagnostic data', () => {
