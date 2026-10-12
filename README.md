@@ -99,6 +99,7 @@
 - **配额展示**：清晰展示 Hourly 和 Weekly 配额状态
 - **计划识别**：自动识别账号 Plan 类型 (Basic, Plus, Team 等)
 - **API 服务**：本地 Codex API 服务由内置 CLIProxyAPI sidecar 驱动，Cockpit Tools 负责账号同步、配置投影、状态与用量统计；Base URL、API Key 与用户操作方式保持不变。
+- **远端 CLI 模型目录**：API 已提供新模型但 `/model` 未显示时，可按[静态模型目录刷新指南](docs/codex-model-catalog-refresh.md#中文)安全补全客户端目录。
 - **语音反代**：支持 Codex backend 实时语音路由与 `/transcribe` 转写入口，并提供 `/v1/audio/transcriptions`、`/v1/audio/translations`、`/v1/audio/speech` 及无 `/v1` 的别名。OAuth 转写使用 ChatGPT backend：兼容入口支持 `file`、`language` 和 JSON／纯文本返回，`model` 仅作为兼容字段，实际模型由 backend 决定；字幕时间戳、流式转写及其他音频操作需使用支持相应接口的 API Key 供应商。原生 `/transcribe` 请求保留原有 multipart 参数，供应商侧未指定模型时使用 `gpt-4o-mini-transcribe`。请求上限为 26 MiB，超时为 2 分钟，音频内容不写入请求快照。只处理实际发送到本地网关的请求；客户端仍直连官方转写服务或自行限制麦克风时，不会因设置模型供应商而自动改走本地网关。
 
 > ![Codex Accounts](docs/images/codex_list.png)

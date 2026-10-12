@@ -93,6 +93,9 @@ jobs:
       - name: 🧪 Release script tests
         run: npm run test:release
 
+      - name: 🧪 Codex model catalog refresh tests
+        run: npm run test:codex-model-catalog-refresh
+
       - name: 🐹 Go sidecar tests
         run: npm run test:go
 
@@ -116,6 +119,9 @@ jobs:
 
       - name: 🧪 TypeScript regression tests
         run: npm test
+
+      - name: 🧪 Codex model catalog refresh tests
+        run: npm run test:codex-model-catalog-refresh
 
   build:
     name: "🏗️ Build: ${{ matrix.label }}"
