@@ -186,6 +186,15 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
             Some(account.api_model_context_windows.clone()),
         )?;
         let mut changed = false;
+        if !account.api_image_generation_account_ids.is_empty()
+            || !account.api_image_generation_account_models.is_empty()
+        {
+            api_acc.api_image_generation_account_ids = account.api_image_generation_account_ids.clone();
+            api_acc.api_image_generation_account_models = account.api_image_generation_account_models.clone();
+            let imported_id = api_acc.id.clone();
+            replace_api_image_source_reference(&mut api_acc, &account.id, &imported_id);
+            changed = true;
+        }
         if let Some(tags) = account.tags {
             api_acc.tags = Some(tags);
             changed = true;

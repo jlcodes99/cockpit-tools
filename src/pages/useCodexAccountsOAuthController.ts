@@ -178,9 +178,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
     const [switching, setSwitching] = useState<string | null>(null);
     const [apiKeyInput, setApiKeyInput] = useState("");
     const [apiKeyInputVisible, setApiKeyInputVisible] = useState(false);
-    const [apiBaseUrlInput, setApiBaseUrlInput] = useState(
-      DEFAULT_CODEX_API_BASE_URL,
-    );
+    const [apiBaseUrlInput, setApiBaseUrlInput] = useState("");
     const [apiModelCatalogInput, setApiModelCatalogInput] = useState("");
     const [apiModelContextWindowsInput, setApiModelContextWindowsInput] =
       useState<Record<string, string>>({});
@@ -191,7 +189,7 @@ export function useCodexAccountsOAuthController(context: Pick<ReturnType<typeof 
       string | null
     >(null);
     const [apiProviderPresetId, setApiProviderPresetId] = useState(
-      DEFAULT_CODEX_API_PROVIDER_ID,
+      CODEX_API_PROVIDER_CUSTOM_ID,
     );
     const [managedProviders, setManagedProviders] = useState<
       CodexModelProvider[]

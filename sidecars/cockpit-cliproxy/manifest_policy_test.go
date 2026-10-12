@@ -33,9 +33,10 @@ type responsesTerminalEventTestError struct {
 }
 
 func TestUsageServiceTierPrefersUpstreamResponseTier(t *testing.T) {
-	// 上游实际返回的档位最权威：请求要求 priority 但上游降级为 default 时，
-	// 统计与日志必须显示标准模式。
+	// API-key routes keep the server-reported processing tier for pricing.
 	if got := usageServiceTier(coreusage.Record{
+		Provider:            "codex",
+		AuthType:            "api_key",
 		ResponseServiceTier: "default",
 		ServiceTier:         "priority",
 	}, ""); got != "standard" {
@@ -49,7 +50,8 @@ func TestUsageServiceTierPrefersUpstreamResponseTier(t *testing.T) {
 }
 
 func TestUsageServiceTierFallsBackToInjectedDefault(t *testing.T) {
-	// 客户端没有指定 service_tier 时，Cockpit 注入的默认档位就是实际使用的档位。
+	// Legacy reporters can use the configured request default without treating
+	// it as server-side confirmation.
 	for _, record := range []coreusage.Record{
 		{},
 		{ServiceTier: "auto"},

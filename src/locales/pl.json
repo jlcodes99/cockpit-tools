@@ -96,6 +96,7 @@
     "providerClear": "Wyczyść wybór"
   },
   "common": {
+    "apiKeyAccount": "Konto API Key",
     "status": "Stan",
     "cliQuickLaunch": "Uruchom CLI",
     "requestId": "ID żądania",
@@ -2381,12 +2382,12 @@
       "accessModeDirectCons": "1: Brak zmiany modelu w Codex, brak wiązania OAuth i przekazywania obrazów",
       "accessModeCdpPros": "1: Prędkość jak przy bezpośrednim\n2: Flash / Pro przełączane na oficjalnej liście modeli Codex",
       "accessModeCdpCons": "1: Wymaga wstrzyknięcia oficjalnego klienta, brak wiązania OAuth i przekazywania obrazów",
-      "imageGenPickerDesc": "Gdy pojawi się żądanie obrazu, jest przekazywane: najpierw obsługuje je model podstawowy, potem model obrazu generuje obraz, zużywając część limitu wybranych kont.",
+      "imageGenPickerDesc": "OAuth używa modelu bazowego i narzędzia obrazów; API Key używa API obrazów. Koszty lub limit rozlicza wybrany dostawca.",
       "imageGenSwitchTitle": "Tylko w trybie bramy",
       "imageGenSwitchDescription": "Włączenie generowania obrazów GPT wymaga trybu bramy. Przełączyć i włączyć?",
       "imageGenSwitchYes": "Tak",
       "imageGenSwitchNo": "Nie",
-      "imageGenTitle": "Włącz generowanie obrazów GPT",
+      "imageGenTitle": "Włącz obrazy",
       "oauthBindingHint": "Po powiązaniu uruchamianie wygląda tak samo jak w przypadku zwykłego konta i dostępne są wszystkie funkcje OAuth (zdalna kompresja, sterowanie przeglądarką, różne wtyczki itd.); rozmowy nadal obsługuje bieżący dostawca klucza API.",
       "oauthBindingChange": "Zmień",
       "title": "Podgląd uruchomienia Codex",
@@ -2680,10 +2681,10 @@
       "killPortSuccess": "Port wyczyszczony (zamknięto {{count}} procesów)",
       "killPortSuccessNone": "Port sprawdzony. Nie używa go żaden proces zewnętrzny.",
       "killPortSuccessUnknown": "Port usługi API został wyczyszczony",
-      "restartAction": "Uruchom Sidecar ponownie",
-      "restartTitle": "Uruchom usługę API ponownie",
-      "restartConfirmMessage": "Zostanie ponownie uruchomiony tylko Sidecar usługi API. Konta, tokeny, klucze API i ustawienia puli kont pozostaną bez zmian. Trwające żądania mogą zostać przerwane. Kontynuować?",
-      "restartSuccess": "Sidecar usługi API został uruchomiony ponownie",
+      "restartAction": "Restart tylko API",
+      "restartTitle": "Restart tylko API",
+      "restartConfirmMessage": "Uruchomić ponownie tylko usługę API, zachowując okna Codex i ustawienia puli kont/API Key. Trwające żądania API mogą zostać przerwane. Kontynuować?",
+      "restartSuccess": "Usługa API uruchomiona ponownie",
       "refreshStats": "Odśwież statystyki",
       "refreshStatsSuccess": "Statystyki usługi API zostały odświeżone",
       "routingStrategy": {
@@ -2730,7 +2731,20 @@
       "apiPortUrl": "URL portu API",
       "modelId": "ID modelu",
       "modelIdPlaceholder": "Wybierz ID modelu",
+      "imageAccounts": {
+        "upstreamModel": "Model dostawcy",
+        "chooseModel": "Wybierz model",
+        "modelRequired": "Wybierz obsługiwany model.",
+        "sourceUnavailable": "Wybrane źródło nie obsługuje bieżącego modelu obrazów lub nie ma prawidłowych danych API albo adresu żądania.",
+        "loadFailed": "Nie udało się wczytać ustawień obrazów. Spróbuj ponownie.",
+        "missingModels": "Wybierz model dla {{count}} wybranych źródeł.",
+        "locateModel": "Znajdź źródło"
+      },
       "imageGenerationModel": {
+        "manage": "Zarządzaj modelami",
+        "deleteSelected": "Model w użyciu. Najpierw zmień i zapisz.",
+        "invalid": "ID modelu nie może zawierać białych znaków ani znaków sterujących i może mieć najwyżej 200 znaków.",
+        "syncFailed": "Nie udało się wykryć modeli obrazów. Spróbuj ponownie.",
         "label": "Model obrazu",
         "custom": "Niestandardowy",
         "save": "Zapisz model",
@@ -2816,8 +2830,8 @@
       "requestLogSuccess": "Sukces",
       "requestLogFailed": "Błąd",
       "requestLogTokens": "{{value}} tokenów",
-      "imageForwardLabel": "Włącz generowanie obrazów GPT",
-      "imageForwardHint": "Po włączeniu wybierz konta GPT: żądania generowania i edycji obrazów są realizowane na wybranych kontach i zużywają ich limit, a czat nadal korzysta z puli kont.",
+      "imageForwardLabel": "Włącz obrazy",
+      "imageForwardHint": "API Key wymaga Images API i wyboru rzeczywistego modelu w wierszu konta; OAuth obsługuje tylko natywne modele GPT.",
       "imageGenerationMode": {
         "enabled": "Włączone",
         "imagesOnly": "Tylko obrazy",
@@ -2922,7 +2936,8 @@
       "removeAction": "Usuń z API",
       "imageGenerationMainModel": {
         "label": "Główny model obrazów",
-        "hint": "Puste pole zachowuje gpt-5.5. Ten model wywołuje narzędzie obrazów; wybrane konta OAuth muszą obsługiwać dla niego image_generation.",
+        "notice": "Nie zmieniaj głównego modelu obrazów podczas zwykłego użycia.",
+        "hint": "Służy tylko do przekazywania żądań do oficjalnej usługi, nie do wyboru modelu generującego obrazy. Zmień go ręcznie tylko po zmianie oficjalnego modelu głównego. Puste pole użyje gpt-5.5.",
         "invalid": "Wpisz ID modelu bez spacji, do 200 znaków."
       },
       "requestDetail": {
@@ -3756,14 +3771,14 @@
         "cdpMode": "Wstrzyknięcie CDP",
         "cdpDesc": "Przejmuje oficjalną listę modeli Codex przez wstrzyknięcie, z prędkością jak w trybie bezpośrednim. Wymaga wstrzyknięcia do oficjalnego klienta; powiązanie OAuth nie jest obsługiwane.",
         "context": "Obsługiwany kontekst",
-        "imageGen": "Generowanie obrazów GPT",
-        "imageGenHint": "Tylko w trybie bramy. Rozmowa nadal jest obsługiwana przez modele tego dostawcy; generowanie obrazów korzysta z pierwotnego potoku gpt-image, jest wykonywane przez wybrane konta GPT i zużywa ich limit.",
-        "imageGenPick": "Wybierz konta GPT",
+        "imageGen": "Generowanie obrazów",
+        "imageGenHint": "API Key wymaga Images API i wyboru rzeczywistego modelu w wierszu konta; OAuth obsługuje tylko natywne modele GPT.",
+        "imageGenPick": "Źródła obrazów",
         "imageGenSelected": "Wybrano konta: {{count}}",
         "imageGenEmpty": "Nie wybrano kont",
         "imageGenLocked": "Zaznacz, aby wybrać konta",
         "pickerTitle": "Wybierz konta do obrazów",
-        "pickerEmpty": "Brak kont OAuth mogących generować obrazy (konta Free i API Key nie są obsługiwane).",
+        "pickerEmpty": "Brak zgodnych źródeł. API Key musi obsługiwać wybrany model lub rodzinę GPT; OAuth obsługuje natywne modele GPT tylko na kontach innych niż Free.",
         "pickerSelectAll": "Wybierz wszystko",
         "pickerClear": "Wyczyść",
         "protocol": "Protokół",
@@ -4270,7 +4285,8 @@
       "saveSuccess": "Szybkość zaktualizowana",
       "saveFailed": "Nie udało się zapisać szybkości: {{error}}",
       "loadFailed": "Nie udało się wczytać prędkości: {{error}}",
-      "apiHint": "Stosowane, gdy żądanie API pomija poziom; jawny poziom klienta ma pierwszeństwo. Tryb szybki zwiększa zużycie lub koszt zależnie od modelu i dostawcy.",
+      "apiHint": "Po zapisaniu ustawienie dotyczy kolejnych żądań API bez ponownego uruchomienia. Trwające żądania nie zmieniają się; poziom jawnie wskazany przez klienta ma pierwszeństwo. Tryb szybki może zwiększyć zużycie lub koszt; przyspieszenie zależy od modelu i dostawcy.",
+      "apiSyncFailed": "Ustawienie zapisano, ale działająca usługa API nie potwierdziła aktualizacji. Spróbuj ponownie.",
       "launchHint": "Zapisywane przy zmianie konta i uruchomieniu z Cockpit. Uruchom ponownie aktywnego klienta. Nowe czaty używają tej wartości; prędkość istniejących czatów zmień w kliencie."
     },
     "apiService": {
@@ -4455,6 +4471,11 @@
         "reasoningEffortValue": "Roz. {{effort}}",
         "serviceTier": "Poziom usługi",
         "serviceTierValue": "Poziom {{tier}}",
+        "requestedTier": "Żądanie: {{tier}}",
+        "responseTier": "Odpowiedź: {{tier}}",
+        "legacyTier": "Stare: {{tier}}",
+        "serviceTierHint": "Żądany poziom to service_tier wysłany do serwera, a nie potwierdzenie rzeczywistego poziomu przetwarzania. W Codex OAuth odpowiedź default nie dowodzi obniżenia trybu szybkiego. Automatycznie oznacza, że nie zażądano konkretnego poziomu (pole pominięto lub ustawiono na auto).",
+        "legacyTierHint": "Ten stary wpis miesza poziomy żądania i odpowiedzi. Ich źródło i rzeczywisty poziom przetwarzania są nieznane.",
         "upstreamModel": "Wysłany model",
         "columns": {
           "time": "Czas",
@@ -5535,7 +5556,15 @@
       },
       "failurePhase": "Etap błędu",
       "applying": "Stosowanie do aktywnych bram…",
-      "applyFailed": "Ustawienia zapisano, lecz aktywne bramy ich nie zastosowały. Spróbuj ponownie. Przyczyna: {{error}}"
+      "applyFailed": "Ustawienia zapisano, lecz aktywne bramy ich nie zastosowały. Spróbuj ponownie. Przyczyna: {{error}}",
+      "timeout": {
+        "open": "Upłynął czas oczekiwania na otwarcie strumienia przez serwer. Zmień „Limity i ponowienia → {{setting}}” (1–600 sekund, domyślnie 60).",
+        "idle": "Strumień jest otwarty, ale upłynął czas oczekiwania na kolejne dane. Zmień odpowiedni limit bezczynności w „Limity i ponowienia”.",
+        "canceled": "Klient anulował żądanie; to nie limit czasu otwarcia strumienia.",
+        "gateway": "HTTP 504 oznacza przekroczenie czasu bramy. Ten zapis nie określa przyczyny; sprawdź błąd serwera i etap żądania.",
+        "threshold": "Próg zastosowany do tego żądania: {{seconds}} sekund.",
+        "settings": "Zmień limit"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "Domyślny poziom",

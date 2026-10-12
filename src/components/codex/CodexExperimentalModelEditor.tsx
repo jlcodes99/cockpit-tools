@@ -30,7 +30,7 @@ import {
   validateModelContext,
 } from "../../utils/codexModelContext";
 import { getCodexModelReasoningEfforts } from "../../services/codexService";
-import { withSupportedReasoningEfforts } from "../../utils/codexModelConfig";
+import { CODEX_REASONING_EFFORT_ORDER, sortCodexReasoningEfforts, withSupportedReasoningEfforts } from "../../utils/codexModelConfig";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
 import { CodexModelConfigTransferModal } from "./CodexModelConfigTransferModal";
 import "./CodexExperimentalModelEditor.css";
@@ -66,14 +66,6 @@ interface CodexExperimentalModelEditorProps {
 }
 
 const MODEL_ID_PATTERN = /^[A-Za-z0-9._:/-]+$/;
-const REASONING_EFFORT_OPTIONS: CodexReasoningEffort[] = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-];
 const CONTEXT_PRESETS = {
   preset_516k: { context_window: 516000, auto_compact_token_limit: 464400 },
   preset_1m: { context_window: 1000000, auto_compact_token_limit: 900000 },
@@ -1170,7 +1162,7 @@ export function CodexExperimentalModelEditor({
                     aria-expanded={openReasoningIndex === index}
                     title={
                       model.reasoning_efforts?.length
-                        ? model.reasoning_efforts.map(reasoningLabel).join("、")
+                        ? sortCodexReasoningEfforts(model.reasoning_efforts).map(reasoningLabel).join("、")
                         : t(
                             "codex.experimentalModelCatalog.models.followOfficial",
                             "跟随官方",
@@ -1179,7 +1171,7 @@ export function CodexExperimentalModelEditor({
                   >
                     <span>
                       {model.reasoning_efforts?.length
-                        ? model.reasoning_efforts.map(reasoningLabel).join("、")
+                        ? sortCodexReasoningEfforts(model.reasoning_efforts).map(reasoningLabel).join("、")
                         : t(
                             "codex.experimentalModelCatalog.models.followOfficial",
                             "跟随官方",
@@ -1211,7 +1203,7 @@ export function CodexExperimentalModelEditor({
                           "跟随官方",
                         )}
                       </button>
-                      {REASONING_EFFORT_OPTIONS.map((effort) => {
+                      {CODEX_REASONING_EFFORT_ORDER.map((effort) => {
                         const selected =
                           model.reasoning_efforts?.includes(effort) ?? false;
                         return (
@@ -1248,7 +1240,7 @@ export function CodexExperimentalModelEditor({
                 <SingleSelectDropdown value={model.default_reasoning_effort ?? ""}
                   className="codex-experimental-model-default-effort-select"
                   options={[{ value: "", label: t("codex.experimentalModels.defaultReasoningFollow") },
-                    ...(effectiveEfforts[model.model_id] ?? model.reasoning_efforts ?? []).map((effort) => ({ value: effort, label: reasoningLabel(effort) }))]}
+                    ...sortCodexReasoningEfforts(effectiveEfforts[model.model_id] ?? model.reasoning_efforts ?? []).map((effort) => ({ value: effort, label: reasoningLabel(effort) }))]}
                   disabled={disabled || reasoningLoadFailed || !effectiveEfforts[model.model_id]}
                   ariaLabel={t("codex.experimentalModels.defaultReasoning")}
                   onChange={(value) => onChange(models.map((item, itemIndex) => itemIndex === index
@@ -1507,7 +1499,7 @@ export function CodexExperimentalModelEditor({
                 )}
                 <span className="codex-experimental-model-summary__reasoning">
                   {model.reasoning_efforts?.length
-                    ? model.reasoning_efforts.map(reasoningLabel).join("、")
+                    ? sortCodexReasoningEfforts(model.reasoning_efforts).map(reasoningLabel).join("、")
                     : t(
                         "codex.experimentalModelCatalog.models.followOfficial",
                         "跟随官方",

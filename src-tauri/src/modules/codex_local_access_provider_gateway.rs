@@ -1567,6 +1567,10 @@ fn apply_provider_gateway_template_settings(
 ) {
     collection.client_base_url_host = template.client_base_url_host;
     collection.image_generation_mode = template.image_generation_mode;
+    collection.image_generation_model = template.image_generation_model.clone();
+    collection.image_generation_models = template.image_generation_models.clone();
+    collection.image_generation_deleted_models = template.image_generation_deleted_models.clone();
+    collection.image_generation_model_catalog_revision = template.image_generation_model_catalog_revision;
     collection.image_generation_main_model = template.image_generation_main_model.clone();
     collection.upstream_proxy_url = template.upstream_proxy_url.clone();
     collection.routing_strategy = template.routing_strategy;
@@ -1598,8 +1602,11 @@ fn provider_gateway_bound_oauth_account_id_for_account(account: &CodexAccount) -
     normalize_optional_account_ref(account.bound_oauth_account_id.as_deref())
 }
 
-/// 生图转发账号池：只接受仍然存在的 OAuth 账号（带 refresh_token，sidecar 自行续期）。
-pub(crate) fn image_generation_accounts_for_account(account: &CodexAccount) -> Vec<CodexAccount> {
+/// 生图转发账号池：OAuth 保持原资格，API Key 必须支持当前图片模型。
+pub(crate) fn image_generation_accounts_for_account(
+    account: &CodexAccount,
+    collection: &CodexLocalAccessCollection,
+) -> Vec<CodexAccount> {
     if !account.is_api_key_auth() {
         return Vec::new();
     }
@@ -1609,16 +1616,19 @@ pub(crate) fn image_generation_accounts_for_account(account: &CodexAccount) -> V
         let Some(account_id) = normalize_optional_account_ref(Some(raw_id.as_str())) else {
             continue;
         };
-        if account_id == account.id || !seen.insert(account_id.clone()) {
+        if !seen.insert(account_id.clone()) {
             continue;
         }
-        let Some(candidate) = codex_account::load_account(&account_id) else {
-            continue;
+        let candidate = if account_id == account.id {
+            account.clone()
+        } else {
+            let Some(candidate) = codex_account::load_account(&account_id) else {
+                continue;
+            };
+            candidate
         };
-        if candidate.is_api_key_auth()
-            || candidate.is_agent_identity_auth()
-            || !codex_account::account_has_refresh_token(&candidate)
-        {
+        if !image_generation_source_is_ready(&candidate, collection,
+            account.api_image_generation_account_models.get(&candidate.id).map(String::as_str)) {
             continue;
         }
         resolved.push(candidate);
@@ -1859,12 +1869,16 @@ fn build_provider_gateway_collection_for_profile(
     collection.api_keys.clear();
     collection.bound_oauth_account_id =
         provider_gateway_bound_oauth_account_id_for_account(account);
-    // 生图转发：对话账号自身不承接生图，生图请求只落到这里选定的 OAuth 账号。
-    let image_accounts = image_generation_accounts_for_account(account);
-    collection.image_generation_account_ids = image_accounts
-        .iter()
-        .map(|item| item.id.clone())
-        .collect::<Vec<_>>();
+    // 对话和生图分别按角色调度；对话账号自身也可成为明确选定的图片来源。
+    let image_accounts = image_generation_accounts_for_account(account, &collection);
+    // Keep the declared image scope even when its source is temporarily unreadable or the
+    // selected actual model is unavailable. An empty scope would silently fall back to chat.
+    let declared_image_account_ids = normalize_account_id_list(account.api_image_generation_account_ids.clone());
+    collection.image_generation_account_ids = declared_image_account_ids.clone();
+    // Migrate old per-source candidates without changing the user's selected full model.
+    merge_discovered_image_models(&mut collection, account.api_image_generation_account_models.values().cloned().collect());
+    collection.image_generation_account_models = account.api_image_generation_account_models.clone();
+    collection.image_generation_account_models.retain(|id, _| collection.image_generation_account_ids.contains(id));
     collection.image_generation_account_policies.clear();
     if !collection.image_generation_account_ids.is_empty() {
         collection.image_generation_account_policies.insert(
@@ -1917,6 +1931,9 @@ fn build_provider_gateway_collection_for_profile(
     });
     collection.updated_at = now;
     let (changed, _) = sanitize_collection(&mut collection)?;
+    collection.image_generation_account_ids = declared_image_account_ids;
+    collection.image_generation_account_models = account.api_image_generation_account_models.clone();
+    collection.image_generation_account_models.retain(|id, _| collection.image_generation_account_ids.contains(id));
     if changed {
         collection.updated_at = now_ms();
     }
@@ -3373,7 +3390,7 @@ pub async fn ensure_provider_gateway_for_dir(
         crate::modules::codex_speed::get_app_speed_config_for_dir(profile_dir)
             .map(|config| codex_app_speed_service_tier(&config.speed))?;
     // 生图转发账号需要把凭据写进实例 sidecar，否则网关手里只有 API Key 上游。
-    let image_accounts = image_generation_accounts_for_account(&account);
+    let image_accounts = image_generation_accounts_for_account(&account, &collection);
     let mut account_overrides: HashMap<String, CodexAccount> = HashMap::new();
     account_overrides.insert(account.id.clone(), account.clone());
     for image_account in &image_accounts {
@@ -3381,6 +3398,7 @@ pub async fn ensure_provider_gateway_for_dir(
     }
     let runtime_oauth_account_ids = image_accounts
         .iter()
+        .filter(|item| !item.is_api_key_auth())
         .map(|item| item.id.clone())
         .collect::<Vec<_>>();
     let launch_config = prepare_sidecar_launch_config_in_dir(

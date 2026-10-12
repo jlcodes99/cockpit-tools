@@ -112,7 +112,7 @@ fn model_config_snapshot(base_dir: &Path) -> Result<ModelConfigSnapshot, String>
         })
         .transpose()?;
     let models = match saved.as_ref() {
-        Some(saved) => normalize_experimental_model_definitions(saved.models.clone())?,
+        Some(saved) => normalize_experimental_model_definitions_for_profile(Some(base_dir), saved.models.clone())?,
         None => default_experimental_model_definitions(base_dir),
     };
     let models = if content(CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE).is_some() {
@@ -347,8 +347,12 @@ fn prepare_model_config_import(
     };
     // Normalize each row while keeping errors attached to that row.
     let mut incoming_models = Vec::new();
+    // Read the profile template once for this import rather than once per model.
+    let reasoning_template = snapshot.profile_dir.as_deref()
+        .and_then(|dir| fs::read_to_string(experimental_model_catalog_path(dir)).ok())
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
     for model in document.models.iter().take(MODEL_CONFIG_MAX_ITEMS + 1) {
-        match normalize_experimental_model_definitions(vec![model.clone()]) {
+        match normalize_experimental_model_definitions_with_template(vec![model.clone()], reasoning_template.as_ref()) {
             Ok(mut models) => incoming_models.push(models.remove(0)),
             Err(code) => model_config_preview_entry(
                 &mut preview,

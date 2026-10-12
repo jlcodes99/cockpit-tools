@@ -1,5 +1,13 @@
 import type { CodexExperimentalModelDefinition, CodexReasoningEffort } from '../types/codex';
 
+export const CODEX_REASONING_EFFORT_ORDER: readonly CodexReasoningEffort[] = [
+  'low', 'medium', 'high', 'xhigh', 'max', 'ultra',
+];
+
+export function sortCodexReasoningEfforts(efforts: readonly CodexReasoningEffort[]): CodexReasoningEffort[] {
+  return CODEX_REASONING_EFFORT_ORDER.filter((effort) => efforts.includes(effort));
+}
+
 const ERROR_KEYS: Record<string, string> = {
   MODEL_CONFIG_JSON_INVALID: 'json', MODEL_CONFIG_VERSION_UNSUPPORTED: 'version',
   MODEL_CONFIG_FIELDS_UNSUPPORTED: 'fields', MODEL_CONFIG_TOO_LARGE: 'tooLarge',
@@ -41,7 +49,7 @@ export function withSupportedReasoningEfforts(
   const supported = reasoningEfforts?.length ? reasoningEfforts : inheritedEfforts;
   return {
     ...model,
-    reasoning_efforts: reasoningEfforts?.length ? reasoningEfforts : undefined,
+    reasoning_efforts: reasoningEfforts?.length ? sortCodexReasoningEfforts(reasoningEfforts) : undefined,
     default_reasoning_effort: model.default_reasoning_effort && supported
       && !supported.includes(model.default_reasoning_effort) ? undefined : model.default_reasoning_effort,
   };

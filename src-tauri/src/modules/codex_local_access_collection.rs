@@ -100,6 +100,13 @@ fn save_collection_to_path(path: &Path, collection: &CodexLocalAccessCollection)
             // Explicit body-recording choices must survive every full collection write.
             match serde_json::from_str::<Value>(current) {
                 Ok(current) => {
+                    // Ordinary full-snapshot writers do not own the image model directory.
+                    // The dedicated field transaction alone can add/delete/restore a model.
+                    if current.get("imageGenerationModels").is_some() {
+                        let latest: CodexLocalAccessCollection = serde_json::from_value(current.clone())
+                            .map_err(|error| format!("读取最新生图型号目录失败: {}", error))?;
+                        copy_image_model_catalog_fields(&mut next, &latest);
+                    }
                     next.request_payload_logging = current.get("requestPayloadLogging")
                         .and_then(Value::as_bool)
                         .unwrap_or_else(|| REQUEST_PAYLOAD_LOGGING_ENABLED.load(Ordering::SeqCst));
@@ -1529,6 +1536,8 @@ fn sanitize_collection_structure(
         changed = true;
     }
 
+    changed |= sanitize_image_model_catalog(collection);
+
     if collection.port == 0 {
         collection.port = allocate_initial_local_port(bind_host_for_collection(collection))?;
         changed = true;
@@ -1686,6 +1695,14 @@ fn sanitize_collection_with_accounts(
         })
         .map(|account| account.id.clone())
         .collect();
+    let valid_image_source_ids: HashSet<String> = accounts
+        .iter()
+        // Declared sources must survive a selected-model mismatch; an empty image scope
+        // would silently fall back to the conversation provider. Dispatch validates exact ID.
+        .filter(|account| !account.is_agent_identity_auth()
+            && (account.is_api_key_auth() || codex_account::account_has_refresh_token(account)))
+        .map(|account| account.id.clone())
+        .collect();
     let valid_account_ids: HashSet<String> = accounts
         .iter()
         .filter(|account| {
@@ -1742,21 +1759,11 @@ fn sanitize_collection_with_accounts(
         changed = true;
     }
 
-    // 成员移除后同步清理策略，避免旧账号策略影响后续重新加入的账号。
-    let before_image_policies = collection.image_generation_account_policies.clone();
-    let pool_account_ids: HashSet<&str> = collection.account_ids.iter().map(String::as_str).collect();
-    collection
-        .image_generation_account_policies
-        .retain(|account_id, _| pool_account_ids.contains(account_id.as_str()));
-    if collection.image_generation_account_policies != before_image_policies {
-        changed = true;
-    }
-
-    // 生图转发账号池只允许指向仍然有效的 OAuth 账号。
+    // 生图转发账号池接受 OAuth 和匹配当前图片模型的 API Key。
     let before_image_accounts = collection.image_generation_account_ids.clone();
     let mut deduped_image_accounts: Vec<String> = Vec::new();
     for account_id in &collection.image_generation_account_ids {
-        if !keep_reference(account_id, &valid_bound_oauth_account_ids) {
+        if !keep_reference(account_id, &valid_image_source_ids) {
             changed = true;
             continue;
         }
@@ -1768,6 +1775,20 @@ fn sanitize_collection_with_accounts(
     }
     if deduped_image_accounts != before_image_accounts {
         collection.image_generation_account_ids = deduped_image_accounts;
+        changed = true;
+    }
+
+    let before_image_models = collection.image_generation_account_models.clone();
+    collection.image_generation_account_models.retain(|id, _| collection.image_generation_account_ids.contains(id));
+    changed |= collection.image_generation_account_models != before_image_models;
+
+    // 清理对话池与显式图片池都已移除的策略，保留实例 self 生图来源的 Enabled。
+    let before_image_policies = collection.image_generation_account_policies.clone();
+    let pool_account_ids: HashSet<&str> = collection.account_ids.iter().chain(collection.image_generation_account_ids.iter()).map(String::as_str).collect();
+    collection
+        .image_generation_account_policies
+        .retain(|account_id, _| pool_account_ids.contains(account_id.as_str()));
+    if collection.image_generation_account_policies != before_image_policies {
         changed = true;
     }
 
@@ -1857,9 +1878,13 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 client_base_url_host: CodexLocalAccessClientBaseUrlHost::default(),
                 image_generation_mode: CodexLocalAccessImageGenerationMode::default(),
                 image_generation_model: DEFAULT_CODEX_IMAGE_GENERATION_MODEL.to_string(),
+        image_generation_models: crate::models::codex_local_access::default_image_generation_models(),
+        image_generation_deleted_models: Vec::new(),
+        image_generation_model_catalog_revision: 0,
                 image_generation_main_model: None,
                 image_generation_account_policies: HashMap::new(),
                 image_generation_account_ids: Vec::new(),
+        image_generation_account_models: HashMap::new(),
                 gateway_mode: CodexLocalAccessGatewayMode::default(),
                 upstream_proxy_url: None,
                 routing_strategy: CodexLocalAccessRoutingStrategy::default(),

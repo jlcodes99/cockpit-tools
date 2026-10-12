@@ -1716,8 +1716,8 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             Some("deepseek-flash".to_string()),
             Some(vec![other_api_key.id.clone()]),
         )
-        .expect_err("api key accounts cannot host images");
-        assert!(api_key_error.contains("OAuth"));
+        .expect_err("api key without current image model is rejected");
+        assert_eq!(api_key_error, "codex.localAccess.imageAccounts.sourceUnavailable");
 
         let self_error = update_account_instance_access(
             &account.id,
@@ -1725,8 +1725,8 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             Some("deepseek-flash".to_string()),
             Some(vec![account.id.clone()]),
         )
-        .expect_err("self binding rejected");
-        assert!(self_error.contains("自身"));
+        .expect_err("self without current image model is rejected");
+        assert_eq!(self_error, "codex.localAccess.imageAccounts.sourceUnavailable");
 
         let missing_error = update_account_instance_access(
             &account.id,
@@ -2098,4 +2098,92 @@ multi_agent = true
 
         fs::remove_dir_all(&managed_dir).expect("cleanup temp dir");
         fs::remove_dir_all(&baseline_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn api_image_source_self_selection_round_trips_and_rejects_other_model() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let _env = TestEnvGuard::new("codex-api-image-source-selection");
+        let mut account = CodexAccount::new_api_key(
+            "api-image-self".into(), "images@example.com".into(), "test-image-key".into(),
+            CodexApiProviderMode::Custom, Some("https://images.example/v1".into()),
+            Some("images".into()), Some("Images".into()), vec!["gpt-image-2.5".into()],
+        );
+        save_account(&account).unwrap();
+        let updated = update_account_instance_access(
+            &account.id, None, None, Some(vec![account.id.clone(), account.id.clone()]),
+        ).unwrap();
+        assert_eq!(updated.api_image_generation_account_ids, vec![account.id.clone()]);
+        assert_eq!(load_account(&account.id).unwrap().api_image_generation_account_ids, vec![account.id.clone()]);
+        account.api_model_catalog = vec!["gpt-image-2".into()];
+        save_account(&account).unwrap();
+        assert_eq!(update_account_instance_access(
+            &account.id, None, None, Some(vec![account.id.clone()]),
+        ).unwrap_err(), "codex.localAccess.imageAccounts.sourceUnavailable");
+    }
+
+    #[test]
+    fn image_source_uses_global_family_and_preserves_explicit_mapping_for_round_trip() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let _env = TestEnvGuard::new("codex-image-suffix-save");
+        let account = CodexAccount::new_api_key(
+            "api-suffix-source".into(), "images@example.com".into(), "test-key".into(),
+            CodexApiProviderMode::Custom, Some("https://images.example/v1".into()),
+            Some("images".into()), Some("Images".into()),
+            vec!["gpt-image-2.5-flare".into(), "gpt-image-2.5-vip".into()],
+        );
+        save_account(&account).unwrap();
+        assert_eq!(update_account_instance_access(&account.id, None, None, Some(vec![account.id.clone()])).unwrap_err(),
+            "codex.localAccess.imageAccounts.modelRequired");
+        let service_path = crate::modules::codex_local_access::model_config_service_file_path().unwrap();
+        fs::write(&service_path, serde_json::to_vec(&serde_json::json!({
+            "enabled": false, "port": 14998, "apiKey": "test-service", "accountIds": [],
+            "imageGenerationModel": "gpt-image-2.5", "createdAt": 1, "updatedAt": 1,
+        })).unwrap()).unwrap();
+        let selected = HashMap::from([(account.id.clone(), "gpt-image-2.5-vip".into())]);
+        let saved = super::update_account_instance_access_with_image_models(
+            &account.id, None, None, Some(vec![account.id.clone()]), Some(selected.clone()),
+        ).unwrap();
+        assert_eq!(saved.api_image_generation_account_models, selected);
+        assert_eq!(load_account(&account.id).unwrap().api_image_generation_account_models, selected);
+        let directory: serde_json::Value = serde_json::from_slice(&fs::read(&service_path).unwrap()).unwrap();
+        assert!(directory["imageGenerationModels"].as_array().unwrap().iter().any(|model| model == "gpt-image-2.5-vip"));
+        let mut deleted_directory = directory;
+        deleted_directory["imageGenerationDeletedModels"] = serde_json::json!(["gpt-image-2.5-vip"]);
+        fs::write(&service_path, serde_json::to_vec(&deleted_directory).unwrap()).unwrap();
+        assert_eq!(super::update_account_instance_access_with_image_models(
+            &account.id, None, None, Some(vec![account.id.clone()]), Some(selected.clone()),
+        ).unwrap_err(), "codex.localAccess.imageAccounts.modelRequired");
+        assert_eq!(load_account(&account.id).unwrap().api_image_generation_account_models, selected);
+        deleted_directory["imageGenerationDeletedModels"] = serde_json::json!([]);
+        fs::write(&service_path, serde_json::to_vec(&deleted_directory).unwrap()).unwrap();
+
+        let round_trip: CodexAccount = serde_json::from_value(serde_json::to_value(&saved).unwrap()).unwrap();
+        assert_eq!(round_trip.api_image_generation_account_models, selected);
+        let imported = super::import_account_struct(saved.clone()).unwrap();
+        assert_eq!(imported.api_image_generation_account_ids, vec![imported.id.clone()]);
+        assert_eq!(imported.api_image_generation_account_models.get(&imported.id).map(String::as_str), Some("gpt-image-2.5-vip"));
+        assert_eq!(load_account(&imported.id).unwrap().api_image_generation_account_models, imported.api_image_generation_account_models);
+
+        // Older callers do not erase the user's explicit suffix model.
+        assert_eq!(update_account_instance_access(&account.id, None, None, Some(vec![account.id.clone()])).unwrap()
+            .api_image_generation_account_models, selected);
+        // A valid legacy per-account choice cannot rescue an unsupported global full ID.
+        fs::write(&service_path, serde_json::to_vec(&serde_json::json!({
+            "enabled": false, "port": 14998, "apiKey": "test-service", "accountIds": [],
+            "imageGenerationModel": "gpt-image-2.5-missing", "createdAt": 1, "updatedAt": 1,
+        })).unwrap()).unwrap();
+        assert_eq!(super::update_account_instance_access_with_image_models(
+            &account.id, None, None, Some(vec![account.id.clone()]), Some(selected.clone()),
+        ).unwrap_err(), "codex.localAccess.imageAccounts.sourceUnavailable");
+        let old_id = account.id.clone();
+        // The saved source selector and model selector migrate together on a credential ID edit.
+        let mut migrated = saved;
+        assert!(super::replace_api_image_source_reference(&mut migrated, &old_id, "new-source"));
+        assert_eq!(migrated.api_image_generation_account_ids, vec!["new-source"]);
+        assert_eq!(migrated.api_image_generation_account_models.get("new-source").map(String::as_str), Some("gpt-image-2.5-vip"));
+        let cleared = update_account_instance_access(&old_id, None, None, Some(Vec::new())).unwrap();
+        assert!(cleared.api_image_generation_account_models.is_empty());
     }

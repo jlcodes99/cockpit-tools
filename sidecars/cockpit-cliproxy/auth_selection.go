@@ -1458,20 +1458,36 @@ type usagePlugin struct {
 	defaultServiceTier string
 }
 
-// usageServiceTier 解析一次请求实际生效的服务等级，供宿主在统计与日志中展示
-// 快速/标准模式。上游响应回传的档位最权威，其次是客户端请求的档位，最后回退到
-// Cockpit 自己注入的默认档位；"auto"/空值表示客户端没有指定，需要继续回退。
+// Codex OAuth response tiers are not authoritative Fast-mode confirmations.
+// Keep the request selection for that route; API-key routes still use the
+// upstream-reported processing tier for pricing and display.
 func usageServiceTier(record coreusage.Record, fallback string) string {
+	requested := requestedUsageServiceTier(record, fallback)
+	if strings.EqualFold(strings.TrimSpace(record.Provider), "codex") &&
+		strings.EqualFold(strings.TrimSpace(record.AuthType), "oauth") {
+		return normalizedUsageServiceTier(requested)
+	}
 	if tier := normalizedUsageServiceTier(record.ResponseServiceTier); tier != "" {
 		return tier
 	}
-	if tier := normalizedRequestedUsageServiceTier(record.ServiceTier); tier != "" {
-		return tier
+	return normalizedUsageServiceTier(requested)
+}
+
+// Prefer the final serialized upstream payload. "auto" denotes an observed
+// absence of an explicit tier, not a confirmed server-side processing mode.
+func requestedUsageServiceTier(record coreusage.Record, fallback string) string {
+	if record.UpstreamServiceTierObserved {
+		if tier := strings.TrimSpace(record.UpstreamServiceTier); tier != "" {
+			return tier
+		}
+		return "auto"
 	}
-	if tier := normalizedRequestedUsageServiceTier(record.RequestServiceTier); tier != "" {
-		return tier
+	for _, value := range []string{record.ServiceTier, record.RequestServiceTier} {
+		if normalizedRequestedUsageServiceTier(value) != "" {
+			return strings.TrimSpace(value)
+		}
 	}
-	return normalizedUsageServiceTier(fallback)
+	return strings.TrimSpace(fallback)
 }
 
 // normalizedRequestedUsageServiceTier 归一化客户端请求的档位。空值和 "auto"
@@ -1497,6 +1513,14 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 		spec = p.manifest.apiKeyByValue[strings.TrimSpace(record.APIKey)]
 	}
 	account := p.accountForRecord(record)
+	if account != nil {
+		if strings.TrimSpace(record.AuthType) == "" {
+			record.AuthType = account.AuthKind
+		}
+		if strings.TrimSpace(record.Provider) == "" {
+			record.Provider = normalizedSidecarProvider(account.Provider)
+		}
+	}
 	requestKind, _ := ctx.Value(requestKindContextKey).(string)
 	if strings.TrimSpace(requestKind) == "" {
 		requestKind = requestKindFromPath(internallogging.GetEndpoint(ctx))
@@ -1525,29 +1549,35 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 	}
 	status := record.Fail.StatusCode
 	success := !record.Failed
+	requestedTierEvidence := ""
+	if record.UpstreamServiceTierObserved {
+		requestedTierEvidence = requestedUsageServiceTier(record, "")
+	}
 	payload := usagePayload{
-		ProxyRoute:       record.ProxyRoute,
-		Type:             "usage",
-		RequestID:        internallogging.GetRequestID(ctx),
-		Provider:         record.Provider,
-		Model:            model,
-		Alias:            alias,
-		RequestedModel:   requestedModel,
-		UpstreamModel:    upstreamModel,
-		AccountID:        stringFromAccount(account, "id"),
-		AccountEmail:     stringFromAccount(account, "email"),
-		AuthID:           record.AuthID,
-		APIKeyID:         stringFromAPIKey(spec, "id"),
-		APIKeyLabel:      stringFromAPIKey(spec, "label"),
-		ClientInstanceID: clientInstanceIDFromContext(ctx),
-		RequestKind:      requestKind,
-		ServiceTier:      usageServiceTier(record, p.defaultServiceTier),
-		ReasoningEffort:  strings.TrimSpace(record.ReasoningEffort),
-		Success:          success,
-		Status:           status,
-		ErrorCategory:    errorCategory(status, record.Fail.Body, success),
-		ErrorMessage:     strings.TrimSpace(record.Fail.Body),
-		LatencyMS:        record.Latency.Milliseconds(),
+		ProxyRoute:           record.ProxyRoute,
+		Type:                 "usage",
+		RequestID:            internallogging.GetRequestID(ctx),
+		Provider:             record.Provider,
+		Model:                model,
+		Alias:                alias,
+		RequestedModel:       requestedModel,
+		UpstreamModel:        upstreamModel,
+		AccountID:            stringFromAccount(account, "id"),
+		AccountEmail:         stringFromAccount(account, "email"),
+		AuthID:               record.AuthID,
+		APIKeyID:             stringFromAPIKey(spec, "id"),
+		APIKeyLabel:          stringFromAPIKey(spec, "label"),
+		ClientInstanceID:     clientInstanceIDFromContext(ctx),
+		RequestKind:          requestKind,
+		ServiceTier:          usageServiceTier(record, p.defaultServiceTier),
+		RequestedServiceTier: requestedTierEvidence,
+		ResponseServiceTier:  strings.TrimSpace(record.ResponseServiceTier),
+		ReasoningEffort:      strings.TrimSpace(record.ReasoningEffort),
+		Success:              success,
+		Status:               status,
+		ErrorCategory:        errorCategory(status, record.Fail.Body, success),
+		ErrorMessage:         strings.TrimSpace(record.Fail.Body),
+		LatencyMS:            record.Latency.Milliseconds(),
 		Usage: usageDetails{
 			InputTokens:     record.Detail.InputTokens,
 			OutputTokens:    record.Detail.OutputTokens,

@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { resolveCodexAccountDisplayName } from "../../utils/codexAccountDisplayName";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, ImagePlus, KeyRound, Play, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useEscClose } from "../../hooks/useEscClose";
@@ -25,6 +26,8 @@ import {
   resolveCodexProviderAccessMode,
   type CodexProviderAccessAccount,
 } from "../../utils/codexProviderAccess";
+import { useCodexImageModelConfig } from "./useCodexImageModelConfig";
+import { eligibleImageAccountIds, configuredImageAccountIds, isImageGenerationEligibleAccount, resolveImageAccountModel } from "../../utils/codexImageAccounts";
 import { CodexImageAccountPickerModal } from "./CodexImageAccountPickerModal";
 import "./CodexLaunchPreviewModal.css";
 import "./CodexApiKeyLaunchSection.css";
@@ -34,6 +37,7 @@ export interface CodexApiKeyLaunchOptions {
   startupModel: string;
   imageGenEnabled: boolean;
   imageGenAccountIds: string[];
+  imageGenAccountModels: Record<string, string>;
 }
 
 /** 启动预览与模型供应商弹框共用：后者传入的是表单草稿，字段可能不全。 */
@@ -45,6 +49,7 @@ export type CodexApiKeyLaunchAccount = DeepSeekStartTarget & CodexProviderAccess
   api_provider_name?: string | null;
   api_model_context_windows?: Record<string, number> | null;
   api_image_generation_account_ids?: string[] | null;
+  api_image_generation_account_models?: Record<string, string> | null;
 };
 
 export function createCodexApiKeyLaunchOptions(
@@ -64,6 +69,9 @@ export function createCodexApiKeyLaunchOptions(
     startupModel: resolveDeepSeekStartupModel(account ?? undefined),
     imageGenEnabled: imageAccountIds.length > 0,
     imageGenAccountIds: imageAccountIds,
+    imageGenAccountModels: accessMode === DEEPSEEK_ACCESS_MODE_GATEWAY
+      ? account?.api_image_generation_account_models ?? {}
+      : {},
   };
 }
 
@@ -102,6 +110,7 @@ export interface CodexApiKeyLaunchSectionProps {
   options: CodexApiKeyLaunchOptions;
   onChange: (options: CodexApiKeyLaunchOptions) => void;
   disabled?: boolean;
+  onImageConfigReadyChange?: (ready: boolean) => void;
 }
 
 export function CodexApiKeyLaunchSection({
@@ -109,10 +118,30 @@ export function CodexApiKeyLaunchSection({
   options,
   onChange,
   disabled = false,
+  onImageConfigReadyChange,
 }: CodexApiKeyLaunchSectionProps) {
   const { t } = useTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
   const accounts = useCodexAccountStore((state) => state.accounts);
+  const accountsLoaded = useCodexAccountStore((state) => state.accountsLoaded);
+  const imageModelConfig = useCodexImageModelConfig(disabled, pickerOpen || options.imageGenEnabled);
+  const imageConfigReady = !options.imageGenEnabled || options.imageGenAccountIds.every((id) => {
+    const item = accounts.find((candidate) => candidate.id === id);
+    return Boolean(item && imageModelConfig.loaded && isImageGenerationEligibleAccount(item, imageModelConfig.model, imageModelConfig.deletedModels) && (!isCodexApiKeyAccount(item) || resolveImageAccountModel(item, imageModelConfig.model, options.imageGenAccountModels, imageModelConfig.deletedModels)));
+  });
+  useEffect(() => { onImageConfigReadyChange?.(imageConfigReady); }, [imageConfigReady, onImageConfigReadyChange]);
+
+  useEffect(() => {
+    if (!imageModelConfig.loaded || !accountsLoaded) return;
+    const ids = options.imageGenAccountIds.filter((id) => {
+      const item = accounts.find((candidate) => candidate.id === id);
+      return item ? eligibleImageAccountIds([id], [item], imageModelConfig.model, imageModelConfig.deletedModels).length > 0 : !accountsLoaded;
+    });
+    const models = Object.fromEntries(Object.entries(options.imageGenAccountModels).filter(([id]) => ids.includes(id)));
+    if (ids.length !== options.imageGenAccountIds.length || JSON.stringify(models) !== JSON.stringify(options.imageGenAccountModels)) {
+      onChange({ ...options, imageGenAccountIds: ids, imageGenAccountModels: models });
+    }
+  }, [accounts, accountsLoaded, imageModelConfig.loaded, imageModelConfig.model, imageModelConfig.deletedModels, onChange, options]);
 
   const canChooseAccessMode = canChooseCodexProviderAccessMode({
     ...account,
@@ -176,7 +205,7 @@ export function CodexApiKeyLaunchSection({
     },
   ];
 
-  const selectedImageAccounts = options.imageGenAccountIds
+  const selectedImageAccounts = configuredImageAccountIds(options.imageGenAccountIds, accounts, imageModelConfig.model, options.imageGenAccountModels, imageModelConfig.deletedModels)
     .map((id) => accounts.find((item) => item.id === id))
     .filter((item): item is CodexAccount => Boolean(item));
 
@@ -213,7 +242,7 @@ export function CodexApiKeyLaunchSection({
                   ...options,
                   accessMode: mode.id,
                   ...(mode.id !== DEEPSEEK_ACCESS_MODE_GATEWAY
-                    ? { imageGenEnabled: false, imageGenAccountIds: [] }
+                    ? { imageGenEnabled: false, imageGenAccountIds: [], imageGenAccountModels: {} }
                     : {}),
                 })}
                 disabled={disabled}
@@ -293,20 +322,23 @@ export function CodexApiKeyLaunchSection({
                   ...options,
                   imageGenEnabled: enabled,
                   imageGenAccountIds: enabled ? options.imageGenAccountIds : [],
+                  imageGenAccountModels: enabled ? options.imageGenAccountModels : {},
                 });
               }}
             />
             <span>
               <ImagePlus size={15} />
-              {t("codex.deepSeek.start.imageGen", "支持 GPT 生图")}
+              {t("codex.deepSeek.start.imageGen", "支持生图")}
             </span>
           </label>
           <p className="form-hint">
             {t(
               "codex.deepSeek.start.imageGenHint",
-              "对话仍由 DeepSeek 处理；生图走 gpt-image 原链路，由所选 GPT 账号执行并消耗其额度。",
+              "仅网关模式支持。对话使用当前供应商；OAuth 使用原生 GPT 生图，API Key 来源需兼容 Images API 且包含所选完整型号。",
             )}
           </p>
+          {!imageConfigReady && imageModelConfig.loading && <p role="status">{t("common.loading")}</p>}
+          {!imageConfigReady && <ModalErrorMessage message={imageModelConfig.error || (imageModelConfig.loaded ? t("codex.localAccess.imageAccounts.modelRequired") : null)} />}
           <div className="codex-api-key-launch-imagegen-row">
             <button
               type="button"
@@ -314,7 +346,7 @@ export function CodexApiKeyLaunchSection({
               disabled={disabled || !options.imageGenEnabled}
               onClick={() => setPickerOpen(true)}
             >
-              {t("codex.deepSeek.start.imageGenPick", "选择 GPT 账号")}
+              {t("codex.deepSeek.start.imageGenPick", "选择生图来源")}
             </button>
             <span className="codex-api-key-launch-imagegen-status">
               {!options.imageGenEnabled
@@ -331,7 +363,7 @@ export function CodexApiKeyLaunchSection({
             <div className="codex-api-key-launch-imagegen-tags">
               {selectedImageAccounts.map((item) => (
                 <span key={item.id} className="codex-api-key-launch-imagegen-tag">
-                  {item.email || item.account_name || item.id}
+                  {resolveCodexAccountDisplayName(item, t("common.apiKeyAccount"))}
                 </span>
               ))}
             </div>
@@ -343,10 +375,13 @@ export function CodexApiKeyLaunchSection({
         <CodexImageAccountPickerModal
           accounts={accounts}
           selectedIds={options.imageGenAccountIds}
+          selectedModels={options.imageGenAccountModels}
+          imageGenerationModel={imageModelConfig.model}
+          imageModelControl={imageModelConfig.control}
           onCancel={() => setPickerOpen(false)}
-          onConfirm={(ids) => {
+          onConfirm={(ids, models) => {
             setPickerOpen(false);
-            onChange({ ...options, imageGenEnabled: ids.length > 0, imageGenAccountIds: ids });
+            onChange({ ...options, imageGenEnabled: ids.length > 0, imageGenAccountIds: ids, imageGenAccountModels: models });
           }}
         />
       )}
@@ -391,6 +426,7 @@ export function CodexApiKeyLaunchDialog({
   onConfirm,
 }: CodexApiKeyLaunchDialogProps) {
   const { t } = useTranslation();
+  const [imageConfigReady, setImageConfigReady] = useState(true);
   useEscClose(!submitting, onCancel);
   const providerLabel =
     subjectLabel?.trim() ||
@@ -500,6 +536,7 @@ export function CodexApiKeyLaunchDialog({
                 options={options}
                 onChange={onChange}
                 disabled={submitting}
+                onImageConfigReadyChange={setImageConfigReady}
               />
             </section>
           </div>
@@ -516,8 +553,8 @@ export function CodexApiKeyLaunchDialog({
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => onConfirm(options)}
-            disabled={submitting}
+            onClick={() => { if (imageConfigReady) onConfirm(options); }}
+            disabled={submitting || !imageConfigReady}
           >
             {!submitting && <Play size={15} />}
             {submitting

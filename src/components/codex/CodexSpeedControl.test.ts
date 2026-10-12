@@ -118,6 +118,34 @@ test('duplicate clicks are single flight and a dismissed preview gets no late er
   assert.deepEqual(h.busy, [true, false]);
 });
 
+test('API runtime sync failure reports a localized error and permits retry', async () => {
+  let failing = true;
+  const h = harness('api', { saveCodexApiServiceAppSpeed: async (speed: string) => {
+    if (failing) throw Error('codex_api_service_speed_sync_failed: IPC timeout');
+    return { speed };
+  } });
+  await h.ready();
+  await h.select().onChange('fast'); h.render();
+  assert.equal(h.select().value, 'standard');
+  assert.equal(h.select().busy, false);
+  assert.deepEqual(h.errors, [null, 'codex.speed.apiSyncFailed']);
+  failing = false;
+  await h.select().onChange('fast'); h.render();
+  assert.equal(h.select().value, 'fast');
+  assert.equal(h.errors[h.errors.length - 1], null);
+  h.h.unmount();
+});
+
+test('a dismissed API preview receives no late runtime sync error', async () => {
+  const save = deferred<any>();
+  const h = harness('api', { saveCodexApiServiceAppSpeed: () => save.promise });
+  await h.ready();
+  const pending = h.select().onChange('fast');
+  h.h.unmount();
+  save.reject(Error('codex_api_service_speed_sync_failed')); await pending;
+  assert.deepEqual(h.errors, [null]);
+});
+
 test('API read failure exposes retry without saving a guessed tier', async () => {
   let failing = true;
   const h = harness('api', { getCodexApiServiceAppSpeedConfig: async () => {

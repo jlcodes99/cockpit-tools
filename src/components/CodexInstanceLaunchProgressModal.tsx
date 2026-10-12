@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -364,7 +365,7 @@ export function CodexInstanceLaunchProgressModal() {
   const account = accountId
     ? accounts.find((item) => item.id === accountId)
     : null;
-  const accountLabel = account?.account_name || account?.email || accountId;
+  const accountLabel = resolveCodexAccountDisplayName(account ?? { id: accountId ?? "" }, t("common.apiKeyAccount"));
   const authReason = authFailure
     ? authFailure.reasonCode === "client_login_required"
       ? t(
@@ -396,7 +397,7 @@ export function CodexInstanceLaunchProgressModal() {
           return [t("instances.accountLease.detail.noOAuthAccount")];
         }
         const lines = step.details.accountEmail
-          ? [String(step.details.accountEmail)]
+          ? [resolveCodexAccountDisplayName(account ?? { id: accountId ?? "", email: String(step.details.accountEmail) }, t("common.apiKeyAccount"))]
           : [t("instances.accountLease.detail.checkingAccount")];
         const accessExpiry = optionalTimestamp(
           step.details.accessTokenExpiresAt,

@@ -32,6 +32,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	coreusage "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
 
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
@@ -50,6 +51,7 @@ const (
 )
 
 const ginUserAPIKeyKey = "userApiKey"
+const ginResponsesWebsocketDisabledKey = "cockpitResponsesWebsocketDisabled"
 
 const defaultStreamKeepAliveSeconds = 15
 const quotaReserveMaxSnapshotAge = 3 * time.Minute
@@ -114,10 +116,11 @@ type manifest struct {
 	// MaxAccountConcurrency 限制单个账号同时处理的会话数；0 表示不限制。
 	MaxAccountConcurrency int `json:"maxAccountConcurrency"`
 	// AccountConcurrencyWaitMs 账号并发达到上限后的等待时长（毫秒）；0 表示不等待，直接拒绝。
-	AccountConcurrencyWaitMs int    `json:"accountConcurrencyWaitMs"`
-	DebugLogs                *bool  `json:"debugLogs,omitempty"`
-	RequestPayloadLogging    bool   `json:"requestPayloadLogging"`
-	DiagnosticsControlKey    string `json:"diagnosticsControlKey,omitempty"`
+	AccountConcurrencyWaitMs  int    `json:"accountConcurrencyWaitMs"`
+	DebugLogs                 *bool  `json:"debugLogs,omitempty"`
+	RequestPayloadLogging     bool   `json:"requestPayloadLogging"`
+	DiagnosticsControlKey     string `json:"diagnosticsControlKey,omitempty"`
+	ServiceTierControlEnabled bool   `json:"serviceTierControlEnabled,omitempty"`
 
 	apiKeyByValue                 map[string]*apiKeySpec
 	accountByID                   map[string]*accountSpec
@@ -139,7 +142,7 @@ type apiKeySpec struct {
 	ProviderGateway *providerGatewaySpec `json:"providerGateway,omitempty"`
 	ModelRouting    *modelRoutingSpec    `json:"modelRouting,omitempty"`
 	BoundOAuth      bool                 `json:"boundOAuth,omitempty"`
-	// 生图转发账号池：生图请求只允许落到这些 OAuth 账号。
+	// 生图转发账号池：生图请求只允许落到这些 OAuth 或图片 API 账号。
 	ImageGenerationAccountIDs []string `json:"imageGenerationAccountIds,omitempty"`
 	AccountIDs                []string `json:"accountIds"`
 	ModelPrefix               string   `json:"modelPrefix,omitempty"`
@@ -376,19 +379,20 @@ type accountSpec struct {
 	// sidecar 已支持并注册执行器的 provider（目前为 xai/Grok）。
 	Provider string `json:"provider,omitempty"`
 	// ModelIDs 是该账号可承接的客户端模型；仅第三方 provider 使用。
-	ModelIDs              []string            `json:"modelIds,omitempty"`
-	PlanType              string              `json:"planType,omitempty"`
-	AccessTokenOnly       bool                `json:"accessTokenOnly,omitempty"`
-	ChatGPTAccountID      string              `json:"chatgptAccountId,omitempty"`
-	UpstreamAPIKey        string              `json:"upstreamApiKey,omitempty"`
-	PlanRank              *int                `json:"planRank,omitempty"`
-	RemainingQuota        *int                `json:"remainingQuota,omitempty"`
-	QuotaCooldown         *quotaCooldownState `json:"quotaCooldown,omitempty"`
-	SubscriptionExpiryMS  *int64              `json:"subscriptionExpiryMs,omitempty"`
-	GPTReserveAllowed     bool                `json:"gptReserveAllowed,omitempty"`
-	ImageGenerationPolicy string              `json:"imageGenerationPolicy,omitempty"`
-	QuotaReserve          *quotaReserveSpec   `json:"quotaReserve,omitempty"`
-	ModelContextWindows   map[string]int64    `json:"modelContextWindows,omitempty"`
+	ModelIDs                []string              `json:"modelIds,omitempty"`
+	PlanType                string                `json:"planType,omitempty"`
+	AccessTokenOnly         bool                  `json:"accessTokenOnly,omitempty"`
+	ChatGPTAccountID        string                `json:"chatgptAccountId,omitempty"`
+	UpstreamAPIKey          string                `json:"upstreamApiKey,omitempty"`
+	ImageGenerationUpstream *imageAPIUpstreamSpec `json:"imageGenerationUpstream,omitempty"`
+	PlanRank                *int                  `json:"planRank,omitempty"`
+	RemainingQuota          *int                  `json:"remainingQuota,omitempty"`
+	QuotaCooldown           *quotaCooldownState   `json:"quotaCooldown,omitempty"`
+	SubscriptionExpiryMS    *int64                `json:"subscriptionExpiryMs,omitempty"`
+	GPTReserveAllowed       bool                  `json:"gptReserveAllowed,omitempty"`
+	ImageGenerationPolicy   string                `json:"imageGenerationPolicy,omitempty"`
+	QuotaReserve            *quotaReserveSpec     `json:"quotaReserve,omitempty"`
+	ModelContextWindows     map[string]int64      `json:"modelContextWindows,omitempty"`
 }
 
 type quotaReserveSpec struct {
@@ -445,23 +449,25 @@ type usagePayload struct {
 	Alias          string                `json:"alias,omitempty"`
 	// RequestedModel keeps the client-requested model (route namespace intact)
 	// while Model/UpstreamModel carry the model that actually reached upstream.
-	RequestedModel     string `json:"requestedModel,omitempty"`
-	UpstreamModel      string `json:"upstreamModel,omitempty"`
-	AccountID          string `json:"accountId,omitempty"`
-	AccountEmail       string `json:"accountEmail,omitempty"`
-	AuthID             string `json:"authId,omitempty"`
-	APIKeyID           string `json:"apiKeyId,omitempty"`
-	APIKeyLabel        string `json:"apiKeyLabel,omitempty"`
-	ClientInstanceID   string `json:"clientInstanceId,omitempty"`
-	RequestKind        string `json:"requestKind,omitempty"`
-	ServiceTier        string `json:"serviceTier,omitempty"`
-	ReasoningEffort    string `json:"reasoningEffort,omitempty"`
-	Success            bool   `json:"success"`
-	Status             int    `json:"status,omitempty"`
-	ErrorCategory      string `json:"errorCategory,omitempty"`
-	ErrorMessage       string `json:"errorMessage,omitempty"`
-	LatencyMS          int64  `json:"latencyMs,omitempty"`
-	OutputGenerationMS *int64 `json:"outputGenerationMs,omitempty"`
+	RequestedModel       string `json:"requestedModel,omitempty"`
+	UpstreamModel        string `json:"upstreamModel,omitempty"`
+	AccountID            string `json:"accountId,omitempty"`
+	AccountEmail         string `json:"accountEmail,omitempty"`
+	AuthID               string `json:"authId,omitempty"`
+	APIKeyID             string `json:"apiKeyId,omitempty"`
+	APIKeyLabel          string `json:"apiKeyLabel,omitempty"`
+	ClientInstanceID     string `json:"clientInstanceId,omitempty"`
+	RequestKind          string `json:"requestKind,omitempty"`
+	ServiceTier          string `json:"serviceTier,omitempty"`
+	RequestedServiceTier string `json:"requestedServiceTier,omitempty"`
+	ResponseServiceTier  string `json:"responseServiceTier,omitempty"`
+	ReasoningEffort      string `json:"reasoningEffort,omitempty"`
+	Success              bool   `json:"success"`
+	Status               int    `json:"status,omitempty"`
+	ErrorCategory        string `json:"errorCategory,omitempty"`
+	ErrorMessage         string `json:"errorMessage,omitempty"`
+	LatencyMS            int64  `json:"latencyMs,omitempty"`
+	OutputGenerationMS   *int64 `json:"outputGenerationMs,omitempty"`
 	// TurnStateLength/TurnStateClass 来自上游响应头的旁路观测；state 原文不保存。
 	TurnStateLength *int         `json:"turnStateLength,omitempty"`
 	TurnStateClass  string       `json:"turnStateClass,omitempty"`
@@ -1299,13 +1305,14 @@ func withClientInstanceID(ctx context.Context, instanceID string) context.Contex
 }
 
 type requestPolicy struct {
-	diagnosticsOnce  sync.Once
-	diagnosticsQueue *requestDiagnosticsQueue
-	manifest         *manifest
-	cfg              *config.Config
-	emitter          *eventEmitter
-	tracker          *requestUsageTracker
-	tokenLimiter     *apiKeyTokenLimiter
+	serviceTierDefault *apiServiceTierDefault
+	diagnosticsOnce    sync.Once
+	diagnosticsQueue   *requestDiagnosticsQueue
+	manifest           *manifest
+	cfg                *config.Config
+	emitter            *eventEmitter
+	tracker            *requestUsageTracker
+	tokenLimiter       *apiKeyTokenLimiter
 }
 
 func (p *requestPolicy) middleware() gin.HandlerFunc {
@@ -1320,6 +1327,13 @@ func (p *requestPolicy) middleware() gin.HandlerFunc {
 		requestID := ensureRequestID(c)
 		diagnostics := p.beginRequestDiagnostics(c, requestID, startedAt)
 		spec := p.lookupAPIKey(c.Request)
+		if p.serviceTierDefault != nil && spec != nil && spec.ProviderGateway == nil {
+			ctx := cliproxyexecutor.WithServiceTierDefaultProvider(c.Request.Context(), p.serviceTierDefault.tier)
+			if diagnosticTransport(c.Request) != "websocket" {
+				ctx = cliproxyexecutor.SnapshotServiceTierDefault(ctx)
+			}
+			c.Request = c.Request.WithContext(ctx)
+		}
 		if diagnosticTransport(c.Request) == "websocket" && p.emitter != nil {
 			sink := newWebsocketUsageSink(requestID, func(payload usagePayload) {
 				p.tokenLimiter.addUsage(spec, effectiveUsageTotalTokens(payload.Usage))
@@ -1548,9 +1562,13 @@ func (p *requestPolicy) emitRequestCompleted(c *gin.Context, requestID string, s
 		return
 	}
 	p.tracker.releaseImageJobs(requestID)
-	if _, ok := c.Request.Context().Value(websocketUsageContextKey).(*websocketUsageSink); ok && status < http.StatusBadRequest {
+	_, websocketUsage := c.Request.Context().Value(websocketUsageContextKey).(*websocketUsageSink)
+	if (websocketUsage && status < http.StatusBadRequest) ||
+		(status == http.StatusUpgradeRequired && c.GetBool(ginResponsesWebsocketDisabledKey)) {
 		// Gorilla writes the 101 handshake after hijacking, leaving Gin's
-		// status at 200. Rejected handshakes must still reach finalization.
+		// status at 200. A deliberately disabled WebSocket handshake is also
+		// transport-only: HTTP fallback can happen before any execution.
+		// Other rejected handshakes must still reach usage finalization.
 		// Transport completion is diagnostic-only. Per-execution callbacks own
 		// usage and may arrive after this handler returns.
 		p.tracker.mu.Lock()

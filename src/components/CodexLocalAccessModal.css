@@ -1444,6 +1444,54 @@
   color: var(--text-primary);
 }
 
+.codex-local-access-modal .codex-local-access-payload-details {
+  position: relative;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.codex-local-access-modal .codex-local-access-payload-details > summary {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  list-style: none;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 6px;
+  color: var(--text-primary);
+  background: transparent;
+  font-family: inherit;
+}
+
+.codex-local-access-modal .codex-local-access-payload-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.codex-local-access-modal .codex-local-access-payload-details > summary:hover {
+  background: var(--bg-hover);
+}
+
+.codex-local-access-modal .codex-local-access-payload-details > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.codex-local-access-modal .codex-local-access-payload-chevron {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.codex-local-access-modal .codex-local-access-payload-details[open] .codex-local-access-payload-chevron {
+  transform: rotate(180deg);
+}
+
+.codex-local-access-modal .codex-local-access-payload-details-body {
+  padding-top: 10px;
+}
+
 .codex-local-access-section-title svg {
   flex-shrink: 0;
   color: var(--primary);

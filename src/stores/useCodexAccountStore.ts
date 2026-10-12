@@ -190,6 +190,7 @@ interface CodexAccountState {
     accessMode?: string | null,
     startupModel?: string | null,
     imageGenerationAccountIds?: string[] | null,
+    imageGenerationAccountModels?: Record<string, string> | null,
   ) => Promise<CodexAccount>;
 }
 
@@ -553,12 +554,14 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     accessMode?: string | null,
     startupModel?: string | null,
     imageGenerationAccountIds?: string[] | null,
+    imageGenerationAccountModels?: Record<string, string> | null,
   ) => {
     const account = await codexService.updateCodexAccountInstanceAccess(
       accountId,
       accessMode,
       startupModel,
       imageGenerationAccountIds,
+      imageGenerationAccountModels,
     );
     await get().fetchAccounts();
     await get().fetchCurrentAccount();

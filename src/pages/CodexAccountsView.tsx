@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -247,7 +248,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
         accounts={accounts}
         accountId={proxyAccountId}
         resolveDisplayName={(account) =>
-          maskAccountText(account.account_name || account.email || account.id)
+          maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")))
         }
         onBack={() => setActiveTab("overview")}
       />}
@@ -1062,9 +1063,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
           key={`${proxyPreviewAccount.id}:${JSON.stringify(proxyPreviewAccount.egress_proxy)}`}
           account={proxyPreviewAccount}
           displayName={proxyPreviewAccount.id === CODEX_API_SERVICE_PROXY_TARGET ? t("codex.localAccess.title") : maskAccountText(
-            proxyPreviewAccount.account_name ||
-              proxyPreviewAccount.email ||
-              proxyPreviewAccount.id,
+            resolveCodexAccountDisplayName(proxyPreviewAccount, t("common.apiKeyAccount")),
           )}
           onClose={() => setProxyPreviewId(null)}
           onManage={() => {

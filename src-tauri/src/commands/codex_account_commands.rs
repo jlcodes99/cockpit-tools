@@ -929,6 +929,10 @@ pub async fn get_codex_api_service_app_speed_config() -> Result<CodexAppSpeedCon
 pub async fn save_codex_api_service_app_speed(
     speed: CodexAppSpeed,
 ) -> Result<CodexAppSpeedConfig, String> {
+    // Serialize preference writes and runtime acknowledgements so an older save
+    // cannot overwrite a newer choice in the running API service.
+    let _speed_guard = codex_local_access::api_service_speed_save_lock().lock().await;
+    let runtime_speed = speed.clone();
     let saved = tauri::async_runtime::spawn_blocking(move || {
         let saved = codex_speed::save_api_service_app_speed(speed.clone())?;
         let bind_id = crate::modules::codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID;
@@ -942,7 +946,7 @@ pub async fn save_codex_api_service_app_speed(
         }
         Ok::<_, String>(saved)
     }).await.map_err(|error| error.to_string())??;
-    codex_local_access::trigger_gateway_reload_in_background("保存 API 服务速度配置");
+    codex_local_access::sync_running_api_service_speed(runtime_speed).await?;
     Ok(saved)
 }
 
@@ -2513,13 +2517,15 @@ pub async fn update_codex_account_instance_access(
     access_mode: Option<String>,
     startup_model: Option<String>,
     image_generation_account_ids: Option<Vec<String>>,
+    image_generation_account_models: Option<std::collections::HashMap<String, String>>,
 ) -> Result<CodexAccount, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        codex_account::update_account_instance_access(
+        codex_account::update_account_instance_access_with_image_models(
             &account_id,
             access_mode,
             startup_model,
             image_generation_account_ids,
+            image_generation_account_models,
         )
     })
     .await

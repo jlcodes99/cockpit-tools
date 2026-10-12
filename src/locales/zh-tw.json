@@ -96,6 +96,7 @@
     "providerClear": "清除選取"
   },
   "common": {
+    "apiKeyAccount": "API Key 帳號",
     "status": "狀態",
     "cliQuickLaunch": "CLI 啟動",
     "requestId": "請求 ID",
@@ -2381,12 +2382,12 @@
       "accessModeDirectCons": "1：不能在 codex 內切換模型，也不支援綁定 OAuth 帳號與轉發生圖",
       "accessModeCdpPros": "1：速度與直連一致\n2：可在 codex 官方模型列表切換 Flash / Pro",
       "accessModeCdpCons": "1：需要注入官方用戶端，不支援綁定 OAuth 帳號與轉發生圖",
-      "imageGenPickerDesc": "當遇到生圖需求時會轉發生圖請求：先由基礎模型處理，再由生圖模型出圖，會消耗所選帳號的部分額度。",
+      "imageGenPickerDesc": "OAuth 來源使用基礎模型與生圖工具；API Key 來源使用圖片介面。費用或額度由對應上游計入。",
       "imageGenSwitchTitle": "僅閘道模式支援",
       "imageGenSwitchDescription": "啟用 GPT 生圖需要先切換到「閘道列出」模式，是否切換並勾選？",
       "imageGenSwitchYes": "是",
       "imageGenSwitchNo": "否",
-      "imageGenTitle": "啟用 GPT 生圖",
+      "imageGenTitle": "啟用生圖",
       "oauthBindingHint": "綁定後啟動與一般帳號沒有任何差異，可使用 OAuth 的全部能力（遠端壓縮，瀏覽器操作，各類外掛等）；對話仍由目前的 API Key 供應商處理。",
       "oauthBindingChange": "更換",
       "title": "Codex 啟動預覽",
@@ -2680,10 +2681,10 @@
       "killPortSuccess": "連接埠已清理（已結束 {{count}} 個處理程序）",
       "killPortSuccessNone": "連接埠已檢查，未發現外部占用程序",
       "killPortSuccessUnknown": "API 服務連接埠已清理",
-      "restartAction": "重新啟動 Sidecar",
-      "restartTitle": "重新啟動 API 服務",
-      "restartConfirmMessage": "只會重新啟動 API 服務 Sidecar，不會修改帳號、Token、API Key 或帳號池設定。進行中的請求可能會中斷，確定繼續嗎？",
-      "restartSuccess": "API 服務 Sidecar 已重新啟動",
+      "restartAction": "僅重啟 API 服務",
+      "restartTitle": "僅重啟 API 服務",
+      "restartConfirmMessage": "僅重啟 API 服務，保留 Codex 視窗及帳號池、API Key 設定。進行中的 API 請求可能中斷。確定繼續嗎？",
+      "restartSuccess": "API 服務已重啟",
       "refreshStats": "刷新統計",
       "refreshStatsSuccess": "API 服務統計已刷新",
       "routingStrategy": {
@@ -2730,7 +2731,20 @@
       "apiPortUrl": "API 連接埠 URL",
       "modelId": "模型 ID",
       "modelIdPlaceholder": "選擇模型 ID",
+      "imageAccounts": {
+        "upstreamModel": "上游型號",
+        "chooseModel": "選擇型號",
+        "modelRequired": "請選擇支援的實際型號。",
+        "sourceUnavailable": "所選來源不支援目前圖片模型，或缺少可用的 API 憑證／請求地址。",
+        "loadFailed": "讀取生圖設定失敗，請重試。",
+        "missingModels": "有 {{count}} 個已選來源需要指定型號。",
+        "locateModel": "定位來源"
+      },
       "imageGenerationModel": {
+        "manage": "管理型號",
+        "deleteSelected": "型號正在使用，請先替換並儲存。",
+        "invalid": "型號不能包含空白或控制字元，最長 200 字元。",
+        "syncFailed": "圖片型號探索失敗，請重試。",
         "label": "生圖模型",
         "custom": "自訂",
         "save": "儲存模型",
@@ -2816,8 +2830,8 @@
       "requestLogSuccess": "成功",
       "requestLogFailed": "失敗",
       "requestLogTokens": "{{value}} 個 Tokens",
-      "imageForwardLabel": "啟用 GPT 生圖",
-      "imageForwardHint": "勾選後選擇 GPT 帳號：生圖與圖片編輯請求交給所選帳號執行並消耗其額度，對話請求仍依帳號池調度。",
+      "imageForwardLabel": "啟用生圖",
+      "imageForwardHint": "API Key 來源須相容 Images API，並在帳號列選擇實際型號；OAuth 僅支援原生 GPT 型號。",
       "imageGenerationMode": {
         "enabled": "啟用",
         "imagesOnly": "僅圖片",
@@ -2922,7 +2936,8 @@
       "removeAction": "從 API 移除",
       "imageGenerationMainModel": {
         "label": "生圖主模型",
-        "hint": "留空沿用 gpt-5.5。此模型負責呼叫圖片工具；所選 OAuth 帳號必須支援該主模型的 image_generation。",
+        "notice": "日常請勿修改生圖主模型。",
+        "hint": "此項僅用於官方生圖介面的底層轉發，不用於切換出圖模型。僅當官方調整主模型時手動更新；留空沿用 gpt-5.5。",
         "invalid": "請輸入不含空白的模型 ID，最長 200 字元。"
       },
       "requestDetail": {
@@ -3756,14 +3771,14 @@
         "cdpMode": "CDP 注入",
         "cdpDesc": "透過注入接管 Codex 官方模型清單，速度與直連相同。需要注入官方用戶端，不支援綁定 OAuth。",
         "context": "支援上下文",
-        "imageGen": "支援 GPT 生圖",
-        "imageGenHint": "僅閘道模式支援。對話仍由該供應商的模型處理；生圖走 gpt-image 原鏈路，由所選 GPT 帳號執行並消耗其額度。",
-        "imageGenPick": "選擇 GPT 帳號",
+        "imageGen": "支援生圖",
+        "imageGenHint": "API Key 來源須相容 Images API，並在帳號列選擇實際型號；OAuth 僅支援原生 GPT 型號。",
+        "imageGenPick": "選擇生圖來源",
         "imageGenSelected": "已選 {{count}} 個帳號",
         "imageGenEmpty": "尚未選擇帳號",
         "imageGenLocked": "勾選後可選擇帳號",
         "pickerTitle": "選擇生圖帳號",
-        "pickerEmpty": "沒有可用於生圖的 OAuth 帳號（Free 帳號與 API Key 帳號不支援）。",
+        "pickerEmpty": "沒有可用來源。API Key 須支援所選型號或 GPT 同族型號；OAuth 僅支援非 Free 的原生 GPT 型號。",
         "pickerSelectAll": "全選",
         "pickerClear": "清空",
         "protocol": "協定",
@@ -4270,7 +4285,8 @@
       "saveSuccess": "速度已更新",
       "saveFailed": "儲存速度失敗：{{error}}",
       "loadFailed": "讀取速度失敗：{{error}}",
-      "apiHint": "API 請求未指定檔位時使用此預設值；客戶端明確指定的檔位優先。快速會增加用量或費用，實際加速取決於模型與供應商。",
+      "apiHint": "儲存成功後用於後續 API 請求，無需重新啟動；進行中的請求不變，用戶端明確指定的檔位優先。快速可能增加用量或費用，實際加速取決於模型與供應商。",
+      "apiSyncFailed": "偏好已儲存，但執行中的 API 服務尚未確認更新；請重試。",
       "launchHint": "切換帳號及透過 Cockpit 啟動時寫入客戶端設定。執行中的客戶端需重新啟動；新對話使用預設檔位，既有對話的獨立速度設定需在客戶端調整。"
     },
     "apiService": {
@@ -4455,6 +4471,11 @@
         "reasoningEffortValue": "思考 {{effort}}",
         "serviceTier": "服務等級",
         "serviceTierValue": "等級 {{tier}}",
+        "requestedTier": "請求: {{tier}}",
+        "responseTier": "回報: {{tier}}",
+        "legacyTier": "舊檔位: {{tier}}",
+        "serviceTierHint": "請求檔位是傳送至上游的 service_tier，不代表已確認上游實際處理檔位。Codex OAuth 回報 default 不能據此認定快速已降級。「自動」表示未指定具體檔位（省略欄位或使用 auto）。",
+        "legacyTierHint": "舊記錄混合了請求與回應檔位，無法確認來源及實際處理檔位。",
         "upstreamModel": "傳送模型",
         "columns": {
           "time": "時間",
@@ -5535,7 +5556,15 @@
       },
       "failurePhase": "失敗階段",
       "applying": "正在套用至執行中的閘道…",
-      "applyFailed": "設定已儲存，但執行中的閘道未能套用，可重試。原因：{{error}}"
+      "applyFailed": "設定已儲存，但執行中的閘道未能套用，可重試。原因：{{error}}",
+      "timeout": {
+        "open": "等待上游建立串流逾時。可在「逾時與重試 → {{setting}}」調整等待時間（1–600 秒，預設 60 秒）。",
+        "idle": "串流已建立，但等待後續資料逾時。可在「逾時與重試」調整對應的串流閒置逾時。",
+        "canceled": "請求已由用戶端取消，不屬於串流開啟逾時。",
+        "gateway": "HTTP 504 表示閘道等待逾時；目前紀錄不足以確定原因，請查看上游錯誤及請求階段。",
+        "threshold": "本次生效門檻：{{seconds}} 秒。",
+        "settings": "調整逾時"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "預設檔位",

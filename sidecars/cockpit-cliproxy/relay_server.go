@@ -42,6 +42,7 @@ type relayServer struct {
 	codexLive             *codexlive.Handler
 	quotaPoolStatePath    string
 	providerBackoff       providerGatewayBackoffState
+	imageDownloads        *imageDownloadPolicy
 }
 
 func (s *relayServer) router() *gin.Engine {
@@ -57,6 +58,7 @@ func (s *relayServer) router() *gin.Engine {
 	router.GET(cockpitQuotaPath, s.handleCockpitQuota)
 	router.POST("/v1/cockpit/auth/reset", s.handleResetAuthState)
 	router.POST(requestDiagnosticsConfigPath, s.handleRequestDiagnosticsConfig)
+	router.POST(apiServiceTierDefaultPath, s.handleAPIServiceTierDefault)
 	router.GET(requestDiagnosticsEventsPath, s.handleRequestDiagnosticsEvents)
 	router.POST("/v1/cockpit/accounts/reset-scheduler", s.handleResetSchedulerState)
 	router.POST("/v1/live", s.handleCodexLive)
@@ -719,6 +721,10 @@ func (s *relayServer) handleResponsesWebsocket(c *gin.Context) {
 		return
 	}
 	if !spec.ResponsesWebsockets {
+		if diagnosticTransport(c.Request) == "websocket" {
+			c.Set(ginResponsesWebsocketDisabledKey, true)
+			_ = c.Error(errors.New("responses websocket is disabled"))
+		}
 		writeAPIError(c, http.StatusUpgradeRequired, "responses websocket is disabled", "websocket_disabled")
 		return
 	}

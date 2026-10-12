@@ -96,6 +96,7 @@
     "providerClear": "Zrušit výběr"
   },
   "common": {
+    "apiKeyAccount": "Účet API Key",
     "status": "Stav",
     "cliQuickLaunch": "Spustit CLI",
     "requestId": "ID požadavku",
@@ -2381,12 +2382,12 @@
       "accessModeDirectCons": "1: Žádné přepínání modelů v Codexu, propojení OAuth ani přeposílání obrázků",
       "accessModeCdpPros": "1: Stejná rychlost jako přímé\n2: Flash / Pro lze přepínat v oficiálním seznamu modelů Codexu",
       "accessModeCdpCons": "1: Vyžaduje injektáž oficiálního klienta, propojení OAuth ani přeposílání obrázků",
-      "imageGenPickerDesc": "Když přijde požadavek na obrázek, přepošle se: nejprve jej zpracuje základní model, poté obrázek vytvoří model obrázků a spotřebuje část kvóty vybraných účtů.",
+      "imageGenPickerDesc": "OAuth používá základní model a nástroj obrázků; API Key používá rozhraní obrázků. Náklady nebo kvótu účtuje zvolený poskytovatel.",
       "imageGenSwitchTitle": "Pouze v režimu brány",
       "imageGenSwitchDescription": "Zapnutí generování obrázků GPT vyžaduje režim brány. Přepnout a zapnout?",
       "imageGenSwitchYes": "Ano",
       "imageGenSwitchNo": "Ne",
-      "imageGenTitle": "Zapnout generování obrázků GPT",
+      "imageGenTitle": "Zapnout obrázky",
       "oauthBindingHint": "Po propojení probíhá spuštění stejně jako u běžného účtu a jsou dostupné všechny funkce OAuth (vzdálená komprese, ovládání prohlížeče, různá rozšíření atd.); konverzace stále zpracovává současný poskytovatel API Key.",
       "oauthBindingChange": "Změnit",
       "title": "Náhled spuštění Codexu",
@@ -2680,10 +2681,10 @@
       "killPortSuccess": "Port byl vyčištěn (ukončeno {{count}} procesů)",
       "killPortSuccessNone": "Port byl zkontrolován. Nepoužívá ho žádný externí proces.",
       "killPortSuccessUnknown": "Port služby API byl vyčištěn",
-      "restartAction": "Restartovat Sidecar",
-      "restartTitle": "Restartovat službu API",
-      "restartConfirmMessage": "Restartuje se pouze Sidecar služby API. Účty, tokeny, API klíče ani nastavení fondu účtů se nezmění. Probíhající požadavky mohou být přerušeny. Pokračovat?",
-      "restartSuccess": "Sidecar služby API byl restartován",
+      "restartAction": "Restartovat jen API",
+      "restartTitle": "Restartovat jen API",
+      "restartConfirmMessage": "Restartovat pouze službu API a zachovat okna Codex i nastavení fondu účtů/API Key. Probíhající požadavky API se mohou přerušit. Pokračovat?",
+      "restartSuccess": "Služba API restartována",
       "refreshStats": "Obnovit statistiky",
       "refreshStatsSuccess": "Statistiky služby API byly obnoveny",
       "routingStrategy": {
@@ -2730,7 +2731,20 @@
       "apiPortUrl": "URL portu API",
       "modelId": "ID modelu",
       "modelIdPlaceholder": "Vyberte ID modelu",
+      "imageAccounts": {
+        "upstreamModel": "Model poskytovatele",
+        "chooseModel": "Vybrat model",
+        "modelRequired": "Vyberte podporovaný model.",
+        "sourceUnavailable": "Vybraný zdroj nepodporuje aktuální model obrázků nebo nemá platné přihlašovací údaje API či adresu požadavku.",
+        "loadFailed": "Nastavení obrázků se nepodařilo načíst. Zkuste to znovu.",
+        "missingModels": "Vyberte model pro {{count}} vybraných zdrojů.",
+        "locateModel": "Najít zdroj"
+      },
       "imageGenerationModel": {
+        "manage": "Správa modelů",
+        "deleteSelected": "Model se používá. Nejprve změňte a uložte.",
+        "invalid": "ID modelu nesmí obsahovat bílé ani řídicí znaky a může mít nejvýše 200 znaků.",
+        "syncFailed": "Vyhledání modelů obrázků se nezdařilo. Zkuste to znovu.",
         "label": "Obrazový model",
         "custom": "Vlastní",
         "save": "Uložit model",
@@ -2816,8 +2830,8 @@
       "requestLogSuccess": "Úspěch",
       "requestLogFailed": "Selhalo",
       "requestLogTokens": "{{value}} tokenů",
-      "imageForwardLabel": "Zapnout generování obrázků GPT",
-      "imageForwardHint": "Po zapnutí vyberte účty GPT: požadavky na generování a úpravu obrázků běží na vybraných účtech a spotřebovávají jejich kvótu, zatímco chat dál využívá fond účtů.",
+      "imageForwardLabel": "Zapnout obrázky",
+      "imageForwardHint": "API Key vyžaduje Images API a výběr skutečného modelu v řádku účtu; OAuth podporuje pouze nativní modely GPT.",
       "imageGenerationMode": {
         "enabled": "Zapnuto",
         "imagesOnly": "Jen obrázky",
@@ -2922,7 +2936,8 @@
       "removeAction": "Odebrat z API",
       "imageGenerationMainModel": {
         "label": "Hlavní model obrázků",
-        "hint": "Prázdné pole ponechá gpt-5.5. Tento model volá nástroj obrázků; vybrané účty OAuth pro něj musí podporovat image_generation.",
+        "notice": "Při běžném používání hlavní model obrázků neměňte.",
+        "hint": "Slouží pouze k předávání požadavků oficiální službě, ne k výběru modelu pro tvorbu obrázků. Upravte jej jen při změně oficiálního hlavního modelu. Prázdné pole použije gpt-5.5.",
         "invalid": "Zadejte ID modelu bez mezer, nejvýše 200 znaků."
       },
       "requestDetail": {
@@ -3756,14 +3771,14 @@
         "cdpMode": "CDP injekce",
         "cdpDesc": "Převezme oficiální seznam modelů Codex pomocí injektáže, rychlost jako v přímém režimu. Vyžaduje injektáž oficiálního klienta; propojení OAuth není podporováno.",
         "context": "Podporovaný kontext",
-        "imageGen": "Generování obrázků GPT",
-        "imageGenHint": "Pouze v režimu brány. Konverzaci stále zpracovávají modely tohoto poskytovatele; generování obrázků používá původní cestu gpt-image, provádějí je vybrané GPT účty a spotřebovává jejich kvótu.",
-        "imageGenPick": "Vybrat účty GPT",
+        "imageGen": "Generování obrázků",
+        "imageGenHint": "API Key vyžaduje Images API a výběr skutečného modelu v řádku účtu; OAuth podporuje pouze nativní modely GPT.",
+        "imageGenPick": "Zdroje obrázků",
         "imageGenSelected": "Vybráno účtů: {{count}}",
         "imageGenEmpty": "Nejsou vybrány žádné účty",
         "imageGenLocked": "Zaškrtnutím vyberete účty",
         "pickerTitle": "Vyberte účty pro obrázky",
-        "pickerEmpty": "Žádné účty OAuth nemohou generovat obrázky (účty Free a API Key nejsou podporovány).",
+        "pickerEmpty": "Žádné vhodné zdroje. API Key musí podporovat vybraný model nebo rodinu GPT; OAuth podporuje nativní modely GPT pouze pro účty bez Free.",
         "pickerSelectAll": "Vybrat vše",
         "pickerClear": "Vymazat",
         "protocol": "Protokol",
@@ -4270,7 +4285,8 @@
       "saveSuccess": "Rychlost aktualizována",
       "saveFailed": "Rychlost se nepodařilo uložit: {{error}}",
       "loadFailed": "Rychlost se nepodařilo načíst: {{error}}",
-      "apiHint": "Použije se, když požadavek API neuvede úroveň; výslovná úroveň klienta má přednost. Rychlý režim zvyšuje spotřebu nebo cenu podle modelu a poskytovatele.",
+      "apiHint": "Po uložení se použije pro další požadavky API bez restartu. Probíhající požadavky se nemění; výslovně zvolená úroveň klienta má přednost. Rychlý režim může zvýšit spotřebu nebo cenu; zrychlení závisí na modelu a poskytovateli.",
+      "apiSyncFailed": "Nastavení bylo uloženo, ale běžící služba API nepotvrdila aktualizaci. Zkuste to znovu.",
       "launchHint": "Uloží se při změně účtu a spuštění přes Cockpit. Běžícího klienta restartujte. Nové chaty použijí tuto hodnotu; vlastní rychlost stávajících chatů změňte v klientu."
     },
     "apiService": {
@@ -4455,6 +4471,11 @@
         "reasoningEffortValue": "Úvah. {{effort}}",
         "serviceTier": "Úroveň služby",
         "serviceTierValue": "Úroveň {{tier}}",
+        "requestedTier": "Požadavek: {{tier}}",
+        "responseTier": "Odpověď: {{tier}}",
+        "legacyTier": "Staré: {{tier}}",
+        "serviceTierHint": "Požadovaná úroveň je service_tier odeslaný serveru, nikoli potvrzení skutečné úrovně zpracování. U Codex OAuth odpověď default neprokazuje snížení rychlého režimu. Automaticky znamená, že nebyla požadována konkrétní úroveň (pole bylo vynecháno nebo nastaveno na auto).",
+        "legacyTierHint": "Tento starý záznam směšuje úrovně požadavku a odpovědi. Jejich zdroj a skutečná úroveň zpracování nejsou známy.",
         "upstreamModel": "Odeslaný model",
         "columns": {
           "time": "Čas",
@@ -5535,7 +5556,15 @@
       },
       "failurePhase": "Fáze chyby",
       "applying": "Používání na aktivních branách…",
-      "applyFailed": "Nastavení bylo uloženo, ale aktivní brány je nepoužily. Zkuste to znovu. Důvod: {{error}}"
+      "applyFailed": "Nastavení bylo uloženo, ale aktivní brány je nepoužily. Zkuste to znovu. Důvod: {{error}}",
+      "timeout": {
+        "open": "Vypršel čas čekání na otevření proudu nadřazeným serverem. Upravte „Časové limity a opakování → {{setting}}“ (1–600 sekund, výchozí 60).",
+        "idle": "Proud je otevřený, ale vypršel čas čekání na další data. Upravte příslušný limit nečinnosti v „Časové limity a opakování“.",
+        "canceled": "Klient tento požadavek zrušil; nejde o časový limit otevření proudu.",
+        "gateway": "HTTP 504 znamená vypršení času brány. Záznam neurčuje příčinu; zkontrolujte chybu serveru a fázi požadavku.",
+        "threshold": "Použitý limit tohoto požadavku: {{seconds}} sekund.",
+        "settings": "Upravit limit"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "Výchozí úroveň",

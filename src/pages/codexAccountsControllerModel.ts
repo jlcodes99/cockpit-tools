@@ -2,7 +2,7 @@ import { isCodexPendingOAuthAccount, type CodexApiProviderMode, type CodexBatchD
 import type { CodexAccount } from "../types/codex";
 import type { CodexLocalAccessAddressKind, CodexLocalAccessAccountHealth, CodexLocalAccessCollection, CodexLocalAccessOAuthQuotaReserve } from "../types/codexLocalAccess";
 import { CODEX_OVERVIEW_FILTER_FIELDS, CODEX_OVERVIEW_FILTER_SCOPE } from "../utils/codexAccountOverview";
-import { findCodexApiProviderPresetById } from "../utils/codexProviderPresets";
+import { CODEX_API_PROVIDER_CUSTOM_ID, findCodexApiProviderPresetById } from "../utils/codexProviderPresets";
 import { normalizeApiKeyFunOfficialUrl, resolveApiKeyFunWireApi } from "../utils/apikeyFunLinks";
 import { type CodexModelProvider, type CodexModelProviderUsageSummary } from "../services/codexModelProviderService";
 import type { Sponsor } from "../types/sponsor";
@@ -659,15 +659,18 @@ export function isRelayApiProviderTemplateId(value?: string | null): boolean {
 }
 
 export function getDefaultApiProviderPresetId(
-  sponsorTemplates: SponsorApiProviderTemplate[],
+  _sponsorTemplates: SponsorApiProviderTemplate[],
 ): string {
-  return sponsorTemplates[0]?.id ?? DEFAULT_CODEX_API_PROVIDER_ID;
+  return CODEX_API_PROVIDER_CUSTOM_ID;
 }
 
 export function resolveApiProviderPresetDefaults(
   providerId: string,
   sponsorTemplates: SponsorApiProviderTemplate[],
 ): { baseUrl: string; providerName: string } {
+  if (providerId === CODEX_API_PROVIDER_CUSTOM_ID) {
+    return { baseUrl: "", providerName: "" };
+  }
   const sponsorTemplate = sponsorTemplates.find(
     (template) => template.id === providerId,
   );

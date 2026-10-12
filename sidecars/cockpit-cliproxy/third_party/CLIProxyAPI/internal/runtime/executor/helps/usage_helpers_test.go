@@ -637,6 +637,48 @@ func TestUsageReporterBuildRecordIncludesServiceTier(t *testing.T) {
 	}
 }
 
+func TestUsageReporterCapturesFinalUpstreamServiceTier(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload string
+		want    string
+	}{
+		{"injected fast", `{"service_tier":"priority"}`, "priority"},
+		{"explicit default", `{"service_tier":"default"}`, "default"},
+		{"removed default", `{"model":"gpt-5.4"}`, ""},
+		{"explicit auto", `{"service_tier":"auto"}`, "auto"},
+		{"unknown raw tier", `{"service_tier":"custom-tier"}`, "custom-tier"},
+		{"empty tier", `{"service_tier":""}`, ""},
+		{"null tier", `{"service_tier":null}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := usage.WithServiceTier(context.Background(), "default")
+			reporter := NewUsageReporter(ctx, "codex", "gpt-5.4", nil)
+			reporter.SetUpstreamServiceTier([]byte(`{"service_tier":"priority"}`))
+			reporter.SetUpstreamServiceTier([]byte(tc.payload))
+			for _, failed := range []bool{false, true} {
+				record := reporter.buildRecord(usage.Detail{TotalTokens: 3, ResponseServiceTier: "default"}, failed)
+				if !record.UpstreamServiceTierObserved || record.UpstreamServiceTier != tc.want {
+					t.Fatalf("observed=%v upstream tier=%q, want observed=true tier=%q", record.UpstreamServiceTierObserved, record.UpstreamServiceTier, tc.want)
+				}
+				if record.ServiceTier != "default" || record.ResponseServiceTier != "default" {
+					t.Fatal("capturing upstream tier changed client or response tier")
+				}
+			}
+			additional, ok := reporter.buildAdditionalModelRecord("gpt-image-2", usage.Detail{TotalTokens: 1})
+			if !ok || !additional.UpstreamServiceTierObserved || additional.UpstreamServiceTier != tc.want {
+				t.Fatalf("additional model tier snapshot = %#v", additional)
+			}
+		})
+	}
+	uncaptured := NewUsageReporter(context.Background(), "openai", "gpt-5.4", nil).buildRecord(usage.Detail{}, false)
+	if uncaptured.UpstreamServiceTierObserved || uncaptured.UpstreamServiceTier != "" {
+		t.Fatal("uncaptured requests must remain distinguishable from an omitted outbound tier")
+	}
+	var nilReporter *UsageReporter
+	nilReporter.SetUpstreamServiceTier(nil)
+}
+
 func TestUsageReporterBuildRecordDefaultsGenerateTrue(t *testing.T) {
 	reporter := NewUsageReporter(context.Background(), "openai", "gpt-5.4", nil)
 

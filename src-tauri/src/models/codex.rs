@@ -216,12 +216,15 @@ pub struct CodexAccount {
     /// Direct-start model for official DeepSeek Responses (`deepseek-v4-flash` / `deepseek-v4-pro`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_startup_model: Option<String>,
-    /// 网关模式下用于生图转发的 GPT(OAuth) 账号池。
+    /// 网关模式下用于生图转发的来源账号池。
     ///
-    /// 对话仍由本账号的上游模型处理；生图请求（images 端点与对话内触发的生图）
-    /// 交给这里的账号执行，走 `gpt-5.5` 基础模型 + `gpt-image-2.5` 的原有链路。
+    /// 对话仍由本账号的上游模型处理；图片请求交给所选 OAuth 或 API Key 来源。
+    /// API Key 来源必须匹配当前图片模型族，后缀型号须明确选择真实目录中的完整 ID。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub api_image_generation_account_ids: Vec<String>,
+    /// 生图来源账号 ID → 用户明确选择的完整上游图片模型 ID。
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub api_image_generation_account_models: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bound_oauth_account_id: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -249,7 +252,12 @@ pub struct CodexAccount {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_note: Option<String>,
     /// 账号级出口代理。留空时继续使用全局/API 服务代理。
-    #[serde(default, skip_serializing_if = "Option::is_none", rename(serialize = "egress_proxy"), serialize_with = "crate::modules::codex_account_proxy::serialize_summary")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename(serialize = "egress_proxy"),
+        serialize_with = "crate::modules::codex_account_proxy::serialize_summary"
+    )]
     pub egress_proxy_url: Option<String>,
     /// Explicit opt-out: bypass account/shared proxies without changing other accounts.
     #[serde(default)]
@@ -650,6 +658,7 @@ impl CodexAccount {
             api_instance_access_mode: None,
             api_startup_model: None,
             api_image_generation_account_ids: Vec::new(),
+            api_image_generation_account_models: HashMap::new(),
             bound_oauth_account_id: None,
             bound_oauth_use_local_gateway: false,
             upstream_grok_account_id: None,
@@ -739,6 +748,50 @@ impl CodexAccount {
         self.auth_mode == CodexAuthMode::Apikey
     }
 
+    /// Presentation only; email and credential identifiers stay unchanged on disk.
+    pub fn display_name(&self, api_key_label: &str) -> String {
+        if !self.is_api_key_auth() {
+            return self.email.clone();
+        }
+        let is_generated = |value: &str| {
+            value
+                .to_ascii_lowercase()
+                .strip_prefix("api-key-")
+                .is_some_and(|suffix| {
+                    suffix.len() == 8 && suffix.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+        };
+        if let Some(name) = self
+            .account_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty() && !is_generated(name))
+        {
+            return name.to_string();
+        }
+        let base_url = self.api_base_url.as_deref().unwrap_or_default().trim();
+        if !base_url.is_empty() {
+            if let Ok(url) = reqwest::Url::parse(base_url) {
+                if matches!(url.scheme(), "http" | "https") {
+                    if let Some(host) = url.host_str() {
+                        return match url.port() {
+                            Some(port) => format!("{}:{}", host, port),
+                            None => host.to_string(),
+                        };
+                    }
+                }
+            }
+        } else if self.api_provider_mode == CodexApiProviderMode::OpenaiBuiltin {
+            return "api.openai.com".to_string();
+        }
+        self.api_provider_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty() && !is_generated(name))
+            .unwrap_or(api_key_label)
+            .to_string()
+    }
+
     pub fn is_agent_identity_auth(&self) -> bool {
         self.agent_identity.is_some()
     }
@@ -756,6 +809,45 @@ impl CodexAccount {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn api_key_display_name_uses_custom_name_or_safe_host_without_mutating_identity() {
+        let mut account = history_account();
+        account.email = "api-key-d5008680".into();
+        account.api_base_url =
+            Some("https://user:secret@relay.example.com/private?key=secret".into());
+        let saved = serde_json::to_value(&account).unwrap();
+        assert_eq!(account.display_name("API Key 账号"), "relay.example.com");
+        assert_eq!(serde_json::to_value(&account).unwrap(), saved);
+        account.account_name = Some(" Production Images ".into());
+        assert_eq!(account.display_name("API Key 账号"), "Production Images");
+        account.account_name = Some("api-key-d5008680".into());
+        account.api_base_url = Some("http://127.0.0.1:8080/v1".into());
+        assert_eq!(account.display_name("API Key 账号"), "127.0.0.1:8080");
+    }
+
+    #[test]
+    fn api_key_display_name_handles_missing_and_invalid_addresses() {
+        let mut account = history_account();
+        account.api_provider_name = Some("Image Provider".into());
+        for base_url in [
+            None,
+            Some(""),
+            Some("invalid"),
+            Some("file:///private/secret"),
+        ] {
+            account.api_base_url = base_url.map(str::to_string);
+            assert_eq!(account.display_name("API Key 账号"), "Image Provider");
+        }
+        account.api_base_url = None;
+        account.api_provider_mode = CodexApiProviderMode::OpenaiBuiltin;
+        assert_eq!(account.display_name("API Key 账号"), "api.openai.com");
+        account.api_provider_mode = CodexApiProviderMode::Custom;
+        account.api_provider_name = None;
+        assert_eq!(account.display_name("API Key 账号"), "API Key 账号");
+        account.auth_mode = CodexAuthMode::OAuth;
+        assert_eq!(account.display_name("API Key 账号"), account.email);
+    }
 
     fn history_account() -> CodexAccount {
         let mut account = CodexAccount::new_api_key(
@@ -843,10 +935,8 @@ mod tests {
     fn team_history_requires_account_identity_and_reset_windows() {
         let mut missing_identity = history_account();
         missing_identity.user_id = None;
-        missing_identity.replace_quota_preserving_team_history(
-            history_quota("team", Some(200)),
-            100,
-        );
+        missing_identity
+            .replace_quota_preserving_team_history(history_quota("team", Some(200)), 100);
         assert!(missing_identity.team_quota_history.is_none());
 
         let mut account = history_account();

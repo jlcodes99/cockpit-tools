@@ -1,9 +1,12 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ImagePlus, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CodexImageAccountPickerModal } from "./codex/CodexImageAccountPickerModal";
+import { useCodexImageModelCatalog } from "./codex/useCodexImageModelCatalog";
+import { configuredImageAccountIds } from "../utils/codexImageAccounts";
 import type { CodexAccount } from "../types/codex";
 import "./CodexLocalAccessModal.css";
 
@@ -11,13 +14,15 @@ interface CodexImageForwardConfigParams {
   accounts: CodexAccount[];
   /** 已保存的生图转发账号 ID。 */
   accountIds?: string[];
+  imageGenerationModel?: string | null;
+  accountModels?: Record<string, string>;
   disabled: boolean;
-  onSave: (accountIds: string[]) => Promise<unknown> | unknown;
+  onSave: (accountIds: string[], models: Record<string, string>) => Promise<unknown> | unknown;
   /** 生图模型等附加设置，随账号选择一起放进「选择生图账号」弹框。 */
   imageModelControl?: ReactNode;
 }
 
-/** 「启用 GPT 生图」的共享状态与左右插槽；卡片形态与启动预览行形态共用。 */
+/** 「启用生图」的共享状态与左右插槽；卡片形态与启动预览行形态共用。 */
 export interface CodexImageForwardConfigController {
   enabled: boolean;
   busy: boolean;
@@ -31,7 +36,7 @@ export interface CodexImageForwardConfigController {
   /** 启用勾选框；className 由调用方按所在布局传入。 */
   renderEnableCheckbox: (className: string) => ReactNode;
   /**
-   * 「选择 GPT 账号」按钮；className 由调用方按所在布局传入。
+   * 「选择生图来源」按钮；className 由调用方按所在布局传入。
    * 启动预览行与 DeepSeek 行保持一致（纯文字），配置卡片保留图标。
    */
   renderPickButton: (
@@ -41,12 +46,14 @@ export interface CodexImageForwardConfigController {
 }
 
 /**
- * API 服务的「启用 GPT 生图」配置；与实例启动预览里的同名能力一致：
- * 勾选并选择 GPT 账号后，生图与图片编辑请求交给所选账号执行。
+ * API 服务的「启用生图」配置；与实例启动预览里的同名能力一致：
+ * 勾选并选择生图来源后，生图与图片编辑请求交给所选账号执行。
  */
 export function useCodexImageForwardConfig({
   accounts,
   accountIds,
+  imageGenerationModel,
+  accountModels,
   disabled,
   onSave,
   imageModelControl,
@@ -59,17 +66,19 @@ export function useCodexImageForwardConfig({
   const feedbackRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
   const busy = disabled || pending;
+  const registry = useCodexImageModelCatalog(imageGenerationModel || undefined, undefined, undefined, undefined, Boolean(imageGenerationModel));
 
   const selectedIds = useMemo(() => {
     const seen = new Set<string>();
-    return (accountIds ?? [])
+    const ids = (accountIds ?? [])
       .map((value) => value.trim())
       .filter((value) => {
         if (!value || seen.has(value)) return false;
         seen.add(value);
         return true;
       });
-  }, [accountIds]);
+    return registry.ready ? configuredImageAccountIds(ids, accounts, imageGenerationModel, accountModels, registry.deleted) : ids;
+  }, [accountIds, accounts, imageGenerationModel, accountModels, registry.ready, registry.deleted]);
   const enabled = selectedIds.length > 0;
   const selectedAccounts = useMemo(
     () =>
@@ -79,23 +88,28 @@ export function useCodexImageForwardConfig({
     [accounts, selectedIds],
   );
 
+  useEffect(() => { setError(""); }, [imageGenerationModel]);
+
   useEffect(() => {
     if (!error) return;
     feedbackRef.current?.scrollIntoView({ block: "nearest" });
   }, [error]);
 
   const persist = useCallback(
-    async (nextAccountIds: string[]) => {
+    async (nextAccountIds: string[], models: Record<string, string> = {}) => {
       if (savingRef.current) return;
       savingRef.current = true;
       setPending(true);
       setError("");
       setNotice("");
       try {
-        await onSave(nextAccountIds);
+        await onSave(nextAccountIds, models);
         setNotice(t("codex.localAccess.saveSuccess", "API 服务集合已更新"));
+        return true;
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        const message = (cause instanceof Error ? cause.message : String(cause)).replace(/^Error:\s*/, "");
+        setError(message.startsWith("codex.localAccess.") ? t(message) : message);
+        return false;
       } finally {
         savingRef.current = false;
         setPending(false);
@@ -116,14 +130,17 @@ export function useCodexImageForwardConfig({
       createPortal(
         <CodexImageAccountPickerModal
           accounts={accounts}
-          selectedIds={selectedIds}
+          selectedIds={accountIds ?? []}
+          selectedModels={accountModels}
+          imageGenerationModel={imageGenerationModel}
           contextLabel={t("codex.localAccess.title", "API 服务")}
           imageModelControl={imageModelControl}
           saving={pending}
-          onCancel={() => setPickerOpen(false)}
-          onConfirm={(ids) => {
-            setPickerOpen(false);
-            void persist(ids);
+          errorMessage={error}
+          onClearError={() => setError("")}
+          onCancel={() => { setPickerOpen(false); setError(""); }}
+          onConfirm={(ids, models) => {
+            void persist(ids, models).then((saved) => { if (saved) setPickerOpen(false); });
           }}
         />,
         document.body,
@@ -132,7 +149,7 @@ export function useCodexImageForwardConfig({
 
   const feedback = (
     <div ref={feedbackRef}>
-      {error && (
+      {error && !pickerOpen && (
         <small role="alert" className="codex-local-access-image-model-error">
           {error}
         </small>
@@ -153,6 +170,7 @@ export function useCodexImageForwardConfig({
         disabled={busy}
         onChange={(event) => {
           if (event.target.checked) {
+            setError("");
             setPickerOpen(true);
             return;
           }
@@ -172,7 +190,7 @@ export function useCodexImageForwardConfig({
       <button
         type="button"
         className={className}
-        onClick={() => setPickerOpen(true)}
+        onClick={() => { setError(""); setPickerOpen(true); }}
         disabled={busy || !enabled}
       >
         {showIcon &&
@@ -181,7 +199,7 @@ export function useCodexImageForwardConfig({
           ) : (
             <ImagePlus size={14} />
           ))}
-        {t("codex.deepSeek.start.imageGenPick", "选择 GPT 账号")}
+        {t("codex.deepSeek.start.imageGenPick", "选择生图来源")}
       </button>
     );
   };
@@ -203,17 +221,21 @@ interface Props {
   accounts: CodexAccount[];
   /** 已保存的生图转发账号 ID。 */
   accountIds?: string[];
+  imageGenerationModel?: string | null;
+  accountModels?: Record<string, string>;
   disabled: boolean;
   maskAccountText: (value?: string | null) => string;
-  onSave: (accountIds: string[]) => Promise<unknown> | unknown;
+  onSave: (accountIds: string[], models: Record<string, string>) => Promise<unknown> | unknown;
   /** 生图模型等附加设置，随账号选择一起放进「选择生图账号」弹框。 */
   imageModelControl?: ReactNode;
 }
 
-/** API 服务面板里的「启用 GPT 生图」配置卡片。 */
+/** API 服务面板里的「启用生图」配置卡片。 */
 export function CodexImageForwardConfig({
   accounts,
   accountIds,
+  imageGenerationModel,
+  accountModels,
   disabled,
   maskAccountText,
   onSave,
@@ -223,6 +245,8 @@ export function CodexImageForwardConfig({
   const controller = useCodexImageForwardConfig({
     accounts,
     accountIds,
+    imageGenerationModel,
+    accountModels,
     disabled,
     onSave,
     imageModelControl,
@@ -232,7 +256,7 @@ export function CodexImageForwardConfig({
     <div className="codex-local-access-config-card codex-local-access-config-card-image-forward">
       <div className="codex-local-access-config-head">
         <span className="codex-local-access-config-label">
-          {t("codex.localAccess.imageForwardLabel", "启用 GPT 生图")}
+          {t("codex.localAccess.imageForwardLabel", "启用生图")}
         </span>
         <div className="codex-local-access-config-actions">
           {controller.renderPickButton("btn btn-secondary btn-sm")}
@@ -252,7 +276,7 @@ export function CodexImageForwardConfig({
               className="codex-local-access-image-forward-tag"
             >
               {maskAccountText(
-                account.email || account.account_name || account.id,
+                resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
               )}
             </span>
           ))}
@@ -262,7 +286,7 @@ export function CodexImageForwardConfig({
       <small className="codex-local-access-config-hint">
         {t(
           "codex.localAccess.imageForwardHint",
-          "勾选后选择 GPT 账号：生图与图片编辑请求交给所选账号执行并消耗其额度，对话请求仍按账号池调度。",
+          "选择支持上方完整型号的来源。API Key 需兼容 Images API，OAuth 仅支持原生 GPT 型号；对话仍按账号池调度。",
         )}
       </small>
       {controller.overlay}

@@ -763,12 +763,14 @@ export async function updateCodexAccountInstanceAccess(
   accessMode?: string | null,
   startupModel?: string | null,
   imageGenerationAccountIds?: string[] | null,
+  imageGenerationAccountModels?: Record<string, string> | null,
 ): Promise<CodexAccount> {
   return await invoke('update_codex_account_instance_access', {
     accountId,
     accessMode: accessMode ?? null,
     startupModel: startupModel ?? null,
     imageGenerationAccountIds: imageGenerationAccountIds ?? null,
+    imageGenerationAccountModels: imageGenerationAccountModels ?? null,
   });
 }
 

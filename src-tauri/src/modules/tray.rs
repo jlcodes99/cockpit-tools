@@ -1150,7 +1150,10 @@ fn build_codex_display_info(lang: &str) -> AccountDisplayInfo {
         }
 
         AccountDisplayInfo {
-            account: format!("📧 {}", account.email),
+            account: format!(
+                "📧 {}",
+                account.display_name(&crate::modules::i18n::translate(lang, "common.apiKeyAccount", &[])),
+            ),
             quota_lines,
         }
     } else {

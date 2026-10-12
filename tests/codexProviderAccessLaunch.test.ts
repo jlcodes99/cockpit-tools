@@ -83,8 +83,9 @@ for (const entry of entries) {
   test(`${entry}: custom Responses access is saved before binding and starting`, async () => {
     const original = account();
     const h = harness(entry, original);
-    assert.equal(await h.run(true, { deepSeekAccessMode: 'direct', imageGenerationAccountIds: [] }), true);
-    assert.deepEqual(h.writes, [[original.id, 'direct', null, []]]);
+    const imageGenerationAccountModels = {};
+    assert.equal(await h.run(true, { deepSeekAccessMode: 'direct', imageGenerationAccountIds: [], imageGenerationAccountModels }), true);
+    assert.deepEqual(h.writes, [[original.id, 'direct', null, [], imageGenerationAccountModels]]);
     assert.deepEqual(h.bindings, [original.id]);
     assert.deepEqual(h.events, ['save', 'bind', entry === 'instance' ? 'continue-start' : 'start']);
   });
@@ -120,7 +121,8 @@ test('DeepSeek retains its explicit gateway binding and image-forwarding options
   const original = account('deepseek', 'direct');
   const h = harness('instance', original);
   h.state.launchPreview.instance.bindAccountId = original.id;
-  await h.run(true, { deepSeekAccessMode: 'gateway', imageGenerationAccountIds: ['image-fixture'] });
-  assert.deepEqual(h.writes, [[original.id, 'gateway', null, ['image-fixture']]]);
+  const imageGenerationAccountModels = { 'image-fixture': 'image-model' };
+  await h.run(true, { deepSeekAccessMode: 'gateway', imageGenerationAccountIds: ['image-fixture'], imageGenerationAccountModels });
+  assert.deepEqual(h.writes, [[original.id, 'gateway', null, ['image-fixture'], imageGenerationAccountModels]]);
   assert.deepEqual(h.bindings, [buildCodexProviderGatewayBindId(original.id)]);
 });

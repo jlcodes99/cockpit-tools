@@ -236,6 +236,7 @@ export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor
 
 /** Privacy-mode aware account label shared by the list, the rules table and the dialogs. */
 export function useCodexProxyAccountName(): (account?: CodexProxyAccountIdentity | null) => string {
+  const { t } = useTranslation();
   const [privacy, setPrivacy] = useState(isPrivacyModeEnabledByDefault);
   useEffect(() => {
     const sync = () => setPrivacy(isPrivacyModeEnabledByDefault());
@@ -243,7 +244,7 @@ export function useCodexProxyAccountName(): (account?: CodexProxyAccountIdentity
     return () => window.removeEventListener(PRIVACY_MODE_CHANGED_EVENT, sync);
   }, []);
   return useCallback(
-    (account?: CodexProxyAccountIdentity | null) => account ? account.id === '__api_service__' ? codexProxyAccountName(account) : maskSensitiveValue(codexProxyAccountName(account), privacy) : '',
-    [privacy],
+    (account?: CodexProxyAccountIdentity | null) => account ? account.id === '__api_service__' ? codexProxyAccountName(account) : maskSensitiveValue(codexProxyAccountName(account, t("common.apiKeyAccount")), privacy) : '',
+    [privacy, t],
   );
 }

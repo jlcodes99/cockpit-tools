@@ -11,6 +11,7 @@ function harness() {
   return loadHookModule(new URL('./CodexApiKeyLaunchSection.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../stores/useCodexAccountStore': { useCodexAccountStore: (select: any) => select({ accounts: [] }) },
+    './useCodexImageModelConfig': { useCodexImageModelConfig: () => ({ loaded: true, model: 'gpt-image-2.5', deletedModels: [] }) },
     './CodexImageAccountPickerModal': { CodexImageAccountPickerModal: 'image-picker' },
   });
 }
@@ -18,11 +19,13 @@ function harness() {
 test('API-key form drafts restore direct access and expose generic provider choices', () => {
   const h = harness();
   const account = { api_provider_id: 'custom', api_wire_api: 'responses', api_instance_access_mode: 'direct',
-    api_image_generation_account_ids: ['stale-image-fixture'] };
+    api_image_generation_account_ids: ['stale-image-fixture'],
+    api_image_generation_account_models: { 'stale-image-fixture': 'old-image-model' } };
   let options = h.exports.createCodexApiKeyLaunchOptions(account);
   assert.equal(options.accessMode, 'direct');
   assert.equal(options.imageGenEnabled, false);
   assert.equal(options.imageGenAccountIds.length, 0);
+  assert.equal(Object.keys(options.imageGenAccountModels).length, 0);
   const tree = h.render(() => h.exports.CodexApiKeyLaunchSection({ account, options,
     onChange: (next: any) => { options = next; } }));
   const buttons = nodes(tree).filter((node) => node.type === 'button' && node.props.className?.includes('codex-api-key-launch-mode '));
@@ -30,11 +33,12 @@ test('API-key form drafts restore direct access and expose generic provider choi
   assert.equal(buttons.find((node) => node.props.className.includes('active')).key, 'direct');
   buttons.find((node) => node.key === 'gateway').props.onClick();
   assert.equal(options.accessMode, 'gateway');
-  options = { ...options, imageGenEnabled: true, imageGenAccountIds: ['image-fixture'] };
+  options = { ...options, imageGenEnabled: true, imageGenAccountIds: ['image-fixture'], imageGenAccountModels: { 'image-fixture': 'image-model' } };
   const next = h.flush();
   nodes(next).find((node) => node.type === 'button' && node.key === 'direct').props.onClick();
   assert.equal(options.imageGenEnabled, false);
   assert.equal(options.imageGenAccountIds.length, 0);
+  assert.equal(Object.keys(options.imageGenAccountModels).length, 0);
   h.unmount();
 });
 

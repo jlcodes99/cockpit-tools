@@ -18,6 +18,10 @@ fn replace_collection_account_references(
     }
     let mut changed = replace_list(&mut collection.account_ids, old_id, new_id);
     changed |= replace_list(&mut collection.image_generation_account_ids, old_id, new_id);
+    if let Some(model) = collection.image_generation_account_models.remove(old_id) {
+        collection.image_generation_account_models.insert(new_id.to_string(), model);
+        changed = true;
+    }
     if let Some(id) = &mut collection.bound_oauth_account_id {
         changed |= replace(id, old_id, new_id);
     }

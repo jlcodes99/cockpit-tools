@@ -40,6 +40,76 @@ fn temp_dir() -> PathBuf {
 }
 
 #[test]
+fn reasoning_order_preserves_legacy_implicit_default_through_load_import_save_and_catalog() {
+    let dir = temp_dir();
+    let mut legacy = definition("gpt-5.6-terra");
+    legacy.reasoning_efforts = Some(vec!["high".into(), "low".into()]);
+    let normalized = normalize_experimental_model_definitions(vec![legacy.clone()]).unwrap();
+    assert_eq!(normalized[0].reasoning_efforts.as_ref().unwrap(), &["low", "high"]);
+    assert_eq!(normalized[0].default_reasoning_effort.as_deref(), Some("high"));
+    let raw = serde_json::json!({ "version": EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
+        "models": [legacy.clone()], "migrations": [GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID,
+            GPT_6_SOL_LUNA_MODEL_CATALOG_MIGRATION_ID, GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID] });
+    fs::write(experimental_model_config_path(&dir), raw.to_string()).unwrap();
+    let loaded = read_experimental_model_definitions(&dir);
+    assert_eq!(loaded[0].default_reasoning_effort.as_deref(), Some("high"));
+    let (preview, imported) = prepare_model_config_import(&snapshot(Vec::new()), &json(vec![legacy]), "replace").unwrap();
+    assert!(preview.errors.is_empty(), "{:?}", preview.errors);
+    assert_eq!(imported.models[0], normalized[0]);
+    persist_experimental_model_definitions(&dir, imported.models, None).unwrap();
+    let saved = read_experimental_model_definitions(&dir);
+    assert_eq!(saved[0].default_reasoning_effort.as_deref(), Some("high"));
+    persist_experimental_model_policy(&dir, true).unwrap();
+    let source = crate::modules::codex_protocol::build_codex_client_models_response(&["gpt-5.6-terra".into()]);
+    let decorated: serde_json::Value = serde_json::from_str(&decorate_managed_model_catalog_for_profile(&dir, &source.to_string()).unwrap()).unwrap();
+    assert_eq!(decorated["models"][0]["default_reasoning_level"], "high");
+    assert_eq!(decorated["models"][0]["supported_reasoning_levels"].as_array().unwrap().iter()
+        .map(|level| level["effort"].as_str().unwrap()).collect::<Vec<_>>(), ["low", "high"]);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn reasoning_order_sorts_six_levels_and_preserves_explicit_and_template_defaults() {
+    let mut model = definition("gpt-5.6-terra");
+    model.reasoning_efforts = Some(["ultra", "max", "xhigh", "high", "medium", "low"].map(str::to_string).to_vec());
+    model.default_reasoning_effort = Some("xhigh".into());
+    let normalized = normalize_experimental_model_definitions(vec![model.clone()]).unwrap();
+    assert_eq!(normalized[0].reasoning_efforts.as_ref().unwrap(), CODEX_REASONING_EFFORTS);
+    assert_eq!(normalized[0].default_reasoning_effort.as_deref(), Some("xhigh"));
+    model.default_reasoning_effort = None;
+    assert_eq!(normalize_experimental_model_definitions(vec![model.clone()]).unwrap()[0].default_reasoning_effort, None);
+    let catalog = crate::modules::codex_protocol::build_codex_client_models_response_with_model_definitions_and_reasoning(&[
+        (model.model_id.clone(), model.display_name.clone(), model.reasoning_efforts.clone())]);
+    assert_eq!(catalog["models"][0]["default_reasoning_level"], "medium");
+    assert_eq!(catalog["models"][0]["supported_reasoning_levels"].as_array().unwrap().iter()
+        .map(|level| level["effort"].as_str().unwrap()).collect::<Vec<_>>(), CODEX_REASONING_EFFORTS);
+    model.reasoning_efforts = Some(Vec::new());
+    assert_eq!(normalize_experimental_model_definitions(vec![model]).unwrap()[0].reasoning_efforts, None);
+}
+
+#[test]
+fn reasoning_order_preserves_profile_template_subset_and_its_implicit_default() {
+    let dir = temp_dir();
+    let template = serde_json::json!({ "models": [{ "slug": "provider/custom",
+        "default_reasoning_level": "xhigh", "supported_reasoning_levels": [
+            {"effort": "high"}, {"effort": "low"}, {"effort": "xhigh"} ] }] });
+    fs::write(experimental_model_catalog_path(&dir), template.to_string()).unwrap();
+    let mut model = definition("provider/custom");
+    model.reasoning_efforts = Some(vec!["ultra".into(), "high".into(), "low".into()]);
+    let models = normalize_experimental_model_definitions_for_profile(Some(&dir), vec![model.clone()]).unwrap();
+    assert_eq!(models[0].default_reasoning_effort.as_deref(), Some("high"));
+    let mut rendered = template.clone();
+    apply_model_reasoning_config_to_catalog(&mut rendered, &models).unwrap();
+    assert_eq!(rendered["models"][0]["default_reasoning_level"], "high");
+    assert_eq!(rendered["models"][0]["supported_reasoning_levels"], serde_json::json!([{"effort":"low"}, {"effort":"high"}]));
+    let mut existing = snapshot(Vec::new()); existing.profile_dir = Some(dir.clone());
+    let (preview, imported) = prepare_model_config_import(&existing, &json(vec![model]), "replace").unwrap();
+    assert!(preview.errors.is_empty(), "{:?}", preview.errors);
+    assert_eq!(imported.models[0], models[0]);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn import_preview_keeps_conflicts_and_replace_updates_only_named_models() {
     let original = definition("local-a");
     let mut changed = original.clone();

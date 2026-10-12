@@ -96,6 +96,7 @@
     "providerClear": "Clear selection"
   },
   "common": {
+    "apiKeyAccount": "API Key account",
     "status": "Status",
     "cliQuickLaunch": "CLI Launch",
     "requestId": "Request ID",
@@ -2601,12 +2602,12 @@
       "accessModeDirectCons": "1: No model switching inside Codex, and no OAuth binding or image forwarding",
       "accessModeCdpPros": "1: Same speed as direct\n2: Switch Flash / Pro in the official Codex model list",
       "accessModeCdpCons": "1: Requires injecting the official client, and supports neither OAuth binding nor image forwarding",
-      "imageGenPickerDesc": "When an image request comes in, the request is forwarded: the base model handles it first, then the image model generates the picture, which consumes part of the selected accounts' quota.",
+      "imageGenPickerDesc": "OAuth sources use a base model and image tool; API Key sources use image endpoints. The selected upstream bills usage or quota.",
       "imageGenSwitchTitle": "Gateway mode only",
       "imageGenSwitchDescription": "Enabling GPT image generation requires the gateway-list mode. Switch to it and enable the option?",
       "imageGenSwitchYes": "Yes",
       "imageGenSwitchNo": "No",
-      "imageGenTitle": "Enable GPT image generation",
+      "imageGenTitle": "Enable images",
       "oauthBindingHint": "After binding, launching is identical to a normal account and all OAuth capabilities are available (remote compaction, browser control, plugins, and more); conversations still run on the current API Key provider.",
       "oauthBindingChange": "Change",
       "title": "Codex Launch Preview",
@@ -2895,8 +2896,8 @@
       "imageGenerationLabel": "image_generation",
       "imageGenerationDesc": "Controls whether chat requests declare the image tool and whether image endpoints are available.",
       "imageGenerationSaveSuccess": "image_generation setting updated",
-      "imageForwardLabel": "Enable GPT image generation",
-      "imageForwardHint": "After enabling, choose GPT accounts: image generation and image editing requests run on the selected accounts and consume their quota, while chat requests keep using the account pool.",
+      "imageForwardLabel": "Enable images",
+      "imageForwardHint": "API Key sources require Images API compatibility and an actual model selected in the account row; OAuth supports native GPT models only.",
       "imageGenerationMode": {
         "enabled": "Enabled",
         "imagesOnly": "Images Only",
@@ -2907,7 +2908,20 @@
       "modelId": "Model ID",
       "modelIdViewOnly": "View only, no switching",
       "modelIdPlaceholder": "Select model ID",
+      "imageAccounts": {
+        "upstreamModel": "Upstream model",
+        "chooseModel": "Select model",
+        "modelRequired": "Choose a supported actual model.",
+        "sourceUnavailable": "The selected source does not support the current image model, or has no usable API credentials or request URL.",
+        "loadFailed": "Could not load image settings. Please retry.",
+        "missingModels": "Choose a model for {{count}} selected sources.",
+        "locateModel": "Find source"
+      },
       "imageGenerationModel": {
+        "manage": "Manage models",
+        "deleteSelected": "Model in use. Replace it and save first.",
+        "invalid": "Model IDs cannot contain whitespace or control characters and must be at most 200 characters.",
+        "syncFailed": "Image model discovery failed. Please retry.",
         "label": "Image model",
         "custom": "Custom",
         "save": "Save model",
@@ -3016,10 +3030,10 @@
       "killPortSuccess": "Port cleared (closed {{count}} process(es))",
       "killPortSuccessNone": "Port checked. No external process was using it.",
       "killPortSuccessUnknown": "API service port cleared",
-      "restartAction": "Restart Sidecar",
-      "restartTitle": "Restart API Service",
-      "restartConfirmMessage": "Only the API service Sidecar will restart. Accounts, tokens, API keys, and account-pool settings will not change. In-flight requests may be interrupted. Continue?",
-      "restartSuccess": "API service Sidecar restarted",
+      "restartAction": "Restart API service only",
+      "restartTitle": "Restart API service only",
+      "restartConfirmMessage": "Restart only the API service, keeping Codex windows and account pool/API Key settings. API requests in progress may be interrupted. Continue?",
+      "restartSuccess": "API service restarted",
       "refreshStats": "Refresh Stats",
       "refreshStatsSuccess": "API service stats have been refreshed",
       "accountStatsTitle": "By Account",
@@ -3273,7 +3287,8 @@
       "testChatEmptyResponse": "Empty response",
       "imageGenerationMainModel": {
         "label": "Image main model",
-        "hint": "Leave blank to keep gpt-5.5. This model calls the image tool; the selected OAuth accounts must support image_generation on it.",
+        "notice": "Do not change the image main model during normal use.",
+        "hint": "Used only for the official image relay, not to select the image model. Update only if the official main model changes. Leave blank for gpt-5.5.",
         "invalid": "Enter a model ID without whitespace, up to 200 characters."
       },
       "requestDetail": {
@@ -3446,14 +3461,14 @@
         "confirm": "Start",
         "chooseAtStart": "Chosen at start",
         "context": "Supported context",
-        "imageGen": "GPT image generation",
-        "imageGenHint": "Gateway mode only. Chat still runs on this supplier's models; image generation uses the original gpt-image pipeline, executed by the selected GPT accounts and consuming their quota.",
-        "imageGenPick": "Choose GPT accounts",
+        "imageGen": "Image generation",
+        "imageGenHint": "API Key sources require Images API compatibility and an actual model selected in the account row; OAuth supports native GPT models only.",
+        "imageGenPick": "Image sources",
         "imageGenSelected": "{{count}} account(s) selected",
         "imageGenEmpty": "No accounts selected",
         "imageGenLocked": "Select the checkbox to choose accounts",
         "pickerTitle": "Choose image accounts",
-        "pickerEmpty": "No OAuth account can generate images (free and API key accounts are not supported).",
+        "pickerEmpty": "No eligible sources. API Key must support the selected model or GPT family; OAuth supports native GPT models on non-Free accounts only.",
         "pickerSelectAll": "Select all",
         "pickerClear": "Clear",
         "protocol": "Protocol",
@@ -4502,7 +4517,8 @@
       "saveSuccess": "Speed updated",
       "saveFailed": "Failed to save speed: {{error}}",
       "loadFailed": "Failed to load speed: {{error}}",
-      "apiHint": "Used when an API request omits its tier; explicit client tiers take precedence. Fast increases usage or cost; acceleration depends on the model and provider.",
+      "apiHint": "After saving, applies to subsequent API requests without a restart. In-flight requests stay unchanged; explicit client tiers take precedence. Fast may increase usage or cost; acceleration depends on the model and provider.",
+      "apiSyncFailed": "Preference saved, but the running API service has not confirmed the update. Try again.",
       "launchHint": "Written to client config on account switch and Cockpit launch. Restart a running client. New chats use the default; adjust existing chats with independent speed settings in the client."
     },
     "apiService": {
@@ -4766,6 +4782,11 @@
         "reasoningEffortValue": "Think {{effort}}",
         "serviceTier": "Service tier",
         "serviceTierValue": "Tier {{tier}}",
+        "requestedTier": "Request: {{tier}}",
+        "responseTier": "Reported: {{tier}}",
+        "legacyTier": "Legacy: {{tier}}",
+        "serviceTierHint": "The requested tier is the service_tier sent upstream, not confirmation of the actual processing tier. For Codex OAuth, a reported default does not confirm a downgrade from Fast. Auto means no specific tier was requested (the field was omitted or set to auto).",
+        "legacyTierHint": "This old record mixes request and response tiers. Its source and actual processing tier are unknown.",
         "upstreamModel": "Sent model",
         "columns": {
           "time": "Time",
@@ -5755,7 +5776,15 @@
       },
       "failurePhase": "Failure stage",
       "applying": "Applying to running gateways…",
-      "applyFailed": "Settings were saved, but running gateways could not apply them. Retry. Reason: {{error}}"
+      "applyFailed": "Settings were saved, but running gateways could not apply them. Retry. Reason: {{error}}",
+      "timeout": {
+        "open": "Timed out waiting for the upstream to establish a stream. Adjust Timeouts & Retries → {{setting}} (1–600 seconds, default 60).",
+        "idle": "The stream opened, but waiting for more data timed out. Adjust the corresponding stream idle timeout in Timeouts & Retries.",
+        "canceled": "The client canceled this request; this is not a stream open timeout.",
+        "gateway": "HTTP 504 indicates a gateway timeout. This record does not establish its cause; check the upstream error and request phase.",
+        "threshold": "Effective threshold for this request: {{seconds}} seconds.",
+        "settings": "Adjust timeout"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "Default effort",

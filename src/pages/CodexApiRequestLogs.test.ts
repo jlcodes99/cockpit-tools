@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { loadHookModule } from '../../tests/helpers/reactHookHarness';
 import { resolveCodexApiServiceLogModelPair } from '../utils/codexApiServiceLogModel';
-import { hasRequestFirstResponse } from '../utils/codexRequestDiagnostics';
+import { hasRequestFirstResponse, requestServiceTierPresentation, requestedServiceTierLabelKey } from '../utils/codexRequestDiagnostics';
 
 type Element = { type: unknown; props: Record<string, any> };
 function nodes(value: any): Element[] {
@@ -26,7 +26,7 @@ const sample = {
 };
 function props(events: any[] = [sample]) {
   return {
-    t: (key: string, values?: any) => values?.status ? `${key}:${values.status}` : key,
+    t: (key: string, values?: any) => values?.status ? `${key}:${values.status}` : values?.tier ? `${key}:${values.tier}` : key,
     accountDisplayNames: new Map(), codexInstances: [], requestLogEvents: events, requestLogLoaded: true,
     cleanRequestLogErrorDetail: (value: string) => value,
     truncateRequestLogErrorDetail: (value: string) => value.slice(0, 100),
@@ -41,12 +41,12 @@ function harness(localStorage: any) {
   return loadHookModule(new URL('./CodexApiRequestLogs.tsx', import.meta.url), {
     '../components/codex/CodexOutputSpeed': { CodexOutputSpeed: 'CodexOutputSpeed' },
     '../utils/codexOutputSpeed': { aggregateOutputSpeed: () => ({ tokensPerSecond: null, samples: 0 }), formatOutputSpeed: () => null },
-    'lucide-react': { Check: 'Check', CircleAlert: 'CircleAlert', Columns3: 'Columns3' },
+    'lucide-react': { Check: 'Check', CircleAlert: 'CircleAlert', Columns3: 'Columns3', Zap: 'Zap' },
     '../components/SingleSelectDropdown': { SingleSelectDropdown: 'SingleSelectDropdown' },
     '../components/PaginationControls': { PaginationControls: 'PaginationControls' },
     '../components/codex/CodexRequestProxyLabel': { CodexRequestProxyLabel: 'CodexRequestProxyLabel' },
     '../components/codex/CodexRequestDetailModal': { CodexRequestDetailModal: 'CodexRequestDetailModal' },
-    '../utils/codexRequestDiagnostics': { hasRequestFirstResponse },
+    '../utils/codexRequestDiagnostics': { hasRequestFirstResponse, requestServiceTierPresentation, requestedServiceTierLabelKey },
     '../utils/codexApiServiceLogModel': { resolveCodexApiServiceLogModelPair },
   }, { localStorage });
 }
@@ -59,6 +59,36 @@ function openColumns(hook: ReturnType<typeof harness>) {
   button.props.onClick();
   return nodes(hook.flush()).filter((n) => n.type === 'button' && 'aria-pressed' in n.props);
 }
+
+test('speed badges use short labels and retain raw tier evidence only in details', () => {
+  const hook = harness(storage());
+  hook.render(() => hook.exports.CodexApiRequestLogs(props([
+    { ...sample, requestedServiceTier: 'priority', responseServiceTier: 'default' },
+    { ...sample, requestId: 'legacy' },
+    { ...sample, requestId: 'automatic', requestedServiceTier: 'auto', responseServiceTier: 'default' },
+    { ...sample, requestId: 'standard', requestedServiceTier: 'default', responseServiceTier: 'default' },
+    { ...sample, requestId: 'fast-alias', requestedServiceTier: 'FAST', responseServiceTier: 'default' },
+    { ...sample, requestId: 'response-only', responseServiceTier: 'priority' },
+  ])));
+  const rows = nodes(hook.flush()).filter((n) => n.type === 'tr').slice(1);
+  const badges = rows.map((row) => nodes(row).filter((n) => n.props.className?.startsWith('codex-request-log-speed')));
+  assert.deepEqual(badges.map((items) => items.map(text)), [
+    ['codex.speed.fast'], [], [], ['codex.speed.standard'], ['codex.speed.fast'], [],
+  ]);
+  for (const row of rows) assert.doesNotMatch(text(row), /requestedTier|responseTier|legacyTier|default/);
+  for (const index of [0, 4]) {
+    assert.equal(badges[index][0].type, 'span');
+    assert.match(badges[index][0].props.className, / fast$/);
+    assert.equal(badges[index][0].props.onClick, undefined);
+    assert.equal(nodes(badges[index][0]).filter((n) => n.type === 'Zap').length, 1);
+  }
+  assert.equal(nodes(badges[3][0]).filter((n) => n.type === 'Zap').length, 0);
+  const details = nodes(rows[0]).find((n) => n.type === 'button' && text(n) === 'codex.requestDiagnostics.details')!;
+  details.props.onClick();
+  const event = nodes(hook.flush()).find((n) => n.type === 'CodexRequestDetailModal')!.props.event;
+  assert.equal(event.requestedServiceTier, 'priority');
+  assert.equal(event.responseServiceTier, 'default');
+});
 
 test('fixed log columns preserve source labels, actual model, privacy, token breakdown and detail entry', () => {
   const hook = harness(storage());
@@ -129,4 +159,18 @@ test('damaged or unavailable preferences degrade to usable columns and existing 
   assert.match(css, /\.codex-request-log-table\s*\{[^}]*table-layout: fixed/s);
   assert.match(css, /\.codex-request-log-token-grid\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/s);
   assert.match(css, /\.codex-request-log-column-options\s*\{[^}]*max-height: min\(420px, 60vh\)/s);
+});
+
+test('timeout navigation closes request details and reopening retains the selected record', () => {
+  const hook = harness(storage());
+  const targets: string[] = [];
+  hook.render(() => hook.exports.CodexApiRequestLogs({ ...props(), openTimeoutSettings: (field: string) => targets.push(field) }));
+  const open = () => nodes(hook.flush()).find((n) => n.type === 'button' && text(n) === 'codex.requestDiagnostics.details')!.props.onClick();
+  open();
+  nodes(hook.flush()).find((n) => n.type === 'CodexRequestDetailModal')!.props.onOpenTimeoutSettings('sidecarStreamOpenTimeoutMs');
+  assert.deepEqual(targets, ['sidecarStreamOpenTimeoutMs']);
+  assert.equal(nodes(hook.flush()).some((n) => n.type === 'CodexRequestDetailModal'), false);
+  open();
+  assert.equal(nodes(hook.flush()).find((n) => n.type === 'CodexRequestDetailModal')!.props.event, sample);
+  hook.unmount();
 });

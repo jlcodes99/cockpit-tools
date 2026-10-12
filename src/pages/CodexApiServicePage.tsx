@@ -28,6 +28,8 @@ import {
   reconcileCodexApiKeyScopeAccountIds,
 } from "../utils/codexApiKeyAccountScope";
 import { resolveCodexApiServiceCompatibilityBaseUrls } from "../utils/codexApiServiceCompatibility";
+import { useCodexTimeoutSettingsNavigation } from "../hooks/useCodexTimeoutSettingsNavigation";
+import { useCodexApiServiceRestart } from "../hooks/useCodexApiServiceRestart";
 import { clearRecoveredCodexGatewayError } from "../utils/codexGatewayKeyRecovery";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import * as codexInstanceService from "../services/codexInstanceService";
@@ -716,7 +718,6 @@ export function useCodexApiServicePageController() {
   const [testChatInput, setTestChatInput] = useState("");
   const [testDialogError, setTestDialogError] = useState("");
   const [portKilling, setPortKilling] = useState(false);
-  const [sidecarRestarting, setSidecarRestarting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   useEffect(() => {
@@ -1966,49 +1967,20 @@ export function useCodexApiServicePageController() {
     }
   };
 
-  const handleRestartSidecar = async () => {
-    const confirmed = await confirmDialog(
-      t(
-        "codex.localAccess.restartConfirmMessage",
-        "将仅重启 API 服务 Sidecar，不修改账号、Token、API Key 或账号池配置。正在进行中的请求可能中断，确认继续吗？",
-      ),
-      {
-        title: t("codex.localAccess.restartTitle", "重启 API 服务"),
-        kind: "warning",
-        okLabel: t("codex.localAccess.restartAction", "重启 Sidecar"),
-        cancelLabel: t("common.cancel", "取消"),
-      },
-    );
-    if (!confirmed) return;
-    setSidecarRestarting(true);
-    setError("");
-    setNotice("");
-    try {
-      const next =
-        await codexLocalAccessService.restartCodexLocalAccessSidecar();
-      setState(next);
-      setNotice(
-        next.recovering ? "" : t("codex.localAccess.restartSuccess", "API 服务 Sidecar 已重启"),
-      );
-    } catch (err) {
-      if (
-        presentWindowsOperationError({
-          error: err,
-          operation: "start_sidecar",
-          summary: t("codex.localAccess.restartTitle", "重启 API 服务"),
-          retry: async () => {
-            const next = await codexLocalAccessService.restartCodexLocalAccessSidecar();
-            setState(next);
-          },
-        })
-      ) {
-        return;
-      }
-      setError(String(err).replace(/^Error:\s*/, ""));
-    } finally {
-      setSidecarRestarting(false);
-    }
-  };
+  const { restarting: sidecarRestarting, restart: handleRestartSidecar } = useCodexApiServiceRestart({
+    t, onState: setState, onError: setError, onNotice: setNotice,
+    presentError: (error, retry) => presentWindowsOperationError({
+      error, operation: "start_sidecar",
+      summary: t("codex.localAccess.restartTitle"), retry,
+    }),
+  });
+
+  const { openTimeoutSettings, timeoutFocusField, timeoutFieldRef } = useCodexTimeoutSettingsNavigation(() => {
+    setTimeoutsError("");
+    setSelectedTimeoutPresetId(collection?.activeTimeoutPresetId || "long_wait");
+    setTimeoutPresetNameDraft("");
+    setTimeoutDrafts(timeoutDraftsFromValue(collection?.timeouts));
+  }, () => setTimeoutsModalOpen(true));
 
   const handleUpdateAccessScope = async (value: string) => {
     const accessScope = value === "lan" ? "lan" : "localhost";
@@ -3882,6 +3854,9 @@ export function useCodexApiServicePageController() {
     timeoutPresetNameDraft,
     timeoutPresetOptions,
     timeoutsError,
+    openTimeoutSettings,
+    timeoutFocusField,
+    timeoutFieldRef,
     timeoutsModalOpen,
     toggleApiKeyPolicyExpanded,
     toggleStringSelection,

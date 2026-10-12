@@ -2,6 +2,31 @@
 // 覆盖内部 API Key 清单、账号范围、并发闸门，以及与对外入口开关解耦的生命周期判断。
 const INTERNAL_SERVICE_TEST_ACCOUNT_ID: &str = "internal-service-test-account";
 
+// Callers hold the shared environment lock while replacing this process-wide
+// registration set. Do not keep its own mutex locked while running requests.
+struct InternalApiAccountIdsGuard {
+    previous: HashSet<String>,
+}
+
+impl InternalApiAccountIdsGuard {
+    fn new() -> Self {
+        let previous = std::mem::take(
+            &mut *super::INTERNAL_API_ACCOUNT_IDS
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()),
+        );
+        Self { previous }
+    }
+}
+
+impl Drop for InternalApiAccountIdsGuard {
+    fn drop(&mut self) {
+        *super::INTERNAL_API_ACCOUNT_IDS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = std::mem::take(&mut self.previous);
+    }
+}
+
 fn internal_service_test_account() -> crate::models::codex::CodexAccount {
     crate::models::codex::CodexAccount::new(
         INTERNAL_SERVICE_TEST_ACCOUNT_ID.to_string(),
@@ -16,11 +41,16 @@ fn internal_service_test_account() -> crate::models::codex::CodexAccount {
 
 #[test]
 fn api_service_manifest_carries_internal_key_and_scope() {
+    let _env_lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _internal_accounts = InternalApiAccountIdsGuard::new();
     super::register_internal_api_account(INTERNAL_SERVICE_TEST_ACCOUNT_ID)
         .expect("register internal API account");
     let collection = test_local_access_collection(Vec::new());
 
-    let api_service_values = super::sidecar_api_key_manifest_values_with_internal(&collection, true);
+    let api_service_values =
+        super::sidecar_api_key_manifest_values_with_internal(&collection, true);
     let internal_spec = api_service_values
         .iter()
         .find(|value| value["internal"].as_bool() == Some(true))
@@ -51,6 +81,10 @@ fn api_service_manifest_carries_internal_key_and_scope() {
 
 #[test]
 fn internal_accounts_join_the_api_service_account_scope() {
+    let _env_lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _internal_accounts = InternalApiAccountIdsGuard::new();
     super::register_internal_api_account(INTERNAL_SERVICE_TEST_ACCOUNT_ID)
         .expect("register internal API account");
     let collection = test_local_access_collection(Vec::new());
@@ -100,6 +134,10 @@ fn internal_accounts_join_the_api_service_account_scope() {
 
 #[test]
 fn disabled_api_service_still_runs_for_internal_requests() {
+    let _env_lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let _internal_accounts = InternalApiAccountIdsGuard::new();
     super::register_internal_api_account(INTERNAL_SERVICE_TEST_ACCOUNT_ID)
         .expect("register internal API account");
     let mut collection = test_local_access_collection(Vec::new());

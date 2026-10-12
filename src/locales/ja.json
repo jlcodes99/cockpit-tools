@@ -96,6 +96,7 @@
     "providerClear": "選択を解除"
   },
   "common": {
+    "apiKeyAccount": "API Key アカウント",
     "status": "状態",
     "cliQuickLaunch": "CLI 起動",
     "requestId": "リクエスト ID",
@@ -2381,12 +2382,12 @@
       "accessModeDirectCons": "1：Codex 内でモデルを切り替えできず、OAuth の紐付けと画像転送もできません",
       "accessModeCdpPros": "1：直連と同じ速度です\n2：Codex 公式モデル一覧で Flash / Pro を切り替えできます",
       "accessModeCdpCons": "1：公式クライアントへの注入が必要で、OAuth の紐付けと画像転送はできません",
-      "imageGenPickerDesc": "画像生成が必要になるとリクエストを転送します：まず基礎モデルが処理し、次に画像モデルが生成します。選択したアカウントの一部の枠を消費します。",
+      "imageGenPickerDesc": "OAuth は基本モデルと画像ツール、API Key は画像 API を使用します。料金や利用枠は選択した提供元で計上されます。",
       "imageGenSwitchTitle": "ゲートウェイモードのみ対応",
       "imageGenSwitchDescription": "GPT 画像生成を有効にするには「ゲートウェイ一覧」モードへ切り替える必要があります。切り替えて有効化しますか？",
       "imageGenSwitchYes": "はい",
       "imageGenSwitchNo": "いいえ",
-      "imageGenTitle": "GPT 画像生成を有効化",
+      "imageGenTitle": "画像生成を有効化",
       "oauthBindingHint": "バインド後は通常アカウントとまったく同じように起動でき、OAuth のすべての機能（リモート圧縮、ブラウザ操作、各種プラグインなど）を利用できます。会話は引き続き現在の API Key プロバイダーが処理します。",
       "oauthBindingChange": "変更",
       "title": "Codex 起動プレビュー",
@@ -2680,10 +2681,10 @@
       "killPortSuccess": "ポートをクリアしました（{{count}} 個のプロセスを終了）",
       "killPortSuccessNone": "ポートを確認しました。外部プロセスは使用していません。",
       "killPortSuccessUnknown": "API サービスのポートをクリアしました",
-      "restartAction": "Sidecar を再起動",
-      "restartTitle": "API サービスを再起動",
-      "restartConfirmMessage": "API サービスの Sidecar だけを再起動します。アカウント、Token、API Key、アカウントプール設定は変更されません。実行中のリクエストは中断される場合があります。続行しますか？",
-      "restartSuccess": "API サービスの Sidecar を再起動しました",
+      "restartAction": "API サービスのみ再起動",
+      "restartTitle": "API サービスのみ再起動",
+      "restartConfirmMessage": "API サービスのみ再起動します。Codex ウィンドウとアカウントプール・API Key の設定は保持されます。進行中の API リクエストは中断される場合があります。続行しますか？",
+      "restartSuccess": "API サービスを再起動しました",
       "refreshStats": "統計を更新",
       "refreshStatsSuccess": "API サービスの統計を更新しました",
       "routingStrategy": {
@@ -2730,7 +2731,20 @@
       "apiPortUrl": "APIポートURL",
       "modelId": "モデル ID",
       "modelIdPlaceholder": "モデル ID を選択",
+      "imageAccounts": {
+        "upstreamModel": "提供元モデル",
+        "chooseModel": "モデルを選択",
+        "modelRequired": "対応する実際のモデルを選択してください。",
+        "sourceUnavailable": "選択した生成元は現在の画像モデルに未対応か、有効な API 認証情報またはリクエスト URL がありません。",
+        "loadFailed": "画像設定を読み込めませんでした。再試行してください。",
+        "missingModels": "選択した {{count}} 件のソースでモデルの指定が必要です。",
+        "locateModel": "ソースを表示"
+      },
       "imageGenerationModel": {
+        "manage": "モデル管理",
+        "deleteSelected": "使用中です。別のモデルに変更して保存してください。",
+        "invalid": "モデル ID に空白や制御文字は使えません。最大 200 文字です。",
+        "syncFailed": "画像モデルの検出に失敗しました。再試行してください。",
         "label": "画像モデル",
         "custom": "カスタム",
         "save": "モデルを保存",
@@ -2816,8 +2830,8 @@
       "requestLogSuccess": "成功",
       "requestLogFailed": "失敗",
       "requestLogTokens": "{{value}} トークン",
-      "imageForwardLabel": "GPT 画像生成を有効化",
-      "imageForwardHint": "有効化して GPT アカウントを選択すると、画像生成と画像編集のリクエストは選択したアカウントで実行され、その枠を消費します。チャットのリクエストは引き続きアカウントプールで処理されます。",
+      "imageForwardLabel": "画像生成を有効化",
+      "imageForwardHint": "API Key は Images API 互換とアカウント行での実際のモデル選択が必要です。OAuth は GPT 標準モデルのみ対応します。",
       "imageGenerationMode": {
         "enabled": "有効",
         "imagesOnly": "画像のみ",
@@ -2922,7 +2936,8 @@
       "removeAction": "API から削除",
       "imageGenerationMainModel": {
         "label": "画像用主モデル",
-        "hint": "空欄なら gpt-5.5 を使用します。このモデルが画像ツールを呼び出します。選択した OAuth アカウントは、このモデルの image_generation に対応している必要があります。",
+        "notice": "通常の利用では画像用主モデルを変更しないでください。",
+        "hint": "公式画像サービスへの内部転送専用で、画像生成モデルの選択には使いません。公式の主モデルが変更された場合のみ手動で更新してください。空欄では gpt-5.5 を使用します。",
         "invalid": "空白を含まないモデル ID を 200 文字以内で入力してください。"
       },
       "requestDetail": {
@@ -3756,14 +3771,14 @@
         "cdpMode": "CDP 注入",
         "cdpDesc": "注入で公式 Codex のモデル一覧を引き継ぎ、速度は直結と同じです。公式クライアントへの注入が必要で、OAuth の紐付けはできません。",
         "context": "対応コンテキスト",
-        "imageGen": "GPT 画像生成",
-        "imageGenHint": "ゲートウェイモードのみ対応。会話は引き続きこのプロバイダーのモデルで処理され、画像生成は元の gpt-image 経路で選択した GPT アカウントが実行し、その枠を消費します。",
-        "imageGenPick": "GPT アカウントを選択",
+        "imageGen": "画像生成対応",
+        "imageGenHint": "API Key は Images API 互換とアカウント行での実際のモデル選択が必要です。OAuth は GPT 標準モデルのみ対応します。",
+        "imageGenPick": "画像生成元",
         "imageGenSelected": "{{count}} 件のアカウントを選択中",
         "imageGenEmpty": "アカウント未選択",
         "imageGenLocked": "チェックするとアカウントを選択できます",
         "pickerTitle": "画像生成アカウントを選択",
-        "pickerEmpty": "画像生成に使える OAuth アカウントがありません（Free と API Key は非対応）。",
+        "pickerEmpty": "利用可能な生成元がありません。API Key は選択したモデルまたは GPT 系列への対応が必要です。OAuth は Free 以外の GPT 標準モデルのみ対応します。",
         "pickerSelectAll": "すべて選択",
         "pickerClear": "クリア",
         "protocol": "プロトコル",
@@ -4270,7 +4285,8 @@
       "saveSuccess": "速度を更新しました",
       "saveFailed": "速度の保存に失敗しました: {{error}}",
       "loadFailed": "速度の読み込みに失敗：{{error}}",
-      "apiHint": "API リクエストに速度指定がない場合の既定値です。クライアントの明示指定が優先されます。高速では使用量や費用が増え、加速はモデルと提供元によって異なります。",
+      "apiHint": "保存後、再起動せずに以降の API リクエストに適用されます。処理中のリクエストは変わらず、クライアントの明示指定が優先されます。高速では使用量や料金が増える場合があり、効果はモデルと提供元によります。",
+      "apiSyncFailed": "設定は保存されましたが、実行中の API サービスで更新を確認できませんでした。再試行してください。",
       "launchHint": "アカウント切替と Cockpit からの起動時に設定を保存します。実行中のクライアントは再起動が必要です。新規チャットは既定値を使い、既存チャットの個別速度はクライアントで変更してください。"
     },
     "apiService": {
@@ -4455,6 +4471,11 @@
         "reasoningEffortValue": "思考 {{effort}}",
         "serviceTier": "サービス階層",
         "serviceTierValue": "階層 {{tier}}",
+        "requestedTier": "要求: {{tier}}",
+        "responseTier": "報告: {{tier}}",
+        "legacyTier": "旧値: {{tier}}",
+        "serviceTierHint": "要求の値は上流に送信した service_tier であり、実際の処理階層の確認ではありません。Codex OAuth の報告値が default でも、高速から降格したとは判断できません。「自動」は具体的な階層を指定していないことを示します（フィールドの省略または auto の使用）。",
+        "legacyTierHint": "旧記録では要求と応答の値が混在しており、出所と実際の処理階層は不明です。",
         "upstreamModel": "送信モデル",
         "columns": {
           "time": "時刻",
@@ -5535,7 +5556,15 @@
       },
       "failurePhase": "失敗段階",
       "applying": "実行中のゲートウェイに適用中…",
-      "applyFailed": "設定は保存されましたが、実行中のゲートウェイに適用できませんでした。再試行してください。理由：{{error}}"
+      "applyFailed": "設定は保存されましたが、実行中のゲートウェイに適用できませんでした。再試行してください。理由：{{error}}",
+      "timeout": {
+        "open": "上流でのストリーム開始待ちがタイムアウトしました。「タイムアウトと再試行 → {{setting}}」で調整できます（1～600 秒、既定 60 秒）。",
+        "idle": "ストリーム開始後、次のデータの待機がタイムアウトしました。「タイムアウトと再試行」で対応するアイドルタイムアウトを調整できます。",
+        "canceled": "クライアントがリクエストをキャンセルしました。ストリーム開始タイムアウトではありません。",
+        "gateway": "HTTP 504 はゲートウェイのタイムアウトです。この記録だけでは原因を特定できません。上流エラーとリクエスト段階を確認してください。",
+        "threshold": "このリクエストの適用値：{{seconds}} 秒。",
+        "settings": "タイムアウト設定"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "既定の推論強度",

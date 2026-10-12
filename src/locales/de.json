@@ -96,6 +96,7 @@
     "providerClear": "Auswahl leeren"
   },
   "common": {
+    "apiKeyAccount": "API-Key-Konto",
     "status": "Zustand",
     "cliQuickLaunch": "CLI starten",
     "requestId": "Anfrage-ID",
@@ -2381,12 +2382,12 @@
       "accessModeDirectCons": "1: Kein Modellwechsel in Codex, keine OAuth-Bindung und keine Bildweiterleitung",
       "accessModeCdpPros": "1: Gleiche Geschwindigkeit wie Direkt\n2: Flash / Pro in der offiziellen Codex-Modellliste umschaltbar",
       "accessModeCdpCons": "1: Erfordert das Injizieren des offiziellen Clients, keine OAuth-Bindung und keine Bildweiterleitung",
-      "imageGenPickerDesc": "Bei einem Bildwunsch wird die Anfrage weitergeleitet: zuerst verarbeitet das Basismodell, dann erzeugt das Bildmodell das Bild. Das verbraucht einen Teil des Kontingents der ausgewählten Konten.",
+      "imageGenPickerDesc": "OAuth nutzt ein Basismodell und das Bildwerkzeug; API Key nutzt Bild-APIs. Kosten oder Kontingent werden beim gewählten Anbieter erfasst.",
       "imageGenSwitchTitle": "Nur im Gateway-Modus",
       "imageGenSwitchDescription": "Für die GPT-Bildgenerierung muss auf den Modus „Gateway-Liste“ umgeschaltet werden. Umschalten und aktivieren?",
       "imageGenSwitchYes": "Ja",
       "imageGenSwitchNo": "Nein",
-      "imageGenTitle": "GPT-Bildgenerierung aktivieren",
+      "imageGenTitle": "Bilder aktivieren",
       "oauthBindingHint": "Nach dem Binden startet das Konto genau wie ein normales Konto und alle OAuth-Funktionen (Remote-Kompression, Browser-Steuerung, verschiedene Plugins usw.) stehen zur Verfügung; Gespräche laufen weiterhin über den aktuellen API-Key-Anbieter.",
       "oauthBindingChange": "Ändern",
       "title": "Codex-Startvorschau",
@@ -2680,10 +2681,10 @@
       "killPortSuccess": "Port bereinigt ({{count}} Prozess(e) beendet)",
       "killPortSuccessNone": "Port geprüft. Kein externer Prozess verwendet ihn.",
       "killPortSuccessUnknown": "API-Dienstport bereinigt",
-      "restartAction": "Sidecar neu starten",
-      "restartTitle": "API-Service neu starten",
-      "restartConfirmMessage": "Nur der Sidecar des API-Dienstes wird neu gestartet. Konten, Token, API-Schlüssel und Kontenpool-Einstellungen bleiben unverändert. Laufende Anfragen können unterbrochen werden. Fortfahren?",
-      "restartSuccess": "API-Service-Sidecar wurde neu gestartet",
+      "restartAction": "Nur API neu starten",
+      "restartTitle": "Nur API neu starten",
+      "restartConfirmMessage": "Nur den API-Dienst neu starten. Codex-Fenster und Kontopool/API-Key-Einstellungen bleiben erhalten. Laufende API-Anfragen können unterbrochen werden. Fortfahren?",
+      "restartSuccess": "API-Dienst neu gestartet",
       "refreshStats": "Statistik aktualisieren",
       "refreshStatsSuccess": "API-Service-Statistiken wurden aktualisiert",
       "routingStrategy": {
@@ -2730,7 +2731,20 @@
       "apiPortUrl": "API-Port-URL",
       "modelId": "Modell-ID",
       "modelIdPlaceholder": "Modell-ID wählen",
+      "imageAccounts": {
+        "upstreamModel": "Anbietermodell",
+        "chooseModel": "Modell wählen",
+        "modelRequired": "Ein unterstütztes Modell wählen.",
+        "sourceUnavailable": "Die gewählte Quelle unterstützt das aktuelle Bildmodell nicht oder hat keine gültigen API-Zugangsdaten oder Anfrage-URL.",
+        "loadFailed": "Bildeinstellungen konnten nicht geladen werden. Bitte erneut versuchen.",
+        "missingModels": "Für {{count}} ausgewählte Quellen fehlt das Modell.",
+        "locateModel": "Quelle finden"
+      },
       "imageGenerationModel": {
+        "manage": "Modelle verwalten",
+        "deleteSelected": "Modell in Verwendung. Erst ersetzen und speichern.",
+        "invalid": "Modell-IDs dürfen keine Leer- oder Steuerzeichen enthalten und höchstens 200 Zeichen lang sein.",
+        "syncFailed": "Bildmodelle konnten nicht erkannt werden. Bitte erneut versuchen.",
         "label": "Bildmodell",
         "custom": "Benutzerdefiniert",
         "save": "Modell speichern",
@@ -2816,8 +2830,8 @@
       "requestLogSuccess": "Erfolg",
       "requestLogFailed": "Fehlgeschlagen",
       "requestLogTokens": "{{value}} Token",
-      "imageForwardLabel": "GPT-Bildgenerierung aktivieren",
-      "imageForwardHint": "Nach dem Aktivieren GPT-Konten auswählen: Anfragen zur Bilderzeugung und Bildbearbeitung laufen über die gewählten Konten und verbrauchen deren Kontingent; Chat-Anfragen nutzen weiterhin den Kontenpool.",
+      "imageForwardLabel": "Bilder aktivieren",
+      "imageForwardHint": "API Key erfordert Images-API-Kompatibilität und die Modellwahl in der Kontozeile; OAuth unterstützt nur native GPT-Modelle.",
       "imageGenerationMode": {
         "enabled": "Aktiv",
         "imagesOnly": "Nur Bilder",
@@ -2922,7 +2936,8 @@
       "removeAction": "Aus API entfernen",
       "imageGenerationMainModel": {
         "label": "Bild-Hauptmodell",
-        "hint": "Leer lassen für gpt-5.5. Dieses Modell ruft das Bildwerkzeug auf; die gewählten OAuth-Konten müssen dafür image_generation unterstützen.",
+        "notice": "Das Bild-Hauptmodell im normalen Betrieb nicht ändern.",
+        "hint": "Dient nur der Weiterleitung an den offiziellen Bilddienst, nicht der Auswahl des Bildmodells. Nur bei einer Änderung des offiziellen Hauptmodells manuell anpassen. Leer lassen für gpt-5.5.",
         "invalid": "Modell-ID ohne Leerzeichen eingeben, höchstens 200 Zeichen."
       },
       "requestDetail": {
@@ -3756,14 +3771,14 @@
         "cdpMode": "CDP-Injektion",
         "cdpDesc": "Übernimmt die offizielle Codex-Modellliste per Injection, gleich schnell wie der Direktmodus. Erfordert Injection in den offiziellen Client; OAuth-Bindung wird nicht unterstützt.",
         "context": "Unterstützter Kontext",
-        "imageGen": "GPT-Bilderzeugung",
-        "imageGenHint": "Nur im Gateway-Modus. Der Chat läuft weiter über die Modelle dieses Anbieters; die Bildgenerierung nutzt die ursprüngliche gpt-image-Pipeline, wird von den gewählten GPT-Konten ausgeführt und verbraucht deren Kontingent.",
-        "imageGenPick": "GPT-Konten wählen",
+        "imageGen": "Bildgenerierung",
+        "imageGenHint": "API Key erfordert Images-API-Kompatibilität und die Modellwahl in der Kontozeile; OAuth unterstützt nur native GPT-Modelle.",
+        "imageGenPick": "Bildquelle wählen",
         "imageGenSelected": "{{count}} Konto/Konten gewählt",
         "imageGenEmpty": "Keine Konten gewählt",
         "imageGenLocked": "Nach dem Aktivieren können Konten gewählt werden",
         "pickerTitle": "Bildkonten wählen",
-        "pickerEmpty": "Keine OAuth-Konten für Bilderzeugung verfügbar (Free- und API-Key-Konten werden nicht unterstützt).",
+        "pickerEmpty": "Keine geeignete Quelle. API Key muss das gewählte Modell oder die GPT-Familie unterstützen; OAuth unterstützt native GPT-Modelle nur ohne Free-Tarif.",
         "pickerSelectAll": "Alle auswählen",
         "pickerClear": "Leeren",
         "protocol": "Protokoll",
@@ -4270,7 +4285,8 @@
       "saveSuccess": "Tempo aktualisiert",
       "saveFailed": "Tempo konnte nicht gespeichert werden: {{error}}",
       "loadFailed": "Tempo konnte nicht geladen werden: {{error}}",
-      "apiHint": "Gilt für API-Anfragen ohne Stufe; explizite Client-Stufen haben Vorrang. Schnell erhöht Verbrauch oder Kosten; die Beschleunigung hängt von Modell und Anbieter ab.",
+      "apiHint": "Nach dem Speichern gilt dies ohne Neustart für folgende API-Anfragen. Laufende Anfragen bleiben unverändert; explizite Client-Stufen haben Vorrang. Schnell kann Verbrauch oder Kosten erhöhen; die Beschleunigung hängt von Modell und Anbieter ab.",
+      "apiSyncFailed": "Einstellung gespeichert, aber der laufende API-Dienst hat die Änderung nicht bestätigt. Bitte erneut versuchen.",
       "launchHint": "Wird beim Kontowechsel und Start über Cockpit gespeichert. Laufende Clients neu starten. Neue Chats nutzen den Standard; eigene Tempoeinstellungen bestehender Chats im Client ändern."
     },
     "apiService": {
@@ -4455,6 +4471,11 @@
         "reasoningEffortValue": "Denk {{effort}}",
         "serviceTier": "Service-Stufe",
         "serviceTierValue": "Stufe {{tier}}",
+        "requestedTier": "Anfrage: {{tier}}",
+        "responseTier": "Gemeldet: {{tier}}",
+        "legacyTier": "Altwert: {{tier}}",
+        "serviceTierHint": "Die angeforderte Stufe ist der an den Upstream gesendete service_tier und bestätigt nicht die tatsächliche Verarbeitung. Bei Codex OAuth beweist die Rückmeldung default keine Herabstufung vom schnellen Modus. Automatisch bedeutet, dass keine bestimmte Stufe angefordert wurde (das Feld wurde weggelassen oder auf auto gesetzt).",
+        "legacyTierHint": "Dieser alte Eintrag vermischt Anfrage- und Antwortstufen. Quelle und tatsächliche Verarbeitungsstufe sind unbekannt.",
         "upstreamModel": "Gesendetes Modell",
         "columns": {
           "time": "Zeit",
@@ -5535,7 +5556,15 @@
       },
       "failurePhase": "Fehlerphase",
       "applying": "Auf laufende Gateways anwenden…",
-      "applyFailed": "Einstellungen gespeichert, aber laufende Gateways konnten sie nicht anwenden. Erneut versuchen. Grund: {{error}}"
+      "applyFailed": "Einstellungen gespeichert, aber laufende Gateways konnten sie nicht anwenden. Erneut versuchen. Grund: {{error}}",
+      "timeout": {
+        "open": "Zeitüberschreitung beim Aufbau des Upstream-Streams. Unter „Zeitlimits & Wiederholungen → {{setting}}“ anpassen (1–600 Sekunden, Standard 60).",
+        "idle": "Der Stream wurde geöffnet, aber weitere Daten blieben aus. Das entsprechende Stream-Leerlauflimit unter „Zeitlimits & Wiederholungen“ anpassen.",
+        "canceled": "Der Client hat die Anfrage abgebrochen; kein Zeitlimit beim Stream-Start.",
+        "gateway": "HTTP 504 zeigt eine Gateway-Zeitüberschreitung. Die Ursache ist hier nicht eindeutig; Upstream-Fehler und Anfragephase prüfen.",
+        "threshold": "Wirksames Limit dieser Anfrage: {{seconds}} Sekunden.",
+        "settings": "Zeitlimit ändern"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "Standardstufe",

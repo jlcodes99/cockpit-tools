@@ -3,6 +3,7 @@ import {
   Activity,
   Bug,
   Check,
+  ChevronDown,
   CircleAlert,
   Copy,
   Eye,
@@ -194,9 +195,10 @@ interface CodexLocalAccessModalProps {
   onUpdateDebugLogs: (debugLogs: boolean) => Promise<unknown> | unknown;
   onUpdateImageGenerationModel: (model: string) => Promise<unknown> | unknown;
   onUpdateImageGenerationMainModel: (model: string | null) => Promise<unknown> | unknown;
-  /** 保存 API 服务的生图转发账号池（生图请求交给这些 OAuth 账号）。 */
+  /** 保存 API 服务的生图来源（OAuth 或支持当前图片模型的 API Key 账号）。 */
   onUpdateImageGenerationAccounts: (
     accountIds: string[],
+    models: Record<string, string>,
   ) => Promise<unknown> | unknown;
   onRotateApiKey: () => Promise<unknown> | unknown;
   onRestartSidecar: () => Promise<unknown> | unknown;
@@ -2364,7 +2366,6 @@ export function CodexLocalAccessModal({
           )}
 
           <div className="modal-body codex-local-access-modal-body">
-            {!isMembersMode && <section className="codex-local-access-section"><CodexRequestPayloadSetting /></section>}
             {notice && (
               <div className="codex-local-access-inline-success">
                 <Check size={14} />
@@ -2811,12 +2812,14 @@ export function CodexLocalAccessModal({
                         <CodexImageForwardConfig
                           accounts={accounts}
                           accountIds={collection.imageGenerationAccountIds}
+                          imageGenerationModel={collection.imageGenerationModel}
+                          accountModels={collection.imageGenerationAccountModels}
                           disabled={saving || testing || starting}
                           maskAccountText={maskAccountText}
                           onSave={onUpdateImageGenerationAccounts}
                           imageModelControl={
                             <CodexImageModelSelect
-                              model={collection.imageGenerationModel}
+                              model={collection.imageGenerationModel} models={collection.imageGenerationModels} deletedModels={collection.imageGenerationDeletedModels} catalogUpdatedAt={collection.updatedAt}
                               mainModel={collection.imageGenerationMainModel}
                               disabled={saving || testing || starting}
                               onSave={onUpdateImageGenerationModel}
@@ -2827,6 +2830,16 @@ export function CodexLocalAccessModal({
                       ) : null}
                     </div>
                   ) : null}
+                  <details className="codex-local-access-payload-details">
+                    <summary className="codex-local-access-section-title">
+                      <Bug size={16} />
+                      <span>{t("codex.requestDiagnostics.recordPayloads")}</span>
+                      <ChevronDown size={16} className="codex-local-access-payload-chevron" />
+                    </summary>
+                    <div className="codex-local-access-payload-details-body">
+                      <CodexRequestPayloadSetting />
+                    </div>
+                  </details>
                 </section>
 
                 <section className="codex-local-access-section codex-local-access-section-surface codex-local-access-account-stats-section">

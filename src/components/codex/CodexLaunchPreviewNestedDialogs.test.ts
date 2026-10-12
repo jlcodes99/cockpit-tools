@@ -19,6 +19,8 @@ for (const saving of [false, true]) {
       '../MultiSelectFilterDropdown': { MultiSelectFilterDropdown: 'filter' },
       '../PaginationControls': { PaginationControls: 'pagination' },
       '../SingleSelectFilterDropdown': { SingleSelectFilterDropdown: 'sort' },
+      '../SingleSelectDropdown': { SingleSelectDropdown: 'model-select' },
+      './useCodexImageModelCatalog': { useCodexImageModelCatalog: () => ({ ready: true, deleted: [], models: ['gpt-image-2.5', 'gpt-image-2'], syncError: '' }) },
       '../../utils/privacy': { isPrivacyModeEnabledByDefault: () => false, maskSensitiveValue: (value: string) => value },
     });
     const tree = h.render(() => h.exports.CodexImageAccountPickerModal({ accounts: [], selectedIds: [], saving,

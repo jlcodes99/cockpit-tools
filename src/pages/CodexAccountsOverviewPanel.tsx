@@ -3527,9 +3527,9 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
             onUpdateImageGenerationMainModel={(model) =>
               codexLocalAccessService.updateCodexLocalAccessImageGenerationMainModel(model).then(setLocalAccessState)
             }
-            onUpdateImageGenerationAccounts={(accountIds) =>
+            onUpdateImageGenerationAccounts={(accountIds, models) =>
               codexLocalAccessService
-                .updateCodexLocalAccessImageGenerationAccounts(accountIds)
+                .updateCodexLocalAccessImageGenerationAccounts(accountIds, models)
                 .then(setLocalAccessState)
             }
             onUpdateUpstreamProxyConfig={

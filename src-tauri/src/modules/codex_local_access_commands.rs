@@ -11,9 +11,13 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         client_base_url_host: CodexLocalAccessClientBaseUrlHost::default(),
         image_generation_mode: CodexLocalAccessImageGenerationMode::default(),
         image_generation_model: DEFAULT_CODEX_IMAGE_GENERATION_MODEL.to_string(),
+        image_generation_models: crate::models::codex_local_access::default_image_generation_models(),
+        image_generation_deleted_models: Vec::new(),
+        image_generation_model_catalog_revision: 0,
         image_generation_main_model: None,
         image_generation_account_policies: HashMap::new(),
         image_generation_account_ids: Vec::new(),
+        image_generation_account_models: HashMap::new(),
         gateway_mode: CodexLocalAccessGatewayMode::default(),
         upstream_proxy_url: None,
         routing_strategy: CodexLocalAccessRoutingStrategy::default(),
@@ -229,6 +233,7 @@ async fn save_local_access_accounts_with_reload(
         Option<HashMap<String, CodexLocalAccessImageGenerationPolicy>>,
     reload: LocalAccessGatewayReload,
 ) -> Result<CodexLocalAccessState, String> {
+    let _image_update_guard = image_configuration_update_lock().lock().await;
     ensure_runtime_loaded_without_start().await?;
 
     let mut collection = {
@@ -274,6 +279,7 @@ async fn save_local_access_accounts_with_reload(
             .map(|(account_id, policy)| (account_id.trim().to_string(), policy))
             .filter(|(account_id, _)| collection.account_ids.iter().any(|id| id == account_id))
             .collect();
+        remove_disabled_image_generation_sources(&mut collection);
     } else {
         collection
             .image_generation_account_policies
@@ -825,13 +831,7 @@ pub async fn update_local_access_image_generation_main_model(
 pub async fn update_local_access_image_generation_model(
     image_generation_model: String,
 ) -> Result<CodexLocalAccessState, String> {
-    let normalized_model = image_generation_model.trim().to_string();
-    if normalized_model.is_empty() {
-        return Err("codex.localAccess.imageGenerationModel.required".to_string());
-    }
-    if normalized_model.chars().count() > 200 {
-        return Err("codex.localAccess.imageGenerationModel.tooLong".to_string());
-    }
+    let normalized_model = normalize_image_model_id(&image_generation_model)?;
     save_image_generation_models(Some(normalized_model), None).await
 }
 
@@ -839,36 +839,25 @@ async fn save_image_generation_models(
     tool_model: Option<String>,
     main_model: Option<Option<String>>,
 ) -> Result<CodexLocalAccessState, String> {
-    static UPDATE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    let _update_guard = UPDATE_LOCK.lock().await;
-    ensure_runtime_loaded().await?;
+    let _update_guard = image_configuration_update_lock().lock().await;
+    ensure_runtime_loaded_without_start().await?;
 
     let maybe_collection = {
         let runtime = gateway_runtime().lock().await;
         runtime.collection.clone()
     };
-    let Some(mut collection) = maybe_collection else {
-        return Err("本地接入集合尚未创建".to_string());
-    };
-    let mut changed = false;
-    if let Some(model) = tool_model {
-        changed |= collection.image_generation_model != model;
-        collection.image_generation_model = model;
-    }
-    if let Some(model) = main_model {
-        changed |= collection.image_generation_main_model != model;
-        collection.image_generation_main_model = model;
-    }
-    if changed {
-        collection.updated_at = now_ms();
-        let collection_to_save = collection.clone();
-        tauri::async_runtime::spawn_blocking(move || save_collection_to_disk(&collection_to_save))
-            .await
-            .map_err(|error| format!("保存生图模型配置任务失败: {}", error))??;
-        {
-            let mut runtime = gateway_runtime().lock().await;
-            sync_runtime_collection(&mut runtime, collection);
+    let collection = maybe_collection.map(Ok).unwrap_or_else(new_local_access_collection)?;
+    let update_main = main_model.is_some();
+    let path = local_access_file_path()?;
+    let published = tauri::async_runtime::spawn_blocking(move || persist_image_model_settings(
+        &path, &collection, tool_model, main_model, None,
+    )).await.map_err(|error| format!("保存生图模型配置任务失败: {}", error))??;
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        if runtime.collection.is_none() {
+            sync_runtime_collection(&mut runtime, published.clone());
         }
+        publish_image_model_settings(&mut runtime, &published, update_main);
     }
     ensure_gateway_matches_runtime().await?;
     snapshot_state().await
@@ -876,12 +865,20 @@ async fn save_image_generation_models(
 
 /// 更新 API 服务的生图转发账号池。
 ///
-/// 生图转发账号池只接收仍然有效的 OAuth 账号（带 refresh_token，sidecar 自行续期）；
+/// 生图转发账号池接收带 refresh_token 的 OAuth 或匹配当前图片模型的 API Key；
 /// 设置后图片生成 / 图片编辑请求只交给这些账号执行，对话请求仍按服务账号池调度。
 pub async fn update_local_access_image_generation_accounts(
     account_ids: Vec<String>,
 ) -> Result<CodexLocalAccessState, String> {
-    ensure_runtime_loaded().await?;
+    update_local_access_image_generation_accounts_with_models(account_ids, None).await
+}
+
+pub async fn update_local_access_image_generation_accounts_with_models(
+    account_ids: Vec<String>,
+    image_generation_account_models: Option<HashMap<String, String>>,
+) -> Result<CodexLocalAccessState, String> {
+    let _update_guard = image_configuration_update_lock().lock().await;
+    ensure_runtime_loaded_without_start().await?;
 
     let maybe_collection = {
         let runtime = gateway_runtime().lock().await;
@@ -891,27 +888,46 @@ pub async fn update_local_access_image_generation_accounts(
         return Err("本地接入集合尚未创建".to_string());
     };
 
-    let accounts = codex_account::list_accounts_checked()?;
+    let mut image_models = image_generation_account_models
+        .unwrap_or_else(|| collection.image_generation_account_models.clone())
+        .into_iter().map(|(id, model)| (id.trim().to_string(), model.trim().to_string()))
+        .filter(|(id, _)| !id.is_empty()).collect::<HashMap<_, _>>();
+    let accounts = tauri::async_runtime::spawn_blocking(codex_account::list_accounts_checked)
+        .await
+        .map_err(|error| format!("读取生图来源账号任务失败: {}", error))??;
     let mut next_account_ids: Vec<String> = Vec::new();
+    let mut source_models = Vec::new();
     for raw_id in account_ids {
         let account_id = raw_id.trim();
         if account_id.is_empty() || next_account_ids.iter().any(|item| item == account_id) {
             continue;
         }
         let Some(account) = accounts.iter().find(|item| item.id == account_id) else {
-            continue;
+            // A partial account read must not silently replace the saved image scope.
+            return Err("codex.localAccess.imageAccounts.sourceUnavailable".to_string());
         };
-        if account.is_api_key_auth()
-            || account.is_agent_identity_auth()
-            || !codex_account::account_has_refresh_token(account)
-        {
-            continue;
+        if !is_image_generation_source_for_model(account, &collection.image_generation_model) {
+            return Err("codex.localAccess.imageAccounts.sourceUnavailable".to_string());
         }
+        let actual = resolve_image_generation_source_model(account, &collection,
+            image_models.get(account_id).map(String::as_str))
+            .ok_or_else(|| "codex.localAccess.imageAccounts.modelRequired".to_string())?;
+        source_models.push(actual);
         next_account_ids.push(account_id.to_string());
     }
 
-    if collection.image_generation_account_ids != next_account_ids {
-        collection.image_generation_account_ids = next_account_ids;
+    let fallback = collection.clone();
+    let path = local_access_file_path()?;
+    let published = tauri::async_runtime::spawn_blocking(move || {
+        persist_image_model_settings_with_sources(&path, &fallback, None, None, None, Some(source_models))
+    }).await.map_err(|error| format!("记录生图来源型号任务失败: {}", error))??;
+    copy_image_model_catalog_fields(&mut collection, &published);
+    {
+        let mut runtime = gateway_runtime().lock().await;
+        publish_image_model_settings(&mut runtime, &published, false);
+    }
+    image_models.retain(|id, _| next_account_ids.contains(id));
+    if apply_image_generation_source_selection(&mut collection, next_account_ids, image_models, &accounts) {
         collection.updated_at = now_ms();
         let collection_to_save = collection.clone();
         tauri::async_runtime::spawn_blocking(move || save_collection_to_disk(&collection_to_save))

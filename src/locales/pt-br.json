@@ -96,6 +96,7 @@
     "providerClear": "Limpar seleção"
   },
   "common": {
+    "apiKeyAccount": "Conta API Key",
     "status": "Estado",
     "cliQuickLaunch": "Iniciar CLI",
     "requestId": "ID da solicitação",
@@ -2381,12 +2382,12 @@
       "accessModeDirectCons": "1: Sem troca de modelo no Codex, sem vínculo OAuth e sem encaminhamento de imagens",
       "accessModeCdpPros": "1: Mesma velocidade do direto\n2: Flash / Pro alternáveis na lista oficial de modelos do Codex",
       "accessModeCdpCons": "1: Exige injetar o cliente oficial, sem vínculo OAuth e sem encaminhamento de imagens",
-      "imageGenPickerDesc": "Quando surge um pedido de imagem, ele é encaminhado: primeiro o modelo base processa e depois o modelo de imagem gera a imagem, consumindo parte da cota das contas selecionadas.",
+      "imageGenPickerDesc": "OAuth usa um modelo base e a ferramenta de imagem; API Key usa APIs de imagens. O provedor escolhido contabiliza custos ou cota.",
       "imageGenSwitchTitle": "Somente no modo gateway",
       "imageGenSwitchDescription": "Ativar a geração de imagens GPT exige o modo gateway. Alternar para esse modo e ativar?",
       "imageGenSwitchYes": "Sim",
       "imageGenSwitchNo": "Não",
-      "imageGenTitle": "Ativar geração de imagens GPT",
+      "imageGenTitle": "Ativar imagens",
       "oauthBindingHint": "Após vincular, a inicialização é idêntica à de uma conta normal e todos os recursos do OAuth (compactação remota, controle do navegador, diversos plugins etc.) ficam disponíveis; as conversas continuam no provedor da API Key atual.",
       "oauthBindingChange": "Alterar",
       "title": "Prévia de inicialização do Codex",
@@ -2680,10 +2681,10 @@
       "killPortSuccess": "Porta limpa ({{count}} processo(s) encerrado(s))",
       "killPortSuccessNone": "Porta verificada. Nenhum processo externo a está usando.",
       "killPortSuccessUnknown": "Porta do serviço de API limpa",
-      "restartAction": "Reiniciar Sidecar",
-      "restartTitle": "Reiniciar serviço de API",
-      "restartConfirmMessage": "Somente o Sidecar do serviço de API será reiniciado. Contas, tokens, chaves de API e configurações do grupo de contas não serão alterados. As solicitações em andamento podem ser interrompidas. Continuar?",
-      "restartSuccess": "Sidecar do serviço de API reiniciado",
+      "restartAction": "Reiniciar só a API",
+      "restartTitle": "Reiniciar só a API",
+      "restartConfirmMessage": "Reiniciar apenas o serviço API, mantendo as janelas do Codex e as configurações do pool de contas/API Key. As solicitações API em andamento podem ser interrompidas. Continuar?",
+      "restartSuccess": "Serviço API reiniciado",
       "refreshStats": "Atualizar estatísticas",
       "refreshStatsSuccess": "As estatísticas do serviço API foram atualizadas",
       "routingStrategy": {
@@ -2730,7 +2731,20 @@
       "apiPortUrl": "URL da porta API",
       "modelId": "ID do modelo",
       "modelIdPlaceholder": "Selecione o ID do modelo",
+      "imageAccounts": {
+        "upstreamModel": "Modelo do provedor",
+        "chooseModel": "Escolher modelo",
+        "modelRequired": "Escolha um modelo compatível.",
+        "sourceUnavailable": "A fonte escolhida não suporta o modelo de imagem atual ou não tem credenciais API ou endereço de solicitação válidos.",
+        "loadFailed": "Não foi possível carregar as configurações de imagem. Tente novamente.",
+        "missingModels": "Escolha um modelo para {{count}} fontes selecionadas.",
+        "locateModel": "Ver fonte"
+      },
       "imageGenerationModel": {
+        "manage": "Gerenciar modelos",
+        "deleteSelected": "Modelo em uso. Substitua e salve primeiro.",
+        "invalid": "IDs de modelo não podem conter espaços ou caracteres de controle e devem ter até 200 caracteres.",
+        "syncFailed": "A descoberta de modelos de imagem falhou. Tente novamente.",
         "label": "Modelo de imagem",
         "custom": "Personalizado",
         "save": "Salvar modelo",
@@ -2816,8 +2830,8 @@
       "requestLogSuccess": "Sucesso",
       "requestLogFailed": "Falhou",
       "requestLogTokens": "{{value}} tokens",
-      "imageForwardLabel": "Ativar a geração de imagens GPT",
-      "imageForwardHint": "Após ativar, escolha contas GPT: as solicitações de geração e edição de imagens passam pelas contas selecionadas e consomem a cota delas, enquanto o chat continua usando o pool de contas.",
+      "imageForwardLabel": "Ativar imagens",
+      "imageForwardHint": "API Key requer Images API e a escolha do modelo real na linha da conta; OAuth suporta apenas modelos GPT nativos.",
       "imageGenerationMode": {
         "enabled": "Ativado",
         "imagesOnly": "Só imagens",
@@ -2922,7 +2936,8 @@
       "removeAction": "Remover da API",
       "imageGenerationMainModel": {
         "label": "Modelo base de imagem",
-        "hint": "Deixe vazio para manter gpt-5.5. Esse modelo chama a ferramenta de imagem; as contas OAuth escolhidas devem suportar image_generation nele.",
+        "notice": "Não altere o modelo base de imagem durante o uso normal.",
+        "hint": "Serve apenas para encaminhar pedidos ao serviço oficial, não para escolher o modelo que gera imagens. Altere apenas se o modelo base oficial mudar. Deixe vazio para usar gpt-5.5.",
         "invalid": "Informe um ID de modelo sem espaços, com até 200 caracteres."
       },
       "requestDetail": {
@@ -3756,14 +3771,14 @@
         "cdpMode": "Injeção CDP",
         "cdpDesc": "Assume a lista oficial de modelos do Codex por injeção, com a mesma velocidade do modo direto. Requer injetar o cliente oficial; a vinculação OAuth não é suportada.",
         "context": "Contexto suportado",
-        "imageGen": "Geração de imagens GPT",
-        "imageGenHint": "Somente no modo gateway. O chat continua nos modelos deste fornecedor; a geração de imagens usa o pipeline gpt-image original, executado pelas contas GPT selecionadas e consumindo a cota delas.",
-        "imageGenPick": "Escolher contas GPT",
+        "imageGen": "Geração de imagens",
+        "imageGenHint": "API Key requer Images API e a escolha do modelo real na linha da conta; OAuth suporta apenas modelos GPT nativos.",
+        "imageGenPick": "Fontes de imagem",
         "imageGenSelected": "{{count}} conta(s) selecionada(s)",
         "imageGenEmpty": "Nenhuma conta selecionada",
         "imageGenLocked": "Marque para escolher contas",
         "pickerTitle": "Escolher contas de imagem",
-        "pickerEmpty": "Nenhuma conta OAuth pode gerar imagens (contas Free e API Key não são suportadas).",
+        "pickerEmpty": "Nenhuma fonte compatível. API Key deve suportar o modelo escolhido ou sua família GPT; OAuth suporta modelos GPT nativos apenas em contas que não sejam Free.",
         "pickerSelectAll": "Selecionar tudo",
         "pickerClear": "Limpar",
         "protocol": "Protocolo",
@@ -4270,7 +4285,8 @@
       "saveSuccess": "Velocidade atualizada",
       "saveFailed": "Falha ao salvar a velocidade: {{error}}",
       "loadFailed": "Falha ao carregar a velocidade: {{error}}",
-      "apiHint": "Usado quando a solicitação API omite o nível; o nível explícito do cliente tem prioridade. Rápido aumenta o consumo ou custo conforme o modelo e provedor.",
+      "apiHint": "Após salvar, aplica-se às próximas solicitações de API sem reiniciar. As solicitações em andamento não mudam; o nível explícito do cliente tem prioridade. O modo rápido pode aumentar o uso ou o custo; a aceleração depende do modelo e do provedor.",
+      "apiSyncFailed": "Preferência salva, mas o serviço de API em execução não confirmou a atualização. Tente novamente.",
       "launchHint": "Salvo ao trocar de conta e iniciar pelo Cockpit. Reinicie o cliente ativo. Novas conversas usam este valor; ajuste no cliente a velocidade própria de conversas existentes."
     },
     "apiService": {
@@ -4455,6 +4471,11 @@
         "reasoningEffortValue": "Raz. {{effort}}",
         "serviceTier": "Nível de serviço",
         "serviceTierValue": "Nível {{tier}}",
+        "requestedTier": "Pedido: {{tier}}",
+        "responseTier": "Retorno: {{tier}}",
+        "legacyTier": "Anterior: {{tier}}",
+        "serviceTierHint": "O nível solicitado é o service_tier enviado ao servidor e não confirma o nível real de processamento. No Codex OAuth, o retorno default não comprova uma redução do modo rápido. Automático significa que nenhum nível específico foi solicitado (campo omitido ou definido como auto).",
+        "legacyTierHint": "Este registro antigo mistura níveis de pedido e resposta. A origem e o nível real de processamento são desconhecidos.",
         "upstreamModel": "Modelo enviado",
         "columns": {
           "time": "Hora",
@@ -5535,7 +5556,15 @@
       },
       "failurePhase": "Etapa da falha",
       "applying": "Aplicando aos gateways ativos…",
-      "applyFailed": "Configurações salvas, mas os gateways ativos não conseguiram aplicá-las. Tente novamente. Motivo: {{error}}"
+      "applyFailed": "Configurações salvas, mas os gateways ativos não conseguiram aplicá-las. Tente novamente. Motivo: {{error}}",
+      "timeout": {
+        "open": "O tempo de espera para abrir o fluxo upstream acabou. Ajuste «Tempos e tentativas → {{setting}}» (1–600 segundos, padrão 60).",
+        "idle": "O fluxo abriu, mas o tempo de espera por mais dados acabou. Ajuste o tempo de inatividade correspondente em «Tempos e tentativas».",
+        "canceled": "O cliente cancelou esta solicitação; não é um tempo de abertura do fluxo esgotado.",
+        "gateway": "HTTP 504 indica que o tempo de espera do gateway acabou. O registro não confirma a causa; verifique o erro upstream e a fase da solicitação.",
+        "threshold": "Limite aplicado a esta solicitação: {{seconds}} segundos.",
+        "settings": "Ajustar tempo"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "Nível padrão",

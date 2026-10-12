@@ -8,7 +8,7 @@ test('proxy account labels mask names, emails and dependency identities and reac
   let privateMode = true;
   const listeners = new Map<string, () => void>();
   const h = loadHookModule(new URL('./useCodexProxyExitEditor.ts', import.meta.url), {
-    'react-i18next': {}, '../../stores/useCodexAccountStore': {}, '../../utils/codexAccountProxy': {},
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) }, '../../stores/useCodexAccountStore': {}, '../../utils/codexAccountProxy': {},
     '../../services/codexProxyTargetService': {},
     '../../services/codexProxyCatalogService': {}, '../../services/codexAccountProxyService': {},
     '../../utils/codexProxySelection': {}, './CodexProxyWorkspaceContext': {},

@@ -316,11 +316,26 @@ export async function updateCodexLocalAccessImageGenerationModel(
   });
 }
 
+/** 累积发现、手动新增或删除持久化的图片模型目录；不会启动服务。 */
+export async function updateCodexLocalAccessImageGenerationModelCatalog(
+  discoveredModels?: string[],
+  addModel?: string,
+  removeModel?: string,
+): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_update_image_generation_model_catalog", {
+    discoveredModels: discoveredModels ?? null,
+    addModel: addModel ?? null,
+    removeModel: removeModel ?? null,
+  });
+}
+
 export async function updateCodexLocalAccessImageGenerationAccounts(
   accountIds: string[],
+  imageGenerationAccountModels?: Record<string, string> | null,
 ): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_update_image_generation_accounts", {
     accountIds,
+    imageGenerationAccountModels: imageGenerationAccountModels ?? null,
   });
 }
 

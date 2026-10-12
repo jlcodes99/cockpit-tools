@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "./codexAccountDisplayName";
 import type { CodexLocalAccessAccountPoolHealth, CodexLocalAccessAccountPoolScopeDiagnostic } from '../types/codexLocalAccess';
 import type { CodexAccount } from '../types/codex';
 
@@ -53,6 +54,9 @@ export function codexAccountPoolScopeDisplayName(
 ): string {
   if (diagnostic.reasonCode.trim().toLowerCase() === 'account_mapping_missing') return unknownLabel;
   const account = accounts.find((item) => item.id === diagnostic.accountId.trim());
-  return account?.account_name?.trim() || account?.email?.trim() || diagnostic.accountEmail.trim() ||
-    (diagnostic.accountId.trim() && accountReference ? accountReference(diagnostic.accountId.trim()) : unknownLabel);
+  if (account) return resolveCodexAccountDisplayName(account, unknownLabel);
+  if (diagnostic.accountEmail.trim()) return resolveCodexAccountDisplayName({
+    id: diagnostic.accountId.trim(), email: diagnostic.accountEmail,
+  }, unknownLabel);
+  return diagnostic.accountId.trim() && accountReference ? accountReference(diagnostic.accountId.trim()) : unknownLabel;
 }

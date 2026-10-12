@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from '../../utils/codexAccountDisplayName';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -89,6 +90,7 @@ function harness(overrides: Props = {}) {
       };
       if (name === '../../types/instance') return { CODEX_PROVIDER_GATEWAY_INTERNAL_NAMESPACE: 'internal' };
       if (name === '../../utils/codexModelRoutingValue') return {};
+      if (name === '../../utils/codexAccountDisplayName') return { resolveCodexAccountDisplayName };
       if (name === '../SingleSelectDropdown') return { SingleSelectDropdown: 'dropdown' };
       if (name === '../ModalErrorMessage') return { ModalErrorMessage: 'modal-error' };
       if (name.endsWith('.css')) return {};

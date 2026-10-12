@@ -1744,6 +1744,9 @@ fn preserve_runtime_collection_fields(
 ) {
     // Only the dedicated settings command changes this field after initial load.
     collection.request_payload_logging = current.request_payload_logging;
+    if collection.image_generation_model_catalog_revision <= current.image_generation_model_catalog_revision {
+        copy_image_model_catalog_fields(collection, current);
+    }
     for api_key in &mut collection.api_keys {
         if let Some(current_api_key) = current.api_keys.iter().find(|item| item.id == api_key.id) {
             api_key.token_used = api_key.token_used.max(current_api_key.token_used);

@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useMemo, useCallback, type MouseEvent as ReactMouseEvent } from "react";
 import { RefreshCw, RotateCw } from "lucide-react";
 import * as codexService from "../services/codexService";
@@ -797,17 +798,23 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
     const localAccessImageForward = useCodexImageForwardConfig({
       accounts,
       accountIds: localAccessCollection?.imageGenerationAccountIds,
+      imageGenerationModel: localAccessCollection?.imageGenerationModel,
+      accountModels: localAccessCollection?.imageGenerationAccountModels,
       disabled: localAccessRefreshing || !localAccessCollection,
-      onSave: async (accountIds) => {
+      onSave: async (accountIds, models) => {
         const nextState =
           await codexLocalAccessService.updateCodexLocalAccessImageGenerationAccounts(
             accountIds,
+            models,
           );
         setLocalAccessState(nextState);
       },
       imageModelControl: (
         <CodexImageModelSelect
           model={localAccessCollection?.imageGenerationModel}
+          models={localAccessCollection?.imageGenerationModels}
+          deletedModels={localAccessCollection?.imageGenerationDeletedModels}
+          catalogUpdatedAt={localAccessCollection?.updatedAt}
           mainModel={localAccessCollection?.imageGenerationMainModel}
           disabled={localAccessRefreshing}
           onSaveMainModel={async (model) => {
@@ -944,7 +951,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
                       .slice(0, 4)
                       .map((item) => (
                         <span key={item.id}>
-                          {item.email || item.account_name || item.id}
+                          {resolveCodexAccountDisplayName(item, t("common.apiKeyAccount"))}
                         </span>
                       ))}
                   </div>

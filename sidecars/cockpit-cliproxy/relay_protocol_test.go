@@ -1461,7 +1461,7 @@ data: {"type":"response.completed","response":{"created_at":1710000000,"output":
 			Chunks:  stream,
 		},
 	}
-	router := testRelayRouterWithImageModel(runtime, "custom-image-model")
+	router := testRelayRouterWithImageModel(runtime, legacyImagesToolModel)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"gpt-image-2","prompt":"draw","response_format":"b64_json"}`))
 	req.Header.Set("Authorization", "Bearer client-key")
@@ -1484,7 +1484,7 @@ data: {"type":"response.completed","response":{"created_at":1710000000,"output":
 	}
 	tools, _ := forwarded["tools"].([]any)
 	tool, _ := tools[0].(map[string]any)
-	if tool["model"] != "custom-image-model" {
+	if tool["model"] != legacyImagesToolModel {
 		t.Fatalf("configured image model was not forwarded: %#v", tool)
 	}
 	var body map[string]any

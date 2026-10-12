@@ -7,7 +7,7 @@ function nodes(tree: any): any[] {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return tree && typeof tree === 'object' ? [tree, ...nodes(tree.props?.children)] : [];
 }
-function harness(mode: string, options: { loaded?: boolean; account?: any; save?: () => Promise<any>; refresh?: () => Promise<any>; latestAccount?: any; execute?: (...args: any[]) => Promise<boolean> } = {}) {
+function harness(mode: string, options: { loaded?: boolean; account?: any; save?: () => Promise<any>; refresh?: () => Promise<any>; latestAccount?: any; accounts?: any[]; imageLoaded?: boolean; imageModel?: string; execute?: (launchAfterSwitch: boolean, options?: any) => Promise<boolean> } = {}) {
   let traps: any[] = [];
   let escapes: any[] = [];
   let closed = 0;
@@ -17,8 +17,11 @@ function harness(mode: string, options: { loaded?: boolean; account?: any; save?
   const modalError = { message: null, scrollKey: 0, set() {} };
   const config = { experimental_model_catalog_available: true, experimental_model_catalog_enabled: false, experimental_model_catalog_models: [],
     experimental_model_catalog_default_model_id: null };
-  const emptyAccounts: any[] = [];
+  const emptyAccounts: any[] = options.accounts ?? [];
   const emptyInstances: any[] = [];
+  const instanceStore: any = (selector: any) => selector({ instances: emptyInstances });
+  instanceStore.getState = () => ({ instances: emptyInstances });
+  instanceStore.setState = () => {};
   const accountStore: any = (selector: any) => selector({ accounts: emptyAccounts, currentAccount: null, fetchAccounts: async () => {} });
   accountStore.getState = () => ({ accounts: [options.latestAccount ?? options.account].filter(Boolean), applyAccountSnapshot() {} });
   const h = loadHookModule(new URL('./CodexLaunchPreviewModal.tsx', import.meta.url), {
@@ -26,7 +29,8 @@ function harness(mode: string, options: { loaded?: boolean; account?: any; save?
     '@tauri-apps/plugin-dialog': { confirm: async () => true },
     '../../hooks/useModalFocusTrap': { useModalFocusTrap: (ref: any, open: boolean, restore = true, active = true) => { traps.push({ ref, open, restore, active }); } },
     '../../hooks/useEscClose': { useEscCloseTopmost: (open: boolean, close: () => void, ref: any) => escapes.push({ open, close, ref }) },
-    '../../services/codexInstanceService': { saveCodexInstanceQuickConfig: options.save ?? (async () => config) },
+    '../../services/codexInstanceService': { saveCodexInstanceQuickConfig: options.save ?? (async () => config),
+      saveCodexInstanceConfiguration: async () => ({ quickConfig: config, instance: { id: '__default__' } }) },
     '../../services/codexService': { forceRefreshCodexTokens: options.refresh ?? (async () => options.account) },
     '../../services/codexLaunchPreviewConfigService': {
       getCachedCodexLaunchPreviewConfig: () => options.loaded ? config : null,
@@ -35,13 +39,14 @@ function harness(mode: string, options: { loaded?: boolean; account?: any; save?
       CODEX_LAUNCH_PREVIEW_CONFIG_TIMEOUT: 'timeout',
     },
     '../../stores/useCodexAccountStore': { useCodexAccountStore: accountStore },
-    '../../stores/useCodexInstanceStore': { useCodexInstanceStore: (selector: any) => selector({ instances: emptyInstances }) },
+    '../../stores/useCodexInstanceStore': { useCodexInstanceStore: instanceStore },
     './CodexModelRoutingFields': {
       CodexModelRoutingFields: 'routing', buildCodexModelRoutingValue,
       createCodexModelSourceResolver: () => () => null, normalizeCodexModelRoutingRoutes: () => [],
       eligibleCodexModelRoutingAccounts: () => [], syncExperimentalModelsWithRouting: (_routes: any, models: any[]) => models,
     },
     './useLaunchPreviewChildReturnFocus': { useLaunchPreviewChildReturnFocus: () => remember },
+    './useCodexImageModelConfig': { useCodexImageModelConfig: () => ({ model: options.imageLoaded === false ? null : options.imageModel ?? 'gpt-image-2.5', control: null, loaded: options.imageLoaded !== false }) },
     './CodexImageAccountPickerModal': { CodexImageAccountPickerModal: 'image-picker' },
     './CodexQuotaMiniRows': { CodexQuotaMiniRows: 'quotas' },
     './CodexExperimentalModelEditor': { CodexExperimentalModelEditor: 'model-editor' },
@@ -66,7 +71,8 @@ for (const [previewMode, savedMode, chosen] of [
   test(`${previewMode}: custom Responses mode is restored, selectable and forwarded by the rendered preview (${savedMode})`, async () => {
     const account = { id: 'provider-fixture', auth_mode: 'apikey', api_provider_id: 'custom',
       api_wire_api: 'responses', api_instance_access_mode: savedMode,
-      api_image_generation_account_ids: ['old-image-account'] };
+      api_image_generation_account_ids: ['old-image-account'],
+      api_image_generation_account_models: { 'old-image-account': 'old-image-model' } };
     const calls: any[][] = [];
     const h = harness(previewMode, { loaded: true, account, execute: async (...args) => { calls.push(args); return true; } });
     await h.ready();
@@ -91,6 +97,7 @@ for (const [previewMode, savedMode, chosen] of [
     assert.equal(calls.length, 1);
     assert.equal(calls[0][1].deepSeekAccessMode, chosen);
     assert.equal(calls[0][1].imageGenerationAccountIds.length, 0);
+    assert.equal(Object.keys(calls[0][1].imageGenerationAccountModels).length, 0);
     h.h.unmount();
   });
 }
@@ -355,4 +362,45 @@ test('the explicit image-account picker button records its own return target bef
   assert.equal(h.remembered[0], 'picker-button-trigger');
   assert.ok(nodes(h.tree).find((node) => node.type === 'image-picker'));
   h.h.unmount();
+});
+
+
+test('launch does not silently discard a selected API image source while image settings are unavailable', async () => {
+  for (const api_provider_id of ['deepseek', 'custom']) {
+    let executed = 0;
+    const apiSource = { id: 'image-api', auth_mode: 'apikey', api_model_catalog: ['gpt-image-2.5'] };
+    const account = { id: 'provider', email: 'Provider', auth_mode: 'apikey', api_provider_id, api_wire_api: 'responses',
+      api_instance_access_mode: 'gateway', api_image_generation_account_ids: ['image-api'], api_image_generation_account_models: { 'image-api': 'gpt-image-2.5-high' } };
+    const { h, ready } = harness('account', { account, loaded: true, accounts: [apiSource], imageLoaded: false,
+      execute: async () => { executed++; return true; } });
+    await ready();
+    const action = nodes(h.flush()).find((node) => node.type === 'button' && [node.props?.children].flat(Infinity).includes('codex.launchPreview.switchAndStart'));
+    assert.ok(action);
+    await action.props.onClick(); await settlePromises();
+    assert.equal(executed, 0);
+    const picker = nodes(h.flush()).find((node) => node.type === 'image-picker');
+    assert.ok(picker);
+    assert.deepEqual(picker.props.selectedIds, ['image-api']);
+    assert.deepEqual(picker.props.selectedModels, { 'image-api': 'gpt-image-2.5-high' });
+    assert.equal(picker.props.imageGenerationModel, null);
+    h.unmount();
+  }
+});
+
+
+test('launch forwards the saved full image variant together with source IDs', async () => {
+  for (const api_provider_id of ['deepseek', 'custom']) {
+    let launchOptions: any;
+    const source = { id: 'source-api', email: 'Image source', auth_mode: 'apikey', api_model_catalog: ['gpt-image-2.5-high'] };
+    const account = { id: 'provider', email: 'Provider', auth_mode: 'apikey', api_provider_id, api_wire_api: 'responses', api_instance_access_mode: 'gateway',
+      api_image_generation_account_ids: ['source-api'], api_image_generation_account_models: { 'source-api': 'gpt-image-2.5-high' } };
+    const { h, ready } = harness('account', { account, loaded: true, accounts: [source], imageModel: 'gpt-image-2.5-high',
+      execute: async (_start, options) => { launchOptions = options; return true; } });
+    await ready();
+    const action = nodes(h.flush()).find((node) => node.type === 'button' && [node.props?.children].flat(Infinity).includes('codex.launchPreview.switchAndStart'));
+    assert.ok(action); action.props.onClick(); await settlePromises(); h.flush();
+    assert.deepEqual(launchOptions.imageGenerationAccountIds, ['source-api']);
+    assert.deepEqual(launchOptions.imageGenerationAccountModels, { 'source-api': 'gpt-image-2.5-high' });
+    h.unmount();
+  }
 });

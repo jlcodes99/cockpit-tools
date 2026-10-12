@@ -832,6 +832,8 @@ fn normalize_reasoning_efforts(
     if normalized.is_empty() {
         return Ok(None);
     }
+    normalized.sort_by_key(|effort| CODEX_REASONING_EFFORTS.iter()
+        .position(|candidate| candidate == &effort.as_str()).unwrap());
     Ok(Some(normalized))
 }
 
@@ -890,10 +892,27 @@ fn validate_profile_default_reasoning_efforts(base_dir: &Path, models: &[CodexEx
 pub(crate) fn normalize_experimental_model_definitions(
     models: Vec<CodexExperimentalModelDefinition>,
 ) -> Result<Vec<CodexExperimentalModelDefinition>, String> {
+    normalize_experimental_model_definitions_for_profile(None, models)
+}
+
+/// Preserve the effective input-order fallback before sorting old custom selections.
+/// Namespaced provider models use their profile's actual template when available.
+pub(crate) fn normalize_experimental_model_definitions_for_profile(
+    base_dir: Option<&Path>,
+    models: Vec<CodexExperimentalModelDefinition>,
+) -> Result<Vec<CodexExperimentalModelDefinition>, String> {
+    let profile_catalog = base_dir.and_then(|dir| fs::read_to_string(experimental_model_catalog_path(dir)).ok())
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+    normalize_experimental_model_definitions_with_template(models, profile_catalog.as_ref())
+}
+
+pub(crate) fn normalize_experimental_model_definitions_with_template(
+    models: Vec<CodexExperimentalModelDefinition>,
+    profile_catalog: Option<&serde_json::Value>,
+) -> Result<Vec<CodexExperimentalModelDefinition>, String> {
     if models.is_empty() {
         return Err("EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED".to_string());
     }
-
     let mut seen = HashSet::new();
     let mut normalized = Vec::with_capacity(models.len());
     for model in models {
@@ -927,8 +946,25 @@ pub(crate) fn normalize_experimental_model_definitions(
             }
         }
         let reasoning_efforts = normalize_reasoning_efforts(model.reasoning_efforts.clone())?;
-        let default_reasoning_effort = model.default_reasoning_effort.as_deref()
+        let mut default_reasoning_effort = model.default_reasoning_effort.as_deref()
             .map(str::trim).filter(|value| !value.is_empty()).map(str::to_ascii_lowercase);
+        if default_reasoning_effort.is_none() && reasoning_efforts.is_some() {
+            let bundled = crate::modules::codex_protocol::build_codex_client_models_response(&[model_id.to_string()]);
+            let template = if !model_id.to_ascii_lowercase().starts_with("gpt-") {
+                profile_catalog.and_then(|catalog| catalog["models"].as_array())
+                    .and_then(|entries| entries.iter().find(|entry| entry["slug"].as_str()
+                        .is_some_and(|id| id.eq_ignore_ascii_case(model_id))))
+            } else { None }.unwrap_or(&bundled["models"][0]);
+            let selected = model.reasoning_efforts.as_ref().into_iter().flatten()
+                .map(|effort| effort.trim().to_ascii_lowercase())
+                .filter(|effort| template["supported_reasoning_levels"].as_array().is_some_and(|levels|
+                    levels.iter().any(|level| level["effort"].as_str() == Some(effort.as_str()))))
+                .collect::<Vec<_>>();
+            if !template["default_reasoning_level"].as_str()
+                .is_some_and(|default| selected.iter().any(|effort| effort == default)) {
+                default_reasoning_effort = selected.first().cloned();
+            }
+        }
         let definition = CodexExperimentalModelDefinition {
             model_id: model_id.to_string(),
             display_name: display_name.to_string(),
@@ -982,7 +1018,7 @@ pub(crate) fn read_experimental_model_definitions(
                 .migrations
                 .iter()
                 .any(|item| item == GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID);
-            normalize_experimental_model_definitions(config.models).map(|models| {
+            normalize_experimental_model_definitions_for_profile(Some(base_dir), config.models).map(|models| {
                 (
                     models,
                     requires_catalog_migration,
@@ -1050,8 +1086,8 @@ fn persist_experimental_model_definitions(
         .as_ref()
         .and_then(|config| config.default_model_id.as_deref())
         .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID));
-    let models = prioritize_gpt_6_model_definitions(normalize_experimental_model_definitions(
-        models,
+    let models = prioritize_gpt_6_model_definitions(normalize_experimental_model_definitions_for_profile(
+        Some(base_dir), models,
     )?);
     validate_profile_default_reasoning_efforts(base_dir, &models)?;
     let mut default_model_id = default_model_id.and_then(|value| {
@@ -1159,8 +1195,9 @@ fn apply_model_reasoning_config_to_catalog(
             .is_some_and(|id| id.eq_ignore_ascii_case(&definition.model_id))) else { continue; };
         if let Some(efforts) = definition.reasoning_efforts.as_ref() {
             let levels = entry["supported_reasoning_levels"].as_array().cloned().unwrap_or_default();
-            let selected = levels.into_iter().filter(|level| level["effort"].as_str()
-                .is_some_and(|value| efforts.iter().any(|effort| effort == value))).collect::<Vec<_>>();
+            let selected = CODEX_REASONING_EFFORTS.iter().filter(|effort| efforts.iter().any(|value| value == **effort))
+                .filter_map(|effort| levels.iter().find(|level| level["effort"].as_str() == Some(effort)).cloned())
+                .collect::<Vec<_>>();
             if !selected.is_empty() {
                 entry["supported_reasoning_levels"] = serde_json::json!(selected);
                 if !selected.iter().any(|level| level["effort"] == entry["default_reasoning_level"]) {

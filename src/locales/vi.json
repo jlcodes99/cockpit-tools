@@ -96,6 +96,7 @@
     "providerClear": "Bỏ chọn"
   },
   "common": {
+    "apiKeyAccount": "Tài khoản API Key",
     "status": "Trạng thái",
     "cliQuickLaunch": "Mở CLI",
     "requestId": "Mã yêu cầu",
@@ -2381,12 +2382,12 @@
       "accessModeDirectCons": "1: Không đổi được model trong Codex, không liên kết OAuth và không chuyển tiếp ảnh",
       "accessModeCdpPros": "1: Tốc độ như kết nối trực tiếp\n2: Đổi Flash / Pro trong danh sách model chính thức của Codex",
       "accessModeCdpCons": "1: Cần inject ứng dụng chính thức, không liên kết OAuth và không chuyển tiếp ảnh",
-      "imageGenPickerDesc": "Khi có yêu cầu tạo ảnh, yêu cầu sẽ được chuyển tiếp: model cơ bản xử lý trước, sau đó model ảnh tạo hình, tiêu tốn một phần hạn mức của các tài khoản đã chọn.",
+      "imageGenPickerDesc": "OAuth dùng mô hình nền và công cụ ảnh; API Key dùng API ảnh. Chi phí hoặc hạn mức được tính bởi nhà cung cấp đã chọn.",
       "imageGenSwitchTitle": "Chỉ hỗ trợ ở chế độ cổng",
       "imageGenSwitchDescription": "Bật tạo ảnh GPT cần chuyển sang chế độ cổng. Chuyển và bật?",
       "imageGenSwitchYes": "Có",
       "imageGenSwitchNo": "Không",
-      "imageGenTitle": "Bật tạo ảnh GPT",
+      "imageGenTitle": "Bật tạo ảnh",
       "oauthBindingHint": "Sau khi liên kết, việc khởi chạy giống hệt tài khoản thường và mọi khả năng OAuth (nén từ xa, điều khiển trình duyệt, các loại plugin, v.v.) đều khả dụng; hội thoại vẫn do nhà cung cấp API Key hiện tại xử lý.",
       "oauthBindingChange": "Đổi",
       "title": "Xem trước khi khởi động Codex",
@@ -2680,10 +2681,10 @@
       "killPortSuccess": "Đã dọn cổng (đã đóng {{count}} tiến trình)",
       "killPortSuccessNone": "Đã kiểm tra cổng. Không có tiến trình bên ngoài nào đang dùng.",
       "killPortSuccessUnknown": "Đã dọn cổng dịch vụ API",
-      "restartAction": "Khởi động lại Sidecar",
-      "restartTitle": "Khởi động lại dịch vụ API",
-      "restartConfirmMessage": "Chỉ Sidecar của dịch vụ API sẽ được khởi động lại. Tài khoản, token, API key và cài đặt nhóm tài khoản sẽ không thay đổi. Các yêu cầu đang chạy có thể bị gián đoạn. Tiếp tục?",
-      "restartSuccess": "Đã khởi động lại Sidecar dịch vụ API",
+      "restartAction": "Chỉ khởi động lại API",
+      "restartTitle": "Chỉ khởi động lại API",
+      "restartConfirmMessage": "Chỉ khởi động lại dịch vụ API, giữ cửa sổ Codex và cấu hình nhóm tài khoản/API Key. Các yêu cầu API đang chạy có thể bị gián đoạn. Tiếp tục?",
+      "restartSuccess": "Đã khởi động lại API",
       "refreshStats": "Làm mới thống kê",
       "refreshStatsSuccess": "Đã làm mới thống kê dịch vụ API",
       "routingStrategy": {
@@ -2730,7 +2731,20 @@
       "apiPortUrl": "URL cổng API",
       "modelId": "ID mô hình",
       "modelIdPlaceholder": "Chọn ID mô hình",
+      "imageAccounts": {
+        "upstreamModel": "Mô hình nhà cung cấp",
+        "chooseModel": "Chọn mô hình",
+        "modelRequired": "Chọn mô hình thực tế được hỗ trợ.",
+        "sourceUnavailable": "Nguồn đã chọn không hỗ trợ mô hình ảnh hiện tại hoặc thiếu thông tin xác thực API hay địa chỉ yêu cầu hợp lệ.",
+        "loadFailed": "Không thể tải cài đặt ảnh. Vui lòng thử lại.",
+        "missingModels": "Chọn mô hình cho {{count}} nguồn đã chọn.",
+        "locateModel": "Tìm nguồn"
+      },
       "imageGenerationModel": {
+        "manage": "Quản lý mô hình",
+        "deleteSelected": "Mô hình đang dùng. Hãy thay và lưu trước.",
+        "invalid": "ID mô hình không được chứa khoảng trắng hoặc ký tự điều khiển và dài tối đa 200 ký tự.",
+        "syncFailed": "Không thể phát hiện mô hình ảnh. Vui lòng thử lại.",
         "label": "Mô hình hình ảnh",
         "custom": "Tùy chỉnh",
         "save": "Lưu mô hình",
@@ -2816,8 +2830,8 @@
       "requestLogSuccess": "Thành công",
       "requestLogFailed": "Thất bại",
       "requestLogTokens": "{{value}} token",
-      "imageForwardLabel": "Bật tạo ảnh GPT",
-      "imageForwardHint": "Sau khi bật, hãy chọn tài khoản GPT: yêu cầu tạo và chỉnh sửa ảnh sẽ do các tài khoản đã chọn thực hiện và tiêu tốn hạn mức của chúng; yêu cầu trò chuyện vẫn dùng nhóm tài khoản.",
+      "imageForwardLabel": "Bật tạo ảnh",
+      "imageForwardHint": "API Key cần Images API và chọn mô hình thực tế tại hàng tài khoản; OAuth chỉ hỗ trợ mô hình GPT gốc.",
       "imageGenerationMode": {
         "enabled": "Bật",
         "imagesOnly": "Chỉ ảnh",
@@ -2922,7 +2936,8 @@
       "removeAction": "Xóa khỏi API",
       "imageGenerationMainModel": {
         "label": "Mô hình chính tạo ảnh",
-        "hint": "Để trống để dùng gpt-5.5. Mô hình này gọi công cụ ảnh; tài khoản OAuth đã chọn phải hỗ trợ image_generation trên mô hình đó.",
+        "notice": "Không đổi mô hình chính tạo ảnh khi sử dụng thông thường.",
+        "hint": "Chỉ dùng để chuyển tiếp yêu cầu đến dịch vụ ảnh chính thức, không dùng để chọn mô hình tạo ảnh. Chỉ cập nhật thủ công khi mô hình chính của dịch vụ thay đổi. Để trống để dùng gpt-5.5.",
         "invalid": "Nhập ID mô hình không có khoảng trắng, tối đa 200 ký tự."
       },
       "requestDetail": {
@@ -3756,14 +3771,14 @@
         "cdpMode": "Tiêm CDP",
         "cdpDesc": "Tiếp quản danh sách mô hình chính thức của Codex bằng injection, tốc độ như chế độ trực tiếp. Cần injection vào ứng dụng chính thức; không hỗ trợ liên kết OAuth.",
         "context": "Ngữ cảnh hỗ trợ",
-        "imageGen": "Tạo ảnh GPT",
-        "imageGenHint": "Chỉ hỗ trợ ở chế độ cổng. Hội thoại vẫn do model của nhà cung cấp này xử lý; tạo ảnh đi theo luồng gpt-image gốc, do các tài khoản GPT đã chọn thực hiện và tiêu tốn hạn mức của chúng.",
-        "imageGenPick": "Chọn tài khoản GPT",
+        "imageGen": "Hỗ trợ tạo ảnh",
+        "imageGenHint": "API Key cần Images API và chọn mô hình thực tế tại hàng tài khoản; OAuth chỉ hỗ trợ mô hình GPT gốc.",
+        "imageGenPick": "Nguồn tạo ảnh",
         "imageGenSelected": "Đã chọn {{count}} tài khoản",
         "imageGenEmpty": "Chưa chọn tài khoản",
         "imageGenLocked": "Tích để chọn tài khoản",
         "pickerTitle": "Chọn tài khoản tạo ảnh",
-        "pickerEmpty": "Không có tài khoản OAuth nào tạo được ảnh (tài khoản Free và API Key không được hỗ trợ).",
+        "pickerEmpty": "Không có nguồn phù hợp. API Key phải hỗ trợ mô hình đã chọn hoặc nhóm GPT; OAuth chỉ hỗ trợ mô hình GPT gốc cho tài khoản không phải Free.",
         "pickerSelectAll": "Chọn tất cả",
         "pickerClear": "Xóa",
         "protocol": "Giao thức",
@@ -4270,7 +4285,8 @@
       "saveSuccess": "Đã cập nhật tốc độ",
       "saveFailed": "Không thể lưu tốc độ: {{error}}",
       "loadFailed": "Không thể tải tốc độ: {{error}}",
-      "apiHint": "Dùng khi yêu cầu API không chỉ định mức; mức do máy khách chỉ định được ưu tiên. Nhanh dùng thêm hạn mức hoặc phí; mức tăng tốc tùy mô hình và nhà cung cấp.",
+      "apiHint": "Sau khi lưu, áp dụng cho các yêu cầu API tiếp theo mà không cần khởi động lại. Yêu cầu đang chạy giữ nguyên; mức do máy khách chỉ định rõ được ưu tiên. Chế độ nhanh có thể tăng mức sử dụng hoặc chi phí; khả năng tăng tốc phụ thuộc vào mô hình và nhà cung cấp.",
+      "apiSyncFailed": "Đã lưu tùy chọn, nhưng dịch vụ API đang chạy chưa xác nhận cập nhật. Vui lòng thử lại.",
       "launchHint": "Lưu khi đổi tài khoản và khởi chạy qua Cockpit. Khởi động lại máy khách đang chạy. Hội thoại mới dùng mặc định; chỉnh tốc độ riêng của hội thoại cũ trong máy khách."
     },
     "apiService": {
@@ -4455,6 +4471,11 @@
         "reasoningEffortValue": "Suy {{effort}}",
         "serviceTier": "Hạng dịch vụ",
         "serviceTierValue": "Hạng {{tier}}",
+        "requestedTier": "Yêu cầu: {{tier}}",
+        "responseTier": "Phản hồi: {{tier}}",
+        "legacyTier": "Cũ: {{tier}}",
+        "serviceTierHint": "Mức yêu cầu là service_tier gửi tới máy chủ, không xác nhận mức xử lý thực tế. Với Codex OAuth, phản hồi default không chứng minh chế độ nhanh đã bị hạ cấp. Tự động nghĩa là không yêu cầu mức cụ thể (bỏ qua trường hoặc dùng auto).",
+        "legacyTierHint": "Bản ghi cũ này trộn lẫn mức yêu cầu và phản hồi. Không xác định được nguồn và mức xử lý thực tế.",
         "upstreamModel": "Mô hình gửi đi",
         "columns": {
           "time": "Thời gian",
@@ -5535,7 +5556,15 @@
       },
       "failurePhase": "Giai đoạn lỗi",
       "applying": "Đang áp dụng cho cổng đang chạy…",
-      "applyFailed": "Đã lưu cài đặt nhưng các cổng đang chạy chưa áp dụng được. Hãy thử lại. Lý do: {{error}}"
+      "applyFailed": "Đã lưu cài đặt nhưng các cổng đang chạy chưa áp dụng được. Hãy thử lại. Lý do: {{error}}",
+      "timeout": {
+        "open": "Hết thời gian chờ máy chủ nguồn mở luồng. Điều chỉnh “Thời gian chờ và thử lại → {{setting}}” (1–600 giây, mặc định 60).",
+        "idle": "Luồng đã mở nhưng hết thời gian chờ dữ liệu tiếp theo. Điều chỉnh thời gian chờ khi luồng nhàn rỗi trong “Thời gian chờ và thử lại”.",
+        "canceled": "Máy khách đã hủy yêu cầu; đây không phải lỗi hết thời gian mở luồng.",
+        "gateway": "HTTP 504 là lỗi hết thời gian chờ cổng. Bản ghi chưa xác định nguyên nhân; xem lỗi máy chủ nguồn và giai đoạn yêu cầu.",
+        "threshold": "Ngưỡng áp dụng cho yêu cầu này: {{seconds}} giây.",
+        "settings": "Chỉnh thời gian chờ"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "Mức mặc định",

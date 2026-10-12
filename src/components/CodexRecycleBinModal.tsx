@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, Download, Loader2, RefreshCw, RotateCcw, ShieldAlert, Trash2, X } from 'lucide-react';
@@ -102,7 +103,7 @@ export function CodexRecycleBinModal({ onClose, onRestored, maskAccountText }: P
       else await service.deleteCodexRecycledAccount(snapshot.account.id);
     }, ids);
   };
-  const name = (account: service.CodexRecycledAccount) => maskAccountText(account.account_name || account.email || account.account_id);
+  const name = (account: service.CodexRecycledAccount) => maskAccountText(resolveCodexAccountDisplayName({ ...account, id: account.account_id }, t("common.apiKeyAccount")));
   return createPortal(
     <div className="modal-overlay codex-recycle-bin-overlay">
       <div ref={dialogRef} className="modal codex-recycle-bin-modal" role="dialog" aria-modal="true" aria-labelledby="codex-recycle-bin-title" aria-busy={busy || loading}>

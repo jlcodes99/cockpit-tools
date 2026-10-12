@@ -954,6 +954,16 @@ pub fn update_account_instance_access(
     startup_model: Option<String>,
     image_generation_account_ids: Option<Vec<String>>,
 ) -> Result<CodexAccount, String> {
+    update_account_instance_access_with_image_models(account_id, access_mode, startup_model, image_generation_account_ids, None)
+}
+
+pub fn update_account_instance_access_with_image_models(
+    account_id: &str,
+    access_mode: Option<String>,
+    startup_model: Option<String>,
+    image_generation_account_ids: Option<Vec<String>>,
+    image_generation_account_models: Option<HashMap<String, String>>,
+) -> Result<CodexAccount, String> {
     let account_id = account_id.trim();
     if account_id.is_empty() {
         return Err("账号 ID 不能为空".to_string());
@@ -997,48 +1007,72 @@ pub fn update_account_instance_access(
             .filter(|value| !value.is_empty())
             .map(|value| value.to_ascii_lowercase());
     }
-    if let Some(image_account_ids) = image_generation_account_ids {
-        account.api_image_generation_account_ids =
-            normalize_image_generation_account_ids(&account, image_account_ids)?;
+    if image_generation_account_ids.is_some() || image_generation_account_models.is_some() {
+        let image_account_ids = image_generation_account_ids.unwrap_or_else(|| account.api_image_generation_account_ids.clone());
+        let mut image_models = image_generation_account_models.unwrap_or_else(|| account.api_image_generation_account_models.clone());
+        image_models = image_models.into_iter()
+            .map(|(id, model)| (id.trim().to_string(), model.trim().to_string()))
+            .filter(|(id, _)| !id.is_empty())
+            .collect();
+        let ids = normalize_image_generation_account_ids(&account, image_account_ids, &image_models)?;
+        image_models.retain(|id, _| ids.contains(id));
+        account.api_image_generation_account_ids = ids;
+        account.api_image_generation_account_models = image_models;
     }
     let _ = normalize_deepseek_account(&mut account);
     save_account(&account)?;
     Ok(account)
 }
 
-/// 生图转发账号池：必须是其他 OAuth 账号，且带 refresh_token（sidecar 需要自行续期）。
+/// 生图转发账号池：OAuth 保留 refresh_token 资格，API Key 必须匹配当前图片模型。
 fn normalize_image_generation_account_ids(
     account: &CodexAccount,
     raw_ids: Vec<String>,
+    image_models: &HashMap<String, String>,
 ) -> Result<Vec<String>, String> {
+    let settings = crate::modules::codex_local_access::configured_image_generation_settings()?;
+    let image_model = &settings.image_generation_model;
+    let mut source_models = Vec::new();
     let mut normalized = Vec::new();
     for raw in raw_ids {
         let id = raw.trim();
         if id.is_empty() {
             continue;
         }
-        if id == account.id {
-            return Err("生图账号不能选择账号自身".to_string());
-        }
         if normalized.iter().any(|value: &String| value == id) {
             continue;
         }
-        let target = load_account(id).ok_or_else(|| format!("生图账号不存在: {}", id))?;
-        if target.is_api_key_auth() {
-            return Err(format!("生图账号必须是 OAuth 账号: {}", target.email));
+        let target = if id == account.id {
+            account.clone()
+        } else {
+            load_account(id).ok_or_else(|| format!("生图账号不存在: {}", id))?
+        };
+        if !crate::modules::codex_local_access::is_image_generation_source_for_model(&target, image_model) {
+            return Err("codex.localAccess.imageAccounts.sourceUnavailable".to_string());
         }
-        if target.is_agent_identity_auth() {
-            return Err(format!(
-                "Agent Identity 账号不能作为生图账号: {}",
-                target.email
-            ));
-        }
-        if !account_has_refresh_token(&target) {
-            return Err(format!("生图账号缺少 refresh_token: {}", target.email));
-        }
+        let actual = crate::modules::codex_local_access::resolve_image_generation_source_model(
+            &target, &settings, image_models.get(id).map(String::as_str),
+        ).ok_or_else(|| "codex.localAccess.imageAccounts.modelRequired".to_string())?;
+        source_models.push(actual);
         normalized.push(id.to_string());
     }
+    crate::modules::codex_local_access::register_image_generation_source_models(&settings, source_models)?;
     Ok(normalized)
+}
+
+fn replace_api_image_source_reference(account: &mut CodexAccount, old_id: &str, new_id: &str) -> bool {
+    let mut changed = false;
+    for id in &mut account.api_image_generation_account_ids {
+        if id == old_id {
+            *id = new_id.to_string();
+            changed = true;
+        }
+    }
+    if let Some(model) = account.api_image_generation_account_models.remove(old_id) {
+        account.api_image_generation_account_models.entry(new_id.to_string()).or_insert(model);
+        changed = true;
+    }
+    changed
 }
 
 pub fn apply_deepseek_cdp_startup_model(

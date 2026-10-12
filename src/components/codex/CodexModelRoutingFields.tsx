@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../../utils/codexAccountDisplayName";
 import type { TFunction } from "i18next";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { GitBranch, Info, Plus, RefreshCw, SlidersHorizontal, Trash2, X } from "lucide-react";
@@ -541,10 +542,8 @@ export function CodexModelRoutingEditor({
   const providerOptions = useMemo(
     () =>
       providerAccounts.map((account) => {
-        const name = shortCodexRouteAccountLabel(
-          account,
-          getAccountDisplayText?.(account) || account.email,
-        );
+        const name = getAccountDisplayText?.(account) ||
+          resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"));
         const catalogCount = account.api_model_catalog?.length ?? 0;
         return {
           value: account.id,
@@ -554,7 +553,7 @@ export function CodexModelRoutingEditor({
               : `${name} · 未获取列表`,
         };
       }),
-    [getAccountDisplayText, providerAccounts],
+    [getAccountDisplayText, providerAccounts, t],
   );
 
   const addManualModels = (routeId: string) => {
@@ -1284,10 +1283,8 @@ export function CodexModelRoutingSummary({
               const provider = providerAccounts.find(
                 (account) => account.id === route.providerAccountId,
               );
-              const accountName = shortCodexRouteAccountLabel(
-                provider,
-                getAccountDisplayText?.(provider!) || provider?.email,
-              );
+              const accountName = provider ? getAccountDisplayText?.(provider) ||
+                resolveCodexAccountDisplayName(provider, t("common.apiKeyAccount")) : "";
               const modelsCount = collectRouteUpstreamModels(route, provider).length;
               return (
                 <div

@@ -107,7 +107,12 @@ export function CodexSpeedControl({ scope, account, instanceId, compact, disable
       // Update bound-instance labels without blocking the control on a scan.
       if (scope !== "instance") void useCodexInstanceStore.getState().fetchInstances().catch(() => {});
     } catch (error) {
-      if (generation === session.current) reportError.current(t("codex.speed.saveFailed", { error: String(error) }));
+      if (generation === session.current) {
+        const syncFailed = scope === "api" && String(error).includes("codex_api_service_speed_sync_failed");
+        reportError.current(syncFailed
+          ? t("codex.speed.apiSyncFailed")
+          : t("codex.speed.saveFailed", { error: String(error) }));
+      }
     } finally {
       pending.current = false;
       if (generation === session.current) {

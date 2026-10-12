@@ -550,6 +550,10 @@ pub fn update_api_key_credentials(
         account.account_name = Some(account_name);
     }
     account.update_last_used();
+    if old_id != account.id {
+        let new_id = account.id.clone();
+        replace_api_image_source_reference(&mut account, &old_id, &new_id);
+    }
     save_account(&account)?;
 
     // Keep the old detail readable until all references and the client projection succeed.
@@ -1124,10 +1128,15 @@ pub fn run_quota_alert_if_needed(
         secondary_threshold,
     );
     let lowest_percentage = low_models.iter().map(|(_, pct)| *pct).min().unwrap_or(0);
+    let api_key_label = crate::modules::i18n::translate(
+        &crate::modules::config::get_user_config().language,
+        "common.apiKeyAccount",
+        &[],
+    );
     let payload = crate::modules::account::QuotaAlertPayload {
         platform: "codex".to_string(),
         current_account_id: current_id,
-        current_email: current.email.clone(),
+        current_email: current.display_name(&api_key_label),
         threshold: primary_threshold,
         threshold_display: Some(format!(
             "short_cycle<={}%, weekly<={}%",
@@ -1136,7 +1145,9 @@ pub fn run_quota_alert_if_needed(
         lowest_percentage,
         low_models: low_models.into_iter().map(|(name, _)| name).collect(),
         recommended_account_id: recommendation.as_ref().map(|account| account.id.clone()),
-        recommended_email: recommendation.as_ref().map(|account| account.email.clone()),
+        recommended_email: recommendation
+            .as_ref()
+            .map(|account| account.display_name(&api_key_label)),
         triggered_at: now,
     };
 

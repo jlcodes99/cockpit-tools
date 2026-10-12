@@ -1,12 +1,13 @@
+import { resolveCodexAccountReferenceDisplayName } from "../utils/codexAccountDisplayName";
 import { useState } from "react";
 import { CodexOutputSpeed } from "../components/codex/CodexOutputSpeed";
 import { aggregateOutputSpeed, formatOutputSpeed } from "../utils/codexOutputSpeed";
-import { Check, CircleAlert, Columns3 } from "lucide-react";
+import { Check, CircleAlert, Columns3, Zap } from "lucide-react";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { PaginationControls } from "../components/PaginationControls";
 import { CodexRequestProxyLabel } from "../components/codex/CodexRequestProxyLabel";
 import { CodexRequestDetailModal } from "../components/codex/CodexRequestDetailModal";
-import { hasRequestFirstResponse } from "../utils/codexRequestDiagnostics";
+import { hasRequestFirstResponse, requestServiceTierPresentation } from "../utils/codexRequestDiagnostics";
 import { resolveCodexApiServiceLogModelPair } from "../utils/codexApiServiceLogModel";
 import type { CodexLocalAccessUsageEvent } from "../types/codexLocalAccess";
 import type { RequestLogKindFilter, RequestLogStatusFilter } from "./CodexApiServicePage";
@@ -48,6 +49,7 @@ function readLogColumns(): LogColumn[] {
 
 type Props = Pick<CodexApiServiceViewProps,
   "accountDisplayNames" |
+  "openTimeoutSettings" |
   "cleanRequestLogErrorDetail" |
   "clearRequestLogFilters" |
   "codexInstances" |
@@ -344,17 +346,12 @@ export function CodexApiRequestLogs(props: Props) {
                       <tbody>{requestLogEvents.map((event, index) => {
                         const fullErrorDetail = cleanRequestLogErrorDetail(event.errorMessage);
                         const errorDetail = truncateRequestLogErrorDetail(fullErrorDetail);
-                        const accountDisplayName = accountDisplayNames.get((event.accountId || "").trim()) ||
-                          accountDisplayNames.get((event.email || "").trim()) || event.email || event.accountId || "—";
+                        const accountDisplayName = resolveCodexAccountReferenceDisplayName(event.accountId, event.email, accountDisplayNames, t("common.apiKeyAccount")) || "—";
                         const maskedAccount = maskAccountText(accountDisplayName);
-                        const serviceTier = (event.serviceTier || "").trim().toLowerCase();
-                        const serviceTierLabel = serviceTier === "priority"
-                          ? t("codex.speed.fast", "快速")
-                          : serviceTier === "standard"
-                            ? t("codex.speed.standard", "标准")
-                            : event.serviceTier
-                              ? t("codex.apiService.logs.serviceTierValue", { tier: event.serviceTier, defaultValue: "Tier {{tier}}" })
-                              : "";
+                        const tiers = requestServiceTierPresentation(event);
+                        const requestedTier = tiers.requested.toLowerCase();
+                        const speed = ["priority", "fast"].includes(requestedTier) ? "fast"
+                          : ["standard", "default"].includes(requestedTier) ? "standard" : null;
                         // 与请求模型相同时也保留实际上游模型；旧记录缺失时不推断。
                         const { requestedModel, upstreamModel } = resolveCodexApiServiceLogModelPair(event);
                         const apiKeyLabel = event.apiKeyId === INTERNAL_API_KEY_ID
@@ -370,7 +367,10 @@ export function CodexApiRequestLogs(props: Props) {
                               <div className="codex-request-log-tags">
                                 <span className="codex-api-service-pill muted">{requestKindLabel(event.requestKind, t)}</span>
                                 {event.reasoningEffort && <span className="codex-api-service-pill muted" title={t("codex.apiService.logs.reasoningEffort", "思考强度")}>{event.reasoningEffort}</span>}
-                                {serviceTierLabel && <span className={`codex-api-service-pill ${serviceTier === "priority" ? "fast" : "muted"}`} title={t("codex.apiService.logs.serviceTier", "服务等级")}>{serviceTierLabel}</span>}
+                                {speed && <span className={`codex-request-log-speed ${speed}`} title={t("codex.apiService.logs.serviceTierHint")}>
+                                  {speed === "fast" && <Zap size={12} aria-hidden="true" />}
+                                  {t(speed === "fast" ? "codex.speed.fast" : "codex.speed.standard")}
+                                </span>}
                               </div>
                             </div>
                           </td>}
@@ -437,7 +437,7 @@ export function CodexApiRequestLogs(props: Props) {
                     )
                   }
                 />
-                {selectedRequest && <CodexRequestDetailModal event={selectedRequest} maskAccountText={maskAccountText} onClose={() => setSelectedRequest(null)} />}
+                {selectedRequest && <CodexRequestDetailModal onOpenTimeoutSettings={(field) => { setSelectedRequest(null); props.openTimeoutSettings(field); }} accountDisplayNames={accountDisplayNames} event={selectedRequest} maskAccountText={maskAccountText} onClose={() => setSelectedRequest(null)} />}
               </>
   );
 }

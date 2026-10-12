@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { listenSafely as listen } from "../utils/tauriEventListener";
 import { refreshCodexQuotaWithFeedback } from "../utils/codexQuotaRefreshFeedback";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
@@ -520,7 +521,7 @@ export function useCodexAccountsBaseController() {
         },
         exportAccounts: codexService.exportCodexAccounts,
       },
-      getDisplayEmail: (account) => account.email ?? account.id,
+      getDisplayEmail: (account): string => resolveCodexAccountDisplayName(account, page.t("common.apiKeyAccount")),
       initialSearchQuery: readAccountsOverviewFilterPersistenceEnabled(
         CODEX_FILTER_PERSISTENCE_SCOPE,
       )

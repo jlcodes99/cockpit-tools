@@ -96,6 +96,7 @@
     "providerClear": "Hapus pilihan"
   },
   "common": {
+    "apiKeyAccount": "Akun API Key",
     "status": "Keadaan",
     "cliQuickLaunch": "Jalankan CLI",
     "requestId": "ID permintaan",
@@ -2428,12 +2429,12 @@
       "accessModeDirectCons": "1: Tidak bisa ganti model di Codex, tanpa tautan OAuth dan penerusan gambar",
       "accessModeCdpPros": "1: Kecepatan sama dengan langsung\n2: Flash / Pro bisa diganti di daftar model resmi Codex",
       "accessModeCdpCons": "1: Perlu menyuntikkan klien resmi, tanpa tautan OAuth dan penerusan gambar",
-      "imageGenPickerDesc": "Saat ada permintaan gambar, permintaan diteruskan: model dasar memproses lebih dulu, lalu model gambar membuat gambar, dan memakai sebagian kuota akun yang dipilih.",
+      "imageGenPickerDesc": "OAuth memakai model dasar dan alat gambar; API Key memakai API gambar. Biaya atau kuota dihitung oleh penyedia yang dipilih.",
       "imageGenSwitchTitle": "Hanya didukung di mode gateway",
       "imageGenSwitchDescription": "Mengaktifkan pembuatan gambar GPT memerlukan mode gateway. Beralih dan aktifkan?",
       "imageGenSwitchYes": "Ya",
       "imageGenSwitchNo": "Tidak",
-      "imageGenTitle": "Aktifkan pembuatan gambar GPT",
+      "imageGenTitle": "Aktifkan gambar",
       "oauthBindingHint": "Setelah ditautkan, peluncuran sama persis seperti akun biasa dan semua kemampuan OAuth (kompresi jarak jauh, kontrol browser, berbagai plugin, dll.) tersedia; percakapan tetap diproses oleh penyedia API Key saat ini.",
       "oauthBindingChange": "Ganti",
       "title": "Pratinjau Peluncuran Codex",
@@ -2730,10 +2731,10 @@
       "killPortSuccess": "Port dibersihkan ({{count}} proses dihentikan)",
       "killPortSuccessNone": "Port diperiksa. Tidak ada proses eksternal yang memakainya.",
       "killPortSuccessUnknown": "Port layanan API dibersihkan",
-      "restartAction": "Mulai Ulang Sidecar",
-      "restartTitle": "Mulai Ulang Layanan API",
-      "restartConfirmMessage": "Hanya Sidecar layanan API yang dimulai ulang. Akun, token, API key, dan pengaturan kumpulan akun tidak akan diubah. Permintaan yang sedang berjalan dapat terputus. Lanjutkan?",
-      "restartSuccess": "Sidecar layanan API dimulai ulang",
+      "restartAction": "Mulai ulang API saja",
+      "restartTitle": "Mulai ulang API saja",
+      "restartConfirmMessage": "Mulai ulang layanan API saja, dengan mempertahankan jendela Codex dan pengaturan kumpulan akun/API Key. Permintaan API yang berlangsung dapat terputus. Lanjutkan?",
+      "restartSuccess": "Layanan API dimulai ulang",
       "refreshStats": "Segarkan Statistik",
       "refreshStatsSuccess": "Statistik layanan API telah disegarkan",
       "routingStrategy": {
@@ -2780,7 +2781,20 @@
       "apiPortUrl": "URL Port API",
       "modelId": "ID Model",
       "modelIdPlaceholder": "Pilih ID model",
+      "imageAccounts": {
+        "upstreamModel": "Model penyedia",
+        "chooseModel": "Pilih model",
+        "modelRequired": "Pilih model yang didukung.",
+        "sourceUnavailable": "Sumber terpilih tidak mendukung model gambar saat ini atau tidak memiliki kredensial API maupun alamat permintaan yang valid.",
+        "loadFailed": "Pengaturan gambar tidak dapat dimuat. Coba lagi.",
+        "missingModels": "Pilih model untuk {{count}} sumber yang dipilih.",
+        "locateModel": "Cari sumber"
+      },
       "imageGenerationModel": {
+        "manage": "Kelola model",
+        "deleteSelected": "Model sedang dipakai. Ganti dan simpan dahulu.",
+        "invalid": "ID model tidak boleh berisi spasi atau karakter kontrol dan maksimal 200 karakter.",
+        "syncFailed": "Penemuan model gambar gagal. Coba lagi.",
         "label": "Model gambar",
         "custom": "Kustom",
         "save": "Simpan model",
@@ -2866,8 +2880,8 @@
       "requestLogSuccess": "Berhasil",
       "requestLogFailed": "Gagal",
       "requestLogTokens": "{{value}} token",
-      "imageForwardLabel": "Aktifkan pembuatan gambar GPT",
-      "imageForwardHint": "Setelah diaktifkan, pilih akun GPT: permintaan pembuatan dan penyuntingan gambar dijalankan oleh akun terpilih dan memakai kuotanya, sedangkan permintaan chat tetap memakai kumpulan akun.",
+      "imageForwardLabel": "Aktifkan gambar",
+      "imageForwardHint": "API Key memerlukan Images API dan model sebenarnya yang dipilih pada baris akun; OAuth hanya mendukung model GPT bawaan.",
       "imageGenerationMode": {
         "enabled": "Aktif",
         "imagesOnly": "Gambar saja",
@@ -2972,7 +2986,8 @@
       "removeAction": "Hapus dari API",
       "imageGenerationMainModel": {
         "label": "Model utama gambar",
-        "hint": "Kosongkan untuk memakai gpt-5.5. Model ini memanggil alat gambar; akun OAuth yang dipilih harus mendukung image_generation pada model ini.",
+        "notice": "Jangan ubah model utama gambar saat penggunaan biasa.",
+        "hint": "Hanya digunakan untuk meneruskan permintaan ke layanan gambar resmi, bukan memilih model pembuat gambar. Ubah manual hanya jika model utama resmi berubah. Kosongkan untuk memakai gpt-5.5.",
         "invalid": "Masukkan ID model tanpa spasi, maksimal 200 karakter."
       },
       "requestDetail": {
@@ -3803,14 +3818,14 @@
         "cdpMode": "Injeksi CDP",
         "cdpDesc": "Mengambil alih daftar model resmi Codex lewat injection, kecepatan sama dengan mode langsung. Perlu injection ke klien resmi; penautan OAuth tidak didukung.",
         "context": "Konteks yang didukung",
-        "imageGen": "Pembuatan gambar GPT",
-        "imageGenHint": "Hanya didukung di mode gateway. Percakapan tetap diproses oleh model penyedia ini; pembuatan gambar memakai jalur gpt-image asli, dijalankan oleh akun GPT yang dipilih, dan memakai kuotanya.",
-        "imageGenPick": "Pilih akun GPT",
+        "imageGen": "Pembuatan gambar",
+        "imageGenHint": "API Key memerlukan Images API dan model sebenarnya yang dipilih pada baris akun; OAuth hanya mendukung model GPT bawaan.",
+        "imageGenPick": "Sumber gambar",
         "imageGenSelected": "{{count}} akun dipilih",
         "imageGenEmpty": "Belum ada akun dipilih",
         "imageGenLocked": "Centang untuk memilih akun",
         "pickerTitle": "Pilih akun gambar",
-        "pickerEmpty": "Tidak ada akun OAuth yang bisa membuat gambar (akun Free dan API Key tidak didukung).",
+        "pickerEmpty": "Tidak ada sumber yang sesuai. API Key harus mendukung model pilihan atau keluarga GPT; OAuth hanya mendukung model GPT bawaan untuk akun selain Free.",
         "pickerSelectAll": "Pilih semua",
         "pickerClear": "Bersihkan",
         "protocol": "Protokol",
@@ -4317,7 +4332,8 @@
       "saveSuccess": "Kecepatan diperbarui",
       "saveFailed": "Gagal menyimpan kecepatan: {{error}}",
       "loadFailed": "Gagal memuat kecepatan: {{error}}",
-      "apiHint": "Digunakan jika permintaan API tidak menentukan tingkat; tingkat eksplisit klien diutamakan. Cepat menambah pemakaian atau biaya; percepatan bergantung pada model dan penyedia.",
+      "apiHint": "Setelah disimpan, berlaku untuk permintaan API berikutnya tanpa memulai ulang. Permintaan yang sedang berjalan tetap; tingkat yang ditentukan klien secara eksplisit diutamakan. Mode cepat dapat menambah penggunaan atau biaya; percepatan bergantung pada model dan penyedia.",
+      "apiSyncFailed": "Preferensi tersimpan, tetapi layanan API yang berjalan belum mengonfirmasi pembaruan. Coba lagi.",
       "launchHint": "Disimpan saat berganti akun dan menjalankan melalui Cockpit. Mulai ulang klien yang aktif. Percakapan baru memakai nilai bawaan; atur kecepatan percakapan lama di klien."
     },
     "apiService": {
@@ -4502,6 +4518,11 @@
         "reasoningEffortValue": "Nalar {{effort}}",
         "serviceTier": "Tingkat layanan",
         "serviceTierValue": "Tingkat {{tier}}",
+        "requestedTier": "Permintaan: {{tier}}",
+        "responseTier": "Balasan: {{tier}}",
+        "legacyTier": "Lama: {{tier}}",
+        "serviceTierHint": "Tingkat yang diminta adalah service_tier yang dikirim ke server, bukan konfirmasi tingkat pemrosesan sebenarnya. Untuk Codex OAuth, balasan default tidak membuktikan penurunan dari mode cepat. Otomatis berarti tidak ada tingkat tertentu yang diminta (kolom dihilangkan atau diatur ke auto).",
+        "legacyTierHint": "Catatan lama ini mencampur tingkat permintaan dan balasan. Sumber dan tingkat pemrosesan sebenarnya tidak diketahui.",
         "upstreamModel": "Model terkirim",
         "columns": {
           "time": "Waktu",
@@ -5582,7 +5603,15 @@
       },
       "failurePhase": "Tahap kegagalan",
       "applying": "Menerapkan ke gateway aktif…",
-      "applyFailed": "Pengaturan tersimpan, tetapi gateway aktif gagal menerapkannya. Coba lagi. Alasan: {{error}}"
+      "applyFailed": "Pengaturan tersimpan, tetapi gateway aktif gagal menerapkannya. Coba lagi. Alasan: {{error}}",
+      "timeout": {
+        "open": "Waktu tunggu pembukaan aliran oleh server hulu habis. Atur “Batas waktu dan percobaan → {{setting}}” (1–600 detik, bawaan 60).",
+        "idle": "Aliran sudah terbuka, tetapi waktu tunggu data berikutnya habis. Atur batas waktu idle aliran terkait di “Batas waktu dan percobaan”.",
+        "canceled": "Klien membatalkan permintaan ini; bukan batas waktu pembukaan aliran.",
+        "gateway": "HTTP 504 menandakan batas waktu gateway habis. Catatan ini belum memastikan penyebabnya; periksa kesalahan hulu dan tahap permintaan.",
+        "threshold": "Batas yang berlaku untuk permintaan ini: {{seconds}} detik.",
+        "settings": "Atur batas waktu"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "Tingkat bawaan",

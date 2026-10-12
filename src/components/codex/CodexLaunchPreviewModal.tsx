@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../../utils/codexAccountDisplayName";
 import {
   ArrowRight,
   BarChart3,
@@ -90,6 +91,8 @@ import {
   isCodexProviderAccessAccount,
   resolveCodexProviderAccessMode,
 } from "../../utils/codexProviderAccess";
+import { useCodexImageModelConfig } from "./useCodexImageModelConfig";
+import { eligibleImageAccountIds, configuredImageAccountIds, resolveImageAccountModel, selectedImageAccountModels } from "../../utils/codexImageAccounts";
 import { CodexImageAccountPickerModal } from "./CodexImageAccountPickerModal";
 import { getCodexJwtExpiration, isCodexAccountReauthRequired, isCodexRefreshTokenReauthReason } from "../../utils/codexSwitchAuthFailure";
 import type { UnifiedQuotaMetric } from "../../presentation/platformAccountPresentation";
@@ -159,6 +162,7 @@ export interface CodexLaunchPreviewAction {
 export interface CodexLaunchPreviewLaunchOptions {
   deepSeekAccessMode?: DeepSeekAccessMode;
   imageGenerationAccountIds?: string[];
+  imageGenerationAccountModels?: Record<string, string>;
 }
 
 /** 启动预览里的 OAuth 绑定状态（仅 API Key 账号展示）。 */
@@ -295,6 +299,7 @@ export function CodexLaunchPreviewModal({
   const [imageGenAccountIds, setImageGenAccountIds] = useState<string[]>(
     () => initialImageGenerationAccountIds,
   );
+  const [imageGenAccountModels, setImageGenAccountModels] = useState<Record<string, string>>(account?.api_image_generation_account_models ?? {});
   const [imageGenPickerOpen, setImageGenPickerOpen] = useState(false);
   const [imageGenModeSwitchOpen, setImageGenModeSwitchOpen] = useState(false);
   const childDialogOpen = repairOpen || modelConfigOpen || contextConfigOpen ||
@@ -312,11 +317,12 @@ export function CodexLaunchPreviewModal({
     setDeepSeekAccessMode(resolveCodexProviderAccessMode(account));
     setImageGenEnabled(initialImageGenerationAccountIds.length > 0);
     setImageGenAccountIds(initialImageGenerationAccountIds);
+    setImageGenAccountModels(account?.api_image_generation_account_models ?? {});
     // 只在切换账号时重置草稿，避免账号列表刷新覆盖用户正在编辑的内容。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
-  // 只有网关模式支持 GPT 生图；切到直连 / CDP 时自动取消勾选并清空账号。
+  // 只有网关模式支持生图；切到直连 / CDP 时自动取消勾选并清空账号。
   const deepSeekImageGenAvailable =
     deepSeekAccessMode === DEEPSEEK_ACCESS_MODE_GATEWAY;
   useEffect(() => {
@@ -329,6 +335,7 @@ export function CodexLaunchPreviewModal({
     }
     setImageGenEnabled(false);
     setImageGenAccountIds([]);
+    setImageGenAccountModels({});
   }, [account, deepSeekImageGenAvailable, imageGenEnabled]);
 
   const accounts = useCodexAccountStore((state) => state.accounts);
@@ -394,6 +401,7 @@ export function CodexLaunchPreviewModal({
     forceRefreshing ||
     executing !== null;
   const configBusy = busy || checkingConfig || !configReady;
+  const imageModelConfig = useCodexImageModelConfig(configBusy, imageGenPickerOpen || imageGenEnabled);
   const requestClose = useCallback(() => {
     // 只把本弹框自己的子弹框（codex-launch-preview-* 系列）视为“还叠着一层”：
     // 启动进度弹框、Windows 操作提示等全局弹框不是它的子级，不应该让「关闭」失效。
@@ -896,6 +904,24 @@ export function CodexLaunchPreviewModal({
   const handleExecute = useCallback(
     async (launchAfterSwitch: boolean) => {
       if (configBusy) return;
+      const providerImageGenEnabled = Boolean(
+        account && isCodexProviderAccessAccount(account) && mode !== "apiService" &&
+        deepSeekAccessMode === DEEPSEEK_ACCESS_MODE_GATEWAY && imageGenEnabled,
+      );
+      if (providerImageGenEnabled && !imageModelConfig.loaded && imageGenAccountIds.length > 0) {
+        setError(t("codex.localAccess.imageAccounts.loadFailed"));
+        setImageGenPickerOpen(true);
+        return;
+      }
+      if (providerImageGenEnabled && imageModelConfig.loaded &&
+          eligibleImageAccountIds(imageGenAccountIds, accounts, imageModelConfig.model, imageModelConfig.deletedModels).some((id) => {
+            const item = accounts.find((candidate) => candidate.id === id)!;
+            return isCodexApiKeyAccount(item) && !resolveImageAccountModel(item, imageModelConfig.model, imageGenAccountModels, imageModelConfig.deletedModels);
+          })) {
+        setError(t("codex.localAccess.imageAccounts.modelRequired"));
+        setImageGenPickerOpen(true);
+        return;
+      }
       const session = configSession.current;
       const saved = await persistDraft();
       if (!saved || session !== configSession.current) return;
@@ -907,16 +933,18 @@ export function CodexLaunchPreviewModal({
           account && isCodexProviderAccessAccount(account) && mode !== "apiService"
             ? {
                 deepSeekAccessMode,
-                imageGenerationAccountIds: imageGenEnabled && deepSeekAccessMode === DEEPSEEK_ACCESS_MODE_GATEWAY
-                  ? imageGenAccountIds.filter((id) =>
-                      accounts.some((item) => item.id === id),
-                    )
+                imageGenerationAccountIds: providerImageGenEnabled
+                  ? configuredImageAccountIds(imageGenAccountIds, accounts, imageModelConfig.model, imageGenAccountModels, imageModelConfig.deletedModels)
                   : [],
+                imageGenerationAccountModels: providerImageGenEnabled
+                  ? selectedImageAccountModels(imageGenAccountIds, accounts, imageModelConfig.model, imageGenAccountModels, imageModelConfig.deletedModels)
+                  : {},
               }
             : undefined;
         await onExecute(launchAfterSwitch, launchOptions);
       } catch (executeError) {
-        setError(String(executeError).replace(/^Error:\s*/, ""));
+        const message = String(executeError).replace(/^Error:\s*/, "");
+        setError(message.startsWith("codex.localAccess.") ? t(message) : message);
       } finally {
         // 启动事务超时或长期不返回时，按钮不能永久停在“加载中”状态。
         setExecuting(null);
@@ -928,6 +956,11 @@ export function CodexLaunchPreviewModal({
       configBusy,
       deepSeekAccessMode,
       imageGenAccountIds,
+      imageGenAccountModels,
+      imageModelConfig.model,
+      imageModelConfig.loaded,
+      imageModelConfig.deletedModels,
+      t,
       imageGenEnabled,
       mode,
       onExecute,
@@ -1134,7 +1167,7 @@ export function CodexLaunchPreviewModal({
     accountPresentation?.planLabel ||
     (mode === "apiService" ? "API Key" : "Codex");
   const displayContextText = summary?.contextText || fallbackContextText;
-  // API 服务的「启用 GPT 生图」：在预览正文里单独成行，与 DeepSeek 启动预览保持一致。
+  // API 服务的「启用生图」：在预览正文里单独成行，与 DeepSeek 启动预览保持一致。
   const imageForwardAction = displayActions.find(
     (action) => action.id === "image-forward",
   );
@@ -1531,14 +1564,9 @@ export function CodexLaunchPreviewModal({
     cons: string;
   }[]);
 
-  const selectedImageGenAccounts = imageGenAccountIds
+  const selectedImageGenAccounts = configuredImageAccountIds(imageGenAccountIds, accounts, imageModelConfig.model, imageGenAccountModels, imageModelConfig.deletedModels)
     .map((id) => accounts.find((item) => item.id === id))
     .filter((item): item is CodexAccount => Boolean(item));
-  // 保存时以列表里勾选的现存账号为准：账号总览里删掉的账号不再参与提交，
-  // 否则后端会逐个校验并报「生图账号不存在」。
-  const existingImageGenAccountIds = selectedImageGenAccounts.map(
-    (item) => item.id,
-  );
 
   return (
     <>
@@ -1826,12 +1854,12 @@ export function CodexLaunchPreviewModal({
                   </div>
                   <div className="codex-launch-preview-tool-copy">
                     <h3>
-                      {t("codex.launchPreview.imageGenTitle", "启用 GPT 生图")}
+                      {t("codex.launchPreview.imageGenTitle", "启用生图")}
                     </h3>
                     <p>
                       {t(
                         "codex.deepSeek.start.imageGenHint",
-                        "对话仍由该供应商的模型处理；生图走 gpt-image 原链路，由所选 GPT 账号执行并消耗其额度。",
+                        "对话仍由该供应商的模型处理；生图由所选 OAuth 或支持当前图片模型的 API Key 来源执行。",
                       )}
                     </p>
                     {providerAccessModeReadOnly && (
@@ -1861,7 +1889,7 @@ export function CodexLaunchPreviewModal({
                       {imageGenEnabled &&
                         selectedImageGenAccounts.slice(0, 4).map((item) => (
                           <span key={item.id}>
-                            {item.email || item.account_name || item.id}
+                            {resolveCodexAccountDisplayName(item, t("common.apiKeyAccount"))}
                           </span>
                         ))}
                     </div>
@@ -1895,7 +1923,7 @@ export function CodexLaunchPreviewModal({
                       disabled={busy || providerAccessModeReadOnly || !imageGenEnabled}
                       onClick={(event) => { rememberChildTrigger(event); setImageGenPickerOpen(true); }}
                     >
-                      {t("codex.deepSeek.start.imageGenPick", "选择 GPT 账号")}
+                      {t("codex.deepSeek.start.imageGenPick", "选择生图来源")}
                     </button>
                   </div>
                 </section>
@@ -1957,12 +1985,12 @@ export function CodexLaunchPreviewModal({
                   </div>
                   <div className="codex-launch-preview-tool-copy">
                     <h3>
-                      {t("codex.launchPreview.imageGenTitle", "启用 GPT 生图")}
+                      {t("codex.launchPreview.imageGenTitle", "启用生图")}
                     </h3>
                     <p>
                       {t(
                         "codex.deepSeek.start.imageGenHint",
-                        "仅网关模式支持。对话仍由该供应商的模型处理；生图走 gpt-image 原链路，由所选 GPT 账号执行并消耗其额度。",
+                        "仅网关模式支持。对话仍由该供应商的模型处理；生图由所选 OAuth 或支持当前图片模型的 API Key 来源执行。",
                       )}
                     </p>
                     {imageForwardAction.meta}
@@ -2402,7 +2430,7 @@ export function CodexLaunchPreviewModal({
               <p className="form-hint">
                 {t(
                   "codex.launchPreview.imageGenSwitchDescription",
-                  "启用 GPT 生图需要先切换到「网关列出」模式，是否切换并勾选？",
+                  "启用生图需要先切换到「网关列出」模式，是否切换并勾选？",
                 )}
               </p>
             </div>
@@ -2434,7 +2462,10 @@ export function CodexLaunchPreviewModal({
       {imageGenPickerOpen && (
         <CodexImageAccountPickerModal
           accounts={accounts}
-          selectedIds={existingImageGenAccountIds}
+          selectedIds={imageGenAccountIds}
+          selectedModels={imageGenAccountModels}
+          imageGenerationModel={imageModelConfig.model}
+          imageModelControl={imageModelConfig.control}
           contextLabel={
             accountPresentation?.displayName ||
             account?.email ||
@@ -2443,13 +2474,14 @@ export function CodexLaunchPreviewModal({
           }
           onCancel={() => {
             setImageGenPickerOpen(false);
-            if (existingImageGenAccountIds.length === 0) {
+            if (imageGenAccountIds.length === 0) {
               setImageGenEnabled(false);
             }
           }}
-          onConfirm={(ids) => {
+          onConfirm={(ids, models) => {
             setImageGenPickerOpen(false);
             setImageGenAccountIds(ids);
+            setImageGenAccountModels(models);
             setImageGenEnabled(ids.length > 0);
           }}
         />

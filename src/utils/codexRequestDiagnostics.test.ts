@@ -1,6 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatRequestPayloadBody, hasRequestFirstResponse, requestDiagnosticPhaseKey } from './codexRequestDiagnostics';
+import { formatRequestPayloadBody, hasRequestFirstResponse, requestDiagnosticPhaseKey, requestServiceTierPresentation, requestedServiceTierLabelKey } from './codexRequestDiagnostics';
+
+test('requested and returned service tiers stay independent, without inferring old log sources', () => {
+  assert.deepEqual(requestServiceTierPresentation({ requestedServiceTier: 'priority', responseServiceTier: 'default', serviceTier: 'standard' }),
+    { requested: 'priority', response: 'default', legacy: '' });
+  assert.deepEqual(requestServiceTierPresentation({ serviceTier: 'standard' }),
+    { requested: '', response: '', legacy: 'standard' });
+  assert.deepEqual(requestServiceTierPresentation({ responseServiceTier: 'default' }),
+    { requested: '', response: 'default', legacy: '' });
+  assert.deepEqual(requestServiceTierPresentation({}), { requested: '', response: '', legacy: '' });
+  assert.equal(requestedServiceTierLabelKey('priority'), 'codex.speed.fast');
+  assert.equal(requestedServiceTierLabelKey('FAST'), 'codex.speed.fast');
+  assert.equal(requestedServiceTierLabelKey('auto'), 'codex.contextOverride.automatic');
+  assert.equal(requestedServiceTierLabelKey('default'), 'codex.speed.standard');
+  assert.equal(requestedServiceTierLabelKey('flex'), null);
+});
 
 test('first-response timing preserves observed zero and leaves legacy or invalid measurements unknown', () => {
   assert.equal(hasRequestFirstResponse(0), true);

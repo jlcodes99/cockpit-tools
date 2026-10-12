@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName, type CodexAccountDisplayIdentity } from "./codexAccountDisplayName";
 import type { CodexAccount } from '../types/codex';
 import type { ProxyCatalog, ProxyCatalogSelections } from '../services/codexProxyCatalogService';
 import type { CodexUnifiedProxyView } from '../services/codexUnifiedProxyService';
@@ -38,10 +39,10 @@ export function codexProxyExitModeKey(mode: CodexProxyExitMode): string {
 }
 
 /** Account label used by the list, the tables and the batch failure rows. */
-export type CodexProxyAccountIdentity = Pick<CodexAccount, 'id'> & Partial<Pick<CodexAccount, 'account_name' | 'email'>>;
+export type CodexProxyAccountIdentity = CodexAccountDisplayIdentity;
 
-export function codexProxyAccountName(account: CodexProxyAccountIdentity): string {
-  return account.account_name?.trim() || account.email?.trim() || account.id;
+export function codexProxyAccountName(account: CodexProxyAccountIdentity, apiKeyLabel?: string): string {
+  return resolveCodexAccountDisplayName(account, apiKeyLabel);
 }
 
 /** Restore a saved binding into an editable draft. Missing resources never pick a replacement. */

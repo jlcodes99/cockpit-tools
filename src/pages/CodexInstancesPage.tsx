@@ -308,6 +308,7 @@ export function CodexInstancesContent({
           launchOptions.deepSeekAccessMode,
           null,
           launchOptions.imageGenerationAccountIds ?? [],
+            launchOptions.imageGenerationAccountModels ?? {},
         );
       }
       if (launchAccount && isCodexProviderAccessAccount(launchAccount)) {

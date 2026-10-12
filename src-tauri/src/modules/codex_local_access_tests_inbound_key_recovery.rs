@@ -157,6 +157,7 @@ fn inbound_key_keeps_partial_missing_scope_until_explicit_removal() {
 #[test]
 fn unresolved_public_key_preserves_last_good_files_even_with_internal_key() {
     let shared_state = crate::modules::codex_unified_proxy::TestCacheGuard::new();
+    let _internal_accounts = InternalApiAccountIdsGuard::new();
     shared_state.prepare_disabled();
     let _env = LocalAccessTestDataGuard::new("inbound-key-preserve-files");
     super::register_internal_api_account(INTERNAL_SERVICE_TEST_ACCOUNT_ID).unwrap();

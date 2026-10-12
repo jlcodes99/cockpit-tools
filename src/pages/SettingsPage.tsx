@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { ALL_CODEX_AUTO_REFRESH_PLAN_KEYS, sanitizeCodexAutoRefreshPlanKeys } from '../utils/codexAutoRefreshPlanScope';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -791,11 +792,11 @@ export function useSettingsPageController() {
     () =>
       codexAccounts.map((account) => ({
         id: account.id,
-        label: account.email,
-        searchableText: account.email,
+        label: resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
+        searchableText: [resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")), account.email, account.api_base_url].join(" "),
         tags: account.tags || [],
       })),
-    [codexAccounts],
+    [codexAccounts, t],
   );
 
   useEffect(() => {
@@ -2522,7 +2523,7 @@ export function useSettingsPageController() {
 
   const getAccountsForPlatform = (
     platform: CurrentAccountRefreshPlatform,
-  ): Array<{ id: string; email: string }> => {
+  ): Array<{ id: string; email: string; displayLabel?: string }> => {
     const getProviderAccounts = <T extends { id: string; email?: string | null }>(
       store: { getState: () => { accounts: T[] } },
       getDisplayEmail: (account: T) => string,
@@ -2544,7 +2545,7 @@ export function useSettingsPageController() {
       case 'antigravity':
         return antigravityAccounts.map((a) => ({ id: a.id, email: a.email }));
       case 'codex':
-        return codexAccounts.map((a) => ({ id: a.id, email: a.email }));
+        return codexAccounts.map((a) => ({ id: a.id, email: a.email, displayLabel: resolveCodexAccountDisplayName(a, t("common.apiKeyAccount")) }));
       case 'claude':
         return getProviderAccounts(useClaudeAccountStore, getClaudeAccountDisplayEmail);
       case 'ghcp':
@@ -2669,9 +2670,9 @@ export function useSettingsPageController() {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}
-                      title={account.email}
+                      title={account.displayLabel || account.email}
                     >
-                      {account.email}
+                      {account.displayLabel || account.email}
                     </span>
                     {isCustomMode ? (
                       <div className="settings-inline-input" style={{ minWidth: '100px', width: 'auto' }}>

@@ -96,6 +96,7 @@
     "providerClear": "清空选择"
   },
   "common": {
+    "apiKeyAccount": "API Key 账号",
     "status": "状态",
     "cliQuickLaunch": "CLI 启动",
     "requestId": "请求 ID",
@@ -2601,12 +2602,12 @@
       "accessModeDirectCons": "1：不能在 codex 内切换模型，也不支持绑定 OAuth 账号与转发生图",
       "accessModeCdpPros": "1：速度与直连一致\n2：可在 codex 官方模型列表切换 Flash / Pro",
       "accessModeCdpCons": "1：需要注入官方客户端，不支持绑定 OAuth 账号与转发生图",
-      "imageGenPickerDesc": "当遇到生图需求时会转发生图请求：先由基础模型处理，再由生图模型出图，会消耗所选账号的部分额度。",
+      "imageGenPickerDesc": "OAuth 来源使用基础模型和生图工具；API Key 来源使用图片接口。费用或额度由对应上游计入。",
       "imageGenSwitchTitle": "仅网关模式支持",
       "imageGenSwitchDescription": "启用 GPT 生图需要先切换到「网关列出」模式，是否切换并勾选？",
       "imageGenSwitchYes": "是",
       "imageGenSwitchNo": "否",
-      "imageGenTitle": "启用 GPT 生图",
+      "imageGenTitle": "启用生图",
       "oauthBindingHint": "绑定后启动与普通账号没有任何差异，可使用 OAuth 的全部能力（远端压缩，浏览器操作，各类插件等）；对话仍由当前 API Key 供应商处理。",
       "oauthBindingChange": "更换",
       "title": "Codex 启动预览",
@@ -2895,8 +2896,8 @@
       "imageGenerationLabel": "image_generation",
       "imageGenerationDesc": "控制普通对话是否声明图片工具，以及图片接口是否可用。",
       "imageGenerationSaveSuccess": "image_generation 设置已更新",
-      "imageForwardLabel": "启用 GPT 生图",
-      "imageForwardHint": "勾选后选择 GPT 账号：生图与图片编辑请求交给所选账号执行并消耗其额度，对话请求仍按账号池调度。",
+      "imageForwardLabel": "启用生图",
+      "imageForwardHint": "API Key 来源须兼容 Images API，并在账号行选择实际型号；OAuth 仅支持原生 GPT 型号。",
       "imageGenerationMode": {
         "enabled": "启用",
         "imagesOnly": "仅图片",
@@ -2907,7 +2908,20 @@
       "modelId": "模型 ID",
       "modelIdViewOnly": "仅查看，无切换功能",
       "modelIdPlaceholder": "选择模型 ID",
+      "imageAccounts": {
+        "upstreamModel": "上游型号",
+        "chooseModel": "选择型号",
+        "modelRequired": "请选择支持的实际型号。",
+        "sourceUnavailable": "所选来源不支持当前图片模型，或缺少可用的 API 凭据/请求地址。",
+        "loadFailed": "读取生图设置失败，请重试。",
+        "missingModels": "有 {{count}} 个已选来源需要指定型号。",
+        "locateModel": "定位来源"
+      },
       "imageGenerationModel": {
+        "manage": "管理型号",
+        "deleteSelected": "型号正在使用，请先替换并保存。",
+        "invalid": "型号不能包含空白或控制字符，最长 200 字符。",
+        "syncFailed": "图片型号发现失败，请重试。",
         "label": "生图模型",
         "custom": "自定义",
         "save": "保存模型",
@@ -3016,10 +3030,10 @@
       "killPortSuccess": "端口已清理（结束 {{count}} 个进程）",
       "killPortSuccessNone": "端口已检查，未发现外部占用进程",
       "killPortSuccessUnknown": "API 服务端口已清理",
-      "restartAction": "重启 Sidecar",
-      "restartTitle": "重启 API 服务",
-      "restartConfirmMessage": "将仅重启 API 服务 Sidecar，不修改账号、Token、API Key 或账号池配置。正在进行中的请求可能中断，确认继续吗？",
-      "restartSuccess": "API 服务 Sidecar 已重启",
+      "restartAction": "仅重启 API 服务",
+      "restartTitle": "仅重启 API 服务",
+      "restartConfirmMessage": "仅重启 API 服务，保留 Codex 窗口和账号池、API Key 配置。正在进行的 API 请求可能中断。确认继续吗？",
+      "restartSuccess": "API 服务已重启",
       "refreshStats": "刷新统计",
       "refreshStatsSuccess": "API 服务统计已刷新",
       "accountStatsTitle": "按账号统计",
@@ -3273,7 +3287,8 @@
       "testChatEmptyResponse": "响应为空",
       "imageGenerationMainModel": {
         "label": "生图主模型",
-        "hint": "留空沿用 gpt-5.5。此模型负责调用图片工具；所选 OAuth 账号必须支持该主模型的 image_generation。",
+        "notice": "日常请勿修改生图主模型。",
+        "hint": "此项仅用于官方生图接口的底层转发，不用于切换出图模型。仅当官方调整主模型时手动更新；留空沿用 gpt-5.5。",
         "invalid": "请输入不含空白的模型 ID，最长 200 字符。"
       },
       "requestDetail": {
@@ -3446,14 +3461,14 @@
         "confirm": "确认启动",
         "chooseAtStart": "启动时选择",
         "context": "支持上下文",
-        "imageGen": "支持 GPT 生图",
-        "imageGenHint": "仅网关模式支持。对话仍由该供应商的模型处理；生图走 gpt-image 原链路，由所选 GPT 账号执行并消耗其额度。",
-        "imageGenPick": "选择 GPT 账号",
+        "imageGen": "支持生图",
+        "imageGenHint": "API Key 来源须兼容 Images API，并在账号行选择实际型号；OAuth 仅支持原生 GPT 型号。",
+        "imageGenPick": "选择生图来源",
         "imageGenSelected": "已选 {{count}} 个账号",
         "imageGenEmpty": "尚未选择账号",
         "imageGenLocked": "勾选后可选择账号",
         "pickerTitle": "选择生图账号",
-        "pickerEmpty": "没有可用于生图的 OAuth 账号（Free 账号与 API Key 账号不支持）。",
+        "pickerEmpty": "没有可用来源。API Key 须支持所选型号或 GPT 同族型号；OAuth 仅支持非 Free 的原生 GPT 型号。",
         "pickerSelectAll": "全选",
         "pickerClear": "清空",
         "protocol": "协议",
@@ -4502,7 +4517,8 @@
       "saveSuccess": "速度已更新",
       "saveFailed": "保存速度失败：{{error}}",
       "loadFailed": "读取速度失败：{{error}}",
-      "apiHint": "API 请求未指定档位时使用此默认值；客户端明确指定的档位优先。快速会增加用量或费用，实际加速取决于模型与供应商。",
+      "apiHint": "保存成功后用于后续 API 请求，无需重启；在途请求不变，客户端显式档位优先。快速可能增加用量或费用，实际加速取决于模型与供应商。",
+      "apiSyncFailed": "偏好已保存，但运行中的 API 服务未确认更新；请重试。",
       "launchHint": "切号及通过 Cockpit 启动时写入客户端配置。运行中的客户端需重启；新会话使用默认档位，已有会话的独立速度设置需在客户端调整。"
     },
     "apiService": {
@@ -4766,6 +4782,11 @@
         "reasoningEffortValue": "思考 {{effort}}",
         "serviceTier": "服务等级",
         "serviceTierValue": "等级 {{tier}}",
+        "requestedTier": "请求: {{tier}}",
+        "responseTier": "回报: {{tier}}",
+        "legacyTier": "旧档位: {{tier}}",
+        "serviceTierHint": "请求档位是发往上游的 service_tier，不代表上游实际处理档位已确认。Codex OAuth 回报 default 不能据此认定快速已降级。“自动”表示未指定具体档位（省略字段或使用 auto）。",
+        "legacyTierHint": "旧记录混合了请求与响应档位，无法确认来源及实际处理档位。",
         "upstreamModel": "发送模型",
         "columns": {
           "time": "时间",
@@ -5755,7 +5776,15 @@
       },
       "failurePhase": "失败阶段",
       "applying": "正在应用到运行中的网关…",
-      "applyFailed": "设置已保存，但运行中的网关未能应用，可重试。原因：{{error}}"
+      "applyFailed": "设置已保存，但运行中的网关未能应用，可重试。原因：{{error}}",
+      "timeout": {
+        "open": "等待上游建立流超时。可在“超时与重试 → {{setting}}”调整等待时间（1–600 秒，默认 60 秒）。",
+        "idle": "流已建立，但等待后续数据超时。可在“超时与重试”调整对应的流空闲超时。",
+        "canceled": "请求已由客户端取消，不属于流打开超时。",
+        "gateway": "HTTP 504 表示网关等待超时；当前记录不足以确定原因，请查看上游错误和请求阶段。",
+        "threshold": "本次生效阈值：{{seconds}} 秒。",
+        "settings": "调整超时"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "默认档位",

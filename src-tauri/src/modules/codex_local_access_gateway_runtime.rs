@@ -986,6 +986,8 @@ struct RequestStatsMeta<'a> {
     http_status: Option<u16>,
     error_message: Option<&'a str>,
     service_tier: Option<&'a str>,
+    requested_service_tier: Option<&'a str>,
+    response_service_tier: Option<&'a str>,
     reasoning_effort: Option<&'a str>,
     /// 客户端请求模型（含路由命名空间）；未提供时按上游模型展示。
     requested_model: Option<&'a str>,
@@ -1113,11 +1115,15 @@ async fn record_request_stats_with_meta(
             estimated_cost_usd,
             meta.proxy_route,
         );
+        event.requested_service_tier = recorded_service_tier_value(meta.requested_service_tier);
+        event.response_service_tier = recorded_service_tier_value(meta.response_service_tier);
         event.output_generation_ms = meta.output_generation_ms;
         event.first_response_ms = meta.first_response_ms.or(event.first_response_ms);
         if let Some(recent) = runtime.stats.events.last_mut() {
             recent.first_response_ms = event.first_response_ms;
             recent.output_generation_ms = event.output_generation_ms;
+            recent.requested_service_tier = event.requested_service_tier.clone();
+            recent.response_service_tier = event.response_service_tier.clone();
         }
 
         apply_usage_event_to_current_windows(&mut runtime.stats, &event, now);
@@ -1376,9 +1382,13 @@ fn new_empty_local_access_collection() -> Result<CodexLocalAccessCollection, Str
         client_base_url_host: CodexLocalAccessClientBaseUrlHost::default(),
         image_generation_mode: CodexLocalAccessImageGenerationMode::default(),
         image_generation_model: DEFAULT_CODEX_IMAGE_GENERATION_MODEL.to_string(),
+        image_generation_models: crate::models::codex_local_access::default_image_generation_models(),
+        image_generation_deleted_models: Vec::new(),
+        image_generation_model_catalog_revision: 0,
         image_generation_main_model: None,
         image_generation_account_policies: HashMap::new(),
         image_generation_account_ids: Vec::new(),
+        image_generation_account_models: HashMap::new(),
         gateway_mode: CodexLocalAccessGatewayMode::default(),
         upstream_proxy_url: None,
         routing_strategy: CodexLocalAccessRoutingStrategy::default(),

@@ -96,6 +96,7 @@
     "providerClear": "Seçimi temizle"
   },
   "common": {
+    "apiKeyAccount": "API Key hesabı",
     "status": "Durum",
     "cliQuickLaunch": "CLI başlat",
     "requestId": "İstek kimliği",
@@ -2381,12 +2382,12 @@
       "accessModeDirectCons": "1: Codex içinde model değiştirilemez, OAuth bağlama ve görsel aktarımı yok",
       "accessModeCdpPros": "1: Doğrudan bağlantı ile aynı hız\n2: Resmi Codex model listesinden Flash / Pro değiştirilebilir",
       "accessModeCdpCons": "1: Resmi istemciye enjeksiyon gerektirir, OAuth bağlama ve görsel aktarımı yok",
-      "imageGenPickerDesc": "Bir görsel isteği geldiğinde iletilir: önce temel model işler, ardından görsel modeli görseli üretir ve seçilen hesapların kotasının bir kısmını tüketir.",
+      "imageGenPickerDesc": "OAuth temel modeli ve görsel aracını; API Key görsel API’lerini kullanır. Ücret veya kota seçilen sağlayıcıda hesaplanır.",
       "imageGenSwitchTitle": "Yalnızca ağ geçidi modunda",
       "imageGenSwitchDescription": "GPT görsel üretimini etkinleştirmek için ağ geçidi moduna geçmek gerekir. Geçip etkinleştirilsin mi?",
       "imageGenSwitchYes": "Evet",
       "imageGenSwitchNo": "Hayır",
-      "imageGenTitle": "GPT görsel üretimini etkinleştir",
+      "imageGenTitle": "Görselleri etkinleştir",
       "oauthBindingHint": "Bağladıktan sonra başlatma normal bir hesapla tamamen aynıdır ve tüm OAuth özellikleri (uzaktan sıkıştırma, tarayıcı denetimi, çeşitli eklentiler vb.) kullanılabilir; görüşmeler yine geçerli API Key sağlayıcısı üzerinden yürür.",
       "oauthBindingChange": "Değiştir",
       "title": "Codex Başlatma Önizlemesi",
@@ -2680,10 +2681,10 @@
       "killPortSuccess": "Port temizlendi ({{count}} işlem kapatıldı)",
       "killPortSuccessNone": "Port kontrol edildi. Harici bir işlem kullanmıyor.",
       "killPortSuccessUnknown": "API hizmeti portu temizlendi",
-      "restartAction": "Sidecar'ı Yeniden Başlat",
-      "restartTitle": "API Hizmetini Yeniden Başlat",
-      "restartConfirmMessage": "Yalnızca API hizmeti Sidecar'ı yeniden başlatılacak. Hesaplar, token'lar, API anahtarları ve hesap havuzu ayarları değiştirilmeyecek. Devam eden istekler kesilebilir. Devam edilsin mi?",
-      "restartSuccess": "API hizmeti Sidecar'ı yeniden başlatıldı",
+      "restartAction": "Yalnız API’yi yeniden başlat",
+      "restartTitle": "Yalnız API’yi yeniden başlat",
+      "restartConfirmMessage": "Yalnızca API hizmeti yeniden başlatılsın. Codex pencereleri ve hesap havuzu/API Key ayarları korunur. Devam eden API istekleri kesilebilir. Devam edilsin mi?",
+      "restartSuccess": "API hizmeti yeniden başlatıldı",
       "refreshStats": "İstatistikleri Yenile",
       "refreshStatsSuccess": "API hizmeti istatistikleri yenilendi",
       "routingStrategy": {
@@ -2730,7 +2731,20 @@
       "apiPortUrl": "API Port URL​",
       "modelId": "Model ID​",
       "modelIdPlaceholder": "Model ID seçin",
+      "imageAccounts": {
+        "upstreamModel": "Sağlayıcı modeli",
+        "chooseModel": "Model seç",
+        "modelRequired": "Desteklenen gerçek modeli seçin.",
+        "sourceUnavailable": "Seçilen kaynak mevcut görsel modelini desteklemiyor veya geçerli API kimlik bilgileri ya da istek adresi yok.",
+        "loadFailed": "Görsel ayarları yüklenemedi. Yeniden deneyin.",
+        "missingModels": "{{count}} seçili kaynak için model seçin.",
+        "locateModel": "Kaynağı bul"
+      },
       "imageGenerationModel": {
+        "manage": "Modelleri yönet",
+        "deleteSelected": "Model kullanımda. Önce değiştirip kaydedin.",
+        "invalid": "Model kimliği boşluk veya kontrol karakteri içeremez ve en fazla 200 karakter olabilir.",
+        "syncFailed": "Görsel modelleri bulunamadı. Yeniden deneyin.",
         "label": "Görsel modeli",
         "custom": "Özel",
         "save": "Modeli kaydet",
@@ -2816,8 +2830,8 @@
       "requestLogSuccess": "Başarılı",
       "requestLogFailed": "Başarısız",
       "requestLogTokens": "{{value}} token",
-      "imageForwardLabel": "GPT görsel üretimini etkinleştir",
-      "imageForwardHint": "Etkinleştirdikten sonra GPT hesaplarını seçin: görsel üretme ve düzenleme istekleri seçilen hesaplarda çalışır ve o hesapların kotasını kullanır; sohbet istekleri hesap havuzunu kullanmaya devam eder.",
+      "imageForwardLabel": "Görselleri etkinleştir",
+      "imageForwardHint": "API Key için Images API ve hesap satırında gerçek model seçimi gerekir; OAuth yalnızca yerel GPT modellerini destekler.",
       "imageGenerationMode": {
         "enabled": "Açık",
         "imagesOnly": "Yalnız görsel",
@@ -2922,7 +2936,8 @@
       "removeAction": "API’den kaldır",
       "imageGenerationMainModel": {
         "label": "Ana görsel modeli",
-        "hint": "Boş bırakırsanız gpt-5.5 kullanılır. Bu model görsel aracını çağırır; seçili OAuth hesapları bu modelde image_generation desteklemelidir.",
+        "notice": "Normal kullanımda ana görsel modelini değiştirmeyin.",
+        "hint": "Yalnızca istekleri resmî görsel hizmetine iletir; görsel üreten modeli seçmez. Sadece resmî ana model değişirse elle güncelleyin. gpt-5.5 için boş bırakın.",
         "invalid": "Boşluksuz, en fazla 200 karakterlik model kimliği girin."
       },
       "requestDetail": {
@@ -3756,14 +3771,14 @@
         "cdpMode": "CDP enjeksiyonu",
         "cdpDesc": "Enjeksiyonla resmi Codex model listesini devralır, hız doğrudan modla aynıdır. Resmi istemciye enjeksiyon gerekir; OAuth bağlama desteklenmez.",
         "context": "Desteklenen bağlam",
-        "imageGen": "GPT görsel üretimi",
-        "imageGenHint": "Yalnızca ağ geçidi modunda. Sohbet yine bu sağlayıcının modelleriyle yürütülür; görsel üretimi özgün gpt-image hattını kullanır, seçilen GPT hesapları tarafından yürütülür ve kotalarını tüketir.",
-        "imageGenPick": "GPT hesabı seç",
+        "imageGen": "Görsel oluşturma",
+        "imageGenHint": "API Key için Images API ve hesap satırında gerçek model seçimi gerekir; OAuth yalnızca yerel GPT modellerini destekler.",
+        "imageGenPick": "Görsel kaynakları",
         "imageGenSelected": "{{count}} hesap seçildi",
         "imageGenEmpty": "Hesap seçilmedi",
         "imageGenLocked": "Hesap seçmek için işaretleyin",
         "pickerTitle": "Görsel hesaplarını seç",
-        "pickerEmpty": "Görsel üretebilecek OAuth hesabı yok (Free ve API Key hesapları desteklenmez).",
+        "pickerEmpty": "Uygun kaynak yok. API Key seçilen modeli veya GPT ailesini desteklemelidir; OAuth yalnızca Free dışındaki hesapların yerel GPT modellerini destekler.",
         "pickerSelectAll": "Tümünü seç",
         "pickerClear": "Temizle",
         "protocol": "Protokol",
@@ -4270,7 +4285,8 @@
       "saveSuccess": "Hız güncellendi",
       "saveFailed": "Hız kaydedilemedi: {{error}}",
       "loadFailed": "Hız yüklenemedi: {{error}}",
-      "apiHint": "API isteği seviye belirtmezse kullanılır; istemcinin açık seçimi önceliklidir. Hızlı, kullanım veya maliyeti artırır; hızlanma modele ve sağlayıcıya bağlıdır.",
+      "apiHint": "Kaydettikten sonra yeniden başlatmadan sonraki API isteklerine uygulanır. Devam eden istekler değişmez; istemcinin açıkça belirttiği seviye önceliklidir. Hızlı mod kullanımı veya maliyeti artırabilir; hızlanma modele ve sağlayıcıya bağlıdır.",
+      "apiSyncFailed": "Tercih kaydedildi, ancak çalışan API hizmeti güncellemeyi doğrulamadı. Tekrar deneyin.",
       "launchHint": "Hesap değişiminde ve Cockpit ile başlatmada kaydedilir. Çalışan istemciyi yeniden başlatın. Yeni sohbetler varsayılanı kullanır; mevcut sohbetlerin özel hızını istemcide ayarlayın."
     },
     "apiService": {
@@ -4455,6 +4471,11 @@
         "reasoningEffortValue": "Akıl {{effort}}",
         "serviceTier": "Hizmet katmanı",
         "serviceTierValue": "Katman {{tier}}",
+        "requestedTier": "İstek: {{tier}}",
+        "responseTier": "Yanıt: {{tier}}",
+        "legacyTier": "Eski: {{tier}}",
+        "serviceTierHint": "İstenen düzey, üst sunucuya gönderilen service_tier değeridir; gerçek işleme düzeyini doğrulamaz. Codex OAuth için default yanıtı, hızlı modun düşürüldüğünü kanıtlamaz. Otomatik, belirli bir düzeyin istenmediği anlamına gelir (alan atlanmış veya auto olarak ayarlanmış).",
+        "legacyTierHint": "Bu eski kayıt istek ve yanıt düzeylerini birleştirir. Kaynakları ve gerçek işleme düzeyi bilinmiyor.",
         "upstreamModel": "Gönderilen model",
         "columns": {
           "time": "Zaman",
@@ -5535,7 +5556,15 @@
       },
       "failurePhase": "Hata aşaması",
       "applying": "Çalışan ağ geçitlerine uygulanıyor…",
-      "applyFailed": "Ayarlar kaydedildi, ancak çalışan ağ geçitlerine uygulanamadı. Yeniden deneyin. Neden: {{error}}"
+      "applyFailed": "Ayarlar kaydedildi, ancak çalışan ağ geçitlerine uygulanamadı. Yeniden deneyin. Neden: {{error}}",
+      "timeout": {
+        "open": "Üst sunucunun akışı açması beklenirken zaman aşımı oluştu. “Zaman aşımı ve yeniden deneme → {{setting}}” ayarını değiştirin (1–600 saniye, varsayılan 60).",
+        "idle": "Akış açıldı ancak yeni veri beklenirken süre doldu. “Zaman aşımı ve yeniden deneme” bölümünde ilgili boşta kalma süresini ayarlayın.",
+        "canceled": "İstemci bu isteği iptal etti; bu bir akış açma zaman aşımı değildir.",
+        "gateway": "HTTP 504, ağ geçidi zaman aşımıdır. Bu kayıt nedeni doğrulamaz; üst sunucu hatasını ve istek aşamasını inceleyin.",
+        "threshold": "Bu istekte uygulanan eşik: {{seconds}} saniye.",
+        "settings": "Süreyi ayarla"
+      }
     },
     "experimentalModels": {
       "defaultReasoning": "Varsayılan düzey",

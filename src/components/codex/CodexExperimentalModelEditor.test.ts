@@ -75,3 +75,35 @@ test('editing context and reasoning keeps distinct row keys while model IDs temp
   }
   h.unmount();
 });
+
+test('High then Medium, cancellation/reselection and all six levels retain canonical editor order', () => {
+  const h = loadHookModule(new URL('./CodexExperimentalModelEditor.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+    '../../utils/codexExperimentalModelOrder': order,
+    '../../utils/codexModelContext': context,
+    '../../utils/codexModelConfig': modelConfig,
+    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
+    './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
+    'react-dom': { createPortal: (child: any) => child },
+  }, { document: { addEventListener() {}, removeEventListener() {} }, window: { addEventListener() {}, removeEventListener() {} } });
+  let models: any[] = [{ model_id: 'gpt-5.6-sol', display_name: 'Model' }];
+  h.render(() => h.exports.CodexExperimentalModelEditor({ models, mode: 'inline', onChange: (next: any[]) => { models = next; } }));
+  const toggle = (effort: string) => {
+    let tree = elements(h.flush());
+    if (!tree.some((node) => node.props?.className?.startsWith('codex-experimental-model-editor__reasoning-option'))) {
+      tree.find((node) => node.props?.className === 'codex-experimental-model-editor__reasoning-trigger').props.onClick();
+      tree = elements(h.flush());
+    }
+    tree.find((node) => node.props?.className?.startsWith('codex-experimental-model-editor__reasoning-option')
+      && node.key === effort)!.props.onClick();
+    h.flush();
+  };
+  toggle('high'); toggle('medium');
+  assert.deepEqual(models[0].reasoning_efforts, ['medium', 'high']);
+  toggle('medium'); toggle('medium');
+  assert.deepEqual(models[0].reasoning_efforts, ['medium', 'high']);
+  for (const effort of ['ultra', 'max', 'xhigh', 'low']) toggle(effort);
+  assert.deepEqual(models[0].reasoning_efforts, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+  h.unmount();
+});

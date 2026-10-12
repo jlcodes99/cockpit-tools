@@ -106,8 +106,9 @@ export interface CodexAccount {
   api_vision_routing_model?: string | null;
   api_instance_access_mode?: "gateway" | "direct" | "cdp" | string | null;
   api_startup_model?: string | null;
-  /** 网关模式下用于生图转发的 GPT(OAuth) 账号池。 */
+  /** 网关模式下用于生图转发的 OAuth / 图片 API Key 账号池。 */
   api_image_generation_account_ids?: string[] | null;
+  api_image_generation_account_models?: Record<string, string> | null;
   bound_oauth_account_id?: string | null;
   /** Grok 供应商账号绑定的 Grok 平台账号 ID：上游凭据来自该 Grok 账号（OAuth）。 */
   upstream_grok_account_id?: string | null;

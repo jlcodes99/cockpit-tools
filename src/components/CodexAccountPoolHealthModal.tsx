@@ -64,12 +64,15 @@ function resolveIssueDisplayName(
   account: CodexAccount | undefined,
   health: CodexLocalAccessAccountHealth | null,
   accountId: string,
+  apiKeyLabel: string,
 ): string {
   return resolveCodexHealthIssueDisplayName(
     account?.account_name,
     account?.email,
     health?.email,
     accountId,
+    account,
+    apiKeyLabel,
   );
 }
 
@@ -231,7 +234,7 @@ export function CodexAccountPoolHealthModal({
       const health = healthById.get(accountId) ?? null;
       const kind = issueKindForHealth(account, health);
       if (!kind) return [];
-      const rawName = resolveIssueDisplayName(account, health, accountId);
+      const rawName = resolveIssueDisplayName(account, health, accountId, t("common.apiKeyAccount"));
       const displayName = maskAccountText ? maskAccountText(rawName) : rawName;
       const presentation = account
         ? buildCodexAccountPresentation(account, t)
@@ -701,6 +704,7 @@ export function CodexAccountPoolHealthModal({
                       account,
                       null,
                       member.accountEmail || member.accountId,
+                      t("common.apiKeyAccount"),
                     );
                     const displayName = maskAccountText
                       ? maskAccountText(rawName)

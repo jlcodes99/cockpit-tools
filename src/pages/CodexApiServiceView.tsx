@@ -210,13 +210,11 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     setProxyInput,
     setResponsesWebsocketsEnabledDraft,
     setSelectedModelId,
-    setSelectedTimeoutPresetId,
     setSessionAffinityDraft,
     setSessionAffinityTtlDraft,
     setState,
     setStatsLogTab,
     setTestChatInput,
-    setTimeoutDrafts,
     setTimeoutPresetNameDraft,
     setTimeoutsError,
     setTimeoutsModalOpen,
@@ -238,11 +236,13 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     testDialogOpen,
     testDialogRunning,
     timeoutDrafts,
-    timeoutDraftsFromValue,
     timeoutPresetNameDraft,
     timeoutPresetOptions,
     timeoutsError,
     timeoutsModalOpen,
+    openTimeoutSettings,
+    timeoutFocusField,
+    timeoutFieldRef,
     toggleApiKeyPolicyExpanded,
     toggleStringSelection,
     updateAccountModelMappingDraft,
@@ -355,13 +355,13 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                 testDialogRunning ||
                 sidecarRestarting
               }
-              title={t("codex.localAccess.restartAction", "重启 Sidecar")}
+              title={t("codex.localAccess.restartAction")}
             >
               <RefreshCw
                 size={14}
                 className={sidecarRestarting ? "loading-spinner" : ""}
               />
-              {t("codex.localAccess.restartAction", "重启 Sidecar")}
+              {t("codex.localAccess.restartAction")}
             </button>
             <button
               type="button"
@@ -698,17 +698,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
-                      onClick={() => {
-                        setTimeoutsError("");
-                        setSelectedTimeoutPresetId(
-                          collection?.activeTimeoutPresetId || "long_wait",
-                        );
-                        setTimeoutPresetNameDraft("");
-                        setTimeoutDrafts(
-                          timeoutDraftsFromValue(collection?.timeouts),
-                        );
-                        setTimeoutsModalOpen(true);
-                      }}
+                      onClick={() => openTimeoutSettings()}
                       disabled={!collection}
                     >
                       <SlidersHorizontal size={14} />
@@ -2406,6 +2396,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                       type="number"
                       min={1}
                       max={600}
+                      ref={timeoutFocusField === "sidecarStreamOpenTimeoutMs" ? timeoutFieldRef : undefined}
                       value={timeoutDrafts.sidecarStreamOpenTimeoutMs}
                       onChange={(event) =>
                         updateTimeoutDraft(
@@ -2423,6 +2414,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                       type="number"
                       min={1}
                       max={600}
+                      ref={timeoutFocusField === "sidecarStreamIdleTimeoutMs" ? timeoutFieldRef : undefined}
                       value={timeoutDrafts.sidecarStreamIdleTimeoutMs}
                       onChange={(event) =>
                         updateTimeoutDraft(
@@ -2440,6 +2432,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                       type="number"
                       min={1}
                       max={600}
+                      ref={timeoutFocusField === "sidecarImageStreamOpenTimeoutMs" ? timeoutFieldRef : undefined}
                       value={timeoutDrafts.sidecarImageStreamOpenTimeoutMs}
                       onChange={(event) =>
                         updateTimeoutDraft(
@@ -2457,6 +2450,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                       type="number"
                       min={1}
                       max={600}
+                      ref={timeoutFocusField === "sidecarImageStreamIdleTimeoutMs" ? timeoutFieldRef : undefined}
                       value={timeoutDrafts.sidecarImageStreamIdleTimeoutMs}
                       onChange={(event) =>
                         updateTimeoutDraft(
@@ -3846,9 +3840,9 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
         onUpdateImageGenerationMainModel={(model) =>
           codexLocalAccessService.updateCodexLocalAccessImageGenerationMainModel(model).then(setState)
         }
-        onUpdateImageGenerationAccounts={(accountIds) =>
+        onUpdateImageGenerationAccounts={(accountIds, models) =>
           codexLocalAccessService
-            .updateCodexLocalAccessImageGenerationAccounts(accountIds)
+            .updateCodexLocalAccessImageGenerationAccounts(accountIds, models)
             .then(setState)
         }
         onUpdateUpstreamProxyConfig={(url) =>

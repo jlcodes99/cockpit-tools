@@ -12,7 +12,7 @@ const requestDiagnosticsConfigPath = "/v1/cockpit/diagnostics/config"
 const requestDiagnosticsEventsPath = "/v1/cockpit/diagnostics/events"
 
 func isRequestDiagnosticsControlPath(path string) bool {
-	return path == requestDiagnosticsConfigPath || path == requestDiagnosticsEventsPath
+	return path == requestDiagnosticsConfigPath || path == requestDiagnosticsEventsPath || path == apiServiceTierDefaultPath
 }
 
 func (m *manifest) payloadLoggingEnabled() bool {

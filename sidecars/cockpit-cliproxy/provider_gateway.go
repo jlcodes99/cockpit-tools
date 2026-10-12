@@ -74,6 +74,9 @@ func (s *relayServer) handleExecutorBody(c *gin.Context, spec *apiKeySpec, body 
 		writeAPIError(c, http.StatusBadRequest, "model is required", "invalid_request")
 		return
 	}
+	if s.handleImageAPIResponses(c, spec, body, sourceFormat, fixedAlt) {
+		return
+	}
 	if spec.ModelRouting != nil && spec.ModelRouting.Automatic {
 		s.handleAutomaticModelRequest(c, spec, body, model, sourceFormat, fixedAlt)
 		return

@@ -38,3 +38,13 @@ test('field-error translations cover missing required fields and remain localize
     assert.notEqual(messages[locale], messages.en, locale);
   }
 });
+
+test('reasoning selections sort all six levels without mutating inputs or a valid explicit default', () => {
+  const model: CodexExperimentalModelDefinition = { model_id: 'gpt-5.6-sol', display_name: 'Model', default_reasoning_effort: 'high' };
+  const reverse = ['ultra', 'max', 'xhigh', 'high', 'medium', 'low'] as const;
+  const next = withSupportedReasoningEfforts(model, [...reverse]);
+  assert.deepEqual(next.reasoning_efforts, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+  assert.equal(next.default_reasoning_effort, 'high');
+  assert.deepEqual(reverse, ['ultra', 'max', 'xhigh', 'high', 'medium', 'low']);
+  assert.equal(withSupportedReasoningEfforts(model, []).reasoning_efforts, undefined);
+});

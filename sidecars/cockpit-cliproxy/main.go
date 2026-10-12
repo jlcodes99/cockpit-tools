@@ -90,8 +90,8 @@ func normalizeCockpitLocale(locale string) string {
 }
 
 // defaultUsageServiceTier 返回 Cockpit 通过 payload.default 注入的服务等级。
-// 客户端未显式发送 service_tier 时，该档位就是实际上游使用的档位，
-// 用于统计与日志里区分快速/标准模式。
+// This is a request default, not confirmation of the server's processing tier.
+// Usage reporters prefer the final serialized upstream request when available.
 func defaultUsageServiceTier(cfg *config.Config) string {
 	if cfg == nil {
 		return ""
@@ -163,6 +163,9 @@ func main() {
 		emitter:      emitter,
 		tracker:      usageTracker,
 		tokenLimiter: tokenLimiter,
+	}
+	if m.ServiceTierControlEnabled {
+		policy.serviceTierDefault = newAPIServiceTierDefault(defaultUsageServiceTier(cfg))
 	}
 	defer policy.stopRequestDiagnostics()
 	hook := &authHook{manifest: m, emitter: emitter}

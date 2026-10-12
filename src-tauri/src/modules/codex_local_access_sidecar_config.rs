@@ -60,9 +60,10 @@ fn stable_sidecar_config_for_fingerprint(config_content: &str) -> String {
         return config_content.to_string();
     };
     if let Some(config) = config.as_object_mut() {
-        // CLIProxyAPI watches the config file and applies payload defaults to new
-        // requests. Excluding this hot-reloadable field keeps active streams alive
-        // when the API service speed changes.
+        // Main API service speed changes use its dedicated control endpoint and
+        // a default snapshot for each new request. Excluding payload preserves
+        // active streams without relying on a config watcher. Provider gateway
+        // fingerprint behavior remains unchanged; its profile is separate.
         config.remove("payload");
     }
     serde_json::to_string(&config).unwrap_or_else(|_| config_content.to_string())
@@ -188,6 +189,10 @@ struct SidecarUsageEvent {
     #[serde(default)]
     #[serde(alias = "service_tier")]
     service_tier: Option<String>,
+    #[serde(default, alias = "requested_service_tier")]
+    requested_service_tier: Option<String>,
+    #[serde(default, alias = "response_service_tier")]
+    response_service_tier: Option<String>,
     #[serde(default)]
     #[serde(alias = "reasoning_effort")]
     reasoning_effort: Option<String>,
@@ -1171,6 +1176,13 @@ fn remove_account_refs_from_collection(
     collection.account_ids.retain(|id| !remove_ids.contains(id));
     changed |= collection.account_ids != before_account_ids;
 
+    let before_image_ids = collection.image_generation_account_ids.len();
+    collection.image_generation_account_ids.retain(|id| !remove_ids.contains(id));
+    changed |= before_image_ids != collection.image_generation_account_ids.len();
+    let before_image_models = collection.image_generation_account_models.len();
+    collection.image_generation_account_models.retain(|id, _| !remove_ids.contains(id));
+    changed |= before_image_models != collection.image_generation_account_models.len();
+
     for api_key in &mut collection.api_keys {
         let before = api_key.account_ids.clone();
         api_key.account_ids.retain(|id| !remove_ids.contains(id));
@@ -1775,10 +1787,20 @@ fn write_sidecar_quota_pool_state(
     write_sidecar_quota_pool_state_in_dir(collection, &base_dir)
 }
 
+#[cfg(test)]
 fn sidecar_account_manifest_value(
     account: &CodexAccount,
     auth_id: Option<&str>,
     collection: &CodexLocalAccessCollection,
+) -> Value {
+    sidecar_account_manifest_value_with_proxy(account, auth_id, collection, None)
+}
+
+fn sidecar_account_manifest_value_with_proxy(
+    account: &CodexAccount,
+    auth_id: Option<&str>,
+    collection: &CodexLocalAccessCollection,
+    proxy_url: Option<&str>,
 ) -> Value {
     let auth_kind = if account.is_api_key_auth() {
         "api_key"
@@ -1803,17 +1825,17 @@ fn sidecar_account_manifest_value(
         "quotaCooldown": account_quota_cooldown(account, now_ms()),
         "subscriptionExpiryMs": resolve_subscription_expiry_ms(account),
         "gptReserveAllowed": account_has_gpt_reserve_entitlement(account),
-        "imageGenerationPolicy": match collection.image_generation_account_policies.get(&account.id) {
-            Some(CodexLocalAccessImageGenerationPolicy::Enabled) => "enabled",
-            Some(CodexLocalAccessImageGenerationPolicy::Disabled) => "disabled",
-            _ => "inherit",
-        },
+        "imageGenerationPolicy": image_generation_manifest_policy(account, collection),
     });
     if let Some(quota_reserve) = sidecar_quota_reserve_manifest_value(collection, account) {
         value["quotaReserve"] = quota_reserve;
     }
     if !account.api_model_context_windows.is_empty() {
         value["modelContextWindows"] = json!(account.api_model_context_windows);
+    }
+    if let Some(upstream) = image_generation_upstream_manifest_value(account, collection, proxy_url) {
+        value["modelIds"] = json!(account.api_model_catalog);
+        value["imageGenerationUpstream"] = upstream;
     }
     value
 }
@@ -2458,6 +2480,8 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     let mut codex_keys = Vec::new();
     let mut expected_auth_files = HashSet::new();
     let mut routing_accounts = HashMap::new();
+    let conversation_account_ids: HashSet<String> =
+        conversation_sidecar_account_ids(collection).into_iter().collect();
     // 账号级本地代理摘要，用于让隧道换端口后触发 sidecar 重建。
     let mut account_proxy_fingerprints = Vec::new();
     let metered_feature_patterns =
@@ -2500,7 +2524,13 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         let internal_account = internal_api_account_ids()
             .iter()
             .any(|internal_id| internal_id == &account.id);
-        let eligible = if internal_account {
+        let selected_image_api_source = account.is_api_key_auth()
+            && collection.image_generation_account_ids.contains(&account.id)
+            && image_generation_source_is_ready(&account, collection,
+                collection.image_generation_account_models.get(&account.id).map(String::as_str));
+        let eligible = if selected_image_api_source {
+            true
+        } else if internal_account {
             sidecar_local_account_usable_for_start(&account)
         } else if collection_uses_provider_gateway_account(collection, &account.id) {
             is_override_account || is_provider_gateway_eligible_account(&account)
@@ -2535,6 +2565,18 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         routing_accounts.insert(account.id.clone(), account.clone());
 
         if account.is_api_key_auth() {
+            // 图片专用 API 无需支持 Responses/Chat 或任意对话模型，也不注册伪造的
+            // Codex auth。图片 relay 从这份显式 manifest 直接调用上游 Images API。
+            if collection.image_generation_account_ids.contains(&account.id)
+                && !conversation_account_ids.contains(&account.id) {
+                let value = sidecar_account_manifest_value_with_proxy(
+                    &account, None, collection, account_proxy_url_ref,
+                );
+                // Preserve an unavailable API record so it cannot be mistaken for a legacy
+                // OAuth source. Its missing image upstream makes the image pool fail closed.
+                manifest_accounts.push(value);
+                continue;
+            }
             // 与自动混合路由的判定保持一致：Chat 协议账号、以及具备逐模型识图能力的账号
             // （例如 DeepSeek）走 provider 路由，这样带图片的请求才能自动转到识图模型。
             let provider_route_models =
@@ -2548,7 +2590,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
                     Vec::new()
                 };
             if !provider_route_models.is_empty() {
-                manifest_accounts.push(sidecar_account_manifest_value(&account, None, collection));
+                manifest_accounts.push(sidecar_account_manifest_value_with_proxy(&account, None, collection, account_proxy_url_ref));
                 continue;
             }
             if let Some(mut config_value) =
@@ -2579,7 +2621,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
                     );
                 }
                 codex_keys.push(config_value);
-                manifest_accounts.push(sidecar_account_manifest_value(&account, None, collection));
+                manifest_accounts.push(sidecar_account_manifest_value_with_proxy(&account, None, collection, account_proxy_url_ref));
             } else {
                 // Base-URL rejection is already logged inside resolve/config builders.
                 // Only emit the missing-key message when the key itself is empty.
@@ -2613,10 +2655,11 @@ fn prepare_sidecar_launch_config_in_dir_sync(
             .map_err(|e| format!("序列化 sidecar Codex OAuth 认证失败: {}", e))?;
         write_secret_string_atomic_if_changed(&auth_path, &auth_content)?;
         harden_sidecar_auth_file_permissions(&auth_path)?;
-        manifest_accounts.push(sidecar_account_manifest_value(
+        manifest_accounts.push(sidecar_account_manifest_value_with_proxy(
             &account,
             Some(&file_name),
             collection,
+            account_proxy_url_ref,
         ));
     }
     remove_stale_sidecar_auth_files(&auths_dir, &expected_auth_files)?;
@@ -2684,6 +2727,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     }
     let manifest = json!({
         "locale": app_locale,
+        "serviceTierControlEnabled": api_service,
         "gatewayErrorMessages": {
             "pool_unavailable": sidecar_localized_messages("codex.localAccess.accountPoolHealth.dialog.poolUnavailable"),
             "pool_diagnostic_detail": sidecar_localized_messages("codex.localAccess.accountPoolHealth.dialog.poolDiagnosticDetail"),
