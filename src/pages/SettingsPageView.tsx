@@ -108,13 +108,14 @@ export function SettingsPageView(props: SettingsPageViewProps) {
         {/* === General Tab === */}
         {activeTab === 'general' && <SettingsGeneralPanel {...props} />}
 
-        {activeTab === 'data' && (
-          <>
-            <SettingsInstanceCleanupSection />
-            <SettingsAccountTransferSection />
-            <SettingsWebdavSyncSection />
-          </>
-        )}
+        {/* Keep the data-management sections mounted and only hide them via CSS.
+            This prevents SettingsAccountTransferSection from re-scanning the data
+            directory every time the user switches back to this tab. */}
+        <div style={{ display: activeTab === 'data' ? 'block' : 'none' }}>
+          <SettingsInstanceCleanupSection />
+          <SettingsAccountTransferSection />
+          <SettingsWebdavSyncSection />
+        </div>
 
         {/* === Network Tab === */}
         {activeTab === 'network' && (
