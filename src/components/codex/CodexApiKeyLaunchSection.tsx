@@ -14,14 +14,17 @@ import {
   DEEPSEEK_ACCESS_MODE_DIRECT,
   DEEPSEEK_ACCESS_MODE_GATEWAY,
   isDeepSeekAccount,
-  isDeepSeekResponsesAccount,
-  resolveDeepSeekAccessMode,
   resolveDeepSeekModelOptions,
   resolveDeepSeekStartupModel,
   shouldUseDeepSeekProviderGateway,
   type DeepSeekAccessMode,
   type DeepSeekStartTarget,
 } from "../../utils/codexDeepSeekAccess";
+import {
+  canChooseCodexProviderAccessMode,
+  resolveCodexProviderAccessMode,
+  type CodexProviderAccessAccount,
+} from "../../utils/codexProviderAccess";
 import { CodexImageAccountPickerModal } from "./CodexImageAccountPickerModal";
 import "./CodexLaunchPreviewModal.css";
 import "./CodexApiKeyLaunchSection.css";
@@ -34,7 +37,7 @@ export interface CodexApiKeyLaunchOptions {
 }
 
 /** 启动预览与模型供应商弹框共用：后者传入的是表单草稿，字段可能不全。 */
-export type CodexApiKeyLaunchAccount = DeepSeekStartTarget & {
+export type CodexApiKeyLaunchAccount = DeepSeekStartTarget & CodexProviderAccessAccount & {
   id?: string;
   email?: string;
   account_name?: string | null;
@@ -47,13 +50,17 @@ export type CodexApiKeyLaunchAccount = DeepSeekStartTarget & {
 export function createCodexApiKeyLaunchOptions(
   account: CodexApiKeyLaunchAccount | null | undefined,
 ): CodexApiKeyLaunchOptions {
-  const imageAccountIds = Array.isArray(account?.api_image_generation_account_ids)
+  const accessMode = resolveCodexProviderAccessMode(
+    account ? { ...account, auth_mode: account.auth_mode ?? "apikey" } : null,
+  );
+  const imageAccountIds = accessMode === DEEPSEEK_ACCESS_MODE_GATEWAY &&
+    Array.isArray(account?.api_image_generation_account_ids)
     ? (account?.api_image_generation_account_ids ?? []).filter(
         (value): value is string => typeof value === "string" && value.trim().length > 0,
       )
     : [];
   return {
-    accessMode: resolveDeepSeekAccessMode(account ?? undefined),
+    accessMode,
     startupModel: resolveDeepSeekStartupModel(account ?? undefined),
     imageGenEnabled: imageAccountIds.length > 0,
     imageGenAccountIds: imageAccountIds,
@@ -64,8 +71,11 @@ export function createCodexApiKeyLaunchOptions(
 export function accountUsesInstanceLocalGateway(
   account: CodexApiKeyLaunchAccount | null | undefined,
 ): boolean {
-  if (!account || !isCodexApiKeyAccount(account as CodexAccount)) return false;
-  const full = account as CodexAccount;
+  if (!account) return false;
+  const full = { ...account, auth_mode: account.auth_mode ?? "apikey" } as CodexAccount;
+  if (!isCodexApiKeyAccount(full)) return false;
+  if (full.upstream_grok_account_id?.trim()) return true;
+  if (resolveCodexProviderAccessMode(full) !== DEEPSEEK_ACCESS_MODE_GATEWAY) return false;
   if (isCodexChatCompletionsApiKeyAccount(full)) return true;
   if (isDeepSeekAccount(full)) return shouldUseDeepSeekProviderGateway(full);
   return (
@@ -104,7 +114,10 @@ export function CodexApiKeyLaunchSection({
   const [pickerOpen, setPickerOpen] = useState(false);
   const accounts = useCodexAccountStore((state) => state.accounts);
 
-  const canChooseAccessMode = isDeepSeekResponsesAccount(account);
+  const canChooseAccessMode = canChooseCodexProviderAccessMode({
+    ...account,
+    auth_mode: account.auth_mode ?? "apikey",
+  });
   const isDeepSeek = isDeepSeekAccount(account);
   const models = useMemo(() => {
     if (isDeepSeek) return resolveDeepSeekModelOptions(account);
@@ -147,7 +160,7 @@ export function CodexApiKeyLaunchSection({
     },
     {
       id: DEEPSEEK_ACCESS_MODE_DIRECT,
-      title: t("codex.deepSeek.start.directMode", "直连官方"),
+      title: t("codex.deepSeek.start.directUpstream", "直连上游，不经网关"),
       description: t(
         "codex.deepSeek.start.directDesc",
         "不走网关，速度更快。不能在 Codex 内切换模型，也没有 OAuth 能力与生图转发。",
@@ -196,7 +209,13 @@ export function CodexApiKeyLaunchSection({
                 className={`codex-api-key-launch-mode ${
                   options.accessMode === mode.id ? "active" : ""
                 }`}
-                onClick={() => onChange({ ...options, accessMode: mode.id })}
+                onClick={() => onChange({
+                  ...options,
+                  accessMode: mode.id,
+                  ...(mode.id !== DEEPSEEK_ACCESS_MODE_GATEWAY
+                    ? { imageGenEnabled: false, imageGenAccountIds: [] }
+                    : {}),
+                })}
                 disabled={disabled}
               >
                 <span className="codex-api-key-launch-mode-title">{mode.title}</span>

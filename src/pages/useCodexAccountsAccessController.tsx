@@ -25,6 +25,7 @@ import {
   readCodexLaunchPreviewLastInstanceId,
 } from "../utils/codexLaunchPreviewInstancePreference";
  import { isDeepSeekAccount, isCodexTokenPlanAccount, resolveDeepSeekBindAccountId } from "../utils/codexDeepSeekAccess";
+ import { isCodexProviderAccessAccount } from "../utils/codexProviderAccess";
 import { contextWindowDraftsFromRecord, parseContextWindowDrafts } from "../utils/codexModelContextWindows";
 import type { CodexAccount } from "../types/codex";
 import { CODEX_API_SERVICE_BIND_ID, type InstanceProfile } from "../types/instance";
@@ -718,7 +719,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
        if (!account) return false;
         persistCodexLaunchPreviewLastInstanceId(account.id, launchPreviewInstanceId);
         let launchAccount = account;
-        if (isDeepSeekAccount(account) && launchOptions?.deepSeekAccessMode) {
+        if (isCodexProviderAccessAccount(account) && launchOptions?.deepSeekAccessMode) {
           launchAccount = await updateAccountInstanceAccess(
             account.id,
             launchOptions.deepSeekAccessMode,

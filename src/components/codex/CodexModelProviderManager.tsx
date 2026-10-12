@@ -48,6 +48,7 @@ import {
   isDeepSeekAccount,
   resolveDeepSeekBindAccountId,
 } from "../../utils/codexDeepSeekAccess";
+import { isCodexProviderAccessAccount } from "../../utils/codexProviderAccess";
 import {
   contextWindowDraftsFromRecord,
   parseContextWindowDrafts,
@@ -3066,7 +3067,7 @@ export function useCodexModelProviderManagerController({
     ],
   );
 
-  /** 启动预览确认：与账号流程一致（DeepSeek 先选接入方式与模型），再绑定实例并按需启动。 */
+  /** Save the provider's access choice before binding and optionally launching its instance. */
   const executeProviderLaunchPreview = useCallback(
     async (
       launchAfterSwitch: boolean,
@@ -3077,7 +3078,7 @@ export function useCodexModelProviderManagerController({
       setNotice(null);
       try {
         let account = preview.account;
-        if (isDeepSeekAccount(account) && launchOptions?.deepSeekAccessMode) {
+        if (isCodexProviderAccessAccount(account) && launchOptions?.deepSeekAccessMode) {
           account = await updateAccountInstanceAccess(
             account.id,
             launchOptions.deepSeekAccessMode,

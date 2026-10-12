@@ -45,6 +45,10 @@ import {
   resolveDeepSeekBindAccountId,
 } from "../utils/codexDeepSeekAccess";
 import {
+  isCodexProviderAccessAccount,
+  resolveCodexProviderAccessMode,
+} from "../utils/codexProviderAccess";
+import {
   isPrivacyModeEnabledByDefault,
   maskSensitiveValue,
 } from "../utils/privacy";
@@ -296,7 +300,7 @@ export function CodexInstancesContent({
       let launchAccount = account;
       if (
         account &&
-        isDeepSeekAccount(account) &&
+        isCodexProviderAccessAccount(account) &&
         launchOptions?.deepSeekAccessMode
       ) {
         launchAccount = await updateAccountInstanceAccess(
@@ -306,8 +310,15 @@ export function CodexInstancesContent({
           launchOptions.imageGenerationAccountIds ?? [],
         );
       }
-      if (launchAccount && isDeepSeekAccount(launchAccount)) {
-        const nextBindId = resolveDeepSeekBindAccountId(launchAccount);
+      if (launchAccount && isCodexProviderAccessAccount(launchAccount)) {
+        // An explicit gateway binding overrides the saved access mode. Remove it
+        // for direct/CDP while preserving other providers' existing gateway/follow bindings.
+        const nextBindId = isDeepSeekAccount(launchAccount)
+          ? resolveDeepSeekBindAccountId(launchAccount)
+          : resolveCodexProviderAccessMode(launchAccount) !== "gateway" &&
+              instance.bindAccountId?.startsWith(CODEX_PROVIDER_GATEWAY_BIND_PREFIX)
+            ? launchAccount.id
+            : instance.bindAccountId || null;
         if ((instance.bindAccountId || null) !== nextBindId) {
           await instanceStore.updateInstance({
             instanceId: instance.id,
