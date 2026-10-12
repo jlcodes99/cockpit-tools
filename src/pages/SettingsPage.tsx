@@ -232,6 +232,7 @@ interface GeneralConfig {
   codex_auto_restore_takeover_on_launch?: boolean;
   codex_preserve_verified_external_bridge?: boolean;
   antigravity_launch_on_switch: boolean;
+  antigravity_sync_cli_on_switch?: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
   codex_hide_relay_quota?: boolean;
@@ -668,6 +669,7 @@ export function useSettingsPageController() {
   const [codexAutoRestoreTakeoverOnLaunch, setCodexAutoRestoreTakeoverOnLaunch] = useState(true);
   const [codexPreserveVerifiedExternalBridge, setCodexPreserveVerifiedExternalBridge] = useState(false);
   const [antigravityLaunchOnSwitch, setAntigravityLaunchOnSwitch] = useState(true);
+  const [antigravitySyncCliOnSwitch, setAntigravitySyncCliOnSwitch] = useState(true);
   const [codexRestartSpecifiedAppOnSwitch, setCodexRestartSpecifiedAppOnSwitch] = useState(false);
   const [codexLocalAccessEntryVisible, setCodexLocalAccessEntryVisible] = useState(true);
   const [codexHideRelayQuota, setCodexHideRelayQuota] = useState(false);
@@ -1156,6 +1158,7 @@ export function useSettingsPageController() {
       codex_auto_restore_takeover_on_launch: codexAutoRestoreTakeoverOnLaunch,
       codex_preserve_verified_external_bridge: codexPreserveVerifiedExternalBridge,
       antigravity_launch_on_switch: antigravityLaunchOnSwitch,
+      antigravity_sync_cli_on_switch: antigravitySyncCliOnSwitch,
       codex_restart_specified_app_on_switch: codexRestartSpecifiedAppOnSwitch,
       codex_local_access_entry_visible: codexLocalAccessEntryVisible,
       codex_hide_relay_quota: codexHideRelayQuota,
@@ -1392,6 +1395,7 @@ export function useSettingsPageController() {
     codexAutoRestoreTakeoverOnLaunch,
     codexPreserveVerifiedExternalBridge,
     antigravityLaunchOnSwitch,
+    antigravitySyncCliOnSwitch,
     codexRestartSpecifiedAppOnSwitch,
     codexLocalAccessEntryVisible,
     codexHideRelayQuota,
@@ -1778,6 +1782,7 @@ export function useSettingsPageController() {
       setCodexAutoRestoreTakeoverOnLaunch(config.codex_auto_restore_takeover_on_launch ?? true);
       setCodexPreserveVerifiedExternalBridge(config.codex_preserve_verified_external_bridge ?? false);
       setAntigravityLaunchOnSwitch(config.antigravity_launch_on_switch ?? true);
+      setAntigravitySyncCliOnSwitch(config.antigravity_sync_cli_on_switch ?? true);
       setCodexRestartSpecifiedAppOnSwitch(
         config.codex_restart_specified_app_on_switch ?? false,
       );
@@ -3225,6 +3230,8 @@ export function useSettingsPageController() {
     antigravityAppPath,
     antigravityDualSwitchNoRestartEnabled,
     antigravityLaunchOnSwitch,
+    antigravitySyncCliOnSwitch,
+    setAntigravitySyncCliOnSwitch,
     antigravityScopeAccounts,
     antigravityScopeTypeOptions,
     antigravitySeamlessSwitchUnlocked,

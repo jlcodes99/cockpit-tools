@@ -93,6 +93,99 @@ fn build_antigravity_credential_payload(account: &Account) -> Result<String, Str
     .map_err(|e| format!("序列化 Antigravity 系统凭据失败: {}", e))
 }
 
+
+/// 同步 Antigravity CLI 及 Language Server 凭据到本地文件
+pub fn write_antigravity_cli_credential(account: &Account) -> Result<(), String> {
+    let payload_json = build_antigravity_credential_payload(account)?;
+    let gemini_dir = crate::modules::antigravity_paths::gemini_dir()?;
+    if !gemini_dir.exists() {
+        std::fs::create_dir_all(&gemini_dir)
+            .map_err(|e| format!("创建 .gemini 目录失败: {}", e))?;
+    }
+
+    let jetski_token_path = crate::modules::antigravity_paths::jetski_oauth_token_path()?;
+    write_secure_credential_file(&jetski_token_path, &payload_json)?;
+
+    let cli_dir = crate::modules::antigravity_paths::antigravity_cli_dir()?;
+    if !cli_dir.exists() {
+        let _ = std::fs::create_dir_all(&cli_dir);
+    }
+    let cli_token_path = crate::modules::antigravity_paths::antigravity_cli_oauth_token_path()?;
+
+    let is_symlink_to_jetski = match std::fs::read_link(&cli_token_path) {
+        Ok(target) => {
+            target == jetski_token_path
+                || target.file_name() == jetski_token_path.file_name()
+                || target.to_string_lossy().contains("jetski-standalone-oauth-token")
+        }
+        Err(_) => false,
+    };
+    if !is_symlink_to_jetski {
+        write_secure_credential_file(&cli_token_path, &payload_json)?;
+    }
+
+    let google_accounts_path = crate::modules::antigravity_paths::google_accounts_path()?;
+    update_google_accounts_active(&google_accounts_path, &account.email)?;
+
+    crate::modules::logger::log_info(&format!(
+        "[Antigravity CLI] 自动同步 CLI 凭据完成: {}",
+        account.email
+    ));
+    Ok(())
+}
+
+fn write_secure_credential_file(path: &std::path::Path, content: &str) -> Result<(), String> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path)
+        .map_err(|e| format!("创建凭据文件失败 {:?}: {}", path, e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    file.write_all(content.as_bytes())
+        .map_err(|e| format!("写入凭据文件失败 {:?}: {}", path, e))?;
+    file.flush()
+        .map_err(|e| format!("刷新凭据文件失败 {:?}: {}", path, e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+fn update_google_accounts_active(path: &std::path::Path, email: &str) -> Result<(), String> {
+    let mut root: serde_json::Value = if path.exists() {
+        match std::fs::read_to_string(path) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({})),
+            Err(_) => serde_json::json!({}),
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    if !root.is_object() {
+        root = serde_json::json!({});
+    }
+
+    if let Some(obj) = root.as_object_mut() {
+        obj.insert(
+            "active".to_string(),
+            serde_json::Value::String(email.to_string()),
+        );
+        if !obj.contains_key("old") {
+            obj.insert("old".to_string(), serde_json::json!([]));
+        }
+    }
+
+    let serialized = serde_json::to_string_pretty(&root)
+        .map_err(|e| format!("序列化 google_accounts.json 失败: {}", e))?;
+    std::fs::write(path, serialized)
+        .map_err(|e| format!("写入 google_accounts.json 失败: {}", e))?;
+    Ok(())
+}
+
 pub fn write_antigravity_system_credential(account: &Account) -> Result<(), String> {
     let payload_json = build_antigravity_credential_payload(account)?;
 
@@ -351,4 +444,77 @@ pub fn read_antigravity_system_credential() -> Result<Option<AntigravitySystemCr
         return Ok(None);
     };
     parse_antigravity_system_credential(&secret).map(Some)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::TokenData;
+
+    #[test]
+    fn test_build_antigravity_credential_payload() {
+        let token = TokenData::new(
+            "test-access-token".to_string(),
+            "test-refresh-token".to_string(),
+            3600,
+            Some("test@example.com".to_string()),
+            None,
+            None,
+        );
+        let account = Account::new(
+            "account-id".to_string(),
+            "test@example.com".to_string(),
+            token,
+        );
+        let payload = build_antigravity_credential_payload(&account).expect("payload");
+        let parsed: serde_json::Value = serde_json::from_str(&payload).expect("valid json");
+        assert_eq!(parsed["auth_method"], "consumer");
+        assert_eq!(parsed["token"]["access_token"], "test-access-token");
+        assert_eq!(parsed["token"]["refresh_token"], "test-refresh-token");
+        assert_eq!(parsed["token"]["token_type"], "Bearer");
+        assert!(parsed["token"]["expiry"].as_str().unwrap().contains("T"));
+    }
+
+    #[test]
+    fn test_write_secure_credential_file() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "ag-cred-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let file_path = temp_dir.join("test-token");
+        write_secure_credential_file(&file_path, "{\"test\": true}").expect("write secure");
+        let read_back = std::fs::read_to_string(&file_path).expect("read");
+        assert_eq!(read_back, "{\"test\": true}");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let meta = std::fs::metadata(&file_path).expect("meta");
+            assert_eq!(meta.permissions().mode() & 0o777, 0o600);
+        }
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_update_google_accounts_active() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "ag-google-acc-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let file_path = temp_dir.join("google_accounts.json");
+
+        update_google_accounts_active(&file_path, "user1@example.com").expect("create accounts");
+        let parsed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file_path).unwrap()).unwrap();
+        assert_eq!(parsed["active"], "user1@example.com");
+        assert!(parsed["old"].is_array());
+
+        update_google_accounts_active(&file_path, "user2@example.com").expect("update active");
+        let parsed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file_path).unwrap()).unwrap();
+        assert_eq!(parsed["active"], "user2@example.com");
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
 }
