@@ -81,6 +81,10 @@ pub enum WsMessage {
         account_id: String,
         #[serde(default)]
         request_id: Option<String>,
+        /// 可选目标运行时：`"antigravity"` 为桌面版（走与 UI 一致的 legacy 切换流程），
+        /// 缺省或 `"antigravity_ide"` 保持既有行为。
+        #[serde(default)]
+        runtime_target: Option<String>,
     },
 
     /// 请求设置语言
@@ -726,6 +730,7 @@ async fn handle_client_message(
         WsMessage::SwitchAccount {
             account_id,
             request_id,
+            runtime_target,
         } => {
             crate::modules::logger::log_info("[WS] 收到切换请求");
 
@@ -734,23 +739,57 @@ async fn handle_client_message(
             tokio::spawn(async move {
                 let dual_no_restart_enabled = crate::modules::config::get_user_config()
                     .antigravity_dual_switch_no_restart_enabled;
-                let switch_result = if dual_no_restart_enabled {
-                    crate::modules::account::switch_account_dual_no_restart(
-                        &account_id,
-                        "manual",
-                        "tools.ws.request_switch_account",
-                        "ws_request_switch_account",
-                        None,
-                    )
-                    .await
-                } else {
-                    crate::modules::account::switch_account_internal(&account_id).await
+                let switch_plan = crate::commands::account::resolve_ws_switch_plan(
+                    runtime_target.as_deref(),
+                    dual_no_restart_enabled,
+                );
+                let switch_result = match switch_plan {
+                    crate::commands::account::WsSwitchPlan::LegacyDesktop => {
+                        // 桌面版目标：与 UI 命令一致，走 legacy 切换流程（写系统凭据/状态库并启动）。
+                        match crate::get_app_handle() {
+                            Some(app_handle) => {
+                                crate::commands::account::switch_account_legacy_antigravity(
+                                    app_handle.clone(),
+                                    account_id,
+                                )
+                                .await
+                            }
+                            None => {
+                                let error_message =
+                                    "应用句柄不可用，无法切换 Antigravity 桌面版账号".to_string();
+                                let msg = WsMessage::SwitchError {
+                                    message: error_message,
+                                };
+                                if let Ok(json) = serde_json::to_string(&msg) {
+                                    let _ = server_clone.send(json);
+                                }
+                                return;
+                            }
+                        }
+                    }
+                    crate::commands::account::WsSwitchPlan::IdeDualNoRestart => {
+                        crate::modules::account::switch_account_dual_no_restart(
+                            &account_id,
+                            "manual",
+                            "tools.ws.request_switch_account",
+                            "ws_request_switch_account",
+                            None,
+                        )
+                        .await
+                    }
+                    crate::commands::account::WsSwitchPlan::IdeInternal => {
+                        crate::modules::account::switch_account_internal(&account_id).await
+                    }
                 };
 
                 match switch_result {
                     Ok(account) => {
-                        // 无感双通道链路内已广播 account_switched，这里避免重复广播。
-                        if !dual_no_restart_enabled {
+                        // 无感双通道链路与桌面版切换流程内已广播 account_switched，这里避免重复广播。
+                        if !matches!(
+                            switch_plan,
+                            crate::commands::account::WsSwitchPlan::IdeDualNoRestart
+                                | crate::commands::account::WsSwitchPlan::LegacyDesktop
+                        ) {
                             let msg = WsMessage::AccountSwitched {
                                 account_id: account.id,
                                 email: account.email,
@@ -1111,4 +1150,51 @@ fn handle_set_language(language: &str, source: Option<&str>) -> Result<String, S
     broadcast_language_changed(&normalized, source.unwrap_or("ws"));
 
     Ok(format!("语言已更新为 {}", normalized))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WsMessage;
+
+    #[test]
+    fn switch_account_message_parses_without_runtime_target() {
+        let msg: WsMessage = serde_json::from_str(
+            r#"{"type":"request.switch_account","payload":{"account_id":"acc-1"}}"#,
+        )
+        .expect("switch_account message must parse");
+
+        match msg {
+            WsMessage::SwitchAccount {
+                account_id,
+                request_id,
+                runtime_target,
+            } => {
+                assert_eq!(account_id, "acc-1");
+                assert_eq!(request_id, None);
+                assert_eq!(runtime_target, None);
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn switch_account_message_parses_desktop_runtime_target() {
+        let msg: WsMessage = serde_json::from_str(
+            r#"{"type":"request.switch_account","payload":{"account_id":"acc-1","runtime_target":"antigravity","request_id":"req-1"}}"#,
+        )
+        .expect("switch_account message with runtime_target must parse");
+
+        match msg {
+            WsMessage::SwitchAccount {
+                account_id,
+                request_id,
+                runtime_target,
+            } => {
+                assert_eq!(account_id, "acc-1");
+                assert_eq!(runtime_target.as_deref(), Some("antigravity"));
+                assert_eq!(request_id.as_deref(), Some("req-1"));
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
+    }
 }

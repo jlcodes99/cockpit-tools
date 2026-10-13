@@ -48,6 +48,29 @@ fn resolve_antigravity_switch_flow(
     }
 }
 
+/// WebSocket `request.switch_account` 的执行计划。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WsSwitchPlan {
+    /// 目标为桌面版：走与 UI 命令一致的 legacy 切换流程（写系统凭据/状态库并启动）。
+    LegacyDesktop,
+    /// IDE 目标且无感双通道开启：与既有 WS 行为一致。
+    IdeDualNoRestart,
+    /// IDE 目标默认路径：与既有 WS 行为一致。
+    IdeInternal,
+}
+
+/// 解析 WebSocket 切号计划：缺省目标时完全保持既有行为，仅显式请求桌面版时改走 legacy 流程。
+pub(crate) fn resolve_ws_switch_plan(
+    runtime_target: Option<&str>,
+    dual_no_restart_enabled: bool,
+) -> WsSwitchPlan {
+    match normalize_antigravity_runtime_target(runtime_target) {
+        AntigravityRuntimeTarget::Legacy => WsSwitchPlan::LegacyDesktop,
+        AntigravityRuntimeTarget::Ide if dual_no_restart_enabled => WsSwitchPlan::IdeDualNoRestart,
+        AntigravityRuntimeTarget::Ide => WsSwitchPlan::IdeInternal,
+    }
+}
+
 fn parse_version_parts(value: &str) -> Vec<u64> {
     value
         .trim()
@@ -476,7 +499,7 @@ async fn run_auto_switch_for_runtime_target(
     .await
 }
 
-async fn switch_account_legacy_antigravity(
+pub(crate) async fn switch_account_legacy_antigravity(
     app: AppHandle,
     account_id: String,
 ) -> Result<models::Account, String> {
@@ -890,7 +913,8 @@ pub async fn save_platform_account_groups(platform: String, data: String) -> Res
 mod tests {
     use super::{
         normalize_antigravity_runtime_target, resolve_antigravity_switch_flow,
-        validate_account_groups_payload, AntigravityRuntimeTarget, AntigravitySwitchFlow,
+        resolve_ws_switch_plan, validate_account_groups_payload, AntigravityRuntimeTarget,
+        AntigravitySwitchFlow, WsSwitchPlan,
     };
 
     #[test]
@@ -951,6 +975,38 @@ mod tests {
         assert_eq!(
             normalize_antigravity_runtime_target(Some("antigravity")),
             AntigravityRuntimeTarget::Legacy
+        );
+    }
+
+    #[test]
+    fn ws_switch_plan_routes_desktop_target_to_legacy_flow() {
+        assert_eq!(
+            resolve_ws_switch_plan(Some("antigravity"), false),
+            WsSwitchPlan::LegacyDesktop
+        );
+        assert_eq!(
+            resolve_ws_switch_plan(Some("antigravity"), true),
+            WsSwitchPlan::LegacyDesktop
+        );
+    }
+
+    #[test]
+    fn ws_switch_plan_keeps_current_behavior_for_ide_and_missing_target() {
+        assert_eq!(
+            resolve_ws_switch_plan(None, false),
+            WsSwitchPlan::IdeInternal
+        );
+        assert_eq!(
+            resolve_ws_switch_plan(None, true),
+            WsSwitchPlan::IdeDualNoRestart
+        );
+        assert_eq!(
+            resolve_ws_switch_plan(Some("antigravity_ide"), false),
+            WsSwitchPlan::IdeInternal
+        );
+        assert_eq!(
+            resolve_ws_switch_plan(Some("antigravity_ide"), true),
+            WsSwitchPlan::IdeDualNoRestart
         );
     }
 }
