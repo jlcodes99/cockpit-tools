@@ -38,6 +38,15 @@ fn read_top_level_int_from_doc(doc: &Document, key: &str) -> Option<i64> {
     doc.get(key).and_then(|item| item.as_integer())
 }
 
+fn context_config_key(base_dir: &Path, doc: &Document) -> Result<String, String> {
+    serde_json::to_vec(&(
+        base_dir.to_string_lossy(),
+        doc.get(CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY).map(|item| item.to_string().trim().to_string()),
+        doc.get(CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY).map(|item| item.to_string().trim().to_string()),
+    )).map(|bytes| format!("{:x}", Sha256::digest(bytes)))
+        .map_err(|error| format!("读取上下文配置基线失败: {}", error))
+}
+
 #[derive(Debug, Default)]
 struct ExperimentalModelCatalogState {
     enabled: bool,
@@ -1823,7 +1832,23 @@ pub fn read_quick_config_from_config_toml(base_dir: &Path) -> Result<CodexQuickC
         .or_else(|| experimental_reset_models.first())
         .map(|model| model.model_id.clone());
 
+    let stored_models = match fs::read_to_string(experimental_model_config_path(base_dir)) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("读取模型配置基线失败: {}", error)),
+    };
+    let model_catalog_config_key = serde_json::to_vec(&(
+        doc.get(CODEX_CONFIG_MODEL_KEY).map(|item| item.to_string().trim().to_string()),
+        doc.get(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY).map(|item| item.to_string().trim().to_string()),
+        experimental.enabled,
+        stored_models,
+    )).map(|bytes| format!("{:x}", Sha256::digest(bytes)))
+        .map_err(|error| format!("读取模型配置基线失败: {}", error))?;
+
     Ok(CodexQuickConfig {
+        config_dir: base_dir.to_string_lossy().to_string(),
+        context_config_key: context_config_key(base_dir, &doc)?,
+        model_catalog_config_key,
         context_window_1m: detected_model_context_window == Some(CODEX_CONTEXT_WINDOW_1M_VALUE),
         auto_compact_token_limit: detected_auto_compact_token_limit
             .unwrap_or(CODEX_AUTO_COMPACT_DEFAULT_LIMIT),
@@ -1909,6 +1934,9 @@ fn write_quick_config_to_config_toml_with_default_mode(
 ) -> Result<CodexQuickConfig, String> {
     let config_path = get_config_toml_path(base_dir);
     let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let update_model_catalog = experimental_model_catalog_enabled.is_some()
+        || experimental_model_catalog_models.is_some()
+        || experimental_model_catalog_default_model_id.is_some();
     let disabling_experimental_catalog = experimental_model_catalog_enabled == Some(false);
     let had_experimental_model_control_state = experimental_model_policy_path(base_dir).is_file()
         || experimental_model_config_path(base_dir).is_file()
@@ -1932,7 +1960,7 @@ fn write_quick_config_to_config_toml_with_default_mode(
     // Disabling the Cockpit catalog must not migrate or retain a legacy reference as part of
     // this save. The official client must use its own catalog and account-level visibility rules;
     // any user-owned catalog file is left untouched on disk, but is no longer activated here.
-    let migrated_legacy_catalog = if disabling_experimental_catalog {
+    let migrated_legacy_catalog = if !update_model_catalog || disabling_experimental_catalog {
         false
     } else {
         migrate_legacy_managed_catalog_reference(base_dir, &mut doc)?
@@ -1982,7 +2010,7 @@ fn write_quick_config_to_config_toml_with_default_mode(
     }
 
     let effective_experimental_enabled = experimental_model_catalog_enabled
-        .or_else(|| experimental_model_policy_enabled(base_dir).then_some(true));
+        .or_else(|| (update_model_catalog && experimental_model_policy_enabled(base_dir)).then_some(true));
     let remove_experimental_catalog_after_write = apply_experimental_model_catalog_to_doc(
         base_dir,
         &mut doc,

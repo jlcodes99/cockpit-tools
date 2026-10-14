@@ -14,7 +14,8 @@ function harness(mode: string, options: { loaded?: boolean; account?: any; save?
   const remember = (event?: any) => { if (event?.currentTarget) remembered.push(event.currentTarget); };
   const t = (key: string) => key;
   const modalError = { message: null, scrollKey: 0, set() {} };
-  const config = { experimental_model_catalog_available: true, experimental_model_catalog_enabled: false, experimental_model_catalog_models: [],
+  const config = { config_dir: '/profiles/a', context_config_key: 'context', model_catalog_config_key: 'catalog',
+    experimental_model_catalog_available: true, experimental_model_catalog_enabled: false, experimental_model_catalog_models: [],
     experimental_model_catalog_default_model_id: null };
   const emptyAccounts: any[] = options.accounts ?? [];
   const emptyInstances: any[] = [];

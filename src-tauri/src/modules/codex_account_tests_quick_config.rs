@@ -283,6 +283,67 @@
     }
 
     #[test]
+    fn context_only_save_preserves_enabled_custom_catalog_and_unrelated_settings() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let env = TestEnvGuard::new("codex-context-only-save-test");
+        let base_dir = env.codex_home();
+        let models = vec![CodexExperimentalModelDefinition {
+            model_id: "provider/custom".into(),
+            display_name: "Custom model".into(),
+            reasoning_efforts: None,
+            default_reasoning_effort: None,
+            context_window: None,
+            auto_compact_token_limit: None,
+        }];
+        super::save_model_catalog_for_base_dir_preserving_context(
+            &base_dir, true, models, Some("provider/custom".into()),
+        ).expect("enable custom catalog");
+        // Finish the existing display-name migration before checking save ownership.
+        read_quick_config_from_config_toml(&base_dir).expect("read migrated catalog");
+        let catalog_path = base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        let mut catalog: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(&catalog_path).expect("read catalog"),
+        ).expect("parse catalog");
+        catalog["user_metadata"] = serde_json::json!("keep");
+        fs::write(&catalog_path, catalog.to_string()).expect("customize catalog metadata");
+        let config_path = base_dir.join("config.toml");
+        fs::write(&config_path,
+            "model = \"external-user-default\"\nmodel_catalog_json = \"cockpit-model-catalog.json\"\nservice_tier = \"fast\"\nmodel_context_window = 200000\nmodel_auto_compact_token_limit = 180000\n",
+        ).expect("write current settings");
+        let before = read_quick_config_from_config_toml(&base_dir).expect("read before save");
+        assert!(before.experimental_model_catalog_enabled);
+        let side_files = [
+            super::experimental_model_catalog_path(&base_dir),
+            super::experimental_model_config_path(&base_dir),
+            super::experimental_model_policy_path(&base_dir),
+            super::user_customized_model_catalog_marker_path(&base_dir),
+            super::experimental_model_previous_catalog_path(&base_dir),
+        ].map(|path| {
+            let content = fs::read(&path).ok();
+            (path, content)
+        });
+
+        let saved = super::save_quick_config_for_base_dir_with_default(
+            &base_dir, Some(516_000), Some(464_400), None, None, None,
+        ).expect("save context without model parameters");
+
+        let content = fs::read_to_string(&config_path).expect("read saved config");
+        let document = content.parse::<toml_edit::Document>().expect("parse saved config");
+        assert_eq!(document["model_context_window"].as_integer(), Some(516_000));
+        assert_eq!(document["model_auto_compact_token_limit"].as_integer(), Some(464_400));
+        assert_eq!(document["model"].as_str(), Some("external-user-default"));
+        assert_eq!(document["model_catalog_json"].as_str(), Some("cockpit-model-catalog.json"));
+        assert_eq!(document["service_tier"].as_str(), Some("fast"));
+        assert_ne!(saved.context_config_key, before.context_config_key);
+        assert_eq!(saved.model_catalog_config_key, before.model_catalog_config_key);
+        for (path, original) in side_files {
+            assert_eq!(fs::read(&path).ok(), original, "{}", path.display());
+        }
+    }
+
+    #[test]
     fn quick_config_catalog_only_context_preservation_keeps_latest_values() {
         let base_dir = make_temp_dir("codex-catalog-context-preservation-test");
         let config_path = base_dir.join("config.toml");

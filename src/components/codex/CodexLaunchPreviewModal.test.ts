@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import { buildCodexModelRoutingValue, resolveRoutingCatalog } from "../../utils/codexModelRoutingValue.ts";
+import { codexLaunchPreviewQuickConfigKey } from "../../utils/codexLaunchPreviewConfig.ts";
 import { deferred, settlePromises } from "../../../tests/helpers/reactHookHarness";
 
 // Exercise the production callbacks with controlled IPC completion order. This
@@ -42,12 +43,13 @@ function harness(routing = false, overlay = "global-progress-overlay") {
   const cached: unknown[] = [];
   let closed = false;
   let store = { instances: [{ id: "synthetic", saved: false }, { id: "unrelated", saved: false }] };
-  const saved = { model: "saved" };
+  const saved = { model: "saved", context_config_key: 'saved-context' };
   const savedInstance = { id: "synthetic", saved: true };
   const c: Record<string, any> = {
     configSession: { current: 1 }, configWritePending: { current: false },
-    busy: false, checkingConfig: false, configReady: true, configBusy: false, contextConfigSaving: false,
-    loadedConfig: {}, loadedInstanceKey: null, configLoadInputs: { current: { selectedInstance: store.instances[0] } },
+    busy: false, checkingConfig: false, configReady: true, configBusy: false, contextConfigBusy: false, contextConfigSaving: false,
+    loadedConfig: { context_config_key: 'context', model_catalog_config_key: 'catalog' }, loadedInstanceKey: null,
+    configLoadInputs: { current: { selectedInstance: store.instances[0] } },
     catalogEnabled: false, modelsError: null, models: [], defaultModelId: null,
     routingEnabled: false, routingEnabledForSave: false, routingDirty: routing,
     nextModelRouting: { enabled: false, routes: [] }, mixedRoutingBindAccountId: undefined,
@@ -56,13 +58,14 @@ function harness(routing = false, overlay = "global-progress-overlay") {
     loadedTarget: "synthetic", previewTargetKey: "synthetic",
     document: { querySelectorAll: () => ["codex-launch-preview-overlay", overlay].map((className) => ({ classList: [className] })) },
     onClose: () => { assert.equal(c.configSession.current, 2); closed = true; events.push("close"); },
-    loadCodexLaunchPreviewConfig: () => { events.push("read"); return read.promise; },
+    loadCodexLaunchPreviewConfig: () => { events.push("read"); return read.promise.then((config) => ({ context_config_key: 'context', ...config })); },
     saveCodexInstanceQuickConfig: () => { events.push("quick-write"); return write.promise; },
     saveCodexInstanceConfiguration: () => { events.push("routing-write"); return write.promise; },
     rememberCodexLaunchPreviewConfig: (_id: string, config: unknown) => { cached.push(config); },
     useCodexInstanceStore: { getState: () => store, setState: (next: typeof store) => { store = next; } },
     resolveRoutingCatalog: (models: unknown[]) => ({ enabled: false, models, defaultModelId: null }),
     codexLaunchPreviewQuickConfigKey: () => "same",
+    resolveStoredCompactLimitInput: (_window: unknown, compact: number | null) => compact?.toString() ?? '',
     codexLaunchPreviewInstanceConfigKey: (instance: { id: string }) => instance.id,
     onExecute: async () => { events.push("launch"); },
     onInstanceChange: async () => { events.push("switch"); },
@@ -71,7 +74,8 @@ function harness(routing = false, overlay = "global-progress-overlay") {
   };
   for (const name of ["setCheckingConfig", "setNotice", "setError", "setSaving", "setExecuting",
     "setChangingInstance", "setContextConfigError", "setContextConfigSaving", "setConfigLoadError",
-    "setLoadedInstanceKey", "setRoutingRoutes", "applyLoadedConfig", "setContextConfigSnapshot", "setContextConfigOpen"]) {
+    "setLoadedInstanceKey", "setRoutingRoutes", "applyLoadedConfig", "setContextConfigSnapshot", "setContextConfigOpen",
+    "setLoadedConfig", "setContextOverrideEnabled", "setContextWindowInput", "setCompactLimitInput"]) {
     c[name] = () => { if (closed) lateUpdates.push(name); else events.push(name); };
   }
   vm.runInNewContext(compiled, c);
@@ -91,6 +95,57 @@ test("upstream close policy allows the busy footer and global overlays, but reta
 });
 
 const actions = ["persistDraft", "handleExecute", "handleInstanceChange", "applyContextConfig"] as const;
+test("saving context or a draft after the account pool refreshes its display models does not report a conflict", async () => {
+  for (const action of ["persistDraft", "applyContextConfig"]) {
+    const h = harness();
+    h.c.codexLaunchPreviewQuickConfigKey = codexLaunchPreviewQuickConfigKey;
+    Object.assign(h.c.loadedConfig, {
+      detected_model_context_window: 200000,
+      detected_auto_compact_token_limit: 180000,
+      experimental_model_catalog_models: [{ model_id: "pool-a", display_name: "Pool A" }],
+    });
+    Object.assign(h.c, { contextOverrideEnabled: true, contextWindowInput: "300000", compactLimitInput: "270000",
+      catalogEnabled: true, models: [{ model_id: "draft-model", display_name: "Unsaved model" }], defaultModelId: "draft-model" });
+    let payload: any[] = [];
+    h.c.saveCodexInstanceQuickConfig = (...args: any[]) => { payload = args; h.events.push("quick-write"); return h.write.promise; };
+    const pending = h.c.handlers[action]();
+    h.read.resolve({
+      ...h.c.loadedConfig,
+      experimental_model_catalog_models: [{ model_id: "pool-b", display_name: "Pool B" }],
+    });
+    await settlePromises();
+    assert.equal(h.events.includes("setConfigLoadError"), false);
+    assert.equal(h.events.includes("quick-write"), true);
+    if (action === "applyContextConfig") assert.deepEqual(payload, ["synthetic", 300000, 270000]);
+    h.completeWrite(action === "applyContextConfig");
+    const result = await pending;
+    if (action === "persistDraft") assert.equal(result, true);
+    else {
+      assert.equal(h.events.includes("setContextConfigOpen"), true);
+      assert.equal(h.c.models[0].model_id, "draft-model");
+      assert.equal(h.c.defaultModelId, "draft-model");
+    }
+  }
+});
+
+test("applying context rejects an externally changed context before dispatching a write", async () => {
+  const h = harness();
+  h.c.contextOverrideEnabled = true;
+  h.c.contextWindowInput = "300000";
+  h.c.compactLimitInput = "270000";
+  let conflict: string | undefined;
+  h.c.setConfigLoadError = (value: string) => { conflict = value; };
+  const pending = h.c.handlers.applyContextConfig();
+  h.read.resolve({ ...h.c.loadedConfig, context_config_key: "externally-changed-context" });
+  await pending;
+  assert.equal(conflict, "CODEX_LAUNCH_PREVIEW_CONFIG_CHANGED");
+  assert.equal(h.events.some((event) => event.endsWith("-write")), false);
+  assert.deepEqual(h.cached, []);
+  assert.equal(h.c.contextWindowInput, "300000");
+  assert.equal(h.c.compactLimitInput, "270000");
+  assert.equal(h.c.configWritePending.current, false);
+});
+
 for (const action of ["handleExecute", "handleInstanceChange"]) {
   test(`${action}: a clean draft cannot continue if Close wins the await boundary`, async () => {
     const h = harness(); h.c.dirty = false;
@@ -128,7 +183,10 @@ for (const action of actions) {
           assert.equal(h.events.includes("launch"), !failed && !close && action === "handleExecute");
           assert.equal(h.events.includes("switch"), !failed && !close && action === "handleInstanceChange");
           assert.equal(h.cached.length, failed ? 0 : 1);
-          if (!failed) assert.equal(h.cached[0], h.saved, "completed writes still refresh the shared cache");
+          if (!failed) {
+            if (action === "applyContextConfig") assert.equal((h.cached[0] as any).context_config_key, 'saved-context');
+            else assert.equal(h.cached[0], h.saved, "completed writes still refresh the shared cache");
+          }
           assert.equal(h.getStore().instances[0].saved, !failed && routing, "routing writes still refresh the shared instance store");
           assert.equal(h.getStore().instances[1].id, "unrelated");
           if (!close) assert.equal(h.c.configWritePending.current, false);

@@ -1731,7 +1731,7 @@ pub async fn codex_get_instance_quick_config(
             }
         }
         if let Some(draft) = read_pending_model_catalog(&base_dir)? {
-            draft.apply_to_view(&mut config);
+            draft.apply_to_view(&mut config)?;
         }
         Ok(config)
     })
@@ -1764,6 +1764,9 @@ pub async fn codex_save_instance_quick_config(
     experimental_model_catalog_default_model_id: Option<String>,
 ) -> Result<crate::models::codex::CodexQuickConfig, String> {
     let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
+    let update_model_catalog = experimental_model_catalog_enabled.is_some()
+        || experimental_model_catalog_models.is_some()
+        || experimental_model_catalog_default_model_id.is_some();
     let saved = tauri::async_runtime::spawn_blocking(move || {
         let saved = modules::codex_account::save_quick_config_for_base_dir_with_default(
             &base_dir,
@@ -1773,12 +1776,16 @@ pub async fn codex_save_instance_quick_config(
             experimental_model_catalog_models,
             experimental_model_catalog_default_model_id,
         )?;
-        modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        if update_model_catalog {
+            modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        }
         Ok::<crate::models::codex::CodexQuickConfig, String>(saved)
     })
     .await
     .map_err(|error| format!("保存 Codex 实例快捷配置后台任务失败: {}", error))??;
-    modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    if update_model_catalog {
+        modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    }
     Ok(saved)
 }
 
@@ -1870,6 +1877,7 @@ pub async fn codex_save_instance_configuration(
                     quick_config.context_window_1m = saved_context.context_window_1m;
                     quick_config.auto_compact_token_limit =
                         saved_context.auto_compact_token_limit;
+                    quick_config.context_config_key = saved_context.context_config_key;
                 }
                 Err(error) => {
                     restore_pending_model_catalog(

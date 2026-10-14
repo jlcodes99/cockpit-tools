@@ -14,19 +14,5 @@ export function codexLaunchPreviewInstanceConfigKey(instance?: InstanceProfile):
 }
 
 export function codexLaunchPreviewQuickConfigKey(config: CodexQuickConfig): string {
-  return JSON.stringify({
-    context: config.detected_model_context_window ?? null,
-    compact: config.detected_auto_compact_token_limit ?? null,
-    enabled: config.experimental_model_catalog_enabled,
-    available: config.experimental_model_catalog_available,
-    conflict: config.experimental_model_catalog_conflict ?? null,
-    defaultModel: config.experimental_model_catalog_default_model_id ?? null,
-    models: config.experimental_model_catalog_models.map((model) => ({
-      id: model.model_id,
-      name: model.display_name,
-      reasoning: model.reasoning_efforts ?? null,
-      context: model.context_window ?? null,
-      compact: model.auto_compact_token_limit ?? null,
-    })),
-  });
+  return JSON.stringify([config.context_config_key, config.model_catalog_config_key]);
 }

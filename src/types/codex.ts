@@ -57,6 +57,9 @@ export interface CodexModelConfigImportPreview {
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 export interface CodexQuickConfig {
+  config_dir: string;
+  context_config_key: string;
+  model_catalog_config_key: string;
   context_window_1m: boolean;
   auto_compact_token_limit: number;
   detected_model_context_window?: number;

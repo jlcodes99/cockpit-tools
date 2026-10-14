@@ -112,6 +112,9 @@ pub struct CodexModelConfigImportPreview {
 /// Codex config.toml 快捷配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexQuickConfig {
+    pub config_dir: String,
+    pub context_config_key: String,
+    pub model_catalog_config_key: String,
     pub context_window_1m: bool,
     pub auto_compact_token_limit: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]

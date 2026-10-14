@@ -8,6 +8,7 @@ import {
 
 function config(modelId: string): CodexQuickConfig {
   return {
+    config_dir: '/profiles/a', context_config_key: 'context', model_catalog_config_key: modelId,
     context_window_1m: false,
     auto_compact_token_limit: 180_000,
     experimental_model_catalog_enabled: true,

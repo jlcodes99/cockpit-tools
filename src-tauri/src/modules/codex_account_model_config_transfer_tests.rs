@@ -686,6 +686,80 @@ fn changing_model_metadata_preserves_default_toml_until_default_selection_change
 }
 
 #[test]
+fn model_import_preserves_speed_changed_after_preview_when_saving_default_model() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let env = ModelConfigTestEnvironment::new();
+    let profile = populated_profile(&env);
+    fs::write(experimental_model_policy_path(&profile), "enabled\n").unwrap();
+    fs::write(get_config_toml_path(&profile),
+        "model = \"gpt-5.6-sol\"\nmodel_catalog_json = \"cockpit-model-catalog.json\"\nservice_tier = \"default\"\nmodel_context_window = 200000\nmodel_auto_compact_token_limit = 180000\n",
+    ).unwrap();
+    let source = serde_json::to_string(&CodexModelConfigDocument {
+        schema: MODEL_CONFIG_SCHEMA.into(),
+        version: 1,
+        models: vec![definition("provider/imported")],
+        default_model_id: Some("provider/imported".into()),
+        api_service: None,
+    }).unwrap();
+    let preview = preview_model_config_import(&profile, &source, "replace").unwrap();
+    assert!(preview.errors.is_empty(), "{:?}", preview.errors);
+    let mut document = fs::read_to_string(get_config_toml_path(&profile)).unwrap()
+        .parse::<toml_edit::Document>().unwrap();
+    document["service_tier"] = value("fast");
+    fs::write(get_config_toml_path(&profile), document.to_string()).unwrap();
+    let service_path = crate::modules::codex_local_access::model_config_service_file_path().unwrap();
+    let original_service = fs::read(&service_path).unwrap();
+
+    let (saved, _, _) = import_model_config(&profile, &source, "replace", &preview.revision).unwrap();
+
+    assert!(saved.committed > 0);
+    assert!(saved.models.iter().any(|model| model.model_id == "provider/imported"));
+    let document = fs::read_to_string(get_config_toml_path(&profile)).unwrap()
+        .parse::<toml_edit::Document>().unwrap();
+    assert_eq!(document["model"].as_str(), Some("provider/imported"));
+    assert_eq!(document["service_tier"].as_str(), Some("fast"));
+    assert_eq!(document["model_context_window"].as_integer(), Some(200_000));
+    assert_eq!(document["model_auto_compact_token_limit"].as_integer(), Some(180_000));
+    assert_eq!(document["model_catalog_json"].as_str(), Some("cockpit-model-catalog.json"));
+    assert_eq!(fs::read(service_path).unwrap(), original_service);
+    assert!(!profile.join(MODEL_CONFIG_JOURNAL).exists());
+}
+
+#[test]
+fn model_import_rejects_model_edited_after_preview_without_writing_any_files() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let env = ModelConfigTestEnvironment::new();
+    let profile = populated_profile(&env);
+    let mut incoming = definition("gpt-5.6-sol");
+    incoming.display_name = "Imported name".into();
+    let source = json(vec![incoming]);
+    let preview = preview_model_config_import(&profile, &source, "replace").unwrap();
+    assert!(preview.errors.is_empty(), "{:?}", preview.errors);
+    let mut external = definition("gpt-5.6-sol");
+    external.display_name = "Edited elsewhere".into();
+    persist_experimental_model_definitions(&profile, vec![external], None).unwrap();
+    let before = model_config_snapshot(&profile).unwrap();
+
+    assert_eq!(
+        import_model_config(&profile, &source, "replace", &preview.revision).unwrap_err(),
+        "MODEL_CONFIG_STATE_CHANGED"
+    );
+
+    for file in before.files {
+        assert_eq!(
+            model_config_read_file(&model_config_file_path(&profile, &file.name).unwrap()).unwrap(),
+            file.before,
+            "{}", file.name
+        );
+    }
+    assert!(!profile.join(MODEL_CONFIG_JOURNAL).exists());
+}
+
+#[test]
 fn preview_rechecks_missing_account_and_revision_before_any_write() {
     let _lock = crate::modules::test_support::env_lock()
         .lock()

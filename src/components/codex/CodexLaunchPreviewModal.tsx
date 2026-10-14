@@ -397,6 +397,10 @@ export function CodexLaunchPreviewModal({
     forceRefreshing ||
     executing !== null;
   const configBusy = busy || checkingConfig || !configReady;
+  const contextTargetChanged = loadedConfig !== null && selectedInstance !== undefined &&
+    loadedConfig.config_dir !== selectedInstance.userDataDir;
+  const contextConfigBusy = busy || checkingConfig || loading || configLoadError !== null ||
+    loadedTarget !== previewTargetKey || loadedConfig === null || contextTargetChanged;
   const imageModelConfig = useCodexImageModelConfig(configBusy, imageGenPickerOpen || imageGenEnabled);
   const requestClose = useCallback(() => {
     // 只把本弹框自己的子弹框（codex-launch-preview-* 系列）视为“还叠着一层”：
@@ -1272,7 +1276,7 @@ export function CodexLaunchPreviewModal({
   );
 
   const openContextConfig = useCallback(() => {
-    if (configBusy) return;
+    if (contextConfigBusy) return;
     setContextConfigSnapshot({
       enabled: contextOverrideEnabled,
       contextWindowInput,
@@ -1282,7 +1286,7 @@ export function CodexLaunchPreviewModal({
     setError(null);
     setContextConfigError(null);
     setContextConfigOpen(true);
-  }, [configBusy, compactLimitInput, contextOverrideEnabled, contextWindowInput, setError]);
+  }, [contextConfigBusy, compactLimitInput, contextOverrideEnabled, contextWindowInput, setError]);
 
   const closeContextConfig = useCallback(
     (apply: boolean) => {
@@ -1299,17 +1303,17 @@ export function CodexLaunchPreviewModal({
 
   useEffect(() => {
     if (!contextConfigOpen || contextConfigSaving ||
-        (!instanceConfigChanged && configLoadError !== "CODEX_LAUNCH_PREVIEW_CONFIG_CHANGED")) return;
+        (!contextTargetChanged && configLoadError !== "CODEX_LAUNCH_PREVIEW_CONFIG_CHANGED")) return;
     // 保留当前选择，只有用户点击外层「重试」重新载入时才替换草稿。
     setContextConfigSnapshot(null);
     setContextConfigOpen(false);
-  }, [configLoadError, contextConfigOpen, contextConfigSaving, instanceConfigChanged]);
+  }, [configLoadError, contextConfigOpen, contextConfigSaving, contextTargetChanged]);
 
   /** 「应用上下文」直接落盘：立即写入 model_context_window / 自动压缩阈值，
    *  普通保存失败时保留弹框并在弹框内提示，避免用户以为已保存但 config.toml 没有变化。
    *  配置冲突时收起子弹框，让外层原有错误提示与「重试」可操作。 */
   const applyContextConfig = useCallback(async () => {
-    if (configBusy || contextConfigSaving || !loadedConfig) return;
+    if (contextConfigBusy || contextConfigSaving || !loadedConfig) return;
     const contextWindow = Number.parseInt(contextWindowInput, 10);
     const compactLimit = compactLimitInput.trim()
       ? Number.parseInt(compactLimitInput, 10)
@@ -1349,18 +1353,13 @@ export function CodexLaunchPreviewModal({
     configWritePending.current = true;
     setCheckingConfig(true);
     try {
-      // 与「保存」一致：写入前重读一次配置，外部已改动时拒绝应用，
-      // 避免「应用上下文」绕过校验、静默覆盖别处的修改。
-      const latest = await loadCodexLaunchPreviewConfig(
-        instanceId,
-        mode === "apiService",
-      );
+      // 与「保存」一致，写入前重读配置；这里只比较本次负责的上下文字段。
+      // 外部已改动时拒绝应用，避免静默覆盖别处的修改。
+      const latest = await loadCodexLaunchPreviewConfig(instanceId, mode === "apiService");
       if (session !== configSession.current) return;
-      if (
-        codexLaunchPreviewQuickConfigKey(latest) !==
-        codexLaunchPreviewQuickConfigKey(loadedConfig) ||
-        (loadedInstanceKey !== null && loadedInstanceKey !== codexLaunchPreviewInstanceConfigKey(configLoadInputs.current.selectedInstance))
-      ) {
+      const currentDir = configLoadInputs.current.selectedInstance?.userDataDir;
+      if (latest.context_config_key !== loadedConfig.context_config_key ||
+          (currentDir !== undefined && currentDir !== loadedConfig.config_dir)) {
         setConfigLoadError("CODEX_LAUNCH_PREVIEW_CONFIG_CHANGED");
         return;
       }
@@ -1369,13 +1368,21 @@ export function CodexLaunchPreviewModal({
         instanceId,
         contextOverrideEnabled ? contextWindow : undefined,
         contextOverrideEnabled ? compactLimit : undefined,
-        catalogEnabled,
-        models,
-        defaultModelId,
       );
-      rememberCodexLaunchPreviewConfig(instanceId, saved);
+      const updatedConfig = {
+        ...loadedConfig,
+        context_window_1m: saved.context_window_1m,
+        auto_compact_token_limit: saved.auto_compact_token_limit,
+        detected_model_context_window: saved.detected_model_context_window,
+        detected_auto_compact_token_limit: saved.detected_auto_compact_token_limit,
+        context_config_key: saved.context_config_key,
+      };
+      rememberCodexLaunchPreviewConfig(instanceId, updatedConfig);
       if (session !== configSession.current) return;
-      applyLoadedConfig(saved);
+      setLoadedConfig(updatedConfig);
+      setContextOverrideEnabled(saved.detected_model_context_window !== undefined || saved.detected_auto_compact_token_limit !== undefined);
+      setContextWindowInput(saved.detected_model_context_window?.toString() ?? "");
+      setCompactLimitInput(resolveStoredCompactLimitInput(saved.detected_model_context_window, saved.detected_auto_compact_token_limit));
       setContextConfigSnapshot(null);
       setContextConfigOpen(false);
       setNotice(
@@ -1392,19 +1399,14 @@ export function CodexLaunchPreviewModal({
       }
     }
   }, [
-    applyLoadedConfig,
-    catalogEnabled,
     compactLimitInput,
-    configBusy,
+    contextConfigBusy,
     contextConfigSaving,
     contextOverrideEnabled,
     contextWindowInput,
-    defaultModelId,
     instanceId,
     loadedConfig,
-    loadedInstanceKey,
     mode,
-    models,
   ]);
 
   const handleAuxiliaryAction = useCallback(
@@ -2131,7 +2133,7 @@ export function CodexLaunchPreviewModal({
                   type="button"
                   className="btn btn-outline btn-sm codex-launch-preview-tool-action"
                   onClick={(event) => { rememberChildTrigger(event); openContextConfig(); }}
-                  disabled={configBusy}
+                  disabled={contextConfigBusy}
                 >
                   {contextOverrideEnabled
                     ? t("codex.contextOverride.manage", "管理上下文")
@@ -2704,7 +2706,7 @@ export function CodexLaunchPreviewModal({
                 enabled={contextOverrideEnabled}
                 contextWindow={contextWindowInput}
                 compactLimit={compactLimitInput}
-                disabled={configBusy}
+                disabled={contextConfigBusy}
                 onChange={(value) => {
                   setContextOverrideEnabled(value.enabled);
                   setContextWindowInput(value.contextWindow);
@@ -2730,7 +2732,7 @@ export function CodexLaunchPreviewModal({
                 type="button"
                 className="btn btn-primary"
                 onClick={() => void applyContextConfig()}
-                disabled={configBusy || contextConfigSaving}
+                disabled={contextConfigBusy || contextConfigSaving}
               >
                 {contextConfigSaving
                   ? t("common.saving", "保存中...")

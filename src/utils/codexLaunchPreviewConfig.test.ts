@@ -9,6 +9,7 @@ const instance: InstanceProfile = {
   bindAccountId: 'account-a', createdAt: 1, running: false,
 };
 const config: CodexQuickConfig = {
+  config_dir: '/profiles/a', context_config_key: 'context', model_catalog_config_key: 'catalog',
   context_window_1m: false, auto_compact_token_limit: 200000,
   experimental_model_catalog_enabled: true, experimental_model_catalog_available: true,
   experimental_model_catalog_models: [{ model_id: 'gpt-test', display_name: 'Test' }],
@@ -30,20 +31,19 @@ test('instance scope, binding and routing changes invalidate stale preview write
   }
 });
 
-test('configuration fingerprints normalize absent fields and ignore reset-only metadata', () => {
+test('configuration fingerprints use persistent fields and ignore display-only metadata', () => {
   assert.equal(codexLaunchPreviewQuickConfigKey(config), codexLaunchPreviewQuickConfigKey({
     ...config, experimental_model_catalog_default_model_id: null,
     experimental_model_catalog_reset_models: [{ model_id: 'reset-only', display_name: 'Reset' }],
     auto_compact_token_limit: 300000,
+    experimental_model_catalog_models: [{ model_id: 'pool-model', display_name: 'Updated pool' }],
   }));
 });
 
 test('context and model changes must be detected before saving a draft', () => {
   for (const change of [
-    { detected_model_context_window: 1000000 }, { detected_auto_compact_token_limit: 900000 },
-    { experimental_model_catalog_enabled: false },
-    { experimental_model_catalog_models: [{ model_id: 'gpt-test', display_name: 'Updated' }] },
-    { experimental_model_catalog_default_model_id: 'gpt-test' },
+    { context_config_key: 'changed-context' },
+    { model_catalog_config_key: 'changed-catalog' },
   ]) {
     assert.notEqual(codexLaunchPreviewQuickConfigKey(config), codexLaunchPreviewQuickConfigKey({ ...config, ...change }));
   }

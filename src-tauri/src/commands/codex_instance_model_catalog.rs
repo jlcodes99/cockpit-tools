@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::models::codex::{CodexExperimentalModelDefinition, CodexQuickConfig};
 use crate::modules;
@@ -15,10 +16,14 @@ pub(super) struct PendingModelCatalog {
 }
 
 impl PendingModelCatalog {
-    pub(super) fn apply_to_view(&self, config: &mut CodexQuickConfig) {
+    pub(super) fn apply_to_view(&self, config: &mut CodexQuickConfig) -> Result<(), String> {
+        config.model_catalog_config_key = serde_json::to_vec(&(&config.model_catalog_config_key, self))
+            .map(|bytes| format!("{:x}", Sha256::digest(bytes)))
+            .map_err(|error| format!("读取待生效模型配置基线失败: {}", error))?;
         config.experimental_model_catalog_enabled = self.enabled;
         config.experimental_model_catalog_models = self.models.clone();
         config.experimental_model_catalog_default_model_id = self.default_model_id.clone();
+        Ok(())
     }
 }
 
@@ -65,7 +70,7 @@ pub(super) fn save_pending_model_catalog(
         &profile.join(PENDING_MODEL_CATALOG_FILE),
         &content,
     )?;
-    draft.apply_to_view(&mut config);
+    draft.apply_to_view(&mut config)?;
     Ok(config)
 }
 

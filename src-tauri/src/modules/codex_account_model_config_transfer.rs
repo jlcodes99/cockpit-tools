@@ -147,7 +147,13 @@ fn model_config_snapshot(base_dir: &Path) -> Result<ModelConfigSnapshot, String>
     let revision = format!(
         "{:x}",
         Sha256::digest(
-            serde_json::to_vec(&files).map_err(|_| "MODEL_CONFIG_SERIALIZE_FAILED".to_string())?
+            serde_json::to_vec(&(
+                doc.get("model").map(|item| item.to_string().trim().to_string()),
+                content(CODEX_MANAGED_MODEL_CATALOG_FILE),
+                content(CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE),
+                content(CODEX_EXPERIMENTAL_MODEL_POLICY_FILE),
+                content(CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE),
+            )).map_err(|_| "MODEL_CONFIG_SERIALIZE_FAILED".to_string())?
         )
     );
     Ok(ModelConfigSnapshot {
@@ -340,9 +346,22 @@ fn prepare_model_config_import(
     if document.models.is_empty() {
         return Err("EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED".to_string());
     }
+    let service_sections = snapshot.service.as_ref()
+        .map(crate::modules::codex_local_access::model_config_service_sections);
+    let api_revision = document.api_service.as_ref()
+        .filter(|incoming| **incoming != CodexModelConfigApiService::default())
+        .map(|incoming| service_sections.as_ref().map(|service| (
+            incoming.routing_strategy.map(|_| service.routing_strategy),
+            (!incoming.model_pricings.is_empty()).then_some(&service.model_pricings),
+            (!incoming.model_aliases.is_empty()).then_some(&service.model_aliases),
+            (!incoming.account_model_rules.is_empty()).then_some(&service.account_model_rules),
+            (!incoming.custom_routing_rules.is_empty()).then_some(&service.custom_routing_rules),
+            (!incoming.excluded_models.is_empty()).then_some(&service.excluded_models),
+        )));
     let replace = strategy == "replace";
     let mut preview = CodexModelConfigImportPreview {
-        revision: snapshot.revision.clone(),
+        revision: format!("{:x}", Sha256::digest(serde_json::to_vec(&(&snapshot.revision, api_revision))
+            .map_err(|_| "MODEL_CONFIG_SERIALIZE_FAILED".to_string())?)),
         ..Default::default()
     };
     // Normalize each row while keeping errors attached to that row.
@@ -973,10 +992,10 @@ pub(crate) fn import_model_config(
         .map_err(|_| "MODEL_CONFIG_BUSY".to_string())?;
     recover_model_config_import_if_pending(base_dir)?;
     let snapshot = model_config_snapshot(base_dir)?;
-    if snapshot.revision != expected_revision {
+    let (preview, _) = prepare_model_config_import(&snapshot, json, strategy)?;
+    if preview.revision != expected_revision {
         return Err("MODEL_CONFIG_STATE_CHANGED".to_string());
     }
-    let (mut preview, document) = prepare_model_config_import(&snapshot, json, strategy)?;
     if !preview.errors.is_empty() {
         return Err("MODEL_CONFIG_VALIDATION_FAILED".to_string());
     }
@@ -987,15 +1006,20 @@ pub(crate) fn import_model_config(
     if preview.added.is_empty() && preview.updated.is_empty() {
         return Ok((preview, before_service, None));
     }
-    let (files, service) = model_config_stage(&snapshot, &document)?;
     let _lease = try_acquire_profile_mutation_lease(base_dir, "model-config-import")?;
-    // Slow parsing, catalog rendering and account reads finish before the mutation lease.
-    // Recheck the compact file snapshot immediately before the CAS transaction.
-    for file in &snapshot.files {
-        if model_config_read_file(&model_config_file_path(base_dir, &file.name)?)? != file.before {
-            return Err("MODEL_CONFIG_STATE_CHANGED".to_string());
-        }
+    // Initial parsing and account validation finish before the mutation lease.
+    // Recheck the model configuration and merge into the latest files before the CAS transaction.
+    let snapshot = model_config_snapshot(base_dir)?;
+    let (mut preview, document) = prepare_model_config_import(&snapshot, json, strategy)?;
+    if preview.revision != expected_revision {
+        return Err("MODEL_CONFIG_STATE_CHANGED".to_string());
     }
+    if !preview.errors.is_empty() {
+        return Err("MODEL_CONFIG_VALIDATION_FAILED".to_string());
+    }
+    let before_service = snapshot.service.as_ref()
+        .map(crate::modules::codex_local_access::model_config_service_sections);
+    let (files, service) = model_config_stage(&snapshot, &document)?;
     commit_model_config_files(base_dir, files)?;
     preview.committed = preview.added.len() + preview.updated.len();
     preview.models = document.models;
