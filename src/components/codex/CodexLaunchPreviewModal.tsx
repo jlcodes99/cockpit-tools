@@ -1297,10 +1297,19 @@ export function CodexLaunchPreviewModal({
     [contextConfigSnapshot],
   );
 
+  useEffect(() => {
+    if (!contextConfigOpen || contextConfigSaving ||
+        (!instanceConfigChanged && configLoadError !== "CODEX_LAUNCH_PREVIEW_CONFIG_CHANGED")) return;
+    // 保留当前选择，只有用户点击外层「重试」重新载入时才替换草稿。
+    setContextConfigSnapshot(null);
+    setContextConfigOpen(false);
+  }, [configLoadError, contextConfigOpen, contextConfigSaving, instanceConfigChanged]);
+
   /** 「应用上下文」直接落盘：立即写入 model_context_window / 自动压缩阈值，
-   *  失败时保留弹框并在弹框内提示，避免用户以为已保存但 config.toml 没有变化。 */
+   *  普通保存失败时保留弹框并在弹框内提示，避免用户以为已保存但 config.toml 没有变化。
+   *  配置冲突时收起子弹框，让外层原有错误提示与「重试」可操作。 */
   const applyContextConfig = useCallback(async () => {
-    if (configBusy || contextConfigSaving) return;
+    if (configBusy || contextConfigSaving || !loadedConfig) return;
     const contextWindow = Number.parseInt(contextWindowInput, 10);
     const compactLimit = compactLimitInput.trim()
       ? Number.parseInt(compactLimitInput, 10)
@@ -1349,7 +1358,8 @@ export function CodexLaunchPreviewModal({
       if (session !== configSession.current) return;
       if (
         codexLaunchPreviewQuickConfigKey(latest) !==
-        codexLaunchPreviewQuickConfigKey(loadedConfig)
+        codexLaunchPreviewQuickConfigKey(loadedConfig) ||
+        (loadedInstanceKey !== null && loadedInstanceKey !== codexLaunchPreviewInstanceConfigKey(configLoadInputs.current.selectedInstance))
       ) {
         setConfigLoadError("CODEX_LAUNCH_PREVIEW_CONFIG_CHANGED");
         return;
@@ -1392,6 +1402,7 @@ export function CodexLaunchPreviewModal({
     defaultModelId,
     instanceId,
     loadedConfig,
+    loadedInstanceKey,
     mode,
     models,
   ]);
