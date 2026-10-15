@@ -412,6 +412,8 @@ export function CodexExperimentalModelEditor({
   const addMenuRef = useRef<HTMLDivElement | null>(null);
   const reasoningPickerRef = useRef<HTMLDivElement | null>(null);
   const contextPickerRef = useRef<HTMLDivElement | null>(null);
+  const reasoningMenuRef = useRef<HTMLDivElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!addMenuOpen) return;
@@ -434,6 +436,9 @@ export function CodexExperimentalModelEditor({
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
+    // Reveal the overlay menu by scrolling it into view instead of reserving
+    // in-flow space: reserved padding made the host modal grow (issue #2804).
+    reasoningMenuRef.current?.scrollIntoView({ block: "nearest" });
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [openReasoningIndex]);
 
@@ -446,6 +451,8 @@ export function CodexExperimentalModelEditor({
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
+    // See the reasoning menu above: scroll reveal, no in-flow padding.
+    contextMenuRef.current?.scrollIntoView({ block: "nearest" });
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [openContextIndex]);
 
@@ -1032,10 +1039,8 @@ export function CodexExperimentalModelEditor({
 
       <div
         className={`codex-experimental-model-editor__list${
-          openReasoningIndex !== null || openContextIndex !== null
-            ? " has-open-menu"
-            : ""
-        }${draggingModelId ? " is-sorting" : ""}`}
+          draggingModelId ? " is-sorting" : ""
+        }`}
       >
         {models.map((model, index) => {
           const source = resolveModelSource?.(model.model_id);
@@ -1180,7 +1185,10 @@ export function CodexExperimentalModelEditor({
                     <ChevronDown size={14} />
                   </button>
                   {openReasoningIndex === index && (
-                    <div className="codex-experimental-model-editor__reasoning-menu">
+                    <div
+                      className="codex-experimental-model-editor__reasoning-menu"
+                      ref={reasoningMenuRef}
+                    >
                       <button
                         type="button"
                         className={`codex-experimental-model-editor__reasoning-option${
@@ -1278,7 +1286,10 @@ export function CodexExperimentalModelEditor({
                     <ChevronDown size={14} />
                   </button>
                   {openContextIndex === index && (
-                    <div className="codex-experimental-model-editor__context-menu">
+                    <div
+                      className="codex-experimental-model-editor__context-menu"
+                      ref={contextMenuRef}
+                    >
                       {(
                         [
                           [

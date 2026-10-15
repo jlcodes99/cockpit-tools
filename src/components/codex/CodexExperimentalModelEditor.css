@@ -407,10 +407,6 @@
   overflow-y: auto;
 }
 
-.codex-experimental-model-editor__list.has-open-menu {
-  padding-bottom: 150px;
-}
-
 .codex-experimental-model-editor__list.is-sorting {
   user-select: none;
 }
