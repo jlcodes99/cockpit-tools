@@ -6172,7 +6172,14 @@
       "quotaFailed": "Kontingentabfrage fehlgeschlagen ({{count}})",
       "cleanQuotaFailedAction": "Kontingentabfrage-fehlgeschlagene Konten löschen ({{count}})",
       "cleanQuotaFailedConfirm": "Alle {{count}} Konto/Konten mit fehlgeschlagener Kontingentabfrage löschen?"
-    }
+    },
+    "manualQuotaExhausted": "Manuell null",
+    "manualQuotaExhaustedTooltip": "Das Kontingent dieses Kontos wurde manuell auf 0 gesetzt und wird bei Wechselvorschlägen übersprungen",
+    "setManualQuotaExhausted": "Kontingent manuell auf 0 setzen",
+    "clearManualQuotaExhausted": "Manuelle Kontingent-Nullung aufheben",
+    "manualQuotaExhaustedSet": "Kontokontingent als manuell ausgeschöpft markiert",
+    "manualQuotaExhaustedCleared": "Manuelle Kontingent-Nullung für dieses Konto aufgehoben",
+    "manualQuotaExhaustedFailed": "Aktualisierung der manuellen Kontingent-Markierung fehlgeschlagen: {{error}}"
   },
   "breakout": {
     "gameOver": "Spiel vorbei",

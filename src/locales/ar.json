@@ -6219,7 +6219,14 @@
       "quotaFailed": "فشل الاستعلام عن الحصة ({{count}})",
       "cleanQuotaFailedAction": "حذف الحسابات التي فشل الاستعلام عن حصتها ({{count}})",
       "cleanQuotaFailedConfirm": "هل تريد حذف جميع الحسابات {{count}} التي فشل الاستعلام عن حصتها؟"
-    }
+    },
+    "manualQuotaExhausted": "تصفير يدوي",
+    "manualQuotaExhaustedTooltip": "تم تعيين حصة هذا الحساب يدويًا إلى 0 ولن يُقترح عند التنبيه بتبديل الحساب",
+    "setManualQuotaExhausted": "تعيين الحصة إلى 0 يدويًا",
+    "clearManualQuotaExhausted": "إلغاء التصغير اليدوي للحصة",
+    "manualQuotaExhaustedSet": "تم تعليم حصة الحساب كمُستنفدة يدويًا",
+    "manualQuotaExhaustedCleared": "تم إلغاء التصغير اليدوي لحصة هذا الحساب",
+    "manualQuotaExhaustedFailed": "فشل تحديث علامة الحصة اليدوية: {{error}}"
   },
   "breakout": {
     "gameOver": "انتهت اللعبة",

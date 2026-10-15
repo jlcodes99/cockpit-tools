@@ -6172,7 +6172,14 @@
       "quotaFailed": "Kota sorgusu başarısız ({{count}})",
       "cleanQuotaFailedAction": "Kota sorgusu başarısız olan hesapları sil ({{count}})",
       "cleanQuotaFailedConfirm": "Kota sorgusu başarısız olan {{count}} hesabın tümü silinsin mi?"
-    }
+    },
+    "manualQuotaExhausted": "Manuel sıfır",
+    "manualQuotaExhaustedTooltip": "Bu hesabın kotası elle 0 yapıldı ve kota uyarısıyla geçiş önerilerinde atlanır",
+    "setManualQuotaExhausted": "Kotayı elle 0 yap",
+    "clearManualQuotaExhausted": "Elle kota sıfırlamayı kaldır",
+    "manualQuotaExhaustedSet": "Hesap kotası elle tükenmiş olarak işaretlendi",
+    "manualQuotaExhaustedCleared": "Bu hesabın elle kota sıfırlaması kaldırıldı",
+    "manualQuotaExhaustedFailed": "Elle kota işareti güncellenemedi: {{error}}"
   },
   "breakout": {
     "gameOver": "Oyun bitti",
