@@ -2346,6 +2346,16 @@ fn format_cursor_dollars(cents: f64) -> String {
 
 #[cfg(not(target_os = "macos"))]
 fn read_cursor_tray_usage(account: &crate::models::cursor::CursorAccount) -> CursorTrayUsage {
+    if account.manual_quota_exhausted {
+        return CursorTrayUsage {
+            total_used_percent: Some(100),
+            auto_used_percent: Some(100),
+            api_used_percent: Some(100),
+            reset_ts: None,
+            on_demand_text: None,
+        };
+    }
+
     let Some(raw) = account.cursor_usage_raw.as_ref() else {
         return CursorTrayUsage::default();
     };

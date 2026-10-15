@@ -5108,6 +5108,13 @@
   "cursor": {
     "subscription": "订阅状态",
     "injectToCursor": "切换到 Cursor",
+    "manualQuotaExhausted": "手动置零",
+    "manualQuotaExhaustedTooltip": "该账号已手动将配额设为 0，超额预警换号时不会推荐此账号",
+    "setManualQuotaExhausted": "手动将配额设为 0",
+    "clearManualQuotaExhausted": "取消手动配额置零",
+    "manualQuotaExhaustedSet": "已将该账号配额手动设为 0",
+    "manualQuotaExhaustedCleared": "已取消该账号的手动配额置零",
+    "manualQuotaExhaustedFailed": "更新手动配额标记失败：{{error}}",
     "quota": {
       "onDemand": "按需使用"
     },

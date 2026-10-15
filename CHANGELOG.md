@@ -7,6 +7,12 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.35] - 2026-10-15
+
+### Added
+
+- **Cursor manual quota zero**: mark an account’s remaining quota as 0 when the official API still reports usage available but the account is rate-limited or unusable; quota-alert switch suggestions skip these accounts, and the mark can be cleared in one click.
+
 ## [1.3.34] - 2026-08-28
 
 ### Added

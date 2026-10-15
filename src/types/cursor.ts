@@ -19,6 +19,8 @@ export interface CursorAccount {
   status_reason?: string | null;
   quota_query_last_error?: string | null;
   quota_query_last_error_at?: number | null;
+  /** Manual override: treat remaining quota as 0; excluded from switch suggestions. */
+  manual_quota_exhausted?: boolean;
 
   created_at: number;
   last_used: number;
@@ -282,7 +284,31 @@ function pickBoolean(obj: unknown, ...candidateKeys: string[]): boolean | null {
   return null;
 }
 
+export function isCursorManualQuotaExhausted(account: CursorAccount): boolean {
+  return account.manual_quota_exhausted === true;
+}
+
 export function getCursorUsage(account: CursorAccount): CursorUsage {
+  if (isCursorManualQuotaExhausted(account)) {
+    return {
+      inlineSuggestionsUsedPercent: 100,
+      chatMessagesUsedPercent: null,
+      allowanceResetAt: null,
+      planUsedCents: null,
+      planLimitCents: null,
+      totalPercentUsed: 100,
+      autoPercentUsed: 100,
+      apiPercentUsed: 100,
+      onDemandUsedCents: null,
+      onDemandLimitCents: null,
+      teamOnDemandUsedCents: null,
+      teamOnDemandLimitCents: null,
+      onDemandEnabled: null,
+      onDemandLimitType: null,
+      isUnlimited: false,
+    };
+  }
+
   const raw = account.cursor_usage_raw;
   if (!raw || typeof raw !== 'object') {
     return { inlineSuggestionsUsedPercent: null, chatMessagesUsedPercent: null };
@@ -435,7 +461,7 @@ export function isCursorAccountBanned(account: CursorAccount): boolean {
 }
 
 export function hasCursorQuotaData(account: CursorAccount): boolean {
-  return account.cursor_usage_raw != null;
+  return account.cursor_usage_raw != null || isCursorManualQuotaExhausted(account);
 }
 
 export function hasCursorQuotaQueryError(account: CursorAccount): boolean {
