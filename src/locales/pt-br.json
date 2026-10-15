@@ -6172,7 +6172,14 @@
       "quotaFailed": "Falha na consulta de cota ({{count}})",
       "cleanQuotaFailedAction": "Excluir contas com falha na consulta de cota ({{count}})",
       "cleanQuotaFailedConfirm": "Excluir todas as {{count}} conta(s) com falha na consulta de cota?"
-    }
+    },
+    "manualQuotaExhausted": "Zero manual",
+    "manualQuotaExhaustedTooltip": "A cota desta conta foi definida manualmente como 0 e não será sugerida no alerta de troca",
+    "setManualQuotaExhausted": "Definir cota como 0 manualmente",
+    "clearManualQuotaExhausted": "Limpar zero manual da cota",
+    "manualQuotaExhaustedSet": "Cota da conta marcada como esgotada manualmente",
+    "manualQuotaExhaustedCleared": "Zero manual da cota removido desta conta",
+    "manualQuotaExhaustedFailed": "Falha ao atualizar a marca de cota manual: {{error}}"
   },
   "breakout": {
     "gameOver": "Fim de jogo",

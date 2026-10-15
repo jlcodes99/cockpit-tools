@@ -6172,7 +6172,14 @@
       "quotaFailed": "Ошибка запроса квоты ({{count}})",
       "cleanQuotaFailedAction": "Удалить аккаунты с ошибкой запроса квоты ({{count}})",
       "cleanQuotaFailedConfirm": "Удалить все аккаунты ({{count}}), для которых запрос квоты завершился ошибкой?"
-    }
+    },
+    "manualQuotaExhausted": "Ручной ноль",
+    "manualQuotaExhaustedTooltip": "Квота этого аккаунта вручную установлена в 0 и не будет предлагаться при предупреждении о смене",
+    "setManualQuotaExhausted": "Вручную установить квоту в 0",
+    "clearManualQuotaExhausted": "Снять ручной ноль квоты",
+    "manualQuotaExhaustedSet": "Квота аккаунта отмечена как исчерпанная вручную",
+    "manualQuotaExhaustedCleared": "Ручной ноль квоты для этого аккаунта снят",
+    "manualQuotaExhaustedFailed": "Не удалось обновить флаг ручной квоты: {{error}}"
   },
   "breakout": {
     "gameOver": "Игра окончена",

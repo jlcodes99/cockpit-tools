@@ -492,6 +492,8 @@ fn merge_duplicate_account(primary: &mut CursorAccount, duplicate: &CursorAccoun
     fill_if_none(&mut primary.status, &duplicate.status);
     fill_if_none(&mut primary.status_reason, &duplicate.status_reason);
 
+    primary.manual_quota_exhausted =
+        primary.manual_quota_exhausted || duplicate.manual_quota_exhausted;
     primary.tags = merge_string_list(primary.tags.clone(), duplicate.tags.clone());
     primary.created_at = primary.created_at.min(duplicate.created_at);
     primary.last_used = primary.last_used.max(duplicate.last_used);
@@ -842,6 +844,7 @@ pub fn upsert_account(payload: CursorImportPayload) -> Result<CursorAccount, Str
         quota_query_last_error: None,
         quota_query_last_error_at: None,
         usage_updated_at: None,
+        manual_quota_exhausted: false,
         created_at,
         last_used: now,
     });
@@ -888,6 +891,22 @@ pub fn update_account_tags(account_id: &str, tags: Vec<String>) -> Result<Cursor
     account.last_used = now_ts();
     let updated = account.clone();
     upsert_account_record(account)?;
+    Ok(updated)
+}
+
+pub fn set_manual_quota_exhausted(
+    account_id: &str,
+    exhausted: bool,
+) -> Result<CursorAccount, String> {
+    let mut account = load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
+    account.manual_quota_exhausted = exhausted;
+    account.last_used = now_ts();
+    let updated = account.clone();
+    upsert_account_record(account)?;
+    logger::log_info(&format!(
+        "Cursor 手动配额耗尽标记已更新: id={}, exhausted={}",
+        updated.id, exhausted
+    ));
     Ok(updated)
 }
 
@@ -1836,6 +1855,15 @@ fn read_usage_percent(account: &CursorAccount) -> CursorUsagePercent {
 }
 
 pub(crate) fn extract_quota_metrics(account: &CursorAccount) -> Vec<(String, i32)> {
+    if account.manual_quota_exhausted {
+        // Remaining quota forced to 0 so the current account can still trigger alerts.
+        return vec![
+            ("Total Usage".to_string(), 0),
+            ("Auto + Composer".to_string(), 0),
+            ("API Usage".to_string(), 0),
+        ];
+    }
+
     let usage = read_usage_percent(account);
     let mut metrics = Vec::new();
 
@@ -1930,6 +1958,7 @@ fn pick_quota_alert_recommendation(
         .iter()
         .filter(|account| account.id != current_id)
         .filter(|account| !is_banned_account(account))
+        .filter(|account| !account.manual_quota_exhausted)
         .filter(|account| !extract_quota_metrics(account).is_empty())
         .cloned()
         .collect();

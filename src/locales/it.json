@@ -6172,7 +6172,14 @@
       "quotaFailed": "Query della quota non riuscita ({{count}})",
       "cleanQuotaFailedAction": "Elimina account con query della quota non riuscita ({{count}})",
       "cleanQuotaFailedConfirm": "Eliminare tutti i {{count}} account con query della quota non riuscita?"
-    }
+    },
+    "manualQuotaExhausted": "Zero manuale",
+    "manualQuotaExhaustedTooltip": "La quota di questo account è stata impostata manualmente a 0 e non verrà suggerita nei cambi per allerta quota",
+    "setManualQuotaExhausted": "Imposta quota a 0 manualmente",
+    "clearManualQuotaExhausted": "Annulla azzeramento manuale quota",
+    "manualQuotaExhaustedSet": "Quota dell’account contrassegnata come esaurita manualmente",
+    "manualQuotaExhaustedCleared": "Azzzeramento manuale quota annullato per questo account",
+    "manualQuotaExhaustedFailed": "Aggiornamento del flag quota manuale non riuscito: {{error}}"
   },
   "breakout": {
     "gameOver": "Partita finita",

@@ -292,7 +292,9 @@ export function getRecommendedCursorAccount(
   currentId: string | null | undefined,
 ): CursorAccount | null {
   if (accounts.length <= 1) return null;
-  const others = accounts.filter((account) => account.id !== currentId);
+  const others = accounts.filter(
+    (account) => account.id !== currentId && !account.manual_quota_exhausted,
+  );
   if (others.length === 0) return null;
 
   const getScore = (account: CursorAccount) => {
