@@ -24,6 +24,8 @@ import {
   EyeOff,
   Lock,
   BookOpen,
+  Ban,
+  CircleCheck,
 } from 'lucide-react';
 import { useCursorAccountStore } from '../stores/useCursorAccountStore';
 import * as cursorService from '../services/cursorService';
@@ -48,6 +50,7 @@ import {
   hasCursorQuotaData,
   hasCursorQuotaQueryError,
   isCursorAccountBanned,
+  isCursorManualQuotaExhausted,
 } from '../types/cursor';
 import type { CursorAccount } from '../types/cursor';
 import { compareCurrentAccountFirst } from '../utils/currentAccountSort';
@@ -248,6 +251,36 @@ export function CursorAccountsPage() {
   const resolveDisplayEmail = useCallback(
     (account: CursorAccount) => getCursorAccountDisplayEmail(account),
     [],
+  );
+
+  const [togglingManualQuotaId, setTogglingManualQuotaId] = useState<string | null>(null);
+
+  const handleToggleManualQuotaExhausted = useCallback(
+    async (account: CursorAccount) => {
+      const next = !isCursorManualQuotaExhausted(account);
+      setTogglingManualQuotaId(account.id);
+      try {
+        await cursorService.setCursorManualQuotaExhausted(account.id, next);
+        await store.fetchAccounts();
+        setMessage({
+          tone: 'success',
+          text: next
+            ? t('cursor.manualQuotaExhaustedSet', '已将该账号配额手动设为 0')
+            : t('cursor.manualQuotaExhaustedCleared', '已取消该账号的手动配额置零'),
+        });
+      } catch (error) {
+        setMessage({
+          tone: 'error',
+          text: t('cursor.manualQuotaExhaustedFailed', {
+            error: error instanceof Error ? error.message : String(error),
+            defaultValue: '更新手动配额标记失败：{{error}}',
+          }),
+        });
+      } finally {
+        setTogglingManualQuotaId(null);
+      }
+    },
+    [setMessage, store, t],
   );
 
   const resolveSingleExportBaseName = useCallback(
@@ -633,6 +666,7 @@ export function CursorAccountsPage() {
       const quotaError = account.quota_query_last_error?.trim();
       const hasQuotaData = hasCursorQuotaData(account);
       const isBanned = isCursorAccountBanned(account);
+      const isManualQuotaExhausted = isCursorManualQuotaExhausted(account);
       const hasStatusError = (account.status || '').toLowerCase() === 'error';
       const statusReason = account.status_reason ?? null;
       const bannedTitle = statusReason || t('accounts.status.forbidden_tooltip');
@@ -661,6 +695,15 @@ export function CursorAccountsPage() {
               <span className="status-pill warning" title={quotaError}>
                 <CircleAlert size={12} />
                 {t('common.shared.quota.queryFailed', '配额查询失败')}
+              </span>
+            )}
+            {isManualQuotaExhausted && (
+              <span
+                className="status-pill warning"
+                title={t('cursor.manualQuotaExhaustedTooltip', '该账号已手动将配额设为 0，超额预警换号时不会推荐此账号')}
+              >
+                <Ban size={12} />
+                {t('cursor.manualQuotaExhausted', '手动置零')}
               </span>
             )}
             {isBanned && (
@@ -764,6 +807,24 @@ export function CursorAccountsPage() {
                 <RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} />
               </button>
               <button
+                className={`card-action-btn ${isManualQuotaExhausted ? 'success' : ''}`}
+                onClick={() => handleToggleManualQuotaExhausted(account)}
+                disabled={togglingManualQuotaId === account.id}
+                title={
+                  isManualQuotaExhausted
+                    ? t('cursor.clearManualQuotaExhausted', '取消手动配额置零')
+                    : t('cursor.setManualQuotaExhausted', '手动将配额设为 0')
+                }
+              >
+                {togglingManualQuotaId === account.id ? (
+                  <RefreshCw size={14} className="loading-spinner" />
+                ) : isManualQuotaExhausted ? (
+                  <CircleCheck size={14} />
+                ) : (
+                  <Ban size={14} />
+                )}
+              </button>
+              <button
                 className="card-action-btn export-btn"
                 onClick={() => handleExportByIds([account.id], resolveSingleExportBaseName(account))}
                 title={t('common.shared.export.title', '导出')}
@@ -797,6 +858,7 @@ export function CursorAccountsPage() {
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
       const isCurrent = currentAccountId === account.id;
       const isBanned = isCursorAccountBanned(account);
+      const isManualQuotaExhausted = isCursorManualQuotaExhausted(account);
       const quotaError = account.quota_query_last_error?.trim();
       const hasQuotaData = hasCursorQuotaData(account);
       const hasStatusError = (account.status || '').toLowerCase() === 'error';
@@ -813,9 +875,18 @@ export function CursorAccountsPage() {
                 <span className="account-email-text" title={maskAccountText(emailText)}>{maskAccountText(emailText)}</span>
                 {isCurrent && <span className="mini-tag current">{t('accounts.status.current')}</span>}
               </div>
-              {(hasStatusError || isBanned) && (
+              {(hasStatusError || isBanned || isManualQuotaExhausted) && (
                 <div className="account-sub-line">
                   {hasStatusError && (<span className="status-pill warning" title={errorTitle}><CircleAlert size={12} />{t('accounts.status.refreshFailed')}</span>)}
+                  {isManualQuotaExhausted && (
+                    <span
+                      className="status-pill warning"
+                      title={t('cursor.manualQuotaExhaustedTooltip', '该账号已手动将配额设为 0，超额预警换号时不会推荐此账号')}
+                    >
+                      <Ban size={12} />
+                      {t('cursor.manualQuotaExhausted', '手动置零')}
+                    </span>
+                  )}
                   {isBanned && (<span className="status-pill forbidden" title={bannedTitle}><Lock size={12} />{t('accounts.status.forbidden')}</span>)}
                 </div>
               )}
@@ -915,6 +986,24 @@ export function CursorAccountsPage() {
               </button>
               <button className="action-btn" onClick={() => handleRefresh(account.id)} disabled={refreshing === account.id} title={t('common.shared.refreshQuota', '刷新配额')}>
                 <RotateCw size={14} className={refreshing === account.id ? 'loading-spinner' : ''} />
+              </button>
+              <button
+                className={`action-btn ${isManualQuotaExhausted ? 'success' : ''}`}
+                onClick={() => handleToggleManualQuotaExhausted(account)}
+                disabled={togglingManualQuotaId === account.id}
+                title={
+                  isManualQuotaExhausted
+                    ? t('cursor.clearManualQuotaExhausted', '取消手动配额置零')
+                    : t('cursor.setManualQuotaExhausted', '手动将配额设为 0')
+                }
+              >
+                {togglingManualQuotaId === account.id ? (
+                  <RefreshCw size={14} className="loading-spinner" />
+                ) : isManualQuotaExhausted ? (
+                  <CircleCheck size={14} />
+                ) : (
+                  <Ban size={14} />
+                )}
               </button>
               <button
                 className="action-btn"

@@ -37,6 +37,10 @@ pub struct CursorAccount {
     pub quota_query_last_error_at: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage_updated_at: Option<i64>,
+    /// Manual override: treat remaining quota as 0 (e.g. rate-limited Free accounts
+    /// that still report 0% used from the official API). Excluded from switch suggestions.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub manual_quota_exhausted: bool,
 
     pub created_at: i64,
     pub last_used: i64,

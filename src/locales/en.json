@@ -6453,6 +6453,13 @@
   "cursor": {
     "subscription": "Subscription",
     "injectToCursor": "Switch to Cursor",
+    "manualQuotaExhausted": "Manual zero",
+    "manualQuotaExhaustedTooltip": "This account’s quota was manually set to 0 and will be skipped when suggesting a switch after a quota alert",
+    "setManualQuotaExhausted": "Set quota to 0 manually",
+    "clearManualQuotaExhausted": "Clear manual quota zero",
+    "manualQuotaExhaustedSet": "Account quota marked as manually exhausted",
+    "manualQuotaExhaustedCleared": "Manual quota zero cleared for this account",
+    "manualQuotaExhaustedFailed": "Failed to update manual quota flag: {{error}}",
     "quota": {
       "onDemand": "On-Demand"
     },

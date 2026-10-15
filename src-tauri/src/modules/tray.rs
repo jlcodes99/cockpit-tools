@@ -2451,6 +2451,15 @@ fn format_cursor_dollars(cents: f64) -> String {
 #[cfg(not(target_os = "macos"))]
 fn read_cursor_tray_usage(account: &crate::models::cursor::CursorAccount) -> CursorTrayUsage {
     let Some(raw) = account.cursor_usage_raw.as_ref() else {
+        if account.manual_quota_exhausted {
+            return CursorTrayUsage {
+                total_used_percent: Some(100),
+                auto_used_percent: Some(100),
+                api_used_percent: Some(100),
+                reset_ts: None,
+                on_demand_text: None,
+            };
+        }
         return CursorTrayUsage::default();
     };
     let raw_obj = match raw.as_object() {
@@ -2580,13 +2589,22 @@ fn read_cursor_tray_usage(account: &crate::models::cursor::CursorAccount) -> Cur
         .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
         .map(|value| value.timestamp());
 
-    CursorTrayUsage {
+    let mut usage = CursorTrayUsage {
         total_used_percent: total_direct.or(total_ratio).map(clamp_cursor_percent),
         auto_used_percent: auto_direct.map(clamp_cursor_percent),
         api_used_percent: api_direct.map(clamp_cursor_percent),
         reset_ts,
         on_demand_text,
+    };
+
+    // Manual zero only overrides used percentages; keep reset time and on-demand text.
+    if account.manual_quota_exhausted {
+        usage.total_used_percent = Some(100);
+        usage.auto_used_percent = Some(100);
+        usage.api_used_percent = Some(100);
     }
+
+    usage
 }
 
 #[cfg(not(target_os = "macos"))]
