@@ -1,0 +1,18 @@
+.codex-refresh-scope { width: min(420px, 100%); min-width: 0; }
+.codex-refresh-scope-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.codex-refresh-scope-option.btn {
+  font-size: 12px;
+  min-width: 0;
+  gap: 6px;
+  padding: 5px 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.codex-refresh-scope-option.is-selected { border-color: var(--primary); background: var(--primary-light); }
+.codex-refresh-scope-option.is-selected:hover:not(:disabled) { background: var(--bg-hover); }
+.codex-refresh-scope-option:disabled { opacity: 0.5; cursor: not-allowed; }
+.codex-refresh-scope-count { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.codex-refresh-scope-actions { display: flex; gap: 6px; margin-top: 6px; }
+.codex-refresh-scope-actions .btn { font-size: 12px; padding: 4px 8px; }
+
+.codex-refresh-scope-description { margin: 0 0 10px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }

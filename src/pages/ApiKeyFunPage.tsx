@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Play,
   Trash2,
   Copy,
   Pencil,
@@ -21,19 +22,17 @@ import {
 } from '../services/modelProviderUsageService';
 import {
   APIKEY_FUN_GLOBAL_ENDPOINT,
-  APIKEY_FUN_PROVIDER_BASE_URL,
   APIKEY_FUN_REGISTER_URL,
   APIKEY_FUN_SOURCE_TAG,
   buildApiKeyFunProviderBaseUrl,
 } from '../utils/apikeyFunLinks';
 import {
-  CLAUDE_APIKEY_FUN_BASE_URL,
-} from '../utils/claudeProviderPresets';
-import {
   dispatchApiKeyFunPrefillEvent,
   getApiKeyFunPrefillPage,
   type ApiKeyFunPrefillTarget,
 } from '../utils/apiKeyFunPrefill';
+import { ApiKeyFunKeyConfigModal } from '../components/apiKeyFun/ApiKeyFunKeyConfigModal';
+import { useSponsorStore } from '../stores/useSponsorStore';
 import apiKeyFunIcon from '../assets/icons/apikey-fun.png';
 import './ApiKeyFunPage.css';
 
@@ -142,6 +141,7 @@ function isClaudeModelId(value: string): boolean {
 
 export function ApiKeyFunPage() {
   const { t } = useTranslation();
+  const sponsorModule = useSponsorStore((state) => state.state.sponsorModule);
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [usage, setUsage] = useState<ModelProviderUsageSummary | null>(null);
@@ -165,10 +165,23 @@ export function ApiKeyFunPage() {
 
   // 复制状态
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [configKey, setConfigKey] = useState<ManagedApiKey | null>(null);
+  const [configModels, setConfigModels] = useState<string[]>([]);
+  const [configModelsLoading, setConfigModelsLoading] = useState(false);
 
-  const providerBaseUrl = useMemo(
-    () => buildApiKeyFunProviderBaseUrl(APIKEY_FUN_GLOBAL_ENDPOINT),
-    [],
+  const sponsorIntegration = useMemo(
+    () => sponsorModule?.sponsors.find((item) => item.id === 'apikey-fun')?.integration ?? null,
+    [sponsorModule],
+  );
+  const providerBaseUrl = useMemo(() => {
+    const remoteBaseUrl = sponsorIntegration?.enabled
+      ? sponsorIntegration.baseUrl?.trim()
+      : '';
+    return remoteBaseUrl || buildApiKeyFunProviderBaseUrl(APIKEY_FUN_GLOBAL_ENDPOINT);
+  }, [sponsorIntegration]);
+  const claudeBaseUrl = useMemo(
+    () => providerBaseUrl.replace(/\/+$/, '').replace(/\/v1$/i, ''),
+    [providerBaseUrl],
   );
   const maskedApiKey = useMemo(() => maskKey(apiKey), [apiKey]);
   const currentKey = apiKey.trim();
@@ -394,7 +407,7 @@ export function ApiKeyFunPage() {
         apiKey: key,
         apiKeyName: item.name || buildManagedKeyName(key),
         providerName: 'APIKEY.FUN',
-        baseUrl: target === 'codex' ? APIKEY_FUN_PROVIDER_BASE_URL : CLAUDE_APIKEY_FUN_BASE_URL,
+        baseUrl: target === 'codex' ? providerBaseUrl : claudeBaseUrl,
         sourceTag: APIKEY_FUN_SOURCE_TAG,
         modelCatalog: apiKeyFunModelCatalog,
       });
@@ -407,7 +420,25 @@ export function ApiKeyFunPage() {
         target: targetName,
       }),
     });
-  }, [apiKeyFunModelCatalog, setManagedKeyAction, t]);
+  }, [apiKeyFunModelCatalog, claudeBaseUrl, providerBaseUrl, setManagedKeyAction, t]);
+
+  /** 「使用密钥」：按这把 Key 真实返回的模型渲染配置弹窗（只读 + 复制）。 */
+  const handleOpenKeyConfig = useCallback(async (item: ManagedApiKey) => {
+    setConfigKey(item);
+    setConfigModels([]);
+    setConfigModelsLoading(true);
+    try {
+      const { models } = await listModelProviderModels({
+        baseUrl: providerBaseUrl,
+        apiKey: item.key,
+      });
+      setConfigModels([...new Set(models.map((model) => model.id.trim()).filter(Boolean))]);
+    } catch {
+      setConfigModels([]);
+    } finally {
+      setConfigModelsLoading(false);
+    }
+  }, [providerBaseUrl]);
 
   // 切换密钥
   const handleUseManagedKey = useCallback((item: ManagedApiKey) => {
@@ -483,7 +514,7 @@ export function ApiKeyFunPage() {
             <p>
               {t(
                 'apiKeyFun.description',
-                'Cockpit 官方合作中转站，为用户提供稳定、开放、高性价比的大模型 API 接入服务。支持 Claude、OpenAI、Gemini 等主流模型，适合在 Codex、Gemini CLI、Claude Code 及其他开发工具中统一配置使用。通过 Cockpit 专属链接注册，可享受最高充值永久 95 折优惠。',
+                'Cockpit 官方合作中转站，为用户提供稳定、开放、高性价比的大模型 API 接入服务。支持 Claude、ChatGPT、Grok、Gemini、智谱 GLM、Kimi、DeepSeek 等主流模型，适合在 Codex、Gemini CLI、Claude Code 及其他开发工具中统一配置使用。通过 Cockpit 专属链接注册，可享受最高充值永久 95 折优惠。',
               )}
             </p>
           </div>
@@ -793,6 +824,17 @@ export function ApiKeyFunPage() {
                         <button
                           type="button"
                           className="apikey-fun-key-copy"
+                          title={t('apiKeyFun.keyManager.useKey', '使用密钥')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleOpenKeyConfig(item);
+                          }}
+                        >
+                          <Play size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="apikey-fun-key-copy"
                           onClick={(e) => handleCopyToClipboard(item.key, item.id, e)}
                           title={t('apiKeyFun.copyKey', '复制密钥')}
                         >
@@ -823,6 +865,15 @@ export function ApiKeyFunPage() {
           </section>
         </aside>
       </div>
+      {configKey && (
+        <ApiKeyFunKeyConfigModal
+          keyName={configKey.name}
+          apiKey={configKey.key}
+          models={configModels}
+          modelsLoading={configModelsLoading}
+          onClose={() => setConfigKey(null)}
+        />
+      )}
     </div>
   );
 }

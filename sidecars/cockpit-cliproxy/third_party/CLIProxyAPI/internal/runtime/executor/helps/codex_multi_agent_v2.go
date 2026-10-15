@@ -29,6 +29,13 @@ func RewriteCodexMultiAgentV2Input(ctx context.Context, headers http.Header, pay
 	return multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, payload, cfg)
 }
 
+// RewriteCodexOrphanDelegationInput converts orphan Codex delegation outputs into
+// standard user messages when orphan delegation compatibility is enabled and the
+// request carries the X-Openai-Subagent: collab_spawn header.
+func RewriteCodexOrphanDelegationInput(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config) []byte {
+	return multiagentv2.RewriteCodexOrphanDelegationInputForConfig(ctx, headers, payload, cfg)
+}
+
 // TranslateRequestWithCodexMultiAgentV2 normalizes official Codex multi-agent
 // input before translating it to a non-Codex target protocol.
 func TranslateRequestWithCodexMultiAgentV2(ctx context.Context, headers http.Header, cfg *config.Config, from, to sdktranslator.Format, model string, payload []byte, stream bool) []byte {
@@ -71,8 +78,11 @@ func TranslateRequestWithAPIKeyModelCompatibility(ctx context.Context, headers h
 	if !isCompat {
 		return TranslateRequestWithCodexMultiAgentV2(ctx, headers, cfg, from, to, model, payload, stream)
 	}
-	if from == sdktranslator.FormatOpenAIResponse && to != sdktranslator.FormatCodex && to != sdktranslator.FormatOpenAIResponse {
-		payload = multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, payload, cfg)
+	if from == sdktranslator.FormatOpenAIResponse {
+		payload = RewriteCodexOrphanDelegationInput(ctx, headers, payload, cfg)
+		if to != sdktranslator.FormatCodex && to != sdktranslator.FormatOpenAIResponse {
+			payload = multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, payload, cfg)
+		}
 	}
 
 	var translated []byte
@@ -124,4 +134,33 @@ func OptimizeCodexMultiAgentV2RequestForAuth(ctx context.Context, headers http.H
 // values before an upstream response is translated and returned to the client.
 func RestoreCodexMultiAgentV2Response(payload []byte, optimized bool) []byte {
 	return multiagentv2.RestoreCodexMultiAgentV2Response(payload, optimized)
+}
+
+// PrepareCodexMultiAgentV2Tools refreshes the collaboration tool declarations at
+// the Responses API boundary without renaming the collaboration namespace.
+// Executors that perform their own namespace folding (for example the xAI
+// executor) use it to refresh spawn_agent model details and to drop encrypted
+// message parameters before the tools reach a third-party upstream.
+func PrepareCodexMultiAgentV2Tools(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config) []byte {
+	if cfg == nil {
+		return payload
+	}
+	updated, _ := multiagentv2.PrepareCodexMultiAgentV2Tools(ctx, headers, payload, cfg.Codex.OptimizeMultiAgentV2, cfg.Home.Enabled)
+	return updated
+}
+
+// NormalizeCodexCollaborationToolNames rewrites flat collaboration tool names
+// (for example `collaboration::spawn_agent` or `collaboration.spawn_agent`)
+// emitted by third-party models into the structured {name, namespace} shape
+// Codex clients register.
+func NormalizeCodexCollaborationToolNames(payload []byte) []byte {
+	return multiagentv2.RestoreCodexCollaborationFlatToolNames(payload)
+}
+
+// NormalizeCodexCollaborationToolCalls normalizes flat collaboration tool names
+// and integer-valued floating point arguments produced by third-party models
+// into the strictly typed shape Codex clients accept.
+func NormalizeCodexCollaborationToolCalls(payload []byte) []byte {
+	payload = multiagentv2.RestoreCodexCollaborationFlatToolNames(payload)
+	return multiagentv2.NormalizeCodexCollaborationArguments(payload)
 }

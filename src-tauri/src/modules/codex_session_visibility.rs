@@ -10,4 +10,5 @@ include!("codex_session_visibility_backup.rs");
 #[cfg(test)]
 mod tests {
     include!("codex_session_visibility_tests.rs");
+    include!("codex_session_visibility_mtime_tests.rs");
 }

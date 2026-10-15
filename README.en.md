@@ -36,6 +36,16 @@ A **universal AI IDE account management tool**, currently supporting **Antigravi
   </tr>
   <tr>
     <td width="120" align="center">
+      <a href="https://go.apimart.ai/gh-cockpit-tools">
+        <img src="src/assets/icons/apimart.png" alt="APIMart" width="96" />
+      </a>
+    </td>
+    <td>
+      Thanks to <a href="https://go.apimart.ai/gh-cockpit-tools"><strong>APIMart</strong></a> for sponsoring this project! <a href="https://go.apimart.ai/gh-cockpit-tools"><strong>APIMart</strong></a> is a low-cost API platform for AI image &amp; video generation — GPT-Image-2 from <strong>$0.006/image</strong>, <strong>160+ images per dollar</strong>. One async API covers both image and video: submit a task, get an ID, fetch results via polling or callback. Batch <strong>tens of thousands of images</strong> without timeouts, switch models without changing code. Pay-as-you-go with no monthly fee — <a href="https://go.apimart.ai/gh-cockpit-tools"><strong>sign up here</strong></a> to get started.
+    </td>
+  </tr>
+  <tr>
+    <td width="120" align="center">
       <a href="https://roxybrowser.cn?code=0326VTDA">
         <img src="src/assets/icons/roxybrowser.jpg" alt="RoxyBrowser" width="96" />
       </a>
@@ -88,6 +98,7 @@ Run multiple Antigravity IDE instances in parallel with different accounts. For 
 - **Quota Display**: Clear display of Hourly and Weekly quota status
 - **Plan Recognition**: Automatically identifies account Plan types (Basic, Plus, Team, etc.)
 - **API Service**: The local Codex API service is powered by the bundled CLIProxyAPI sidecar. Cockpit Tools handles account sync, config projection, status, and usage statistics while keeping the same Base URL, API keys, and user workflow.
+- **Voice proxying**: Supports native Codex backend realtime routes and `/transcribe`, plus `/v1/audio/transcriptions`, `/v1/audio/translations`, `/v1/audio/speech` and aliases without `/v1`. OAuth transcription uses the ChatGPT backend: the compatible endpoint supports `file`, `language`, and JSON/text output; `model` is a compatibility field and the backend chooses the actual model. Timestamped subtitles, streaming transcription and other audio operations require an API-key provider supporting those APIs. Native `/transcribe` retains its multipart fields; API-key forwarding defaults to `gpt-4o-mini-transcribe` when that request omits a model. Requests are limited to 26 MiB and two minutes; uploaded audio is excluded from request snapshots. Only requests actually sent to the local gateway are handled. Configuring a model provider does not reroute clients that still use the official transcription service or enable a microphone restricted by the client itself.
 
 > ![Codex Accounts](docs/images/codex_list.png)
 
@@ -279,11 +290,13 @@ These are the most common security questions answered directly:
 
 - **This is a local desktop tool**: it does not require a separate cloud account for this project, and it does not rely on a project-hosted cloud account storage.
 - **Data is mainly stored on your machine**:
-  - `~/.antigravity_cockpit`: Antigravity IDE accounts, configs, WebSocket status, etc.
+  - `~/.cockpit_tools`: accounts across platforms, shared settings, logs, backups, and instance settings; development uses `~/.cockpit_tools_dev`, and `COCKPIT_TOOLS_DATA_DIR` can select a custom directory
+  - Existing installations automatically gain the new directory entry in the background through a Unix symbolic link or Windows directory junction to `~/.antigravity_cockpit` / `~/.antigravity_cockpit_dev`. No manual migration is required. The physical legacy directory and existing instance paths remain intact, and both entries access the same data. The current session keeps its original path; subsequent launches use the new entry. If link creation fails, the legacy directory remains in use. If both names identify separate directories, the legacy directory remains in use without automatic merging or overwriting
+  - Managed instances default to `instances/<platform>` in the shared directory. On Windows, some platforms use `%APPDATA%\.cockpit_tools\instances\<platform>`, with the same automatic compatibility for legacy directories. Custom directories stay unchanged
   - `~/.codex`: official Codex current login `auth.json`
   - `~/.grok`: the official Grok CLI default instance and current sign-in `auth.json`
   - `~/.zcode/v2`: ZCode encrypted credentials for the current official sign-in and quota cache
-  - local app data folder under `com.antigravity.cockpit-tools`: Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Grok CLI / CodeBuddy / CodeBuddy CN / Qoder / Trae suite / Zed / ZCode multi-account data, etc.; Grok CLI account details, managed profiles, and instance configuration are also stored here
+  - system application data under `com.jlcodes.cockpit-tools`: host WebView state and related data; historical `com.antigravity.cockpit-tools` directories are used only for legacy data imports
 - **Grok CLI credentials are not encrypted**: access and refresh tokens are stored locally as plaintext JSON and rely primarily on operating-system account isolation and local file permissions. On Unix systems, credential directories are set to `0700` and credential files to `0600`. Redacted exports contain no tokens and cannot serve as sign-in backups.
 - **WebSocket is local-only by default**: binds to `127.0.0.1`, default port `19528`; you can disable it or change the port in Settings.
 - **When network access happens**: OAuth login, token refresh, quota fetching, update checks, and other official API requests.
@@ -351,7 +364,9 @@ Notes:
 Go to [GitHub Releases](https://github.com/jlcodes99/cockpit-tools/releases) to download the package for your system:
 
 *   **macOS**: `.dmg` (Apple Silicon & Intel)
-*   **Windows**: `.msi` (Recommended) or `.exe`
+*   **Windows**: `.msi` (Recommended), `.exe`, or `x64-portable.zip` (extract and run)
+
+Extract the Windows portable archive and run the included `Cockpit Tools.exe` (or the bundled main executable). Windows 10/11 with the Microsoft Edge WebView2 Runtime is required. Accounts and settings remain in the current Windows user's data directory and are not moved with the ZIP folder.
 *   **Linux**: `.deb` (Debian/Ubuntu), `.rpm`, or `.AppImage` (Universal)
 
 ### Option B: Install with Homebrew (macOS)
@@ -449,20 +464,12 @@ Every bit of support helps sustain open-source development. Thank you!
 ## Acknowledgments
 
 - Antigravity account switching logic references: [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager)
-- The Codex API service integrates CLIProxyAPI; its Codex Live WebRTC/sideband support, Responses WebSocket state safety, canonical token accounting v2, Multi-Agent V2 compatibility, and open-source account and OAuth handling also informed Cockpit and the Grok CLI implementation: [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (MIT)
-- Grok icon shape references: [LobeHub/lobe-icons](https://github.com/lobehub/lobe-icons) (MIT)
-- Grok CLI task-usage querying and compatibility parsing direction references: [junhoyeo/tokscale](https://github.com/junhoyeo/tokscale) (MIT)
-- Grok CLI third-party BYOK and custom-model configuration formats follow the upstream implementation and documentation: [xai-org/grok-build](https://github.com/xai-org/grok-build)
-- Codex API service protocol compatibility direction references: [codex-proxy](https://github.com/icebear0828/codex-proxy)
-- Codex Agent Identity import, dynamic signing, task recovery, OAuth device-fingerprint convergence, Responses namespace routing, encrypted-content recovery, tool-output protocol conversion, model compatibility, and official-account window usage display (req / tokens / A$) reference: [sub2api](https://github.com/Wei-Shaw/sub2api)
-- Codex Agent Identity runtime registration protocol and Ed25519 key format reference the official implementation: [openai/codex](https://github.com/openai/codex) (Apache-2.0)
-- Codex, Claude CLI, and Claude Desktop Gateway third-party provider presets, model mapping, and session JSONL usage aggregation direction reference: [CC Switch](https://github.com/farion1231/cc-switch)
-- Codex model catalog, frontend model display, loopback CDP diagnostics, official live-auth preservation strategy, and historical session provider, SQLite local catalog, and workspace-state repair direction reference: [CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)
-- Codex managed-catalog experimental model display direction references: [gptsolwm](https://github.com/yynxxxxx/gptsolwm)
-- Claude optional sign-in helper runtime is based on: [Electron](https://github.com/electron/electron)
+- The Codex API service integrates CLIProxyAPI. Codex Live WebRTC/sideband support, Responses WebSocket state safety, canonical token accounting v2, Multi-Agent V2 compatibility, Grok CLI accounts and OAuth, Grok `apply_patch` protocol compatibility, and account-pool error classification and recovery boundaries reference its open-source implementation: [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (MIT)
+- Third-party provider presets and model mapping for Codex, Claude CLI, and Claude Desktop Gateway, along with the approach to aggregating actual usage from session JSONL files, reference: [CC Switch](https://github.com/farion1231/cc-switch)
+- The optional Claude sign-in helper runtime is based on: [Electron](https://github.com/electron/electron)
+- Codex account proxies use [Mihomo](https://github.com/MetaCubeX/mihomo) as a separate process for supported Clash nodes and groups. Configuration semantics for node options, nested groups, and built-in blocking policies, local connection-log APIs, health checks, and failover design reference its official source and documentation. Users explicitly download or import the engine; the host installer does not bundle it. This does not imply an official partnership.
 
-Thanks to the project author for their open-source contributions! If these projects have helped you, please give them a ⭐ Star to show your support!
-
+Thanks to the authors of these projects for their open-source contributions! If these projects have helped you, please give them a ⭐ Star to show your support!
 ---
 
 ## License

@@ -59,19 +59,20 @@ export function GroupAccountPickerModal({
     if (!isOpen) return
     setQuery('')
     setGroupName(targetGroup?.name ?? '')
-    setSelected(isQuickAddMode ? new Set() : new Set(targetGroup?.accountIds ?? []))
+    const validIds = new Set(accounts.map((a) => a.id))
+    setSelected(new Set((targetGroup?.accountIds ?? []).filter((id) => validIds.has(id))))
     setFilterTypes([])
     setTagFilter([])
     setError('')
-  }, [isOpen, isQuickAddMode, targetGroup])
+  }, [isOpen, accounts, targetGroup])
 
-  const groupByAccountId = useMemo(() => {
-    const result = new Map<string, AccountGroup>()
+  const groupsByAccountId = useMemo(() => {
+    const result = new Map<string, AccountGroup[]>()
     for (const group of accountGroups) {
       for (const accountId of group.accountIds) {
-        if (!result.has(accountId)) {
-          result.set(accountId, group)
-        }
+        const list = result.get(accountId) || []
+        list.push(group)
+        result.set(accountId, list)
       }
     }
     return result
@@ -95,11 +96,6 @@ export function GroupAccountPickerModal({
     const selectedTags = new Set(tagFilter.map(normalizeAccountTag))
     let next = [...accounts].sort((a, b) => a.email.localeCompare(b.email))
 
-    if (isQuickAddMode && targetGroup) {
-      const existingIds = new Set(targetGroup.accountIds)
-      next = next.filter((account) => !existingIds.has(account.id))
-    }
-
     if (selectedTypes.size > 0) {
       next = next.filter((account) =>
         accountMatchesTypeFilters(account, selectedTypes, verificationStatusMap)
@@ -113,10 +109,12 @@ export function GroupAccountPickerModal({
     if (!normalized) return next
 
     return next.filter((account) => {
-      const currentGroupName = groupByAccountId.get(account.id)?.name?.toLowerCase() || ''
-      return account.email.toLowerCase().includes(normalized) || currentGroupName.includes(normalized)
+      const groupNames = (groupsByAccountId.get(account.id) || [])
+        .map((g) => g.name.toLowerCase())
+        .join(' ')
+      return account.email.toLowerCase().includes(normalized) || groupNames.includes(normalized)
     })
-  }, [accounts, filterTypes, groupByAccountId, isQuickAddMode, query, tagFilter, targetGroup, verificationStatusMap])
+  }, [accounts, filterTypes, groupsByAccountId, query, tagFilter, verificationStatusMap])
 
   const selectedVisibleCount = useMemo(
     () =>
@@ -304,8 +302,8 @@ export function GroupAccountPickerModal({
               <div className="group-account-empty">{t('accounts.groups.accountPickerEmpty')}</div>
             ) : (
               visibleAccounts.map((account) => {
-                const currentGroup = groupByAccountId.get(account.id) || null
-                const isUngrouped = !currentGroup
+                const currentGroups = groupsByAccountId.get(account.id) || []
+                const isUngrouped = currentGroups.length === 0
                 const isChecked = selected.has(account.id)
                 const tierBadge = getAntigravityTierBadge(account.quota)
                 const verificationBadge = getVerificationBadge(account)
@@ -337,9 +335,20 @@ export function GroupAccountPickerModal({
                             {verificationBadge.label}
                           </span>
                         )}
-                        <span className={`group-account-badge${isUngrouped ? ' is-ungrouped' : ''}`}>
-                          {isUngrouped ? t('accounts.groups.ungrouped') : currentGroup.name}
-                        </span>
+                        {isUngrouped ? (
+                          <span className="group-account-badge is-ungrouped">
+                            {t('accounts.groups.ungrouped')}
+                          </span>
+                        ) : (
+                          currentGroups.map((g) => (
+                            <span
+                              key={g.id}
+                              className={`group-account-badge${targetGroup && g.id === targetGroup.id ? ' is-current-target' : ''}`}
+                            >
+                              {g.name}
+                            </span>
+                          ))
+                        )}
                       </div>
                     </div>
                   </label>

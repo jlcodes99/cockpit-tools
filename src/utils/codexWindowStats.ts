@@ -139,6 +139,34 @@ export function formatCodexWindowCostUsd(value: number): string {
   return `$${formatCodexWindowCostAmount(value)}`;
 }
 
+/**
+ * 按已消耗比例把窗口内累计费用折算成「满额约合多少」。
+ *
+ * 额度百分比是「剩余可用比例」，所以已消耗比例 = 100 - 剩余百分比。
+ * 例：剩余 96%（已消耗 4%）、累计 $0.56 → 约 $14.00。
+ * 窗口内没有费用、或还没有消耗（无法折算）时返回 null，调用方据此隐藏这一项。
+ */
+export function estimateCodexWindowFullCostUsd(
+  stats?: Pick<CodexWindowStats, "estimatedCostUsd"> | null,
+  remainingPercent?: number | null,
+): number | null {
+  const cost = stats?.estimatedCostUsd ?? 0;
+  const percent =
+    typeof remainingPercent === "number" && Number.isFinite(remainingPercent)
+      ? remainingPercent
+      : 100;
+  if (!Number.isFinite(cost) || cost <= 0) {
+    return null;
+  }
+  const consumedPercent = Math.min(Math.max(100 - percent, 0), 100);
+  // 消耗太少时按当前样本折算会放大误差，且没有参考价值，直接不显示。
+  if (consumedPercent < 1) {
+    return null;
+  }
+  const estimate = cost / (consumedPercent / 100);
+  return Number.isFinite(estimate) ? estimate : null;
+}
+
 export function hasVisibleCodexWindowStats(
   stats?: CodexWindowStats | null,
 ): boolean {

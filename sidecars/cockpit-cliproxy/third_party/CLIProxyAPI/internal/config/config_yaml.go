@@ -12,6 +12,16 @@ import (
 // SaveConfigPreserveComments writes the config back to YAML while preserving existing comments
 // and key ordering by loading the original file into a yaml.Node tree and updating values in-place.
 func SaveConfigPreserveComments(configFile string, cfg *Config) error {
+	return saveConfigPreserveComments(configFile, cfg, false)
+}
+
+// SaveLegacyAmpConfigPreserveComments serves unregistered legacy Amp handlers only.
+// Normal product saves continue removing all removed integration settings.
+func SaveLegacyAmpConfigPreserveComments(configFile string, cfg *Config) error {
+	return saveConfigPreserveComments(configFile, cfg, true)
+}
+
+func saveConfigPreserveComments(configFile string, cfg *Config, preserveLegacyAmp bool) error {
 	persistCfg := cfg
 	// Load original YAML as a node tree to preserve comments and ordering.
 	data, err := os.ReadFile(configFile)
@@ -50,6 +60,9 @@ func SaveConfigPreserveComments(configFile string, cfg *Config) error {
 	removeLegacyAuthBlock(original.Content[0])
 	removeLegacyOpenAICompatAPIKeys(original.Content[0])
 	removeRemovedIntegrationKeys(original.Content[0])
+	if !preserveLegacyAmp {
+		removeRemovedIntegrationKeys(generated.Content[0])
+	}
 	removeLegacyGenerativeLanguageKeys(original.Content[0])
 
 	pruneMappingToGeneratedKeys(original.Content[0], generated.Content[0], "oauth-excluded-models")

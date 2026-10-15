@@ -1,0 +1,179 @@
+.codex-image-model-config {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 20px;
+  min-width: 0;
+  width: 100%;
+}
+
+.codex-image-model-config .codex-image-tool-model {
+  flex: 0 1 210px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.codex-image-model-config .codex-image-model-inline-label {
+  margin: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.codex-image-tool-model .single-select-dropdown.codex-image-model-inline-select {
+  width: 100%;
+  min-width: 0;
+  max-width: 210px;
+}
+
+.codex-image-tool-model .single-select-dropdown-trigger {
+  min-height: 32px;
+  border-radius: 10px;
+  gap: 8px;
+  padding-inline: 10px;
+}
+
+.codex-image-tool-model .single-select-dropdown-value {
+  font-size: 12px;
+}
+
+.codex-image-main-model {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 300px;
+  gap: 6px;
+  min-width: 0;
+  max-width: 480px;
+}
+
+.codex-image-model-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codex-image-main-model .codex-image-model-inline-input {
+  flex: 1 1 150px;
+  width: auto;
+  min-width: 0;
+  min-height: 32px;
+  max-width: 100%;
+}
+
+.codex-image-model-input-row > .btn {
+  flex: 0 0 auto;
+  min-height: 32px;
+}
+
+.codex-image-main-model-hint {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.codex-image-main-model input[aria-invalid="true"] {
+  border-color: var(--danger, #dc2626);
+}
+
+.codex-image-model-config .codex-image-model-inline-input {
+  max-width: 100%;
+}
+
+.codex-image-model-config .codex-image-tool-model {
+  flex-basis: 280px;
+}
+
+.codex-image-model-select-row,
+.codex-image-model-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  align-items: center;
+}
+
+.codex-image-model-select-row .single-select-dropdown.codex-image-model-inline-select {
+  flex: 1 1 180px;
+  width: auto;
+  max-width: none;
+}
+
+.codex-image-model-manage {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding-inline: 8px;
+}
+
+.codex-image-model-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.codex-image-model-add-row .codex-image-model-inline-input {
+  flex: 1 1 150px;
+  width: auto;
+  min-width: 0;
+}
+
+.codex-image-model-managed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.codex-image-model-managed-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.codex-image-model-managed-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.codex-image-model-managed-row > .btn {
+  flex: 0 0 auto;
+  padding: 5px;
+}
+
+.codex-image-tool-model input[aria-invalid="true"] {
+  border-color: var(--danger, #dc2626);
+}
+
+.codex-image-model-sync-error {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--danger, #dc2626);
+  overflow-wrap: anywhere;
+}
+
+.codex-image-model-custom-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codex-image-model-custom-row .codex-image-model-inline-input {
+  flex: 1 1 150px;
+  width: auto;
+  min-width: 0;
+}

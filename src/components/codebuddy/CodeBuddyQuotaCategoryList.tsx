@@ -83,7 +83,9 @@ export function CodeBuddyQuotaCategoryList({ groups, formatNumber, formatDateTim
               </div>
               <div className="quota-category-stats">
                 <span className="quota-category-value">
-                  {formatNumber(group.used)} / {formatNumber(group.total)}
+                  {group.unlimited
+                    ? t('common.shared.quota.unlimited', '无限额度')
+                    : `${formatNumber(group.used)} / ${formatNumber(group.total)}`}
                 </span>
                 {hasDetails && (
                   <span className="quota-category-expand-icon">
@@ -146,7 +148,9 @@ function QuotaItemDetail({ item, formatNumber, formatDateTime }: QuotaItemDetail
           {item.packageName || t('common.shared.quota.noData', '暂无配额数据')}
         </span>
         <span className={`quota-detail-value ${getQuotaClass(remainPercent)}`}>
-          {formatNumber(item.used)} / {formatNumber(item.total)}
+          {item.unlimited
+            ? t('common.shared.quota.unlimited', '无限额度')
+            : `${formatNumber(item.used)} / ${formatNumber(item.total)}`}
         </span>
       </div>
       {timeText && (

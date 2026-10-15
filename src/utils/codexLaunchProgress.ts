@@ -1,5 +1,29 @@
 import type { CodexSwitchAuthFailure } from './codexSwitchAuthFailure';
 
+/** Lifecycle failures are retryable setup errors, not requests to reauthorize. */
+export function codexLaunchErrorKey(error: unknown): string | null {
+  const code = String(error ?? '').replace(/^Error:\s*/, '');
+  if (code === 'CODEX_SWITCH_BINDING_FAILED') return 'codex.launchErrors.bindingFailed';
+  if (code === 'CODEX_PROCESS_SCAN_FAILED') return 'codex.launchErrors.processScanFailed';
+  if (code === 'PROXY_ENTRY_PORT_UNAVAILABLE' || code === 'PROXY_RUNTIME_NOT_READY') {
+    return 'codex.launchErrors.proxyEntryFailed';
+  }
+  const clientProxyErrors: Record<string, string> = {
+    CLIENT_PROXY_STORAGE: 'runtimeReadFailed',
+    CLIENT_PROXY_INVALID_MODE: 'saveFailed',
+    CLIENT_PROXY_TARGET_UNSUPPORTED: 'unsupportedAccount',
+    CLIENT_PROXY_BOUND_OAUTH_MISSING: 'boundAccountUnavailable',
+    CLIENT_PROXY_BOUND_PROXY_MISSING: 'boundProxyUnavailable',
+    CLIENT_PROXY_STALE: 'sourceUnavailable',
+    CLIENT_PROXY_FAILED: 'saveFailed',
+    CLIENT_PROXY_TIMEOUT: 'operationTimeout',
+  };
+  if (Object.prototype.hasOwnProperty.call(clientProxyErrors, code)) {
+    return `codex.proxy.${clientProxyErrors[code]}`;
+  }
+  return null;
+}
+
 export type CodexLaunchOperation = 'instance-launch' | 'switch-and-start';
 
 export type CodexLaunchStepId =

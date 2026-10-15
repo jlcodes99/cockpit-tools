@@ -1,5 +1,6 @@
 import {
   APIKEY_FUN_DEFAULT_MODEL_CATALOG,
+  APIKEY_FUN_DIRECT_ENDPOINT,
   APIKEY_FUN_GLOBAL_ENDPOINT,
   APIKEY_FUN_REGISTER_URL,
   APIKEY_FUN_SOURCE_TAG,
@@ -553,9 +554,9 @@ export const CLAUDE_API_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset[] = [
   {
     id: CLAUDE_APIKEY_FUN_PROVIDER_ID,
     name: 'APIKEY.FUN',
-    baseUrls: [CLAUDE_APIKEY_FUN_BASE_URL, 'https://slb.apikey.fun'],
+    baseUrls: [CLAUDE_APIKEY_FUN_BASE_URL, APIKEY_FUN_DIRECT_ENDPOINT],
     apiKeyField: 'ANTHROPIC_AUTH_TOKEN',
-    website: 'https://apikey.fun',
+    website: 'https://apikey.fan',
     apiKeyUrl: APIKEY_FUN_REGISTER_URL,
     isPartner: true,
     sourceTag: APIKEY_FUN_SOURCE_TAG,

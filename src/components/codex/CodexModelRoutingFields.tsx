@@ -1,7 +1,8 @@
+import { resolveCodexAccountDisplayName } from "../../utils/codexAccountDisplayName";
 import type { TFunction } from "i18next";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { GitBranch, Info, Plus, RefreshCw, SlidersHorizontal, Trash2, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useEscClose } from "../../hooks/useEscClose";
@@ -13,10 +14,12 @@ import type {
   CodexProviderWireApi,
 } from "../../types/codex";
 import {
+  CODEX_PROVIDER_GATEWAY_INTERNAL_NAMESPACE,
   CodexInstanceApiRoute,
-  CodexInstanceModelRouting,
 } from "../../types/instance";
+export { buildCodexModelRoutingValue } from "../../utils/codexModelRoutingValue";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
+import { ModalErrorMessage } from "../ModalErrorMessage";
 import type { CodexExperimentalModelSource } from "./CodexExperimentalModelEditor";
 import "./CodexModelRoutingFields.css";
 
@@ -189,6 +192,35 @@ export const suggestCodexRouteNamespace = (
   return "api";
 };
 
+export const normalizeCodexModelRoutingRoutes = (
+  routes: CodexInstanceApiRoute[],
+  accounts: CodexModelRoutingAccount[],
+): CodexInstanceApiRoute[] => {
+  const usedNamespaces = new Set<string>();
+  return routes.map((route) => {
+    const currentNamespace = route.namespace.trim().toLowerCase();
+    if (currentNamespace !== CODEX_PROVIDER_GATEWAY_INTERNAL_NAMESPACE) {
+      usedNamespaces.add(currentNamespace);
+      return route;
+    }
+
+    const provider = accounts.find((account) => account.id === route.providerAccountId);
+    const suggested = suggestCodexRouteNamespace(
+      provider,
+      provider ? shortCodexRouteAccountLabel(provider, provider.email) : undefined,
+    );
+    const base = suggested || "api";
+    let namespace = base;
+    let suffix = 2;
+    while (usedNamespaces.has(namespace)) {
+      namespace = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedNamespaces.add(namespace);
+    return { ...route, namespace };
+  });
+};
+
 export const createCodexModelRoute = (
   account?: CodexModelRoutingAccount | null,
   displayText?: string,
@@ -319,25 +351,6 @@ export const createCodexModelSourceResolver = (
   };
 };
 
-export const buildCodexModelRoutingValue = (
-  enabled: boolean,
-  routes: CodexInstanceApiRoute[],
-): CodexInstanceModelRouting | null =>
-  enabled
-    ? {
-        enabled: true,
-        version: 1,
-        routes: routes.map((route) => ({
-          id: route.id,
-          namespace: route.namespace,
-          providerAccountId: route.providerAccountId,
-          enabled: route.enabled,
-          selectedModels: route.selectedModels,
-          extraModels: route.extraModels,
-        })),
-      }
-    : null;
-
 export function syncExperimentalModelsWithRouting(
   currentModels: CodexExperimentalModelDefinition[],
   routes: CodexInstanceApiRoute[],
@@ -454,6 +467,8 @@ export function toggleRouteModelInRoutes(
 
 interface CodexModelRoutingModalProps {
   open: boolean;
+  disabled?: boolean;
+  errorMessage?: string | null;
   enabled?: boolean;
   routes: CodexInstanceApiRoute[];
   accounts: CodexModelRoutingAccount[];
@@ -465,6 +480,8 @@ interface CodexModelRoutingModalProps {
 }
 
 interface CodexModelRoutingFieldsProps {
+  disabled?: boolean;
+  errorMessage?: string | null;
   enabled: boolean;
   routes: CodexInstanceApiRoute[];
   accounts: CodexModelRoutingAccount[];
@@ -479,6 +496,7 @@ interface CodexModelRoutingFieldsProps {
 }
 
 interface CodexModelRoutingEditorProps {
+  disabled?: boolean;
   routes: CodexInstanceApiRoute[];
   accounts: CodexModelRoutingAccount[];
   onRoutesChange: (routes: CodexInstanceApiRoute[]) => void;
@@ -487,9 +505,10 @@ interface CodexModelRoutingEditorProps {
 }
 
 export function CodexModelRoutingEditor({
+  disabled = false,
   routes,
   accounts,
-  onRoutesChange,
+  onRoutesChange: reportRoutesChange,
   onAccountsRefresh,
   getAccountDisplayText,
 }: CodexModelRoutingEditorProps) {
@@ -498,6 +517,22 @@ export function CodexModelRoutingEditor({
   const [routeActionError, setRouteActionError] = useState<string | null>(null);
   const [manualDraftByRoute, setManualDraftByRoute] = useState<Record<string, string>>({});
   const [addingManualRouteId, setAddingManualRouteId] = useState<string | null>(null);
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+  const fetchRevisionRef = useRef(0);
+
+  useEffect(() => {
+    if (disabled) setFetchingAccountId(null);
+    return () => {
+      // An in-flight catalog read must not write after this editor is blocked or closed.
+      fetchRevisionRef.current += 1;
+    };
+  }, [disabled]);
+
+  const onRoutesChange = (nextRoutes: CodexInstanceApiRoute[]) => {
+    if (disabledRef.current) return;
+    reportRoutesChange(nextRoutes);
+  };
 
   const providerAccounts = useMemo(
     () => eligibleCodexModelRoutingAccounts(accounts),
@@ -507,10 +542,8 @@ export function CodexModelRoutingEditor({
   const providerOptions = useMemo(
     () =>
       providerAccounts.map((account) => {
-        const name = shortCodexRouteAccountLabel(
-          account,
-          getAccountDisplayText?.(account) || account.email,
-        );
+        const name = getAccountDisplayText?.(account) ||
+          resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"));
         const catalogCount = account.api_model_catalog?.length ?? 0;
         return {
           value: account.id,
@@ -520,10 +553,11 @@ export function CodexModelRoutingEditor({
               : `${name} · 未获取列表`,
         };
       }),
-    [getAccountDisplayText, providerAccounts],
+    [getAccountDisplayText, providerAccounts, t],
   );
 
   const addManualModels = (routeId: string) => {
+    if (disabledRef.current) return;
     const draft = (manualDraftByRoute[routeId] ?? "")
       .split(/[\n,，\s]+/)
       .map((item) => item.trim())
@@ -572,6 +606,7 @@ export function CodexModelRoutingEditor({
   };
 
   const fetchAccountCatalog = async (account: CodexModelRoutingAccount) => {
+    if (disabledRef.current || fetchingAccountId) return;
     const apiKey = account.openai_api_key?.trim();
     const baseUrl = account.api_base_url?.trim();
     if (!apiKey || !baseUrl) {
@@ -585,8 +620,12 @@ export function CodexModelRoutingEditor({
     }
     setFetchingAccountId(account.id);
     setRouteActionError(null);
+    const requestRevision = ++fetchRevisionRef.current;
+    const isCurrentRequest = () =>
+      !disabledRef.current && fetchRevisionRef.current === requestRevision;
     try {
       const result = await listModelProviderModels({ baseUrl, apiKey });
+      if (!isCurrentRequest()) return;
       const models = Array.from(
         new Set(
           result.models
@@ -617,8 +656,10 @@ export function CodexModelRoutingEditor({
         undefined,
         (account.api_wire_api as CodexProviderWireApi | undefined) ?? undefined,
       );
+      if (!isCurrentRequest()) return;
       await onAccountsRefresh?.();
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setRouteActionError(
         t("instances.form.modelRouting.fetchFailed", {
           defaultValue: "获取模型列表失败：{{error}}",
@@ -626,7 +667,7 @@ export function CodexModelRoutingEditor({
         }),
       );
     } finally {
-      setFetchingAccountId(null);
+      if (isCurrentRequest()) setFetchingAccountId(null);
     }
   };
 
@@ -709,6 +750,7 @@ export function CodexModelRoutingEditor({
               <div className="codex-model-routing-card__header">
                 <div className="codex-model-routing-card__provider">
                   <SingleSelectDropdown
+                    disabled={disabled}
                     value={route.providerAccountId}
                     onChange={(providerAccountId) =>
                       onRoutesChange(
@@ -752,6 +794,7 @@ export function CodexModelRoutingEditor({
                 <div className="codex-model-routing-card__namespace-wrap">
                   <input
                     className="codex-model-routing-card__namespace-input"
+                    disabled={disabled}
                     value={route.namespace}
                     onChange={(event) => {
                       const namespace = event.target.value
@@ -774,6 +817,7 @@ export function CodexModelRoutingEditor({
                 <button
                   type="button"
                   className="codex-model-routing-card__delete"
+                  disabled={disabled}
                   onClick={() =>
                     onRoutesChange(routes.filter((item) => item.id !== route.id))
                   }
@@ -813,6 +857,7 @@ export function CodexModelRoutingEditor({
                         <button
                           type="button"
                           className="codex-model-routing-card__action-btn"
+                          disabled={disabled}
                           onClick={() => selectAllModels(route.id)}
                           title="全选该渠道所有模型"
                         >
@@ -821,6 +866,7 @@ export function CodexModelRoutingEditor({
                         <button
                           type="button"
                           className="codex-model-routing-card__action-btn"
+                          disabled={disabled}
                           onClick={() => clearAllModels(route.id)}
                           title="清空已选模型"
                         >
@@ -834,7 +880,7 @@ export function CodexModelRoutingEditor({
                       onClick={() => {
                         if (provider) void fetchAccountCatalog(provider);
                       }}
-                      disabled={!provider || fetchingAccountId === provider?.id}
+                      disabled={disabled || !provider || fetchingAccountId !== null}
                     >
                       <RefreshCw
                         size={12}
@@ -852,6 +898,7 @@ export function CodexModelRoutingEditor({
                       <button
                         type="button"
                         className="codex-model-routing-card__action-btn"
+                        disabled={disabled}
                         onClick={() => setAddingManualRouteId(route.id)}
                       >
                         <Plus size={12} />
@@ -865,6 +912,7 @@ export function CodexModelRoutingEditor({
                   <div className="codex-model-routing-card__manual-input-row">
                     <input
                       className="codex-model-routing-card__manual-input"
+                      disabled={disabled}
                       value={manualDraftByRoute[route.id] ?? ""}
                       autoFocus
                       onChange={(event) =>
@@ -891,6 +939,7 @@ export function CodexModelRoutingEditor({
                     <button
                       type="button"
                       className="btn btn-primary btn-xs"
+                      disabled={disabled}
                       onClick={() => {
                         addManualModels(route.id);
                         setAddingManualRouteId(null);
@@ -928,6 +977,7 @@ export function CodexModelRoutingEditor({
                           className={`codex-model-routing-card__pill${
                             isSelected ? " is-selected" : ""
                           }`}
+                          aria-disabled={disabled}
                           key={model}
                           onClick={() => toggleModelSelection(route.id, model, models)}
                           title={isSelected ? t("instances.form.modelRouting.clickToDeselect", "已勾选（点击取消）") : t("instances.form.modelRouting.clickToSelect", "未勾选（点击选择）")}
@@ -940,6 +990,7 @@ export function CodexModelRoutingEditor({
                             <button
                               type="button"
                               className="codex-model-routing-card__pill-remove"
+                              disabled={disabled}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 removeManualModel(route.id, model);
@@ -963,6 +1014,7 @@ export function CodexModelRoutingEditor({
       <button
         type="button"
         className="btn btn-outline btn-sm codex-model-routing-modal__add-channel-btn"
+        disabled={disabled}
         onClick={() => {
           const used = new Set(routes.map((route) => route.providerAccountId));
           const nextAccount =
@@ -1002,7 +1054,7 @@ async function confirmRoutingToggle(
   const message = nextEnabled
     ? t(
         "instances.form.modelRouting.confirmEnableMessage",
-        "开启后，Codex 的模型请求将通过 Cockpit Tools 本地服务分流。服务未运行时，官方订阅和第三方模型都可能无法使用。保存时将默认启用开机自启。\n\n确认开启吗？",
+        "开启后，Codex 的模型请求将通过 Cockpit Tools 本地服务分流。服务未运行时，官方订阅和第三方模型都可能无法使用。\n\n确认开启吗？",
       )
     : t(
         "instances.form.modelRouting.confirmDisableMessage",
@@ -1029,6 +1081,8 @@ async function confirmRoutingToggle(
 
 export function CodexModelRoutingModal({
   open,
+  disabled = false,
+  errorMessage,
   enabled = true,
   onEnabledChange,
   routes,
@@ -1040,28 +1094,32 @@ export function CodexModelRoutingModal({
 }: CodexModelRoutingModalProps) {
   const { t } = useTranslation();
   const [draftRoutes, setDraftRoutes] = useState<CodexInstanceApiRoute[]>([]);
+  const currentStateRef = useRef({ disabled, open, enabled, onEnabledChange });
+  currentStateRef.current = { disabled, open, enabled, onEnabledChange };
+  const sourceRoutesKey = JSON.stringify(routes);
 
   const handleModalToggle = async (nextEnabled: boolean) => {
-    if (!onEnabledChange || nextEnabled === enabled) return;
+    if (disabled || !onEnabledChange || nextEnabled === enabled) return;
     const confirmed = await confirmRoutingToggle(nextEnabled, t);
-    if (!confirmed) return;
-    onEnabledChange(nextEnabled);
+    const current = currentStateRef.current;
+    if (!confirmed || current.disabled || !current.open || nextEnabled === current.enabled) return;
+    current.onEnabledChange?.(nextEnabled);
   };
 
-  useMemo(() => {
-    if (open) {
-      setDraftRoutes(
-        routes.map((r) => ({
-          ...r,
-          extraModels: r.extraModels ? [...r.extraModels] : [],
-        })),
-      );
-    }
-  }, [open, routes]);
+  useEffect(() => {
+    if (!open) return;
+    setDraftRoutes(
+      routes.map((r) => ({
+        ...r,
+        extraModels: r.extraModels ? [...r.extraModels] : [],
+      })),
+    );
+  }, [open, sourceRoutesKey]);
 
   useEscClose(open, onClose);
 
   const handleApply = useCallback(() => {
+    if (currentStateRef.current.disabled || !currentStateRef.current.open) return;
     onRoutesChange(draftRoutes);
     onClose();
   }, [draftRoutes, onClose, onRoutesChange]);
@@ -1069,11 +1127,8 @@ export function CodexModelRoutingModal({
   if (!open) return null;
 
   return createPortal(
-    <div className="modal-overlay codex-model-routing-overlay" onClick={onClose}>
-      <div
-        className="modal codex-model-routing-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="modal-overlay codex-model-routing-overlay">
+      <div className="modal codex-model-routing-modal">
         <div className="modal-header">
           <div>
             <h2>{t("instances.form.modelRouting.modalTitle", "第三方 API 路由配置")}</h2>
@@ -1100,6 +1155,7 @@ export function CodexModelRoutingModal({
                 >
                   <input
                     type="checkbox"
+                    disabled={disabled}
                     checked={enabled}
                     onChange={() => {}}
                   />
@@ -1119,6 +1175,7 @@ export function CodexModelRoutingModal({
         </div>
 
         <div className="modal-body">
+          <ModalErrorMessage message={errorMessage} />
           <div className="codex-model-routing-modal__tip">
             <Info size={16} className="codex-model-routing-modal__tip-icon" />
             <span>
@@ -1130,6 +1187,7 @@ export function CodexModelRoutingModal({
           </div>
 
           <CodexModelRoutingEditor
+            disabled={disabled}
             routes={draftRoutes}
             accounts={accounts}
             onRoutesChange={setDraftRoutes}
@@ -1142,7 +1200,7 @@ export function CodexModelRoutingModal({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             {t("common.cancel", "取消")}
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleApply}>
+          <button type="button" className="btn btn-primary" disabled={disabled} onClick={handleApply}>
             {t("common.save", "保存")}
           </button>
         </div>
@@ -1153,12 +1211,14 @@ export function CodexModelRoutingModal({
 }
 
 export function CodexModelRoutingSummary({
+  disabled = false,
   routes,
   accounts,
   onRoutesChange,
   onAccountsRefresh,
   getAccountDisplayText,
 }: {
+  disabled?: boolean;
   routes: CodexInstanceApiRoute[];
   accounts: CodexModelRoutingAccount[];
   onRoutesChange: (routes: CodexInstanceApiRoute[]) => void;
@@ -1185,6 +1245,7 @@ export function CodexModelRoutingSummary({
           <button
             type="button"
             className="codex-model-routing-summary__manage-btn"
+            disabled={disabled}
             onClick={() => setModalOpen(true)}
           >
             <SlidersHorizontal size={13} />
@@ -1198,7 +1259,9 @@ export function CodexModelRoutingSummary({
             <button
               type="button"
               className="btn btn-outline btn-xs"
+              disabled={disabled}
               onClick={() => {
+                if (disabled) return;
                 if (providerAccounts.length > 0) {
                   const acc = providerAccounts[0];
                   const label = shortCodexRouteAccountLabel(
@@ -1220,16 +1283,17 @@ export function CodexModelRoutingSummary({
               const provider = providerAccounts.find(
                 (account) => account.id === route.providerAccountId,
               );
-              const accountName = shortCodexRouteAccountLabel(
-                provider,
-                getAccountDisplayText?.(provider!) || provider?.email,
-              );
+              const accountName = provider ? getAccountDisplayText?.(provider) ||
+                resolveCodexAccountDisplayName(provider, t("common.apiKeyAccount")) : "";
               const modelsCount = collectRouteUpstreamModels(route, provider).length;
               return (
                 <div
                   className="codex-model-routing-summary__row"
                   key={route.id}
-                  onClick={() => setModalOpen(true)}
+                  aria-disabled={disabled}
+                  onClick={() => {
+                    if (!disabled) setModalOpen(true);
+                  }}
                   title={t("instances.form.modelRouting.clickToEdit", "点击配置此渠道")}
                 >
                   <div className="codex-model-routing-summary__row-left">
@@ -1257,6 +1321,7 @@ export function CodexModelRoutingSummary({
 
       <CodexModelRoutingModal
         open={modalOpen}
+        disabled={disabled}
         enabled={true}
         routes={routes}
         accounts={accounts}
@@ -1270,6 +1335,8 @@ export function CodexModelRoutingSummary({
 }
 
 export function CodexModelRoutingFields({
+  disabled = false,
+  errorMessage,
   enabled,
   routes,
   accounts,
@@ -1299,18 +1366,26 @@ export function CodexModelRoutingFields({
     }
     return count;
   }, [providerAccounts, routes]);
+  const currentStateRef = useRef({
+    disabled, enabled, routes, providerAccounts, onEnabledChange, onRoutesChange,
+  });
+  currentStateRef.current = {
+    disabled, enabled, routes, providerAccounts, onEnabledChange, onRoutesChange,
+  };
 
   const enableWithDefaultRoute = (nextEnabled: boolean) => {
-    onEnabledChange(nextEnabled);
-    if (nextEnabled && routes.length === 0) {
-      onRoutesChange([createCodexModelRoute(providerAccounts[0] ?? null)]);
+    const current = currentStateRef.current;
+    if (current.disabled) return;
+    current.onEnabledChange(nextEnabled);
+    if (nextEnabled && current.routes.length === 0) {
+      current.onRoutesChange([createCodexModelRoute(current.providerAccounts[0] ?? null)]);
     }
   };
 
   const handleToggle = async (nextEnabled: boolean) => {
-    if (nextEnabled === enabled) return;
+    if (disabled || nextEnabled === enabled) return;
     const confirmed = await confirmRoutingToggle(nextEnabled, t);
-    if (!confirmed) return;
+    if (!confirmed || currentStateRef.current.disabled || nextEnabled === currentStateRef.current.enabled) return;
     enableWithDefaultRoute(nextEnabled);
   };
 
@@ -1326,6 +1401,7 @@ export function CodexModelRoutingFields({
       <input
         id="codex-model-routing-enabled"
         type="checkbox"
+        disabled={disabled}
         checked={enabled}
         onChange={() => {}}
         aria-checked={enabled}
@@ -1379,7 +1455,9 @@ export function CodexModelRoutingFields({
           <button
             type="button"
             className="btn btn-outline btn-sm codex-launch-preview-tool-action"
+            disabled={disabled}
             onClick={() => {
+              if (disabled) return;
               if (!enabled) {
                 enableWithDefaultRoute(false);
               }
@@ -1394,6 +1472,8 @@ export function CodexModelRoutingFields({
 
         <CodexModelRoutingModal
           open={modalOpen}
+          disabled={disabled}
+          errorMessage={errorMessage}
           enabled={enabled}
           routes={routes}
           accounts={accounts}
@@ -1427,6 +1507,7 @@ export function CodexModelRoutingFields({
       {enabled && (
         mode === "inline" ? (
           <CodexModelRoutingEditor
+            disabled={disabled}
             routes={routes}
             accounts={accounts}
             onRoutesChange={onRoutesChange}
@@ -1435,6 +1516,7 @@ export function CodexModelRoutingFields({
           />
         ) : (
           <CodexModelRoutingSummary
+            disabled={disabled}
             routes={routes}
             accounts={accounts}
             onRoutesChange={onRoutesChange}

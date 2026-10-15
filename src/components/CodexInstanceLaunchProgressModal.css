@@ -1,4 +1,5 @@
-.codex-instance-launch-modal {
+/* 与 .codex-switch-progress-modal 同维度：这里显式压过复用类，避免加载顺序影响高度。 */
+.modal-content.codex-instance-launch-modal {
   max-height: min(860px, calc(100vh - 40px));
 }
 

@@ -86,24 +86,20 @@ fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
     }
 }
 
-/// 获取我们的多账号存储路径（统一使用 ~/.antigravity_cockpit/）
+/// 获取我们的多账号存储路径（使用公共数据目录入口 ~/.cockpit_tools/，兼容旧目录）
 fn get_accounts_storage_path() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
-        dirs::home_dir()
-            .expect("无法获取用户目录")
-            .join(".antigravity_cockpit")
+        crate::modules::data_paths::fallback_data_dir()
     });
     fs::create_dir_all(&data_dir).ok();
     migrate_codex_data_if_needed(&data_dir);
     data_dir.join("codex_accounts.json")
 }
 
-/// 获取账号详情存储目录（统一使用 ~/.antigravity_cockpit/codex_accounts/）
+/// 获取账号详情存储目录（使用公共数据目录入口 ~/.cockpit_tools/，兼容旧目录；账号文件位于 codex_accounts/）
 fn get_accounts_dir() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
-        dirs::home_dir()
-            .expect("无法获取用户目录")
-            .join(".antigravity_cockpit")
+        crate::modules::data_paths::fallback_data_dir()
     });
     let accounts_dir = data_dir.join("codex_accounts");
     fs::create_dir_all(&accounts_dir).ok();
@@ -112,13 +108,79 @@ fn get_accounts_dir() -> PathBuf {
 
 fn account_tombstone_path(account_id: &str) -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
-        dirs::home_dir()
-            .expect("无法获取用户目录")
-            .join(".antigravity_cockpit")
+        crate::modules::data_paths::fallback_data_dir()
     });
     data_dir
         .join(CODEX_ACCOUNT_TOMBSTONES_DIR)
         .join(format!("{}.json", account_id))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CodexAccountStorageStatus {
+    Present,
+    Missing,
+    Deleted,
+}
+
+/// Inspect revocation and file presence without loading credentials or migrating accounts.
+/// Unknown storage errors must remain errors; they cannot authorize reuse of stale auth.
+pub(crate) fn account_storage_status(
+    account_id: &str,
+) -> Result<CodexAccountStorageStatus, String> {
+    validate_recycle_account_id(account_id)?;
+    // Match the account store's override order without creating storage directories.
+    let override_dir = [
+        "COCKPIT_TOOLS_TEST_DATA_DIR",
+        "COCKPIT_TEST_DATA_DIR",
+        "COCKPIT_TOOLS_DATA_DIR",
+    ]
+    .into_iter()
+    .filter_map(|key| std::env::var(key).ok())
+    .map(|value| value.trim().to_string())
+    .find(|value| !value.is_empty());
+    let data_dir = match override_dir {
+        Some(path) => PathBuf::from(path),
+        None => {
+            #[cfg(test)]
+            let path = crate::modules::test_support::fallback_data_dir();
+            #[cfg(not(test))]
+            let path = account::resolve_data_dir()?;
+            path
+        }
+    };
+    account_storage_status_in_dir(&data_dir, account_id)
+}
+
+fn account_storage_status_in_dir(
+    data_dir: &Path,
+    account_id: &str,
+) -> Result<CodexAccountStorageStatus, String> {
+    validate_recycle_account_id(account_id)?;
+    let tombstone_path = data_dir
+        .join(CODEX_ACCOUNT_TOMBSTONES_DIR)
+        .join(format!("{account_id}.json"));
+    match fs::read_to_string(&tombstone_path) {
+        Ok(content) => {
+            let tombstone: CodexAccountTombstone = serde_json::from_str(&content)
+                .map_err(|error| format!("解析 Codex 账号删除状态失败: {error}"))?;
+            if tombstone.deleted {
+                return Ok(CodexAccountStorageStatus::Deleted);
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("读取 Codex 账号删除状态失败: {error}")),
+    }
+    let account_path = data_dir
+        .join("codex_accounts")
+        .join(format!("{account_id}.json"));
+    match fs::metadata(account_path) {
+        Ok(metadata) if metadata.is_file() => Ok(CodexAccountStorageStatus::Present),
+        Ok(_) => Err("Codex 账号详情路径不是文件".to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(CodexAccountStorageStatus::Missing)
+        }
+        Err(error) => Err(format!("读取 Codex 账号详情状态失败: {error}")),
+    }
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -256,7 +318,7 @@ fn now_timestamp() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
-fn codex_token_lock_for(account_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+pub(crate) fn codex_token_lock_for(account_id: &str) -> Arc<tokio::sync::Mutex<()>> {
     let mut locks = CODEX_TOKEN_REFRESH_LOCKS
         .lock()
         .unwrap_or_else(|err| err.into_inner());
@@ -332,9 +394,7 @@ fn codex_token_refresh_file_lock_path(account_id: &str) -> PathBuf {
     // 仍映射到同一把锁；旧账号缺少该字段时再回退邮箱或本地 ID。
     let lock_name = codex_account_lock_name(account_id);
     let data_root = account::resolve_data_dir().unwrap_or_else(|_| {
-        dirs::home_dir()
-            .expect("无法获取用户目录")
-            .join(".antigravity_cockpit")
+        crate::modules::data_paths::fallback_data_dir()
     });
     data_root
         .join(".cockpit-token-locks")
@@ -430,7 +490,7 @@ pub(crate) fn try_acquire_profile_mutation_lease(
     ))
 }
 
-fn codex_profile_mutation_lock_owner_pid(path: &Path) -> Option<u32> {
+fn lock_owner_pid(path: &Path) -> Option<u32> {
     fs::read_to_string(path.join("owner"))
         .ok()
         .and_then(|content| {
@@ -439,6 +499,10 @@ fn codex_profile_mutation_lock_owner_pid(path: &Path) -> Option<u32> {
                     .and_then(|value| value.trim().parse::<u32>().ok())
             })
         })
+}
+
+fn codex_profile_mutation_lock_owner_pid(path: &Path) -> Option<u32> {
+    lock_owner_pid(path)
 }
 
 fn codex_profile_mutation_lock_is_stale(path: &Path) -> bool {
@@ -461,22 +525,27 @@ pub(crate) fn profile_mutation_lease_held_by_other_process(profile_dir: &Path) -
     owner_pid != Some(std::process::id())
 }
 
+fn codex_token_refresh_file_lock_age(path: &Path) -> Option<Duration> {
+    let metadata = fs::metadata(path).ok()?;
+    let modified = metadata.modified().ok()?;
+    SystemTime::now().duration_since(modified).ok()
+}
+
 fn codex_token_refresh_file_lock_is_stale(path: &Path) -> bool {
-    let Ok(metadata) = fs::metadata(path) else {
-        return false;
-    };
-    let Ok(modified) = metadata.modified() else {
-        return false;
-    };
-    SystemTime::now()
-        .duration_since(modified)
+    if let Some(pid) = lock_owner_pid(path) {
+        if !crate::modules::process::is_pid_running(pid) {
+            return true;
+        }
+    }
+    codex_token_refresh_file_lock_age(path)
         .map(|age| age >= Duration::from_secs(CODEX_TOKEN_REFRESH_FILE_LOCK_STALE_SECONDS))
         .unwrap_or(false)
 }
 
-async fn acquire_codex_token_refresh_file_lock(
+async fn acquire_codex_token_refresh_file_lock_with_timeout(
     account_id: &str,
     reason: &str,
+    timeout: Duration,
 ) -> Result<CodexTokenRefreshFileLock, String> {
     let path = codex_token_refresh_file_lock_path(account_id);
     let parent = path
@@ -525,9 +594,7 @@ async fn acquire_codex_token_refresh_file_lock(
                     continue;
                 }
 
-                if started.elapsed()
-                    >= Duration::from_secs(CODEX_TOKEN_REFRESH_FILE_LOCK_TIMEOUT_SECONDS)
-                {
+                if started.elapsed() >= timeout {
                     return Err(format!(
                         "等待 Codex Token 刷新锁超时: account_id={}, lock_path={}, reason={}",
                         account_id,
@@ -546,10 +613,49 @@ async fn acquire_codex_token_refresh_file_lock(
     }
 }
 
+async fn acquire_codex_token_refresh_file_lock(
+    account_id: &str,
+    reason: &str,
+) -> Result<CodexTokenRefreshFileLock, String> {
+    acquire_codex_token_refresh_file_lock_with_timeout(
+        account_id,
+        reason,
+        Duration::from_secs(CODEX_TOKEN_REFRESH_FILE_LOCK_TIMEOUT_SECONDS),
+    )
+    .await
+}
+
+async fn try_acquire_codex_token_refresh_file_lock(
+    account_id: &str,
+    reason: &str,
+) -> Result<Option<CodexTokenRefreshFileLock>, String> {
+    match acquire_codex_token_refresh_file_lock_with_timeout(
+        account_id,
+        reason,
+        Duration::from_secs(CODEX_TOKEN_REFRESH_FILE_LOCK_FAST_TIMEOUT_SECONDS),
+    )
+    .await
+    {
+        Ok(lock) => Ok(Some(lock)),
+        Err(error) if error.starts_with("等待 Codex Token 刷新锁超时") => {
+            logger::log_warn(&format!(
+                "Codex Token 刷新锁忙，跳过本次非阻塞同步: account_id={}, reason={}",
+                account_id, reason
+            ));
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 fn mark_token_chain_updated(account: &mut CodexAccount) {
     account.token_generation = account.token_generation.saturating_add(1);
     account.token_updated_at = Some(now_timestamp());
     account.token_source_mode = CODEX_TOKEN_SOURCE_MANAGED.to_string();
+    // A new token chain supersedes revocation of the previous access token.
+    if account_has_known_access_token_revocation(account) {
+        account.quota_error = None;
+    }
     account.requires_reauth = false;
     account.reauth_reason = None;
 }

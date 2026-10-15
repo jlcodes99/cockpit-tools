@@ -270,11 +270,10 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         ui_scale: user_config.ui_scale,
         auto_refresh_minutes: user_config.auto_refresh_minutes,
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
+        codex_auto_refresh_plan_types: user_config.codex_auto_refresh_plan_types,
         codex_sync_wsl: user_config.codex_sync_wsl,
         codex_app_ui_injection_enabled: user_config.codex_app_ui_injection_enabled,
         codex_oauth_app_version: user_config.codex_oauth_app_version,
-        codex_cli_only_allow_app_server_clients: user_config
-            .codex_cli_only_allow_app_server_clients,
         codex_wsl_config_dir: user_config.codex_wsl_config_dir,
         zed_auto_refresh_minutes: user_config.zed_auto_refresh_minutes,
         ghcp_auto_refresh_minutes: user_config.ghcp_auto_refresh_minutes,
@@ -307,6 +306,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         remember_main_window_state: user_config.remember_main_window_state,
         startup_page: config::normalize_startup_page(&user_config.startup_page),
         floating_card_always_on_top: user_config.floating_card_always_on_top,
+        floating_card_minimal: user_config.floating_card_minimal,
+        floating_card_background_opacity: config::normalize_floating_card_background_opacity(user_config.floating_card_background_opacity),
         app_auto_launch_enabled,
         token_keeper_enabled: user_config.token_keeper_enabled,
         auto_import_from_local_enabled: user_config.auto_import_from_local_enabled,
@@ -396,6 +397,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         openclaw_auth_overwrite_on_switch: user_config.openclaw_auth_overwrite_on_switch,
         hermes_auth_overwrite_on_switch: user_config.hermes_auth_overwrite_on_switch,
         codex_launch_on_switch: user_config.codex_launch_on_switch,
+        codex_auto_restore_takeover_on_launch: user_config.codex_auto_restore_takeover_on_launch,
+        codex_preserve_verified_external_bridge: user_config.codex_preserve_verified_external_bridge,
         antigravity_launch_on_switch: user_config.antigravity_launch_on_switch,
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: user_config.codex_local_access_entry_visible,
@@ -516,8 +519,6 @@ pub fn patch_general_config(
     }
 
     let mut language_changed = false;
-    let codex_client_policy_changed =
-        updates.contains_key("codex_cli_only_allow_app_server_clients");
     let mut token_keeper_enabled_changed = false;
     let mut auto_import_from_local_enabled_changed = false;
     let mut floating_always_on_top_changed = false;
@@ -597,10 +598,6 @@ pub fn patch_general_config(
         );
     }
 
-    if codex_client_policy_changed {
-        modules::codex_local_access::schedule_codex_client_policy_sync();
-    }
-
     if floating_always_on_top_changed {
         if let Err(err) = modules::floating_card_window::apply_floating_card_always_on_top(&app) {
             modules::logger::log_warn(&format!(
@@ -626,6 +623,14 @@ pub fn patch_general_config(
     if menu_bar_quota_changed {
         if let Err(err) = modules::tray::update_tray_menu(&app) {
             modules::logger::log_warn(&format!("[Tray] 保存菜单栏额度设置后刷新失败: {}", err));
+        }
+    }
+
+    if updates.contains_key("floating_card_minimal") || updates.contains_key("floating_card_background_opacity") {
+        use tauri::Emitter;
+        if let Err(err) = app.emit(modules::floating_card_window::FLOATING_CARD_APPEARANCE_CHANGED_EVENT,
+            modules::floating_card_window::FloatingCardAppearance::from(&new_config)) {
+            modules::logger::log_warn(&format!("[FloatingCard] 通用设置外观通知失败: {}", err));
         }
     }
 
@@ -689,13 +694,4 @@ pub fn codex_ssh_sync_current(id: String) -> Result<String, String> {
 #[tauri::command]
 pub fn codex_managed_lb_provider_id() -> String {
     "cockpit-codex-lb".to_string()
-}
-
-#[tauri::command]
-pub fn codebuddy_list_local_session_files(
-    limit: Option<u32>,
-) -> Result<Vec<modules::codebuddy_session_list::CodebuddySessionFileEntry>, String> {
-    Ok(modules::codebuddy_session_list::list_local_session_files(
-        limit.unwrap_or(100) as usize,
-    ))
 }

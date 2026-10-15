@@ -89,12 +89,48 @@ fn load_collection_from_disk() -> Result<Option<CodexLocalAccessCollection>, Str
 
 fn save_collection_to_disk(collection: &CodexLocalAccessCollection) -> Result<(), String> {
     let path = local_access_file_path()?;
-    let content = serde_json::to_string_pretty(collection)
-        .map_err(|e| format!("序列化本地接入配置失败: {}", e))?;
-    write_string_atomic(&path, &content)
+    save_collection_to_path(&path, collection)
 }
 
-fn normalize_stats(stats: &mut CodexLocalAccessStats) {
+fn save_collection_to_path(path: &Path, collection: &CodexLocalAccessCollection) -> Result<(), String> {
+    update_string_atomic(path, |current| {
+        let mut next = collection.clone();
+        if let Some(current) = current {
+            // Background statistics and unrelated settings may hold an older snapshot.
+            // Explicit body-recording choices must survive every full collection write.
+            match serde_json::from_str::<Value>(current) {
+                Ok(current) => {
+                    // Ordinary full-snapshot writers do not own the image model directory.
+                    // The dedicated field transaction alone can add/delete/restore a model.
+                    if current.get("imageGenerationModels").is_some() {
+                        let latest: CodexLocalAccessCollection = serde_json::from_value(current.clone())
+                            .map_err(|error| format!("读取最新生图型号目录失败: {}", error))?;
+                        copy_image_model_catalog_fields(&mut next, &latest);
+                    }
+                    next.request_payload_logging = current.get("requestPayloadLogging")
+                        .and_then(Value::as_bool)
+                        .unwrap_or_else(|| REQUEST_PAYLOAD_LOGGING_ENABLED.load(Ordering::SeqCst));
+                    if let Some(updated_at) = current.get("updatedAt").and_then(Value::as_i64) {
+                        next.updated_at = next.updated_at.max(updated_at);
+                    }
+                }
+                Err(error) => {
+                    // Keep the existing recovery path for damaged files. With no readable
+                    // choice, use the last published setting (off before initial loading).
+                    next.request_payload_logging = REQUEST_PAYLOAD_LOGGING_ENABLED.load(Ordering::SeqCst);
+                    logger::log_codex_api_warn(&format!(
+                        "本地接入配置损坏，保存可用配置并保留运行态正文记录设置: line={}, column={}",
+                        error.line(), error.column()
+                    ));
+                }
+            }
+        }
+        serde_json::to_string_pretty(&next)
+            .map_err(|error| format!("序列化本地接入配置失败: {error}"))
+    })
+}
+
+fn normalize_stats_metadata(stats: &mut CodexLocalAccessStats) {
     let now = now_ms();
     if stats.since <= 0 {
         stats.since = now;
@@ -102,10 +138,33 @@ fn normalize_stats(stats: &mut CodexLocalAccessStats) {
     if stats.updated_at <= 0 {
         stats.updated_at = stats.since;
     }
+    sort_stats_rows(stats);
+}
+
+fn sort_stats_rows(stats: &mut CodexLocalAccessStats) {
     sort_usage_accounts(&mut stats.accounts);
     sort_usage_models(&mut stats.models);
     sort_usage_api_keys(&mut stats.api_keys);
-    recompute_time_windows(stats, now);
+    for window in [&mut stats.daily, &mut stats.weekly, &mut stats.monthly] {
+        sort_usage_accounts(&mut window.accounts);
+        sort_usage_models(&mut window.models);
+        sort_usage_api_keys(&mut window.api_keys);
+    }
+}
+
+fn stats_snapshot_without_events(stats: &CodexLocalAccessStats) -> CodexLocalAccessStats {
+    CodexLocalAccessStats {
+        since: stats.since,
+        updated_at: stats.updated_at,
+        totals: stats.totals.clone(),
+        accounts: stats.accounts.clone(),
+        models: stats.models.clone(),
+        api_keys: stats.api_keys.clone(),
+        daily: stats.daily.clone(),
+        weekly: stats.weekly.clone(),
+        monthly: stats.monthly.clone(),
+        events: Vec::new(),
+    }
 }
 
 fn invalid_stats_backup_path(path: &Path) -> PathBuf {
@@ -202,22 +261,36 @@ fn load_stats_from_disk() -> Result<CodexLocalAccessStats, String> {
             error
         ));
     }
-    let (_, week_since, month_since) = local_calendar_window_starts(now_ms());
+    let now = now_ms();
+    let (_, week_since, month_since) = local_calendar_window_starts(now);
     let retention_since = week_since.min(month_since);
-    parsed.events = match load_local_access_usage_events_since(retention_since) {
-        Ok(events) => events,
+    match load_stats_windows_and_recent_events(now) {
+        Ok((daily, weekly, monthly, recent_events)) => {
+            parsed.daily = daily;
+            parsed.weekly = weekly;
+            parsed.monthly = monthly;
+            parsed.events = recent_events;
+        }
         Err(error) => {
             logger::log_codex_api_warn(&format!(
                 "API 服务请求日志读取失败，继续使用统计快照中的最近事件: {}",
                 error
             ));
-            json_events
+            let (day_since, week_since, month_since) = local_calendar_window_starts(now);
+            parsed.daily = empty_stats_window(day_since, now);
+            parsed.weekly = empty_stats_window(week_since, now);
+            parsed.monthly = empty_stats_window(month_since, now);
+            parsed.events.clear();
+            for event in json_events
                 .into_iter()
                 .filter(|event| event.timestamp >= retention_since)
-                .collect()
+            {
+                apply_usage_event_to_current_windows(&mut parsed, &event, now);
+                push_recent_usage_event(&mut parsed.events, event);
+            }
         }
-    };
-    normalize_stats(&mut parsed);
+    }
+    normalize_stats_metadata(&mut parsed);
     Ok(parsed)
 }
 
@@ -293,6 +366,8 @@ fn run_collection_account_sanitize_once() -> Result<bool, String> {
         let mut next = base;
         let (changed, _) = sanitize_collection_with_accounts(&mut next, &accounts)?;
         if !changed {
+            let mut runtime = gateway_runtime().blocking_lock();
+            sync_runtime_quota_cooldowns(&mut runtime, &accounts, now_ms());
             return Ok(true);
         }
         next.updated_at = now_ms();
@@ -369,6 +444,22 @@ fn ensure_collection_account_sanitize_started() {
     });
 }
 
+fn replace_stats_window_if_more_complete(
+    current: &mut CodexLocalAccessStatsWindow,
+    candidate: CodexLocalAccessStatsWindow,
+) {
+    if candidate.since != current.since {
+        return;
+    }
+    let candidate_count = candidate.totals.request_count;
+    let current_count = current.totals.request_count;
+    if candidate_count > current_count
+        || (candidate_count == current_count && candidate.updated_at >= current.updated_at)
+    {
+        *current = candidate;
+    }
+}
+
 fn ensure_stats_maintenance_started() {
     if GATEWAY_STATS_MAINTENANCE_COMPLETED.load(Ordering::SeqCst) {
         return;
@@ -377,24 +468,34 @@ fn ensure_stats_maintenance_started() {
         return;
     }
     tauri::async_runtime::spawn(async move {
+        let baseline_revision = {
+            let runtime = gateway_runtime().lock().await;
+            runtime.stats_revision
+        };
         let result = tauri::async_runtime::spawn_blocking(load_stats_from_disk).await;
         match result {
             Ok(Ok(mut maintained)) => {
                 let mut runtime = gateway_runtime().lock().await;
-                if runtime.loaded {
-                    // Merge SQLite/month events with any live runtime events so maintenance
-                    // never drops requests accepted after the compact snapshot load.
+                if runtime.loaded && runtime.stats_revision == baseline_revision {
+                    // Merge only the bounded recent event list with live events. The windows
+                    // have already been aggregated while streaming SQLite rows and must not be
+                    // recomputed from the bounded list.
                     let mut events_by_key = maintained
                         .events
                         .drain(..)
                         .map(|event| (local_access_log_event_key(&event), event))
                         .collect::<HashMap<_, _>>();
                     for event in runtime.stats.events.iter().cloned() {
-                        events_by_key.insert(local_access_log_event_key(&event), event);
+                        let key = local_access_log_event_key(&event);
+                        events_by_key.insert(key, event);
                     }
                     maintained.events = events_by_key.into_values().collect();
                     maintained.events.sort_by_key(|event| event.timestamp);
-                    recompute_time_windows(&mut maintained, now_ms());
+                    if maintained.events.len() > STATE_RECENT_USAGE_EVENT_LIMIT {
+                        let remove_count = maintained.events.len() - STATE_RECENT_USAGE_EVENT_LIMIT;
+                        maintained.events.drain(..remove_count);
+                    }
+                    sort_stats_rows(&mut maintained);
 
                     // Keep runtime top-level lifetime aggregates (they include live traffic).
                     // Only backfill account/model/api_key rows that runtime never saw.
@@ -406,15 +507,28 @@ fn ensure_stats_maintenance_started() {
                     sort_usage_api_keys(&mut runtime.stats.api_keys);
 
                     runtime.stats.events = maintained.events;
-                    runtime.stats.daily = maintained.daily;
-                    runtime.stats.weekly = maintained.weekly;
-                    runtime.stats.monthly = maintained.monthly;
+                    replace_stats_window_if_more_complete(
+                        &mut runtime.stats.daily,
+                        maintained.daily,
+                    );
+                    replace_stats_window_if_more_complete(
+                        &mut runtime.stats.weekly,
+                        maintained.weekly,
+                    );
+                    replace_stats_window_if_more_complete(
+                        &mut runtime.stats.monthly,
+                        maintained.monthly,
+                    );
                     runtime.stats.updated_at = runtime.stats.updated_at.max(maintained.updated_at);
                     if runtime.stats.since <= 0 {
                         runtime.stats.since = maintained.since;
                     } else if maintained.since > 0 {
                         runtime.stats.since = runtime.stats.since.min(maintained.since);
                     }
+                } else if runtime.loaded {
+                    logger::log_codex_api_info(
+                        "API 服务统计后台维护期间运行态已更新，保留当前统计以避免覆盖新结果",
+                    );
                 }
                 GATEWAY_STATS_MAINTENANCE_COMPLETED.store(true, Ordering::SeqCst);
             }
@@ -436,8 +550,33 @@ fn save_stats_to_disk(stats: &CodexLocalAccessStats) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("创建 API 服务统计目录失败: {}", e))?;
     }
-    let mut snapshot = stats.clone();
-    snapshot.events.clear();
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct StatsSnapshotWithoutEvents<'a> {
+        since: i64,
+        updated_at: i64,
+        totals: &'a CodexLocalAccessUsageStats,
+        accounts: &'a [CodexLocalAccessAccountStats],
+        models: &'a [CodexLocalAccessModelStats],
+        api_keys: &'a [CodexLocalAccessApiKeyStats],
+        daily: &'a CodexLocalAccessStatsWindow,
+        weekly: &'a CodexLocalAccessStatsWindow,
+        monthly: &'a CodexLocalAccessStatsWindow,
+        events: &'a [CodexLocalAccessUsageEvent],
+    }
+
+    let snapshot = StatsSnapshotWithoutEvents {
+        since: stats.since,
+        updated_at: stats.updated_at,
+        totals: &stats.totals,
+        accounts: &stats.accounts,
+        models: &stats.models,
+        api_keys: &stats.api_keys,
+        daily: &stats.daily,
+        weekly: &stats.weekly,
+        monthly: &stats.monthly,
+        events: &[],
+    };
     let content = serde_json::to_string_pretty(&snapshot)
         .map_err(|e| format!("序列化 API 服务统计失败: {}", e))?;
     write_string_atomic(&path, &content)
@@ -464,6 +603,9 @@ fn prune_runtime_routing_state(runtime: &mut GatewayRuntime, now: i64) {
     runtime
         .model_cooldowns
         .retain(|_, cooldown| cooldown.next_retry_at_ms > now);
+    runtime
+        .recovery_suppressed_accounts
+        .retain(|_, suppressed_until_ms| *suppressed_until_ms > now);
 
     if runtime.response_affinity.len() <= MAX_RESPONSE_AFFINITY_BINDINGS {
         return;
@@ -628,7 +770,7 @@ fn resolve_prompt_cache_key(
         .unwrap_or_else(|| stable_prompt_cache_key(api_key))
 }
 
-fn is_valid_gpt_reasoning_signature(raw_signature: &str) -> bool {
+pub(crate) fn is_valid_gpt_reasoning_signature(raw_signature: &str) -> bool {
     if raw_signature.is_empty()
         || raw_signature.len() > MAX_GPT_REASONING_SIGNATURE_LEN
         || raw_signature != raw_signature.trim()
@@ -1105,12 +1247,6 @@ fn local_access_ineligible_reason(
     if account.is_web_session_auth() {
         return Some("web_session_quota_only");
     }
-    if is_chat_completions_api_key_account(account) {
-        return Some("chat_completions_api_key");
-    }
-    if is_official_deepseek_account(account) {
-        return Some("deepseek_unsupported");
-    }
     if restrict_free_accounts
         && !account.is_agent_identity_auth()
         && is_free_plan_type(account.plan_type.as_deref())
@@ -1384,6 +1520,23 @@ fn sanitize_collection_structure(
         collection.image_generation_mode = CodexLocalAccessImageGenerationMode::Enabled;
         changed = true;
     }
+    let normalized_main_model = normalize_image_generation_main_model(collection.image_generation_main_model.clone()).unwrap_or(None);
+    if normalized_main_model != collection.image_generation_main_model {
+        collection.image_generation_main_model = normalized_main_model;
+        changed = true;
+    }
+    let normalized_image_generation_model = collection.image_generation_model.trim().to_string();
+    if normalized_image_generation_model.is_empty()
+        || normalized_image_generation_model.chars().count() > 200
+    {
+        collection.image_generation_model = DEFAULT_CODEX_IMAGE_GENERATION_MODEL.to_string();
+        changed = true;
+    } else if normalized_image_generation_model != collection.image_generation_model {
+        collection.image_generation_model = normalized_image_generation_model;
+        changed = true;
+    }
+
+    changed |= sanitize_image_model_catalog(collection);
 
     if collection.port == 0 {
         collection.port = allocate_initial_local_port(bind_host_for_collection(collection))?;
@@ -1453,13 +1606,20 @@ fn sanitize_collection_structure(
     if normalized_model_pricings != original_model_pricings {
         changed = true;
     }
-    collection.model_pricings =
-        drop_superseded_default_56_model_pricings(normalized_model_pricings);
+    collection.model_pricings = if collection.model_pricing_version < DEFAULT_MODEL_PRICING_VERSION {
+        drop_superseded_default_56_model_pricings(normalized_model_pricings)
+    } else {
+        normalized_model_pricings
+    };
     if collection.model_pricings != original_model_pricings {
         changed = true;
     }
     if collection.model_pricing_version < DEFAULT_MODEL_PRICING_VERSION {
-        collection.model_pricings = Vec::new();
+        // Versions before 3 require a full reseed; subsequent price updates
+        // discard only recognized old defaults above and preserve user rates.
+        if collection.model_pricing_version < 3 {
+            collection.model_pricings = Vec::new();
+        }
         collection.model_pricing_version = DEFAULT_MODEL_PRICING_VERSION;
         changed = true;
     }
@@ -1492,6 +1652,27 @@ fn sanitize_collection_structure(
         collection.max_retry_interval_ms = normalized_max_retry_interval_ms;
         changed = true;
     }
+    if !collection.account_concurrency_default_migrated {
+        // A saved zero is an explicit unlimited limit, not a missing default.
+        // Missing fields already receive the new default during deserialization.
+        collection.account_concurrency_default_migrated = true;
+        changed = true;
+    }
+    let normalized_max_account_concurrency = collection
+        .max_account_concurrency
+        .min(MAX_ACCOUNT_CONCURRENCY_LIMIT);
+    if normalized_max_account_concurrency != collection.max_account_concurrency {
+        collection.max_account_concurrency = normalized_max_account_concurrency;
+        changed = true;
+    }
+    let normalized_account_concurrency_wait_ms = collection.account_concurrency_wait_ms.clamp(
+        ACCOUNT_CONCURRENCY_WAIT_MIN_MS,
+        ACCOUNT_CONCURRENCY_WAIT_MAX_MS,
+    );
+    if normalized_account_concurrency_wait_ms != collection.account_concurrency_wait_ms {
+        collection.account_concurrency_wait_ms = normalized_account_concurrency_wait_ms;
+        changed = true;
+    }
     changed |= normalize_timeouts(&mut collection.timeouts);
     changed |= normalize_timeout_presets(&mut collection.timeout_presets);
     changed |= normalize_active_timeout_preset_id(collection);
@@ -1514,6 +1695,14 @@ fn sanitize_collection_with_accounts(
         })
         .map(|account| account.id.clone())
         .collect();
+    let valid_image_source_ids: HashSet<String> = accounts
+        .iter()
+        // Declared sources must survive a selected-model mismatch; an empty image scope
+        // would silently fall back to the conversation provider. Dispatch validates exact ID.
+        .filter(|account| !account.is_agent_identity_auth()
+            && (account.is_api_key_auth() || codex_account::account_has_refresh_token(account)))
+        .map(|account| account.id.clone())
+        .collect();
     let valid_account_ids: HashSet<String> = accounts
         .iter()
         .filter(|account| {
@@ -1527,8 +1716,22 @@ fn sanitize_collection_with_accounts(
         .map(|account| account.id.clone())
         .collect();
 
+    let known_account_ids: HashSet<&str> = accounts.iter().map(|account| account.id.as_str()).collect();
+    // Account enumeration can be partial during credential rewrites or storage failures.
+    // Only a known ineligible account or an explicit deletion revokes membership.
+    let explicitly_deleted_ids: HashSet<String> = effective_sidecar_account_ids(collection)
+        .into_iter()
+        .chain(collection.bound_oauth_account_id.iter().cloned())
+        .filter(|id| matches!(codex_account::account_storage_status(id),
+            Ok(codex_account::CodexAccountStorageStatus::Deleted)))
+        .collect();
+    let keep_reference = |id: &str, valid_ids: &HashSet<String>| {
+        !explicitly_deleted_ids.contains(id)
+            && (!known_account_ids.contains(id) || valid_ids.contains(id))
+    };
+
     if let Some(bound_id) = collection.bound_oauth_account_id.as_deref() {
-        if !valid_bound_oauth_account_ids.contains(bound_id) {
+        if !keep_reference(bound_id, &valid_bound_oauth_account_ids) {
             collection.bound_oauth_account_id = None;
             changed = true;
             changed |= normalize_bound_oauth_quota_reserve(
@@ -1541,7 +1744,7 @@ fn sanitize_collection_with_accounts(
     let mut deduped = Vec::new();
     let mut seen = HashSet::new();
     for account_id in &collection.account_ids {
-        if !valid_account_ids.contains(account_id) {
+        if !keep_reference(account_id, &valid_account_ids) {
             changed = true;
             continue;
         }
@@ -1556,16 +1759,41 @@ fn sanitize_collection_with_accounts(
         changed = true;
     }
 
-    // 成员移除后同步清理策略，避免旧账号策略影响后续重新加入的账号。
+    // 生图转发账号池接受 OAuth 和匹配当前图片模型的 API Key。
+    let before_image_accounts = collection.image_generation_account_ids.clone();
+    let mut deduped_image_accounts: Vec<String> = Vec::new();
+    for account_id in &collection.image_generation_account_ids {
+        if !keep_reference(account_id, &valid_image_source_ids) {
+            changed = true;
+            continue;
+        }
+        if deduped_image_accounts.iter().any(|value| value == account_id) {
+            changed = true;
+            continue;
+        }
+        deduped_image_accounts.push(account_id.clone());
+    }
+    if deduped_image_accounts != before_image_accounts {
+        collection.image_generation_account_ids = deduped_image_accounts;
+        changed = true;
+    }
+
+    let before_image_models = collection.image_generation_account_models.clone();
+    collection.image_generation_account_models.retain(|id, _| collection.image_generation_account_ids.contains(id));
+    changed |= collection.image_generation_account_models != before_image_models;
+
+    // 清理对话池与显式图片池都已移除的策略，保留实例 self 生图来源的 Enabled。
     let before_image_policies = collection.image_generation_account_policies.clone();
-    let known_account_ids: HashSet<&str> = collection.account_ids.iter().map(String::as_str).collect();
+    let pool_account_ids: HashSet<&str> = collection.account_ids.iter().chain(collection.image_generation_account_ids.iter()).map(String::as_str).collect();
     collection
         .image_generation_account_policies
-        .retain(|account_id, _| known_account_ids.contains(account_id.as_str()));
+        .retain(|account_id, _| pool_account_ids.contains(account_id.as_str()));
     if collection.image_generation_account_policies != before_image_policies {
         changed = true;
     }
 
+    // A missing/unreadable account is not an explicit deletion. Keep its declared
+    // key scope; routing still checks actual credentials and explicit removals clean references.
     for api_key in &mut collection.api_keys {
         let before = api_key.account_ids.clone();
         let valid_scope_account_ids = if api_key.provider_gateway.is_some() {
@@ -1573,9 +1801,9 @@ fn sanitize_collection_with_accounts(
         } else {
             &valid_account_ids
         };
-        api_key
-            .account_ids
-            .retain(|account_id| valid_scope_account_ids.contains(account_id));
+        api_key.account_ids.retain(|account_id| {
+            keep_reference(account_id, valid_scope_account_ids)
+        });
         if api_key.account_ids != before {
             changed = true;
         }
@@ -1649,13 +1877,21 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 access_scope: CodexLocalAccessScope::Localhost,
                 client_base_url_host: CodexLocalAccessClientBaseUrlHost::default(),
                 image_generation_mode: CodexLocalAccessImageGenerationMode::default(),
+                image_generation_model: DEFAULT_CODEX_IMAGE_GENERATION_MODEL.to_string(),
+        image_generation_models: crate::models::codex_local_access::default_image_generation_models(),
+        image_generation_deleted_models: Vec::new(),
+        image_generation_model_catalog_revision: 0,
+                image_generation_main_model: None,
                 image_generation_account_policies: HashMap::new(),
+                image_generation_account_ids: Vec::new(),
+        image_generation_account_models: HashMap::new(),
                 gateway_mode: CodexLocalAccessGatewayMode::default(),
                 upstream_proxy_url: None,
                 routing_strategy: CodexLocalAccessRoutingStrategy::default(),
                 custom_routing_rules: Vec::new(),
                 account_model_rules: Vec::new(),
                 model_aliases: Vec::new(),
+                suppress_oauth_model_alias: false,
                 model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,
                 model_pricings: Vec::new(),
                 excluded_models: Vec::new(),
@@ -1671,8 +1907,12 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
                 disable_cooling: false,
                 restrict_free_accounts: true,
                 debug_logs: true,
+        request_payload_logging: false,
                 immediate_sse_response: false,
                 max_concurrent_image_requests: 1,
+                max_account_concurrency: DEFAULT_MAX_ACCOUNT_CONCURRENCY,
+                account_concurrency_default_migrated: true,
+                account_concurrency_wait_ms: DEFAULT_ACCOUNT_CONCURRENCY_WAIT_MS,
                 bound_oauth_account_id: None,
                 bound_oauth_quota_reserve: None,
                 account_ids: Vec::new(),
@@ -1712,6 +1952,7 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
             let mut runtime = gateway_runtime().blocking_lock();
             runtime.stats_dirty = false;
             runtime.stats_flush_inflight = false;
+            runtime.stats_revision = 0;
             runtime.stats = loaded_stats;
             if let Some(collection) = next_collection.clone() {
                 sync_runtime_collection(&mut runtime, collection);
@@ -1821,7 +2062,8 @@ async fn ensure_runtime_loaded_for_app_startup() -> Result<(), String> {
             runtime.collection.clone()
         };
         if let Some(collection) = collection.as_ref() {
-            if local_access_profile_takeovers_need_websocket_sync(collection) {
+            if crate::modules::config::get_user_config().codex_auto_restore_takeover_on_launch
+                && local_access_profile_takeovers_need_sync(collection) {
                 ensure_local_access_profile_takeovers_from_runtime().await?;
             }
         }
@@ -1835,10 +2077,12 @@ async fn ensure_runtime_loaded_for_app_startup() -> Result<(), String> {
 }
 
 async fn ensure_gateway_matches_runtime() -> Result<(), String> {
-    let result = {
+    let (result, generation) = {
         let _lifecycle_guard = gateway_lifecycle_lock().lock().await;
-        ensure_gateway_matches_runtime_locked().await
+        let generation = current_gateway_lifecycle_generation();
+        (ensure_gateway_matches_runtime_locked().await, generation)
     };
+    let result = defer_gateway_key_preparation_error(result, generation).await;
     if result.is_ok() && GATEWAY_STOP_REQUESTS.load(Ordering::SeqCst) == 0 {
         let collection = {
             let runtime = gateway_runtime().lock().await;
@@ -1862,7 +2106,7 @@ where
         match reload.await {
             Ok(()) => {
                 let mut runtime = gateway_runtime().lock().await;
-                runtime.last_error = None;
+                if !gateway_key_recovery_snapshot().0 { runtime.last_error = None; }
                 logger::log_codex_api_info(&format!(
                     "[CodexLocalAccess] 后台网关重载完成: {}",
                     reason
@@ -1937,7 +2181,7 @@ async fn refresh_bound_oauth_quota_if_due(reason: &'static str, min_interval: Du
         control.last_started_at = Some(Instant::now());
     }
 
-    let result = codex_quota::refresh_account_quota(&account_id).await;
+    let result = codex_quota::refresh_account_quota_background(&account_id).await;
     {
         let mut control = bound_oauth_quota_refresh_control().lock().await;
         control.in_flight = false;
@@ -1985,6 +2229,7 @@ pub async fn reevaluate_bound_oauth_quota_reserve_after_refresh(
     if account_id.is_empty() {
         return;
     }
+    let refreshed_account = refresh_succeeded.then(|| codex_account::load_account(account_id)).flatten();
     if let Ok(mut failures) = bound_oauth_quota_refresh_failures().lock() {
         if refresh_succeeded {
             failures.remove(account_id);
@@ -2006,6 +2251,9 @@ pub async fn reevaluate_bound_oauth_quota_reserve_after_refresh(
             .cloned();
         if collection.is_some() {
             runtime.prepared_accounts.remove(account_id);
+        }
+        if let Some(account) = refreshed_account.as_ref() {
+            sync_runtime_quota_cooldowns(&mut runtime, std::slice::from_ref(account), now_ms());
         }
         (collection, runtime.collection.clone())
     };
@@ -2035,28 +2283,42 @@ pub async fn reevaluate_bound_oauth_quota_reserve_after_refresh(
     }
 }
 
-fn refresh_gateway_process_status(runtime: &mut GatewayRuntime) {
+fn refresh_gateway_process_status(runtime: &mut GatewayRuntime) -> Option<SidecarProcessExit> {
     if !runtime.running {
-        return;
+        return None;
     }
     let Some(child) = runtime.sidecar_child.as_mut() else {
-        return;
+        return None;
     };
+    let pid = child.id().unwrap_or_default();
+    let generation = runtime
+        .sidecar_generation
+        .unwrap_or_else(current_gateway_lifecycle_generation);
     let message = match child.try_wait() {
         Ok(Some(status)) => Some(format!("API 服务 sidecar 已退出: {}", status)),
         Ok(None) => None,
-        Err(error) => Some(format!("检查 API 服务 sidecar 状态失败: {}", error)),
+        Err(error) => {
+            let message = format!("检查 API 服务 sidecar 状态失败: {}", error);
+            log_gateway_mode_warn(CodexLocalAccessGatewayMode::Sidecar, &message);
+            return None;
+        }
     };
     let Some(message) = message else {
-        return;
+        return None;
     };
     log_gateway_mode_warn(CodexLocalAccessGatewayMode::Sidecar, &message);
     runtime.running = false;
     runtime.actual_port = None;
     runtime.actual_bind_host = None;
     runtime.sidecar_config_fingerprint = None;
-    runtime.last_error = Some(message);
+    runtime.last_error = Some(message.clone());
+    runtime.sidecar_generation = None;
     runtime.sidecar_child = None;
+    Some(SidecarProcessExit {
+        pid,
+        generation,
+        message,
+    })
 }
 
 fn is_retryable_sidecar_bind_error(error: &str) -> bool {

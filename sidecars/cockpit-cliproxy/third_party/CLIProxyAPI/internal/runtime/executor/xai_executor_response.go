@@ -281,6 +281,10 @@ func (f *xaiInternalXSearchResponseFilter) filterCompletedOutput(eventData []byt
 }
 
 func normalizeXAIInputNamespaceToolCalls(body []byte) []byte {
+	return normalizeXAIInputNamespaceToolCallsWithFold(body, xaiShouldFoldNamespaceTools(body, false))
+}
+
+func normalizeXAIInputNamespaceToolCallsWithFold(body []byte, shouldFold bool) []byte {
 	if !gjson.ValidBytes(body) {
 		return body
 	}
@@ -294,8 +298,55 @@ func normalizeXAIInputNamespaceToolCalls(body []byte) []byte {
 		}
 		namespaceName := strings.TrimSpace(item.Get("namespace").String())
 		toolName := strings.TrimSpace(item.Get("name").String())
+		if namespaceName == "" {
+			continue
+		}
 		qualifiedName := qualifyXAINamespaceToolName(namespaceName, toolName)
-		if namespaceName == "" || qualifiedName == "" {
+		var isFolded bool
+		if xaiHasFunctionToolNamed(body, namespaceName) {
+			isFolded = true
+		} else if xaiHasFunctionToolNamed(body, qualifiedName) {
+			isFolded = false
+		} else {
+			isFolded = shouldFold
+		}
+		if isFolded {
+			namePath := fmt.Sprintf("input.%d.name", index)
+			namespacePath := fmt.Sprintf("input.%d.namespace", index)
+			argsPath := fmt.Sprintf("input.%d.arguments", index)
+
+			dispatcherArgs := map[string]any{
+				"name": toolName,
+			}
+			if rawArgs := item.Get("arguments").String(); rawArgs != "" {
+				if gjson.Valid(rawArgs) {
+					dispatcherArgs["arguments"] = json.RawMessage(rawArgs)
+				} else {
+					dispatcherArgs["arguments"] = rawArgs
+				}
+			}
+			encodedArgs, errMarshal := json.Marshal(dispatcherArgs)
+			if errMarshal != nil {
+				continue
+			}
+
+			updated, errSet := sjson.SetBytes(body, namePath, namespaceName)
+			if errSet != nil {
+				continue
+			}
+			updated, errSet = sjson.SetBytes(updated, argsPath, string(encodedArgs))
+			if errSet != nil {
+				continue
+			}
+			updated, errDelete := sjson.DeleteBytes(updated, namespacePath)
+			if errDelete != nil {
+				continue
+			}
+			body = updated
+			continue
+		}
+
+		if qualifiedName == "" {
 			continue
 		}
 		namePath := fmt.Sprintf("input.%d.name", index)
@@ -313,29 +364,241 @@ func normalizeXAIInputNamespaceToolCalls(body []byte) []byte {
 	return body
 }
 
-func restoreXAINamespaceToolCalls(data []byte, refs map[string]xaiNamespaceToolRef) []byte {
-	if len(refs) == 0 || len(data) == 0 || !gjson.ValidBytes(data) {
-		return data
-	}
-	data = restoreXAINamespaceToolCallAtPath(data, "item", refs)
-	output := gjson.GetBytes(data, "response.output")
-	if output.Exists() && output.IsArray() {
-		for index := range output.Array() {
-			data = restoreXAINamespaceToolCallAtPath(data, fmt.Sprintf("response.output.%d", index), refs)
-		}
-	}
-	return data
+type xaiNamespaceRestorer struct {
+	refs              map[string]xaiNamespaceToolRef
+	dispatcherItemIDs map[string]string
+	pendingCalls      map[string]*xaiPendingDispatcherCall
+	pendingEvents     [][]byte
+	visibleOutputs    map[int64]bool
+	resequence        bool
+	nextSequence      int64
 }
 
-func restoreXAINamespaceToolCallAtPath(data []byte, path string, refs map[string]xaiNamespaceToolRef) []byte {
+type xaiPendingDispatcherCall struct {
+	added     []byte
+	delta     []byte
+	arguments strings.Builder
+	resolved  bool
+	finalArgs string
+}
+
+func newXAINamespaceRestorer(refs map[string]xaiNamespaceToolRef) *xaiNamespaceRestorer {
+	return &xaiNamespaceRestorer{
+		refs:              refs,
+		dispatcherItemIDs: make(map[string]string),
+		pendingCalls:      make(map[string]*xaiPendingDispatcherCall),
+		visibleOutputs:    make(map[int64]bool),
+	}
+}
+
+// Folded calls carry their real tool name inside the arguments. Delay their added
+// event and later outputs until that identity is known. SDKs append added items
+// to an array, then address them by output_index, so added order must not change.
+func (r *xaiNamespaceRestorer) restoreStream(data []byte) [][]byte {
+	if r == nil || len(r.refs) == 0 || !gjson.ValidBytes(data) {
+		return [][]byte{data}
+	}
+	if !r.resequence {
+		r.nextSequence = gjson.GetBytes(data, "sequence_number").Int()
+	}
+	var events [][]byte
+	resolved := false
+	eventType := gjson.GetBytes(data, "type").String()
+	itemID := gjson.GetBytes(data, "item_id").String()
+	switch eventType {
+	case "response.output_item.added":
+		item := gjson.GetBytes(data, "item")
+		ref, exists := r.refs[item.Get("name").String()]
+		itemID = item.Get("id").String()
+		if exists && ref.isDispatcher && item.Get("type").String() == "function_call" && itemID != "" {
+			r.resequence = true
+			r.dispatcherItemIDs[itemID] = ref.namespace
+			call := &xaiPendingDispatcherCall{added: bytes.Clone(data)}
+			call.arguments.WriteString(item.Get("arguments").String())
+			r.pendingCalls[itemID] = call
+		}
+	case "response.function_call_arguments.delta":
+		if call := r.pendingCalls[itemID]; call != nil {
+			if call.delta == nil {
+				call.delta = bytes.Clone(data)
+			}
+			call.arguments.WriteString(gjson.GetBytes(data, "delta").String())
+			return nil
+		}
+	case "response.function_call_arguments.done":
+		if call := r.pendingCalls[itemID]; call != nil {
+			call.finalArgs = gjson.GetBytes(data, "arguments").String()
+			call.resolved, resolved = true, true
+		}
+	case "response.output_item.done":
+		itemID = gjson.GetBytes(data, "item.id").String()
+		if call := r.pendingCalls[itemID]; call != nil {
+			call.finalArgs = gjson.GetBytes(data, "item.arguments").String()
+			call.resolved, resolved = true, true
+		}
+	case "response.completed", "response.incomplete", "response.failed":
+		// Some upstreams omit arguments.done or even output_item.done. Resolve
+		// pending identities from the terminal snapshot before emitting it.
+		output := gjson.GetBytes(data, "response.output").Array()
+		for pendingID, call := range r.pendingCalls {
+			if call.resolved {
+				continue
+			}
+			arguments := call.arguments.String()
+			for _, item := range output {
+				if item.Get("id").String() == pendingID && item.Get("arguments").Exists() {
+					arguments = item.Get("arguments").String()
+					break
+				}
+			}
+			call.finalArgs = arguments
+			call.resolved, resolved = true, true
+		}
+	}
+	if len(r.pendingEvents) > 0 && !resolved {
+		// Already published outputs can continue while a later added is waiting.
+		// Do not rescan a growing queue for each fragment of a later output.
+		outputIndex := gjson.GetBytes(data, "output_index")
+		if eventType != "response.output_item.added" && outputIndex.Exists() && r.visibleOutputs[outputIndex.Int()] {
+			events = append(events, r.restore(data))
+		} else {
+			r.pendingEvents = append(r.pendingEvents, bytes.Clone(data))
+			return nil
+		}
+	} else {
+		r.pendingEvents = append(r.pendingEvents, bytes.Clone(data))
+		var waiting [][]byte
+		blocked := false
+		for _, event := range r.pendingEvents {
+			isAdded := gjson.GetBytes(event, "type").String() == "response.output_item.added"
+			outputIndex := gjson.GetBytes(event, "output_index")
+			callID := gjson.GetBytes(event, "item.id").String()
+			call := r.pendingCalls[callID]
+			if isAdded && call != nil && !call.resolved {
+				blocked = true
+			}
+			if blocked && (isAdded || !outputIndex.Exists() || !r.visibleOutputs[outputIndex.Int()]) {
+				waiting = append(waiting, event)
+				continue
+			}
+			if isAdded && outputIndex.Exists() {
+				r.visibleOutputs[outputIndex.Int()] = true
+			}
+			if isAdded && call != nil {
+				events = append(events, r.flushDispatcherCall(callID, call.finalArgs)...)
+			} else {
+				events = append(events, r.restore(event))
+			}
+		}
+		r.pendingEvents = waiting
+	}
+	for index, event := range events {
+		if r.resequence && gjson.GetBytes(event, "sequence_number").Exists() {
+			events[index], _ = sjson.SetBytes(event, "sequence_number", r.nextSequence)
+			r.nextSequence++
+		}
+	}
+	return events
+}
+
+func (r *xaiNamespaceRestorer) flushDispatcherCall(itemID, arguments string) [][]byte {
+	call := r.pendingCalls[itemID]
+	delete(r.pendingCalls, itemID)
+	// Restore with the final envelope, then keep added.arguments empty so
+	// clients that append deltas do not receive the arguments twice.
+	added, _ := sjson.SetBytes(call.added, "item.arguments", arguments)
+	added = r.restoreAtPath(added, "item")
+	childArguments := gjson.GetBytes(added, "item.arguments").String()
+	added, _ = sjson.SetBytes(added, "item.arguments", "")
+	delta := call.delta
+	if delta == nil {
+		// No upstream delta is required: arguments.done may be the first
+		// complete argument payload. Preserve its output index and item ID.
+		delta, _ = sjson.DeleteBytes(call.added, "item")
+		delta, _ = sjson.SetBytes(delta, "type", "response.function_call_arguments.delta")
+		delta, _ = sjson.SetBytes(delta, "item_id", itemID)
+	}
+	delta, _ = sjson.SetBytes(delta, "delta", childArguments)
+	return [][]byte{added, delta}
+}
+
+func (r *xaiNamespaceRestorer) restore(data []byte) []byte {
+	if r == nil || len(r.refs) == 0 || len(data) == 0 || !gjson.ValidBytes(data) {
+		return data
+	}
+	eventType := gjson.GetBytes(data, "type").String()
+	switch eventType {
+	case "response.output_item.added":
+		item := gjson.GetBytes(data, "item")
+		if item.Get("type").String() == "function_call" {
+			name := strings.TrimSpace(item.Get("name").String())
+			itemID := strings.TrimSpace(item.Get("id").String())
+			if ref, ok := r.refs[name]; ok && ref.isDispatcher {
+				if itemID != "" {
+					r.dispatcherItemIDs[itemID] = ref.namespace
+				}
+				data, _ = sjson.SetBytes(data, "item.namespace", ref.namespace)
+			}
+		}
+		return r.restoreAtPath(data, "item")
+
+	case "response.function_call_arguments.done":
+		itemID := strings.TrimSpace(gjson.GetBytes(data, "item_id").String())
+		if namespaceName, isDisp := r.dispatcherItemIDs[itemID]; isDisp {
+			rawArgs := gjson.GetBytes(data, "arguments").String()
+			if _, childArgs, ok := unwrapXAIDispatcherArguments(rawArgs, namespaceName, r.refs); ok {
+				updated, errSet := sjson.SetBytes(data, "arguments", string(childArgs))
+				if errSet == nil {
+					data = updated
+				}
+			}
+		}
+		return data
+
+	default:
+		data = r.restoreAtPath(data, "item")
+		output := gjson.GetBytes(data, "response.output")
+		if output.Exists() && output.IsArray() {
+			for index := range output.Array() {
+				data = r.restoreAtPath(data, fmt.Sprintf("response.output.%d", index))
+			}
+		}
+		return data
+	}
+}
+
+func (r *xaiNamespaceRestorer) restoreAtPath(data []byte, path string) []byte {
 	if gjson.GetBytes(data, path+".type").String() != "function_call" {
 		return data
 	}
 	qualifiedName := strings.TrimSpace(gjson.GetBytes(data, path+".name").String())
-	ref, ok := refs[qualifiedName]
+	ref, ok := r.refs[qualifiedName]
 	if !ok {
 		return data
 	}
+	if ref.isDispatcher {
+		rawArgs := gjson.GetBytes(data, path+".arguments").String()
+		childName, childArgs, unwrapped := unwrapXAIDispatcherArguments(rawArgs, ref.namespace, r.refs)
+		if !unwrapped && childName == "" {
+			childName = ref.name
+		}
+		updated, errSet := sjson.SetBytes(data, path+".namespace", ref.namespace)
+		if errSet != nil {
+			return data
+		}
+		if childName != "" {
+			if updatedName, errSetName := sjson.SetBytes(updated, path+".name", childName); errSetName == nil {
+				updated = updatedName
+			}
+		}
+		if len(childArgs) > 0 {
+			if updatedArgs, errSetArgs := sjson.SetBytes(updated, path+".arguments", string(childArgs)); errSetArgs == nil {
+				updated = updatedArgs
+			}
+		}
+		return updated
+	}
+
 	updated, errSet := sjson.SetBytes(data, path+".name", ref.name)
 	if errSet != nil {
 		return data
@@ -345,6 +608,64 @@ func restoreXAINamespaceToolCallAtPath(data []byte, path string, refs map[string
 		return data
 	}
 	return updated
+}
+
+func unwrapXAIDispatcherArguments(rawArgs string, namespaceName string, refs map[string]xaiNamespaceToolRef) (string, []byte, bool) {
+	if !gjson.Valid(rawArgs) {
+		return "", nil, false
+	}
+	argsParsed := gjson.Parse(rawArgs)
+	nameField := argsParsed.Get("name")
+	if !nameField.Exists() || nameField.Type != gjson.String {
+		return "", nil, false
+	}
+	childName := strings.TrimSpace(nameField.String())
+	if childName == "" {
+		return "", nil, false
+	}
+
+	if namespaceName != "" {
+		qualified := qualifyXAINamespaceToolName(namespaceName, childName)
+		if ref, exists := refs[qualified]; exists && ref.isDispatcher {
+			return "", nil, false
+		}
+	} else {
+		isChildOfDispatcher := false
+		for _, ref := range refs {
+			if ref.isDispatcher && (ref.name == childName || ref.namespace == childName) {
+				isChildOfDispatcher = true
+				break
+			}
+		}
+		if !isChildOfDispatcher && !argsParsed.Get("arguments").Exists() {
+			return "", nil, false
+		}
+	}
+
+	var childArgs []byte
+	if argsField := argsParsed.Get("arguments"); argsField.Exists() {
+		if argsField.Type == gjson.String {
+			childArgs = []byte(argsField.String())
+		} else {
+			childArgs = []byte(argsField.Raw)
+		}
+	} else {
+		cleaned, errDel := sjson.DeleteBytes([]byte(rawArgs), "name")
+		if errDel == nil && len(cleaned) > 0 && string(cleaned) != "{}" {
+			childArgs = cleaned
+		} else {
+			childArgs = []byte("{}")
+		}
+	}
+	if len(childArgs) == 0 {
+		childArgs = []byte("{}")
+	}
+	return childName, childArgs, true
+}
+
+func restoreXAINamespaceToolCalls(data []byte, refs map[string]xaiNamespaceToolRef) []byte {
+	restorer := newXAINamespaceRestorer(refs)
+	return restorer.restore(data)
 }
 
 // normalizeXAIObjectRootUnionBranchTypes makes untyped root union branches
@@ -365,7 +686,7 @@ func normalizeXAIObjectRootUnionBranchTypes(tool []byte) ([]byte, bool, bool) {
 			continue
 		}
 		for index, branch := range union.Array() {
-			if !branch.IsObject() || branch.Get("type").Exists() {
+			if !branch.IsObject() || branch.Get("type").Exists() || branch.Get("$ref").Exists() {
 				continue
 			}
 			updated, errSet := sjson.SetBytes(tool, fmt.Sprintf("parameters.%s.%d.type", unionName, index), "object")
@@ -398,6 +719,18 @@ func xaiSchemaTypeIsObjectOnly(schemaType gjson.Result) bool {
 	return true
 }
 
+func isXAICodexAppAutomationUpdate(toolName, namespaceName string) bool {
+	cleanNamespace := strings.TrimPrefix(strings.TrimSpace(namespaceName), "mcp__")
+	cleanTool := strings.TrimPrefix(strings.TrimSpace(toolName), "mcp__")
+	if strings.EqualFold(cleanTool, xaiAutomationUpdateToolName) && (strings.EqualFold(cleanNamespace, xaiCodexAppNamespaceName) || strings.EqualFold(cleanNamespace, "codex_apps")) {
+		return true
+	}
+	if strings.EqualFold(cleanTool, xaiCodexAppNamespaceName+"__"+xaiAutomationUpdateToolName) || strings.EqualFold(cleanTool, "codex_apps__"+xaiAutomationUpdateToolName) {
+		return true
+	}
+	return false
+}
+
 // xaiFunctionParametersNeedSimplification reports whether a function tool, or
 // a custom tool normalized to a function, has a schema that xAI cannot accept.
 func xaiFunctionParametersNeedSimplification(tool gjson.Result, namespaceName string) bool {
@@ -409,10 +742,7 @@ func xaiFunctionParametersNeedSimplification(tool gjson.Result, namespaceName st
 	}
 
 	toolName := strings.TrimSpace(tool.Get("name").String())
-	qualifiedAutomationName := xaiCodexAppNamespaceName + "__" + xaiAutomationUpdateToolName
-	if isFunction && (strings.EqualFold(toolName, qualifiedAutomationName) ||
-		(strings.EqualFold(strings.TrimSpace(namespaceName), xaiCodexAppNamespaceName) &&
-			strings.EqualFold(toolName, xaiAutomationUpdateToolName))) {
+	if isFunction && isXAICodexAppAutomationUpdate(toolName, namespaceName) {
 		return true
 	}
 
@@ -423,7 +753,7 @@ func xaiFunctionParametersNeedSimplification(tool gjson.Result, namespaceName st
 			continue
 		}
 		for _, branch := range union.Array() {
-			if !xaiSchemaTypeIsObjectOnly(branch.Get("type")) {
+			if branch.Get("$ref").Exists() || !xaiSchemaTypeIsObjectOnly(branch.Get("type")) {
 				return true
 			}
 		}
@@ -853,6 +1183,227 @@ func xaiPatchCompletedOutput(eventData []byte, outputItemsByIndex map[int64][]by
 
 	patched, _ := sjson.SetRawBytes(eventData, "response.output", outputArray)
 	return patched
+}
+
+// xaiApplyPatchRestorer 把请求侧降级成 function 的 apply_patch 还原成客户端
+// 声明的 custom_tool_call 形态。
+//
+// Codex 在目录里看到 apply_patch_tool_type=freeform 时会声明 freeform(custom)
+// 工具，并期望 custom_tool_call / custom_tool_call_output。xAI 的 Responses
+// 端点只接受 function 工具，因此请求侧把 apply_patch 改写成单字段 function，
+// 这里在响应出口把等价的 function_call 还原回 custom_tool_call（input 为纯
+// patch 文本）。未声明 apply_patch 的请求不会创建 restorer，其它工具零影响。
+type xaiApplyPatchRestorer struct {
+	pending        map[string]struct{}
+	pendingOutputs map[int64]struct{}
+}
+
+func newXAIApplyPatchRestorer(enabled bool) *xaiApplyPatchRestorer {
+	if !enabled {
+		return nil
+	}
+	return &xaiApplyPatchRestorer{
+		pending:        make(map[string]struct{}),
+		pendingOutputs: make(map[int64]struct{}),
+	}
+}
+
+func xaiApplyPatchCallItem(item gjson.Result) bool {
+	return strings.TrimSpace(item.Get("type").String()) == "function_call" &&
+		strings.TrimSpace(item.Get("name").String()) == xaiApplyPatchToolName
+}
+
+// xaiApplyPatchInputFromArguments 从 function 参数里取出 freeform patch 文本。
+// 正常情况下参数是 {"input":"*** Begin Patch..."}；模型直接输出 patch 文本或
+// 使用 patch/diff 等别名时也保持可用。抽出文本后再把独立成行的错误头尾改回官方信封。
+func xaiApplyPatchInputFromArguments(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	input := raw
+	if gjson.Valid(trimmed) {
+		parsed := gjson.Parse(trimmed)
+		switch {
+		case parsed.Type == gjson.String:
+			input = parsed.String()
+		case parsed.IsObject():
+			found := false
+			for _, key := range []string{"input", "patch", "diff", "content", "text"} {
+				if value := parsed.Get(key); value.Type == gjson.String {
+					input = value.String()
+					found = true
+					break
+				}
+			}
+			if !found {
+				var only string
+				matches := 0
+				parsed.ForEach(func(_, value gjson.Result) bool {
+					if value.Type == gjson.String {
+						only = value.String()
+						matches++
+					}
+					return true
+				})
+				if matches == 1 {
+					input = only
+				}
+			}
+		}
+	}
+	return xaiNormalizeApplyPatchEnvelope(input)
+}
+
+// xaiNormalizeApplyPatchEnvelope 只改独立成行的错误头尾。
+// 新窗口的 Grok 常把官方 `*** Begin Patch` 写成 `*** Begin Patch ***`，Codex
+// 的 Lark grammar 会直接拒。正文里的同名字符串、正确信封和中间行一律不动。
+func xaiNormalizeApplyPatchEnvelope(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	lines := strings.Split(raw, "\n")
+	first, last := -1, -1
+	for i, line := range lines {
+		if strings.TrimSpace(strings.TrimSuffix(line, "\r")) == "" {
+			continue
+		}
+		if first < 0 {
+			first = i
+		}
+		last = i
+	}
+	if first < 0 {
+		return raw
+	}
+	changed := false
+	if next, ok := xaiRewriteApplyPatchMarkerLine(lines[first], xaiApplyPatchBeginWrong, xaiApplyPatchBeginMarker); ok {
+		lines[first] = next
+		changed = true
+	}
+	if next, ok := xaiRewriteApplyPatchMarkerLine(lines[last], xaiApplyPatchEndWrong, xaiApplyPatchEndMarker); ok {
+		lines[last] = next
+		changed = true
+	}
+	if !changed {
+		return raw
+	}
+	return strings.Join(lines, "\n")
+}
+
+func xaiRewriteApplyPatchMarkerLine(line, wrong, correct string) (string, bool) {
+	cr := strings.HasSuffix(line, "\r")
+	body := line
+	if cr {
+		body = strings.TrimSuffix(line, "\r")
+	}
+	if strings.TrimSpace(body) != wrong {
+		return line, false
+	}
+	if cr {
+		return correct + "\r", true
+	}
+	return correct, true
+}
+
+// xaiRewriteApplyPatchItem 把 path 指向的 function_call 项改写成 custom_tool_call。
+func xaiRewriteApplyPatchItem(data []byte, path string) []byte {
+	item := gjson.GetBytes(data, path)
+	input := xaiApplyPatchInputFromArguments(item.Get("arguments").String())
+	updated := data
+	if next, errDel := sjson.DeleteBytes(updated, path+".arguments"); errDel == nil {
+		updated = next
+	}
+	if next, errDel := sjson.DeleteBytes(updated, path+".encrypted_function_args"); errDel == nil {
+		updated = next
+	}
+	if next, errSet := sjson.SetBytes(updated, path+".type", "custom_tool_call"); errSet == nil {
+		updated = next
+	}
+	if next, errSet := sjson.SetBytes(updated, path+".input", input); errSet == nil {
+		updated = next
+	}
+	return updated
+}
+
+func (r *xaiApplyPatchRestorer) tracksEvent(data []byte) bool {
+	if _, ok := r.pending[strings.TrimSpace(gjson.GetBytes(data, "item_id").String())]; ok {
+		return true
+	}
+	index := gjson.GetBytes(data, "output_index")
+	if !index.Exists() {
+		return false
+	}
+	_, ok := r.pendingOutputs[index.Int()]
+	return ok
+}
+
+// applyStream 处理单个上游 SSE 事件；返回 nil 表示该事件被吸收。
+func (r *xaiApplyPatchRestorer) applyStream(data []byte) []byte {
+	if r == nil || len(data) == 0 || !gjson.ValidBytes(data) {
+		return data
+	}
+	switch gjson.GetBytes(data, "type").String() {
+	case "response.output_item.added":
+		item := gjson.GetBytes(data, "item")
+		if !xaiApplyPatchCallItem(item) {
+			return data
+		}
+		if id := strings.TrimSpace(item.Get("id").String()); id != "" {
+			r.pending[id] = struct{}{}
+		}
+		if index := gjson.GetBytes(data, "output_index"); index.Exists() {
+			r.pendingOutputs[index.Int()] = struct{}{}
+		}
+		return xaiRewriteApplyPatchItem(data, "item")
+	case "response.function_call_arguments.delta", "response.function_call_arguments.done":
+		if !r.tracksEvent(data) {
+			return data
+		}
+		// 参数以 JSON 增量到达，无法无损转成 patch 文本增量；客户端会在
+		// output_item.done 里拿到完整 input，因此这里吸收这两个事件。
+		return nil
+	case "response.output_item.done":
+		item := gjson.GetBytes(data, "item")
+		itemID := strings.TrimSpace(item.Get("id").String())
+		_, trackedByID := r.pending[itemID]
+		tracked := r.tracksEvent(data) || trackedByID
+		if !tracked && !xaiApplyPatchCallItem(item) {
+			return data
+		}
+		if itemID != "" {
+			delete(r.pending, itemID)
+		}
+		if index := gjson.GetBytes(data, "output_index"); index.Exists() {
+			delete(r.pendingOutputs, index.Int())
+		}
+		return xaiRewriteApplyPatchItem(data, "item")
+	case "response.completed", "response.incomplete", "response.failed", "response.done":
+		return r.restore(data)
+	default:
+		return data
+	}
+}
+
+// restore 处理终态快照（response.output）或非流式完成事件里的 apply_patch 项。
+func (r *xaiApplyPatchRestorer) restore(data []byte) []byte {
+	if r == nil || len(data) == 0 || !gjson.ValidBytes(data) {
+		return data
+	}
+	if item := gjson.GetBytes(data, "item"); item.IsObject() && xaiApplyPatchCallItem(item) {
+		data = xaiRewriteApplyPatchItem(data, "item")
+	}
+	output := gjson.GetBytes(data, "response.output")
+	if !output.IsArray() {
+		return data
+	}
+	for index, item := range output.Array() {
+		if !xaiApplyPatchCallItem(item) {
+			continue
+		}
+		data = xaiRewriteApplyPatchItem(data, fmt.Sprintf("response.output.%d", index))
+	}
+	return data
 }
 
 // xaiFreeUsageExhaustedCooldown is the free-tier rolling window advertised by

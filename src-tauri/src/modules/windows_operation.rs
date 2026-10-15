@@ -120,7 +120,6 @@ fn supported_elevation_process_name(name: &str) -> bool {
         "antigravity ide.exe"
             | "antigravity.exe"
             | "chatgpt.exe"
-            | "codex.exe"
             | "claude.exe"
             | "cursor.exe"
             | "windsurf.exe"
@@ -320,7 +319,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn elevation_process_allowlist_rejects_generic_electron() {
-        assert!(supported_elevation_process_name("Codex.exe"));
+        assert!(!supported_elevation_process_name("Codex.exe"));
         assert!(supported_elevation_process_name("Code - Insiders.exe"));
         assert!(!supported_elevation_process_name("Electron.exe"));
         assert!(!supported_elevation_process_name("explorer.exe"));

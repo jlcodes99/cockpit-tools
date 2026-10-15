@@ -25,7 +25,8 @@ const (
 
 // SanitizeCodexInputItemIDs normalizes supported input item IDs for Codex, removes encrypted
 // reasoning items whose IDs exceed the Codex limit, and deterministically shortens
-// other overlong input item IDs.
+// other overlong input item IDs. Retained encrypted reasoning IDs stay unchanged
+// because their ciphertext is bound to the original identity.
 func SanitizeCodexInputItemIDs(body []byte) []byte {
 	input := util.GetGJSONBytesNoCopy(body, "input")
 	if !input.IsArray() {
@@ -135,8 +136,14 @@ func normalizeCodexInputItemID(item gjson.Result, id string) string {
 	case "message":
 		prefix = codexMessageItemIDPrefix
 	case "reasoning":
+		if encrypted := item.Get("encrypted_content"); encrypted.Type == gjson.String && encrypted.String() != "" {
+			return id
+		}
 		prefix = codexReasoningItemIDPrefix
-	case "function_call":
+	case "function_call", "function_call_output":
+		// Custom image results are promoted to function_call_output before the
+		// final wire normalization. Their persisted ctco IDs must also satisfy
+		// the upstream's fc prefix check; already-valid fco IDs stay unchanged.
 		prefix = codexFunctionCallItemIDPrefix
 	case "custom_tool_call":
 		prefix = codexCustomToolCallItemIDPrefix

@@ -33,6 +33,7 @@ import { ModalErrorMessage, useModalErrorState } from '../components/ModalErrorM
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { MultiSelectFilterDropdown, type MultiSelectFilterOption } from '../components/MultiSelectFilterDropdown';
 import { SingleSelectFilterDropdown } from '../components/SingleSelectFilterDropdown';
@@ -298,6 +299,7 @@ export function QoderAccountsPage() {
       : 'desc',
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const grouping = usePlatformAccountGroups('qoder', () => setSelected(new Set()));
   const [showAddModal, setShowAddModal] = useState(false);
   const [addTab, setAddTab] = useState<'oauth' | 'token' | 'import'>('import');
 
@@ -755,9 +757,13 @@ export function QoderAccountsPage() {
       );
     }
 
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
+
     result.sort(compareAccountsBySort);
     return result;
-  }, [accounts, compareAccountsBySort, filterTypes, isAbnormalAccount, searchQuery, tagFilter]);
+  }, [accounts, compareAccountsBySort, filterTypes, grouping, isAbnormalAccount, searchQuery, tagFilter]);
 
   const groupedAccounts = useMemo(() => {
     if (!groupByTag) return [] as Array<[string, QoderAccount[]]>;
@@ -1097,11 +1103,41 @@ export function QoderAccountsPage() {
         setOauthCompleting(true);
         void qoderService
           .qoderOauthLoginComplete(loginId)
-          .then(async () => {
+          .then(async (completedAccount) => {
             logQoderOauthUi('complete:resolved', { loginId });
             if (attemptSeq !== oauthAttemptSeqRef.current) return;
             if (oauthSessionRef.current !== loginId) return;
-            await store.fetchAccounts();
+
+            // fetchAccounts 将列表读取异常写入 store.error 而不会 reject。
+            // 授权完成必须以“新账号已在列表中可见”为准，避免出现绿色成功但账号未加载的假成功状态。
+            let accountVisible = false;
+            let listError: string | null = null;
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+              await store.fetchAccounts();
+              const state = useQoderAccountStore.getState();
+              listError = state.error;
+              accountVisible = state.accounts.some(
+                (account) =>
+                  account.id === completedAccount.id ||
+                  (completedAccount.email && account.email === completedAccount.email),
+              );
+              if (accountVisible) break;
+              if (attempt < 2) await delay(150);
+            }
+            if (!accountVisible) {
+              logQoderOauthUi('complete:account-not-visible-after-refresh', {
+                loginId,
+                accountId: completedAccount.id,
+                error: listError,
+              });
+              setOauthError(listError);
+              setAddStatus('error');
+              setAddMessage(t('common.shared.oauth.failed', '授权失败'));
+              setOauthCompleting(false);
+              oauthCompletingLoginIdRef.current = null;
+              return;
+            }
+
             setAddStatus('success');
             setAddMessage(t('common.shared.oauth.success', '授权成功'));
             setOauthError(null);
@@ -1109,6 +1145,7 @@ export function QoderAccountsPage() {
             oauthSessionRef.current = null;
             oauthCompletingLoginIdRef.current = null;
             setOauthLoginId(null);
+            setShowAddModal(false);
           })
           .catch((error) => {
             logQoderOauthUi('complete:rejected', {
@@ -2091,13 +2128,16 @@ export function QoderAccountsPage() {
             </div>
           </div>
 
-          {filteredAccounts.length > 0 && (
+          {(accounts.length > 0 || grouping.groups.length > 0) && (
             <AccountSelectionToolbar
               selectedCount={selected.size}
               allSelected={allSelected}
               disabled={paginatedIds.length === 0}
               onToggleSelectAll={toggleSelectAll}
               onClearSelection={() => setSelected(new Set())}
+              grouping={grouping}
+              accounts={accounts}
+              selectedIds={Array.from(selected)}
               actions={(
                 <button
                   className="btn btn-danger icon-only"
@@ -2158,7 +2198,7 @@ export function QoderAccountsPage() {
 
       {showAddModal && (
         <div className="modal-overlay">
-          <div className="modal-content codex-add-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-content codex-add-modal platform-account-add-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <button className="btn btn-secondary icon-only" onClick={() => setShowAddModal(false)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               <h2>{t('qoder.addModal.title')}</h2>

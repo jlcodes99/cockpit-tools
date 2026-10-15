@@ -6,6 +6,8 @@ package config
 
 // Config represents the application's configuration, loaded from a YAML file.
 type Config struct {
+	// AmpCode is legacy package-only compatibility data, excluded from product JSON.
+	AmpCode   AmpCode `yaml:"ampcode,omitempty" json:"-"`
 	SDKConfig `yaml:",inline"`
 	// Host is the network host/interface on which the API server will bind.
 	// Default is empty ("") to bind all interfaces (IPv4 + IPv6). Use "127.0.0.1" or "localhost" for local-only access.

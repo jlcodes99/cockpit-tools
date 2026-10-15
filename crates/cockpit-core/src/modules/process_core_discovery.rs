@@ -355,8 +355,41 @@ fn spawn_command_with_trace(cmd: &mut Command) -> std::io::Result<Child> {
     result
 }
 
+#[cfg(any(test, target_os = "windows"))]
+fn windows_powershell_executable_candidates(system_root: Option<&str>) -> Vec<std::path::PathBuf> {
+    // Appx/StartApps 探测依赖 Windows PowerShell 模块，因此绝对路径优先于 pwsh。
+    let mut candidates = vec![std::path::PathBuf::from("powershell.exe")];
+    let system_root = system_root
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(r"C:\Windows");
+    let system_root = system_root.trim_end_matches(['\\', '/']);
+    candidates.push(std::path::PathBuf::from(format!(
+        r"{}\System32\WindowsPowerShell\v1.0\powershell.exe",
+        system_root
+    )));
+    candidates.push(std::path::PathBuf::from("pwsh.exe"));
+    candidates
+}
+
 #[cfg(target_os = "windows")]
-fn build_powershell_command(args: &[&str]) -> Command {
+fn windows_powershell_executable_candidates_for_host() -> Vec<std::path::PathBuf> {
+    let system_root = std::env::var("SystemRoot")
+        .ok()
+        .or_else(|| std::env::var("windir").ok());
+    windows_powershell_executable_candidates(system_root.as_deref())
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn is_windowsapps_launch_path(path: &Path) -> bool {
+    path.to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase()
+        .contains("\\windowsapps\\")
+}
+
+#[cfg(target_os = "windows")]
+fn build_powershell_command(executable: &std::path::Path, args: &[&str]) -> Command {
     use std::os::windows::process::CommandExt;
 
     let mut final_args: Vec<String> = vec![
@@ -391,20 +424,39 @@ fn build_powershell_command(args: &[&str]) -> Command {
         index += 1;
     }
 
-    let mut command = Command::new("powershell");
+    let mut command = Command::new(executable);
     command.creation_flags(CREATE_NO_WINDOW).args(final_args);
     command
 }
 
 #[cfg(target_os = "windows")]
 fn powershell_output(args: &[&str]) -> std::io::Result<std::process::Output> {
-    let mut command = build_powershell_command(args);
-    let preview = format_command_preview(&command);
-    log_command_trace_exec(&preview);
-    let start = Instant::now();
-    let result = command.output();
-    log_command_trace_result(&preview, &result, start.elapsed());
-    result
+    let mut last_error = None;
+    for executable in windows_powershell_executable_candidates_for_host() {
+        let mut command = build_powershell_command(&executable, args);
+        let preview = format_command_preview(&command);
+        log_command_trace_exec(&preview);
+        let start = Instant::now();
+        let result = command.output();
+        log_command_trace_result(&preview, &result, start.elapsed());
+        match result {
+            Ok(output) => return Ok(output),
+            Err(error) => {
+                crate::modules::logger::log_warn(&format!(
+                    "[PowerShell] 启动候选失败，尝试下一个: exe={} error={}",
+                    executable.display(),
+                    error
+                ));
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "未找到可用的 PowerShell（powershell.exe / pwsh.exe）",
+        )
+    }))
 }
 
 #[cfg(target_os = "windows")]
@@ -414,24 +466,41 @@ fn powershell_output_with_timeout(
 ) -> std::io::Result<std::process::Output> {
     use std::io::{Error, ErrorKind, Read};
 
-    let mut command = build_powershell_command(args);
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let preview = format_command_preview(&command);
-    log_command_trace_exec(&preview);
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(err) => {
-            if command_trace_enabled() {
-                crate::modules::logger::log_warn(&format!(
-                    "[CmdTrace] SPAWN_ERROR elapsed=0ms cmd={} err={}",
-                    preview, err
-                ));
+    let mut last_error = None;
+    let (mut child, preview) = 'spawn: {
+        for executable in windows_powershell_executable_candidates_for_host() {
+            let mut command = build_powershell_command(&executable, args);
+            command
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            let preview = format_command_preview(&command);
+            log_command_trace_exec(&preview);
+            match command.spawn() {
+                Ok(child) => break 'spawn (child, preview),
+                Err(error) => {
+                    crate::modules::logger::log_warn(&format!(
+                        "[PowerShell] 启动候选失败，尝试下一个: exe={} error={}",
+                        executable.display(),
+                        error
+                    ));
+                    last_error = Some(error);
+                }
             }
-            return Err(err);
         }
+        let error = last_error.unwrap_or_else(|| {
+            Error::new(
+                ErrorKind::NotFound,
+                "未找到可用的 PowerShell（powershell.exe / pwsh.exe）",
+            )
+        });
+        if command_trace_enabled() {
+            crate::modules::logger::log_warn(&format!(
+                "[CmdTrace] SPAWN_ERROR elapsed=0ms err={}",
+                error
+            ));
+        }
+        return Err(error);
     };
     let start = Instant::now();
 
@@ -2732,3 +2801,41 @@ fn migrate_legacy_codex_launch_path(custom_path: &str) -> Option<std::path::Path
     Some(detected)
 }
 
+#[cfg(test)]
+mod windows_launch_fallback_tests {
+    use super::{is_windowsapps_launch_path, windows_powershell_executable_candidates};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn powershell_candidates_prefer_path_then_system32_then_pwsh() {
+        let candidates = windows_powershell_executable_candidates(Some(r"D:\Windows"));
+        assert_eq!(candidates[0], PathBuf::from("powershell.exe"));
+        assert_eq!(
+            candidates[1],
+            PathBuf::from(r"D:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+        );
+        assert_eq!(candidates[2], PathBuf::from("pwsh.exe"));
+    }
+
+    #[test]
+    fn powershell_candidates_keep_windows_default_root_fallback() {
+        let candidates = windows_powershell_executable_candidates(None);
+        assert_eq!(
+            candidates[1],
+            PathBuf::from(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+        );
+    }
+
+    #[test]
+    fn detects_windowsapps_launch_paths() {
+        assert!(is_windowsapps_launch_path(Path::new(
+            r"C:\Program Files\WindowsApps\OpenAI.Codex_1.0.0.0_x64__8wekyb3d8bbwe\app\ChatGPT.exe"
+        )));
+        assert!(is_windowsapps_launch_path(Path::new(
+            r"C:/Program Files/WindowsApps/OpenAI.Codex_1.0.0.0_x64__8wekyb3d8bbwe/app/Codex.exe"
+        )));
+        assert!(!is_windowsapps_launch_path(Path::new(
+            r"C:\Users\me\AppData\Local\Programs\Codex\Codex.exe"
+        )));
+    }
+}

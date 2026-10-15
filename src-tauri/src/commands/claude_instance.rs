@@ -135,10 +135,14 @@ fn inject_bound_account_for_cli_instance_start(
         );
     }
 
-    if let Some(config_dir) = config_dir {
-        let _ =
-            modules::claude_account::sync_cli_account_from_config_dir_if_same(bind_id, config_dir)?;
-    }
+    let effective_config_dir = match config_dir {
+        Some(path) => path.to_path_buf(),
+        None => modules::claude_account::get_default_claude_code_config_dir()?,
+    };
+    let _ = modules::claude_account::sync_cli_account_from_config_dir_if_same(
+        bind_id,
+        &effective_config_dir,
+    )?;
     modules::claude_account::inject_to_claude_config(bind_id, config_dir)?;
     crate::modules::provider_current_state::set_current_account_id(
         "claude_code_account",

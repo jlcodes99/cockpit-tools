@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 describe("codex batch import portal rendering", () => {
   it("renders the modal overlay through document.body so it opens outside hidden pages", () => {
     const source = readFileSync(
-      `${process.cwd()}/src/pages/CodexAccountsPage.tsx`,
+      `${process.cwd()}/src/pages/CodexAccountsView.tsx`,
       "utf8",
     );
 
@@ -25,51 +25,29 @@ describe("codex batch import portal rendering", () => {
     );
   });
 
-  it("keeps background jobs only in the global bottom-right task stack", () => {
-    const pageSource = readFileSync(
-      `${process.cwd()}/src/pages/CodexAccountsPage.tsx`,
-      "utf8",
-    );
-    const globalTaskSource = readFileSync(
-      `${process.cwd()}/src/components/CodexBatchImportGlobalTask.tsx`,
-      "utf8",
-    );
-
-    assert.equal(
-      pageSource.includes("codex-batch-import-floating-panel"),
-      false,
-      "the duplicate top-right task panel should be removed",
-    );
-    assert.equal(
-      pageSource.includes('className="codex-batch-import-task-list"'),
-      false,
-      "the duplicate in-page task list should be removed",
-    );
-    assert.ok(
-      globalTaskSource.includes("visible.slice(0, 3)"),
-      "the global task stack should show at most three collapsed jobs",
-    );
-    assert.ok(
-      globalTaskSource.includes("codex.batchImport.viewAllTasks"),
-      "the global task stack should expose the full queue",
-    );
-    assert.ok(
-      globalTaskSource.includes("codex.batchImport.scanCompleteReview"),
-      "a completed background scan should ask the user to review its result",
-    );
-  });
-
-  it("consumes each reopen request once so background progress cannot reopen the dialog", () => {
+  it("keeps a minimized batch import task on the Codex accounts page", () => {
     const source = readFileSync(
-      `${process.cwd()}/src/pages/CodexAccountsPage.tsx`,
+      `${process.cwd()}/src/pages/CodexAccountsOverviewPanel.tsx`,
       "utf8",
     );
 
-    assert.ok(source.includes("handledBatchImportReopenNonceRef"));
     assert.ok(
-      source.includes(
-        "batchImportReopenNonce === handledBatchImportReopenNonceRef.current",
-      ),
+      source.includes("batchImportSessionId &&") &&
+        source.includes("!batchImportOpen") &&
+        source.includes("!batchImportResult"),
+      "a live single-session task should stay visible after the modal is minimized",
+    );
+    assert.ok(
+      source.includes('className="codex-batch-import-task"'),
+      "the minimized task should render on the Codex accounts page",
+    );
+    assert.ok(
+      source.includes("setBatchImportOpen(true)"),
+      "the minimized task should reopen the batch import modal",
+    );
+    assert.ok(
+      source.includes("handleDismissBatchImportTask"),
+      "the minimized task should support dismissing the current session",
     );
   });
 });

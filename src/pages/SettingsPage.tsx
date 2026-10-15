@@ -1,3 +1,5 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
+import { ALL_CODEX_AUTO_REFRESH_PLAN_KEYS, sanitizeCodexAutoRefreshPlanKeys } from '../utils/codexAutoRefreshPlanScope';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -133,6 +135,7 @@ interface GeneralConfig {
   ui_scale: number;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_auto_refresh_plan_types?: string[];
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_app_ui_injection_enabled?: boolean;
@@ -226,6 +229,8 @@ interface GeneralConfig {
   openclaw_auth_overwrite_on_switch: boolean;
   hermes_auth_overwrite_on_switch?: boolean;
   codex_launch_on_switch: boolean;
+  codex_auto_restore_takeover_on_launch?: boolean;
+  codex_preserve_verified_external_bridge?: boolean;
   antigravity_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
@@ -518,6 +523,7 @@ export function useSettingsPageController() {
   const [uiScale, setUiScale] = useState('1');
   const [autoRefresh, setAutoRefresh] = useState('5');
   const [codexAutoRefresh, setCodexAutoRefresh] = useState('10');
+  const [codexAutoRefreshPlanTypes, setCodexAutoRefreshPlanTypes] = useState<string[]>([...ALL_CODEX_AUTO_REFRESH_PLAN_KEYS]);
   const [claudeAutoRefresh, setClaudeAutoRefresh] = useState('10');
   const [codexSyncWsl, setCodexSyncWsl] = useState(false);
   const [codexAppUiInjectionEnabled, setCodexAppUiInjectionEnabled] = useState(true);
@@ -659,6 +665,8 @@ export function useSettingsPageController() {
   const [openclawAuthOverwriteOnSwitch, setOpenclawAuthOverwriteOnSwitch] = useState(false);
   const [hermesAuthOverwriteOnSwitch, setHermesAuthOverwriteOnSwitch] = useState(false);
   const [codexLaunchOnSwitch, setCodexLaunchOnSwitch] = useState(true);
+  const [codexAutoRestoreTakeoverOnLaunch, setCodexAutoRestoreTakeoverOnLaunch] = useState(true);
+  const [codexPreserveVerifiedExternalBridge, setCodexPreserveVerifiedExternalBridge] = useState(false);
   const [antigravityLaunchOnSwitch, setAntigravityLaunchOnSwitch] = useState(true);
   const [codexRestartSpecifiedAppOnSwitch, setCodexRestartSpecifiedAppOnSwitch] = useState(false);
   const [codexLocalAccessEntryVisible, setCodexLocalAccessEntryVisible] = useState(true);
@@ -784,11 +792,11 @@ export function useSettingsPageController() {
     () =>
       codexAccounts.map((account) => ({
         id: account.id,
-        label: account.email,
-        searchableText: account.email,
+        label: resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
+        searchableText: [resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")), account.email, account.api_base_url].join(" "),
         tags: account.tags || [],
       })),
-    [codexAccounts],
+    [codexAccounts, t],
   );
 
   useEffect(() => {
@@ -1069,6 +1077,7 @@ export function useSettingsPageController() {
       ui_scale: normalizedUiScale,
       auto_refresh_minutes: autoRefreshNum,
       codex_auto_refresh_minutes: codexAutoRefreshNum,
+      codex_auto_refresh_plan_types: sanitizeCodexAutoRefreshPlanKeys(codexAutoRefreshPlanTypes),
       claude_auto_refresh_minutes: claudeAutoRefreshNum,
       codex_sync_wsl: codexSyncWsl,
       codex_app_ui_injection_enabled: codexAppUiInjectionEnabled,
@@ -1144,6 +1153,8 @@ export function useSettingsPageController() {
       openclaw_auth_overwrite_on_switch: openclawAuthOverwriteOnSwitch,
       hermes_auth_overwrite_on_switch: hermesAuthOverwriteOnSwitch,
       codex_launch_on_switch: codexLaunchOnSwitch,
+      codex_auto_restore_takeover_on_launch: codexAutoRestoreTakeoverOnLaunch,
+      codex_preserve_verified_external_bridge: codexPreserveVerifiedExternalBridge,
       antigravity_launch_on_switch: antigravityLaunchOnSwitch,
       codex_restart_specified_app_on_switch: codexRestartSpecifiedAppOnSwitch,
       codex_local_access_entry_visible: codexLocalAccessEntryVisible,
@@ -1272,7 +1283,8 @@ export function useSettingsPageController() {
           dispatchSettingsConfigUpdated(configUpdateSource);
         } catch (err) {
           console.error('保存通用配置失败:', err);
-          alert(`${t('settings.network.saveFailed').replace('{error}', String(err))}`);
+          const message = String(err) === 'common.configSaveTimeout' ? t('common.configSaveTimeout') : String(err);
+          alert(`${t('settings.network.saveFailed').replace('{error}', message)}`);
           if (generalSaveQueueRef.current === operation) {
             await loadGeneralConfig();
           }
@@ -1298,6 +1310,7 @@ export function useSettingsPageController() {
   }, [
     autoRefresh,
     codexAutoRefresh,
+    codexAutoRefreshPlanTypes,
     claudeAutoRefresh,
     codexSyncWsl,
     codexAppUiInjectionEnabled,
@@ -1376,6 +1389,8 @@ export function useSettingsPageController() {
     openclawAuthOverwriteOnSwitch,
     hermesAuthOverwriteOnSwitch,
     codexLaunchOnSwitch,
+    codexAutoRestoreTakeoverOnLaunch,
+    codexPreserveVerifiedExternalBridge,
     antigravityLaunchOnSwitch,
     codexRestartSpecifiedAppOnSwitch,
     codexLocalAccessEntryVisible,
@@ -1665,6 +1680,7 @@ export function useSettingsPageController() {
       setUiScale(String(config.ui_scale ?? 1));
       setAutoRefresh(String(config.auto_refresh_minutes));
       setCodexAutoRefresh(String(config.codex_auto_refresh_minutes ?? 10));
+      setCodexAutoRefreshPlanTypes(sanitizeCodexAutoRefreshPlanKeys(config.codex_auto_refresh_plan_types));
       setClaudeAutoRefresh(String(config.claude_auto_refresh_minutes ?? 10));
       setCodexSyncWsl(Boolean(config.codex_sync_wsl ?? false));
       setCodexAppUiInjectionEnabled(Boolean(config.codex_app_ui_injection_enabled ?? false));
@@ -1759,6 +1775,8 @@ export function useSettingsPageController() {
       setOpenclawAuthOverwriteOnSwitch(config.openclaw_auth_overwrite_on_switch ?? false);
       setHermesAuthOverwriteOnSwitch(config.hermes_auth_overwrite_on_switch ?? false);
       setCodexLaunchOnSwitch(config.codex_launch_on_switch ?? true);
+      setCodexAutoRestoreTakeoverOnLaunch(config.codex_auto_restore_takeover_on_launch ?? true);
+      setCodexPreserveVerifiedExternalBridge(config.codex_preserve_verified_external_bridge ?? false);
       setAntigravityLaunchOnSwitch(config.antigravity_launch_on_switch ?? true);
       setCodexRestartSpecifiedAppOnSwitch(
         config.codex_restart_specified_app_on_switch ?? false,
@@ -1977,7 +1995,8 @@ export function useSettingsPageController() {
         alert(t('settings.network.saveSuccess'));
       }
     } catch (err) {
-      alert(t('settings.network.saveFailed').replace('{error}', String(err)));
+      const message = String(err) === 'common.configSaveTimeout' ? t('common.configSaveTimeout') : String(err);
+      alert(t('settings.network.saveFailed').replace('{error}', message));
     } finally {
       setNetworkSaving(false);
     }
@@ -2504,7 +2523,7 @@ export function useSettingsPageController() {
 
   const getAccountsForPlatform = (
     platform: CurrentAccountRefreshPlatform,
-  ): Array<{ id: string; email: string }> => {
+  ): Array<{ id: string; email: string; displayLabel?: string }> => {
     const getProviderAccounts = <T extends { id: string; email?: string | null }>(
       store: { getState: () => { accounts: T[] } },
       getDisplayEmail: (account: T) => string,
@@ -2526,7 +2545,7 @@ export function useSettingsPageController() {
       case 'antigravity':
         return antigravityAccounts.map((a) => ({ id: a.id, email: a.email }));
       case 'codex':
-        return codexAccounts.map((a) => ({ id: a.id, email: a.email }));
+        return codexAccounts.map((a) => ({ id: a.id, email: a.email, displayLabel: resolveCodexAccountDisplayName(a, t("common.apiKeyAccount")) }));
       case 'claude':
         return getProviderAccounts(useClaudeAccountStore, getClaudeAccountDisplayEmail);
       case 'ghcp':
@@ -2651,9 +2670,9 @@ export function useSettingsPageController() {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}
-                      title={account.email}
+                      title={account.displayLabel || account.email}
                     >
-                      {account.email}
+                      {account.displayLabel || account.email}
                     </span>
                     {isCustomMode ? (
                       <div className="settings-inline-input" style={{ minWidth: '100px', width: 'auto' }}>
@@ -3265,6 +3284,7 @@ export function useSettingsPageController() {
     codexAppScanError,
     codexAppUiInjectionEnabled,
     codexAutoRefresh,
+    codexAutoRefreshPlanTypes,
     codexAutoRefreshCustomMode,
     codexAutoRefreshIsPreset,
     codexAutoSwitchAccountScopeMode,
@@ -3274,6 +3294,10 @@ export function useSettingsPageController() {
     codexHideRelayQuota,
     codexLaunchCandidates,
     codexLaunchOnSwitch,
+    codexAutoRestoreTakeoverOnLaunch,
+    codexPreserveVerifiedExternalBridge,
+    setCodexPreserveVerifiedExternalBridge,
+    setCodexAutoRestoreTakeoverOnLaunch,
     codexLocalAccessEntryVisible,
     codexQuotaAlertEnabled,
     codexQuotaAlertThreshold,
@@ -3455,6 +3479,7 @@ export function useSettingsPageController() {
     setCodexAppScanError,
     setCodexAppUiInjectionEnabled,
     setCodexAutoRefresh,
+    setCodexAutoRefreshPlanTypes,
     setCodexAutoRefreshCustomMode,
     setCodexAutoSwitchAccountScopeMode,
     setCodexAutoSwitchSelectedAccountIds,

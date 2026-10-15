@@ -1,0 +1,79 @@
+.instance-cleanup-section .btn {
+  font-family: inherit;
+  font-style: inherit;
+}
+
+.instance-cleanup-section .btn-secondary:disabled {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.instance-cleanup-section .btn-danger:disabled {
+  background: var(--danger);
+  color: white;
+}
+
+.instance-cleanup-content {
+  padding: 0 20px 16px;
+}
+
+.instance-cleanup-content:empty {
+  display: none;
+}
+
+.instance-cleanup-list {
+  max-height: min(360px, 45vh);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.instance-cleanup-entry {
+  display: grid;
+  grid-template-columns: minmax(80px, 100px) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.instance-cleanup-entry + .instance-cleanup-entry {
+  border-top: 1px solid var(--border);
+}
+
+.instance-cleanup-entry code,
+.instance-cleanup-error {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.instance-cleanup-size-error {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.instance-cleanup-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.instance-cleanup-warning,
+.instance-cleanup-error {
+  color: var(--danger);
+  margin-top: 12px;
+}
+
+@media (max-width: 600px) {
+  .instance-cleanup-entry {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .instance-cleanup-entry code {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

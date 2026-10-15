@@ -189,16 +189,10 @@ struct CodexSyncInstance {
 struct RolloutProviderChange {
     relative_path: PathBuf,
     absolute_path: PathBuf,
-    updated_content: Option<RolloutProviderUpdate>,
     target_modified_at: Option<SystemTime>,
     source_modified_at: Option<SystemTime>,
     source_size: u64,
-}
-
-#[derive(Debug, Clone)]
-enum RolloutProviderUpdate {
-    FullContent(String),
-    FirstLine(String),
+    source_identity: RolloutTimestampIdentity,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -207,7 +201,6 @@ struct CodexSessionVisibilityRepairOptions {
     dry_run: bool,
     repair_rollout: bool,
     repair_referenced_rollouts: bool,
-    rewrite_all_session_meta: bool,
     sqlite_scope: SqliteRepairScope,
     repair_sqlite_timestamps: bool,
     collect_rollout_thread_facts: bool,
@@ -311,7 +304,6 @@ impl CodexSessionVisibilityRepairOptions {
             dry_run: false,
             repair_rollout: false,
             repair_referenced_rollouts: true,
-            rewrite_all_session_meta: matches!(mode, CodexSessionVisibilityRepairMode::Deep),
             sqlite_scope: SqliteRepairScope::OfficialStateDbs,
             repair_sqlite_timestamps: false,
             collect_rollout_thread_facts: false,
@@ -331,7 +323,6 @@ impl CodexSessionVisibilityRepairOptions {
             dry_run: false,
             repair_rollout: true,
             repair_referenced_rollouts: false,
-            rewrite_all_session_meta: true,
             sqlite_scope: SqliteRepairScope::AllSessionDbs,
             repair_sqlite_timestamps: false,
             collect_rollout_thread_facts: true,
@@ -404,6 +395,7 @@ struct SessionIndexReconcileResult {
 
 #[derive(Debug, Clone, Copy, Default)]
 struct RepairSingleInstanceResult {
+    changed_rollout_files: usize,
     updated_sqlite_rows: usize,
     updated_sqlite_timestamp_rows: usize,
     added_session_index_entries: usize,
@@ -924,9 +916,7 @@ fn repair_session_visibility_for_instances_with_options(
             }
         };
 
-        let applied_rollout_count = rollout_changes
-            .len()
-            .saturating_sub(repaired.skipped_rollout_files);
+        let applied_rollout_count = repaired.changed_rollout_files;
         let instance_mutated = applied_rollout_count > 0
             || repaired.updated_sqlite_rows > 0
             || repaired.updated_sqlite_timestamp_rows > 0
@@ -1356,6 +1346,7 @@ fn repair_single_instance_with_progress(
         CatalogRepairCounts::default()
     };
     let rollout_total = rollout_changes.len();
+    let mut changed_rollout_files = 0usize;
     let mut skipped_rollout_files = 0usize;
     for (rollout_index, change) in rollout_changes.iter().enumerate() {
         report_repair_progress(
@@ -1376,7 +1367,9 @@ fn repair_single_instance_with_progress(
             rollout_total,
             Some(instance),
         );
-        if !rewrite_rollout_provider(change)? {
+        if normalize_rollout_timestamp(change)? {
+            changed_rollout_files += 1;
+        } else {
             skipped_rollout_files += 1;
         }
     }
@@ -1416,6 +1409,7 @@ fn repair_single_instance_with_progress(
         0
     };
     Ok(RepairSingleInstanceResult {
+        changed_rollout_files,
         updated_sqlite_rows: sqlite_rows_updated + catalog_repairs.updated_rows,
         updated_sqlite_timestamp_rows: sqlite_timestamp_rows_updated,
         added_session_index_entries: session_index_result.added_entries,
@@ -1507,7 +1501,7 @@ fn build_summary_message(
     };
 
     format!(
-        "已为 {} 个实例修复历史会话：校正 {} 个会话文件，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}{}{}",
+        "已为 {} 个实例修复历史会话：校正 {} 个会话文件时间，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}{}{}",
         mutated_instance_count,
         changed_rollout_file_count,
         updated_sqlite_row_count,
@@ -1578,7 +1572,7 @@ fn build_dry_run_summary_message(
     };
 
     format!(
-        "预览将为 {} 个实例修复历史会话：校正 {} 个会话文件，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}",
+        "预览将为 {} 个实例修复历史会话：校正 {} 个会话文件时间，更新 {} 条 SQLite 记录，校正 {} 条 SQLite 时间记录{}{}{}{}{}",
         mutated_instance_count,
         changed_rollout_file_count,
         updated_sqlite_row_count,

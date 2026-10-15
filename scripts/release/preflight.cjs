@@ -59,6 +59,12 @@ if (!hasFlag('--skip-locales')) {
   });
 }
 
+steps.push({
+  name: 'Modal sizing specificity check',
+  command: 'node',
+  args: ['scripts/check_modal_sizing.cjs', '--strict'],
+});
+
 if (!hasFlag('--skip-typecheck')) {
   steps.push({
     name: 'TypeScript typecheck',

@@ -7,6 +7,15 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+// WrapGeminiCLIResponse preserves the legacy envelope used by retained translators.
+func WrapGeminiCLIResponse(response []byte) []byte {
+	out, err := sjson.SetRawBytes([]byte(`{"response":{}}`), "response", response)
+	if err != nil {
+		return response
+	}
+	return out
+}
+
 func GeminiTokenCountJSON(count int64) []byte {
 	out := make([]byte, 0, 96)
 	out = append(out, `{"totalTokens":`...)

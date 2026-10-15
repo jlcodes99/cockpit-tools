@@ -3,12 +3,12 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::RngCore;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, USER_AGENT};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Mutex;
 
 use crate::models::zcode::{ZcodeAccount, ZcodeAccountIndex, ZcodeAuthMode};
@@ -19,8 +19,10 @@ const ACCOUNTS_INDEX_FILE: &str = "zcode_accounts.json";
 const CREDENTIALS_FILE: &str = "credentials.json";
 const CONFIG_FILE: &str = "config.json";
 const SETTINGS_FILE: &str = "setting.json";
+const DEVICE_MID_FILE: &str = "zcode_device_mid";
 const CREDENTIAL_PREFIX: &str = "enc:v1:";
-const DEFAULT_APP_VERSION: &str = "3.3.4";
+// 与当前官方 ZCode 3.10.2 保持一致；安装路径可读取时优先使用实际版本。
+const DEFAULT_APP_VERSION: &str = "3.10.2";
 const BILLING_BALANCE_URL: &str = "https://zcode.z.ai/api/v1/zcode-plan/billing/balance";
 const ACTIVE_PROVIDER_KEY: &str = "oauth:active_provider";
 const ZCODE_JWT_KEY: &str = "zcodejwttoken";
@@ -873,28 +875,186 @@ pub fn inject_to_instance_root(account_id: &str, root: &Path) -> Result<ZcodeAcc
 }
 
 fn detect_app_version() -> String {
+    crate::modules::client_version::detect_client_version("ZCode", None)
+        .unwrap_or_else(|| DEFAULT_APP_VERSION.to_string())
+}
+
+fn normalize_header_value(value: impl Into<String>) -> Option<HeaderValue> {
+    HeaderValue::from_str(value.into().trim()).ok()
+}
+
+fn zcode_platform() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        "windows" => "win32",
+        "linux" => "linux",
+        _ => std::env::consts::OS,
+    }
+}
+
+fn zcode_arch() -> &'static str {
+    match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "x64",
+        "x86" => "ia32",
+        "arm" => "arm",
+        _ => std::env::consts::ARCH,
+    }
+}
+
+fn zcode_os_category() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "macos",
+        "windows" => "windows",
+        _ => "linux",
+    }
+}
+
+fn zcode_os_version() -> String {
     #[cfg(target_os = "macos")]
+    if let Ok(output) = std::process::Command::new("sw_vers")
+        .args(["-productVersion"])
+        .output()
     {
-        if let Ok(output) = Command::new("/usr/bin/plutil")
-            .args([
-                "-extract",
-                "CFBundleShortVersionString",
-                "raw",
-                "/Applications/ZCode.app/Contents/Info.plist",
-            ])
-            .output()
-        {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if output.status.success() && !value.is_empty() {
-                return value;
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if output.status.success() && !value.is_empty() {
+            return value;
+        }
+    }
+    sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.to_string())
+}
+
+fn zcode_locale() -> String {
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|key| {
+            std::env::var(key)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .map(|value| {
+            value
+                .split('.')
+                .next()
+                .unwrap_or(value.as_str())
+                .replace('_', "-")
+        })
+        .unwrap_or_else(|| "en-US".to_string())
+}
+
+fn zcode_timezone() -> String {
+    std::env::var("TZ")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "UTC".to_string())
+}
+
+fn zcode_device_mid() -> Result<String, String> {
+    let data_dir = resolve_default_v2_dir()?;
+
+    // 官方客户端会把稳定设备标识保存在 telemetry-state.json。优先复用该值，
+    // 这样额度请求与 ZCode 自身的设备身份保持一致；旧版本或未安装官方客户端
+    // 时再使用 Cockpit 自己维护的回退文件。
+    let telemetry_path = data_dir.join("telemetry-state.json");
+    if let Ok(content) = fs::read_to_string(&telemetry_path) {
+        if let Ok(value) = serde_json::from_str::<Value>(&content) {
+            if let Some(device_mid) = value
+                .get("deviceMid")
+                .and_then(Value::as_str)
+                .and_then(|value| uuid::Uuid::parse_str(value.trim()).ok())
+            {
+                return Ok(device_mid.to_string());
             }
         }
     }
-    DEFAULT_APP_VERSION.to_string()
+
+    let path = data_dir.join(DEVICE_MID_FILE);
+    if let Ok(value) = fs::read_to_string(&path) {
+        if let Ok(uuid) = uuid::Uuid::parse_str(value.trim()) {
+            return Ok(uuid.to_string());
+        }
+    }
+    let value = uuid::Uuid::new_v4().to_string();
+    atomic_write::write_string_atomic(&path, &value)
+        .map_err(|error| format!("保存 ZCode 设备标识失败: {}", error))?;
+    Ok(value)
+}
+
+fn zcode_source_headers(app_version: &str) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    let values = [
+        (USER_AGENT, format!("ZCode/{}", app_version)),
+        (
+            HeaderName::from_static("http-referer"),
+            "https://zcode.z.ai".to_string(),
+        ),
+        (
+            HeaderName::from_static("x-zcode-app-version"),
+            app_version.to_string(),
+        ),
+        (
+            HeaderName::from_static("x-title"),
+            "Z Code@electron".to_string(),
+        ),
+        (
+            HeaderName::from_static("x-platform"),
+            format!("{}-{}", zcode_platform(), zcode_arch()),
+        ),
+        (
+            HeaderName::from_static("x-release-channel"),
+            if cfg!(debug_assertions) {
+                "test".to_string()
+            } else {
+                "production".to_string()
+            },
+        ),
+        (HeaderName::from_static("x-client-language"), zcode_locale()),
+        (
+            HeaderName::from_static("x-client-timezone"),
+            zcode_timezone(),
+        ),
+        (
+            HeaderName::from_static("x-os-category"),
+            zcode_os_category().to_string(),
+        ),
+        (HeaderName::from_static("x-os-version"), zcode_os_version()),
+    ];
+    for (name, value) in values {
+        if let Some(value) = normalize_header_value(value) {
+            headers.insert(name, value);
+        }
+    }
+    if let Ok(device_mid) = zcode_device_mid() {
+        if let Some(value) = normalize_header_value(device_mid) {
+            headers.insert(HeaderName::from_static("x-device-mid"), value);
+        }
+    }
+    if let Some(value) = normalize_header_value(uuid::Uuid::new_v4().to_string()) {
+        headers.insert(HeaderName::from_static("x-request-id"), value);
+    }
+    headers
 }
 
 fn number(value: Option<&Value>) -> f64 {
-    value.and_then(Value::as_f64).unwrap_or(0.0)
+    value
+        .and_then(|value| match value {
+            Value::Number(number) => number.as_f64(),
+            Value::String(text) => text.trim().parse::<f64>().ok(),
+            _ => None,
+        })
+        .filter(|value| value.is_finite())
+        .unwrap_or(0.0)
+}
+
+fn unix_seconds(value: Option<&Value>) -> Option<i64> {
+    let number = value.and_then(|value| match value {
+        Value::Number(number) => number
+            .as_i64()
+            .or_else(|| number.as_f64().map(|v| v as i64)),
+        Value::String(text) => text.trim().parse::<f64>().ok().map(|v| v as i64),
+        _ => None,
+    })?;
+    (number > 0).then_some(number)
 }
 
 fn apply_quota_payload(value: &mut ZcodeAccount, payload: Value) -> Result<(), String> {
@@ -917,11 +1077,14 @@ fn apply_quota_payload(value: &mut ZcodeAccount, payload: Value) -> Result<(), S
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    value.plan_type = plans
+    let plan_type = plans
         .iter()
         .find(|plan| plan.get("status").and_then(Value::as_str) == Some("active"))
         .or_else(|| plans.first())
         .and_then(|plan| value_string(plan, &["name", "plan_id"]));
+    if plan_type.is_some() {
+        value.plan_type = plan_type;
+    }
     value.quota_total = Some(
         balances
             .iter()
@@ -950,7 +1113,7 @@ fn apply_quota_payload(value: &mut ZcodeAccount, payload: Value) -> Result<(), S
         .filter_map(|item| {
             item.get("period_end")
                 .or_else(|| item.get("expires_at"))
-                .and_then(Value::as_i64)
+                .and_then(|value| unix_seconds(Some(value)))
         })
         .min();
     value.subscription_raw = Some(Value::Array(plans));
@@ -969,13 +1132,21 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ZcodeAccount, Str
         value.quota_query_last_error_at = None;
         return upsert_account(value);
     }
-    let url = format!(
-        "{}?app_version={}",
-        BILLING_BALANCE_URL,
-        detect_app_version()
-    );
+    let (app_version, source_headers) = tokio::task::spawn_blocking(|| {
+        let app_version = detect_app_version();
+        let source_headers = zcode_source_headers(&app_version);
+        (app_version, source_headers)
+    })
+    .await
+    .unwrap_or_else(|_| {
+        let app_version = DEFAULT_APP_VERSION.to_string();
+        let source_headers = HeaderMap::new();
+        (app_version, source_headers)
+    });
+    let url = format!("{}?app_version={}", BILLING_BALANCE_URL, app_version);
     let response = reqwest::Client::new()
         .get(&url)
+        .headers(source_headers)
         .bearer_auth(&value.zcode_jwt_token)
         .send()
         .await
@@ -985,7 +1156,25 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<ZcodeAccount, Str
             .json::<Value>()
             .await
             .map_err(|error| format!("解析 ZCode 配额失败: {}", error)),
-        Ok(response) => Err(format!("请求 ZCode 配额失败: HTTP {}", response.status())),
+        Ok(response) => {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            let message = serde_json::from_str::<Value>(&body)
+                .ok()
+                .and_then(|payload| match payload.get("msg").and_then(Value::as_str) {
+                    Some(message) => Some(message.to_string()),
+                    None => payload
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                })
+                .filter(|message| !message.trim().is_empty())
+                .unwrap_or_else(|| "服务端未提供错误详情".to_string());
+            Err(format!(
+                "请求 ZCode 配额失败: HTTP {} ({})",
+                status, message
+            ))
+        }
         Err(error) => Err(error),
     };
 
@@ -1280,12 +1469,12 @@ mod tests {
                         },
                         {
                             "show_name": "GLM-5-Turbo",
-                            "total_units": 2_000_000,
-                            "used_units": 250_000,
-                            "remaining_units": 1_750_000,
-                            "available_units": 1_750_000,
-                            "period_end": 1_783_785_599,
-                            "expires_at": 1_783_785_599
+                            "total_units": "2000000",
+                            "used_units": "250000",
+                            "remaining_units": "1750000",
+                            "available_units": "1750000",
+                            "period_end": "1783785599",
+                            "expires_at": "1783785599"
                         }
                     ]
                 }
@@ -1322,6 +1511,31 @@ mod tests {
         .unwrap_err();
         assert_eq!(error, "app_version is required");
         assert_eq!(account.plan_type.as_deref(), Some("Existing Plan"));
+    }
+
+    #[test]
+    fn empty_success_keeps_plan_and_clears_previous_error() {
+        let mut account = sample_account();
+        account.plan_type = Some("ZCode Start Plan".to_string());
+        account.quota_query_last_error = Some("HTTP 400".to_string());
+        account.quota_query_last_error_at = Some(1);
+
+        apply_quota_payload(
+            &mut account,
+            json!({
+                "code": 0,
+                "data": {"plans": [], "balances": []}
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(account.plan_type.as_deref(), Some("ZCode Start Plan"));
+        assert_eq!(account.quota_raw, Some(Value::Array(Vec::new())));
+        assert_eq!(account.subscription_raw, Some(Value::Array(Vec::new())));
+        assert_eq!(account.quota_total, Some(0.0));
+        assert!(account.quota_query_last_error.is_none());
+        assert!(account.quota_query_last_error_at.is_none());
+        assert!(account.usage_updated_at.is_some());
     }
 
     #[test]

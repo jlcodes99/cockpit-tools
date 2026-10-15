@@ -1,0 +1,12 @@
+.codex-wakeup-confirmation-overlay { z-index: 14020; }
+.modal.codex-wakeup-confirmation {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+.codex-wakeup-confirmation .modal-body { overflow-y: auto; min-height: 0; }
+.codex-wakeup-confirmation .modal-header,
+.codex-wakeup-confirmation .modal-footer { flex-shrink: 0; }
+.codex-wakeup-confirmation pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.codex-wakeup-confirmation-error { color: var(--danger-color, #dc2626); }

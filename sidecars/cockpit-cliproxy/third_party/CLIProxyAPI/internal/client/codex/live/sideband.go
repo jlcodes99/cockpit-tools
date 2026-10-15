@@ -301,6 +301,7 @@ const (
 	sidebandFrameless sidebandStyle = iota
 	sidebandRealtimeCalls
 	sidebandRealtimeQuery
+	sidebandBackendCodex
 )
 
 // HandleSideband relays live session sideband WebSocket frames bidirectionally.
@@ -506,7 +507,9 @@ func sidebandTarget(c *gin.Context) (sidebandStyle, string, bool) {
 	}
 	if callID := strings.TrimSpace(c.Param("call_id")); callID != "" {
 		style := sidebandFrameless
-		if strings.Contains(c.Request.URL.Path, "/realtime/calls/") {
+		if strings.HasPrefix(c.Request.URL.Path, "/backend-api/codex/") {
+			style = sidebandBackendCodex
+		} else if strings.Contains(c.Request.URL.Path, "/realtime/calls/") {
 			style = sidebandRealtimeCalls
 		}
 		return style, callID, callIDPattern.MatchString(callID)
@@ -518,6 +521,12 @@ func sidebandTarget(c *gin.Context) (sidebandStyle, string, bool) {
 func buildSidebandURL(baseURL string, style sidebandStyle, callID string) string {
 	root := strings.TrimRight(baseURL, "/")
 	switch style {
+	case sidebandBackendCodex:
+		// Native backend calls use a bare call ID, unlike the public Live API.
+		if root == defaultSidebandAPIBaseURL {
+			root = "wss://chatgpt.com/backend-api/codex"
+		}
+		return root + "/" + callID
 	case sidebandRealtimeCalls:
 		return root + "/realtime/calls/" + callID
 	case sidebandRealtimeQuery:

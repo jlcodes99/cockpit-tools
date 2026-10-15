@@ -23,6 +23,7 @@ import {
   type AccountFilterType,
 } from '../utils/accountFilters';
 import { getAccountGroups, type AccountGroup } from '../services/accountGroupService';
+import { formatGoogleValidationUrl } from '../utils/googleValidationUrl';
 import {
   isPrivacyModeEnabledByDefault,
   maskSensitiveValue,
@@ -1346,7 +1347,8 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
     if (record.accountEmail) lines.push(`Account: ${maskAccountText(record.accountEmail)}`);
     if (record.modelId) lines.push(`Model: ${record.modelId}`);
     if (record.prompt) lines.push(`Prompt: ${record.prompt}`);
-    if (payload.validationUrl) lines.push(`Validation URL: ${payload.validationUrl}`);
+    const validationUrl = formatGoogleValidationUrl(payload.validationUrl || '', record.accountEmail);
+    if (validationUrl) lines.push(`Validation URL: ${validationUrl}`);
     if (payload.errorMessageJson) lines.push(`Error JSON: ${payload.errorMessageJson}`);
     if (payload.stepJson) lines.push(`Step JSON: ${payload.stepJson}`);
     return lines.join('\n');
@@ -1377,6 +1379,7 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
         : plainText;
     const shouldShowErrorCodeMeta = typeof payload.errorCode === 'number' && kind !== 'verification_required';
     const shouldShowTrajectoryMeta = Boolean(payload.trajectoryId);
+    const validationUrl = formatGoogleValidationUrl(payload.validationUrl || '', record.accountEmail);
 
     return (
       <div className={`wakeup-error-panel is-${kind}`}>
@@ -1392,26 +1395,26 @@ export function WakeupTasksPage({ onNavigate }: WakeupPageProps) {
             )}
           </div>
         ) : null}
-        {payload.validationUrl ? (
+        {validationUrl ? (
           <div className="wakeup-error-link-box">
             <div className="wakeup-error-link-label">{t('wakeup.errorUi.validationUrlLabel')}</div>
-            <div className="wakeup-error-link-value">{payload.validationUrl}</div>
+            <div className="wakeup-error-link-value">{validationUrl}</div>
           </div>
         ) : null}
         <div className="wakeup-error-actions">
-          {payload.validationUrl ? (
+          {validationUrl ? (
             <>
               <button
                 type="button"
                 className="btn btn-primary wakeup-error-btn"
-                onClick={() => openWakeupErrorUrl(payload.validationUrl!)}
+                onClick={() => openWakeupErrorUrl(validationUrl)}
               >
                 {t('wakeup.errorUi.completeVerification')}
               </button>
               <button
                 type="button"
                 className="btn btn-secondary wakeup-error-btn"
-                onClick={() => copyWakeupErrorText(payload.validationUrl!)}
+                onClick={() => copyWakeupErrorText(validationUrl)}
               >
                 {t('wakeup.errorUi.copyValidationUrl')}
               </button>

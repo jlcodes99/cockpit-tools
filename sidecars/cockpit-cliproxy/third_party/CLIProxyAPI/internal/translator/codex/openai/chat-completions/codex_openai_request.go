@@ -63,6 +63,9 @@ func ConvertOpenAIRequestToCodex(modelName string, inputRawJSON []byte, stream b
 	} else {
 		out, _ = sjson.SetBytes(out, "reasoning.effort", "medium")
 	}
+	if tier := normalizeCodexServiceTier(root.Get("service_tier")); tier != "" {
+		out, _ = sjson.SetBytes(out, "service_tier", tier)
+	}
 	out, _ = sjson.SetBytes(out, "parallel_tool_calls", true)
 	// OpenAI documents reasoning summaries as explicit opt-in output. Leave
 	// reasoning.summary to the source request's canonical summary intent instead
@@ -78,33 +81,23 @@ func ConvertOpenAIRequestToCodex(modelName string, inputRawJSON []byte, stream b
 	functionToolNames := map[string]struct{}{}
 	{
 		if tools.IsArray() && len(toolResults) > 0 {
-			var names []string
-			seenNames := map[string]struct{}{}
 			for _, tool := range toolResults {
-				var name string
 				switch tool.Get("type").String() {
 				case "function":
-					name = tool.Get("function.name").String()
-					functionToolNames[name] = struct{}{}
+					functionToolNames[tool.Get("function.name").String()] = struct{}{}
 				case "custom":
-					name = tool.Get("name").String()
-					customToolNames[name] = struct{}{}
+					customToolNames[tool.Get("name").String()] = struct{}{}
 				}
-				if name != "" {
-					if _, seen := seenNames[name]; !seen {
-						names = append(names, name)
-						seenNames[name] = struct{}{}
-					}
-				}
-			}
-			if len(names) > 0 {
-				originalToolNameMap = buildShortNameMap(names)
 			}
 			// A normalized function envelope cannot disambiguate declarations that share a name.
 			// Preserve function behavior for such ambiguous names.
 			for name := range functionToolNames {
 				delete(customToolNames, name)
 			}
+		}
+		allNames := collectRequestToolNames(rawJSON)
+		if len(allNames) > 0 {
+			originalToolNameMap = buildShortNameMap(allNames)
 		}
 	}
 
@@ -126,6 +119,7 @@ func ConvertOpenAIRequestToCodex(modelName string, inputRawJSON []byte, stream b
 
 	// Extract system instructions from first system message (string or text object)
 	messages := gjson.GetBytes(rawJSON, "messages")
+	shortCallIDs, usedCallIDs := buildCodexCallIDMap(messages)
 	type pendingToolCall struct {
 		callID       string
 		sourceCallID string
@@ -173,7 +167,7 @@ func ConvertOpenAIRequestToCodex(modelName string, inputRawJSON []byte, stream b
 					if pendingCall.consumed {
 						continue
 					}
-					if toolCallID == "" || pendingCall.sourceCallID == toolCallID || pendingCall.callID == toolCallID {
+					if toolCallID == "" || pendingCall.sourceCallID == toolCallID || pendingCall.sourceCallID == "" && pendingCall.callID == toolCallID {
 						pendingIndex = index
 						break
 					}
@@ -295,7 +289,6 @@ func ConvertOpenAIRequestToCodex(modelName string, inputRawJSON []byte, stream b
 					if toolCalls.Exists() && toolCalls.IsArray() {
 						toolCallsArr := toolCalls.Array()
 						callIDCounts := map[string]int{}
-						usedCallIDs := map[string]struct{}{}
 						for _, tc := range toolCallsArr {
 							_, _, _, valid := resolveToolCall(tc)
 							callID := tc.Get("id").String()
@@ -331,6 +324,9 @@ func ConvertOpenAIRequestToCodex(modelName string, inputRawJSON []byte, stream b
 									callID = baseCallID + "_" + strconv.Itoa(suffix)
 								}
 								usedCallIDs[callID] = struct{}{}
+							}
+							if shortID, exists := shortCallIDs[callID]; exists {
+								callID = shortID
 							}
 							pendingToolCalls = append(pendingToolCalls, pendingToolCall{
 								callID:       callID,
@@ -467,6 +463,10 @@ func ConvertOpenAIRequestToCodex(modelName string, inputRawJSON []byte, stream b
 					}
 					if v := fn.Get("strict"); v.Exists() {
 						item, _ = sjson.SetBytes(item, "strict", v.Value())
+					} else {
+						// Chat Completions defaults strict to false while the Responses API
+						// defaults it to true, so an omitted value must be forwarded explicitly.
+						item, _ = sjson.SetBytes(item, "strict", false)
 					}
 				}
 				toolItems = append(toolItems, item)
@@ -514,6 +514,20 @@ func ConvertOpenAIRequestToCodex(modelName string, inputRawJSON []byte, stream b
 
 	out, _ = sjson.SetBytes(out, "store", false)
 	return out
+}
+
+func normalizeCodexServiceTier(value gjson.Result) string {
+	if !value.Exists() || value.Type != gjson.String {
+		return ""
+	}
+	switch tier := strings.ToLower(strings.TrimSpace(value.String())); tier {
+	case "fast", "priority":
+		return "priority"
+	case "ultrafast":
+		return tier
+	default:
+		return ""
+	}
 }
 
 func setToolCallOutputContent(funcOutput []byte, content gjson.Result) []byte {
@@ -631,26 +645,104 @@ func toolOutputFallbackPart(item gjson.Result) []byte {
 	return part
 }
 
-// shortenNameIfNeeded applies the simple shortening rule for a single name.
+// sanitizeToolName normalizes a tool name by replacing any character outside
+// [a-zA-Z0-9_-] with an underscore so it conforms to Codex upstream requirements.
+func sanitizeToolName(name string) string {
+	if name == "" {
+		return ""
+	}
+	var sb strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			sb.WriteRune(r)
+		} else {
+			sb.WriteByte('_')
+		}
+	}
+	return sb.String()
+}
+
+// shortenNameIfNeeded normalizes invalid characters and applies the shortening rule for a single name.
 // If the name length exceeds 64, it will try to preserve the "mcp__" prefix and last segment.
 // Otherwise it truncates to 64 characters.
 func shortenNameIfNeeded(name string) string {
 	const limit = 64
-	if len(name) <= limit {
-		return name
+	sanitized := sanitizeToolName(name)
+	if len(sanitized) <= limit {
+		return sanitized
 	}
-	if strings.HasPrefix(name, "mcp__") {
+	if strings.HasPrefix(sanitized, "mcp__") {
 		// Keep prefix and last segment after '__'
-		idx := strings.LastIndex(name, "__")
+		idx := strings.LastIndex(sanitized, "__")
 		if idx > 0 {
-			candidate := "mcp__" + name[idx+2:]
+			candidate := "mcp__" + sanitized[idx+2:]
 			if len(candidate) > limit {
 				return candidate[:limit]
 			}
 			return candidate
 		}
 	}
-	return name[:limit]
+	return sanitized[:limit]
+}
+
+// collectRequestToolNames extracts unique tool names across tools declarations,
+// tool_choice, and historical assistant tool_calls in a deterministic order.
+func collectRequestToolNames(rawJSON []byte) []string {
+	var names []string
+	seen := map[string]struct{}{}
+	addName := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; !ok {
+			names = append(names, name)
+			seen[name] = struct{}{}
+		}
+	}
+
+	tools := gjson.GetBytes(rawJSON, "tools")
+	if tools.IsArray() {
+		for _, tool := range tools.Array() {
+			switch tool.Get("type").String() {
+			case "function":
+				addName(tool.Get("function.name").String())
+			case "custom":
+				addName(tool.Get("name").String())
+			}
+		}
+	}
+
+	tc := gjson.GetBytes(rawJSON, "tool_choice")
+	if tc.IsObject() {
+		switch tc.Get("type").String() {
+		case "function":
+			fnName := tc.Get("function.name").String()
+			if fnName == "" {
+				fnName = tc.Get("name").String()
+			}
+			addName(fnName)
+		case "custom":
+			addName(tc.Get("name").String())
+		}
+	}
+
+	messages := gjson.GetBytes(rawJSON, "messages")
+	if messages.IsArray() {
+		for _, msg := range messages.Array() {
+			if msg.Get("role").String() != "assistant" {
+				continue
+			}
+			for _, tc := range msg.Get("tool_calls").Array() {
+				fnName := tc.Get("function.name").String()
+				if fnName == "" {
+					fnName = tc.Get("custom.name").String()
+				}
+				addName(fnName)
+			}
+		}
+	}
+
+	return names
 }
 
 // buildShortNameMap generates unique short names (<=64) for the given list of names.
@@ -662,20 +754,7 @@ func buildShortNameMap(names []string) map[string]string {
 	m := map[string]string{}
 
 	baseCandidate := func(n string) string {
-		if len(n) <= limit {
-			return n
-		}
-		if strings.HasPrefix(n, "mcp__") {
-			idx := strings.LastIndex(n, "__")
-			if idx > 0 {
-				cand := "mcp__" + n[idx+2:]
-				if len(cand) > limit {
-					cand = cand[:limit]
-				}
-				return cand
-			}
-		}
-		return n[:limit]
+		return shortenNameIfNeeded(n)
 	}
 
 	makeUnique := func(cand string) string {

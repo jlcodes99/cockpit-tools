@@ -43,6 +43,7 @@ import { MfaQuickCodeSelect } from "../MfaQuickCodeSelect";
 import { QuickSettingsPopover } from "../QuickSettingsPopover";
 import { PaginationControls } from "../PaginationControls";
 import { AccountSelectionToolbar } from "../AccountSelectionToolbar";
+import { usePlatformAccountGroups } from "../../hooks/usePlatformAccountGroups";
 import { useEscClose } from "../../hooks/useEscClose";
 import { useEnterConfirm } from "../../hooks/useEnterConfirm";
 import { useCodebuddySuitePage } from "../../hooks/useCodebuddySuitePage";
@@ -71,6 +72,7 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from "../../utils/accountsOverviewFilterPersistence";
+import { getAccountQuotaUpdatedAtMs } from "../../utils/codebuddy-suite/parser";
 
 const FILTER_TYPES_FIELD = "filter_types";
 
@@ -426,8 +428,21 @@ export function CodebuddySuiteAccountsSharedView<
     [platformConfig],
   );
 
+  const platformKey = useMemo(() => {
+    if (platformConfig.quickSettingsType) return platformConfig.quickSettingsType;
+    const match = platformConfig.pageClassName.replace(/-accounts-page$/, '');
+    return match || 'workbuddy';
+  }, [platformConfig.pageClassName, platformConfig.quickSettingsType]);
+
+  const grouping = usePlatformAccountGroups(platformKey, () => toggleSelectAll(Array.from(selected)));
+
+  const groupFilteredAccounts = useMemo(
+    () => grouping.filterAccountsByGroup(accounts),
+    [accounts, grouping.filterAccountsByGroup],
+  );
+
   const suitePage = useCodebuddySuitePage({
-    accounts,
+    accounts: groupFilteredAccounts,
     currentAccountId,
     searchQuery,
     filterTypes,
@@ -561,7 +576,7 @@ export function CodebuddySuiteAccountsSharedView<
       const refreshFailed = !!account.quota_query_last_error?.trim();
       const reauthorizationReason =
         platformConfig.getReauthorizationReason?.(account) || null;
-      const shouldShowQuota = hasQuotaData && !refreshFailed;
+      const shouldShowQuota = hasQuotaData;
       const statusText = refreshFailed
         ? t(
             `${platformConfig.quotaPrefix}.quotaQuery.failedRefreshCompact`,
@@ -571,6 +586,14 @@ export function CodebuddySuiteAccountsSharedView<
             `${platformConfig.quotaPrefix}.quotaQuery.empty`,
             "暂无可用配额数据",
           );
+      const cachedWarningText = t(
+        "common.shared.quota.cachedRefreshFailed",
+        "刷新失败，以下为上次成功数据",
+      );
+      const updatedAtMs = getAccountQuotaUpdatedAtMs(account);
+      const updatedAtText = updatedAtMs != null
+        ? formatQuotaDateTime(updatedAtMs)
+        : "";
       return (
         <>
           {reauthorizationReason && (
@@ -612,6 +635,21 @@ export function CodebuddySuiteAccountsSharedView<
                 )}
               </span>
             </div>
+            {refreshFailed && hasQuotaData && (
+              <div className={`quota-cache-warning ${variant === "table" ? "table" : ""}`} role="status">
+                <CircleAlert size={14} />
+                <div className="quota-cache-warning-content">
+                  <span className="quota-cache-warning-title">{cachedWarningText}</span>
+                  {updatedAtText && (
+                    <span className="quota-cache-warning-time">
+                      {t("common.shared.quota.lastSuccessfulQuery", "上次成功：{{time}}", {
+                        time: updatedAtText,
+                      })}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             {shouldShowQuota ? (
               renderResourceQuotaItems(account, variant)
             ) : (
@@ -977,7 +1015,7 @@ export function CodebuddySuiteAccountsSharedView<
           <MultiSelectFilterDropdown
             options={tierFilterOptions}
             selectedValues={filterTypes}
-            allLabel={`ALL (${tierSummary.all})`}
+            allLabel={t('common.shared.filter.all', '全部 ({{count}})', { count: tierSummary.all })}
             filterLabel={t("common.shared.filterLabel", "筛选")}
             clearLabel={t("accounts.clearFilter", "清空筛选")}
             emptyLabel={t("common.none", "暂无")}
@@ -1126,13 +1164,16 @@ export function CodebuddySuiteAccountsSharedView<
         </div>
       </div>
 
-      {filteredAccounts.length > 0 && (
+      {(accounts.length > 0 || grouping.groups.length > 0) && (
         <AccountSelectionToolbar
           selectedCount={selected.size}
           allSelected={isAllPaginatedSelected}
           disabled={paginatedIds.length === 0}
           onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
           onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          grouping={grouping}
+          accounts={accounts}
+          selectedIds={Array.from(selected)}
           actions={
             <button
               className="btn btn-danger icon-only"
@@ -1298,7 +1339,7 @@ export function CodebuddySuiteAccountsSharedView<
         createPortal(
           <div className="modal-overlay account-add-modal-overlay">
             <div
-              className={`modal-content ghcp-add-modal ${platformConfig.pageClassName}-add-modal${
+              className={`modal-content ghcp-add-modal platform-account-add-modal ${platformConfig.pageClassName}-add-modal${
                 platformConfig.showPasteJsonTab
                   ? " suite-account-add-modal-wide"
                   : ""

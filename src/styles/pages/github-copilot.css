@@ -2263,7 +2263,9 @@
 }
 
 /* 通用 modal-content 样式 */
-.modal-content {
+/* 基类用 :where() 降到零优先级：组件自己的弹框类永远能覆盖这里的默认值，
+   不再依赖打包后的 CSS 加载顺序。 */
+:where(.modal-content) {
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
@@ -2292,6 +2294,13 @@
   max-width: 620px;
   max-height: min(820px, calc(100dvh - 48px));
   overflow: hidden;
+}
+
+/* 所有平台的添加账号弹框统一使用 Codex 的大弹框基准。 */
+.modal.platform-account-add-modal,
+.modal-content.platform-account-add-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-width: 760px;
 }
 
 .account-add-modal-overlay {
@@ -2419,6 +2428,7 @@
 }
 
 .claude-add-modal .claude-gateway-supports1m-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2439,7 +2449,7 @@
   position: absolute;
   width: 1px;
   height: 1px;
-  margin: -1px;
+  margin: 0;
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
@@ -2532,10 +2542,6 @@
   .claude-add-modal .claude-gateway-mode-segmented {
     grid-template-columns: 1fr;
   }
-}
-
-.windsurf-add-modal {
-  max-width: 620px;
 }
 
 .ghcp-add-modal .modal-body {
@@ -2950,6 +2956,11 @@
   .ghcp-add-modal {
     width: 100%;
     max-height: calc(100dvh - 24px);
+  }
+
+  .modal.platform-account-add-modal,
+  .modal-content.platform-account-add-modal {
+    width: 100%;
   }
 
   .ghcp-add-modal > .modal-header {

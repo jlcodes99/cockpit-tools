@@ -279,10 +279,14 @@ fn load_sqlite_thread_index_rows_from_db(
         return Ok(Vec::new());
     }
 
-    let title_expr = if names.contains("title") {
-        "COALESCE(title, '')"
-    } else {
-        "''"
+    // 官方客户端侧边栏展示的是 `threads.name`（会话展示名），`threads.title`
+    // 往往只是首条用户消息原文。重建 session_index 时必须优先取展示名，
+    // 否则会把会话管理里的标题写成原始长文本，与 Codex 显示的名称不一致。
+    let title_expr = match (names.contains("name"), names.contains("title")) {
+        (true, true) => "COALESCE(NULLIF(TRIM(name), ''), COALESCE(title, ''))",
+        (true, false) => "COALESCE(NULLIF(TRIM(name), ''), '')",
+        (false, true) => "COALESCE(title, '')",
+        (false, false) => "''",
     };
     let updated_at_expr = if names.contains("updated_at") {
         "updated_at"
@@ -966,4 +970,3 @@ fn normalize_sqlite_thread_cwds_for_db(
         .map_err(|error| format_sqlite_write_error(db_path, &error))?;
     Ok(updated_rows)
 }
-

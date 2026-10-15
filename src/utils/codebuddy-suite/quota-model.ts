@@ -6,9 +6,8 @@
 
 import {
   PACKAGE_CODE,
-  RESOURCE_STATUS,
   ENTERPRISE_ACCOUNT_TYPES,
-} from '../../types/codebuddy-suite';
+} from '../../types/codebuddy-suite.ts';
 import type {
   CodebuddySuiteAccountBase,
   CodebuddyPlanDetail,
@@ -17,10 +16,9 @@ import type {
   CodebuddyUsage,
   QuotaDisplayItem,
   QuotaCategoryGroup,
-} from '../../types/codebuddy-suite';
+} from '../../types/codebuddy-suite.ts';
 import {
   asRecord,
-  parseNumeric,
   parseDateTimeToEpoch,
   parseCycleTotal,
   parseCycleRemain,
@@ -31,7 +29,7 @@ import {
   extractResourceAccounts,
   getAccountQuotaUpdatedAtMs,
   aggregateCycleResources,
-} from './parser';
+} from './parser.ts';
 
 /**
  * 将原始资源转换为 OfficialQuotaResource
@@ -39,22 +37,26 @@ import {
 export function toOfficialQuotaResource(raw: Record<string, unknown>): OfficialQuotaResource {
   const packageCode = typeof raw.PackageCode === 'string' ? raw.PackageCode : null;
   const packageName = typeof raw.PackageName === 'string' ? raw.PackageName : null;
-  const cycleStartTime = typeof raw.CycleStartTime === 'string' ? raw.CycleStartTime : null;
-  const cycleEndTime = typeof raw.CycleEndTime === 'string' ? raw.CycleEndTime : null;
-  const deductionEndTime = parseNumeric(raw.DeductionEndTime);
-  const expiredTime = typeof raw.ExpiredTime === 'string' ? raw.ExpiredTime : null;
+  const scalarDateText = (value: unknown): string | null =>
+    typeof value === 'string' || typeof value === 'number' ? String(value) : null;
+  const cycleStartTime = scalarDateText(raw.CycleStartTime);
+  const cycleEndTime = scalarDateText(raw.CycleEndTime);
+  const deductionEndTime = parseDateTimeToEpoch(raw.DeductionEndTime);
+  const expiredTime = scalarDateText(raw.ExpiredTime);
 
   const total = parseCycleTotal(raw);
   const remain = parseCycleRemain(raw);
-  const used = Math.max(0, total - remain);
-  const usedPercent = total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
-  const remainPercent = total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : null;
+  const unlimited = raw.Unlimited === true || raw.unlimited === true || total === -1;
+  const used = unlimited ? 0 : Math.max(0, total - remain);
+  const usedPercent = unlimited ? 0 : total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
+  const remainPercent = unlimited ? null : total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : null;
 
-  const cycleEndAt = parseDateTimeToEpoch(cycleEndTime);
+  const cycleEndAt = parseDateTimeToEpoch(raw.CycleEndTime);
+  const cycleResetAt = parseDateTimeToEpoch(raw.CycleResetTime);
   const expireAt = deductionEndTime ?? parseDateTimeToEpoch(expiredTime) ?? cycleEndAt;
-  const refreshAt = cycleEndAt != null && expireAt != null && cycleEndAt !== expireAt ? cycleEndAt + 1000 : null;
+  const refreshAt = cycleResetAt ?? (cycleEndAt != null && expireAt != null && cycleEndAt !== expireAt ? cycleEndAt + 1000 : null);
 
-  const isBasePackage = packageCode === PACKAGE_CODE.free || packageCode === PACKAGE_CODE.freeMon;
+  const isBasePackage = packageCode === PACKAGE_CODE.free || packageCode === PACKAGE_CODE.freeMon || packageCode === PACKAGE_CODE.freeMonIntl;
 
   return {
     packageCode,
@@ -71,6 +73,7 @@ export function toOfficialQuotaResource(raw: Record<string, unknown>): OfficialQ
     refreshAt,
     expireAt,
     isBasePackage,
+    unlimited,
   };
 }
 
@@ -88,14 +91,11 @@ export function getPlanDetail(account: CodebuddySuiteAccountBase): CodebuddyPlan
   }
 
   const all = extractResourceAccounts(account);
-  const active = all.filter((a) => {
-    const s = typeof a.Status === 'number' ? a.Status : -1;
-    return s === RESOURCE_STATUS.valid || s === RESOURCE_STATUS.usedUp;
-  });
+  const active = all.filter(isActiveResource);
 
   const proPkg = active.find((a) => {
     const c = typeof a.PackageCode === 'string' ? a.PackageCode : '';
-    return c === PACKAGE_CODE.proYear || c === PACKAGE_CODE.proMon;
+    return c === PACKAGE_CODE.proYear || c === PACKAGE_CODE.proMon || c === PACKAGE_CODE.proMonPlus || c === PACKAGE_CODE.advanced || c === PACKAGE_CODE.flagship || c === PACKAGE_CODE.youth;
   });
 
   const hasGift = active.some((a) => {
@@ -232,6 +232,7 @@ export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): Offic
     refreshAt: null,
     expireAt: null,
     isBasePackage: false,
+    unlimited: false,
   };
 
   const all = extractResourceAccounts(account).filter(isActiveResource);
@@ -258,8 +259,10 @@ export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): Offic
   const mergedTrialOrFreeMon = aggregateCycleResources(trialOrFreeMon);
   const mergedFree = aggregateCycleResources(free);
   const mergedEnterprise = aggregateCycleResources(enterprise);
-  const ordered = [mergedTrialOrFreeMon, ...pro, ...activity, mergedEnterprise, mergedFree].filter(
-    (item): item is Record<string, unknown> => item != null && !!item.PackageCode,
+  const classified = new Set([...pro, ...extras, ...trialOrFreeMon, ...free, ...activity, ...enterprise]);
+  const leftovers = all.filter((item) => !classified.has(item));
+  const ordered = [mergedTrialOrFreeMon, ...pro, ...activity, mergedEnterprise, mergedFree, ...leftovers].filter(
+    (item): item is Record<string, unknown> => item != null && !!(item.PackageCode || item.PackageName),
   );
   const resources = ordered.map(toOfficialQuotaResource);
 
@@ -272,16 +275,17 @@ export function getOfficialQuotaModel(account: CodebuddySuiteAccountBase): Offic
  * 解析包名称
  */
 function resolvePackageName(resource: OfficialQuotaResource): string {
+  if (resource.packageName) return resource.packageName;
   if (resource.packageCode === PACKAGE_CODE.enterprise) return '企业版';
   if (resource.packageCode === PACKAGE_CODE.extra) return '加量包';
   if (resource.packageCode === PACKAGE_CODE.activity) return '活动赠送包';
-  if (resource.packageCode === PACKAGE_CODE.free || resource.packageCode === PACKAGE_CODE.gift || resource.packageCode === PACKAGE_CODE.freeMon) {
+  if (resource.packageCode === PACKAGE_CODE.free || resource.packageCode === PACKAGE_CODE.gift || resource.packageCode === PACKAGE_CODE.freeMon || resource.packageCode === PACKAGE_CODE.freeMonIntl) {
     return '基础体验包';
   }
-  if (resource.packageCode === PACKAGE_CODE.proMon || resource.packageCode === PACKAGE_CODE.proYear) {
+  if (resource.packageCode === PACKAGE_CODE.proMon || resource.packageCode === PACKAGE_CODE.proMonPlus || resource.packageCode === PACKAGE_CODE.proYear) {
     return '专业版订阅';
   }
-  return resource.packageName || '基础包';
+  return '基础包';
 }
 
 /**
@@ -292,7 +296,7 @@ export function getQuotaDisplayItems(account: CodebuddySuiteAccountBase): QuotaD
   const items: QuotaDisplayItem[] = [];
 
   for (const resource of model.resources) {
-    if (resource.total <= 0 && resource.remain <= 0) continue;
+    if (!resource.unlimited && resource.total <= 0 && resource.remain <= 0) continue;
 
     const remainPercent = resource.remainPercent ?? Math.max(0, 100 - resource.usedPercent);
     const quotaClass = remainPercent <= 10 ? 'low' : remainPercent <= 30 ? 'medium' : 'high';
@@ -307,10 +311,11 @@ export function getQuotaDisplayItems(account: CodebuddySuiteAccountBase): QuotaD
       remainPercent: resource.remainPercent,
       quotaClass,
       refreshAt: resource.refreshAt,
+      unlimited: resource.unlimited,
     });
   }
 
-  if (model.extra.total > 0 || model.extra.remain > 0) {
+  if (model.extra.unlimited || model.extra.total > 0 || model.extra.remain > 0) {
     const remainPercent = model.extra.remainPercent ?? Math.max(0, 100 - model.extra.usedPercent);
     const quotaClass = remainPercent <= 10 ? 'low' : remainPercent <= 30 ? 'medium' : 'high';
 
@@ -324,6 +329,7 @@ export function getQuotaDisplayItems(account: CodebuddySuiteAccountBase): QuotaD
       remainPercent: model.extra.remainPercent,
       quotaClass,
       refreshAt: model.extra.refreshAt,
+      unlimited: model.extra.unlimited,
     });
   }
 
@@ -343,30 +349,40 @@ export function getQuotaCategoryGroups(account: CodebuddySuiteAccountBase, t: (k
 
   for (const resource of model.resources) {
     const code = resource.packageCode;
+    const name = resource.packageName || '';
     if (code === PACKAGE_CODE.enterprise) {
       baseItems.push(resource);
-    } else if (code === PACKAGE_CODE.free || code === PACKAGE_CODE.gift || code === PACKAGE_CODE.freeMon || code === PACKAGE_CODE.proMon || code === PACKAGE_CODE.proYear) {
+    } else if (code === PACKAGE_CODE.free || code === PACKAGE_CODE.gift || code === PACKAGE_CODE.freeMon || code === PACKAGE_CODE.freeMonIntl || code === PACKAGE_CODE.proMon || code === PACKAGE_CODE.proMonPlus || code === PACKAGE_CODE.proYear || code === PACKAGE_CODE.youth || code === PACKAGE_CODE.advanced || code === PACKAGE_CODE.flagship || name.includes('基础')) {
       baseItems.push(resource);
-    } else if (code === PACKAGE_CODE.activity) {
+    } else if (code === PACKAGE_CODE.activity || code === PACKAGE_CODE.bonus28 || code === PACKAGE_CODE.bonus29 || code === PACKAGE_CODE.bonus30 || code === PACKAGE_CODE.bonusIntl || name.includes('赠')) {
       activityItems.push(resource);
     } else {
       otherItems.push(resource);
     }
   }
 
-  if (model.extra.total > 0 || model.extra.remain > 0 || model.extra.used > 0) {
+  if (model.extra.unlimited || model.extra.total > 0 || model.extra.remain > 0 || model.extra.used > 0) {
     extraItems.push(model.extra);
   }
 
   const aggregate = (items: OfficialQuotaResource[]): Omit<QuotaCategoryGroup, 'key' | 'label' | 'items' | 'visible'> => {
+    const unlimited = items.some((item) => item.unlimited);
     const total = items.reduce((sum, r) => sum + r.total, 0);
     const remain = items.reduce((sum, r) => sum + r.remain, 0);
     const used = items.reduce((sum, r) => sum + r.used, 0);
-    const usedPercent = total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
-    const remainPercent = total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : null;
+    const usedPercent = unlimited ? 0 : total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0;
+    const remainPercent = unlimited ? null : total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : null;
     const quotaClass =
       remainPercent != null ? (remainPercent <= 10 ? 'critical' : remainPercent <= 30 ? 'low' : remainPercent <= 60 ? 'medium' : 'high') : 'high';
-    return { total, remain, used, usedPercent, remainPercent, quotaClass };
+    return {
+      total: unlimited ? -1 : total,
+      remain: unlimited ? -1 : remain,
+      used: unlimited ? 0 : used,
+      usedPercent,
+      remainPercent,
+      quotaClass,
+      unlimited,
+    };
   };
 
   const baseAgg = aggregate(baseItems);
@@ -375,9 +391,9 @@ export function getQuotaCategoryGroups(account: CodebuddySuiteAccountBase, t: (k
   const otherAgg = aggregate(otherItems);
 
   return [
-    { key: 'base', label: t('codebuddy.quotaCategory.base', '基础体验包'), ...baseAgg, items: baseItems, visible: baseAgg.total > 0 },
-    { key: 'activity', label: t('codebuddy.quotaCategory.activity', '活动赠送包'), ...activityAgg, items: activityItems, visible: activityAgg.total > 0 },
-    { key: 'extra', label: t('codebuddy.quotaCategory.extra', '加量包'), ...extraAgg, items: extraItems, visible: extraAgg.total > 0 },
-    { key: 'other', label: t('codebuddy.quotaCategory.other', '其他'), ...otherAgg, items: otherItems, visible: otherAgg.total > 0 },
+    { key: 'base', label: t('codebuddy.quotaCategory.base', '基础体验包'), ...baseAgg, items: baseItems, visible: baseAgg.unlimited || baseAgg.total > 0 },
+    { key: 'activity', label: t('codebuddy.quotaCategory.activity', '活动赠送包'), ...activityAgg, items: activityItems, visible: activityAgg.unlimited || activityAgg.total > 0 },
+    { key: 'extra', label: t('codebuddy.quotaCategory.extra', '加量包'), ...extraAgg, items: extraItems, visible: extraAgg.unlimited || extraAgg.total > 0 },
+    { key: 'other', label: t('codebuddy.quotaCategory.other', '其他'), ...otherAgg, items: otherItems, visible: otherAgg.unlimited || otherAgg.total > 0 },
   ];
 }

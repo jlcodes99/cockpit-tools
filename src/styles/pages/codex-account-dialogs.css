@@ -1,6 +1,8 @@
 /* Codex 样式分片：添加/导入/编辑弹框、表格和暗色适配。按原顺序由 codex.css 聚合。 */
 /* 通用 modal-content 样式 */
-.modal-content {
+/* 基类用 :where() 降到零优先级：组件自己的弹框类永远能覆盖这里的默认值，
+   不再依赖打包后的 CSS 加载顺序。 */
+:where(.modal-content) {
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
@@ -519,6 +521,18 @@
   border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--primary) 5%, var(--bg-secondary));
+}
+
+/* 重新授权上下文（目标账号 + 备注）：在官方登录等所有页签下都展示。 */
+.codex-reauth-target-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.codex-reauth-target-summary .codex-reauth-note-summary {
+  margin-top: 0;
 }
 
 .codex-pending-oauth-draft {
@@ -1313,6 +1327,13 @@
   font-weight: 600;
 }
 
+.api-model-context-window-optional {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-style: normal;
+  font-weight: 500;
+}
+
 .api-model-context-window-row span {
   overflow: hidden;
   color: var(--text-primary);
@@ -1326,6 +1347,82 @@
   min-height: 32px;
   padding: 6px 8px;
   font-size: 12px;
+}
+
+/* 模型列表的逐模型识图开关：与供应商弹框的开关保持同一套视觉语言。 */
+.api-model-context-window-panel.with-vision .api-model-context-window-head,
+.api-model-context-window-panel.with-vision .api-model-context-window-row {
+  grid-template-columns: minmax(0, 1fr) minmax(108px, 140px) 46px;
+}
+
+/* 只保留逐模型识图列时（上下文统一走启动预览的实例级管理）。 */
+.api-model-context-window-panel.no-context .api-model-context-window-head,
+.api-model-context-window-panel.no-context .api-model-context-window-row {
+  grid-template-columns: minmax(0, 1fr) 46px;
+}
+
+.api-model-vision-toggle {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.api-model-vision-toggle input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.api-model-vision-switch {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 24%, var(--bg-card));
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.api-model-vision-switch::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+  transition: transform 0.16s ease;
+}
+
+.api-model-vision-toggle input:checked + .api-model-vision-switch {
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.api-model-vision-toggle input:checked + .api-model-vision-switch::before {
+  transform: translateX(18px);
+}
+
+.api-model-vision-toggle input:disabled {
+  cursor: not-allowed;
+}
+
+.api-model-context-window-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.api-model-context-window-select {
+  width: 100%;
 }
 
 .codex-add-modal .oauth-url-section {
@@ -2621,6 +2718,59 @@
   gap: 20px;
 }
 
+.codex-quick-config-modal .codex-quick-config-section {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-secondary) 34%, transparent);
+}
+
+.codex-quick-config-modal .codex-quick-config-section__heading h3,
+.codex-quick-config-modal .codex-quick-config-section__heading p {
+  margin: 0;
+}
+
+.codex-quick-config-modal .codex-quick-config-section__heading h3 {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.codex-quick-config-modal .codex-quick-config-section__heading p {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.codex-quick-config-modal .codex-context-override-editor {
+  display: grid;
+  gap: 16px;
+}
+
+.codex-quick-config-modal
+  .codex-context-override-preset
+  .single-select-dropdown-trigger {
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+.codex-quick-config-modal .codex-context-override-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.codex-quick-config-modal .codex-context-override-fields label {
+  display: grid;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .codex-quick-config-modal .codex-quick-config-field {
   display: flex;
   flex-direction: column;
@@ -3284,6 +3434,14 @@
   box-shadow:
     0 24px 64px -8px rgba(14, 165, 233, 0.12),
     0 12px 24px -8px rgba(0, 0, 0, 0.06);
+}
+
+/* Codex account dialogs share the provider editor width, including the
+   platform-wide account-add class whose legacy rule is narrower. */
+.modal-content.codex-provider-modal.platform-account-add-modal,
+.modal.codex-provider-modal.platform-account-add-modal {
+  width: min(920px, calc(100vw - 48px));
+  max-width: 920px;
 }
 
 [data-theme="dark"] .codex-provider-modal {
@@ -4213,4 +4371,3 @@
 }
 
 /* Dark Mode Table Overrides */
-

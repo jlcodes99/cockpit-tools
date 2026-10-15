@@ -39,6 +39,7 @@ export interface CodebuddySuiteAccountBase {
   status_reason?: string | null;
   quota_query_last_error?: string | null;
   quota_query_last_error_at?: number | null;
+  usage_updated_at?: number | null;
 
   created_at: number;
   last_used: number;
@@ -83,10 +84,23 @@ export const PACKAGE_CODE = {
   free: 'TCACA_code_001_PqouKr6QWV',
   proMon: 'TCACA_code_002_AkiJS3ZHF5',
   proYear: 'TCACA_code_003_FAnt7lcmRT',
+  proMonPlus: 'TCACA_code_005_maRGyrHhw1',
   gift: 'TCACA_code_006_DbXS0lrypC',
   activity: 'TCACA_code_007_nzdH5h4Nl0',
   freeMon: 'TCACA_code_008_cfWoLwvjU4',
   extra: 'TCACA_code_009_0XmEQc2xOf',
+  youth: 'TCACA_code_023_4xbGhMrE6q',
+  advanced: 'TCACA_code_026_BaESVICNoi',
+  flagship: 'TCACA_code_027_0FCGVA6vSa',
+  bonus28: 'TCACA_code_028_NtpWi0jzXs',
+  bonus29: 'TCACA_code_029_6wCGEWquYy',
+  bonus30: 'TCACA_code_030_BjSt89qTvr',
+  freeMonIntl: 'TCACA_code_035_ArVxJcGDsm',
+  extraIntl: 'TCACA_code_036_lupO5WgNdG',
+  bonusIntl: 'TCACA_code_037_WxOD3MpI2o',
+  extra38: 'TCACA_code_038_OhvqZtiPKr',
+  proTrialMon: 'TCACA_code_039_KRcQj7wUat',
+  proTrialYear: 'TCACA_code_040_mi9rCYg46x',
   enterprise: 'TCACA_code_enterprise',
 } as const;
 
@@ -135,6 +149,7 @@ export interface OfficialQuotaResource {
   refreshAt: number | null;
   expireAt: number | null;
   isBasePackage: boolean;
+  unlimited?: boolean;
 }
 
 /**
@@ -173,6 +188,7 @@ export interface QuotaDisplayItem {
   remainPercent: number | null;
   quotaClass: string;
   refreshAt: number | null;
+  unlimited?: boolean;
 }
 
 /**
@@ -194,6 +210,7 @@ export interface QuotaCategoryGroup {
   quotaClass: string;
   items: OfficialQuotaResource[];
   visible: boolean;
+  unlimited?: boolean;
 }
 
 // 兼容旧常量名称

@@ -62,8 +62,12 @@ func (s *relayServer) executeStreamWithOpenTimeout(
 			timer.Stop()
 			if out.err != nil || out.result == nil {
 				cancelAttempt()
+				return out.result, out.err
 			}
-			return out.result, out.err
+			// 流已建立：执行器的 chunk 生产 goroutine 仍在监听这次 attempt 的 context，
+			// 立刻 cancel 会把正常流截断，所以把 cancel 交给返回的流，
+			// 等通道结束（或下游 context 结束）后再释放这次 attempt。
+			return releaseAttemptOnStreamEnd(ctx, out.result, cancelAttempt), nil
 		case <-ctx.Done():
 			timer.Stop()
 			cancelAttempt()
@@ -89,6 +93,53 @@ func (s *relayServer) executeStreamWithOpenTimeout(
 		}
 	}
 	return nil, relayTimeoutError{phase: "stream_open", timeout: openTimeout}
+}
+
+// releaseAttemptOnStreamEnd 把一次 stream open attempt 的 context cancel 绑定到流的生命周期上。
+//
+// ExecuteStream 返回的 chunk 通道由执行器内部的 goroutine 生产，该 goroutine 直接监听传入的
+// context（例如 codex_executor_stream.go 里的 `case <-ctx.Done(): return`）。因此流式打开成功后
+// 既不能立刻 cancel（会把正常流截断），也不能永不 cancel（attempt 级 context 会一直挂在父
+// context 上）。这里加一层转发：上游通道关闭、下游 context 结束或转发中断时统一释放 cancel。
+func releaseAttemptOnStreamEnd(
+	ctx context.Context,
+	result *cliproxyexecutor.StreamResult,
+	cancel context.CancelFunc,
+) *cliproxyexecutor.StreamResult {
+	if result == nil || result.Chunks == nil {
+		if cancel != nil {
+			cancel()
+		}
+		return result
+	}
+	upstream := result.Chunks
+	released := make(chan cliproxyexecutor.StreamChunk)
+	go func() {
+		defer func() {
+			if cancel != nil {
+				cancel()
+			}
+			close(released)
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case chunk, ok := <-upstream:
+				if !ok {
+					return
+				}
+				select {
+				case released <- chunk:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	wrapped := *result
+	wrapped.Chunks = released
+	return &wrapped
 }
 
 func (s *relayServer) startExecutorWaitLogger(c *gin.Context, model, phase string, startedAt time.Time) func() {
@@ -198,7 +249,11 @@ func (s *relayServer) bodyWithValidatedModel(c *gin.Context, spec *apiKeySpec, b
 		writeAPIError(c, http.StatusBadRequest, err.Error(), "invalid_request")
 		return nil, "", false
 	}
-	nextBody, requestedModel, err := rewriteBodyModel(s.manifest, spec, body)
+	requestKind := ""
+	if c != nil && c.Request != nil && c.Request.URL != nil {
+		requestKind = requestKindFromPath(c.Request.URL.Path)
+	}
+	nextBody, requestedModel, err := rewriteBodyModel(s.manifest, spec, requestKind, body)
 	if requestedModel != "" && c != nil && c.Request != nil {
 		ctx := context.WithValue(c.Request.Context(), requestModelContextKey, requestedModel)
 		c.Request = c.Request.WithContext(ctx)

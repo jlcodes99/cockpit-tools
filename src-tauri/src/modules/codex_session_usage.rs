@@ -58,6 +58,8 @@ pub struct CodexSessionUsageTotals {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSessionUsageBreakdownRow {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_cost_usd: Option<f64>,
     pub key: String,
     pub label: String,
     pub input_tokens: u64,
@@ -1514,6 +1516,7 @@ fn query_breakdown(
                 stored_label
             };
             Ok(CodexSessionUsageBreakdownRow {
+                estimated_cost_usd: None,
                 key,
                 label,
                 input_tokens: input,
@@ -1533,51 +1536,43 @@ fn query_day_breakdown(
     where_sql: &str,
     params: &[rusqlite::types::Value],
 ) -> Result<Vec<CodexSessionUsageBreakdownRow>, String> {
-    let sql = format!(
-        "SELECT timestamp, input_tokens, cached_input_tokens, output_tokens
-         FROM session_usage_events {where_sql}"
-    );
-    let mut statement = conn
-        .prepare(&sql)
-        .map_err(|error| format!("查询会话用量日期失败: {error}"))?;
-    let rows = statement
-        .query_map(rusqlite::params_from_iter(params.iter()), |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, i64>(1)?.max(0) as u64,
-                row.get::<_, i64>(2)?.max(0) as u64,
-                row.get::<_, i64>(3)?.max(0) as u64,
-            ))
-        })
-        .map_err(|error| format!("遍历会话用量日期失败: {error}"))?;
-
-    let mut grouped: HashMap<String, CodexSessionUsageTotals> = HashMap::new();
+    let sql = format!("SELECT timestamp, model, input_tokens, cached_input_tokens, output_tokens
+        FROM session_usage_events {where_sql}");
+    let mut statement = conn.prepare(&sql).map_err(|error| format!("查询会话用量日期失败: {error}"))?;
+    let rows = statement.query_map(rusqlite::params_from_iter(params.iter()), |row| Ok((
+        row.get::<_, i64>(0)?, row.get::<_, String>(1)?,
+        row.get::<_, i64>(2)?.max(0) as u64, row.get::<_, i64>(3)?.max(0) as u64,
+        row.get::<_, i64>(4)?.max(0) as u64,
+    ))).map_err(|error| format!("遍历会话用量日期失败: {error}"))?;
+    let mut days: HashMap<String, HashMap<String, CodexSessionUsageTotals>> = HashMap::new();
     for row in rows {
-        let (timestamp, input, cached, output) =
-            row.map_err(|error| format!("解析会话用量日期失败: {error}"))?;
-        let key = local_day_key(timestamp);
-        let entry = grouped.entry(key).or_default();
-        entry.input_tokens = entry.input_tokens.saturating_add(input);
-        entry.cached_input_tokens = entry.cached_input_tokens.saturating_add(cached);
-        entry.output_tokens = entry.output_tokens.saturating_add(output);
-        entry.total_tokens = entry
-            .total_tokens
-            .saturating_add(input.saturating_add(output));
-        entry.request_count = entry.request_count.saturating_add(1);
+        let (timestamp, model, input, cached, output) = row.map_err(|error| format!("解析会话用量日期失败: {error}"))?;
+        let totals = days.entry(local_day_key(timestamp)).or_default().entry(model).or_default();
+        totals.input_tokens = totals.input_tokens.saturating_add(input);
+        totals.cached_input_tokens = totals.cached_input_tokens.saturating_add(cached);
+        totals.output_tokens = totals.output_tokens.saturating_add(output);
+        totals.total_tokens = totals.total_tokens.saturating_add(input.saturating_add(output));
+        totals.request_count = totals.request_count.saturating_add(1);
     }
-
-    Ok(grouped
-        .into_iter()
-        .map(|(key, totals)| CodexSessionUsageBreakdownRow {
-            label: key.clone(),
-            key,
-            input_tokens: totals.input_tokens,
-            cached_input_tokens: totals.cached_input_tokens,
-            output_tokens: totals.output_tokens,
-            total_tokens: totals.total_tokens,
-            request_count: totals.request_count,
-        })
-        .collect())
+    Ok(days.into_iter().map(|(key, models)| {
+        let mut row = CodexSessionUsageBreakdownRow {
+            label: key.clone(), key, input_tokens: 0, cached_input_tokens: 0,
+            output_tokens: 0, total_tokens: 0, request_count: 0, estimated_cost_usd: Some(0.0),
+        };
+        for (model, totals) in models {
+            row.input_tokens = row.input_tokens.saturating_add(totals.input_tokens);
+            row.cached_input_tokens = row.cached_input_tokens.saturating_add(totals.cached_input_tokens);
+            row.output_tokens = row.output_tokens.saturating_add(totals.output_tokens);
+            row.total_tokens = row.total_tokens.saturating_add(totals.total_tokens);
+            row.request_count = row.request_count.saturating_add(totals.request_count);
+            row.estimated_cost_usd = row.estimated_cost_usd.and_then(|cost| {
+                crate::modules::codex_local_access::estimate_known_model_token_cost_usd(
+                    &model, totals.input_tokens, totals.cached_input_tokens, totals.output_tokens,
+                ).map(|model_cost| cost + model_cost)
+            });
+        }
+        row
+    }).collect())
 }
 
 fn local_day_key(timestamp: i64) -> String {
@@ -1602,6 +1597,52 @@ fn local_day_key(timestamp: i64) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn daily_cost_test_connection() -> Connection {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch("CREATE TABLE session_usage_events (
+            timestamp INTEGER, model TEXT, input_tokens INTEGER, cached_input_tokens INTEGER,
+            output_tokens INTEGER, instance_id TEXT
+        )").unwrap();
+        connection
+    }
+
+    #[test]
+    fn daily_cost_sums_models_and_preserves_time_and_instance_filters() {
+        let conn = daily_cost_test_connection();
+        let noon = Local.with_ymd_and_hms(2026, 10, 3, 12, 0, 0).single().unwrap().timestamp();
+        let next_day = Local.with_ymd_and_hms(2026, 10, 4, 12, 0, 0).single().unwrap().timestamp();
+        for (timestamp, model, instance) in [(noon, "gpt-5.4", "a"), (noon + 1, "gpt-5.4-mini", "a"),
+            (next_day, "gpt-5.4", "a"), (noon, "gpt-5.4", "b")] {
+            conn.execute("INSERT INTO session_usage_events VALUES (?1, ?2, 1000000, 200000, 100000, ?3)",
+                rusqlite::params![timestamp, model, instance]).unwrap();
+        }
+        let params = vec![rusqlite::types::Value::Integer(noon), rusqlite::types::Value::Integer(next_day),
+            rusqlite::types::Value::Text("a".into())];
+        let rows = query_day_breakdown(&conn, "WHERE timestamp >= ?1 AND timestamp < ?2 AND instance_id = ?3", &params).unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row.key, "2026-10-03");
+        assert_eq!(row.request_count, 2);
+        assert_eq!(row.total_tokens, 2200000);
+        let expected = ["gpt-5.4", "gpt-5.4-mini"].into_iter().map(|model|
+            crate::modules::codex_local_access::estimate_known_model_token_cost_usd(model, 1000000, 200000, 100000).unwrap()
+        ).sum::<f64>();
+        assert!((row.estimated_cost_usd.unwrap() - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn daily_cost_distinguishes_unpriced_models_from_real_zero() {
+        let conn = daily_cost_test_connection();
+        let noon = Local.with_ymd_and_hms(2026, 10, 3, 12, 0, 0).single().unwrap().timestamp();
+        conn.execute("INSERT INTO session_usage_events VALUES (?1, 'gpt-5.4', 0, 0, 0, 'a')", [noon]).unwrap();
+        assert_eq!(query_day_breakdown(&conn, "", &[]).unwrap()[0].estimated_cost_usd, Some(0.0));
+        conn.execute("INSERT INTO session_usage_events VALUES (?1, 'unpriced-future-model', 500, 0, 20, 'a')", [noon]).unwrap();
+        let row = &query_day_breakdown(&conn, "", &[]).unwrap()[0];
+        assert_eq!(row.estimated_cost_usd, None);
+        assert_eq!(row.request_count, 2);
+        assert_eq!(row.total_tokens, 520);
+    }
 
     const PARENT_ID: &str = "00000000-0000-4000-8000-000000000001";
     const CHILD_ID: &str = "00000000-0000-4000-8000-000000000002";

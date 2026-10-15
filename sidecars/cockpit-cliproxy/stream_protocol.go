@@ -25,6 +25,8 @@ import (
 
 	sdkhandlers "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
 
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
@@ -75,7 +77,7 @@ func (s *relayServer) streamTimeoutsForRequest(r *http.Request, body []byte, mod
 }
 
 func isImageGenerationRequest(r *http.Request, body []byte, model string) bool {
-	if modelBase(model) == "gpt-image-2" {
+	if modelBase(model) == defaultImagesToolModel || modelBase(model) == legacyImagesToolModel {
 		return true
 	}
 	if r != nil && r.URL != nil {
@@ -193,6 +195,9 @@ func buildExecutorRequest(c *gin.Context, body []byte, model string, sourceForma
 }
 
 func writeAPIError(c *gin.Context, status int, message, code string) {
+	if relayServerFromContext(c).tryWriteModerationNotice(c, status, message, sourceFormatFromRequest(c), requestPrefersStream(c)) {
+		return
+	}
 	if status <= 0 {
 		status = http.StatusInternalServerError
 	}
@@ -211,7 +216,51 @@ func writeAPIError(c *gin.Context, status int, message, code string) {
 	})
 }
 
+// clientClosedRequestStatus 记录「客户端在响应写完前主动断开」。
+// 取值与内置 CLIProxyAPI 的 clienterror.StatusClientClosedRequest 一致，
+// 避免把下游取消记成网关侧 502。
+const clientClosedRequestStatus = 499
+
+// requestClientGone 判断本次失败是否由下游主动断开引起。
+// 这类请求既不能再写响应体，也不应记成网关侧 5xx：宿主会按状态与错误分类区分
+// 「用户取消」和「网关故障」，5xx + context canceled 会被判为网关取消。
+func requestClientGone(c *gin.Context, err error) bool {
+	if c != nil && c.Request != nil {
+		// 只认下游请求上下文的取消：执行器在重试或换号时会取消自己的 attempt
+		// context，那种 context.Canceled 不能当成客户端断开。
+		return errors.Is(c.Request.Context().Err(), context.Canceled)
+	}
+	return errors.Is(err, context.Canceled)
+}
+
+// forwardSafeErrorResponseHeaders 只转发内置 CLIProxyAPI 明确判定为安全的重试/冷却
+// 响应头（当前为 Retry-After），与 SDK 处理器 handlers_errors.go 的行为保持一致。
+// 上游未给出可安全转发的重试时间时不写该头，不自行编造退避时长。
+func forwardSafeErrorResponseHeaders(c *gin.Context, err error) {
+	if c == nil || err == nil {
+		return
+	}
+	headers := coreauth.SafeResponseHeaders(err)
+	if len(headers) == 0 {
+		return
+	}
+	for _, value := range headers.Values("Retry-After") {
+		c.Writer.Header().Add("Retry-After", value)
+	}
+}
+
 func (s *relayServer) writeExecutorError(c *gin.Context, err error) {
+	if requestClientGone(c, err) {
+		if err != nil {
+			_ = c.Error(err)
+		}
+		// 下游已经断开：只记录状态供请求日志归类，不再写响应体或延迟。
+		c.Status(clientClosedRequestStatus)
+		return
+	}
+	if s.tryWriteModerationNoticeFromError(c, err, sourceFormatFromRequest(c), requestPrefersStream(c)) {
+		return
+	}
 	status := statusCodeFromError(err)
 	code := "upstream_error"
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
@@ -226,6 +275,7 @@ func (s *relayServer) writeExecutorError(c *gin.Context, err error) {
 	if err != nil {
 		_ = c.Error(err)
 	}
+	forwardSafeErrorResponseHeaders(c, err)
 	if shouldThrottleDownstreamExecutorError(status) {
 		var ctx context.Context = context.Background()
 		if c != nil && c.Request != nil {
@@ -383,6 +433,14 @@ func writeStreamTerminalError(c *gin.Context, err error) {
 
 func writeStreamTerminalErrorForFormat(c *gin.Context, err error, sourceFormat sdktranslator.Format) {
 	if c == nil {
+		return
+	}
+	if requestClientGone(c, err) {
+		// 下游已断开：不写 SSE 终止事件，只更新状态供请求日志归类。
+		c.Status(clientClosedRequestStatus)
+		return
+	}
+	if relayServerFromContext(c).tryWriteModerationNoticeFromError(c, err, sourceFormat, true) {
 		return
 	}
 	if !sourceFormatEqual(sourceFormat, sdktranslator.FormatOpenAIResponse) {
@@ -616,6 +674,8 @@ func splitResponsesConcatenatedJSONDocuments(payload []byte) ([][]byte, bool) {
 }
 
 func writeResponsesSSEFrame(w io.Writer, chunk []byte) error {
+	// 出口统一清洗第三方推理项，避免客户端把不兼容的 reasoning content 落盘。
+	chunk = normalizeResponsesReasoningContentSSE(chunk)
 	payload, ok := responsesSSEDataPayload(chunk)
 	if !ok {
 		return writeResponsesSSEChunk(w, chunk)

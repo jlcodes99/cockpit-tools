@@ -1347,10 +1347,13 @@ fn get_managed_codex_windows_app_user_data_dir(codex_home: &str) -> Option<Strin
 #[cfg(target_os = "windows")]
 fn get_default_codex_windows_app_user_data_dirs(default_codex_home: &str) -> HashSet<String> {
     let mut dirs = HashSet::new();
-    if let Some(app_dir) = get_default_codex_windows_app_user_data_dir() {
-        let normalized = normalize_path_for_compare(&app_dir);
-        if !normalized.is_empty() {
-            dirs.insert(normalized);
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let base = std::path::PathBuf::from(appdata).join("Codex");
+        for app_dir in [base.clone(), base.join("web").join("Codex")] {
+            let normalized = normalize_path_for_compare(&app_dir.to_string_lossy());
+            if !normalized.is_empty() {
+                dirs.insert(normalized);
+            }
         }
     }
     if let Some(app_dir) = get_managed_codex_windows_app_user_data_dir(default_codex_home) {
@@ -1441,7 +1444,8 @@ fn collect_codex_windows_resource_process_pids() -> Vec<u32> {
             continue;
         }
         let (resolved_exe, _) = resolve_windows_process_exe_for_match(process);
-        if resolved_exe.as_deref() != Some(expected.as_str()) {
+        let resolved_exe = resolved_exe.unwrap_or_default();
+        if !is_matching_codex_windows_exe(&resolved_exe, &expected) {
             continue;
         }
         let args_line = process
@@ -1476,6 +1480,16 @@ fn resolve_codex_windows_target_and_fallback(codex_home: Option<&str>) -> Option
 }
 
 #[cfg(target_os = "macos")]
+fn is_qoder_macos_main_process_command_line(cmdline: &str) -> bool {
+    let lower = cmdline.to_lowercase();
+    if lower.contains("crashpad_handler") || is_helper_command_line(&lower) {
+        return false;
+    }
+    lower.contains("/qoder ide.app/contents/macos/qoder")
+        || lower.contains("/qoder.app/contents/macos/qoder")
+}
+
+#[cfg(target_os = "macos")]
 fn collect_qoder_process_entries_macos() -> Vec<(u32, Option<String>)> {
     let mut entries = Vec::new();
     let output = Command::new("ps").args(["-axo", "pid,command"]).output();
@@ -1493,12 +1507,13 @@ fn collect_qoder_process_entries_macos() -> Vec<(u32, Option<String>)> {
                 Ok(value) => value,
                 Err(_) => continue,
             };
-            let lower = cmdline.to_lowercase();
-            let is_qoder = lower.contains("qoder.app/contents/macos/");
-            if !is_qoder {
-                continue;
-            }
-            if lower.contains("crashpad_handler") || is_helper_command_line(&lower) {
+            // Qoder's current macOS bundle is named `Qoder IDE.app`, while
+            // older builds used `Qoder.app`. The main Electron process does
+            // not expose `--user-data-dir`, so it must still be collected and
+            // matched to the configured default profile via the `None`
+            // fallback. Match the executable segment, not just the bundle
+            // name, so helpers under `Contents/Frameworks` are excluded.
+            if !is_qoder_macos_main_process_command_line(cmdline) {
                 continue;
             }
             let dir = extract_user_data_dir_from_command_line(cmdline);

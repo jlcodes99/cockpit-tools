@@ -12,6 +12,7 @@ import { ModalErrorMessage } from '../components/ModalErrorMessage';
 import { MfaQuickCodeSelect } from '../components/MfaQuickCodeSelect';
 import { PaginationControls } from '../components/PaginationControls';
 import { AccountSelectionToolbar } from '../components/AccountSelectionToolbar';
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups';
 import {
   CB_PACKAGE_CODE,
   CodebuddyAccount,
@@ -45,7 +46,6 @@ import {
   removeAccountsOverviewFilterField,
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence';
-import { CodebuddySessionListPanel } from '../components/codebuddy/CodebuddySessionListPanel';
 import { CodebuddySessionManager } from '../components/codebuddy/CodebuddySessionManager';
 
 const CB_FLOW_NOTICE_COLLAPSED_KEY = 'agtools.codebuddy.flow_notice_collapsed';
@@ -155,6 +155,8 @@ export function CodebuddyAccountsPage() {
     currentAccountId, formatDate, normalizeTag,
   } = page;
 
+  const grouping = usePlatformAccountGroups('codebuddy', () => toggleSelectAll(Array.from(selected)));
+
   useEffect(() => {
     if (!filterPersistenceEnabled) {
       removeAccountsOverviewFilterField(filterPersistenceScope, FILTER_TYPES_FIELD);
@@ -239,6 +241,9 @@ export function CodebuddyAccountsPage() {
 
   const filteredAccounts = useMemo(() => {
     let result = [...accounts];
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result);
+    }
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter((account) =>
@@ -269,7 +274,7 @@ export function CodebuddyAccountsPage() {
       return sortDirection === 'desc' ? diff : -diff;
     });
     return result;
-  }, [accounts, currentAccountId, searchQuery, filterTypes, isAbnormalAccount, resolvePlanKey, tagFilter, normalizeTag, sortBy, sortDirection]);
+  }, [accounts, grouping.activeGroupId, grouping.filterAccountsByGroup, currentAccountId, searchQuery, filterTypes, isAbnormalAccount, resolvePlanKey, tagFilter, normalizeTag, sortBy, sortDirection]);
 
   const filteredIds = useMemo(() => filteredAccounts.map((account) => account.id), [filteredAccounts]);
   const exportSelectionCount = getScopedSelectedCount(filteredIds);
@@ -394,7 +399,9 @@ export function CodebuddyAccountsPage() {
           const isExtra = idx === allResources.length - 1;
           const quotaClass = getQuotaClassByRemainPercent(resource.remainPercent);
           const usedPercent = clampPercent(resource.usedPercent);
-          const quotaValueText = `${formatQuotaNumber(resource.used)} / ${formatQuotaNumber(resource.total)}`;
+          const quotaValueText = resource.unlimited
+            ? t('common.shared.quota.unlimited', '无限额度')
+            : `${formatQuotaNumber(resource.used)} / ${formatQuotaNumber(resource.total)}`;
           const timeText = resolveResourceTimeText(resource, isExtra);
           const packageName = resolveResourcePackageTitle(resource, isExtra);
 
@@ -449,10 +456,17 @@ export function CodebuddyAccountsPage() {
     const hasQuotaData =
       model.resources.length > 0 || model.extra.total > 0 || model.extra.remain > 0 || model.extra.used > 0;
     const refreshFailed = !!account.quota_query_last_error?.trim();
-    const shouldShowQuota = hasQuotaData && !refreshFailed;
+    const shouldShowQuota = hasQuotaData;
     const statusText = refreshFailed
       ? t('codebuddy.quotaQuery.failedRefreshCompact', '配额查询失败')
       : t('codebuddy.quotaQuery.empty', '暂无可用配额数据');
+    const cachedWarningText = t(
+      'common.shared.quota.cachedRefreshFailed',
+      '刷新失败，以下为上次成功数据',
+    );
+    const updatedAtText = model.updatedAt != null
+      ? formatQuotaDateTime(model.updatedAt)
+      : null;
     return (
       <>
         <div className="quota-item">
@@ -465,6 +479,21 @@ export function CodebuddyAccountsPage() {
           <div className="quota-header codebuddy-quota-header">
             <span className="quota-name">{t('codebuddy.quotaQuery.sectionTitle', '配额查询')}</span>
           </div>
+          {refreshFailed && hasQuotaData && (
+            <div className={`quota-cache-warning ${variant === 'table' ? 'table' : ''}`} role="status">
+              <CircleAlert size={14} />
+              <div className="quota-cache-warning-content">
+                <span className="quota-cache-warning-title">{cachedWarningText}</span>
+                {updatedAtText && (
+                  <span className="quota-cache-warning-time">
+                    {t('common.shared.quota.lastSuccessfulQuery', '上次成功：{{time}}', {
+                      time: updatedAtText,
+                    })}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
           {shouldShowQuota ? (
             renderResourceQuotaItems(account, variant)
           ) : (
@@ -475,7 +504,7 @@ export function CodebuddyAccountsPage() {
         </div>
       </>
     );
-  }, [renderResourceQuotaItems, renderUsageInfo, t]);
+  }, [formatQuotaDateTime, renderResourceQuotaItems, renderUsageInfo, t]);
 
   const renderGridCards = (items: typeof filteredAccounts, groupKey?: string) =>
     items.map((account) => {
@@ -614,7 +643,7 @@ export function CodebuddyAccountsPage() {
           <MultiSelectFilterDropdown
             options={tierFilterOptions}
             selectedValues={filterTypes}
-            allLabel={`ALL (${tierSummary.all})`}
+            allLabel={t('common.shared.filter.all', '全部 ({{count}})', { count: tierSummary.all })}
             filterLabel={t('common.shared.filterLabel', '筛选')}
             clearLabel={t('accounts.clearFilter', '清空筛选')}
             emptyLabel={t('common.none', '暂无')}
@@ -672,13 +701,16 @@ export function CodebuddyAccountsPage() {
         </div>
       </div>
 
-      {filteredAccounts.length > 0 && (
+      {(accounts.length > 0 || grouping.groups.length > 0) && (
         <AccountSelectionToolbar
           selectedCount={selected.size}
           allSelected={isAllPaginatedSelected}
           disabled={paginatedIds.length === 0}
           onToggleSelectAll={() => toggleSelectAll(paginatedIds)}
           onClearSelection={() => toggleSelectAll(Array.from(selected))}
+          grouping={grouping}
+          accounts={accounts}
+          selectedIds={Array.from(selected)}
           actions={(
             <button
               className="btn btn-danger icon-only"
@@ -782,12 +814,9 @@ export function CodebuddyAccountsPage() {
         onNextPage={pagination.goToNextPage}
       />
 
-      {/* Full session manager is on the sessions tab; keep lightweight list on overview. */}
-      <CodebuddySessionListPanel />
-
       {showAddModal && (
         <div className="modal-overlay">
-            <div className="modal-content ghcp-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content ghcp-add-modal platform-account-add-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{t('codebuddy.addAccount', '添加 CodeBuddy 账号')}</h2>
               <button className="modal-close" onClick={closeAddModal}><X size={18} /></button>

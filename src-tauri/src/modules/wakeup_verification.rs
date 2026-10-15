@@ -449,6 +449,9 @@ pub async fn run_batch(
                 Err(err) => {
                     let (status, code, validation_url, appeal_url, trajectory_id, message) =
                         classify_failure(&err);
+                    let validation_url = validation_url.map(|u| {
+                        crate::modules::quota::format_google_validation_url(&u, &account_email_owned)
+                    });
                     WakeupVerificationStateItem {
                         account_id: account_id_owned,
                         account_email: account_email_owned,

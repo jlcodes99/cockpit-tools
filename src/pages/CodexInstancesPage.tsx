@@ -7,6 +7,7 @@ import { CodexCliLaunchDialog } from "../components/codex/CodexCliLaunchDialog";
 import {
   CodexLaunchPreviewModal,
   type CodexLaunchPreviewAction,
+  type CodexLaunchPreviewLaunchOptions,
   type CodexLaunchPreviewSummary,
 } from "../components/codex/CodexLaunchPreviewModal";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
@@ -38,7 +39,6 @@ import {
   resolveCodexApiProviderPresetId,
 } from "../utils/codexProviderPresets";
 import { useEscClose } from "../hooks/useEscClose";
-import { useDeepSeekDirectModelPrompt } from "../components/codex/DeepSeekDirectModelModal";
 import {
   isDeepSeekAccount,
   parseCodexBoundAccountId,
@@ -132,7 +132,6 @@ export function CodexInstancesContent({
     text: string;
     tone?: "error";
   } | null>(null);
-  const deepSeekStart = useDeepSeekDirectModelPrompt();
 
   useEscClose(!!launchModal, () => setLaunchModal(null));
   useEscClose(showSyncSettingsModal, () => setShowSyncSettingsModal(false));
@@ -285,41 +284,46 @@ export function CodexInstancesContent({
     setLaunchPreview(null);
   }, []);
 
-  const executeLaunchPreview = useCallback(async () => {
-    const preview = launchPreview;
-    const resolve = pendingLaunchResolve.current;
-    if (!preview || !resolve) return false;
-    const { instance, account } = preview;
-    if (account && isDeepSeekAccount(account)) {
-      const instanceName = instance.isDefault
-        ? t("instances.defaultName", "默认实例")
-        : instance.name || t("instances.defaultName", "默认实例");
-      const updated = await deepSeekStart.confirmStart(
-        account,
-        updateAccountInstanceAccess,
-        instanceName,
-      );
-      if (!updated) return false;
-      const nextBindId = resolveDeepSeekBindAccountId(updated);
-      if ((instance.bindAccountId || null) !== nextBindId) {
-        await instanceStore.updateInstance({
-          instanceId: instance.id,
-          bindAccountId: nextBindId,
-          followLocalAccount: false,
-        });
+  const executeLaunchPreview = useCallback(
+    async (
+      _launchAfterSwitch: boolean,
+      launchOptions?: CodexLaunchPreviewLaunchOptions,
+    ) => {
+      const preview = launchPreview;
+      const resolve = pendingLaunchResolve.current;
+      if (!preview || !resolve) return false;
+      const { instance, account } = preview;
+      let launchAccount = account;
+      if (
+        account &&
+        isDeepSeekAccount(account) &&
+        launchOptions?.deepSeekAccessMode
+      ) {
+        launchAccount = await updateAccountInstanceAccess(
+          account.id,
+          launchOptions.deepSeekAccessMode,
+          null,
+          launchOptions.imageGenerationAccountIds ?? [],
+            launchOptions.imageGenerationAccountModels ?? {},
+        );
       }
-    }
-    pendingLaunchResolve.current = null;
-    setLaunchPreview(null);
-    resolve(true);
-    return true;
-  }, [
-    deepSeekStart,
-    instanceStore,
-    launchPreview,
-    t,
-    updateAccountInstanceAccess,
-  ]);
+      if (launchAccount && isDeepSeekAccount(launchAccount)) {
+        const nextBindId = resolveDeepSeekBindAccountId(launchAccount);
+        if ((instance.bindAccountId || null) !== nextBindId) {
+          await instanceStore.updateInstance({
+            instanceId: instance.id,
+            bindAccountId: nextBindId,
+            followLocalAccount: false,
+          });
+        }
+      }
+      pendingLaunchResolve.current = null;
+      setLaunchPreview(null);
+      resolve(true);
+      return true;
+    },
+    [instanceStore, launchPreview, updateAccountInstanceAccess],
+  );
 
   const defaultInstance = useMemo(
     () =>
@@ -558,10 +562,7 @@ export function CodexInstancesContent({
       }
 
       const confirmed = await confirmDialog(
-        t(
-          "codex.instances.syncAllRecords.confirmMessage",
-          "会把所有 Codex 实例中的本地会话记录做一次全量同步；同 ID 会话会进行事件级合并，写入前会备份目标实例关键文件和旧会话文件。确认继续？",
-        ),
+        t("codex.instances.syncAllRecords.confirmMessage"),
         {
           title: t("codex.instances.syncAllRecords.title", "同步所有实例记录"),
           okLabel: t("common.confirm", "确认"),
@@ -771,10 +772,7 @@ export function CodexInstancesContent({
                   </div>
                 </div>
                 <div className="codex-sync-settings-hint">
-                  {t(
-                    "codex.instances.syncAllRecords.autoDesc",
-                    "关闭时保持多实例记录隔离；开启后仅在所有 Codex 实例已停止时，启动或关闭实例会自动合并本地记录。",
-                  )}
+                  {t("codex.instances.syncAllRecords.autoDesc")}
                 </div>
               </div>
             </div>
@@ -838,7 +836,6 @@ export function CodexInstancesContent({
           onExecute={executeLaunchPreview}
         />
       )}
-      {deepSeekStart.modal}
     </>
   );
 }

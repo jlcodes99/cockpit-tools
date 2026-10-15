@@ -1,8 +1,8 @@
 import { isCodexPendingOAuthAccount, type CodexApiProviderMode, type CodexBatchDeleteJobStatus } from "../types/codex";
 import type { CodexAccount } from "../types/codex";
-import type { CodexLocalAccessAddressKind, CodexLocalAccessAccountHealth } from "../types/codexLocalAccess";
+import type { CodexLocalAccessAddressKind, CodexLocalAccessAccountHealth, CodexLocalAccessCollection, CodexLocalAccessOAuthQuotaReserve } from "../types/codexLocalAccess";
 import { CODEX_OVERVIEW_FILTER_FIELDS, CODEX_OVERVIEW_FILTER_SCOPE } from "../utils/codexAccountOverview";
-import { findCodexApiProviderPresetById } from "../utils/codexProviderPresets";
+import { CODEX_API_PROVIDER_CUSTOM_ID, findCodexApiProviderPresetById } from "../utils/codexProviderPresets";
 import { normalizeApiKeyFunOfficialUrl, resolveApiKeyFunWireApi } from "../utils/apikeyFunLinks";
 import { type CodexModelProvider, type CodexModelProviderUsageSummary } from "../services/codexModelProviderService";
 import type { Sponsor } from "../types/sponsor";
@@ -60,12 +60,33 @@ export const CODEX_TOKEN_BATCH_EXAMPLE = `[
 ]`;
 export const OPENAI_OFFICIAL_PRESET_ID = "openai_official";
 export const OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_OAUTH_QUOTA_RESERVE_PERCENT = 10;
+
 export function parseOAuthQuotaReservePercent(value: string): number | null {
   const normalized = value.trim();
   if (!/^(?:[1-9]\d?|100)$/.test(normalized)) {
     return null;
   }
   return Number(normalized);
+}
+
+export function resolveOAuthBindingQuotaReserve(
+  collection: Pick<CodexLocalAccessCollection, "boundOauthAccountId" | "boundOauthQuotaReserve"> | null | undefined,
+): CodexLocalAccessOAuthQuotaReserve | null {
+  const reserve = collection?.boundOauthQuotaReserve;
+  if (reserve) {
+    const hourlyPercent = parseOAuthQuotaReservePercent(String(reserve.hourlyPercent));
+    const weeklyPercent = parseOAuthQuotaReservePercent(String(reserve.weeklyPercent));
+    return hourlyPercent !== null && weeklyPercent !== null
+      ? { hourlyPercent, weeklyPercent }
+      : null;
+  }
+  // 已绑定且未保留额度表示保存过关闭状态；仅新绑定使用默认值。
+  if (collection?.boundOauthAccountId?.trim()) return null;
+  return {
+    hourlyPercent: DEFAULT_OAUTH_QUOTA_RESERVE_PERCENT,
+    weeklyPercent: DEFAULT_OAUTH_QUOTA_RESERVE_PERCENT,
+  };
 }
 
 export function normalizeCodexApiBaseUrl(rawValue?: string | null): string {
@@ -252,7 +273,6 @@ export interface LocalAccessAccountPoolHealthSummary {
   missing: number;
   authError: number;
   quotaLimited: number;
-  poolUnavailable: number;
 }
 
 export const ABNORMAL_LOCAL_ACCESS_ACCOUNT_FAILURE_CATEGORIES = new Set([
@@ -639,15 +659,18 @@ export function isRelayApiProviderTemplateId(value?: string | null): boolean {
 }
 
 export function getDefaultApiProviderPresetId(
-  sponsorTemplates: SponsorApiProviderTemplate[],
+  _sponsorTemplates: SponsorApiProviderTemplate[],
 ): string {
-  return sponsorTemplates[0]?.id ?? DEFAULT_CODEX_API_PROVIDER_ID;
+  return CODEX_API_PROVIDER_CUSTOM_ID;
 }
 
 export function resolveApiProviderPresetDefaults(
   providerId: string,
   sponsorTemplates: SponsorApiProviderTemplate[],
 ): { baseUrl: string; providerName: string } {
+  if (providerId === CODEX_API_PROVIDER_CUSTOM_ID) {
+    return { baseUrl: "", providerName: "" };
+  }
   const sponsorTemplate = sponsorTemplates.find(
     (template) => template.id === providerId,
   );

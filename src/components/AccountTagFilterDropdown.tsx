@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Tag, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useDropdownPanelPlacement } from '../hooks/useDropdownPanelPlacement'
+import { useEscCloseTopmost } from '../hooks/useEscClose'
 import './AccountFilterDropdown.css'
 
 interface AccountTagFilterDropdownProps {
@@ -26,6 +27,10 @@ export function AccountTagFilterDropdown({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  useEscCloseTopmost(open, () => {
+    setOpen(false)
+    rootRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+  }, rootRef)
   const { panelPlacement, panelRef, scrollContainerStyle } = useDropdownPanelPlacement(
     rootRef,
     open,

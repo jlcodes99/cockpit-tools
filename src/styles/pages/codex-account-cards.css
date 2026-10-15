@@ -123,6 +123,7 @@
 }
 
 .codex-account-card .tier-badge,
+.pelican-account-summary .tier-badge,
 .codex-accounts-page .account-table .tier-badge,
 .codex-oauth-binding-row .tier-badge {
   display: inline-flex;
@@ -140,12 +141,14 @@
 }
 
 .codex-account-card .tier-badge::before,
+.pelican-account-summary .tier-badge::before,
 .codex-accounts-page .account-table .tier-badge::before,
 .codex-oauth-binding-row .tier-badge::before {
   display: none;
 }
 
 .codex-account-card .tier-badge.free,
+.pelican-account-summary .tier-badge.free,
 .codex-accounts-page .account-table .tier-badge.free,
 .codex-oauth-binding-row .tier-badge.free {
   background: var(--plan-free-bg);
@@ -165,6 +168,7 @@
 }
 
 .codex-account-card .tier-badge.plus,
+.pelican-account-summary .tier-badge.plus,
 .codex-accounts-page .account-table .tier-badge.plus,
 .codex-oauth-binding-row .tier-badge.plus {
   background: var(--plan-plus-bg);
@@ -174,6 +178,7 @@
 
 .tier-badge.codex-plus,
 .codex-account-card .tier-badge.codex-plus,
+.pelican-account-summary .tier-badge.codex-plus,
 .codex-accounts-page .account-table .tier-badge.codex-plus,
 .codex-oauth-binding-row .tier-badge.codex-plus,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-plus,
@@ -188,6 +193,7 @@
 }
 
 .codex-account-card .tier-badge.team,
+.pelican-account-summary .tier-badge.team,
 .codex-accounts-page .account-table .tier-badge.team,
 .codex-oauth-binding-row .tier-badge.team {
   background: var(--plan-team-bg);
@@ -196,6 +202,7 @@
 }
 
 .codex-account-card .tier-badge.enterprise,
+.pelican-account-summary .tier-badge.enterprise,
 .codex-accounts-page .account-table .tier-badge.enterprise,
 .codex-oauth-binding-row .tier-badge.enterprise {
   background: var(--plan-enterprise-bg);
@@ -204,6 +211,7 @@
 }
 
 .codex-account-card .tier-badge.pro,
+.pelican-account-summary .tier-badge.pro,
 .codex-accounts-page .account-table .tier-badge.pro,
 .codex-oauth-binding-row .tier-badge.pro {
   background: var(--plan-pro-bg);
@@ -213,6 +221,7 @@
 
 .tier-badge.codex-pro-lite,
 .codex-account-card .tier-badge.codex-pro-lite,
+.pelican-account-summary .tier-badge.codex-pro-lite,
 .codex-accounts-page .account-table .tier-badge.codex-pro-lite,
 .codex-oauth-binding-row .tier-badge.codex-pro-lite,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-pro-lite,
@@ -227,16 +236,17 @@
 
 .tier-badge.codex-pro-max,
 .codex-account-card .tier-badge.codex-pro-max,
+.pelican-account-summary .tier-badge.codex-pro-max,
 .codex-accounts-page .account-table .tier-badge.codex-pro-max,
 .codex-oauth-binding-row .tier-badge.codex-pro-max,
 .codex-accounts-page .folder-preview-item .tier-badge.codex-pro-max,
 .codex-wakeup-account-chip .tier-badge.codex-pro-max {
-  background: linear-gradient(135deg, #fff7cc 0%, #f6d365 42%, #d99b16 100%);
+  background: linear-gradient(135deg, #fff4d4 0%, #efd394 42%, #d4aa54 100%);
   color: #5a3700;
-  border: 1px solid rgba(180, 116, 11, 0.42);
+  border: 1px solid rgba(180, 116, 11, 0.34);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 1px 3px rgba(180, 116, 11, 0.2);
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 1px 3px rgba(180, 116, 11, 0.12);
 }
 
 .tier-badge.new-api-exclusive,
@@ -357,6 +367,39 @@
   white-space: nowrap;
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.codex-team-quota-history {
+  grid-column: 1 / -1;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.codex-team-history-window {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  min-width: 0;
+}
+
+.codex-accounts-page .codex-team-history-reset.pending {
+  background: rgba(59, 130, 246, 0.07);
+  border-color: rgba(59, 130, 246, 0.22);
+}
+
+.codex-accounts-page .codex-team-history-reset {
+  flex-wrap: wrap;
+}
+
+.codex-accounts-page .codex-team-history-reset .codex-subscription-footer-main {
+  white-space: normal;
+}
+
+.codex-accounts-page .codex-team-history-reset .codex-subscription-footer-date {
+  margin-left: auto;
 }
 
 .codex-accounts-page .codex-subscription-footer {
@@ -1394,7 +1437,7 @@
   margin-top: 8px;
 }
 
-.codex-api-key-usage-detail-modal {
+.modal-content.codex-api-key-usage-detail-modal {
   width: min(760px, calc(100vw - 32px));
 }
 
@@ -1680,10 +1723,99 @@
   cursor: not-allowed;
 }
 
+.codex-accounts-page .codex-top-layout-save-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 5%, var(--bg-card));
+  color: var(--text-primary);
+}
+
+.codex-accounts-page .codex-top-layout-save-error > svg {
+  flex-shrink: 0;
+  color: var(--danger);
+}
+
+.codex-accounts-page .codex-top-layout-save-error > span {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
 /* Compact 布局（新增，不影响原 grid/list） */
+.codex-accounts-page {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep navigation scrolling within its tab rail, not the whole page. */
+.codex-accounts-page .codex-page-navigation.page-tabs-row-with-leading {
+  grid-template-columns: minmax(140px, 1fr) minmax(0, max-content) minmax(140px, 1fr);
+  justify-content: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.codex-accounts-page .codex-page-navigation .page-tabs {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  width: max-content;
+  justify-self: center;
+}
+
+.codex-accounts-page .codex-page-navigation .page-tabs-leading {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.codex-accounts-page .codex-page-navigation .page-tabs-leading .platform-group-switcher-trigger {
+  max-width: 100%;
+}
+
+.codex-accounts-page .codex-page-navigation .filter-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.codex-accounts-page .toolbar-left {
+  flex: 1 1 480px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.codex-accounts-page .toolbar-left > .tag-filter {
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .codex-accounts-page .codex-page-navigation.page-tabs-row-with-leading {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .codex-accounts-page .codex-page-navigation .page-tabs-leading {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .codex-accounts-page .codex-page-navigation .page-tabs-trailing,
+  .codex-accounts-page .codex-page-navigation .page-tabs-trailing-placeholder {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .codex-accounts-page .codex-page-navigation .page-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 .codex-accounts-page .codex-compact-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 8px;
   padding: 12px;
   background: var(--bg-card);
@@ -1694,15 +1826,31 @@
 
 .codex-accounts-page .codex-compact-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
   padding: 8px 10px;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   min-width: 0;
-  overflow: hidden;
   transition: all 0.15s ease;
+}
+
+.codex-accounts-page .codex-compact-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codex-accounts-page .codex-compact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
 }
 
 .codex-accounts-page .codex-compact-row:hover {
@@ -1737,8 +1885,7 @@
 .codex-accounts-page .codex-compact-email {
   flex: 1;
   min-width: 0;
-  display: inline-flex;
-  align-items: center;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1749,6 +1896,7 @@
 }
 
 .codex-accounts-page .codex-compact-row .codex-client-auth-status-pill {
+  flex-shrink: 0;
   max-width: 118px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1759,7 +1907,8 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  min-width: 240px;
+  min-width: 0;
+  width: 100%;
 }
 
 .codex-accounts-page .codex-compact-quotas .codex-quota-mini-list {
@@ -1910,17 +2059,7 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 960px) {
-  .codex-accounts-page .codex-compact-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 640px) {
-  .codex-accounts-page .codex-compact-list {
-    grid-template-columns: 1fr;
-  }
-
   .codex-group-entry-grid {
     grid-template-columns: 1fr;
   }
@@ -2333,6 +2472,9 @@
 }
 
 .codex-accounts-page .account-table-container {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
   background: var(--bg-card);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
@@ -2377,9 +2519,21 @@
 .codex-accounts-page
   .account-table
   th.sticky-action-header.table-action-header {
-  background: var(--bg-card);
+  background: var(--bg-surface);
   z-index: 30;
   border-left: 1px solid var(--border-light);
+}
+
+.codex-accounts-page .account-table .sticky-action-cell {
+  background: var(--bg-surface);
+}
+
+.codex-accounts-page .account-table tr:hover .sticky-action-cell {
+  background: color-mix(in srgb, var(--primary) 4%, var(--bg-surface));
+}
+
+.codex-accounts-page .account-table tr.current .sticky-action-cell {
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-surface));
 }
 
 .codex-accounts-page .account-table tr.current {

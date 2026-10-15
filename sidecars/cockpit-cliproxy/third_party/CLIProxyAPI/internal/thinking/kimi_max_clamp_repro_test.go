@@ -10,9 +10,9 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// Reproduces Claude Code -> Kimi /v1/messages with effort=max.
+// Claude Code adaptive effort is converted to the K2.5 token-budget contract.
 // KimiExecutor delegates to ClaudeExecutor, so ApplyThinking sees claude/claude.
-func TestKimiClaudeMessagesMaxClampsToHigh(t *testing.T) {
+func TestKimiClaudeMessagesMaxUsesTokenBudget(t *testing.T) {
 	models := registry.GetKimiModels()
 	reg := registry.GetGlobalRegistry()
 	clientID := "test-kimi-max-clamp"
@@ -24,10 +24,13 @@ func TestKimiClaudeMessagesMaxClampsToHigh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyThinking returned error: %v", err)
 	}
-	if got := gjson.GetBytes(out, "thinking.type").String(); got != "adaptive" {
-		t.Fatalf("thinking.type = %q, want adaptive", got)
+	if got := gjson.GetBytes(out, "thinking.type").String(); got != "enabled" {
+		t.Fatalf("thinking.type = %q, want enabled", got)
 	}
-	if got := gjson.GetBytes(out, "output_config.effort").String(); got != "high" {
-		t.Fatalf("output_config.effort = %q, want high", got)
+	if got := gjson.GetBytes(out, "thinking.budget_tokens").Int(); got != 32000 {
+		t.Fatalf("thinking.budget_tokens = %d, want 32000", got)
+	}
+	if gjson.GetBytes(out, "output_config.effort").Exists() {
+		t.Fatalf("budget-based K2.5 must not receive adaptive effort: %s", out)
 	}
 }

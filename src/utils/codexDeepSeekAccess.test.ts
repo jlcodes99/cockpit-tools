@@ -121,7 +121,8 @@ test("keeps last official startup model or falls back to Flash", () => {
   );
   assert.equal(
     resolveDeepSeekStartupModel({ api_startup_model: "gpt-5.5" }),
-    "deepseek-v4-flash",
+    // 官方新名 `deepseek-flash` 与 DeepSeek 模型目录（DEEPSEEK_CODEX_MODEL_CATALOG）保持一致。
+    "deepseek-flash",
   );
   assert.equal(
     parseCodexBoundAccountId(`${CODEX_PROVIDER_GATEWAY_BIND_PREFIX}acc-2`),

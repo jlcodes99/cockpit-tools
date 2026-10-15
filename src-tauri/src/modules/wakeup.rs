@@ -925,7 +925,8 @@ async fn resolve_requested_model_for_official_ls(
                                 let details = parsed.get("error").and_then(|e| e.get("details"));
                                 let appeal_url = extract_appeal_url_from_error_details(details);
                                 let validation_url =
-                                    extract_validation_url_from_error_details(details);
+                                    extract_validation_url_from_error_details(details)
+                                        .map(|u| crate::modules::quota::format_google_validation_url(&u, &account.email));
                                 let message = parsed
                                     .get("error")
                                     .and_then(|e| e.get("message"))
@@ -1565,7 +1566,7 @@ async fn trigger_wakeup_via_client_gateway_once(
                 return Ok(parsed);
             }
 
-            if let Some(err) = extract_gateway_error_from_trajectory(&get_resp) {
+            if let Some(mut err) = extract_gateway_error_from_trajectory(&get_resp) {
                 if is_cascade_status_running(&last_status) {
                     if poll_idx == 0 || poll_idx % 8 == 0 {
                         crate::modules::logger::log_warn(&format!(
@@ -1583,6 +1584,12 @@ async fn trigger_wakeup_via_client_gateway_once(
                     )
                     .await?;
                     continue;
+                }
+
+                if let Some(ref u) = err.validation_url {
+                    if let Ok(account) = modules::load_account(account_id) {
+                        err.validation_url = Some(crate::modules::quota::format_google_validation_url(u, &account.email));
+                    }
                 }
 
                 if err.error_code == Some(403) {

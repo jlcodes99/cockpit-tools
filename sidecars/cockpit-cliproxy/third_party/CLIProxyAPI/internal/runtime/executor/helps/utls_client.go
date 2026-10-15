@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync"
 	"time"
@@ -26,7 +27,8 @@ import (
 // providers that require a browser-like TLS and HTTP/2 transport. Each request
 // gets a dedicated connection that is closed with the response body.
 type utlsRoundTripper struct {
-	dialer proxy.Dialer
+	dialer   proxy.Dialer
+	proxyURL string
 }
 
 type closeConnectionBody struct {
@@ -56,18 +58,26 @@ func (b *closeConnectionBody) Close() error {
 
 func newUtlsRoundTripper(proxyURL string) *utlsRoundTripper {
 	var dialer proxy.Dialer = proxy.Direct
+	actualProxyURL := ""
 	if proxyURL != "" {
 		proxyDialer, mode, errBuild := proxyutil.BuildDialer(proxyURL)
 		if errBuild != nil {
 			log.Errorf("utls: failed to configure proxy dialer for %q: %v", proxyutil.Redact(proxyURL), errBuild)
 		} else if mode != proxyutil.ModeInherit && proxyDialer != nil {
 			dialer = proxyDialer
+			if mode == proxyutil.ModeProxy {
+				actualProxyURL = proxyURL
+			}
 		}
 	}
-	return &utlsRoundTripper{dialer: dialer}
+	return &utlsRoundTripper{dialer: dialer, proxyURL: actualProxyURL}
 }
 
 func (t *utlsRoundTripper) createConnection(ctx context.Context, host, addr string) (*http2.ClientConn, error) {
+	trace := httptrace.ContextClientTrace(ctx)
+	if trace != nil && trace.GetConn != nil {
+		trace.GetConn(addr)
+	}
 	contextDialer, ok := t.dialer.(proxy.ContextDialer)
 	if !ok {
 		return nil, fmt.Errorf("utls: dialer does not support context cancellation")
@@ -99,6 +109,11 @@ func (t *utlsRoundTripper) createConnection(ctx context.Context, host, addr stri
 		return nil, fmt.Errorf("utls: initialize HTTP/2 connection: %w", errClientConn)
 	}
 
+	// ClientConn.RoundTrip bypasses the transport-level GotConn callback. Report
+	// the actual socket and dialer route before sending the HTTP/2 request.
+	if trace != nil && trace.GotConn != nil {
+		trace.GotConn(httptrace.GotConnInfo{Conn: &proxyRouteConn{Conn: conn, proxyURL: t.proxyURL}})
+	}
 	return h2Conn, nil
 }
 
@@ -353,13 +368,17 @@ type fallbackRoundTripper struct {
 }
 
 func (f *fallbackRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f.transportForRequest(req).RoundTrip(req)
+}
+
+func (f *fallbackRoundTripper) transportForRequest(req *http.Request) http.RoundTripper {
 	if IsAnthropicUpstreamURL(req.URL) {
-		return f.anthropic.RoundTrip(req)
+		return f.anthropic
 	}
 	if req.URL.Scheme == "https" && strings.EqualFold(req.URL.Hostname(), "chatgpt.com") {
-		return f.chrome.RoundTrip(req)
+		return f.chrome
 	}
-	return f.fallback.RoundTrip(req)
+	return f.fallback
 }
 
 // NewUtlsHTTPClient creates an HTTP client using provider-specific TLS

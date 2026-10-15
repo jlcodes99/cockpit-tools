@@ -11,7 +11,17 @@ import {
   findCodexApiProviderPresetByBaseUrl,
   findCodexApiProviderPresetById,
 } from "./codexProviderPresets.ts";
-import { resolveCodexProviderCapabilityProfile } from "./codexProviderGateway.ts";
+import { canConfigureCodexProviderVision, resolveCodexProviderCapabilityProfile } from "./codexProviderGateway.ts";
+
+test("third-party Responses providers expose preserved vision settings", () => {
+  for (const presetId of ["custom", "packycode", "openrouter"]) {
+    assert.equal(canConfigureCodexProviderVision({ presetId, wireApi: "responses" }), true);
+  }
+  for (const presetId of ["openai_official", "deepseek"]) {
+    assert.equal(canConfigureCodexProviderVision({ presetId, wireApi: "responses" }), false);
+  }
+  assert.equal(canConfigureCodexProviderVision({ presetId: "deepseek", wireApi: "chat_completions" }), true);
+});
 
 test("OpenRouter preset includes the current Luna Pro model id", () => {
   const preset = findCodexApiProviderPresetByBaseUrl(

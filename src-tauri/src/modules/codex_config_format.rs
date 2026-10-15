@@ -98,33 +98,142 @@ pub fn write_codex_config_toml_atomic(path: &Path, content: &str) -> Result<(), 
     crate::modules::atomic_write::write_string_atomic(path, content)
 }
 
+fn sibling_config_backup_path(path: &Path) -> Option<std::path::PathBuf> {
+    let name = path.file_name()?.to_str()?;
+    if name.ends_with(".bak") {
+        return None;
+    }
+    Some(path.with_file_name(format!("{}.bak", name)))
+}
+
+fn decode_utf16_units(bytes: &[u8], little_endian: bool) -> Option<String> {
+    if bytes.len() % 2 != 0 {
+        return None;
+    }
+    let units = bytes
+        .chunks_exact(2)
+        .map(|chunk| {
+            if little_endian {
+                u16::from_le_bytes([chunk[0], chunk[1]])
+            } else {
+                u16::from_be_bytes([chunk[0], chunk[1]])
+            }
+        })
+        .collect::<Vec<_>>();
+    String::from_utf16(&units).ok()
+}
+
+fn decode_codex_config_bytes(bytes: &[u8]) -> Result<(String, bool), String> {
+    if bytes.is_empty() {
+        return Ok((String::new(), false));
+    }
+    if bytes.starts_with(&[0xFF, 0xFE]) {
+        return decode_utf16_units(&bytes[2..], true)
+            .map(|text| (text, true))
+            .ok_or_else(|| "UTF-16 LE 配置无法解码".to_string());
+    }
+    if bytes.starts_with(&[0xFE, 0xFF]) {
+        return decode_utf16_units(&bytes[2..], false)
+            .map(|text| (text, true))
+            .ok_or_else(|| "UTF-16 BE 配置无法解码".to_string());
+    }
+    match std::str::from_utf8(bytes) {
+        Ok(text) => Ok((text.to_string(), false)),
+        Err(_) => decode_utf16_units(bytes, true)
+            .map(|text| (text, true))
+            .ok_or_else(|| "配置既不是 UTF-8 也不是 UTF-16".to_string()),
+    }
+}
+
+fn read_codex_config_file_text(path: &Path) -> Result<Option<(String, bool)>, String> {
+    match fs::read(path) {
+        Ok(bytes) => decode_codex_config_bytes(&bytes).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "读取 Codex config.toml 失败 ({}): {}",
+            path.display(),
+            error
+        )),
+    }
+}
+
+fn write_repaired_codex_config(path: &Path, doc: &Document) -> Result<(), String> {
+    let normalized = normalize_config_toml_spacing(&doc.to_string());
+    write_codex_config_toml_atomic(path, &normalized)
+}
+
+fn recover_invalid_codex_config(
+    path: &Path,
+    parse_error: &str,
+) -> Result<(Document, bool), String> {
+    if let Some(backup_path) = sibling_config_backup_path(path) {
+        if let Ok(Some((backup_text, _))) = read_codex_config_file_text(&backup_path) {
+            if !backup_text.trim().is_empty() {
+                if let Ok((doc, _)) = parse_codex_config_doc(&backup_text) {
+                    let quarantined = crate::modules::atomic_write::quarantine_file(
+                        path,
+                        "invalid-toml",
+                    )?;
+                    write_repaired_codex_config(path, &doc)?;
+                    crate::modules::logger::log_warn(&format!(
+                        "[Codex Config] 已从备份恢复损坏的 config.toml: path={}, backup={}, quarantined={:?}, error={}",
+                        path.display(),
+                        backup_path.display(),
+                        quarantined,
+                        parse_error
+                    ));
+                    return Ok((doc, true));
+                }
+            }
+        }
+    }
+
+    let quarantined =
+        crate::modules::atomic_write::quarantine_file(path, "invalid-toml")?;
+    crate::modules::logger::log_warn(&format!(
+        "[Codex Config] 已隔离无法解析的 config.toml 并继续使用空配置: path={}, quarantined={:?}, error={}",
+        path.display(),
+        quarantined,
+        parse_error
+    ));
+    Ok((Document::new(), true))
+}
+
+pub fn load_codex_config_doc(path: &Path) -> Result<Document, String> {
+    Ok(repair_codex_config_toml_file(path)?.0)
+}
+
+pub fn repair_codex_config_toml_file(path: &Path) -> Result<(Document, bool), String> {
+    let Some((text, reencoded)) = read_codex_config_file_text(path)? else {
+        return Ok((Document::new(), false));
+    };
+    if text.trim().is_empty() {
+        return Ok((Document::new(), false));
+    }
+
+    match parse_codex_config_doc(&text) {
+        Ok((doc, changed)) => {
+            if reencoded || changed {
+                write_repaired_codex_config(path, &doc)?;
+                crate::modules::logger::log_info(&format!(
+                    "[Codex Config] 已规范化 config.toml: path={}, reencoded={}, sanitized={}",
+                    path.display(),
+                    reencoded,
+                    changed
+                ));
+                return Ok((doc, true));
+            }
+            Ok((doc, false))
+        }
+        Err(error) => recover_invalid_codex_config(path, &error),
+    }
+}
+
 fn strip_utf8_bom(content: &str) -> (&str, bool) {
     match content.strip_prefix(UTF8_BOM) {
         Some(stripped) => (stripped, true),
         None => (content, false),
     }
-}
-
-fn contains_toml_unicode_escape(value: &str) -> bool {
-    let chars = value.chars().collect::<Vec<_>>();
-    let mut index = 0usize;
-    while index + 1 < chars.len() {
-        if chars[index] == '\\' && matches!(chars[index + 1], 'u' | 'U') {
-            let expected_len = if chars[index + 1] == 'u' { 4 } else { 8 };
-            if chars
-                .iter()
-                .skip(index + 2)
-                .take(expected_len)
-                .filter(|ch| ch.is_ascii_hexdigit())
-                .count()
-                == expected_len
-            {
-                return true;
-            }
-        }
-        index += 1;
-    }
-    false
 }
 
 fn is_table_header_line(trimmed_line: &str) -> bool {
@@ -141,12 +250,12 @@ fn header_parses_as_toml_table(trimmed_line: &str) -> bool {
         .is_ok()
 }
 
+/// 只有「残缺头部」和「无法作为 TOML 表解析」才算不安全。
+/// `[projects.'E:\中文项目\店铺管理']` 这类含非 ASCII 的合法路径（Codex 自己的写法，单引号字面量）
+/// 以及带 `\uXXXX` 转义的合法写法都必须保留，不能仅因为不是 ASCII 就整段删除。
 fn is_unsafe_projects_header(trimmed_line: &str) -> bool {
     is_projects_table_header(trimmed_line)
-        && (!trimmed_line.contains(']')
-            || !trimmed_line.is_ascii()
-            || contains_toml_unicode_escape(trimmed_line)
-            || !header_parses_as_toml_table(trimmed_line))
+        && (!trimmed_line.contains(']') || !header_parses_as_toml_table(trimmed_line))
 }
 
 fn remove_project_sections(content: &str, aggressive: bool) -> (String, bool) {
@@ -316,54 +425,14 @@ fn inspect_codex_config_file(path: &Path) -> Result<String, String> {
 }
 
 fn sanitize_codex_config_toml_file_once(path: &Path) -> Result<bool, String> {
-    let content = match fs::read_to_string(path) {
-        Ok(content) => content,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => {
-            return Err(format!(
-                "读取 Codex config.toml 失败 ({}): {}",
-                path.display(),
-                error
-            ));
-        }
-    };
-    if content.trim().is_empty() {
-        return Ok(false);
-    }
-
-    prepare_codex_config_file_for_write(path)?;
-
-    let (doc, input_changed) = parse_codex_config_doc(&content).map_err(|error| {
-        format!(
-            "解析 Codex config.toml 失败 ({}): {}",
-            path.display(),
-            error
-        )
-    })?;
-    if !input_changed {
-        return Ok(false);
-    }
-
-    let normalized = normalize_config_toml_spacing(&doc.to_string());
-    write_codex_config_toml_atomic(path, &normalized).map_err(|error| {
-        format!(
-            "写入 Codex config.toml 失败 ({}): {}",
-            path.display(),
-            error
-        )
-    })?;
-    crate::modules::logger::log_info(&format!(
-        "[Codex Config] sanitized config.toml before launch: {}",
-        path.display()
-    ));
-    Ok(true)
+    Ok(repair_codex_config_toml_file(path)?.1)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        codex_config_doc_to_string, normalize_config_toml_spacing, parse_codex_config_doc,
-        sanitize_codex_config_toml_file,
+        codex_config_doc_to_string, load_codex_config_doc, normalize_config_toml_spacing,
+        parse_codex_config_doc, sanitize_codex_config_toml_file,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -450,21 +519,33 @@ features = true
     }
 
     #[test]
-    fn parse_removes_non_ascii_project_sections() {
-        let input = "model = \"gpt-5\"\n\n[projects.'C:\\Users\\demo\\赚钱']\ntrust_level = \"trusted\"\n\n[mcp_servers.demo]\ncommand = \"node\"\n";
+    fn parse_keeps_non_ascii_project_sections() {
+        let input = "model = \"gpt-5\"\n\n[projects.'E:\\中文项目\\店铺管理']\ntrust_level = \"trusted\"\n\n[mcp_servers.demo]\ncommand = \"node\"\n";
         let (doc, changed) = parse_codex_config_doc(input).expect("parse config");
         let output = doc.to_string();
 
-        assert!(changed);
+        assert!(!changed);
         assert!(output.contains("model = \"gpt-5\""));
         assert!(output.contains("[mcp_servers.demo]"));
-        assert!(!output.contains("[projects."));
-        assert!(!output.contains("trust_level"));
+        assert!(output.contains("[projects."));
+        assert!(output.contains("trust_level = \"trusted\""));
     }
 
     #[test]
-    fn parse_removes_unicode_escape_project_sections() {
+    fn parse_keeps_unicode_escape_project_sections() {
         let input = "model = \"gpt-5\"\n\n[projects.\"C:\\\\Users\\\\demo\\\\GitHub\\u8d5a\\u94b1\"]\ntrust_level = \"trusted\"\n";
+        let (doc, changed) = parse_codex_config_doc(input).expect("parse config");
+        let output = doc.to_string();
+
+        assert!(!changed);
+        assert!(output.contains("model = \"gpt-5\""));
+        assert!(output.contains("[projects."));
+        assert!(output.contains("trust_level = \"trusted\""));
+    }
+
+    #[test]
+    fn parse_removes_project_sections_with_unescaped_backslash_header() {
+        let input = "model = \"gpt-5\"\n\n[projects.\"C:\\Users\\demo\\repo\"]\ntrust_level = \"trusted\"\n";
         let (doc, changed) = parse_codex_config_doc(input).expect("parse config");
         let output = doc.to_string();
 
@@ -517,7 +598,95 @@ features = true
         assert!(backup.contains("[features]"));
         assert!(backup.contains("memories = true"));
         assert!(backup.contains("model = \"gpt-5\""));
+        let _ = fs::remove_dir_all(&dir);
+    }
 
+    #[test]
+    fn sanitize_keeps_non_ascii_project_trust_entries_on_disk() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let config_path = dir.join("config.toml");
+        let backup_path = dir.join("config.toml.bak");
+        let input =
+            "model = \"gpt-5\"\n\n[projects.'E:\\中文项目\\店铺管理']\ntrust_level = \"trusted\"\n";
+        fs::write(&config_path, input).expect("write config");
+        fs::write(&backup_path, input).expect("write backup");
+
+        assert!(!sanitize_codex_config_toml_file(&config_path).expect("sanitize config"));
+
+        assert_eq!(fs::read_to_string(&config_path).expect("read config"), input);
+        assert_eq!(fs::read_to_string(&backup_path).expect("read backup"), input);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_restores_invalid_config_from_backup() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let config_path = dir.join("config.toml");
+        fs::write(&config_path, "{\"model\":\"gpt-5\"}\n").expect("write invalid config");
+        fs::write(dir.join("config.toml.bak"), "model = \"gpt-5.5\"\n").expect("write backup");
+
+        let doc = load_codex_config_doc(&config_path).expect("load recovered config");
+        assert_eq!(
+            doc.get("model").and_then(|item| item.as_str()),
+            Some("gpt-5.5")
+        );
+        let restored = fs::read_to_string(&config_path).expect("read restored config");
+        assert!(restored.contains("model = \"gpt-5.5\""));
+        let quarantined = fs::read_dir(&dir)
+            .expect("read dir")
+            .flatten()
+            .any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("config.toml.invalid-toml.")
+            });
+        assert!(quarantined, "invalid config should be quarantined");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_quarantines_invalid_config_without_backup() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let config_path = dir.join("config.toml");
+        fs::write(&config_path, "{not toml").expect("write invalid config");
+
+        let doc = load_codex_config_doc(&config_path).expect("load empty recovered config");
+        assert!(doc.as_table().is_empty() || doc.get("model").is_none());
+        assert!(!config_path.exists());
+        let quarantined = fs::read_dir(&dir)
+            .expect("read dir")
+            .flatten()
+            .any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("config.toml.invalid-toml.")
+            });
+        assert!(quarantined);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_rewrites_utf16_config_as_utf8() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let config_path = dir.join("config.toml");
+        let text = "model = \"gpt-5\"\n";
+        let mut encoded = vec![0xFF, 0xFE];
+        encoded.extend(text.encode_utf16().flat_map(|unit| unit.to_le_bytes()));
+        fs::write(&config_path, encoded).expect("write utf16 config");
+
+        let doc = load_codex_config_doc(&config_path).expect("load utf16 config");
+        assert_eq!(
+            doc.get("model").and_then(|item| item.as_str()),
+            Some("gpt-5")
+        );
+        let restored = fs::read_to_string(&config_path).expect("read rewritten utf8 config");
+        assert!(restored.contains("model = \"gpt-5\""));
         let _ = fs::remove_dir_all(&dir);
     }
 }

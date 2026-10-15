@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useEscCloseTopmost } from "../hooks/useEscClose";
 import { Check, ChevronDown } from "lucide-react";
 import "./SingleSelectDropdown.css";
+import { dropdownLayer, dropdownPlacement, type DropdownPlacement } from "../utils/dropdownPlacement";
 
 export interface SingleSelectOption {
   value: string;
@@ -36,16 +38,19 @@ export function SingleSelectDropdown({
   menuMaxHeight = 280,
 }: SingleSelectDropdownProps) {
   const [open, setOpen] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-    width: number;
-    maxHeight: number;
-  } | null>(null);
+  const [menuStyle, setMenuStyle] = useState<DropdownPlacement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const closeMenu = () => { setOpen(false); triggerRef.current?.focus(); };
+  useEscCloseTopmost(open, closeMenu, menuRef);
+  useEffect(() => {
+    if (open && menuStyle) {
+      (menuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+        ?? menuRef.current?.querySelector<HTMLElement>('[role="option"]'))?.focus();
+    }
+  }, [open, Boolean(menuStyle)]);
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
@@ -66,35 +71,20 @@ export function SingleSelectDropdown({
       }
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const width = menuWidth ? Math.max(rect.width, menuWidth) : rect.width;
-      const left = Math.min(
-        rect.left,
-        Math.max(12, window.innerWidth - width - 12),
-      );
-      const nextStyle =
-        menuPlacement === "up"
-          ? {
-              bottom: Math.round(window.innerHeight - rect.top + 10),
-              left: Math.round(left),
-              width: Math.round(width),
-              maxHeight: Math.min(menuMaxHeight, Math.max(160, rect.top - 20)),
-            }
-          : {
-              top: Math.round(rect.bottom + 10),
-              left: Math.round(left),
-              width: Math.round(width),
-              maxHeight: Math.min(
-                menuMaxHeight,
-                Math.max(160, window.innerHeight - rect.bottom - 20),
-              ),
-            };
+      const layers: string[] = [];
+      for (let ancestor: Element | null = triggerRef.current; ancestor; ancestor = ancestor.parentElement) {
+        layers.push(window.getComputedStyle(ancestor).zIndex);
+      }
+      const nextStyle = dropdownPlacement(rect, { width: window.innerWidth, height: window.innerHeight },
+        menuPlacement, menuWidth, menuMaxHeight, dropdownLayer(layers));
       setMenuStyle((prev) =>
         prev &&
         prev.top === nextStyle.top &&
         prev.bottom === nextStyle.bottom &&
         prev.left === nextStyle.left &&
         prev.width === nextStyle.width &&
-        prev.maxHeight === nextStyle.maxHeight
+        prev.maxHeight === nextStyle.maxHeight &&
+        prev.zIndex === nextStyle.zIndex
           ? prev
           : nextStyle,
       );
@@ -149,6 +139,12 @@ export function SingleSelectDropdown({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
         onClick={() => {
           if (disabled) return;
           setOpen((prev) => !prev);
@@ -180,7 +176,17 @@ export function SingleSelectDropdown({
                 left: `${menuStyle.left}px`,
                 width: `${menuStyle.width}px`,
                 maxHeight: `${menuStyle.maxHeight}px`,
-                zIndex: 11000,
+                zIndex: menuStyle.zIndex,
+              }}
+              onKeyDown={(event) => {
+                const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? []);
+                const index = items.indexOf(document.activeElement as HTMLElement);
+                if (event.key === "Tab") { event.preventDefault(); closeMenu(); }
+                if (!items.length) return;
+                const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+                  : event.key === "ArrowDown" ? (index + 1) % items.length
+                  : event.key === "ArrowUp" ? (index - 1 + items.length) % items.length : -1;
+                if (next >= 0) { event.preventDefault(); items[next].focus(); }
               }}
               role="listbox"
               aria-label={ariaLabel}
@@ -194,7 +200,7 @@ export function SingleSelectDropdown({
                     className={`single-select-dropdown-item${active ? " active" : ""}`}
                     onClick={() => {
                       onChange(option.value);
-                      setOpen(false);
+                      closeMenu();
                     }}
                     role="option"
                     aria-selected={active}

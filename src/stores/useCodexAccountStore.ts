@@ -10,17 +10,21 @@ import {
   hasCodexAccountName,
   isCodexTeamLikePlan,
   isCodexPendingOAuthAccount,
+  isCodexApiKeyAccount,
+  isCodexAgentIdentityAccount,
 } from '../types/codex';
 import * as codexService from '../services/codexService';
 import { removeAccountIdsFromAllCodexGroups } from '../services/codexAccountGroupService';
 import { emitAccountsChanged, emitCurrentAccountChanged } from '../utils/accountSyncEvents';
+import { withoutCachedProxySecret } from '../utils/codexProxyCache';
+import { createSerialAccountRefreshQueue } from '../utils/serialAccountRefreshQueue';
+import { createCoalescedWriter } from '../utils/coalescedWriter';
+import { mergeCodexProfileResult } from '../utils/codexProfileRefresh';
 
 const APP_PROFILE = (import.meta.env.VITE_COCKPIT_TOOLS_PROFILE || '').trim();
 const STORAGE_PROFILE_SUFFIX = APP_PROFILE && APP_PROFILE !== 'prod' ? `.${APP_PROFILE}` : '';
 const CODEX_ACCOUNTS_CACHE_KEY = `agtools.codex.accounts.cache${STORAGE_PROFILE_SUFFIX}`;
 const CODEX_CURRENT_ACCOUNT_CACHE_KEY = `agtools.codex.accounts.current${STORAGE_PROFILE_SUFFIX}`;
-const CODEX_PROFILE_SYNC_IN_FLIGHT = new Set<string>();
-const CODEX_PROFILE_SYNC_LAST_ATTEMPT = new Map<string, number>();
 const CODEX_PROFILE_SYNC_RETRY_INTERVAL_MS = 5 * 60 * 1000;
 let fetchCodexAccountsSeq = 0;
 let fetchCodexCurrentAccountSeq = 0;
@@ -36,7 +40,13 @@ const loadCachedCodexAccounts = () => {
     const raw = localStorage.getItem(CODEX_ACCOUNTS_CACHE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const accounts = parsed.filter((account) => account && typeof account === 'object');
+    const sanitized = accounts.map(withoutCachedProxySecret);
+    if (accounts.some((account) => Object.prototype.hasOwnProperty.call(account, 'egress_proxy_url'))) {
+      try { localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(sanitized)); } catch { /* cache is optional */ }
+    }
+    return sanitized;
   } catch {
     return [];
   }
@@ -46,7 +56,13 @@ const loadCachedCodexCurrentAccount = () => {
   try {
     const raw = localStorage.getItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as CodexAccount;
+    const parsed = JSON.parse(raw) as CodexAccount | null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const sanitized = withoutCachedProxySecret(parsed);
+    if (Object.prototype.hasOwnProperty.call(parsed, 'egress_proxy_url')) {
+      try { localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(sanitized)); } catch { /* cache is optional */ }
+    }
+    return sanitized;
   } catch {
     return null;
   }
@@ -55,13 +71,15 @@ const loadCachedCodexCurrentAccount = () => {
 const initialCachedCodexAccounts = loadCachedCodexAccounts();
 const initialCachedCodexCurrentAccount = loadCachedCodexCurrentAccount();
 
-const persistCodexAccountsCache = (accounts: CodexAccount[]) => {
+const codexAccountsCacheWriter = createCoalescedWriter((accounts: CodexAccount[]) => {
   try {
-    localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(accounts));
+    localStorage.setItem(CODEX_ACCOUNTS_CACHE_KEY, JSON.stringify(accounts.map(withoutCachedProxySecret)));
   } catch {
     // ignore cache write failures
   }
-};
+});
+const persistCodexAccountsCache = codexAccountsCacheWriter.schedule;
+window.addEventListener('pagehide', codexAccountsCacheWriter.flush);
 
 const persistCodexCurrentAccountCache = (account: CodexAccount | null) => {
   try {
@@ -69,15 +87,18 @@ const persistCodexCurrentAccountCache = (account: CodexAccount | null) => {
       localStorage.removeItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY);
       return;
     }
-    localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(account));
+    localStorage.setItem(CODEX_CURRENT_ACCOUNT_CACHE_KEY, JSON.stringify(withoutCachedProxySecret(account)));
   } catch {
     // ignore cache write failures
   }
 };
 
 const shouldHydrateCodexProfile = (account: CodexAccount): boolean =>
-  !hasCodexAccountStructure(account) ||
-  (isCodexTeamLikePlan(account.plan_type) && !hasCodexAccountName(account));
+  !isCodexApiKeyAccount(account) &&
+  !isCodexAgentIdentityAccount(account) &&
+  !isCodexPendingOAuthAccount(account) &&
+  (!hasCodexAccountStructure(account) ||
+    (isCodexTeamLikePlan(account.plan_type) && !hasCodexAccountName(account)));
 
 const CODEX_STALE_ACCOUNT_ERROR = 'CODEX_STALE_ACCOUNT';
 
@@ -96,10 +117,12 @@ const mergeCodexAccountIntoList = (
 
 type FetchCodexAccountsOptions = {
   allowEmpty?: boolean;
+  throwOnError?: boolean;
 };
 
 type FetchCodexCurrentAccountOptions = {
   allowEmpty?: boolean;
+  throwOnError?: boolean;
 };
 
 type SwitchCodexAccountOptions = {
@@ -118,6 +141,7 @@ interface CodexAccountState {
   // Actions
   fetchAccounts: (options?: FetchCodexAccountsOptions) => Promise<void>;
   fetchCurrentAccount: (options?: FetchCodexCurrentAccountOptions) => Promise<void>;
+  restoreActiveTakeoverIfNeeded: () => Promise<void>;
   applyAccountSnapshot: (account: CodexAccount) => void;
   switchAccount: (accountId: string, options?: SwitchCodexAccountOptions) => Promise<CodexAccount>;
   deleteAccount: (accountId: string) => Promise<void>;
@@ -126,7 +150,7 @@ interface CodexAccountState {
   refreshSubscriptionInfo: (accountId: string) => Promise<CodexAccount>;
   refreshAllQuotas: () => Promise<number>;
   hydrateAccountProfilesIfNeeded: (accountIds?: string[]) => Promise<void>;
-  importFromLocal: () => Promise<CodexAccount>;
+  importFromLocal: (instanceId?: string | null) => Promise<CodexAccount>;
   importFromJson: (jsonContent: string) => Promise<CodexAccount[]>;
   updateAccountName: (accountId: string, name: string) => Promise<CodexAccount>;
   updateApiKeyCredentials: (
@@ -151,6 +175,11 @@ interface CodexAccountState {
     boundOauthAccountId: string | null,
   ) => Promise<CodexAccount>;
   updateAccountTags: (accountId: string, tags: string[]) => Promise<CodexAccount>;
+  updateAccountEgressProxy: (
+    accountId: string,
+    egressProxyUrl: string | null,
+    disabled?: boolean,
+  ) => Promise<CodexAccount>;
   updateAccountNote: (
     accountId: string,
     update: string | CodexAccountNoteUpdate,
@@ -160,6 +189,8 @@ interface CodexAccountState {
     accountId: string,
     accessMode?: string | null,
     startupModel?: string | null,
+    imageGenerationAccountIds?: string[] | null,
+    imageGenerationAccountModels?: Record<string, string> | null,
   ) => Promise<CodexAccount>;
 }
 
@@ -184,9 +215,11 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       void get().hydrateAccountProfilesIfNeeded(accounts.map((account) => account.id));
     } catch (e) {
       if (requestId !== fetchCodexAccountsSeq) {
+        if (options?.throwOnError) throw e;
         return;
       }
       set({ error: String(e), loading: false });
+      if (options?.throwOnError) throw e;
     }
   },
 
@@ -202,9 +235,19 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
       persistCodexCurrentAccountCache(currentAccount);
     } catch (e) {
       if (requestId !== fetchCodexCurrentAccountSeq) {
+        if (options?.throwOnError) throw e;
         return;
       }
       console.error('获取当前 Codex 账号失败:', e);
+      if (options?.throwOnError) throw e;
+    }
+  },
+
+  restoreActiveTakeoverIfNeeded: async () => {
+    try {
+      await codexService.restoreCodexActiveTakeoverIfEnabled();
+    } catch (e) {
+      console.warn('[Codex Store] 自动恢复接管失败:', e);
     }
   },
 
@@ -401,49 +444,11 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
   },
 
   hydrateAccountProfilesIfNeeded: async (accountIds?: string[]) => {
-    const now = Date.now();
-    const scope = accountIds ? new Set(accountIds) : null;
-    const candidates = get().accounts.filter(
-      (account) =>
-        (!scope || scope.has(account.id)) &&
-        shouldHydrateCodexProfile(account) &&
-        !CODEX_PROFILE_SYNC_IN_FLIGHT.has(account.id) &&
-        now - (CODEX_PROFILE_SYNC_LAST_ATTEMPT.get(account.id) ?? 0) >=
-          CODEX_PROFILE_SYNC_RETRY_INTERVAL_MS,
-    );
-
-    for (const account of candidates) {
-      CODEX_PROFILE_SYNC_IN_FLIGHT.add(account.id);
-      CODEX_PROFILE_SYNC_LAST_ATTEMPT.set(account.id, now);
-      try {
-        const updatedAccount = await codexService.refreshCodexAccountProfile(account.id);
-        set((state) => {
-          const nextAccounts = state.accounts.map((item) =>
-            item.id === updatedAccount.id ? { ...item, ...updatedAccount } : item,
-          );
-          const nextCurrentAccount =
-            state.currentAccount?.id === updatedAccount.id
-              ? { ...state.currentAccount, ...updatedAccount }
-              : state.currentAccount;
-
-          persistCodexAccountsCache(nextAccounts);
-          persistCodexCurrentAccountCache(nextCurrentAccount);
-
-          return {
-            accounts: nextAccounts,
-            currentAccount: nextCurrentAccount,
-          };
-        });
-      } catch (e) {
-        console.warn('刷新 Codex 账号资料失败:', account.id, e);
-      } finally {
-        CODEX_PROFILE_SYNC_IN_FLIGHT.delete(account.id);
-      }
-    }
+    await codexProfileRefreshQueue.enqueue(accountIds ?? get().accounts.map((account) => account.id));
   },
 
-  importFromLocal: async () => {
-    const account = await codexService.importCodexFromLocal();
+  importFromLocal: async (instanceId?: string | null) => {
+    const account = await codexService.importCodexFromLocal(instanceId);
     await get().fetchAccounts();
     await emitAccountsChanged({
       platformId: 'codex',
@@ -524,6 +529,12 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     return account;
   },
 
+  updateAccountEgressProxy: async (accountId: string, egressProxyUrl: string | null, disabled = false) => {
+    const account = await codexService.updateCodexAccountEgressProxy(accountId, egressProxyUrl, disabled);
+    get().applyAccountSnapshot(account);
+    return account;
+  },
+
   updateAccountNote: async (accountId: string, update: string | CodexAccountNoteUpdate) => {
     const account = await codexService.updateCodexAccountNote(accountId, update);
     await get().fetchAccounts();
@@ -542,14 +553,46 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     accountId: string,
     accessMode?: string | null,
     startupModel?: string | null,
+    imageGenerationAccountIds?: string[] | null,
+    imageGenerationAccountModels?: Record<string, string> | null,
   ) => {
     const account = await codexService.updateCodexAccountInstanceAccess(
       accountId,
       accessMode,
       startupModel,
+      imageGenerationAccountIds,
+      imageGenerationAccountModels,
     );
     await get().fetchAccounts();
     await get().fetchCurrentAccount();
     return account;
   },
 }));
+
+const codexProfileRefreshQueue = createSerialAccountRefreshQueue({
+  retryIntervalMs: CODEX_PROFILE_SYNC_RETRY_INTERVAL_MS,
+  shouldRun: (id) => {
+    const account = useCodexAccountStore.getState().accounts.find((item) => item.id === id);
+    return !!account && shouldHydrateCodexProfile(account);
+  },
+  run: async (id) => {
+    const original = useCodexAccountStore.getState().accounts.find((item) => item.id === id);
+    if (!original) return;
+    const refreshed = await codexService.refreshCodexAccountProfile(id);
+    useCodexAccountStore.setState((state) => {
+      const index = state.accounts.findIndex((item) => item.id === id);
+      if (index < 0) return state;
+      const merged = mergeCodexProfileResult(state.accounts[index], original, refreshed);
+      if (merged === state.accounts[index]) return state;
+      const accounts = [...state.accounts];
+      accounts[index] = merged;
+      const currentAccount = state.currentAccount?.id === id
+        ? mergeCodexProfileResult(state.currentAccount, original, refreshed)
+        : state.currentAccount;
+      persistCodexAccountsCache(accounts);
+      if (currentAccount !== state.currentAccount) persistCodexCurrentAccountCache(currentAccount);
+      return { accounts, currentAccount };
+    });
+  },
+  onError: (id, error) => console.warn('刷新 Codex 账号资料失败:', id, error),
+});

@@ -9,8 +9,7 @@
 
 .codex-experimental-model-summary__header,
 .codex-experimental-model-editor__header,
-.codex-experimental-model-manager-modal__header,
-.codex-experimental-model-custom-context-modal__header {
+.codex-experimental-model-manager-modal__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -50,12 +49,14 @@
 .codex-experimental-model-summary__table-head,
 .codex-experimental-model-summary__row {
   display: grid;
-  min-width: 620px;
+  min-width: 820px;
   grid-template-columns:
-    minmax(130px, 1.2fr)
-    minmax(180px, 1.8fr)
-    minmax(96px, 0.8fr)
-    minmax(110px, 0.9fr)
+    18px
+    minmax(120px, 1.1fr)
+    minmax(160px, 1.5fr)
+    minmax(90px, 0.75fr)
+    minmax(90px, 0.7fr)
+    minmax(105px, 0.85fr)
     52px;
   align-items: center;
   gap: 10px;
@@ -63,12 +64,14 @@
 
 .codex-experimental-model-summary__table-head.has-source,
 .codex-experimental-model-summary__row.has-source {
-  min-width: 720px;
+  min-width: 910px;
   grid-template-columns:
-    minmax(120px, 1.1fr)
-    minmax(180px, 1.7fr)
+    18px
+    minmax(110px, 1fr)
+    minmax(150px, 1.4fr)
     64px
-    minmax(90px, 0.75fr)
+    minmax(80px, 0.7fr)
+    minmax(90px, 0.7fr)
     minmax(105px, 0.85fr)
     52px;
 }
@@ -81,8 +84,17 @@
   font-weight: 600;
 }
 
-.codex-experimental-model-summary__table-head.has-source > span:nth-child(3) {
+.codex-experimental-model-summary__table-head.has-source > span:nth-child(4) {
   text-align: center;
+}
+
+.codex-experimental-model-summary__list.is-sorting {
+  user-select: none;
+}
+
+.codex-experimental-model-summary__row.is-dragging {
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 .codex-experimental-model-summary__list {
@@ -206,10 +218,15 @@
 
 .codex-experimental-model-manager-overlay {
   z-index: 10002;
+  align-items: safe center;
+  overflow-y: auto;
+  padding: 20px;
 }
 
 .codex-experimental-model-custom-context-overlay {
   z-index: 10080;
+  align-items: safe center;
+  overflow-y: auto;
   background: rgb(15 23 42 / 34%);
 }
 
@@ -225,13 +242,18 @@
 }
 
 .codex-experimental-model-manager-modal {
-  width: min(80vw, calc(100vw - 48px));
-  max-height: min(780px, calc(100vh - 48px));
+  width: min(1120px, calc(100vw - 40px));
+  max-width: none;
+  height: min(880px, calc(100vh - 40px));
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
   padding: 18px 22px 20px;
 }
 
 .codex-experimental-model-custom-context-modal {
   width: min(460px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   padding: 18px;
 }
 
@@ -258,7 +280,14 @@
 .codex-experimental-model-manager-modal .codex-experimental-model-editor {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  height: 0;
   overflow: hidden;
+}
+
+.codex-experimental-model-manager-modal
+  .codex-experimental-model-editor__list {
+  max-height: none;
 }
 
 .codex-experimental-model-editor__icon-btn {
@@ -284,29 +313,34 @@
 .codex-experimental-model-editor__table-head,
 .codex-experimental-model-editor__fields {
   display: grid;
-  min-width: 820px;
+  width: 100%;
+  min-width: 0;
   grid-template-columns:
-    minmax(200px, 1.6fr)
-    minmax(160px, 1.2fr)
+    18px
+    minmax(160px, 1.4fr)
+    minmax(130px, 1.1fr)
+    minmax(110px, 0.9fr)
+    minmax(92px, 0.75fr)
     minmax(130px, 1fr)
-    minmax(140px, 1fr)
     64px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .codex-experimental-model-editor__table-head.has-source,
 .codex-experimental-model-editor__fields.has-source {
-  min-width: 900px;
+  min-width: 0;
   grid-template-columns:
-    minmax(190px, 1.4fr)
-    minmax(140px, 1.1fr)
+    18px
+    minmax(150px, 1.2fr)
+    minmax(120px, 1fr)
     76px
-    minmax(130px, 1fr)
+    minmax(110px, 0.9fr)
+    minmax(92px, 0.75fr)
     minmax(130px, 1fr)
     64px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .codex-experimental-model-editor__table-head {
@@ -318,25 +352,50 @@
   letter-spacing: 0.2px;
 }
 
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(1),
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(2) {
-  text-align: left;
-  padding-left: 2px;
-}
-
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(2),
 .codex-experimental-model-editor__table-head.has-source > span:nth-child(3) {
-  text-align: center;
-}
-
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(4),
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(5) {
   text-align: left;
   padding-left: 2px;
 }
 
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(6) {
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(4) {
   text-align: center;
 }
+
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(5),
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(6) {
+  text-align: left;
+  padding-left: 2px;
+}
+
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(8) {
+  text-align: center;
+}
+
+.codex-experimental-model-transfer-btn {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.codex-experimental-model-editor__default-effort {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.codex-experimental-model-default-effort-select .single-select-dropdown-trigger {
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--bg-secondary);
+  box-shadow: none;
+  gap: 4px;
+}
+.codex-experimental-model-default-effort-select .single-select-dropdown-value { font-size: 11px; }
+.codex-experimental-model-default-effort-select .single-select-dropdown-arrow { width: 16px; height: 16px; background: transparent; }
 
 .codex-experimental-model-editor__list {
   display: flex;
@@ -344,21 +403,71 @@
   flex: 1;
   max-height: 520px;
   flex-direction: column;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .codex-experimental-model-editor__list.has-open-menu {
   padding-bottom: 150px;
 }
 
+.codex-experimental-model-editor__list.is-sorting {
+  user-select: none;
+}
+
+.codex-experimental-model-editor__list.is-sorting .codex-experimental-model-editor__row {
+  cursor: grabbing;
+}
+
 .codex-experimental-model-editor__row {
-  min-width: 820px;
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
   padding: 7px 10px;
   border-bottom: 1px solid var(--border-light);
 }
 
 .codex-experimental-model-editor__row:hover {
   background: color-mix(in srgb, var(--primary) 3%, transparent);
+}
+
+.codex-experimental-model-editor__row.is-dragging {
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.codex-experimental-model-editor__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0.35;
+}
+
+.codex-experimental-model-editor__row:hover .codex-experimental-model-editor__drag-handle {
+  opacity: 0.7;
+}
+
+.codex-experimental-model-editor__drag-handle:hover:not(:disabled),
+.codex-experimental-model-editor__drag-handle:focus-visible {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.codex-experimental-model-editor__drag-handle:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.codex-experimental-model-editor__drag-handle:disabled {
+  cursor: not-allowed;
+  opacity: 0.2;
 }
 
 .codex-experimental-model-editor__fields > label,
@@ -519,6 +628,8 @@
 
 .codex-experimental-model-editor__operation-actions {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 5px;
 }
 
@@ -535,6 +646,7 @@
 }
 
 .codex-experimental-model-editor__hint {
+  flex: 0 0 auto;
   margin: 2px 0 0;
   color: var(--text-muted);
   font-size: 11px;
@@ -581,11 +693,19 @@
 }
 
 /* Add Models Dropdown Menu */
+.codex-experimental-model-editor__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .codex-experimental-model-editor__add-wrap {
   position: relative;
 }
 
+.codex-experimental-model-editor__reset-btn,
 .codex-experimental-model-editor__add-btn {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -601,10 +721,17 @@
   transition: all 0.15s ease;
 }
 
+.codex-experimental-model-editor__reset-btn:hover:not(:disabled),
 .codex-experimental-model-editor__add-btn:hover:not(:disabled) {
   border-color: var(--primary);
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, var(--bg-tertiary));
+}
+
+.codex-experimental-model-editor__reset-btn:disabled,
+.codex-experimental-model-editor__add-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .codex-experimental-model-editor__add-btn svg.is-open {
@@ -817,8 +944,8 @@
   }
 
   .codex-experimental-model-manager-modal {
-    width: calc(100vw - 24px);
-    max-height: calc(100vh - 24px);
+    width: calc(100vw - 40px);
+    height: calc(100vh - 40px);
     padding: 16px;
   }
 }
@@ -826,7 +953,7 @@
 @media (max-width: 640px) {
   .codex-experimental-model-summary__table-head,
   .codex-experimental-model-summary__row {
-    min-width: 620px;
+    min-width: 720px;
   }
 
   .codex-experimental-model-custom-context-overlay {

@@ -6,7 +6,8 @@ import { useTranslation } from 'react-i18next';
 import type { Page } from '../types/navigation';
 import type { Announcement, AnnouncementAction } from '../types/announcement';
 import { useAnnouncementStore } from '../stores/useAnnouncementStore';
-import { useEscClose } from '../hooks/useEscClose';
+import { useEscCloseTopmost } from '../hooks/useEscClose';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import './AnnouncementCenter.css';
 
 interface AnnouncementCenterProps {
@@ -108,6 +109,12 @@ function AnnouncementSurface({
   const [detailAnnouncement, setDetailAnnouncement] = useState<Announcement | null>(null);
   const [detailFromList, setDetailFromList] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const listDialog = useRef<HTMLDivElement>(null);
+  const detailDialog = useRef<HTMLDivElement>(null);
+  const imageDialog = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(listDialog, listOpen, true, !detailAnnouncement && !imagePreviewUrl);
+  useModalFocusTrap(detailDialog, Boolean(detailAnnouncement), true, !imagePreviewUrl);
+  useModalFocusTrap(imageDialog, Boolean(imagePreviewUrl));
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [handledPopupId, setHandledPopupId] = useState<string | null>(null);
   const [popupRetryRevision, setPopupRetryRevision] = useState(0);
@@ -242,8 +249,10 @@ function AnnouncementSurface({
     }
   };
 
-  useEscClose(!!detailAnnouncement, () => void closeDetail(false));
-  useEscClose(listOpen && !detailAnnouncement, () => setListOpen(false));
+  useEscCloseTopmost(!!detailAnnouncement && !imagePreviewUrl, () => void closeDetail(false), detailDialog);
+  useEscCloseTopmost(listOpen && !detailAnnouncement && !imagePreviewUrl, () => setListOpen(false), listDialog);
+
+  useEscCloseTopmost(Boolean(imagePreviewUrl), () => setImagePreviewUrl(null), imageDialog);
 
   const handleAnnouncementClick = async (announcement: Announcement) => {
     if (announcementState.unreadIds.includes(announcement.id)) {
@@ -340,7 +349,7 @@ function AnnouncementSurface({
       {listOpen &&
         renderInBody(
           <div className="modal-overlay announcement-modal-overlay">
-            <div className="modal announcement-list-modal" onClick={(event) => event.stopPropagation()}>
+            <div ref={listDialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('announcement.title')} className="modal announcement-list-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
                 <h2>{t('announcement.title', '公告')}</h2>
                 <button className="modal-close" onClick={() => setListOpen(false)} aria-label={t('common.close', '关闭')}>
@@ -407,7 +416,7 @@ function AnnouncementSurface({
       {detailAnnouncement &&
         renderInBody(
           <div className="modal-overlay announcement-modal-overlay">
-            <div className="modal announcement-detail-modal" onClick={(event) => event.stopPropagation()}>
+            <div ref={detailDialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={detailAnnouncement.title} className="modal announcement-detail-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
                 <div className="announcement-detail-header-left">
                   {detailFromList ? (
@@ -489,7 +498,7 @@ function AnnouncementSurface({
       {imagePreviewUrl &&
         renderInBody(
           <div className="announcement-image-preview-overlay">
-            <div className="announcement-image-preview-wrapper">
+            <div ref={imageDialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={detailAnnouncement?.title || t('announcement.title')} className="announcement-image-preview-wrapper">
               <button
                 type="button"
                 className="announcement-image-preview-close"

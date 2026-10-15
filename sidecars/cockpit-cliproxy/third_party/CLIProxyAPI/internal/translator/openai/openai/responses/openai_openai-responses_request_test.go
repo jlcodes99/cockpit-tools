@@ -20,6 +20,17 @@ func prettyJSONForTest(raw []byte) string {
 	return out.String()
 }
 
+func TestCanonicalResponsesToolNameRecoversOnlyUniqueNamespace(t *testing.T) {
+	unique := []byte(`{"tools":[{"type":"namespace","name":"functions","tools":[{"type":"custom","name":"exec"}]}]}`)
+	if got := canonicalResponsesToolName(unique, "exec"); got != "functions__exec" {
+		t.Fatalf("unique namespace recovery = %q, want functions__exec", got)
+	}
+	ambiguous := []byte(`{"tools":[{"type":"namespace","name":"first","tools":[{"type":"custom","name":"exec"}]},{"type":"namespace","name":"second","tools":[{"type":"custom","name":"exec"}]}]}`)
+	if got := canonicalResponsesToolName(ambiguous, "exec"); got != "exec" {
+		t.Fatalf("ambiguous namespace recovery = %q, want exec", got)
+	}
+}
+
 func TestConvertOpenAIResponsesRequestToOpenAIChatCompletions_MergeConsecutiveFunctionCalls(t *testing.T) {
 	raw := []byte(`{
 		"input": [

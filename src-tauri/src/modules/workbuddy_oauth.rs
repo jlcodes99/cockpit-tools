@@ -4,9 +4,12 @@ use std::sync::{Arc, Mutex};
 use crate::models::workbuddy::{WorkbuddyOAuthCompletePayload, WorkbuddyOAuthStartResponse};
 use crate::modules::logger;
 
-const WORKBUDDY_API_ENDPOINT: &str = "https://www.codebuddy.cn";
+const WORKBUDDY_API_ENDPOINT: &str = "https://copilot.tencent.com";
 const WORKBUDDY_API_PREFIX: &str = "/v2/plugin";
 const WORKBUDDY_PLATFORM: &str = "workbuddy";
+// WorkBuddy 与 CodeBuddy 共用同一网关校验，缺少 User-Agent 会返回 403 / code=10085。
+const WORKBUDDY_HTTP_USER_AGENT: &str =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const OAUTH_TIMEOUT_SECONDS: u64 = 600;
 const OAUTH_POLL_INTERVAL_MS: u64 = 1500;
 /// 企业版套餐代码（本地标识，用于前端识别企业用量资源）
@@ -41,11 +44,34 @@ fn generate_login_id() -> String {
     )
 }
 
+const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+                  (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36";
+
 fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
+        .user_agent(UA)
         .timeout(std::time::Duration::from_secs(30))
+        .user_agent(WORKBUDDY_HTTP_USER_AGENT)
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败:{}", e))
+}
+
+fn decorate_workbuddy_auth_url(
+    raw_url: &str,
+    version: Option<&str>,
+    login_session_id: &str,
+) -> String {
+    let Ok(mut url) = url::Url::parse(raw_url) else {
+        return raw_url.to_string();
+    };
+    {
+        let mut query = url.query_pairs_mut();
+        if let Some(version) = version.map(str::trim).filter(|value| !value.is_empty()) {
+            query.append_pair("version", version);
+        }
+        query.append_pair("loginSessionId", login_session_id);
+    }
+    url.to_string()
 }
 
 fn normalize_non_empty(value: Option<&str>) -> Option<String> {
@@ -55,27 +81,74 @@ fn normalize_non_empty(value: Option<&str>) -> Option<String> {
         .map(|v| v.to_string())
 }
 
-fn normalize_product_code(value: Option<&str>) -> String {
-    normalize_non_empty(value).unwrap_or_else(|| "p_tcaca".to_string())
+fn build_user_resource_request_body() -> Value {
+    json!({
+        "PageNumber": 1,
+        "PageSize": 100,
+        "ProductCode": "p_tcaca",
+        "Status": [0, 3],
+        "OnlyValidPeriod": true
+    })
 }
 
-fn normalize_user_resource_status(status: &[i32]) -> Vec<i32> {
-    let mut normalized: Vec<i32> = status.iter().copied().filter(|v| *v >= 0).collect();
-    if normalized.is_empty() {
-        return vec![0, 3];
+fn user_resource_items(body: &Value) -> Option<&Vec<Value>> {
+    [
+        "/data/resources",
+        "/data/data/resources",
+        "/data/Response/Data/Accounts",
+        "/data/data/Response/Data/Accounts",
+        "/Response/Data/Accounts",
+    ]
+    .into_iter()
+    .find_map(|path| body.pointer(path).and_then(Value::as_array))
+}
+
+fn user_resource_has_payload(body: &Value) -> bool {
+    user_resource_items(body).is_some_and(|items| !items.is_empty())
+}
+
+fn user_resource_has_shape(body: &Value) -> bool {
+    user_resource_items(body).is_some()
+}
+
+fn enterprise_usage_data(body: &Value) -> Option<&Value> {
+    body.pointer("/data/data")
+        .or_else(|| body.get("data"))
+        .or(Some(body))
+}
+
+fn token_expiry_at(data: &Value) -> Option<i64> {
+    let parse = |value: Option<&Value>| {
+        value.and_then(|v| {
+            v.as_i64()
+                .or_else(|| v.as_str()?.trim().parse::<i64>().ok())
+        })
+    };
+    parse(data.get("expiresAt").or_else(|| data.get("expires_at")))
+        .map(|value| {
+            if value > 0 && value < 100_000_000_000 {
+                value.saturating_mul(1000)
+            } else {
+                value
+            }
+        })
+        .or_else(|| {
+            parse(data.get("expiresIn").or_else(|| data.get("expires_in")))
+                .map(|seconds| chrono::Utc::now().timestamp_millis() + seconds.saturating_mul(1000))
+        })
+}
+fn json_f64(value: Option<&Value>) -> Option<f64> {
+    value.and_then(|v| {
+        v.as_f64()
+            .or_else(|| v.as_str()?.trim().parse::<f64>().ok())
+    })
+}
+fn json_scalar_string(value: Option<&Value>) -> String {
+    match value {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Number(n)) => n.to_string(),
+        _ => String::new(),
     }
-    normalized.sort_unstable();
-    normalized.dedup();
-    normalized
-}
-
-fn build_default_user_resource_time_range() -> (String, String) {
-    let now = chrono::Local::now();
-    let begin = now.format("%Y-%m-%d %H:%M:%S").to_string();
-    let end = (now + chrono::Duration::days(365 * 101))
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
-    (begin, end)
 }
 
 fn clear_pending_login(login_id: &str) -> Result<(), String> {
@@ -107,6 +180,10 @@ async fn start_login_with_platform(platform: &str) -> Result<WorkbuddyOAuthStart
 
     let resp = client
         .post(&url)
+        .header("X-No-Authorization", "true")
+        .header("X-No-User-Id", "true")
+        .header("X-No-Enterprise-Id", "true")
+        .header("X-No-Department-Info", "true")
         .json(&json!({}))
         .send()
         .await
@@ -141,12 +218,25 @@ async fn start_login_with_platform(platform: &str) -> Result<WorkbuddyOAuthStart
         .to_string();
 
     let login_id = generate_login_id();
+    let login_session_id = uuid::Uuid::new_v4().to_string();
+    let configured_path = crate::modules::config::get_user_config().workbuddy_app_path;
+    let version = tokio::task::spawn_blocking(move || {
+        crate::modules::client_version::detect_client_version("WorkBuddy", Some(&configured_path))
+    })
+    .await
+    .ok()
+    .flatten();
 
-    let verification_uri = if auth_url.is_empty() {
+    let base_verification_uri = if auth_url.is_empty() {
         format!("{}/login?state={}", WORKBUDDY_API_ENDPOINT, state)
     } else {
         auth_url.clone()
     };
+    let verification_uri = decorate_workbuddy_auth_url(
+        &base_verification_uri,
+        version.as_deref(),
+        &login_session_id,
+    );
 
     {
         let mut pending = PENDING_OAUTH_STATE
@@ -209,7 +299,15 @@ pub async fn complete_login(login_id: &str) -> Result<WorkbuddyOAuthCompletePayl
             WORKBUDDY_API_ENDPOINT, WORKBUDDY_API_PREFIX, state_info.state
         );
 
-        match client.get(&url).send().await {
+        match client
+            .get(&url)
+            .header("X-No-Authorization", "true")
+            .header("X-No-User-Id", "true")
+            .header("X-No-Enterprise-Id", "true")
+            .header("X-No-Department-Info", "true")
+            .send()
+            .await
+        {
             Ok(resp) => {
                 if let Ok(body) = resp.json::<Value>().await {
                     let code = body.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
@@ -232,10 +330,7 @@ pub async fn complete_login(login_id: &str) -> Result<WorkbuddyOAuthCompletePayl
                                     .and_then(|v| v.as_str())
                                     .map(|s| s.to_string());
 
-                                let expires_at = data
-                                    .get("expiresAt")
-                                    .or_else(|| data.get("expires_at"))
-                                    .and_then(|v| v.as_i64());
+                                let expires_at = token_expiry_at(data);
 
                                 let domain = data
                                     .get("domain")
@@ -357,7 +452,10 @@ async fn fetch_account_info(
 
     let mut req = client
         .get(&url)
-        .header("Authorization", format!("Bearer {}", access_token));
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("X-No-User-Id", "true")
+        .header("X-No-Enterprise-Id", "true")
+        .header("X-No-Department-Info", "true");
 
     if let Some(d) = domain {
         req = req.header("X-Domain", d);
@@ -434,6 +532,7 @@ pub async fn refresh_token(
         .post(&url)
         .header("Authorization", format!("Bearer {}", access_token))
         .header("X-Refresh-Token", refresh_token)
+        .header("X-Auth-Refresh-Source", "plugin")
         .json(&json!({}));
 
     if let Some(d) = domain {
@@ -554,25 +653,28 @@ pub async fn fetch_user_resource_with_access_token(
     domain: Option<&str>,
     product_code: &str,
     status: &[i32],
-    package_end_time_range_begin: &str,
-    package_end_time_range_end: &str,
-    page_number: i32,
-    page_size: i32,
+    _package_end_time_range_begin: &str,
+    _package_end_time_range_end: &str,
+    _page_number: i32,
+    _page_size: i32,
+) -> Result<Value, String> {
+    let _ = (product_code, status);
+    let body = build_user_resource_request_body();
+    post_user_resource(access_token, uid, enterprise_id, domain, body).await
+}
+
+async fn post_user_resource(
+    access_token: &str,
+    uid: Option<&str>,
+    enterprise_id: Option<&str>,
+    domain: Option<&str>,
+    body: Value,
 ) -> Result<Value, String> {
     let client = build_client()?;
     let url = format!(
         "{}/v2/billing/meter/get-user-resource",
         WORKBUDDY_API_ENDPOINT
     );
-
-    let body = json!({
-        "PageNumber": page_number,
-        "PageSize": page_size,
-        "ProductCode": product_code,
-        "Status": status,
-        "PackageEndTimeRangeBegin": package_end_time_range_begin,
-        "PackageEndTimeRangeEnd": package_end_time_range_end
-    });
 
     let mut req = client
         .post(&url)
@@ -660,15 +762,17 @@ pub async fn fetch_user_resource_with_access_token(
 /// 企业版用户用量（网页端 /profile/usage 实际使用的接口）
 pub async fn fetch_enterprise_user_usage(
     access_token: &str,
+    uid: Option<&str>,
     enterprise_id: &str,
+    domain: Option<&str>,
 ) -> Result<Value, String> {
     let client = build_client()?;
     let url = format!(
-        "{}/billing/meter/get-enterprise-user-usage",
+        "{}/v2/billing/meter/get-enterprise-user-usage",
         WORKBUDDY_API_ENDPOINT
     );
 
-    let req = client
+    let mut req = client
         .post(&url)
         .header("Accept", "application/json, text/plain, */*")
         .header("Accept-Language", "zh-CN,zh;q=0.9")
@@ -676,6 +780,12 @@ pub async fn fetch_enterprise_user_usage(
         .header("Content-Type", "application/json")
         .header("X-Enterprise-Id", enterprise_id)
         .header("X-Tenant-Id", enterprise_id);
+    if let Some(uid) = uid {
+        req = req.header("X-User-Id", uid);
+    }
+    if let Some(domain) = domain {
+        req = req.header("X-Domain", domain);
+    }
 
     let resp = req
         .json(&json!({}))
@@ -719,52 +829,72 @@ pub async fn fetch_enterprise_user_usage(
         }
     }
 
+    if enterprise_usage_data(&body)
+        .and_then(|data| data.get("limit_num").or_else(|| data.get("limitNum")))
+        .and_then(|value| json_f64(Some(value)))
+        .is_none()
+    {
+        return Err("enterprise user usage 响应缺少 limit_num/limitNum".to_string());
+    }
+
     Ok(body)
 }
 
 /// 将企业用量响应包装成前端可识别的 get-user-resource 结构
-pub fn wrap_enterprise_usage_as_resource(usage_body: &Value) -> Value {
-    let data = usage_body.get("data").cloned().unwrap_or_else(|| json!({}));
-    // credit 为周期内已使用积分，剩余 = limitNum - credit
-    let credit = data.get("credit").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let limit_num = data.get("limitNum").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let remain = (limit_num - credit).max(0.0);
-    let cycle_start_time = data
-        .get("cycleStartTime")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let cycle_end_time = data
-        .get("cycleEndTime")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let cycle_reset_time = data
-        .get("cycleResetTime")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+pub fn wrap_enterprise_usage_as_resource(usage_body: &Value) -> Result<Value, String> {
+    let data = enterprise_usage_data(usage_body)
+        .ok_or_else(|| "enterprise user usage 响应缺少 data".to_string())?;
+    let limit_num = data
+        .get("limit_num")
+        .or_else(|| data.get("limitNum"))
+        .and_then(|value| json_f64(Some(value)))
+        .ok_or_else(|| "enterprise user usage 响应缺少 limit_num/limitNum".to_string())?;
+    let used_num = data
+        .get("used_num")
+        .or_else(|| data.get("usedNum"))
+        .or_else(|| data.get("credit"))
+        .and_then(|value| json_f64(Some(value)))
+        .ok_or_else(|| "enterprise user usage 响应缺少 credit/used_num".to_string())?;
+    let unlimited = limit_num == -1.0;
+    let remain = if unlimited {
+        -1.0
+    } else {
+        (limit_num - used_num).max(0.0)
+    };
+    let cycle_start_time = json_scalar_string(
+        data.get("cycle_start_time")
+            .or_else(|| data.get("cycleStartTime")),
+    );
+    let cycle_end_time = json_scalar_string(
+        data.get("cycle_end_time")
+            .or_else(|| data.get("cycleEndTime")),
+    );
+    let cycle_reset_time = json_scalar_string(
+        data.get("cycle_reset_time")
+            .or_else(|| data.get("cycleResetTime")),
+    );
 
     let account = json!({
         "PackageCode": ENTERPRISE_PACKAGE_CODE,
         "PackageName": "企业版",
         "CycleCapacitySizePrecise": limit_num.to_string(),
         "CycleCapacityRemainPrecise": remain.to_string(),
-        "CycleCapacityUsedPrecise": credit.to_string(),
+        "CycleCapacityUsedPrecise": used_num.to_string(),
         "CycleCapacitySize": limit_num,
         "CycleCapacityRemain": remain,
-        "CycleCapacityUsed": credit,
+        "CycleCapacityUsed": used_num,
         "CapacitySize": limit_num,
         "CapacityRemain": remain,
-        "CapacityUsed": credit,
+        "CapacityUsed": used_num,
         "CapacityUnit": "credits",
         "CycleStartTime": cycle_start_time,
         "CycleEndTime": cycle_end_time,
         "CycleResetTime": cycle_reset_time,
+        "Unlimited": unlimited,
         "Status": 0
     });
 
-    json!({
+    Ok(json!({
         "code": 0,
         "msg": "OK",
         "data": {
@@ -772,11 +902,11 @@ pub fn wrap_enterprise_usage_as_resource(usage_body: &Value) -> Value {
                 "Data": {
                     "Accounts": [account],
                     "TotalCount": 1,
-                    "TotalDosage": credit
+                    "TotalDosage": used_num
                 }
             }
         }
-    })
+    }))
 }
 
 async fn fetch_user_resource_with_access_token_default(
@@ -785,23 +915,35 @@ async fn fetch_user_resource_with_access_token_default(
     enterprise_id: Option<&str>,
     domain: Option<&str>,
 ) -> Result<Value, String> {
-    let product_code = normalize_product_code(None);
-    let status = normalize_user_resource_status(&[]);
-    let (package_end_time_range_begin, package_end_time_range_end) =
-        build_default_user_resource_time_range();
-    fetch_user_resource_with_access_token(
+    let payload = post_user_resource(
         access_token,
         uid,
         enterprise_id,
         domain,
-        product_code.as_str(),
-        &status,
-        package_end_time_range_begin.as_str(),
-        package_end_time_range_end.as_str(),
-        1,
-        100,
+        build_user_resource_request_body(),
     )
-    .await
+    .await?;
+    if user_resource_has_payload(&payload) {
+        Ok(payload)
+    } else if user_resource_has_shape(&payload) {
+        Err("user resource 响应未包含可用资源".to_string())
+    } else {
+        Err("user resource 响应缺少 resources/Accounts".to_string())
+    }
+}
+
+async fn fetch_quota_resource_for_account(
+    access_token: &str,
+    uid: Option<&str>,
+    enterprise_id: Option<&str>,
+    domain: Option<&str>,
+) -> Result<Value, String> {
+    if let Some(enterprise_id) = enterprise_id {
+        let body = fetch_enterprise_user_usage(access_token, uid, enterprise_id, domain).await?;
+        wrap_enterprise_usage_as_resource(&body)
+    } else {
+        fetch_user_resource_with_access_token_default(access_token, uid, None, domain).await
+    }
 }
 
 async fn refresh_payload_for_account_inner(
@@ -830,11 +972,7 @@ async fn refresh_payload_for_account_inner(
                     .map(|s| s.to_string())
                     .or_else(|| account.refresh_token.clone());
 
-                new_expires_at = token_data
-                    .get("expiresAt")
-                    .or_else(|| token_data.get("expires_at"))
-                    .and_then(|v| v.as_i64())
-                    .or(account.expires_at);
+                new_expires_at = token_expiry_at(&token_data).or(account.expires_at);
 
                 new_domain = token_data
                     .get("domain")
@@ -884,7 +1022,7 @@ async fn refresh_payload_for_account_inner(
         resolved_enterprise_id.is_some(),
         new_domain.is_some()
     ));
-    let user_resource = match fetch_user_resource_with_access_token_default(
+    let user_resource = match fetch_quota_resource_for_account(
         new_access_token.as_str(),
         resolved_uid.as_deref(),
         resolved_enterprise_id.as_deref(),
@@ -893,37 +1031,8 @@ async fn refresh_payload_for_account_inner(
     .await
     {
         Ok(payload) => {
-            // 企业账号时 get-user-resource 可能返回空 Accounts，
-            // 改用网页端真实的企业用量接口兜底
-            if let Some(eid) = resolved_enterprise_id.as_deref() {
-                let accounts_empty = payload
-                    .pointer("/data/Response/Data/Accounts")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.is_empty())
-                    .unwrap_or(true);
-                if accounts_empty {
-                    match fetch_enterprise_user_usage(new_access_token.as_str(), eid).await {
-                        Ok(enterprise_body) => {
-                            let wrapped = wrap_enterprise_usage_as_resource(&enterprise_body);
-                            logger::log_info(
-                                "[WorkBuddy][IDE Token] 企业账号 user_resource 为空，已使用企业用量接口兜底",
-                            );
-                            Some(wrapped)
-                        }
-                        Err(enterprise_err) => {
-                            logger::log_warn(&format!(
-                                "[WorkBuddy][IDE Token] 企业用量接口兜底失败:{}",
-                                enterprise_err
-                            ));
-                            Some(payload)
-                        }
-                    }
-                } else {
-                    Some(payload)
-                }
-            } else {
-                Some(payload)
-            }
+            logger::log_info("[WorkBuddy][IDE Token] 刷新额度成功");
+            Some(payload)
         }
         Err(err) => {
             logger::log_warn(&format!(
@@ -970,7 +1079,12 @@ async fn refresh_payload_for_account_inner(
         })
         .or_else(|| account.payment_type.clone());
 
-    let mut combined_quota = serde_json::Map::new();
+    let mut combined_quota = account
+        .quota_raw
+        .as_ref()
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
     if let Some(d) = &dosage {
         combined_quota.insert("dosage".to_string(), d.clone());
     }
@@ -1184,4 +1298,94 @@ pub async fn build_payload_from_token(
         status: Some("normal".to_string()),
         status_reason: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_url_contains_detected_version_and_login_session() {
+        let decorated = decorate_workbuddy_auth_url(
+            "https://copilot.tencent.com/login?state=test",
+            Some("5.4.5"),
+            "00000000-0000-4000-8000-000000000000",
+        );
+        let parsed = url::Url::parse(&decorated).unwrap();
+        let params = parsed
+            .query_pairs()
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(
+            params.get("version").map(|value| value.as_ref()),
+            Some("5.4.5")
+        );
+        assert_eq!(
+            params.get("loginSessionId").map(|value| value.as_ref()),
+            Some("00000000-0000-4000-8000-000000000000")
+        );
+    }
+
+    #[test]
+    fn user_resource_body_uses_only_current_official_fields() {
+        assert_eq!(
+            build_user_resource_request_body(),
+            json!({
+                "PageNumber": 1,
+                "PageSize": 100,
+                "ProductCode": "p_tcaca",
+                "Status": [0, 3],
+                "OnlyValidPeriod": true
+            })
+        );
+    }
+
+    #[test]
+    fn token_expiry_accepts_duration_and_epoch_units() {
+        let before = chrono::Utc::now().timestamp_millis();
+        let relative = token_expiry_at(&json!({ "expiresIn": 60 })).unwrap();
+        assert!(relative >= before + 60_000);
+        assert_eq!(
+            token_expiry_at(&json!({ "expiresAt": 1_793_368_047_633_i64 })),
+            Some(1_793_368_047_633_i64)
+        );
+        assert_eq!(
+            token_expiry_at(&json!({ "expiresAt": 1_793_368_047 })),
+            Some(1_793_368_047_000)
+        );
+    }
+
+    #[test]
+    fn enterprise_unlimited_is_not_converted_to_zero() {
+        let wrapped = wrap_enterprise_usage_as_resource(&json!({
+            "data": { "limit_num": -1, "used_num": 12 }
+        }))
+        .unwrap();
+        let resource = wrapped.pointer("/data/Response/Data/Accounts/0").unwrap();
+        assert_eq!(resource.get("Unlimited"), Some(&json!(true)));
+        assert_eq!(
+            resource.get("CycleCapacityRemainPrecise"),
+            Some(&json!("-1"))
+        );
+    }
+
+    #[test]
+    fn accepts_double_data_envelope_and_numeric_strings() {
+        assert!(user_resource_has_payload(&json!({
+            "data": { "data": { "Response": { "Data": { "Accounts": [{}] } } } }
+        })));
+        let wrapped = wrap_enterprise_usage_as_resource(&json!({
+            "data": { "data": { "limitNum": "100", "credit": "20", "cycleResetTime": 1_800_000_000 } }
+        })).unwrap();
+        let resource = wrapped.pointer("/data/Response/Data/Accounts/0").unwrap();
+        assert_eq!(resource["CycleCapacityRemainPrecise"], "80");
+        assert_eq!(resource["CycleResetTime"], "1800000000");
+    }
+
+    #[test]
+    fn derives_expiry_from_expires_in_when_absolute_time_is_missing() {
+        let before = chrono::Utc::now().timestamp_millis() + 59_000;
+        let expiry = token_expiry_at(&json!({ "expiresIn": "60" })).unwrap();
+        let after = chrono::Utc::now().timestamp_millis() + 61_000;
+        assert!((before..=after).contains(&expiry));
+    }
 }

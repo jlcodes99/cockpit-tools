@@ -1,6 +1,7 @@
 import { UnlockFireworksOverlay } from '../components/UnlockFireworksOverlay';
 import { SettingsAccountTransferSection } from '../components/SettingsAccountTransferSection';
 import { SettingsWebdavSyncSection } from '../components/SettingsWebdavSyncSection';
+import { SettingsInstanceCleanupSection } from '../components/SettingsInstanceCleanupSection';
 import './settings/Settings.css';
 import { Github, User, Rocket, Save, AlertCircle, RefreshCw, Heart, MessageSquare, FileText, Download, X } from 'lucide-react';
 import type { PlatformId } from '../types/platform';
@@ -109,6 +110,7 @@ export function SettingsPageView(props: SettingsPageViewProps) {
 
         {activeTab === 'data' && (
           <>
+            <SettingsInstanceCleanupSection />
             <SettingsAccountTransferSection />
             <SettingsWebdavSyncSection />
           </>

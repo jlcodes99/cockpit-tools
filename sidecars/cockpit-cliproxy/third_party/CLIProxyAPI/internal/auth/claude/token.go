@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/misc"
-	log "github.com/sirupsen/logrus"
 )
 
 // ClaudeTokenStorage stores OAuth2 token information for Anthropic Claude API authentication.
@@ -85,19 +84,12 @@ func (ts *ClaudeTokenStorage) SaveTokenToFile(authFilePath string) error {
 		return fmt.Errorf("failed to merge metadata: %w", errMerge)
 	}
 
-	// Create the token file
-	f, err := os.Create(authFilePath)
+	raw, err := json.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("failed to create token file: %w", err)
+		return fmt.Errorf("failed to marshal token data: %w", err)
 	}
-	defer func() {
-		if errClose := f.Close(); errClose != nil {
-			log.Errorf("claude token storage: close token file error: %v", errClose)
-		}
-	}()
-
-	// Encode and write the token data as JSON
-	if err = json.NewEncoder(f).Encode(data); err != nil {
+	raw = append(raw, '\n')
+	if err = misc.WriteFileAtomic(authFilePath, raw, 0o600); err != nil {
 		return fmt.Errorf("failed to write token to file: %w", err)
 	}
 	return nil

@@ -386,6 +386,21 @@ pub fn delete_claude_accounts(account_ids: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn claude_uninstall_desktop_login_component() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(claude_account::uninstall_desktop_login_component)
+        .await
+        .map_err(|error| format!("卸载 Claude 登录组件任务失败: {}", error))?
+}
+
+#[tauri::command]
+pub async fn claude_get_desktop_login_component_storage(
+) -> Result<claude_account::ClaudeDesktopLoginComponentStorageInfo, String> {
+    tauri::async_runtime::spawn_blocking(claude_account::desktop_login_component_storage_info)
+        .await
+        .map_err(|error| format!("读取 Claude 登录组件占用空间任务失败: {}", error))?
+}
+
+#[tauri::command]
 pub async fn import_claude_from_json(
     app: AppHandle,
     json_content: String,

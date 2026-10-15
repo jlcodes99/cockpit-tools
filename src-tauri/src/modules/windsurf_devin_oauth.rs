@@ -547,11 +547,16 @@ pub async fn fetch_devin_user_status(ide_token: &str) -> Result<serde_json::Valu
         return Err("ide_token 不能为空".to_string());
     }
     let client = build_client()?;
+    let versions = tokio::task::spawn_blocking(|| {
+        crate::modules::client_version::detect_windsurf_version_metadata("Devin", None)
+    })
+    .await
+    .unwrap_or_default();
     let body = json!({
         "metadata": {
             "ide_name": "WINDSURF",
-            "ide_version": "1.0.0",
-            "extension_version": "1.0.0",
+            "ide_version": versions.ide_version.as_deref().unwrap_or("1.0.0"),
+            "extension_version": versions.extension_version.as_deref().unwrap_or("1.0.0"),
             "api_key": token,
         }
     });

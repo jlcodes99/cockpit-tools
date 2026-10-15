@@ -1,0 +1,323 @@
+.codex-instance-gateways-overlay {
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.modal.codex-instance-gateways-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(760px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg-surface);
+  box-shadow: 0 24px 70px rgba(2, 6, 23, 0.28);
+}
+
+.codex-instance-gateways-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.codex-instance-gateways-title-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.codex-instance-gateways-title-row svg {
+  color: var(--accent, #2563eb);
+}
+
+.codex-instance-gateways-header h3 {
+  margin: 0;
+}
+
+.codex-instance-gateways-header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.codex-instance-gateways-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 弹框高度受视口约束后，正文自身就是滚动容器：网关再多也只在正文内部滚动，
+   标题、刷新与关闭按钮始终可见。 */
+.modal.codex-instance-gateways-modal
+  > .modal-body.codex-instance-gateways-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 正文是滚动容器时，直接子项必须按内容高度排列，避免窗口高度不足时卡片被压扁。 */
+.codex-instance-gateways-body > * {
+  flex: 0 0 auto;
+}
+
+.codex-instance-gateways-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.codex-instance-gateways-body::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.codex-instance-gateways-body::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.48);
+  background-clip: padding-box;
+}
+
+.codex-instance-gateways-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.62);
+  background-clip: padding-box;
+}
+
+.codex-instance-gateways-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.codex-instance-gateways-error {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.08);
+  color: #b91c1c;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.codex-instance-gateways-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 16px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.codex-instance-gateways-empty strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.codex-instance-gateways-empty span {
+  font-size: 12px;
+  max-width: 420px;
+}
+
+.codex-instance-gateways-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.codex-instance-gateways-row:hover {
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
+}
+
+.codex-instance-gateways-row-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-width: 0;
+}
+
+.codex-instance-gateways-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.codex-instance-gateways-row-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-instance-gateways-kind {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.codex-instance-gateways-status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.codex-instance-gateways-status.success {
+  background: rgba(34, 197, 94, 0.14);
+  color: #15803d;
+}
+
+.codex-instance-gateways-status.warning {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.codex-instance-gateways-status.error {
+  background: rgba(239, 68, 68, 0.14);
+  color: #b91c1c;
+}
+
+.codex-instance-gateways-status.muted {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-secondary);
+}
+
+.codex-instance-gateways-fields {
+  display: grid;
+  grid-template-columns: minmax(56px, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.codex-instance-gateways-field {
+  display: contents;
+}
+
+.codex-instance-gateways-fields dt {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.codex-instance-gateways-fields dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-instance-gateways-field-address {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.codex-instance-gateways-field-address code {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.16);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-instance-gateways-copy-btn {
+  flex: 0 0 auto;
+}
+
+.codex-instance-gateways-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--text-secondary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-instance-gateways-row-error {
+  font-size: 12px;
+  color: #b91c1c;
+  overflow-wrap: anywhere;
+}
+
+.codex-instance-gateways-row-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-self: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 45%;
+}
+
+.codex-instance-gateways-row-actions .btn {
+  width: 100%;
+}
+
+[data-theme="dark"] .codex-instance-gateways-row {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .codex-instance-gateways-kind {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .codex-instance-gateways-chip {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="dark"] .codex-instance-gateways-error {
+  color: #fca5a5;
+}
+
+@media (max-width: 720px) {
+  .codex-instance-gateways-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .codex-instance-gateways-row-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: auto;
+    max-width: none;
+    justify-content: flex-end;
+  }
+
+  .codex-instance-gateways-row-actions .btn {
+    width: auto;
+  }
+}

@@ -640,96 +640,12 @@
   color: var(--text-muted);
 }
 
-.qs-codex-oauth-policy-row {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-light);
-}
-
-.qs-codex-oauth-policy-control {
-  gap: 10px;
-}
-
-.qs-codex-oauth-policy-summary {
+.qs-codex-model-management-actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
+  justify-content: flex-end;
+  margin-top: 2px;
 }
 
-.qs-codex-oauth-policy-summary__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qs-codex-oauth-policy-summary__manage {
-  min-height: 30px;
-  padding: 5px 11px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 11px;
-}
-
-.qs-codex-oauth-policy-summary__manage:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.qs-codex-oauth-policy-summary__list {
-  display: flex;
-  max-height: 190px;
-  flex-direction: column;
-  gap: 4px;
-  overflow: auto;
-}
-
-.qs-codex-oauth-policy-summary__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(88px, 0.8fr) minmax(110px, 1fr) minmax(90px, 0.8fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 34px;
-  padding: 6px 9px;
-  border: 1px solid var(--border-light);
-  border-radius: 7px;
-  background: var(--bg-tertiary);
-}
-
-.qs-codex-oauth-policy-summary__account,
-.qs-codex-oauth-policy-summary__value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qs-codex-oauth-policy-summary__account {
-  color: var(--text-primary);
-  font-size: 11px;
-}
-
-.qs-codex-oauth-policy-summary__value {
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.qs-codex-oauth-policy-summary__empty {
-  padding: 12px 9px;
-  border: 1px solid var(--border-light);
-  border-radius: 7px;
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  font-size: 11px;
-  text-align: center;
-}
 
 .qs-codex-quick-config > .qs-hint,
 .qs-codex-quick-field .qs-hint {
@@ -743,15 +659,6 @@
   line-height: 1.45;
 }
 
-@media (max-width: 640px) {
-  .qs-codex-oauth-policy-summary__row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .qs-codex-oauth-policy-summary__account {
-    grid-column: 1 / -1;
-  }
-}
 
 .qs-codex-quick-warning {
   padding: 8px 10px;
@@ -826,6 +733,24 @@
 
 .qs-error-close:hover {
   background: rgba(239, 68, 68, 0.15);
+}
+
+/* 配置读取中的占位：避免加载期间弹层看起来“什么都没有” */
+.qs-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 24px 28px;
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.qs-loading .loading-spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
 }
 
 .qs-modal .settings-account-scope-toolbar {

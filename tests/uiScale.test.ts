@@ -11,7 +11,8 @@ describe('uiScale helpers', () => {
   it('normalizes invalid and out-of-range values', () => {
     assert.equal(normalizeUiScale(undefined), UI_SCALE_DEFAULT);
     assert.equal(normalizeUiScale(Number.NaN), UI_SCALE_DEFAULT);
-    assert.equal(normalizeUiScale(0.5), 0.8);
+    assert.equal(normalizeUiScale(0.1), 0.3);
+    assert.equal(normalizeUiScale(0.5), 0.5);
     assert.equal(normalizeUiScale(3), 2);
     assert.equal(normalizeUiScale(1.25), 1.25);
   });
@@ -21,7 +22,8 @@ describe('uiScale helpers', () => {
     assert.equal(stepUiScale(1.1, 1), 1.25);
     assert.equal(stepUiScale(1.5, 1), 1.5);
     assert.equal(stepUiScale(1, -1), 0.9);
-    assert.equal(stepUiScale(0.9, -1), 0.9);
+    assert.equal(stepUiScale(0.9, -1), 0.7);
+    assert.equal(stepUiScale(0.3, -1), 0.3);
   });
 
   it('snaps intermediate values to the next option', () => {
@@ -32,6 +34,6 @@ describe('uiScale helpers', () => {
   });
 
   it('keeps the public option list stable', () => {
-    assert.deepEqual([...UI_SCALE_OPTION_VALUES], [0.9, 1, 1.1, 1.25, 1.5]);
+    assert.deepEqual([...UI_SCALE_OPTION_VALUES], [0.3, 0.5, 0.7, 0.9, 1, 1.1, 1.25, 1.5]);
   });
 });

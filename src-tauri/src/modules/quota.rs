@@ -39,10 +39,17 @@ pub struct QuotaCloudCodeContext {
 impl QuotaCloudCodeContext {
     pub fn from_token(token: &TokenData) -> Self {
         Self {
-            preferred_project_id: token.project_id.clone(),
+            preferred_project_id: valid_cloud_code_project_id(token.project_id.as_deref())
+                .map(str::to_string),
             is_gcp_tos: token.is_gcp_tos.unwrap_or(false),
         }
     }
+}
+
+fn valid_cloud_code_project_id(project_id: Option<&str>) -> Option<&str> {
+    project_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "aicode-consumers")
 }
 
 fn env_var_trimmed(name: &str) -> Option<String> {
@@ -251,21 +258,43 @@ fn build_cloud_code_metadata(duet_project: Option<&str>) -> Value {
 }
 
 fn resolve_cloud_code_base_url(ctx: &QuotaCloudCodeContext) -> String {
-    // 与 Antigravity IDE.app 的 IYs(...) 选择顺序保持一致：override > gcpTos > internal(insider/dev) > daily
-    if let Some(override_url) = env_var_trimmed("ANTIGRAVITY_CLOUD_CODE_URL_OVERRIDE") {
-        return override_url;
+    select_cloud_code_base_url(
+        ctx,
+        env_var_trimmed("ANTIGRAVITY_CLOUD_CODE_URL_OVERRIDE").as_deref(),
+        env_bool("ANTIGRAVITY_IS_GOOGLE_INTERNAL"),
+        env_quality_is_insider_or_dev(),
+    )
+}
+
+fn select_cloud_code_base_url(
+    ctx: &QuotaCloudCodeContext,
+    override_url: Option<&str>,
+    is_google_internal: bool,
+    is_insider_or_dev: bool,
+) -> String {
+    // Preserve the host routing order: override > GCP ToS with project > internal > daily.
+    if let Some(override_url) = override_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return override_url.to_string();
     }
 
-    if ctx.is_gcp_tos {
+    if ctx.is_gcp_tos && valid_cloud_code_project_id(ctx.preferred_project_id.as_deref()).is_some()
+    {
         return CLOUD_CODE_PROD_BASE_URL.to_string();
     }
 
-    if env_bool("ANTIGRAVITY_IS_GOOGLE_INTERNAL") && env_quality_is_insider_or_dev() {
+    if is_google_internal && is_insider_or_dev {
         return CLOUD_CODE_AUTOPUSH_SANDBOX_BASE_URL.to_string();
     }
 
     CLOUD_CODE_DAILY_BASE_URL.to_string()
 }
+
+#[cfg(test)]
+#[path = "quota_cloud_code_routing_tests.rs"]
+mod cloud_code_routing_tests;
 
 fn header_value(headers: &reqwest::header::HeaderMap, name: reqwest::header::HeaderName) -> String {
     headers
@@ -382,10 +411,120 @@ struct QuotaInfo {
     reset_time: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuotaFetchError {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<u16>,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_url: Option<String>,
+}
+
+pub fn format_google_validation_url(raw_url: &str, email: &str) -> String {
+    let email = email.trim();
+    if raw_url.trim().is_empty() || email.is_empty() {
+        return raw_url.to_string();
+    }
+
+    match url::Url::parse(raw_url) {
+        Ok(mut parsed) => {
+            let host = match parsed.host_str() {
+                Some(h) => h.to_ascii_lowercase(),
+                None => return raw_url.to_string(),
+            };
+            let is_google_host = host == "accounts.google.com"
+                || host == "google.com"
+                || host.ends_with(".google.com");
+            if !is_google_host {
+                return raw_url.to_string();
+            }
+
+            let mut pairs: Vec<(String, String)> = parsed.query_pairs().into_owned().collect();
+            let has_valid_authuser = pairs.iter().any(|(k, v)| {
+                k == "authuser" && !v.trim().is_empty() && !v.trim().chars().all(|c| c.is_ascii_digit())
+            });
+            let has_login_hint = pairs.iter().any(|(k, v)| k == "login_hint" && !v.trim().is_empty());
+            let has_email = pairs.iter().any(|(k, v)| k == "Email" && !v.trim().is_empty());
+
+            if !has_valid_authuser {
+                pairs.retain(|(k, _)| k != "authuser");
+                pairs.push(("authuser".to_string(), email.to_string()));
+            }
+            if !has_login_hint {
+                pairs.retain(|(k, _)| k != "login_hint");
+                pairs.push(("login_hint".to_string(), email.to_string()));
+            }
+            if !has_email {
+                pairs.retain(|(k, _)| k != "Email");
+                pairs.push(("Email".to_string(), email.to_string()));
+            }
+
+            parsed.query_pairs_mut().clear().extend_pairs(pairs);
+            parsed.to_string()
+        }
+        Err(_) => raw_url.to_string(),
+    }
+}
+
+pub fn parse_google_api_error(status: u16, text: &str) -> QuotaFetchError {
+    parse_google_api_error_with_email(status, text, None)
+}
+
+pub fn parse_google_api_error_with_email(status: u16, text: &str, email: Option<&str>) -> QuotaFetchError {
+    let mut message = if text.trim().is_empty() {
+        format!("API returned status {}", status)
+    } else {
+        text.to_string()
+    };
+    let mut reason: Option<String> = None;
+    let mut validation_url: Option<String> = None;
+
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(err_obj) = val.get("error") {
+            if let Some(msg) = err_obj.get("message").and_then(|v| v.as_str()) {
+                message = msg.to_string();
+            }
+            if let Some(details) = err_obj.get("details").and_then(|v| v.as_array()) {
+                for detail in details {
+                    if reason.is_none() {
+                        if let Some(r) = detail.get("reason").and_then(|v| v.as_str()) {
+                            reason = Some(r.to_string());
+                        }
+                    }
+                    if validation_url.is_none() {
+                        if let Some(metadata) = detail.get("metadata") {
+                            if let Some(url) = metadata.get("validation_url").and_then(|v| v.as_str()) {
+                                validation_url = Some(url.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if reason.is_none() {
+        if message.contains("Verify your account") {
+            reason = Some("VALIDATION_REQUIRED".to_string());
+        } else if message.contains("Subscription required") {
+            reason = Some("SUBSCRIPTION_REQUIRED".to_string());
+        }
+    }
+
+    if let Some(url) = validation_url.as_ref() {
+        if let Some(email) = email {
+            validation_url = Some(format_google_validation_url(url, email));
+        }
+    }
+
+    QuotaFetchError {
+        code: Some(status),
+        message,
+        reason,
+        validation_url,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -411,11 +550,15 @@ struct AllowedTier {
     id: Option<String>,
     #[serde(rename = "isDefault")]
     is_default: Option<bool>,
+    #[serde(rename = "usesGcpTos")]
+    uses_gcp_tos: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Tier {
     id: Option<String>,
+    #[serde(rename = "usesGcpTos")]
+    uses_gcp_tos: Option<bool>,
     #[serde(rename = "availableCredits", default)]
     available_credits: Option<Vec<AvailableCreditRaw>>,
 }
@@ -614,13 +757,29 @@ fn extract_credits_from_tier(tier: &Tier) -> Vec<CreditInfo> {
         .unwrap_or_default()
 }
 
+#[derive(Debug, Clone)]
+pub struct ProjectMetadataResult {
+    pub project_id: Option<String>,
+    pub subscription_tier: Option<String>,
+    pub credits: Vec<CreditInfo>,
+    pub is_gcp_tos: Option<bool>,
+}
+
 /// 获取项目 ID、订阅类型和积分信息（优先使用 token 中的 project_id / is_gcp_tos 上下文）
 pub async fn fetch_project_id_for_token(
     token: &TokenData,
     email: &str,
 ) -> (Option<String>, Option<String>, Vec<CreditInfo>) {
+    let meta = fetch_project_metadata_for_token(token, email).await;
+    (meta.project_id, meta.subscription_tier, meta.credits)
+}
+
+pub async fn fetch_project_metadata_for_token(
+    token: &TokenData,
+    email: &str,
+) -> ProjectMetadataResult {
     let ctx = QuotaCloudCodeContext::from_token(token);
-    fetch_project_id_with_context(&token.access_token, email, &ctx).await
+    fetch_project_metadata_with_context(&token.access_token, email, &ctx).await
 }
 
 pub async fn fetch_project_id_with_context(
@@ -628,11 +787,21 @@ pub async fn fetch_project_id_with_context(
     email: &str,
     ctx: &QuotaCloudCodeContext,
 ) -> (Option<String>, Option<String>, Vec<CreditInfo>) {
+    let meta = fetch_project_metadata_with_context(access_token, email, ctx).await;
+    (meta.project_id, meta.subscription_tier, meta.credits)
+}
+
+pub async fn fetch_project_metadata_with_context(
+    access_token: &str,
+    email: &str,
+    ctx: &QuotaCloudCodeContext,
+) -> ProjectMetadataResult {
     let client = create_client();
     let mut subscription_tier: Option<String> = None;
     let mut allowed_tiers: Vec<AllowedTier> = Vec::new();
     let mut last_error: Option<String> = None;
     let mut credits: Vec<CreditInfo> = Vec::new();
+    let mut resolved_is_gcp_tos: Option<bool> = None;
     let base_url = resolve_cloud_code_base_url(ctx);
     let ua = load_code_assist_user_agent();
     let x_goog_api_client = load_code_assist_x_goog_api_client();
@@ -686,6 +855,23 @@ pub async fn fetch_project_id_with_context(
                                     subscription_tier =
                                         paid_tier_id.clone().or(current_tier_id.clone());
 
+                                    // 从 currentTier / allowedTiers 中解析 usesGcpTos（严格遵循 Google 返回的真实字段）
+                                    let detected_gcp_tos = data
+                                        .current_tier
+                                        .as_ref()
+                                        .and_then(|t| t.uses_gcp_tos)
+                                        .or_else(|| {
+                                            data.allowed_tiers.as_ref().and_then(|tiers| {
+                                                tiers
+                                                    .iter()
+                                                    .find(|t| t.is_default.unwrap_or(false))
+                                                    .and_then(|t| t.uses_gcp_tos)
+                                            })
+                                        });
+                                    if detected_gcp_tos.is_some() {
+                                        resolved_is_gcp_tos = detected_gcp_tos;
+                                    }
+
                                     // 提取积分数据
                                     if let Some(ref paid_tier) = data.paid_tier {
                                         credits = extract_credits_from_tier(paid_tier);
@@ -706,7 +892,6 @@ pub async fn fetch_project_id_with_context(
                                             ));
                                         }
                                     }
-
                                     if subscription_tier.is_some() {
                                         log_subscription_tier_result(
                                             email,
@@ -726,12 +911,12 @@ pub async fn fetch_project_id_with_context(
                                             })
                                             .unwrap_or_else(|| "-".to_string());
                                         let reason = format!(
-                                        "loadCodeAssist 成功但无 tier: paidTier={:?}, currentTier={:?}, allowedTiers=[{}], hasProject={}",
-                                        paid_tier_id,
-                                        current_tier_id,
-                                        allowed_tier_preview,
-                                        data.project.is_some()
-                                    );
+                                            "loadCodeAssist 成功但无 tier: paidTier={:?}, currentTier={:?}, allowedTiers=[{}], hasProject={}",
+                                            paid_tier_id,
+                                            current_tier_id,
+                                            allowed_tier_preview,
+                                            data.project.is_some()
+                                        );
                                         log_subscription_tier_result(
                                             email,
                                             subscription_tier.as_ref(),
@@ -739,10 +924,18 @@ pub async fn fetch_project_id_with_context(
                                         );
                                     }
 
-                                    let response_project_id =
-                                        data.project.as_ref().and_then(extract_project_id);
+                                    let response_project_id = data
+                                        .project
+                                        .as_ref()
+                                        .and_then(extract_project_id)
+                                        .filter(|id| !id.trim().is_empty() && id.trim() != "aicode-consumers");
                                     if let Some(project_id) = response_project_id.clone() {
-                                        return (Some(project_id), subscription_tier, credits);
+                                        return ProjectMetadataResult {
+                                            project_id: Some(project_id),
+                                            subscription_tier,
+                                            credits,
+                                            is_gcp_tos: resolved_is_gcp_tos,
+                                        };
                                     }
 
                                     if let Some(tiers) = data.allowed_tiers {
@@ -765,12 +958,16 @@ pub async fn fetch_project_id_with_context(
                                         .await
                                         {
                                             Ok(project_id) => {
-                                                if let Some(project_id) = project_id {
-                                                    return (
-                                                        Some(project_id),
+                                                let clean_project_id = project_id.filter(|id| {
+                                                    !id.trim().is_empty() && id.trim() != "aicode-consumers"
+                                                });
+                                                if let Some(project_id) = clean_project_id {
+                                                    return ProjectMetadataResult {
+                                                        project_id: Some(project_id),
                                                         subscription_tier,
                                                         credits,
-                                                    );
+                                                        is_gcp_tos: resolved_is_gcp_tos,
+                                                    };
                                                 }
                                             }
                                             Err(err) => {
@@ -782,7 +979,12 @@ pub async fn fetch_project_id_with_context(
                                         }
                                     }
 
-                                    return (None, subscription_tier, credits);
+                                    return ProjectMetadataResult {
+                                        project_id: None,
+                                        subscription_tier,
+                                        credits,
+                                        is_gcp_tos: resolved_is_gcp_tos,
+                                    };
                                 }
                                 Err(err) => {
                                     last_error = Some(format!("loadCodeAssist 解析失败: {}", err));
@@ -815,7 +1017,7 @@ pub async fn fetch_project_id_with_context(
                                 header_value(&headers, reqwest::header::CONTENT_LENGTH)
                             );
                             crate::modules::logger::log_error(&format!(
-                                "❌ [{}] loadCodeAssist 响应读取失败: {}, {}",
+                                "❌ [{}] loadCodeAssist 请求失败: {}, {}",
                                 email, err, header_info
                             ));
                         }
@@ -830,7 +1032,12 @@ pub async fn fetch_project_id_with_context(
                         text.len()
                     );
                     log_subscription_tier_result(email, subscription_tier.as_ref(), &reason);
-                    return (None, subscription_tier, credits);
+                    return ProjectMetadataResult {
+                        project_id: None,
+                        subscription_tier,
+                        credits,
+                        is_gcp_tos: resolved_is_gcp_tos,
+                    };
                 } else if status == reqwest::StatusCode::FORBIDDEN {
                     let text = res.text().await.unwrap_or_default();
                     let reason = format!(
@@ -841,7 +1048,12 @@ pub async fn fetch_project_id_with_context(
                         text.len()
                     );
                     log_subscription_tier_result(email, subscription_tier.as_ref(), &reason);
-                    return (None, subscription_tier, credits);
+                    return ProjectMetadataResult {
+                        project_id: None,
+                        subscription_tier,
+                        credits,
+                        is_gcp_tos: resolved_is_gcp_tos,
+                    };
                 } else {
                     let text = res.text().await.unwrap_or_default();
                     let retryable =
@@ -886,7 +1098,12 @@ pub async fn fetch_project_id_with_context(
         log_subscription_tier_result(email, subscription_tier.as_ref(), "未知错误");
     }
 
-    (None, subscription_tier, credits)
+    ProjectMetadataResult {
+        project_id: None,
+        subscription_tier,
+        credits,
+        is_gcp_tos: resolved_is_gcp_tos,
+    }
 }
 
 fn build_quota_data_from_response(
@@ -894,8 +1111,32 @@ fn build_quota_data_from_response(
     subscription_tier: Option<String>,
     credits: Vec<CreditInfo>,
     quota_summary: Option<serde_json::Value>,
+    is_gcp_tos: Option<bool>,
+    project_id: Option<String>,
 ) -> QuotaData {
     let mut quota_data = QuotaData::new();
+    let is_free_tier = subscription_tier
+        .as_deref()
+        .map(str::to_lowercase)
+        .map(|s| s.contains("free") || (!s.contains("pro") && !s.contains("ultra")))
+        .unwrap_or(false);
+    quota_data.quota_summary_stale = if is_free_tier {
+        false
+    } else {
+        !quota_summary.as_ref()
+            .and_then(|summary| summary.get("groups")).and_then(Value::as_array)
+            .is_some_and(|groups| groups.iter().all(|group| {
+                group.get("buckets").and_then(Value::as_array).is_some_and(|buckets| {
+                    buckets.iter().all(|bucket| {
+                        bucket.get("bucketId").and_then(Value::as_str).is_some_and(|id| !id.is_empty())
+                            && bucket.get("remainingFraction").and_then(Value::as_f64).is_some()
+                    })
+                })
+            }))
+    };
+    if !quota_data.quota_summary_stale {
+        quota_data.quota_summary_updated_at = Some(quota_data.last_updated);
+    }
 
     for (name, info) in quota_response.models {
         let display_name = info
@@ -949,8 +1190,37 @@ fn build_quota_data_from_response(
 
     quota_data.subscription_tier = subscription_tier;
     quota_data.credits = credits;
+    quota_data.is_gcp_tos = is_gcp_tos;
+    quota_data.project_id = project_id;
     quota_data
 }
+
+fn is_summary_bucket(name: &str) -> bool {
+    matches!(name, "3p-5h" | "claude:5h" | "3p-weekly" | "claude:weekly"
+        | "gemini-5h" | "gemini:5h" | "gemini-weekly" | "gemini:weekly")
+}
+
+/// Merge only real quota windows from this account's last successful summary.
+/// Fresh model-level data remains fresh; no model name is interpreted as a window.
+pub(crate) fn preserve_failed_quota_summary(quota: &mut QuotaData, previous: Option<&QuotaData>) {
+    if !quota.quota_summary_stale || quota.is_forbidden { return; }
+    let Some(previous) = previous else { return; };
+    if previous.is_forbidden || previous.project_id != quota.project_id
+        || previous.subscription_tier != quota.subscription_tier { return; }
+    for model in previous.models.iter().filter(|model| is_summary_bucket(&model.name)) {
+        if !quota.models.iter().any(|current| current.name == model.name) {
+            quota.models.push(model.clone());
+        }
+    }
+    if quota.models.iter().any(|model| is_summary_bucket(&model.name)) {
+        quota.quota_summary_updated_at = previous.quota_summary_updated_at
+            .or_else(|| (!previous.quota_summary_stale).then_some(previous.last_updated));
+    }
+}
+
+#[cfg(test)]
+#[path = "quota_summary_tests.rs"]
+mod summary_tests;
 
 pub async fn fetch_quota_for_token(
     token: &TokenData,
@@ -970,16 +1240,32 @@ pub async fn fetch_quota_with_context(
     use crate::error::AppError;
 
     let base_url = resolve_cloud_code_base_url(ctx);
-    let (resolved_project_id, subscription_tier, credits) =
-        fetch_project_id_with_context(access_token, email, ctx).await;
+    let meta = fetch_project_metadata_with_context(access_token, email, ctx).await;
+    let resolved_project_id = meta
+        .project_id
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty() && id != "aicode-consumers");
+    let subscription_tier = meta.subscription_tier;
+    let credits = meta.credits;
+    let is_gcp_tos = meta.is_gcp_tos;
     let effective_project_id = resolved_project_id
         .clone()
-        .or_else(|| ctx.preferred_project_id.clone());
+        .or_else(|| ctx.preferred_project_id.clone())
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty() && id != "aicode-consumers");
 
     // 保留缓存，但缓存命中前仍先执行与 Antigravity IDE.app 对齐的项目识别流程。
     if !skip_cache {
         if let Some(record) = read_api_cache("authorized", email) {
-            if is_api_cache_valid(&record) {
+            let is_dirty_cache = record
+                .project_id
+                .as_deref()
+                .map(|p| p.trim() == "aicode-consumers")
+                .unwrap_or(false);
+            if !is_dirty_cache
+                && is_api_cache_valid(&record)
+                && record.project_id == effective_project_id
+            {
                 crate::modules::logger::log_info(&format!(
                     "[QuotaApiCache] Using api cache for {} (age: {}s)",
                     email,
@@ -989,12 +1275,19 @@ pub async fn fetch_quota_with_context(
                     serde_json::from_value::<QuotaResponse>(record.payload.clone())
                 {
                     let quota_summary = record.payload.get("quota_summary").cloned();
-                    let quota_data = build_quota_data_from_response(
+                    let mut quota_data = build_quota_data_from_response(
                         quota_response,
                         subscription_tier.clone(),
                         credits.clone(),
                         quota_summary,
+                        is_gcp_tos,
+                        resolved_project_id.clone(),
                     );
+                    // A cache hit is not a new successful query.
+                    quota_data.last_updated = record.updated_at / 1000;
+                    if quota_data.quota_summary_updated_at.is_some() {
+                        quota_data.quota_summary_updated_at = Some(record.updated_at / 1000);
+                    }
                     return Ok(QuotaFetchResult {
                         quota: quota_data,
                         error: None,
@@ -1002,7 +1295,7 @@ pub async fn fetch_quota_with_context(
                 }
             } else {
                 crate::modules::logger::log_info(&format!(
-                    "[QuotaApiCache] Cache expired for {} (age: {}s), fetching from network",
+                    "[QuotaApiCache] Cache expired or project changed for {} (age: {}s), fetching from network",
                     email,
                     api_cache_age_secs(&record),
                 ));
@@ -1013,6 +1306,7 @@ pub async fn fetch_quota_with_context(
     let client = create_client();
     let payload = effective_project_id
         .as_ref()
+        .filter(|id| !id.trim().is_empty() && id.trim() != "aicode-consumers")
         .map(|id| json!({ "project": id }))
         .unwrap_or_else(|| json!({}));
     let cloud_code_user_agent = build_cloud_code_user_agent();
@@ -1042,17 +1336,12 @@ pub async fn fetch_quota_with_context(
                         let mut q = QuotaData::new();
                         q.is_forbidden = true;
                         q.subscription_tier = subscription_tier.clone();
-                        let message = if text.trim().is_empty() {
-                            "API returned 403 Forbidden".to_string()
-                        } else {
-                            text
-                        };
+                        q.is_gcp_tos = is_gcp_tos;
+                        q.project_id = resolved_project_id.clone();
+                        let parsed_error = parse_google_api_error_with_email(status.as_u16(), &text, Some(email));
                         return Ok(QuotaFetchResult {
                             quota: q,
-                            error: Some(QuotaFetchError {
-                                code: Some(status.as_u16()),
-                                message,
-                            }),
+                            error: Some(parsed_error),
                         });
                     }
 
@@ -1073,8 +1362,9 @@ pub async fn fetch_quota_with_context(
                     .map_err(|e| AppError::Unknown(format!("API 响应解析失败: {}", e)))?;
 
                 // Fetch retrieveUserQuotaSummary to get weekly and 5h buckets
-                let summary_url = format!("{}/v1internal:retrieveUserQuotaSummary", base_url);
                 let mut quota_summary_val: Option<serde_json::Value> = None;
+                let mut quota_summary_error: Option<QuotaFetchError> = None;
+                let summary_url = format!("{}/v1internal:retrieveUserQuotaSummary", base_url);
                 crate::modules::logger::log_info(&format!(
                     "[Quota] 发送 retrieveUserQuotaSummary, url: {}",
                     summary_url
@@ -1123,14 +1413,21 @@ pub async fn fetch_quota_with_context(
                             }
                         } else {
                             let err_text = res.text().await.unwrap_or_default();
-                            crate::modules::logger::log_error(&format!(
+                            crate::modules::logger::log_warn(&format!(
                                 "[Quota] retrieveUserQuotaSummary 请求未成功: {}, body: {}",
                                 status, err_text
                             ));
+                            let parsed = parse_google_api_error_with_email(status.as_u16(), &err_text, Some(email));
+                            if parsed.reason.as_deref() == Some("VALIDATION_REQUIRED")
+                                || parsed.validation_url.is_some()
+                                || parsed.message.contains("Verify your account")
+                            {
+                                quota_summary_error = Some(parsed);
+                            }
                         }
                     }
                     Err(e) => {
-                        crate::modules::logger::log_error(&format!(
+                        crate::modules::logger::log_warn(&format!(
                             "[Quota] retrieveUserQuotaSummary 发送失败: {}",
                             e
                         ));
@@ -1152,11 +1449,13 @@ pub async fn fetch_quota_with_context(
                     subscription_tier.clone(),
                     credits.clone(),
                     quota_summary_val,
+                    is_gcp_tos,
+                    resolved_project_id.clone(),
                 );
 
                 return Ok(QuotaFetchResult {
                     quota: quota_data,
-                    error: None,
+                    error: quota_summary_error,
                 });
             }
             Err(e) => {
@@ -1171,3 +1470,59 @@ pub async fn fetch_quota_with_context(
 
     Err(AppError::Unknown("配额查询失败".to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_google_validation_url_empty_authuser() {
+        let raw = "https://accounts.google.com/signin/continue?sarp=1&scc=1&continue=https%3A%2F%2Fdevelopers.google.com%2Fgemini-code-assist%2Fauth%2Fauth_success_gemini&plt=AKgnsbtp&flowName=GlifWebSignIn&authuser";
+        let email = "target@gmail.com";
+        let formatted = format_google_validation_url(raw, email);
+
+        let parsed = url::Url::parse(&formatted).unwrap();
+        let pairs: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+        assert_eq!(pairs.get("authuser").map(|s| s.as_str()), Some("target@gmail.com"));
+        assert_eq!(pairs.get("login_hint").map(|s| s.as_str()), Some("target@gmail.com"));
+        assert_eq!(pairs.get("Email").map(|s| s.as_str()), Some("target@gmail.com"));
+        assert_eq!(pairs.get("plt").map(|s| s.as_str()), Some("AKgnsbtp"));
+    }
+
+    #[test]
+    fn test_format_google_validation_url_numeric_authuser() {
+        let raw = "https://accounts.google.com/signin/continue?authuser=0&continue=https%3A%2F%2Fdevelopers.google.com";
+        let formatted = format_google_validation_url(raw, "target@gmail.com");
+
+        let parsed = url::Url::parse(&formatted).unwrap();
+        let pairs: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+        assert_eq!(pairs.get("authuser").map(|s| s.as_str()), Some("target@gmail.com"));
+        assert_eq!(pairs.get("login_hint").map(|s| s.as_str()), Some("target@gmail.com"));
+        assert_eq!(pairs.get("Email").map(|s| s.as_str()), Some("target@gmail.com"));
+    }
+
+    #[test]
+    fn test_format_google_validation_url_preserves_valid_email() {
+        let raw = "https://accounts.google.com/signin/continue?authuser=existing%40gmail.com&continue=https%3A%2F%2Fdevelopers.google.com";
+        let formatted = format_google_validation_url(raw, "target@gmail.com");
+
+        let parsed = url::Url::parse(&formatted).unwrap();
+        let pairs: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+        assert_eq!(pairs.get("authuser").map(|s| s.as_str()), Some("existing@gmail.com"));
+        assert_eq!(pairs.get("login_hint").map(|s| s.as_str()), Some("target@gmail.com"));
+    }
+
+    #[test]
+    fn test_format_google_validation_url_ignores_non_google_or_empty() {
+        let raw = "https://example.com/verify?code=123";
+        assert_eq!(format_google_validation_url(raw, "target@gmail.com"), raw);
+        assert_eq!(format_google_validation_url(raw, ""), raw);
+
+        let fake_host = "https://evil-google.com/signin?authuser";
+        assert_eq!(format_google_validation_url(fake_host, "target@gmail.com"), fake_host);
+
+        let query_substr = "https://attacker.com/login?redirect=accounts.google.com&authuser";
+        assert_eq!(format_google_validation_url(query_substr, "target@gmail.com"), query_substr);
+    }
+}
+

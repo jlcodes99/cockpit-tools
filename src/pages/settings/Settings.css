@@ -934,7 +934,7 @@ input:checked + .slider:before {
   color: var(--text-secondary);
 }
 
-.settings-transfer-modal {
+.modal.settings-transfer-modal {
   width: min(760px, calc(100vw - 32px));
   max-width: 760px;
 }
@@ -947,7 +947,12 @@ input:checked + .slider:before {
 
 .settings-backup-modal-body {
   max-height: min(70vh, 640px);
+  min-height: 0;
   overflow: auto;
+}
+
+.settings-backup-modal-footer {
+  flex-shrink: 0;
 }
 
 .settings-transfer-modal-desc {
@@ -1042,8 +1047,17 @@ input:checked + .slider:before {
   gap: 8px;
 }
 
-.settings-backup-migration-modal {
+.settings-backup-migration-confirm-overlay {
+  z-index: 10010;
+}
+
+.settings-backup-migration-progress-overlay {
+  z-index: 10020;
+}
+
+.modal.settings-backup-migration-modal {
   width: min(620px, calc(100vw - 32px));
+  max-width: 620px;
 }
 
 .settings-backup-migration-paths {
@@ -1191,6 +1205,7 @@ input:checked + .slider:before {
 
 .settings-backup-migration-warning {
   padding: 10px;
+  overflow-wrap: anywhere;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(245, 158, 11, 0.35);
   background: rgba(245, 158, 11, 0.08);

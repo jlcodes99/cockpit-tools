@@ -4,6 +4,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	log "github.com/sirupsen/logrus"
+	"github.com/tidwall/gjson"
 )
 
 // CodexWebsocketsExecutor executes Codex Responses requests using a WebSocket transport.
@@ -116,6 +119,96 @@ func (e *CodexAutoExecutor) UpstreamDisconnectChan(sessionID string) <-chan erro
 		return nil
 	}
 	return e.wsExec.UpstreamDisconnectChan(sessionID)
+}
+
+// InterruptExecutionSession forwards a response.interrupt control frame on the
+// current upstream socket. It does not dial, replay, or select another credential.
+func (e *CodexAutoExecutor) InterruptExecutionSession(ctx context.Context, sessionID string, payload []byte) error {
+	if e == nil || e.wsExec == nil {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	return e.wsExec.InterruptExecutionSession(ctx, sessionID, payload)
+}
+
+// InterruptExecutionSession writes the original interrupt payload to the session
+// socket captured for this execution. Payload rules and response.create defaults
+// must not rewrite response_id, mode, or extension fields.
+func (e *CodexWebsocketsExecutor) InterruptExecutionSession(ctx context.Context, sessionID string, payload []byte) error {
+	if e == nil {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	if ctx != nil {
+		if errCtx := ctx.Err(); errCtx != nil {
+			return errCtx
+		}
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	store := e.store
+	if store == nil {
+		store = globalCodexWebsocketSessionStore
+	}
+	store.mu.Lock()
+	sess := store.sessions[sessionID]
+	store.mu.Unlock()
+	if sess == nil {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	sess.connMu.Lock()
+	conn := sess.conn
+	authID := sess.authID
+	sess.connMu.Unlock()
+	if conn == nil {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	capturedRead, _ := sess.activeForConn(conn)
+	// Credential checks may call the manager; never hold session locks across them.
+	authEnabled := cliproxyexecutor.WebsocketAuthEnabled(ctx, authID)
+	sess.connMu.Lock()
+	if sess.conn != conn {
+		sess.connMu.Unlock()
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	sess.activeMu.Lock()
+	alreadyTerminal := sess.responseStateConn == conn && sess.terminalResponseIDs.Contains(gjson.GetBytes(payload, "response_id").String())
+	readCh, activeDone := sess.activeCh, sess.activeDone
+	active := sess.activeConn == conn && readCh != nil
+	var disconnectErr error
+	if sess.terminalConn == conn {
+		disconnectErr = sess.terminalErr
+	}
+	sess.activeMu.Unlock()
+	sess.connMu.Unlock()
+	if disconnectErr != nil {
+		return disconnectErr
+	}
+	if alreadyTerminal {
+		return nil
+	}
+	if !active || readCh != capturedRead {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	if !authEnabled {
+		return fmt.Errorf("websocket credential is no longer enabled")
+	}
+	if errWrite := sess.writeInterruptMessage(ctx, conn, readCh, activeDone, payload); errWrite != nil {
+		// Completion can clear the read epoch while this interrupt waits for another writer.
+		if errors.Is(errWrite, cliproxyexecutor.ErrNoActiveUpstreamWebsocket) {
+			sess.connMu.Lock()
+			sess.activeMu.Lock()
+			completed := sess.conn == conn && sess.responseStateConn == conn && sess.terminalResponseIDs.Contains(gjson.GetBytes(payload, "response_id").String())
+			sess.activeMu.Unlock()
+			sess.connMu.Unlock()
+			if completed {
+				return nil
+			}
+		}
+		return errWrite
+	}
+	log.Debug("codex websockets: response.interrupt forwarded")
+	return nil
 }
 
 func codexWebsocketsEnabled(auth *cliproxyauth.Auth) bool {

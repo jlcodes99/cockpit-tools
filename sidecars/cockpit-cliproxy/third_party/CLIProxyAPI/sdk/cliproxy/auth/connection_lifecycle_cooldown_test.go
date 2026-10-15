@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"testing"
@@ -94,6 +95,43 @@ func TestManager_MarkResult_ConnectionLifecycleAuthLevelDoesNotCooldown(t *testi
 	}
 	if !updated.NextRetryAfter.IsZero() {
 		t.Fatalf("expected auth-level lifecycle error to keep auth cooldown unset, got %v", updated.NextRetryAfter)
+	}
+}
+
+func TestManager_MarkResult_TransportNetworkDoesNotCooldown(t *testing.T) {
+	previous := quotaCooldownDisabled.Load()
+	quotaCooldownDisabled.Store(false)
+	t.Cleanup(func() { quotaCooldownDisabled.Store(previous) })
+
+	prevTransient := transientErrorCooldownSeconds.Load()
+	SetTransientErrorCooldownSeconds(5)
+	t.Cleanup(func() { transientErrorCooldownSeconds.Store(prevTransient) })
+
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "dns", err: &net.DNSError{Name: "chatgpt.com", Err: "no such host"}},
+		{name: "dial", err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}},
+		{name: "wrapped textual dns", err: errors.New("utls: dial upstream: dial tcp: lookup chatgpt.com: no such host")},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewManager(nil, nil, nil)
+			auth := &Auth{ID: "auth-transport-" + tc.name, Provider: "codex"}
+			if _, errRegister := m.Register(context.Background(), auth); errRegister != nil {
+				t.Fatalf("register auth: %v", errRegister)
+			}
+
+			m.MarkResult(context.Background(), Result{
+				AuthID:   auth.ID,
+				Provider: auth.Provider,
+				Model:    "gpt-5.6-sol",
+				Error:    resultErrorFromError(tc.err),
+			})
+			assertNoCooldown(t, m, auth.ID, "gpt-5.6-sol")
+		})
 	}
 }
 
@@ -218,6 +256,10 @@ func TestResultErrorFromError_ConnectionLifecycleDoesNotBecomeRequestScoped(t *t
 		&websocket.CloseError{Code: websocket.CloseAbnormalClosure, Text: "unexpected EOF"},
 		fmt.Errorf("upstream read: %w", &websocket.CloseError{Code: websocket.CloseAbnormalClosure, Text: "unexpected EOF"}),
 		fmt.Errorf("wrap: %w", io.ErrUnexpectedEOF),
+		&url.Error{Op: "Post", URL: "https://chatgpt.com", Err: &net.DNSError{Name: "chatgpt.com", Err: "no such host"}},
+		&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")},
+		errors.New("dial tcp: lookup chatgpt.com: no such host"),
+		errors.New("network is unreachable"),
 		errors.New("websocket: close 1000 (normal)"),
 		errors.New("websocket: close 1006 (abnormal closure): unexpected EOF"),
 		errors.New("context deadline exceeded"),

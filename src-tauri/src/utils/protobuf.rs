@@ -92,15 +92,9 @@ pub fn create_oauth_info_with_metadata(
     expiry: i64,
     is_gcp_tos: Option<bool>,
     id_token: Option<&str>,
-    email: Option<&str>,
+    _email: Option<&str>,
 ) -> Vec<u8> {
-    let mut is_gcp_tos = is_gcp_tos.unwrap_or(false);
-    if let Some(email) = email.map(str::trim).filter(|value| !value.is_empty()) {
-        let lower = email.to_ascii_lowercase();
-        if lower.ends_with("@gmail.com") || lower.ends_with("@googlemail.com") {
-            is_gcp_tos = false;
-        }
-    }
+    let is_gcp_tos = is_gcp_tos.unwrap_or(false);
 
     // Field 1: access_token (string, wire_type = 2)
     let field1 = encode_string_field(1, access_token);
@@ -296,3 +290,39 @@ fn extract_string_field(data: &[u8], target_field: u32) -> Option<String> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_oauth_info_with_metadata_gmail_gcp_tos() {
+        let payload = create_oauth_info_with_metadata(
+            "fake_access_token",
+            "fake_refresh_token",
+            1700000000,
+            Some(true),
+            Some("fake_id_token"),
+            Some("test-gcp-tos-user@gmail.com"),
+        );
+
+        let has_field_6 = payload.windows(2).any(|w| w == [0x30, 0x01]);
+        assert!(has_field_6, "Protobuf must encode field 6 when is_gcp_tos is Some(true)");
+    }
+
+    #[test]
+    fn test_create_oauth_info_with_metadata_gmail_personal() {
+        let payload = create_oauth_info_with_metadata(
+            "fake_access_token",
+            "fake_refresh_token",
+            1700000000,
+            None,
+            Some("fake_id_token"),
+            Some("test-personal-user@gmail.com"),
+        );
+
+        let has_field_6 = payload.windows(2).any(|w| w == [0x30, 0x01]);
+        assert!(!has_field_6, "Protobuf must NOT encode field 6 when is_gcp_tos is None");
+    }
+}
+

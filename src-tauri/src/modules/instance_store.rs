@@ -69,6 +69,7 @@ pub fn save_instance_store(
     _file_name: &str,
     store: &InstanceStore,
 ) -> Result<(), String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let data_dir = path.parent().ok_or("无法获取实例配置目录")?;
     fs::create_dir_all(data_dir).map_err(|e| format!("创建实例配置目录失败: {}", e))?;
     let content =

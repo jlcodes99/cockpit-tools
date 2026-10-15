@@ -42,20 +42,9 @@ const CHAT_COMPLETIONS_PROVIDER_HOSTS = [
 ];
 
 export type CodexLocalAccessAccountIneligibleReason =
-  | "chat_completions_api_key"
-  | "deepseek_unsupported"
   | "free_restricted"
   | "pending_oauth"
   | "web_session_quota_only";
-
-function isDeepSeekApiServiceAccount(account: CodexAccount): boolean {
-  const providerId = (account.api_provider_id || "").trim().toLowerCase();
-  if (providerId === "deepseek") {
-    return true;
-  }
-  const baseUrl = (account.api_base_url || "").trim().toLowerCase();
-  return baseUrl.includes("api.deepseek.com");
-}
 
 export function isCodexChatCompletionsApiKeyAccount(account: CodexAccount): boolean {
   if (!isCodexApiKeyAccount(account)) {
@@ -96,12 +85,6 @@ export function getCodexLocalAccessAccountIneligibleReason(
   // ChatGPT Web Session: quota view only, never join API service.
   if (isCodexWebSessionAccount(account)) {
     return "web_session_quota_only";
-  }
-  if (isCodexChatCompletionsApiKeyAccount(account)) {
-    return "chat_completions_api_key";
-  }
-  if (isDeepSeekApiServiceAccount(account)) {
-    return "deepseek_unsupported";
   }
   if (
     restrictFreeAccounts &&

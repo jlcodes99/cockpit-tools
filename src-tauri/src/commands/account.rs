@@ -379,6 +379,7 @@ pub async fn fetch_account_quota(account_id: String) -> AppResult<models::Accoun
 pub async fn refresh_all_quotas(
     app: tauri::AppHandle,
     trigger: Option<String>,
+    runtime_target: Option<String>,
 ) -> Result<modules::account::RefreshStats, String> {
     let trigger = match trigger
         .as_deref()
@@ -392,7 +393,7 @@ pub async fn refresh_all_quotas(
     let result = modules::account::refresh_all_quotas_logic(trigger).await;
     if result.is_ok() {
         let mut switched = false;
-        match modules::account::run_auto_switch_if_needed().await {
+        match run_auto_switch_for_runtime_target(&app, runtime_target.as_deref()).await {
             Ok(Some(account)) => {
                 modules::logger::log_info(&format!("[AutoSwitch] 自动切号完成: {}", account.email));
                 switched = true;
@@ -413,8 +414,11 @@ pub async fn refresh_all_quotas(
 }
 
 #[tauri::command]
-pub async fn refresh_current_quota(app: tauri::AppHandle) -> Result<(), String> {
-    let Some(account) = modules::get_current_account().map_err(|e| e.to_string())? else {
+pub async fn refresh_current_quota(
+    app: tauri::AppHandle,
+    runtime_target: Option<String>,
+) -> Result<(), String> {
+    let Some(account) = get_current_account(runtime_target.clone()).await? else {
         return Err("未找到当前账号".to_string());
     };
     let mut account = account;
@@ -424,7 +428,7 @@ pub async fn refresh_current_quota(app: tauri::AppHandle) -> Result<(), String> 
     modules::update_account_quota(&account.id, quota).map_err(|e| e.to_string())?;
 
     let mut switched = false;
-    match modules::account::run_auto_switch_if_needed().await {
+    match run_auto_switch_for_runtime_target(&app, runtime_target.as_deref()).await {
         Ok(Some(account)) => {
             modules::logger::log_info(&format!(
                 "[AutoSwitch] 当前账号刷新后自动切号完成: {}",
@@ -446,6 +450,30 @@ pub async fn refresh_current_quota(app: tauri::AppHandle) -> Result<(), String> 
 
     let _ = crate::modules::tray::update_tray_menu(&app);
     Ok(())
+}
+
+async fn run_auto_switch_for_runtime_target(
+    app: &AppHandle,
+    runtime_target: Option<&str>,
+) -> Result<Option<models::Account>, String> {
+    if !modules::config::get_user_config().auto_switch_enabled {
+        return Ok(None);
+    }
+    let target = normalize_antigravity_runtime_target(runtime_target);
+    let current_id = get_current_account(runtime_target.map(str::to_owned))
+        .await?
+        .map(|account| account.id);
+    modules::account::run_auto_switch_if_needed(current_id, |account_id, reason| async move {
+        match target {
+            AntigravityRuntimeTarget::Legacy => {
+                switch_account_legacy_antigravity(app.clone(), account_id).await
+            }
+            AntigravityRuntimeTarget::Ide => {
+                modules::account::execute_ide_auto_switch(account_id, reason).await
+            }
+        }
+    })
+    .await
 }
 
 async fn switch_account_legacy_antigravity(
@@ -601,8 +629,8 @@ pub async fn switch_account(
 
     modules::logger::log_info(&format!("开始切换账号: {}", account_id));
 
-    // 1. 加载并验证账号存在
-    let mut account = modules::load_account(&account_id)?;
+    // 1. 加载并验证账号存在，并预刷新与探测必要元数据
+    let mut account = modules::account::prepare_account_for_injection(&account_id).await?;
     modules::logger::log_info(&format!(
         "正在切换到账号: {} (ID: {})",
         account.email, account.id
@@ -622,24 +650,12 @@ pub async fn switch_account(
         return Err(e);
     }
 
-    // 2. 确保 Token 有效（自动刷新过期的 Token）
-    let fresh_token = modules::oauth::ensure_fresh_token(&account.token)
-        .await
-        .map_err(|e| format!("Token 刷新失败: {}", e))?;
-
-    // 如果 Token 更新了，保存回账号文件
-    if fresh_token.access_token != account.token.access_token {
-        modules::logger::log_info(&format!("Token 已刷新: {}", account.email));
-        account.token = fresh_token.clone();
-        modules::save_account(&account)?;
-    }
-
-    // 3. 更新工具内部状态
+    // 2. 更新工具内部状态
     modules::set_current_account_id(&account_id)?;
     account.update_last_used();
     modules::save_account(&account)?;
 
-    // 4. 同步更新 Antigravity IDE 默认实例的绑定账号（不同步到 Codex，因为账号体系不同）
+    // 3. 同步更新 Antigravity IDE 默认实例的绑定账号（不同步到 Codex，因为账号体系不同）
     if let Err(e) = modules::instance::update_default_settings(
         Some(Some(account_id.clone())),
         None,
@@ -653,15 +669,23 @@ pub async fn switch_account(
         ));
     }
 
-    // 5. 关闭受管进程：按默认实例目录关闭受管进程，等待其完全退出
+    // 4. 关闭受管进程：按默认实例目录关闭受管进程，等待其完全退出
     let default_dir = modules::instance::get_default_user_data_dir()?;
     let default_dir_str = default_dir.to_string_lossy().to_string();
     modules::process::close_antigravity_instances(&[default_dir_str], 20)?;
     let _ = modules::instance::update_default_pid(None);
 
-    // 6. 进程完全退出后，执行磁盘级别的文件注入
-    // 6.1 将账号 Token 注入默认实例目录
-    modules::instance::inject_account_to_profile(&default_dir, &account_id)?;
+    // 5. 进程完全退出后，先确保本次要启动的默认目录写入成功；
+    // 其他已存在客户端目录只做尽力同步，不能反向阻断主流程。
+    modules::instance::inject_account_to_profile_with_account(&default_dir, &account)?;
+    for target_dir in modules::instance::get_all_antigravity_user_data_dirs() {
+        if target_dir == default_dir {
+            continue;
+        }
+        if let Err(e) = modules::instance::inject_account_to_profile_with_account(&target_dir, &account) {
+            modules::logger::log_warn(&format!("[Switch] 注入目录 {} 失败: {}", target_dir.display(), e));
+        }
+    }
 
     // 7. 启动 Antigravity IDE（带默认实例自定义启动参数；启动失败不阻断切号，保持原行为）
     modules::logger::log_info("正在启动 Antigravity IDE 默认实例...");
@@ -815,6 +839,51 @@ pub async fn save_account_groups(data: String) -> Result<(), String> {
     let path = dir.join(GROUPS_FILE);
     modules::atomic_write::write_string_atomic(&path, &data)
         .map_err(|e| format!("Failed to write groups: {}", e))
+}
+
+fn resolve_platform_groups_filename(platform: &str) -> String {
+    let lower = platform.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "antigravity" | "gemini" => GROUPS_FILE.to_string(),
+        "codex" => "codex_account_groups.json".to_string(),
+        "claude" => "claude_manager_account_groups.json".to_string(),
+        other => {
+            let sanitized: String = other
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            format!("{}_account_groups.json", sanitized)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn load_platform_account_groups(platform: String) -> Result<String, String> {
+    let filename = resolve_platform_groups_filename(&platform);
+    let path = modules::account::get_data_dir()?.join(filename);
+    if !path.exists() {
+        return Ok("[]".to_string());
+    }
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read platform groups for {}: {}", platform, e))
+}
+
+#[tauri::command]
+pub async fn save_platform_account_groups(platform: String, data: String) -> Result<(), String> {
+    validate_account_groups_payload(&data)?;
+    let dir = modules::account::get_data_dir()?;
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+    }
+    let filename = resolve_platform_groups_filename(&platform);
+    let path = dir.join(filename);
+    modules::atomic_write::write_string_atomic(&path, &data)
+        .map_err(|e| format!("Failed to write platform groups for {}: {}", platform, e))
 }
 
 #[cfg(test)]

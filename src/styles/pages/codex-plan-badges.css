@@ -1,0 +1,83 @@
+/* Retain the existing capsule dimensions; PRO 500 uses smoky purple/champagne. */
+.tier-badge.pro.codex-pro-500,
+.codex-accounts-page .account-table .tier-badge.pro.codex-pro-500,
+.account-mini-card .tier-badge.pro.codex-pro-500,
+.instances-page .instance-plan-badge.pro.codex-pro-500,
+.floating-card-plan.codex-pro-500,
+.group-account-tier-badge.pro.codex-pro-500 {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  isolation: isolate;
+  flex-shrink: 0;
+  white-space: nowrap;
+  --codex-pro-500-cycle: 7s;
+  background: #745487;
+  color: #f8e6bf;
+  border: 1px solid rgba(199, 173, 119, 0.65);
+  text-shadow: none;
+  box-shadow:
+    inset 0 1px 0 rgba(248, 230, 191, 0.16),
+    inset 0 -1px 0 rgba(48, 27, 61, 0.12),
+    0 1px 3px rgba(68, 40, 82, 0.12);
+}
+
+.tier-badge.pro.codex-pro-500::before,
+.codex-accounts-page .account-table .tier-badge.pro.codex-pro-500::before,
+.account-mini-card .tier-badge.pro.codex-pro-500::before,
+.instances-page .instance-plan-badge.pro.codex-pro-500::before,
+.floating-card-plan.codex-pro-500::before,
+.group-account-tier-badge.pro.codex-pro-500::before {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 43%, rgba(255, 244, 216, 0.025) 48%, rgba(255, 244, 216, 0.05) 50%, rgba(255, 244, 216, 0.025) 52%, transparent 57%);
+  background-size: 250% 100%;
+  background-position: 95% 0;
+  opacity: 0;
+  animation: var(--codex-pro-500-sheen-animation, codex-pro-500-sheen var(--codex-pro-500-cycle, 7s) ease-in-out infinite);
+  pointer-events: none;
+}
+
+.codex-pro-500:is(.tier-badge, .instance-plan-badge, .floating-card-plan, .group-account-tier-badge)::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  z-index: -1;
+  background: linear-gradient(135deg, #ffffff 30%, #fff2d0 100%);
+  clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%);
+  opacity: 0.18;
+  animation: var(--codex-pro-500-sparkle-animation, codex-pro-500-sparkle var(--codex-pro-500-cycle, 7s) ease-in-out infinite);
+  pointer-events: none;
+}
+
+@keyframes codex-pro-500-sheen {
+  0% { background-position: 95% 0; opacity: 0; }
+  2% { background-position: 95% 0; opacity: 1; }
+  16% { background-position: 5% 0; opacity: 1; }
+  18%, 100% { background-position: 5% 0; opacity: 0; }
+}
+
+@keyframes codex-pro-500-sparkle {
+  0%, 9%, 20%, 100% { opacity: 0.18; transform: scale(0.78); }
+  13%, 15% { opacity: 1; transform: scale(1.05); }
+  18% { opacity: 0.35; transform: scale(0.9); }
+}
+
+.codex-pro-500.plan-badge-style-mono:is(.tier-badge, .instance-plan-badge, .group-account-tier-badge)::before,
+.codex-pro-500.plan-badge-style-mono:is(.tier-badge, .instance-plan-badge, .group-account-tier-badge)::after {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-pro-500:is(.tier-badge, .instance-plan-badge, .floating-card-plan, .group-account-tier-badge) {
+    --codex-pro-500-sheen-animation: none;
+    --codex-pro-500-sparkle-animation: none;
+  }
+}

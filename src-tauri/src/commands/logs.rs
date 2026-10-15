@@ -82,8 +82,31 @@ fn build_available_log_files(paths: Vec<PathBuf>) -> Result<Vec<ManagedLogFile>,
         .collect()
 }
 
+async fn run_bounded_log_read<T: Send + 'static>(
+    gate: std::sync::Arc<tokio::sync::Semaphore>,
+    timeout: std::time::Duration,
+    task: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let permit = gate.try_acquire_owned().map_err(|_| "日志读取仍在进行，请稍后重试".to_string())?;
+    let worker = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        task()
+    });
+    tokio::time::timeout(timeout, worker).await
+        .map_err(|_| "日志读取超时，请稍后重试".to_string())?
+        .map_err(|error| format!("日志读取任务失败: {error}"))?
+}
+
 #[tauri::command]
-pub fn logs_get_snapshot(
+pub async fn logs_get_snapshot(file_name: Option<String>, line_limit: Option<usize>) -> Result<LogSnapshot, String> {
+    static GATE: std::sync::OnceLock<std::sync::Arc<tokio::sync::Semaphore>> = std::sync::OnceLock::new();
+    let gate = GATE.get_or_init(|| std::sync::Arc::new(tokio::sync::Semaphore::new(1))).clone();
+    run_bounded_log_read(gate, std::time::Duration::from_secs(5), move || {
+        read_log_snapshot(file_name, line_limit)
+    }).await
+}
+
+fn read_log_snapshot(
     file_name: Option<String>,
     line_limit: Option<usize>,
 ) -> Result<LogSnapshot, String> {
@@ -114,4 +137,25 @@ pub fn logs_get_snapshot(
 pub fn logs_open_log_directory() -> Result<(), String> {
     let log_dir = logger::get_log_dir()?;
     open_directory(&log_dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn log_read_timeout_does_not_allow_overlapping_workers() {
+        let gate = std::sync::Arc::new(tokio::sync::Semaphore::new(1));
+        let (release, blocked) = std::sync::mpsc::channel::<()>();
+        let result = run_bounded_log_read(gate.clone(), std::time::Duration::from_millis(10), move || {
+            let _ = blocked.recv();
+            Ok(1)
+        }).await;
+        assert!(result.unwrap_err().contains("超时"));
+        assert_eq!(gate.available_permits(), 0);
+        assert!(run_bounded_log_read(gate.clone(), std::time::Duration::from_secs(1), || Ok(2)).await.is_err());
+        release.send(()).unwrap();
+        let permit = tokio::time::timeout(std::time::Duration::from_secs(4), gate.clone().acquire_owned()).await.unwrap().unwrap();
+        drop(permit);
+        assert_eq!(run_bounded_log_read(gate, std::time::Duration::from_secs(1), || Ok(3)).await.unwrap(), 3);
+    }
 }

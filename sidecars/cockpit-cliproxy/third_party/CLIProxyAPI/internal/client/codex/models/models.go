@@ -4,6 +4,7 @@ package models
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -37,14 +38,29 @@ var codexClientAllowedReasoningLevels = map[string]struct{}{
 	"ultra":   {},
 }
 
+var codexClientLegacyAllowedReasoningLevels = map[string]struct{}{
+	"none":    {},
+	"minimal": {},
+	"low":     {},
+	"medium":  {},
+	"high":    {},
+	"xhigh":   {},
+}
+
 // BuildResponse builds a Codex client model response from available models.
 func BuildResponse(availableModels []map[string]any, providersForModel ProvidersForModelFunc, optimizeMultiAgentV2 bool) map[string]any {
+	return BuildResponseForClient(availableModels, providersForModel, optimizeMultiAgentV2, "")
+}
+
+// BuildResponseForClient builds a Codex client model response from available models
+// tailored for a specific client version.
+func BuildResponseForClient(availableModels []map[string]any, providersForModel ProvidersForModelFunc, optimizeMultiAgentV2 bool, clientVersion string) map[string]any {
 	return map[string]any{
-		"models": buildCodexClientModels(availableModels, providersForModel, optimizeMultiAgentV2),
+		"models": buildCodexClientModels(availableModels, providersForModel, optimizeMultiAgentV2, clientVersion),
 	}
 }
 
-func buildCodexClientModels(models []map[string]any, providersForModel ProvidersForModelFunc, optimizeMultiAgentV2 bool) []map[string]any {
+func buildCodexClientModels(models []map[string]any, providersForModel ProvidersForModelFunc, optimizeMultiAgentV2 bool, clientVersion string) []map[string]any {
 	templates, defaultTemplate, err := loadCodexClientModelTemplates()
 	if err != nil || defaultTemplate == nil {
 		return nil
@@ -57,13 +73,14 @@ func buildCodexClientModels(models []map[string]any, providersForModel Providers
 			continue
 		}
 
-		if template, ok := templates[id]; ok {
+		if template, ok := lookupCodexClientModelTemplate(templates, id); ok {
 			entry := cloneCodexClientModelMap(template)
+			entry["slug"] = id
 			applyCodexClientDisplayName(entry, model)
 			applyCodexClientMaxContextLengthOverride(entry, model)
 			applyCodexClientMaxTokens(entry, model)
 			applyCodexClientSearchToolSupport(entry, id, true, providersForModel)
-			sanitizeCodexClientReasoningMetadata(entry)
+			sanitizeCodexClientReasoningMetadata(entry, clientVersion)
 			applyCodexClientVisibilityOverride(entry, id)
 			if optimizeMultiAgentV2 {
 				entry["multi_agent_version"] = "v2"
@@ -73,10 +90,10 @@ func buildCodexClientModels(models []map[string]any, providersForModel Providers
 		}
 
 		entry := cloneCodexClientModelMap(defaultTemplate)
-		applyCodexClientModelMetadata(entry, id, model, optimizeMultiAgentV2)
+		applyCodexClientModelMetadata(entry, id, model, optimizeMultiAgentV2, clientVersion)
 		applyCodexClientMaxTokens(entry, model)
 		applyCodexClientSearchToolSupport(entry, id, false, providersForModel)
-		sanitizeCodexClientReasoningMetadata(entry)
+		sanitizeCodexClientReasoningMetadata(entry, clientVersion)
 		applyCodexClientVisibilityOverride(entry, id)
 		result = append(result, entry)
 	}
@@ -116,7 +133,7 @@ func applyCodexClientNonTemplatePriorities(result []map[string]any, templates ma
 	pending := make([]nonTemplateEntry, 0)
 	for index, entry := range result {
 		slug := stringModelValue(entry, "slug")
-		if _, ok := templates[slug]; ok {
+		if _, ok := lookupCodexClientModelTemplate(templates, slug); ok {
 			continue
 		}
 		displayName := stringModelValue(entry, "display_name")
@@ -142,6 +159,20 @@ func applyCodexClientNonTemplatePriorities(result []map[string]any, templates ma
 	for rank, entry := range pending {
 		result[entry.index]["priority"] = basePriority + 100*(rank+1)
 	}
+}
+
+// The desktop uses Luna's metadata for its temporary Reserve mode when the
+// server has no dedicated reserve template. Prefer a dedicated template if one
+// is supplied later; never invent independent context or reasoning limits.
+func lookupCodexClientModelTemplate(templates map[string]map[string]any, id string) (map[string]any, bool) {
+	if template, ok := templates[id]; ok {
+		return template, true
+	}
+	if id == "gpt-reserve" {
+		template, ok := templates["gpt-5.6-luna"]
+		return template, ok
+	}
+	return nil, false
 }
 
 func loadCodexClientModelTemplates() (map[string]map[string]any, map[string]any, error) {
@@ -229,12 +260,13 @@ func applyCodexClientSearchToolSupport(entry map[string]any, id string, template
 	}
 }
 
-func applyCodexClientModelMetadata(entry map[string]any, id string, model map[string]any, optimizeMultiAgentV2 bool) {
+func applyCodexClientModelMetadata(entry map[string]any, id string, model map[string]any, optimizeMultiAgentV2 bool, clientVersion string) {
 	info := registry.LookupModelInfo(id)
 
 	displayName := stringModelValue(model, "display_name")
 	description := stringModelValue(model, "description")
 	contextWindow := intModelValue(model, "context_length")
+	thinkingSupport := codexClientThinkingSupport(model)
 
 	if info != nil {
 		if info.DisplayName != "" {
@@ -243,7 +275,7 @@ func applyCodexClientModelMetadata(entry map[string]any, id string, model map[st
 		if info.Description != "" {
 			description = info.Description
 		}
-		if info.ContextLength > 0 {
+		if contextWindow <= 0 && info.ContextLength > 0 {
 			contextWindow = info.ContextLength
 		}
 		if info.Type == registry.OpenAIImageModelType {
@@ -253,8 +285,11 @@ func applyCodexClientModelMetadata(entry map[string]any, id string, model map[st
 		} else {
 			applyCodexClientInputModalitiesMetadata(entry, info.SupportedInputModalities)
 		}
-		applyCodexClientThinkingMetadata(entry, info.Thinking)
+		if thinkingSupport == nil {
+			thinkingSupport = info.Thinking
+		}
 	}
+	applyCodexClientThinkingMetadata(entry, thinkingSupport, clientVersion)
 
 	if maxContextWindow := intModelValue(model, "max_context_length"); maxContextWindow > 0 {
 		contextWindow = maxContextWindow
@@ -292,9 +327,34 @@ func applyCodexClientModelMetadata(entry map[string]any, id string, model map[st
 	}
 }
 
+func codexClientThinkingSupport(model map[string]any) *registry.ThinkingSupport {
+	raw, ok := model["thinking"]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch thinking := raw.(type) {
+	case *registry.ThinkingSupport:
+		return thinking
+	case registry.ThinkingSupport:
+		return &thinking
+	}
+	data, errMarshal := json.Marshal(raw)
+	if errMarshal != nil {
+		return nil
+	}
+	var thinking registry.ThinkingSupport
+	if errUnmarshal := json.Unmarshal(data, &thinking); errUnmarshal != nil {
+		return nil
+	}
+	return &thinking
+}
+
 func applyCodexClientVisibilityOverride(entry map[string]any, id string) {
 	switch strings.TrimSpace(id) {
-	case "grok-imagine-image-quality", "gpt-image-1.5", "gpt-image-2", "grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-video", "grok-imagine-video-1.5", "grok-imagine-video-1.5-preview":
+	case "gpt-reserve":
+		entry["visibility"] = "list"
+		entry["display_name"] = "GPT-5.6 Reserve"
+	case "grok-imagine-image-quality", "gpt-image-1.5", "gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5", "grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-video", "grok-imagine-video-1.5", "grok-imagine-video-1.5-preview":
 		entry["visibility"] = "hide"
 	}
 }
@@ -331,8 +391,8 @@ func applyCodexClientInputModalitiesMetadata(entry map[string]any, modalities []
 	}
 }
 
-func applyCodexClientThinkingMetadata(entry map[string]any, thinking *registry.ThinkingSupport) {
-	if thinking == nil || len(thinking.Levels) == 0 {
+func applyCodexClientThinkingMetadata(entry map[string]any, thinking *registry.ThinkingSupport, clientVersion string) {
+	if thinking == nil {
 		return
 	}
 
@@ -340,7 +400,7 @@ func applyCodexClientThinkingMetadata(entry map[string]any, thinking *registry.T
 	defaultLevel := ""
 	firstLevel := ""
 	for _, rawLevel := range thinking.Levels {
-		level := normalizeCodexClientReasoningLevel(rawLevel)
+		level := normalizeCodexClientReasoningLevel(rawLevel, clientVersion)
 		if level == "" {
 			continue
 		}
@@ -356,6 +416,8 @@ func applyCodexClientThinkingMetadata(entry map[string]any, thinking *registry.T
 		})
 	}
 	if len(levels) == 0 {
+		entry["supported_reasoning_levels"] = levels
+		delete(entry, "default_reasoning_level")
 		return
 	}
 	if defaultLevel == "" {
@@ -366,7 +428,7 @@ func applyCodexClientThinkingMetadata(entry map[string]any, thinking *registry.T
 	entry["default_reasoning_level"] = defaultLevel
 }
 
-func sanitizeCodexClientReasoningMetadata(entry map[string]any) {
+func sanitizeCodexClientReasoningMetadata(entry map[string]any, clientVersion string) {
 	rawLevels, ok := entry["supported_reasoning_levels"].([]any)
 	if !ok {
 		return
@@ -379,7 +441,7 @@ func sanitizeCodexClientReasoningMetadata(entry map[string]any) {
 		if !ok {
 			continue
 		}
-		level := normalizeCodexClientReasoningLevel(stringModelValue(levelEntry, "effort"))
+		level := normalizeCodexClientReasoningLevel(stringModelValue(levelEntry, "effort"), clientVersion)
 		if level == "" {
 			continue
 		}
@@ -390,12 +452,12 @@ func sanitizeCodexClientReasoningMetadata(entry map[string]any) {
 	}
 
 	if len(levels) == 0 {
-		delete(entry, "supported_reasoning_levels")
+		entry["supported_reasoning_levels"] = levels
 		delete(entry, "default_reasoning_level")
 		return
 	}
 
-	defaultLevel := normalizeCodexClientReasoningLevel(stringModelValue(entry, "default_reasoning_level"))
+	defaultLevel := normalizeCodexClientReasoningLevel(stringModelValue(entry, "default_reasoning_level"), clientVersion)
 	if _, ok := allowedDefaults[defaultLevel]; !ok {
 		defaultLevel = stringModelValue(levels[0].(map[string]any), "effort")
 	}
@@ -404,12 +466,85 @@ func sanitizeCodexClientReasoningMetadata(entry map[string]any) {
 	entry["default_reasoning_level"] = defaultLevel
 }
 
-func normalizeCodexClientReasoningLevel(rawLevel string) string {
+func normalizeCodexClientReasoningLevel(rawLevel string, clientVersion string) string {
 	level := strings.ToLower(strings.TrimSpace(rawLevel))
+	if !supportsExtendedReasoningLevels(clientVersion) {
+		if _, ok := codexClientLegacyAllowedReasoningLevels[level]; !ok {
+			return ""
+		}
+		return level
+	}
 	if _, ok := codexClientAllowedReasoningLevels[level]; !ok {
 		return ""
 	}
 	return level
+}
+
+// supportsExtendedReasoningLevels reports whether the given clientVersion supports
+// extended reasoning effort levels ("max" and "ultra"), which require Codex CLI >= 0.144.0.
+// If the version is empty or unparseable, it returns true to preserve modern features.
+func supportsExtendedReasoningLevels(clientVersion string) bool {
+	clientVersion = strings.TrimSpace(clientVersion)
+	if clientVersion == "" {
+		return true
+	}
+	cmp, ok := compareDottedVersions(clientVersion, "0.144.0")
+	if !ok {
+		return true
+	}
+	return cmp >= 0
+}
+
+func parseDottedVersion(version string) []int64 {
+	version = strings.TrimSpace(version)
+	if strings.HasPrefix(version, "v") || strings.HasPrefix(version, "V") {
+		version = version[1:]
+	}
+	if idx := strings.IndexAny(version, "-+"); idx != -1 {
+		version = version[:idx]
+	}
+	parts := strings.Split(version, ".")
+	nums := make([]int64, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		num, errParse := strconv.ParseInt(part, 10, 64)
+		if errParse != nil || num < 0 {
+			return nil
+		}
+		nums = append(nums, num)
+	}
+	return nums
+}
+
+func compareDottedVersions(a, b string) (int, bool) {
+	numsA := parseDottedVersion(a)
+	numsB := parseDottedVersion(b)
+	if len(numsA) == 0 || len(numsB) == 0 {
+		return 0, false
+	}
+	maxLen := len(numsA)
+	if len(numsB) > maxLen {
+		maxLen = len(numsB)
+	}
+	for i := 0; i < maxLen; i++ {
+		var valA, valB int64
+		if i < len(numsA) {
+			valA = numsA[i]
+		}
+		if i < len(numsB) {
+			valB = numsB[i]
+		}
+		if valA < valB {
+			return -1, true
+		}
+		if valA > valB {
+			return 1, true
+		}
+	}
+	return 0, true
 }
 
 func codexClientReasoningDescription(level string) string {

@@ -819,7 +819,7 @@ func clearCodexReasoningReplayOnInvalidSignature(ctx context.Context, scope code
 		return nil
 	}
 	code, _, ok := codexStatusErrorClassification(statusCode, body)
-	if ok && code == "thinking_signature_invalid" {
+	if ok && code == "thinking_signature_invalid" || helps.IsCodexEncryptedContentRejection(statusCode, body) {
 		return internalcache.DeleteCodexReasoningReplayItemRequired(ctx, scope.modelName, scope.sessionKey)
 	}
 	return nil

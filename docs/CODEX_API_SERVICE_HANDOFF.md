@@ -22,12 +22,17 @@ Codex CLI / selected Codex profile
 React page -> Tauri invoke -> Rust collection/runtime -> sidecar config + manifest
 ```
 
-The implementation has two gateway modes:
+Production traffic has a single gateway path:
 
-- `sidecar` is the default. Rust materializes config and credentials, then starts
-  the bundled Go executable `cockpit-cliproxy`.
-- `legacy` retains the Rust in-process HTTP proxy path. Do not change defaults or
-  route behavior in one mode without checking the other.
+- Rust materializes config and credentials, then starts the bundled Go executable
+  `cockpit-cliproxy`. Every supported route is served by that sidecar.
+- `CodexLocalAccessGatewayMode::Legacy` survives only as a persisted value. It is
+  migrated to `sidecar` when the collection is read
+  (`migrate_legacy_gateway_mode`, `collection_gateway_mode`) and is not a
+  selectable runtime mode.
+- The retired in-process gateway is compiled only under `#[cfg(test)]` as a test
+  oracle (`codex_local_access_recovery.rs`). Do not route production traffic
+  through it; route behavior is owned by the sidecar.
 
 ## Source Ownership
 
@@ -37,7 +42,7 @@ The implementation has two gateway modes:
 | UI bridge | `src/services/codexLocalAccessService.ts` | Typed wrappers around the Tauri commands. Keep camelCase payload names aligned with Rust command arguments. |
 | Contract | `src/types/codexLocalAccess.ts`, `src-tauri/src/models/codex_local_access.rs` | Frontend/Rust state and configuration schema. Rust uses `serde(rename_all = "camelCase")`. |
 | Commands | `src-tauri/src/commands/codex.rs` | Tauri command boundary; commands are registered in `src-tauri/src/lib.rs`. |
-| Service coordinator | `src-tauri/src/modules/codex_local_access.rs` | Persistence, profile takeover, sidecar lifecycle, legacy proxy, routing, quotas, request logs and tests. |
+| Service coordinator | `src-tauri/src/modules/codex_local_access.rs` | Persistence, profile takeover, sidecar lifecycle, routing, quotas, request logs and tests. |
 | Sidecar | `sidecars/cockpit-cliproxy/main.go` | Go HTTP gateway based on CLIProxyAPI SDK. Receives generated config and manifest. |
 
 ## Runtime Flow
@@ -47,7 +52,7 @@ The implementation has two gateway modes:
 2. Rust persists a `CodexLocalAccessCollection`, synchronizes `GatewayRuntime`,
    and calls `ensure_gateway_matches_runtime` when a gateway-relevant setting
    changes.
-3. In sidecar mode, `prepare_sidecar_launch_config` writes the sidecar `config.json`,
+3. `prepare_sidecar_launch_config` writes the sidecar `config.json`,
    `manifest.json`, credentials below `auths/`, and quota-reserve state. A stable
    fingerprint decides whether the process must be restarted.
 4. The sidecar authenticates the client key, applies model visibility/alias rules,
@@ -159,7 +164,7 @@ it can contain credentials.
 Completed: repository import, source map, service-flow review, and this handoff
 document.
 
-Before implementing a change, identify whether it belongs to the UI contract,
-Rust legacy proxy, generated sidecar contract, or all three. Test both the
-OpenAI-compatible request path and Codex profile takeover/restore whenever the
-change affects activation, keys, base URLs, models, routing, or credentials.
+Before implementing a change, identify whether it belongs to the UI contract, the
+generated sidecar contract, or both. Test both the OpenAI-compatible request path
+and Codex profile takeover/restore whenever the change affects activation, keys,
+base URLs, models, routing, or credentials.

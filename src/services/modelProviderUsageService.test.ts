@@ -97,3 +97,11 @@ test("new_api quota ignores malformed numeric details", () => {
 test("token plan percentages render without currency decimals", () => {
   assert.equal(formatModelProviderUsageMoney(72, "%"), "72%");
 });
+
+test("new-api amounts without a reported unit do not acquire a dollar sign", () => {
+  assert.equal(formatModelProviderUsageMoney(45.2, ""), "45.20");
+  assert.equal(formatModelProviderUsageMoney(0, ""), "0.00");
+  assert.equal(formatModelProviderUsageMoney(45.2, "CNY"), "¥45.20");
+  assert.equal(formatModelProviderUsageMoney(45.2, "USD"), "$45.20");
+  assert.equal(formatModelProviderUsageMoney(45.2), "$45.20");
+});

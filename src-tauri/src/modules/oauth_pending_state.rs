@@ -1,9 +1,12 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fs;
+#[cfg(not(target_os = "windows"))]
 use std::fs::OpenOptions;
+#[cfg(not(target_os = "windows"))]
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+#[cfg(not(target_os = "windows"))]
 use uuid::Uuid;
 
 const OAUTH_PENDING_DIR: &str = "oauth_pending";
@@ -26,48 +29,51 @@ fn pending_dir_path() -> Result<PathBuf, String> {
 fn write_secure_atomic(path: &Path, content: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        return crate::modules::atomic_write::write_string_atomic(path, content);
+        crate::modules::atomic_write::write_string_atomic(path, content)
     }
 
-    let parent = path
-        .parent()
-        .ok_or_else(|| "OAuth pending 目录无效".to_string())?;
-    let temp = parent.join(format!(
-        ".{}.{}.tmp",
-        path.file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("pending"),
-        Uuid::new_v4()
-    ));
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
+    #[cfg(not(target_os = "windows"))]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+        let parent = path
+            .parent()
+            .ok_or_else(|| "OAuth pending 目录无效".to_string())?;
+        let temp = parent.join(format!(
+            ".{}.{}.tmp",
+            path.file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("pending"),
+            Uuid::new_v4()
+        ));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options
+            .open(&temp)
+            .map_err(|error| format!("创建 OAuth pending 临时文件失败: {}", error))?;
+        if let Err(error) = file
+            .write_all(content.as_bytes())
+            .and_then(|_| file.sync_all())
+        {
+            let _ = fs::remove_file(&temp);
+            return Err(format!("写入 OAuth pending 临时文件失败: {}", error));
+        }
+        drop(file);
+        if let Err(error) = fs::rename(&temp, path) {
+            let _ = fs::remove_file(&temp);
+            return Err(format!("原子替换 OAuth pending 文件失败: {}", error));
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+                .map_err(|error| format!("设置 OAuth pending 文件权限失败: {}", error))?;
+        }
+        Ok(())
     }
-    let mut file = options
-        .open(&temp)
-        .map_err(|error| format!("创建 OAuth pending 临时文件失败: {}", error))?;
-    if let Err(error) = file
-        .write_all(content.as_bytes())
-        .and_then(|_| file.sync_all())
-    {
-        let _ = fs::remove_file(&temp);
-        return Err(format!("写入 OAuth pending 临时文件失败: {}", error));
-    }
-    drop(file);
-    if let Err(error) = fs::rename(&temp, path) {
-        let _ = fs::remove_file(&temp);
-        return Err(format!("原子替换 OAuth pending 文件失败: {}", error));
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-            .map_err(|error| format!("设置 OAuth pending 文件权限失败: {}", error))?;
-    }
-    Ok(())
 }
 
 fn pending_file_path(file_name: &str) -> Result<PathBuf, String> {

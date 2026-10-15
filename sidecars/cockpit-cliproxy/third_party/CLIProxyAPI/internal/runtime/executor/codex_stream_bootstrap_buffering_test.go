@@ -384,6 +384,9 @@ func TestIsCodexOverloadBootstrapFailureRejectsRequestFaults(t *testing.T) {
 	if !isCodexOverloadBootstrapFailure([]byte(`{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`)) {
 		t.Fatal("rate limit rejections should be eligible for bootstrap failover")
 	}
+	if !isCodexOverloadBootstrapFailure([]byte(`{"error":{"type":"server_error","message":"You can retry your request"}}`)) {
+		t.Fatal("retry-advised server errors should be eligible for bootstrap failover")
+	}
 }
 
 // codexWebsocketServerHoldingConnection behaves like codexWebsocketServer but keeps the upstream

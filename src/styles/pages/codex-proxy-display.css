@@ -1,0 +1,117 @@
+.codex-proxy-display-control { min-width: 0; padding: 12px 0; }
+.codex-proxy-display-control-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.codex-proxy-display-control-heading > strong { color: var(--text-primary); font-size: 13px; }
+.codex-proxy-display-options { display: flex; flex-wrap: wrap; gap: 4px; }
+.codex-proxy-display-options > .btn { padding: 5px 9px; font-size: 12px; }
+.codex-proxy-display-options > .btn.is-selected { background: var(--primary); color: white; border-color: var(--primary); }
+.codex-proxy-display-options > .btn.is-selected:hover { filter: brightness(1.08); }
+.codex-proxy-display-options > .btn.is-selected:disabled { opacity: 0.5; cursor: not-allowed; }
+.codex-proxy-display-control > p { margin: 8px 0; font-size: 12px; color: var(--text-secondary); }
+.codex-proxy-display-sample { width: 100%; max-width: 340px; }
+.codex-proxy-display-sample.is-compact { display: flex; align-items: center; gap: 6px; width: fit-content; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-secondary); color: var(--text-secondary); font-size: 11px; }
+
+.codex-account-proxy-card {
+  min-width: 0;
+  margin: 0;
+  --proxy-card-accent: var(--primary);
+  --proxy-card-success: color-mix(in srgb, var(--success) 65%, var(--text-primary));
+}
+
+/* Shares the footer's auto top margin, so spare height stays above the details. */
+.codex-account-card .codex-card-bottom > .codex-account-proxy-card {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+:is(.btn, .codex-proxy-display-sample-card).codex-account-proxy-card-open {
+  appearance: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) 12px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  gap: 3px 5px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-align: start;
+  white-space: normal;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.codex-proxy-display-sample-card.codex-account-proxy-card-open { cursor: default; }
+
+.btn.codex-account-proxy-card-open:hover {
+  background: color-mix(in srgb, var(--proxy-card-accent) 3%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--proxy-card-accent) 35%, var(--border));
+}
+
+.btn.codex-account-proxy-card-open:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.codex-account-proxy-card-open:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.codex-account-proxy-card-emblem {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+.codex-account-proxy-card-emblem > svg { width: 13px; height: 13px; }
+.codex-account-proxy-card-heading { display: flex; justify-content: space-between; align-items: center; min-width: 0; gap: 6px; }
+.codex-account-proxy-card-mode { font-size: 11px; font-weight: 400; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codex-account-proxy-card-heading > small { min-width: 0; max-width: 55%; color: var(--text-secondary); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codex-account-proxy-card-chevron { color: var(--text-secondary); opacity: 0.55; }
+.codex-account-proxy-card-nodes { display: grid; grid-column: 1 / -1; gap: 4px; min-width: 0; }
+.codex-account-proxy-card-nodes:empty { display: none; }
+.codex-account-proxy-card-nodes > small { color: var(--text-secondary); font-size: 11px; }
+.codex-account-proxy-card-node { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1px 6px; min-width: 0; }
+.codex-account-proxy-card-node-label { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.codex-account-proxy-card-node-label > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: 11px; font-weight: 500; color: var(--text-primary); }
+.codex-account-proxy-card-node-label > small { flex-shrink: 0; max-width: 45%; color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere; }
+.codex-account-proxy-card-latency { display: inline-flex; align-items: center; justify-content: center; max-inline-size: 90px; padding: 0; color: var(--text-secondary); font-size: 10px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
+.codex-account-proxy-card-latency.is-measured { color: var(--proxy-card-accent); white-space: nowrap; }
+.codex-account-proxy-card-latency > svg { flex-shrink: 0; }
+.codex-account-proxy-card-node > small { grid-column: 1 / -1; color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere; }
+.codex-account-proxy-card-checked { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; opacity: 0.8; }
+.codex-account-proxy-card-checked > svg { flex-shrink: 0; }
+.codex-account-proxy-card-checked > time { font-variant-numeric: tabular-nums; }
+
+/* Keep mode, node and latency on one row; extra nodes alone add rows. */
+.codex-account-proxy-card.is-summary .codex-account-proxy-card-open { grid-template-columns: 14px fit-content(80px) minmax(0, 1fr) 12px; gap: 0 5px; padding: 5px 8px; background: color-mix(in srgb, var(--proxy-card-accent) 2%, var(--bg-card)); }
+.codex-account-proxy-card.is-summary .codex-account-proxy-card-open:hover { background: color-mix(in srgb, var(--proxy-card-accent) 5%, var(--bg-card)); }
+.codex-account-proxy-card.is-summary .codex-account-proxy-card-emblem { grid-column: 1; grid-row: 1; }
+.codex-account-proxy-card.is-summary .codex-account-proxy-card-heading { grid-column: 2; grid-row: 1; }
+.codex-account-proxy-card.is-summary .codex-account-proxy-card-chevron { grid-column: 4; grid-row: 1; }
+.codex-account-proxy-card.is-summary .codex-account-proxy-card-mode { font-size: 10px; font-weight: 400; color: var(--text-secondary); }
+.codex-account-proxy-card.is-summary .codex-account-proxy-card-nodes { grid-column: 3; grid-row: 1; }
+
+.codex-account-proxy-card-details { display: grid; grid-column: 1 / -1; gap: 2px; min-width: 0; padding-top: 4px; border-top: 1px solid var(--border-light); }
+.codex-account-proxy-card-channel { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
+.codex-account-proxy-card-channel > span { color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere; }
+.codex-account-proxy-card-channel > strong { display: flex; align-items: center; gap: 5px; color: var(--text-secondary); font-weight: 500; font-size: 11px; min-width: 0; overflow-wrap: anywhere; }
+.codex-account-proxy-card-channel > strong > i { flex: 0 0 5px; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.codex-account-proxy-card-channel > .is-running { color: var(--proxy-card-success); }
+.codex-account-proxy-card-channel > :is(.is-ready, .is-starting) { color: var(--primary); }
+.codex-account-proxy-card-channel > :is(.is-failed, .is-entry_failed, .is-missing) { color: var(--danger); }
+.codex-account-proxy-card-request { display: grid; grid-column: 1 / -1; gap: 1px; min-width: 0; }
+.codex-account-proxy-card-request-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; font-size: 10px; color: var(--text-secondary); }
+.codex-account-proxy-card-request-heading > span { display: inline-flex; align-items: center; gap: 4px; }
+.codex-account-proxy-card-request-heading > small { font-size: 10px; }
+.codex-account-proxy-card-result { font-size: 10px; font-weight: 500; }
+.codex-account-proxy-card-result.is-success { color: var(--proxy-card-success); }
+.codex-account-proxy-card-result.is-failure { color: var(--danger); }
+.codex-account-proxy-card-request-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 8px; min-width: 0; color: var(--text-secondary); font-size: 10px; }
+.codex-account-proxy-card-request-meta > span { min-width: 0; flex: 1 1 85px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codex-account-proxy-card-request-meta > time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.codex-account-proxy-card-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-top: 5px; color: var(--danger); font-size: 11px; }
+.codex-account-proxy-card-error > .btn { padding: 3px 7px; font-size: 11px; }
+.codex-account-proxy-card-error.is-busy { color: var(--text-secondary); }
+@media (prefers-reduced-motion: reduce) {
+  .btn.codex-account-proxy-card-open { transition: none; }
+}

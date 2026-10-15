@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -139,6 +140,34 @@ func TestNextRefreshCheckAt_ProviderLead_Expiry(t *testing.T) {
 	}
 }
 
+func TestNextRefreshCheckAt_RelativeExpiry(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
+	issuedAt := now.Add(-15 * time.Minute)
+	lead := 30 * time.Minute
+	setRefreshLeadFactory(t, "relative-expiry", func() *time.Duration {
+		d := lead
+		return &d
+	})
+
+	auth := &Auth{
+		ID:       "relative-expiry-auth",
+		Provider: "relative-expiry",
+		Metadata: map[string]any{
+			"access_token": "test-access",
+			"expires_in":   3600,
+			"timestamp":    int(issuedAt.UnixMilli()),
+		},
+	}
+
+	got, ok := nextRefreshCheckAt(now, auth, 15*time.Minute)
+	want := issuedAt.Add(time.Hour - lead)
+	if !ok || !got.Equal(want) {
+		t.Fatalf("nextRefreshCheckAt() = (%s, %t), want (%s, true)", got, ok, want)
+	}
+}
+
 func TestNextRefreshCheckAt_RefreshEvaluatorFallback(t *testing.T) {
 	now := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
 	interval := 15 * time.Minute
@@ -155,5 +184,38 @@ func TestNextRefreshCheckAt_RefreshEvaluatorFallback(t *testing.T) {
 	want := now.Add(interval)
 	if !got.Equal(want) {
 		t.Fatalf("nextRefreshCheckAt() = %s, want %s", got, want)
+	}
+}
+
+// StopAutoRefresh must join the loop and its workers. Otherwise a worker still
+// running refreshAuth can create a credential temp file after the caller
+// believes it stopped, which surfaced as a flaky "directory not empty" cleanup
+// and could leave a half-written auth file on disk.
+func TestStopAutoRefreshJoinsWorkers(t *testing.T) {
+	manager := &Manager{}
+	loop := newAuthAutoRefreshLoop(manager, time.Hour, 2)
+	// Manager without store/executors: refreshAuth returns early, so the worker
+	// loop is driven purely by the jobs channel and the cancelled context.
+	ctx, cancel := context.WithCancel(context.Background())
+	manager.refreshCancel = cancel
+	manager.refreshLoop = loop
+	manager.refreshRuns = map[*authAutoRefreshLoop]context.CancelFunc{loop: cancel}
+	go loop.run(ctx)
+
+	// Give the workers a real job, then stop and assert the join completed
+	// synchronously (wait returns rather than blocking forever).
+	select {
+	case loop.jobs <- "auth-1":
+	default:
+		t.Fatal("worker did not start")
+	}
+	manager.StopAutoRefresh()
+
+	done := make(chan struct{})
+	go func() { _ = loop.wait(context.Background()); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("StopAutoRefresh left the refresh workers running")
 	}
 }

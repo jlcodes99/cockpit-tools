@@ -317,6 +317,22 @@
     }
 
     #[test]
+    fn general_config_patch_rejects_retired_codex_client_policy() {
+        let mut config = UserConfig::default();
+        let before = serde_json::to_value(&config).expect("serialize config");
+        let updates = serde_json::json!({
+            "codex_cli_only_allow_app_server_clients": true,
+        })
+        .as_object()
+        .expect("patch object")
+        .clone();
+        let error = apply_general_config_updates(&mut config, &updates)
+            .expect_err("retired setting must not be writable");
+        assert!(error.contains("codex_cli_only_allow_app_server_clients"));
+        assert_eq!(serde_json::to_value(&config).expect("serialize unchanged config"), before);
+    }
+
+    #[test]
     fn unrelated_general_save_preserves_distinct_codex_quota_thresholds() {
         let mut config = UserConfig {
             codex_quota_alert_threshold: 20,
@@ -356,4 +372,24 @@
         assert_eq!(config.codex_quota_alert_threshold, 40);
         assert_eq!(config.codex_quota_alert_primary_threshold, 15);
         assert_eq!(config.codex_quota_alert_secondary_threshold, 25);
+    }
+
+    #[test]
+    fn codex_takeover_settings_patch_persists_false_and_defaults_bridge_off() {
+        let mut config = UserConfig::default();
+        assert!(!config.codex_preserve_verified_external_bridge);
+        let updates = serde_json::json!({
+            "codex_auto_restore_takeover_on_launch": false,
+            "codex_preserve_verified_external_bridge": true
+        }).as_object().unwrap().clone();
+        apply_general_config_updates(&mut config, &updates).unwrap();
+        let saved = serde_json::to_value(&config).unwrap();
+        let loaded: UserConfig = serde_json::from_value(saved).unwrap();
+        assert!(!loaded.codex_auto_restore_takeover_on_launch);
+        assert!(loaded.codex_preserve_verified_external_bridge);
+        assert!(loaded.codex_launch_on_switch);
+        let updates = serde_json::json!({"codex_preserve_verified_external_bridge": false})
+            .as_object().unwrap().clone();
+        apply_general_config_updates(&mut config, &updates).unwrap();
+        assert!(!config.codex_preserve_verified_external_bridge);
     }

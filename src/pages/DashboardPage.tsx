@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAccountStore } from '../stores/useAccountStore';
@@ -2332,8 +2333,8 @@ export function DashboardPage({
         <div className={`account-mini-card codex-api-mini-card ${account.api_provider_id ? "sponsor-api-account" : ""}`}>
           <div className="account-mini-header">
             <div className="account-info-row">
-              <span className="account-email" title={account.account_name || account.email || account.id}>
-                {account.account_name || account.email || account.id}
+              <span className="account-email" title={resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))}>
+                {resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))}
               </span>
               <span className="tier-badge sponsor-api">
                 {(account.api_provider_name || 'API_KEY').toUpperCase()}

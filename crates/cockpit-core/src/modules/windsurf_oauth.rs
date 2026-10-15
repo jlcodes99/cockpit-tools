@@ -11,6 +11,7 @@ use url::Url;
 use crate::models::windsurf::{
     WindsurfAccount, WindsurfOAuthCompletePayload, WindsurfOAuthStartResponse,
 };
+use crate::modules::client_version::WindsurfVersionMetadata;
 use crate::modules::logger;
 
 const WINDSURF_AUTH_BASE_URL: &str = "https://www.windsurf.com";
@@ -709,7 +710,7 @@ async fn get_plan_status(api_server_url: &str, auth_token: &str) -> Result<Value
     post_seat_management_json(api_server_url, "GetPlanStatus", payload).await
 }
 
-fn build_user_status_metadata(api_key: &str) -> Value {
+fn build_user_status_metadata(api_key: &str, versions: &WindsurfVersionMetadata) -> Value {
     let normalized_os = match std::env::consts::OS {
         "macos" => "darwin",
         other => other,
@@ -718,10 +719,11 @@ fn build_user_status_metadata(api_key: &str) -> Value {
     json!({
         "apiKey": api_key,
         "ideName": "Windsurf",
-        // 服务端会校验该字段，缺失时 GetUserStatus 会返回 invalid_argument。
-        "ideVersion": "1.0.0",
+        // 服务端会校验这些字段；官方 Devin/Windsurf 扩展使用产品版本和
+        // language server 版本，而不是固定的占位版本。
+        "ideVersion": versions.ide_version.as_deref().unwrap_or("1.0.0"),
         "extensionName": "codeium.windsurf",
-        "extensionVersion": "1.0.0",
+        "extensionVersion": versions.extension_version.as_deref().unwrap_or("1.0.0"),
         "locale": "zh-CN",
         "os": normalized_os,
         "disableTelemetry": false,
@@ -731,8 +733,13 @@ fn build_user_status_metadata(api_key: &str) -> Value {
 }
 
 async fn get_user_status_by_api_key(api_server_url: &str, api_key: &str) -> Result<Value, String> {
+    let versions = tokio::task::spawn_blocking(|| {
+        crate::modules::client_version::detect_windsurf_version_metadata("Windsurf", None)
+    })
+    .await
+    .unwrap_or_default();
     let payload = json!({
-        "metadata": build_user_status_metadata(api_key)
+        "metadata": build_user_status_metadata(api_key, &versions)
     });
     post_seat_management_json(api_server_url, "GetUserStatus", payload).await
 }

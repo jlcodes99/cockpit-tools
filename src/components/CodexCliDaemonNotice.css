@@ -1,0 +1,37 @@
+.codex-cli-daemon-overlay {
+  z-index: 12020;
+}
+
+.modal.codex-cli-daemon-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+.codex-cli-daemon-dialog .modal-header,
+.codex-cli-daemon-dialog .modal-footer {
+  flex-shrink: 0;
+}
+
+.codex-cli-daemon-dialog .modal-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.codex-cli-daemon-body p {
+  line-height: 1.6;
+}
+
+.codex-cli-daemon-body pre {
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.codex-cli-daemon-error {
+  color: var(--danger, #ef4444);
+}

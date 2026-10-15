@@ -44,12 +44,18 @@ type ExecutionSessionCloser interface {
 
 // Result captures execution outcome used to adjust auth state.
 type Result struct {
+	// StaleCredential preserves request diagnostics without changing current auth health.
+	StaleCredential   bool
+	CredentialVersion uint64
+	RegistrationEpoch uint64
 	// AuthID references the auth that produced this result.
 	AuthID string
 	// Provider is copied for convenience when emitting hooks.
 	Provider string
 	// Model is the upstream model identifier used for the request.
 	Model string
+	// RouteModel is the requested logical route model before alias resolution.
+	RouteModel string
 	// Success marks whether the execution succeeded.
 	Success bool
 	// RetryAfter carries a provider supplied retry hint (e.g. 429 retryDelay).
@@ -59,11 +65,19 @@ type Result struct {
 	// Error describes the failure when Success is false.
 	Error *Error
 	// Options carries execution request options (headers, metadata, etc.) for result tracking.
-	Options         cliproxyexecutor.Options
-	AuthStateKnown  bool
-	AuthAvailable   bool
-	NextRetryAt     time.Time
-	AuthStateReason string
+	Options cliproxyexecutor.Options
+	// SkipQuotaObservation reports that this result must not replace the last
+	// observed watermark. Count-tokens requests reuse the credential but are not
+	// generation traffic; their response headers are not a generation snapshot.
+	SkipQuotaObservation bool
+	AuthStateKnown       bool
+	AuthAvailable        bool
+	NextRetryAt          time.Time
+	AuthStateReason      string
+	// AttemptStartedAt identifies results from requests that began before a
+	// manual scheduler reset. Such stale results must not restore the state that
+	// the user just cleared.
+	AttemptStartedAt time.Time
 }
 
 // Selector chooses an auth candidate for execution.
@@ -128,6 +142,8 @@ type Manager struct {
 	selectorMu                sync.Mutex
 	configCooldownMu          sync.Mutex
 	auths                     map[string]*Auth
+	authEpochs                map[string]uint64
+	authRecoveryBarriers      map[string]time.Time
 	scheduler                 *authScheduler
 	// pluginScheduler runs outside m.mu before falling back to native selection.
 	pluginScheduler PluginScheduler
@@ -168,11 +184,15 @@ type Manager struct {
 	// Auto refresh state
 	refreshCancel context.CancelFunc
 	refreshLoop   *authAutoRefreshLoop
+	// refreshRuns retains cancelled runs until all their workers have exited.
+	refreshRuns map[*authAutoRefreshLoop]context.CancelFunc
 
 	requestPrepareLocks sync.Map
 	// refreshLocks serializes credential refresh per auth ID so concurrent
 	// 401 recoveries and auto-refresh workers do not race the same refresh_token.
 	refreshLocks sync.Map
+	// persistLocks serializes disk persistence per auth ID and guards against out-of-order writes.
+	persistLocks sync.Map
 }
 
 // NewManager constructs a manager with optional custom selector and hook.
@@ -189,6 +209,8 @@ func NewManager(store Store, selector Selector, hook Hook) *Manager {
 		selector:              selector,
 		hook:                  hook,
 		auths:                 make(map[string]*Auth),
+		authEpochs:            make(map[string]uint64),
+		authRecoveryBarriers:  make(map[string]time.Time),
 		homeRuntimeAuths:      make(map[string]map[string]*Auth),
 		homeRuntimeAuthOwners: make(map[string]map[string]*HomeDispatchSelection),
 		homeSessionSelections: make(map[string]map[homeSessionSelectionKey]*HomeDispatchSelection),

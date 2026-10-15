@@ -1,0 +1,64 @@
+.codex-oauth-binding-picker-header {
+  flex-wrap: wrap;
+}
+
+.codex-oauth-binding-picker-controls .codex-oauth-binding-quota-control {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.codex-oauth-binding-quota-control .codex-oauth-binding-quota-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 8px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.codex-oauth-binding-quota-control .codex-oauth-binding-quota-summary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  color: var(--primary);
+}
+
+.codex-oauth-binding-quota-control .codex-oauth-binding-quota-summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.codex-oauth-binding-quota-control .codex-oauth-binding-quota-summary:disabled {
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.codex-oauth-binding-quota-summary > span {
+  overflow-wrap: anywhere;
+}
+
+.codex-oauth-binding-quota-summary > span + span {
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--border);
+}
+
+.codex-oauth-binding-quota-summary strong {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.codex-oauth-binding-quota-summary > svg {
+  flex-shrink: 0;
+}

@@ -10,7 +10,7 @@ import {
 } from "../utils/windowsOperationError";
 import "./WindowsOperationDialog.css";
 
-type ActionKind = "retry" | "manual" | "authorize" | "open";
+type ActionKind = "retry" | "manual" | "authorize" | "open" | "repair";
 
 export function WindowsOperationDialog() {
   const { t } = useTranslation();
@@ -45,6 +45,8 @@ export function WindowsOperationDialog() {
         return t("common.windowsOperation.programNotFoundDescription");
       case "port_denied":
         return t("common.windowsOperation.portDeniedDescription");
+      case "codex_store_launch_blocked":
+        return t("common.windowsOperation.storeLaunchBlockedDescription");
       default:
         return t("common.windowsOperation.genericDescription");
     }
@@ -96,6 +98,7 @@ export function WindowsOperationDialog() {
       `${t("common.windowsOperation.originalReason")}: ${error.originalReason}`,
       error.target ? `${t("common.windowsOperation.targetLabel")}: ${error.target}` : "",
       error.pids.length ? `PID: ${error.pids.join(", ")}` : "",
+      ...error.diagnostics.map((item) => `${item.label}=${item.value}`),
       error.attemptedRecoveries.length
         ? `${t("common.windowsOperation.attemptedRecoveries")}: ${error.attemptedRecoveries.join(" · ")}`
         : "",
@@ -180,6 +183,9 @@ export function WindowsOperationDialog() {
               <div><strong>{t("common.windowsOperation.operationLabel")}</strong><span>{error.operation}</span></div>
               {error.target && <div><strong>{t("common.windowsOperation.targetLabel")}</strong><span>{error.target}</span></div>}
               {error.pids.length > 0 && <div><strong>PID</strong><span>{error.pids.join(", ")}</span></div>}
+              {error.diagnostics.map((item) => (
+                <div key={item.label}><strong>{item.label}</strong><span>{item.value}</span></div>
+              ))}
               {error.attemptedRecoveries.length > 0 && (
                 <div>
                   <strong>{t("common.windowsOperation.attemptedRecoveries")}</strong>
@@ -206,7 +212,7 @@ export function WindowsOperationDialog() {
               {t("common.windowsOperation.manualContinue")}
             </button>
           )}
-          {error.retryable && request.retry && (
+          {error.retryable && request.retry && !request.repair && (
             <button
               type="button"
               className="btn btn-secondary"
@@ -214,6 +220,16 @@ export function WindowsOperationDialog() {
               disabled={Boolean(busy)}
             >
               {t("common.windowsOperation.retry")}
+            </button>
+          )}
+          {request.repair && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void runAction("repair", request.repair)}
+              disabled={Boolean(busy)}
+            >
+              {t("common.windowsOperation.repairPath", "Re-detect path and retry")}
             </button>
           )}
           {request.authorize && (

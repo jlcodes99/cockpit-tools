@@ -95,7 +95,7 @@ func TestNormalizeCodexResponsesLiteRequestLeavesRegularRequestUnchanged(t *test
 	}
 }
 
-func TestNormalizeCodexResponsesLiteRequestKeepsAPIKeyImageGeneration(t *testing.T) {
+func TestNormalizeCodexResponsesLiteRequestForAPIKeyForcesParallelToolCallsFalse(t *testing.T) {
 	body := []byte(`{"parallel_tool_calls":true,"tools":[{"type":"image_generation"}],"tool_choice":{"type":"image_generation"}}`)
 	headers := http.Header{codexResponsesLiteHeaderName: []string{"true"}}
 	auth := &cliproxyauth.Auth{Attributes: map[string]string{
@@ -108,8 +108,12 @@ func TestNormalizeCodexResponsesLiteRequestKeepsAPIKeyImageGeneration(t *testing
 		t.Fatal("API key request should keep its existing Responses mode")
 	}
 
-	if string(result) != string(body) {
-		t.Fatalf("API key request changed: %s", result)
+	parallelToolCalls := gjson.GetBytes(result, "parallel_tool_calls")
+	if !parallelToolCalls.Exists() || parallelToolCalls.Bool() {
+		t.Fatalf("API key parallel_tool_calls = %s, want false: %s", parallelToolCalls.Raw, result)
+	}
+	if toolType := gjson.GetBytes(result, "tools.0.type").String(); toolType != "image_generation" {
+		t.Fatalf("API key image tool = %q, want image_generation: %s", toolType, result)
 	}
 }
 
@@ -344,7 +348,7 @@ func TestCodexExecutorExecutePreservesImageGenNamespaceOutsideResponsesLite(t *t
 	}
 }
 
-func TestCodexExecutorExecuteKeepsAPIKeyImageGenerationPathUnchanged(t *testing.T) {
+func TestCodexExecutorExecuteAPIKeyStripsResponsesLiteHeaderAndForcesParallelToolCallsFalse(t *testing.T) {
 	type capturedRequest struct {
 		header http.Header
 		body   []byte
@@ -381,21 +385,21 @@ func TestCodexExecutorExecuteKeepsAPIKeyImageGenerationPathUnchanged(t *testing.
 		Payload: payload,
 	}, cliproxyexecutor.Options{
 		SourceFormat: sdktranslator.FromString("codex"),
-		Headers:      http.Header{codexResponsesLiteHeaderName: []string{"true"}},
 	})
 	if err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
 
 	got := <-captured
-	if !codexResponsesLiteEnabled(got.header) {
-		t.Fatalf("API key request lost its existing Responses Lite header: %v", got.header)
+	if codexResponsesLiteEnabled(got.header) {
+		t.Fatalf("API key upstream retained internal Responses Lite header: %v", got.header)
 	}
 	if toolType := gjson.GetBytes(got.body, "tools.0.type").String(); toolType != "image_generation" {
 		t.Fatalf("API key image tool = %q, want image_generation: %s", toolType, got.body)
 	}
-	if !gjson.GetBytes(got.body, "parallel_tool_calls").Bool() {
-		t.Fatalf("API key parallel_tool_calls changed: %s", got.body)
+	parallelToolCalls := gjson.GetBytes(got.body, "parallel_tool_calls")
+	if !parallelToolCalls.Exists() || parallelToolCalls.Bool() {
+		t.Fatalf("API key parallel_tool_calls = %s, want false: %s", parallelToolCalls.Raw, got.body)
 	}
 }
 
@@ -412,5 +416,21 @@ func TestRemoveCodexResponsesLiteHeaderForFullResponse(t *testing.T) {
 	}
 	if got := headers.Get("X-Custom"); got != "keep-me" {
 		t.Fatalf("X-Custom = %q, want keep-me", got)
+	}
+}
+
+func TestRemoveCodexResponsesLiteHeaderForAPIKeyOnly(t *testing.T) {
+	apiKeyHeaders := http.Header{codexResponsesLiteHeaderName: []string{"true"}}
+	apiKeyAuth := &cliproxyauth.Auth{Attributes: map[string]string{"api_key": "sk-test"}}
+	removeCodexResponsesLiteHeaderForAPIKey(apiKeyHeaders, apiKeyAuth)
+	if codexResponsesLiteEnabled(apiKeyHeaders) {
+		t.Fatal("API key upstream retained internal Responses Lite header")
+	}
+
+	oauthHeaders := http.Header{codexResponsesLiteHeaderName: []string{"true"}}
+	oauth := &cliproxyauth.Auth{Metadata: map[string]any{"access_token": "oauth-token"}}
+	removeCodexResponsesLiteHeaderForAPIKey(oauthHeaders, oauth)
+	if !codexResponsesLiteEnabled(oauthHeaders) {
+		t.Fatal("OAuth upstream lost Responses Lite header")
 	}
 }

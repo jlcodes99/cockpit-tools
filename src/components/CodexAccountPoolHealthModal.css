@@ -3,7 +3,7 @@
   background: rgba(15, 23, 42, 0.62);
 }
 
-.codex-account-pool-health-modal {
+.modal.codex-account-pool-health-modal {
   width: min(760px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 48px));
   display: flex;
@@ -45,8 +45,26 @@
 }
 
 .codex-account-pool-health-body {
-  min-height: 180px;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.codex-account-pool-health-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--success, #16a34a) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--success, #16a34a) 12%, transparent);
+  color: var(--success, #16a34a);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.codex-account-pool-health-success svg {
+  flex-shrink: 0;
 }
 
 .codex-account-pool-health-list {
@@ -156,71 +174,22 @@
   color: var(--text-secondary);
 }
 
-.codex-account-pool-health-item.is-pool {
-  border-color: color-mix(in srgb, var(--danger, #dc2626) 36%, var(--border-light));
-  background: color-mix(in srgb, var(--danger, #dc2626) 5%, var(--bg-card));
-}
-
-.codex-account-pool-health-pool-error {
-  display: block;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.codex-account-pool-health-members {
-  display: grid;
-  gap: 6px;
-  margin-top: 2px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-light);
-}
-
-.codex-account-pool-health-member {
-  display: grid;
-  gap: 2px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
-}
-
-.codex-account-pool-health-member-primary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.codex-account-pool-health-member-primary strong {
-  min-width: 0;
-  max-width: min(100%, 300px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-primary);
-}
-
-.codex-account-pool-health-member-primary code {
-  color: var(--text-muted, var(--text-secondary));
-  font-size: 10px;
-}
-
-.codex-account-pool-health-member.is-available .codex-account-pool-health-item-status {
+.codex-account-pool-health-item.is-available .codex-account-pool-health-item-status {
   color: var(--success, #16a34a);
 }
 
-.codex-account-pool-health-member-detail {
-  margin: 0;
+.codex-account-pool-health-model-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
   color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
 .codex-account-pool-health-item-primary > .btn {
@@ -234,6 +203,24 @@
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.codex-account-pool-health-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codex-account-pool-health-request > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-account-pool-health-request > .btn {
+  flex-shrink: 0;
 }
 
 .codex-account-pool-health-empty {

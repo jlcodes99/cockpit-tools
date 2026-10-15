@@ -26,6 +26,7 @@
 }
 
 .codex-overview-selection-bar {
+  container: codex-selection-bar / inline-size;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -585,6 +586,52 @@
 .codex-local-access-status.unconfigured {
   background: rgba(148, 163, 184, 0.14);
   color: var(--text-secondary);
+}
+
+.codex-local-access-instance-gateways {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.26);
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.codex-local-access-instance-gateways:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.codex-local-access-instance-gateways:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.codex-local-access-instance-gateways.is-empty {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-secondary);
+}
+
+.codex-local-access-instance-gateways.has-issue {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.codex-local-access-instance-gateways-issue {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.9;
 }
 
 .codex-local-access-meta {
@@ -1783,6 +1830,24 @@
   color: rgba(226, 232, 240, 0.82);
 }
 
+[data-theme="dark"] .codex-local-access-instance-gateways {
+  border-color: rgba(96, 165, 250, 0.32);
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .codex-local-access-instance-gateways.is-empty {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.16);
+  color: rgba(226, 232, 240, 0.82);
+}
+
+[data-theme="dark"] .codex-local-access-instance-gateways.has-issue {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
 [data-theme="dark"] .codex-local-access-hide-confirm-modal {
   background: linear-gradient(
     180deg,
@@ -2750,4 +2815,11 @@
   }
 }
 
-
+/* Keep toolbar actions together when the sidebar leaves little content width. */
+@container codex-selection-bar (max-width: 900px) {
+  .codex-overview-selection-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

@@ -37,6 +37,17 @@ export interface CodexProviderCapabilityProfile {
   capabilities: CodexProviderCapabilities;
 }
 
+/** Whether the editable provider defaults are preserved by the backend. */
+export function canConfigureCodexProviderVision(input: {
+  presetId?: string | null;
+  wireApi: CodexProviderWireApi;
+}): boolean {
+  if (input.wireApi === "chat_completions") return true;
+  const presetId = input.presetId?.trim() ?? "";
+  if (presetId === DEEPSEEK_API_PROVIDER_ID) return false;
+  return findCodexApiProviderPresetById(presetId)?.isOfficial !== true;
+}
+
 const CHAT_COMPLETIONS_PRESET_IDS = new Set([
   "moonshot",
   "siliconflow",

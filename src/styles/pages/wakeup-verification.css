@@ -334,6 +334,7 @@
 }
 
 .verification-checkbox-row {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -381,9 +382,11 @@
 
 .verification-checkbox-input {
   position: absolute;
+  top: 50%;
+  left: 0;
   width: 1px;
   height: 1px;
-  margin: -1px;
+  margin: 0;
   border: 0;
   padding: 0;
   clip: rect(0 0 0 0);
@@ -471,6 +474,7 @@
 }
 
 .verification-account-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;

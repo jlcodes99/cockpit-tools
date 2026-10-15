@@ -7,6 +7,7 @@ import {
   X,
   Globe,
   Check,
+  Copy,
   Lock,
   AlertTriangle,
   CircleAlert,
@@ -16,11 +17,8 @@ import {
   Eye,
   EyeOff,
   Tag,
-  FolderOpen,
-  FolderPlus,
-  LogOut,
-  Pencil,
   FileText,
+  ExternalLink,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAccountStore } from '../stores/useAccountStore'
@@ -29,24 +27,24 @@ import { Account } from '../types/account'
 import { Page } from '../types/navigation'
 import {
   getAntigravityTierBadge,
-  getQuotaClass,
-  formatResetTimeDisplay,
 } from '../utils/account'
+import { formatGoogleValidationUrl } from '../utils/googleValidationUrl'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { useModalErrorState } from '../components/ModalErrorMessage'
 import { useEscClose } from '../hooks/useEscClose'
+import { useMfaCountdown } from '../hooks/useMfaCountdown'
 import { useEnterConfirm } from '../hooks/useEnterConfirm'
+import { AntigravityGcpTosBadge } from '../components/AntigravityGcpTosBadge'
+import { AntigravityQuotaSection } from '../components/AntigravityQuotaSection'
 import {
-  AccountGroup,
-  getAccountGroups,
-  assignAccountsToGroup,
-  removeAccountsFromGroup,
   removeAccountIdsFromAllGroups,
-  deleteGroup,
-  renameGroup,
 } from '../services/accountGroupService'
+import {
+  assignAccountsToPlatformGroup,
+} from '../services/platformGroupService'
+import { usePlatformAccountGroups } from '../hooks/usePlatformAccountGroups'
 import {
   GroupSettings,
   DisplayGroup,
@@ -55,8 +53,10 @@ import {
   calculateGroupQuota,
   updateGroupOrder
 } from '../services/groupService'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import {
   getAntigravityQuotaDisplayItems,
+  isAccountNeedsReauth,
 } from '../presentation/platformAccountPresentation'
 import {
   ANTIGRAVITY_RESET_SORT_PREFIX,
@@ -119,9 +119,9 @@ import {
   writeAccountsOverviewFilterField,
 } from '../utils/accountsOverviewFilterPersistence'
 import { useAntigravityRuntimeTarget } from '../hooks/useAntigravityRuntimeTarget'
+import { useRememberMfaQuery } from '../hooks/useRememberMfaQuery'
 import {
   getMfaOtpToken,
-  getMfaTimeRemaining,
   loadSavedMfaRecords,
   parseMfaCredentialInput,
   upsertSavedMfaRecord,
@@ -131,7 +131,6 @@ import { findFirstMailVerificationCode } from '../utils/mailVerificationCode'
 import { AccountsOverviewView } from "./AccountsOverviewView";
 import {
   ANTIGRAVITY_ACCOUNT_NOTE_MAX_LENGTH,
-  ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
   ANTIGRAVITY_FILTER_FIELD_FILTER_TYPES,
   ANTIGRAVITY_FILTER_FIELD_GROUP_BY_TAG,
   ANTIGRAVITY_FILTER_FIELD_SORT_BY,
@@ -227,14 +226,57 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const getVerificationBadge = useCallback((account: Account) => {
     // 优先从 disabled_reason 读（新版），回退到验证历史（旧数据兼容）
     const reason = account.disabled_reason || verificationStatusMap[account.id]
-    if (reason === 'verification_required') {
-      return { label: t('wakeup.errorUi.verificationRequiredTitle', 'Need Verify'), className: 'is-warning' }
-    }
     if (reason === 'tos_violation') {
       return { label: t('wakeup.errorUi.tosViolationTitle', 'TOS'), className: 'is-tos-violation' }
     }
+    if (reason === 'verification_required' || isAccountNeedsReauth(account, verificationStatusMap)) {
+      return { label: t('accounts.status.needsReauth', '需网页验证'), className: 'is-warning' }
+    }
     return null
   }, [verificationStatusMap, t])
+
+  const resolveValidationUrl = useCallback((account: Account) => {
+    let rawUrl: string | null = null
+    if (account.quota_error?.validation_url) {
+      rawUrl = account.quota_error.validation_url
+    } else {
+      const vDetail = verificationDetailMap[account.id]
+      if (vDetail?.validationUrl) {
+        rawUrl = vDetail.validationUrl
+      } else if (account.quota_error?.message) {
+        const match = account.quota_error.message.match(/https?:\/\/[^\s"'\)]+/)
+        if (match) rawUrl = match[0]
+      }
+    }
+    if (!rawUrl) return null
+    return formatGoogleValidationUrl(rawUrl, account.email)
+  }, [verificationDetailMap])
+
+  const [copiedValidationUrlAccountId, setCopiedValidationUrlAccountId] = useState<string | null>(null)
+  const copiedValidationUrlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleCopyValidationUrl = useCallback(async (accountId: string, url: string) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedValidationUrlAccountId(accountId)
+      if (copiedValidationUrlTimerRef.current) {
+        clearTimeout(copiedValidationUrlTimerRef.current)
+      }
+      copiedValidationUrlTimerRef.current = setTimeout(() => {
+        setCopiedValidationUrlAccountId(null)
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to copy validation URL:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (copiedValidationUrlTimerRef.current) {
+        clearTimeout(copiedValidationUrlTimerRef.current)
+      }
+    }
+  }, [])
 
   // 文件损坏错误状态
   const [fileCorruptedError, setFileCorruptedError] = useState<FileCorruptedError | null>(null)
@@ -425,17 +467,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     set: setDeleteConfirmError,
   } = useModalErrorState()
   const [deleting, setDeleting] = useState(false)
-  const [groupDeleteConfirm, setGroupDeleteConfirm] = useState<{
-    id: string
-    name: string
-  } | null>(null)
-  const {
-    message: groupDeleteError,
-    scrollKey: groupDeleteErrorScrollKey,
-    set: setGroupDeleteError,
-  } = useModalErrorState()
-  const [deletingGroup, setDeletingGroup] = useState(false)
-  const [removingGroupAccountIds, setRemovingGroupAccountIds] = useState<Set<string>>(new Set())
   const [tagDeleteConfirm, setTagDeleteConfirm] = useState<{
     tag: string
     count: number
@@ -475,7 +506,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const [accountNoteFieldError, setAccountNoteFieldError] = useState<string | null>(null)
   const [savedMfaRecords, setSavedMfaRecords] = useState<MfaRecord[]>([])
   const [accountNoteMfaPickerOpen, setAccountNoteMfaPickerOpen] = useState(false)
-  const [mfaTimeRemaining, setMfaTimeRemaining] = useState(getMfaTimeRemaining)
   const [accountNoteMailPreview, setAccountNoteMailPreview] = useState<AntigravityAccountNoteMailPreviewState | null>(null)
   const [accountNoteMailPreviewLoading, setAccountNoteMailPreviewLoading] = useState(false)
   const [accountNoteMailPreviewError, setAccountNoteMailPreviewError] = useState<string | null>(null)
@@ -562,58 +592,30 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     }
   }, [t])
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setMfaTimeRemaining(getMfaTimeRemaining()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
+  const mfaTimeRemaining = useMfaCountdown(
+    Boolean(editingAccountNoteAccount || oauthAccountNoteMode) &&
+      activeAccountNoteForm.twoFactorSecret.trim().length > 0,
+  )
 
   const [displayGroups, setDisplayGroups] = useState<DisplayGroup[]>([])
   const [displayGroupsLoaded, setDisplayGroupsLoaded] = useState(false)
 
-  // ─── 账号分组（文件夹）────────────────────────────────────
-  const [accountGroups, setAccountGroups] = useState<AccountGroup[]>([])
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
-    if (!initialFilterPersistenceEnabled) {
-      return null
-    }
-    const saved = readAccountsOverviewFilterField<string | null>(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
-      null,
-    )
-    return typeof saved === 'string' && saved.trim() ? saved : null
-  })
+  // ─── 账号分组 ──────────────────────────────────────────
+  const grouping = usePlatformAccountGroups('antigravity', () => setSelected(new Set()))
   const [addTargetGroupId, setAddTargetGroupId] = useState<string | null>(null)
-  const [showAccountGroupModal, setShowAccountGroupModal] = useState(false)
-  const [showAddToGroupModal, setShowAddToGroupModal] = useState(false)
-  const [groupAccountPickerGroupId, setGroupAccountPickerGroupId] = useState<string | null>(null)
-  const [groupQuickAddGroupId, setGroupQuickAddGroupId] = useState<string | null>(null)
-
-  const reloadAccountGroups = useCallback(async () => {
-    setAccountGroups(await getAccountGroups())
-  }, [])
-
-  useEffect(() => {
-    reloadAccountGroups()
-  }, [reloadAccountGroups])
-
-  const activeGroup = useMemo(() => {
-    if (!activeGroupId) return null
-    return accountGroups.find((g) => g.id === activeGroupId) || null
-  }, [accountGroups, activeGroupId])
 
   const addTargetGroup = useMemo(() => {
     if (!addTargetGroupId) return null
-    return accountGroups.find((group) => group.id === addTargetGroupId) || null
-  }, [accountGroups, addTargetGroupId])
+    return grouping.groups.find((group) => group.id === addTargetGroupId) || null
+  }, [grouping.groups, addTargetGroupId])
 
   const resolveValidAccountGroupId = useCallback(
     (groupId?: string | null) => {
       const normalized = groupId?.trim()
       if (!normalized) return null
-      return accountGroups.some((group) => group.id === normalized) ? normalized : null
+      return grouping.groups.some((group) => group.id === normalized) ? normalized : null
     },
-    [accountGroups],
+    [grouping.groups],
   )
 
   const assignAccountsToAddTargetGroup = useCallback(
@@ -633,34 +635,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       )
       if (accountIds.length === 0) return
 
-      await assignAccountsToGroup(resolvedGroupId, accountIds)
-      await reloadAccountGroups()
+      await assignAccountsToPlatformGroup('antigravity', resolvedGroupId, accountIds)
+      await grouping.reloadGroups()
     },
-    [addTargetGroupId, reloadAccountGroups, resolveValidAccountGroupId],
+    [addTargetGroupId, grouping, resolveValidAccountGroupId],
   )
-
-  const groupAccountPickerGroup = useMemo(() => {
-    if (!groupAccountPickerGroupId) return null
-    return accountGroups.find((group) => group.id === groupAccountPickerGroupId) || null
-  }, [accountGroups, groupAccountPickerGroupId])
-
-  const groupQuickAddGroup = useMemo(() => {
-    if (!groupQuickAddGroupId) return null
-    return accountGroups.find((group) => group.id === groupQuickAddGroupId) || null
-  }, [accountGroups, groupQuickAddGroupId])
-
-  // 离开已删除的分组
-  useEffect(() => {
-    if (activeGroupId && !accountGroups.find((g) => g.id === activeGroupId)) {
-      setActiveGroupId(null)
-    }
-  }, [accountGroups, activeGroupId])
-
-  useEffect(() => {
-    if (groupQuickAddGroupId && !accountGroups.find((group) => group.id === groupQuickAddGroupId)) {
-      setGroupQuickAddGroupId(null)
-    }
-  }, [accountGroups, groupQuickAddGroupId])
   const [sortBy, setSortBy] = useState<string>(() => {
     if (readAntigravityCustomSortActive()) {
       return 'custom'
@@ -848,17 +827,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       ),
     )
 
-    const savedActiveGroupId = readAccountsOverviewFilterField<string | null>(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
-      null,
-    )
-    setActiveGroupId(
-      typeof savedActiveGroupId === 'string' && savedActiveGroupId.trim()
-        ? savedActiveGroupId
-        : null,
-    )
-
     setSortBy(
       normalizeAntigravitySortBy(
         readAccountsOverviewFilterField<unknown>(
@@ -885,7 +853,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setFilterTypes([])
     setTagFilter([])
     setGroupByTag(false)
-    setActiveGroupId(null)
     setSortBy(DEFAULT_ANTIGRAVITY_SORT_BY)
     setSortDirection('desc')
   }, [])
@@ -902,6 +869,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
         resetOverviewFilters()
       }
       setPrivacyModeEnabled(isPrivacyModeEnabledByDefault())
+      void fetchAccounts()
     }
 
     const handlePrivacyModeChanged = (event: Event) => {
@@ -930,7 +898,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
         handleFilterPersistenceChanged as EventListener,
       )
     }
-  }, [loadPersistedOverviewFilters, resetOverviewFilters])
+  }, [loadPersistedOverviewFilters, resetOverviewFilters, fetchAccounts])
 
   useEffect(() => {
     // Always persist layout mode so switching tabs does not reset list/card view (#1200)
@@ -1015,21 +983,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       groupByTag,
     )
   }, [filterPersistenceEnabled, groupByTag])
-
-  useEffect(() => {
-    if (!filterPersistenceEnabled) {
-      removeAccountsOverviewFilterField(
-        ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-        ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
-      )
-      return
-    }
-    writeAccountsOverviewFilterField(
-      ANTIGRAVITY_FILTER_PERSISTENCE_SCOPE,
-      ANTIGRAVITY_FILTER_FIELD_ACTIVE_GROUP_ID,
-      activeGroupId,
-    )
-  }, [activeGroupId, filterPersistenceEnabled])
 
   useEffect(() => {
     return subscribeUserMemory(() => {
@@ -1239,7 +1192,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       const verificationReason = account.disabled_reason || verificationStatusMap[account.id]
       const hasVerificationIssue =
         verificationReason === 'verification_required' || verificationReason === 'tos_violation'
-      return isDisabled || isForbidden || hasWarning || hasVerificationIssue
+      const needsReauth = isAccountNeedsReauth(account, verificationStatusMap)
+      return isDisabled || isForbidden || hasWarning || hasVerificationIssue || needsReauth
     },
     [refreshWarnings, verificationStatusMap]
   )
@@ -1253,21 +1207,9 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const filteredAccounts = useMemo(() => {
     let result = [...accounts]
 
-    // 分组过滤（进入分组后只显示该组的账号）
-    if (activeGroup) {
-      const groupAccountSet = new Set(activeGroup.accountIds)
-      result = result.filter((acc) => groupAccountSet.has(acc.id))
-    } else {
-      // 主界面：隐藏所有已被归入文件夹的账号
-      const allGroupedIds = new Set<string>()
-      for (const group of accountGroups) {
-        for (const id of group.accountIds) {
-          allGroupedIds.add(id)
-        }
-      }
-      if (allGroupedIds.size > 0) {
-        result = result.filter((acc) => !allGroupedIds.has(acc.id))
-      }
+    // 分组过滤
+    if (grouping.activeGroupId) {
+      result = grouping.filterAccountsByGroup(result)
     }
 
     // 搜索过滤
@@ -1308,8 +1250,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     accountSortComparator,
     verificationStatusMap,
     isAbnormalAccount,
-    activeGroup,
-    accountGroups,
+    grouping.activeGroupId,
+    grouping.filterAccountsByGroup,
   ])
 
   const groupedAccounts = useMemo(() => {
@@ -1361,10 +1303,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     [paginatedIds, selected]
   )
 
-  const hasVisibleAccountGroups = useMemo(
-    () => !activeGroupId && !groupByTag && accountGroups.length > 0,
-    [activeGroupId, groupByTag, accountGroups]
-  )
+  const hasVisibleAccountGroups = false
 
   // 统计数量
   const tierCounts = useMemo(
@@ -1683,9 +1622,9 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const handleRefreshAll = async () => {
     setRefreshingAll(true)
     try {
-      if (activeGroup) {
+      if (grouping.activeGroup) {
         // 分组内刷新：只刷新该组的账号
-        const groupAccountIds = new Set(activeGroup.accountIds)
+        const groupAccountIds = new Set(grouping.activeGroup.accountIds)
         const groupAccounts = accounts.filter((acc) => groupAccountIds.has(acc.id))
         await Promise.allSettled(
           groupAccounts.map((acc) => refreshQuota(acc.id, antigravityRuntimeTarget))
@@ -1775,7 +1714,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setDeleteConfirmError(null)
     try {
       await deleteAccounts(deleteConfirm.ids)
-      void removeAccountIdsFromAllGroups(deleteConfirm.ids)
+      await removeAccountIdsFromAllGroups(deleteConfirm.ids)
+      await grouping.reloadGroups()
       setCustomSortOrder((prev) =>
         prev.filter((accountId) => !deleteConfirm.ids.includes(accountId)),
       )
@@ -1812,7 +1752,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   }, [])
 
   const openAddModal = useCallback((tab: 'oauth' | 'token' | 'import') => {
-    setAddTargetGroupId(resolveValidAccountGroupId(activeGroupId))
+    setAddTargetGroupId(resolveValidAccountGroupId(grouping.activeGroupId))
     setAddTab(tab)
     setShowAddModal(true)
     setPendingOAuthAccount(null)
@@ -1820,7 +1760,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setOauthAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
     setPendingOAuthEmailError(null)
     resetAddModalState()
-  }, [activeGroupId, resetAddModalState, resolveValidAccountGroupId])
+  }, [grouping.activeGroupId, resetAddModalState, resolveValidAccountGroupId])
 
   const consumeExternalProviderImport = useCallback(() => {
     const request = consumeQueuedExternalProviderImportForPlatform('antigravity')
@@ -1880,13 +1820,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   });
   useEnterConfirm(Boolean(deleteConfirm) && !deleting, () => {
     void confirmDelete()
-  });
-  useEscClose(Boolean(groupDeleteConfirm) && !deletingGroup, () => {
-    setGroupDeleteConfirm(null)
-    setGroupDeleteError(null)
-  });
-  useEnterConfirm(Boolean(groupDeleteConfirm) && !deletingGroup, () => {
-    void confirmDeleteGroup()
   });
   useEscClose(Boolean(tagDeleteConfirm) && !deletingTag, () => {
     setTagDeleteConfirm(null)
@@ -2562,76 +2495,9 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
 
   // 从当前分组中移除选中账号
   const handleRemoveFromGroup = async () => {
-    if (!activeGroupId || selected.size === 0) return
-    await removeAccountsFromGroup(activeGroupId, Array.from(selected))
-    setSelected(new Set())
-    await reloadAccountGroups()
+    if (!grouping.activeGroupId || selected.size === 0) return
+    await grouping.handleRemoveFromGroup(Array.from(selected))
   }
-
-  const handleRemoveSingleFromGroup = useCallback(
-    async (groupId: string, accountId: string) => {
-      setRemovingGroupAccountIds((prev) => {
-        const next = new Set(prev)
-        next.add(accountId)
-        return next
-      })
-
-      try {
-        await removeAccountsFromGroup(groupId, [accountId])
-        setSelected((prev) => {
-          if (!prev.has(accountId)) return prev
-          const next = new Set(prev)
-          next.delete(accountId)
-          return next
-        })
-        await reloadAccountGroups()
-      } catch (error) {
-        console.error('Failed to remove account from group:', error)
-        setMessage({
-          text: t('messages.actionFailed', {
-            action: t('accounts.groups.removeFromGroup'),
-            error: String(error),
-          }),
-          tone: 'error',
-        })
-      } finally {
-        setRemovingGroupAccountIds((prev) => {
-          const next = new Set(prev)
-          next.delete(accountId)
-          return next
-        })
-      }
-    },
-    [reloadAccountGroups, t]
-  )
-
-  const requestDeleteGroup = useCallback((groupId: string, groupName: string) => {
-    setGroupDeleteError(null)
-    setGroupDeleteConfirm({
-      id: groupId,
-      name: groupName,
-    })
-  }, [])
-
-  const confirmDeleteGroup = useCallback(async () => {
-    if (!groupDeleteConfirm || deletingGroup) return
-
-    setDeletingGroup(true)
-    setGroupDeleteError(null)
-    try {
-      await deleteGroup(groupDeleteConfirm.id)
-      await reloadAccountGroups()
-      setGroupDeleteConfirm(null)
-      setGroupDeleteError(null)
-    } catch (error) {
-      console.error('Failed to delete account group:', error)
-      setGroupDeleteError(
-        t('accounts.groups.error.deleteFailed', { error: String(error) })
-      )
-    } finally {
-      setDeletingGroup(false)
-    }
-  }, [deletingGroup, groupDeleteConfirm, reloadAccountGroups, t])
 
   // 渲染分组文件夹卡片
 
@@ -2738,8 +2604,16 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     }
   }, [fetchAccountNoteMailPreviewForUrl, oauthAccountNoteForm.mailUrl, oauthAccountNoteMode])
 
+  const rememberActiveAccountNoteMfaQuery = useRememberMfaQuery({
+    enabled: Boolean(editingAccountNoteId || oauthAccountNoteMode),
+    secret: activeAccountNoteForm.twoFactorSecret,
+    accountName: activeAccountNoteEmail,
+    remark: activeAccountNoteForm.note,
+  })
+
   const closeAccountNoteModal = useCallback(() => {
     if (savingAccountNote) return
+    rememberActiveAccountNoteMfaQuery()
     setEditingAccountNoteId(null)
     setOauthAccountNoteMode(false)
     setEditingAccountNoteForm(EMPTY_ANTIGRAVITY_ACCOUNT_NOTE_FORM)
@@ -2748,7 +2622,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setAccountNoteMfaPickerOpen(false)
     setAccountNoteError(null)
     resetAccountNoteMailPreview()
-  }, [resetAccountNoteMailPreview, savingAccountNote, setAccountNoteError])
+  }, [rememberActiveAccountNoteMfaQuery, resetAccountNoteMailPreview, savingAccountNote, setAccountNoteError])
 
   const updateEditingAccountNoteForm = useCallback(
     (update: Partial<AntigravityAccountNoteFormState>) => {
@@ -2807,6 +2681,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
         await updateAccountNotes(editingAccountNoteId, noteUpdate)
       }
       if (normalizedTwoFactorSecret) {
+        rememberActiveAccountNoteMfaQuery()
         setSavedMfaRecords(upsertSavedMfaRecord({
           secret: normalizedTwoFactorSecret,
           accountName: editingAccountNoteAccount?.email ?? parsedTwoFactorSecret?.accountName ?? null,
@@ -2832,6 +2707,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     editingAccountNoteId,
     editingAccountNoteAccount,
     oauthAccountNoteMode,
+    rememberActiveAccountNoteMfaQuery,
     savingAccountNote,
     setAccountNoteError,
     t,
@@ -2875,46 +2751,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       })
     })
   };
-
-  const handleAssignAccountsToGroup = async (
-    groupId: string,
-    groupName: string,
-    accountIds: string[]
-  ) => {
-    const currentGroup = accountGroups.find((group) => group.id === groupId)
-    if (!currentGroup) return
-
-    const nextName = groupName.trim()
-    if (!nextName) {
-      throw new Error(t('platformLayout.groupNameRequired'))
-    }
-
-    if (accountGroups.some((group) => group.id !== groupId && group.name === nextName)) {
-      throw new Error(t('accounts.groups.error.duplicate'))
-    }
-
-    const currentIds = new Set(currentGroup.accountIds)
-    const nextIds = new Set(accountIds)
-    const addedIds = accountIds.filter((accountId) => !currentIds.has(accountId))
-    const removedIds = currentGroup.accountIds.filter((accountId) => !nextIds.has(accountId))
-    const shouldRename = nextName !== currentGroup.name
-
-    if (!shouldRename && addedIds.length === 0 && removedIds.length === 0) return
-
-    if (shouldRename) {
-      await renameGroup(groupId, nextName)
-    }
-
-    if (accountIds.length > 0) {
-      await assignAccountsToGroup(groupId, accountIds)
-    }
-
-    if (removedIds.length > 0) {
-      await removeAccountsFromGroup(groupId, removedIds)
-    }
-
-    await reloadAccountGroups()
-  }
 
   const formatDate = (timestamp: number) => {
     const d = new Date(timestamp * 1000)
@@ -3020,71 +2856,14 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   const resolveGroupLabel = (groupKey: string) =>
     groupKey === untaggedKey ? t('accounts.untagged', '未分组') : groupKey
 
-  const renderCustomQuotaSection = (account: Account, isList: boolean = false) => {
-    const quotaDisplayItems = getQuotaDisplayItems(account);
-    const hasModels = account.quota?.models && account.quota.models.length > 0;
-    
-    if (!hasModels) {
-      return (
-        <div className="quota-empty" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>
-          {t('overview.noQuotaData')}
-        </div>
-      );
-    }
-
-    const claude5h = quotaDisplayItems.find(item => item.key === 'claude:5h');
-    const claudeWeekly = quotaDisplayItems.find(item => item.key === 'claude:weekly');
-    const gemini5h = quotaDisplayItems.find(item => item.key === 'gemini:5h');
-    const geminiWeekly = quotaDisplayItems.find(item => item.key === 'gemini:weekly');
-
-    const renderBar = (label: string, item: any) => {
-      const percentage = item ? item.percentage : 100;
-      const resetTime = item ? item.resetTime : '';
-      const resetLabel = resetTime ? formatResetTimeDisplay(resetTime, t) : '';
-      
-      return (
-        <div className={isList ? "quota-item" : "quota-compact-item"}>
-          <div className={isList ? "quota-header" : "quota-compact-header"}>
-            <span className={isList ? "quota-name" : "model-label"}>{label}</span>
-            <span className={`${isList ? "quota-value" : "model-pct"} ${getQuotaClass(percentage)}`}>
-              {percentage}%
-            </span>
-          </div>
-          <div className={isList ? "quota-progress-track" : "quota-compact-bar-track"}>
-            <div
-              className={`${isList ? "quota-progress-bar" : "quota-compact-bar"} ${getQuotaClass(percentage)}`}
-              style={{ width: `${percentage}%` }}
-            />
-          </div>
-          {(isList || resetLabel) && (
-            <div className={isList ? "quota-footer" : undefined}>
-              <span
-                className={isList ? "quota-reset" : "quota-compact-reset"}
-                title={resetLabel || undefined}
-              >
-                {resetLabel || '\u00A0'}
-              </span>
-            </div>
-          )}
-        </div>
-      );
-    };
-
-    return (
-      <>
-        <div className="quota-column">
-          <div className="quota-column-title">Claude</div>
-          {renderBar("5h", claude5h)}
-          {renderBar(t('common.weekly', 'Weekly'), claudeWeekly)}
-        </div>
-        <div className="quota-column">
-          <div className="quota-column-title">Gemini</div>
-          {renderBar("5h", gemini5h)}
-          {renderBar(t('common.weekly', 'Weekly'), geminiWeekly)}
-        </div>
-      </>
-    );
-  };
+  const renderCustomQuotaSection = (account: Account, isList: boolean = false) => (
+    <AntigravityQuotaSection
+      items={getQuotaDisplayItems(account)}
+      isList={isList}
+      isNeedsReauth={isAccountNeedsReauth(account, verificationStatusMap)}
+      t={t}
+    />
+  );
 
   const renderGridCards = (items: Account[], groupKey?: string) =>
     items.map((account) => {
@@ -3095,7 +2874,12 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       const isForbidden = Boolean(account.quota?.is_forbidden)
       const isSelected = selected.has(account.id)
       const quotaError = account.quota_error
-      const hasQuotaError = Boolean(quotaError?.message)
+      const hasValidModels = Boolean(account.quota?.models && account.quota.models.length > 0)
+      const isSpuriousSubscriptionError =
+        hasValidModels &&
+        (quotaError?.reason === 'SUBSCRIPTION_REQUIRED' ||
+          Boolean(quotaError?.message?.includes('valid license')))
+      const hasQuotaError = Boolean(quotaError?.message) && !isSpuriousSubscriptionError
       const accountTags = (account.tags || []).map((tag) => tag.trim()).filter(Boolean)
       const visibleTags = accountTags.slice(0, 2)
       const moreTagCount = Math.max(0, accountTags.length - visibleTags.length)
@@ -3109,7 +2893,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       const disabledTitle = isDisabled
         ? `${t('accounts.status.disabled')}${account.disabled_reason ? `: ${account.disabled_reason}` : ''}`
         : ''
-      const verificationReason = account.disabled_reason || verificationStatusMap[account.id]
+      const rawVerificationReason = account.disabled_reason || verificationStatusMap[account.id]
+      const verificationReason =
+        rawVerificationReason === 'subscription_required' && hasValidModels
+          ? undefined
+          : rawVerificationReason
       const hasVerificationIssue = verificationReason === 'verification_required' || verificationReason === 'tos_violation'
 
       const hasModels = account.quota?.models && account.quota.models.length > 0
@@ -3149,7 +2937,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                 {warningLabel}
               </span>
             )}
-            {isDisabled && (
+            {isDisabled && !isAccountNeedsReauth(account, verificationStatusMap) && (
               <span className="status-pill disabled" title={disabledTitle}>
                 <CircleAlert size={12} />
                 {t('accounts.status.disabled')}
@@ -3164,6 +2952,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
             <span className={`tier-badge ${tierBadge.className}`}>
               {tierBadge.label}
             </span>
+            <AntigravityGcpTosBadge account={account} />
             {isPendingAntigravityAccount(account) && (
               <span className="status-pill warning">{t('codex.pendingAuth.badge', '待授权')}</span>
             )}
@@ -3184,6 +2973,62 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                 {t('codex.pendingAuth.authorizeAction', '授权添加')}
               </button>
             )}
+            {!isPendingAntigravityAccount(account) && isAccountNeedsReauth(account, verificationStatusMap) && (() => {
+              const validationUrl = resolveValidationUrl(account)
+              const isCopied = copiedValidationUrlAccountId === account.id
+              return (
+                <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline validation-warning-btn"
+                    style={{
+                      color: 'var(--color-warning, #f59e0b)',
+                      borderColor: 'var(--color-warning, #f59e0b)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                    onClick={async () => {
+                      if (validationUrl) {
+                        try {
+                          await openUrl(validationUrl)
+                        } catch {
+                          window.open(validationUrl, '_blank', 'noopener,noreferrer')
+                        }
+                      } else {
+                        setShowVerificationErrorModal(account.id)
+                      }
+                    }}
+                    title={validationUrl || t('modals.errors.viewVerificationDetail', '查看验证详情')}
+                  >
+                    <ExternalLink size={12} />
+                    <span>{t('accounts.actions.openValidationUrl', '网页验证')}</span>
+                  </button>
+                  {validationUrl && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline copy-validation-btn"
+                      style={{
+                        color: isCopied ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)',
+                        borderColor: isCopied ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                      onClick={() => handleCopyValidationUrl(account.id, validationUrl)}
+                      title={t('accounts.actions.copyValidationUrlTooltip', '复制网页验证地址')}
+                    >
+                      {isCopied ? <Check size={12} /> : <Copy size={12} />}
+                      <span>
+                        {isCopied
+                          ? t('common.copied', '已复制')
+                          : t('accounts.actions.copyValidationUrl', '复制验证链接')}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {account.notes && (
@@ -3200,7 +3045,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
               </div>
             ) : (
               <>
-                {hasQuotaError && (
+                {hasQuotaError && !isAccountNeedsReauth(account, verificationStatusMap) && (
                   <div className="quota-empty" title={quotaError?.message}>
                     {t('common.shared.quota.queryFailed', '配额查询失败')}
                   </div>
@@ -3238,11 +3083,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                   <Globe size={14} />
                 </button>
               )}
-              {(hasQuotaError || hasVerificationIssue) && (
+              {(hasQuotaError || hasVerificationIssue || isAccountNeedsReauth(account, verificationStatusMap)) && (
                 <button
                   className="card-action-btn is-danger"
                   onClick={() =>
-                    hasVerificationIssue
+                    (hasVerificationIssue || isAccountNeedsReauth(account, verificationStatusMap))
                       ? setShowVerificationErrorModal(account.id)
                       : setShowErrorModal(account.id)
                   }
@@ -3326,92 +3171,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       )
     })
 
-  // 渲染文件夹卡片（嵌入accounts-grid内）
-  const renderInlineFolderCards = () => {
-    if (activeGroupId || accountGroups.length === 0) return null
-    return accountGroups.map((group) => {
-      const groupAccounts = accounts.filter((acc) => group.accountIds.includes(acc.id))
-      return (
-        <div
-          key={`folder-${group.id}`}
-          className="account-card folder-inline-card"
-          onClick={() => {
-            setActiveGroupId(group.id)
-            setSelected(new Set())
-          }}
-        >
-          <div className="folder-inline-header">
-            <div className="folder-inline-icon">
-              <FolderOpen size={24} />
-            </div>
-            <div className="folder-inline-info">
-              <span className="folder-inline-name">{group.name}</span>
-              <span className="folder-inline-count">
-                {t('accounts.groups.accountCount', { count: groupAccounts.length })}
-              </span>
-            </div>
-            <button
-              className="folder-icon-btn"
-              title={t('accounts.groups.addAccounts')}
-              onClick={(e) => {
-                e.stopPropagation()
-                setGroupQuickAddGroupId(group.id)
-              }}
-            >
-              <FolderPlus size={14} />
-            </button>
-            <button
-              className="folder-icon-btn"
-              title={t('accounts.groups.editTitle')}
-              onClick={(e) => {
-                e.stopPropagation()
-                setGroupAccountPickerGroupId(group.id)
-              }}
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              className="folder-icon-btn folder-delete-btn"
-              title={t('accounts.groups.deleteTitle')}
-              onClick={(e) => {
-                e.stopPropagation()
-                requestDeleteGroup(group.id, group.name)
-              }}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-          <div className="folder-inline-preview">
-            {groupAccounts.map((acc) => (
-              <div key={acc.id} className={`folder-preview-item${acc.disabled ? ' disabled' : ''}`}>
-                <span className="folder-preview-email" title={maskAccountText(acc.email) || ''}>
-                  {maskAccountText(acc.email)}
-                </span>
-                {acc.quota?.subscription_tier && (
-                  <span className={`tier-badge ${(acc.quota.subscription_tier || '').replace(/-tier$/, '').replace('g1-', '').toLowerCase()}`}>
-                    {(acc.quota.subscription_tier || '').replace(/-tier$/, '').replace('g1-', '').toUpperCase()}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="folder-preview-remove-btn"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void handleRemoveSingleFromGroup(group.id, acc.id)
-                  }}
-                  title={t('accounts.groups.removeFromGroup')}
-                  aria-label={`${t('accounts.groups.removeFromGroup')}: ${maskAccountText(acc.email)}`}
-                  disabled={removingGroupAccountIds.has(acc.id)}
-                >
-                  <LogOut size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )
-    })
-  }
+  // 渲染文件夹卡片（已改为顶部 Tab，不再嵌入 accounts-grid）
+  const renderInlineFolderCards = () => null
 
   // 渲染卡片视图
   const renderGridView = () => {
@@ -3760,7 +3521,12 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       const availableCreditsDisplay = getAvailableAICreditsDisplay(account)
       const isForbidden = Boolean(account.quota?.is_forbidden)
       const quotaError = account.quota_error
-      const hasQuotaError = Boolean(quotaError?.message)
+      const hasValidModels = Boolean(account.quota?.models && account.quota.models.length > 0)
+      const isSpuriousSubscriptionError =
+        hasValidModels &&
+        (quotaError?.reason === 'SUBSCRIPTION_REQUIRED' ||
+          Boolean(quotaError?.message?.includes('valid license')))
+      const hasQuotaError = Boolean(quotaError?.message) && !isSpuriousSubscriptionError
       const warning = refreshWarnings[account.email]
       const warningLabel =
         warning?.kind === 'auth'
@@ -3771,7 +3537,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
       const disabledTitle = account.disabled
         ? `${t('accounts.status.disabled')}${account.disabled_reason ? `: ${account.disabled_reason}` : ''}`
         : ''
-      const verificationReason = account.disabled_reason || verificationStatusMap[account.id]
+      const rawVerificationReason = account.disabled_reason || verificationStatusMap[account.id]
+      const verificationReason =
+        rawVerificationReason === 'subscription_required' && hasValidModels
+          ? undefined
+          : rawVerificationReason
       const hasVerificationIssue = verificationReason === 'verification_required' || verificationReason === 'tos_violation'
 
       return (
@@ -3808,11 +3578,68 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                     {t('codex.pendingAuth.authorizeAction', '授权添加')}
                   </button>
                 )}
+                {!isPendingAntigravityAccount(account) && isAccountNeedsReauth(account, verificationStatusMap) && (() => {
+                  const validationUrl = resolveValidationUrl(account)
+                  const isCopied = copiedValidationUrlAccountId === account.id
+                  return (
+                    <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline validation-warning-btn"
+                        style={{
+                          color: 'var(--color-warning, #f59e0b)',
+                          borderColor: 'var(--color-warning, #f59e0b)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                        onClick={async () => {
+                          if (validationUrl) {
+                            try {
+                              await openUrl(validationUrl)
+                            } catch {
+                              window.open(validationUrl, '_blank', 'noopener,noreferrer')
+                            }
+                          } else {
+                            setShowVerificationErrorModal(account.id)
+                          }
+                        }}
+                        title={validationUrl || t('modals.errors.viewVerificationDetail', '查看验证详情')}
+                      >
+                        <ExternalLink size={12} />
+                        <span>{t('accounts.actions.openValidationUrl', '网页验证')}</span>
+                      </button>
+                      {validationUrl && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline copy-validation-btn"
+                          style={{
+                            color: isCopied ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)',
+                            borderColor: isCopied ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          onClick={() => handleCopyValidationUrl(account.id, validationUrl)}
+                          title={t('accounts.actions.copyValidationUrlTooltip', '复制网页验证地址')}
+                        >
+                          {isCopied ? <Check size={12} /> : <Copy size={12} />}
+                          <span>
+                            {isCopied
+                              ? t('common.copied', '已复制')
+                              : t('accounts.actions.copyValidationUrl', '复制验证链接')}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
               <div className="account-sub-line">
                 <span className={`tier-badge ${tierBadge.className}`}>
                   {tierBadge.label}
                 </span>
+                <AntigravityGcpTosBadge account={account} />
                 {(() => {
                   const vBadge = getVerificationBadge(account)
                   return vBadge ? (
@@ -3827,7 +3654,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                     {warningLabel}
                   </span>
                 )}
-                {account.disabled && (
+                {account.disabled && !isAccountNeedsReauth(account, verificationStatusMap) && (
                   <span className="status-pill disabled" title={disabledTitle}>
                     <CircleAlert size={12} />
                     {t('accounts.status.disabled')}
@@ -3851,7 +3678,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                 </div>
               ) : (
                 <>
-                  {hasQuotaError && (
+                  {hasQuotaError && !isAccountNeedsReauth(account, verificationStatusMap) && (
                     <div className="quota-empty" title={quotaError?.message}>
                       {t('common.shared.quota.queryFailed', '配额查询失败')}
                     </div>
@@ -3873,11 +3700,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
                   <Globe size={16} />
                 </button>
               )}
-              {(hasQuotaError || hasVerificationIssue) && (
+              {(hasQuotaError || hasVerificationIssue || isAccountNeedsReauth(account, verificationStatusMap)) && (
                 <button
                   className="action-btn is-danger"
                   onClick={() =>
-                    hasVerificationIssue
+                    (hasVerificationIssue || isAccountNeedsReauth(account, verificationStatusMap))
                       ? setShowVerificationErrorModal(account.id)
                       : setShowErrorModal(account.id)
                   }
@@ -3982,65 +3809,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
           </tr>
         </thead>
         <tbody>
-          {!activeGroupId && accountGroups.length > 0 && accountGroups.map((group) => {
-            const groupAccounts = accounts.filter((acc) => group.accountIds.includes(acc.id))
-            return (
-              <tr
-                key={`folder-row-${group.id}`}
-                className="folder-table-row"
-                style={{ cursor: 'pointer' }}
-                onClick={() => {
-                  setActiveGroupId(group.id)
-                  setSelected(new Set())
-                }}
-              >
-                <td></td>
-                <td colSpan={3}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <FolderOpen size={16} style={{ color: 'var(--primary)' }} />
-                    <strong>{group.name}</strong>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                      {t('accounts.groups.accountCount', { count: groupAccounts.length })}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <div className="folder-table-actions">
-                    <button
-                      className="folder-icon-btn"
-                      title={t('accounts.groups.addAccounts')}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setGroupQuickAddGroupId(group.id)
-                      }}
-                    >
-                      <FolderPlus size={14} />
-                    </button>
-                    <button
-                      className="folder-icon-btn"
-                      title={t('accounts.groups.editTitle')}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setGroupAccountPickerGroupId(group.id)
-                      }}
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      className="folder-icon-btn folder-delete-btn"
-                      title={t('accounts.groups.deleteTitle')}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        requestDeleteGroup(group.id, group.name)
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
           {groupByTag
             ? paginatedGroupedAccounts.map(({ groupKey, items, totalCount }) => (
               <Fragment key={groupKey}>
@@ -4064,7 +3832,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   )
 
   return {
-    accountGroups,
+    grouping,
+    accountGroups: grouping.groups,
     accountNoteCopiedKey,
     accountNoteError,
     accountNoteErrorScrollKey,
@@ -4079,8 +3848,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     accounts,
     activeAccountNoteEmail,
     activeAccountNoteForm,
-    activeGroup,
-    activeGroupId,
+    activeGroup: grouping.activeGroup,
+    activeGroupId: grouping.activeGroupId,
     addMessage,
     addStatus,
     addTab,
@@ -4097,8 +3866,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     closeAddModal,
     confirmClearSwitchHistory,
     confirmDelete,
-    confirmDeleteGroup,
     confirmDeleteTag,
+    copiedValidationUrlAccountId,
     copyAccountNoteValue,
     currentAccount,
     customSortAccounts,
@@ -4107,7 +3876,6 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     deleteConfirmError,
     deleteConfirmErrorScrollKey,
     deleting,
-    deletingGroup,
     deletingTag,
     displayGroups,
     draggedCustomSortAccountId,
@@ -4130,18 +3898,11 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     formatSwitchHistoryTrigger,
     getQuotaDisplayItems,
     getVerificationBadge,
-    groupAccountPickerGroup,
-    groupAccountPickerGroupId,
     groupByTag,
-    groupDeleteConfirm,
-    groupDeleteError,
-    groupDeleteErrorScrollKey,
-    groupQuickAddGroup,
-    groupQuickAddGroupId,
-    handleAssignAccountsToGroup,
     handleBatchDelete,
     handleClearSwitchHistory,
     handleCopyOauthUrl,
+    handleCopyValidationUrl,
     handleCustomSortDragMove,
     handleCustomSortDragStart,
     handleExport,
@@ -4186,6 +3947,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     onNavigate,
     openAddModal,
     openOAuthAccountNoteModal,
+    openPendingOAuthAccount,
     openSwitchHistoryModal,
     paginatedIds,
     pagination,
@@ -4195,7 +3957,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     privacyModeEnabled,
     refreshing,
     refreshingAll,
-    reloadAccountGroups,
+    reloadAccountGroups: grouping.reloadGroups,
     renderCompactView,
     renderErrorMessage,
     renderGridView,
@@ -4203,6 +3965,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     requestDeleteTag,
     resetAddModalState,
     resetCustomSortOrder,
+    resolveValidationUrl,
     savedMfaRecords,
     savingAccountNote,
     savingPendingOAuthAccount,
@@ -4211,16 +3974,12 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setAccountNoteMfaPickerOpen,
     setAccountNotePasswordVisible,
     setAccountNoteSecretVisible,
-    setActiveGroupId,
+    setActiveGroupId: grouping.setActiveGroupId,
     setAddTab,
     setDeleteConfirm,
     setDeleteConfirmError,
     setFileCorruptedError,
-    setGroupAccountPickerGroupId,
     setGroupByTag,
-    setGroupDeleteConfirm,
-    setGroupDeleteError,
-    setGroupQuickAddGroupId,
     setIncludeExportSensitiveNotes,
     setMessage,
     setOauthCallbackInput,
@@ -4229,8 +3988,8 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setSavedMfaRecords,
     setSearchQuery,
     setSelected,
-    setShowAccountGroupModal,
-    setShowAddToGroupModal,
+    setShowAccountGroupModal: grouping.setShowManageModal,
+    setShowAddToGroupModal: grouping.setShowAddToGroupModal,
     setShowCustomSortModal,
     setShowErrorModal,
     setShowQuotaModal,
@@ -4242,9 +4001,9 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
     setTagDeleteConfirm,
     setTagDeleteConfirmError,
     setTokenInput,
-    showAccountGroupModal,
+    showAccountGroupModal: grouping.showManageModal,
     showAddModal,
-    showAddToGroupModal,
+    showAddToGroupModal: grouping.showAddToGroupModal,
     showCustomSortModal,
     showErrorModal,
     showQuotaModal,

@@ -1,0 +1,21 @@
+.codex-context-management-status {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.codex-context-management-status.success {
+  color: var(--success, #16a34a);
+}
+
+.codex-context-management-status.error {
+  color: var(--danger, #ef4444);
+}
+
+.codex-context-management-control--quick {
+  margin-top: 10px;
+}
+
+.codex-context-management-control--quick .qs-codex-quick-status {
+  margin-top: 8px;
+}

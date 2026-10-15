@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { loadCodexTopLayoutPreference, normalizeCodexTopLayout, writeCodexTopLayoutPreference, type CodexTopLayoutPreference } from '../utils/codexTopLayoutPreferences';
 import {
   ACCOUNT_TRANSFER_SCHEMA,
   AccountTransferBundle,
@@ -20,6 +21,10 @@ import {
   getCodexAccountGroups,
   invalidateCodexGroupCache,
 } from './codexAccountGroupService';
+import {
+  getPlatformGroups,
+  invalidatePlatformGroupCache,
+} from './platformGroupService';
 import {
   CodexModelProvider,
   invalidateCodexModelProviderCache,
@@ -226,6 +231,7 @@ export interface DataTransferConfigBundle {
   group_settings: GroupSettings;
   account_groups: ExportedAccountGroup[];
   codex_account_groups: ExportedCodexAccountGroup[];
+  platform_account_groups?: Record<string, ExportedAccountGroup[]>;
   codex_model_providers: CodexModelProvider[];
   instance_stores: Partial<Record<InstancePlatform, ExportedInstanceStore>>;
   antigravity_wakeup: ExportedAntigravityWakeupState;
@@ -234,6 +240,7 @@ export interface DataTransferConfigBundle {
   verification_records?: unknown;
   verification_history?: unknown;
   platform_layout_config?: unknown;
+  codex_top_layout?: CodexTopLayoutPreference;
   platform_layout_custom_icons?: unknown;
   compact_group_order?: unknown;
   compact_group_colors?: unknown;
@@ -1022,11 +1029,18 @@ function importCodexWakeupState(
 }
 
 async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransferConfigBundle> {
+  let codexTopLayout: CodexTopLayoutPreference;
+  try {
+    codexTopLayout = loadCodexTopLayoutPreference();
+  } catch {
+    throw new Error('codex_top_layout_read_failed');
+  }
   const [
     rawUserConfig,
     groupSettings,
     accountGroups,
     codexAccountGroups,
+    platformAccountGroups,
     codexModelProviders,
     codexWakeupState,
     codexWakeupCliStatus,
@@ -1036,6 +1050,27 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     getGroupSettings(),
     getAccountGroups(),
     getCodexAccountGroups(),
+    (async () => {
+      const entries: Array<[string, ExportedAccountGroup[]]> = [];
+      for (const platform of ALL_PLATFORM_IDS) {
+        if (platform === 'antigravity' || platform === 'antigravity_ide' || platform === 'codex' || platform === 'codex_api_service') {
+          continue;
+        }
+        const groups = await getPlatformGroups(platform);
+        if (groups.length > 0) {
+          entries.push([
+            platform,
+            groups.map((g) => ({
+              id: g.id,
+              name: g.name,
+              createdAt: g.createdAt,
+              accountRefs: mapAccountIdsToRefs(platform, g.accountIds, registry),
+            })),
+          ]);
+        }
+      }
+      return Object.fromEntries(entries);
+    })(),
     listCodexModelProviders(),
     getCodexWakeupState(),
     getCodexWakeupCliStatus(),
@@ -1054,6 +1089,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     group_settings: groupSettings,
     account_groups: exportAccountGroups(accountGroups, registry),
     codex_account_groups: exportCodexAccountGroups(codexAccountGroups, registry),
+    platform_account_groups: platformAccountGroups,
     codex_model_providers: codexModelProviders,
     instance_stores: Object.fromEntries(instanceStoreEntries) as Partial<
       Record<InstancePlatform, ExportedInstanceStore>
@@ -1071,6 +1107,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     verification_records: safeGetLocalStorageItem('agtools.mfa.vault.v2'),
     verification_history: safeGetLocalStorageItem('agtools.mfa.vault.history'),
     platform_layout_config: safeGetLocalStorageItem('agtools.platform_layout.v1'),
+    codex_top_layout: codexTopLayout,
     platform_layout_custom_icons: safeGetLocalStorageItem('agtools.platform_layout.custom_icons.v1'),
     compact_group_order: safeGetLocalStorageItem('compactGroupOrder'),
     compact_group_colors: safeGetLocalStorageItem('compactGroupColors'),
@@ -1079,7 +1116,17 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
   };
 }
 
+function validateImportedCodexTopLayout(value: unknown): CodexTopLayoutPreference {
+  if (!isRecord(value) || !Array.isArray(value.order) || !value.order.every(tab => typeof tab === 'string')) {
+    throw new Error('codex_top_layout_invalid');
+  }
+  return normalizeCodexTopLayout(value);
+}
+
 async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<DataTransferConfigImportResult> {
+  // Validate before any writes. Older bundles intentionally retain the current layout.
+  const codexTopLayout = bundle.codex_top_layout === undefined ? undefined
+    : validateImportedCodexTopLayout(bundle.codex_top_layout);
   const registry = await loadAccountRegistry();
   let unresolvedAccountRefs = 0;
   let disabledTaskCount = 0;
@@ -1110,6 +1157,27 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
     data: JSON.stringify(codexAccountGroupsImport.groups, null, 2),
   });
   invalidateCodexGroupCache();
+
+  if (bundle.platform_account_groups) {
+    for (const [platform, exportedGroups] of Object.entries(bundle.platform_account_groups)) {
+      if (!Array.isArray(exportedGroups)) continue;
+      const restored = exportedGroups.map((group) => {
+        const resolved = resolveAccountRefsToIds(group.accountRefs, registry);
+        unresolvedAccountRefs += resolved.unresolved;
+        return {
+          id: group.id,
+          name: group.name,
+          createdAt: group.createdAt,
+          accountIds: resolved.ids,
+        };
+      });
+      await invoke('save_platform_account_groups', {
+        platform,
+        data: JSON.stringify(restored, null, 2),
+      });
+      invalidatePlatformGroupCache(platform);
+    }
+  }
 
   await invoke('save_codex_model_providers', {
     data: JSON.stringify(bundle.codex_model_providers, null, 2),
@@ -1178,6 +1246,14 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
   saveCurrentAccountRefreshMinutesMap(bundle.current_account_refresh_minutes);
   window.dispatchEvent(new Event('config-updated'));
   window.dispatchEvent(new Event('wakeup-tasks-updated'));
+  if (codexTopLayout !== undefined) {
+    try {
+      writeCodexTopLayoutPreference(codexTopLayout);
+    } catch {
+      // Other settings have already been applied; do not report a complete import.
+      throw new Error('codex_top_layout_import_failed');
+    }
+  }
 
   return {
     applied: true,

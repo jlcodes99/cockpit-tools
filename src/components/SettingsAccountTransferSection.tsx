@@ -5,6 +5,7 @@ import {
   SetStateAction,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -16,7 +17,8 @@ import { listen } from '@tauri-apps/api/event';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { ExportJsonModal } from './ExportJsonModal';
 import { useExportJsonModal } from '../hooks/useExportJsonModal';
-import { useEscClose } from '../hooks/useEscClose';
+import { useEscCloseTopmost } from '../hooks/useEscClose';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import {
   AccountTransferImportProgress,
   AccountTransferImportProgressDetail,
@@ -47,8 +49,7 @@ import {
   createManagedBackup,
   deleteAutoBackupFile,
   extractAutoBackupPlatformJson,
-  getAutoBackupSettings,
-  getBackupUsage,
+  getAutoBackupState,
   getSelectionFromAutoBackupSettings,
   listAutoBackupFiles,
   normalizeAutoBackupPlatforms,
@@ -96,6 +97,10 @@ function normalizeImportErrorMessage(
   fallbackMessage: string,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
+  if (rawError === 'invalid_json') return t('common.shared.import.invalidJson');
+  if (rawError === 'codex_top_layout_read_failed') return t('codex.more.topLayoutReadFailed');
+  if (rawError === 'codex_top_layout_invalid') return t('settings.transfer.errors.codexTopLayoutInvalid');
+  if (rawError === 'codex_top_layout_import_failed') return t('settings.transfer.errors.codexTopLayoutImportFailed');
   if (rawError === 'transfer_selection_required') {
     return t('settings.transfer.errors.selectionRequired');
   }
@@ -199,10 +204,18 @@ export function SettingsAccountTransferSection({
   directoryEntryOnly = false,
 }: SettingsAccountTransferSectionProps = {}) {
   const { t } = useTranslation();
+  const dialogId = useId();
+  const exportOptionsDialogRef = useRef<HTMLDivElement | null>(null);
+  const importDialogRef = useRef<HTMLDivElement | null>(null);
+  const backupManagerDialogRef = useRef<HTMLDivElement | null>(null);
+  const migrationConfirmDialogRef = useRef<HTMLDivElement | null>(null);
+  const migrationProgressDialogRef = useRef<HTMLDivElement | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const progressListRef = useRef<HTMLDivElement | null>(null);
   const backupMigrationIdRef = useRef<string | null>(null);
+  const backupLoadVersionRef = useRef(0);
+  const backupMigrationErrorRef = useRef<HTMLDivElement | null>(null);
 
   const [showExportOptionsModal, setShowExportOptionsModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -222,6 +235,7 @@ export function SettingsAccountTransferSection({
   const [backupFiles, setBackupFiles] = useState<AutoBackupFileEntry[]>([]);
   const [backupUsage, setBackupUsage] = useState<BackupUsageSummary | null>(null);
   const [backupLoading, setBackupLoading] = useState(true);
+  const [recoveredBackupDirectory, setRecoveredBackupDirectory] = useState<string | null>(null);
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
   const [backupDeletingFile, setBackupDeletingFile] = useState<string | null>(null);
@@ -248,7 +262,7 @@ export function SettingsAccountTransferSection({
       setFeedback({
         tone: 'error',
         text: t('messages.exportFailed', {
-          error: normalizeError(error),
+          error: normalizeImportErrorMessage(normalizeError(error), t("messages.jsonRequired"), t),
         }),
       });
     },
@@ -323,9 +337,27 @@ export function SettingsAccountTransferSection({
     backupSaving,
   ]);
 
-  useEscClose(showExportOptionsModal, closeExportOptionsModal);
-  useEscClose(showImportModal, closeImportModal);
-  useEscClose(showBackupManagerModal, closeBackupManagerModal);
+  const migrationConfirmOpen = showBackupMigrationConfirm && !!backupMigrationPreview;
+  const migrationProgressOpen = showBackupMigrationProgress && !!backupMigrationProgress;
+  const topTransferDialog = migrationProgressOpen ? 'migrationProgress'
+    : migrationConfirmOpen ? 'migrationConfirm'
+      : exportModal.showModal ? 'exportJson'
+        : showBackupManagerModal ? 'backupManager'
+          : showImportModal ? 'import' : showExportOptionsModal ? 'exportOptions' : null;
+  const closeBackupMigrationConfirm = useCallback(() => {
+    setShowBackupMigrationConfirm(false);
+    setBackupMigrationPreview(null);
+  }, []);
+
+  useModalFocusTrap(exportOptionsDialogRef, showExportOptionsModal, true, topTransferDialog === 'exportOptions');
+  useModalFocusTrap(importDialogRef, showImportModal, true, topTransferDialog === 'import');
+  useModalFocusTrap(backupManagerDialogRef, showBackupManagerModal, true, topTransferDialog === 'backupManager');
+  useModalFocusTrap(migrationConfirmDialogRef, migrationConfirmOpen, true, topTransferDialog === 'migrationConfirm');
+  useModalFocusTrap(migrationProgressDialogRef, migrationProgressOpen, true, topTransferDialog === 'migrationProgress');
+  useEscCloseTopmost(topTransferDialog === 'exportOptions', closeExportOptionsModal, exportOptionsDialogRef);
+  useEscCloseTopmost(topTransferDialog === 'import', closeImportModal, importDialogRef);
+  useEscCloseTopmost(topTransferDialog === 'backupManager', closeBackupManagerModal, backupManagerDialogRef);
+  useEscCloseTopmost(topTransferDialog === 'migrationConfirm', closeBackupMigrationConfirm, migrationConfirmDialogRef);
 
   const calcProgressPercent = useCallback((progress: AccountTransferImportProgress | null) => {
     if (!progress || progress.total_platforms <= 0) {
@@ -596,28 +628,36 @@ export function SettingsAccountTransferSection({
 
   const loadAutoBackupState = useCallback(
     async (silent = false) => {
+      const version = ++backupLoadVersionRef.current;
       if (!silent) {
         setBackupLoading(true);
+        setBackupFeedback(null);
       }
       try {
-        const [settings, files, usage] = await Promise.all([
-          getAutoBackupSettings(),
-          listAutoBackupFiles(),
-          getBackupUsage(),
-        ]);
-        setBackupSettings(settings);
-        setBackupFiles(files);
-        setBackupUsage(usage);
-        setBackupRetentionInput(String(settings.retention_days));
+        const { settings, files, usage } = await getAutoBackupState();
+        if (version !== backupLoadVersionRef.current) return;
+        if (settings.status === 'fulfilled') {
+          setBackupSettings(settings.value);
+          setBackupRetentionInput(String(settings.value.retention_days));
+        }
+        if (files.status === 'fulfilled') setBackupFiles(files.value);
+        if (usage.status === 'fulfilled') setBackupUsage(usage.value);
+        for (const result of [settings, files, usage]) {
+          if (result.status === 'rejected') throw result.reason;
+        }
+        setBackupFeedback(null);
       } catch (error) {
+        if (version !== backupLoadVersionRef.current) return;
         setBackupFeedback({
           tone: 'error',
           text: t('settings.transfer.backup.feedback.loadFailed', {
-            error: normalizeError(error),
+            error: normalizeError(error) === 'backup_load_timeout'
+              ? t('settings.transfer.backup.loadTimeout')
+              : normalizeError(error),
           }),
         });
       } finally {
-        if (!silent) {
+        if (version === backupLoadVersionRef.current) {
           setBackupLoading(false);
         }
       }
@@ -806,7 +846,8 @@ export function SettingsAccountTransferSection({
       setBackupFeedback({
         tone: 'error',
         text: t('settings.transfer.backup.feedback.runFailed', {
-          error: normalizeError(error),
+          error: normalizeError(error) === 'codex_top_layout_read_failed'
+            ? t('codex.more.topLayoutReadFailed') : normalizeError(error),
         }),
       });
     } finally {
@@ -995,18 +1036,22 @@ export function SettingsAccountTransferSection({
   }, [t]);
 
   const handleChangeBackupDirectory = useCallback(async () => {
-    if (!backupSettings || backupDirectorySaving) return;
+    if (backupDirectorySaving) return;
+    setBackupDirectorySaving(true);
+    setBackupFeedback(null);
     let selectedPath: string | null = null;
     try {
       const selected = await open({
         directory: true,
         multiple: false,
-        defaultPath: backupSettings.directory_path || undefined,
+        defaultPath: backupSettings?.directory_path || recoveredBackupDirectory || undefined,
       });
       if (!selected || typeof selected !== 'string') return;
       selectedPath = selected;
-      if (selected.trim() === backupSettings.directory_path.trim()) return;
-      setBackupDirectorySaving(true);
+      if (selected.trim() === (backupSettings?.directory_path ?? recoveredBackupDirectory)?.trim()) return;
+      // An older load must not replace feedback or settings for this selection.
+      backupLoadVersionRef.current++;
+      setBackupLoading(false);
       setBackupFeedback({
         tone: 'loading',
         text: t('settings.transfer.backup.feedback.scanningMigration'),
@@ -1046,7 +1091,7 @@ export function SettingsAccountTransferSection({
     } finally {
       setBackupDirectorySaving(false);
     }
-  }, [backupDirectorySaving, backupSettings, loadAutoBackupState, t]);
+  }, [backupDirectorySaving, backupSettings, recoveredBackupDirectory, t]);
 
   const startBackupDirectoryChange = useCallback(
     async (migrateExisting: boolean) => {
@@ -1076,6 +1121,13 @@ export function SettingsAccountTransferSection({
           migrateExisting,
           migrationId,
         );
+        setRecoveredBackupDirectory(result.new_directory);
+        setBackupSettings((current) => current ? { ...current, directory_path: result.new_directory } : null);
+        // These caches belong to the old directory, so they cannot be reused if
+        // loading the new directory fails or times out.
+        setBackupFiles([]);
+        setBackupUsage(null);
+        setBackupLoading(true);
         setBackupMigrationResult(result);
         setBackupMigrationProgress((current) => ({
           migration_id: migrationId,
@@ -1088,7 +1140,7 @@ export function SettingsAccountTransferSection({
           current_path: null,
           cancellable: false,
         }));
-        await loadAutoBackupState(true);
+        void loadAutoBackupState(true);
       } catch (error) {
         const message = normalizeError(error);
         if (message === 'backup_migration_cancelled') {
@@ -1115,6 +1167,10 @@ export function SettingsAccountTransferSection({
     [backupDirectorySaving, backupMigrationPreview, loadAutoBackupState],
   );
 
+  useEffect(() => {
+    if (backupMigrationError) backupMigrationErrorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [backupMigrationError]);
+
   const handleCancelBackupMigration = useCallback(async () => {
     const migrationId = backupMigrationIdRef.current;
     if (!migrationId || !backupMigrationProgress?.cancellable || backupMigrationCanceling) return;
@@ -1135,6 +1191,7 @@ export function SettingsAccountTransferSection({
     setBackupMigrationError(null);
     setBackupMigrationPreview(null);
   }, [backupDirectorySaving]);
+  useEscCloseTopmost(topTransferDialog === 'migrationProgress', closeBackupMigrationProgress, migrationProgressDialogRef);
 
   const handleCleanupBehaviorBackups = useCallback(async () => {
     if (backupCleanupRunning) return;
@@ -1323,7 +1380,7 @@ export function SettingsAccountTransferSection({
             </div>
             <div className="settings-backup-inline-meta">
               {directoryEntryOnly
-                ? backupSettings?.directory_path ?? t('common.loading')
+                ? backupSettings?.directory_path ?? recoveredBackupDirectory ?? (backupLoading ? t('common.loading') : '-')
                 : backupLoading && !backupSettings
                 ? t('common.loading')
                 : `${backupSettings?.enabled
@@ -1337,6 +1394,15 @@ export function SettingsAccountTransferSection({
             </div>
           </div>
           <div className="row-control">
+            {backupFeedback?.tone === 'error' && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => void loadAutoBackupState()}
+                disabled={backupLoading || backupDirectorySaving}
+              >
+                {t('common.retry')}
+              </button>
+            )}
             <button
               className="btn btn-secondary"
               onClick={() => {
@@ -1418,9 +1484,11 @@ export function SettingsAccountTransferSection({
 
       {showBackupMigrationConfirm && backupMigrationPreview &&
         renderToBody(
-          <div className="modal-overlay">
+          <div className="modal-overlay settings-backup-migration-confirm-overlay">
             <div
-              className="modal settings-transfer-modal settings-backup-migration-modal"
+              className="modal settings-backup-migration-modal"
+              ref={migrationConfirmDialogRef}
+              tabIndex={-1}
               role="dialog"
               aria-modal="true"
               aria-labelledby="backup-migration-confirm-title"
@@ -1431,10 +1499,7 @@ export function SettingsAccountTransferSection({
                 </h2>
                 <button
                   className="modal-close"
-                  onClick={() => {
-                    setShowBackupMigrationConfirm(false);
-                    setBackupMigrationPreview(null);
-                  }}
+                  onClick={closeBackupMigrationConfirm}
                   aria-label={t('common.close')}
                 >
                   <X />
@@ -1454,16 +1519,24 @@ export function SettingsAccountTransferSection({
                     <code>{backupMigrationPreview.new_directory}</code>
                   </div>
                 </div>
-                <div className="settings-backup-migration-summary">
-                  <div>
-                    <strong>{formatFileSize(backupMigrationPreview.size_bytes)}</strong>
-                    <span>{t('settings.transfer.backup.migrationTotalSize')}</span>
+                {backupMigrationPreview.source_error ? (
+                  <div className="settings-backup-migration-warning" role="alert">
+                    {t('settings.transfer.backup.sourceUnavailable', {
+                      error: backupMigrationPreview.source_error,
+                    })}
                   </div>
-                  <div>
-                    <strong>{backupMigrationPreview.file_count}</strong>
-                    <span>{t('settings.transfer.backup.migrationTotalFiles')}</span>
+                ) : (
+                  <div className="settings-backup-migration-summary">
+                    <div>
+                      <strong>{formatFileSize(backupMigrationPreview.size_bytes)}</strong>
+                      <span>{t('settings.transfer.backup.migrationTotalSize')}</span>
+                    </div>
+                    <div>
+                      <strong>{backupMigrationPreview.file_count}</strong>
+                      <span>{t('settings.transfer.backup.migrationTotalFiles')}</span>
+                    </div>
                   </div>
-                </div>
+                )}
                 {backupMigrationPreview.sources.length > 0 && (
                   <div className="settings-backup-migration-sources">
                     {backupMigrationPreview.sources.map((source) => (
@@ -1484,10 +1557,7 @@ export function SettingsAccountTransferSection({
                 <div className="settings-transfer-modal-actions settings-backup-migration-actions">
                   <button
                     className="btn btn-secondary"
-                    onClick={() => {
-                      setShowBackupMigrationConfirm(false);
-                      setBackupMigrationPreview(null);
-                    }}
+                    onClick={closeBackupMigrationConfirm}
                   >
                     {t('common.cancel')}
                   </button>
@@ -1500,6 +1570,7 @@ export function SettingsAccountTransferSection({
                   <button
                     className="btn btn-primary"
                     onClick={() => void startBackupDirectoryChange(true)}
+                    disabled={!!backupMigrationPreview.source_error}
                   >
                     {t('settings.transfer.backup.migrateAndSwitch')}
                   </button>
@@ -1511,9 +1582,11 @@ export function SettingsAccountTransferSection({
 
       {showBackupMigrationProgress && backupMigrationProgress &&
         renderToBody(
-          <div className="modal-overlay">
+          <div className="modal-overlay settings-backup-migration-progress-overlay">
             <div
-              className="modal settings-transfer-modal settings-backup-migration-modal"
+              className="modal settings-backup-migration-modal"
+              ref={migrationProgressDialogRef}
+              tabIndex={-1}
               role="dialog"
               aria-modal="true"
               aria-labelledby="backup-migration-progress-title"
@@ -1575,7 +1648,7 @@ export function SettingsAccountTransferSection({
                   </div>
                 )}
                 {backupMigrationError && (
-                  <div className="form-error settings-backup-migration-error" role="alert">
+                  <div className="form-error settings-backup-migration-error" role="alert" ref={backupMigrationErrorRef}>
                     {t('settings.transfer.backup.feedback.directoryChangeFailed', {
                       error: backupMigrationError,
                     })}
@@ -1643,10 +1716,12 @@ export function SettingsAccountTransferSection({
       {showExportOptionsModal &&
         renderToBody(
           <div className="modal-overlay">
-            <div className="modal settings-transfer-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal settings-transfer-modal" ref={exportOptionsDialogRef} tabIndex={-1}
+              role="dialog" aria-modal="true" aria-labelledby={`${dialogId}-export-options-title`}
+              onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
                 <button className="btn btn-secondary icon-only" onClick={closeExportOptionsModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
-                <h2>{t('settings.transfer.exportTitle')}</h2>
+                <h2 id={`${dialogId}-export-options-title`}>{t('settings.transfer.exportTitle')}</h2>
                 <button
                   className="modal-close"
                   onClick={closeExportOptionsModal}
@@ -1694,10 +1769,12 @@ export function SettingsAccountTransferSection({
       {showImportModal &&
         renderToBody(
           <div className="modal-overlay">
-            <div className="modal settings-transfer-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal settings-transfer-modal" ref={importDialogRef} tabIndex={-1}
+              role="dialog" aria-modal="true" aria-labelledby={`${dialogId}-import-title`}
+              onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
                 <button className="btn btn-secondary icon-only" onClick={closeImportModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
-                <h2>{t('settings.transfer.importTitle')}</h2>
+                <h2 id={`${dialogId}-import-title`}>{t('settings.transfer.importTitle')}</h2>
                 <button className="modal-close" onClick={closeImportModal} aria-label={t('common.close')}>
                   <X />
                 </button>
@@ -1830,11 +1907,16 @@ export function SettingsAccountTransferSection({
           <div className="modal-overlay">
             <div
               className="modal settings-transfer-modal settings-backup-modal"
+              ref={backupManagerDialogRef}
+              tabIndex={-1}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={`${dialogId}-backup-title`}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="modal-header">
                 <button className="btn btn-secondary icon-only" onClick={closeBackupManagerModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
-                <h2>{t('settings.transfer.backup.title')}</h2>
+                <h2 id={`${dialogId}-backup-title`}>{t('settings.transfer.backup.title')}</h2>
                 <button className="modal-close" onClick={closeBackupManagerModal} aria-label={t('common.close')}>
                   <X />
                 </button>
@@ -1989,7 +2071,7 @@ export function SettingsAccountTransferSection({
                       {t('settings.transfer.backup.openFolder')}
                     </button>
                   </div>
-                  <div className="settings-backup-path">{backupSettings?.directory_path ?? '-'}</div>
+                  <div className="settings-backup-path">{backupSettings?.directory_path ?? recoveredBackupDirectory ?? '-'}</div>
                 </div>
 
                 <div className="settings-backup-manager-card">
@@ -2250,16 +2332,16 @@ export function SettingsAccountTransferSection({
                 </div>
 
                 {backupFeedbackNode}
+              </div>
 
-                <div className="settings-transfer-modal-actions">
-                  <button
-                    className="btn btn-secondary"
-                    onClick={closeBackupManagerModal}
-                    disabled={backupControlsDisabled}
-                  >
-                    {t('common.close')}
-                  </button>
-                </div>
+              <div className="modal-footer settings-backup-modal-footer">
+                <button
+                  className="btn btn-secondary"
+                  onClick={closeBackupManagerModal}
+                  disabled={backupControlsDisabled}
+                >
+                  {t('common.close')}
+                </button>
               </div>
             </div>
           </div>,
@@ -2269,6 +2351,7 @@ export function SettingsAccountTransferSection({
         renderToBody(
           <ExportJsonModal
             isOpen={exportModal.showModal}
+            active={topTransferDialog === 'exportJson'}
             title={`${t('common.shared.export.title')} JSON`}
             jsonContent={exportModal.jsonContent}
             hidden={exportModal.hidden}

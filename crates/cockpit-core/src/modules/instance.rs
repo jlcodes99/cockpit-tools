@@ -136,28 +136,50 @@ fn windows_app_root_exists(root_name: &str, exe_names: &[&str]) -> bool {
         .any(|exe_name| root.join(exe_name).exists())
 }
 
-pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/antigravity"));
-    }
-
+/// 获取所有存在的 Antigravity 用户数据目录（同时包含 `Antigravity` 与 `Antigravity IDE`）。
+pub fn get_all_antigravity_user_data_dirs() -> Vec<PathBuf> {
+    let mut results = Vec::new();
     #[cfg(target_os = "windows")]
-    {
-        let appdata =
-            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
-        return Ok(PathBuf::from(appdata).join(".antigravity_cockpit\\instances\\antigravity"));
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let appdata = PathBuf::from(appdata);
+        for candidate in windows_antigravity_user_data_candidates(&appdata) {
+            if candidate.exists() {
+                results.push(candidate);
+            }
+        }
     }
-
+    #[cfg(target_os = "macos")]
+    if let Some(home) = dirs::home_dir() {
+        let ide_dir = home.join("Library/Application Support/Antigravity IDE");
+        let app_dir = home.join("Library/Application Support/Antigravity");
+        if ide_dir.exists() {
+            results.push(ide_dir);
+        }
+        if app_dir.exists() {
+            results.push(app_dir);
+        }
+    }
     #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/antigravity"));
+    if let Some(home) = dirs::home_dir() {
+        let ide_dir = home.join(".config/Antigravity IDE");
+        let app_dir = home.join(".config/Antigravity");
+        if ide_dir.exists() {
+            results.push(ide_dir);
+        }
+        if app_dir.exists() {
+            results.push(app_dir);
+        }
     }
+    if results.is_empty() {
+        if let Ok(default_dir) = get_default_user_data_dir() {
+            results.push(default_dir);
+        }
+    }
+    results
+}
 
-    #[allow(unreachable_code)]
-    Err("无法确定默认实例目录".to_string())
+pub fn get_default_instances_root_dir() -> Result<PathBuf, String> {
+    crate::modules::data_paths::managed_instances_root_dir("antigravity")
 }
 
 pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {

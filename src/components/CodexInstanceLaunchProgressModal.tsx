@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -22,6 +23,7 @@ import type {
   CodexInstanceRuntimeOwner,
 } from "../utils/codexInstanceLaunchConflict";
 import { conciseCodexCredentialFailure } from "../utils/codexCredentialProgress";
+import { presentProxyEnginePrerequisite, proxyEnginePrerequisiteKey } from "../utils/codexProxyEnginePrerequisite";
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
 import type { CodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
 import { parseCodexSwitchAuthFailure } from "../utils/codexSwitchAuthFailure";
@@ -29,6 +31,7 @@ import { presentWindowsOperationError } from "../utils/windowsOperationDialog";
 import { parseWindowsOperationError } from "../utils/windowsOperationError";
 import {
   mapCodexSwitchProgressToLaunch,
+  codexLaunchErrorKey,
   type CodexLaunchOperation,
   type CodexLaunchStepId,
   type CodexLaunchStepStatus,
@@ -141,6 +144,13 @@ export function CodexInstanceLaunchProgressModal() {
     let unlistenSwitch: (() => void) | undefined;
     const applyPayload = (payload: LaunchProgressPayload) => {
       if (disposed || !payload.instanceId) return;
+      const prerequisiteKey = payload.type === "error" ? proxyEnginePrerequisiteKey(payload.error) : null;
+      if (prerequisiteKey) {
+        presentProxyEnginePrerequisite(payload.error);
+        payload = { ...payload, error: t(prerequisiteKey) };
+      }
+      const lifecycleKey = payload.type === "error" ? codexLaunchErrorKey(payload.error) : null;
+      if (lifecycleKey) payload = { ...payload, error: t(lifecycleKey) };
       setState((previous) => {
         if (payload.type === "start") {
           setActionError(null);
@@ -355,7 +365,7 @@ export function CodexInstanceLaunchProgressModal() {
   const account = accountId
     ? accounts.find((item) => item.id === accountId)
     : null;
-  const accountLabel = account?.account_name || account?.email || accountId;
+  const accountLabel = resolveCodexAccountDisplayName(account ?? { id: accountId ?? "" }, t("common.apiKeyAccount"));
   const authReason = authFailure
     ? authFailure.reasonCode === "client_login_required"
       ? t(
@@ -387,7 +397,7 @@ export function CodexInstanceLaunchProgressModal() {
           return [t("instances.accountLease.detail.noOAuthAccount")];
         }
         const lines = step.details.accountEmail
-          ? [String(step.details.accountEmail)]
+          ? [resolveCodexAccountDisplayName(account ?? { id: accountId ?? "", email: String(step.details.accountEmail) }, t("common.apiKeyAccount"))]
           : [t("instances.accountLease.detail.checkingAccount")];
         const accessExpiry = optionalTimestamp(
           step.details.accessTokenExpiresAt,

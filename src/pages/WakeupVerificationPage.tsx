@@ -27,6 +27,7 @@ import {
   type AccountFilterType,
 } from '../utils/accountFilters';
 import { getAntigravityTierBadge } from '../utils/account';
+import { formatGoogleValidationUrl } from '../utils/googleValidationUrl';
 import { getAccountGroups, type AccountGroup } from '../services/accountGroupService';
 import {
   isPrivacyModeEnabledByDefault,
@@ -1155,19 +1156,20 @@ export function WakeupVerificationPage({ onNavigate }: WakeupVerificationPagePro
 
   const renderValidationActions = (item: WakeupVerificationStateItem) => {
     if (!item.validationUrl) return null;
+    const formattedUrl = formatGoogleValidationUrl(item.validationUrl, item.accountEmail);
     return (
       <div className="verification-inline-actions">
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          onClick={() => openValidationUrl(item.validationUrl!)}
+          onClick={() => openValidationUrl(formattedUrl)}
         >
           {t('wakeup.errorUi.completeVerification')}
         </button>
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          onClick={() => copyText(item.validationUrl!)}
+          onClick={() => copyText(formattedUrl)}
         >
           {t('wakeup.errorUi.copyValidationUrl')}
         </button>

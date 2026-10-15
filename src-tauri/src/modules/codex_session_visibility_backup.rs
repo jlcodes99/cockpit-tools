@@ -17,63 +17,134 @@ fn format_sqlite_write_error(path: &Path, error: &rusqlite::Error) -> String {
     )
 }
 
-fn rewrite_rollout_provider(change: &RolloutProviderChange) -> Result<bool, String> {
-    let metadata = match fs::metadata(&change.absolute_path) {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct RolloutTimestampIdentity {
+    created_at_ns: Option<i128>,
+    device: Option<u64>,
+    inode: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct RolloutTimestampBackup {
+    relative_path: PathBuf,
+    source_size: u64,
+    source_identity: RolloutTimestampIdentity,
+    original_modified_at_ns: i128,
+    applied_modified_at_ns: i128,
+}
+
+fn system_time_nanos(value: SystemTime) -> Option<i128> {
+    match value.duration_since(UNIX_EPOCH) {
+        Ok(duration) => i128::try_from(duration.as_nanos()).ok(),
+        Err(error) => i128::try_from(error.duration().as_nanos()).ok().map(|value| -value),
+    }
+}
+
+fn system_time_from_nanos(value: i128) -> Option<SystemTime> {
+    let magnitude = value.checked_abs()?;
+    let seconds = u64::try_from(magnitude / 1_000_000_000).ok()?;
+    let nanos = (magnitude % 1_000_000_000) as u32;
+    let duration = Duration::new(seconds, nanos);
+    if value < 0 { UNIX_EPOCH.checked_sub(duration) } else { UNIX_EPOCH.checked_add(duration) }
+}
+
+fn rollout_timestamp_identity(metadata: &fs::Metadata) -> RolloutTimestampIdentity {
+    #[cfg(unix)]
+    let (device, inode) = {
+        use std::os::unix::fs::MetadataExt;
+        (Some(metadata.dev()), Some(metadata.ino()))
+    };
+    #[cfg(not(unix))]
+    let (device, inode) = (None, None);
+    RolloutTimestampIdentity {
+        // On Unix, backdating mtime may also backdate birthtime (APFS).
+        // Device/inode are the stable identity there; Windows creation time
+        // remains independent of a modification-time update.
+        created_at_ns: if cfg!(unix) { None } else { metadata.created().ok().and_then(system_time_nanos) },
+        device,
+        inode,
+    }
+}
+
+fn normalize_rollout_timestamp(change: &RolloutProviderChange) -> Result<bool, String> {
+    let (Some(expected), Some(target)) = (change.source_modified_at, change.target_modified_at) else {
+        return Ok(false);
+    };
+    apply_rollout_timestamp_if_unchanged(
+        &change.absolute_path,
+        change.source_size,
+        &change.source_identity,
+        expected,
+        target,
+    )
+}
+
+fn apply_rollout_timestamp_if_unchanged(
+    path: &Path,
+    expected_size: u64,
+    identity: &RolloutTimestampIdentity,
+    expected_modified_at: SystemTime,
+    target_modified_at: SystemTime,
+) -> Result<bool, String> {
+    let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) => {
             modules::logger::log_warn(&format!(
                 "跳过已不可读取的 Codex rollout 文件 ({}): {}",
-                change.absolute_path.display(),
+                path.display(),
                 error
             ));
             return Ok(false);
         }
     };
-    let current_modified_at = metadata.modified().ok();
-    if metadata.len() != change.source_size
-        || !modules::codex_session_file_time::same_modified_time_millis(
-            current_modified_at,
-            change.source_modified_at,
-        )
+    if !metadata.is_file()
+        || metadata.len() != expected_size
+        || metadata.modified().ok() != Some(expected_modified_at)
+        || &rollout_timestamp_identity(&metadata) != identity
     {
         modules::logger::log_warn(&format!(
             "跳过修复扫描后发生变化的 Codex rollout 文件: {}",
-            change.absolute_path.display()
+            path.display()
         ));
         return Ok(false);
     }
-    let original_modified_at =
-        modules::codex_session_file_time::read_modified_time(&change.absolute_path);
-    if let Some(updated_content) = change.updated_content.as_ref() {
-        match updated_content {
-            RolloutProviderUpdate::FullContent(content) => {
-                write_bytes_atomic(&change.absolute_path, content.as_bytes())?;
-            }
-            RolloutProviderUpdate::FirstLine(line) => {
-                rewrite_rollout_first_line(&change.absolute_path, line)?;
-            }
-        }
-    }
-    modules::codex_session_file_time::restore_modified_time(
-        &change.absolute_path,
-        change.target_modified_at.or(original_modified_at),
-    )?;
-    Ok(true)
-}
-
-fn rewrite_rollout_first_line(path: &Path, updated_first_line: &str) -> Result<(), String> {
-    let content = fs::read_to_string(path)
-        .map_err(|error| format!("读取 rollout 文件失败 ({}): {}", path.display(), error))?;
-    let (first_segment, rest) = match content.find('\n') {
-        Some(index) => (&content[..index + 1], &content[index + 1..]),
-        None => (content.as_str(), ""),
+    if metadata.modified().ok() == Some(target_modified_at) { return Ok(false); }
+    #[cfg(windows)]
+    let file = {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Read contents/metadata and change only attributes; never request
+        // write-data or truncation rights on append-only history.
+        fs::OpenOptions::new().access_mode(0x8000_0000 | 0x0100).open(path)
     };
-    let (_, separator) = split_line_ending(first_segment);
-    let mut output = String::new();
-    output.push_str(updated_first_line);
-    output.push_str(separator);
-    output.push_str(rest);
-    write_bytes_atomic(path, output.as_bytes())
+    #[cfg(not(windows))]
+    let file = fs::File::open(path);
+    let file = file.map_err(|error| format!("{}: {}", path.display(), error))?;
+    match file.try_lock() {
+        Ok(()) => {},
+        Err(std::fs::TryLockError::WouldBlock) => return Ok(false),
+        Err(error) => return Err(format!("{}: {}", path.display(), error)),
+    }
+    let unchanged = |metadata: &fs::Metadata| {
+        metadata.len() == expected_size
+            && metadata.modified().ok() == Some(expected_modified_at)
+            && &rollout_timestamp_identity(metadata) == identity
+    };
+    if !unchanged(&file.metadata().map_err(|error| format!("{}: {}", path.display(), error))?)
+        || !unchanged(&fs::symlink_metadata(path).map_err(|error| format!("{}: {}", path.display(), error))?)
+    {
+        return Ok(false);
+    }
+    // The generic best-effort time helper deliberately ignores setter errors.
+    // Repair results must count only actual successful, verified changes.
+    file.set_modified(target_modified_at).map_err(|error| format!("{}: {}", path.display(), error))?;
+    let applied = file.metadata().map_err(|error| format!("{}: {}", path.display(), error))?;
+    if applied.len() != expected_size
+        || applied.modified().ok() != Some(target_modified_at)
+        || &rollout_timestamp_identity(&fs::symlink_metadata(path).map_err(|error| format!("{}: {}", path.display(), error))?) != identity
+    {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 fn write_bytes_atomic(path: &Path, content: &[u8]) -> Result<(), String> {
@@ -381,32 +452,24 @@ fn backup_instance_files(
         ),
     )?;
 
-    let mut backed_up_files = Vec::new();
+    let backed_up_files: Vec<String> = Vec::new();
+    let mut rollout_timestamps = Vec::new();
     let mut sqlite_backup_files = Vec::new();
     for change in rollout_changes {
-        let target = backup_dir.join("files").join(&change.relative_path);
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                format!(
-                    "创建 rollout 备份目录失败 ({}): {}",
-                    parent.display(),
-                    error
-                )
-            })?;
+        // Timestamp-only repair needs no rollout content copy. A byte copy can
+        // be huge, go stale during append, and must never replace live history.
+        if let (Some(original), Some(applied)) = (
+            change.source_modified_at.and_then(system_time_nanos),
+            change.target_modified_at.and_then(system_time_nanos),
+        ) {
+            rollout_timestamps.push(RolloutTimestampBackup {
+                relative_path: change.relative_path.clone(),
+                source_size: change.source_size,
+                source_identity: change.source_identity.clone(),
+                original_modified_at_ns: original,
+                applied_modified_at_ns: applied,
+            });
         }
-        fs::copy(&change.absolute_path, &target).map_err(|error| {
-            format!(
-                "备份 rollout 文件失败 ({} -> {}): {}",
-                change.absolute_path.display(),
-                target.display(),
-                error
-            )
-        })?;
-        modules::codex_session_file_time::restore_modified_time(
-            &target,
-            modules::codex_session_file_time::read_modified_time(&change.absolute_path),
-        )?;
-        backed_up_files.push(change.relative_path.to_string_lossy().to_string());
     }
 
     if include_sqlite {
@@ -470,6 +533,7 @@ fn backup_instance_files(
         "hasSessionIndexBackup": session_index_backup_created,
         "hasGlobalStateBackup": global_state_backup_created,
         "rolloutFiles": backed_up_files,
+        "rolloutTimestamps": rollout_timestamps,
     });
     fs::write(
         backup_dir.join("manifest.json"),
@@ -589,6 +653,32 @@ fn restore_instance_files_from_backup(
         let _ = restore_sqlite_databases_from_backup(data_dir, backup_dir)?;
     }
 
+    let manifest_path = backup_dir.join("manifest.json");
+    if manifest_path.exists() {
+        let manifest: JsonValue = serde_json::from_slice(
+            &fs::read(&manifest_path).map_err(|error| error.to_string())?,
+        ).map_err(|error| error.to_string())?;
+        if let Some(records) = manifest.get("rolloutTimestamps") {
+            let records: Vec<RolloutTimestampBackup> = serde_json::from_value(records.clone())
+                .map_err(|error| error.to_string())?;
+            for record in records {
+                if !record.relative_path.components().all(|component| matches!(component, std::path::Component::Normal(_))) {
+                    continue;
+                }
+                let (Some(applied), Some(original)) = (
+                    system_time_from_nanos(record.applied_modified_at_ns),
+                    system_time_from_nanos(record.original_modified_at_ns),
+                ) else { continue; };
+                // Restore only a timestamp we applied to the same unchanged
+                // file. New records, replacement files and new mtimes win.
+                apply_rollout_timestamp_if_unchanged(
+                    &data_dir.join(record.relative_path), record.source_size,
+                    &record.source_identity, applied, original,
+                )?;
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -620,6 +710,11 @@ fn restore_directory_contents(source_root: &Path, target_root: &Path) -> Result<
             continue;
         }
 
+        // Legacy repair backups may contain stale rollouts. Restoring them
+        // would discard appended records and invalidate downstream byte cursors.
+        if source_path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("rollout-") && n.ends_with(".jsonl")) {
+            continue;
+        }
         if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|error| format!("创建恢复父目录失败 ({}): {}", parent.display(), error))?;

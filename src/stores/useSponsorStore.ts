@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import type { SponsorModuleState } from '../types/sponsor';
-import { forceRefreshSponsorModuleState, getSponsorModuleState } from '../services/sponsorService';
+import {
+  forceRefreshSponsorModuleState,
+  getSponsorModuleState,
+  syncSponsorRoutes,
+} from '../services/sponsorService';
 
 const EMPTY_STATE: SponsorModuleState = {
   sponsorModule: null,
@@ -25,6 +29,17 @@ export const useSponsorStore = create<SponsorStoreState>((set) => ({
         ? await forceRefreshSponsorModuleState()
         : await getSponsorModuleState();
       set({ state: nextState, loading: false, initialized: true });
+      if (nextState.sponsorModule) {
+        void syncSponsorRoutes()
+          .then((summary) => {
+            if (summary.changed) {
+              window.dispatchEvent(new CustomEvent('sponsor-routes-updated'));
+            }
+          })
+          .catch((error) => {
+            console.warn('同步赞助商线路失败:', error);
+          });
+      }
       return nextState;
     } catch (error) {
       console.error('加载赞助商模块失败:', error);

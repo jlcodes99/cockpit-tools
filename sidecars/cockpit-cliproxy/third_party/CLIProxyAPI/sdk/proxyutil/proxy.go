@@ -110,10 +110,20 @@ func BuildHTTPTransport(raw string) (*http.Transport, Mode, error) {
 			if errSOCKS5 != nil {
 				return nil, setting.Mode, fmt.Errorf("create SOCKS5 dialer failed: %w", errSOCKS5)
 			}
+			contextDialer, ok := dialer.(proxy.ContextDialer)
+			if !ok {
+				return nil, setting.Mode, errors.New("SOCKS5 dialer does not support context cancellation")
+			}
 			transport := cloneDefaultTransport()
 			transport.Proxy = nil
-			transport.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
-				return dialer.Dial(network, addr)
+			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				conn, errDial := contextDialer.DialContext(ctx, network, addr)
+				// SOCKS cancellation can surface as a socket timeout. Preserve the
+				// caller's cancellation cause instead of blaming the proxy.
+				if errDial != nil && ctx.Err() != nil {
+					return nil, fmt.Errorf("SOCKS5 dial canceled: %w", ctx.Err())
+				}
+				return conn, errDial
 			}
 			return transport, setting.Mode, nil
 		}
@@ -220,10 +230,13 @@ func (d *httpConnectDialer) DialContext(ctx context.Context, network, addr strin
 		return nil, fmt.Errorf("read CONNECT response failed: %w", errRead)
 	}
 	if resp.StatusCode != http.StatusOK {
+		// Close the failed tunnel before closing the body, which may otherwise
+		// drain an incomplete proxy error response indefinitely.
+		errClose := conn.Close()
 		if resp.Body != nil {
 			_ = resp.Body.Close()
 		}
-		if errClose := conn.Close(); errClose != nil {
+		if errClose != nil {
 			return nil, fmt.Errorf("proxy CONNECT returned status %s; close failed: %v", resp.Status, errClose)
 		}
 		return nil, fmt.Errorf("proxy CONNECT returned status %s", resp.Status)

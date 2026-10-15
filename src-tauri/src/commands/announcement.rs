@@ -1,6 +1,7 @@
 use crate::modules::announcement;
 use crate::modules::announcement::AnnouncementState;
 use crate::modules::announcement::SponsorModuleState;
+use crate::modules::sponsor_route_sync::SponsorRouteSyncSummary;
 use crate::modules::announcement::TopRightAdState;
 
 #[tauri::command]
@@ -41,4 +42,9 @@ pub async fn announcement_get_sponsor_module() -> Result<SponsorModuleState, Str
 #[tauri::command]
 pub async fn announcement_force_refresh_sponsor_module() -> Result<SponsorModuleState, String> {
     announcement::force_refresh_sponsor_module().await
+}
+
+#[tauri::command]
+pub async fn announcement_sync_sponsor_routes() -> Result<SponsorRouteSyncSummary, String> {
+    announcement::sync_sponsor_routes_from_announcements().await
 }

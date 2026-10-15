@@ -10,6 +10,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import { SingleSelectDropdown, type SingleSelectOption } from '../SingleSelectDropdown';
 import type {
   CodebuddySessionRecord,
   CodebuddySessionPlatform,
@@ -79,6 +80,24 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
   // UI state
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const statusOptions = useMemo<SingleSelectOption[]>(
+    () => [
+      {
+        value: '',
+        label: t('codebuddy.sessionManager.statusAll', '全部状态'),
+      },
+      {
+        value: 'Completed',
+        label: t('codebuddy.sessionManager.statusCompleted', '已完成'),
+      },
+      {
+        value: 'InProgress',
+        label: t('codebuddy.sessionManager.statusInProgress', '进行中'),
+      },
+    ],
+    [t],
+  );
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<number | null>(null);
@@ -151,45 +170,47 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
   }, []);
 
   return (
-    <div className="codex-session-manager">
+    <div className="codex-session-manager codebuddy-session-manager">
       {/* Search & Filter row */}
       <div className="codex-session-manager__header">
-        <div className="codex-session-manager__filters">
-          <div className="codex-session-manager__search-wrap">
-            <Search size={13} className="codex-session-manager__search-icon" />
-            <input
-              type="text"
-              className="codex-session-manager__search-input"
-              placeholder={t('codebuddy.sessionManager.searchPlaceholder', '搜索标题或工作目录...')}
-              value={keywordInput}
-              onChange={(e) => handleKeywordChange(e.target.value)}
-              disabled={loading}
-            />
-            {keywordInput && (
-              <button
-                className="codex-session-manager__search-clear"
-                onClick={handleClearKeyword}
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
-
-          <select
-            className="codex-session-manager__status-select"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            disabled={loading}
+        <div className="codex-session-manager__search">
+          <label className="codex-session-search-field">
+            <div className="codex-session-search-field__control">
+              <Search size={14} />
+              <input
+                type="text"
+                value={keywordInput}
+                onChange={(e) => handleKeywordChange(e.target.value)}
+                placeholder={t('codebuddy.sessionManager.searchPlaceholder', '搜索标题或工作目录...')}
+                disabled={loading}
+              />
+            </div>
+          </label>
+          <button
+            className="btn btn-secondary codex-session-manager__search-button"
+            type="button"
+            onClick={handleClearKeyword}
+            disabled={loading || !keywordInput}
           >
-            <option value="">{t('codebuddy.sessionManager.statusAll', '全部状态')}</option>
-            <option value="Completed">{t('codebuddy.sessionManager.statusCompleted', '已完成')}</option>
-            <option value="InProgress">{t('codebuddy.sessionManager.statusInProgress', '进行中')}</option>
-          </select>
+            <X size={14} />
+            {t('codex.sessionManager.search.clear', '清空')}
+          </button>
+          <SingleSelectDropdown
+            className="codex-session-manager__kind-filter"
+            value={statusFilter}
+            options={statusOptions}
+            onChange={setStatusFilter}
+            disabled={loading}
+            ariaLabel={t('codebuddy.sessionManager.statusFilter', '会话状态')}
+            menuWidth={160}
+            menuMaxHeight={220}
+          />
         </div>
 
         <div className="codex-session-manager__actions">
           <button
-            className="codex-session-manager__action-button btn btn-ghost"
+            className="codex-session-manager__action-button btn btn-secondary"
+            type="button"
             onClick={loadSessions}
             disabled={loading}
             title={t('common.refresh', '刷新')}
@@ -221,11 +242,11 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
               {/* Group header */}
               <div className="codex-session-folder__row">
                 <div className="codex-session-folder__left">
-                  <button className="codex-session-folder__expand" onClick={() => toggleGroupExpanded(group.cwd)}>
+                  <button type="button" className="codex-session-folder__expand" onClick={() => toggleGroupExpanded(group.cwd)}>
                     {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </button>
                   <Folder size={14} className="codex-session-folder__icon" />
-                  <button className="codex-session-folder__label" onClick={() => toggleGroupExpanded(group.cwd)}>
+                  <button type="button" className="codex-session-folder__label" onClick={() => toggleGroupExpanded(group.cwd)}>
                     {resolveGroupLabel(group.cwd)}
                   </button>
                   <span className="codex-session-group__count">{group.sessions.length}</span>
@@ -272,6 +293,7 @@ export function CodebuddySessionManager({ platform, accounts = [] }: Props) {
                           {session.status}
                         </span>
                         <button
+                          type="button"
                           className={`codex-session-row__copy-button${copiedId === session.conversationId ? ' is-copied' : ''}`}
                           onClick={() => handleCopyId(session.conversationId)}
                           title={session.conversationId}

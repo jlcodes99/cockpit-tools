@@ -18,7 +18,7 @@ const OAUTH_TIMEOUT_SECONDS: i64 = 600;
 const OAUTH_POLL_INTERVAL_MS: u64 = 1000;
 const DEFAULT_LOGIN_BASE_URL: &str = "https://qoder.com/device/selectAccounts";
 const DEFAULT_OPENAPI_BASE_URL: &str = "https://openapi.qoder.sh";
-const QODER_CLI_BROWSER_LOGIN_CLIENT_ID: &str = "e883ade2-e6e3-4d6d-adf7-f92ceff5fdcb";
+const QODER_IDE_REDIRECT_URI: &str = "qoder://aicoding.aicoding-agent/login-success";
 const QODER_DEVICE_LOGIN_CHALLENGE_METHOD: &str = "S256";
 const DEVICE_TOKEN_POLL_PATH: &str = "/api/v1/deviceToken/poll";
 const USER_INFO_PATH: &str = "/api/v1/userinfo";
@@ -44,8 +44,7 @@ struct PendingOAuthState {
     code_verifier: String,
     challenge_method: String,
     openapi_base_url: String,
-    machine_token: Option<String>,
-    machine_type: Option<String>,
+    machine_info: Option<QoderMachineInfo>,
     verification_uri: String,
     expires_at: i64,
     cancelled: bool,
@@ -55,6 +54,11 @@ struct PendingOAuthState {
 struct QoderMachineInfo {
     token: String,
     machine_type: Option<String>,
+    machine_code: Option<String>,
+    machine_id: Option<String>,
+    machine_hostname: Option<String>,
+    machine_os: Option<String>,
+    cosy_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +68,16 @@ struct QoderMachineTokenCache {
     token: Option<String>,
     #[serde(default, rename = "type")]
     machine_type: Option<String>,
+    #[serde(default, rename = "code")]
+    machine_code: Option<String>,
+    #[serde(default, rename = "id")]
+    machine_id: Option<String>,
+    #[serde(default, rename = "hostname")]
+    machine_hostname: Option<String>,
+    #[serde(default, rename = "os")]
+    machine_os: Option<String>,
+    #[serde(default, rename = "version")]
+    cosy_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,7 +159,7 @@ fn build_cli_device_login_url(
         query_pairs.append_pair("nonce", nonce);
         query_pairs.append_pair("challenge", challenge);
         query_pairs.append_pair("challenge_method", challenge_method);
-        query_pairs.append_pair("client_id", QODER_CLI_BROWSER_LOGIN_CLIENT_ID);
+        query_pairs.append_pair("redirect_uri", QODER_IDE_REDIRECT_URI);
         if let Some(machine_id) = machine_id.and_then(|value| normalize_non_empty(Some(value))) {
             query_pairs.append_pair("machine_id", &machine_id);
         }
@@ -263,7 +277,7 @@ fn build_qoder_product_file_candidates(base_path: &Path) -> Vec<PathBuf> {
         let Some(name) = ancestor.file_name().and_then(|value| value.to_str()) else {
             continue;
         };
-        if name.eq_ignore_ascii_case("Qoder.app") {
+        if name.eq_ignore_ascii_case("Qoder.app") || name.eq_ignore_ascii_case("Qoder IDE.app") {
             app_roots.push(ancestor.to_path_buf());
             break;
         }
@@ -323,6 +337,10 @@ fn detect_qoder_product_version() -> Option<String> {
 
     #[cfg(target_os = "macos")]
     {
+        base_paths.push(PathBuf::from("/Applications/Qoder IDE.app"));
+        base_paths.push(PathBuf::from(
+            "/Applications/Qoder IDE.app/Contents/MacOS/Qoder IDE",
+        ));
         base_paths.push(PathBuf::from("/Applications/Qoder.app"));
         base_paths.push(PathBuf::from(
             "/Applications/Qoder.app/Contents/MacOS/Qoder",
@@ -367,10 +385,9 @@ fn detect_qoder_product_version() -> Option<String> {
     None
 }
 
-fn build_qoder_status_headers(
+fn build_qoder_headers(
     token: &str,
-    machine_token: Option<&str>,
-    machine_type: Option<&str>,
+    machine_info: Option<&QoderMachineInfo>,
 ) -> reqwest::header::HeaderMap {
     use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
 
@@ -382,34 +399,66 @@ fn build_qoder_status_headers(
     if let Ok(value) = HeaderValue::from_str("application/json") {
         headers.insert(ACCEPT, value);
     }
-    let cosy_version = detect_qoder_product_version();
+    let cosy_version = machine_info
+        .and_then(|value| value.cosy_version.clone())
+        .or_else(detect_qoder_product_version);
     if let Some(version) = cosy_version.as_deref() {
         if let Ok(value) = HeaderValue::from_str(&version) {
             headers.insert("Cosy-Version", value);
         }
     }
-    if let Some(machine_token) = machine_token.and_then(|value| normalize_non_empty(Some(value))) {
+    if let Some(machine_token) = machine_info
+        .map(|value| value.token.as_str())
+        .and_then(|value| normalize_non_empty(Some(value)))
+    {
         if let Ok(value) = HeaderValue::from_str(&machine_token) {
             headers.insert("Cosy-MachineToken", value);
         }
     }
-    if let Some(machine_type) = machine_type.and_then(|value| normalize_non_empty(Some(value))) {
+    if let Some(machine_type) = machine_info
+        .and_then(|value| value.machine_type.as_deref())
+        .and_then(|value| normalize_non_empty(Some(value)))
+    {
         if let Ok(value) = HeaderValue::from_str(&machine_type) {
             headers.insert("Cosy-MachineType", value);
         }
     }
-    if let Ok(value) = HeaderValue::from_str(&build_cosy_machine_os()) {
+    let machine_os = machine_info
+        .and_then(|value| value.machine_os.as_deref())
+        .and_then(|value| normalize_non_empty(Some(value)))
+        .unwrap_or_else(build_cosy_machine_os);
+    if let Ok(value) = HeaderValue::from_str(&machine_os) {
         headers.insert("Cosy-MachineOS", value);
+    }
+    for (header, value) in [
+        (
+            "Cosy-MachineCode",
+            machine_info.and_then(|v| v.machine_code.as_deref()),
+        ),
+        (
+            "Cosy-MachineId",
+            machine_info.and_then(|v| v.machine_id.as_deref()),
+        ),
+        (
+            "Cosy-MachineHostname",
+            machine_info.and_then(|v| v.machine_hostname.as_deref()),
+        ),
+    ] {
+        if let Some(value) = value.and_then(|value| normalize_non_empty(Some(value))) {
+            if let Ok(header_value) = HeaderValue::from_str(&value) {
+                headers.insert(header, header_value);
+            }
+        }
     }
     if let Ok(value) = HeaderValue::from_str("0") {
         headers.insert("Cosy-ClientType", value);
     }
     logger::log_info(&format!(
-        "[Qoder OAuth] 构造状态请求头: has_cosy_version={}, has_machine_token={}, has_machine_type={}, machine_os={}",
+        "[Qoder OAuth] 构造请求头: has_cosy_version={}, has_machine_token={}, has_machine_type={}, machine_os={}",
         cosy_version.is_some(),
-        machine_token.is_some(),
-        machine_type.is_some(),
-        build_cosy_machine_os()
+        machine_info.is_some_and(|value| !value.token.is_empty()),
+        machine_info.and_then(|value| value.machine_type.as_ref()).is_some(),
+        machine_os
     ));
     headers
 }
@@ -608,16 +657,9 @@ async fn fetch_qoder_user_info(
     client: &reqwest::Client,
     openapi_base_url: &str,
     token: &str,
+    machine_info: Option<&QoderMachineInfo>,
 ) -> Result<Value, String> {
-    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-
-    let mut headers = HeaderMap::new();
-    let bearer = format!("Bearer {}", token);
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&bearer)
-            .map_err(|err| format!("构造 Qoder userinfo 授权头失败: {}", err))?,
-    );
+    let headers = build_qoder_headers(token, machine_info);
     fetch_openapi_json(client, openapi_base_url, USER_INFO_PATH, headers, &[]).await
 }
 
@@ -625,10 +667,9 @@ async fn fetch_qoder_user_status_bundle(
     client: &reqwest::Client,
     openapi_base_url: &str,
     token: &str,
-    machine_token: Option<&str>,
-    machine_type: Option<&str>,
+    machine_info: Option<&QoderMachineInfo>,
 ) -> Result<(Value, Option<Value>), String> {
-    let status_headers = build_qoder_status_headers(token, machine_token, machine_type);
+    let status_headers = build_qoder_headers(token, machine_info);
     let status = fetch_openapi_json(
         client,
         openapi_base_url,
@@ -655,16 +696,9 @@ async fn fetch_qoder_user_plan(
     client: &reqwest::Client,
     openapi_base_url: &str,
     token: &str,
+    machine_info: Option<&QoderMachineInfo>,
 ) -> Result<Value, String> {
-    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-
-    let mut headers = HeaderMap::new();
-    let bearer = format!("Bearer {}", token);
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&bearer)
-            .map_err(|err| format!("构造 Qoder user plan 授权头失败: {}", err))?,
-    );
+    let headers = build_qoder_headers(token, machine_info);
     fetch_openapi_json(client, openapi_base_url, USER_PLAN_PATH, headers, &[]).await
 }
 
@@ -672,16 +706,9 @@ async fn fetch_qoder_credit_usage(
     client: &reqwest::Client,
     openapi_base_url: &str,
     token: &str,
+    machine_info: Option<&QoderMachineInfo>,
 ) -> Result<Value, String> {
-    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-
-    let mut headers = HeaderMap::new();
-    let bearer = format!("Bearer {}", token);
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&bearer)
-            .map_err(|err| format!("构造 Qoder credit usage 授权头失败: {}", err))?,
-    );
+    let headers = build_qoder_headers(token, machine_info);
     fetch_openapi_json(client, openapi_base_url, CREDIT_USAGE_PATH, headers, &[]).await
 }
 
@@ -810,14 +837,7 @@ async fn fetch_qoder_user_status_bundle_with_machine_info(
     token: &str,
     machine_info: Option<&QoderMachineInfo>,
 ) -> Result<(Value, Option<Value>), String> {
-    fetch_qoder_user_status_bundle(
-        client,
-        openapi_base_url,
-        token,
-        machine_info.map(|item| item.token.as_str()),
-        machine_info.and_then(|item| item.machine_type.as_deref()),
-    )
-    .await
+    fetch_qoder_user_status_bundle(client, openapi_base_url, token, machine_info).await
 }
 
 async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAccount, String> {
@@ -852,31 +872,43 @@ async fn refresh_account_from_openapi_once(account_id: &str) -> Result<QoderAcco
     let user_info_raw =
         build_refresh_user_info_raw(&target, &access_token, &user_status, data_policy.as_ref());
 
-    let user_plan_raw =
-        match fetch_qoder_user_plan(&client, DEFAULT_OPENAPI_BASE_URL, &access_token).await {
-            Ok(value) => Some(value),
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Qoder Refresh] 获取 /api/v2/user/plan 失败，将沿用本地缓存: {}",
-                    err
-                ));
-                target.auth_user_plan_raw.clone()
-            }
-        };
+    let user_plan_raw = match fetch_qoder_user_plan(
+        &client,
+        DEFAULT_OPENAPI_BASE_URL,
+        &access_token,
+        machine_info.as_ref(),
+    )
+    .await
+    {
+        Ok(value) => Some(value),
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[Qoder Refresh] 获取 /api/v2/user/plan 失败，将沿用本地缓存: {}",
+                err
+            ));
+            target.auth_user_plan_raw.clone()
+        }
+    };
 
     let mut quota_query_error: Option<String> = None;
-    let credit_usage_raw =
-        match fetch_qoder_credit_usage(&client, DEFAULT_OPENAPI_BASE_URL, &access_token).await {
-            Ok(value) => Some(value),
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Qoder Refresh] 获取 /api/v2/quota/usage 失败，将沿用本地缓存: {}",
-                    err
-                ));
-                quota_query_error = Some(err.clone());
-                target.auth_credit_usage_raw.clone()
-            }
-        };
+    let credit_usage_raw = match fetch_qoder_credit_usage(
+        &client,
+        DEFAULT_OPENAPI_BASE_URL,
+        &access_token,
+        machine_info.as_ref(),
+    )
+    .await
+    {
+        Ok(value) => Some(value),
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[Qoder Refresh] 获取 /api/v2/quota/usage 失败，将沿用本地缓存: {}",
+                err
+            ));
+            quota_query_error = Some(err.clone());
+            target.auth_credit_usage_raw.clone()
+        }
+    };
 
     let refreshed = qoder_account::upsert_account_from_snapshot(
         user_info_raw,
@@ -968,6 +1000,26 @@ fn read_qoder_machine_info_cache() -> Result<Option<QoderMachineInfo>, String> {
         .machine_type
         .as_deref()
         .and_then(|value| normalize_non_empty(Some(value)));
+    let machine_code = parsed
+        .machine_code
+        .as_deref()
+        .and_then(|value| normalize_non_empty(Some(value)));
+    let machine_id = parsed
+        .machine_id
+        .as_deref()
+        .and_then(|value| normalize_non_empty(Some(value)));
+    let machine_hostname = parsed
+        .machine_hostname
+        .as_deref()
+        .and_then(|value| normalize_non_empty(Some(value)));
+    let machine_os = parsed
+        .machine_os
+        .as_deref()
+        .and_then(|value| normalize_non_empty(Some(value)));
+    let cosy_version = parsed
+        .cosy_version
+        .as_deref()
+        .and_then(|value| normalize_non_empty(Some(value)));
 
     logger::log_info(&format!(
         "[Qoder OAuth] 官方 machine token 缓存已加载: path={}, has_token={}, has_machine_type={}",
@@ -979,6 +1031,11 @@ fn read_qoder_machine_info_cache() -> Result<Option<QoderMachineInfo>, String> {
     Ok(token.map(|token| QoderMachineInfo {
         token,
         machine_type,
+        machine_code,
+        machine_id,
+        machine_hostname,
+        machine_os,
+        cosy_version,
     }))
 }
 
@@ -1131,8 +1188,7 @@ pub async fn start_login() -> Result<QoderOAuthStartResponse, String> {
         code_verifier,
         challenge_method: challenge_method.clone(),
         openapi_base_url: DEFAULT_OPENAPI_BASE_URL.to_string(),
-        machine_token: machine_info.as_ref().map(|value| value.token.clone()),
-        machine_type: machine_info.and_then(|value| value.machine_type),
+        machine_info,
         verification_uri: verification_uri.clone(),
         expires_at: now_timestamp() + OAUTH_TIMEOUT_SECONDS,
         cancelled: false,
@@ -1146,8 +1202,8 @@ pub async fn start_login() -> Result<QoderOAuthStartResponse, String> {
     }
 
     logger::log_info(&format!(
-        "[Qoder OAuth] 登录会话已创建: login_id={}, client_id={}, expires_in={}s",
-        login_id, QODER_CLI_BROWSER_LOGIN_CLIENT_ID, OAUTH_TIMEOUT_SECONDS
+        "[Qoder OAuth] 登录会话已创建: login_id={}, redirect_uri={}, expires_in={}s",
+        login_id, QODER_IDE_REDIRECT_URI, OAUTH_TIMEOUT_SECONDS
     ));
 
     Ok(QoderOAuthStartResponse {
@@ -1196,8 +1252,7 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                 state.code_verifier.clone(),
                 state.challenge_method.clone(),
                 state.openapi_base_url.clone(),
-                state.machine_token.clone(),
-                state.machine_type.clone(),
+                state.machine_info.clone(),
             )
         };
 
@@ -1214,24 +1269,29 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                 let access_token = normalize_non_empty(token_data.token.as_deref())
                     .ok_or_else(|| "Qoder device token 响应缺少 token".to_string())?;
 
-                let user_info_response =
-                    match fetch_qoder_user_info(&client, &snapshot.3, &access_token).await {
-                        Ok(value) => Some(value),
-                        Err(err) => {
-                            logger::log_warn(&format!(
-                                "[Qoder OAuth] 获取 /userinfo 失败，将继续使用 user/status: {}",
-                                err
-                            ));
-                            None
-                        }
-                    };
+                let user_info_response = match fetch_qoder_user_info(
+                    &client,
+                    &snapshot.3,
+                    &access_token,
+                    snapshot.4.as_ref(),
+                )
+                .await
+                {
+                    Ok(value) => Some(value),
+                    Err(err) => {
+                        logger::log_warn(&format!(
+                            "[Qoder OAuth] 获取 /userinfo 失败，将继续使用 user/status: {}",
+                            err
+                        ));
+                        None
+                    }
+                };
 
                 let (user_status, data_policy) = fetch_qoder_user_status_bundle(
                     &client,
                     &snapshot.3,
                     &access_token,
-                    snapshot.4.as_deref(),
-                    snapshot.5.as_deref(),
+                    snapshot.4.as_ref(),
                 )
                 .await?;
 
@@ -1243,29 +1303,41 @@ pub async fn complete_login(login_id: &str) -> Result<QoderAccount, String> {
                     data_policy.as_ref(),
                 );
 
-                let user_plan_raw =
-                    match fetch_qoder_user_plan(&client, &snapshot.3, &access_token).await {
-                        Ok(value) => Some(value),
-                        Err(err) => {
-                            logger::log_warn(&format!(
-                                "[Qoder OAuth] 获取 /api/v2/user/plan 失败，将以缺省快照继续: {}",
-                                err
-                            ));
-                            None
-                        }
-                    };
+                let user_plan_raw = match fetch_qoder_user_plan(
+                    &client,
+                    &snapshot.3,
+                    &access_token,
+                    snapshot.4.as_ref(),
+                )
+                .await
+                {
+                    Ok(value) => Some(value),
+                    Err(err) => {
+                        logger::log_warn(&format!(
+                            "[Qoder OAuth] 获取 /api/v2/user/plan 失败，将以缺省快照继续: {}",
+                            err
+                        ));
+                        None
+                    }
+                };
 
-                let credit_usage_raw =
-                    match fetch_qoder_credit_usage(&client, &snapshot.3, &access_token).await {
-                        Ok(value) => Some(value),
-                        Err(err) => {
-                            logger::log_warn(&format!(
-                                "[Qoder OAuth] 获取 /api/v2/quota/usage 失败，将以缺省快照继续: {}",
-                                err
-                            ));
-                            None
-                        }
-                    };
+                let credit_usage_raw = match fetch_qoder_credit_usage(
+                    &client,
+                    &snapshot.3,
+                    &access_token,
+                    snapshot.4.as_ref(),
+                )
+                .await
+                {
+                    Ok(value) => Some(value),
+                    Err(err) => {
+                        logger::log_warn(&format!(
+                            "[Qoder OAuth] 获取 /api/v2/quota/usage 失败，将以缺省快照继续: {}",
+                            err
+                        ));
+                        None
+                    }
+                };
 
                 let account = qoder_account::upsert_account_from_snapshot(
                     user_info_raw,
@@ -1352,7 +1424,7 @@ mod tests {
 
     #[test]
     // lgtm[rs/hardcoded-credentials] test-nonce 和 test-challenge 是单元测试专用占位字符串，不用于生产认证
-    fn builds_cli_device_login_url_without_redirect_uri() {
+    fn builds_current_ide_device_login_url() {
         let url = build_cli_device_login_url(
             DEFAULT_LOGIN_BASE_URL,
             "test-nonce",
@@ -1375,10 +1447,33 @@ mod tests {
             QODER_DEVICE_LOGIN_CHALLENGE_METHOD.to_string()
         )));
         assert!(query.contains(&(
-            "client_id".to_string(),
-            QODER_CLI_BROWSER_LOGIN_CLIENT_ID.to_string()
+            "redirect_uri".to_string(),
+            QODER_IDE_REDIRECT_URI.to_string()
         )));
         assert!(query.contains(&("machine_id".to_string(), "test-machine-id".to_string())));
-        assert!(!query.iter().any(|(key, _)| key == "redirect_uri"));
+        assert!(!query.iter().any(|(key, _)| key == "client_id"));
+    }
+
+    #[test]
+    fn builds_current_official_cosy_headers_from_machine_cache() {
+        let machine = QoderMachineInfo {
+            token: "machine-token".to_string(),
+            machine_type: Some("machine-type".to_string()),
+            machine_code: Some("machine-code".to_string()),
+            machine_id: Some("machine-id".to_string()),
+            machine_hostname: Some("machine-hostname".to_string()),
+            machine_os: Some("aarch64_darwin".to_string()),
+            cosy_version: Some("1.27.1".to_string()),
+        };
+        let headers = build_qoder_headers("access-token", Some(&machine));
+
+        assert_eq!(headers["Cosy-Version"], "1.27.1");
+        assert_eq!(headers["Cosy-MachineToken"], "machine-token");
+        assert_eq!(headers["Cosy-MachineType"], "machine-type");
+        assert_eq!(headers["Cosy-MachineCode"], "machine-code");
+        assert_eq!(headers["Cosy-MachineId"], "machine-id");
+        assert_eq!(headers["Cosy-MachineHostname"], "machine-hostname");
+        assert_eq!(headers["Cosy-MachineOS"], "aarch64_darwin");
+        assert_eq!(headers["Cosy-ClientType"], "0");
     }
 }
