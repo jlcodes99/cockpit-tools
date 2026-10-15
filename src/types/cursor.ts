@@ -289,28 +289,19 @@ export function isCursorManualQuotaExhausted(account: CursorAccount): boolean {
 }
 
 export function getCursorUsage(account: CursorAccount): CursorUsage {
-  if (isCursorManualQuotaExhausted(account)) {
-    return {
-      inlineSuggestionsUsedPercent: 100,
-      chatMessagesUsedPercent: null,
-      allowanceResetAt: null,
-      planUsedCents: null,
-      planLimitCents: null,
-      totalPercentUsed: 100,
-      autoPercentUsed: 100,
-      apiPercentUsed: 100,
-      onDemandUsedCents: null,
-      onDemandLimitCents: null,
-      teamOnDemandUsedCents: null,
-      teamOnDemandLimitCents: null,
-      onDemandEnabled: null,
-      onDemandLimitType: null,
-      isUnlimited: false,
-    };
-  }
-
   const raw = account.cursor_usage_raw;
   if (!raw || typeof raw !== 'object') {
+    if (isCursorManualQuotaExhausted(account)) {
+      return {
+        inlineSuggestionsUsedPercent: 100,
+        chatMessagesUsedPercent: null,
+        allowanceResetAt: null,
+        totalPercentUsed: 100,
+        autoPercentUsed: 100,
+        apiPercentUsed: 100,
+        isUnlimited: false,
+      };
+    }
     return { inlineSuggestionsUsedPercent: null, chatMessagesUsedPercent: null };
   }
 
@@ -404,7 +395,7 @@ export function getCursorUsage(account: CursorAccount): CursorUsage {
         ? 1
         : Math.min(100, Math.max(0, totalBase));
 
-  return {
+  const usage: CursorUsage = {
     inlineSuggestionsUsedPercent: usedPct,
     chatMessagesUsedPercent: null,
     allowanceResetAt: resetAt,
@@ -421,6 +412,20 @@ export function getCursorUsage(account: CursorAccount): CursorUsage {
     onDemandLimitType,
     isUnlimited,
   };
+
+  // Manual zero only overrides used percentages; keep reset time and other metadata.
+  if (isCursorManualQuotaExhausted(account)) {
+    return {
+      ...usage,
+      inlineSuggestionsUsedPercent: 100,
+      totalPercentUsed: 100,
+      autoPercentUsed: 100,
+      apiPercentUsed: 100,
+      isUnlimited: false,
+    };
+  }
+
+  return usage;
 }
 
 export function getCursorOnDemandSummary(usage: CursorUsage): CursorOnDemandSummary {
