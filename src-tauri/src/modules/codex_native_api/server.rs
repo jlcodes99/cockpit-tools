@@ -517,6 +517,25 @@ pub(super) fn outbound_headers(headers: &HeaderMap) -> HeaderMap {
                         | "sec-websocket-version"
                         | "sec-websocket-extensions"
                         | "sec-websocket-protocol"
+                        // Ingress metadata does not describe the new provider connection.
+                        // Match exact names to preserve identity and custom API headers.
+                        | "forwarded"
+                        | "x-forwarded-for"
+                        | "x-forwarded-host"
+                        | "x-forwarded-proto"
+                        | "x-forwarded-port"
+                        | "x-forwarded-server"
+                        | "x-real-ip"
+                        | "true-client-ip"
+                        | "cf-connecting-ip"
+                        | "cf-connecting-ipv6"
+                        | "cf-pseudo-ipv4"
+                        | "cf-ipcountry"
+                        | "cf-ray"
+                        | "cf-visitor"
+                        | "cf-worker"
+                        | "cf-ew-via"
+                        | "cdn-loop"
                 )
                 && !connection_fields
                     .iter()
