@@ -16,6 +16,7 @@ const INGRESS_NETWORK_HEADERS: &[&str] = &[
     "cf-ipcountry",
     "cf-ray",
     "cf-visitor",
+    "cf-warp-tag-id",
     "cf-worker",
     "cf-ew-via",
     "cdn-loop",

@@ -533,6 +533,7 @@ pub(super) fn outbound_headers(headers: &HeaderMap) -> HeaderMap {
                         | "cf-ipcountry"
                         | "cf-ray"
                         | "cf-visitor"
+                        | "cf-warp-tag-id"
                         | "cf-worker"
                         | "cf-ew-via"
                         | "cdn-loop"
