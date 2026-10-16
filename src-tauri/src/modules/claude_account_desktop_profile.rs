@@ -1166,7 +1166,7 @@ async fn fetch_desktop_web_profile_with_cookies(
         web_profile: None,
     })?;
     let last_active_org = desktop_cookie_value(cookies, "lastActiveOrg").unwrap_or_default();
-    let client = reqwest::Client::builder()
+    let client = super::account_http::client_builder()?
         .timeout(std::time::Duration::from_secs(15))
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()

@@ -1147,7 +1147,7 @@ async fn exchange_oauth_code_for_tokens(
     state: &PendingClaudeOAuthState,
     code: &str,
 ) -> Result<Value, String> {
-    let client = reqwest::Client::builder()
+    let client = super::account_http::client_builder()?
         .timeout(std::time::Duration::from_secs(20))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
@@ -1182,7 +1182,7 @@ async fn exchange_oauth_code_for_tokens(
 }
 
 async fn request_oauth_profile(access_token: &str) -> Result<Value, String> {
-    let client = reqwest::Client::builder()
+    let client = super::account_http::client_builder()?
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
@@ -3397,7 +3397,7 @@ async fn refresh_oauth_credentials(credentials: &Value) -> Result<Option<Value>,
     let Some(refresh_token) = credentials_refresh_token(credentials) else {
         return Ok(None);
     };
-    let client = reqwest::Client::builder()
+    let client = super::account_http::client_builder()?
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
@@ -3473,7 +3473,7 @@ async fn request_usage(access_token: &str) -> Result<Value, String> {
         HeaderValue::from_static("antigravity-cockpit-tools"),
     );
 
-    let client = reqwest::Client::builder()
+    let client = super::account_http::client_builder()?
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
