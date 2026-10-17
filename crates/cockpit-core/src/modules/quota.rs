@@ -21,13 +21,13 @@ const ONBOARD_POLL_DELAY_MS: u64 = 500;
 const API_CACHE_DIR: &str = "cache/quota_api_v1_desktop";
 const API_CACHE_VERSION: u8 = 1;
 const API_CACHE_TTL_MS: i64 = 60_000;
-const DEFAULT_CLOUD_CODE_IDE_VERSION: &str = "1.20.5";
+const DEFAULT_CLOUD_CODE_IDE_VERSION: &str = "2.23.1";
 const DEFAULT_LOAD_CODE_ASSIST_UA_OS: &str = "windows";
 const DEFAULT_LOAD_CODE_ASSIST_UA_ARCH: &str = "amd64";
 const DEFAULT_GOOGLE_API_NODEJS_CLIENT_VERSION: &str = "10.3.0";
-const DEFAULT_CLOUD_CODE_USER_AGENT: &str = "antigravity/1.20.5 windows/amd64";
+const DEFAULT_CLOUD_CODE_USER_AGENT: &str = "antigravity/2.23.1 windows/amd64";
 const DEFAULT_LOAD_CODE_ASSIST_USER_AGENT: &str =
-    "antigravity/1.20.5 windows/amd64 google-api-nodejs-client/10.3.0";
+    "antigravity/2.23.1 windows/amd64 google-api-nodejs-client/10.3.0";
 const DEFAULT_X_GOOG_API_CLIENT_NODE_VERSION: &str = "22.21.1";
 
 #[derive(Debug, Clone, Default)]
