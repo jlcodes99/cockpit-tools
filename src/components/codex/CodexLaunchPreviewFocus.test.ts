@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { deferred, loadHookModule, settlePromises } from '../../../tests/helpers/reactHookHarness';
+import { buildCodexModelRoutingValue } from '../../utils/codexModelRoutingValue';
 
 function nodes(tree: any): any[] {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
@@ -40,7 +41,7 @@ function harness(mode: string, options: { loaded?: boolean; account?: any; save?
     '../../stores/useCodexAccountStore': { useCodexAccountStore: accountStore },
     '../../stores/useCodexInstanceStore': { useCodexInstanceStore: instanceStore },
     './CodexModelRoutingFields': {
-      CodexModelRoutingFields: 'routing', buildCodexModelRoutingValue: () => ({ enabled: false, routes: [] }),
+      CodexModelRoutingFields: 'routing', buildCodexModelRoutingValue,
       createCodexModelSourceResolver: () => () => null, normalizeCodexModelRoutingRoutes: () => [],
       eligibleCodexModelRoutingAccounts: () => [], syncExperimentalModelsWithRouting: (_routes: any, models: any[]) => models,
     },
@@ -61,6 +62,67 @@ function harness(mode: string, options: { loaded?: boolean; account?: any; save?
       onClose: () => { closed++; }, onExecute: options.execute ?? (async () => false) });
   });
   return { h, remembered, get tree() { return h.flush(); }, get trap() { const active = traps.filter((entry) => entry.open && entry.active); assert.equal(active.length, 1); return active[0]; }, get traps() { return traps; }, async ready() { await settlePromises(); h.flush(); }, get escapes() { for (const entry of escapes.filter((item) => item.open)) assert.equal(entry.ref, traps.find((trap) => trap.open && trap.active)?.ref); return escapes; }, get closed() { return closed; } };
+}
+
+for (const [previewMode, savedMode, chosen] of [
+  ['account', 'direct', 'cdp'],
+  ['instance', 'gateway', 'direct'],
+]) {
+  test(`${previewMode}: custom Responses mode is restored, selectable and forwarded by the rendered preview (${savedMode})`, async () => {
+    const account = { id: 'provider-fixture', auth_mode: 'apikey', api_provider_id: 'custom',
+      api_wire_api: 'responses', api_instance_access_mode: savedMode,
+      api_image_generation_account_ids: ['old-image-account'],
+      api_image_generation_account_models: { 'old-image-account': 'old-image-model' } };
+    const calls: any[][] = [];
+    const h = harness(previewMode, { loaded: true, account, execute: async (...args) => { calls.push(args); return true; } });
+    await h.ready();
+    const row = nodes(h.tree).find((node) => node.props?.className === 'codex-launch-preview-tool-row'
+      && nodes(node).some((child) => child.type === 'h3' && child.props.children === 'codex.launchPreview.accessModeTitle'));
+    assert.ok(row, 'custom provider must show the access-mode row');
+    const trigger = nodes(row).find((node) => node.type === 'button');
+    assert.equal(trigger.props.disabled, false);
+    trigger.props.onClick({ currentTarget: 'access-mode-trigger' });
+    const cards = nodes(h.tree).filter((node) => node.type === 'button' && node.props.className?.includes('codex-launch-preview-mode-card'));
+    assert.equal(cards.length, 3);
+    assert.equal(cards.find((node) => node.props.className.includes('active')).key, savedMode);
+    cards.find((node) => node.key === chosen).props.onClick();
+    const tree = h.tree;
+    const imageRow = nodes(tree).find((node) => node.props?.className === 'codex-launch-preview-tool-row'
+      && nodes(node).some((child) => child.type === 'h3' && nodes(child).some((item) => item.props?.children === 'codex.launchPreview.imageGenTitle')));
+    assert.equal(nodes(imageRow).find((node) => node.type === 'input').props.checked, false);
+    const launch = nodes(tree).find((node) => node.type === 'button' && node.props.className === 'btn btn-primary');
+    assert.equal(launch.props.disabled, false);
+    launch.props.onClick();
+    await settlePromises();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][1].deepSeekAccessMode, chosen);
+    assert.equal(calls[0][1].imageGenerationAccountIds.length, 0);
+    assert.equal(Object.keys(calls[0][1].imageGenerationAccountModels).length, 0);
+    h.h.unmount();
+  });
+}
+
+for (const kind of ['chat', 'grok', 'api-service']) {
+  test(`${kind}: preview does not offer an incompatible direct route`, async () => {
+    const account = { id: 'guard-fixture', auth_mode: 'apikey',
+      api_wire_api: kind === 'chat' ? 'chat_completions' : 'responses',
+      upstream_grok_account_id: kind === 'grok' ? 'grok-fixture' : null };
+    const calls: any[][] = [];
+    const h = harness(kind === 'api-service' ? 'apiService' : 'account', { loaded: true, account,
+      execute: async (...args) => { calls.push(args); return true; } });
+    await h.ready();
+    const row = nodes(h.tree).find((node) => node.props?.className === 'codex-launch-preview-tool-row'
+      && nodes(node).some((child) => child.type === 'h3' && child.props.children === 'codex.launchPreview.accessModeTitle'));
+    if (kind === 'chat') assert.equal(nodes(row).find((node) => node.type === 'button').props.disabled, true);
+    else assert.equal(row, undefined);
+    if (kind === 'api-service') {
+      nodes(h.tree).find((node) => node.type === 'button' && node.props.className === 'btn btn-primary').props.onClick();
+      await settlePromises();
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0][1], undefined, 'API service must not persist provider access settings');
+    }
+    h.h.unmount();
+  });
 }
 
 for (const mode of ['account', 'instance', 'apiService']) {
@@ -304,37 +366,41 @@ test('the explicit image-account picker button records its own return target bef
 
 
 test('launch does not silently discard a selected API image source while image settings are unavailable', async () => {
-  let executed = 0;
-  const apiSource = { id: 'image-api', auth_mode: 'apikey', api_model_catalog: ['gpt-image-2.5'] };
-  const account = { id: 'deepseek', email: 'DeepSeek', auth_mode: 'apikey', api_provider_id: 'deepseek',
-    api_instance_access_mode: 'gateway', api_image_generation_account_ids: ['image-api'], api_image_generation_account_models: { 'image-api': 'gpt-image-2.5-high' } };
-  const { h, ready } = harness('account', { account, loaded: true, accounts: [apiSource], imageLoaded: false,
-    execute: async () => { executed++; return true; } });
-  await ready();
-  const action = nodes(h.flush()).find((node) => node.type === 'button' && [node.props?.children].flat(Infinity).includes('codex.launchPreview.switchAndStart'));
-  assert.ok(action);
-  await action.props.onClick(); await settlePromises();
-  assert.equal(executed, 0);
-  const picker = nodes(h.flush()).find((node) => node.type === 'image-picker');
-  assert.ok(picker);
-  assert.deepEqual(picker.props.selectedIds, ['image-api']);
-  assert.deepEqual(picker.props.selectedModels, { 'image-api': 'gpt-image-2.5-high' });
-  assert.equal(picker.props.imageGenerationModel, null);
-  h.unmount();
+  for (const api_provider_id of ['deepseek', 'custom']) {
+    let executed = 0;
+    const apiSource = { id: 'image-api', auth_mode: 'apikey', api_model_catalog: ['gpt-image-2.5'] };
+    const account = { id: 'provider', email: 'Provider', auth_mode: 'apikey', api_provider_id, api_wire_api: 'responses',
+      api_instance_access_mode: 'gateway', api_image_generation_account_ids: ['image-api'], api_image_generation_account_models: { 'image-api': 'gpt-image-2.5-high' } };
+    const { h, ready } = harness('account', { account, loaded: true, accounts: [apiSource], imageLoaded: false,
+      execute: async () => { executed++; return true; } });
+    await ready();
+    const action = nodes(h.flush()).find((node) => node.type === 'button' && [node.props?.children].flat(Infinity).includes('codex.launchPreview.switchAndStart'));
+    assert.ok(action);
+    await action.props.onClick(); await settlePromises();
+    assert.equal(executed, 0);
+    const picker = nodes(h.flush()).find((node) => node.type === 'image-picker');
+    assert.ok(picker);
+    assert.deepEqual(picker.props.selectedIds, ['image-api']);
+    assert.deepEqual(picker.props.selectedModels, { 'image-api': 'gpt-image-2.5-high' });
+    assert.equal(picker.props.imageGenerationModel, null);
+    h.unmount();
+  }
 });
 
 
 test('launch forwards the saved full image variant together with source IDs', async () => {
-  let launchOptions: any;
-  const source = { id: 'source-api', email: 'Image source', auth_mode: 'apikey', api_model_catalog: ['gpt-image-2.5-high'] };
-  const account = { id: 'deepseek-chat', email: 'DeepSeek', auth_mode: 'apikey', api_provider_id: 'deepseek', api_instance_access_mode: 'gateway',
-    api_image_generation_account_ids: ['source-api'], api_image_generation_account_models: { 'source-api': 'gpt-image-2.5-high' } };
-  const { h, ready } = harness('account', { account, loaded: true, accounts: [source], imageModel: 'gpt-image-2.5-high',
-    execute: async (_start, options) => { launchOptions = options; return true; } });
-  await ready();
-  const action = nodes(h.flush()).find((node) => node.type === 'button' && [node.props?.children].flat(Infinity).includes('codex.launchPreview.switchAndStart'));
-  assert.ok(action); action.props.onClick(); await settlePromises(); h.flush();
-  assert.deepEqual(launchOptions.imageGenerationAccountIds, ['source-api']);
-  assert.deepEqual(launchOptions.imageGenerationAccountModels, { 'source-api': 'gpt-image-2.5-high' });
-  h.unmount();
+  for (const api_provider_id of ['deepseek', 'custom']) {
+    let launchOptions: any;
+    const source = { id: 'source-api', email: 'Image source', auth_mode: 'apikey', api_model_catalog: ['gpt-image-2.5-high'] };
+    const account = { id: 'provider', email: 'Provider', auth_mode: 'apikey', api_provider_id, api_wire_api: 'responses', api_instance_access_mode: 'gateway',
+      api_image_generation_account_ids: ['source-api'], api_image_generation_account_models: { 'source-api': 'gpt-image-2.5-high' } };
+    const { h, ready } = harness('account', { account, loaded: true, accounts: [source], imageModel: 'gpt-image-2.5-high',
+      execute: async (_start, options) => { launchOptions = options; return true; } });
+    await ready();
+    const action = nodes(h.flush()).find((node) => node.type === 'button' && [node.props?.children].flat(Infinity).includes('codex.launchPreview.switchAndStart'));
+    assert.ok(action); action.props.onClick(); await settlePromises(); h.flush();
+    assert.deepEqual(launchOptions.imageGenerationAccountIds, ['source-api']);
+    assert.deepEqual(launchOptions.imageGenerationAccountModels, { 'source-api': 'gpt-image-2.5-high' });
+    h.unmount();
+  }
 });

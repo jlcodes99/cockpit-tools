@@ -84,10 +84,13 @@ import {
   DEEPSEEK_ACCESS_MODE_DIRECT,
   DEEPSEEK_ACCESS_MODE_GATEWAY,
   isDeepSeekAccount,
-  isDeepSeekResponsesAccount,
-  resolveDeepSeekAccessMode,
   type DeepSeekAccessMode,
 } from "../../utils/codexDeepSeekAccess";
+import {
+  canChooseCodexProviderAccessMode,
+  isCodexProviderAccessAccount,
+  resolveCodexProviderAccessMode,
+} from "../../utils/codexProviderAccess";
 import { useCodexImageModelConfig } from "./useCodexImageModelConfig";
 import { eligibleImageAccountIds, configuredImageAccountIds, resolveImageAccountModel, selectedImageAccountModels } from "../../utils/codexImageAccounts";
 import { CodexImageAccountPickerModal } from "./CodexImageAccountPickerModal";
@@ -289,7 +292,7 @@ export function CodexLaunchPreviewModal({
   );
   const [deepSeekAccessMode, setDeepSeekAccessMode] =
     useState<DeepSeekAccessMode>(() =>
-      resolveDeepSeekAccessMode(account ?? undefined),
+      resolveCodexProviderAccessMode(account),
     );
   const [deepSeekAccessModeDialogOpen, setDeepSeekAccessModeDialogOpen] =
     useState(false);
@@ -314,7 +317,7 @@ export function CodexLaunchPreviewModal({
   const accountId = account?.id ?? null;
 
   useEffect(() => {
-    setDeepSeekAccessMode(resolveDeepSeekAccessMode(account ?? undefined));
+    setDeepSeekAccessMode(resolveCodexProviderAccessMode(account));
     setImageGenEnabled(initialImageGenerationAccountIds.length > 0);
     setImageGenAccountIds(initialImageGenerationAccountIds);
     setImageGenAccountModels(account?.api_image_generation_account_models ?? {});
@@ -327,7 +330,7 @@ export function CodexLaunchPreviewModal({
     deepSeekAccessMode === DEEPSEEK_ACCESS_MODE_GATEWAY;
   useEffect(() => {
     if (
-      !(account && isDeepSeekAccount(account)) ||
+      !(account && isCodexProviderAccessAccount(account)) ||
       deepSeekImageGenAvailable ||
       !imageGenEnabled
     ) {
@@ -335,6 +338,7 @@ export function CodexLaunchPreviewModal({
     }
     setImageGenEnabled(false);
     setImageGenAccountIds([]);
+    setImageGenAccountModels({});
   }, [account, deepSeekImageGenAvailable, imageGenEnabled]);
 
   const accounts = useCodexAccountStore((state) => state.accounts);
@@ -906,12 +910,16 @@ export function CodexLaunchPreviewModal({
   const handleExecute = useCallback(
     async (launchAfterSwitch: boolean) => {
       if (configBusy) return;
-      if (account && isDeepSeekAccount(account) && imageGenEnabled && !imageModelConfig.loaded && imageGenAccountIds.length > 0) {
+      const providerImageGenEnabled = Boolean(
+        account && isCodexProviderAccessAccount(account) && mode !== "apiService" &&
+        deepSeekAccessMode === DEEPSEEK_ACCESS_MODE_GATEWAY && imageGenEnabled,
+      );
+      if (providerImageGenEnabled && !imageModelConfig.loaded && imageGenAccountIds.length > 0) {
         setError(t("codex.localAccess.imageAccounts.loadFailed"));
         setImageGenPickerOpen(true);
         return;
       }
-      if (account && isDeepSeekAccount(account) && imageGenEnabled && imageModelConfig.loaded &&
+      if (providerImageGenEnabled && imageModelConfig.loaded &&
           eligibleImageAccountIds(imageGenAccountIds, accounts, imageModelConfig.model, imageModelConfig.deletedModels).some((id) => {
             const item = accounts.find((candidate) => candidate.id === id)!;
             return isCodexApiKeyAccount(item) && !resolveImageAccountModel(item, imageModelConfig.model, imageGenAccountModels, imageModelConfig.deletedModels);
@@ -928,13 +936,13 @@ export function CodexLaunchPreviewModal({
       setError(null);
       try {
         const launchOptions: CodexLaunchPreviewLaunchOptions | undefined =
-          account && isDeepSeekAccount(account)
+          account && isCodexProviderAccessAccount(account) && mode !== "apiService"
             ? {
                 deepSeekAccessMode,
-                imageGenerationAccountIds: imageGenEnabled
+                imageGenerationAccountIds: providerImageGenEnabled
                   ? configuredImageAccountIds(imageGenAccountIds, accounts, imageModelConfig.model, imageGenAccountModels, imageModelConfig.deletedModels)
                   : [],
-                imageGenerationAccountModels: imageGenEnabled
+                imageGenerationAccountModels: providerImageGenEnabled
                   ? selectedImageAccountModels(imageGenAccountIds, accounts, imageModelConfig.model, imageGenAccountModels, imageModelConfig.deletedModels)
                   : {},
               }
@@ -949,6 +957,7 @@ export function CodexLaunchPreviewModal({
       }
     },
     [
+      account,
       accounts,
       configBusy,
       deepSeekAccessMode,
@@ -957,9 +966,9 @@ export function CodexLaunchPreviewModal({
       imageModelConfig.model,
       imageModelConfig.loaded,
       imageModelConfig.deletedModels,
-      account,
       t,
       imageGenEnabled,
+      mode,
       onExecute,
       persistDraft,
       setError,
@@ -982,10 +991,10 @@ export function CodexLaunchPreviewModal({
   // DeepSeek 走自己的模型目录与 API Key 鉴权：不显示 Token 刷新与官方模型管理。
   const isDeepSeekSubject = Boolean(account && isDeepSeekAccount(account));
   /** API 服务固定走网关模式，接入方式只读展示。 */
-  const providerRowsVisible = isDeepSeekSubject || mode === "apiService";
+  const providerRowsVisible = Boolean(account && isCodexProviderAccessAccount(account)) || mode === "apiService";
   const providerAccessModeReadOnly = mode === "apiService";
   const canChooseDeepSeekAccessMode = Boolean(
-    account && isDeepSeekResponsesAccount(account),
+    account && canChooseCodexProviderAccessMode(account),
   );
   const imageGenAvailable = deepSeekImageGenAvailable;
 
@@ -1555,7 +1564,7 @@ export function CodexLaunchPreviewModal({
 
   const deepSeekAccessModeLabel =
     deepSeekAccessMode === DEEPSEEK_ACCESS_MODE_DIRECT
-      ? t("codex.deepSeek.start.directMode", "直连官方")
+      ? t("codex.deepSeek.start.directUpstream", "直连上游，不经网关")
       : deepSeekAccessMode === DEEPSEEK_ACCESS_MODE_CDP
         ? t("codex.deepSeek.start.cdpMode", "CDP 注入")
         : t("codex.deepSeek.start.gatewayMode", "网关列出");
@@ -1581,10 +1590,10 @@ export function CodexLaunchPreviewModal({
     {
       id: DEEPSEEK_ACCESS_MODE_CDP,
       label: t("codex.deepSeek.start.cdpMode", "CDP 注入"),
-      pros: t(
+      pros: isDeepSeekSubject ? t(
         "codex.launchPreview.accessModeCdpPros",
         "优点：速度与直连一致，可在官方模型列表切换 Flash / Pro。",
-      ),
+      ) : t("codex.deepSeek.start.cdpDesc", "通过注入接管 Codex 官方模型列表。"),
       cons: t(
         "codex.launchPreview.accessModeCdpCons",
         "缺点：需要注入官方客户端，不支持绑定 OAuth 与生图转发。",
@@ -1592,7 +1601,7 @@ export function CodexLaunchPreviewModal({
     },
     {
       id: DEEPSEEK_ACCESS_MODE_DIRECT,
-      label: t("codex.deepSeek.start.directMode", "直连官方"),
+      label: t("codex.deepSeek.start.directUpstream", "直连上游，不经网关"),
       pros: t(
         "codex.launchPreview.accessModeDirectPros",
         "优点：不经网关，速度最快。",
@@ -2400,7 +2409,7 @@ export function CodexLaunchPreviewModal({
               <p className="form-hint">
                 {t(
                   "codex.launchPreview.accessModeDescription",
-                  "选择 DeepSeek 的启动方式；不同方式在模型切换、OAuth 与生图转发上不同。",
+                  "选择供应商的启动方式；不同方式在模型切换、OAuth 与生图转发上不同。",
                 )}
               </p>
               <div className="codex-launch-preview-mode-list">
