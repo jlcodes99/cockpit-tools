@@ -426,6 +426,9 @@
       "weeklyWindow": "Tuần"
     },
     "optional": " (tùy chọn)",
+    "done": "Hoàn tất",
+    "saved": "Đã lưu",
+    "edit": "Chỉnh sửa",
     "hide": "Ẩn",
     "show": "Hiện",
     "configSaveTimeout": "Thao tác quá hạn. Làm mới để xác nhận kết quả trước khi thử lại.",
@@ -1172,6 +1175,12 @@
       "menuBarQuotaConfirmEnable": "Bật",
       "codexHideRelayQuota": "Ẩn hạn mức relay",
       "codexHideRelayQuotaDesc": "Ẩn bảng hạn mức relay / New API trên tổng quan tài khoản Codex.",
+      "accountLevelRefreshTitle": "Cài đặt làm mới theo tài khoản",
+      "accountLevelRefreshDesc": "Đặt khoảng thời gian tự động làm mới khác nhau cho từng tài khoản, ghi đè giá trị mặc định của nền tảng.",
+      "accountLevelRefreshSummaryActive": "Đã cấu hình {{count}} tài khoản",
+      "accountLevelRefreshSummary": "Mở rộng cài đặt",
+      "accountLevelRefreshInherit": "Kế thừa cài đặt của nền tảng",
+      "accountLevelRefreshDisabled": "Đã tắt",
       "floatingCardStyle": "Kiểu cửa sổ nổi",
       "floatingCardStyleDesc": "Áp dụng cho mọi cửa sổ nổi. Có thể đổi ngay trong cửa sổ.",
       "floatingCardFull": "Thẻ đầy đủ",
@@ -1501,7 +1510,8 @@
       "windowsApp": "Ứng dụng Microsoft Store",
       "defaultOnly": "Chỉ dành cho desktop mặc định; hãy chọn Claude.exe thật cho hồ sơ đa phiên bản.",
       "claudeScanEmpty": "Không tìm thấy mục tiêu Claude Desktop. Hãy chọn Claude.exe thủ công hoặc chỉnh phạm vi quét.",
-      "claudeTargetPlaceholder": "Đường dẫn Claude.exe hoặc shell:AppsFolder\\..."
+      "claudeTargetPlaceholder": "Đường dẫn Claude.exe hoặc shell:AppsFolder\\...",
+      "scanEmptyGeneric": "Không phát hiện ứng dụng {{app}} đang chạy. Hãy khởi động ứng dụng rồi thử lại, hoặc chọn đường dẫn thủ công."
     },
     "modal": {
       "desc": "Không tìm thấy đường dẫn ứng dụng {{app}}. Vui lòng cấu hình ngay để tiếp tục."
