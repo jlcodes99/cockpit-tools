@@ -1315,6 +1315,69 @@ mod tests {
     }
 
     #[test]
+    fn deepseek_v41_third_party_catalog_preserves_native_capabilities() {
+        let model = build_codex_client_model("deepseek-v4.1-flash", 0);
+        assert!(known_codex_model_template("deepseek-v4.1-flash").is_some());
+        assert_eq!(model["slug"], "deepseek-v4.1-flash");
+        assert_eq!(model["context_window"], 1_000_000);
+        assert_eq!(model["max_context_window"], 1_000_000);
+        assert_eq!(model["auto_compact_token_limit"], 900_000);
+        assert_eq!(model["default_reasoning_level"], "high");
+        let efforts = model["supported_reasoning_levels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|level| level["effort"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(efforts, ["low", "medium", "high", "xhigh", "max"]);
+        assert_eq!(model["tool_mode"], Value::Null);
+        assert_eq!(model["use_responses_lite"], false);
+        assert_eq!(model["service_tiers"], json!([]));
+        assert_eq!(model["additional_speed_tiers"], json!([]));
+    }
+
+    #[test]
+    fn deepseek_v41_custom_max_survives_catalog_regeneration() {
+        let definitions = [(
+            "deepseek-v4.1-flash".into(),
+            "DeepSeek V4.1 Flash".into(),
+            Some(vec!["max".into()]),
+        )];
+        for _ in 0..2 {
+            let catalog =
+                build_codex_client_models_response_with_model_definitions_and_reasoning(&definitions);
+            let model = &catalog["models"][0];
+            assert_eq!(
+                model["supported_reasoning_levels"].as_array().unwrap().len(),
+                1
+            );
+            assert_eq!(model["supported_reasoning_levels"][0]["effort"], "max");
+            assert_eq!(model["default_reasoning_level"], "max");
+            assert_eq!(model["context_window"], 1_000_000);
+        }
+    }
+
+    #[test]
+    fn deepseek_v41_existing_reasoning_aliases_survive_regeneration() {
+        for effort in ["medium", "xhigh"] {
+            let definitions = [(
+                "deepseek-v4.1-flash".into(),
+                "DeepSeek V4.1 Flash".into(),
+                Some(vec![effort.into()]),
+            )];
+            let catalog =
+                build_codex_client_models_response_with_model_definitions_and_reasoning(&definitions);
+            let model = &catalog["models"][0];
+            assert_eq!(
+                model["supported_reasoning_levels"].as_array().unwrap().len(),
+                1
+            );
+            assert_eq!(model["supported_reasoning_levels"][0]["effort"], effort);
+            assert_eq!(model["default_reasoning_level"], effort);
+        }
+    }
+
+    #[test]
     fn deepseek_multi_agent_catalog_is_scoped_and_preserves_identity() {
         for slug in [
             "deepseek-flash",

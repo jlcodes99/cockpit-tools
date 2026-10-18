@@ -1082,6 +1082,34 @@
   ],
   "model_overrides": [
     {
+      "slug": "deepseek-v4.1-flash",
+      "display_name": "DeepSeek V4.1 Flash",
+      "description": "DeepSeek V4.1 Flash",
+      "prefer_websockets": false,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "auto_compact_token_limit": 900000,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {"effort": "low", "description": "Fast responses with lighter reasoning"},
+        {"effort": "medium", "description": "Compatibility alias for high reasoning"},
+        {"effort": "high", "description": "Greater reasoning depth for complex problems"},
+        {"effort": "xhigh", "description": "Compatibility alias for high reasoning"},
+        {"effort": "max", "description": "Maximum reasoning depth for the hardest problems"}
+      ],
+      "multi_agent_version": null,
+      "minimal_client_version": "0.144.0",
+      "tool_mode": null,
+      "use_responses_lite": false,
+      "include_skills": true,
+      "additional_speed_tiers": [],
+      "service_tiers": []
+    },
+    {
       "slug": "grok-4.7",
       "display_name": "Grok 4.7",
       "description": "Grok 4.7",

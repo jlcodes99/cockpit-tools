@@ -12,7 +12,8 @@ import (
 )
 
 type codexClientModelsPayload struct {
-	Models []map[string]any `json:"models"`
+	Models         []map[string]any `json:"models"`
+	ModelOverrides []map[string]any `json:"model_overrides"`
 }
 
 // ProvidersForModelFunc returns the providers registered for a model.
@@ -192,7 +193,7 @@ func loadCodexClientModelTemplatesSnapshot(raw []byte, revision uint64) (map[str
 	var templates map[string]map[string]any
 	var defaultTemplate map[string]any
 	if err == nil {
-		templates = make(map[string]map[string]any, len(payload.Models))
+		templates = make(map[string]map[string]any, len(payload.Models)+len(payload.ModelOverrides))
 		for _, model := range payload.Models {
 			slug := strings.TrimSpace(stringModelValue(model, "slug"))
 			if slug == "" {
@@ -201,6 +202,24 @@ func loadCodexClientModelTemplatesSnapshot(raw []byte, revision uint64) (map[str
 			templates[slug] = cloneCodexClientModelMap(model)
 			if slug == "gpt-5.6-sol" {
 				defaultTemplate = cloneCodexClientModelMap(model)
+			}
+		}
+		// Match the desktop catalog: explicit provider overrides inherit the
+		// request schema, while their declared capabilities replace the fallback.
+		if defaultTemplate != nil {
+			for _, override := range payload.ModelOverrides {
+				slug := strings.TrimSpace(stringModelValue(override, "slug"))
+				if slug == "" {
+					continue
+				}
+				if _, exists := templates[slug]; exists {
+					continue
+				}
+				entry := cloneCodexClientModelMap(defaultTemplate)
+				for key, value := range override {
+					entry[key] = value
+				}
+				templates[slug] = entry
 			}
 		}
 	}
