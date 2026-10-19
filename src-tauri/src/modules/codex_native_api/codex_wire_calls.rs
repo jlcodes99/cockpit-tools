@@ -1,11 +1,14 @@
 use serde_json::{json, Value};
 use std::collections::HashSet;
 
+use super::super::codex_app_outputs::{Classification, Classifier};
+
 /// Repair only historical tool protocol items. User strings and opaque item IDs stay intact.
 pub(super) fn normalize(body: &mut Value) {
     let Some(items) = body.get_mut("input").and_then(Value::as_array_mut) else {
         return;
     };
+    let host_outputs = Classifier::new(items);
     let mut used: HashSet<String> = items
         .iter()
         .filter_map(|item| item["call_id"].as_str())
@@ -16,6 +19,16 @@ pub(super) fn normalize(body: &mut Value) {
     let mut pending: Vec<(String, String)> = Vec::new();
     let mut retained = Vec::with_capacity(items.len());
     for (index, mut item) in std::mem::take(items).into_iter().enumerate() {
+        if matches!(
+            host_outputs.classify(&item),
+            Classification::Standalone | Classification::Ambiguous
+        ) {
+            // Preserve the entire host envelope and its position. An ambiguous
+            // envelope must also stay unpaired: guessing an ID here would hide
+            // the incomplete history from later replay validation.
+            retained.push(item);
+            continue;
+        }
         let kind = item["type"]
             .as_str()
             .unwrap_or("")
@@ -73,3 +86,7 @@ pub(super) fn normalize(body: &mut Value) {
     }
     *items = retained;
 }
+
+#[cfg(test)]
+#[path = "codex_wire_calls_tests.rs"]
+mod tests;

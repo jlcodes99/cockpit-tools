@@ -51,6 +51,7 @@ struct Upstream {
 struct TestHost {
     base: String,
     enabled: AtomicBool,
+    oauth: AtomicBool,
     passthrough: AtomicBool,
     removed_a: AtomicBool,
     selections: Mutex<Vec<RouteRequest>>,
@@ -121,7 +122,7 @@ impl Host for TestHost {
                 client: client(),
                 proxy_url: None,
                 proxy_route: None,
-                chatgpt: false,
+                chatgpt: self.oauth.load(Ordering::SeqCst),
                 wire_api: WireApi::Responses,
                 compact_endpoint: None,
                 websocket_endpoint: None,
@@ -337,6 +338,7 @@ impl Fixture {
         let host = Arc::new(TestHost {
             base: format!("http://{address}"),
             enabled: AtomicBool::new(enabled),
+            oauth: AtomicBool::new(false),
             passthrough: AtomicBool::new(false),
             removed_a: AtomicBool::new(false),
             selections: Mutex::new(vec![]),
@@ -1016,3 +1018,6 @@ mod output_evidence_tests;
 
 #[path = "account_installation_http_tests.rs"]
 mod installation_tests;
+
+#[path = "context_rebuild_codex_app_failover_tests.rs"]
+mod codex_app_failover_tests;

@@ -418,6 +418,162 @@ fn plaintext_tools_require_ordered_complete_pairs_and_checkpoint_delta_can_finis
     );
 }
 
+fn codex_app_host_output(name: &str) -> Value {
+    json!({
+        "type":"function_call_output", "id":format!("host-{name}"),
+        "namespace":"codex_app", "name":name, "output":"host handoff result",
+        "internal_chat_message_metadata_passthrough":{"keep":[1,null,{"text":"原值"}]},
+        "extension":{"retained":true}
+    })
+}
+
+#[test]
+fn codex_app_handoffs_are_independent_of_ordered_function_and_custom_pairs() {
+    let function =
+        json!({"type":"function_call","name":"lookup","call_id":"function-1","arguments":"{}"});
+    let custom =
+        json!({"type":"custom_tool_call","name":"patch","call_id":"custom-1","input":"synthetic"});
+    let function_result =
+        json!({"type":"function_call_output","call_id":"function-1","output":"found"});
+    let custom_result =
+        json!({"type":"custom_tool_call_output","call_id":"custom-1","output":"done"});
+    let host = codex_app_host_output("create_thread");
+    let items = vec![
+        host.clone(),
+        function.clone(),
+        codex_app_host_output("send_message_to_thread"),
+        custom.clone(),
+        function_result.clone(),
+        host.clone(),
+        custom_result,
+    ];
+    let before = items.clone();
+    assert!(paired_tools(&items));
+    assert_eq!(items, before);
+    for incomplete in [
+        vec![function.clone(), host.clone()],
+        vec![host.clone(), function_result.clone()],
+        vec![function_result.clone(), host.clone(), function.clone()],
+        vec![
+            function.clone(),
+            host.clone(),
+            function.clone(),
+            function_result.clone(),
+        ],
+        vec![custom, host.clone()],
+    ] {
+        assert!(
+            !paired_tools(&incomplete),
+            "a host output cannot finish or hide a pending call: {incomplete:?}"
+        );
+    }
+}
+
+#[test]
+fn codex_app_handoff_exemption_never_accepts_unknown_or_invalid_tool_results() {
+    for (field, value) in [
+        ("type", json!("custom_tool_call_output")),
+        ("namespace", json!("other")),
+        ("name", json!("list_threads")),
+        ("name", json!("codex_app.create_thread")),
+        ("call_id", Value::Null),
+        ("call_id", json!("")),
+        ("call_id", json!("unknown-call")),
+        ("output", Value::Null),
+        ("output", json!([{"type":"input_text","text":"result"}])),
+    ] {
+        let mut host = codex_app_host_output("create_thread");
+        host[field] = value;
+        assert!(!paired_tools(&[host.clone()]), "{host}");
+    }
+    let mut resource = codex_app_host_output("create_thread");
+    resource["extension"]["file_id"] = json!("server-only-file");
+    assert!(paired_tools(&[resource.clone()]));
+    assert!(
+        !replay_items(&[resource]),
+        "pairing exemption must not bypass resource checks"
+    );
+}
+
+#[test]
+fn same_qualified_real_calls_make_idless_host_results_ambiguous() {
+    for name in ["create_thread", "send_message_to_thread"] {
+        let host = codex_app_host_output(name);
+        for call in [
+            json!({"type":"function_call","namespace":"codex_app","name":name,"call_id":"real-call","arguments":"{}"}),
+            json!({"type":"function_call","name":format!("codex_app.{name}"),"call_id":"real-call","arguments":"{}"}),
+        ] {
+            let result =
+                json!({"type":"function_call_output","call_id":"real-call","output":"real result"});
+            assert!(paired_tools(&[call.clone(), result.clone()]));
+            let mut explicit_host = host.clone();
+            explicit_host["call_id"] = json!("real-call");
+            assert!(paired_tools(&[call.clone(), explicit_host]));
+            assert!(!paired_tools(&[host.clone(), call.clone(), result.clone()]));
+            assert!(!paired_tools(&[call.clone(), host.clone(), result.clone()]));
+            assert!(!paired_tools(&[call, result, host.clone()]));
+        }
+    }
+}
+
+#[test]
+fn codex_app_host_records_survive_portable_checkpoint_and_cached_continuation_exactly() {
+    let (_temp, path, store) = fixture();
+    let input = vec![
+        codex_app_host_output("create_thread"),
+        message("user", "first"),
+        codex_app_host_output("send_message_to_thread"),
+    ];
+    let original = request(input.clone());
+    let before = original.clone();
+    let headers = HeaderMap::new();
+    let mut context = store
+        .inspect_for_rebuild("caller", &headers, &original)
+        .unwrap();
+    let candidate = store
+        .configure_rebuild(&mut context, &headers, &original, true)
+        .unwrap()
+        .unwrap();
+    assert_eq!(candidate.body["input"], json!(input));
+    assert_eq!(original, before);
+    let mut upstream_headers = headers;
+    let mut upstream = original;
+    let binding = store
+        .rewrite(
+            &context,
+            "a",
+            &owner("a"),
+            &mut upstream_headers,
+            &mut upstream,
+        )
+        .unwrap();
+    complete(
+        &store,
+        &binding,
+        "host-a",
+        vec![message("assistant", "answer")],
+    );
+    assert_eq!(
+        &checkpoint(&path, "host-a").unwrap().2[..input.len()],
+        input.as_slice()
+    );
+    assert_eq!(rows(&path, "native_rebuild_portable_v1"), 1);
+    let next = continuation("host-a", vec![message("user", "next")]);
+    let headers = HeaderMap::new();
+    let mut context = store
+        .inspect_for_rebuild("caller", &headers, &next)
+        .unwrap();
+    let candidate = store
+        .configure_rebuild(&mut context, &headers, &next, true)
+        .unwrap()
+        .unwrap();
+    let replay = candidate.body["input"].as_array().unwrap();
+    assert_eq!(&replay[..input.len()], input.as_slice());
+    assert!(candidate.body.get("previous_response_id").is_none());
+    assert!(replay[0].get("call_id").is_none());
+    assert!(replay[2].get("call_id").is_none());
+}
+
 #[test]
 fn truncated_history_declines_but_large_requests_keep_owner_and_cache_budget() {
     let (_temp, path, store) = fixture();

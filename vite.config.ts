@@ -1,12 +1,30 @@
+import fs from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { assertReactSingleton } from "./scripts/react-singleton";
 
-// @ts-expect-error process is a nodejs global
+// A Windows SUBST drive or a linked checkout can expose the project under two
+// paths. Keep dependency resolution rooted in the same physical directory so
+// React's CJS runtime is not instantiated twice (invalid hook dispatcher).
+const configFilePath = fileURLToPath(import.meta.url);
+const projectRoot = fs.realpathSync.native(path.dirname(configFilePath));
+
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  // Keep Vite's resolution root canonical even when the caller's working
+  // directory is a SUBST alias.  `dedupe` also covers React subpath imports
+  // (`react/jsx-runtime`) and packages that peer-depend on React.
+  root: projectRoot,
+  plugins: [react(), assertReactSingleton()],
+  resolve: {
+    dedupe: ["react", "react-dom", "scheduler"],
+    preserveSymlinks: false,
+  },
   base: "./",
   build: {
     rollupOptions: {

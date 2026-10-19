@@ -519,6 +519,7 @@ pub(super) fn replay_items(items: &[Value]) -> bool {
 }
 
 pub(super) fn paired_tools(items: &[Value]) -> bool {
+    let host_outputs = super::super::codex_app_outputs::Classifier::new(items);
     let mut pending = HashSet::new();
     let mut seen = HashSet::new();
     for item in items {
@@ -533,6 +534,13 @@ pub(super) fn paired_tools(items: &[Value]) -> bool {
                 pending.insert(id);
             }
             Some("function_call_output" | "custom_tool_call_output") => {
+                if host_outputs.classify(item)
+                    == super::super::codex_app_outputs::Classification::Standalone
+                {
+                    // This host notification is not the result of a model call.
+                    // Keep it in the transcript without consuming a pending call.
+                    continue;
+                }
                 let Some(id) = item.get("call_id").and_then(Value::as_str) else {
                     return false;
                 };

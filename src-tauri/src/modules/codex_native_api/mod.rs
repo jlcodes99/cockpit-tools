@@ -11,6 +11,7 @@ mod blocking;
 mod bootstrap;
 mod chat;
 mod chat_upstream;
+mod codex_app_outputs;
 mod codex_wire;
 mod compat;
 mod compat_http;
