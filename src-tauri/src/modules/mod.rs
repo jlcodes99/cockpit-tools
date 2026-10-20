@@ -13,6 +13,7 @@ pub mod backup_directory_recovery;
 pub mod backup_storage;
 pub mod claude_account;
 pub mod claude_desktop_gateway;
+pub(crate) mod minimax_request;
 pub mod claude_instance;
 pub mod client_version;
 pub mod codebuddy_account;

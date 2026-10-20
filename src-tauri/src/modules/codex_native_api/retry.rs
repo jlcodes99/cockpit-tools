@@ -223,6 +223,9 @@ async fn send_inner(
         super::codex_wire::finalize_routing_hint(
             &mut headers, &body, codex_backend && !prepared.route.chatgpt_plan, &prepared.route.headers,
         )?;
+        if chat && path == "chat/completions" {
+            crate::modules::minimax_request::normalize_flash_request(&mut body, false);
+        }
         prepared.multi_agent_context.capture_final(&body);
         prepared.binding.retain_transmitted_input_blobs(&body);
         let base_url = endpoint.as_ref().map_or(prepared.route.base_url.as_str(), |endpoint| {

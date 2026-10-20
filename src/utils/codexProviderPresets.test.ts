@@ -58,15 +58,16 @@ test("DeepSeek keeps its native Responses default", () => {
   assert.equal(profile.wireApi, "responses");
 });
 
-test("both MiniMax presets declare image input only for the vision-capable model", () => {
+test("both MiniMax presets offer Flash first and declare image input for Flash and M3", () => {
   [MINIMAX_API_PROVIDER_ID, MINIMAX_EN_API_PROVIDER_ID].forEach((presetId) => {
     const preset = findCodexApiProviderPresetById(presetId);
 
     assert.ok(preset);
-    assert.deepEqual(preset.modelCatalog, ["MiniMax-M3", "MiniMax-M2.7"]);
-    assert.deepEqual(preset.visionModelCatalog, ["MiniMax-M3"]);
+    assert.deepEqual(preset.modelCatalog, ["MiniMax-M3.1-Flash", "MiniMax-M3"]);
+    assert.deepEqual(preset.visionModelCatalog, ["MiniMax-M3.1-Flash", "MiniMax-M3"]);
 
     const support = codexApiProviderPresetVisionSupport(preset);
+    assert.equal(support["minimax-m3.1-flash"], true);
     assert.equal(support["minimax-m3"], true);
     assert.equal(support["minimax-m2.7"], undefined);
   });

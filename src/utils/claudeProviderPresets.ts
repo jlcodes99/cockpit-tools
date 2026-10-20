@@ -213,9 +213,9 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     name: 'MiniMax',
     baseUrl: 'https://api.minimaxi.com/anthropic',
     website: 'https://platform.minimaxi.com/docs',
-    apiKeyUrl: 'https://platform.minimaxi.com/subscribe/coding-plan',
-    modelCatalog: ['MiniMax-M3', 'MiniMax-M2.7'],
-    extraEnv: modelEnv('MiniMax-M3', {}, {
+    apiKeyUrl: 'https://platform.minimaxi.com',
+    modelCatalog: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
+    extraEnv: modelEnv('MiniMax-M3.1-Flash', {}, {
       API_TIMEOUT_MS: '3000000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     }),
@@ -226,8 +226,8 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     baseUrl: 'https://api.minimax.io/anthropic',
     website: 'https://platform.minimax.io/docs',
     apiKeyUrl: 'https://platform.minimax.io/subscribe/coding-plan',
-    modelCatalog: ['MiniMax-M3', 'MiniMax-M2.7'],
-    extraEnv: modelEnv('MiniMax-M3', {}, {
+    modelCatalog: ['MiniMax-M3.1-Flash', 'MiniMax-M3'],
+    extraEnv: modelEnv('MiniMax-M3.1-Flash', {}, {
       API_TIMEOUT_MS: '3000000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     }),
@@ -265,7 +265,7 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     website: 'https://siliconflow.cn',
     apiKeyUrl: 'https://cloud.siliconflow.cn/i/drGuwc9k',
     isPartner: true,
-    extraEnv: modelEnv('Pro/MiniMaxAI/MiniMax-M2.7'),
+    // Select a model supported by this account; do not recommend an older MiniMax ID.
   }),
   createClaudeApiProviderPreset({
     id: 'siliconflow_global',
@@ -274,7 +274,7 @@ const CC_SWITCH_DIRECT_CLAUDE_PROVIDER_PRESETS: readonly ClaudeApiProviderPreset
     website: 'https://siliconflow.com',
     apiKeyUrl: 'https://cloud.siliconflow.cn/i/drGuwc9k',
     isPartner: true,
-    extraEnv: modelEnv('MiniMaxAI/MiniMax-M2.7'),
+    // Select a model supported by this account; do not recommend an older MiniMax ID.
   }),
   createClaudeApiProviderPreset({
     id: 'dmxapi',

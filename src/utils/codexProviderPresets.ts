@@ -40,16 +40,15 @@ export const OPENCODE_GO_API_BASE_URL = "https://opencode.ai/zen/go/v1";
 export const MINIMAX_API_PROVIDER_ID = "minimax";
 export const MINIMAX_EN_API_PROVIDER_ID = "minimax_en";
 export const MINIMAX_CODEX_MODEL_CATALOG = [
+  "MiniMax-M3.1-Flash",
   "MiniMax-M3",
-  "MiniMax-M2.7",
 ] as const;
 /** MiniMax models whose published input modalities include images. */
-export const MINIMAX_CODEX_VISION_MODEL_CATALOG = ["MiniMax-M3"] as const;
+export const MINIMAX_CODEX_VISION_MODEL_CATALOG = MINIMAX_CODEX_MODEL_CATALOG;
 /** OpenCode Go models exposed through its OpenAI-compatible chat completions API. */
 export const OPENCODE_GO_CODEX_MODEL_CATALOG = [
+  "minimax-m3.1-flash-free",
   "minimax-m3",
-  "minimax-m2.7",
-  "minimax-m2.5",
   "kimi-k3",
   "kimi-k2.7-code",
   "kimi-k2.6",
