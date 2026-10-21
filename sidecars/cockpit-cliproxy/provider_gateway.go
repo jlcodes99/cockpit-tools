@@ -22,6 +22,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/codex/collaboration"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/codex/historyprojection"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
@@ -432,6 +433,12 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 	if identityClient == nil {
 		identityClient = http.DefaultClient
 	}
+	// Use the final transmitted declarations, not the client's original schemas
+	// or the namespace optimization flag, as evidence of plaintext arguments.
+	plaintextPolicy := collaboration.PlaintextPolicyForRequest(upstreamBody, multiAgentV2Optimized)
+	markPlaintext := func(event []byte) []byte {
+		return helps.MarkCodexMultiAgentV2PlaintextResponse(relayContext(c), c.Request.Header, event, plaintextPolicy, s.cfg)
+	}
 	resp, err := identityClient.Do(req)
 	if err != nil {
 		if observer := requestDiagnosticsFromContext(req.Context()); observer != nil {
@@ -478,7 +485,7 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 			return
 		}
 		c.Status(http.StatusOK)
-		s.writeProviderGatewayResponsesStream(c, resp.Body, multiAgentV2Optimized)
+		s.writeProviderGatewayResponsesStream(c, resp.Body, multiAgentV2Optimized, markPlaintext)
 		return
 	}
 
@@ -500,6 +507,9 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		payload = normalizeResponsesReasoningContentBody(payload)
 		payload = helps.RestoreCodexMultiAgentV2Response(payload, multiAgentV2Optimized)
 		payload = helps.NormalizeCodexCollaborationToolCalls(payload)
+		if wireAPI == "responses" {
+			payload = markPlaintext(payload)
+		}
 		payload = newProviderGatewayItemIDRewriter().RewritePayload(payload)
 	}
 	contentType := resp.Header.Get("Content-Type")
@@ -781,7 +791,7 @@ func (s *relayServer) writeProviderGatewayTranslatedChatStream(c *gin.Context, b
 // writeProviderGatewayResponsesStream 透传 provider gateway 的 Responses SSE，
 // 只在出口清洗第三方推理项，并在需要时还原 Multi-Agent V2 collaboration
 // namespace；其余字节与原有 io.Copy 透传保持一致。
-func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body io.Reader, multiAgentV2Optimized bool) {
+func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body io.Reader, multiAgentV2Optimized bool, plaintextMarker ...func([]byte) []byte) {
 	if body == nil {
 		return
 	}
@@ -791,7 +801,7 @@ func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body i
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
 			line = normalizeResponsesReasoningContentSSELine(line)
-			line = restoreProviderGatewayMultiAgentV2SSELine(line, multiAgentV2Optimized)
+			line = restoreProviderGatewayMultiAgentV2SSELine(line, multiAgentV2Optimized, plaintextMarker...)
 			line = itemIDRewriter.RewriteSSEFrame(line)
 			if _, writeErr := c.Writer.Write(line); writeErr != nil {
 				return
@@ -810,7 +820,7 @@ func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body i
 
 // restoreProviderGatewayMultiAgentV2SSELine 只改写 data 行内的 JSON，
 // event:、空行和 [DONE] 保持原样。
-func restoreProviderGatewayMultiAgentV2SSELine(line []byte, optimized bool) []byte {
+func restoreProviderGatewayMultiAgentV2SSELine(line []byte, optimized bool, plaintextMarker ...func([]byte) []byte) []byte {
 	if len(line) == 0 {
 		return line
 	}
@@ -827,6 +837,9 @@ func restoreProviderGatewayMultiAgentV2SSELine(line []byte, optimized bool) []by
 		restored = helps.RestoreCodexMultiAgentV2Response(restored, true)
 	}
 	restored = helps.NormalizeCodexCollaborationToolCalls(restored)
+	if len(plaintextMarker) > 0 && plaintextMarker[0] != nil {
+		restored = plaintextMarker[0](restored)
+	}
 	if bytes.Equal(restored, payload) {
 		return line
 	}
