@@ -75,7 +75,7 @@ fn sidecar_usage_event_is_client_canceled(event: &SidecarUsageEvent) -> bool {
 }
 
 fn sidecar_usage_event_should_auto_restart(event: &SidecarUsageEvent) -> bool {
-    if event.success {
+    if event.success || sidecar_usage_event_is_client_canceled(event) {
         return false;
     }
 

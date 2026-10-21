@@ -364,6 +364,49 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     }
 
     #[test]
+    fn sidecar_context_canceled_by_client_does_not_request_automatic_restart() {
+        for (status, category) in [
+            (Some(499), Some("client_canceled")),
+            (Some(499), None),
+            (None, Some("client_canceled")),
+            (None, None),
+        ] {
+            let event: SidecarUsageEvent = serde_json::from_value(json!({
+                "success": false,
+                "status": status,
+                "errorCategory": category,
+                "errorMessage": "context canceled"
+            }))
+            .expect("client cancellation event should deserialize");
+
+            assert!(sidecar_usage_event_is_client_canceled(&event));
+            assert!(
+                !sidecar_usage_event_should_auto_restart(&event),
+                "client cancellation must not restart the shared gateway: status={status:?}, category={category:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sidecar_context_canceled_upstream_with_legacy_client_label_requests_restart() {
+        for status in [502, 504] {
+            let event: SidecarUsageEvent = serde_json::from_value(json!({
+                "success": false,
+                "status": status,
+                "errorCategory": "client_canceled",
+                "errorMessage": "context canceled"
+            }))
+            .expect("legacy upstream cancellation event should deserialize");
+
+            assert!(!sidecar_usage_event_is_client_canceled(&event));
+            assert!(
+                sidecar_usage_event_should_auto_restart(&event),
+                "legacy upstream cancellations must retain timeout recovery: status={status}"
+            );
+        }
+    }
+
+    #[test]
     fn sidecar_timeout_event_requests_automatic_restart() {
         let event: SidecarUsageEvent = serde_json::from_value(json!({
             "success": false,
