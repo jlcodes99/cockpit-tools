@@ -140,7 +140,8 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		authLabel = auth.Label
 		authType, authValue = auth.AccountInfo()
 	}
-	continuityAttempt, continuityBody, errContinuity := helps.BindContinuityHTTPRequest(ctx, auth, httpReq, upstreamBody)
+	continuityAttempt, continuityBody, reboundOptimized, errContinuity := helps.BindCodexMultiAgentV2HTTPRequest(ctx, auth, httpReq, upstreamBody, opts.Headers, e.cfg, isCompat)
+	optimizeMultiAgentV2 = optimizeMultiAgentV2 || reboundOptimized
 	if errContinuity != nil {
 		return resp, errContinuity
 	}
@@ -359,7 +360,8 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 		authLabel = auth.Label
 		authType, authValue = auth.AccountInfo()
 	}
-	continuityAttempt, continuityBody, errContinuity := helps.BindContinuityHTTPRequest(ctx, auth, httpReq, upstreamBody)
+	continuityAttempt, continuityBody, reboundOptimized, errContinuity := helps.BindCodexMultiAgentV2HTTPRequest(ctx, auth, httpReq, upstreamBody, opts.Headers, e.cfg, isCompat)
+	optimizeMultiAgentV2 = optimizeMultiAgentV2 || reboundOptimized
 	if errContinuity != nil {
 		return resp, errContinuity
 	}
