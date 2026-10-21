@@ -14,6 +14,8 @@ use crate::models::kiro::{
     KiroAccount, KiroOAuthCompletePayload, KiroOAuthLoginStartOptions, KiroOAuthStartResponse,
 };
 use crate::modules::{kiro_account, logger};
+#[path = "kiro_idc_token.rs"]
+mod idc_token;
 
 const KIRO_AUTH_PORTAL_URL: &str = "https://app.kiro.dev/signin";
 const KIRO_TOKEN_ENDPOINT: &str = "https://prod.us-east-1.auth.desktop.kiro.dev/oauth/token";
@@ -1627,17 +1629,20 @@ async fn refresh_token_via_idc_oidc(
         resolve_idc_client_credentials_from_local_cache(auth_token, account)?;
 
     let endpoint = KIRO_AWS_OIDC_TOKEN_ENDPOINT_FMT.replace("{region}", region.as_str());
-    let response = reqwest::Client::new()
-        .post(endpoint.as_str())
-        .form(&[
-            ("grant_type", "refresh_token"),
-            ("refresh_token", refresh_token),
-            ("client_id", client_id.as_str()),
-            ("client_secret", client_secret.as_str()),
-        ])
-        .send()
-        .await
-        .map_err(|e| format!("请求 AWS IAM Identity Center OIDC 刷新接口失败: {}", e))?;
+    let response = idc_token::request(
+        &reqwest::Client::new(),
+        endpoint.as_str(),
+        idc_token::TokenRequest {
+            client_id: client_id.as_str(),
+            client_secret: client_secret.as_str(),
+            grant: idc_token::Grant::RefreshToken {
+                value: refresh_token,
+            },
+        },
+    )
+    .send()
+    .await
+    .map_err(|e| format!("请求 AWS IAM Identity Center OIDC 刷新接口失败: {}", e))?;
 
     let status = response.status();
     let body = response
@@ -2561,18 +2566,20 @@ async fn complete_idc_login(
             return Err("IAM Identity Center 登录已取消".to_string());
         }
 
-        let response = client
-            .post(endpoint.as_str())
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .form(&[
-                ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-                ("device_code", idc.device_code.as_str()),
-                ("client_id", idc.client_id.as_str()),
-                ("client_secret", idc.client_secret.as_str()),
-            ])
-            .send()
-            .await
-            .map_err(|error| format!("轮询 AWS IAM Identity Center Token 失败: {error}"))?;
+        let response = idc_token::request(
+            &client,
+            endpoint.as_str(),
+            idc_token::TokenRequest {
+                client_id: idc.client_id.as_str(),
+                client_secret: idc.client_secret.as_str(),
+                grant: idc_token::Grant::DeviceCode {
+                    value: idc.device_code.as_str(),
+                },
+            },
+        )
+        .send()
+        .await
+        .map_err(|error| format!("轮询 AWS IAM Identity Center Token 失败: {error}"))?;
         let status = response.status();
         let body = response
             .text()
