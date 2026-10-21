@@ -75,7 +75,7 @@ fn sidecar_usage_event_is_client_canceled(event: &SidecarUsageEvent) -> bool {
 }
 
 fn sidecar_usage_event_should_auto_restart(event: &SidecarUsageEvent) -> bool {
-    if event.success || sidecar_usage_event_is_client_canceled(event) {
+    if event.success {
         return false;
     }
 
@@ -91,10 +91,22 @@ fn sidecar_usage_event_should_auto_restart(event: &SidecarUsageEvent) -> bool {
         .unwrap_or_default()
         .to_ascii_lowercase();
 
+    let timeout_category = matches!(
+        category.as_str(),
+        "gateway_context_canceled"
+            | "upstream_timeout"
+            | "upstream_first_byte_timeout"
+            | "upstream_stream_timeout"
+            | "stream_idle"
+            | "stream_idle_timeout"
+    );
+
     // A caller can cancel its own request while the Sidecar is healthy. Do not
     // restart for those downstream disconnects, even when the transport reports
     // a generic gateway status.
-    if category.contains("client_disconnect")
+    // Keep explicit timeout categories authoritative when HTTP status is absent.
+    if (!timeout_category && sidecar_usage_event_is_client_canceled(event))
+        || category.contains("client_disconnect")
         || category.contains("downstream_client")
         || message.contains("client canceled")
         || message.contains("client disconnected")
@@ -105,15 +117,6 @@ fn sidecar_usage_event_should_auto_restart(event: &SidecarUsageEvent) -> bool {
         return false;
     }
 
-    let timeout_category = matches!(
-        category.as_str(),
-        "gateway_context_canceled"
-            | "upstream_timeout"
-            | "upstream_first_byte_timeout"
-            | "upstream_stream_timeout"
-            | "stream_idle"
-            | "stream_idle_timeout"
-    );
     let timeout_message = message.contains("context canceled")
         || message.contains("upstream timed out")
         || message.contains("stream_idle")

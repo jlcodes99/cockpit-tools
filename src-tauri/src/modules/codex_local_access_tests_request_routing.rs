@@ -407,6 +407,53 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     }
 
     #[test]
+    fn sidecar_context_canceled_with_explicit_timeout_category_requests_restart() {
+        for status in [None, Some(0), Some(502), Some(504)] {
+            for category in [
+                "gateway_context_canceled",
+                "upstream_timeout",
+                "upstream_first_byte_timeout",
+                "upstream_stream_timeout",
+                "stream_idle",
+                "stream_idle_timeout",
+                " GATEWAY_CONTEXT_CANCELED ",
+            ] {
+                let event: SidecarUsageEvent = serde_json::from_value(json!({
+                    "success": false,
+                    "status": status,
+                    "errorCategory": category,
+                    "errorMessage": "context canceled"
+                }))
+                .expect("explicit timeout event should deserialize");
+
+                assert!(
+                    sidecar_usage_event_should_auto_restart(&event),
+                    "explicit timeout must retain recovery: status={status:?}, category={category}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn sidecar_explicit_client_disconnect_still_overrides_timeout_category() {
+        for category in [
+            "gateway_context_canceled",
+            "upstream_stream_timeout",
+            "stream_idle_timeout",
+        ] {
+            let event: SidecarUsageEvent = serde_json::from_value(json!({
+                "success": false,
+                "status": 504,
+                "errorCategory": category,
+                "errorMessage": "client disconnected while streaming response"
+            }))
+            .expect("explicit client disconnect event should deserialize");
+
+            assert!(!sidecar_usage_event_should_auto_restart(&event));
+        }
+    }
+
+    #[test]
     fn sidecar_timeout_event_requests_automatic_restart() {
         let event: SidecarUsageEvent = serde_json::from_value(json!({
             "success": false,
