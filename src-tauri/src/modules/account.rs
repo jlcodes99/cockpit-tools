@@ -733,9 +733,31 @@ pub fn create_pending_oauth_account(
 
     let mut account = if let Some(id) = existing_id {
         // Never replace an unreadable existing account with an empty placeholder.
-        let mut account = load_account(&id)?;
-        account.email = email.clone();
-        account
+        match load_account(&id) {
+            Ok(mut account) => {
+                account.email = email.clone();
+                account
+            }
+            Err(err) => {
+                let accounts_dir = get_accounts_dir()?;
+                let account_path = accounts_dir.join(format!("{}.json", id));
+                if !account_path.exists() {
+                    modules::logger::log_warn(&format!(
+                        "待授权账号文件不存在，创建新占位文件: id={}, email={}",
+                        id, email
+                    ));
+                    let mut account = Account::new(
+                        id,
+                        email.clone(),
+                        TokenData::new(String::new(), String::new(), 0, Some(email), None, None),
+                    );
+                    account.pending_oauth = true;
+                    account
+                } else {
+                    return Err(err);
+                }
+            }
+        }
     } else {
         let mut account = Account::new(
             target_id,
@@ -797,26 +819,42 @@ pub fn upsert_account(
     // Existing IDs are referenced by instances, wakeup tasks and groups. Reimport
     // updates credentials in place; deterministic IDs apply only to new accounts.
     let mut account = if let Some(account_id) = existing_account_id {
-        let mut account = load_account(&account_id)?;
-        let mut next_token = token;
-        if next_token.project_id.is_none() {
-            next_token.project_id = account.token.project_id.clone();
+        match load_account(&account_id) {
+            Ok(mut account) => {
+                let mut next_token = token;
+                if next_token.project_id.is_none() {
+                    next_token.project_id = account.token.project_id.clone();
+                }
+                if next_token.session_id.is_none() {
+                    next_token.session_id = account.token.session_id.clone();
+                }
+                account.token = next_token;
+                account.email = email.clone();
+                if account.disabled {
+                    account.disabled = false;
+                    account.disabled_reason = None;
+                    account.disabled_at = None;
+                } else if account.disabled_reason.as_deref() == Some("verification_required") {
+                    account.disabled_reason = None;
+                }
+                account.quota_error = None;
+                account.update_last_used();
+                account
+            }
+            Err(err) => {
+                let accounts_dir = get_accounts_dir()?;
+                let account_path = accounts_dir.join(format!("{}.json", account_id));
+                if !account_path.exists() {
+                    modules::logger::log_warn(&format!(
+                        "账号文件不存在，为已有账号重建详情文件: id={}, email={}",
+                        account_id, email
+                    ));
+                    Account::new(account_id, email.clone(), token)
+                } else {
+                    return Err(err);
+                }
+            }
         }
-        if next_token.session_id.is_none() {
-            next_token.session_id = account.token.session_id.clone();
-        }
-        account.token = next_token;
-        account.email = email.clone();
-        if account.disabled {
-            account.disabled = false;
-            account.disabled_reason = None;
-            account.disabled_at = None;
-        } else if account.disabled_reason.as_deref() == Some("verification_required") {
-            account.disabled_reason = None;
-        }
-        account.quota_error = None;
-        account.update_last_used();
-        account
     } else {
         Account::new(build_account_storage_id(&email), email.clone(), token)
     };

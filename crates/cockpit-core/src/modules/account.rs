@@ -490,26 +490,42 @@ pub fn upsert_account(
     // Existing IDs are referenced by instances, wakeup tasks and groups. Reimport
     // updates credentials in place; deterministic IDs apply only to new accounts.
     let mut account = if let Some(account_id) = existing_account_id {
-        let mut account = load_account(&account_id)?;
-        let mut next_token = token;
-        if next_token.project_id.is_none() {
-            next_token.project_id = account.token.project_id.clone();
+        match load_account(&account_id) {
+            Ok(mut account) => {
+                let mut next_token = token;
+                if next_token.project_id.is_none() {
+                    next_token.project_id = account.token.project_id.clone();
+                }
+                if next_token.session_id.is_none() {
+                    next_token.session_id = account.token.session_id.clone();
+                }
+                account.token = next_token;
+                account.email = email.clone();
+                if account.disabled {
+                    account.disabled = false;
+                    account.disabled_reason = None;
+                    account.disabled_at = None;
+                } else if account.disabled_reason.as_deref() == Some("verification_required") {
+                    account.disabled_reason = None;
+                }
+                account.quota_error = None;
+                account.update_last_used();
+                account
+            }
+            Err(err) => {
+                let accounts_dir = get_accounts_dir()?;
+                let account_path = accounts_dir.join(format!("{}.json", account_id));
+                if !account_path.exists() {
+                    modules::logger::log_warn(&format!(
+                        "账号文件不存在，为已有账号重建详情文件: id={}, email={}",
+                        account_id, email
+                    ));
+                    Account::new(account_id, email.clone(), token)
+                } else {
+                    return Err(err);
+                }
+            }
         }
-        if next_token.session_id.is_none() {
-            next_token.session_id = account.token.session_id.clone();
-        }
-        account.token = next_token;
-        account.email = email.clone();
-        if account.disabled {
-            account.disabled = false;
-            account.disabled_reason = None;
-            account.disabled_at = None;
-        } else if account.disabled_reason.as_deref() == Some("verification_required") {
-            account.disabled_reason = None;
-        }
-        account.quota_error = None;
-        account.update_last_used();
-        account
     } else {
         Account::new(build_account_storage_id(&email), email.clone(), token)
     };
