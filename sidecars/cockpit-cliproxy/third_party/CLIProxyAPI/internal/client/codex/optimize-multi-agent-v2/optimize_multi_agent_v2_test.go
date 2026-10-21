@@ -503,8 +503,8 @@ func TestRewriteCodexMultiAgentV2InputRewritesAgentMessage(t *testing.T) {
 			t.Fatalf("private field %s must not reach standard Responses upstream: %s", field, got)
 		}
 	}
-	if gjson.GetBytes(got, "input.0.id").String() != gjson.GetBytes(payload, "input.0.id").String() || gjson.GetBytes(got, "input.0.content.#").Int() != 2 {
-		t.Fatalf("CPA compatibility changed the item identity or appended metadata into task content: %s", got)
+	if gjson.GetBytes(got, "input.0.id").Exists() || gjson.GetBytes(got, "input.0.content.#").Int() != 2 {
+		t.Fatalf("compatibility retained a private item ID or changed task content: %s", got)
 	}
 }
 

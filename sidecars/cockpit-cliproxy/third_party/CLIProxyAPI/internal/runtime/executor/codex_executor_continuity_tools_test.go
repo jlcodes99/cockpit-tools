@@ -32,12 +32,31 @@ func (*rebuiltToolsHook) Finish(context.Context, cliproxyexecutor.ContinuityFini
 }
 
 func TestCodexExecutorContinuityRebuiltTools(t *testing.T) {
+	testCodexExecutorContinuityRebuiltTools(t, false)
+}
+
+func TestCodexExecutorContinuityRebuiltAgentMessageIDs(t *testing.T) {
+	testCodexExecutorContinuityRebuiltTools(t, true)
+}
+
+func testCodexExecutorContinuityRebuiltTools(t *testing.T, receipt bool) {
 	payload := []byte(`{"model":"test","input":[{"type":"additional_tools","role":"developer","tools":[{"type":"namespace","name":"collaboration","description":"test","tools":[{"type":"function","name":"spawn_agent","parameters":{"properties":{"message":{"type":"string","encrypted":true}}}}]}]},{"role":"user","content":"task"}]}`)
+	if receipt {
+		payload = []byte(strings.TrimSuffix(string(payload), `]}`) + `,{"type":"agent_message","id":"amsg_01a15d7a-297f-7ac2-9b3b-e4d2c36571da","author":"/root/child","recipient":"/root","content":[{"type":"input_text","text":"verified child receipt"}]}]}`)
+	}
 	for _, mode := range []string{"stream", "execute", "compact"} {
 		t.Run(mode, func(t *testing.T) {
 			var sent []byte
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				sent, _ = io.ReadAll(r.Body)
+				for _, item := range gjson.GetBytes(sent, "input").Array() {
+					if id := item.Get("id"); item.Get("type").String() == "message" && id.Exists() && !strings.HasPrefix(id.String(), "msg") {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadRequest)
+						fmt.Fprintf(w, `{"error":{"code":"invalid_id_prefix","message":"ordinary message ID must begin with msg; got %s"}}`, id.String())
+						return
+					}
+				}
 				namespace := gjson.GetBytes(sent, "input.0.tools.0.name").String()
 				output := fmt.Sprintf(`{"type":"function_call","name":"spawn_agent","namespace":%q,"arguments":"{\"message\":\"plain task\"}","call_id":"tool-1"}`, namespace)
 				if mode == "compact" {
@@ -85,6 +104,9 @@ func TestCodexExecutorContinuityRebuiltTools(t *testing.T) {
 			}
 			if !containsPlaintextToolMarker(result) {
 				t.Fatalf("plaintext call not marked in client response: %s", result)
+			}
+			if receipt && (gjson.GetBytes(sent, "input.2.id").Exists() || gjson.GetBytes(sent, "input.2.content.0.text").String() != "verified child receipt") {
+				t.Fatalf("child receipt lost or private ID retained: %s", sent)
 			}
 		})
 	}
