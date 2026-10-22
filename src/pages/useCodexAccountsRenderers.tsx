@@ -886,6 +886,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               </div>
             )}
             <CodexAccountProxyCard account={account} placement="summary" />
+            {renderResetCreditControls(account, 'expiry')}
             {!isApiKeyAccount && (
               <div className="account-sub-line">
                 <span className="codex-login-subline" title={signInLine}>
@@ -2123,6 +2124,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                       onError={(text) => setMessage(text ? { text, tone: "error" } : null)} />
                   </div>
                 )}
+                {renderResetCreditControls(account, 'expiry')}
                 {!isApiKeyAccount && (
                   <div className="account-sub-line codex-account-meta-inline">
                     <span className="codex-login-subline" title={signInLine}>
