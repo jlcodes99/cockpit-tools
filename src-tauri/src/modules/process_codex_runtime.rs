@@ -1933,7 +1933,14 @@ pub fn kill_managed_sidecar_port_processes(
     current_parent_pid: u32,
 ) -> Result<usize, String> {
     let pids = find_pids_by_port(port)?;
+    let mut live_pids = Vec::with_capacity(pids.len());
     for pid in &pids {
+        // netstat 报的是套接字的创建者 PID。进程退出后句柄可能已被子进程继承，
+        // 端口依旧被占着，但这里已经没有可结束的进程：跳过，而不是让整次
+        // 「清理端口」直接失败（旧行为会返回 "pid XXXX 已退出" 并放弃清理）。
+        if !is_pid_running(*pid) {
+            continue;
+        }
         let command_line = process_command_line_for_pid(*pid)?;
         let parent_pid = command_line_parent_pid(&command_line);
         let matching_sidecar =
@@ -1951,8 +1958,9 @@ pub fn kill_managed_sidecar_port_processes(
                     .unwrap_or_else(|| "unknown".to_string())
             ));
         }
+        live_pids.push(*pid);
     }
-    kill_processes_by_pid(&pids)
+    kill_processes_by_pid(&live_pids)
 }
 
 fn kill_processes_by_pid(pids: &[u32]) -> Result<usize, String> {
