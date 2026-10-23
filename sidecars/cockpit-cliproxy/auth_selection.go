@@ -1372,7 +1372,7 @@ func (s *cockpitSelector) emitAuthPoolUnavailable(
 	if errors.As(err, &authErr) && authErr != nil && strings.TrimSpace(authErr.Code) != "" {
 		errorCode = strings.TrimSpace(authErr.Code)
 	}
-	s.emitter.emit(requestDiagnosticPayload{
+	payload := requestDiagnosticPayload{
 		Type:                    "auth_pool_result",
 		StartedAtMS:             requestStartedAtMS(ctx),
 		RequestID:               internallogging.GetRequestID(ctx),
@@ -1392,7 +1392,11 @@ func (s *cockpitSelector) emitAuthPoolUnavailable(
 		ImagePolicyBlockedAuths: stats.imagePolicyBlockedAuths,
 		AccountStatuses:         stats.members,
 		ScopeDiagnostics:        stats.scopeDiagnostics,
-	})
+	}
+	if deferRequestPoolDiagnostic(ctx, s.emitter, payload) {
+		return
+	}
+	s.emitter.emit(payload)
 }
 
 func unavailableAuthDiagnostic(auth *coreauth.Auth, model string, now time.Time) (string, string) {
@@ -1681,6 +1685,8 @@ func errorCategory(status int, body string, success bool) string {
 			code = strings.TrimSpace(envelope.Response.Error.Code)
 		}
 		switch strings.ToLower(code) {
+		case "auth_not_found", "auth_unavailable":
+			return "no_available_account"
 		case "upstream_stream_error":
 			return "upstream_stream_error"
 		case "incomplete_upstream_stream":
@@ -1691,6 +1697,8 @@ func errorCategory(status int, body string, success bool) string {
 	}
 	lower := strings.ToLower(body)
 	switch {
+	case strings.Contains(lower, "auth_not_found:") || strings.Contains(lower, "auth_unavailable:"):
+		return "no_available_account"
 	case strings.Contains(lower, "upstream timed out in stream_open") ||
 		strings.Contains(lower, "phase=execute_stream upstream timed out in stream_open") ||
 		strings.Contains(lower, "stream_open"):

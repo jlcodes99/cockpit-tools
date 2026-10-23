@@ -12,11 +12,12 @@ import (
 )
 
 type httpPreviousHook struct {
-	bound cliproxyexecutor.ContinuityBindRequest
+	bound         cliproxyexecutor.ContinuityBindRequest
+	selfContained bool
 }
 
 func (h *httpPreviousHook) Prepare(_ context.Context, r cliproxyexecutor.ContinuityPrepareRequest) (cliproxyexecutor.ContinuityPrepareResponse, error) {
-	return cliproxyexecutor.ContinuityPrepareResponse{Ticket: "ticket", Body: r.Body, Headers: r.Headers}, nil
+	return cliproxyexecutor.ContinuityPrepareResponse{Ticket: "ticket", Body: r.Body, Headers: r.Headers, SelfContained: h.selfContained}, nil
 }
 func (h *httpPreviousHook) Bind(_ context.Context, r cliproxyexecutor.ContinuityBindRequest) (cliproxyexecutor.ContinuityBindResponse, error) {
 	h.bound = r
@@ -29,14 +30,20 @@ func (*httpPreviousHook) Finish(context.Context, cliproxyexecutor.ContinuityFini
 	return nil
 }
 
-func TestHTTPPreviousExpansionCapabilityOnlyForSelectedCodexOAuthHTTP(t *testing.T) {
+func TestHTTPPreviousExpansionRequiresVerifiedHistoryOrOAuthHTTP(t *testing.T) {
 	for _, tc := range []struct {
 		name, path                            string
+		host                                  string
+		selfContained                         bool
 		apiKey, websocket, tokenMissing, want bool
 	}{
 		{name: "oauth HTTP", path: "/backend-api/codex/responses", want: true},
 		{name: "API key", path: "/responses", apiKey: true},
 		{name: "API key with legacy OAuth metadata", path: "/responses", apiKey: true},
+		{name: "compatible API key with verified history", path: "/responses", apiKey: true, selfContained: true, want: true},
+		{name: "official OpenAI preserves previous ID", host: "api.openai.com", path: "/v1/responses", apiKey: true, selfContained: true},
+		{name: "compatible websocket preserves previous ID", path: "/responses", apiKey: true, selfContained: true, websocket: true},
+		{name: "compatible compact preserves previous ID", path: "/responses/compact", apiKey: true, selfContained: true},
 		{name: "OAuth websocket", path: "/responses", websocket: true},
 		{name: "compact", path: "/responses/compact"},
 		{name: "missing OAuth token", path: "/responses", tokenMissing: true},
@@ -49,7 +56,7 @@ func TestHTTPPreviousExpansionCapabilityOnlyForSelectedCodexOAuthHTTP(t *testing
 			if tc.tokenMissing {
 				delete(auth.Metadata, "access_token")
 			}
-			hook := &httpPreviousHook{}
+			hook := &httpPreviousHook{selfContained: tc.selfContained}
 			canonical := []byte(`{"model":"test","previous_response_id":"previous","input":[{"role":"user","content":"delta"}]}`)
 			ctx, _, err := cliproxyexecutor.PrepareContinuity(cliproxyexecutor.WithContinuityHook(context.Background(), hook), cliproxyexecutor.ContinuityPrepareRequest{Body: canonical})
 			if err != nil {
@@ -58,7 +65,11 @@ func TestHTTPPreviousExpansionCapabilityOnlyForSelectedCodexOAuthHTTP(t *testing
 			if tc.websocket {
 				_, _, _, err = BindCodexContinuity(ctx, auth, http.Header{}, canonical)
 			} else {
-				req, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, "https://synthetic.invalid"+tc.path, nil)
+				host := tc.host
+				if host == "" {
+					host = "synthetic.invalid"
+				}
+				req, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+host+tc.path, nil)
 				if requestErr != nil {
 					t.Fatal(requestErr)
 				}

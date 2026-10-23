@@ -2,10 +2,30 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
+
+// Selection failures happen locally, before an upstream attempt exists. Keep
+// their machine-readable code rather than flattening them to upstream_error.
+func publicExecutorFailure(err error) (string, bool) {
+	var selection *coreauth.Error
+	if errors.As(err, &selection) && selection != nil {
+		switch selection.Code {
+		case "auth_not_found", "auth_unavailable":
+			payload, marshalErr := json.Marshal(map[string]any{"error": map[string]any{
+				"code": selection.Code, "type": "server_error", "message": selection.Message,
+			}})
+			if marshalErr == nil {
+				return publicExecutorError(string(payload))
+			}
+		}
+	}
+	return publicExecutorError(errorMessage(err))
+}
 
 // Preserve structured upstream errors at the outer relay boundary too. The SDK
 // has already classified EOF, missing completion and deadlines independently.

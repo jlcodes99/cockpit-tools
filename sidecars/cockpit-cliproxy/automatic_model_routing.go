@@ -136,6 +136,13 @@ func retryableAutomaticStatus(status int) bool {
 // Successful output passes straight through, including the first SSE byte;
 // once that happens it is never replayed against another provider.
 func (s *relayServer) handleAutomaticModelRequest(c *gin.Context, spec *apiKeySpec, body []byte, model string, sourceFormat sdktranslator.Format, fixedAlt string) {
+	if s.handleCustomAutomaticPriority(c, spec, body, model, sourceFormat, fixedAlt) {
+		return
+	}
+	s.handleAutomaticModelRequestTier(c, spec, body, model, sourceFormat, fixedAlt)
+}
+
+func (s *relayServer) handleAutomaticModelRequestTier(c *gin.Context, spec *apiKeySpec, body []byte, model string, sourceFormat sdktranslator.Format, fixedAlt string) {
 	if !automaticClientModelVisible(s.manifest, spec, model) {
 		writeAPIError(c, http.StatusNotFound, s.manifest.modelUnavailableMessage(model), "model_not_available")
 		return

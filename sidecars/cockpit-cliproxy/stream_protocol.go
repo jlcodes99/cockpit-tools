@@ -295,7 +295,7 @@ func (s *relayServer) writeExecutorError(c *gin.Context, err error) {
 		c.Data(status, "application/json", []byte(continuityError.Error()))
 		return
 	}
-	message, structured := publicExecutorError(errorMessage(err))
+	message, structured := publicExecutorFailure(err)
 	if structured {
 		c.Data(status, "application/json", []byte(message))
 		return
@@ -433,7 +433,7 @@ func streamKeepAliveInterval(cfg *config.Config) time.Duration {
 
 func writeStreamTerminalError(c *gin.Context, err error) {
 	status := statusCodeFromError(err)
-	message, structured := publicExecutorError(errorMessage(err))
+	message, structured := publicExecutorFailure(err)
 	payload := []byte(message)
 	if !structured {
 		var marshalErr error
@@ -468,7 +468,7 @@ func writeStreamTerminalErrorForFormat(c *gin.Context, err error, sourceFormat s
 		return
 	}
 	status := statusCodeFromError(err)
-	message, _ := publicExecutorError(errorMessage(err))
+	message, _ := publicExecutorFailure(err)
 	eventName, payload := sdkhandlers.BuildOpenAIResponsesStreamTerminalEvent(status, errors.New(message), 0)
 	_, _ = fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", eventName, string(payload))
 }

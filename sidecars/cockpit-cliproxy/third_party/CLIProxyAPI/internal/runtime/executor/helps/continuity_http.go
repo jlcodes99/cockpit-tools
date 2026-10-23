@@ -12,6 +12,7 @@ import (
 
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/tidwall/gjson"
 )
 
 // BindCodexContinuity preserves the separately managed installation profile.
@@ -45,6 +46,15 @@ func BindContinuityHTTPRequest(ctx context.Context, auth *cliproxyauth.Auth, req
 		return nil, body, nil
 	}
 	expandPrevious := IsCodexOAuthAuth(auth) && req.URL != nil && strings.HasSuffix(req.URL.Path, "/responses")
+	// Compatible API gateways may themselves use OAuth HTTP upstreams, which
+	// cannot resolve previous_response_id. Prefer a verified local checkpoint
+	// on these routes; unknown history and official OpenAI IDs stay untouched.
+	if !expandPrevious && req.URL != nil && strings.HasSuffix(req.URL.Path, "/responses") &&
+		!strings.EqualFold(req.URL.Hostname(), "api.openai.com") && auth != nil &&
+		strings.TrimSpace(auth.Attributes["api_key"]) != "" &&
+		gjson.GetBytes(body, "previous_response_id").String() != "" && cliproxyexecutor.ContinuityCanRebuild(ctx) {
+		expandPrevious = true
+	}
 	attempt, headers, next, err := bindCodexContinuity(ctx, auth, req.Header, body, expandPrevious)
 	if err != nil {
 		return nil, nil, err

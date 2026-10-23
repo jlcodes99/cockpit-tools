@@ -9,8 +9,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 )
 
@@ -159,6 +161,13 @@ func (c *continuityClient) Prepare(ctx context.Context, request coreexecutor.Con
 		mapped := ""
 		if c.manifest.authManager != nil {
 			for _, auth := range c.manifest.authManager.List() {
+				// List also includes retired/disabled auth snapshots. Pinning one
+				// makes the scheduler reject every active account before selection.
+				// Complete history may choose a new account; protected incremental
+				// history must keep the existing unavailable-owner error instead.
+				if auth == nil || auth.Disabled || auth.Status == coreauth.StatusDisabled {
+					continue
+				}
 				if account := accountForAuthInManifest(c.manifest, auth); account != nil && account.ID == result.PreferredAccountID {
 					mapped = auth.ID
 					break
@@ -171,6 +180,13 @@ func (c *continuityClient) Prepare(ctx context.Context, request coreexecutor.Con
 			return result, continuityControlError{status: 409, code: "account_binding_unavailable", message: "The original account is not available for this protected continuation"}
 		}
 		result.PreferredAccountID = mapped
+		// A portable/full-history turn can be rebound by the continuity worker.
+		// Its previous owner is not an authorization pin and must not override
+		// the user's custom account priorities, regardless of the API key used.
+		// Incremental/protected turns retain their required account binding.
+		if result.SelfContained && strings.EqualFold(strings.TrimSpace(c.manifest.RoutingStrategy), "custom") {
+			result.PreferredAccountID = ""
+		}
 	}
 	result.Headers = canonicalContinuityHeaders(result.Headers)
 	return result, nil

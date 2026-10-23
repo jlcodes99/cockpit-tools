@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -110,7 +111,16 @@ func parity22MediaFixture(t *testing.T, name string, value any) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !bytes.Equal(saved, encoded) {
+				// Git may check out JSON fixtures with CRLF on Windows. Compare
+				// JSON values so whitespace cannot hide the actual wire parity.
+				var actual, expected any
+				if err := json.Unmarshal(encoded, &actual); err != nil {
+					t.Fatal(err)
+				}
+				if err := json.Unmarshal(saved, &expected); err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(actual, expected) {
 					t.Fatalf("Go media fixture drift: %s; regenerate with COCKPIT_UPDATE_PARITY22_MEDIA=1", path)
 				}
 			}
