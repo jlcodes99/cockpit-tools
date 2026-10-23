@@ -388,6 +388,11 @@ impl IdentityStore {
             headers,
             "session-id",
         )?;
+        if session_id.is_none() {
+            // Legacy clients such as Pi use the underscore spelling. Resolve it
+            // before generating a root, preserving the existing validation order.
+            session_id = header_identity(headers, "session_id")?;
+        }
         let mut thread_id = primary_identity(
             canonical.and_then(|v| v.get("thread_id")),
             flat.and_then(|v| v.get("thread_id")),
@@ -1137,6 +1142,9 @@ fn supplement_identities(
     if header_identity(headers, "session-id")?.is_none() {
         set_identity_header(headers, "session-id", context.session_id.as_deref())?;
     }
+    // Forward only the canonical spelling through the caller/owner mapping;
+    // never leave the original alias alongside the isolated upstream identity.
+    headers.remove("session_id");
     for (name, value) in [
         ("thread-id", context.thread_id.as_deref()),
         ("x-client-request-id", context.thread_id.as_deref()),

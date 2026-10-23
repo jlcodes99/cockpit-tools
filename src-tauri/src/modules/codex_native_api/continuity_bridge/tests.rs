@@ -1,6 +1,36 @@
 use super::{protocol::*, session::Core, *};
 use serde_json::{json, Value};
 
+#[test]
+fn legacy_session_header_is_stable_through_shared_go_identity_prepare_and_bind() {
+    let temp = tempfile::tempdir().unwrap();
+    let core = Core::open(config(temp.path().join("identity.sqlite"))).unwrap();
+    let project = |request_id: &str, account: &str| {
+        let mut original = request(request_id);
+        original
+            .body
+            .as_object_mut()
+            .unwrap()
+            .remove("client_metadata");
+        original
+            .headers
+            .insert("session_id".into(), vec!["pi-session".into()]);
+        let prepared = core.prepare(original).unwrap();
+        let bound = core.bind(binding(&prepared, "attempt", account)).unwrap();
+        assert!(!bound.headers.contains_key("session_id"));
+        let session = &bound.headers["session-id"][0];
+        assert_ne!(session, "pi-session");
+        assert_eq!(
+            bound.body["client_metadata"]["session_id"],
+            session.as_str()
+        );
+        session.clone()
+    };
+    let first = project("request-1", "account-a");
+    assert_eq!(first, project("request-2", "account-a"));
+    assert_ne!(first, project("request-3", "account-b"));
+}
+
 fn config(path: PathBuf) -> Config {
     Config {
         identity_path: path,
