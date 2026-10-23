@@ -7084,7 +7084,8 @@
     "addAccount": "Aggiungi account MiniMax Code",
     "search": "Cerca account MiniMax Code...",
     "usageNormal": "Stato normale",
-    "usageAbnormal": "Anomalo"
+    "usageAbnormal": "Anomalo",
+    "placeholder": "La gestione degli account MiniMax Code sarà presto disponibile."
   },
   "zcode": {
     "search": "Cerca account ZCode...",

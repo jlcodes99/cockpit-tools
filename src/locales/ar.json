@@ -7131,7 +7131,8 @@
     "addAccount": "إضافة حساب MiniMax Code",
     "search": "ابحث في حسابات MiniMax Code...",
     "usageNormal": "طبيعي",
-    "usageAbnormal": "غير طبيعي"
+    "usageAbnormal": "غير طبيعي",
+    "placeholder": "ستتوفر إدارة حسابات MiniMax Code قريبًا."
   },
   "zcode": {
     "search": "البحث في حسابات ZCode...",

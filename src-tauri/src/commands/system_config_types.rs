@@ -1363,6 +1363,9 @@ fn apply_general_config_updates(
     if updates.contains_key("startup_page") {
         next.startup_page = config::normalize_startup_page(&next.startup_page);
     }
+    if updates.contains_key("minimax_code_region") {
+        next.minimax_code_region = config::normalize_minimax_code_region(&next.minimax_code_region);
+    }
     if updates.contains_key("floating_card_background_opacity") {
         next.floating_card_background_opacity = config::normalize_floating_card_background_opacity(next.floating_card_background_opacity);
     }

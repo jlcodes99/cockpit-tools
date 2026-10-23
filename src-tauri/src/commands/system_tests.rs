@@ -435,3 +435,69 @@
             assert!(apply_general_config_updates(&mut config, &updates).is_err());
         }
     }
+
+    #[test]
+    fn minimax_code_general_config_patch_round_trips_fields() {
+        let mut config = UserConfig::default();
+        let updates = serde_json::json!({
+            "minimax_code_auto_refresh_minutes": 7,
+            "minimax_code_app_path": r"\\?\C:\Program Files\MiniMax Code\MiniMax Code.exe",
+            "minimax_code_region": "EN",
+            "minimax_code_quota_alert_enabled": true,
+            "minimax_code_quota_alert_threshold": 55,
+        })
+        .as_object()
+        .expect("patch should be an object")
+        .clone();
+
+        apply_general_config_updates(&mut config, &updates)
+            .expect("minimax code patch should succeed");
+
+        assert_eq!(config.minimax_code_auto_refresh_minutes, 7);
+        assert_eq!(
+            config.minimax_code_app_path,
+            r"C:\Program Files\MiniMax Code\MiniMax Code.exe"
+        );
+        assert_eq!(config.minimax_code_region, "en");
+        assert!(config.minimax_code_quota_alert_enabled);
+        assert_eq!(config.minimax_code_quota_alert_threshold, 55);
+    }
+
+    #[test]
+    fn load_user_config_backfills_minimax_code_fields() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        let data_dir = std::env::temp_dir().join(format!(
+            "cockpit-tools-minimaxcode-config-{}-{}",
+            std::process::id(),
+            unique
+        ));
+        let _ = std::fs::remove_dir_all(&data_dir);
+        std::fs::create_dir_all(&data_dir).expect("create config test directory");
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &data_dir);
+
+        let config_path = data_dir.join("config.json");
+        std::fs::write(
+            &config_path,
+            r#"{
+  "workbuddy_auto_refresh_minutes": 12,
+  "quota_alert_enabled": true,
+  "quota_alert_threshold": 42
+}
+"#,
+        )
+        .expect("write legacy config");
+
+        let loaded = crate::modules::config::load_user_config().expect("load legacy config");
+        assert_eq!(loaded.minimax_code_auto_refresh_minutes, 12);
+        assert!(loaded.minimax_code_quota_alert_enabled);
+        assert_eq!(loaded.minimax_code_quota_alert_threshold, 42);
+
+        std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+        std::fs::remove_dir_all(&data_dir).expect("remove temp dir");
+    }

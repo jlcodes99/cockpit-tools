@@ -7084,7 +7084,8 @@
     "addAccount": "MiniMax Code アカウントを追加",
     "search": "MiniMax Code アカウントを検索...",
     "usageNormal": "正常",
-    "usageAbnormal": "異常"
+    "usageAbnormal": "異常",
+    "placeholder": "MiniMax Code アカウント管理は近日公開予定です。"
   },
   "zcode": {
     "search": "ZCode アカウントを検索...",

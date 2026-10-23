@@ -7084,7 +7084,8 @@
     "addAccount": "新增 MiniMax Code 帳號",
     "search": "搜尋 MiniMax Code 帳號...",
     "usageNormal": "正常",
-    "usageAbnormal": "異常"
+    "usageAbnormal": "異常",
+    "placeholder": "MiniMax Code 帳號管理即將推出。"
   },
   "zcode": {
     "search": "搜尋 ZCode 帳號...",

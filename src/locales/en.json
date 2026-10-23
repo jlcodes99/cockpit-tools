@@ -7432,7 +7432,8 @@
     "addAccount": "Add MiniMax Code account",
     "search": "Search MiniMax Code accounts...",
     "usageNormal": "Normal",
-    "usageAbnormal": "Abnormal"
+    "usageAbnormal": "Abnormal",
+    "placeholder": "MiniMax Code account management is coming soon."
   },
   "mfaVault": {
     "pageDesc": "Securely store and manage your MFA backup recovery codes, passcode sets, and other sensitive authentication data. MFA records are stored locally only. Deleting records, clearing cache, or replacing/losing a device may cause MFA loss. Keep backups and import from backup when needed.",

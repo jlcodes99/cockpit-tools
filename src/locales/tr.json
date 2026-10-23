@@ -7084,7 +7084,8 @@
     "addAccount": "MiniMax Code Hesabı Ekle",
     "search": "MiniMax Code hesaplarını ara...",
     "usageNormal": "Normal​",
-    "usageAbnormal": "Anormal"
+    "usageAbnormal": "Anormal",
+    "placeholder": "MiniMax Code hesap yönetimi yakında geliyor."
   },
   "zcode": {
     "search": "ZCode hesaplarını ara...",
