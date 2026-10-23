@@ -7253,6 +7253,14 @@
       "timeRangeError": "Waktu mulai tidak boleh lebih lambat dari waktu selesai"
     }
   },
+  "minimaxCode": {
+    "title": "Akun MiniMax Code",
+    "noAccounts": "Tidak ada akun MiniMax Code",
+    "addAccount": "Tambah Akun MiniMax Code",
+    "search": "Cari akun MiniMax Code...",
+    "usageNormal": "Status normal",
+    "usageAbnormal": "Abnormal​"
+  },
   "mfaVault": {
     "pageDesc": "Simpan dan kelola kode pemulihan cadangan MFA, set kode sandi, dan data autentikasi sensitif lainnya dengan aman. Catatan MFA disimpan secara lokal saja. Menghapus catatan, membersihkan cache, atau mengganti/kehilangan perangkat dapat menyebabkan kehilangan MFA. Simpan cadangan dan impor dari cadangan saat diperlukan.",
     "manualAdd": "Tambah Kredensial",

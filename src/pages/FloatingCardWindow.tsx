@@ -227,6 +227,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useTraeSoloCnInstanceStore.getState();
     case 'workbuddy':
       return useWorkbuddyInstanceStore.getState();
+    case 'minimaxcode':
+      return null;
     case 'zcode':
       return useZcodeInstanceStore.getState();
     case 'zed':

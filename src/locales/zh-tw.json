@@ -7078,6 +7078,14 @@
       "timeRangeError": "開始時間不能晚於結束時間"
     }
   },
+  "minimaxCode": {
+    "title": "MiniMax Code 帳號管理",
+    "noAccounts": "暫無 MiniMax Code 帳號",
+    "addAccount": "新增 MiniMax Code 帳號",
+    "search": "搜尋 MiniMax Code 帳號...",
+    "usageNormal": "正常",
+    "usageAbnormal": "異常"
+  },
   "zcode": {
     "search": "搜尋 ZCode 帳號...",
     "flowNotice": {

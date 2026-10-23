@@ -7125,6 +7125,14 @@
       "timeRangeError": "لا يمكن أن يكون وقت البدء متأخرًا عن وقت الانتهاء"
     }
   },
+  "minimaxCode": {
+    "title": "إدارة حسابات MiniMax Code",
+    "noAccounts": "لا توجد حسابات MiniMax Code",
+    "addAccount": "إضافة حساب MiniMax Code",
+    "search": "ابحث في حسابات MiniMax Code...",
+    "usageNormal": "طبيعي",
+    "usageAbnormal": "غير طبيعي"
+  },
   "zcode": {
     "search": "البحث في حسابات ZCode...",
     "flowNotice": {

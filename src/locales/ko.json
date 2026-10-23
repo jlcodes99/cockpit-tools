@@ -7078,6 +7078,14 @@
       "timeRangeError": "시작 시간은 종료 시간보다 늦을 수 없습니다"
     }
   },
+  "minimaxCode": {
+    "title": "MiniMax Code 계정 관리",
+    "noAccounts": "MiniMax Code 계정이 없습니다",
+    "addAccount": "MiniMax Code 계정 추가",
+    "search": "MiniMax Code 계정 검색...",
+    "usageNormal": "정상",
+    "usageAbnormal": "이상"
+  },
   "zcode": {
     "search": "ZCode 계정 검색...",
     "flowNotice": {

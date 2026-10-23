@@ -7078,6 +7078,14 @@
       "timeRangeError": "Thời gian bắt đầu không thể sau thời gian kết thúc"
     }
   },
+  "minimaxCode": {
+    "title": "Quản lý tài khoản MiniMax Code",
+    "noAccounts": "Chưa có tài khoản MiniMax Code",
+    "addAccount": "Thêm tài khoản MiniMax Code",
+    "search": "Tìm kiếm tài khoản MiniMax Code...",
+    "usageNormal": "Bình thường",
+    "usageAbnormal": "Bất thường"
+  },
   "zcode": {
     "search": "Tìm tài khoản ZCode...",
     "flowNotice": {

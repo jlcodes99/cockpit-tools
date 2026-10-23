@@ -7078,6 +7078,14 @@
       "timeRangeError": "L'heure de début ne peut pas être postérieure à l'heure de fin"
     }
   },
+  "minimaxCode": {
+    "title": "Gestion des comptes MiniMax Code",
+    "noAccounts": "Aucun compte MiniMax Code",
+    "addAccount": "Ajouter un compte MiniMax Code",
+    "search": "Rechercher des comptes MiniMax Code...",
+    "usageNormal": "Etat normal",
+    "usageAbnormal": "Anormal"
+  },
   "zcode": {
     "search": "Rechercher des comptes ZCode...",
     "flowNotice": {
