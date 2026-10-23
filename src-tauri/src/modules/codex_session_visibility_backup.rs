@@ -317,6 +317,7 @@ fn backup_sqlite_databases(
 ) -> Result<Vec<String>, String> {
     let mut backed_up = Vec::new();
     for db_path in sqlite_candidate_paths_for_options(data_dir, options) {
+        check_launch_visibility_budget("backup_sqlite")?;
         if !db_path.exists() {
             continue;
         }
@@ -343,6 +344,7 @@ fn backup_sqlite_databases(
                     error
                 )
             })?;
+        configure_launch_visibility_connection(&connection)?;
 
         if backup_db_path.exists() {
             fs::remove_file(&backup_db_path).map_err(|error| {
@@ -440,6 +442,7 @@ fn backup_instance_files(
     target_provider: &str,
     options: CodexSessionVisibilityRepairOptions,
 ) -> Result<PathBuf, String> {
+    check_launch_visibility_budget("backup_instance")?;
     let scope = modules::backup_storage::scope_for_path(data_dir);
     let backup_dir = modules::backup_storage::behavior_backup_dir(
         "codex",
@@ -456,6 +459,7 @@ fn backup_instance_files(
     let mut rollout_timestamps = Vec::new();
     let mut sqlite_backup_files = Vec::new();
     for change in rollout_changes {
+        check_launch_visibility_budget("backup_rollout_timestamps")?;
         // Timestamp-only repair needs no rollout content copy. A byte copy can
         // be huge, go stale during append, and must never replace live history.
         if let (Some(original), Some(applied)) = (

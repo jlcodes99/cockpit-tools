@@ -864,6 +864,7 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
         ).await
     };
     let result_ok = result.is_ok();
+    let uses_official_authorization = result.as_ref().is_ok_and(|output| output.uses_official_authorization);
     let header_quota = result
         .as_ref()
         .ok()
@@ -910,7 +911,11 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
                 }
                 .into();
                 item.error = artifact_result.err();
-                item.quota = pelican_quota_usage(before_quota.as_ref(), output.quota.as_ref());
+                item.quota = if output.uses_official_authorization {
+                    None
+                } else {
+                    pelican_quota_usage(before_quota.as_ref(), output.quota.as_ref())
+                };
                 item.usage = output.usage;
                 item.response_id = output.response_id;
                 item.response_model = output.response_model;
@@ -924,7 +929,7 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
     if let Err(error) = persist(&job).await {
         job.storage_error(error);
     }
-    if item.provider.is_none() && result_ok && header_quota.is_none() {
+    if item.provider.is_none() && result_ok && !uses_official_authorization && header_quota.is_none() {
         if let Ok(updated) = updated {
             if let Some(finished_at) = updated
                 .items

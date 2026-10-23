@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canAddCodexAccountToLocalAccess,
+  filterCodexLocalAccessAccountIds,
   getCodexLocalAccessAccountIneligibleReason,
   isCodexLocalAccessEligibleAccount,
   isCodexOAuthBindingEligibleAccount,
@@ -22,6 +23,13 @@ function account(partial: Partial<CodexAccount>): CodexAccount {
     ...partial,
   } as CodexAccount;
 }
+
+test('a paused member survives a settings save without admitting other incomplete accounts', () => {
+  const paused = account({ id: 'paused', authorization_status: 'pending' });
+  const candidate = account({ id: 'candidate', authorization_status: 'pending' });
+  assert.deepEqual(filterCodexLocalAccessAccountIds(['paused', 'candidate', 'paused'], [paused, candidate], true, ['paused']), ['paused']);
+  assert.deepEqual(filterCodexLocalAccessAccountIds(['paused', 'candidate'], [paused, candidate], true), []);
+});
 
 test("pending oauth accounts are ineligible for API service", () => {
   const pending = account({

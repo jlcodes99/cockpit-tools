@@ -44,6 +44,8 @@ type ExecutionSessionCloser interface {
 
 // Result captures execution outcome used to adjust auth state.
 type Result struct {
+	// unsent excludes local admission and preparation failures from execution observations.
+	unsent bool
 	// StaleCredential preserves request diagnostics without changing current auth health.
 	StaleCredential   bool
 	CredentialVersion uint64

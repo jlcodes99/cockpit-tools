@@ -42,12 +42,24 @@ function run(command, args, options = {}) {
 }
 
 function runFinal(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: repoRoot,
-    stdio: 'inherit',
-    shell: false,
-    ...withToolchainPaths(options),
-  });
+  const isMacBuild = process.platform === 'darwin' && ['build', 'bundle'].includes(process.argv[2]);
+  const mounts = isMacBuild ? require('./release/dmg-mounts.cjs').createDmgMounts() : null;
+  if (mounts) {
+    mounts.watchBuildImages(path.resolve(repoRoot, process.env.CARGO_TARGET_DIR || 'target'));
+    mounts.installExitHandlers();
+  }
+  let result;
+  try {
+    result = spawnSync(command, args, {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      shell: false,
+      ...withToolchainPaths(options),
+    });
+  } finally {
+    // Also clean Tauri's writable scratch image when the bundler fails.
+    mounts?.cleanup();
+  }
 
   if (result.error) {
     throw result.error;

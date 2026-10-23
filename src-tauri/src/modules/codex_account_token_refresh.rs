@@ -410,7 +410,7 @@ impl CodexQuotaRuntimeSnapshot {
             .map_err(|error| format!("采集 Codex 额度运行态失败: {}", error))
     }
 
-    fn capture_blocking() -> Self {
+    pub(crate) fn capture_blocking() -> Self {
         let process_entries = crate::modules::process::collect_codex_process_entries();
         let running_oauth_account_ids =
             running_codex_oauth_account_ids_from_entries(&process_entries)

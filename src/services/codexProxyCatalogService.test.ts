@@ -104,7 +104,7 @@ test('unavailable resource reasons distinguish protocol limits, group limits and
     SUBSCRIPTION_GROUP_TIMEOUT: 'reasonGroupTimeout',
     SUBSCRIPTION_PROVIDER_UNSUPPORTED: 'reasonProvider', SUBSCRIPTION_GROUP_UNAVAILABLE: 'reasonMembers',
     PROXY_UNSUPPORTED_OPTION: 'reasonOptions', SUBSCRIPTION_INVALID: 'reasonInvalid',
-    PROXY_TLS_INSECURE: 'reasonTlsInsecure', PROXY_TRANSPORT_UNSUPPORTED: 'reasonTransport',
+    PROXY_TLS_INSECURE: 'refreshRequired', PROXY_TRANSPORT_UNSUPPORTED: 'reasonTransport',
     PROXY_ECH_UNSUPPORTED: 'reasonEch',
   };
   for (const [error, key] of Object.entries(reasons)) {

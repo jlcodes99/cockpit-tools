@@ -1245,22 +1245,6 @@
   background: color-mix(in srgb, var(--bg-tertiary) 88%, #f59e0b 12%);
 }
 
-.codex-local-access-risk-notice-remember {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
-  cursor: pointer;
-  user-select: none;
-}
-
-.codex-local-access-risk-notice-remember input[type="checkbox"] {
-  margin: 3px 0 0;
-  flex-shrink: 0;
-}
-
 .codex-api-switch-notice-modal {
   width: min(760px, calc(100vw - 32px));
   max-width: min(760px, calc(100vw - 32px));

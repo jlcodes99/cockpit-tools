@@ -174,3 +174,151 @@ fn proxy_route_sidecar_snapshot_is_cloned_into_recent_events() {
     .unwrap();
     assert_eq!(direct.proxy_route.unwrap().name, "");
 }
+
+#[test]
+fn native_proxy_route_snapshots_deserialize_and_persist_without_private_url_parts() {
+    let conn = Connection::open_in_memory().unwrap();
+    create_request_logs_table(&conn, true).unwrap();
+    let private_proxy = "http://private-user:private-password@proxy.example:8080/private-path?private-query#private-fragment";
+    let mut cases = vec![
+        (
+            "account",
+            Some(private_proxy),
+            None,
+            snapshot("proxy", "http://proxy.example:8080"),
+        ),
+        (
+            "service",
+            Some(private_proxy),
+            None,
+            snapshot("proxy", "http://proxy.example:8080"),
+        ),
+        (
+            "global",
+            Some(private_proxy),
+            None,
+            snapshot("proxy", "http://proxy.example:8080"),
+        ),
+        (
+            "environment",
+            Some(private_proxy),
+            None,
+            snapshot("proxy", "http://proxy.example:8080"),
+        ),
+        (
+            "system",
+            Some(private_proxy),
+            None,
+            snapshot("proxy", "http://proxy.example:8080"),
+        ),
+    ];
+    cases.extend([
+        ("account_direct", None, None, snapshot("direct", "")),
+        ("direct", None, None, snapshot("direct", "")),
+        (
+            "account",
+            Some("invalid private-malformed-proxy"),
+            None,
+            snapshot("unknown", ""),
+        ),
+        (
+            "account",
+            Some("socks5h://private-user:private-password@127.0.0.1:45678"),
+            Some("订阅入口 \"A\" / 東京"),
+            snapshot("proxy", "订阅入口 \"A\" / 東京"),
+        ),
+    ]);
+
+    let mut expected_routes = Vec::new();
+    for (index, (source, proxy, entry_name, expected)) in cases.into_iter().enumerate() {
+        let diagnostic = native_proxy_diagnostic(source, proxy, entry_name);
+        let expected_json = json!({"kind": expected.kind, "name": expected.name});
+        assert_eq!(diagnostic, expected_json, "public snapshot for {source}");
+        // Use the same DTO conversion as NativeHostBridge::record. A diagnostic
+        // containing only mode/proxy must fail here instead of disappearing via .ok().
+        let route: CodexLocalAccessProxyRoute = serde_json::from_value(diagnostic)
+            .expect("native diagnostics must match the request-log proxy route DTO");
+        assert_eq!(route, expected);
+        let mut event = event_with_snapshot(Some(route));
+        event.timestamp += index as i64;
+        event.request_id = format!("native-proxy-route-{index}");
+        event.gateway_mode = Some(CodexLocalAccessGatewayMode::Native);
+        insert_local_access_usage_event(&conn, &event).unwrap();
+
+        let persisted_json: String = conn
+            .query_row(
+                "SELECT proxy_route_json FROM request_logs WHERE request_id = ?1",
+                [&event.request_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&persisted_json).unwrap(),
+            expected_json
+        );
+        for private_part in [
+            "private-user",
+            "private-password",
+            "private-path",
+            "private-query",
+            "private-fragment",
+            "private-malformed-proxy",
+        ] {
+            assert!(
+                !persisted_json.contains(private_part),
+                "private URL data reached request logs"
+            );
+        }
+        expected_routes.push(Some(expected));
+    }
+
+    let events = stored_events(&conn);
+    assert_eq!(events.len(), expected_routes.len());
+    assert!(events
+        .iter()
+        .all(|event| event.gateway_mode == Some(CodexLocalAccessGatewayMode::Native)));
+    assert_eq!(
+        events
+            .into_iter()
+            .map(|event| event.proxy_route)
+            .collect::<Vec<_>>(),
+        expected_routes
+    );
+}
+
+#[test]
+fn native_proxy_route_new_snapshots_do_not_backfill_historical_requests() {
+    let conn = Connection::open_in_memory().unwrap();
+    create_request_logs_table(&conn, true).unwrap();
+    let mut historical = event_with_snapshot(None);
+    historical.gateway_mode = Some(CodexLocalAccessGatewayMode::Native);
+    insert_local_access_usage_event(&conn, &historical).unwrap();
+
+    let route: CodexLocalAccessProxyRoute = serde_json::from_value(native_proxy_diagnostic(
+        "account",
+        Some("socks5h://private-user:private-password@127.0.0.1:45678"),
+        Some("Current proxy entry"),
+    ))
+    .expect("native proxy entry must deserialize for persistence");
+    historical.proxy_route = Some(route.clone());
+    insert_local_access_usage_event(&conn, &historical).unwrap();
+    assert_eq!(
+        stored_events(&conn)[0].proxy_route,
+        None,
+        "replayed old requests stay unrecorded"
+    );
+
+    let mut fresh = event_with_snapshot(Some(route.clone()));
+    fresh.timestamp += 1;
+    fresh.request_id = "new-native-proxy-request".into();
+    fresh.gateway_mode = Some(CodexLocalAccessGatewayMode::Native);
+    insert_local_access_usage_event(&conn, &fresh).unwrap();
+    let events = stored_events(&conn);
+    assert_eq!(events.len(), 2);
+    assert_eq!(
+        events[0].proxy_route, None,
+        "new requests cannot backfill old route snapshots"
+    );
+    assert_eq!(events[1].proxy_route.as_ref(), Some(&route));
+    assert_eq!(route, snapshot("proxy", "Current proxy entry"));
+}

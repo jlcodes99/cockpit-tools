@@ -507,6 +507,7 @@ pub fn update_api_key_credentials(
     let mut account =
         load_account(account_id).ok_or_else(|| format!("账号不存在: {}", account_id))?;
 
+    reject_chatgpt_plan_client_injection(&account)?;
     if !account.is_api_key_auth() {
         return Err("仅 API Key 账号支持编辑凭据".to_string());
     }

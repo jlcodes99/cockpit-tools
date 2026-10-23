@@ -22,7 +22,7 @@ func (e *XAIExecutor) CountTokens(ctx context.Context, auth *cliproxyauth.Auth, 
 	if err != nil {
 		return cliproxyexecutor.Response{}, fmt.Errorf("xai executor: tokenizer init failed: %w", err)
 	}
-	count, err := countXAIInputTokens(enc, prepared.body)
+	count, err := countXAIInputTokens(enc, prepared.finalizePayload(prepared.body))
 	if err != nil {
 		return cliproxyexecutor.Response{}, fmt.Errorf("xai executor: token counting failed: %w", err)
 	}

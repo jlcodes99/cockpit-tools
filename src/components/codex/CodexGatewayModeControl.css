@@ -1,0 +1,50 @@
+.codex-gateway-mode-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+
+.codex-gateway-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.codex-gateway-mode-row > span {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.codex-gateway-mode-row .single-select-dropdown {
+  width: min(200px, 100%);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.codex-gateway-mode-control > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.codex-gateway-mode-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.codex-gateway-mode-error {
+  color: var(--danger-color, #dc2626);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}

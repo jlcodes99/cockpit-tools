@@ -131,6 +131,8 @@ type cockpitQuotaResponse struct {
 	RemainingPercent         *int                      `json:"remainingPercent,omitempty"`
 	WeeklyRemainingPercent   *int                      `json:"weeklyRemainingPercent,omitempty"`
 	FiveHourRemainingPercent *int                      `json:"fiveHourRemainingPercent,omitempty"`
+	WeeklyCapacityPercent    *int                      `json:"weeklyCapacityPercent,omitempty"`
+	FiveHourCapacityPercent  *int                      `json:"fiveHourCapacityPercent,omitempty"`
 	AccountCount             int                       `json:"accountCount"`
 	IncludedAccountCount     int                       `json:"includedAccountCount"`
 	MissingAccountCount      int                       `json:"missingAccountCount"`
@@ -248,6 +250,8 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 	hasValue := false
 	weeklyTotal := 0
 	fiveHourTotal := 0
+	weeklyCapacity := 0
+	fiveHourCapacity := 0
 	hasWeekly := false
 	hasFiveHour := false
 	for _, accountID := range quotaAccountIDs {
@@ -287,18 +291,22 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 		hasValue = true
 		if primaryOK && primaryMinutes >= 5*24*60 {
 			weeklyTotal += primaryValue
+			weeklyCapacity += 100
 			hasWeekly = true
 		}
 		if secondaryOK && secondaryMinutes >= 5*24*60 {
 			weeklyTotal += secondaryValue
+			weeklyCapacity += 100
 			hasWeekly = true
 		}
 		if primaryOK && primaryMinutes > 0 && primaryMinutes <= 6*60 {
 			fiveHourTotal += primaryValue
+			fiveHourCapacity += 100
 			hasFiveHour = true
 		}
 		if secondaryOK && secondaryMinutes > 0 && secondaryMinutes <= 6*60 {
 			fiveHourTotal += secondaryValue
+			fiveHourCapacity += 100
 			hasFiveHour = true
 		}
 		var account *accountSpec
@@ -338,6 +346,12 @@ func buildCockpitQuotaResponseWithAccounts(spec *apiKeySpec, state quotaPoolStat
 	}
 	if hasFiveHour {
 		result.FiveHourRemainingPercent = &fiveHourTotal
+	}
+	if hasWeekly || result.AccountCount == 0 {
+		result.WeeklyCapacityPercent = &weeklyCapacity
+	}
+	if hasFiveHour || result.AccountCount == 0 {
+		result.FiveHourCapacityPercent = &fiveHourCapacity
 	}
 	return result
 }

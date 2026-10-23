@@ -34,6 +34,11 @@ pub struct GrokProductUsage {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GrokQuota {
+    /// Official billing flag; absent on legacy servers/accounts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_unified_billing_user: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_demand_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub period_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

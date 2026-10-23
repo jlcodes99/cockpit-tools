@@ -21,6 +21,15 @@ test('client proxy setup failures explain the route problem instead of requestin
   assert.equal(codexLaunchErrorKey('toString'), null);
 });
 
+test('bounded session checks keep contextual diagnostics out of both launch dialogs', () => {
+  assert.equal(codexLaunchErrorKey('CODEX_SESSION_VISIBILITY_TIMEOUT'), 'codex.launchErrors.sessionCheckTimeout');
+  assert.equal(codexLaunchErrorKey(new Error('Session repair (default / private-path): CODEX_SESSION_VISIBILITY_TIMEOUT: sqlite')), 'codex.launchErrors.sessionCheckTimeout');
+  assert.equal(codexLaunchErrorKey('Session repair: CODEX_SESSION_VISIBILITY_ROLLOUT_LINE_TOO_LARGE: private-path'), 'codex.launchErrors.sessionFileTooLarge');
+  assert.equal(codexLaunchErrorKey('CODEX_SESSION_VISIBILITY_ROLLBACK_FAILED: CODEX_SESSION_VISIBILITY_TIMEOUT; backup: private-path'), 'codex.launchErrors.sessionRestoreFailed');
+  assert.equal(codexLaunchErrorKey('CODEX_SESSION_VISIBILITY_TIMEOUT_OTHER'), null);
+  assert.equal(codexLaunchErrorKey('CODEX_SESSION_VISIBILITY_ROLLOUT_LINE_TOO_LARGE_OTHER'), null);
+});
+
 test('maps account overview access_token progress to shared launch fields', () => {
   const result = mapCodexSwitchProgressToLaunch({
     accountId: 'account-1',

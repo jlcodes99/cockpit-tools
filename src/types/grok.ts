@@ -16,6 +16,8 @@ export interface GrokProductUsage {
 }
 
 export interface GrokQuota {
+  isUnifiedBillingUser?: boolean | null;
+  onDemandEnabled?: boolean | null;
   periodType?: string | null;
   periodStart?: string | null;
   periodEnd?: string | null;
@@ -230,90 +232,8 @@ export function getGrokPlanRawValue(account: GrokAccount): string | null {
  * fields were not resolved.
  */
 export function getGrokPlanBadge(account: GrokAccount): string {
-  if (isGrokApiKeyAccount(account)) {
-    // Plan/tier badges show raw values (project rule).
-    return getGrokPlanRawValue(account) || "API_KEY";
-  }
-  const raw = getGrokPlanRawValue(account);
-  // Unknown / unresolved tier: leave empty for the UI "none" fallback.
-  if (!raw) return "";
-  const normalized = raw
-    .trim()
-    .toUpperCase()
-    .replace(/[\s-]+/g, "_");
-  const compact = normalized.replace(/_/g, "");
-  // Explicit free / invalid enums only — not missing data.
-  if (
-    [
-      "SUBSCRIPTION_TIER_INVALID",
-      "SUBSCRIPTION_TIER_FREE",
-      "INVALID",
-      "FREE",
-    ].includes(normalized)
-  ) {
-    return "Free";
-  }
-  if (
-    ["SUBSCRIPTION_TIER_GROK_PRO", "GROK_PRO"].includes(normalized) ||
-    compact === "GROKPRO" ||
-    compact === "SUBSCRIPTIONTIERGROKPRO"
-  ) {
-    return "Grok Pro";
-  }
-  // XPremiumPlus 等无下划线别名必须先于 XPremium 精确匹配
-  if (
-    ["SUBSCRIPTION_TIER_X_PREMIUM_PLUS", "X_PREMIUM_PLUS"].includes(normalized) ||
-    compact === "XPREMIUMPLUS" ||
-    compact === "SUBSCRIPTIONTIERXPREMIUMPLUS"
-  ) {
-    return "X Premium+";
-  }
-  if (
-    ["SUBSCRIPTION_TIER_X_PREMIUM", "X_PREMIUM"].includes(normalized) ||
-    compact === "XPREMIUM" ||
-    compact === "SUBSCRIPTIONTIERXPREMIUM"
-  ) {
-    return "X Premium";
-  }
-  if (
-    ["SUBSCRIPTION_TIER_X_BASIC", "X_BASIC"].includes(normalized) ||
-    compact === "XBASIC" ||
-    compact === "SUBSCRIPTIONTIERXBASIC"
-  ) {
-    return "X Basic";
-  }
-  if (
-    [
-      "SUBSCRIPTION_TIER_SUPER_GROK_LITE",
-      "SUBSCRIPTION_TIER_SUPERGROK_LITE",
-    ].includes(normalized) ||
-    compact === "SUPERGROKLITE"
-  ) {
-    return "SuperGrok Lite";
-  }
-  if (
-    [
-      "SUBSCRIPTION_TIER_SUPER_GROK_PRO",
-      "SUBSCRIPTION_TIER_SUPERGROK_PRO",
-    ].includes(normalized) ||
-    compact === "SUPERGROKPRO"
-  ) {
-    return "SuperGrok Pro";
-  }
-  if (
-    [
-      "SUBSCRIPTION_TIER_SUPERGROK_HEAVY",
-      "SUBSCRIPTION_TIER_GROK_HEAVY",
-    ].includes(normalized) ||
-    compact === "SUPERGROKHEAVY" ||
-    compact === "GROKHEAVY"
-  ) {
-    return "SuperGrok Heavy";
-  }
-  if (normalized === "SUBSCRIPTION_TIER_SUPERGROK" || compact === "SUPERGROK") {
-    return "SuperGrok";
-  }
-  return raw;
+  // Keep legacy, unified and future tiers exactly as the backend supplied them.
+  return getGrokPlanRawValue(account) || "";
 }
 
 function grokLabelT(key: string, defaultValue?: string): string {
@@ -443,16 +363,24 @@ export function getGrokQuotaSummaryItems(
     (weeklyUsed != null && weeklyTotal != null && weeklyTotal > 0
       ? (weeklyUsed / weeklyTotal) * 100
       : null);
-  if (weeklyUsedPercent != null || (weeklyUsed != null && weeklyTotal != null)) {
+  if (weeklyUsedPercent != null) {
     items.push({
       key: "weekly",
-      label: t("grok.quota.weekly", "每周用量"),
+      label: quota.isUnifiedBillingUser === true
+        ? t("grok.quota.sharedPool", "共享额度")
+        : /monthly/i.test(quota.periodType || "")
+          ? t("grok.quota.monthly", "每月用量")
+          : t("grok.quota.weekly", "每周用量"),
       percentage: clampPercent(weeklyUsedPercent ?? 0),
       used: weeklyUsed,
       total: weeklyTotal,
       resetAtMs: billingResetAtMs,
     });
   }
+
+  // Unified billing has one included pool. Product shares and legacy task/
+  // on-demand fields are not separate allowances for this seat.
+  if (quota.isUnifiedBillingUser === true) return items;
 
   (quota.products ?? []).forEach((product, index) => {
     const used = finite(product.used);
@@ -473,13 +401,12 @@ export function getGrokQuotaSummaryItems(
         : remaining != null && resolvedTotal != null && resolvedTotal > 0
           ? ((resolvedTotal - remaining) / resolvedTotal) * 100
           : null);
-    if (usagePercent == null && resolvedUsed == null && resolvedTotal == null) {
-      return;
-    }
+    // A partial amount is not evidence of an unused allowance.
+    if (usagePercent == null) return;
     items.push({
       key: `product-${index}`,
       label: product.product || t("grok.quota.included", "套餐用量"),
-      percentage: clampPercent(usagePercent ?? 0),
+      percentage: clampPercent(usagePercent),
       used: resolvedUsed,
       total: resolvedTotal,
       resetAtMs: billingResetAtMs,
@@ -519,7 +446,7 @@ export function getGrokQuotaSummaryItems(
 
   const onDemandCap = finite(quota.onDemandCap);
   const onDemandUsed = finite(quota.onDemandUsed);
-  if (onDemandCap != null && onDemandCap > 0 && onDemandUsed != null) {
+  if (quota.onDemandEnabled !== false && onDemandCap != null && onDemandCap > 0 && onDemandUsed != null) {
     items.push({
       key: "on-demand",
       label: t("grok.quota.onDemand", "按量用量"),

@@ -211,11 +211,12 @@ func quotaReserveSnapshotsFromManifest(m *manifest) map[string]quotaReserveSnaps
 		}
 		reserve := account.QuotaReserve
 		snapshots[account.ID] = quotaReserveSnapshot{
-			SnapshotUpdatedAtUnixSeconds: reserve.SnapshotUpdatedAtUnixSeconds,
-			HourlyRemainingPercent:       reserve.HourlyRemainingPercent,
-			WeeklyRemainingPercent:       reserve.WeeklyRemainingPercent,
-			HourlyWindowPresent:          reserve.HourlyWindowPresent,
-			WeeklyWindowPresent:          reserve.WeeklyWindowPresent,
+			SnapshotVerifiedQueryStartedAtUnixMillis: reserve.SnapshotVerifiedQueryStartedAtUnixMillis,
+			SnapshotUpdatedAtUnixSeconds:             reserve.SnapshotUpdatedAtUnixSeconds,
+			HourlyRemainingPercent:                   reserve.HourlyRemainingPercent,
+			WeeklyRemainingPercent:                   reserve.WeeklyRemainingPercent,
+			HourlyWindowPresent:                      reserve.HourlyWindowPresent,
+			WeeklyWindowPresent:                      reserve.WeeklyWindowPresent,
 		}
 	}
 	return snapshots
@@ -509,6 +510,11 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 	available := make([]*coreauth.Auth, 0, len(auths))
 	quotaReserveReasons := make([]string, 0)
 	for _, auth := range auths {
+		if serviceAuthPaused(ctx, s.manifest, auth) {
+			selectionStats.unavailableAuths++
+			selectionStats.members = append(selectionStats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "paused", "account is paused in this service"))
+			continue
+		}
 		if accountQuotaExhausted(s.manifest, s.accountForAuth(auth), now) && !isCodexReserveModel(model) {
 			selectionStats.unavailableAuths++
 			selectionStats.members = append(selectionStats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "quota_cooldown", "account quota is exhausted; wait for quota reset"))
@@ -638,6 +644,11 @@ func (s *cockpitSelector) ReportAuthSelectionFailure(ctx context.Context, provid
 	}
 	now := time.Now()
 	for _, auth := range auths {
+		if serviceAuthPaused(ctx, s.manifest, auth) {
+			stats.unavailableAuths++
+			stats.members = append(stats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "paused", "account is paused in this service"))
+			continue
+		}
 		if accountQuotaExhausted(s.manifest, s.accountForAuth(auth), now) && !isCodexReserveModel(model) {
 			stats.unavailableAuths++
 			stats.members = append(stats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "quota_cooldown", "account quota is exhausted; wait for quota reset"))
@@ -855,11 +866,12 @@ func quotaReserveSnapshotFromSpec(account *accountSpec) *quotaReserveSnapshot {
 	}
 	reserve := account.QuotaReserve
 	return &quotaReserveSnapshot{
-		SnapshotUpdatedAtUnixSeconds: reserve.SnapshotUpdatedAtUnixSeconds,
-		HourlyRemainingPercent:       reserve.HourlyRemainingPercent,
-		WeeklyRemainingPercent:       reserve.WeeklyRemainingPercent,
-		HourlyWindowPresent:          reserve.HourlyWindowPresent,
-		WeeklyWindowPresent:          reserve.WeeklyWindowPresent,
+		SnapshotVerifiedQueryStartedAtUnixMillis: reserve.SnapshotVerifiedQueryStartedAtUnixMillis,
+		SnapshotUpdatedAtUnixSeconds:             reserve.SnapshotUpdatedAtUnixSeconds,
+		HourlyRemainingPercent:                   reserve.HourlyRemainingPercent,
+		WeeklyRemainingPercent:                   reserve.WeeklyRemainingPercent,
+		HourlyWindowPresent:                      reserve.HourlyWindowPresent,
+		WeeklyWindowPresent:                      reserve.WeeklyWindowPresent,
 	}
 }
 
@@ -1651,6 +1663,32 @@ func errorCategory(status int, body string, success bool) string {
 	if success {
 		return ""
 	}
+	// Explicit upstream codes take precedence over transport text such as
+	// unexpected EOF, which can also describe a disconnected downstream client.
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+		Response struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		} `json:"response"`
+	}
+	if json.Unmarshal([]byte(body), &envelope) == nil {
+		code := strings.TrimSpace(envelope.Error.Code)
+		if code == "" {
+			code = strings.TrimSpace(envelope.Response.Error.Code)
+		}
+		switch strings.ToLower(code) {
+		case "upstream_stream_error":
+			return "upstream_stream_error"
+		case "incomplete_upstream_stream":
+			return "incomplete_upstream_stream"
+		case "request_timeout":
+			return "upstream_stream_timeout"
+		}
+	}
 	lower := strings.ToLower(body)
 	switch {
 	case strings.Contains(lower, "upstream timed out in stream_open") ||
@@ -1700,6 +1738,7 @@ func errorCategory(status int, body string, success bool) string {
 type authHook struct {
 	manifest *manifest
 	emitter  *eventEmitter
+	tracker  *requestUsageTracker
 }
 
 func (h *authHook) OnAuthRegistered(_ context.Context, auth *coreauth.Auth) {
@@ -1711,6 +1750,9 @@ func (h *authHook) OnAuthUpdated(_ context.Context, auth *coreauth.Auth) {
 }
 
 func (h *authHook) OnResult(ctx context.Context, result coreauth.Result) {
+	if h != nil && h.tracker != nil {
+		h.tracker.completeQuotaProtection(ctx, result.AuthID)
+	}
 	if observer := requestDiagnosticsFromContext(ctx); observer != nil {
 		observer.recordResult(ctx, result)
 	}
@@ -1863,6 +1905,20 @@ func buildCoreAuthSelectorWithConcurrency(cfg *config.Config, selector coreauth.
 			fallback: selector,
 		}
 	}
+	if manifestHasQuotaReserve(m) {
+		if quota == nil {
+			quota = newQuotaReserveStateStore("", m)
+		}
+		admission := quota.protectionCoordinator()
+		if tracker != nil {
+			tracker.mu.Lock()
+			tracker.quotaAdmission = admission
+			tracker.quotaManifest = m
+			tracker.quotaState = quota
+			tracker.mu.Unlock()
+		}
+		selector = &quotaProtectionSelector{manifest: m, quota: quota, fallback: selector, admission: admission, tracker: tracker}
+	}
 	if m != nil {
 		selector = &apiKeyScopeSelector{manifest: m, fallback: selector}
 	}
@@ -1879,6 +1935,9 @@ func buildCoreAuthManager(cfg *config.Config, selector coreauth.Selector, hook c
 		dirSetter.SetBaseDir(cfg.AuthDir)
 	}
 	selector = buildCoreAuthSelectorWithConcurrency(cfg, selector, m, quota, tracker)
+	if authHook, ok := hook.(*authHook); ok && authHook != nil {
+		authHook.tracker = tracker
+	}
 	if tracker != nil {
 		selector = &recordingSelector{inner: selector, manifest: m, tracker: tracker}
 	}

@@ -327,14 +327,10 @@ pub fn parse(input: &str) -> Result<ParsedCatalog> {
         let node_name = name(text(m, "name")?)?;
         let protocol = text(m, "type")?;
         let result = clash_node(m);
-        let insecure = result
-            .as_ref()
-            .is_ok_and(super::codex_proxy_catalog_binding::is_insecure);
         let error = result
             .as_ref()
             .err()
-            .map(|e| safe_node_error(e))
-            .or_else(|| insecure.then(|| "PROXY_TLS_INSECURE".into()));
+            .map(|e| safe_node_error(e));
         nodes.push(ParsedNode {
             id: id("node", &node_name),
             name: node_name,
@@ -400,14 +396,13 @@ fn clash_node(m: &Map<String, Value>) -> Result<Value> {
     Ok(json!({"type":"mihomo", "proxy":proxy}))
 }
 
-/// Recheck retained definitions against current capabilities without changing
-/// user permissions. A missing rejected definition requires an explicit refresh.
+/// Recheck retained definitions against current capabilities. Node-declared TLS
+/// exceptions are accepted automatically; missing definitions still need a refresh.
 pub(super) fn revalidate_retained_nodes(catalog: &mut ParsedCatalog) {
     for node in &mut catalog.nodes {
         let Some(outbound) = node.outbound.as_ref() else {
             continue;
         };
-        let approved = node.error.is_none();
         let result = if outbound["type"] == "mihomo" {
             outbound["proxy"]
                 .as_object()
@@ -426,9 +421,7 @@ pub(super) fn revalidate_retained_nodes(catalog: &mut ParsedCatalog) {
         };
         match result {
             Ok(current) => {
-                node.error = (!approved
-                    && super::codex_proxy_catalog_binding::is_insecure(&current))
-                .then(|| "PROXY_TLS_INSECURE".into());
+                node.error = None;
                 if current["type"] == "mihomo" {
                     node.protocol = current["proxy"]["type"]
                         .as_str()
@@ -541,7 +534,7 @@ fn clash_group(value: &Value, node_names: &[String], has_providers: bool) -> Res
 }
 
 pub(super) fn validate(catalog: &mut ParsedCatalog) -> Result<()> {
-    // Availability is derived from the current capabilities and permissions.
+    // Availability is derived from the current capabilities.
     // Recompute it for persisted catalogs; keep actual parse/option failures.
     for group in &mut catalog.groups {
         if group

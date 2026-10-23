@@ -17,6 +17,47 @@ fn replace_collection_account_references(
             .fold(false, |changed, value| replace(value, old, new) | changed)
     }
     let mut changed = replace_list(&mut collection.account_ids, old_id, new_id);
+    changed |= replace_list(
+        &mut collection.capability_fallback.account_ids,
+        old_id,
+        new_id,
+    );
+    let previous_backup_count = collection.capability_fallback.account_ids.len();
+    let mut backup_ids = HashSet::new();
+    collection
+        .capability_fallback
+        .account_ids
+        .retain(|id| backup_ids.insert(id.clone()));
+    changed |= collection.capability_fallback.account_ids.len() != previous_backup_count;
+    // A partial/legacy migration may already contain target declarations.
+    // Keep those whole model entries, regardless of their ordering, instead
+    // of letting source declarations shadow them or create invalid duplicates.
+    let target_models: HashSet<String> = collection
+        .capability_fallback
+        .overrides
+        .iter()
+        .filter(|entry| entry.account_id.trim() == new_id)
+        .map(|entry| entry.model.trim().to_owned())
+        .collect();
+    collection.capability_fallback.overrides.retain(|entry| {
+        let collision = old_id != new_id
+            && entry.account_id.trim() == old_id
+            && target_models.contains(entry.model.trim());
+        changed |= collision;
+        !collision
+    });
+    for entry in &mut collection.capability_fallback.overrides {
+        changed |= replace(&mut entry.account_id, old_id, new_id);
+    }
+    for entry in &mut collection.multi_agent.compat_models {
+        changed |= replace(&mut entry.account_id, old_id, new_id);
+    }
+    let mut multi_agent_seen = HashSet::new();
+    collection.multi_agent.compat_models.retain(|entry| {
+        let keep = multi_agent_seen.insert((entry.account_id.clone(), entry.model.to_ascii_lowercase()));
+        changed |= !keep;
+        keep
+    });
     changed |= replace_list(&mut collection.image_generation_account_ids, old_id, new_id);
     if let Some(model) = collection.image_generation_account_models.remove(old_id) {
         collection.image_generation_account_models.insert(new_id.to_string(), model);

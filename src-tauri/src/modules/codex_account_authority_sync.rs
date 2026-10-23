@@ -337,7 +337,7 @@ where
 }
 
 /// One authoritative raw-store selection for OAuth, API keys and identity logins.
-fn read_configured_codex_auth_value(base_dir: &Path) -> Result<Option<serde_json::Value>, String> {
+pub(crate) fn read_configured_codex_auth_value(base_dir: &Path) -> Result<Option<serde_json::Value>, String> {
     let read_file = || -> Result<Option<serde_json::Value>, String> {
         match fs::read(base_dir.join("auth.json")) {
             Ok(raw) => serde_json::from_slice(&raw)

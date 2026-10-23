@@ -34,6 +34,9 @@ interface CodexAccountPoolHealthModalProps {
   accountPoolHealth: CodexLocalAccessAccountPoolHealth[];
   /** 手动恢复后仍在抑制窗口内的账号，暂时不显示这些账号的异常行。 */
   recoverySuppressedAccountIds?: string[];
+  /** Paused members are intentional and must not be recovered as failures. */
+  pausedAccountIds?: string[];
+  officialAccountBindings?: Readonly<Record<string, string>>;
   actionBusy: boolean;
   maskAccountText?: (value: string) => string;
   onClose: () => void;
@@ -79,6 +82,7 @@ function resolveIssueDisplayName(
 function issueKindForHealth(
   account: CodexAccount | undefined,
   health: CodexLocalAccessAccountHealth | null,
+  official: boolean,
 ): HealthIssueKind | null {
   if (!account) return "missing";
   if (health?.cooldowns?.length) return "cooldown";
@@ -91,7 +95,7 @@ function issueKindForHealth(
   }
   if (
     health?.schedulerReason === "quota" ||
-    isBlockingCodexAccountQuotaError(account)
+    (!official && isBlockingCodexAccountQuotaError(account))
   ) {
     return "quota";
   }
@@ -126,11 +130,14 @@ function formatCooldown(
     hour: "2-digit",
     minute: "2-digit",
   });
-  return t("codex.localAccess.accountPoolHealth.dialog.cooldownUntil", {
+  const until = t("codex.localAccess.accountPoolHealth.dialog.cooldownUntil", {
     model,
     time,
     defaultValue: "模型 {{model}} 冷却至 {{time}}",
   });
+  return cooldown.reason === "transient_upstream"
+    ? `${until} · ${t("codex.localAccess.accountPoolHealth.dialog.upstreamDetail")}`
+    : until;
 }
 
 type PoolMemberStatus =
@@ -138,6 +145,7 @@ type PoolMemberStatus =
 
 function isRecoverableReason(reason: string | null | undefined): boolean {
   return ![
+    "state_refreshing",
     "disabled",
     "missing",
     "quota_reserved",
@@ -175,6 +183,8 @@ export function CodexAccountPoolHealthModal({
   accountHealth,
   accountPoolHealth,
   recoverySuppressedAccountIds,
+  pausedAccountIds,
+  officialAccountBindings,
   actionBusy,
   maskAccountText,
   onClose,
@@ -201,11 +211,11 @@ export function CodexAccountPoolHealthModal({
   const suppressedAccountIds = useMemo(
     () =>
       new Set(
-        (recoverySuppressedAccountIds ?? [])
+        [...(recoverySuppressedAccountIds ?? []), ...(pausedAccountIds ?? [])]
           .map((accountId) => accountId.trim())
           .filter(Boolean),
       ),
-    [recoverySuppressedAccountIds],
+    [recoverySuppressedAccountIds, pausedAccountIds],
   );
   const visiblePools = useMemo(
     () => accountPoolHealth.filter((pool) => {
@@ -232,7 +242,7 @@ export function CodexAccountPoolHealthModal({
     return accountIds.flatMap((accountId) => {
       const account = accountsById.get(accountId);
       const health = healthById.get(accountId) ?? null;
-      const kind = issueKindForHealth(account, health);
+      const kind = issueKindForHealth(account, health, Boolean(officialAccountBindings?.[accountId]));
       if (!kind) return [];
       const rawName = resolveIssueDisplayName(account, health, accountId, t("common.apiKeyAccount"));
       const displayName = maskAccountText ? maskAccountText(rawName) : rawName;
@@ -257,7 +267,7 @@ export function CodexAccountPoolHealthModal({
         health,
       }];
     });
-  }, [accountHealth, accountIds, accounts, maskAccountText, t]);
+  }, [accountHealth, accountIds, accounts, officialAccountBindings, maskAccountText, t]);
   // 恢复现在会立即返回、重活在后台继续跑；后台失败必须回到当前弹框内提示，
   // 不能只停留在日志或提示“已提交”。
   useEffect(() => {
@@ -353,6 +363,8 @@ export function CodexAccountPoolHealthModal({
       );
     }
     switch (issue.health?.schedulerReason) {
+      case "state_refreshing":
+        return t("common.loading");
       case "payment_required":
         return t(
           "codex.localAccess.accountPoolHealth.dialog.paymentDetail",

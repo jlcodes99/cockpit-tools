@@ -22,6 +22,7 @@ static REQUEST_LOG_WRITE_EPOCH: AtomicU64 = AtomicU64::new(0);
 static REQUEST_LOG_RECORDS_CLEARED_BEFORE: std::sync::atomic::AtomicI64 =
     std::sync::atomic::AtomicI64::new(0);
 static REQUEST_PAYLOAD_LOGGING_ENABLED: AtomicBool = AtomicBool::new(false);
+include!("codex_local_access_request_identity.rs");
 static REQUEST_FIRST_RESPONSE_CACHE: std::sync::LazyLock<Mutex<HashMap<String, (u64, i64)>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 static REQUEST_PAYLOAD_SETTING_WRITE_LOCK: std::sync::LazyLock<TokioMutex<()>> =
@@ -111,7 +112,7 @@ fn queue_local_access_usage_event(event: CodexLocalAccessUsageEvent) {
         let result = tauri::async_runtime::spawn_blocking(move || {
             let (_guard, conn) = open_local_access_logs_db_for_write()?;
             if epoch == REQUEST_LOG_WRITE_EPOCH.load(Ordering::SeqCst) {
-                insert_local_access_usage_event(&conn, &event)?;
+                insert_live_local_access_usage_event(&conn, &event)?;
             }
             Ok::<_, String>(())
         })
@@ -221,6 +222,12 @@ fn create_request_diagnostics_table(conn: &Connection) -> Result<(), SqliteError
         r#"
         CREATE TABLE IF NOT EXISTS request_diagnostics (
             request_id TEXT PRIMARY KEY,
+            client_identity_captured INTEGER NOT NULL DEFAULT 0,
+            client_session_id TEXT,
+            client_thread_id TEXT,
+            client_identity_metadata_captured INTEGER NOT NULL DEFAULT 0,
+            client_installation_id TEXT,
+            client_chatgpt_account_id TEXT,
             captured_at_ms INTEGER NOT NULL,
             first_response_ms INTEGER,
             failure_phase TEXT,
@@ -232,7 +239,8 @@ fn create_request_diagnostics_table(conn: &Connection) -> Result<(), SqliteError
         CREATE INDEX IF NOT EXISTS idx_request_diagnostics_captured_at
             ON request_diagnostics(captured_at_ms);
     "#,
-    )
+    )?;
+    ensure_request_identity_columns(conn)
 }
 
 fn diagnostics_table_exists(conn: &Connection) -> Result<bool, SqliteError> {
@@ -313,17 +321,52 @@ fn normalize_request_diagnostics(
     detail.request_id = detail.request_id.trim().to_string();
     detail.captured_at_ms = detail.captured_at_ms.max(0);
     detail.failure_phase = diagnostic_optional(detail.failure_phase, 80);
+    detail.truncated |= normalize_diagnostic_identity(
+        &mut detail.client_identity_captured,
+        &mut detail.client_session_id,
+        &mut detail.client_thread_id,
+    );
+    detail.truncated |= normalize_diagnostic_identity(
+        &mut detail.client_identity_metadata_captured,
+        &mut detail.client_installation_id,
+        &mut detail.client_chatgpt_account_id,
+    );
     detail.truncated |= detail.attempts.len() > REQUEST_DIAGNOSTICS_MAX_ATTEMPTS;
     detail.attempts.sort_by_key(|attempt| attempt.sequence);
     detail.attempts.truncate(REQUEST_DIAGNOSTICS_MAX_ATTEMPTS);
     for attempt in &mut detail.attempts {
+        detail.truncated |= normalize_diagnostic_identity(
+            &mut attempt.upstream_identity_captured,
+            &mut attempt.upstream_session_id,
+            &mut attempt.upstream_thread_id,
+        );
+        detail.truncated |= normalize_diagnostic_identity(
+            &mut attempt.upstream_identity_metadata_captured,
+            &mut attempt.upstream_installation_id,
+            &mut attempt.upstream_chatgpt_account_id,
+        );
+        detail.truncated |= normalize_diagnostic_account_profile(&mut attempt.account_identity);
         attempt.account_id = diagnostic_truncate(&attempt.account_id, 256);
         attempt.account_email = diagnostic_optional(attempt.account_email.take(), 256);
         attempt.model_id = diagnostic_truncate(&attempt.model_id, 256);
         attempt.transport = diagnostic_truncate(&attempt.transport, 32);
         attempt.error_category = diagnostic_optional(attempt.error_category.take(), 128);
         attempt.error_message = diagnostic_optional(attempt.error_message.take(), 1024);
+        attempt.upstream_request_id = attempt.upstream_request_id.take().filter(|value| {
+            !value.is_empty() && value.len() <= 256
+                && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        });
         attempt.failure_phase = diagnostic_optional(attempt.failure_phase.take(), 80);
+        attempt.transport_error = attempt.transport_error.take().filter(|kind| kind == "tls_decrypt");
+        if attempt.transport_error.is_none() {
+            attempt.transport_pool_retired = None;
+        }
+        attempt.upstream_http_version = attempt.upstream_http_version.take().filter(|version| {
+            matches!(version.as_str(), "HTTP/0.9" | "HTTP/1.0" | "HTTP/1.1" | "HTTP/2.0" | "HTTP/3.0")
+        });
+        detail.truncated |= normalize_capability_fallback_trace(attempt);
+        detail.truncated |= normalize_authorization_fallback_trace(attempt);
+        detail.truncated |= normalize_service_tier_adaptation(attempt);
     }
     detail.truncated |= detail.payloads.len() > REQUEST_DIAGNOSTICS_MAX_PAYLOADS;
     detail.payloads.truncate(REQUEST_DIAGNOSTICS_MAX_PAYLOADS);
@@ -370,6 +413,81 @@ fn normalize_request_diagnostics(
     detail
 }
 
+fn normalize_service_tier_adaptation(attempt: &mut CodexLocalAccessRequestAttempt) -> bool {
+    let Some(trace) = attempt.service_tier_adaptation.as_ref() else { return false; };
+    let valid = attempt.authorization_route.as_deref() == Some("official")
+        && trace.reason == "official_default_only" && trace.sent_tier == "default"
+        && !trace.requested_tier.is_empty() && trace.requested_tier.len() <= 64
+        && trace.requested_tier.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        && !matches!(trace.requested_tier.as_str(), "auto" | "default");
+    if !valid { attempt.service_tier_adaptation = None; }
+    !valid
+}
+
+/// Only a recorded switch within the selected account can label an authorization fallback.
+fn normalize_authorization_fallback_trace(attempt: &mut CodexLocalAccessRequestAttempt) -> bool {
+    let Some(mut trace) = attempt.authorization_fallback.take() else { return false; };
+    let valid_id = |value: &str| !value.trim().is_empty() && value.len() <= 256
+        && !value.chars().any(char::is_control) && !value.contains("://");
+    if trace.from_route != "official" || trace.to_route != "local_gateway"
+        || trace.from_account_id != trace.to_account_id || trace.to_account_id != attempt.account_id
+        || attempt.authorization_route.as_deref() != Some("local_gateway")
+        || !valid_id(&trace.from_account_id) || trace.reason.is_empty() || trace.reason.len() > 80
+        || !trace.reason.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    { return true; }
+    if trace.trigger_stage.is_empty() { trace.trigger_stage = "upstream".into(); }
+    if !matches!(trace.trigger_stage.as_str(), "upstream" | "preflight" | "health_pause") { return true; }
+    trace.error_code = trace.error_code.take().filter(|value| !value.is_empty() && value.len() <= 128
+        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')));
+    trace.error_message = diagnostic_optional(trace.error_message.take(), 1024);
+    trace.status = trace.status.filter(|status| (100..=599).contains(status));
+    attempt.authorization_fallback = Some(trace);
+    false
+}
+
+/// Fallback provenance is bounded routing metadata, independent of payload
+/// capture. A malformed or unrelated record must never label an ordinary retry.
+fn normalize_capability_fallback_trace(attempt: &mut CodexLocalAccessRequestAttempt) -> bool {
+    let Some(mut trace) = attempt.capability_fallback.take() else {
+        return false;
+    };
+    let valid_field = |value: &str| {
+        !value.trim().is_empty()
+            && value.len() <= 256
+            && !value.chars().any(char::is_control)
+            && !value.contains("://")
+    };
+    if !matches!(trace.reason.as_str(), "preflight" | "upstream_unsupported")
+        || ![
+            &trace.from_account_id,
+            &trace.from_model,
+            &trace.to_account_id,
+            &trace.to_model,
+        ]
+        .into_iter()
+        .all(|value| valid_field(value))
+        || trace.from_account_id == trace.to_account_id
+        || trace.to_account_id != attempt.account_id
+        || trace.to_model != attempt.model_id
+    {
+        return true;
+    }
+    let old_len = trace.capabilities.len();
+    trace.capabilities.retain(|capability| {
+        capability == "unknown_tool"
+            || crate::models::codex_local_access::CODEX_CAPABILITY_IDS
+                .contains(&capability.as_str())
+    });
+    trace.capabilities.sort();
+    trace.capabilities.dedup();
+    if trace.capabilities.is_empty() {
+        return true;
+    }
+    let truncated = old_len != trace.capabilities.len();
+    attempt.capability_fallback = Some(trace);
+    truncated
+}
+
 fn request_diagnostic_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<CodexLocalAccessRequestDetail> {
@@ -381,6 +499,18 @@ fn request_diagnostic_from_row(
     };
     Ok(CodexLocalAccessRequestDetail {
         request_id: row.get("request_id")?,
+        client_identity_captured: diagnostic_identity_bool_column(row, "client_identity_captured")?,
+        client_session_id: diagnostic_identity_text_column(row, "client_session_id")?,
+        client_thread_id: diagnostic_identity_text_column(row, "client_thread_id")?,
+        client_identity_metadata_captured: diagnostic_identity_bool_column(
+            row,
+            "client_identity_metadata_captured",
+        )?,
+        client_installation_id: diagnostic_identity_text_column(row, "client_installation_id")?,
+        client_chatgpt_account_id: diagnostic_identity_text_column(
+            row,
+            "client_chatgpt_account_id",
+        )?,
         captured_at_ms: row.get("captured_at_ms")?,
         first_response_ms: first_response_ms.and_then(|value| u64::try_from(value).ok()),
         failure_phase: row.get("failure_phase")?,
@@ -413,6 +543,18 @@ fn merge_request_diagnostics(
     incoming: CodexLocalAccessRequestDetail,
 ) -> CodexLocalAccessRequestDetail {
     let newer = incoming.captured_at_ms >= previous.captured_at_ms;
+    if incoming.client_identity_metadata_captured
+        && (!previous.client_identity_metadata_captured || newer)
+    {
+        previous.client_identity_metadata_captured = true;
+        previous.client_installation_id = incoming.client_installation_id.clone();
+        previous.client_chatgpt_account_id = incoming.client_chatgpt_account_id.clone();
+    }
+    if incoming.client_identity_captured && (!previous.client_identity_captured || newer) {
+        previous.client_identity_captured = true;
+        previous.client_session_id = incoming.client_session_id.clone();
+        previous.client_thread_id = incoming.client_thread_id.clone();
+    }
     previous.first_response_ms = match (previous.first_response_ms, incoming.first_response_ms) {
         (Some(left), Some(right)) => Some(left.min(right)),
         (left, right) => left.or(right),
@@ -422,13 +564,54 @@ fn merge_request_diagnostics(
     }
     previous.captured_at_ms = previous.captured_at_ms.max(incoming.captured_at_ms);
     previous.truncated |= incoming.truncated;
-    for attempt in incoming.attempts {
+    for mut attempt in incoming.attempts {
         match previous
             .attempts
             .iter_mut()
             .find(|old| old.sequence == attempt.sequence)
         {
-            Some(old) if newer => *old = attempt,
+            Some(old) if newer => {
+                let same_attempt = old.account_id == attempt.account_id
+                    && old.started_at_ms == attempt.started_at_ms;
+                if !attempt.upstream_identity_metadata_captured && same_attempt {
+                    attempt.upstream_identity_metadata_captured =
+                        old.upstream_identity_metadata_captured;
+                    attempt.upstream_installation_id = old.upstream_installation_id.clone();
+                    attempt.upstream_chatgpt_account_id = old.upstream_chatgpt_account_id.clone();
+                    if attempt.account_identity.is_none() {
+                        attempt.account_identity = old.account_identity.clone();
+                    }
+                }
+                if !attempt.upstream_identity_captured
+                    && old.upstream_identity_captured
+                    && old.account_id == attempt.account_id
+                    && old.started_at_ms == attempt.started_at_ms
+                {
+                    attempt.upstream_identity_captured = true;
+                    attempt.upstream_session_id = old.upstream_session_id.clone();
+                    attempt.upstream_thread_id = old.upstream_thread_id.clone();
+                }
+                // A later completion snapshot may omit optional provenance.
+                // Retain it only for the very same account/model/attempt.
+                if same_attempt && old.model_id == attempt.model_id {
+                    attempt.authorization_route = attempt.authorization_route.or_else(|| old.authorization_route.clone());
+                    attempt.authorization_fallback = attempt.authorization_fallback.or_else(|| old.authorization_fallback.clone());
+                    attempt.upstream_request_id = attempt.upstream_request_id.or_else(|| old.upstream_request_id.clone());
+                    attempt.transport_error = attempt.transport_error.or_else(|| old.transport_error.clone());
+                    attempt.transport_pool_retired = match (old.transport_pool_retired, attempt.transport_pool_retired) {
+                        (Some(old), Some(new)) => Some(old || new),
+                        (old, new) => new.or(old),
+                    };
+                    attempt.upstream_http_version = attempt.upstream_http_version.or_else(|| old.upstream_http_version.clone());
+                }
+                if same_attempt
+                    && old.model_id == attempt.model_id
+                    && old.capability_fallback.is_some()
+                {
+                    attempt.capability_fallback = old.capability_fallback.clone();
+                }
+                *old = attempt;
+            }
             Some(_) => {}
             None => previous.attempts.push(attempt),
         }
@@ -464,13 +647,17 @@ fn insert_request_diagnostic(
         .map(|payload| payload.body.len())
         .sum();
     conn.execute(r#"INSERT INTO request_diagnostics
-        (request_id,captured_at_ms,first_response_ms,failure_phase,attempts_json,payloads_json,payload_bytes,truncated)
-        VALUES (?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(request_id) DO UPDATE SET
+        (request_id,captured_at_ms,first_response_ms,failure_phase,attempts_json,payloads_json,payload_bytes,truncated,client_identity_captured,client_session_id,client_thread_id,client_identity_metadata_captured,client_installation_id,client_chatgpt_account_id)
+        VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14) ON CONFLICT(request_id) DO UPDATE SET
         captured_at_ms=excluded.captured_at_ms,first_response_ms=excluded.first_response_ms,
         failure_phase=excluded.failure_phase,attempts_json=excluded.attempts_json,
-        payloads_json=excluded.payloads_json,payload_bytes=excluded.payload_bytes,truncated=excluded.truncated"#,
+        payloads_json=excluded.payloads_json,payload_bytes=excluded.payload_bytes,truncated=excluded.truncated,
+        client_identity_captured=excluded.client_identity_captured,client_session_id=excluded.client_session_id,client_thread_id=excluded.client_thread_id,
+        client_identity_metadata_captured=excluded.client_identity_metadata_captured,client_installation_id=excluded.client_installation_id,client_chatgpt_account_id=excluded.client_chatgpt_account_id"#,
         params![detail.request_id,detail.captured_at_ms,detail.first_response_ms.map(|value| value.min(i64::MAX as u64) as i64),
-            detail.failure_phase,attempts,payloads,payload_bytes as i64,bool_to_db_value(detail.truncated)])
+            detail.failure_phase,attempts,payloads,payload_bytes as i64,bool_to_db_value(detail.truncated),
+            bool_to_db_value(detail.client_identity_captured),detail.client_session_id,detail.client_thread_id,
+            bool_to_db_value(detail.client_identity_metadata_captured),detail.client_installation_id,detail.client_chatgpt_account_id])
         .map_err(|error| format!("写入请求诊断失败: {error}"))?;
     // This updates metadata only; usage events and aggregate statistics are never replayed.
     if request_logs_has_column(conn, "first_response_ms").unwrap_or(false) {
@@ -546,7 +733,7 @@ fn apply_request_diagnostic_write(
     match write {
         RequestDiagnosticWrite::Usage(event, epoch) => {
             if epoch == REQUEST_LOG_WRITE_EPOCH.load(Ordering::SeqCst) {
-                insert_local_access_usage_event(conn, &event)?;
+                insert_live_local_access_usage_event(conn, &event)?;
             }
         }
         RequestDiagnosticWrite::Detail(mut detail, payload_epoch, log_epoch) => {
@@ -556,7 +743,9 @@ fn apply_request_diagnostic_write(
             if payload_epoch != REQUEST_DIAGNOSTICS_PAYLOAD_EPOCH.load(Ordering::SeqCst) {
                 detail.payloads.clear();
             }
+            let request_id = detail.request_id.clone();
             insert_request_diagnostic(conn, *detail)?;
+            refresh_live_request_summary(conn, &request_id);
         }
     }
     Ok(())
@@ -689,7 +878,7 @@ fn persist_request_payload_logging_at_path(path: &Path, enabled: bool) -> Result
 async fn running_request_diagnostic_ports(enabled: bool) -> Vec<u16> {
     let mut ports = {
         let runtime = gateway_runtime().lock().await;
-        if runtime.running {
+        if runtime.running && runtime.native_handle.is_none() {
             runtime.actual_port.into_iter().collect::<Vec<_>>()
         } else {
             Vec::new()

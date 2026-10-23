@@ -740,6 +740,9 @@ func isStaleExecutionResult(result Result, current *Auth) bool {
 
 // MarkResult records an execution result and notifies hooks.
 func (m *Manager) MarkResult(ctx context.Context, result Result) {
+	if skipUnsentExecutionResult(ctx, result) {
+		return
+	}
 	if result.AuthID == "" {
 		return
 	}
@@ -1021,6 +1024,9 @@ func (m *Manager) recordExecutionResult(ctx context.Context, result Result, auth
 
 // reportHomeResult only observes a Home dispatch result and never updates local auth state.
 func (m *Manager) reportHomeResult(ctx context.Context, result Result, auth *Auth) {
+	if skipUnsentExecutionResult(ctx, result) {
+		return
+	}
 	if m == nil || result.AuthID == "" {
 		return
 	}
@@ -1033,6 +1039,9 @@ func (m *Manager) reportHomeResult(ctx context.Context, result Result, auth *Aut
 }
 
 func (m *Manager) recordAvailabilityNeutralResult(ctx context.Context, result Result) {
+	if skipUnsentExecutionResult(ctx, result) {
+		return
+	}
 	if result.AuthID == "" {
 		return
 	}
@@ -1479,6 +1488,11 @@ func resultErrorFromError(err error) *Error {
 func shouldSkipCredentialCooldown(err *Error) bool {
 	if err != nil && err.Code == ErrorCodeForceCooldown {
 		return false
+	}
+	// Local quota admission did not send a request or observe an upstream 429.
+	// Keep credential rotation available without poisoning its health state.
+	if err != nil && err.Code == "quota_reserved" && err.HTTPStatus == http.StatusTooManyRequests {
+		return true
 	}
 	return isRequestScopedResultError(err) || isConnectionLifecycleResultError(err)
 }

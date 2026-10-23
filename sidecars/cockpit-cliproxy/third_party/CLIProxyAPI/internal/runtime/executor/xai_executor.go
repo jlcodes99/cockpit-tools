@@ -57,6 +57,7 @@ const (
 	xaiNamespaceToolType       = "namespace"
 	xaiToolSearchType          = "tool_search"
 	xaiWebSearchToolType       = "web_search"
+	xaiClientWebSearchAlias    = "clientfn_web_search"
 	xaiXSearchToolType         = "x_search"
 	xaiMaxTools                = 200
 	// Codex Desktop injects codex_app.automation_update with a large oneOf+$ref
@@ -82,9 +83,9 @@ const (
 	xaiTokenAuthHeader          = "X-XAI-Token-Auth"
 	xaiTokenAuthValue           = "xai-grok-cli"
 	xaiClientVersionHeader      = "x-grok-client-version"
-	// Pinned to @xai-official/grok's stable version, matching CLIProxyAPI v8.0.20's fallback.
-	// Upstream #6252 reports HTTP 426 for versions below 1.0.13.
-	xaiClientVersionValue         = "1.0.46"
+	xaiCLIClientVersionHeader   = "x-grok-cli-version"
+	// The cached npm version is used at runtime; this pin is the offline fallback.
+	xaiClientVersionValue         = helps.DefaultXAIFallbackClientVersion
 	xaiClientIdentifierHeader     = "x-grok-client-identifier"
 	xaiClientIdentifierValue      = "grok-shell"
 	xaiAuthenticateResponseHeader = "x-authenticateresponse"
@@ -105,6 +106,11 @@ type XAIExecutor struct {
 // NewXAIExecutor creates a new xAI executor.
 func NewXAIExecutor(cfg *config.Config) *XAIExecutor {
 	return &XAIExecutor{cfg: cfg}
+}
+
+// StartXAIVersionUpdater refreshes the Grok CLI identity outside request paths.
+func StartXAIVersionUpdater(ctx context.Context, proxyURL string) {
+	helps.StartXAIVersionUpdater(ctx, proxyURL)
 }
 
 // Identifier returns the provider identifier.

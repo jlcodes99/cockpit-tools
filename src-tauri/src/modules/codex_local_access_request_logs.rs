@@ -1,4 +1,9 @@
 // Codex Local Access：Request log database, usage statistics and repricing workers。
+#[cfg(test)]
+#[path = "codex_request_summary_writer_tests.rs"]
+mod request_summary_writer_tests;
+include!("codex_local_access_log_maintenance.rs");
+include!("codex_local_access_window_stats.rs");
 // 通过 include! 保持原 modules::codex_local_access 作用域和私有调用关系。
 fn request_kind_to_db_value(request_kind: CodexLocalAccessRequestKind) -> &'static str {
     match request_kind {
@@ -22,6 +27,7 @@ fn gateway_mode_to_db_value(gateway_mode: CodexLocalAccessGatewayMode) -> &'stat
     match gateway_mode {
         CodexLocalAccessGatewayMode::Legacy => "legacy",
         CodexLocalAccessGatewayMode::Sidecar => "sidecar",
+        CodexLocalAccessGatewayMode::Native => "native",
     }
 }
 
@@ -29,6 +35,7 @@ fn gateway_mode_from_db_value(value: &str) -> Option<CodexLocalAccessGatewayMode
     match value.trim() {
         "legacy" => Some(CodexLocalAccessGatewayMode::Legacy),
         "sidecar" => Some(CodexLocalAccessGatewayMode::Sidecar),
+        "native" => Some(CodexLocalAccessGatewayMode::Native),
         _ => None,
     }
 }
@@ -401,38 +408,6 @@ fn open_local_access_logs_db_once(
             ON request_logs(request_id, timestamp DESC);
         "#,
     )?;
-    conn.execute(
-        r#"
-        UPDATE request_logs
-        SET error_category = 'upstream_response_failed'
-        WHERE success = 0
-          AND error_category != 'upstream_response_failed'
-          AND (
-            lower(error_message) LIKE '%upstream_response_failed%'
-            OR lower(error_message) LIKE '%codex upstream response.failed%'
-            OR lower(error_message) LIKE '%last_event=response.failed%'
-          )
-        "#,
-        [],
-    )?;
-    conn.execute(
-        r#"
-        UPDATE request_logs
-        SET error_category = 'stream_incomplete'
-        WHERE success = 0
-          AND error_category != 'stream_incomplete'
-          AND error_category != 'upstream_response_failed'
-          AND (
-            lower(error_message) LIKE '%stream disconnected before completion%'
-            OR lower(error_message) LIKE '%error decoding response body%'
-            OR lower(error_message) LIKE '%closed before response.completed%'
-            OR lower(error_message) LIKE '%closed before response.done%'
-            OR lower(error_message) LIKE '%stream ended before completion%'
-            OR lower(error_message) LIKE '%incomplete_eof%'
-          )
-        "#,
-        [],
-    )?;
     Ok(conn)
 }
 
@@ -548,14 +523,33 @@ fn deserialize_token_breakdown_from_db(raw: &str) -> Option<CodexTokenBreakdown>
     serde_json::from_str(raw).ok()
 }
 
-fn request_logs_proxy_route_select(conn: &Connection) -> Result<&'static str, String> {
-    if request_logs_has_column(conn, "proxy_route_json")
-        .map_err(|e| format!("检查 API 服务日志 proxy_route_json 列失败: {}", e))?
-    {
-        Ok("proxy_route_json")
-    } else {
-        Ok("'' AS proxy_route_json")
+fn request_logs_proxy_route_select(conn: &Connection) -> Result<String, String> {
+    let projection = ["proxy_route_json", "authorization_route"].into_iter().map(|column| {
+        request_logs_has_column(conn, column).map(|exists| if exists { column.to_string() } else { format!("'' AS {column}") })
+    }).collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?;
+    Ok(projection.join(", "))
+}
+
+fn request_logs_authorization_fallback_select(conn: &Connection) -> Result<String, String> {
+    if !diagnostics_table_exists(conn).map_err(|error| error.to_string())? {
+        return Ok("'' AS authorization_attempts_json".into());
     }
+    // Primary-key lookup per visible row only. Never read payloads, wait for an in-flight
+    // diagnostic, or scan all diagnostics merely to decorate a paginated list.
+    Ok("(SELECT CASE WHEN length(CAST(attempts_json AS BLOB)) <= 65536 THEN attempts_json ELSE '[]' END FROM request_diagnostics WHERE request_id=request_logs.request_id) AS authorization_attempts_json".into())
+}
+
+fn authorization_fallback_from_attempts_json(raw: &str) -> Option<crate::models::codex_local_access::CodexLocalAccessAuthorizationFallbackTrace> {
+    if raw.is_empty() || raw.len() > 65536 { return None; }
+    let attempts: Vec<CodexLocalAccessRequestAttempt> = serde_json::from_str(raw).ok()?;
+    attempts.into_iter().take(REQUEST_DIAGNOSTICS_MAX_ATTEMPTS).find_map(|mut attempt| {
+        normalize_authorization_fallback_trace(&mut attempt);
+        attempt.authorization_fallback
+    })
+}
+
+fn service_tier_adaptation_from_attempts_json(raw: &str) -> Option<crate::models::codex_local_access::CodexLocalAccessServiceTierAdaptation> {
+    crate::modules::codex_request_summary::service_tier_adaptation(raw)
 }
 
 fn official_stats_account_id(local_account_id: &str) -> Option<String> {
@@ -577,6 +571,12 @@ fn insert_local_access_usage_event(
     conn: &Connection,
     event: &CodexLocalAccessUsageEvent,
 ) -> Result<(), String> {
+    // Classify the incoming row once; readers never rewrite failed history.
+    let normalized_error_category = normalized_request_log_error_category(
+        event.success,
+        event.error_category.trim(),
+        event.error_message.trim(),
+    );
     let has_service_tier_column = request_logs_has_service_tier_column(conn)
         .map_err(|e| format!("检查 API 服务日志 service_tier 列失败: {}", e))?;
     let has_reasoning_effort_column = request_logs_has_column(conn, "reasoning_effort")
@@ -680,7 +680,7 @@ fn insert_local_access_usage_event(
                 reasoning_effort,
                 bool_to_db_value(event.success),
                 event.http_status.map(|value| value as i64),
-                event.error_category.trim(),
+                normalized_error_category.as_ref(),
                 event.error_message.trim(),
                 event.latency_ms as i64,
                 event.input_tokens as i64,
@@ -763,7 +763,7 @@ fn insert_local_access_usage_event(
                 service_tier,
                 bool_to_db_value(event.success),
                 event.http_status.map(|value| value as i64),
-                event.error_category.trim(),
+                normalized_error_category.as_ref(),
                 event.error_message.trim(),
                 event.latency_ms as i64,
                 event.input_tokens as i64,
@@ -844,7 +844,7 @@ fn insert_local_access_usage_event(
                 request_kind_to_db_value(event.request_kind),
                 bool_to_db_value(event.success),
                 event.http_status.map(|value| value as i64),
-                event.error_category.trim(),
+                normalized_error_category.as_ref(),
                 event.error_message.trim(),
                 event.latency_ms as i64,
                 event.input_tokens as i64,
@@ -866,6 +866,10 @@ fn insert_local_access_usage_event(
             ],
         )
         .map_err(|e| format!("写入 API 服务请求日志失败: {}", e))?;
+    }
+    ensure_request_logs_column(conn, "authorization_route", "authorization_route TEXT NOT NULL DEFAULT ''").map_err(|error| error.to_string())?;
+    if let Some(route) = event.authorization_route.as_deref().filter(|route| matches!(*route, "official" | "local_gateway")) {
+        conn.execute("UPDATE request_logs SET authorization_route=?1 WHERE event_key=?2 AND authorization_route=''", params![route, local_access_log_event_key(event)]).map_err(|error| error.to_string())?;
     }
     if let Some(official_account_id) = official_stats_account_id(&event.account_id) {
         conn.execute(
@@ -902,7 +906,26 @@ fn insert_local_access_usage_event(
 
 fn persist_local_access_usage_event(event: &CodexLocalAccessUsageEvent) -> Result<(), String> {
     let (_write_guard, conn) = open_local_access_logs_db_for_write()?;
-    insert_local_access_usage_event(&conn, event)
+    insert_live_local_access_usage_event(&conn, event)
+}
+
+// Live Rust and sidecar events use this wrapper. Historical JSON migration
+// intentionally calls the original insert function and never backfills summaries.
+fn insert_live_local_access_usage_event(
+    conn: &Connection,
+    event: &CodexLocalAccessUsageEvent,
+) -> Result<(), String> {
+    insert_local_access_usage_event(conn, event)?;
+    refresh_live_request_summary(conn, &event.request_id);
+    Ok(())
+}
+
+fn refresh_live_request_summary(conn: &Connection, request_id: &str) {
+    if let Err(error) = crate::modules::codex_request_summary::refresh_request(conn, request_id) {
+        logger::log_codex_api_warn(&format!(
+            "请求展示摘要更新失败，原始请求日志已保留，后续请求更新可重试: {error}"
+        ));
+    }
 }
 
 fn migrate_local_access_json_events(
@@ -1668,6 +1691,7 @@ fn clear_local_access_usage_events_db() -> Result<(), String> {
         conn.execute("DELETE FROM request_diagnostics", [])
             .map_err(|e| format!("清空 API 服务请求诊断失败: {}", e))?;
     }
+    crate::modules::codex_request_summary::clear_if_present(&conn)?;
     conn.execute("DELETE FROM request_logs", [])
         .map_err(|e| format!("清空 API 服务请求日志失败: {}", e))?;
     conn.execute_batch("COMMIT")
@@ -1687,7 +1711,14 @@ fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalA
         let value: i64 = row.get(name)?;
         Ok(value.max(0) as u64)
     };
-    Ok(CodexLocalAccessUsageEvent {
+    let mut event = CodexLocalAccessUsageEvent {
+        service_tier_adaptation: row.get::<_, String>("authorization_route").ok()
+            .filter(|route| route == "official")
+            .and_then(|_| row.get::<_, Option<String>>("authorization_attempts_json").ok().flatten())
+            .as_deref().and_then(service_tier_adaptation_from_attempts_json),
+        authorization_route: row.get::<_, String>("authorization_route").ok().filter(|route| matches!(route.as_str(), "official" | "local_gateway")),
+        authorization_fallback: row.get::<_, Option<String>>("authorization_attempts_json").ok().flatten()
+            .as_deref().and_then(authorization_fallback_from_attempts_json),
         timestamp: row.get("timestamp")?,
         request_id: row.get("request_id")?,
         account_id: row.get("account_id")?,
@@ -1742,7 +1773,11 @@ fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalA
         input_usd_per_million: row.get("input_usd_per_million")?,
         output_usd_per_million: row.get("output_usd_per_million")?,
         cached_input_usd_per_million: row.get("cached_input_usd_per_million")?,
-    })
+    };
+    // A background migration may not have reached this row yet. Decode the
+    // same category on either side of its checkpoint, without another scan.
+    normalize_request_log_event_category(&mut event);
+    Ok(event)
 }
 
 fn for_each_local_access_usage_event_since<F>(since: i64, on_event: F) -> Result<(), String>
@@ -2072,7 +2107,7 @@ fn query_local_access_usage_events_blocking(
         params.push(SqlValue::Integer(end_at));
     }
     // 模型筛选同时匹配客户端请求模型与实际上游模型：
-    // 例如用 `cpa/gpt-5.5` 或 `glm-5.3` 都能命中同一条路由日志。
+    // 例如用 `cpa/gpt-5.6-sol` 或 `glm-5.3` 都能命中同一条路由日志。
     push_like_filter(
         &mut clauses,
         &mut params,
@@ -2194,6 +2229,7 @@ fn query_local_access_usage_events_blocking(
     let proxy_route_select = request_logs_proxy_route_select(&conn)?;
     let first_response_select = request_logs_first_response_select(&conn)?;
     let output_generation_select = request_logs_output_generation_select(&conn)?;
+    let authorization_fallback_select = request_logs_authorization_fallback_select(&conn)?;
     let list_sql = format!(
         r#"
         SELECT
@@ -2213,6 +2249,7 @@ fn query_local_access_usage_events_blocking(
             {reasoning_effort_select},
             {service_tier_evidence_select},
             {proxy_route_select},
+            {authorization_fallback_select},
             {first_response_select}, {output_generation_select},
             turn_state_length,
             turn_state_class,
@@ -2389,161 +2426,6 @@ pub async fn query_local_access_stats_window(
     .map_err(|e| format!("统计 API 服务时间范围任务失败: {}", e))?
 }
 
-pub async fn query_local_access_account_window_stats(
-    queries: Vec<CodexLocalAccessAccountWindowQuery>,
-) -> Result<Vec<CodexLocalAccessAccountWindowStats>, String> {
-    ensure_runtime_loaded_without_start().await?;
-    tauri::async_runtime::spawn_blocking(move || {
-        query_local_access_account_window_stats_blocking(queries)
-    })
-    .await
-    .map_err(|e| format!("统计 API 服务账号窗口用量任务失败: {}", e))?
-}
-
-/// request_logs.timestamp 存毫秒。官方额度 resetAt / 前端误传的 Unix 秒会小于 1e12。
-fn normalize_request_log_time_bound(value: i64) -> i64 {
-    if value > 0 && value < 1_000_000_000_000 {
-        value.saturating_mul(1000)
-    } else {
-        value
-    }
-}
-
-struct AccountWindowStatSpec {
-    account_id: String,
-    window_key: String,
-    start_at: i64,
-    end_at: i64,
-}
-
-/// API 服务请求日志的 `account_id` 是本地 Codex 账号 ID。
-/// Team/Workspace 的官方 `account_id` 可能被多个成员共享，不能作为本地账号统计键。
-fn account_window_stat_identity_matches(row_account_id: &str, requested_account_id: &str) -> bool {
-    let row_account_id = row_account_id.trim();
-    let requested_account_id = requested_account_id.trim();
-    !row_account_id.is_empty() && row_account_id == requested_account_id
-}
-
-fn query_local_access_account_window_stats_blocking(
-    queries: Vec<CodexLocalAccessAccountWindowQuery>,
-) -> Result<Vec<CodexLocalAccessAccountWindowStats>, String> {
-    let conn = open_local_access_logs_db()?;
-    query_local_access_account_window_stats_from_conn(&conn, queries)
-}
-
-fn query_local_access_account_window_stats_from_conn(
-    conn: &Connection,
-    queries: Vec<CodexLocalAccessAccountWindowQuery>,
-) -> Result<Vec<CodexLocalAccessAccountWindowStats>, String> {
-    if queries.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut specs = Vec::new();
-    let mut min_start = i64::MAX;
-    let mut max_end = 0i64;
-    let mut local_account_ids = HashSet::new();
-    for query in &queries {
-        let account_id = query.account_id.trim();
-        let window_key = query.window_key.trim();
-        let start_at = normalize_request_log_time_bound(query.start_at);
-        let end_at = normalize_request_log_time_bound(query.end_at);
-        if account_id.is_empty() || window_key.is_empty() || end_at < start_at {
-            continue;
-        }
-        min_start = min_start.min(start_at);
-        max_end = max_end.max(end_at);
-        local_account_ids.insert(account_id.to_string());
-        specs.push(AccountWindowStatSpec {
-            account_id: account_id.to_string(),
-            window_key: window_key.to_string(),
-            start_at,
-            end_at,
-        });
-    }
-    if specs.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let placeholders = local_account_ids
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        "SELECT account_id, timestamp,
-                input_tokens, output_tokens, total_tokens,
-                cached_tokens, estimated_cost_usd
-         FROM request_logs
-         WHERE timestamp >= ? AND timestamp <= ?
-           AND account_id IN ({placeholders})"
-    );
-    let mut statement = conn
-        .prepare(sql.as_str())
-        .map_err(|e| format!("准备 API 服务账号窗口查询失败: {}", e))?;
-    let mut params: Vec<rusqlite::types::Value> = vec![
-        rusqlite::types::Value::Integer(min_start),
-        rusqlite::types::Value::Integer(max_end),
-    ];
-    for account_id in &local_account_ids {
-        params.push(rusqlite::types::Value::Text(account_id.clone()));
-    }
-
-    let mut totals = HashMap::<(String, String), CodexLocalAccessAccountWindowStats>::new();
-    for spec in &specs {
-        totals.insert(
-            (spec.account_id.clone(), spec.window_key.clone()),
-            CodexLocalAccessAccountWindowStats {
-                account_id: spec.account_id.clone(),
-                window_key: spec.window_key.clone(),
-                ..CodexLocalAccessAccountWindowStats::default()
-            },
-        );
-    }
-
-    let rows = statement
-        .query_map(rusqlite::params_from_iter(params.iter()), |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?.max(0) as u64,
-                row.get::<_, i64>(3)?.max(0) as u64,
-                row.get::<_, i64>(4)?.max(0) as u64,
-                row.get::<_, i64>(5)?.max(0) as u64,
-                row.get::<_, f64>(6).unwrap_or(0.0),
-            ))
-        })
-        .map_err(|e| format!("查询 API 服务账号窗口用量失败: {}", e))?;
-
-    for row in rows {
-        let (row_account_id, timestamp, input, output, total, cached, cost) =
-            row.map_err(|e| format!("解析 API 服务账号窗口用量失败: {}", e))?;
-        for spec in &specs {
-            if !account_window_stat_identity_matches(&row_account_id, &spec.account_id)
-                || timestamp < spec.start_at
-                || timestamp > spec.end_at
-            {
-                continue;
-            }
-            if let Some(entry) = totals.get_mut(&(spec.account_id.clone(), spec.window_key.clone()))
-            {
-                entry.request_count = entry.request_count.saturating_add(1);
-                entry.input_tokens = entry.input_tokens.saturating_add(input);
-                entry.output_tokens = entry.output_tokens.saturating_add(output);
-                entry.total_tokens = entry.total_tokens.saturating_add(total);
-                entry.cached_tokens = entry.cached_tokens.saturating_add(cached);
-                if cost.is_finite() && cost > 0.0 {
-                    entry.estimated_cost_usd += cost;
-                }
-            }
-        }
-    }
-
-    Ok(specs
-        .into_iter()
-        .filter_map(|spec| totals.remove(&(spec.account_id, spec.window_key)))
-        .collect())
-}
 
 fn apply_usage_event_to_stats(
     stats: &mut CodexLocalAccessStats,
@@ -2729,6 +2611,9 @@ fn append_usage_event_with_meta(
     let usage = usage.cloned().unwrap_or_default();
     let model_id = model_id.unwrap_or_default().trim().to_string();
     let event = CodexLocalAccessUsageEvent {
+        authorization_route: None,
+        authorization_fallback: None,
+        service_tier_adaptation: None,
         timestamp: now,
         request_id: request_id.unwrap_or_default().trim().to_string(),
         account_id: account_id.unwrap_or_default().trim().to_string(),
@@ -2935,6 +2820,16 @@ fn apply_usage_event_to_current_windows(
     if event.timestamp >= stats.daily.since {
         apply_usage_event_to_window(&mut stats.daily, event);
     }
+}
+
+fn apply_snapshot_usage_event_to_current_windows(
+    stats: &mut CodexLocalAccessStats,
+    mut event: CodexLocalAccessUsageEvent,
+    now: i64,
+) {
+    normalize_request_log_event_category(&mut event);
+    apply_usage_event_to_current_windows(stats, &event, now);
+    push_recent_usage_event(&mut stats.events, event);
 }
 
 fn load_stats_windows_and_recent_events_from_conn(
@@ -3164,3 +3059,33 @@ fn apply_reprice_changes_to_stats(
 #[cfg(test)]
 #[path = "codex_local_access_tests_proxy_route_storage.rs"]
 mod proxy_route_storage_tests;
+
+#[cfg(test)]
+mod official_service_tier_adaptation_tests {
+    use super::*;
+
+    fn attempt(route: &str, adaptation: bool) -> CodexLocalAccessRequestAttempt {
+        CodexLocalAccessRequestAttempt {
+            authorization_route: Some(route.into()),
+            transport: "http".into(),
+            service_tier_adaptation: adaptation.then(|| crate::models::codex_local_access::CodexLocalAccessServiceTierAdaptation {
+                requested_tier: "priority".into(), sent_tier: "default".into(), reason: "official_default_only".into(),
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn official_service_tier_summary_uses_final_route_and_validates_recorded_metadata() {
+        let official = attempt("official", true);
+        let local = attempt("local_gateway", false);
+        let encode = |items: Vec<CodexLocalAccessRequestAttempt>| serde_json::to_string(&items).unwrap();
+        assert!(service_tier_adaptation_from_attempts_json(&encode(vec![official.clone()])).is_some());
+        assert!(service_tier_adaptation_from_attempts_json(&encode(vec![official.clone(), local])).is_none());
+        let mut invalid = official.clone();
+        invalid.service_tier_adaptation.as_mut().unwrap().sent_tier = "priority".into();
+        assert!(service_tier_adaptation_from_attempts_json(&encode(vec![invalid])).is_none());
+        let mut skipped_local = attempt("local_gateway", false); skipped_local.transport = "preflight".into();
+        assert!(service_tier_adaptation_from_attempts_json(&encode(vec![official, skipped_local])).is_some());
+    }
+}

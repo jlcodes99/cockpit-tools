@@ -15,7 +15,9 @@ use std::path::{Path, PathBuf};
 /// 3：上下文与压缩统一为 90% 口径（压缩阈值不再留空），GPT-6 系列上下文修正为 256K。
 /// 4：加入 GPT-6.1 Sol 客户端目录。
 /// 5：删除退役型号的内置模板与兼容槽位。
-pub(crate) const MANAGED_MODEL_CATALOG_GENERATOR_VERSION: u32 = 5;
+/// 6：Grok 4.7 真实上下文、推理档位与默认推理强度。
+/// 7：GPT-6.1 Sol 与 GPT-6 Astra 声明官方 Ultrafast 速度档位。
+pub(crate) const MANAGED_MODEL_CATALOG_GENERATOR_VERSION: u32 = 7;
 
 const META_FILE_NAME: &str = "cockpit-model-catalog.meta.json";
 

@@ -397,8 +397,14 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 	}
 
 	for {
-		msgType, payload, errReadMessage := readPump.next()
+		msgType, payload, errReadMessage := readPump.nextWhileServing(handlers.GatewayDrain(c.Request.Context()))
 		if errReadMessage != nil {
+			if errors.Is(errReadMessage, errGatewayDraining) {
+				// The last turn has finished. Reject queued/new turns on this
+				// retired configuration and let the client reconnect to the new one.
+				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseServiceRestart, "gateway reloaded; reconnect"), time.Time{})
+				return
+			}
 			wsTerminateErr = errReadMessage
 			if websocket.IsCloseError(errReadMessage, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
 				log.Infof("responses websocket: client disconnected id=%s error=%v", passthroughSessionID, errReadMessage)

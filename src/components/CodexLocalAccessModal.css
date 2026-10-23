@@ -2662,6 +2662,12 @@
   display: none;
 }
 
+.codex-local-access-member-mainline .tier-badge.chatgpt-plan,
+.codex-local-access-account-stat-main .tier-badge.chatgpt-plan {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .codex-local-access-member-mainline .tier-badge.free,
 .codex-local-access-account-stat-main .tier-badge.free {
   background: var(--plan-free-bg);
@@ -3442,3 +3448,21 @@
 .codex-local-access-error-area .codex-local-access-inline-error {
   margin-bottom: 0;
 }
+.codex-official-member-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-surface));
+}
+.codex-official-member-hint p { flex: 1 1 260px; margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+
+/* Split the existing 18rem identity slot; priority/image/plan columns keep their positions. */
+.codex-member-identity-slot { flex: 0 0 18rem; width: 18rem; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.codex-local-access-member-list .codex-member-identity-slot .group-account-email { flex: 1 1 0; min-width: 0; width: auto; max-width: none; }
+.codex-member-access-mode { flex: 0 0 98px; width: 98px; }
+.codex-member-access-mode .single-select-dropdown-trigger { min-height: 30px; padding: 5px 8px; font-size: 12px; }

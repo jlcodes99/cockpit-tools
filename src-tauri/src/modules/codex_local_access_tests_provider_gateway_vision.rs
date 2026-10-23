@@ -82,7 +82,12 @@ fn provider_per_model_entry_wins_over_account_entry() {
         },
     );
 
-    super::merge_provider_vision_capabilities(&mut capabilities, &account, Some(&provider), &models);
+    super::merge_provider_vision_capabilities(
+        &mut capabilities,
+        &account,
+        Some(&provider),
+        &models,
+    );
 
     assert_eq!(
         capabilities
@@ -114,7 +119,12 @@ fn account_explicit_disable_still_wins_over_provider_flag() {
         },
     );
 
-    super::merge_provider_vision_capabilities(&mut capabilities, &account, Some(&provider), &models);
+    super::merge_provider_vision_capabilities(
+        &mut capabilities,
+        &account,
+        Some(&provider),
+        &models,
+    );
 
     assert_eq!(
         capabilities
@@ -137,6 +147,7 @@ fn provider_vision_record_matches_by_id_or_base_url() {
         super::CodexModelProviderVisionEntry {
             id: "cmp_other".to_string(),
             base_url: Some("https://other.example.com/v1".to_string()),
+            credential_records: Vec::new(),
             record: super::CodexModelProviderVisionRecord {
                 supports_vision: false,
                 model_capabilities: std::collections::HashMap::new(),
@@ -145,6 +156,7 @@ fn provider_vision_record_matches_by_id_or_base_url() {
         super::CodexModelProviderVisionEntry {
             id: "cmp_legacy".to_string(),
             base_url: Some("https://relay.example.com/v1".to_string()),
+            credential_records: Vec::new(),
             record: super::CodexModelProviderVisionRecord {
                 supports_vision: true,
                 model_capabilities: std::collections::HashMap::new(),
@@ -159,10 +171,10 @@ fn provider_vision_record_matches_by_id_or_base_url() {
 }
 
 #[test]
-fn gpt_5_5_and_later_default_to_vision_without_any_configuration() {
+fn catalog_image_declarations_determine_vision_without_any_configuration() {
     let models = vec![
         "openai/gpt-5.6-sol".to_string(),
-        "gpt-5.5".to_string(),
+        "gpt-6-luna".to_string(),
         "gpt-5.4".to_string(),
     ];
     let account = provider_vision_test_account(
@@ -177,7 +189,7 @@ fn gpt_5_5_and_later_default_to_vision_without_any_configuration() {
     let gateway_supports_vision =
         super::merge_provider_vision_capabilities(&mut capabilities, &account, None, &models);
 
-    // 供应商/账号都没有声明：gpt-5.5+ 默认支持，5.5 以下维持原样。
+    // 供应商/账号都没有声明：采用 models.json 的图片输入声明；目录缺少的 gpt-5.4 默认 false。
     assert!(!gateway_supports_vision);
     assert_eq!(
         capabilities
@@ -187,7 +199,7 @@ fn gpt_5_5_and_later_default_to_vision_without_any_configuration() {
     );
     assert_eq!(
         capabilities
-            .get("gpt-5.5")
+            .get("gpt-6-luna")
             .map(|capability| capability.supports_vision),
         Some(true)
     );
@@ -200,7 +212,7 @@ fn gpt_5_5_and_later_default_to_vision_without_any_configuration() {
 }
 
 #[test]
-fn explicit_per_model_disable_beats_gpt_5_5_default() {
+fn explicit_per_model_disable_beats_catalog_image_declaration() {
     let models = vec!["gpt-5.6-sol".to_string()];
     let account = provider_vision_test_account(
         "cmp_unset",
@@ -230,4 +242,164 @@ fn explicit_per_model_disable_beats_gpt_5_5_default() {
             .map(|capability| capability.supports_vision),
         Some(false)
     );
+}
+
+#[test]
+fn provider_vision_resolves_each_credential_before_overriding_account_capabilities() {
+    let entries = super::parse_codex_model_provider_vision_entries(
+        r#"[{
+        "id": "cmp_keys", "baseUrl": "https://relay.example.com/v1",
+        "supportsVision": false,
+        "modelCapabilities": {"qwen-vl": {"supportsVision": false}},
+        "apiKeys": [
+            {"apiKey": " sk-enabled ", "supportsVision": true,
+             "modelCapabilities": {"QWEN-VL": {"supportsVision": true}}},
+            {"apiKey": "sk-disabled", "supportsVision": false,
+             "modelCapabilities": {"qwen-vl": {"supportsVision": false}}},
+            {"apiKey": "sk-inherited"}
+        ]
+    }]"#,
+    );
+    let models = vec!["qwen-vl".to_string()];
+    for (api_key, expected) in [
+        (" sk-enabled ", true),
+        ("sk-disabled", false),
+        ("sk-inherited", false),
+        ("sk-not-listed", false),
+    ] {
+        // A stale account snapshot must not override the selected credential's map.
+        let mut account = provider_vision_test_account(
+            "cmp_keys",
+            "https://relay.example.com/v1",
+            &["qwen-vl"],
+            !expected,
+            &[("qwen-vl", !expected)],
+        );
+        account.openai_api_key = Some(api_key.to_string());
+        let provider = super::codex_model_provider_vision_record_for_account(&account, &entries)
+            .expect("credential or provider record");
+        assert_eq!(provider.supports_vision, expected, "key={api_key}");
+        let mut capabilities = std::collections::HashMap::from([(
+            "qwen-vl".to_string(),
+            super::CodexLocalAccessProviderGatewayModelCapability {
+                supports_vision: !expected,
+            },
+        )]);
+        super::merge_provider_vision_capabilities(
+            &mut capabilities,
+            &account,
+            Some(provider),
+            &models,
+        );
+        assert_eq!(
+            capabilities["qwen-vl"].supports_vision, expected,
+            "key={api_key}"
+        );
+    }
+}
+
+#[test]
+fn provider_vision_credential_catalog_filters_only_inherited_metadata() {
+    let entries = super::parse_codex_model_provider_vision_entries(
+        r#"[{
+        "id": "cmp_keys", "supportsVision": true,
+        "modelCapabilities": {
+            "qwen-vl": {"supportsVision": false},
+            "other-model": {"supportsVision": true}
+        },
+        "apiKeys": [
+            {"apiKey": "sk-inherited"},
+            {"apiKey": "sk-catalog", "modelCatalog": ["QWEN-VL"]},
+            {"apiKey": "sk-empty-catalog", "modelCatalog": []},
+            {"apiKey": "sk-empty-map", "modelCapabilities": {}},
+            {"apiKey": "sk-own-map", "modelCatalog": ["qwen-vl"],
+             "modelCapabilities": {"other-model": {"supportsVision": false}}}
+        ]
+    }]"#,
+    );
+    for (api_key, expected) in [
+        (
+            "sk-inherited",
+            vec![("qwen-vl", false), ("other-model", true)],
+        ),
+        ("sk-catalog", vec![("qwen-vl", false)]),
+        ("sk-empty-catalog", vec![]),
+        ("sk-empty-map", vec![]),
+        ("sk-own-map", vec![("other-model", false)]),
+    ] {
+        let mut account = provider_vision_test_account("cmp_keys", "", &["qwen-vl"], false, &[]);
+        account.openai_api_key = Some(api_key.to_string());
+        let record = super::codex_model_provider_vision_record_for_account(&account, &entries)
+            .expect("credential record");
+        assert!(record.supports_vision, "key={api_key}");
+        assert_eq!(
+            record.model_capabilities,
+            expected
+                .into_iter()
+                .map(|(model, flag)| (model.to_string(), flag))
+                .collect(),
+            "key={api_key}"
+        );
+    }
+}
+
+#[test]
+fn provider_vision_credential_flags_inherit_only_when_missing() {
+    let entries = super::parse_codex_model_provider_vision_entries(
+        r#"[{
+        "id": "cmp_keys", "supportsVision": true,
+        "apiKeys": [
+            {"apiKey": "sk-enabled", "supportsVision": true},
+            {"apiKey": "sk-disabled", "supportsVision": false},
+            {"apiKey": "sk-inherited"}
+        ]
+    }]"#,
+    );
+    for (api_key, expected) in [
+        (Some("sk-enabled"), true),
+        (Some("sk-disabled"), false),
+        (Some("sk-inherited"), true),
+        (Some("sk-unlisted"), true),
+        (Some("  "), true),
+        (None, true),
+    ] {
+        let mut account = provider_vision_test_account("cmp_keys", "", &["qwen-vl"], false, &[]);
+        account.openai_api_key = api_key.map(str::to_string);
+        let record = super::codex_model_provider_vision_record_for_account(&account, &entries)
+            .expect("credential or provider record");
+        assert_eq!(record.supports_vision, expected, "key={api_key:?}");
+    }
+}
+
+#[test]
+fn provider_vision_parser_preserves_legacy_records_and_handles_missing_providers() {
+    for content in ["not JSON", "null", "{}", "[{}]"] {
+        assert!(super::parse_codex_model_provider_vision_entries(content).is_empty());
+    }
+    let entries = super::parse_codex_model_provider_vision_entries(
+        r#"[
+        {"id": "cmp_legacy", "supportsVision": true, "apiKey": "legacy-key"},
+        {"baseUrl": " HTTPS://OTHER.EXAMPLE.COM/v1/ ",
+         "modelCapabilities": {" QWEN-VL ": {"supportsVision": false}, "invalid": {}}}
+    ]"#,
+    );
+    let legacy = provider_vision_test_account("cmp_legacy", "", &["qwen-vl"], false, &[]);
+    assert!(
+        super::codex_model_provider_vision_record_for_account(&legacy, &entries)
+            .expect("legacy provider record")
+            .supports_vision
+    );
+    let url_match = provider_vision_test_account(
+        "cmp_old_id",
+        "https://other.example.com/v1/",
+        &["qwen-vl"],
+        false,
+        &[],
+    );
+    let record = super::codex_model_provider_vision_record_for_account(&url_match, &entries)
+        .expect("base URL match");
+    assert_eq!(record.model_capabilities.get("qwen-vl"), Some(&false));
+    assert_eq!(record.model_capabilities.len(), 1);
+    let missing = provider_vision_test_account("cmp_missing", "", &["qwen-vl"], false, &[]);
+    assert!(super::codex_model_provider_vision_record_for_account(&missing, &entries).is_none());
 }

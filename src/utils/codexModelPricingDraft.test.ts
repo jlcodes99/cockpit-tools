@@ -46,3 +46,17 @@ test('invalid base input stays empty in derived displays for validation', () => 
   assert.equal(updateModelPricingDraft(withoutLong, 'inputUsdPerMillion', '8')
     .standardLongInputUsdPerMillion, '');
 });
+
+test('Grok 4.7 long-context output uses its own multiplier and keeps explicit prices', () => {
+  for (const modelId of ['grok-4.7', 'xai/GROK-4.7(high)', 'grok-4.7-latest']) {
+    const base = { ...draft(), modelId, longContextThresholdTokens: '200000',
+      outputUsdPerMillion: '6', standardLongOutputUsdPerMillion: '12' };
+    assert.equal(updateModelPricingDraft(base, 'outputUsdPerMillion', '8')
+      .standardLongOutputUsdPerMillion, '16');
+    const custom = updateModelPricingDraft(base, 'standardLongOutputUsdPerMillion', '19');
+    assert.equal(updateModelPricingDraft(custom, 'outputUsdPerMillion', '8')
+      .standardLongOutputUsdPerMillion, '19');
+  }
+  assert.equal(updateModelPricingDraft({ ...draft(), modelId: 'grok-4.7-preview' },
+    'outputUsdPerMillion', '8').standardLongOutputUsdPerMillion, '12');
+});

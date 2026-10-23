@@ -31,7 +31,9 @@ const REASONING_EFFORT_MAX: &str = "max";
 const CODEX_WAKEUP_TEST_CANCELLED_MESSAGE: &str = "Codex 唤醒测试已取消";
 const CODEX_WAKEUP_CANCEL_POLL_MS: u64 = 120;
 const GPT_5_6_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-5-6-model-presets";
+// 保留旧标记，避免升级或旧快照再次触发已退役模型的添加。
 const GPT_5_5_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-5-5-model-preset";
+const RETIRE_GPT_5_5_WAKEUP_MODEL_MIGRATION_ID: &str = "retire-gpt-5-5-wakeup-model";
 const GPT_6_1_SOL_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-1-sol-model-preset";
 const GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-astra-model-preset";
 const GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-6-sol-luna-model-presets";
@@ -62,7 +64,9 @@ const LEGACY_CODEX_MODEL_PRESET_MODELS: &[&str] = &[
 
 #[path = "codex_wakeup_task_state.rs"]
 mod task_state;
-pub use task_state::{authorize_task_dispatch, claim_task_run, mark_task_run_failed, try_task_run_lease};
+pub use task_state::{
+    authorize_task_dispatch, claim_task_run, mark_task_run_failed, try_task_run_lease,
+};
 
 static TASKS_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
 static HISTORY_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
@@ -383,6 +387,7 @@ impl Default for CodexWakeupState {
             model_preset_migrations: vec![
                 GPT_5_6_MODEL_PRESETS_MIGRATION_ID.to_string(),
                 GPT_5_5_MODEL_PRESET_MIGRATION_ID.to_string(),
+                RETIRE_GPT_5_5_WAKEUP_MODEL_MIGRATION_ID.to_string(),
                 GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string(),
                 GPT_6_SOL_LUNA_MODEL_PRESETS_MIGRATION_ID.to_string(),
                 PREFIX_BUILTIN_MODEL_PRESET_NAMES_MIGRATION_ID.to_string(),
@@ -536,7 +541,6 @@ fn default_model_presets() -> Vec<CodexWakeupModelPreset> {
         ("preset-gpt-5-6-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
         ("preset-gpt-5-6-terra", "GPT-5.6 Terra", "gpt-5.6-terra"),
         ("preset-gpt-5-6-luna", "GPT-5.6 Luna", "gpt-5.6-luna"),
-        ("preset-gpt-5-5", "GPT-5.5", "gpt-5.5"),
     ];
 
     items
@@ -599,54 +603,6 @@ fn ensure_gpt_5_6_model_presets(state: &mut CodexWakeupState) -> bool {
     }
 
     state.model_presets.splice(0..0, additions);
-    true
-}
-
-fn gpt_5_5_model_preset() -> CodexWakeupModelPreset {
-    let model = "gpt-5.5";
-    let allowed_reasoning_efforts = default_reasoning_efforts_for_model(model);
-    let default_reasoning_effort = if allowed_reasoning_efforts
-        .iter()
-        .any(|item| item == REASONING_EFFORT_MEDIUM)
-    {
-        REASONING_EFFORT_MEDIUM.to_string()
-    } else {
-        allowed_reasoning_efforts
-            .first()
-            .cloned()
-            .unwrap_or_else(|| REASONING_EFFORT_MEDIUM.to_string())
-    };
-    CodexWakeupModelPreset {
-        id: "preset-gpt-5-5".to_string(),
-        name: "GPT-5.5".to_string(),
-        model: model.to_string(),
-        allowed_reasoning_efforts,
-        default_reasoning_effort,
-    }
-}
-
-fn ensure_gpt_5_5_model_preset(state: &mut CodexWakeupState) -> bool {
-    if state
-        .model_preset_migrations
-        .iter()
-        .any(|item| item == GPT_5_5_MODEL_PRESET_MIGRATION_ID)
-    {
-        return false;
-    }
-
-    state
-        .model_preset_migrations
-        .push(GPT_5_5_MODEL_PRESET_MIGRATION_ID.to_string());
-
-    if state
-        .model_presets
-        .iter()
-        .any(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-5.5"))
-    {
-        return true;
-    }
-
-    state.model_presets.insert(0, gpt_5_5_model_preset());
     true
 }
 
@@ -883,6 +839,52 @@ fn retarget_pre_5_5_wakeup_tasks(state: &mut CodexWakeupState) -> bool {
     changed
 }
 
+fn is_retired_gpt_5_5_wakeup_model(model: &str) -> bool {
+    wakeup_model_version(model) == Some((5, 5))
+}
+
+fn retarget_retired_wakeup_model(
+    model: &mut Option<String>,
+    display_name: &mut Option<String>,
+) -> bool {
+    if !model
+        .as_deref()
+        .is_some_and(is_retired_gpt_5_5_wakeup_model)
+    {
+        return false;
+    }
+    *model = Some(DEFAULT_WAKEUP_MODEL.to_string());
+    *display_name = Some(DEFAULT_WAKEUP_MODEL_NAME.to_string());
+    true
+}
+
+/// 每次读取/保存都清理旧快照中的退役目标；旧添加标记继续保留，迁移可重复执行。
+fn retire_gpt_5_5_wakeup_model(state: &mut CodexWakeupState) -> bool {
+    let mut changed = false;
+    for marker in [
+        GPT_5_5_MODEL_PRESET_MIGRATION_ID,
+        RETIRE_GPT_5_5_WAKEUP_MODEL_MIGRATION_ID,
+    ] {
+        if !state
+            .model_preset_migrations
+            .iter()
+            .any(|item| item == marker)
+        {
+            state.model_preset_migrations.push(marker.to_string());
+            changed = true;
+        }
+    }
+    let before = state.model_presets.len();
+    state
+        .model_presets
+        .retain(|preset| !is_retired_gpt_5_5_wakeup_model(&preset.model));
+    changed |= before != state.model_presets.len();
+    for task in &mut state.tasks {
+        changed |= retarget_retired_wakeup_model(&mut task.model, &mut task.model_display_name);
+    }
+    changed
+}
+
 fn ensure_gpt_6_1_sol_model_preset(state: &mut CodexWakeupState) -> bool {
     if state
         .model_preset_migrations
@@ -921,7 +923,7 @@ fn apply_model_preset_migrations(state: &mut CodexWakeupState) -> bool {
     changed |= prune_pre_5_5_model_presets(state);
     changed |= retarget_pre_5_5_wakeup_tasks(state);
     changed |= ensure_gpt_5_6_model_presets(state);
-    changed |= ensure_gpt_5_5_model_preset(state);
+    changed |= retire_gpt_5_5_wakeup_model(state);
     changed |= ensure_gpt_6_astra_model_preset(state);
     changed |= ensure_gpt_6_sol_luna_model_presets(state);
     changed |= ensure_gpt_6_1_sol_model_preset(state);
@@ -3089,6 +3091,11 @@ pub async fn run_batch(
     run_id: Option<String>,
     cancel_scope_id: Option<&str>,
 ) -> Result<CodexWakeupBatchResult, String> {
+    let mut execution_config = execution_config;
+    retarget_retired_wakeup_model(
+        &mut execution_config.model,
+        &mut execution_config.model_display_name,
+    );
     let existing_accounts = existing_codex_account_id_set();
     let cleaned_ids: Vec<String> = account_ids
         .into_iter()
@@ -3429,8 +3436,7 @@ mod tests {
                 "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
-                "gpt-5.6-luna",
-                "gpt-5.5"
+                "gpt-5.6-luna"
             ]
         );
         let astra = default_model_presets()
@@ -3492,8 +3498,7 @@ mod tests {
                 "gpt-6-luna",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
-                "gpt-5.6-luna",
-                "gpt-5.5"
+                "gpt-5.6-luna"
             ]
         );
         assert!(state
@@ -3525,7 +3530,7 @@ mod tests {
         legacy_task.model_display_name = Some("GPT-5.4-Mini".to_string());
         legacy_task.model_reasoning_effort = Some(REASONING_EFFORT_MEDIUM.to_string());
         let mut kept_task = sample_task("kept", &["account-a"]);
-        kept_task.model = Some("gpt-5.5".to_string());
+        kept_task.model = Some("custom-model".to_string());
         let mut state = CodexWakeupState {
             enabled: false,
             tasks: vec![legacy_task, kept_task],
@@ -3540,7 +3545,7 @@ mod tests {
             Some("GPT-5.6 Luna")
         );
         assert_eq!(state.tasks[0].model_reasoning_effort, None);
-        assert_eq!(state.tasks[1].model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(state.tasks[1].model.as_deref(), Some("custom-model"));
     }
 
     #[test]
@@ -3568,6 +3573,7 @@ mod tests {
         assert_eq!(
             models,
             vec![
+                "gpt-6.1-sol",
                 "gpt-6-astra",
                 "gpt-6-sol",
                 "gpt-6-luna",
@@ -3576,6 +3582,15 @@ mod tests {
                 "gpt-5.6-sol",
                 "custom-model"
             ]
+        );
+        assert_eq!(
+            state
+                .model_presets
+                .iter()
+                .find(|preset| preset.id == "custom-sol")
+                .unwrap()
+                .name,
+            "Custom Sol"
         );
         assert!(!apply_model_preset_migrations(&mut state));
     }
@@ -3698,7 +3713,11 @@ mod tests {
 
         let error = build_usable_resolved_binary(broken, "test".to_string(), None)
             .expect_err("an existing launcher that cannot run must be rejected");
-        assert!(error.message.contains("missing-native-binary"));
+        assert!(
+            error.message.contains("missing-native-binary"),
+            "unexpected launcher probe failure: {}",
+            error.message
+        );
 
         let working = root.join("working-codex");
         fs::write(&working, "#!/bin/sh\necho codex-cli-test 1.0\n")
@@ -3713,3 +3732,7 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 }
+
+#[cfg(test)]
+#[path = "codex_wakeup_model_migration_tests.rs"]
+mod model_migration_tests;

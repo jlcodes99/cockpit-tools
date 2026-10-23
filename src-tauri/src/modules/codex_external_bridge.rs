@@ -1,4 +1,4 @@
-//! Opt-in preservation of a verified, profile-wide Codex Web GPT launcher route.
+//! Automatic preservation of a verified, profile-wide Codex Web GPT launcher route.
 //! No network requests or launcher execution: malformed/unverified state follows
 //! the ordinary OAuth projection, which clears the previous endpoint.
 
@@ -113,21 +113,18 @@ pub(super) fn preserved_url(
     profile: &Path,
     incoming: &CodexAccount,
     existing_auth: Option<&Value>,
-    enabled: bool,
 ) -> Option<String> {
     let journal = dirs::home_dir()?.join(".codex-chatgpt-web/codex/integration-journal.json");
-    preserved_url_at(profile, incoming, existing_auth, enabled, &journal)
+    preserved_url_at(profile, incoming, existing_auth, &journal)
 }
 
 fn preserved_url_at(
     profile: &Path,
     incoming: &CodexAccount,
     existing_auth: Option<&Value>,
-    enabled: bool,
     journal: &Path,
 ) -> Option<String> {
-    if !enabled
-        || incoming.is_api_key_auth()
+    if incoming.is_api_key_auth()
         || incoming.is_agent_identity_auth()
         || incoming.is_web_session_auth()
         || incoming.tokens.id_token.trim().is_empty()
@@ -251,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn opt_in_oauth_projections_preserve_bridge_and_default_or_api_projection_clear_it() {
+    fn oauth_projections_automatically_preserve_verified_bridge_and_api_projection_clears_it() {
         use crate::models::codex::{CodexApiProviderMode, CodexTokens};
         let _lock = crate::modules::test_support::env_lock()
             .lock()
@@ -281,12 +278,8 @@ mod tests {
                 &std::fs::read_to_string(fixture.0.join("auth.json")).unwrap(),
             )
             .unwrap();
-            let bridge = preserved_url_at(&fixture.0, &account, Some(&auth), true, &journal);
+            let bridge = preserved_url_at(&fixture.0, &account, Some(&auth), &journal);
             assert_eq!(bridge.as_deref(), Some(endpoint));
-            assert_eq!(
-                preserved_url_at(&fixture.0, &account, Some(&auth), false, &journal),
-                None
-            );
             super::super::write_auth_file_to_dir_with_after_commit_and_bridge(
                 &fixture.0,
                 &account,
@@ -319,7 +312,7 @@ mod tests {
             vec![],
         );
         assert_eq!(
-            preserved_url_at(&fixture.0, &api, Some(&oauth), true, &journal),
+            preserved_url_at(&fixture.0, &api, Some(&oauth), &journal),
             None
         );
         super::super::write_auth_file_to_dir_with_after_commit_and_bridge(
@@ -346,7 +339,6 @@ mod tests {
                 &fixture.0,
                 &account,
                 Some(&json!({"auth_mode":"apikey"})),
-                true,
                 &journal
             ),
             None

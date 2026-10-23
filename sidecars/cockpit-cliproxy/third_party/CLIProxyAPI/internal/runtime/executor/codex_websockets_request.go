@@ -25,6 +25,9 @@ func applyCodexPromptCacheHeaders(from sdktranslator.Format, req cliproxyexecuto
 
 func applyCodexPromptCacheHeadersWithContext(ctx context.Context, from sdktranslator.Format, req cliproxyexecutor.Request, rawJSON []byte, headerSets ...http.Header) ([]byte, http.Header, error) {
 	headers := http.Header{}
+	if cliproxyexecutor.ContinuityActive(ctx) {
+		return rawJSON, headers, nil
+	}
 	if len(rawJSON) == 0 {
 		return rawJSON, headers, nil
 	}

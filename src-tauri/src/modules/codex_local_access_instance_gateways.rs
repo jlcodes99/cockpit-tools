@@ -279,10 +279,7 @@ async fn live_provider_gateway_endpoints() -> HashMap<String, (u16, String)> {
     let mut endpoints = HashMap::new();
     let mut runtimes = provider_gateway_runtime_store().lock().await;
     for (key, runtime) in runtimes.iter_mut() {
-        let alive = runtime
-            .sidecar_child
-            .as_mut()
-            .is_some_and(|child| matches!(child.try_wait(), Ok(None)));
+        let alive = native_provider_runtime_alive(runtime);
         if !alive {
             continue;
         }
@@ -313,10 +310,7 @@ async fn current_instance_gateway_endpoint(
     {
         let mut runtimes = provider_gateway_runtime_store().lock().await;
         if let Some(runtime) = runtimes.get_mut(&runtime_key) {
-            let alive = runtime
-                .sidecar_child
-                .as_mut()
-                .is_some_and(|child| matches!(child.try_wait(), Ok(None)));
+            let alive = native_provider_runtime_alive(runtime);
             if alive {
                 if let Some(collection) = runtime.collection.as_ref() {
                     return Some((collection.port, collection.api_key.clone()));

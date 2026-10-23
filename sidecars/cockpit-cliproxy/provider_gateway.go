@@ -229,7 +229,7 @@ func resolveModelRoutingRoute(spec *apiKeySpec, clientModel string) (*modelRoute
 
 // providerGatewayUpstreamModel 把客户端模型名解析成真正的上游模型名。
 //
-// 先按 manifest 的别名表解析（例如 DeepSeek 网关的目录壳位 gpt-5.5 → deepseek-flash），
+// 先按 manifest 的别名表解析（例如 DeepSeek 网关的目录壳位 gpt-5.6-luna → deepseek-flash），
 // 再对照 provider gateway 的模型清单。未声明的 Codex/GPT 官方 id 会解析为空字符串，
 // 由调用方返回明确的「模型不可用」，避免把 GPT 请求静默交给非 GPT 上游。
 func (s *relayServer) providerGatewayUpstreamModel(gateway *providerGatewaySpec, model string) string {
@@ -325,7 +325,7 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		// 输入项；第三方上游不认识这些私有形态，这里按 CLIProxyAPI 的既有优化
 		// 逻辑改写请求，响应出口再还原 collaboration namespace。
 		body, multiAgentV2Optimized = helps.OptimizeCodexMultiAgentV2Request(relayContext(c), c.Request.Header, body, s.cfg)
-		body = helps.RewriteCodexMultiAgentV2Input(relayContext(c), c.Request.Header, body, s.cfg)
+		body = helps.RewriteCodexPortableGatewayInput(relayContext(c), c.Request.Header, body, s.cfg)
 		// DeepSeek 等严格 Responses 上游按字段反序列化整个 input。历史里缺 call_id
 		// 时整包 422，不会进入后面的工具顺序修复。补 ID 必须在重排之前，
 		// 否则缺 ID 的调用项会让重排直接放弃。
@@ -401,8 +401,38 @@ func (s *relayServer) handleProviderGatewayRequest(c *gin.Context, gateway *prov
 		applyOpenCodeSessionHeader(req.Header, c.Request.Header, body)
 	}
 
+	identityAuth, err := s.directGatewayIdentity(providerGatewayBoundAccount(c), gateway.APIKey, gateway.BaseURL, wireAPI == "responses")
+	if err != nil {
+		s.writeExecutorError(c, err)
+		return
+	}
+	identityClient, err := applyDirectGatewayIdentity(req, identityAuth)
+	if err != nil {
+		s.writeExecutorError(c, err)
+		return
+	}
+	if identityClient != nil && wireAPI == "responses" && cliproxyexecutor.DiagnosticsObserver(req.Context()) != nil {
+		snapshot, snapshotErr := req.GetBody()
+		if snapshotErr != nil {
+			s.writeExecutorError(c, snapshotErr)
+			return
+		}
+		upstreamBody, snapshotErr = io.ReadAll(snapshot)
+		closeErr := snapshot.Close()
+		if snapshotErr != nil {
+			s.writeExecutorError(c, snapshotErr)
+			return
+		}
+		if closeErr != nil {
+			s.writeExecutorError(c, closeErr)
+			return
+		}
+	}
 	observeDirectGatewayRequest(req.Context(), providerGatewayBoundAccount(c), upstreamModel, req.Header, upstreamBody)
-	resp, err := http.DefaultClient.Do(req)
+	if identityClient == nil {
+		identityClient = http.DefaultClient
+	}
+	resp, err := identityClient.Do(req)
 	if err != nil {
 		if observer := requestDiagnosticsFromContext(req.Context()); observer != nil {
 			observer.UpstreamError(req.Context(), "dial", err)

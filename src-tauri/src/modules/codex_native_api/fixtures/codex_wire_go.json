@@ -1,0 +1,1409 @@
+[
+  {
+    "name": "string_input_required_fields",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": "keep user text 250ms cipher",
+      "include": [
+        "message.output_text.logprobs",
+        "web_search_call.action.sources"
+      ],
+      "instructions": null
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "keep user text 250ms cipher"
+            }
+          ]
+        }
+      ],
+      "include": [
+        "reasoning.encrypted_content",
+        "web_search_call.action.sources"
+      ],
+      "instructions": "",
+      "stream": true,
+      "store": false
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "oauth_fields_and_system",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "message",
+          "role": "system",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "raw",
+              "prompt_cache_breakpoint": true
+            }
+          ]
+        },
+        {
+          "type": "reasoning",
+          "encrypted_content": "cipher"
+        }
+      ],
+      "max_output_tokens": 7,
+      "max_completion_tokens": 8,
+      "temperature": 0.2,
+      "top_p": 0.8,
+      "truncation": "auto",
+      "prompt_cache_options": {
+        "x": 1
+      },
+      "prompt_cache_retention": "24h",
+      "context_management": [
+        {
+          "type": "compaction"
+        }
+      ],
+      "user": "user",
+      "generate": false,
+      "safety_identifier": "safety",
+      "stream_options": {
+        "include_usage": true
+      },
+      "service_tier": " FAST ",
+      "instructions": " \n "
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "message",
+          "role": "developer",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "raw"
+            }
+          ]
+        },
+        {
+          "type": "reasoning",
+          "encrypted_content": "cipher"
+        }
+      ],
+      "service_tier": "priority",
+      "instructions": " \n ",
+      "stream": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ]
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "service_tier_default",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "service_tier": "default"
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "stream": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "service_tier_ultrafast",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "service_tier": "ultrafast"
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "service_tier": "ultrafast",
+      "stream": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "service_tier_priority",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "service_tier": " priority "
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "service_tier": "priority",
+      "stream": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "service_tier_null",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "service_tier": null
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "stream": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "service_tier_12",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "service_tier": 12
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "stream": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "builtin_web_search",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "web_search_preview_2025_03_11"
+        },
+        {
+          "type": "function",
+          "name": "f",
+          "parameters": {
+            "type": "object"
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "allowed_tools",
+        "tools": [
+          {
+            "type": "web_search_preview"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "web_search"
+        },
+        {
+          "type": "function",
+          "name": "f",
+          "parameters": {
+            "type": "object"
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "allowed_tools",
+        "tools": [
+          {
+            "type": "web_search"
+          }
+        ]
+      },
+      "stream": true,
+      "store": false,
+      "parallel_tool_calls": true,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "compact_preserves_generation_fields",
+    "chatgpt": true,
+    "compact": true,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [
+        {
+          "role": "system",
+          "content": "raw"
+        }
+      ],
+      "stream": true,
+      "temperature": 0.2,
+      "max_output_tokens": 12,
+      "context_management": [
+        {
+          "type": "compaction"
+        }
+      ],
+      "generate": false,
+      "safety_identifier": "safety",
+      "stream_options": {
+        "include_usage": true
+      },
+      "instructions": " \n "
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [
+        {
+          "role": "system",
+          "content": "raw"
+        }
+      ],
+      "temperature": 0.2,
+      "max_output_tokens": 12,
+      "context_management": [
+        {
+          "type": "compaction"
+        }
+      ],
+      "generate": false,
+      "safety_identifier": "safety",
+      "stream_options": {
+        "include_usage": true
+      },
+      "instructions": " \n "
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "api_key_preserves_generation_fields",
+    "chatgpt": false,
+    "compact": false,
+    "websocket": false,
+    "headers": {
+      "X-Custom": [
+        "preserve"
+      ],
+      "X-OpenAI-Internal-Codex-Responses-Lite": [
+        "true"
+      ]
+    },
+    "input": {
+      "model": "vendor",
+      "input": "raw",
+      "temperature": 0.3,
+      "max_output_tokens": 11,
+      "tools": [
+        {
+          "type": "function",
+          "name": "f",
+          "parameters": {
+            "type": "string",
+            "pattern": "\\p{Letter}"
+          }
+        }
+      ],
+      "instructions": null,
+      "service_tier": "default"
+    },
+    "expected": {
+      "model": "vendor",
+      "input": "raw",
+      "temperature": 0.3,
+      "max_output_tokens": 11,
+      "tools": [
+        {
+          "type": "function",
+          "name": "f",
+          "parameters": {
+            "type": "string",
+            "pattern": "\\p{Letter}"
+          }
+        }
+      ],
+      "instructions": null,
+      "service_tier": "default"
+    },
+    "expected_headers": {
+      "X-Custom": [
+        "preserve"
+      ]
+    }
+  },
+  {
+    "name": "api_key_compact_removes_stream",
+    "chatgpt": false,
+    "compact": true,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "vendor",
+      "input": "raw",
+      "stream": false,
+      "temperature": 0.2
+    },
+    "expected": {
+      "model": "vendor",
+      "input": "raw",
+      "temperature": 0.2
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "lite_recursive_objects",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {
+      "X-OpenAI-Internal-Codex-Responses-Lite": [
+        "true"
+      ]
+    },
+    "input": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": "raw"
+        },
+        {
+          "type": "additional_tools",
+          "tools": [
+            {
+              "type": "web_search"
+            },
+            {
+              "type": "function",
+              "name": "keep"
+            }
+          ],
+          "input": [
+            {
+              "type": "additional_tools",
+              "tools": [
+                {
+                  "type": "tool_search",
+                  "execution": "server"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "additional_tools",
+          "tools": [
+            {
+              "type": "web_search"
+            }
+          ]
+        }
+      ],
+      "response": {
+        "tools": [
+          {
+            "type": "custom",
+            "name": "c"
+          },
+          {
+            "type": "computer"
+          }
+        ],
+        "tool_choice": {
+          "type": "allowed_tools",
+          "allowed_tools": {
+            "tools": [
+              {
+                "type": "function",
+                "name": "f"
+              },
+              {
+                "type": "web_search"
+              }
+            ]
+          }
+        }
+      },
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "ns"
+        },
+        {
+          "type": "tool_search",
+          "execution": "CLIENT"
+        },
+        {
+          "type": "tool_search",
+          "execution": "server"
+        },
+        {
+          "type": "web_search"
+        }
+      ],
+      "tool_choice": {
+        "type": "allowed_tools",
+        "tools": [
+          {
+            "type": "web_search"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": "raw"
+        },
+        {
+          "type": "additional_tools",
+          "tools": [
+            {
+              "type": "function",
+              "name": "keep"
+            }
+          ],
+          "input": []
+        }
+      ],
+      "response": {
+        "tools": [
+          {
+            "type": "custom",
+            "name": "c"
+          }
+        ],
+        "tool_choice": {
+          "type": "allowed_tools",
+          "allowed_tools": {
+            "tools": [
+              {
+                "type": "function",
+                "name": "f"
+              }
+            ]
+          }
+        }
+      },
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "ns"
+        },
+        {
+          "type": "tool_search",
+          "execution": "CLIENT"
+        }
+      ],
+      "stream": true,
+      "store": false,
+      "parallel_tool_calls": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {
+      "X-OpenAI-Internal-Codex-Responses-Lite": [
+        "true"
+      ]
+    }
+  },
+  {
+    "name": "lite_header_presence_false",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {
+      "X-OpenAI-Internal-Codex-Responses-Lite": [
+        "false"
+      ]
+    },
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "web_search"
+        }
+      ]
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "stream": true,
+      "store": false,
+      "parallel_tool_calls": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {
+      "X-OpenAI-Internal-Codex-Responses-Lite": [
+        "false"
+      ]
+    }
+  },
+  {
+    "name": "lite_metadata",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "additional_tools",
+          "tools": [
+            {
+              "type": "web_search"
+            }
+          ]
+        }
+      ],
+      "client_metadata": {
+        "ws_request_header_x_openai_internal_codex_responses_lite": " True "
+      },
+      "tools": [
+        {
+          "type": "function",
+          "name": "f"
+        }
+      ],
+      "tool_choice": "unexpected"
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "client_metadata": {
+        "ws_request_header_x_openai_internal_codex_responses_lite": " True "
+      },
+      "tools": [
+        {
+          "type": "function",
+          "name": "f"
+        }
+      ],
+      "stream": true,
+      "store": false,
+      "parallel_tool_calls": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {
+      "X-OpenAI-Internal-Codex-Responses-Lite": [
+        "true"
+      ]
+    }
+  },
+  {
+    "name": "lite_image_promotes_full",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {
+      "X-OpenAI-Internal-Codex-Responses-Lite": [
+        "true"
+      ]
+    },
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "image_generation"
+        },
+        {
+          "type": "web_search"
+        }
+      ],
+      "tool_choice": {
+        "type": "image_generation"
+      }
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "image_generation"
+        },
+        {
+          "type": "web_search"
+        }
+      ],
+      "tool_choice": {
+        "type": "image_generation"
+      },
+      "stream": true,
+      "store": false,
+      "parallel_tool_calls": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "websocket_preserves_generate_and_parallel",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": true,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "generate": false,
+      "stream_options": {
+        "reasoning_summary_delivery": "sequential_cutoff"
+      }
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "generate": false,
+      "stream_options": {
+        "reasoning_summary_delivery": "sequential_cutoff"
+      },
+      "stream": true,
+      "store": false,
+      "parallel_tool_calls": true,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "call_id_repair_and_orphans",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "function_call",
+          "id": "do-not-use",
+          "name": "a",
+          "arguments": "cipher"
+        },
+        {
+          "type": "function_call",
+          "name": "b",
+          "call_id": "existing"
+        },
+        {
+          "type": "function_call_output",
+          "name": "b",
+          "output": "b"
+        },
+        {
+          "type": "function_call_output",
+          "name": "a",
+          "output": "a"
+        },
+        {
+          "type": "custom_tool_call_output",
+          "output": "orphan"
+        },
+        {
+          "type": "function_call_output",
+          "name": "standalone",
+          "output": "raw"
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": "call_id untouched"
+        }
+      ]
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "function_call",
+          "id": "do-not-use",
+          "name": "a",
+          "arguments": "cipher",
+          "call_id": "call_missing_0"
+        },
+        {
+          "type": "function_call",
+          "name": "b",
+          "call_id": "existing"
+        },
+        {
+          "type": "function_call_output",
+          "name": "b",
+          "output": "b",
+          "call_id": "existing"
+        },
+        {
+          "type": "function_call_output",
+          "name": "a",
+          "output": "a",
+          "call_id": "call_missing_0"
+        },
+        {
+          "type": "function_call_output",
+          "name": "standalone",
+          "output": "raw"
+        },
+        {
+          "type": "message",
+          "role": "user",
+          "content": "call_id untouched"
+        }
+      ],
+      "stream": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "call_id_collision",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "function_call",
+          "name": "f"
+        },
+        {
+          "type": "function_call",
+          "name": "g",
+          "call_id": "call_missing_0"
+        },
+        {
+          "type": "function_call_output",
+          "output": "first"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_missing_0",
+          "output": "second"
+        }
+      ]
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [
+        {
+          "type": "function_call",
+          "name": "f",
+          "call_id": "call_missing_0_1"
+        },
+        {
+          "type": "function_call",
+          "name": "g",
+          "call_id": "call_missing_0"
+        },
+        {
+          "type": "function_call_output",
+          "output": "first",
+          "call_id": "call_missing_0_1"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_missing_0",
+          "output": "second"
+        }
+      ],
+      "stream": true,
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "schema_union_patterns_and_user_data",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "n",
+          "tools": [
+            {
+              "type": "function",
+              "name": "f",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "a.b": {
+                    "oneOf": [
+                      {
+                        "const": 0,
+                        "title": "choice0"
+                      },
+                      {
+                        "const": 1,
+                        "title": "choice1"
+                      },
+                      {
+                        "const": 2,
+                        "title": "choice2"
+                      },
+                      {
+                        "const": 3,
+                        "title": "choice3"
+                      },
+                      {
+                        "const": 4,
+                        "title": "choice4"
+                      },
+                      {
+                        "const": 5,
+                        "title": "choice5"
+                      },
+                      {
+                        "const": 6,
+                        "title": "choice6"
+                      },
+                      {
+                        "const": 7,
+                        "title": "choice7"
+                      }
+                    ]
+                  },
+                  "pattern": {
+                    "type": "string",
+                    "pattern": "^\\p{Letter}+$",
+                    "default": {
+                      "pattern": "\\p{Letter}"
+                    }
+                  },
+                  "escaped": {
+                    "type": "string",
+                    "pattern": "\\\\p{Letter}"
+                  },
+                  "keep": {
+                    "type": "string",
+                    "pattern": "^[a-z]+$"
+                  }
+                },
+                "patternProperties": {
+                  "\\p{Letter}": {
+                    "type": "string"
+                  },
+                  "^x": {
+                    "type": "string",
+                    "pattern": "\\P{Digit}"
+                  }
+                },
+                "$defs": {
+                  "nested": {
+                    "items": {
+                      "type": "string",
+                      "pattern": "\\p{X}"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "n",
+          "tools": [
+            {
+              "type": "function",
+              "name": "f",
+              "parameters": {
+                "$defs": {
+                  "nested": {
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "patternProperties": {
+                  "^x": {
+                    "type": "string"
+                  }
+                },
+                "properties": {
+                  "a.b": {
+                    "enum": [
+                      0,
+                      1,
+                      2,
+                      3,
+                      4,
+                      5,
+                      6,
+                      7
+                    ]
+                  },
+                  "escaped": {
+                    "pattern": "\\\\p{Letter}",
+                    "type": "string"
+                  },
+                  "keep": {
+                    "pattern": "^[a-z]+$",
+                    "type": "string"
+                  },
+                  "pattern": {
+                    "default": {
+                      "pattern": "\\p{Letter}"
+                    },
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          ]
+        }
+      ],
+      "stream": true,
+      "store": false,
+      "parallel_tool_calls": true,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  },
+  {
+    "name": "schema_duplicate_or_constrained_union",
+    "chatgpt": true,
+    "compact": false,
+    "websocket": false,
+    "headers": {},
+    "input": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "function",
+          "name": "f",
+          "parameters": {
+            "properties": {
+              "duplicate": {
+                "oneOf": [
+                  {
+                    "const": 1
+                  },
+                  {
+                    "const": 1
+                  },
+                  {
+                    "const": 2,
+                    "title": "choice2"
+                  },
+                  {
+                    "const": 3,
+                    "title": "choice3"
+                  },
+                  {
+                    "const": 4,
+                    "title": "choice4"
+                  },
+                  {
+                    "const": 5,
+                    "title": "choice5"
+                  },
+                  {
+                    "const": 6,
+                    "title": "choice6"
+                  },
+                  {
+                    "const": 7,
+                    "title": "choice7"
+                  }
+                ]
+              },
+              "constrained": {
+                "anyOf": [
+                  {
+                    "const": 0,
+                    "type": "number"
+                  },
+                  {
+                    "const": 1,
+                    "title": "choice1"
+                  },
+                  {
+                    "const": 2,
+                    "title": "choice2"
+                  },
+                  {
+                    "const": 3,
+                    "title": "choice3"
+                  },
+                  {
+                    "const": 4,
+                    "title": "choice4"
+                  },
+                  {
+                    "const": 5,
+                    "title": "choice5"
+                  },
+                  {
+                    "const": 6,
+                    "title": "choice6"
+                  },
+                  {
+                    "const": 7,
+                    "title": "choice7"
+                  }
+                ]
+              },
+              "same_enum": {
+                "oneOf": [
+                  {
+                    "const": 0,
+                    "title": "choice0"
+                  },
+                  {
+                    "const": 1,
+                    "title": "choice1"
+                  },
+                  {
+                    "const": 2,
+                    "title": "choice2"
+                  },
+                  {
+                    "const": 3,
+                    "title": "choice3"
+                  },
+                  {
+                    "const": 4,
+                    "title": "choice4"
+                  },
+                  {
+                    "const": 5,
+                    "title": "choice5"
+                  },
+                  {
+                    "const": 6,
+                    "title": "choice6"
+                  },
+                  {
+                    "const": 7,
+                    "title": "choice7"
+                  }
+                ],
+                "enum": [
+                  7,
+                  6,
+                  5,
+                  4,
+                  3,
+                  2,
+                  1,
+                  0
+                ]
+              },
+              "different_enum": {
+                "oneOf": [
+                  {
+                    "const": 0,
+                    "title": "choice0"
+                  },
+                  {
+                    "const": 1,
+                    "title": "choice1"
+                  },
+                  {
+                    "const": 2,
+                    "title": "choice2"
+                  },
+                  {
+                    "const": 3,
+                    "title": "choice3"
+                  },
+                  {
+                    "const": 4,
+                    "title": "choice4"
+                  },
+                  {
+                    "const": 5,
+                    "title": "choice5"
+                  },
+                  {
+                    "const": 6,
+                    "title": "choice6"
+                  },
+                  {
+                    "const": 7,
+                    "title": "choice7"
+                  }
+                ],
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  8
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "model": "fixture",
+      "input": [],
+      "tools": [
+        {
+          "type": "function",
+          "name": "f",
+          "parameters": {
+            "properties": {
+              "duplicate": {
+                "oneOf": [
+                  {
+                    "const": 1
+                  },
+                  {
+                    "const": 1
+                  },
+                  {
+                    "const": 2,
+                    "title": "choice2"
+                  },
+                  {
+                    "const": 3,
+                    "title": "choice3"
+                  },
+                  {
+                    "const": 4,
+                    "title": "choice4"
+                  },
+                  {
+                    "const": 5,
+                    "title": "choice5"
+                  },
+                  {
+                    "const": 6,
+                    "title": "choice6"
+                  },
+                  {
+                    "const": 7,
+                    "title": "choice7"
+                  }
+                ]
+              },
+              "constrained": {
+                "anyOf": [
+                  {
+                    "const": 0,
+                    "type": "number"
+                  },
+                  {
+                    "const": 1,
+                    "title": "choice1"
+                  },
+                  {
+                    "const": 2,
+                    "title": "choice2"
+                  },
+                  {
+                    "const": 3,
+                    "title": "choice3"
+                  },
+                  {
+                    "const": 4,
+                    "title": "choice4"
+                  },
+                  {
+                    "const": 5,
+                    "title": "choice5"
+                  },
+                  {
+                    "const": 6,
+                    "title": "choice6"
+                  },
+                  {
+                    "const": 7,
+                    "title": "choice7"
+                  }
+                ]
+              },
+              "same_enum": {
+                "enum": [
+                  7,
+                  6,
+                  5,
+                  4,
+                  3,
+                  2,
+                  1,
+                  0
+                ]
+              },
+              "different_enum": {
+                "oneOf": [
+                  {
+                    "const": 0,
+                    "title": "choice0"
+                  },
+                  {
+                    "const": 1,
+                    "title": "choice1"
+                  },
+                  {
+                    "const": 2,
+                    "title": "choice2"
+                  },
+                  {
+                    "const": 3,
+                    "title": "choice3"
+                  },
+                  {
+                    "const": 4,
+                    "title": "choice4"
+                  },
+                  {
+                    "const": 5,
+                    "title": "choice5"
+                  },
+                  {
+                    "const": 6,
+                    "title": "choice6"
+                  },
+                  {
+                    "const": 7,
+                    "title": "choice7"
+                  }
+                ],
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  8
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "stream": true,
+      "store": false,
+      "parallel_tool_calls": true,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "instructions": ""
+    },
+    "expected_headers": {}
+  }
+]

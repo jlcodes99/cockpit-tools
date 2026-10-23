@@ -67,15 +67,20 @@ fn image_generation_source_is_ready(
 }
 
 pub(crate) fn configured_image_generation_settings() -> Result<CodexLocalAccessCollection, String> {
-    load_collection_from_disk()?
+    let mut collection = load_collection_from_disk()?
         .map(Ok)
-        .unwrap_or_else(new_local_access_collection)
+        .unwrap_or_else(new_local_access_collection)?;
+    enforce_chatgpt_plan_image_policy(&mut collection, &[]);
+    Ok(collection)
 }
 
 fn image_generation_manifest_policy(
     account: &CodexAccount,
     collection: &CodexLocalAccessCollection,
 ) -> &'static str {
+    if codex_account::is_chatgpt_plan_account(account) {
+        return "disabled";
+    }
     // Native OAuth images can only execute a live bare model. Keep its credential
     // admission behavior unchanged; this guard owns only image model availability.
     if !account.is_api_key_auth()
@@ -100,6 +105,9 @@ fn image_generation_manifest_policy(
 }
 
 pub(crate) fn is_image_generation_source_for_model(account: &CodexAccount, model: &str) -> bool {
+    if codex_account::is_chatgpt_plan_account(account) {
+        return false;
+    }
     if account.is_api_key_auth() {
         image_api_model_ids(account)
             .iter()
@@ -237,4 +245,52 @@ fn remove_disabled_image_generation_sources(collection: &mut CodexLocalAccessCol
         .retain(|id, _| !disabled.contains(id));
     ids_before != collection.image_generation_account_ids.len()
         || models_before != collection.image_generation_account_models.len()
+}
+
+/// Plan registrations cannot generate images. The reserved projection prefix lets
+/// cold reads enforce this without loading/decrypting accounts; account metadata
+/// additionally covers imported or older references during full normalization.
+fn enforce_chatgpt_plan_image_policy(
+    collection: &mut CodexLocalAccessCollection,
+    accounts: &[CodexAccount],
+) -> bool {
+    let plan_ids: HashSet<String> = collection
+        .account_ids
+        .iter()
+        .chain(collection.image_generation_account_ids.iter())
+        .chain(collection.image_generation_account_policies.keys())
+        .chain(collection.image_generation_account_models.keys())
+        .filter(|id| id.starts_with(codex_account::CHATGPT_PLAN_ACCOUNT_PREFIX))
+        .cloned()
+        .chain(
+            accounts
+                .iter()
+                .filter(|account| codex_account::is_chatgpt_plan_account(account))
+                .map(|account| account.id.clone()),
+        )
+        .collect();
+    let ids_before = collection.image_generation_account_ids.len();
+    let models_before = collection.image_generation_account_models.len();
+    collection
+        .image_generation_account_ids
+        .retain(|id| !plan_ids.contains(id));
+    collection
+        .image_generation_account_models
+        .retain(|id, _| !plan_ids.contains(id));
+    let mut changed = ids_before != collection.image_generation_account_ids.len()
+        || models_before != collection.image_generation_account_models.len();
+    for id in plan_ids {
+        if collection.account_ids.contains(&id) {
+            changed |= collection
+                .image_generation_account_policies
+                .insert(id, CodexLocalAccessImageGenerationPolicy::Disabled)
+                != Some(CodexLocalAccessImageGenerationPolicy::Disabled);
+        } else {
+            changed |= collection
+                .image_generation_account_policies
+                .remove(&id)
+                .is_some();
+        }
+    }
+    changed
 }

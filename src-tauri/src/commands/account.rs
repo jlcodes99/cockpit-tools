@@ -476,14 +476,15 @@ async fn run_auto_switch_for_runtime_target(
     .await
 }
 
+include!("account_desktop_switch.rs");
+
 async fn switch_account_legacy_antigravity(
     app: AppHandle,
     account_id: String,
 ) -> Result<models::Account, String> {
-    modules::logger::log_info(&format!("开始切换 Antigravity 账号: {}", account_id));
-
-    if let Err(e) = modules::process::ensure_antigravity_legacy_launch_path_configured() {
-        if e.starts_with("APP_PATH_NOT_FOUND:") {
+    let result = switch_account_desktop(account_id.clone(), true).await;
+    if let Err(error) = &result {
+        if error.starts_with("APP_PATH_NOT_FOUND:") {
             let _ = app.emit(
                 "app:path_missing",
                 serde_json::json!({
@@ -496,85 +497,8 @@ async fn switch_account_legacy_antigravity(
                 }),
             );
         }
-        return Err(e);
     }
-
-    let auth_mode = resolve_antigravity_desktop_auth_mode()?;
-    let mut account = modules::account::prepare_account_for_injection(&account_id).await?;
-    modules::set_current_account_id(&account_id)?;
-    account.update_last_used();
-    modules::save_account(&account)?;
-
-    if let Err(e) = modules::antigravity_legacy_instance::update_default_settings(
-        Some(Some(account_id.clone())),
-        None,
-        Some(false),
-    ) {
-        modules::logger::log_warn(&format!("更新 Antigravity 默认实例绑定账号失败: {}", e));
-    }
-
-    let default_dir = legacy_antigravity_user_data_dir()?;
-    let default_dir_str = default_dir.to_string_lossy().to_string();
-    modules::process::close_antigravity_legacy_instances(
-        &[default_dir_str.clone()],
-        &default_dir_str,
-        20,
-    )?;
-    let _ = modules::antigravity_legacy_instance::update_default_pid(None);
-
-    match auth_mode {
-        AntigravityDesktopAuthMode::SystemCredential => {
-            modules::logger::log_info("[Antigravity] 使用系统凭据认证模式写入账号");
-            modules::antigravity_credential::write_antigravity_system_credential(&account)?;
-        }
-        AntigravityDesktopAuthMode::LegacyStateDb => {
-            modules::logger::log_info("[Antigravity] 使用旧版 SQLite 认证模式写入账号");
-            let db_path = legacy_antigravity_state_db_path()?;
-            modules::db::inject_account_token_to_path(&db_path, &account)?;
-        }
-    }
-
-    modules::logger::log_info("正在启动 Antigravity 默认实例...");
-    let default_settings = modules::antigravity_legacy_instance::load_default_settings()?;
-    let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
-    let launch_result = modules::process::start_antigravity_legacy_with_args("", &extra_args);
-    let launch_error = match launch_result {
-        Ok(pid) => {
-            if let Err(e) = modules::antigravity_legacy_instance::update_default_pid(Some(pid)) {
-                modules::logger::log_warn(&format!("更新默认实例 PID 失败: {}", e));
-            }
-            None
-        }
-        Err(e) => {
-            modules::logger::log_warn(&format!("Antigravity 启动失败: {}", e));
-            if e.starts_with("APP_PATH_NOT_FOUND:") {
-                let _ = app.emit(
-                    "app:path_missing",
-                    serde_json::json!({
-                        "app": "antigravity",
-                        "retry": {
-                            "kind": "switchAccount",
-                            "accountId": account_id,
-                            "runtimeTarget": "antigravity"
-                        }
-                    }),
-                );
-            }
-            Some(e)
-        }
-    };
-
-    if let Some(err) = launch_error {
-        modules::websocket::broadcast_account_switched(&account.id, &account.email);
-        if err.starts_with("APP_PATH_NOT_FOUND:") {
-            return Err(err);
-        }
-        return Err(format!("账号已切换，但启动 Antigravity 失败: {}", err));
-    }
-
-    modules::logger::log_info(&format!("Antigravity 账号切换完成: {}", account.email));
-    modules::websocket::broadcast_account_switched(&account.id, &account.email);
-    Ok(account)
+    result
 }
 
 /// 切换账号（完整流程：Token刷新 + 关闭程序 + 注入 + 重启）
@@ -682,8 +606,14 @@ pub async fn switch_account(
         if target_dir == default_dir {
             continue;
         }
-        if let Err(e) = modules::instance::inject_account_to_profile_with_account(&target_dir, &account) {
-            modules::logger::log_warn(&format!("[Switch] 注入目录 {} 失败: {}", target_dir.display(), e));
+        if let Err(e) =
+            modules::instance::inject_account_to_profile_with_account(&target_dir, &account)
+        {
+            modules::logger::log_warn(&format!(
+                "[Switch] 注入目录 {} 失败: {}",
+                target_dir.display(),
+                e
+            ));
         }
     }
 
@@ -870,7 +800,8 @@ pub async fn load_platform_account_groups(platform: String) -> Result<String, St
     if !path.exists() {
         return Ok("[]".to_string());
     }
-    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read platform groups for {}: {}", platform, e))
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read platform groups for {}: {}", platform, e))
 }
 
 #[tauri::command]

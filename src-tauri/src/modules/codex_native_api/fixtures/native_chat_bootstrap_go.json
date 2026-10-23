@@ -1,0 +1,12 @@
+[
+  {"name":"nested quota numeric","wire":"data: {\"error\":{\"status_code\":429,\"message\":\"limited\"}}\n\n","expected_status":429},
+  {"name":"response overload numeric string","wire":"data: {\"response\":{\"error\":{\"status\":\"503\",\"message\":\"overloaded\"}}}\n\n","expected_status":503},
+  {"name":"declared SSE overload","wire":"event: error\ndata: {\"status_code\":503,\"message\":\"busy\"}\n\n","expected_status":503},
+  {"name":"top level SSE overload","wire":"data: {\"code\":\"busy\",\"message\":\"overloaded\",\"status\":503}\n\n","expected_status":503},
+  {"name":"declared empty error","wire":"event: error\n\n","expected_status":502},
+  {"name":"declared flat invalid request type","wire":"event: error\ndata: {\"type\":\"invalid_request_error\",\"status\":503,\"message\":\"Malformed request\"}\n\n","expected_status":503,"expected_request_fault":true},
+  {"name":"declared flat authentication type wins generic code","wire":"event: error\ndata: {\"type\":\"authentication_error\",\"code\":\"invalid_request_error\",\"status\":401,\"message\":\"Expired key\"}\n\n","expected_status":401,"expected_request_fault":false},
+  {"name":"declared nested auth retains original type","wire":"event: error\ndata: {\"status\":401,\"error\":{\"type\":\"authentication_error\",\"code\":\"invalid_request_error\",\"message\":\"Expired key\"}}\n\n","expected_status":401,"expected_request_fault":false},
+  {"name":"top request type survives nested overload","wire":"event: error\ndata: {\"type\":\"invalid_request_error\",\"status\":503,\"error\":{\"type\":\"overloaded_error\",\"code\":\"server_error\",\"message\":\"Malformed request\"}}\n\n","expected_status":503,"expected_request_fault":true},
+  {"name":"top auth type survives nested generic code","wire":"event: error\ndata: {\"type\":\"authentication_error\",\"status\":401,\"error\":{\"code\":\"invalid_request_error\",\"message\":\"Expired key\"}}\n\n","expected_status":401,"expected_request_fault":false}
+]

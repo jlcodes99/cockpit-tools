@@ -32,6 +32,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
+import { codexBackgroundError } from '../../utils/codexBackgroundError';
 import { DEFAULT_WAKEUP_MODEL } from '../../utils/codexTestModel';
 import {
   CodexAccount,
@@ -1035,6 +1036,7 @@ export function CodexWakeupContent({
       buildCodexPlanFilterOptions(wakeupTierCounts, {
         includeError: false,
         pendingLabel: t('codex.pendingAuth.badge', '待授权'),
+        chatgptPlanLabel: t('chatgptPlan.title'),
       }),
     [t, wakeupTierCounts],
   );
@@ -3784,7 +3786,7 @@ export function CodexWakeupContent({
               </button>
             </div>
             <div className="modal-body codex-wakeup-modal-body codex-wakeup-results-body">
-              <ModalErrorMessage message={executionSession.errorText} />
+              <ModalErrorMessage message={executionSession.errorText ? codexBackgroundError(executionSession.errorText, t) : undefined} />
               <section className="codex-wakeup-results-summary-bar">
                 <div className="codex-wakeup-results-summary-copy">
                   <div className="codex-wakeup-results-summary-head">
@@ -3941,7 +3943,7 @@ export function CodexWakeupContent({
                             ? t('codex.wakeup.executionRunningDesc')
                             : record.status === 'success'
                               ? record.reply || t('codex.wakeup.historyNoReply')
-                              : record.error || t('codex.wakeup.historyUnknownError')}
+                              : record.error ? codexBackgroundError(record.error, t) : t('codex.wakeup.historyUnknownError')}
                       </p>
                       <div className="codex-wakeup-execution-row-meta">
                         {record.timestamp && <span>{formatHistoryTimestamp(record.timestamp)}</span>}

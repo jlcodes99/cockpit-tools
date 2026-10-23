@@ -70,6 +70,26 @@ test('a remounted API control reflects persisted Fast instead of defaulting its 
   h.h.unmount();
 });
 
+test('Ultrafast persists independently in account, instance and API controls', async () => {
+  for (const scope of ['account', 'instance', 'api']) {
+    const h = harness(scope);
+    await h.ready();
+    assert.equal(h.select().value, 'standard');
+    assert.equal(h.calls.length, 0);
+    await h.select().onChange('ultrafast'); h.render();
+    assert.equal(h.select().value, 'ultrafast');
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0][0], scope);
+    assert.equal(scope === 'instance' ? h.calls[0][1].appSpeed : h.calls[0][h.calls[0].length - 1], 'ultrafast');
+    h.h.unmount();
+  }
+  const h = harness('api', { getCodexApiServiceAppSpeedConfig: async () => ({ speed: 'ultrafast' }) });
+  await h.ready();
+  assert.equal(h.select().value, 'ultrafast');
+  assert.equal(h.calls.length, 0);
+  h.h.unmount();
+});
+
 test('account changes update the shared account snapshot and do not save API defaults', async () => {
   const h = harness('account');
   await h.select().onChange('fast'); h.render();

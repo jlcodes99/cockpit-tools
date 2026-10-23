@@ -80,7 +80,7 @@ function CodexImageMainModelInput({ model, disabled, onSave }: {
       </label>
       <div className="codex-image-model-input-row">
         <input id={inputId} ref={input} className="codex-image-model-inline-input" value={draft}
-          placeholder="gpt-5.5" maxLength={200} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={hintId}
+          placeholder="gpt-5.6-luna" maxLength={200} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={hintId}
           onChange={(event) => { setDraft(event.target.value); setError(""); }}
           onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void save(); } }} />
         <button type="button" className="btn btn-secondary btn-sm" disabled={disabled || draft.trim() === (model || "")} onClick={() => void save()}>

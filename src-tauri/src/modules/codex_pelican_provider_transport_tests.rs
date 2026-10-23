@@ -78,6 +78,27 @@ async fn mock_provider(wire: &str) -> (String, tokio::task::JoinHandle<Value>) {
             "post /v1/chat/completions "
         }));
         let body: Value = serde_json::from_slice(&raw[header_end..header_end + length]).unwrap();
+        let installation = headers
+            .lines()
+            .find_map(|line| line.strip_prefix("x-codex-installation-id:").map(str::trim));
+        if wire == "responses" {
+            let installation = installation.expect("Codex provider installation header");
+            assert_eq!(
+                uuid::Uuid::parse_str(installation)
+                    .unwrap()
+                    .get_version_num(),
+                4
+            );
+            assert_eq!(
+                body["client_metadata"]["x-codex-installation-id"],
+                installation
+            );
+        } else {
+            assert!(
+                installation.is_none(),
+                "Do not inject Codex installation headers into Chat providers"
+            );
+        }
         assert_eq!(body["model"], "provider-model");
         assert_eq!(body["stream"], true);
         assert!(!body.to_string().contains("max_output_tokens\":256"));
@@ -124,12 +145,7 @@ async fn pelican_provider_protocols_stream_and_clean_up_without_enrolling_accoun
         let (_cancel, receiver) = watch::channel(false);
         let result = timeout(
             Duration::from_secs(45),
-            run_pelican_provider_chat(
-                request,
-                "medium".into(),
-                receiver,
-                |_| {},
-            ),
+            run_pelican_provider_chat(request, "medium".into(), receiver, |_| {}),
         )
         .await
         .unwrap()

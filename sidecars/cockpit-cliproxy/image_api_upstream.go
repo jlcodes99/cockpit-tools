@@ -453,6 +453,10 @@ func (s *relayServer) handleImageAPIUpstream(c *gin.Context, account *accountSpe
 		writeAPIError(c, http.StatusBadRequest, err.Error(), "invalid_request")
 		return
 	}
+	if direct == nil && imageAPIHistoryIsOpaque(payload, c.Request.Header) {
+		writeAPIError(c, http.StatusConflict, "An external Images source needs the complete prompt and input images; opaque Responses continuation is not supported", "continuation_not_supported")
+		return
+	}
 	tools, _ := payload["tools"].([]any)
 	for _, entry := range tools {
 		if tool, ok := entry.(map[string]any); ok && stringField(tool, "type") == "image_generation" {
@@ -523,6 +527,22 @@ func (s *relayServer) handleImageAPIUpstream(c *gin.Context, account *accountSpe
 	req.Header.Set("Authorization", "Bearer "+upstream.APIKey)
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
+	identityAuth, err := s.directGatewayIdentity(account.ID, upstream.APIKey, upstream.BaseURL, false)
+	if err != nil {
+		s.writeExecutorError(c, err)
+		return
+	}
+	if identityAuth != nil {
+		identityAuth.ProxyURL = upstream.ProxyURL
+	}
+	identityClient, err := applyDirectGatewayIdentity(req, identityAuth)
+	if err != nil {
+		s.writeExecutorError(c, err)
+		return
+	}
+	if identityClient != nil {
+		client = identityClient
+	}
 	observeDirectGatewayRequest(ctx, account.ID, model, req.Header, raw)
 	resp, err := client.Do(req)
 	if err != nil {

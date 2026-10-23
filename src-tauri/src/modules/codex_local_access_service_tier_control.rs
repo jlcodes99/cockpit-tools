@@ -25,6 +25,8 @@ pub async fn sync_running_api_service_speed(speed: CodexAppSpeed) -> Result<(), 
             if !runtime.running {
                 return Ok(());
             }
+            // Native requests read the persisted preference when selecting their route.
+            if runtime.native_handle.is_some() { return Ok(()); }
             let port = runtime.actual_port.ok_or("running gateway has no port")?;
             (port, runtime.sidecar_generation)
         };

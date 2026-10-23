@@ -686,6 +686,9 @@ pub async fn prepare_account_for_injection(account_id: &str) -> Result<CodexAcco
 pub async fn prepare_account_for_injection_from_store(
     account_id: &str,
 ) -> Result<CodexAccount, String> {
+    if let Some(account) = load_account(account_id) {
+        reject_chatgpt_plan_client_injection(&account)?;
+    }
     ensure_managed_account_fresh(account_id).await
 }
 
@@ -1057,6 +1060,9 @@ where
     Fut: std::future::Future<Output = Result<(), String>>,
 {
     let _switch_guard = CODEX_ACCOUNT_SWITCH_LOCK.lock().await;
+    if let Some(account) = load_account(account_id) {
+        reject_chatgpt_plan_client_injection(&account)?;
+    }
     sync_active_official_account_before_switch().await?;
 
     let switch_lock_account_id = load_account_after_index_repair(account_id)

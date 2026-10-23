@@ -110,6 +110,11 @@ pub struct UserConfig {
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     #[serde(default = "default_codex_app_ui_injection_enabled")]
     pub codex_app_ui_injection_enabled: bool,
+    /// 官方客户端增强，仅在重启目标实例后应用。
+    #[serde(default = "default_codex_app_enhancements_enabled")]
+    pub codex_app_native_fast_enabled: bool,
+    #[serde(default = "default_codex_app_enhancements_enabled")]
+    pub codex_app_api_quota_compat_enabled: bool,
     /// Codex WSL 配置目录 (Windows Only)
     #[serde(default = "default_codex_wsl_config_dir")]
     pub codex_wsl_config_dir: String,
@@ -407,9 +412,6 @@ pub struct UserConfig {
     /// 启动时是否自动恢复 Codex 代理接管状态
     #[serde(default = "default_codex_auto_restore_takeover_on_launch")]
     pub codex_auto_restore_takeover_on_launch: bool,
-    /// OAuth 切号时保留经过本地集成记录验证的外部桥接（默认关闭）。
-    #[serde(default)]
-    pub codex_preserve_verified_external_bridge: bool,
     /// 切换 Antigravity IDE 时是否自动启动/重启应用
     #[serde(default = "default_antigravity_launch_on_switch")]
     pub antigravity_launch_on_switch: bool,
@@ -731,6 +733,10 @@ fn default_codex_sync_wsl() -> bool {
     false
 }
 fn default_codex_app_ui_injection_enabled() -> bool {
+    true
+}
+
+fn default_codex_app_enhancements_enabled() -> bool {
     true
 }
 
@@ -1214,6 +1220,8 @@ impl Default for UserConfig {
             codex_auto_refresh_plan_types: default_codex_auto_refresh_plan_types(),
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
+            codex_app_native_fast_enabled: default_codex_app_enhancements_enabled(),
+            codex_app_api_quota_compat_enabled: default_codex_app_enhancements_enabled(),
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
@@ -1323,7 +1331,6 @@ impl Default for UserConfig {
             codex_launch_on_switch: default_codex_launch_on_switch(),
             codex_auto_restore_takeover_on_launch:
                 default_codex_auto_restore_takeover_on_launch(),
-            codex_preserve_verified_external_bridge: false,
             antigravity_launch_on_switch: default_antigravity_launch_on_switch(),
             codex_restart_specified_app_on_switch: default_codex_restart_specified_app_on_switch(),
             codex_local_access_entry_visible: default_codex_local_access_entry_visible(),
@@ -2799,6 +2806,69 @@ mod tests {
 
         std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
         fs::remove_dir_all(data_dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn codex_app_enhancements_default_on_and_preserve_explicit_values() {
+        for config in [
+            UserConfig::default(),
+            serde_json::from_value(serde_json::json!({})).unwrap(),
+        ] {
+            assert!(config.codex_app_native_fast_enabled);
+            assert!(config.codex_app_api_quota_compat_enabled);
+        }
+        let disabled: UserConfig = serde_json::from_value(serde_json::json!({
+            "codex_app_native_fast_enabled": false,
+            "codex_app_api_quota_compat_enabled": false
+        }))
+        .unwrap();
+        assert!(!disabled.codex_app_native_fast_enabled);
+        assert!(!disabled.codex_app_api_quota_compat_enabled);
+        let config: UserConfig = serde_json::from_value(serde_json::json!({
+            "codex_app_native_fast_enabled": true,
+            "codex_app_api_quota_compat_enabled": true
+        }))
+        .unwrap();
+        let restored: UserConfig =
+            serde_json::from_value(serde_json::to_value(config).unwrap()).unwrap();
+        assert!(restored.codex_app_native_fast_enabled);
+        assert!(restored.codex_app_api_quota_compat_enabled);
+    }
+
+    #[test]
+    fn retired_codex_api_dictation_fields_are_ignored_and_not_saved() {
+        let dir = make_temp_dir("retired_codex_api_dictation_config");
+        let path = dir.join("config.json");
+        fs::write(
+            &path,
+            serde_json::json!({
+                "language": "ja",
+                "codex_app_native_fast_enabled": false,
+                "codex_app_api_quota_compat_enabled": true,
+                "codex_app_api_dictation_enabled": true,
+                "codex_app_api_dictation_model": "previously-enabled-model"
+            })
+            .to_string(),
+        )
+        .expect("write legacy configuration");
+        let legacy = load_test_config(&path);
+        assert!(!legacy.codex_app_native_fast_enabled);
+        assert!(legacy.codex_app_api_quota_compat_enabled);
+        persist_test_config(&path, &legacy).expect("save supported configuration fields");
+        let persisted: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("read saved configuration"))
+                .expect("parse saved configuration");
+        for retired in [
+            "codex_app_api_dictation_enabled",
+            "codex_app_api_dictation_model",
+        ] {
+            assert!(persisted.get(retired).is_none());
+        }
+        let reloaded = load_test_config(&path);
+        assert_eq!(reloaded.language, "ja");
+        assert!(!reloaded.codex_app_native_fast_enabled);
+        assert!(reloaded.codex_app_api_quota_compat_enabled);
+        fs::remove_dir_all(dir).expect("remove temporary configuration");
     }
 
     #[test]

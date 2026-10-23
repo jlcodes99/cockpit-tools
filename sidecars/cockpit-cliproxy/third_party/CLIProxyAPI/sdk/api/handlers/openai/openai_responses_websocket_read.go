@@ -17,6 +17,8 @@ const (
 	responsesWebsocketInboundMaxBytes  = 32 << 20
 )
 
+var errGatewayDraining = errors.New("gateway is reloading")
+
 type responsesWebsocketInboundMessage struct {
 	kind    int
 	payload []byte
@@ -97,14 +99,30 @@ func (p *responsesWebsocketReadPump) read() {
 }
 
 func (p *responsesWebsocketReadPump) next() (int, []byte, error) {
+	return p.nextWhileServing(nil)
+}
+
+func (p *responsesWebsocketReadPump) nextWhileServing(drain <-chan struct{}) (int, []byte, error) {
+	select {
+	case <-drain:
+		return 0, nil, errGatewayDraining
+	default:
+	}
 	if p.ctx.Err() != nil {
 		return 0, nil, context.Cause(p.ctx)
 	}
 	select {
+	case <-drain:
+		return 0, nil, errGatewayDraining
 	case <-p.ctx.Done():
 		return 0, nil, context.Cause(p.ctx)
 	case message := <-p.messages:
 		p.bytes.Add(-int64(len(message.payload)))
+		select {
+		case <-drain:
+			return 0, nil, errGatewayDraining
+		default:
+		}
 		if p.ctx.Err() != nil {
 			return 0, nil, context.Cause(p.ctx)
 		}

@@ -24,6 +24,12 @@ const longFields = [
   'standardLongOutputUsdPerMillion',
 ] as const;
 
+function longContextOutputMultiplier(modelId: string): number {
+  const segments = modelId.trim().split('/');
+  const model = segments[segments.length - 1].replace(/\([^()]*\)$/, '').toLowerCase();
+  return model === 'grok-4.7' || model === 'grok-4.7-latest' ? 2 : 1.5;
+}
+
 export function updateModelPricingDraft(
   draft: ModelPricingDraft, field: ModelPricingDraftField, value: string,
 ): ModelPricingDraft {
@@ -46,7 +52,9 @@ export function updateModelPricingDraft(
       next.standardLongCachedInputUsdPerMillion = scaled(
         next.cachedInputUsdPerMillion.trim() ? next.cachedInputUsdPerMillion : next.inputUsdPerMillion, 2,
       );
-      next.standardLongOutputUsdPerMillion = scaled(next.outputUsdPerMillion, 1.5);
+      next.standardLongOutputUsdPerMillion = scaled(
+        next.outputUsdPerMillion, longContextOutputMultiplier(next.modelId),
+      );
     }
   }
   return next;

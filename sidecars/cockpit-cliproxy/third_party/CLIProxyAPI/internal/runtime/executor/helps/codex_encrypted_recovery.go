@@ -121,7 +121,7 @@ func (r *CodexHTTPEncryptedRecovery) PrepareRequest(req *http.Request, body []by
 // credentials and context. It never inspects HTTP 200/SSE events or replays any
 // request after downstream output has been delivered.
 func (r *CodexHTTPEncryptedRecovery) Do(ctx context.Context, cfg *config.Config, client *http.Client, req *http.Request, body []byte, beforeRetry func(int, []byte) error) (*http.Response, []byte, error) {
-	resp, err := client.Do(req)
+	resp, err := DoGuardedUpstreamHTTP(ctx, r.auth, client, req)
 	if err != nil || !r.enabled || resp.StatusCode != http.StatusBadRequest {
 		return resp, body, err
 	}
@@ -170,7 +170,7 @@ func (r *CodexHTTPEncryptedRecovery) Do(ctx context.Context, cfg *config.Config,
 	RecordAPIRequest(ctx, cfg, UpstreamRequestLog{Transport: transport, URL: req.URL.String(), Method: req.Method, Headers: req.Header.Clone(), Body: next,
 		Provider: "codex", AuthID: r.auth.ID, AuthLabel: r.auth.Label, AuthType: authType, AuthValue: authValue})
 	LogWithRequestID(ctx).Debug("codex HTTP encrypted content rejected; retrying once with rejected digests removed")
-	resp, err = client.Do(req)
+	resp, err = DoGuardedUpstreamHTTP(ctx, r.auth, client, req)
 	return resp, next, err
 }
 

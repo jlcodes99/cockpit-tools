@@ -123,12 +123,10 @@ func TestPaidCodexModelsIncludeGPT6FamilyButFreeDoesNot(t *testing.T) {
 			if model == nil {
 				t.Fatalf("paid Codex models do not contain %s", modelID)
 			}
-			if modelID == codexBuiltinGPT61SolModelID {
-				if model.ContextLength != 272000 || model.MaxCompletionTokens != 128000 {
-					t.Fatalf("GPT-6.1 Sol limits = %#v", model)
-				}
-			} else if model.ContextLength != 256000 || model.MaxCompletionTokens != 128000 {
-				t.Fatalf("%s limits = %d/%d, want 256000/128000", modelID, model.ContextLength, model.MaxCompletionTokens)
+			template := embeddedCodexClientModelForTest(t, modelID)
+			wantContext := int(template["context_window"].(float64))
+			if model.ContextLength != wantContext || model.MaxCompletionTokens != 128000 {
+				t.Fatalf("%s limits = %d/%d, want %d/128000", modelID, model.ContextLength, model.MaxCompletionTokens, wantContext)
 			}
 			if model.DisplayName != wantDisplayNames[modelID] {
 				t.Fatalf("%s display name = %q, want %q", modelID, model.DisplayName, wantDisplayNames[modelID])
@@ -179,8 +177,10 @@ func TestLookupStaticModelInfoFallsBackToShippedGPT6Builtins(t *testing.T) {
 		if model.ID != modelID {
 			t.Fatalf("LookupStaticModelInfo(%s).ID = %s, want %s", modelID, model.ID, modelID)
 		}
-		if model.ContextLength != 256000 || model.MaxCompletionTokens != 128000 {
-			t.Fatalf("%s limits = %d/%d, want 256000/128000", modelID, model.ContextLength, model.MaxCompletionTokens)
+		template := embeddedCodexClientModelForTest(t, modelID)
+		wantContext := int(template["context_window"].(float64))
+		if model.ContextLength != wantContext || model.MaxCompletionTokens != 128000 {
+			t.Fatalf("%s limits = %d/%d, want %d/128000", modelID, model.ContextLength, model.MaxCompletionTokens, wantContext)
 		}
 	}
 	if model := LookupStaticModelInfo("gpt-6-unknown"); model != nil {
@@ -253,7 +253,7 @@ func TestCodexCatalogsDoNotRestoreRetiredModels(t *testing.T) {
 			}
 		}
 	}
-	models := WithCodexBuiltins([]*ModelInfo{{ID: "gpt-5.4"}, {ID: "gpt-4.1"}, {ID: "gpt-6.1-sol"}, {ID: "custom-model"}})
+	models := WithCodexBuiltins([]*ModelInfo{{ID: "gpt-5.5"}, {ID: "gpt-5.4"}, {ID: "gpt-4.1"}, {ID: "gpt-6.1-sol"}, {ID: "custom-model"}})
 	found := false
 	for _, model := range models {
 		if isRetiredCodexModelID(model.ID) {

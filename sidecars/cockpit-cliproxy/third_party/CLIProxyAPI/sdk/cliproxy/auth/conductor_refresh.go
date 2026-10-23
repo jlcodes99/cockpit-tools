@@ -475,7 +475,7 @@ func (m *Manager) tryRefreshExecutionAuthAfterUnauthorized(ctx context.Context, 
 	if m == nil || executor == nil || auth == nil || alreadyTried || execErr == nil {
 		return auth, false, nil
 	}
-	if !isUnauthorizedError(execErr) || auth.AuthKind() != AuthKindOAuth {
+	if isRequestStopError(execErr) || !isUnauthorizedError(execErr) || auth.AuthKind() != AuthKindOAuth {
 		return auth, false, nil
 	}
 
@@ -559,7 +559,7 @@ func (m *Manager) tryRefreshAfterUnauthorized(ctx context.Context, auth *Auth, e
 	}
 	// Request-scoped failures describe this request, not stale credentials.
 	// Refreshing would turn a direct error response into an implicit retry.
-	if isRequestScopedError(execErr) {
+	if isRequestStopError(execErr) || isRequestScopedError(execErr) {
 		return auth, false
 	}
 	if !isUnauthorizedError(execErr) || !authHasRefreshCredential(auth) {

@@ -335,7 +335,6 @@ fn emit_model_provider_chat_test_progress(
     let _ = app.emit(CODEX_MODEL_PROVIDER_CHAT_TEST_PROGRESS_EVENT, payload);
 }
 
-
 const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY: &[&str] = &[
     crate::modules::codex_wakeup::DEFAULT_WAKEUP_MODEL,
     "gpt-6.1-sol",
@@ -344,7 +343,6 @@ const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY: &[&str] = &[
     "gpt-6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
-    "gpt-5.5",
 ];
 
 fn is_image_generation_model_id(model_id: &str) -> bool {

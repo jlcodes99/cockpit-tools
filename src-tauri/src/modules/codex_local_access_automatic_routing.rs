@@ -5,7 +5,9 @@
 fn automatic_api_service_visible_model_ids(models: Vec<String>) -> Vec<String> {
     automatic_api_service_visible_model_ids_with_explicit_catalog(
         models,
-        api_service_experimental_model_catalog().as_deref().unwrap_or(&[]),
+        api_service_experimental_model_catalog()
+            .as_deref()
+            .unwrap_or(&[]),
     )
 }
 
@@ -55,7 +57,12 @@ fn automatic_api_service_account_model_slots(account: &CodexAccount) -> Vec<(Str
             let upstream = account
                 .api_model_mappings
                 .iter()
-                .find(|mapping| mapping.client_model.trim().eq_ignore_ascii_case(model.trim()))
+                .find(|mapping| {
+                    mapping
+                        .client_model
+                        .trim()
+                        .eq_ignore_ascii_case(model.trim())
+                })
                 .map(|mapping| mapping.upstream_model.clone())
                 .unwrap_or_else(|| model.clone());
             (model, upstream)
@@ -63,14 +70,30 @@ fn automatic_api_service_account_model_slots(account: &CodexAccount) -> Vec<(Str
         .collect()
 }
 
-/// 账号是否走 provider 路由（而不是原生账号池）。
+/// 账号是否需要 provider 路由，而不是使用原生账号池。
 ///
-/// Chat 协议账号一直如此；另外与 DeepSeek 网关模式一致，具备逐模型识图能力的账号也走
-/// provider 路由，这样才能把带图片的请求自动转到识图模型。
-fn automatic_api_service_provider_route_eligible(account: &CodexAccount) -> bool {
-    account.is_api_key_auth()
-        && (provider_gateway_wire_api_for_account(account) == "chat_completions"
-            || !account.api_model_vision_support.is_empty())
+/// Chat Completions 账号需要 Gateway 做协议转换。Responses 账号只有在显式配置的图片
+/// 转模型目标能够匹配候选上游模型，或命中官方 DeepSeek 的既有自动转模型规则时，
+/// 才需要 Gateway；模型图片能力表本身不参与这项判断。
+fn automatic_api_service_provider_route_eligible(
+    account: &CodexAccount,
+    upstream_models: &[String],
+) -> bool {
+    if !account.is_api_key_auth() {
+        return false;
+    }
+    if provider_gateway_wire_api_for_account(account) == "chat_completions" {
+        return true;
+    }
+    if account
+        .api_vision_routing_model
+        .as_deref()
+        .is_some_and(|model| !model.trim().is_empty())
+    {
+        return automatic_api_service_vision_routing_model(account, upstream_models).is_some();
+    }
+    is_official_deepseek_account(account)
+        && automatic_api_service_vision_routing_model(account, upstream_models).is_some()
 }
 
 /// 账号在自动路由里是否存在「图片自动转到识图模型」的兜底模型。
@@ -106,7 +129,7 @@ fn automatic_api_service_vision_routing_model(
     vision_model.cloned()
 }
 
-/// 单个模型的识图能力：用户显式开关优先，其次 gpt-5.5+ 默认支持，最后取官方 DeepSeek 默认值。
+/// 单个模型的识图能力：用户显式开关优先，其次取 models.json 的图片输入声明，最后取官方 DeepSeek 默认值。
 fn automatic_api_service_account_model_vision(account: &CodexAccount, model: &str) -> bool {
     let key = model.trim();
     if let Some(value) = account
@@ -125,10 +148,7 @@ fn automatic_api_service_account_model_vision(account: &CodexAccount, model: &st
 }
 
 /// 单个模型在 provider 网关里的识图能力：模型级开关优先，其次取网关默认值。
-fn provider_gateway_model_vision(
-    gateway: &CodexLocalAccessProviderGateway,
-    model: &str,
-) -> bool {
+fn provider_gateway_model_vision(gateway: &CodexLocalAccessProviderGateway, model: &str) -> bool {
     gateway
         .model_capabilities
         .iter()
@@ -178,8 +198,8 @@ fn is_gpt_or_codex_namespace_model(model: &str) -> bool {
 /// - OAuth(订阅) / 官方身份账号：直接承接官方模型；
 /// - Grok 供应商账号：不提供；
 /// - API Key 账号：按账号自己的模型清单判断，且只认「上游也是 GPT / Codex 家族」的槽位——
-///   官方 DeepSeek 目录壳位（客户端名 `gpt-5.5`、上游 `deepseek-flash`）不算，第三方 GPT
-///   中转（客户端名与上游名都是 `gpt-5.5`）才算；目录为空但按 Responses 直通时仍按官方
+///   官方 DeepSeek 目录壳位（客户端名 `gpt-5.6-luna`、上游 `deepseek-flash`）不算，第三方 GPT
+///   中转（客户端名与上游名都是 `gpt-5.6-sol`）才算；目录为空但按 Responses 直通时仍按官方
 ///   名称透传。
 fn account_provides_gpt_models(account: &CodexAccount) -> bool {
     if account.upstream_grok_account_id.is_some() {
@@ -210,7 +230,10 @@ fn is_local_gateway_visible_gpt_model(model: &str) -> bool {
         .any(|(model_id, _)| model_id.eq_ignore_ascii_case(key))
 }
 
-fn automatic_api_service_pool_model_ids(accounts: &[CodexAccount], fallback: Vec<String>) -> Vec<String> {
+fn automatic_api_service_pool_model_ids(
+    accounts: &[CodexAccount],
+    fallback: Vec<String>,
+) -> Vec<String> {
     // 账号池里没有能承接官方 GPT / Codex 模型的账号时，官方推荐目录不参与展示：
     // 客户端可见模型完全来自账号池（例如只加了 Grok 账号就只显示 Grok 模型），
     // 额度兜底条目 `gpt-reserve` 同样要隐藏（它只能由 OAuth 账号承接）。
@@ -221,12 +244,16 @@ fn automatic_api_service_pool_model_ids(accounts: &[CodexAccount], fallback: Vec
             .into_iter()
             .filter(|model| {
                 !is_local_gateway_visible_gpt_model(model)
-                    && !model.trim().eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID)
+                    && !model
+                        .trim()
+                        .eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID)
             })
             .collect::<Vec<_>>()
     };
     // Keep the existing empty-pool catalog so configuration remains possible before adding accounts.
-    if accounts.is_empty() { return fallback; }
+    if accounts.is_empty() {
+        return fallback;
+    }
     let mut models = Vec::new();
     for account in accounts {
         if !account.is_api_key_auth() {
@@ -265,23 +292,30 @@ fn automatic_api_service_route_models(
             .map(|model| (model.clone(), model.clone()))
             .collect();
     }
-    let account_excluded = collection.account_model_rules.iter()
+    let account_excluded = collection
+        .account_model_rules
+        .iter()
         .find(|rule| rule.account_id == account.id)
-        .map(|rule| rule.excluded_models.as_slice()).unwrap_or_default();
+        .map(|rule| rule.excluded_models.as_slice())
+        .unwrap_or_default();
     let mut seen = HashSet::new();
     let mut models = Vec::new();
     for (client, upstream) in slots {
         let client = client.trim();
         let upstream = upstream.trim();
-        if client.is_empty() || upstream.is_empty()
+        if client.is_empty()
+            || upstream.is_empty()
             || model_matches_any_rule(client, account_excluded)
-            || model_matches_any_rule(upstream, account_excluded) {
+            || model_matches_any_rule(upstream, account_excluded)
+        {
             continue;
         }
-        for alias in apply_model_aliases_to_ids(vec![client.to_string()], &collection.model_aliases) {
+        for alias in apply_model_aliases_to_ids(vec![client.to_string()], &collection.model_aliases)
+        {
             if !model_matches_any_rule(&alias, &collection.excluded_models)
                 && !model_matches_any_rule(&alias, account_excluded)
-                && seen.insert(alias.to_ascii_lowercase()) {
+                && seen.insert(alias.to_ascii_lowercase())
+            {
                 // 显示名与推理档位沿用账号官方模板（例如 DeepSeek 官方 models.json），
                 // 这样客户端通过网关拿到的名称与档位和 DeepSeek 网关模式完全一致。
                 let template = account_model_template(account, &alias)
@@ -347,18 +381,29 @@ fn automatic_api_service_model_routing_value(
     accounts: &HashMap<String, CodexAccount>,
 ) -> Value {
     let mut fallback = api_service_supported_codex_model_ids();
-    if !fallback.iter().any(|model| model.eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID)) {
+    if !fallback
+        .iter()
+        .any(|model| model.eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID))
+    {
         fallback.push(CODEX_GPT_RESERVE_MODEL_ID.to_string());
     }
     let mut native_models = Vec::new();
     let mut seen_native = HashSet::new();
     let mut routes = Vec::new();
     for account_id in normalize_account_id_list(account_ids.to_vec()) {
-        let Some(account) = accounts.get(&account_id) else { continue; };
+        let Some(account) = accounts.get(&account_id) else {
+            continue;
+        };
         let models = automatic_api_service_route_models(collection, account, &fallback);
+        let upstream_models = normalize_model_rule_list(
+            models
+                .iter()
+                .filter_map(|model| model["upstreamModel"].as_str().map(str::to_string))
+                .collect(),
+        );
         // Grok 供应商账号没有上游 API Key：模型直接以原生名称暴露，请求由 sidecar
         // 的 Grok(xAI) 执行器用绑定的 Grok 平台账号凭据发出。
-        if !automatic_api_service_provider_route_eligible(account)
+        if !automatic_api_service_provider_route_eligible(account, &upstream_models)
             || codex_account::is_grok_upstream_provider(account)
         {
             for model in models {
@@ -369,13 +414,18 @@ fn automatic_api_service_model_routing_value(
             }
             continue;
         }
-        if models.is_empty() { continue; }
-        let Ok(mut gateway) = provider_gateway_for_account(account) else { continue; };
-        let Some(base_url) = resolve_sidecar_upstream_base_url(account, collection) else { continue; };
+        if models.is_empty() {
+            continue;
+        }
+        let Ok(mut gateway) = provider_gateway_for_account(account) else {
+            continue;
+        };
+        let Some(base_url) = resolve_sidecar_upstream_base_url(account, collection) else {
+            continue;
+        };
         gateway.base_url = base_url;
         // Explicit mappings can contain upstream names absent from the discovered catalog.
-        gateway.upstream_models = normalize_model_rule_list(models.iter()
-            .filter_map(|model| model["upstreamModel"].as_str().map(str::to_string)).collect());
+        gateway.upstream_models = upstream_models;
         gateway.upstream_model = gateway.upstream_models.first().cloned().unwrap_or_default();
         // 与 DeepSeek 网关模式一致：带图片的文本模型请求自动转到识图模型。
         gateway.vision_routing_model =
@@ -423,14 +473,27 @@ fn apply_automatic_api_service_model_routing(
         if value
             .get("providerGateway")
             .is_some_and(|gateway| !gateway.is_null())
-            || value.get("modelRouting").is_some_and(|routing| !routing.is_null()) {
+            || value
+                .get("modelRouting")
+                .is_some_and(|routing| !routing.is_null())
+        {
             continue;
         }
-        let account_ids = value.get("accountIds").and_then(Value::as_array)
-            .map(|ids| ids.iter().filter_map(Value::as_str).map(str::to_string).collect::<Vec<_>>())
+        let account_ids = value
+            .get("accountIds")
+            .and_then(Value::as_array)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
         let routing = automatic_api_service_model_routing_value(collection, &account_ids, accounts);
-        if routing["routes"].as_array().is_some_and(|routes| !routes.is_empty()) {
+        if routing["routes"]
+            .as_array()
+            .is_some_and(|routes| !routes.is_empty())
+        {
             value["responsesWebsockets"] = Value::Bool(false);
         }
         value["modelRouting"] = routing;
@@ -450,15 +513,19 @@ fn automatic_api_service_account_model_entries(
         .iter()
         .map(|(_, upstream)| upstream.clone())
         .collect::<Vec<_>>();
-    // provider 路由账号：只要存在识图兜底模型，客户端就可以对任意模型发图片（与 DeepSeek 网关模式一致）。
-    let routed_vision = automatic_api_service_provider_route_eligible(account)
+    // 已进入 provider 路由且存在识图兜底模型时，客户端可对该路由暴露的任意模型发图片；
+    // 这里描述图片能力，不决定账号是否进入 provider 路由。
+    let routed_vision = automatic_api_service_provider_route_eligible(account, &upstream_models)
         && automatic_api_service_vision_routing_model(account, &upstream_models).is_some();
     automatic_api_service_route_models(collection, account, &[])
         .into_iter()
         .filter_map(|model| {
-            let client_model = model.get("clientModel").and_then(Value::as_str)?.to_string();
-            let image_capable = routed_vision
-                || automatic_api_service_account_model_vision(account, &client_model);
+            let client_model = model
+                .get("clientModel")
+                .and_then(Value::as_str)?
+                .to_string();
+            let image_capable =
+                routed_vision || automatic_api_service_account_model_vision(account, &client_model);
             Some((client_model, image_capable))
         })
         .collect()
@@ -492,7 +559,9 @@ fn automatic_api_service_profile_extra_models(
                 }
             }
         }
-        models.extend(automatic_api_service_account_model_entries(collection, account));
+        models.extend(automatic_api_service_account_model_entries(
+            collection, account,
+        ));
     }
     // 该 API Key 自己的供应商网关模型同样要在客户端可选。
     if let Some(gateway) = api_key.provider_gateway.as_ref() {
@@ -515,7 +584,9 @@ fn automatic_api_service_profile_extra_models(
         let gpt_namespace = is_gpt_or_codex_namespace_model(model);
         !model.trim().is_empty()
             && (!gpt_namespace
-                || (gpt_backed_models.contains(&key) && is_local_gateway_visible_gpt_model(model)))
+                || (gpt_backed_models.contains(&key)
+                    && (is_local_gateway_visible_gpt_model(model)
+                        || codex_account::is_retired_gpt55_model(model))))
             && !model_matches_any_rule(model, &collection.excluded_models)
             && (api_key.allowed_models.is_empty()
                 || model_matches_any_rule(model, &api_key.allowed_models))
@@ -530,8 +601,7 @@ fn is_official_gpt_or_reserve_catalog_model(model_id: &str) -> bool {
     if key.is_empty() {
         return false;
     }
-    key.eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID)
-        || is_local_gateway_visible_gpt_model(key)
+    key.eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID) || is_local_gateway_visible_gpt_model(key)
 }
 
 pub(crate) fn overlay_rendered_pool_models_on_experimental_catalog(
@@ -569,11 +639,9 @@ pub(crate) fn overlay_rendered_pool_models_on_experimental_catalog(
         .iter()
         .map(|model| model.model_id.to_ascii_lowercase())
         .collect::<HashSet<_>>();
-    for (model_id, _) in automatic_api_service_profile_extra_models(
-        &collection,
-        &resolved_key,
-        &accounts,
-    ) {
+    for (model_id, _) in
+        automatic_api_service_profile_extra_models(&collection, &resolved_key, &accounts)
+    {
         if !seen.insert(model_id.to_ascii_lowercase()) {
             continue;
         }

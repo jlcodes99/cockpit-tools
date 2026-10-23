@@ -10,14 +10,14 @@ function elements(value: any): any[] {
   return value && typeof value === 'object' && value.props ? [value, ...elements(value.props.children)] : [];
 }
 
-function harness(onlyBlocked = false) {
+function harness(onlyInsecure = false) {
   const nodes = Array.from({ length: 50 }, (_, index) => ({
     id: `blocked-${index}`, name: `Region ${index}`, protocol: index < 27 ? 'anytls' : 'hysteria2',
-    supported: false, insecure: true, error: 'PROXY_TLS_INSECURE',
+    supported: true, insecure: true, error: null,
   }));
   const subscription: ProxyCatalogSource = {
     id: 'subscription', name: 'Subscription', kind: 'subscription', revision: 'revision-1',
-    nodes: onlyBlocked ? nodes : [...nodes, { id: 'website', name: 'Website', protocol: 'vmess', supported: true, insecure: false, error: null }],
+    nodes: onlyInsecure ? nodes : [...nodes, { id: 'website', name: 'Website', protocol: 'vmess', supported: true, insecure: false, error: null }],
     groups: [], updatedAt: 1, lastAttemptAt: null, autoUpdate: false, error: null, default: null, defaultInvalidated: false,
   };
   const permissionCalls: { args: any[]; result: ReturnType<typeof deferred<ProxyCatalog>> }[] = [];
@@ -69,52 +69,23 @@ function harness(onlyBlocked = false) {
     permissionCalls, saves, applied, closed: () => closed, unmount() { child.unmount(); parent.unmount(); } };
 }
 
-test('strategy members show all 51 nodes and require explicit node permission before adding', async () => {
+test('node-declared certificate exceptions can be added directly without a permission transaction', async () => {
   const h = harness();
   assert.equal(h.candidates().length, 51);
-  assert.equal(h.permissionCalls.length, 0);
   h.candidate('Website').props.onClick();
   h.candidate('Region 49').props.onClick();
-  assert.equal(h.selected(), 1, 'inspection must not add an unauthorized node');
-  assert.equal(h.issueProps().target.id, 'blocked-49');
-  assert.equal(h.issueProps().source.revision, 'revision-1');
-  h.issueTree();
-  assert.equal(h.permissionCalls.length, 0, 'opening permission details must not authorize');
-  h.allow().onClick();
-  assert.deepEqual(h.permissionCalls[0].args, ['subscription', 'blocked-49', 'revision-1', true]);
-  assert.equal(h.save().disabled, true);
-  h.save().onClick();
-  await settlePromises();
-  assert.equal(h.saves.length, 0, 'strategy saves wait for a permission transaction');
-  h.permissionCalls[0].result.resolve(h.approved('blocked-49'));
-  await settlePromises();
-  assert.equal(h.closed(), 0, 'granting permission keeps the strategy editor open');
-  assert.equal(h.selected(), 1, 'granting permission preserves the draft and does not add automatically');
-  h.candidate('Region 49').props.onClick();
   assert.equal(h.selected(), 2);
+  assert.equal(h.issueProps(), undefined);
+  assert.equal(h.permissionCalls.length, 0);
+  assert.equal(h.tree().some((entry) => entry.props.role === 'switch'), false, 'lazy probing has no UI opt-out');
   h.tree().find((entry) => entry.type === 'input' && entry.props.className === 'codex-strategy-input').props.onChange({ target: { value: 'My group' } });
   h.save().onClick(); await settlePromises();
   assert.deepEqual(JSON.parse(JSON.stringify(h.saves[0].members)), [
     { sourceId: 'subscription', itemId: 'website', name: 'Website', sourceName: 'Subscription' },
     { sourceId: 'subscription', itemId: 'blocked-49', name: 'Region 49', sourceName: 'Subscription' },
   ]);
+  assert.equal(h.saves[0].options.lazy, true);
   h.unmount();
-});
-
-test('failed permission stays inside the editor and leaves the node unavailable for retry', async () => {
-  const h = harness(); h.candidate('Region 0').props.onClick(); h.allow().onClick();
-  h.permissionCalls[0].result.reject(new Error('CATALOG_DOWNLOAD'));
-  await settlePromises();
-  assert.equal(h.issueTree().find((entry) => entry.type === 'error')!.props.message, 'codex.proxy.catalog.downloadFailed');
-  assert.equal(h.selected(), 0);
-  assert.equal(h.applied.length, 0);
-  assert.equal(h.closed(), 0);
-  assert.equal(h.save().disabled, false);
-  h.allow().onClick(); assert.equal(h.permissionCalls.length, 2);
-  assert.equal(h.issueTree().find((entry) => entry.type === 'error')!.props.message, '');
-  h.unmount();
-  h.permissionCalls[1].result.resolve(h.approved('blocked-0')); await settlePromises();
-  assert.equal(h.applied.length, 0, 'late permission results must not update a closed editor');
 });
 
 test('protocol failures stay visible for inspection but cannot become strategy members', () => {
@@ -126,7 +97,7 @@ test('protocol failures stay visible for inspection but cannot become strategy m
   h.unmount();
 });
 
-test('a subscription containing only permission-blocked nodes can still open the strategy editor', () => {
+test('a subscription containing only certificate exceptions can directly create a strategy', () => {
   const h = harness(true);
   const panel = loadHookModule(new URL('./CodexProxyStrategyPanel.tsx', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },

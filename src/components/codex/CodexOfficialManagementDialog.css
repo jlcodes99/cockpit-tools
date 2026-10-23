@@ -1,0 +1,19 @@
+.codex-official-management-overlay { overflow-y: auto; align-items: safe center; padding: 16px; }
+.modal.codex-official-management-dialog { width: min(820px, calc(100vw - 32px)); max-width: 820px; max-height: calc(100vh - 32px); min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-surface); color: var(--text-primary); }
+.codex-official-management-dialog .modal-header, .codex-official-management-dialog .modal-footer { flex: 0 0 auto; }
+.codex-official-management-dialog .modal-header h2 { margin: 0; font-size: 18px; }
+.codex-official-management-dialog .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px; }
+.codex-official-management-dialog section { padding-top: 20px; margin-top: 20px; border-top: 1px solid var(--border); }
+.codex-official-management-dialog h3 { font-size: 14px; margin: 0 0 10px; }
+.codex-official-management-dialog p, .codex-official-management-dialog small { color: var(--text-secondary); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.codex-official-management-account { display: flex; align-items: center; gap: 14px; padding: 16px; background: color-mix(in srgb, var(--primary) 5%, transparent); border: 1px solid var(--border); border-radius: 12px; }
+.codex-official-management-account > svg { flex-shrink: 0; color: var(--primary); }
+.codex-official-management-account > div { min-width: 0; }
+.codex-official-management-account > div > strong, .codex-official-management-account > div > span, .codex-official-management-account > div > small { display: block; overflow-wrap: anywhere; }
+.codex-official-management-account > div > span, .codex-official-management-status { margin-top: 5px; font-size: 12px; color: var(--text-secondary); }
+.codex-official-management-status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.codex-official-management-mode { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.codex-official-management-mode .single-select-dropdown { width: 160px; }
+.codex-official-management-dialog .codex-official-release-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.codex-official-management-dialog .btn { white-space: normal; }
+@media (max-width: 520px) { .codex-official-management-dialog .modal-body { padding: 16px; } .codex-official-management-dialog .codex-official-release-options { grid-template-columns: 1fr; } }

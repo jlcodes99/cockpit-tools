@@ -62,3 +62,180 @@
 .codex-oauth-binding-quota-summary > svg {
   flex-shrink: 0;
 }
+
+.codex-oauth-binding-protection {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.codex-oauth-binding-protection .section-desc {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-oauth-binding-protection .codex-oauth-binding-quota-field {
+  max-width: 260px;
+}
+
+.codex-oauth-binding-protection .codex-oauth-binding-quota-input-wrap > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.codex-local-access-quota-runtime {
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.codex-accounts-page .codex-local-access-quota-reserve-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.codex-accounts-page .codex-local-access-quota-reserve-warning span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-accounts-page .codex-local-access-quota-reserve-warning.is-blocked {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.codex-oauth-binding-quota-overlay {
+  z-index: 10010;
+}
+
+.modal-content.codex-oauth-binding-quota-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(520px, calc(100vh - 32px));
+  overflow: hidden;
+}
+
+.codex-oauth-binding-quota-modal .modal-body {
+  overflow-y: auto;
+}
+
+.codex-oauth-binding-quota-modal .add-section {
+  gap: 16px;
+}
+
+.codex-oauth-binding-quota-desc {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.codex-oauth-binding-quota-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(108px, 1fr));
+  gap: 10px;
+}
+
+.codex-oauth-binding-quota-field {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.codex-oauth-binding-quota-input-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 4px;
+  min-width: 108px;
+}
+
+.codex-oauth-binding-quota-input-wrap .codex-account-note-input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.codex-oauth-binding-quota-input-wrap > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.codex-oauth-binding-quota-error {
+  max-width: none;
+  font-size: 11px;
+}
+
+.codex-oauth-binding-picker-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.codex-oauth-binding-quota-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.codex-oauth-binding-quota-edit {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  border-radius: 6px;
+}
+
+.codex-oauth-binding-quota-edit svg {
+  width: 12px;
+  height: 12px;
+}
+
+@media (max-width: 640px) {
+  .codex-oauth-binding-quota-modal .modal-header,
+  .codex-oauth-binding-quota-modal .modal-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .codex-oauth-binding-picker-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .codex-oauth-binding-quota-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .codex-oauth-binding-quota-fields {
+    grid-template-columns: 1fr;
+  }
+}

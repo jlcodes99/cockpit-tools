@@ -16,6 +16,8 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { createDmgMounts } = require('./dmg-mounts.cjs');
+const mounts = createDmgMounts();
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const README_SOURCE = path.join(__dirname, 'assets', 'dmg-readme.txt');
@@ -106,6 +108,7 @@ function findTauriDmg(bundleDir) {
   // Clean up leftovers from an interrupted previous run.
   for (const name of entries.filter((entry) => entry.endsWith('.inject.dmg'))) {
     log(`removing stale temporary image: ${name}`);
+    if (process.platform === 'darwin') mounts.assertImageUnmounted(path.join(dmgDir, name));
     fs.rmSync(path.join(dmgDir, name), { force: true });
   }
 
@@ -121,49 +124,6 @@ function findTauriDmg(bundleDir) {
     );
   }
   return path.join(dmgDir, candidates[0]);
-}
-
-function attachDiskImage(mountPoint, imagePath, { readOnly = false } = {}) {
-  const args = ['attach', '-nobrowse', '-mountpoint', mountPoint];
-  if (readOnly) {
-    args.push('-readonly');
-  } else {
-    args.push('-readwrite', '-noverify', '-noautoopen');
-  }
-  args.push(imagePath);
-
-  const output = run('hdiutil', args, { capture: true });
-
-  const device = output
-    .split('\n')
-    .map((line) => line.trim().split(/\s+/)[0])
-    .find((token) => /^\/dev\/disk\d+s\d+$/.test(token));
-  if (!device) {
-    throw new Error(`unable to resolve the mounted device for ${imagePath}`);
-  }
-  return { device, mountPoint };
-}
-
-function detachMountedVolume(target) {
-  for (const attempt of [0, 1, 2]) {
-    const result = spawnSync('hdiutil', ['detach', target], {
-      stdio: 'pipe',
-      encoding: 'utf8',
-    });
-    if (result.status === 0) {
-      return true;
-    }
-    sleep(1000 * (attempt + 1));
-  }
-
-  const force = spawnSync('hdiutil', ['detach', target, '-force'], {
-    stdio: 'pipe',
-    encoding: 'utf8',
-  });
-  if (force.status !== 0) {
-    log(`warning: unable to unmount ${target}; unmount it manually before retrying`);
-  }
-  return force.status === 0;
 }
 
 function copyAppBundle(sourceAppPath, destinationAppPath) {
@@ -287,7 +247,7 @@ function buildDmg({
     tempImagePath,
   ]);
 
-  const mounted = attachDiskImage(preferredMountPoint, tempImagePath);
+  const mounted = mounts.attach(preferredMountPoint, tempImagePath);
   const { mountPoint } = mounted;
   let layoutSignature = '';
 
@@ -316,7 +276,7 @@ function buildDmg({
     fs.rmSync(path.join(mountPoint, '.fseventsd'), { recursive: true, force: true });
     run('chmod', ['-Rf', 'go-w', mountPoint]);
   } finally {
-    detachMountedVolume(mounted.mountPoint) || detachMountedVolume(mounted.device);
+    mounts.detach(mounted);
   }
 
   run('hdiutil', ['convert', tempImagePath, '-format', 'UDZO', '-o', outputPath]);
@@ -351,7 +311,7 @@ function verifyDmg({ dmgPath, readmeName, workDir, expectedLayout }) {
   const mountPoint = path.join(workDir, 'verify-mount');
   fs.mkdirSync(mountPoint, { recursive: true });
 
-  const attached = attachDiskImage(mountPoint, dmgPath, { readOnly: true });
+  const attached = mounts.attach(mountPoint, dmgPath, { readOnly: true });
 
   try {
     const readmePath = path.join(mountPoint, readmeName);
@@ -379,7 +339,7 @@ function verifyDmg({ dmgPath, readmeName, workDir, expectedLayout }) {
       throw new Error('rebuilt DMG has no volume name');
     }
   } finally {
-    detachMountedVolume(attached.mountPoint) || detachMountedVolume(attached.device);
+    mounts.detach(attached);
   }
 }
 
@@ -427,7 +387,7 @@ function main() {
   log(`target DMG: ${outputPath}`);
 
   try {
-    sourceMount = attachDiskImage(injectMountPoint, sourceDmg, { readOnly: true });
+    sourceMount = mounts.attach(injectMountPoint, sourceDmg, { readOnly: true });
 
     let appName;
     let appBundlePath;
@@ -444,6 +404,7 @@ function main() {
       appName = appBundles[0];
       appBundlePath = path.join(injectMountPoint, appName);
 
+      mounts.assertImageUnmounted(tempOutputPath);
       fs.rmSync(tempOutputPath, { force: true });
       layoutSignature = buildDmg({
         workDir,
@@ -456,7 +417,7 @@ function main() {
       });
     } finally {
       if (sourceMount) {
-        detachMountedVolume(sourceMount.mountPoint) || detachMountedVolume(sourceMount.device);
+        mounts.detach(sourceMount);
       }
     }
 
@@ -471,6 +432,9 @@ function main() {
     fs.renameSync(tempOutputPath, outputPath);
     log(`done: ${outputPath}`);
   } finally {
+    // Never delete the backing image or mount directory after a failed detach.
+    mounts.cleanup();
+    mounts.assertImageUnmounted(tempOutputPath);
     fs.rmSync(tempOutputPath, { force: true });
     if (keepWorkDir) {
       log(`keeping work directory: ${workDir}`);
@@ -481,6 +445,7 @@ function main() {
 }
 
 if (require.main === module) {
+  mounts.installExitHandlers();
   try {
     main();
   } catch (error) {
@@ -493,4 +458,5 @@ module.exports = {
   describeFinderLayout,
   findTauriDmg,
   parseArgs,
+  verifyDmg,
 };

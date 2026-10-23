@@ -1,3 +1,4 @@
+import { CodexAppEnhancementSettings } from './codex/CodexAppEnhancementSettings';
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { CodexRefreshPlanScopeControl } from './CodexRefreshPlanScopeControl';
 import { CodexRequestPayloadSetting } from './codex/CodexRequestPayloadSetting';
@@ -151,7 +152,6 @@ interface GeneralConfig {
   hermes_auth_overwrite_on_switch?: boolean;
   codex_launch_on_switch: boolean;
   codex_auto_restore_takeover_on_launch: boolean;
-  codex_preserve_verified_external_bridge: boolean;
   antigravity_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
@@ -1875,11 +1875,10 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
             )}
             {type === 'codex' && config && (
               <div className="qs-section">
-                <div className="qs-section-header">{t('codex.autoRefreshScope.label')}</div>
-                <p className="codex-refresh-scope-description">{t('codex.autoRefreshScope.description')}</p>
                 <CodexRefreshPlanScopeControl value={config.codex_auto_refresh_plan_types}
                   onChange={(value) => void saveConfig({ codex_auto_refresh_plan_types: value })} />
                 <CodexRequestPayloadSetting />
+                <CodexAppEnhancementSettings variant="quick" onError={setError} />
               </div>
             )}
             {type === 'codex' && (
@@ -1939,10 +1938,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                   </div>
                 </div>
                 <div className="qs-hint">
-                  {t(
-                    'settings.general.codexAppUiInjectionDesc',
-                    '重启 Codex 实例后，在输入框下方显示 Cockpit Tools API 服务的账号数、周额度和 5h 额度。需保持 Cockpit Tools 在后台运行；完全退出或网络不可用时，额度不会继续刷新。',
-                  )}
+                  {t('settings.general.codexAppUiInjectionDesc')}
                 </div>
                 <div className="qs-row" style={{ marginTop: 8 }}>
                   <div className="qs-row-label">
@@ -2335,17 +2331,6 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       </div>
                     </div>
                     <div className="qs-hint">{t('settings.general.codexAutoRestoreTakeoverOnLaunchDesc')}</div>
-                    <div className="qs-row">
-                      <div className="qs-row-label"><span>{t('settings.general.codexPreserveExternalBridge')}</span></div>
-                      <div className="qs-row-control">
-                        <label className="qs-switch">
-                          <input type="checkbox" checked={config.codex_preserve_verified_external_bridge}
-                            onChange={(event) => saveConfig({ codex_preserve_verified_external_bridge: event.target.checked })} />
-                          <span className="qs-switch-slider"></span>
-                        </label>
-                      </div>
-                    </div>
-                    <div className="qs-hint">{t('settings.general.codexPreserveExternalBridgeDesc')}</div>
                   </>
                 )}
                 {type === 'antigravity' && config && (

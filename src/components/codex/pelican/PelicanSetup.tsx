@@ -12,6 +12,8 @@ import { ModalErrorMessage, useModalErrorState } from '../../ModalErrorMessage';
 import { pelicanError } from './pelicanUtils';
 import { defaultPelicanConcurrency, parsePelicanConcurrency } from './pelicanSetupModel';
 import { PelicanAccountSummary } from './PelicanAccountSummary';
+import { PELICAN_BENCHMARKS, PELICAN_BENCHMARK_IDS, pelicanBenchmark, pelicanBenchmarkLabel, type PelicanBenchmark } from './pelicanBenchmarks';
+import { PelicanReference } from './PelicanReference';
 
 export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
   const { t } = useTranslation();
@@ -80,12 +82,25 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
     finally { setBusy(false); }
   };
 
+  const currentBenchmark = pelicanBenchmark(prompt);
+  const benchmarkOptions = PELICAN_BENCHMARK_IDS.map((value) => ({ value, label: pelicanBenchmarkLabel(value, t) }));
+  if (!PELICAN_BENCHMARK_IDS.includes(currentBenchmark)) {
+    benchmarkOptions.splice(benchmarkOptions.length - 1, 0, { value: currentBenchmark, label: `${pelicanBenchmarkLabel(currentBenchmark, t)} · ${t('pelican.legacyCase')}` });
+  }
+
   return <form className="pelican-setup" ref={formRef} onSubmit={(event) => { event.preventDefault(); void submit(); }}>
     <p className="pelican-muted">{t(providerMode ? 'pelican.providerDescription' : 'pelican.description')}</p>
+    <p className="pelican-muted">{t('pelican.scoringHint')}</p>
+    <label>{t('pelican.benchmark')}
+      <SingleSelectDropdown value={currentBenchmark} ariaLabel={t('pelican.benchmark')} disabled={busy}
+        options={benchmarkOptions}
+        onChange={(value) => { setPrompt(PELICAN_BENCHMARKS[value as PelicanBenchmark]); fieldChanged(); }} />
+    </label>
     <label>{t('pelican.prompt')}
-      <textarea data-field="prompt" value={prompt} rows={4} maxLength={10000} disabled={busy} aria-invalid={fieldError === 'prompt'} onChange={(event) => { setPrompt(event.target.value); fieldChanged(); }} />
+      <textarea data-field="prompt" value={prompt} rows={4} maxLength={100000} disabled={busy} aria-invalid={fieldError === 'prompt'} onChange={(event) => { setPrompt(event.target.value); fieldChanged(); }} />
     </label>
     {fieldError === 'prompt' && <span className="pelican-field-error" role="alert">{t('pelican.required')}</span>}
+    <PelicanReference prompt={prompt} />
     <div className="pelican-fields">
       {!providerMode && <label>{t('pelican.model')}
         <input data-field="model" value={model} maxLength={128} disabled={busy} aria-invalid={fieldError === 'model'} onChange={(event) => { setModel(event.target.value); fieldChanged(); }} />

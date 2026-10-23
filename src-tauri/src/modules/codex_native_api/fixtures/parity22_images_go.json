@@ -1,0 +1,53 @@
+[
+  {
+    "image_model": "gpt-image-2.5",
+    "main_model": "gpt-5.6-luna",
+    "name": "conversation-generation",
+    "path": "/v1/images/generations",
+    "request": {
+      "model": "gpt-5.5",
+      "prompt": "draw"
+    }
+  },
+  {
+    "image_model": "gpt-image-2.5",
+    "main_model": "gpt-5.6-luna",
+    "name": "conversation-edit",
+    "path": "/v1/images/edits",
+    "request": {
+      "model": "gpt-5.5",
+      "prompt": "draw",
+      "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+    }
+  },
+  {
+    "image_model": "gpt-image-2.5",
+    "main_model": "gpt-5.6-luna",
+    "name": "conversation-edit-multipart",
+    "path": "/v1/images/edits",
+    "request": {
+      "model": "gpt-5.5",
+      "prompt": "draw"
+    }
+  },
+  {
+    "image_model": "gpt-image-2.5",
+    "main_model": "gpt-5.6-luna",
+    "name": "mixed-oauth-main",
+    "path": "/v1/responses",
+    "request": {
+      "model": "gpt-5.5",
+      "input": "draw",
+      "stream": true,
+      "tool_choice": {
+        "type": "image_generation"
+      },
+      "tools": [
+        {
+          "type": "image_generation",
+          "model": "gpt-image-2"
+        }
+      ]
+    }
+  }
+]

@@ -102,6 +102,13 @@ mod service_tier_control_tests {
     }
 
     #[tokio::test]
+    async fn service_tier_control_acknowledges_ultrafast_without_downgrading() {
+        let (port, server) = speed_control_server(200, json!({"speed":"ultrafast"}), Duration::ZERO).await;
+        send_api_service_speed_to_sidecar(port, &CodexAppSpeed::Ultrafast, Duration::from_secs(1)).await.unwrap();
+        assert_eq!(speed_request_body(&server.await.unwrap())["speed"], "ultrafast");
+    }
+
+    #[tokio::test]
     async fn service_tier_control_slow_or_closed_server_has_bounded_failure() {
         let (port, server) =
             speed_control_server(200, json!({"speed":"fast"}), Duration::from_millis(200)).await;
@@ -343,7 +350,7 @@ mod service_tier_control_tests {
         let env = super::LocalAccessTestDataGuard::new("service-tier-control-next-launch");
         let previous = std::mem::take(&mut *gateway_runtime().lock().await);
         let collection = super::test_local_access_collection(Vec::new());
-        for speed in [CodexAppSpeed::Fast, CodexAppSpeed::Standard] {
+        for speed in [CodexAppSpeed::Ultrafast, CodexAppSpeed::Fast, CodexAppSpeed::Standard] {
             crate::modules::codex_speed::save_api_service_app_speed(speed.clone()).unwrap();
             sync_running_api_service_speed(speed.clone()).await.unwrap();
             let launch = prepare_sidecar_launch_config_in_dir_sync(
@@ -358,10 +365,10 @@ mod service_tier_control_tests {
             .unwrap();
             let config: Value =
                 serde_json::from_slice(&fs::read(launch.config_path).unwrap()).unwrap();
-            if speed == CodexAppSpeed::Fast {
+            if let Some(tier) = speed.service_tier() {
                 assert_eq!(
                     config["payload"]["default"][0]["params"]["service_tier"],
-                    "priority"
+                    tier
                 );
             } else {
                 assert!(config.get("payload").is_none());

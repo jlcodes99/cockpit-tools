@@ -443,13 +443,13 @@
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
-            "gpt-5.5",
         ] {
             assert!(models.iter().any(|model| {
                 model.get("slug").and_then(serde_json::Value::as_str) == Some(expected)
             }));
         }
         for legacy in [
+            "gpt-5.5",
             "gpt-5.4",
             "gpt-5.4-mini",
             "gpt-5.3-codex",
@@ -713,7 +713,7 @@
                 .expect("read repaired catalog"),
         )
         .expect("parse repaired catalog");
-        assert_eq!(catalog_config["models"][0]["model_id"], "gpt-6-astra");
+        assert_eq!(catalog_config["models"][0]["model_id"], "gpt-6.1-sol");
         assert_eq!(catalog_config["default_model_id"], "gpt-5.6-sol");
         assert!(catalog_config["migrations"]
             .as_array()

@@ -51,7 +51,7 @@ export function strategyOptionsForm(source?: ProxyCatalogSource | null): ProxySt
     interval: stored.interval == null ? '' : String(stored.interval),
     timeout: stored.timeout == null ? '' : String(stored.timeout),
     tolerance: stored.tolerance == null ? '' : String(stored.tolerance),
-    lazy: stored.lazy ?? PROXY_STRATEGY_DEFAULTS.lazy,
+    lazy: true,
   };
 }
 
@@ -115,7 +115,7 @@ export function strategyOptions(form: ProxyStrategyOptionsForm, kind: ProxyStrat
   if (!PROXY_STRATEGY_OPTION_FIELDS[kind].length) return {};
   const applicable = applicableForm(kind, form);
   const errors = strategyOptionErrors(applicable, kind);
-  const options: ProxyStrategyOptions = { lazy: form.lazy };
+  const options: ProxyStrategyOptions = { lazy: true };
   const url = applicable.url.trim();
   if (url && !errors.url) options.url = url;
   const number = (field: 'interval' | 'timeout' | 'tolerance') => {
@@ -197,8 +197,8 @@ export function isPossibleProxyNotice(name: string): boolean {
   return /^(剩余流量|距离下次重置|套餐到期|到期时间|官网地址|.*官网地址\s*[:：]|remaining traffic|traffic remaining|expires?\s*[:：])/i.test(name.trim());
 }
 
-/** Editors may show unavailable nodes for inspection/explicit permission. Saved-member
- * matching still uses only supported nodes; displaying a node never grants permission. */
+/** Editors may show unavailable nodes for diagnostics. Saved-member matching
+ * still uses only supported nodes; node-declared TLS exceptions are already supported. */
 export function strategyCandidates(sources: ProxyCatalogSource[], includeUnavailable = false): ProxyStrategyCandidate[] {
   return sources.flatMap((source) => source.kind === 'strategy' ? [] : source.nodes
     .filter((node) => includeUnavailable || node.supported)
@@ -314,7 +314,7 @@ export function strategySaveArgs(draft: ProxyStrategyDraft): Record<string, unkn
     name: draft.name.trim(),
     kind: draft.kind,
     members: strategyOrderedMembers(draft.members),
-    options: draft.options,
+    options: draft.kind === 'select' ? {} : { ...draft.options, lazy: true },
   };
 }
 

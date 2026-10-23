@@ -16,20 +16,24 @@ const apiServiceTierDefaultPath = "/v1/cockpit/service-tier-default"
 // This state belongs to one public API-service process. Provider gateways do
 // not enable it, and active requests retain their own immutable snapshot.
 type apiServiceTierDefault struct {
-	fast     atomic.Bool
+	value    atomic.Value // string: empty (Standard), priority (Fast), or ultrafast
 	mu       sync.Mutex
 	revision uint64
 }
 
 func newAPIServiceTierDefault(tier string) *apiServiceTierDefault {
 	state := &apiServiceTierDefault{}
-	state.fast.Store(normalizedUsageServiceTier(tier) == "priority")
+	normalized := normalizedUsageServiceTier(tier)
+	if normalized != "priority" && normalized != "ultrafast" {
+		normalized = ""
+	}
+	state.value.Store(normalized)
 	return state
 }
 
 func (s *apiServiceTierDefault) tier() string {
-	if s.fast.Load() {
-		return "priority"
+	if tier, ok := s.value.Load().(string); ok {
+		return tier
 	}
 	return ""
 }
@@ -57,16 +61,21 @@ func (s *relayServer) handleAPIServiceTierDefault(c *gin.Context) {
 		writeAPIError(c, http.StatusBadRequest, "invalid API service speed", "invalid_request")
 		return
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF || input.Revision == 0 || (input.Speed != "standard" && input.Speed != "fast") {
+	if err := decoder.Decode(new(any)); err != io.EOF || input.Revision == 0 || (input.Speed != "standard" && input.Speed != "fast" && input.Speed != "ultrafast") {
 		writeAPIError(c, http.StatusBadRequest, "invalid API service speed", "invalid_request")
 		return
 	}
 	state := s.policy.serviceTierDefault
-	fast := input.Speed == "fast"
+	tier := ""
+	if input.Speed == "fast" {
+		tier = "priority"
+	} else if input.Speed == "ultrafast" {
+		tier = "ultrafast"
+	}
 	state.mu.Lock()
-	stale := input.Revision < state.revision || (input.Revision == state.revision && state.fast.Load() != fast)
+	stale := input.Revision < state.revision || (input.Revision == state.revision && state.tier() != tier)
 	if !stale {
-		state.fast.Store(fast)
+		state.value.Store(tier)
 		state.revision = input.Revision
 	}
 	state.mu.Unlock()

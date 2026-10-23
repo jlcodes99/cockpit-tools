@@ -46,6 +46,12 @@ type captureExecutor struct {
 	refreshCalls atomic.Int32
 }
 
+type liveRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f liveRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func (*captureExecutor) Identifier() string { return "codex" }
 
 func (*captureExecutor) Execute(context.Context, *auth.Auth, coreexecutor.Request, coreexecutor.Options) (coreexecutor.Response, error) {
@@ -1007,6 +1013,220 @@ func TestPrepareCallRequestRewritesMultipart(t *testing.T) {
 	}
 	if payload.SDP != "v=0-offer" || payload.Session["instructions"] != "hi" {
 		t.Fatalf("encoded payload = %#v", payload)
+	}
+}
+
+func TestCallTargetURL(t *testing.T) {
+	for _, target := range []string{
+		"/wham/realtime/calls?intent=quicksilver&architecture=avas",
+		"/next%2Dvoice/calls?option=a%2Fb&option=c",
+	} {
+		got, errTarget := callTargetURL(target)
+		want := "https://chatgpt.com/backend-api" + target
+		if errTarget != nil || got != want {
+			t.Errorf("callTargetURL(%q) = %q, %v; want %q", target, got, errTarget, want)
+		}
+	}
+	for _, target := range []string{
+		"",
+		"https://example.com/calls",
+		"//example.com/calls",
+		"/../calls",
+		"/voice/./calls",
+		"/voice/%2e%2e/calls",
+		"/voice/%252e%252e/calls",
+		"/%2fexample.com/calls",
+		"/voice/%5c../calls",
+		"/voice/calls#fragment",
+	} {
+		if got, errTarget := callTargetURL(target); errTarget == nil || got != "" {
+			t.Errorf("callTargetURL(%q) = %q, %v; want rejection", target, got, errTarget)
+		}
+	}
+}
+
+func TestPrepareCallRequestValidatesJSONAndMultipart(t *testing.T) {
+	const boundary = "shared-validation-boundary"
+	for name, testCase := range map[string]struct {
+		sdp     string
+		session string
+		invalid bool
+	}{
+		"preserved session": {sdp: "v=0\r\na=setup:actpass", session: `{"model":"gpt-realtime-1.5","instructions":"voice","audio":{"output":{"voice":"marin"}}}`},
+		"optional session":  {sdp: "v=0"},
+		"empty SDP":         {session: `{}`, invalid: true},
+		"whitespace SDP":    {sdp: " \r\n", session: `{}`, invalid: true},
+		"null session":      {sdp: "v=0", session: `null`, invalid: true},
+		"array session":     {sdp: "v=0", session: `[]`, invalid: true},
+		"string session":    {sdp: "v=0", session: `"session"`, invalid: true},
+		"malformed session": {sdp: "v=0", session: `{`, invalid: true},
+	} {
+		for _, format := range []string{"JSON", "multipart"} {
+			t.Run(name+"/"+format, func(t *testing.T) {
+				encodedSDP, errEncode := json.Marshal(testCase.sdp)
+				if errEncode != nil {
+					t.Fatal(errEncode)
+				}
+				body := `{"sdp":` + string(encodedSDP)
+				if testCase.session != "" {
+					body += `,"session":` + testCase.session
+				}
+				body += "}"
+				contentType := ""
+				if format == "multipart" {
+					body = multipartBody(boundary, testCase.sdp, testCase.session)
+					contentType = "multipart/form-data; boundary=" + boundary
+				}
+				prepared, preparedType, model, errPrepare := prepareCallRequest([]byte(body), contentType)
+				if testCase.invalid {
+					if errPrepare == nil {
+						t.Fatal("prepareCallRequest() accepted invalid call input")
+					}
+					return
+				}
+				if errPrepare != nil || preparedType != "application/json" {
+					t.Fatalf("prepared type/error = %q/%v", preparedType, errPrepare)
+				}
+				var payload struct {
+					SDP     string          `json:"sdp"`
+					Session json.RawMessage `json:"session"`
+				}
+				if errDecode := json.Unmarshal(prepared, &payload); errDecode != nil {
+					t.Fatal(errDecode)
+				}
+				if payload.SDP != testCase.sdp || string(payload.Session) != testCase.session {
+					t.Fatalf("prepared body changed SDP/session: %s", prepared)
+				}
+				if format == "JSON" && string(prepared) != body {
+					t.Fatalf("prepared JSON = %s, want original %s", prepared, body)
+				}
+				wantModel := defaultLiveModel
+				if testCase.session != "" {
+					wantModel = "gpt-realtime-1.5"
+				}
+				if model != wantModel {
+					t.Fatalf("model = %q, want %q", model, wantModel)
+				}
+			})
+		}
+	}
+}
+
+func TestHandlerUsesExplicitCallTarget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for name, testCase := range map[string]struct {
+		location string
+		noStore  bool
+		redirect bool
+		wantCode int
+	}{
+		"created":         {location: "/v1/live/rtc_target", wantCode: http.StatusCreated},
+		"missing call ID": {wantCode: http.StatusBadGateway},
+		"invalid call ID": {location: "/v1/live/invalid!", wantCode: http.StatusBadGateway},
+		"missing store":   {location: "/v1/live/rtc_target", noStore: true, wantCode: http.StatusServiceUnavailable},
+		"redirect":        {location: "https://example.com/calls", redirect: true, wantCode: http.StatusBadGateway},
+	} {
+		t.Run(name, func(t *testing.T) {
+			manager := auth.NewManager(nil, nil, nil)
+			responseBody := &trackedResponseBody{Reader: strings.NewReader("v=0\r\na=ice-lite\r\n")}
+			executor := &captureExecutor{responseBody: responseBody}
+			if testCase.redirect {
+				executor.statusCode = http.StatusTemporaryRedirect
+			}
+			manager.RegisterExecutor(executor)
+			credential := &auth.Auth{ID: "target-oauth", Provider: "codex", Status: auth.StatusActive, Metadata: map[string]any{"access_token": "test-oauth-token", "account_id": "target-account"}}
+			registerCredential(t, manager, credential)
+			handler := NewHandler(manager, nil)
+			t.Cleanup(handler.Close)
+			if testCase.noStore {
+				handler.sessions = nil
+			}
+			router := gin.New()
+			router.POST("/v1/live", func(c *gin.Context) {
+				c.Set("userApiKey", "test-owner")
+				c.Set("accessProvider", "test-provider")
+				handler.Handle(c)
+			})
+			transport := liveRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if executor.httpCalls.Load() != 0 {
+					t.Fatal("voice creation followed a redirect")
+				}
+				response, errRequest := executor.HttpRequest(req.Context(), credential, req)
+				if response != nil {
+					response.Header.Set("Location", testCase.location)
+				}
+				return response, errRequest
+			})
+			ctx := context.WithValue(context.Background(), "cliproxy.roundtripper", transport)
+			const body = `{"sdp":"v=0","session":{"model":"gpt-realtime-1.5","instructions":"preserve","audio":{"output":{"voice":"marin"}}},"extra":"preserve"}`
+			req := httptest.NewRequest(http.MethodPost, "/v1/live", strings.NewReader(body)).WithContext(ctx)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer downstream-key")
+			req.Header.Set("X-Cockpit-Voice-Target", "/wham/realtime/calls?intent=quicksilver&architecture=avas")
+			req.Header.Set("X-Codex-Turn-Metadata", `{"turn_id":"turn-target"}`)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != testCase.wantCode {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, testCase.wantCode, recorder.Body.String())
+			}
+			if executor.httpCalls.Load() != 1 || executor.request == nil {
+				t.Fatal("expected exactly one upstream creation request")
+			}
+			if got := executor.request.URL.String(); got != "https://chatgpt.com/backend-api/wham/realtime/calls?intent=quicksilver&architecture=avas" {
+				t.Fatalf("upstream target = %q", got)
+			}
+			if string(executor.body) != body {
+				t.Fatalf("upstream body changed: %s", executor.body)
+			}
+			for header, want := range map[string]string{"Authorization": "Bearer test-oauth-token", "Chatgpt-Account-Id": "target-account", "X-Codex-Turn-Metadata": `{"turn_id":"turn-target"}`, "X-Cockpit-Voice-Target": ""} {
+				if got := executor.request.Header.Get(header); got != want {
+					t.Errorf("%s = %q, want %q", header, got, want)
+				}
+			}
+			stored, ok := handler.sessions.peek("rtc_target")
+			if testCase.wantCode != http.StatusCreated {
+				if ok {
+					t.Fatal("failed call was stored")
+				}
+				return
+			}
+			if !ok || stored.authID != "target-oauth" || stored.model != "gpt-realtime-1.5" || stored.ownerPrincipal != "test-owner" || stored.ownerProvider != "test-provider" {
+				t.Fatalf("stored call = %#v, found=%t", stored, ok)
+			}
+			if recorder.Body.String() != "v=0\r\na=ice-lite\r\n" || recorder.Header().Get("Location") != testCase.location {
+				t.Fatalf("upstream SDP/Location were changed: %s / %q", recorder.Body.String(), recorder.Header().Get("Location"))
+			}
+			if !responseBody.closed.Load() {
+				t.Fatal("upstream response body remained open")
+			}
+		})
+	}
+}
+
+func TestHandlerRejectsInvalidCallBeforeSelectingAuth(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for name, testCase := range map[string]struct {
+		body    string
+		target  string
+		message string
+	}{
+		"empty target":    {body: `{"sdp":"v=0","session":{}}`, message: "relative path"},
+		"SDP error first": {body: `{"session":{}}`, target: "https://example.com/calls", message: "requires an SDP offer"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			handler := NewHandler(auth.NewManager(nil, nil, nil), nil)
+			t.Cleanup(handler.Close)
+			router := gin.New()
+			router.POST("/v1/live", handler.Handle)
+			req := httptest.NewRequest(http.MethodPost, "/v1/live", strings.NewReader(testCase.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Cockpit-Voice-Target", testCase.target)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), testCase.message) {
+				t.Fatalf("response = %d %s; want 400 with %q", recorder.Code, recorder.Body.String(), testCase.message)
+			}
+		})
 	}
 }
 

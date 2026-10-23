@@ -168,11 +168,8 @@ fn validate_tls(v: &Value) -> Result<(), String> {
 
 /// Validate the resource envelope and host boundaries, preserving native engine
 /// parameters. Legacy intermediate formats remain explicitly decoded below.
-/// TLS bypass is an explicit node opt-in.
+/// TLS exceptions declared by the node use the same capability validation.
 pub fn validate_outbound(v: &Value) -> Result<(), String> {
-    if is_insecure(v) {
-        return Err(UNSUPPORTED.into());
-    }
     validate_outbound_capabilities(v)
 }
 fn validate_outbound_capabilities(v: &Value) -> Result<(), String> {
@@ -671,9 +668,6 @@ fn validate(binding: &Binding) -> Result<(), String> {
                 }
             }
         } else {
-            if is_insecure(v) != binding.insecure_tags.contains(tag) {
-                return Err(UNSUPPORTED.into());
-            }
             validate_outbound_capabilities(v)?;
         }
         graph.insert(tag.into(), edges);
@@ -908,7 +902,6 @@ mod tests {
                 "tls",
                 json!({"enabled":true,"certificate_path":"/private/secret"}),
             ),
-            ("tls", json!({"enabled":true,"insecure":true})),
             (
                 "transport",
                 json!({"type":"ws","headers":{"Authorization":"secret"}}),
@@ -960,12 +953,12 @@ mod tests {
         );
     }
     #[test]
-    fn version_one_snapshot_keeps_credentials_and_explicit_tls_approval() {
+    fn legacy_snapshots_accept_declared_tls_exceptions_without_approval_tags() {
         let value = encode("source", "Source", "Alpha", &catalog(), &BTreeMap::new()).unwrap();
         let mut binding = decode(&value).unwrap();
         binding.version = 1;
         binding.outbounds[0]["tls"] = json!({"enabled":true,"insecure":true});
-        assert!(decode(&raw(&binding)).is_err());
+        assert!(decode(&raw(&binding)).is_ok());
         binding.insecure_tags.insert("account-node".into());
         let saved = raw(&binding);
         let decoded = decode(&saved).unwrap();

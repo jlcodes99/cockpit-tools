@@ -272,17 +272,27 @@ func responsesWebsocketErrorStatus(errMsg *interfaces.ErrorMessage) int {
 // shouldExposeResponsesUpstreamError reports whether a terminal upstream error
 // must reach the downstream client.
 //
-// Only request-shape failures are exposed: the client can act on them and no
-// credential rotation or retry can make the request succeed. Credential, quota
-// and transport failures stay silent so the client simply reconnects and retries;
-// a fresh connection carries no server-side transcript, so reconnecting already
-// implies a full context resend.
+// Request-shape failures and explicitly classified Responses read failures are
+// exposed before closing the socket. The close still forces a fresh connection
+// and full context resend. Other credential, quota and transport failures retain
+// their existing silent reconnect behavior.
 func shouldExposeResponsesUpstreamError(errMsg *interfaces.ErrorMessage) bool {
 	if errMsg == nil {
 		return false
 	}
 	if coreauth.IsTerminalAuthError(errMsg.Error) {
 		return true
+	}
+	if errMsg.Error != nil {
+		body := errMsg.Error.Error()
+		code := gjson.Get(body, "error.code").String()
+		if code == "" {
+			code = gjson.Get(body, "response.error.code").String()
+		}
+		switch code {
+		case "upstream_stream_error", "incomplete_upstream_stream", "request_timeout":
+			return true
+		}
 	}
 	return clienterror.IsRequestFault(responsesWebsocketErrorStatus(errMsg), errMsg.Error)
 }
@@ -604,6 +614,7 @@ func websocketJSONPayloadsFromChunk(chunk []byte) [][]byte {
 }
 
 func buildResponsesWebsocketErrorPayload(errMsg *interfaces.ErrorMessage) ([]byte, error) {
+	errMsg = sanitizeResponsesStreamErrorMessage(errMsg)
 	status := http.StatusInternalServerError
 	errText := http.StatusText(status)
 	if errMsg != nil {

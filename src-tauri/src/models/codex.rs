@@ -146,10 +146,27 @@ pub struct CodexQuickConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CodexAppSpeed {
-    /// 兼容已移除的自定义档位，旧账号、实例及速度偏好统一回落标准速度。
-    #[serde(alias = "ultrafast")]
     Standard,
     Fast,
+    Ultrafast,
+}
+
+impl CodexAppSpeed {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::Fast => "fast",
+            Self::Ultrafast => "ultrafast",
+        }
+    }
+
+    pub fn service_tier(&self) -> Option<&'static str> {
+        match self {
+            Self::Standard => None,
+            Self::Fast => Some("priority"),
+            Self::Ultrafast => Some("ultrafast"),
+        }
+    }
 }
 
 impl Default for CodexAppSpeed {
@@ -192,6 +209,9 @@ pub struct CodexAccount {
     pub api_provider_name: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub api_model_catalog: Vec<String>,
+    /// Last applied Grok default catalog revision; prevents restoring user-deleted models.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grok_model_catalog_version: Option<u32>,
     /// 供应商目录里按模型覆盖的 `context_window`。未填写时走官方值或全局兜底。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub api_model_context_windows: HashMap<String, i64>,
@@ -235,6 +255,12 @@ pub struct CodexAccount {
     /// 访问令牌写成 xai auth 文件交给 sidecar，由 Grok(xAI) 执行器完成上游请求。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream_grok_account_id: Option<String>,
+    /// Historical API-service grouping only. Never an authorization or routing alias.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_service_source_account_id: Option<String>,
+    /// Request-local credential overlay only; never serialized into an account.
+    #[serde(skip)]
+    pub official_registration_id: Option<String>,
     pub user_id: Option<String>,
     pub plan_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -647,6 +673,7 @@ impl CodexAccount {
             api_provider_id: None,
             api_provider_name: None,
             api_model_catalog: Vec::new(),
+            grok_model_catalog_version: None,
             api_model_context_windows: HashMap::new(),
             api_model_mappings: Vec::new(),
             api_sync_model_catalog_to_codex: false,
@@ -662,6 +689,8 @@ impl CodexAccount {
             bound_oauth_account_id: None,
             bound_oauth_use_local_gateway: false,
             upstream_grok_account_id: None,
+            api_service_source_account_id: None,
+            official_registration_id: None,
             user_id: None,
             plan_type: None,
             subscription_active_until: None,

@@ -50,6 +50,45 @@ fn automatic_routing_keeps_overlapping_candidates_and_scopes_native_models() {
 }
 
 #[test]
+fn automatic_routing_keeps_responses_native_when_only_vision_capabilities_exist() {
+    let collection = automatic_routing_collection();
+    let mut account = automatic_routing_account("responses", "responses", &["gpt-6-luna"]);
+    account.api_model_vision_support = HashMap::from([("gpt-6-luna".to_string(), true)]);
+    let accounts = HashMap::from([(account.id.clone(), account)]);
+
+    let routing = super::automatic_api_service_model_routing_value(
+        &collection,
+        &["responses".into()],
+        &accounts,
+    );
+
+    assert_eq!(routing["routes"], json!([]));
+    assert_eq!(routing["nativeModels"], json!(["gpt-6-luna"]));
+}
+
+#[test]
+fn automatic_routing_uses_responses_gateway_for_explicit_vision_target() {
+    let collection = automatic_routing_collection();
+    let mut account =
+        automatic_routing_account("responses", "responses", &["text-model", "vision-model"]);
+    account.api_vision_routing_model = Some("vision-model".to_string());
+    let accounts = HashMap::from([(account.id.clone(), account)]);
+
+    let routing = super::automatic_api_service_model_routing_value(
+        &collection,
+        &["responses".into()],
+        &accounts,
+    );
+
+    assert_eq!(routing["nativeModels"], json!([]));
+    assert_eq!(routing["routes"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        routing["routes"][0]["providerGateway"]["visionRoutingModel"],
+        json!("vision-model")
+    );
+}
+
+#[test]
 fn automatic_routing_preserves_mapping_fork_and_model_exclusions() {
     let mut collection = automatic_routing_collection();
     // 账号模型列表是唯一可见来源，映射只决定该模型发给上游的名字。

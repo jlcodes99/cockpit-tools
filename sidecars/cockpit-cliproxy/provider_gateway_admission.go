@@ -139,6 +139,10 @@ func (s *relayServer) admitProviderGateway(c *gin.Context, key providerGatewayBa
 	if key.account == "" {
 		return noop, true
 	}
+	if serviceAccountPaused(relayContext(c), s.manifest, key.account) {
+		writeAPIError(c, http.StatusServiceUnavailable, "account is paused in this service", "account_paused")
+		return noop, false
+	}
 	if s.rejectProviderBackoff(c, key) {
 		return noop, false
 	}

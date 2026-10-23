@@ -26,6 +26,27 @@ test("Responses provider account snapshots retain vision defaults, overrides and
   assert.equal(snapshot.apiWireApi, "responses");
 });
 
+test("account snapshots materialize catalog vision defaults", () => {
+  const snapshot = buildCodexModelProviderAccountSnapshot({
+    id: "cmp_catalog",
+    name: "Catalog Responses",
+    baseUrl: "https://relay.example.com/v1",
+    wireApi: "responses",
+    modelCatalog: ["gpt-6-luna", "gpt-4o"],
+    supportsVision: false,
+    modelCapabilities: {},
+    supportsWebsockets: false,
+    apiKeys: [],
+    createdAt: 1,
+    updatedAt: 1,
+  });
+
+  assert.deepEqual(snapshot.apiModelVisionSupport, {
+    "gpt-6-luna": true,
+    "gpt-4o": false,
+  });
+});
+
 function account(overrides: Partial<CodexAccount>): CodexAccount {
   return {
     id: "account-1",
@@ -91,7 +112,7 @@ test('account snapshots resolve by credential and preserve another key and legac
   assert.deepEqual(a.apiModelContextWindows, { a: 256000 });
   assert.deepEqual(b.apiModelCatalog, ['b']);
   assert.deepEqual(b.apiModelContextWindows, {});
-  assert.deepEqual(b.apiModelVisionSupport, {});
+  assert.deepEqual(b.apiModelVisionSupport, { b: false });
   assert.equal(b.apiSupportsVision, false);
   assert.equal(b.apiVisionRoutingModel, undefined);
   assert.deepEqual(legacy.apiModelCatalog, ['legacy']);

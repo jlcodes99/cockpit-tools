@@ -4,6 +4,9 @@ import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletio
 import { isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { CodexQuotaMiniRows } from "../components/codex/CodexQuotaMiniRows";
 import { CodexAccountProxyButton } from "../components/codex/CodexAccountProxyButton";
+import { CodexAccountOfficialBadge } from "../components/codex/CodexOfficialBadge";
+import { CodexServiceEmptyMembers } from "../components/codex/CodexServiceEmptyMembers";
+import { chatGptPlanSourceMemberIds } from "../utils/chatgptPlanOverview";
 import { apiServiceProxyAccount } from "../services/codexProxyTargetService";
 import { CodexSpeedControl } from "../components/codex/CodexSpeedControl";
 import { CodexAccountProxyCard } from "../components/codex/CodexAccountProxyCard";
@@ -15,7 +18,7 @@ import { CODEX_LAUNCH_PREVIEW_API_SERVICE_CARD_KEY } from "../utils/codexLaunchP
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { CODEX_API_SERVICE_BIND_ID } from "../types/instance";
 import { COCKPIT_API_BASE_URL } from "../utils/codexProviderPresets";
-import { formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
+import { formatCodexQuotaPoolPlanLabel, formatCodexQuotaPoolPercent, formatCodexQuotaPoolWindowLabel } from "../utils/codexQuotaPool";
 import { CODEX_LOCAL_ACCESS_STATUS_KEYS, resolveCodexLocalAccessRuntimeStatus } from "../utils/codexLocalAccessStatus";
 import { resolveNewApiQuotaSnapshot } from "../services/modelProviderUsageService";
 import { CODEX_LOCAL_ACCESS_FALLBACK_API_KEY_MASK, formatCockpitApiInteger, formatCockpitApiTokenCount, getCockpitApiStatsRecord, getCockpitApiUsageRecord, getCodexAccountNoteTitle, hasCodexAccountNoteDetails, isPendingOAuthCodexAccount, isSponsorModelProvider, readCockpitApiNumber, readCockpitApiString, resolveApiKeyUsageMode, toCockpitApiRecord, type CockpitApiJsonRecord } from "./codexAccountsControllerModel";
@@ -114,6 +117,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
   | "openQuickSwitchProviderModal"
   | "openQuotaErrorDetail"
   | "openTagModal"
+  | "planOverview"
   | "overviewCurrentAccountId"
   | "overviewLayoutMode"
   | "paginatedAccounts"
@@ -171,6 +175,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
 >) {
   const {
     accountIdLabel,
+    accounts,
     addingLocalAccessAccountId,
     apiKeyUsageDetailAccount,
     apiKeyUsageMap,
@@ -250,6 +255,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
     openQuickSwitchProviderModal,
     openQuotaErrorDetail,
     openTagModal,
+    planOverview,
     overviewCurrentAccountId,
     overviewLayoutMode,
     paginatedAccounts,
@@ -391,6 +397,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                 </span>
               )}
             </div>
+            <CodexAccountOfficialBadge account={account} grants={planOverview.accounts} memberIds={localAccessAccountIdSet} />
             <div className="codex-compact-quotas">
               {isDeepSeekAccount(account) ? (
                 <>
@@ -732,7 +739,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
         // 充分利用卡片横向空间：最多展示 8 个，避免 3 个标签就被 +N 收起（#962）
         const visibleTags = accountTags.slice(0, 8);
         const moreTagCount = Math.max(0, accountTags.length - visibleTags.length);
-        const isInLocalAccess = localAccessAccountIdSet.has(account.id);
+        const isInLocalAccess = chatGptPlanSourceMemberIds(account.id, planOverview.accounts, localAccessAccountIdSet, accounts).length > 0;
         const canAddToLocalAccess = canDirectlyAddLocalAccessAccount(account);
         const subscriptionInfo = resolveSubscriptionPresentation(account);
         const isSubscriptionInfoMissing = subscriptionInfo.bucket === "missing";
@@ -857,6 +864,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                       <Link2 size={11} />
                     )}
                     {t("codex.localAccess.removeAction", "移除 API 服务")}
+                    <CodexAccountOfficialBadge account={account} grants={planOverview.accounts} memberIds={localAccessAccountIdSet} />
                   </button>
                 )}
                 {!isInLocalAccess && canAddToLocalAccess && (
@@ -869,6 +877,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   >
                     <Link2 size={11} />
                     {t("codex.localAccess.entryAction", "添加至 API 服务")}
+                    <CodexAccountOfficialBadge account={account} grants={planOverview.accounts} memberIds={localAccessAccountIdSet} />
                   </button>
                 )}
                 {!isApiKeyAccount && renderAccountNoteButton(account)}
@@ -1253,8 +1262,21 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                     "codex.localAccess.oauthBinding.quotaReserveHourlyLabel",
                     "5 小时保留",
                   )
-            }：${quotaReserveStatus.effectiveRemainingPercent}% / ${quotaReserveStatus.effectiveReservePercent}%`
+            }：${Number(quotaReserveStatus.effectiveRemainingPercent.toFixed(2))}% / ${quotaReserveStatus.effectiveReservePercent}%`
           : null;
+      const quotaRuntimeLine = quotaReserveStatus ? [
+        (localAccessCollection?.gatewayMode ?? "native") === "native"
+          ? t("codex.localAccess.oauthBinding.quotaInFlight", { count: quotaReserveStatus.inFlight ?? 0 }) : null,
+        quotaReserveStatus.strict
+          ? `${t("codex.localAccess.oauthBinding.safetyMargin")} ${quotaReserveStatus.safetyMarginPercent} ${t("codex.localAccess.oauthBinding.safetyMarginUnit")}` : null,
+        quotaReserveStatus.awaitingConfirmation
+          ? t("codex.localAccess.oauthBinding.quotaWaiting")
+          : !quotaReserveStatus.snapshotFresh
+            ? t("codex.localAccess.oauthBinding.quotaStale")
+            : quotaReserveStatus.blocked ? t("codex.localAccess.oauthBinding.quotaProtected") : null,
+        quotaReserveStatus.snapshotUpdatedAt
+          ? t("codex.localAccess.oauthBinding.quotaUpdated", { time: new Date(quotaReserveStatus.snapshotUpdatedAt * 1000).toLocaleTimeString() }) : null,
+      ].filter(Boolean).join(" · ") : null;
       const localAccessStatusTone = resolveCodexLocalAccessRuntimeStatus(
         localAccessCollection,
         localAccessState,
@@ -1532,6 +1554,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                     {t("codex.api.oauthBinding.actionShort", "绑定")}
                   </button>
                 </div>
+                {quotaRuntimeLine && <div className="codex-local-access-quota-runtime">{quotaRuntimeLine}</div>}
                 {quotaReserveWarningLine && (
                   <div
                     className={`codex-local-access-quota-reserve-warning ${
@@ -1556,7 +1579,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   {localAccessQuotaPreviewItems.map((item) => (
                     <div key={item.key} className="codex-local-access-pool-pill">
                       <strong>
-                        {item.key} ({item.count})
+                        {formatCodexQuotaPoolPlanLabel(item, t('chatgptPlan.officialFlow.badge'), { pending: t('chatgptPlan.officialFlow.bindingChecking'), invalid: t('chatgptPlan.officialFlow.bindingInvalid') })} ({item.count})
                       </strong>
                       {item.windows.map((window) => (
                         <span key={window.key}>
@@ -1589,6 +1612,9 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                 </div>
               )}
   
+              {localAccessCollection && localAccessAccountPoolHealthSummary.total === 0 && (
+                <CodexServiceEmptyMembers onManage={openLocalAccessMemberPicker} disabled={localAccessBusy} />
+              )}
               {localAccessAccountPoolHealthSummary.total > 0 && (
                 <button
                   type="button"
@@ -1640,6 +1666,15 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                         cooldown: localAccessAccountPoolHealthSummary.cooldown,
                         defaultValue: "异常 {{abnormal}} · 冷却 {{cooldown}}",
                       })}
+                    </span>
+                  )}
+                  {Boolean(localAccessCollection?.pausedAccountIds?.length) && (
+                    <span className="codex-local-access-health-summary-value">
+                      {t('codex.localAccess.accountPoolHealth.paused')} {new Set(
+                        localAccessCollection?.pausedAccountIds?.map((id) =>
+                          localAccessState?.serviceMembers?.find((member) => member.accountId === id)?.sourceAccountId
+                            ?? localAccessCollection.officialAccountSourceIds?.[id] ?? id),
+                      ).size}
                     </span>
                   )}
                 </button>
@@ -1978,7 +2013,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
           isNewApiAccount && !hideRelayQuota
             ? resolveCockpitApiAccountBalanceText(account)
             : null;
-        const isInLocalAccess = localAccessAccountIdSet.has(account.id);
+        const isInLocalAccess = chatGptPlanSourceMemberIds(account.id, planOverview.accounts, localAccessAccountIdSet, accounts).length > 0;
         const subscriptionInfo = resolveSubscriptionPresentation(account);
         const showSubscriptionRefreshAction =
           !isApiKeyAccount &&
@@ -2077,8 +2112,10 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                           <Link2 size={11} />
                         )}
                         {t("codex.localAccess.removeAction", "移除 API 服务")}
+                    <CodexAccountOfficialBadge account={account} grants={planOverview.accounts} memberIds={localAccessAccountIdSet} />
                       </button>
                     )}
+                    {!isInLocalAccess && <CodexAccountOfficialBadge account={account} grants={planOverview.accounts} memberIds={localAccessAccountIdSet} />}
                     {!isApiKeyAccount && renderAccountNoteButton(account)}
                     {resetCreditControls}
                     <CodexAccountProxyButton account={account} />

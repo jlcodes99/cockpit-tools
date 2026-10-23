@@ -10,11 +10,17 @@ function nodes(value: any): Element[] {
   return [{ type: value.type, props: value.props ?? {} }, ...nodes(value.props?.children)];
 }
 const t = (key: string) => key;
+const authorizationFallbackTrace = loadHookModule(new URL('./CodexAuthorizationFallbackTrace.tsx', import.meta.url), {
+  'react-i18next': { useTranslation: () => ({ t }) },
+  '../../utils/codexRequestDiagnostics': diagnostics,
+});
 const modalImports = {
   'react-i18next': { useTranslation: () => ({ t }) },
   '../ModalErrorMessage': { ModalErrorMessage: 'ModalErrorMessage' },
   '../SingleSelectDropdown': { SingleSelectDropdown: 'SingleSelectDropdown' },
   './CodexOutputSpeed': { CodexOutputSpeed: 'CodexOutputSpeed' },
+  './CodexCapabilityFallbackTrace': { CodexCapabilityFallbackTrace: 'CodexCapabilityFallbackTrace' },
+  './CodexAuthorizationFallbackTrace': authorizationFallbackTrace.exports,
 };
 
 test('payload setting retains old preference on save failure, deduplicates saves and requires confirmation before clearing', async () => {

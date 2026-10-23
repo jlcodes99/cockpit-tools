@@ -253,6 +253,10 @@ pub fn runtime_parts(input: Value) -> Result<(Vec<Value>, Vec<Value>), String> {
                 validate_native_group(&group, true)?;
                 group["name"] = json!(tag);
                 group["empty-fallback"] = json!("REJECT");
+                if group["type"] != "select" {
+                    // A saved `lazy: false` no longer disables demand-driven probes.
+                    group["lazy"] = json!(true);
+                }
                 groups.push(group);
             }
             "selector" | "urltest" => {

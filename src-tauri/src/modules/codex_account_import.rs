@@ -1882,7 +1882,9 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
 }
 
 fn serialize_accounts_for_export(accounts: &[CodexAccount]) -> Result<String, String> {
-    serde_json::to_string_pretty(accounts).map_err(|e| format!("序列化失败: {}", e))
+    let exportable: Vec<&CodexAccount> = accounts.iter()
+        .filter(|account| !is_chatgpt_plan_account(account)).collect();
+    serde_json::to_string_pretty(&exportable).map_err(|e| format!("序列化失败: {}", e))
 }
 
 #[derive(serde::Serialize, Clone)]

@@ -1502,9 +1502,9 @@ func TestHomeExecutionFailureResultPreservesRequestMetadata(t *testing.T) {
 	}
 }
 
-// TestHomePrepareFailureResultPreservesRequestMetadata covers the prepare_failed Home result paths,
-// which report usage before any executor call happens.
-func TestHomePrepareFailureResultPreservesRequestMetadata(t *testing.T) {
+// TestHomePrepareFailureDoesNotReportExecutionResult preserves preparation
+// metadata without reporting generation usage before an executor send.
+func TestHomePrepareFailureDoesNotReportExecutionResult(t *testing.T) {
 	paths := []homeRequestMetadataPath{homeExecuteMetadataPath(), homeCountMetadataPath(), homeStreamMetadataPath()}
 
 	for _, path := range paths {
@@ -1518,7 +1518,11 @@ func TestHomePrepareFailureResultPreservesRequestMetadata(t *testing.T) {
 			_ = path.run(manager, homeRequestMetadataOptions("priority"))
 			prepareMetadata, _ := executor.snapshots()
 			assertHomeRequestMetadata(t, prepareMetadata, "priority")
-			assertHomeRequestMetadata(t, hook.awaitResult(t), "priority")
+			select {
+			case result := <-hook.results:
+				t.Fatalf("unsent preparation emitted execution result: %#v", result)
+			default:
+			}
 		})
 	}
 }

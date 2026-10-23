@@ -1979,6 +1979,18 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 
 func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, ProviderExecutor, string, error) {
 	opts.EnsureMetadata()
+	if preferred := continuityPreferredAuth(opts, tried); preferred != "" && pinnedAuthIDFromMetadata(opts.Metadata) == "" {
+		preferredOpts := opts
+		preferredOpts.Metadata = make(map[string]any, len(opts.Metadata))
+		for key, value := range opts.Metadata {
+			preferredOpts.Metadata[key] = value
+		}
+		delete(preferredOpts.Metadata, continuityPreferredAuthMetadataKey)
+		preferredOpts.Metadata[cliproxyexecutor.PinnedAuthMetadataKey] = preferred
+		if auth, executor, provider, err := m.pickNextMixed(ctx, providers, model, preferredOpts, tried); err == nil {
+			return auth, executor, provider, nil
+		}
+	}
 	if m.HomeEnabled() {
 		return m.pickNextViaHome(ctx, model, opts, tried)
 	}

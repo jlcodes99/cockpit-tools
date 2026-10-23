@@ -7,6 +7,8 @@ on:
       - "main"
   push:
     branches:
+      # Trusted default-branch builds seed caches readable by future tags.
+      - "main"
       - "feature/build-matrix*"
       - "feature/build-matrix/**"
 
@@ -128,26 +130,32 @@ jobs:
       matrix:
         include:
           - label: "macos-aarch64"
+            cache_target: "macos-aarch64"
             platform: "macos-latest"
             args: "--target aarch64-apple-darwin"
             release_dir: "target/aarch64-apple-darwin/release"
           - label: "macos-x86_64"
+            cache_target: "macos-x86_64"
             platform: "macos-latest"
             args: "--target x86_64-apple-darwin"
             release_dir: "target/x86_64-apple-darwin/release"
           - label: "macos-universal"
+            cache_target: "macos-universal"
             platform: "macos-latest"
             args: "--target universal-apple-darwin"
             release_dir: "target/universal-apple-darwin/release"
           - label: "ubuntu-22.04"
+            cache_target: "linux-x86_64"
             platform: "ubuntu-22.04"
             args: ""
             release_dir: "target/release"
           - label: "ubuntu-24.04-arm"
+            cache_target: "linux-aarch64"
             platform: "ubuntu-24.04-arm"
             args: ""
             release_dir: "target/release"
           - label: "windows-latest"
+            cache_target: "windows"
             platform: "windows-latest"
             args: ""
             release_dir: "target/release"
@@ -168,10 +176,10 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: 🦀 Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: 💾 Host build cache
+        uses: ./.github/actions/host-build-cache
         with:
-          key: ${{ matrix.platform }}-${{ matrix.label }}
+          target: ${{ matrix.cache_target }}
 
       - name: 🧪 Test Codex context preservation
         if: matrix.label == 'ubuntu-22.04'
@@ -201,17 +209,6 @@ jobs:
       - name: 🧪 Test core Rust library
         if: matrix.label == 'ubuntu-22.04'
         run: npm run test:rust:core
-
-      - name: 💾 Cache Tauri tooling
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ matrix.platform == 'windows-latest' && 'C:\Users\runneradmin\AppData\Local\tauri' || '' }}
-            ${{ startsWith(matrix.platform, 'ubuntu') && '~/.cache/tauri' || '' }}
-            ${{ matrix.platform == 'macos-latest' && '~/Library/Caches/tauri' || '' }}
-          key: tauri-deps-${{ matrix.platform }}-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
-          restore-keys: |
-            tauri-deps-${{ matrix.platform }}-
 
       # Keep the private key out of PR code, dependency scripts, and third-party actions.
       - name: 🔐 Check signing availability

@@ -11,7 +11,7 @@ fn default_exe_clears_profile_environment_and_stale_user_data_arguments() {
         "old split".into(),
         "--remote-debugging-port=9222".into(),
     ];
-    prepare_codex_windows_default_command(&mut command, &args);
+    prepare_codex_windows_default_command(&mut command, &args, None);
     for name in ["CODEX_HOME", "CODEX_ELECTRON_USER_DATA_PATH"] {
         assert!(command
             .get_envs()
@@ -21,6 +21,135 @@ fn default_exe_clears_profile_environment_and_stale_user_data_arguments() {
         command.get_args().collect::<Vec<_>>(),
         vec![std::ffi::OsStr::new("--remote-debugging-port=9222")]
     );
+}
+
+#[test]
+fn default_custom_home_reaches_exe_and_store_without_managed_window_arguments() {
+    let args = vec![
+        "--user-data-dir=stale".into(),
+        "--remote-debugging-port=9222".into(),
+    ];
+    let inherited = vec![
+        ("CODEX_HOME".into(), "stale-home".into()),
+        ("CODEX_ELECTRON_USER_DATA_PATH".into(), "stale-data".into()),
+    ];
+    for home in [
+        r"D:\codex-home",
+        r"D:\李杰\Codex Data",
+        r"\\server\配置\Codex Home",
+    ] {
+        let selected = codex_default_home_env_override(
+            Path::new(home),
+            Some(Path::new(r"C:\Users\李杰\.codex")),
+        );
+        assert_eq!(selected.as_deref(), Some(home));
+        let mut exe = Command::new("never-executed-chatgpt.exe");
+        exe.envs(inherited.iter().cloned());
+        prepare_codex_windows_default_command(&mut exe, &args, selected.as_deref());
+        let store = request(selected.as_deref(), None, &args, &inherited);
+        let store_command = store.child_command();
+        for command in [&exe, &store_command] {
+            let env = command
+                .get_envs()
+                .collect::<std::collections::HashMap<_, _>>();
+            assert_eq!(
+                env[std::ffi::OsStr::new("CODEX_HOME")],
+                Some(std::ffi::OsStr::new(home))
+            );
+            assert!(env[std::ffi::OsStr::new("CODEX_ELECTRON_USER_DATA_PATH")].is_none());
+            assert_eq!(
+                command.get_args().collect::<Vec<_>>(),
+                vec![std::ffi::OsStr::new("--remote-debugging-port=9222")]
+            );
+        }
+        assert_eq!(store.app_user_data_dir, None);
+        assert!(is_codex_windows_default_process_dir(None, &HashSet::new()));
+    }
+}
+
+#[test]
+fn standard_home_does_not_require_codex_home_even_with_alternate_windows_spelling() {
+    let standard = Path::new(r"C:\Users\李杰\.codex");
+    for home in [
+        r"C:\Users\李杰\.codex",
+        "c:/users/李杰/.codex/",
+        r"\\?\C:\Users\李杰\.codex",
+    ] {
+        assert_eq!(
+            codex_default_home_env_override(Path::new(home), Some(standard)),
+            None
+        );
+    }
+}
+
+#[test]
+fn relative_default_home_is_resolved_before_package_activation() {
+    let relative = Path::new("Codex Home");
+    assert_eq!(
+        resolve_codex_default_launch_home(Some(relative)).unwrap(),
+        std::env::current_dir().unwrap().join(relative)
+    );
+}
+
+#[test]
+fn default_launch_reuses_the_home_where_configuration_was_written() {
+    let _guard = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    struct Restore(Option<std::ffi::OsString>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            match &self.0 {
+                Some(value) => std::env::set_var("CODEX_HOME", value),
+                None => std::env::remove_var("CODEX_HOME"),
+            }
+        }
+    }
+    let _restore = Restore(std::env::var_os("CODEX_HOME"));
+    let root = tempfile::tempdir().unwrap();
+    let configured = root.path().join("李杰 Codex Home");
+    std::fs::create_dir_all(&configured).unwrap();
+    std::env::set_var("CODEX_HOME", format!(" \"{}\" ", configured.display()));
+    let written_home = crate::modules::codex_account::get_codex_home();
+    std::fs::write(
+        written_home.join("config.toml"),
+        "model_provider = 'codex_local_access'\n",
+    )
+    .unwrap();
+    assert_eq!(
+        resolve_codex_default_launch_home(None).unwrap(),
+        written_home
+    );
+    std::env::set_var("CODEX_HOME", root.path().join("changed-after-write"));
+    assert_eq!(
+        resolve_codex_default_launch_home(Some(&written_home)).unwrap(),
+        configured
+    );
+    let home = codex_default_home_env_override(&written_home, Some(root.path()));
+    let command = request(home.as_deref(), None, &[], &[]).child_command();
+    let launched_home = command
+        .get_envs()
+        .find(|(key, _)| *key == "CODEX_HOME")
+        .unwrap()
+        .1
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(Path::new(launched_home).join("config.toml")).unwrap(),
+        "model_provider = 'codex_local_access'\n"
+    );
+    for empty in [None, Some(""), Some("  \"\"  ")] {
+        match empty {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        let standard = dirs::home_dir().unwrap().join(".codex");
+        let selected = resolve_codex_default_launch_home(None).unwrap();
+        assert_eq!(selected, standard);
+        assert_eq!(
+            codex_default_home_env_override(&selected, Some(&standard)),
+            None
+        );
+    }
 }
 
 fn package() -> CodexRegisteredLaunch {
@@ -556,7 +685,7 @@ fn receipts_are_isolated_authenticated_and_removed_after_attempt() {
 
 #[cfg(target_os = "windows")]
 #[test]
-fn default_child_receives_proxy_and_clears_inherited_profile_without_console() {
+fn default_child_receives_proxy_and_selected_home_without_console() {
     use std::os::windows::process::CommandExt;
     let proxy = "socks5h://127.0.0.1:53669";
     let mut env = account_proxy_env_pairs(proxy)
@@ -566,33 +695,38 @@ fn default_child_receives_proxy_and_clears_inherited_profile_without_console() {
     env.push(("CODEX_HOME".into(), "wrong-home".into()));
     env.push(("CODEX_ELECTRON_USER_DATA_PATH".into(), "wrong-data".into()));
     let script = "$values=@{};foreach($key in @('ALL_PROXY','HTTP_PROXY','HTTPS_PROXY','CODEX_HOME','CODEX_ELECTRON_USER_DATA_PATH','COCKPIT_CODEX_PACKAGE_LAUNCH_PAYLOAD')){$values[$key]=[Environment]::GetEnvironmentVariable($key,'Process')};$values|ConvertTo-Json -Compress";
-    let mut request = request(None, None, &[], &env);
-    request.executable = PathBuf::from(std::env::var("SystemRoot").unwrap())
-        .join(r"System32\WindowsPowerShell\v1.0\powershell.exe")
-        .to_string_lossy()
-        .into_owned();
-    request.args = vec![
-        "-NoProfile".into(),
-        "-NonInteractive".into(),
-        "-Command".into(),
-        script.into(),
-    ];
-    let output = crate::modules::process_timeout::output_with_timeout(
-        request.child_command().creation_flags(CREATE_NO_WINDOW),
-        Duration::from_secs(15),
-    )
-    .unwrap();
-    assert!(output.status.success());
-    let env: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    for key in ["ALL_PROXY", "HTTP_PROXY", "HTTPS_PROXY"] {
-        assert_eq!(env[key], proxy);
-    }
-    for key in [
-        "CODEX_HOME",
-        "CODEX_ELECTRON_USER_DATA_PATH",
-        codex_package_launcher::PAYLOAD_ENV,
-    ] {
-        assert!(env[key].is_null());
+    for selected_home in [None, Some(r"D:\李杰\Codex Home")] {
+        let mut request = request(selected_home, None, &[], &env);
+        request.executable = PathBuf::from(std::env::var("SystemRoot").unwrap())
+            .join(r"System32\WindowsPowerShell\v1.0\powershell.exe")
+            .to_string_lossy()
+            .into_owned();
+        request.args = vec![
+            "-NoProfile".into(),
+            "-NonInteractive".into(),
+            "-Command".into(),
+            script.into(),
+        ];
+        let output = crate::modules::process_timeout::output_with_timeout(
+            request.child_command().creation_flags(CREATE_NO_WINDOW),
+            Duration::from_secs(15),
+        )
+        .unwrap();
+        assert!(output.status.success());
+        let env: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        for key in ["ALL_PROXY", "HTTP_PROXY", "HTTPS_PROXY"] {
+            assert_eq!(env[key], proxy);
+        }
+        match selected_home {
+            Some(home) => assert_eq!(env["CODEX_HOME"], home),
+            None => assert!(env["CODEX_HOME"].is_null()),
+        }
+        for key in [
+            "CODEX_ELECTRON_USER_DATA_PATH",
+            codex_package_launcher::PAYLOAD_ENV,
+        ] {
+            assert!(env[key].is_null());
+        }
     }
 }
 

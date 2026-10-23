@@ -20,6 +20,10 @@ import { withoutCachedProxySecret } from '../utils/codexProxyCache';
 import { createSerialAccountRefreshQueue } from '../utils/serialAccountRefreshQueue';
 import { createCoalescedWriter } from '../utils/coalescedWriter';
 import { mergeCodexProfileResult } from '../utils/codexProfileRefresh';
+import { mergeCodexQuotaUpdate, type CodexQuotaUpdate } from '../utils/codexQuotaSync';
+
+const quotaUpdates = new Map<string, CodexQuotaUpdate>();
+const reconcileQuotaUpdate = (account: CodexAccount) => mergeCodexQuotaUpdate(account, quotaUpdates.get(account.id));
 
 const APP_PROFILE = (import.meta.env.VITE_COCKPIT_TOOLS_PROFILE || '').trim();
 const STORAGE_PROFILE_SUFFIX = APP_PROFILE && APP_PROFILE !== 'prod' ? `.${APP_PROFILE}` : '';
@@ -143,6 +147,7 @@ interface CodexAccountState {
   fetchCurrentAccount: (options?: FetchCodexCurrentAccountOptions) => Promise<void>;
   restoreActiveTakeoverIfNeeded: () => Promise<void>;
   applyAccountSnapshot: (account: CodexAccount) => void;
+  applyQuotaUpdate: (update: CodexQuotaUpdate) => void;
   switchAccount: (accountId: string, options?: SwitchCodexAccountOptions) => Promise<CodexAccount>;
   deleteAccount: (accountId: string) => Promise<void>;
   deleteAccounts: (accountIds: string[]) => Promise<void>;
@@ -206,7 +211,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     const requestId = ++fetchCodexAccountsSeq;
     set({ loading: true, error: null });
     try {
-      const accounts = await codexService.listCodexAccounts();
+      const accounts = (await codexService.listCodexAccounts()).map(reconcileQuotaUpdate);
       if (requestId !== fetchCodexAccountsSeq) {
         return;
       }
@@ -227,7 +232,8 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     void options;
     const requestId = ++fetchCodexCurrentAccountSeq;
     try {
-      const currentAccount = await codexService.getCurrentCodexAccount();
+      const fetched = await codexService.getCurrentCodexAccount();
+      const currentAccount = fetched ? reconcileQuotaUpdate(fetched) : null;
       if (requestId !== fetchCodexCurrentAccountSeq) {
         return;
       }
@@ -253,6 +259,7 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
 
   applyAccountSnapshot: (account: CodexAccount) => {
     if (!account?.id) return;
+    account = reconcileQuotaUpdate(account);
 
     // 授权/切号返回的账号是后端刚落盘的权威快照，先写入内存和 localStorage，
     // 同时使旧的异步回读失效，避免旧结果把刚更新的状态覆盖回去。
@@ -271,12 +278,30 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
     });
   },
 
+  applyQuotaUpdate: (update) => {
+    if (!update?.account_id || !update.quota || !Number.isFinite(update.sequence)) return;
+    const previous = quotaUpdates.get(update.account_id);
+    if (previous && previous.sequence >= update.sequence) return;
+    quotaUpdates.set(update.account_id, update);
+    // Bound retained updates, including accounts deleted in another window.
+    if (quotaUpdates.size > 1024) quotaUpdates.delete(quotaUpdates.keys().next().value!);
+    set((state) => {
+      const accounts = state.accounts.map((account) => account.id === update.account_id ? mergeCodexQuotaUpdate(account, update) : account);
+      const currentAccount = state.currentAccount ? mergeCodexQuotaUpdate(state.currentAccount, update) : null;
+      persistCodexAccountsCache(accounts);
+      if (currentAccount !== state.currentAccount) persistCodexCurrentAccountCache(currentAccount);
+      // Keep list/current fetches alive; their results merge these newer quota
+      // fields instead of discarding unrelated additions or leaving loading set.
+      return { accounts, currentAccount };
+    });
+  },
+
   switchAccount: async (accountId: string, options?: SwitchCodexAccountOptions) => {
     const flowStartedAt = performance.now();
     console.info('[Codex Switch][Store] switchAccount started', {
       accountId,
     });
-    const accounts = await codexService.listCodexAccounts();
+    const accounts = (await codexService.listCodexAccounts()).map(reconcileQuotaUpdate);
     console.info('[Codex Switch][Store] listCodexAccounts finished', {
       accountId,
       elapsedMs: Math.round(performance.now() - flowStartedAt),
@@ -301,10 +326,12 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
         reauthTokenGeneration: options?.reauthTokenGeneration,
         launchAfterSwitch: options?.launchAfterSwitch,
       });
+      account = reconcileQuotaUpdate(account);
     } catch (error) {
-      // Token Authority 可能已把账号标记为 requires_reauth。立即回读账号库，
-      // 让账号卡片和切号弹框都展示最新的 API-only / 需授权状态。
-      void get().fetchAccounts();
+      // 失败既可能发生在凭据预检，也可能发生在已切号后的启动阶段。
+      // 后台回读账号库与真实 current，不能凭错误猜测是否已完成落盘，
+      // 也不能让回读阻塞当前错误提示。
+      void Promise.allSettled([get().fetchAccounts(), get().fetchCurrentAccount()]);
       throw error;
     }
     console.info('[Codex Switch][Store] switchCodexAccount finished', {
@@ -323,19 +350,13 @@ export const useCodexAccountStore = create<CodexAccountState>((set, get) => ({
         error: null,
       };
     });
-    const refreshAfterSwitch = get()
-      .fetchAccounts()
-      .then(() => {
-        console.info('[Codex Switch][Store] background fetchAccounts after switch finished', {
-          accountId,
-          elapsedMs: Math.round(performance.now() - flowStartedAt),
-        });
-      });
+    // The command already returned the authoritative, persisted account. Avoid
+    // another full-list read and render/aggregation wave on every successful switch.
     if (options?.reconcileAfterSwitch) {
-      await refreshAfterSwitch;
+      await get().fetchAccounts();
       await get().fetchCurrentAccount();
     } else {
-      void refreshAfterSwitch;
+      void get().hydrateAccountProfilesIfNeeded([account.id]);
     }
     await emitCurrentAccountChanged({
       platformId: 'codex',

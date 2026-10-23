@@ -378,6 +378,12 @@ func (r *UsageReporter) publishWithOutcome(ctx context.Context, detail usage.Det
 	if r == nil {
 		return
 	}
+	// Codex's tracked transport boundary distinguishes local admission failures
+	// from real upstream errors. An unsent candidate must not create a failed
+	// usage/request record or consume this reporter's eventual outcome slot.
+	if failed && strings.EqualFold(r.provider, "codex") && cliproxyexecutor.UpstreamAttemptIdentity(ctx) != nil && !cliproxyexecutor.UpstreamAttempted(ctx) {
+		return
+	}
 	detail = normalizeUsageDetailTotal(detail, r.provider, r.executorType)
 	r.once.Do(func() {
 		r.publishRecord(ctx, r.buildRecord(detail, failed, fail))

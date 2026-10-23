@@ -22,12 +22,8 @@ func TestCapacityFailurePreservesUpstreamHTTPAndStreamErrors(t *testing.T) {
 			c, _ := gin.CreateTestContext(w)
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 			(&relayServer{}).writeExecutorError(c, err)
-			wantCode := "upstream_error"
-			if status == http.StatusTooManyRequests {
-				wantCode = "rate_limited"
-			}
-			if w.Code != status || gjson.Get(w.Body.String(), "error.code").String() != wantCode ||
-				gjson.Get(w.Body.String(), "error.message").String() != err.Error() {
+			if w.Code != status || gjson.Get(w.Body.String(), "error.code").String() != code ||
+				gjson.Get(w.Body.String(), "error.message").String() != "original upstream failure" {
 				t.Fatalf("upstream failure changed: %d %s", w.Code, w.Body.String())
 			}
 			w = httptest.NewRecorder()

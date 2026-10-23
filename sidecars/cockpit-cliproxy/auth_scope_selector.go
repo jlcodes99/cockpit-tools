@@ -20,7 +20,12 @@ func (s *apiKeyScopeSelector) Pick(ctx context.Context, provider, model string, 
 		err := noAuthAvailableError(nil)
 		return nil, s.ReportAuthSelectionFailure(ctx, provider, model, auths, err)
 	}
-	return s.fallback.Pick(ctx, provider, model, opts, scoped)
+	active := unpausedServiceAuths(ctx, s.manifest, scoped)
+	if len(active) == 0 && len(scoped) > 0 {
+		err := s.ReportAuthSelectionFailure(ctx, provider, model, scoped, serviceAccountPausedError())
+		return nil, terminalScopedPauseError(ctx, err)
+	}
+	return s.fallback.Pick(ctx, provider, model, opts, active)
 }
 
 func (s *apiKeyScopeSelector) ReportAuthSelectionFailure(ctx context.Context, provider, model string, auths []*coreauth.Auth, err error) error {

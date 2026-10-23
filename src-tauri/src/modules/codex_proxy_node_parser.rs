@@ -112,11 +112,14 @@ fn get<'a>(q: &'a BTreeMap<String, String>, key: &str, default: &'a str) -> &'a 
 }
 
 fn tls(out: &mut Value, q: &BTreeMap<String, String>, required: bool) -> Parsed<()> {
+    let mut insecure = false;
     for key in ["insecure", "allowInsecure"] {
         if let Some(value) = q.get(key) {
-            if !matches!(value.as_str(), "0" | "false") {
-                return Err(UNSUPPORTED.into());
-            }
+            insecure |= match value.as_str() {
+                "1" | "true" => true,
+                "0" | "false" => false,
+                _ => return Err(INVALID.into()),
+            };
         }
     }
     let security = get(q, "security", if required { "tls" } else { "none" });
@@ -133,6 +136,9 @@ fn tls(out: &mut Value, q: &BTreeMap<String, String>, required: bool) -> Parsed<
         return Ok(());
     }
     let mut t = json!({"enabled":true});
+    if insecure {
+        t["insecure"] = json!(true);
+    }
     if let Some(sni) = q.get("sni") {
         if sni.is_empty() || sni.chars().any(char::is_whitespace) {
             return Err(INVALID.into());
@@ -551,7 +557,6 @@ mod tests {
     #[test]
     fn rejects_unsupported_without_leaking() {
         for suffix in [
-            "?insecure=1",
             "?unknown=TOPSECRET",
             "?type=xhttp",
             "?security=none",
@@ -566,10 +571,9 @@ mod tests {
             parse_node_link("trojan://pass@example.com:443?sni=a&sni=b").unwrap_err(),
             INVALID
         );
-        assert_eq!(
-            parse_node_link("trojan://pass@example.com:443?insecure=1").unwrap_err(),
-            UNSUPPORTED
-        );
+        assert_eq!(parse_node_link("trojan://pass@example.com:443?insecure=1").unwrap()["tls"]["insecure"], true);
+        assert_eq!(parse_node_link("trojan://pass@example.com:443?insecure=false").unwrap()["tls"]["insecure"], Value::Null);
+        assert_eq!(parse_node_link("trojan://pass@example.com:443?insecure=invalid").unwrap_err(), INVALID);
         let grpc =
             parse_node_link("trojan://pass@example.com:443?type=grpc&serviceName=TunService")
                 .unwrap();

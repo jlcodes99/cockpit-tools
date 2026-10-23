@@ -23,7 +23,7 @@ import {
   type ModelProviderUsageSummary,
 } from './modelProviderUsageService';
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
-import { expandLegacyProviderVisionCapabilities } from '../utils/codexModelProviderVision';
+import { migrateCodexModelProviderVisionCapabilities } from '../utils/codexModelProviderVisionMigration';
 import { cloneCodexProviderModelConfig, type CodexProviderModelConfig } from '../utils/codexModelProviderKeyConfig';
 
 export interface CodexModelProviderApiKey extends CodexProviderModelConfig {
@@ -536,20 +536,19 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   const migration = migrateApiKeyFunProvider(loaded);
   loaded = migration.providers;
   let migratedDeepSeek = false;
-  let migratedLegacyVision = false;
+  let migratedVisionCapabilities = false;
   for (const provider of loaded) {
     migratedDeepSeek = enforceDeepSeekProvider(provider) || migratedDeepSeek;
-    // 旧版本的供应商级识图开关展开成逐模型能力，避免网关把图片当 text-only 丢弃。
-    if (expandLegacyProviderVisionCapabilities(provider)) {
+    if (migrateCodexModelProviderVisionCapabilities(provider)) {
       provider.updatedAt = Date.now();
-      migratedLegacyVision = true;
+      migratedVisionCapabilities = true;
     }
   }
   if (
     loaded.length !== loadedProviders.length ||
     migration.changed ||
     migratedDeepSeek ||
-    migratedLegacyVision ||
+    migratedVisionCapabilities ||
     loadResult.removedImageGenerationSetting ||
     loadResult.migratedSupportsWebsockets
   ) {
@@ -581,6 +580,8 @@ export const mergeCodexModelProviderApiKeysFromAccounts = serializedProviderMuta
     const providerBaseUrl = normalizeCodexModelProviderBaseUrl(provider.baseUrl);
     const linkedAccounts = accounts.filter((account) => {
       if ((account.auth_mode ?? '').toLowerCase() !== 'apikey') return false;
+      // A plan registration is a service reference, never a reusable API key.
+      if (account.api_provider_id === 'cockpit_chatgpt_plan') return false;
       const accountBaseUrl = normalizeCodexModelProviderBaseUrl(account.api_base_url ?? '');
       return (
         (account.api_provider_id?.trim() === provider.id && provider.id.length > 0) ||

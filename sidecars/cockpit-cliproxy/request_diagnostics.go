@@ -27,18 +27,25 @@ const (
 )
 
 type requestAttemptDetail struct {
-	Sequence      int    `json:"sequence"`
-	AccountID     string `json:"accountId"`
-	AccountEmail  string `json:"accountEmail,omitempty"`
-	ModelID       string `json:"modelId"`
-	Transport     string `json:"transport"`
-	StartedAtMS   int64  `json:"startedAtMs"`
-	LatencyMS     int64  `json:"latencyMs"`
-	Status        int    `json:"status,omitempty"`
-	Success       bool   `json:"success"`
-	ErrorCategory string `json:"errorCategory,omitempty"`
-	ErrorMessage  string `json:"errorMessage,omitempty"`
-	FailurePhase  string `json:"failurePhase,omitempty"`
+	UpstreamIdentityCaptured         bool                       `json:"upstreamIdentityCaptured"`
+	UpstreamSessionID                string                     `json:"upstreamSessionId,omitempty"`
+	UpstreamThreadID                 string                     `json:"upstreamThreadId,omitempty"`
+	UpstreamIdentityMetadataCaptured bool                       `json:"upstreamIdentityMetadataCaptured"`
+	UpstreamInstallationID           string                     `json:"upstreamInstallationId,omitempty"`
+	UpstreamChatGPTAccountID         string                     `json:"upstreamChatgptAccountId,omitempty"`
+	AccountIdentity                  *diagnosticAccountIdentity `json:"accountIdentity,omitempty"`
+	Sequence                         int                        `json:"sequence"`
+	AccountID                        string                     `json:"accountId"`
+	AccountEmail                     string                     `json:"accountEmail,omitempty"`
+	ModelID                          string                     `json:"modelId"`
+	Transport                        string                     `json:"transport"`
+	StartedAtMS                      int64                      `json:"startedAtMs"`
+	LatencyMS                        int64                      `json:"latencyMs"`
+	Status                           int                        `json:"status,omitempty"`
+	Success                          bool                       `json:"success"`
+	ErrorCategory                    string                     `json:"errorCategory,omitempty"`
+	ErrorMessage                     string                     `json:"errorMessage,omitempty"`
+	FailurePhase                     string                     `json:"failurePhase,omitempty"`
 }
 
 type requestPayloadSnapshot struct {
@@ -54,14 +61,20 @@ type requestPayloadSnapshot struct {
 }
 
 type requestDiagnosticsPayload struct {
-	Type            string                   `json:"type"`
-	RequestID       string                   `json:"requestId"`
-	FirstResponseMS *int64                   `json:"firstResponseMs,omitempty"`
-	FailurePhase    string                   `json:"failurePhase,omitempty"`
-	Attempts        []requestAttemptDetail   `json:"attempts"`
-	Payloads        []requestPayloadSnapshot `json:"payloads"`
-	Truncated       bool                     `json:"truncated,omitempty"`
-	CapturedAtMS    int64                    `json:"capturedAtMs"`
+	ClientIdentityCaptured         bool                     `json:"clientIdentityCaptured"`
+	ClientSessionID                string                   `json:"clientSessionId,omitempty"`
+	ClientThreadID                 string                   `json:"clientThreadId,omitempty"`
+	ClientIdentityMetadataCaptured bool                     `json:"clientIdentityMetadataCaptured"`
+	ClientInstallationID           string                   `json:"clientInstallationId,omitempty"`
+	ClientChatGPTAccountID         string                   `json:"clientChatgptAccountId,omitempty"`
+	Type                           string                   `json:"type"`
+	RequestID                      string                   `json:"requestId"`
+	FirstResponseMS                *int64                   `json:"firstResponseMs,omitempty"`
+	FailurePhase                   string                   `json:"failurePhase,omitempty"`
+	Attempts                       []requestAttemptDetail   `json:"attempts"`
+	Payloads                       []requestPayloadSnapshot `json:"payloads"`
+	Truncated                      bool                     `json:"truncated,omitempty"`
+	CapturedAtMS                   int64                    `json:"capturedAtMs"`
 }
 
 type rawDiagnosticSnapshot struct {
@@ -83,6 +96,7 @@ type diagnosticAttempt struct {
 // Request-owned collectors retain bounded memory and never write to stdout or
 // the filesystem. The worker redacts snapshots into a bounded HTTP IPC queue.
 type requestDiagnosticsCollector struct {
+	clientIdentity  diagnosticHeaderIdentity
 	mu              sync.Mutex
 	manifest        *manifest
 	capturePayloads bool
@@ -154,12 +168,19 @@ func (d *requestDiagnosticsCollector) upstreamRequest(ctx context.Context, info 
 		model = execution.Model
 	}
 	accountID, email := info.AuthID, ""
+	var profile *diagnosticAccountIdentity
 	if account := accountForAuthIDInManifest(d.manifest, info.AuthID); account != nil {
 		accountID, email = account.ID, account.Email
+		profile = diagnosticProfileForAccount(account)
 	}
+	headers := captureDiagnosticIdentity(info.Headers)
+	d.truncated = d.truncated || !headers.captured || !headers.metadataCaptured
 	a := &diagnosticAttempt{requestAttemptDetail: requestAttemptDetail{
 		Sequence: len(d.attempts) + 1, AccountID: accountID, AccountEmail: email, ModelID: model,
 		Transport: info.Transport, StartedAtMS: now.UnixMilli(),
+		UpstreamIdentityCaptured: headers.captured, UpstreamSessionID: headers.session, UpstreamThreadID: headers.thread,
+		UpstreamIdentityMetadataCaptured: headers.metadataCaptured, UpstreamInstallationID: headers.installation,
+		UpstreamChatGPTAccountID: headers.account, AccountIdentity: profile,
 	}, identity: identity, started: now}
 	d.attempts = append(d.attempts, a)
 	d.captureLocked("upstream", a.Sequence, info.Transport, info.Headers, info.Body, len(info.Body))
@@ -309,24 +330,33 @@ func (d *requestDiagnosticsCollector) finish(ctx context.Context, status int) pe
 		attempts = append(attempts, a.requestAttemptDetail)
 	}
 	return pendingRequestDiagnostics{payload: requestDiagnosticsPayload{
-		Type: "request_diagnostics", RequestID: d.requestID, FirstResponseMS: d.firstResponseMS,
+		ClientIdentityCaptured: d.clientIdentity.captured, ClientSessionID: d.clientIdentity.session, ClientThreadID: d.clientIdentity.thread,
+		ClientIdentityMetadataCaptured: d.clientIdentity.metadataCaptured, ClientInstallationID: d.clientIdentity.installation,
+		ClientChatGPTAccountID: d.clientIdentity.account,
+		Type:                   "request_diagnostics", RequestID: d.requestID, FirstResponseMS: d.firstResponseMS,
 		FailurePhase: d.failurePhase, Attempts: attempts, Payloads: []requestPayloadSnapshot{},
 		Truncated: d.truncated, CapturedAtMS: time.Now().UnixMilli(),
 	}, raw: d.rawPayloads}
 }
 
 type requestDiagnosticsQueue struct {
-	pending chan pendingRequestDiagnostics
-	ready   chan requestDiagnosticsPayload
-	stop    chan struct{}
-	done    chan struct{}
-	once    sync.Once
-	dropped atomic.Uint64
-	emit    func(requestDiagnosticsPayload)
+	pending  chan pendingRequestDiagnostics
+	ready    chan requestDiagnosticsPayload
+	stop     chan struct{}
+	done     chan struct{}
+	once     sync.Once
+	dropped  atomic.Uint64
+	emit     func(requestDiagnosticsPayload)
+	fallback func(requestDiagnosticsPayload)
+	push     atomic.Bool
+	wake     chan struct{}
 }
 
-func newRequestDiagnosticsQueue(emit func(requestDiagnosticsPayload)) *requestDiagnosticsQueue {
-	q := &requestDiagnosticsQueue{pending: make(chan pendingRequestDiagnostics, requestDiagnosticsQueueSize), ready: make(chan requestDiagnosticsPayload, requestDiagnosticsQueueSize), stop: make(chan struct{}), done: make(chan struct{}), emit: emit}
+func newRequestDiagnosticsQueue(emit func(requestDiagnosticsPayload), fallback ...func(requestDiagnosticsPayload)) *requestDiagnosticsQueue {
+	q := &requestDiagnosticsQueue{pending: make(chan pendingRequestDiagnostics, requestDiagnosticsQueueSize), ready: make(chan requestDiagnosticsPayload, requestDiagnosticsQueueSize), stop: make(chan struct{}), done: make(chan struct{}), emit: emit, wake: make(chan struct{}, 1)}
+	if len(fallback) > 0 {
+		q.fallback = fallback[0]
+	}
 	go q.run()
 	return q
 }
@@ -336,24 +366,73 @@ func (q *requestDiagnosticsQueue) run() {
 	for {
 		select {
 		case <-q.stop:
-			return
-		default:
-		}
-		select {
-		case <-q.stop:
-			return
-		case pending := <-q.pending:
-			prepareDiagnosticSnapshots(&pending)
-			limitDiagnosticEvent(&pending.payload)
-			if q.emit != nil {
-				q.emit(pending.payload)
-			} else {
+			if !q.push.Load() {
+				return
+			}
+			for {
 				select {
-				case q.ready <- pending.payload:
+				case pending := <-q.pending:
+					q.deliver(pending)
 				default:
-					q.dropped.Add(1)
+					q.flushReady()
+					return
 				}
 			}
+		case <-q.wake:
+			q.flushReady()
+		case pending := <-q.pending:
+			q.deliver(pending)
+		}
+	}
+}
+
+func (q *requestDiagnosticsQueue) deliver(pending pendingRequestDiagnostics) {
+	select {
+	case <-q.stop:
+		if !q.push.Load() {
+			return
+		}
+	default:
+	}
+	prepareDiagnosticSnapshots(&pending)
+	limitDiagnosticEvent(&pending.payload)
+	if q.emit != nil {
+		q.emit(pending.payload)
+		return
+	}
+	if q.push.Load() && q.fallback != nil {
+		q.fallback(pending.payload)
+		return
+	}
+	select {
+	case q.ready <- pending.payload:
+	default:
+		q.dropped.Add(1)
+	}
+}
+
+func (q *requestDiagnosticsQueue) flushReady() {
+	if !q.push.Load() || q.fallback == nil {
+		return
+	}
+	for {
+		select {
+		case payload := <-q.ready:
+			q.fallback(payload)
+		default:
+			return
+		}
+	}
+}
+
+func (p *requestPolicy) drainRequestDiagnostics() {
+	if q := p.diagnosticsWorker(); q != nil {
+		// The retired listener cannot be polled. Keep the bounded redaction
+		// worker and push its safe output through the still-drained parent pipe.
+		q.push.Store(true)
+		select {
+		case q.wake <- struct{}{}:
+		default:
 		}
 	}
 }
@@ -381,6 +460,12 @@ func (p *requestPolicy) stopRequestDiagnostics() {
 	if p != nil {
 		p.diagnosticsOnce.Do(func() {})
 		p.diagnosticsQueue.close()
+		if p.diagnosticsQueue != nil {
+			select {
+			case <-p.diagnosticsQueue.done:
+			case <-time.After(time.Second):
+			}
+		}
 	}
 }
 
@@ -389,7 +474,7 @@ func (p *requestPolicy) diagnosticsWorker() *requestDiagnosticsQueue {
 		return nil
 	}
 	p.diagnosticsOnce.Do(func() {
-		p.diagnosticsQueue = newRequestDiagnosticsQueue(nil)
+		p.diagnosticsQueue = newRequestDiagnosticsQueue(nil, func(payload requestDiagnosticsPayload) { p.emitter.emit(payload) })
 	})
 	return p.diagnosticsQueue
 }
@@ -426,6 +511,7 @@ func (p *requestPolicy) beginRequestDiagnostics(c *gin.Context, id string, start
 		return nil
 	}
 	observer := newRequestDiagnosticsObserver(p.manifest, id, started, diagnosticTransport(c.Request) == "websocket", p.diagnosticsWorker())
+	observer.captureClientIdentity(c.Request.Header)
 	c.Request = c.Request.WithContext(cliproxyexecutor.WithRequestDiagnosticsObserver(c.Request.Context(), observer))
 	if observer.base.capturePayloads && c.Request.Body != nil && !observer.websocket {
 		c.Request.Body = &diagnosticClientBody{ReadCloser: c.Request.Body, observer: observer, ctx: c.Request.Context(), headers: c.Request.Header.Clone()}

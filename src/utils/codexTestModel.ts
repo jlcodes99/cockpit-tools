@@ -11,7 +11,6 @@ const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY = [
   'gpt-6-luna',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
-  'gpt-5.5',
 ];
 
 export function isImageGenerationModelId(modelId: string): boolean {

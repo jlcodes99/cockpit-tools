@@ -1,0 +1,12 @@
+/* Layout, card surfaces and action sizes come from the ordinary Codex account styles. */
+.chatgpt-plan-account-card, .chatgpt-plan-account-row { min-width: 0; }
+.chatgpt-plan-account-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.chatgpt-plan-image-lock { display: inline-flex; align-items: center; gap: 4px; }
+.chatgpt-plan-local-usage { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.chatgpt-plan-subscription { min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
+.chatgpt-plan-compact-registration { margin-inline-end: auto; }
+.chatgpt-plan-card-error { margin: 0; color: var(--danger); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.chatgpt-plan-account-card input[type="checkbox"]:disabled, .chatgpt-plan-account-row input[type="checkbox"]:disabled { opacity: .4; cursor: not-allowed; }
+.chatgpt-plan-account-card .card-action-btn, .chatgpt-plan-account-row .action-btn, .chatgpt-plan-account-row .codex-compact-note-btn { appearance: none; font: inherit; }
+.chatgpt-plan-account-card .card-action-btn:focus-visible, .chatgpt-plan-account-row .action-btn:focus-visible, .chatgpt-plan-account-row .codex-compact-note-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.chatgpt-plan-account-row .codex-compact-note-btn:disabled { background: transparent; color: var(--text-muted); opacity: .45; cursor: not-allowed; }

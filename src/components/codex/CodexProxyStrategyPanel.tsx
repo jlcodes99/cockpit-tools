@@ -138,7 +138,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, 
   const [advanced, setAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [inspecting, setInspecting] = useState<StrategyMemberItem | null>(null);
-  const [permissionPending, setPermissionPending] = useState(false);
+  const [catalogPending, setCatalogPending] = useState(false);
   const candidates = useMemo(() => strategyCandidates(sources, true), [sources]);
   const inspectedSource = sources.find((entry) => entry.id === inspecting?.sourceId);
   const inspectedNode = inspectedSource?.nodes.find((entry) => entry.id === inspecting?.itemId);
@@ -191,7 +191,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, 
   useEffect(() => { issues.current?.scrollIntoView({ block: 'nearest' }); }, [inspecting]);
 
   const add = (candidate: ProxyStrategyCandidate) => {
-    if (saving || busy || permissionPending || full) return;
+    if (saving || busy || catalogPending || full) return;
     edit();
     if (!candidate.supported) { setInspecting(candidate); return; }
     setInspecting(null);
@@ -208,7 +208,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, 
     return next;
   });
   const submit = async () => {
-    if (saving || busy || permissionPending) return;
+    if (saving || busy || catalogPending) return;
     setSubmitted(true);
     setError('');
     if (Object.keys(optionErrors).length) setAdvanced(true);
@@ -261,7 +261,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, 
             <span className="codex-strategy-label">{t('codex.proxy.catalog.strategyMemberPick')}</span>
             <span className="codex-proxy-page-note">{t('codex.proxy.catalog.strategyMemberLimit', { count: PROXY_STRATEGY_LIMITS.members })}</span>
           </div>
-          <SingleSelectFilterDropdown value={candidateSource} disabled={saving || permissionPending}
+          <SingleSelectFilterDropdown value={candidateSource} disabled={saving || catalogPending}
             ariaLabel={t('codex.proxy.catalog.strategySourceFilter')}
             options={[{ value: '', label: t('codex.proxy.catalog.strategyAllSources') },
               ...sources.filter((entry) => entry.kind !== 'strategy').map((entry) => ({ value: entry.id, label: entry.name }))]}
@@ -272,7 +272,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, 
           <div className="codex-strategy-columns">
             <div className="codex-strategy-candidates" role="group" aria-label={t('codex.proxy.catalog.strategyMemberPick')}>
               {visible.map((candidate) => <button key={strategyMemberId(candidate)} type="button" className="codex-strategy-candidate"
-                disabled={saving || busy || permissionPending || full} onClick={() => add(candidate)} title={`${candidate.name} · ${candidate.sourceName}`}
+                disabled={saving || busy || catalogPending || full} onClick={() => add(candidate)} title={`${candidate.name} · ${candidate.sourceName}`}
                 aria-pressed={!!inspecting && strategyMemberId(inspecting) === strategyMemberId(candidate)}>
                 {candidate.supported ? <Plus size={14} aria-hidden="true" /> : <ShieldAlert size={14} aria-hidden="true" />}
                 <span><strong>{candidate.name}</strong><small>{candidate.sourceName} · {candidate.protocol.toUpperCase()}</small>
@@ -305,7 +305,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, 
           </div>
           {inspectedSource && inspectedNode && <div ref={issues}>
             <CodexProxySelectionIssues source={inspectedSource} target={inspectedNode} busy={saving || busy}
-              onCatalogChange={onCatalogChange} onPendingChange={setPermissionPending} />
+              onCatalogChange={onCatalogChange} onPendingChange={setCatalogPending} />
           </div>}
           {membersInvalid && <span className="codex-strategy-field-error" role="alert">{t('codex.proxy.catalog.strategyErrorMembers')}</span>}
           {membersDuplicated && <span className="codex-strategy-field-error" role="alert">
@@ -335,12 +335,6 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, 
               {optionErrors[entry.field] && <span className="codex-strategy-field-error" role="alert">{fieldError(entry.field)}</span>}
             </label>)}
           </div>
-          <div className="codex-strategy-lazy">
-            <button type="button" role="switch" aria-checked={form.lazy} disabled={saving}
-              className={'codex-strategy-switch' + (form.lazy ? ' on' : '')} aria-label={t('codex.proxy.catalog.strategyLazy')}
-              onClick={() => { setForm((old) => ({ ...old, lazy: !old.lazy })); edit(); }}><span /></button>
-            <span>{t('codex.proxy.catalog.strategyLazy')}</span>
-          </div>
         </details>}
         <div className="codex-strategy-summary" role="group" aria-label={t('codex.proxy.catalog.strategySummary')}>
           <p className="codex-strategy-summary-title">{t('codex.proxy.catalog.strategySummary')}</p>
@@ -353,7 +347,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, 
       </div>
       <footer className="modal-footer">
         <button type="button" className="btn btn-secondary" disabled={saving} onClick={onClose}>{t('common.cancel')}</button>
-        <button type="button" className="btn btn-primary" disabled={saving || busy || permissionPending} onClick={() => void submit()}>
+        <button type="button" className="btn btn-primary" disabled={saving || busy || catalogPending} onClick={() => void submit()}>
           {saving ? <RefreshCw size={15} className="loading-spinner" /> : <Check size={15} />}
           {t(saving ? 'common.processing' : 'common.save')}</button>
       </footer>

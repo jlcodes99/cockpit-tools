@@ -194,6 +194,9 @@ mod tests {
             .with_ansi(false)
             .with_writer(move || writer.clone())
             .finish();
+        // Avoid caching a thread-local capture's callsite interest from a
+        // different thread that has no subscriber (tracing's single-dispatcher path).
+        let _interest_guard = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
         let _guard = tracing::subscriber::set_default(subscriber);
         let mut child = tokio::process::Command::new("/bin/sh")
             .args([

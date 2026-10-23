@@ -21,6 +21,7 @@ func (s *Service) StartRuntime(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	defer s.startXAIVersionUpdater(ctx)()
 	usage.StartDefault(ctx)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -86,6 +87,11 @@ func (s *Service) UpsertRuntimeAuth(ctx context.Context, auth *coreauth.Auth) (*
 		return nil, fmt.Errorf("cliproxy: auth id is required")
 	}
 	auth = auth.Clone()
+	if s.hooks.OnAuthPrepared != nil {
+		if err := s.hooks.OnAuthPrepared(auth); err != nil {
+			return nil, err
+		}
+	}
 	s.ensureExecutorsForAuthWithContext(ctx, auth, false)
 	var registered *coreauth.Auth
 	var err error

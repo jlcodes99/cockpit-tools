@@ -18,6 +18,8 @@ use tokio::{
 
 #[path = "codex_proxy_engine_delay.rs"]
 mod delay;
+#[path = "codex_proxy_engine_process.rs"]
+mod process;
 pub(crate) use delay::validate_delay_url;
 
 pub const ENGINE_VERSION: &str = "1.19.31";
@@ -79,6 +81,7 @@ pub struct NodeTunnel {
     error: Arc<AtomicU8>,
     error_readers: Vec<tokio::task::JoinHandle<()>>,
     child: Arc<Mutex<Child>>,
+    _process_lifetime: process::ProcessLifetime,
     id: uuid::Uuid,
     proxy_url: String,
     controller: EngineController,
@@ -360,9 +363,7 @@ impl Drop for NodeTunnel {
         for reader in self.error_readers.drain(..) {
             reader.abort();
         }
-        if let Ok(mut child) = self.child.lock() {
-            let _ = child.start_kill();
-        }
+        request_child_stop(&self.child, self.id);
         if let Ok(mut children) = CHILDREN.lock() {
             children.remove(&self.id);
         }
@@ -375,18 +376,23 @@ pub fn shutdown_all() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
     let children = CHILDREN
         .lock()
-        .map(|children| {
-            children
-                .iter()
-                .filter_map(|(id, child)| child.upgrade().map(|child| (*id, child)))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .iter()
+        .filter_map(|(id, child)| child.upgrade().map(|child| (*id, child)))
+        .collect::<Vec<_>>();
     for (id, child) in children {
         super::logger::log_info(&format!("[ProxyEngine] stop_requested: tunnel_id={id}, reason=host_shutdown"));
-        if let Ok(mut child) = child.lock() {
-            let _ = child.start_kill();
-        }
+        request_child_stop(&child, id);
+    }
+}
+
+fn request_child_stop(child: &Mutex<Child>, id: uuid::Uuid) {
+    let mut child = child.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Err(error) = child.start_kill() {
+        super::logger::log_warn(&format!(
+            "[ProxyEngine] stop_failed: tunnel_id={id}, kind={:?}, os_code={:?}",
+            error.kind(), error.raw_os_error()
+        ));
     }
 }
 
@@ -497,6 +503,19 @@ fn command(binary: &Path) -> Command {
     command
 }
 
+fn runtime_command(binary: &Path, directory: &Path) -> Command {
+    let mut command = command(binary);
+    command
+        .args(["-f", "-"])
+        .arg("-d")
+        .arg(directory)
+        // Empty stdin must never fall back to a config in the host's working directory.
+        .current_dir(directory)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command
+}
+
 fn inherited_engine_override(key: &std::ffi::OsStr) -> bool {
     let key = key.to_string_lossy().to_ascii_uppercase();
     key.starts_with("CLASH_")
@@ -516,11 +535,12 @@ pub(crate) async fn verify_version_with_timeout(
 ) -> Result<(), String> {
     let output = tokio::time::timeout(
         timeout,
-        command(binary)
-            .arg("-v")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .output(),
+        async {
+            let mut command = command(binary);
+            command.arg("-v").stdin(Stdio::null()).stdout(Stdio::piped());
+            let (child, _process_lifetime) = process::spawn(&mut command)?;
+            child.wait_with_output().await
+        },
     )
     .await
     .map_err(|_| {
@@ -820,14 +840,15 @@ async fn start_inner(
     drop(listener);
     drop(controller_listener);
     let runtime_dir = RuntimeDirectory::create().await?;
-    let mut child = command(binary)
-        .args(["-f", "-"])
-        .arg("-d")
-        .arg(&runtime_dir.0)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|_| "PROXY_ENGINE_START_FAILED")?;
+    // Do not send configuration until the child is owned by its Windows job.
+    let (mut child, process_lifetime) =
+        process::spawn(&mut runtime_command(binary, &runtime_dir.0)).map_err(|error| {
+            super::logger::log_warn(&format!(
+                "[ProxyEngine] protected process spawn failed (kind={:?}, os_code={:?})",
+                error.kind(), error.raw_os_error()
+            ));
+            "PROXY_ENGINE_START_FAILED"
+        })?;
     let mut stdin = child.stdin.take().ok_or("PROXY_ENGINE_START_FAILED")?;
     let error = Arc::new(AtomicU8::new(0));
     let mut error_readers = Vec::new();
@@ -858,6 +879,7 @@ async fn start_inner(
         error,
         error_readers,
         child,
+        _process_lifetime: process_lifetime,
         id,
         _engine_lease: engine_lease,
         _runtime_dir: runtime_dir,
@@ -1285,6 +1307,31 @@ mod tests {
         std::env::var_os("COCKPIT_TEST_MIHOMO")
             .map(PathBuf::from)
             .expect("Set COCKPIT_TEST_MIHOMO to a checksum-verified Mihomo 1.19.31 executable")
+    }
+
+    #[tokio::test]
+    #[ignore = "requires explicitly provided, checksum-verified Mihomo; no network requests"]
+    async fn real_engine_empty_startup_input_exits_instead_of_loading_host_config() {
+        let binary = test_engine();
+        verify_version(&binary).await.unwrap();
+        let directory = RuntimeDirectory::create().await.unwrap();
+        let mut command = runtime_command(&binary, &directory.0);
+        assert_eq!(command.as_std().get_current_dir(), Some(directory.0.as_path()));
+        let (mut child, _process_lifetime) = process::spawn(&mut command).unwrap();
+        let stdin = child.stdin.take().unwrap();
+        // Before job assignment/configuration, the engine must wait for input.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(child.try_wait().unwrap().is_none());
+        // A host dying before assignment closes this pipe without sending config.
+        drop(stdin);
+        let output = tokio::time::timeout(Duration::from_secs(3), child.wait_with_output())
+            .await
+            .expect("unconfigured engine did not exit after stdin closed")
+            .unwrap();
+        assert!(!output.status.success());
+        let diagnostic = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(diagnostic.contains("config.yaml"), "expected missing private config: {diagnostic}");
+        assert!(!directory.0.join("config.yaml").exists());
     }
 
     #[tokio::test]

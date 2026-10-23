@@ -38,6 +38,9 @@ func applyCodexReasoningReplayCache(ctx context.Context, from sdktranslator.Form
 }
 
 func applyCodexReasoningReplayCacheRequired(ctx context.Context, from sdktranslator.Format, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, body []byte) ([]byte, codexReasoningReplayScope, error) {
+	if cliproxyexecutor.ContinuityActive(ctx) {
+		return body, codexReasoningReplayScope{}, nil
+	}
 	scope := codexReasoningReplayScopeFromRequest(ctx, from, req, opts, body)
 	if !scope.valid() {
 		return body, scope, nil

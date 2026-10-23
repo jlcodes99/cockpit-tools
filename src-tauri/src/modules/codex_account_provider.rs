@@ -114,7 +114,6 @@ const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
-    "gpt-5.5",
     "gpt-reserve",
 ];
 /// Official DeepSeek Codex setup writes `models.json` and points `model_catalog_json` at it.
@@ -137,10 +136,7 @@ const CODEX_DEFAULT_RUNTIME_PROVIDER_NAME: &str = "OpenAI";
 const CODEX_PROVIDER_WIRE_API: &str = "responses";
 const DEEPSEEK_API_BASE_URL: &str = "https://api.deepseek.com";
 const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
-const DEEPSEEK_CODEX_MODELS: &[&str] = &[
-    "deepseek-flash",
-    "deepseek-v4-pro",
-];
+const DEEPSEEK_CODEX_MODELS: &[&str] = &["deepseek-flash", "deepseek-v4-pro"];
 /// 官方模型新名到元数据模板的映射：请求仍按用户填写的模型名发送，元数据随模板。
 const DEEPSEEK_CODEX_MODEL_ALIASES: &[(&str, &str)] = &[("deepseek-flash", "deepseek-v4-flash")];
 const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-flash";
@@ -620,10 +616,13 @@ fn is_apikey_fun_base_url(raw: Option<&str>) -> bool {
     let Some(actual) = normalize_api_base_url_for_match(raw) else {
         return false;
     };
-    [APIKEY_FUN_PROVIDER_BASE_URL, APIKEY_FUN_LEGACY_PROVIDER_BASE_URL]
-        .iter()
-        .filter_map(|candidate| normalize_api_base_url_for_match(Some(*candidate)))
-        .any(|expected| actual == expected)
+    [
+        APIKEY_FUN_PROVIDER_BASE_URL,
+        APIKEY_FUN_LEGACY_PROVIDER_BASE_URL,
+    ]
+    .iter()
+    .filter_map(|candidate| normalize_api_base_url_for_match(Some(*candidate)))
+    .any(|expected| actual == expected)
 }
 
 fn migrate_apikey_fun_base_url(account: &mut CodexAccount) -> bool {
@@ -709,7 +708,6 @@ pub(crate) fn is_deepseek_account(account: &CodexAccount) -> bool {
         .as_deref()
         .is_some_and(|value| value.eq_ignore_ascii_case(DEEPSEEK_PROVIDER_ID))
 }
-
 
 fn deepseek_official_model_catalog() -> Vec<String> {
     DEEPSEEK_CODEX_MODELS
@@ -821,7 +819,7 @@ fn normalize_deepseek_account(account: &mut CodexAccount) -> bool {
         let mappings_before = account.api_model_mappings.len();
         account.api_model_mappings.retain(|mapping| {
             let client = mapping.client_model.trim();
-            !crate::modules::codex_wakeup::is_codex_model_before_5_5(client)
+            !is_retired_builtin_codex_model(client)
                 && (!crate::modules::codex_local_access::is_codex_provider_shell_model_id(client)
                     || is_allowed_deepseek_client_model(client))
         });
@@ -945,7 +943,7 @@ fn preferred_deepseek_client_model(
         .find(|slot| slot.upstream_model.eq_ignore_ascii_case(&startup))
         .map(|slot| slot.client_model.clone())
         .or_else(|| slots.first().map(|slot| slot.client_model.clone()))
-        .unwrap_or_else(|| "gpt-5.5".to_string())
+        .unwrap_or_else(|| DEFAULT_CODEX_MODEL_ID.to_string())
 }
 
 pub fn update_account_instance_access(
@@ -954,7 +952,13 @@ pub fn update_account_instance_access(
     startup_model: Option<String>,
     image_generation_account_ids: Option<Vec<String>>,
 ) -> Result<CodexAccount, String> {
-    update_account_instance_access_with_image_models(account_id, access_mode, startup_model, image_generation_account_ids, None)
+    update_account_instance_access_with_image_models(
+        account_id,
+        access_mode,
+        startup_model,
+        image_generation_account_ids,
+        None,
+    )
 }
 
 pub fn update_account_instance_access_with_image_models(
@@ -1008,13 +1012,17 @@ pub fn update_account_instance_access_with_image_models(
             .map(|value| value.to_ascii_lowercase());
     }
     if image_generation_account_ids.is_some() || image_generation_account_models.is_some() {
-        let image_account_ids = image_generation_account_ids.unwrap_or_else(|| account.api_image_generation_account_ids.clone());
-        let mut image_models = image_generation_account_models.unwrap_or_else(|| account.api_image_generation_account_models.clone());
-        image_models = image_models.into_iter()
+        let image_account_ids = image_generation_account_ids
+            .unwrap_or_else(|| account.api_image_generation_account_ids.clone());
+        let mut image_models = image_generation_account_models
+            .unwrap_or_else(|| account.api_image_generation_account_models.clone());
+        image_models = image_models
+            .into_iter()
             .map(|(id, model)| (id.trim().to_string(), model.trim().to_string()))
             .filter(|(id, _)| !id.is_empty())
             .collect();
-        let ids = normalize_image_generation_account_ids(&account, image_account_ids, &image_models)?;
+        let ids =
+            normalize_image_generation_account_ids(&account, image_account_ids, &image_models)?;
         image_models.retain(|id, _| ids.contains(id));
         account.api_image_generation_account_ids = ids;
         account.api_image_generation_account_models = image_models;
@@ -1047,20 +1055,33 @@ fn normalize_image_generation_account_ids(
         } else {
             load_account(id).ok_or_else(|| format!("生图账号不存在: {}", id))?
         };
-        if !crate::modules::codex_local_access::is_image_generation_source_for_model(&target, image_model) {
+        if !crate::modules::codex_local_access::is_image_generation_source_for_model(
+            &target,
+            image_model,
+        ) {
             return Err("codex.localAccess.imageAccounts.sourceUnavailable".to_string());
         }
         let actual = crate::modules::codex_local_access::resolve_image_generation_source_model(
-            &target, &settings, image_models.get(id).map(String::as_str),
-        ).ok_or_else(|| "codex.localAccess.imageAccounts.modelRequired".to_string())?;
+            &target,
+            &settings,
+            image_models.get(id).map(String::as_str),
+        )
+        .ok_or_else(|| "codex.localAccess.imageAccounts.modelRequired".to_string())?;
         source_models.push(actual);
         normalized.push(id.to_string());
     }
-    crate::modules::codex_local_access::register_image_generation_source_models(&settings, source_models)?;
+    crate::modules::codex_local_access::register_image_generation_source_models(
+        &settings,
+        source_models,
+    )?;
     Ok(normalized)
 }
 
-fn replace_api_image_source_reference(account: &mut CodexAccount, old_id: &str, new_id: &str) -> bool {
+fn replace_api_image_source_reference(
+    account: &mut CodexAccount,
+    old_id: &str,
+    new_id: &str,
+) -> bool {
     let mut changed = false;
     for id in &mut account.api_image_generation_account_ids {
         if id == old_id {
@@ -1069,7 +1090,10 @@ fn replace_api_image_source_reference(account: &mut CodexAccount, old_id: &str, 
         }
     }
     if let Some(model) = account.api_image_generation_account_models.remove(old_id) {
-        account.api_image_generation_account_models.entry(new_id.to_string()).or_insert(model);
+        account
+            .api_image_generation_account_models
+            .entry(new_id.to_string())
+            .or_insert(model);
         changed = true;
     }
     changed
@@ -1521,10 +1545,7 @@ fn record_deepseek_top_level_backup(doc: &Document) -> serde_json::Value {
         .chain(DEEPSEEK_OWNED_TOP_LEVEL_KEYS.iter().copied())
     {
         let Some(item) = doc.get(key) else {
-            recorded.insert(
-                key.to_string(),
-                serde_json::json!({ "present": false }),
-            );
+            recorded.insert(key.to_string(), serde_json::json!({ "present": false }));
             continue;
         };
         // 只接管标量值：表结构（例如用户自定义的 `[xxx]` 段）既不覆盖也不备份，
@@ -1895,10 +1916,7 @@ fn deepseek_official_catalog_models_for_account(
             apply_deepseek_model_vision(&mut entry, false);
         }
         if let Some(object) = entry.as_object_mut() {
-            object.insert(
-                "slug".to_string(),
-                serde_json::Value::String(model.clone()),
-            );
+            object.insert("slug".to_string(), serde_json::Value::String(model.clone()));
             object.insert(
                 "display_name".to_string(),
                 serde_json::Value::String(official_deepseek_display_name(&model)),
@@ -1971,7 +1989,7 @@ pub(crate) fn provider_injection_model_payload(account: &CodexAccount) -> serde_
                 .get(&key)
                 .copied()
                 .unwrap_or_else(|| {
-                    // gpt-5.5 及以上默认支持识图；其它模型仍按账号级开关。
+                    // 未设置逐模型值时，采用账号级开关或 models.json 声明的图片输入能力。
                     account.api_supports_vision || model_defaults_to_vision_input(model)
                 });
             serde_json::json!({
@@ -2031,9 +2049,7 @@ fn sort_deepseek_catalog_models(models: &mut [serde_json::Value]) {
 /// 模型壳做底再局部覆盖字段，会残留壳模型的计费档位（`service_tiers` /
 /// `additional_speed_tiers`）、套餐门控（`available_in_plans`）与技能说明注入开关，
 /// 与官方声明不一致。
-fn build_deepseek_official_model_catalog_json(
-    account: &CodexAccount,
-) -> Result<String, String> {
+fn build_deepseek_official_model_catalog_json(account: &CodexAccount) -> Result<String, String> {
     let mut models = deepseek_official_catalog_models_for_account(account)?;
     for model in models.iter_mut() {
         let Some(object) = model.as_object_mut() else {

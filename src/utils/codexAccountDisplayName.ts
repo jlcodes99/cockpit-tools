@@ -6,6 +6,7 @@ export interface CodexAccountDisplayIdentity {
   api_base_url?: string | null;
   api_provider_name?: string | null;
   api_provider_mode?: string | null;
+  api_provider_id?: string | null;
 }
 
 const generatedApiKeyName = /^api-key-[a-f0-9]{8}$/i;
@@ -16,9 +17,14 @@ export function resolveCodexAccountDisplayName(
   apiKeyLabel: string = 'API',
 ): string {
   const name = account.account_name?.trim();
+  const email = account.email?.trim();
+  // An independent authorization still identifies a person, even when a
+  // historical service reference used the API-key storage shape.
+  if (account.api_provider_id === 'cockpit_chatgpt_plan' || account.id.startsWith('chatgpt_plan_')) {
+    return email || name || account.id;
+  }
   if (name && !generatedApiKeyName.test(name)) return name;
 
-  const email = account.email?.trim();
   const isApiKey = account.auth_mode?.trim().toLowerCase() === 'apikey' ||
     generatedApiKeyName.test(email ?? '') || generatedApiKeyName.test(name ?? '') ||
     generatedApiKeyName.test(account.id) || account.id.startsWith('codex_apikey_');

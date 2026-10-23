@@ -1257,7 +1257,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
 }
 
-.codex-speed-trigger.fast {
+.codex-speed-trigger:is(.fast, .ultrafast) {
   color: #7a4b00;
   border-color: rgba(217, 119, 6, 0.24);
   background: linear-gradient(180deg, rgba(255, 250, 241, 0.98), rgba(252, 240, 220, 0.94));
@@ -1266,8 +1266,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
     inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
-.codex-speed-trigger.fast:hover:not(:disabled),
-.codex-speed-trigger.fast.open {
+.codex-speed-trigger:is(.fast, .ultrafast):hover:not(:disabled),
+.codex-speed-trigger:is(.fast, .ultrafast).open {
   border-color: rgba(217, 119, 6, 0.42);
   background: linear-gradient(180deg, rgba(255, 247, 232, 1), rgba(250, 232, 204, 0.96));
 }
@@ -1297,7 +1297,8 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
     0 12px 28px rgba(15, 23, 42, 0.12),
     0 1px 0 rgba(255, 255, 255, 0.72) inset;
   padding: 6px;
-  overflow: hidden;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 
 .codex-speed-menu-title {
@@ -1404,7 +1405,7 @@ html[data-reduced-motion="true"] .platform-group-switcher-trigger.is-open .platf
   line-height: 1.2;
 }
 
-[data-theme="dark"] .codex-speed-trigger.fast {
+[data-theme="dark"] .codex-speed-trigger:is(.fast, .ultrafast) {
   color: #fbbf24;
   border-color: rgba(251, 191, 36, 0.28);
   background: rgba(251, 191, 36, 0.12);

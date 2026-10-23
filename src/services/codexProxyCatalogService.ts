@@ -128,7 +128,7 @@ export function catalogUnsupportedKey(item?: { error?: string | null; kind?: str
     SUBSCRIPTION_GROUP_MEMBER_MISSING: 'reasonMissing',
     SUBSCRIPTION_GROUP_MEMBER_UNSUPPORTED: 'reasonMemberUnsupported',
     PROXY_UNSUPPORTED_OPTION: 'reasonOptions',
-    PROXY_TLS_INSECURE: 'reasonTlsInsecure',
+    PROXY_TLS_INSECURE: 'refreshRequired',
     PROXY_TRANSPORT_UNSUPPORTED: 'reasonTransport',
     PROXY_ECH_UNSUPPORTED: 'reasonEch',
     SUBSCRIPTION_INVALID: 'reasonInvalid',
@@ -163,7 +163,7 @@ export function catalogErrorKey(error: unknown): string {
     SUBSCRIPTION_GROUP_CYCLE: 'reasonCycle', SUBSCRIPTION_GROUP_MEMBER_MISSING: 'reasonMissing',
     SUBSCRIPTION_GROUP_MEMBER_UNSUPPORTED: 'reasonMemberUnsupported',
     SUBSCRIPTION_GROUP_TIMEOUT: 'reasonGroupTimeout',
-    SUBSCRIPTION_PROVIDER_UNSUPPORTED: 'reasonProvider', PROXY_TLS_INSECURE: 'reasonTlsInsecure',
+    SUBSCRIPTION_PROVIDER_UNSUPPORTED: 'reasonProvider', PROXY_TLS_INSECURE: 'refreshRequired',
     PROXY_TRANSPORT_UNSUPPORTED: 'reasonTransport', PROXY_ECH_UNSUPPORTED: 'reasonEch',
   };
   if (code === 'CATALOG_CANCELLED' || code === 'PROXY_PROBE_CANCELLED') return 'common.cancelled';

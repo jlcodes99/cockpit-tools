@@ -230,7 +230,6 @@ interface GeneralConfig {
   hermes_auth_overwrite_on_switch?: boolean;
   codex_launch_on_switch: boolean;
   codex_auto_restore_takeover_on_launch?: boolean;
-  codex_preserve_verified_external_bridge?: boolean;
   antigravity_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
@@ -666,7 +665,6 @@ export function useSettingsPageController() {
   const [hermesAuthOverwriteOnSwitch, setHermesAuthOverwriteOnSwitch] = useState(false);
   const [codexLaunchOnSwitch, setCodexLaunchOnSwitch] = useState(true);
   const [codexAutoRestoreTakeoverOnLaunch, setCodexAutoRestoreTakeoverOnLaunch] = useState(true);
-  const [codexPreserveVerifiedExternalBridge, setCodexPreserveVerifiedExternalBridge] = useState(false);
   const [antigravityLaunchOnSwitch, setAntigravityLaunchOnSwitch] = useState(true);
   const [codexRestartSpecifiedAppOnSwitch, setCodexRestartSpecifiedAppOnSwitch] = useState(false);
   const [codexLocalAccessEntryVisible, setCodexLocalAccessEntryVisible] = useState(true);
@@ -1154,7 +1152,6 @@ export function useSettingsPageController() {
       hermes_auth_overwrite_on_switch: hermesAuthOverwriteOnSwitch,
       codex_launch_on_switch: codexLaunchOnSwitch,
       codex_auto_restore_takeover_on_launch: codexAutoRestoreTakeoverOnLaunch,
-      codex_preserve_verified_external_bridge: codexPreserveVerifiedExternalBridge,
       antigravity_launch_on_switch: antigravityLaunchOnSwitch,
       codex_restart_specified_app_on_switch: codexRestartSpecifiedAppOnSwitch,
       codex_local_access_entry_visible: codexLocalAccessEntryVisible,
@@ -1390,7 +1387,6 @@ export function useSettingsPageController() {
     hermesAuthOverwriteOnSwitch,
     codexLaunchOnSwitch,
     codexAutoRestoreTakeoverOnLaunch,
-    codexPreserveVerifiedExternalBridge,
     antigravityLaunchOnSwitch,
     codexRestartSpecifiedAppOnSwitch,
     codexLocalAccessEntryVisible,
@@ -1776,7 +1772,6 @@ export function useSettingsPageController() {
       setHermesAuthOverwriteOnSwitch(config.hermes_auth_overwrite_on_switch ?? false);
       setCodexLaunchOnSwitch(config.codex_launch_on_switch ?? true);
       setCodexAutoRestoreTakeoverOnLaunch(config.codex_auto_restore_takeover_on_launch ?? true);
-      setCodexPreserveVerifiedExternalBridge(config.codex_preserve_verified_external_bridge ?? false);
       setAntigravityLaunchOnSwitch(config.antigravity_launch_on_switch ?? true);
       setCodexRestartSpecifiedAppOnSwitch(
         config.codex_restart_specified_app_on_switch ?? false,
@@ -3295,8 +3290,6 @@ export function useSettingsPageController() {
     codexLaunchCandidates,
     codexLaunchOnSwitch,
     codexAutoRestoreTakeoverOnLaunch,
-    codexPreserveVerifiedExternalBridge,
-    setCodexPreserveVerifiedExternalBridge,
     setCodexAutoRestoreTakeoverOnLaunch,
     codexLocalAccessEntryVisible,
     codexQuotaAlertEnabled,

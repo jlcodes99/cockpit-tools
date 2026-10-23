@@ -22,7 +22,8 @@ pub async fn codex_local_access_get_request_payload_logging() -> Result<bool, St
 }
 
 #[tauri::command]
-pub fn codex_local_access_get_request_payload_logging_status() -> codex_local_access::RequestPayloadLoggingStatus {
+pub fn codex_local_access_get_request_payload_logging_status(
+) -> codex_local_access::RequestPayloadLoggingStatus {
     codex_local_access::get_local_access_request_payload_logging_status()
 }
 
@@ -70,8 +71,9 @@ pub async fn codex_local_access_save_accounts(
     image_generation_account_policies: Option<
         HashMap<String, CodexLocalAccessImageGenerationPolicy>,
     >,
+    official_account_bindings: Option<HashMap<String, String>>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::save_local_access_accounts(
+    codex_local_access::save_local_access_accounts_with_official_bindings(
         account_ids,
         restrict_free_accounts.unwrap_or(true),
         backup_account_ids,
@@ -79,6 +81,7 @@ pub async fn codex_local_access_save_accounts(
         session_affinity,
         session_affinity_ttl_ms,
         image_generation_account_policies,
+        official_account_bindings,
     )
     .await
 }
@@ -325,7 +328,8 @@ pub async fn codex_local_access_update_debug_logs(
 pub async fn codex_local_access_update_image_generation_main_model(
     image_generation_main_model: Option<String>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::update_local_access_image_generation_main_model(image_generation_main_model).await
+    codex_local_access::update_local_access_image_generation_main_model(image_generation_main_model)
+        .await
 }
 
 #[tauri::command]
@@ -341,7 +345,12 @@ pub async fn codex_local_access_update_image_generation_model_catalog(
     add_model: Option<String>,
     remove_model: Option<String>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::update_local_access_image_generation_model_catalog(discovered_models, add_model, remove_model).await
+    codex_local_access::update_local_access_image_generation_model_catalog(
+        discovered_models,
+        add_model,
+        remove_model,
+    )
+    .await
 }
 
 /// 更新 API 服务的生图转发账号池（生图请求交给所选 OAuth 账号执行）。
@@ -350,7 +359,11 @@ pub async fn codex_local_access_update_image_generation_accounts(
     account_ids: Vec<String>,
     image_generation_account_models: Option<std::collections::HashMap<String, String>>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::update_local_access_image_generation_accounts_with_models(account_ids, image_generation_account_models).await
+    codex_local_access::update_local_access_image_generation_accounts_with_models(
+        account_ids,
+        image_generation_account_models,
+    )
+    .await
 }
 
 #[tauri::command]

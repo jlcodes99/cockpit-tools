@@ -60,13 +60,13 @@ http://localhost:8080/v0/resource/plugins/host-model-callback/status
 Non-streaming request with explicit protocol and prompt:
 
 ```text
-http://localhost:8080/v0/resource/plugins/host-model-callback/status?entry_protocol=openai&exit_protocol=openai&model=gpt-5.5&prompt=Say%20hello%20in%20one%20sentence
+http://localhost:8080/v0/resource/plugins/host-model-callback/status?entry_protocol=openai&exit_protocol=openai&model=gpt-5.6-sol&prompt=Say%20hello%20in%20one%20sentence
 ```
 
 Streaming request with explicit close:
 
 ```text
-http://localhost:8080/v0/resource/plugins/host-model-callback/status?stream=true&model=gpt-5.5&prompt=Write%20three%20short%20tokens
+http://localhost:8080/v0/resource/plugins/host-model-callback/status?stream=true&model=gpt-5.6-sol&prompt=Write%20three%20short%20tokens
 ```
 
 Streaming request that relies on RPC-scope implicit close:
@@ -75,13 +75,13 @@ Streaming request that relies on RPC-scope implicit close:
 http://localhost:8080/v0/resource/plugins/host-model-callback/status?stream=true&implicit_close=true
 ```
 
-The default model ID is `gpt-5.5` to match the current nearby Codex example documentation and code. It is only an example model identifier; the request succeeds only when your CPA configuration can route that model.
+The default model ID is `gpt-5.6-sol` to match the current nearby Codex example documentation and code. It is only an example model identifier; the request succeeds only when your CPA configuration can route that model.
 
 ## Parameters
 
 - `entry_protocol`: inbound client protocol passed to the host model execution path. The default is `openai`.
 - `exit_protocol`: target provider protocol passed to the host model execution path. The default is `openai`.
-- `model`: model identifier passed in the host model execution request. The default is `gpt-5.5`; availability depends on the configured model registry and auth records.
+- `model`: model identifier passed in the host model execution request. The default is `gpt-5.6-sol`; availability depends on the configured model registry and auth records.
 - `stream`: boolean flag. The default is `false`; set `stream=true` to use `host.model.execute_stream`.
 - `prompt`: text used to build the default OpenAI-compatible request body.
 - `body`: optional JSON string in the URL query used as the raw model request body. When `body` is provided, it replaces the generated body.
@@ -92,7 +92,7 @@ The generated default body is OpenAI-compatible:
 
 ```json
 {
-  "model": "gpt-5.5",
+  "model": "gpt-5.6-sol",
   "stream": false,
   "messages": [
     {
@@ -106,7 +106,7 @@ The generated default body is OpenAI-compatible:
 For example, a URL-encoded `body` query value can provide the raw OpenAI-compatible request:
 
 ```text
-http://localhost:8080/v0/resource/plugins/host-model-callback/status?body=%7B%22model%22%3A%22gpt-5.5%22%2C%22stream%22%3Afalse%2C%22messages%22%3A%5B%7B%22role%22%3A%22user%22%2C%22content%22%3A%22Say%20hello%20in%20one%20sentence%22%7D%5D%7D
+http://localhost:8080/v0/resource/plugins/host-model-callback/status?body=%7B%22model%22%3A%22gpt-5.6-sol%22%2C%22stream%22%3Afalse%2C%22messages%22%3A%5B%7B%22role%22%3A%22user%22%2C%22content%22%3A%22Say%20hello%20in%20one%20sentence%22%7D%5D%7D
 ```
 
 ## Stream Close Semantics

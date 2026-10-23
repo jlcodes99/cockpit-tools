@@ -78,7 +78,8 @@ func TestExecuteStream_BootstrapOverload_SkipsConsecutiveOverloadedCredentials(t
 
 	m.RegisterExecutor(&customStreamMockExecutor{
 		identifier: "codex",
-		streamFn: func(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+		streamFn: func(ctx context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+			cliproxyexecutor.MarkUpstreamAttempt(ctx)
 			mu.Lock()
 			order = append(order, auth.ID)
 			mu.Unlock()
@@ -134,7 +135,8 @@ func TestExecuteStream_BootstrapOverload_StopsAtCredentialBudget(t *testing.T) {
 	attempts := 0
 	m.RegisterExecutor(&customStreamMockExecutor{
 		identifier: "codex",
-		streamFn: func(_ context.Context, _ *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+		streamFn: func(ctx context.Context, _ *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+			cliproxyexecutor.MarkUpstreamAttempt(ctx)
 			mu.Lock()
 			attempts++
 			mu.Unlock()

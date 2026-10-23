@@ -2,17 +2,18 @@ import { resolveCodexAccountReferenceDisplayName } from "../utils/codexAccountDi
 import { useState } from "react";
 import { CodexOutputSpeed } from "../components/codex/CodexOutputSpeed";
 import { aggregateOutputSpeed, formatOutputSpeed } from "../utils/codexOutputSpeed";
-import { Check, CircleAlert, Columns3, Zap } from "lucide-react";
+import { Check, CircleAlert, Columns3, Route, Zap } from "lucide-react";
 import { SingleSelectDropdown } from "../components/SingleSelectDropdown";
 import { PaginationControls } from "../components/PaginationControls";
 import { CodexRequestProxyLabel } from "../components/codex/CodexRequestProxyLabel";
 import { CodexRequestDetailModal } from "../components/codex/CodexRequestDetailModal";
-import { hasRequestFirstResponse, requestServiceTierPresentation } from "../utils/codexRequestDiagnostics";
+import { authorizationFallbackReasonKey, authorizationFallbackSummaryKey, hasRequestFirstResponse, recordedServiceTierAdaptation, requestAuthorizationRouteKey, requestServiceTierPresentation, requestedServiceTierLabelKey } from "../utils/codexRequestDiagnostics";
 import { resolveCodexApiServiceLogModelPair } from "../utils/codexApiServiceLogModel";
 import type { CodexLocalAccessUsageEvent } from "../types/codexLocalAccess";
 import type { RequestLogKindFilter, RequestLogStatusFilter } from "./CodexApiServicePage";
 import type { CodexApiServiceViewProps } from "./CodexApiServiceView";
 import "./CodexApiRequestLogs.css";
+import "../components/codex/CodexAuthorizationFallback.css";
 
 const INTERNAL_API_KEY_ID = "__cockpit_internal__";
 
@@ -345,12 +346,18 @@ export function CodexApiRequestLogs(props: Props) {
                       </tr></thead>
                       <tbody>{requestLogEvents.map((event, index) => {
                         const fullErrorDetail = cleanRequestLogErrorDetail(event.errorMessage);
+                        const fallbackSummaryKey = authorizationFallbackSummaryKey(event.authorizationFallback);
+                        const fallbackAccount = event.authorizationFallback ? maskAccountText(resolveCodexAccountReferenceDisplayName(event.authorizationFallback.fromAccountId, null, accountDisplayNames, t("common.apiKeyAccount"))) : "";
                         const errorDetail = truncateRequestLogErrorDetail(fullErrorDetail);
                         const accountDisplayName = resolveCodexAccountReferenceDisplayName(event.accountId, event.email, accountDisplayNames, t("common.apiKeyAccount")) || "—";
                         const maskedAccount = maskAccountText(accountDisplayName);
                         const tiers = requestServiceTierPresentation(event);
-                        const requestedTier = tiers.requested.toLowerCase();
+                        const adaptation = recordedServiceTierAdaptation(event.serviceTierAdaptation);
+                        const originalTier = adaptation?.requestedTier ?? tiers.requested;
+                        const originalTierKey = requestedServiceTierLabelKey(originalTier);
+                        const requestedTier = originalTier.toLowerCase();
                         const speed = ["priority", "fast"].includes(requestedTier) ? "fast"
+                          : requestedTier === "ultrafast" ? "ultrafast"
                           : ["standard", "default"].includes(requestedTier) ? "standard" : null;
                         // 与请求模型相同时也保留实际上游模型；旧记录缺失时不推断。
                         const { requestedModel, upstreamModel } = resolveCodexApiServiceLogModelPair(event);
@@ -367,9 +374,11 @@ export function CodexApiRequestLogs(props: Props) {
                               <div className="codex-request-log-tags">
                                 <span className="codex-api-service-pill muted">{requestKindLabel(event.requestKind, t)}</span>
                                 {event.reasoningEffort && <span className="codex-api-service-pill muted" title={t("codex.apiService.logs.reasoningEffort", "思考强度")}>{event.reasoningEffort}</span>}
-                                {speed && <span className={`codex-request-log-speed ${speed}`} title={t("codex.apiService.logs.serviceTierHint")}>
-                                  {speed === "fast" && <Zap size={12} aria-hidden="true" />}
-                                  {t(speed === "fast" ? "codex.speed.fast" : "codex.speed.standard")}
+                                {adaptation ? <span className="codex-request-log-speed standard adjusted" title={t("codex.apiService.logs.officialDefaultSpeed")}>
+                                  {t("codex.apiService.logs.speedAdjusted", { tier: originalTierKey ? t(originalTierKey) : originalTier })}
+                                </span> : speed && <span className={`codex-request-log-speed ${speed}`} title={t("codex.apiService.logs.serviceTierHint")}>
+                                  {speed !== "standard" && <Zap size={12} aria-hidden="true" />}
+                                  {t(`codex.speed.${speed}`)}
                                 </span>}
                               </div>
                             </div>
@@ -377,6 +386,7 @@ export function CodexApiRequestLogs(props: Props) {
                           {columnVisible("result") && <td>
                             <div className="codex-request-log-stack">
                               <span className={`codex-api-service-pill ${event.success ? "success" : "error"}`}>{event.success ? t("codex.localAccess.requestLogSuccess", "成功") : t("codex.localAccess.requestLogFailed", "失败")}</span>
+                              {fallbackSummaryKey && <span className="codex-api-service-pill muted codex-request-log-fallback" title={`${fallbackAccount} · ${t(authorizationFallbackReasonKey(event.authorizationFallback!.reason))}`}><Route size={12} aria-hidden="true" />{t(fallbackSummaryKey)}</span>}
                               {event.httpStatus ? <span>{t("codex.apiService.logs.httpStatus", { status: event.httpStatus, defaultValue: "HTTP {{status}}" })}</span> : null}
                               {(event.errorCategory || errorDetail) && <span className="codex-request-log-truncate codex-request-log-error" title={fullErrorDetail || event.errorCategory}>{event.errorCategory || errorDetail}</span>}
                             </div>
@@ -384,6 +394,7 @@ export function CodexApiRequestLogs(props: Props) {
                           {columnVisible("source") && <td><div className="codex-request-log-stack">
                             <span className="codex-request-log-truncate" title={`${t("codex.apiService.logs.apiKeyFilter", "API Key")}: ${apiKeyLabel}`}><span className="codex-request-log-label">{t("codex.apiService.logs.apiKeyFilter", "API Key")}</span> {apiKeyLabel}</span>
                             <span className="codex-request-log-truncate" title={event.clientInstanceId ? `${instanceLabel} (${event.clientInstanceId})` : instanceLabel}><span className="codex-request-log-label">{t("codex.apiService.logs.instanceFilter", "Instance")}</span> {instanceLabel}</span>
+                            <span className="codex-request-log-truncate" title={t(requestAuthorizationRouteKey(event.accountId, event.authorizationRoute))}><span className="codex-request-log-label">{t("codex.requestDiagnostics.authorizationRoute")}</span> {t(requestAuthorizationRouteKey(event.accountId, event.authorizationRoute))}</span>
                           </div></td>}
                           {columnVisible("account") && <td><span className="codex-request-log-truncate" title={maskedAccount}>{maskedAccount}</span></td>}
                           {columnVisible("tokens") && <td><div className="codex-request-log-token-grid">

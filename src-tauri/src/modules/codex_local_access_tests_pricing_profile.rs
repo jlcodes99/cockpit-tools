@@ -2445,6 +2445,44 @@ supports_websockets = false
     }
 
     #[test]
+    fn grok_47_prices_match_official_inclusive_long_context_and_exact_aliases() {
+        for model in ["grok-4.7", "grok-4.7-latest", "xai/grok-4.7", "team/GROK-4.7(high)"] {
+            for (input_tokens, rates) in [(199_999, (2.0, 0.5, 6.0)), (200_000, (4.0, 1.0, 12.0)), (200_001, (4.0, 1.0, 12.0))] {
+                let usage = UsageCapture { input_tokens, cached_tokens: 100_000, output_tokens: 10_000, ..Default::default() };
+                for tier in [None, Some("priority"), Some("flex")] {
+                    let pricing = resolve_effective_model_pricing(None, Some(model), Some(&usage), tier).unwrap();
+                    assert_eq!((pricing.input_usd_per_million, pricing.cached_input_usd_per_million.unwrap(), pricing.output_usd_per_million), rates, "{model}/{input_tokens}/{tier:?}");
+                    let expected = (input_tokens - 100_000) as f64 * rates.0 / 1_000_000.0 + 100_000.0 * rates.1 / 1_000_000.0 + 10_000.0 * rates.2 / 1_000_000.0;
+                    assert!((calculate_usage_cost_usd(Some(&usage), Some(&pricing)) - expected).abs() < 1e-10);
+                }
+            }
+        }
+        for unknown in ["grok-4.7-build-fast", "grok-4.7-preview", "grok-4.70", "grok-5", "custom-grok-4.7"] {
+            assert!(super::price_book_entry_for_model(unknown).is_none(), "{unknown}");
+        }
+    }
+
+    #[test]
+    fn grok_47_custom_prices_override_defaults_and_follow_aliases() {
+        let mut collection = test_local_access_collection(vec![]);
+        let mut pricing = super::resolve_base_model_pricing(None, "grok-4.7").unwrap();
+        pricing.input_usd_per_million = 10.0;
+        pricing.cached_input_usd_per_million = Some(3.0);
+        pricing.output_usd_per_million = 20.0;
+        pricing.standard_long_price_override = false;
+        collection.model_pricings = super::normalize_model_pricings(vec![pricing]);
+        for model in ["grok-4.7", "grok-4.7-latest", "xai/grok-4.7(high)"] {
+            for (input_tokens, expected) in [(199_999, (10.0, 3.0, 20.0)), (200_000, (20.0, 6.0, 40.0))] {
+                let usage = UsageCapture { input_tokens, ..Default::default() };
+                let pricing = resolve_effective_model_pricing(Some(&collection), Some(model), Some(&usage), None).unwrap();
+                assert_eq!((pricing.input_usd_per_million, pricing.cached_input_usd_per_million.unwrap(), pricing.output_usd_per_million), expected);
+            }
+        }
+        super::sanitize_collection_structure(&mut collection).unwrap();
+        assert_eq!(collection.model_pricings[0].input_usd_per_million, 10.0);
+    }
+
+    #[test]
     fn gpt_61_costs_cover_cache_writes_tiers_and_long_context() {
         for (input_part, tier, expected) in [
             (50_000, None, 1.23),
@@ -2499,7 +2537,10 @@ supports_websockets = false
         };
         assert!(default_model_pricing_presets()
             .iter()
-            .all(|price| !crate::modules::codex_wakeup::is_codex_model_before_5_5(&price.model_id)));
+            .all(|price| {
+                price.model_id != "gpt-5.5"
+                    && !crate::modules::codex_wakeup::is_codex_model_before_5_5(&price.model_id)
+            }));
         let legacy = price_book_entry_to_model_pricing(
             HISTORICAL_CODEX_MODEL_PRICE_BOOK
                 .iter()

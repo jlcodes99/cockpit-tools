@@ -11,7 +11,7 @@ use crate::models::grok::{GrokOAuthCompletePayload, GrokOAuthStartResponse};
 
 pub const OIDC_ISSUER: &str = "https://auth.x.ai";
 pub const OIDC_CLIENT_ID: &str = "b1a00492-073a-47ea-816f-4c329264a828";
-pub const OIDC_SCOPE: &str = "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write";
+pub const OIDC_SCOPE: &str = "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write workspaces:read workspaces:write";
 pub const AUTH_REGISTRY_KEY: &str = "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828";
 pub const DEFAULT_TOKEN_ENDPOINT: &str = "https://auth.x.ai/oauth2/token";
 
@@ -151,6 +151,31 @@ fn validate_xai_endpoint(raw: &str, field: &str) -> Result<String, String> {
     Ok(parsed.to_string())
 }
 
+fn device_verification_url(
+    verification_uri: &str,
+    verification_uri_complete: Option<&str>,
+    user_code: &str,
+) -> Result<String, String> {
+    if let Some(complete) = verification_uri_complete {
+        return validate_xai_endpoint(complete, "verification_uri_complete");
+    }
+    // Follow the issuer's verification route, including any existing query.
+    // Internal accounts-app sign-in parameters are not an OAuth contract.
+    let validated = validate_xai_endpoint(verification_uri, "verification_uri")?;
+    let mut url = url::Url::parse(&validated)
+        .map_err(|error| format!("Grok OAuth verification_uri URL 无效: {}", error))?;
+    url.query_pairs_mut().append_pair("user_code", user_code);
+    Ok(url.to_string())
+}
+
+fn coding_data_retention_opt_out(claims: &Value) -> bool {
+    // Match the official CLI: unknown sharing preferences remain opted out.
+    claims
+        .get("coding_data_retention_opt_out")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+}
+
 fn set_pending(value: Option<PendingLogin>) -> Result<(), String> {
     if let Ok(mut guard) = PENDING_LOGIN.lock() {
         *guard = value.clone();
@@ -266,18 +291,11 @@ pub async fn start_login() -> Result<GrokOAuthStartResponse, String> {
         .unwrap_or(DEFAULT_INTERVAL_SECONDS)
         .max(DEFAULT_INTERVAL_SECONDS);
     let verification_uri = validate_xai_endpoint(&device.verification_uri, "verification_uri")?;
-    let verification_uri_complete = device
-        .verification_uri_complete
-        .as_deref()
-        .map(|url| validate_xai_endpoint(url, "verification_uri_complete"))
-        .transpose()?
-        .or_else(|| {
-            let return_to = format!("/oauth2/device?user_code={}", device.user_code);
-            Some(format!(
-                "https://accounts.x.ai/sign-in?redirect=oauth2-provider&return_to={}&email=true",
-                urlencoding::encode(&return_to)
-            ))
-        });
+    let verification_uri_complete = Some(device_verification_url(
+        &verification_uri,
+        device.verification_uri_complete.as_deref(),
+        &device.user_code,
+    )?);
     let state = PendingLogin {
         login_id: Uuid::new_v4().to_string(),
         device_code: device.device_code,
@@ -467,9 +485,7 @@ pub async fn complete_login(login_id: &str) -> Result<GrokOAuthCompletePayload, 
                 let team_id = claim_text(&claims, &["team_id"]);
                 let profile_image_asset_id =
                     claim_text(&claims, &["profile_image_asset_id", "picture"]);
-                let retention = claims
-                    .get("coding_data_retention_opt_out")
-                    .and_then(Value::as_bool);
+                let retention = Some(coding_data_retention_opt_out(&claims));
                 let create_time = chrono::Utc::now().to_rfc3339();
                 let expires_at_text = expires_at
                     .and_then(|value| chrono::DateTime::from_timestamp(value, 0))
@@ -486,7 +502,7 @@ pub async fn complete_login(login_id: &str) -> Result<GrokOAuthCompletePayload, 
                     "principal_type": principal_type,
                     "principal_id": principal_id,
                     "team_id": team_id,
-                    "coding_data_retention_opt_out": retention.unwrap_or(false),
+                    "coding_data_retention_opt_out": retention.unwrap_or(true),
                     "refresh_token": token.refresh_token,
                     "expires_at": expires_at_text,
                     "oidc_issuer": OIDC_ISSUER,
@@ -606,8 +622,80 @@ pub async fn refresh_token(
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_jwt_claims, validate_xai_endpoint};
+    use super::{
+        coding_data_retention_opt_out, decode_jwt_claims, device_verification_url,
+        validate_xai_endpoint, OIDC_SCOPE,
+    };
     use base64::Engine;
+    use serde_json::json;
+
+    #[test]
+    fn oauth_scope_includes_official_workspace_permissions() {
+        let scopes = OIDC_SCOPE.split_whitespace().collect::<Vec<_>>();
+        for scope in [
+            "offline_access",
+            "grok-cli:access",
+            "api:access",
+            "conversations:read",
+            "conversations:write",
+            "workspaces:read",
+            "workspaces:write",
+        ] {
+            assert!(scopes.contains(&scope), "missing official scope: {scope}");
+        }
+    }
+
+    #[test]
+    fn device_url_follows_issuer_route_and_preserves_query() {
+        let result = device_verification_url(
+            "https://auth.x.ai/oauth2/device?flow=unified#confirm",
+            None,
+            "ABCD EFGH&next=bad",
+        )
+        .expect("verification URL");
+        let url = url::Url::parse(&result).expect("valid URL");
+        assert_eq!(url.host_str(), Some("auth.x.ai"));
+        assert_eq!(url.path(), "/oauth2/device");
+        assert_eq!(url.fragment(), Some("confirm"));
+        assert_eq!(
+            url.query_pairs().collect::<Vec<_>>(),
+            vec![
+                ("flow".into(), "unified".into()),
+                ("user_code".into(), "ABCD EFGH&next=bad".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn device_url_prefers_server_complete_url_and_rejects_untrusted_origins() {
+        let complete = "https://accounts.x.ai/oauth2/device?user_code=SERVER-CODE";
+        assert_eq!(
+            device_verification_url("https://auth.x.ai/oauth2/device", Some(complete), "OTHER")
+                .expect("complete URL"),
+            complete
+        );
+        assert!(device_verification_url(
+            "https://auth.x.ai/oauth2/device",
+            Some("https://example.com/device"),
+            "CODE"
+        )
+        .is_err());
+        assert!(device_verification_url("http://auth.x.ai/device", None, "CODE").is_err());
+    }
+
+    #[test]
+    fn unknown_retention_preference_is_opted_out_without_overriding_explicit_choice() {
+        assert!(coding_data_retention_opt_out(&json!({})));
+        assert!(coding_data_retention_opt_out(
+            &json!({ "coding_data_retention_opt_out": null })
+        ));
+        assert!(coding_data_retention_opt_out(
+            &json!({ "coding_data_retention_opt_out": true })
+        ));
+        assert!(!coding_data_retention_opt_out(
+            &json!({ "coding_data_retention_opt_out": false })
+        ));
+    }
 
     #[test]
     fn validates_only_xai_https_endpoints() {

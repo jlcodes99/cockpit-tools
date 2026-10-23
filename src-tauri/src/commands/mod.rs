@@ -9,6 +9,8 @@ pub mod codebuddy_cn_instance;
 pub mod codebuddy_instance;
 pub mod codebuddy_session;
 pub mod codex;
+pub mod chatgpt_plan;
+pub mod chatgpt_plan_service;
 pub mod codex_proxy_engine;
 pub mod codex_unified_proxy;
 pub mod codex_pelican;
@@ -55,3 +57,6 @@ pub mod zed;
 pub mod codex_proxy_catalog;
 
 pub mod codex_client_proxy;
+pub mod codex_capability_fallback;
+
+pub mod codex_multi_agent;

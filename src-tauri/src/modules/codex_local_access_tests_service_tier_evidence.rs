@@ -12,6 +12,27 @@ mod service_tier_evidence_tests {
     }
 
     #[test]
+    fn authorization_route_is_recorded_per_event_and_never_inferred_from_current_mode() {
+        let directory = tempfile::tempdir().unwrap();
+        let conn = open_local_access_logs_db_once(&directory.path().join("logs.sqlite"), true).unwrap();
+        let mut event = CodexLocalAccessUsageEvent {
+            timestamp: 1000, request_id: "official-request".into(), account_id: "original-source".into(),
+            authorization_route: Some("official".into()), success: true, ..Default::default()
+        };
+        insert_local_access_usage_event(&conn, &event).unwrap();
+        event.authorization_route = Some("local_gateway".into());
+        insert_local_access_usage_event(&conn, &event).unwrap();
+        let loaded = read_events(&conn);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].account_id, "original-source");
+        assert_eq!(loaded[0].authorization_route.as_deref(), Some("official"));
+        event.request_id = "historical-unrecorded".into();
+        event.authorization_route = None;
+        insert_local_access_usage_event(&conn, &event).unwrap();
+        assert!(read_events(&conn).iter().find(|event| event.request_id == "historical-unrecorded").unwrap().authorization_route.is_none());
+    }
+
+    #[test]
     fn service_tier_evidence_deserializes_new_sidecar_values_without_inferring_legacy() {
         let old: SidecarUsageEvent =
             serde_json::from_value(json!({"serviceTier":"standard"})).unwrap();

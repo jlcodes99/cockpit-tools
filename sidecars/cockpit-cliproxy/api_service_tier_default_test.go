@@ -37,6 +37,14 @@ func updateTier(router *gin.Engine, key, remote, body string) *httptest.Response
 	return response
 }
 
+func TestAPIServiceTierDefaultInitialChoices(t *testing.T) {
+	for input, want := range map[string]string{"": "", "standard": "", "priority": "priority", "fast": "priority", "ultrafast": "ultrafast", "flex": ""} {
+		if got := newAPIServiceTierDefault(input).tier(); got != want {
+			t.Fatalf("initial tier %q = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestAPIServiceTierControlRejectsUnauthorizedAndInvalidUpdates(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, tc := range []struct {
@@ -48,7 +56,7 @@ func TestAPIServiceTierControlRejectsUnauthorizedAndInvalidUpdates(t *testing.T)
 		{"missing key", "", "127.0.0.1:1000", `{"speed":"standard"}`, true, 403},
 		{"remote control", "private-control-key", "192.0.2.1:1000", `{"speed":"standard"}`, true, 403},
 		{"provider gateway disabled", "private-control-key", "127.0.0.1:1000", `{"speed":"standard"}`, false, 404},
-		{"invalid speed", "private-control-key", "127.0.0.1:1000", `{"speed":"ultrafast","revision":1}`, true, 400},
+		{"invalid speed", "private-control-key", "127.0.0.1:1000", `{"speed":"turbo","revision":1}`, true, 400},
 		{"missing revision", "private-control-key", "127.0.0.1:1000", `{"speed":"standard"}`, true, 400},
 		{"invalid JSON", "private-control-key", "127.0.0.1:1000", `{`, true, 400},
 		{"unknown field", "private-control-key", "127.0.0.1:1000", `{"speed":"standard","revision":1,"port":9}`, true, 400},
@@ -98,7 +106,7 @@ func TestAPIServiceTierControlChangesNewHTTPRequestsOnly(t *testing.T) {
 		t.Fatal("initial HTTP snapshot missing")
 	}
 	inflight := captured
-	for index, speed := range []string{"standard", "fast", "standard"} {
+	for index, speed := range []string{"standard", "fast", "ultrafast", "standard"} {
 		response := updateTier(router, "private-control-key", "127.0.0.1:1000", fmt.Sprintf(`{"speed":%q,"revision":%d}`, speed, index+1))
 		if response.Code != 200 || !strings.Contains(response.Body.String(), `"speed":"`+speed+`"`) {
 			t.Fatalf("update did not acknowledge applied speed: %s", response.Body.String())
@@ -106,6 +114,8 @@ func TestAPIServiceTierControlChangesNewHTTPRequestsOnly(t *testing.T) {
 		want := ""
 		if speed == "fast" {
 			want = "priority"
+		} else if speed == "ultrafast" {
+			want = "ultrafast"
 		}
 		if tier, ok := request("public-key", false); !ok || tier != want {
 			t.Fatalf("new request tier=%q present=%v", tier, ok)
@@ -121,15 +131,15 @@ func TestAPIServiceTierControlChangesNewHTTPRequestsOnly(t *testing.T) {
 		t.Fatal("WS connection fixed the default before a turn")
 	}
 	connection := captured
-	s.policy.serviceTierDefault.fast.Store(true)
+	s.policy.serviceTierDefault.value.Store("ultrafast")
 	first := coreexecutor.SnapshotServiceTierDefault(connection)
-	s.policy.serviceTierDefault.fast.Store(false)
+	s.policy.serviceTierDefault.value.Store("")
 	second := coreexecutor.SnapshotServiceTierDefault(connection)
-	if tier, ok := coreexecutor.ServiceTierDefaultSnapshot(first); !ok || tier != "priority" {
+	if tier, ok := coreexecutor.ServiceTierDefaultSnapshot(first); !ok || tier != "ultrafast" {
 		t.Fatal("first WS turn lost its snapshot")
 	}
 	if tier, ok := coreexecutor.ServiceTierDefaultSnapshot(second); !ok || tier != "" {
-		t.Fatal("next WS turn retained stale Fast")
+		t.Fatal("next WS turn retained stale Ultrafast")
 	}
 }
 
@@ -144,7 +154,10 @@ func TestAPIServiceTierControlRejectsDelayedOldUpdate(t *testing.T) {
 		{"fast", 1, 409},
 		{"standard", 2, 200},
 		{"fast", 2, 409},
+		{"ultrafast", 2, 409},
 		{"fast", 3, 200},
+		{"ultrafast", 4, 200},
+		{"fast", 3, 409},
 	} {
 		response := updateTier(router, "private-control-key", "127.0.0.1:1000", fmt.Sprintf(`{"speed":%q,"revision":%d}`, tc.speed, tc.revision))
 		if response.Code != tc.status {
@@ -165,7 +178,7 @@ func TestAPIServiceTierDefaultConcurrentSwitchesAndSnapshots(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 200; i++ {
-				state.fast.Store(i%2 == 0)
+				state.value.Store([]string{"", "priority", "ultrafast"}[i%3])
 				request := coreexecutor.SnapshotServiceTierDefault(connection)
 				a, ok := coreexecutor.ServiceTierDefaultSnapshot(request)
 				b, again := coreexecutor.ServiceTierDefaultSnapshot(coreexecutor.SnapshotServiceTierDefault(request))

@@ -1,7 +1,8 @@
 import type { TFunction } from "i18next";
-import { getCodexPlanFilterKey, type CodexAccount } from "../../types/codex";
+import { type CodexAccount } from "../../types/codex";
 import type {
   CodexLocalAccessAccountHealth,
+  CodexLocalAccessCollection,
   CodexLocalAccessScope,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessState,
@@ -14,6 +15,7 @@ import {
   type CodexQuotaPoolItem,
 } from "../../utils/codexQuotaPool";
 import { isBlockingCodexAccountQuotaError } from "../../utils/codexQuotaError";
+import { getCodexServiceEndpoint, getCodexServiceSourceId } from "../../utils/chatgptPlanOverview";
 
 /** State-free calculations and display formatting shared by the API service modal. */
 export interface AccountPoolHealthSummary {
@@ -138,17 +140,7 @@ export function formatQuotaPoolLabel(
 export function summarizeQuotaPoolsByPlan(
   accounts: CodexAccount[],
 ): Record<string, CodexQuotaPoolItem> {
-  const accountsByPlan: Record<string, CodexAccount[]> = {};
-  accounts.forEach((account) => {
-    const planKey = getCodexPlanFilterKey(account);
-    (accountsByPlan[planKey] ??= []).push(account);
-  });
-  return Object.fromEntries(
-    Object.entries(accountsByPlan).map(([planKey, planAccounts]) => [
-      planKey,
-      summarizeCodexQuotaPool(planAccounts).all,
-    ]),
-  );
+  return summarizeCodexQuotaPool(accounts).byPlan;
 }
 
 export function areSetsEqual(left: Set<string>, right: Set<string>): boolean {
@@ -256,7 +248,9 @@ export function buildLocalAccessSummaryStats(
 export function summarizeAccountPoolHealth(
   localAccessAccounts: CodexAccount[],
   accountIds: string[],
-  state: Pick<CodexLocalAccessState, "accountHealth" | "accountPoolHealth" | "recoverySuppressedAccountIds"> | null,
+  state: (Pick<CodexLocalAccessState, "accountHealth" | "accountPoolHealth" | "recoverySuppressedAccountIds">
+    & { collection?: Pick<CodexLocalAccessCollection, 'pausedAccountIds' | 'officialAccountSourceIds' | 'officialAccountBindings'> | null;
+      serviceMembers?: CodexLocalAccessState['serviceMembers'] }) | null,
 ): AccountPoolHealthSummary {
   const accountById = new Map(
     localAccessAccounts.map((account) => [account.id, account]),
@@ -264,6 +258,7 @@ export function summarizeAccountPoolHealth(
   const healthById = new Map(
     (state?.accountHealth ?? []).map((health) => [health.accountId, health]),
   );
+  const paused = new Set(state?.collection?.pausedAccountIds ?? []);
   // 手动恢复后仍在抑制窗口内的账号：与账号状态弹框保持一致，
   // 不再计入异常，也暂不参与“可用/异常”统计。
   const suppressedAccountIds = new Set(
@@ -286,8 +281,18 @@ export function summarizeAccountPoolHealth(
       .filter((member) => !member.available)
       .forEach((member) => poolUnavailableAccountIds.add(member.accountId.trim()));
   });
+  const sourceMembers = new Map<string, string[]>();
+  const memberSources = new Map(state?.serviceMembers?.map((member) => [member.accountId, member.sourceAccountId]));
+  for (const accountId of new Set(accountIds)) {
+    const account = accountById.get(accountId);
+    const sourceId = memberSources.get(accountId) ?? state?.collection?.officialAccountSourceIds?.[accountId]
+      ?? (account ? getCodexServiceSourceId(account) : accountId);
+    const members = sourceMembers.get(sourceId) ?? [];
+    members.push(accountId);
+    sourceMembers.set(sourceId, members);
+  }
   const summary: AccountPoolHealthSummary = {
-    total: accountIds.length,
+    total: sourceMembers.size,
     available: 0,
     abnormal: 0,
     cooldown: 0,
@@ -296,39 +301,48 @@ export function summarizeAccountPoolHealth(
     quotaLimited: 0,
   };
 
-  accountIds.forEach((accountId) => {
+  const memberStatus = (accountId: string) => {
+    if (paused.has(accountId)) return 'paused';
     if (suppressedAccountIds.has(accountId)) {
-      summary.available += 1;
-      return;
+      return 'available';
     }
     const account = accountById.get(accountId);
     const health = healthById.get(accountId);
     if (!account) {
-      summary.missing += 1;
-      summary.abnormal += 1;
-      return;
+      return 'missing';
     }
     if (health?.cooldowns?.length) {
-      summary.cooldown += 1;
-      return;
+      return 'cooldown';
     }
-    if (isBlockingCodexAccountQuotaError(account)) {
-      summary.quotaLimited += 1;
-      return;
+    if (!state?.collection?.officialAccountBindings?.[accountId] && isBlockingCodexAccountQuotaError(getCodexServiceEndpoint(account))) {
+      return 'quotaLimited';
     }
     if (isAbnormalAccountFailure(health)) {
-      summary.authError += 1;
-      summary.abnormal += 1;
-      return;
+      return 'authError';
     }
     if (health && !health.available) {
-      return;
+      return 'unavailable';
     }
     if (poolUnavailableAccountIds.has(accountId)) {
-      return;
+      return 'unavailable';
     }
-    summary.available += 1;
-  });
+    return 'available';
+  };
+  for (const memberIds of sourceMembers.values()) {
+    const statuses = memberIds.map(memberStatus);
+    // Display identity is shared; actual route health is not. A healthy
+    // selected transport keeps the original account available.
+    if (statuses.includes('available')) summary.available += 1;
+    else if (statuses.every((status) => status === 'missing')) {
+      summary.missing += 1;
+      summary.abnormal += 1;
+    } else if (statuses.includes('cooldown')) summary.cooldown += 1;
+    else if (statuses.includes('quotaLimited')) summary.quotaLimited += 1;
+    else if (statuses.includes('authError')) {
+      summary.authError += 1;
+      summary.abnormal += 1;
+    }
+  }
 
   return summary;
 }

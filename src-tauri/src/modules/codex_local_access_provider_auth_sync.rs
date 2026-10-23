@@ -11,8 +11,9 @@ fn sync_provider_gateway_runtime_auth_file(
     let proxy_signature = sidecar_effective_proxy_signature(collection)?;
     let effective_proxy_url =
         sidecar_proxy_url_for_account(account, proxy_signature.proxy_url.as_deref())?;
-    let auth_json =
+    let mut auth_json =
         sidecar_auth_json_for_account(account, collection, effective_proxy_url.as_deref());
+    apply_sidecar_installation_profile(account, &mut auth_json)?;
     let auth_content = serde_json::to_string_pretty(&auth_json)
         .map_err(|error| format!("序列化实例 sidecar OAuth 认证失败: {}", error))?;
     let changed = write_secret_string_atomic_if_changed(&auth_path, &auth_content)?;

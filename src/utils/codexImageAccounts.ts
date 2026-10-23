@@ -1,5 +1,6 @@
 import {
   isCodexApiKeyAccount,
+  isCodexChatgptPlanAccount,
   isCodexAgentIdentityAccount,
   isCodexWebSessionAccount,
   type CodexAccount,
@@ -10,7 +11,7 @@ export const DEFAULT_CODEX_IMAGE_MODELS = ['gpt-image-2.5', 'gpt-image-2'];
 
 /** 发现只读取已有模型目录，不探测网络，也不把视频型号加入图片目录。 */
 export function discoverImageModels(accounts: CodexAccount[]): string[] {
-  return [...new Set(accounts.flatMap((account) => [...(account.api_model_catalog ?? []), ...Object.values(account.api_image_generation_account_models ?? {})])
+  return [...new Set(accounts.filter((account) => !isCodexChatgptPlanAccount(account)).flatMap((account) => [...(account.api_model_catalog ?? []), ...Object.values(account.api_image_generation_account_models ?? {})])
     .map((id) => id.trim()).filter((id) => id.length <= 200 && !/\s|[\x00-\x1f\x7f]/u.test(id) &&
       (id.startsWith('gpt-image-') || id.startsWith('grok-imagine-image')) && !id.toLowerCase().includes('video')))];
 }
@@ -25,10 +26,12 @@ export function isImageModelInFamily(model: string, family?: string | null): boo
 }
 
 export function imageModelsForAccount(account: CodexAccount, family?: string | null, deleted: string[] = []): string[] {
+  if (isCodexChatgptPlanAccount(account)) return [];
   return [...new Set((account.api_model_catalog ?? []).map((id) => id.trim()).filter((id) => isImageModelInFamily(id, family) && !deleted.includes(id)))];
 }
 
 export function isImageGenerationEligibleAccount(account: CodexAccount, model?: string | null, deleted: string[] = []): boolean {
+  if (isCodexChatgptPlanAccount(account)) return false;
   if (isCodexAgentIdentityAccount(account) || isCodexWebSessionAccount(account)) return false;
   const selected = model?.trim();
   if (!selected) return false;

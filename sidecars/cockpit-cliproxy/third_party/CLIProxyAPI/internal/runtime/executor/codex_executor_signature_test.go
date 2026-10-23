@@ -25,10 +25,9 @@ func validCodexReasoningEncryptedContentForTest() string {
 }
 
 func newCodexSignatureTestAuth(serverURL string) *cliproxyauth.Auth {
-	return &cliproxyauth.Auth{Attributes: map[string]string{
+	return &cliproxyauth.Auth{Provider: "codex", Attributes: map[string]string{
 		"base_url": serverURL,
-		"api_key":  "test",
-	}}
+	}, Metadata: map[string]any{"access_token": "synthetic-access"}}
 }
 
 func TestCodexExecutorDropsInvalidReasoningEncryptedContentFromFinalRequest(t *testing.T) {

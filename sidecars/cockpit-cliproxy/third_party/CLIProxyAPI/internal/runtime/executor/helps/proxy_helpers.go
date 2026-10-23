@@ -42,6 +42,16 @@ func NewProxyAwareHTTPClient(ctx context.Context, cfg *config.Config, auth *clip
 		proxyURL = strings.TrimSpace(cfg.ProxyURL)
 	}
 
+	profile, identityErr := ManagedIdentityForAuth(auth)
+	if identityErr != nil {
+		httpClient.Transport = unavailableManagedTransport{identityErr}
+		return httpClient
+	}
+	if profile != nil {
+		httpClient.Transport = ManagedStandardTransport(auth, proxyURL, "standard")
+		return httpClient
+	}
+
 	// If we have a proxy URL configured, set up the transport
 	if proxyURL != "" {
 		transport := buildProxyTransport(proxyURL)

@@ -623,11 +623,11 @@ func (s *ollamaStreamState) applyToolCallDeltas(toolCalls []any) {
 func (s *ollamaStreamState) finalChunk() gin.H {
 	message := gin.H{
 		"role":    "assistant",
-		"content": s.content,
+		"content": "",
 	}
-	if s.thinking != "" {
-		message["thinking"] = s.thinking
-	}
+	// Text and thinking have already been emitted as deltas. Only tool calls
+	// are accumulated until the final frame, so streaming clients receive each
+	// part of the assistant response exactly once.
 	if toolCalls := s.ollamaToolCalls(); len(toolCalls) > 0 {
 		message["tool_calls"] = toolCalls
 	}

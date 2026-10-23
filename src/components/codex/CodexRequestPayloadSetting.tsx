@@ -10,6 +10,7 @@ import {
 import { SingleSelectDropdown } from '../SingleSelectDropdown';
 import { ModalErrorMessage } from '../ModalErrorMessage';
 import { formatRequestDiagnosticError } from '../../utils/codexRequestDiagnostics';
+import './CodexApiSetting.css';
 import './CodexRequestDiagnostics.css';
 
 const STATE_UPDATED = 'codex-local-access-state-updated';
@@ -71,10 +72,11 @@ export function CodexRequestPayloadSetting() {
     catch (cause) { if (active.current) setError(formatRequestDiagnosticError(cause, t)); }
     finally { inFlight.current = false; if (active.current) setPending(false); }
   };
-  return <div className="codex-request-payload-setting">
+  return <div className="codex-api-setting codex-request-payload-setting">
     <div className="codex-request-payload-row">
       <strong>{t('codex.requestDiagnostics.recordPayloads')}</strong>
       <SingleSelectDropdown
+        menuClassName="codex-api-setting-menu"
         value={String(enabled === true)}
         options={[
           { value: 'false', label: t('common.disable') },

@@ -287,6 +287,10 @@ function isAllowedEnglishReuse(key, value) {
     'codex.launchPreview.imageGenSwitchNo',
     'codex.wakeup.runtimeCardTitle',
     'common.shared.columns.plan',
+    // Token 是专有词；Model（捷/印尼/波/土）和 Total（西/法/葡）为合法同形短标签。
+    'common.codexUsage.token',
+    'common.codexUsage.model',
+    'common.codexUsage.total',
     'gemini.quota.pro',
     'gemini.quota.flash',
     'settings.about.sponsor',

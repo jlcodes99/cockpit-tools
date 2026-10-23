@@ -1194,8 +1194,15 @@ func xaiPatchCompletedOutput(eventData []byte, outputItemsByIndex map[int64][]by
 // 这里在响应出口把等价的 function_call 还原回 custom_tool_call（input 为纯
 // patch 文本）。未声明 apply_patch 的请求不会创建 restorer，其它工具零影响。
 type xaiApplyPatchRestorer struct {
-	pending        map[string]struct{}
-	pendingOutputs map[int64]struct{}
+	pending        map[string]*strings.Builder
+	pendingOutputs map[int64]*strings.Builder
+	pendingIDs     map[*strings.Builder]string
+	pendingCallIDs map[*strings.Builder]string
+	completedArgs  map[string]string
+	completedCalls map[string]string
+	completedBytes int
+	buffered       int
+	err            error
 }
 
 func newXAIApplyPatchRestorer(enabled bool) *xaiApplyPatchRestorer {
@@ -1203,8 +1210,12 @@ func newXAIApplyPatchRestorer(enabled bool) *xaiApplyPatchRestorer {
 		return nil
 	}
 	return &xaiApplyPatchRestorer{
-		pending:        make(map[string]struct{}),
-		pendingOutputs: make(map[int64]struct{}),
+		pending:        make(map[string]*strings.Builder),
+		pendingOutputs: make(map[int64]*strings.Builder),
+		pendingIDs:     make(map[*strings.Builder]string),
+		pendingCallIDs: make(map[*strings.Builder]string),
+		completedArgs:  make(map[string]string),
+		completedCalls: make(map[string]string),
 	}
 }
 
@@ -1326,22 +1337,180 @@ func xaiRewriteApplyPatchItem(data []byte, path string) []byte {
 	return updated
 }
 
-func (r *xaiApplyPatchRestorer) tracksEvent(data []byte) bool {
-	if _, ok := r.pending[strings.TrimSpace(gjson.GetBytes(data, "item_id").String())]; ok {
-		return true
+func (r *xaiApplyPatchRestorer) pendingCall(data []byte) *strings.Builder {
+	var found *strings.Builder
+	for _, path := range []string{"item_id", "item.id"} {
+		if call := r.pending[gjson.GetBytes(data, path).String()]; call != nil {
+			if found != nil && found != call {
+				r.err = fmt.Errorf("upstream apply_patch changed item identity")
+				return nil
+			}
+			found = call
+		}
 	}
-	index := gjson.GetBytes(data, "output_index")
-	if !index.Exists() {
-		return false
+	if index := gjson.GetBytes(data, "output_index"); index.Exists() {
+		if call := r.pendingOutputs[index.Int()]; call != nil {
+			if found != nil && found != call {
+				r.err = fmt.Errorf("upstream apply_patch changed output identity")
+				return nil
+			}
+			found = call
+		}
 	}
-	_, ok := r.pendingOutputs[index.Int()]
-	return ok
+	if found != nil {
+		for _, path := range []string{"item_id", "item.id"} {
+			if id := gjson.GetBytes(data, path).String(); id != "" && r.pendingIDs[found] != "" && id != r.pendingIDs[found] {
+				r.err = fmt.Errorf("upstream apply_patch changed item identity")
+				return nil
+			}
+		}
+		for _, path := range []string{"call_id", "item.call_id"} {
+			if id := gjson.GetBytes(data, path).String(); id != "" && r.pendingCallIDs[found] != "" && id != r.pendingCallIDs[found] {
+				r.err = fmt.Errorf("upstream apply_patch changed call identity")
+				return nil
+			}
+		}
+	}
+	return found
 }
 
-// applyStream 处理单个上游 SSE 事件；返回 nil 表示该事件被吸收。
+func (r *xaiApplyPatchRestorer) forgetCall(call *strings.Builder) {
+	if call == nil {
+		return
+	}
+	r.buffered -= call.Len()
+	delete(r.pendingIDs, call)
+	delete(r.pendingCallIDs, call)
+	for key, candidate := range r.pending {
+		if candidate == call {
+			delete(r.pending, key)
+		}
+	}
+	for key, candidate := range r.pendingOutputs {
+		if candidate == call {
+			delete(r.pendingOutputs, key)
+		}
+	}
+}
+
+func (r *xaiApplyPatchRestorer) rememberArguments(call *strings.Builder, args string, replace bool) {
+	size, total := call.Len()+len(args), r.buffered+r.completedBytes+len(args)
+	if replace {
+		size, total = len(args), r.buffered+r.completedBytes-call.Len()+len(args)
+	}
+	if size > 4*1024*1024 || total > 8*1024*1024 {
+		r.err = fmt.Errorf("upstream apply_patch arguments exceed buffer limit")
+		return
+	}
+	if replace {
+		call.Reset()
+	}
+	call.WriteString(args)
+	r.buffered = total - r.completedBytes
+}
+
+func (r *xaiApplyPatchRestorer) finish() error {
+	if r == nil {
+		return nil
+	}
+	if r.err != nil {
+		return r.err
+	}
+	if len(r.pending) > 0 || len(r.pendingOutputs) > 0 {
+		return fmt.Errorf("upstream apply_patch call ended without complete arguments")
+	}
+	return nil
+}
+
+func validXAIApplyPatchArguments(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if !gjson.Valid(trimmed) {
+		return strings.HasPrefix(trimmed, xaiApplyPatchBeginMarker)
+	}
+	value := gjson.Parse(trimmed)
+	if value.Type == gjson.String {
+		return value.String() != ""
+	}
+	if !value.IsObject() {
+		return false
+	}
+	for _, key := range []string{"input", "patch", "diff", "content", "text"} {
+		if field := value.Get(key); field.Type == gjson.String {
+			return field.String() != ""
+		}
+	}
+	matches := 0
+	value.ForEach(func(_, field gjson.Result) bool {
+		if field.Type == gjson.String && field.String() != "" {
+			matches++
+		}
+		return true
+	})
+	return matches == 1
+}
+
+func (r *xaiApplyPatchRestorer) restoreItem(data []byte, path string) []byte {
+	item := gjson.GetBytes(data, path)
+	id := item.Get("id").String()
+	call := r.pendingCall(data)
+	if call == nil {
+		call = r.pending[id]
+	}
+	if r.err != nil {
+		return nil
+	}
+	if item.Get("type").String() != "function_call" {
+		r.err = fmt.Errorf("upstream apply_patch changed item type")
+		return nil
+	}
+	if name := item.Get("name").String(); name != "" && name != xaiApplyPatchToolName {
+		r.err = fmt.Errorf("upstream apply_patch changed tool identity")
+		return nil
+	}
+	if call != nil && r.pendingCallIDs[call] != "" && item.Get("call_id").String() != "" && r.pendingCallIDs[call] != item.Get("call_id").String() {
+		r.err = fmt.Errorf("upstream apply_patch changed call identity")
+		return nil
+	}
+	args := item.Get("arguments").String()
+	if args == "" && call != nil {
+		args = call.String()
+	}
+	previous := r.completedArgs[id]
+	if args == "" {
+		args = previous
+	}
+	data, _ = sjson.SetBytes(data, path+".arguments", args)
+	if !validXAIApplyPatchArguments(args) {
+		r.err = fmt.Errorf("upstream apply_patch returned invalid or incomplete arguments")
+		return nil
+	}
+	if previous != "" && (xaiApplyPatchInputFromArguments(previous) != xaiApplyPatchInputFromArguments(args) || (item.Get("call_id").String() != "" && r.completedCalls[id] != "" && item.Get("call_id").String() != r.completedCalls[id])) {
+		r.err = fmt.Errorf("upstream apply_patch terminal snapshot conflicts with completed call")
+		return nil
+	}
+	r.forgetCall(call)
+	if id != "" {
+		if (previous == "" && len(r.completedArgs) >= 256) || r.completedBytes-len(previous)+len(args)+r.buffered > 8*1024*1024 {
+			r.err = fmt.Errorf("upstream apply_patch completed arguments exceed buffer limit")
+			return nil
+		}
+		r.completedBytes += len(args) - len(previous)
+		r.completedArgs[id], r.completedCalls[id] = args, item.Get("call_id").String()
+	}
+	if item.Get("name").String() == "" {
+		data, _ = sjson.SetBytes(data, path+".name", xaiApplyPatchToolName)
+	}
+	return xaiRewriteApplyPatchItem(data, path)
+}
+
+// applyStream buffers only patch arguments; complete snapshots remain the source
+// of truth and malformed or truncated calls never become successful empty edits.
 func (r *xaiApplyPatchRestorer) applyStream(data []byte) []byte {
 	if r == nil || len(data) == 0 || !gjson.ValidBytes(data) {
 		return data
+	}
+	if r.err != nil {
+		return nil
 	}
 	switch gjson.GetBytes(data, "type").String() {
 	case "response.output_item.added":
@@ -1349,59 +1518,73 @@ func (r *xaiApplyPatchRestorer) applyStream(data []byte) []byte {
 		if !xaiApplyPatchCallItem(item) {
 			return data
 		}
-		if id := strings.TrimSpace(item.Get("id").String()); id != "" {
-			r.pending[id] = struct{}{}
+		call := r.pendingCall(data)
+		if call == nil {
+			if len(r.pending) >= 256 || len(r.pendingOutputs) >= 256 {
+				r.err = fmt.Errorf("too many pending upstream apply_patch calls")
+				return nil
+			}
+			call = &strings.Builder{}
 		}
+		if id := item.Get("id").String(); id != "" {
+			r.pending[id] = call
+			r.pendingIDs[call] = id
+		}
+		r.pendingCallIDs[call] = item.Get("call_id").String()
 		if index := gjson.GetBytes(data, "output_index"); index.Exists() {
-			r.pendingOutputs[index.Int()] = struct{}{}
+			r.pendingOutputs[index.Int()] = call
 		}
+		r.rememberArguments(call, item.Get("arguments").String(), true)
+		data, _ = sjson.SetBytes(data, "item.arguments", "")
 		return xaiRewriteApplyPatchItem(data, "item")
 	case "response.function_call_arguments.delta", "response.function_call_arguments.done":
-		if !r.tracksEvent(data) {
+		call := r.pendingCall(data)
+		if call == nil {
 			return data
 		}
-		// 参数以 JSON 增量到达，无法无损转成 patch 文本增量；客户端会在
-		// output_item.done 里拿到完整 input，因此这里吸收这两个事件。
+		if gjson.GetBytes(data, "type").String() == "response.function_call_arguments.done" {
+			if args := gjson.GetBytes(data, "arguments"); args.Exists() {
+				r.rememberArguments(call, args.String(), true)
+			}
+		} else {
+			r.rememberArguments(call, gjson.GetBytes(data, "delta").String(), false)
+		}
 		return nil
 	case "response.output_item.done":
-		item := gjson.GetBytes(data, "item")
-		itemID := strings.TrimSpace(item.Get("id").String())
-		_, trackedByID := r.pending[itemID]
-		tracked := r.tracksEvent(data) || trackedByID
-		if !tracked && !xaiApplyPatchCallItem(item) {
+		if !xaiApplyPatchCallItem(gjson.GetBytes(data, "item")) && r.pendingCall(data) == nil {
 			return data
 		}
-		if itemID != "" {
-			delete(r.pending, itemID)
-		}
-		if index := gjson.GetBytes(data, "output_index"); index.Exists() {
-			delete(r.pendingOutputs, index.Int())
-		}
-		return xaiRewriteApplyPatchItem(data, "item")
+		return r.restoreItem(data, "item")
 	case "response.completed", "response.incomplete", "response.failed", "response.done":
-		return r.restore(data)
+		data = r.restore(data)
+		if r.err == nil && gjson.GetBytes(data, "type").String() != "response.failed" {
+			r.err = r.finish()
+		}
+		return data
 	default:
 		return data
 	}
 }
 
-// restore 处理终态快照（response.output）或非流式完成事件里的 apply_patch 项。
 func (r *xaiApplyPatchRestorer) restore(data []byte) []byte {
 	if r == nil || len(data) == 0 || !gjson.ValidBytes(data) {
 		return data
 	}
 	if item := gjson.GetBytes(data, "item"); item.IsObject() && xaiApplyPatchCallItem(item) {
-		data = xaiRewriteApplyPatchItem(data, "item")
+		data = r.restoreItem(data, "item")
 	}
-	output := gjson.GetBytes(data, "response.output")
-	if !output.IsArray() {
-		return data
-	}
-	for index, item := range output.Array() {
+	for index, item := range gjson.GetBytes(data, "response.output").Array() {
+		if r.completedArgs[item.Get("id").String()] != "" && item.Get("type").String() != "custom_tool_call" && !xaiApplyPatchCallItem(item) {
+			r.err = fmt.Errorf("upstream apply_patch terminal snapshot changed tool identity")
+			return nil
+		}
 		if !xaiApplyPatchCallItem(item) {
 			continue
 		}
-		data = xaiRewriteApplyPatchItem(data, fmt.Sprintf("response.output.%d", index))
+		data = r.restoreItem(data, fmt.Sprintf("response.output.%d", index))
+		if r.err != nil {
+			return nil
+		}
 	}
 	return data
 }
@@ -1464,4 +1647,81 @@ func isXAIBadCredentialsBody(body []byte) bool {
 	raw := strings.ToLower(string(body))
 	return strings.Contains(raw, "bad-credentials") ||
 		strings.Contains(raw, "access token could not be validated")
+}
+
+func restoreXAIClientWebSearchName(data []byte, alias string) []byte {
+	if alias == "" || !bytes.Contains(data, []byte(alias)) {
+		return data
+	}
+	if !gjson.ValidBytes(data) {
+		return data
+	}
+
+	// Check item (e.g. response.output_item.added / response.output_item.done)
+	if strings.TrimSpace(gjson.GetBytes(data, "item.namespace").String()) == "" {
+		if strings.TrimSpace(gjson.GetBytes(data, "item.name").String()) == alias {
+			data, _ = sjson.SetBytes(data, "item.name", xaiWebSearchToolType)
+		}
+		if strings.TrimSpace(gjson.GetBytes(data, "item.function.name").String()) == alias {
+			data, _ = sjson.SetBytes(data, "item.function.name", xaiWebSearchToolType)
+		}
+	}
+
+	// Check response.output array (e.g. response.completed / response.incomplete)
+	respOutput := gjson.GetBytes(data, "response.output")
+	if respOutput.IsArray() {
+		for idx, item := range respOutput.Array() {
+			if strings.TrimSpace(item.Get("namespace").String()) != "" {
+				continue
+			}
+			if strings.TrimSpace(item.Get("name").String()) == alias {
+				data, _ = sjson.SetBytes(data, fmt.Sprintf("response.output.%d.name", idx), xaiWebSearchToolType)
+			}
+			if strings.TrimSpace(item.Get("function.name").String()) == alias {
+				data, _ = sjson.SetBytes(data, fmt.Sprintf("response.output.%d.function.name", idx), xaiWebSearchToolType)
+			}
+		}
+	}
+
+	// Check top-level output array (non-stream responses translated)
+	topOutput := gjson.GetBytes(data, "output")
+	if topOutput.IsArray() {
+		for idx, item := range topOutput.Array() {
+			if strings.TrimSpace(item.Get("namespace").String()) != "" {
+				continue
+			}
+			if strings.TrimSpace(item.Get("name").String()) == alias {
+				data, _ = sjson.SetBytes(data, fmt.Sprintf("output.%d.name", idx), xaiWebSearchToolType)
+			}
+			if strings.TrimSpace(item.Get("function.name").String()) == alias {
+				data, _ = sjson.SetBytes(data, fmt.Sprintf("output.%d.function.name", idx), xaiWebSearchToolType)
+			}
+		}
+	}
+
+	// Check top-level name
+	if strings.TrimSpace(gjson.GetBytes(data, "namespace").String()) == "" {
+		if strings.TrimSpace(gjson.GetBytes(data, "name").String()) == alias {
+			data, _ = sjson.SetBytes(data, "name", xaiWebSearchToolType)
+		}
+	}
+
+	return data
+}
+
+// Keep replay transcripts in the client namespace so later declarations may
+// occupy an earlier wire alias without changing the identity of old calls.
+func restoreXAIClientWebSearchHistory(body []byte, alias string) []byte {
+	if alias == "" {
+		return body
+	}
+	for index, item := range gjson.GetBytes(body, "input").Array() {
+		switch item.Get("type").String() {
+		case "function_call", "custom_tool_call", "function_call_output":
+			if item.Get("name").String() == alias && strings.TrimSpace(item.Get("namespace").String()) == "" {
+				body, _ = sjson.SetBytes(body, fmt.Sprintf("input.%d.name", index), xaiWebSearchToolType)
+			}
+		}
+	}
+	return body
 }

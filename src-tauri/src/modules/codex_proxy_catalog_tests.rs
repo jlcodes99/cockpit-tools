@@ -289,7 +289,7 @@ impl Drop for DataDir {
         restore_env("COCKPIT_TOOLS_DATA_DIR", self.data.take());
     }
 }
-/// 策略测试用的订阅来源：Alpha / Beta / Gamma 可用，TLS 因跳过证书校验未获授权而不可用。
+/// 策略测试用的订阅来源：普通节点与声明证书例外的 TLS 节点均可直接使用。
 fn subscription_fixture() -> Source {
     Source {
         id: "subscription-id".into(),
@@ -338,7 +338,7 @@ fn choices(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
 }
 fn selectable_catalog() -> ParsedCatalog {
     parser::parse(
-        "proxies:\n  - {name: Alpha, type: trojan, server: alpha.example, port: 443, password: private-alpha}\n  - {name: Beta, type: trojan, server: beta.example, port: 443, password: private-beta}\n  - {name: TLS, type: hysteria2, server: tls.example, port: 443, password: private-tls, skip-cert-verify: true}\nproxy-groups:\n  - {name: Manual, type: select, proxies: [TLS, Beta, Alpha]}\n  - {name: Auto, type: url-test, proxies: [Alpha, Beta]}\n  - {name: Broken, type: url-test, proxies: [TLS]}\n  - {name: Nested, type: select, proxies: [Alpha]}\n  - {name: Outer, type: url-test, proxies: [Nested]}",
+        "proxies:\n  - {name: Alpha, type: trojan, server: alpha.example, port: 443, password: private-alpha}\n  - {name: Beta, type: trojan, server: beta.example, port: 443, password: private-beta}\n  - {name: TLS, type: hysteria2, server: tls.example, port: 443, password: private-tls, dialer-proxy: DIRECT}\nproxy-groups:\n  - {name: Manual, type: select, proxies: [TLS, Beta, Alpha]}\n  - {name: Auto, type: url-test, proxies: [Alpha, Beta]}\n  - {name: Broken, type: url-test, proxies: [TLS]}\n  - {name: Nested, type: select, proxies: [Alpha]}\n  - {name: Outer, type: url-test, proxies: [Nested]}",
     )
     .unwrap()
 }
@@ -741,7 +741,7 @@ fn catalog_read_recovers_derived_group_availability_without_rewriting_saved_data
 }
 
 #[test]
-fn retained_legacy_nodes_revalidate_without_granting_tls_permission_or_writing() {
+fn retained_legacy_nodes_accept_declared_tls_exceptions_without_writing() {
     let _env = crate::modules::test_support::env_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -750,15 +750,16 @@ fn retained_legacy_nodes_revalidate_without_granting_tls_permission_or_writing()
     let file = temp.0.join("catalog.json");
     let mut source = subscription_fixture();
     source.parser_version = 0;
+    source.auto_update = false;
     let tls = source
         .catalog
         .nodes
         .iter_mut()
         .find(|node| node.name == "TLS")
         .unwrap();
-    tls.error = Some("PROXY_UNSUPPORTED_OPTION".into());
+    tls.error = Some("PROXY_TLS_INSECURE".into());
     source.catalog.nodes[0].error = Some("PROXY_UNSUPPORTED_OPTION".into());
-    // A separate source contains an existing explicit permission.
+    // A second source confirms compatibility with previously accepted records.
     let mut approved = source.clone();
     approved.id = "approved".into();
     approved
@@ -781,13 +782,11 @@ fn retained_legacy_nodes_revalidate_without_granting_tls_permission_or_writing()
         "reading does not migrate or rewrite storage"
     );
     assert!(loaded.sources[0].catalog.nodes[0].error.is_none());
-    assert_eq!(
-        loaded.sources[0].catalog.nodes[3].error.as_deref(),
-        Some("PROXY_TLS_INSECURE")
-    );
+    assert!(loaded.sources[0].catalog.nodes[3].error.is_none());
+    assert!(loaded.sources[0].auto_update, "legacy false cannot disable valid subscription updates");
     assert!(
         loaded.sources[1].catalog.nodes[3].error.is_none(),
-        "keep an existing explicit permission"
+        "keep a previously accepted node available"
     );
     assert!(view(&loaded)
         .sources
@@ -831,31 +830,17 @@ fn group_permission_fixture() -> Source {
 }
 
 #[test]
-fn group_diagnostics_identify_tls_members_without_claiming_a_cycle() {
+fn group_diagnostics_accept_tls_exceptions_without_permission_issues() {
     let source = group_permission_fixture();
     let public = view(&Store {
         sources: vec![source],
         ..Store::default()
     });
     let group = &public.sources[0].groups[1];
-    assert!(!group.supported);
-    assert_eq!(group.error.as_deref(), Some("PROXY_TLS_INSECURE"));
-    assert_eq!(
-        group
-            .issues
-            .iter()
-            .map(|issue| (issue.name.as_str(), issue.error.as_str()))
-            .collect::<Vec<_>>(),
-        vec![
-            ("AT&T", "PROXY_TLS_INSECURE"),
-            ("Starlink", "PROXY_TLS_INSECURE")
-        ]
-    );
-    assert_eq!(
-        group.insecure_node_ids.len(),
-        2,
-        "shared descendants are not repeated"
-    );
+    assert!(group.supported);
+    assert!(group.error.is_none());
+    assert!(group.issues.is_empty());
+    assert!(group.insecure_node_ids.is_empty());
     assert_eq!(
         group.test_url.as_deref(),
         Some("https://check.example/group")
@@ -865,7 +850,7 @@ fn group_diagnostics_identify_tls_members_without_claiming_a_cycle() {
 }
 
 #[test]
-fn group_tls_permission_is_atomic_revision_checked_and_scoped_to_descendants() {
+fn legacy_group_tls_endpoint_is_revision_checked_and_cannot_disable_nodes() {
     let _env = crate::modules::test_support::env_lock()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -909,11 +894,11 @@ fn group_tls_permission_is_atomic_revision_checked_and_scoped_to_descendants() {
                     .unwrap();
             assert!(allowed.sources[0].groups[0].supported);
             assert!(allowed.sources[0].groups[1].supported);
-            assert!(!allowed.sources[0].groups[2].supported);
+            assert!(allowed.sources[0].groups[2].supported);
             assert!(allowed.sources[0].nodes[1].supported && allowed.sources[0].nodes[2].supported);
             assert!(
-                !allowed.sources[0].nodes[3].supported,
-                "other groups are untouched"
+                allowed.sources[0].nodes[3].supported,
+                "other groups also accept their node-declared exceptions"
             );
             assert!(allowed.sources[0].groups[1].insecure_node_ids.is_empty());
             let binding = snapshot(source_id.clone(), group_id.clone(), BTreeMap::new())
@@ -941,8 +926,8 @@ fn group_tls_permission_is_atomic_revision_checked_and_scoped_to_descendants() {
             )
             .await
             .unwrap();
-            assert!(!revoked.sources[0].groups[1].supported);
-            assert_eq!(revoked.sources[0].groups[1].insecure_node_ids.len(), 2);
+            assert!(revoked.sources[0].groups[1].supported);
+            assert!(revoked.sources[0].groups[1].insecure_node_ids.is_empty());
         });
     assert!(
         binding::decode(&old_binding).is_ok(),
@@ -1007,8 +992,8 @@ fn latency_uses_selected_group_url_only_for_its_own_subtree() {
         "CATALOG_INVALID"
     );
     assert!(
-        latency_target_url(&catalog, &catalog.nodes[1].id, Some(&us.id)).is_err(),
-        "pending permission cannot start a probe"
+        latency_target_url(&catalog, &catalog.nodes[1].id, Some(&us.id)).is_ok(),
+        "declared certificate exceptions can be probed directly"
     );
     assert!(latency_target_url(&catalog, &catalog.nodes[0].id, Some("missing")).is_err());
     for url in [
@@ -1031,7 +1016,7 @@ fn latency_uses_selected_group_url_only_for_its_own_subtree() {
 }
 
 #[test]
-fn latency_checks_only_target_reachability_while_group_permissions_remain_strict() {
+fn latency_checks_target_reachability_without_bypassing_group_structure() {
     let catalog = parser::parse("proxies:\n  - {name: Alpha, type: http, server: one.example, port: 8080}\n  - {name: Outside, type: http, server: other.example, port: 8080}\n  - {name: Pending, type: hysteria2, server: pending.example, port: 443, password: private-password, skip-cert-verify: true}\nproxy-groups:\n  - {name: MissingSibling, type: select, proxies: [Missing, Alpha, Pending], url: https://check.example/missing}\n  - {name: CycleSibling, type: select, proxies: [Loop, Child], url: https://check.example/cycle}\n  - {name: Loop, type: select, proxies: [Loop]}\n  - {name: Child, type: select, proxies: [Alpha, Pending]}\n").unwrap();
     let alpha = &catalog.nodes[0].id;
     let outside = &catalog.nodes[1].id;
@@ -1061,13 +1046,13 @@ fn latency_checks_only_target_reachability_while_group_permissions_remain_strict
             "CATALOG_INVALID"
         );
         assert_eq!(
-            latency_target_url(&catalog, pending, Some(&group.id)).unwrap_err(),
-            "CATALOG_INVALID"
+            latency_target_url(&catalog, pending, Some(&group.id)).unwrap(),
+            expected_url
         );
         assert_eq!(
             parser::reachable_nodes(&catalog, &group.id).err().unwrap(),
             structural_error,
-            "bulk certificate permissions still require the complete valid subtree"
+            "group binding still requires the complete valid subtree"
         );
     }
     assert_eq!(
@@ -1491,16 +1476,15 @@ fn unnamed_import_partial_opt_in_duplicates_and_rename_preserve_bindings() {
             let config="proxies:\n  - {name: TLS, type: hysteria2, server: example.test, port: 443, password: private-pass, skip-cert-verify: true}\nproxy-groups:\n  - {name: Group, type: select, proxies: [TLS]}";
             let pending=parser::parse(config).unwrap();let node_id=pending.nodes[0].id.clone();
             mutate(&path().unwrap(),|store|{store.sources[0].catalog=pending.clone();Ok(())}).unwrap();
-            assert!(snapshot(id.clone(),node_id.clone(),BTreeMap::new()).await.is_err());
+            assert!(snapshot(id.clone(),node_id.clone(),BTreeMap::new()).await.is_ok());
             let allowed=set_insecure(id.clone(),node_id.clone(),saved.sources[0].revision.clone(),true).await.unwrap();
             assert!(allowed.sources[0].nodes[0].supported);assert!(allowed.sources[0].groups[0].supported);
             let approved=snapshot(id.clone(),node_id.clone(),BTreeMap::new()).await.unwrap();
             assert_eq!(binding::outbounds(&approved).unwrap()[0]["proxy"]["skip-cert-verify"],true);
-            let old=source(&id).await.unwrap().catalog;
-            let mut same=pending.clone();preserve_permissions(&old,&mut same).unwrap();assert!(same.nodes[0].error.is_none());
-            let mut changed=pending.clone();changed.nodes[0].outbound.as_mut().unwrap()["proxy"]["password"]=serde_json::json!("different");preserve_permissions(&old,&mut changed).unwrap();assert_eq!(changed.nodes[0].error.as_deref(),Some("PROXY_TLS_INSECURE"));
+            let mut same=pending.clone();parser::revalidate_retained_nodes(&mut same);revalidate_groups(&mut same).unwrap();assert!(same.nodes[0].error.is_none());
+            let mut changed=pending.clone();changed.nodes[0].outbound.as_mut().unwrap()["proxy"]["password"]=serde_json::json!("different");parser::revalidate_retained_nodes(&mut changed);revalidate_groups(&mut changed).unwrap();assert!(changed.nodes[0].error.is_none());
             let revoked=set_insecure(id.clone(),node_id.clone(),allowed.sources[0].revision.clone(),false).await.unwrap();
-            assert!(!revoked.sources[0].nodes[0].supported);assert!(snapshot(id,node_id,BTreeMap::new()).await.is_err());
+            assert!(revoked.sources[0].nodes[0].supported);assert!(snapshot(id,node_id,BTreeMap::new()).await.is_ok());
             assert_eq!(binding::outbounds(&approved).unwrap()[0]["proxy"]["skip-cert-verify"],true);
 
         });
@@ -2226,7 +2210,7 @@ async fn strategy_update_never_replaces_a_vanished_source_node_with_its_copy() {
         "CATALOG_CHANGED"
     );
 
-    // 节点仍在但未获授权（跳过证书校验）：保持 CATALOG_INVALID。
+    // 节点仍在但包含禁止的直连绕过参数：保持 CATALOG_INVALID。
     mutate(&path().unwrap(), |store| {
         store
             .sources
@@ -2234,7 +2218,7 @@ async fn strategy_update_never_replaces_a_vanished_source_node_with_its_copy() {
             .find(|entry| entry.id == source.id)
             .unwrap()
             .catalog = parser::parse(
-            "proxies:\n  - {name: TLS, type: hysteria2, server: tls.example, port: 443, password: private-tls, skip-cert-verify: true}\n",
+            "proxies:\n  - {name: TLS, type: hysteria2, server: tls.example, port: 443, password: private-tls, dialer-proxy: DIRECT}\n",
         )
         .unwrap();
         Ok(())
@@ -2444,7 +2428,9 @@ async fn strategy_save_rejects_invalid_input_without_touching_the_store() {
     let _dir = DataDir::set(&temp.0);
     let source = subscription_fixture();
     mutate(&path().unwrap(), |store| {
-        store.sources.push(subscription_fixture());
+        let mut stored_source = subscription_fixture();
+        stored_source.catalog.nodes[3].outbound.as_mut().unwrap()["proxy"]["dialer-proxy"] = serde_json::json!("DIRECT");
+        store.sources.push(stored_source);
         Ok(())
     })
     .unwrap();
@@ -2804,7 +2790,7 @@ async fn strategy_update_keeps_the_id_and_removal_drops_it_from_the_view() {
     assert!(stored().sources.iter().any(|s| s.id == source.id));
 }
 
-/// 策略来源没有 URL，永远不进入订阅自动刷新队列，也不能打开自动更新。
+/// 策略来源没有 URL，永远不进入订阅自动刷新队列。
 #[tokio::test]
 async fn strategy_sources_never_enter_the_auto_refresh_queue() {
     let _lock = crate::modules::test_support::env_lock()
@@ -2864,6 +2850,54 @@ async fn strategy_sources_never_enter_the_auto_refresh_queue() {
             .unwrap()
             .auto_update
     );
+}
+
+#[test]
+fn auto_refresh_ignores_legacy_opt_out_and_preserves_retry_interval_and_url_boundaries() {
+    let now = 2 * REFRESH_INTERVAL_MS;
+    let mut enabled = fixture();
+    enabled.id = "enabled".into();
+    enabled.auto_update = true;
+    let mut legacy_disabled = enabled.clone();
+    legacy_disabled.id = "legacy-disabled".into();
+    legacy_disabled.auto_update = false;
+    let mut recent_failure = legacy_disabled.clone();
+    recent_failure.id = "recent-failure".into();
+    recent_failure.error = Some("CATALOG_TIMEOUT".into());
+    recent_failure.last_attempt_at = Some(now - REFRESH_INTERVAL_MS + 1);
+    let mut due_retry = recent_failure.clone();
+    due_retry.id = "due-retry".into();
+    due_retry.last_attempt_at = Some(now - REFRESH_INTERVAL_MS);
+    let mut invalid_url = enabled.clone();
+    invalid_url.id = "invalid-url".into();
+    invalid_url.url = Some("file:///private/subscription".into());
+    let mut manual = enabled.clone();
+    manual.id = "manual".into();
+    manual.kind = "manual".into();
+    let mut no_url = enabled.clone();
+    no_url.id = "no-url".into();
+    no_url.url = None;
+    let sources = vec![enabled, legacy_disabled, recent_failure, due_retry, invalid_url, manual, no_url];
+    assert_eq!(due_sources(&sources, now), ["enabled", "legacy-disabled", "due-retry"]);
+    assert!(view(&Store { sources, ..Store::default() }).sources[1].auto_update);
+}
+
+#[tokio::test]
+async fn legacy_subscription_toggle_cannot_disable_automatic_refresh() {
+    let _lock = crate::modules::test_support::env_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let temp = Temp::new();
+    let _dir = DataDir::set(&temp.0);
+    let source = fixture();
+    let id = source.id.clone();
+    mutate(&path().unwrap(), |store| { store.sources.push(source); Ok(()) }).unwrap();
+    let before = fs::read(path().unwrap()).unwrap();
+    let loaded = read(&path().unwrap()).unwrap();
+    assert!(loaded.sources[0].auto_update);
+    assert_eq!(fs::read(path().unwrap()).unwrap(), before, "loading old flags never writes a migration");
+    let catalog = set_auto_update(id.clone(), false).await.unwrap();
+    assert!(catalog.sources[0].auto_update);
+    let stored = read(&path().unwrap()).unwrap();
+    assert_eq!(due_sources(&stored.sources, 2 * REFRESH_INTERVAL_MS), [id]);
 }
 
 /// 订阅用量头：只认已知键与十进制数字，缺失或非法字段一律降级为“没有数据”。

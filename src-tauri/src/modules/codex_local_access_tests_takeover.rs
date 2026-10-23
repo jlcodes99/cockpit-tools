@@ -1,5 +1,30 @@
 // Codex Local Access 测试：Takeover reconciliation, gateway configuration and remaining integration cases。
 // 测试与生产实现共享 super 作用域，验证真实网关、持久化和请求协议行为。
+    #[test]
+    fn managed_voice_gateway_config_respects_voice_overrides() {
+        let config = r#"
+model_provider = "codex_local_access"
+experimental_realtime_ws_base_url = "http://127.0.0.1:8317/v1"
+[model_providers.codex_local_access]
+base_url = "http://127.0.0.1:8317/v1"
+experimental_bearer_token = "agt_codex_test"
+"#;
+        let cases = [
+            ("managed gateway", config.to_string(), true),
+            ("localhost gateway", config.replace("127.0.0.1", "localhost"), true),
+            ("account login", "model_provider = \"openai\"".to_string(), false),
+            ("custom creation URL", format!("experimental_realtime_webrtc_call_base_url = \"https://voice.example.test\"\n{config}"), false),
+            ("custom WS URL", config.replacen("http://127.0.0.1:8317/v1", "https://voice.example.test/v1", 1), false),
+            ("missing WS URL", config.replace("experimental_realtime_ws_base_url = \"http://127.0.0.1:8317/v1\"", ""), false),
+            ("nonlocal gateway", config.replace("127.0.0.1", "voice.example.test"), false),
+            ("unmanaged key", config.replace("agt_codex_test", "external-test-key"), false),
+            ("invalid config", "not valid TOML".to_string(), false),
+        ];
+        for (name, config_text, expected) in cases {
+            assert_eq!(super::has_managed_voice_gateway_config(&config_text), expected, "{name}");
+        }
+    }
+
     fn realtime_mixed_test_collection() -> CodexLocalAccessCollection {
         let mut collection = test_local_access_collection(Vec::new());
         collection.api_key = "mixed-realtime-test-key".to_string();
@@ -420,8 +445,8 @@
         let profile = make_temp_dir("local-access-context-overrides");
         let definitions = vec![
             crate::models::codex::CodexExperimentalModelDefinition {
-                model_id: "gpt-5.5".into(),
-                display_name: "GPT-5.5".into(),
+                model_id: "gpt-5.6-sol".into(),
+                display_name: "GPT-5.6 Sol".into(),
                 reasoning_efforts: None,
                 default_reasoning_effort: None,
                 context_window: Some(516_000),
@@ -462,7 +487,7 @@
         // for models without an override.
         super::write_local_access_profile_model_catalog_with_definitions(
             &profile, false, Some(vec![
-                ("gpt-5.5".into(), "GPT-5.5".into()),
+                ("gpt-5.6-sol".into(), "GPT-5.6 Sol".into()),
                 ("gpt-6-astra".into(), "GPT-6 Astra".into()),
             ]),
         ).unwrap();
@@ -470,7 +495,7 @@
             &fs::read_to_string(profile.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)).unwrap(),
         ).unwrap();
         let models = catalog["models"].as_array().unwrap();
-        assert_eq!(models.iter().find(|model| model["slug"] == "gpt-5.5").unwrap()["context_window"], 516_000);
+        assert_eq!(models.iter().find(|model| model["slug"] == "gpt-5.6-sol").unwrap()["context_window"], 516_000);
         let defaults = super::codex_protocol::build_codex_client_models_response(&["gpt-6-astra".into()]);
         assert_eq!(models.iter().find(|model| model["slug"] == "gpt-6-astra").unwrap()["context_window"], defaults["models"][0]["context_window"]);
         // Disabling model management must stop applying persisted overrides.
@@ -478,12 +503,12 @@
             &profile, false, Vec::new(), None,
         ).unwrap();
         super::write_local_access_profile_model_catalog_with_definitions(
-            &profile, false, Some(vec![("gpt-5.5".into(), "GPT-5.5".into())]),
+            &profile, false, Some(vec![("gpt-5.6-sol".into(), "GPT-5.6 Sol".into())]),
         ).unwrap();
         let catalog: Value = serde_json::from_str(
             &fs::read_to_string(profile.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)).unwrap(),
         ).unwrap();
-        let defaults = super::codex_protocol::build_codex_client_models_response(&["gpt-5.5".into()]);
+        let defaults = super::codex_protocol::build_codex_client_models_response(&["gpt-5.6-sol".into()]);
         assert_eq!(catalog["models"][0]["context_window"], defaults["models"][0]["context_window"]);
         fs::remove_dir_all(profile).unwrap();
     }
@@ -889,7 +914,6 @@
             ("gpt-5.6-sol", "GPT-5.6 Sol"),
             ("gpt-5.6-terra", "GPT-5.6 Terra"),
             ("gpt-5.6-luna", "GPT-5.6 Luna"),
-            ("gpt-5.5", "GPT-5.5"),
         ] {
             assert_eq!(
                 names.get(slug).map(String::as_str),
@@ -897,6 +921,10 @@
                 "开启模型管理时 GPT 显示名仍必须带官方前缀: {names:?}"
             );
         }
+        assert!(
+            !names.contains_key("gpt-5.5"),
+            "retired saved model survived: {names:?}"
+        );
         assert_eq!(
             names.get("gpt-reserve").map(String::as_str),
             Some("GPT-5.6 Reserve")

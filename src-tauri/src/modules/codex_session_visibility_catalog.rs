@@ -882,6 +882,7 @@ fn collect_sqlite_cwd_normalizations(
         .map_err(|error| format_sqlite_read_error(db_path, "读取 SQLite cwd 失败", &error))?;
     let mut normalizations = Vec::new();
     for row in rows {
+        check_launch_visibility_budget("scan_sqlite_cwd")?;
         let (thread_id, cwd) =
             row.map_err(|error| format_sqlite_read_error(db_path, "读取 SQLite cwd 失败", &error))?;
         if !selection.includes_session_id(&thread_id) || !is_windows_workspace_path(cwd.trim()) {

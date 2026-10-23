@@ -33,6 +33,10 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
         return Ok(());
     }
 
+    if collection_gateway_mode(&collection) == CodexLocalAccessGatewayMode::Native {
+        return ensure_native_gateway_locked(&collection).await;
+    }
+
     let bind_host = bind_host_for_collection(&collection);
 
     let preparation_total = effective_sidecar_account_ids(&collection).len();
@@ -51,7 +55,8 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
             return Ok(());
         }
         Err(error) => {
-            let preserve_running = error == UNRESOLVED_PUBLIC_API_KEYS && running
+            let preserve_running = error == UNRESOLVED_PUBLIC_API_KEYS
+                && running
                 && can_preserve_gateway_for_key_recovery(&collection).await;
             if running && !preserve_running {
                 stop_gateway_locked_for_reason("configuration_preparation_failed").await;
@@ -67,10 +72,7 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
         && actual_fingerprint.as_deref() == Some(launch_config.fingerprint.as_str())
     {
         let mut runtime = gateway_runtime().lock().await;
-        return finish_public_key_preparation(
-            &mut runtime,
-            launch_config.pending_public_accounts,
-        );
+        return finish_public_key_preparation(&mut runtime, launch_config.pending_public_accounts);
     }
     if running {
         log_gateway_mode_info(
@@ -88,7 +90,23 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
         );
     }
 
-    let stopped_endpoint = stop_gateway_locked_for_reason("configuration_rebuild").await;
+    let stopped_endpoint = if running
+        && actual_port == Some(collection.port)
+        && actual_bind_host.as_deref() == Some(bind_host)
+    {
+        match retire_gateway_sidecar().await? {
+            Some(endpoint) => Some(endpoint),
+            None => {
+                let (endpoint, result) = stop_gateway_locked_checked("configuration_rebuild").await;
+                result?;
+                endpoint
+            }
+        }
+    } else {
+        let (endpoint, result) = stop_gateway_locked_checked("configuration_rebuild").await;
+        result?;
+        endpoint
+    };
     if let Some(endpoint) = stopped_endpoint {
         wait_for_gateway_port_release(&endpoint.bind_host, endpoint.port).await?;
     }
@@ -156,13 +174,14 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
         .arg(&launch_config.quota_pool_path)
         .arg("--parent-pid")
         .arg(std::process::id().to_string())
+        .arg("--control-stdin")
         .current_dir(
             launch_config
                 .config_path
                 .parent()
                 .unwrap_or_else(|| Path::new(".")),
         )
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(target_os = "windows")]
@@ -309,7 +328,8 @@ async fn ensure_gateway_matches_runtime_once_locked() -> Result<(), String> {
     runtime.sidecar_config_fingerprint = Some(launch_config.fingerprint);
     runtime.applied_collection = Some(collection.clone());
     runtime.applied_account_signatures = launch_config.account_signatures;
-    runtime.last_error = launch_config.pending_public_accounts
+    runtime.last_error = launch_config
+        .pending_public_accounts
         .then(|| UNRESOLVED_PUBLIC_API_KEYS.to_string());
     runtime.shutdown_sender = None;
     runtime.task = Some(task);
@@ -538,7 +558,10 @@ async fn stop_gateway_locked_for_reason(reason: &str) -> Option<GatewayBindEndpo
 async fn stop_gateway_locked_checked(
     reason: &str,
 ) -> (Option<GatewayBindEndpoint>, Result<(), String>) {
-    let (shutdown_sender, task, monitor_task, child, endpoint) = {
+    if reason != "configuration_rebuild" {
+        stop_retired_sidecars().await;
+    }
+    let (shutdown_sender, task, monitor_task, child, native_handle, endpoint) = {
         let mut runtime = gateway_runtime().lock().await;
         let endpoint = runtime
             .actual_port
@@ -556,6 +579,7 @@ async fn stop_gateway_locked_checked(
             runtime.task.take(),
             runtime.sidecar_monitor_task.take(),
             runtime.sidecar_child.take(),
+            runtime.native_handle.take(),
             endpoint,
         )
     };
@@ -576,6 +600,18 @@ async fn stop_gateway_locked_checked(
         let _ = monitor_task.await;
     }
     let mut stop_result = Ok(());
+    if let Some(mut handle) = native_handle {
+        NATIVE_API_RUNNING.store(false, Ordering::Release);
+        if let Err(error) = handle.shutdown(Duration::from_secs(10)).await {
+            stop_result = Err(error);
+            let mut runtime = gateway_runtime().lock().await;
+            runtime.native_handle = Some(handle);
+            runtime.running = true;
+            runtime.actual_port = endpoint.as_ref().map(|value| value.port);
+            runtime.actual_bind_host = endpoint.as_ref().map(|value| value.bind_host.clone());
+            NATIVE_API_RUNNING.store(true, Ordering::Release);
+        }
+    }
     if let Some(mut child) = child {
         if let Err(error) = stop_gateway_sidecar_child(&mut child).await {
             logger::log_codex_api_warn(&format!(
@@ -583,7 +619,16 @@ async fn stop_gateway_locked_checked(
                 error
             ));
             stop_result = Err(format!("停止 API 服务 sidecar 失败: {error}"));
+            let mut runtime = gateway_runtime().lock().await;
+            runtime.sidecar_child = Some(child);
+            runtime.running = true;
+            runtime.actual_port = endpoint.as_ref().map(|value| value.port);
+            runtime.actual_bind_host = endpoint.as_ref().map(|value| value.bind_host.clone());
         }
+    }
+    if stop_result.is_err() {
+        gateway_runtime().lock().await.task = task;
+        return (endpoint, stop_result);
     }
     if let Some(mut task) = task {
         tokio::select! {
@@ -851,7 +896,7 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
         .map(|item| (item.account_id.as_str(), item.email.as_str()))
         .collect();
 
-    collection
+    let mut snapshot: Vec<_> = collection
         .account_ids
         .iter()
         .map(|account_id| {
@@ -890,6 +935,9 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
             }
             let image_generation_status = if collection.image_generation_mode
                 == CodexLocalAccessImageGenerationMode::Disabled
+                || account_id.starts_with(codex_account::CHATGPT_PLAN_ACCOUNT_PREFIX)
+                || collection.image_generation_account_policies.get(account_id)
+                    == Some(&CodexLocalAccessImageGenerationPolicy::Disabled)
             {
                 CodexLocalAccessImageGenerationStatus::Disabled
             } else {
@@ -933,7 +981,9 @@ fn build_account_health_snapshot(runtime: &GatewayRuntime) -> Vec<CodexLocalAcce
                 cooldowns,
             }
         })
-        .collect()
+        .collect();
+    apply_native_health_snapshot(runtime, &mut snapshot, now);
+    snapshot
 }
 
 fn build_account_pool_health_snapshot(
@@ -980,6 +1030,7 @@ fn build_account_pool_health_snapshot(
 
 #[derive(Debug, Clone, Copy, Default)]
 struct RequestStatsMeta<'a> {
+    gateway_mode: Option<CodexLocalAccessGatewayMode>,
     proxy_route: Option<&'a CodexLocalAccessProxyRoute>,
     request_id: Option<&'a str>,
     client_instance_id: Option<&'a str>,
@@ -987,6 +1038,7 @@ struct RequestStatsMeta<'a> {
     error_message: Option<&'a str>,
     service_tier: Option<&'a str>,
     requested_service_tier: Option<&'a str>,
+    authorization_route: Option<&'a str>,
     response_service_tier: Option<&'a str>,
     reasoning_effort: Option<&'a str>,
     /// 客户端请求模型（含路由命名空间）；未提供时按上游模型展示。
@@ -1010,6 +1062,14 @@ async fn record_request_stats_with_meta(
     usage: Option<UsageCapture>,
     meta: RequestStatsMeta<'_>,
 ) -> Result<(), String> {
+    // The runtime counters, recent event and persisted row use one bounded
+    // classification before any aggregation takes place.
+    let normalized_category = normalized_request_log_error_category(
+        success,
+        error_category.unwrap_or_default().trim(),
+        meta.error_message.unwrap_or_default().trim(),
+    );
+    let error_category = (!normalized_category.is_empty()).then_some(normalized_category.as_ref());
     let persisted_event = {
         let mut runtime = gateway_runtime().lock().await;
         let now = now_ms();
@@ -1027,7 +1087,9 @@ async fn record_request_stats_with_meta(
             .unwrap_or(DEFAULT_MODEL_PRICING_VERSION)
             .max(DEFAULT_MODEL_PRICING_VERSION);
         let estimated_cost_usd = calculate_usage_cost_usd(usage_ref, pricing.as_ref());
-        let gateway_mode = runtime.collection.as_ref().map(collection_gateway_mode);
+        let gateway_mode = meta
+            .gateway_mode
+            .or_else(|| runtime.collection.as_ref().map(collection_gateway_mode));
         if runtime.stats.since <= 0 {
             runtime.stats.since = now;
         }
@@ -1115,6 +1177,7 @@ async fn record_request_stats_with_meta(
             estimated_cost_usd,
             meta.proxy_route,
         );
+        event.authorization_route = meta.authorization_route.map(str::to_owned);
         event.requested_service_tier = recorded_service_tier_value(meta.requested_service_tier);
         event.response_service_tier = recorded_service_tier_value(meta.response_service_tier);
         event.output_generation_ms = meta.output_generation_ms;
@@ -1122,6 +1185,7 @@ async fn record_request_stats_with_meta(
         if let Some(recent) = runtime.stats.events.last_mut() {
             recent.first_response_ms = event.first_response_ms;
             recent.output_generation_ms = event.output_generation_ms;
+            recent.authorization_route = event.authorization_route.clone();
             recent.requested_service_tier = event.requested_service_tier.clone();
             recent.response_service_tier = event.response_service_tier.clone();
         }
@@ -1225,6 +1289,7 @@ fn build_state_snapshot_inner(
 
     let (recovering, recovery_attempt) = gateway_key_recovery_snapshot();
     CodexLocalAccessState {
+        service_members: collection.as_ref().map(service_member_snapshot).unwrap_or_default(),
         collection,
         recovering: service_enabled && recovering,
         recovery_attempt,
@@ -1243,7 +1308,11 @@ fn build_state_snapshot_inner(
         lan_base_url,
         model_ids,
         model_pricing_presets: default_model_pricing_presets(),
-        last_error: if recovering { None } else { runtime.last_error.clone() },
+        last_error: if recovering {
+            None
+        } else {
+            runtime.last_error.clone()
+        },
         member_count,
         stats,
         account_health,
@@ -1299,11 +1368,40 @@ pub async fn get_local_access_state() -> Result<CodexLocalAccessState, String> {
     snapshot_state().await
 }
 
+/// Read plan activation without starting a listener or refreshing any account.
+pub(crate) async fn chatgpt_plan_pool_snapshot() -> Result<(CodexLocalAccessGatewayMode, Vec<String>), String> {
+    ensure_runtime_loaded_without_start().await?;
+    let runtime = gateway_runtime().lock().await;
+    Ok(runtime.collection.as_ref().map(|c| (c.gateway_mode, c.account_ids.clone()))
+        .unwrap_or((CodexLocalAccessGatewayMode::Native, Vec::new())))
+}
+
+#[cfg(test)]
+pub(crate) async fn with_chatgpt_plan_test_runtime<F, Fut, T>(operation: F) -> T
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    // Tests run serially; preserve any state established by preceding fixtures.
+    let previous = {
+        let mut runtime = gateway_runtime().lock().await;
+        assert!(!runtime.running && runtime.native_handle.is_none() && runtime.sidecar_child.is_none());
+        std::mem::take(&mut *runtime)
+    };
+    let result = operation().await;
+    let mut runtime = gateway_runtime().lock().await;
+    assert!(!runtime.running && runtime.native_handle.is_none() && runtime.sidecar_child.is_none());
+    *runtime = previous;
+    result
+}
+
 /// Read the saved owner without starting a gateway or classifying authentication state.
 pub(crate) async fn client_proxy_bound_oauth_account_id() -> Result<Option<String>, String> {
     ensure_runtime_loaded_without_start().await?;
     let runtime = gateway_runtime().lock().await;
-    Ok(runtime.collection.as_ref().and_then(|collection| normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref())))
+    Ok(runtime.collection.as_ref().and_then(|collection| {
+        normalize_optional_account_ref(collection.bound_oauth_account_id.as_deref())
+    }))
 }
 
 /// Resolve the OAuth account used by an API Service-bound Codex profile.
@@ -1382,14 +1480,24 @@ fn new_empty_local_access_collection() -> Result<CodexLocalAccessCollection, Str
         client_base_url_host: CodexLocalAccessClientBaseUrlHost::default(),
         image_generation_mode: CodexLocalAccessImageGenerationMode::default(),
         image_generation_model: DEFAULT_CODEX_IMAGE_GENERATION_MODEL.to_string(),
-        image_generation_models: crate::models::codex_local_access::default_image_generation_models(),
+        image_generation_models: crate::models::codex_local_access::default_image_generation_models(
+        ),
         image_generation_deleted_models: Vec::new(),
         image_generation_model_catalog_revision: 0,
         image_generation_main_model: None,
         image_generation_account_policies: HashMap::new(),
+        chatgpt_plan_codex_image_policies: HashMap::new(),
+        chatgpt_plan_service_revision: 0,
+        paused_account_ids: Vec::new(),
+        official_account_source_ids: HashMap::new(),
+            official_account_bindings: HashMap::new(),
+        service_account_identity_fingerprints: HashMap::new(),
         image_generation_account_ids: Vec::new(),
         image_generation_account_models: HashMap::new(),
         gateway_mode: CodexLocalAccessGatewayMode::default(),
+        capability_fallback: Default::default(),
+        multi_agent: Default::default(),
+        native_gateway_default_migrated: true,
         upstream_proxy_url: None,
         routing_strategy: CodexLocalAccessRoutingStrategy::default(),
         custom_routing_rules: Vec::new(),

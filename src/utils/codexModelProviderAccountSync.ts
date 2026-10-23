@@ -6,11 +6,13 @@ import type {
 import type { CodexModelProvider } from "../services/codexModelProviderService";
 import {
   CODEX_API_PROVIDER_CUSTOM_ID,
+  DEEPSEEK_API_PROVIDER_ID,
   resolveCodexApiProviderPresetId,
 } from "./codexProviderPresets";
 import { resolveCodexProviderCapabilityProfile } from "./codexProviderGateway";
 import { resolveCodexModelProviderForApiKey } from "./codexModelProviderKeyConfig";
 import { resolveCodexModelProviderAccountName } from "./codexModelProviderAccountName";
+import { resolveProviderModelVisionState } from "./codexModelProviderVision";
 
 export interface CodexModelProviderReference {
   id: string;
@@ -128,6 +130,31 @@ export function buildCodexModelProviderAccountSnapshot(
   const presetId = resolveCodexApiProviderPresetId(provider.baseUrl);
   const isOpenAI = presetId === "openai_official";
   const wireApi = provider.wireApi ?? "responses";
+  const visionStates = Object.fromEntries(
+    Object.entries(provider.modelCapabilities ?? {}).map(([model, capability]) => [
+      model.trim().toLowerCase(),
+      capability.supportsVision === true,
+    ]),
+  );
+  const modelVisionSupport = new Map<string, [string, boolean]>();
+  for (const [model, capability] of Object.entries(provider.modelCapabilities ?? {})) {
+    const key = model.trim().toLowerCase();
+    if (key) modelVisionSupport.set(key, [model, capability.supportsVision === true]);
+  }
+  if (presetId !== DEEPSEEK_API_PROVIDER_ID) {
+    for (const model of provider.modelCatalog ?? []) {
+      const key = model.trim().toLowerCase();
+      if (!key || modelVisionSupport.has(key)) continue;
+      modelVisionSupport.set(key, [
+        model,
+        resolveProviderModelVisionState(
+          model,
+          visionStates,
+          provider.supportsVision === true,
+        ),
+      ]);
+    }
+  }
 
   return {
     apiBaseUrl: provider.baseUrl,
@@ -141,11 +168,7 @@ export function buildCodexModelProviderAccountSnapshot(
     apiSupportsWebsockets:
       !isOpenAI && wireApi === "responses" && provider.supportsWebsockets === true,
     apiSupportsVision: provider.supportsVision === true,
-    apiModelVisionSupport: Object.fromEntries(
-      Object.entries(provider.modelCapabilities ?? {}).map(
-        ([model, capability]) => [model, capability.supportsVision === true],
-      ),
-    ),
+    apiModelVisionSupport: Object.fromEntries(modelVisionSupport.values()),
     apiVisionRoutingModel: provider.visionRoutingModel,
     accountName: resolveCodexModelProviderAccountName(provider.name, apiKeyName),
   };

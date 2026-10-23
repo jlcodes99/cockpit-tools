@@ -1,24 +1,27 @@
-.codex-request-payload-setting { min-width: 0; padding: 12px 0; }
 .codex-request-payload-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .codex-request-payload-row > strong { font-size: 13px; }
-.codex-request-payload-row .single-select-dropdown { width: 140px; max-width: 100%; }
+.codex-request-payload-row .single-select-dropdown { width: 128px; max-width: 100%; }
 .codex-request-diagnostics-hint { color: var(--text-secondary); font-size: 12px; line-height: 1.6; margin: 8px 0; overflow-wrap: anywhere; }
+.codex-request-error-evidence > p, .codex-request-error-evidence > code { overflow-wrap: anywhere; white-space: pre-wrap; }
 .codex-request-payload-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
 /* Request details use a compact summary and separate diagnostic sections. */
-.codex-request-detail-overlay { z-index: 12040; padding: 16px; }
+.codex-request-detail-overlay { z-index: 12040; padding: 16px; overflow-y: auto; align-items: safe center; }
 .modal.codex-request-detail-modal {
   width: min(820px, calc(100vw - 32px));
   max-width: 820px;
   max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 16px;
   color: var(--text-primary);
 }
-.codex-request-detail-modal .modal-header { padding: 18px 24px; }
+.codex-request-detail-modal .modal-header { padding: 18px 24px; flex: 0 0 auto; }
 .codex-request-detail-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .codex-request-detail-heading h3 { margin: 0; font-size: 17px; font-weight: 650; line-height: 1.4; }
 .codex-request-detail-icon { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; color: var(--primary); background: var(--primary-light); }
-.codex-request-detail-body { min-height: 0; padding: 20px 24px 24px; overflow-y: auto; font-size: 13px; }
+.codex-request-detail-body { flex: 1 1 auto; min-height: 0; padding: 20px 24px 24px; overflow-y: auto; font-size: 13px; }
 .codex-request-detail-id { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 16px; }
 .codex-request-detail-id > span { color: var(--text-secondary); font-size: 12px; }
 .codex-request-detail-id code { min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
@@ -63,7 +66,7 @@
 .codex-request-headers-toggle svg { transition: transform 150ms ease; }
 .codex-request-headers-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .codex-request-detail-notice { color: var(--success); font-size: 12px; margin-bottom: 0; }
-.codex-request-detail-modal .modal-footer { padding: 14px 24px; gap: 8px; background: var(--bg-surface); flex-wrap: wrap; }
+.codex-request-detail-modal .modal-footer { padding: 14px 24px; gap: 8px; background: var(--bg-surface); flex-wrap: wrap; flex: 0 0 auto; }
 .codex-request-detail-modal .modal-footer .btn { font-size: 13px; }
 @media (max-width: 560px) {
   .codex-request-detail-modal .modal-header { padding: 14px 16px; }

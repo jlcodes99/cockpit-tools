@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useModalFocusTrap } from "../hooks/useModalFocusTrap";
 import { useEscCloseTopmost } from "../hooks/useEscClose";
 import {
@@ -94,6 +94,27 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
   const reserveDialogRef = useRef<HTMLDivElement>(null);
   const bindingOpen = Boolean(oauthBindingTargetActive);
   const reserveOpen = Boolean(oauthBindingQuotaReserveEditorOpen && isLocalAccessOAuthBinding);
+  const [marginDraft, setMarginDraft] = useState("3");
+  const [marginError, setMarginError] = useState<string | null>(null);
+  const marginInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!reserveOpen) return;
+    setMarginDraft(String(oauthBindingQuotaReserve?.safetyMarginPercent ?? 3));
+    setMarginError(null);
+  }, [reserveOpen, oauthBindingQuotaReserve?.safetyMarginPercent]);
+  const confirmReserve = () => {
+    setOauthBindingQuotaReserveFieldErrors({});
+    setMarginError(null);
+    const margin = Number(marginDraft);
+    if (!/^\d+$/.test(marginDraft) || !Number.isInteger(margin) || margin < 1 || margin > 20) {
+      setMarginError(t("codex.localAccess.oauthBinding.safetyMarginInvalid"));
+      marginInputRef.current?.scrollIntoView({ block: "nearest" });
+      marginInputRef.current?.focus();
+      return;
+    }
+    setMarginError(null);
+    confirmOAuthBindingQuotaReserveEditor({ safetyMarginPercent: margin });
+  };
   useModalFocusTrap(bindingDialogRef, bindingOpen, true, !reserveOpen);
   useModalFocusTrap(reserveDialogRef, reserveOpen);
   useEscCloseTopmost(bindingOpen && !reserveOpen && !oauthBindingSaving, closeOAuthBindingModal, bindingDialogRef);
@@ -635,6 +656,20 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
                     )}
                   </label>
                 </div>
+                <div className="codex-oauth-binding-protection">
+                  <p className="section-desc">{t("codex.localAccess.oauthBinding.strictReserveDesc")}</p>
+                  <label className="codex-oauth-binding-quota-field">
+                    <span>{t("codex.localAccess.oauthBinding.safetyMargin")}</span>
+                    <div className="codex-oauth-binding-quota-input-wrap">
+                      <input ref={marginInputRef} type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
+                        className={`codex-account-note-input${marginError ? " has-error" : ""}`}
+                        value={marginDraft} aria-invalid={Boolean(marginError)}
+                        onChange={(event) => { if (/^\d*$/.test(event.target.value)) { setMarginDraft(event.target.value); setMarginError(null); } }} />
+                      <span>{t("codex.localAccess.oauthBinding.safetyMarginUnit")}</span>
+                    </div>
+                    {marginError && <span className="codex-account-note-field-error">{marginError}</span>}
+                  </label>
+                </div>
                 <div className="api-key-edit-actions">
                   <button
                     type="button"
@@ -646,7 +681,7 @@ export function CodexOAuthBindingModal(props: CodexAccountsViewProps) {
                   <button
                     type="button"
                     className="btn btn-primary"
-                    onClick={confirmOAuthBindingQuotaReserveEditor}
+                    onClick={confirmReserve}
                   >
                     {t("common.confirm", "确认")}
                   </button>

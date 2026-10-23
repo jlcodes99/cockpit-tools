@@ -120,6 +120,10 @@
         account.api_wire_api = Some("responses".to_string());
         account.api_model_mappings = vec![
             CodexApiModelMapping {
+                client_model: "gpt-5.5".to_string(),
+                upstream_model: "deepseek-v4-flash".to_string(),
+            },
+            CodexApiModelMapping {
                 client_model: "gpt-5.4".to_string(),
                 upstream_model: "deepseek-v4-flash".to_string(),
             },
@@ -144,7 +148,7 @@
             .iter()
             .map(|mapping| mapping.client_model.as_str())
             .collect();
-        for legacy in ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"] {
+        for legacy in ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"] {
             assert!(
                 !client_models
                     .iter()
@@ -159,7 +163,7 @@
             "用户自定义别名不能被清理"
         );
         for expected in [
-            "gpt-5.5",
+            "gpt-5.6-luna",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "deepseek-flash",
@@ -176,7 +180,7 @@
         }
         // 目录壳位仍指向 DeepSeek 上游；历史 GPT 模型 id 不再被解析成 DeepSeek 模型。
         assert_eq!(
-            super::resolve_account_upstream_model(&account, "gpt-5.5"),
+            super::resolve_account_upstream_model(&account, "gpt-5.6-luna"),
             "deepseek-flash"
         );
         assert_eq!(
@@ -844,7 +848,8 @@
         let content = fs::read_to_string(&config_path).expect("read official config");
         assert_builtin_provider_config(&content);
         assert!(!content.contains("relay.example.com"), "config: {content}");
-        assert!(content.contains("model = \"gpt-5.5\""), "config: {content}");
+        assert!(content.contains("model = \"gpt-5.6-sol\""), "config: {content}");
+        assert!(!content.contains("gpt-5.5"), "config: {content}");
         assert!(
             !base_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).exists(),
             "快照只服务一次还原"
@@ -1304,12 +1309,12 @@ wire_api = "responses"
         );
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(config.contains("model = \"gpt-5.6-luna\""));
         assert!(!config.contains("model = \"gpt-5.6-sol\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         let catalog_path = super::deepseek_official_model_catalog_path(&base_dir);
         let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
-        assert!(catalog.contains("\"slug\": \"gpt-5.5\""));
+        assert!(catalog.contains("\"slug\": \"gpt-5.6-luna\""));
         assert!(catalog.contains("DeepSeek-V4-Flash"));
         assert!(catalog.contains("apply_patch_tool_type"));
         assert!(catalog.contains("shell_command"));
@@ -1352,13 +1357,13 @@ model_catalog_json = "cockpit-local-access-model-catalog.json"
         );
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(config.contains("model = \"gpt-5.6-luna\""));
         assert!(!config.contains("model = \"gpt-5.6-sol\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         let catalog_path = super::deepseek_official_model_catalog_path(&base_dir);
 
         let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
-        assert!(catalog.contains("\"slug\": \"gpt-5.5\""));
+        assert!(catalog.contains("\"slug\": \"gpt-5.6-luna\""));
         assert!(catalog.contains("\"slug\": \"gpt-5.6-sol\""));
         assert!(catalog.contains("DeepSeek-V4-Flash"));
         assert!(catalog.contains("apply_patch_tool_type"));
@@ -1414,7 +1419,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
 
         let catalog_path = super::deepseek_official_model_catalog_path(&instance_dir);
         let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(config.contains("model = \"gpt-5.6-luna\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         assert_eq!(
             catalog_path.file_name().and_then(|name| name.to_str()),
@@ -1433,7 +1438,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             .expect("models");
         let flash = models
             .iter()
-            .find(|model| model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.5"))
+            .find(|model| model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-luna"))
             .expect("flash shell slug");
         assert_eq!(
             flash

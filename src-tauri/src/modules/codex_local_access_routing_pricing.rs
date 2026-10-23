@@ -380,10 +380,7 @@ fn normalize_quota_limit_name_to_model_pattern(limit_name: &str) -> Option<Strin
 }
 
 fn normalize_quota_entitlement_key(value: &str) -> String {
-    value
-        .trim()
-        .to_ascii_lowercase()
-        .replace(['_', ' '], "-")
+    value.trim().to_ascii_lowercase().replace(['_', ' '], "-")
 }
 
 fn is_gpt_reserve_entitlement_name(value: &str) -> bool {
@@ -431,7 +428,9 @@ fn account_has_gpt_reserve_entitlement(account: &CodexAccount) -> bool {
         return false;
     };
     if raw.pointer("/rate_limit/allowed").and_then(Value::as_bool) != Some(false)
-        || raw.pointer("/rate_limit_upsell/banner_type").and_then(Value::as_str)
+        || raw
+            .pointer("/rate_limit_upsell/banner_type")
+            .and_then(Value::as_str)
             != Some("luna_reserve")
     {
         return false;
@@ -1111,6 +1110,7 @@ fn model_pricing(
 enum CodexBillingServiceTier {
     Standard,
     Priority,
+    Ultrafast,
     Flex,
 }
 
@@ -1152,7 +1152,7 @@ const fn codex_price(
     }
 }
 
-/// Default Codex/OpenAI price book for local cost estimation (USD / 1M tokens).
+/// Default model price book for local cost estimation (USD / 1M tokens).
 /// Bump `DEFAULT_MODEL_PRICING_VERSION` when defaults change so former presets
 /// can be replaced and historical estimates reprice.
 const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
@@ -1209,18 +1209,18 @@ const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
         priority: Some(codex_price(0.4, 0.04, 2.4)),
     },
     CodexLocalAccessPriceBookEntry {
-        model_id: "gpt-5.5",
-        session_long_context: true,
-        standard: codex_price(5.0, 0.5, 30.0),
-        priority: Some(codex_price(10.0, 1.0, 60.0)),
-    },
-    CodexLocalAccessPriceBookEntry {
         model_id: "codex-auto-review",
         session_long_context: true,
         standard: codex_price(5.0, 0.5, 30.0),
         priority: Some(codex_price(10.0, 1.0, 60.0)),
     },
-
+    // https://docs.x.ai/developers/pricing — global token rates; >=200k doubles all rates.
+    CodexLocalAccessPriceBookEntry {
+        model_id: "grok-4.7",
+        session_long_context: true,
+        standard: codex_price(2.0, 0.5, 6.0),
+        priority: None,
+    },
 ];
 
 fn derived_standard_long_price(standard: CodexLocalAccessPrice) -> CodexLocalAccessPrice {
@@ -1235,6 +1235,16 @@ fn derived_standard_long_price(standard: CodexLocalAccessPrice) -> CodexLocalAcc
 fn price_book_entry_to_model_pricing(
     entry: &CodexLocalAccessPriceBookEntry,
 ) -> CodexLocalAccessModelPricing {
+    if is_grok_47_pricing_model(entry.model_id) {
+        return model_pricing(
+            entry.model_id,
+            Some(200_000),
+            entry.standard,
+            Some(codex_price(4.0, 1.0, 12.0)),
+            None,
+            None,
+        );
+    }
     let long_threshold = if entry.session_long_context {
         Some(CODEX_LOCAL_ACCESS_LONG_CONTEXT_THRESHOLD_TOKENS)
     } else {
@@ -1380,6 +1390,24 @@ fn normalize_known_openai_codex_model(model: &str) -> Option<String> {
     None
 }
 
+fn is_grok_47_pricing_model(model_id: &str) -> bool {
+    let model = model_id.trim().rsplit('/').next().unwrap_or_default();
+    let model = if model.ends_with(')') {
+        model.rsplit_once('(').map_or(model, |(base, _)| base)
+    } else {
+        model
+    };
+    model.eq_ignore_ascii_case("grok-4.7") || model.eq_ignore_ascii_case("grok-4.7-latest")
+}
+
+fn normalize_known_pricing_model(model_id: &str) -> Option<String> {
+    if is_grok_47_pricing_model(model_id) {
+        Some("grok-4.7".to_string())
+    } else {
+        normalize_known_openai_codex_model(model_id)
+    }
+}
+
 fn price_book_entry_for_model(model_id: &str) -> Option<&'static CodexLocalAccessPriceBookEntry> {
     let trimmed = model_id.trim();
     if trimmed.is_empty() {
@@ -1392,7 +1420,7 @@ fn price_book_entry_for_model(model_id: &str) -> Option<&'static CodexLocalAcces
     {
         return Some(entry);
     }
-    let normalized = normalize_known_openai_codex_model(trimmed)?;
+    let normalized = normalize_known_pricing_model(trimmed)?;
     CODEX_LOCAL_ACCESS_PRICE_BOOK
         .iter()
         .chain(HISTORICAL_CODEX_MODEL_PRICE_BOOK.iter())
@@ -1402,9 +1430,7 @@ fn price_book_entry_for_model(model_id: &str) -> Option<&'static CodexLocalAcces
 fn parse_billing_service_tier(service_tier: Option<&str>) -> CodexBillingServiceTier {
     match service_tier.and_then(normalize_proxy_service_tier) {
         Some("priority") => CodexBillingServiceTier::Priority,
-        // “超高速”（ultrafast）目前没有公开的独立费率，按官方快速档同档估算，
-        // 避免落回标准档导致费用被明显低估。
-        Some("ultrafast") => CodexBillingServiceTier::Priority,
+        Some("ultrafast") => CodexBillingServiceTier::Ultrafast,
         Some("flex") => CodexBillingServiceTier::Flex,
         _ => CodexBillingServiceTier::Standard,
     }
@@ -1445,7 +1471,12 @@ fn should_apply_session_long_context(
         return false;
     };
     // OpenAI total prompt tokens include cached tokens.
-    usage.map(|item| item.input_tokens).unwrap_or(0) > threshold
+    let input_tokens = usage.map(|item| item.input_tokens).unwrap_or(0);
+    if is_grok_47_pricing_model(model_id) {
+        input_tokens >= threshold
+    } else {
+        input_tokens > threshold
+    }
 }
 
 fn pricing_has_explicit_priority_rates(pricing: &CodexLocalAccessModelPricing) -> bool {
@@ -1461,7 +1492,7 @@ fn pricing_has_explicit_priority_rates(pricing: &CodexLocalAccessModelPricing) -
 }
 
 /// Resolve unit prices after service_tier + long-context policy
-/// (absolute priority rates, else x2/x0.5; long multiplies input/cache/output).
+/// (absolute priority rates, else x2; Ultrafast x6, Flex x0.5; long composes).
 fn compute_effective_unit_prices(
     pricing: &CodexLocalAccessModelPricing,
     model_id: &str,
@@ -1476,8 +1507,8 @@ fn compute_effective_unit_prices(
     let mut tier_multiplier = 1.0_f64;
 
     let tier = parse_billing_service_tier(service_tier);
-    let use_priority_rates = tier == CodexBillingServiceTier::Priority
-        && pricing_has_explicit_priority_rates(pricing);
+    let use_priority_rates =
+        tier == CodexBillingServiceTier::Priority && pricing_has_explicit_priority_rates(pricing);
     match tier {
         CodexBillingServiceTier::Priority if pricing_has_explicit_priority_rates(pricing) => {
             if let Some(value) = pricing
@@ -1499,25 +1530,37 @@ fn compute_effective_unit_prices(
                 cache_price = value;
             }
         }
-        CodexBillingServiceTier::Priority => {
+        CodexBillingServiceTier::Priority if !is_grok_47_pricing_model(model_id) => {
             tier_multiplier = 2.0;
         }
-        CodexBillingServiceTier::Flex => {
+        CodexBillingServiceTier::Ultrafast if !is_grok_47_pricing_model(model_id) => {
+            // OpenAI Ultrafast uses 6x Standard, independently of Fast overrides.
+            // https://developers.openai.com/api/docs/models/gpt-6.1-sol
+            tier_multiplier = 6.0;
+        }
+        CodexBillingServiceTier::Flex if !is_grok_47_pricing_model(model_id) => {
             tier_multiplier = 0.5;
         }
-        CodexBillingServiceTier::Standard => {}
+        _ => {}
     }
 
     if should_apply_session_long_context(model_id, pricing, usage) {
         // Explicit Priority rates compose with the long-context multipliers.
         // Standard/Flex (and multiplier-based Priority) use the user's long prices.
-        let derived = derived_standard_long_price(codex_price(input_price, cache_price, output_price));
+        let derived = if is_grok_47_pricing_model(model_id) {
+            codex_price(input_price * 2.0, cache_price * 2.0, output_price * 2.0)
+        } else {
+            derived_standard_long_price(codex_price(input_price, cache_price, output_price))
+        };
         if pricing.standard_long_price_override && !use_priority_rates {
-            input_price = pricing.standard_long_input_usd_per_million
+            input_price = pricing
+                .standard_long_input_usd_per_million
                 .unwrap_or(derived.input_usd_per_million);
-            cache_price = pricing.standard_long_cached_input_usd_per_million
+            cache_price = pricing
+                .standard_long_cached_input_usd_per_million
                 .unwrap_or(derived.cached_input_usd_per_million);
-            output_price = pricing.standard_long_output_usd_per_million
+            output_price = pricing
+                .standard_long_output_usd_per_million
                 .unwrap_or(derived.output_usd_per_million);
         } else {
             input_price = derived.input_usd_per_million;
@@ -1602,7 +1645,8 @@ fn normalize_model_pricings(
             continue;
         }
 
-        let session_long = normalize_positive_tokens(pricing.long_context_threshold_tokens).is_some()
+        let session_long = normalize_positive_tokens(pricing.long_context_threshold_tokens)
+            .is_some()
             || is_openai_session_long_context_model(&model_id)
             || preset
                 .map(|item| item.session_long_context)
@@ -1610,6 +1654,7 @@ fn normalize_model_pricings(
         let long_context_threshold_tokens = if session_long {
             Some(
                 normalize_positive_tokens(pricing.long_context_threshold_tokens)
+                    .or_else(|| is_grok_47_pricing_model(&model_id).then_some(200_000))
                     .or_else(|| {
                         preset.and_then(|item| {
                             item.session_long_context
@@ -1629,19 +1674,34 @@ fn normalize_model_pricings(
                 .map(normalize_price_value),
             normalize_price_value(pricing.output_usd_per_million),
         );
-        let standard_long_price_override = session_long && pricing.standard_long_price_override
+        let standard_long_price_override = session_long
+            && pricing.standard_long_price_override
             && (pricing.standard_long_input_usd_per_million.is_some()
                 || pricing.standard_long_cached_input_usd_per_million.is_some()
                 || pricing.standard_long_output_usd_per_million.is_some());
         let standard_long = session_long.then(|| {
-            let derived = derived_standard_long_price(standard);
+            let derived = if is_grok_47_pricing_model(&model_id) {
+                codex_price(
+                    standard.input_usd_per_million * 2.0,
+                    standard.cached_input_usd_per_million * 2.0,
+                    standard.output_usd_per_million * 2.0,
+                )
+            } else {
+                derived_standard_long_price(standard)
+            };
             if standard_long_price_override {
                 codex_price(
-                    pricing.standard_long_input_usd_per_million.map(normalize_price_value)
+                    pricing
+                        .standard_long_input_usd_per_million
+                        .map(normalize_price_value)
                         .unwrap_or(derived.input_usd_per_million),
-                    pricing.standard_long_cached_input_usd_per_million.map(normalize_price_value)
+                    pricing
+                        .standard_long_cached_input_usd_per_million
+                        .map(normalize_price_value)
                         .unwrap_or(derived.cached_input_usd_per_million),
-                    pricing.standard_long_output_usd_per_million.map(normalize_price_value)
+                    pricing
+                        .standard_long_output_usd_per_million
+                        .map(normalize_price_value)
                         .unwrap_or(derived.output_usd_per_million),
                 )
             } else {
@@ -1850,10 +1910,10 @@ fn find_custom_model_pricing<'a>(
     {
         return Some(exact);
     }
-    let normalized = normalize_known_openai_codex_model(trimmed)?;
+    let normalized = normalize_known_pricing_model(trimmed)?;
     collection.model_pricings.iter().find(|item| {
         item.model_id.eq_ignore_ascii_case(normalized.as_str())
-            || normalize_known_openai_codex_model(&item.model_id).as_deref()
+            || normalize_known_pricing_model(&item.model_id).as_deref()
                 == Some(normalized.as_str())
     })
 }
@@ -1946,17 +2006,28 @@ fn calculate_usage_cost_usd(
 }
 
 pub fn estimate_model_token_cost_usd(
-    model: &str, input_tokens: u64, cached_input_tokens: u64, output_tokens: u64,
+    model: &str,
+    input_tokens: u64,
+    cached_input_tokens: u64,
+    output_tokens: u64,
 ) -> f64 {
     estimate_known_model_token_cost_usd(model, input_tokens, cached_input_tokens, output_tokens)
         .unwrap_or(0.0)
 }
 
 pub fn estimate_known_model_token_cost_usd(
-    model: &str, input_tokens: u64, cached_input_tokens: u64, output_tokens: u64,
+    model: &str,
+    input_tokens: u64,
+    cached_input_tokens: u64,
+    output_tokens: u64,
 ) -> Option<f64> {
     let pricing = resolve_base_model_pricing(None, model)?;
-    Some(calculate_usage_cost_usd_from_tokens(input_tokens, output_tokens, cached_input_tokens, &pricing))
+    Some(calculate_usage_cost_usd_from_tokens(
+        input_tokens,
+        output_tokens,
+        cached_input_tokens,
+        &pricing,
+    ))
 }
 
 fn calculate_usage_cost_usd_from_tokens(

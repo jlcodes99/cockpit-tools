@@ -37,6 +37,7 @@ fn count_sqlite_rows_to_update_for_options(
         skipped_unusable_database: false,
     };
     for db_path in sqlite_candidate_paths_for_options(data_dir, options) {
+        check_launch_visibility_budget("count_sqlite_changes")?;
         let item = count_sqlite_rows_to_update_for_db(
             &db_path,
             target_provider,
@@ -81,6 +82,7 @@ fn count_sqlite_rows_to_update_for_db(
             ));
         }
     };
+    configure_launch_visibility_connection(&connection)?;
     let columns = match read_threads_table_columns(&connection) {
         Ok(columns) => columns,
         Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
@@ -251,6 +253,7 @@ fn update_sqlite_provider_for_options(
     };
     let mut total = 0usize;
     for db_path in sqlite_candidate_paths_for_options(data_dir, options) {
+        check_launch_visibility_budget("write_sqlite_changes")?;
         total += update_sqlite_provider_for_db(
             &db_path,
             target_provider,
@@ -296,6 +299,7 @@ fn update_sqlite_provider_for_db(
                 error
             )
         })?;
+    configure_launch_visibility_connection(&connection)?;
     let columns = match read_threads_table_columns(&connection) {
         Ok(columns) => columns,
         Err(error) if modules::db::is_unusable_sqlite_database_error(&error) => {
@@ -409,6 +413,7 @@ fn update_sqlite_provider_for_db(
         }
     }
     for (thread_id, cwd) in cwd_normalizations {
+        check_launch_visibility_budget("write_sqlite_cwd")?;
         updated_rows += transaction
             .execute(
                 "UPDATE threads SET cwd = ?1 WHERE id = ?2 AND COALESCE(cwd, '') <> ?1",
@@ -416,6 +421,7 @@ fn update_sqlite_provider_for_db(
             )
             .map_err(|error| format_sqlite_write_error(db_path, &error))?;
     }
+    check_launch_visibility_budget("commit_sqlite_changes")?;
     if let Err(error) = transaction.commit() {
         if modules::db::is_unusable_sqlite_database_error(&error) {
             log_skipped_sqlite_database(db_path, &error.to_string());

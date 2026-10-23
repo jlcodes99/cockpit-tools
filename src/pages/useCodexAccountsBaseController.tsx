@@ -1,3 +1,7 @@
+import { prepareCodexServiceJoins } from "../utils/codexServiceJoin";
+import { chatGptPlanErrorKey, listChatGptPlanAccounts } from "../services/chatgptPlanService";
+import { implicitCodexServiceAccountIds } from "../utils/chatgptPlanOverview";
+import { canChooseCodexServiceAuthorization } from "../utils/codexAccountServiceNavigation";
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { listenSafely as listen } from "../utils/tauriEventListener";
 import { refreshCodexQuotaWithFeedback } from "../utils/codexQuotaRefreshFeedback";
@@ -13,7 +17,6 @@ import { useModalErrorState } from "../components/ModalErrorMessage";
 import { type CodexAccountGroup, assignAccountsToCodexGroup, getCodexAccountGroups, invalidateCodexGroupCache } from "../services/codexAccountGroupService";
 import { formatCodexResetTime, formatCodexResetTimeAbsolute, isCodexOpaqueAccessTokenOnlyAccount, type CodexBatchDeleteJobStatus, type CodexResetCredit, type CodexResetCreditsSnapshot } from "../types/codex";
 import { buildCodexAccountPresentation } from "../presentation/platformAccountPresentation";
-import { type CodexWindowStats } from "../utils/codexWindowStats";
 import { readCodexImportSyncApiService, writeCodexImportSyncApiService } from "../utils/codexImportPreferences";
 import { CODEX_OPEN_ADD_ACCOUNT_EVENT, takePendingCodexOpenAddAccountRequest, type CodexOAuthBindingRetryDetail, type CodexOpenAddAccountDetail } from "../utils/codexAddAccountRequest";
 import { UnlistenFn } from "@tauri-apps/api/event";
@@ -38,7 +41,6 @@ import { readCodexCustomSortActive } from "../utils/codexAccountOverview";
 import { useSponsorStore } from "../stores/useSponsorStore";
 import { buildCodexExportContent, buildCodexExportFileNameBase, hasCodexExportAgentIdentity, hasCodexExportSensitiveNotes, type CodexExportFormat } from "../utils/codexExportFormats";
 import { readAccountsOverviewFilterField, readAccountsOverviewFilterPersistenceEnabled, readAccountsOverviewFilterStringArray, removeAccountsOverviewFilterField, writeAccountsOverviewFilterField } from "../utils/accountsOverviewFilterPersistence";
-import { isCodexLocalAccessRiskNoticeDismissed, setCodexLocalAccessRiskNoticeDismissed, type CodexLocalAccessRiskNoticeAction } from "../utils/codexLocalAccessRiskNotice";
 import { getMfaOtpToken, loadSavedMfaRecords, parseMfaCredentialInput, upsertSavedMfaRecord, type MfaRecord } from "../utils/mfaVault";
 import { findFirstMailVerificationCode } from "../utils/mailVerificationCode";
 import { ACTIVE_GROUP_ID_FIELD, buildCodexAccountNoteForm, buildExportFileName, CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY, CODEX_FILTER_PERSISTENCE_SCOPE, CODEX_HIDE_RELAY_QUOTA_LEGACY_KEY, CODEX_LOCAL_ACCESS_EXPANDED_KEY, CODEX_OVERVIEW_LAYOUT_MODE_KEY, EMPTY_CODEX_ACCOUNT_NOTE_FORM, EXPIRY_FILTER_FIELD, FILTER_TYPES_FIELD, getCodexAccountNoteTitle, getDirectoryPath, GROUP_FILTER_FIELD, hasCodexAccountNoteDetails, hasCodexAccountNoteFormDetails, isHttpLikeUrl, joinFilePath, normalizeCodexOverviewLayoutMode, normalizeHttpBaseUrl, readStoredLocalAccessAddressKind, SEARCH_QUERY_FIELD, shouldAutoHideBatchDeleteJob, type CodexAccountNoteFieldErrors, type CodexAccountNoteFormState, type CodexAccountNoteMailPreviewSnapshot, type CodexAccountNoteMailPreviewState, type CodexBatchImportFilter, type CodexCliLaunchModalState, type CodexOverviewGeneralConfig, type CodexOverviewLayoutMode } from "./codexAccountsControllerModel";
@@ -51,13 +53,6 @@ export function useCodexAccountsBaseController() {
     const sponsorModule = useSponsorStore((state) => state.state.sponsorModule);
     const fetchSponsorState = useSponsorStore((state) => state.fetchState);
     const [activeTab, setActiveTab] = useState<CodexTab>("overview");
-    const [sessionWindowStats, setSessionWindowStats] = useState<{
-      ready: boolean;
-      byAccountId: Record<
-        string,
-        { primary?: CodexWindowStats; secondary?: CodexWindowStats }
-      >;
-    }>({ ready: false, byAccountId: {} });
     const [wakeupPresetManagerSignal, setWakeupPresetManagerSignal] = useState(0);
     const [fullQuotaWakeupOpenRequest, setFullQuotaWakeupOpenRequest] =
       useState<CodexWakeupTestOpenRequest | null>(null);
@@ -100,7 +95,7 @@ export function useCodexAccountsBaseController() {
       report: reportExportModalError,
       clear: clearExportModalError,
     } = useModalErrorState();
-  
+
     // ─── Codex 账号分组 ────────────────────────────────────────────
     const [codexGroups, setCodexGroups] = useState<CodexAccountGroup[]>([]);
     const [groupFilter, setGroupFilter] = useState<string[]>(() =>
@@ -197,10 +192,6 @@ export function useCodexAccountsBaseController() {
       useState(false);
     const [localAccessHideSubmitting, setLocalAccessHideSubmitting] =
       useState(false);
-    const [localAccessRiskNoticeAction, setLocalAccessRiskNoticeAction] =
-      useState<CodexLocalAccessRiskNoticeAction | null>(null);
-    const [localAccessRiskNoticeRemember, setLocalAccessRiskNoticeRemember] =
-      useState(false);
     const [localAccessCopiedField, setLocalAccessCopiedField] = useState<
       "baseUrl" | "apiKey" | null
     >(null);
@@ -214,9 +205,6 @@ export function useCodexAccountsBaseController() {
       useState(false);
     const [showLocalAccessQuotaStatsModal, setShowLocalAccessQuotaStatsModal] =
       useState(false);
-    const localAccessRiskNoticeResolverRef = useRef<
-      ((accepted: boolean) => void) | null
-    >(null);
     const [localAccessDetailsExpanded, setLocalAccessDetailsExpanded] =
       useState<boolean>(() => {
         try {
@@ -237,6 +225,8 @@ export function useCodexAccountsBaseController() {
         setExternalImportSyncError(null);
         if (!readCodexImportSyncApiService()) return;
         try {
+          accountIds = implicitCodexServiceAccountIds(accountIds, await listChatGptPlanAccounts());
+          if (!accountIds.length) return;
           const result =
             await codexLocalAccessService.appendCodexLocalAccessAccounts(
               accountIds,
@@ -275,14 +265,14 @@ export function useCodexAccountsBaseController() {
       }
       return names;
     }, [codexGroups]);
-  
+
     const codexAddTargetGroup = useMemo(() => {
       if (!codexAddTargetGroupId) return null;
       return (
         codexGroups.find((group) => group.id === codexAddTargetGroupId) ?? null
       );
     }, [codexAddTargetGroupId, codexGroups]);
-  
+
     const resolveValidCodexGroupId = useCallback(
       (groupId?: string | null) => {
         const normalized = groupId?.trim();
@@ -293,7 +283,7 @@ export function useCodexAccountsBaseController() {
       },
       [codexGroups],
     );
-  
+
     const assignCodexAccountsToTargetGroup = useCallback(
       async (
         targetAccounts: Array<CodexAccount | null | undefined>,
@@ -301,7 +291,7 @@ export function useCodexAccountsBaseController() {
       ) => {
         const resolvedGroupId = resolveValidCodexGroupId(targetGroupId);
         if (!resolvedGroupId) return;
-  
+
         const accountIds = Array.from(
           new Set(
             targetAccounts
@@ -310,66 +300,28 @@ export function useCodexAccountsBaseController() {
           ),
         );
         if (accountIds.length === 0) return;
-  
+
         await assignAccountsToCodexGroup(resolvedGroupId, accountIds);
         await reloadCodexGroups();
       },
       [codexAddTargetGroupId, reloadCodexGroups, resolveValidCodexGroupId],
     );
-  
+
     useEffect(() => {
       reloadCodexGroups();
     }, [reloadCodexGroups]);
-  
-    useEffect(
-      () => () => {
-        if (localAccessRiskNoticeResolverRef.current) {
-          localAccessRiskNoticeResolverRef.current(false);
-          localAccessRiskNoticeResolverRef.current = null;
-        }
-      },
-      [],
-    );
-  
-    const closeLocalAccessRiskNotice = useCallback(
-      (accepted: boolean) => {
-        if (accepted && localAccessRiskNoticeRemember) {
-          setCodexLocalAccessRiskNoticeDismissed(true);
-        }
-        const resolver = localAccessRiskNoticeResolverRef.current;
-        localAccessRiskNoticeResolverRef.current = null;
-        setLocalAccessRiskNoticeAction(null);
-        setLocalAccessRiskNoticeRemember(false);
-        resolver?.(accepted);
-      },
-      [localAccessRiskNoticeRemember],
-    );
-  
-    const requestLocalAccessRiskNotice = useCallback(
-      (action: CodexLocalAccessRiskNoticeAction): Promise<boolean> => {
-        if (isCodexLocalAccessRiskNoticeDismissed()) {
-          return Promise.resolve(true);
-        }
-        setLocalAccessRiskNoticeRemember(false);
-        setLocalAccessRiskNoticeAction(action);
-        return new Promise<boolean>((resolve) => {
-          localAccessRiskNoticeResolverRef.current = resolve;
-        });
-      },
-      [],
-    );
-  
+
     const toggleGroupFilterValue = useCallback((groupId: string) => {
       setGroupFilter((prev) => {
         if (prev.includes(groupId)) return prev.filter((id) => id !== groupId);
         return [...prev, groupId];
       });
     }, []);
-  
+
     const clearGroupFilter = useCallback(() => {
       setGroupFilter([]);
     }, []);
-  
+
     /** Drop stale group filter IDs after groups are loaded (not on empty initial state). */
     useEffect(() => {
       if (!codexGroupsReady) return;
@@ -383,7 +335,7 @@ export function useCodexAccountsBaseController() {
         setActiveGroupId(null);
       }
     }, [activeGroupId, codexGroups, codexGroupsReady, setActiveGroupId]);
-  
+
     const [overviewLayoutMode, setOverviewLayoutMode] =
       useState<CodexOverviewLayoutMode>(() => {
         try {
@@ -485,8 +437,8 @@ export function useCodexAccountsBaseController() {
       scrollKey: accountNoteErrorScrollKey,
       set: setAccountNoteError,
     } = useModalErrorState();
-  
-  
+
+
     // Use the common hook WITHOUT oauthService since Codex uses Tauri event-based OAuth
     // Codex batch-delete confirm is wired after confirmCodexDelete is defined.
     // Built-in Enter confirm is disabled here so it cannot call generic confirmDelete.
@@ -536,7 +488,7 @@ export function useCodexAccountsBaseController() {
       onExternalImportCompleted: handleExternalImportedAccounts,
       disableEnterConfirmDelete: true,
     });
-  
+
     const {
       t,
       maskAccountText,
@@ -613,7 +565,7 @@ export function useCodexAccountsBaseController() {
       saveJsonFile,
     } = page;
     const [isAllFilteredSelected, setIsAllFilteredSelected] = useState(false);
-  
+
     /** Clear every overview filter so the table matches the full account total. */
     const clearAllOverviewFilters = useCallback(() => {
       setSearchQuery("");
@@ -632,22 +584,45 @@ export function useCodexAccountsBaseController() {
       [],
     );
 
+    const explicitApiServiceChoiceRef = useRef(false);
+
     const syncImportedAccountsToApiService = useCallback(
       async (accountIds: string[], force = false) => {
         if ((!syncImportedToApiService && !force) || accountIds.length === 0)
           return null;
-        const result =
-          await codexLocalAccessService.appendCodexLocalAccessAccounts(
-            accountIds,
-          );
-        setLocalAccessState(result.state);
-        if (result.syncedAccountIds.length > 0) {
-          await ensureLocalAccessEntryVisible();
-          setImportApiServiceGuideCount(result.syncedAccountIds.length);
+        const failures: string[] = [];
+        if (explicitApiServiceChoiceRef.current) {
+          explicitApiServiceChoiceRef.current = false;
+          const imported = await codexService.listCodexAccounts();
+          const candidates = imported.filter((account) => accountIds.includes(account.id));
+          const grants = candidates.some(canChooseCodexServiceAuthorization) ? await listChatGptPlanAccounts() : [];
+          const prepared = await prepareCodexServiceJoins(candidates, grants,
+            localAccessState?.collection?.accountIds ?? [], setLocalAccessState);
+          failures.push(...prepared.failures.map(({ accountId, error }) => {
+            const account = candidates.find((candidate) => candidate.id === accountId);
+            const label = maskAccountText(account ? resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")) : accountId);
+            const raw = String(error).replace(/^Error:\s*/, "");
+            return `${label}: ${raw.startsWith("CHATGPT_PLAN_") ? t(chatGptPlanErrorKey(error)) : raw}`;
+          }));
+          if (prepared.resumedIds.length) { await ensureLocalAccessEntryVisible(); setImportApiServiceGuideCount(prepared.resumedIds.length); }
+          accountIds = prepared.localIds;
         }
+        let result = null;
+        if (accountIds.length) {
+          accountIds = implicitCodexServiceAccountIds(accountIds, await listChatGptPlanAccounts());
+          if (accountIds.length) {
+            result = await codexLocalAccessService.appendCodexLocalAccessAccounts(accountIds);
+            setLocalAccessState(result.state);
+            if (result.syncedAccountIds.length > 0) {
+              await ensureLocalAccessEntryVisible();
+              setImportApiServiceGuideCount(result.syncedAccountIds.length);
+            }
+          }
+        }
+        if (failures.length) throw new Error(failures.join("\n"));
         return result;
       },
-      [ensureLocalAccessEntryVisible, syncImportedToApiService],
+      [ensureLocalAccessEntryVisible, localAccessState?.collection?.accountIds, maskAccountText, syncImportedToApiService, t],
     );
 
     const reauthTargetAccountId = reauthTargetAccount?.id?.trim() ?? "";
@@ -702,12 +677,12 @@ export function useCodexAccountsBaseController() {
     );
     const fetchCodexAccounts = store.fetchAccounts;
     const fetchCodexCurrentAccount = store.fetchCurrentAccount;
-  
+
     useEffect(() => {
       codexAccountsRef.current = store.accounts;
       codexCurrentAccountRef.current = store.currentAccount;
     }, [store.accounts, store.currentAccount]);
-  
+
     const getBatchDeleteRefreshOptions = useCallback(() => {
       const removeIds = batchDeleteRemoveIdsRef.current;
       const accounts = codexAccountsRef.current;
@@ -719,7 +694,7 @@ export function useCodexAccountsBaseController() {
         allowEmptyCurrent: !!currentAccount && removeIds.has(currentAccount.id),
       };
     }, []);
-  
+
     const refreshAccountsAfterBatchDelete = useCallback(async () => {
       const { allowEmptyAccounts, allowEmptyCurrent } =
         getBatchDeleteRefreshOptions();
@@ -736,7 +711,7 @@ export function useCodexAccountsBaseController() {
       getBatchDeleteRefreshOptions,
       reloadCodexGroups,
     ]);
-  
+
     const refreshAccountsDuringBatchDelete = useCallback(async () => {
       const { allowEmptyAccounts, allowEmptyCurrent } =
         getBatchDeleteRefreshOptions();
@@ -747,11 +722,11 @@ export function useCodexAccountsBaseController() {
       fetchCodexCurrentAccount,
       getBatchDeleteRefreshOptions,
     ]);
-  
+
     useEffect(() => {
       const jobId = batchDeleteJob?.jobId;
       if (!jobId || batchDeleteJob.status !== "running") return;
-  
+
       let disposed = false;
       let timer: number | null = null;
       const pollJob = async () => {
@@ -774,7 +749,7 @@ export function useCodexAccountsBaseController() {
           timer = window.setTimeout(pollJob, 250);
         }
       };
-  
+
       timer = window.setTimeout(pollJob, 100);
       return () => {
         disposed = true;
@@ -785,7 +760,7 @@ export function useCodexAccountsBaseController() {
       batchDeleteJob?.status,
       refreshAccountsDuringBatchDelete,
     ]);
-  
+
     useEffect(() => {
       if (!shouldAutoHideBatchDeleteJob(batchDeleteJob)) return;
       let disposed = false;
@@ -807,7 +782,7 @@ export function useCodexAccountsBaseController() {
         disposed = true;
       };
     }, [batchDeleteJob, refreshAccountsAfterBatchDelete]);
-  
+
     const cleanupBatchImportListeners = useCallback(() => {
       for (const unlisten of batchImportUnlistenersRef.current) {
         try {
@@ -818,9 +793,9 @@ export function useCodexAccountsBaseController() {
       }
       batchImportUnlistenersRef.current = [];
     }, []);
-  
+
     useEffect(() => cleanupBatchImportListeners, [cleanupBatchImportListeners]);
-  
+
     const resetBatchImportState = useCallback(() => {
       cleanupBatchImportListeners();
       batchImportSessionIdRef.current = null;
@@ -843,7 +818,7 @@ export function useCodexAccountsBaseController() {
         // ignore storage failures
       }
     }, [cleanupBatchImportListeners]);
-  
+
     useEffect(() => {
       let disposed = false;
       const restoreBatchImportSession = async () => {
@@ -908,7 +883,7 @@ export function useCodexAccountsBaseController() {
         disposed = true;
       };
     }, []);
-  
+
     const batchImportCounts = useMemo(() => {
       const items = batchImportPreview?.items ?? [];
       return {
@@ -919,7 +894,7 @@ export function useCodexAccountsBaseController() {
         invalid: items.filter((item) => item.status === "invalid").length,
       };
     }, [batchImportPreview]);
-  
+
     const batchImportVisibleItems = useMemo(() => {
       const items = batchImportPreview?.items ?? [];
       return batchImportFilter === "ready"
@@ -964,7 +939,7 @@ export function useCodexAccountsBaseController() {
           ),
         )
       : 0;
-  
+
     const openCodexAddModal = useCallback(
       (
         tab: string,
@@ -1009,9 +984,11 @@ export function useCodexAccountsBaseController() {
       },
       [activeGroupId, openAddModal, resolveValidCodexGroupId],
     );
-  
+
     const closeCodexAddModal = useCallback(() => {
       if (importing) return;
+      explicitApiServiceChoiceRef.current = false;
+      setSyncImportedToApiService(readCodexImportSyncApiService());
       setReauthTargetAccount(null);
       setReauthRetrySwitchAccountId(null);
       setReauthRetryLaunchAfterSwitch(undefined);
@@ -1026,14 +1003,12 @@ export function useCodexAccountsBaseController() {
       setPendingWebSessionImport(null);
       closeAddModal();
     }, [closeAddModal, importing]);
-  
+
     // Keep the shared modal independent from the currently visible Codex page.
     useEffect(() => {
       const openFromRequest = async (detail?: CodexOpenAddAccountDetail) => {
-        if (detail?.autoJoinApiService) {
-          setSyncImportedToApiService(true);
-          writeCodexImportSyncApiService(true);
-        }
+        explicitApiServiceChoiceRef.current = Boolean(detail?.autoJoinApiService);
+        if (detail?.autoJoinApiService) setSyncImportedToApiService(true);
         let targetAccount = detail?.targetAccountId
           ? (codexAccountsRef.current.find(
               (account) => account.id === detail.targetAccountId,
@@ -1074,7 +1049,7 @@ export function useCodexAccountsBaseController() {
         );
       };
     }, [fetchCodexAccounts, openCodexAddModal]);
-  
+
     const handleCopyReauthEmail = useCallback(async () => {
       if (!reauthTargetEmail) return;
       try {
@@ -1083,7 +1058,7 @@ export function useCodexAccountsBaseController() {
         window.setTimeout(() => setReauthEmailCopied(false), 1200);
       } catch {}
     }, [reauthTargetEmail]);
-  
+
     useEffect(() => {
       if (showAddModal) return;
       setReauthTargetAccount(null);
@@ -1098,7 +1073,7 @@ export function useCodexAccountsBaseController() {
       setPendingOAuthFieldErrors({});
       setPendingOAuthNoteModalOpen(false);
     }, [showAddModal]);
-  
+
     useEffect(() => {
       if (!filterPersistenceEnabled) {
         removeAccountsOverviewFilterField(
@@ -1113,7 +1088,7 @@ export function useCodexAccountsBaseController() {
         searchQuery,
       );
     }, [filterPersistenceEnabled, filterPersistenceScope, searchQuery]);
-  
+
     useEffect(() => {
       if (!filterPersistenceEnabled) {
         removeAccountsOverviewFilterField(
@@ -1128,14 +1103,14 @@ export function useCodexAccountsBaseController() {
         filterTypes,
       );
     }, [filterPersistenceEnabled, filterPersistenceScope, filterTypes]);
-  
+
     useEffect(() => {
       removeAccountsOverviewFilterField(
         filterPersistenceScope,
         EXPIRY_FILTER_FIELD,
       );
     }, [filterPersistenceScope]);
-  
+
     useEffect(() => {
       if (!filterPersistenceEnabled) {
         removeAccountsOverviewFilterField(
@@ -1150,7 +1125,7 @@ export function useCodexAccountsBaseController() {
         groupFilter,
       );
     }, [filterPersistenceEnabled, filterPersistenceScope, groupFilter]);
-  
+
     useEffect(() => {
       if (!filterPersistenceEnabled) {
         removeAccountsOverviewFilterField(
@@ -1165,7 +1140,7 @@ export function useCodexAccountsBaseController() {
         activeGroupId,
       );
     }, [activeGroupId, filterPersistenceEnabled, filterPersistenceScope]);
-  
+
     const reloadLocalAccessState = useCallback(async () => {
       const requestSeq = ++localAccessStateRequestSeqRef.current;
       try {
@@ -1185,7 +1160,7 @@ export function useCodexAccountsBaseController() {
         });
       }
     }, [setMessage, t]);
-  
+
     const reloadLocalAccessEntryVisibility = useCallback(async () => {
       try {
         const config =
@@ -1200,7 +1175,7 @@ export function useCodexAccountsBaseController() {
         );
       }
     }, []);
-  
+
     const reloadHideRelayQuota = useCallback(async () => {
       try {
         const config =
@@ -1227,7 +1202,7 @@ export function useCodexAccountsBaseController() {
         console.error("Failed to load codex hide-relay-quota preference:", error);
       }
     }, []);
-  
+
     const reloadLocalAccessLaunchCurrent = useCallback(async () => {
       try {
         const instances = await codexInstanceService.listInstances();
@@ -1242,7 +1217,7 @@ export function useCodexAccountsBaseController() {
         );
       }
     }, []);
-  
+
     const exportFormatOptions = useMemo<SingleSelectFilterOption[]>(
       () => [
         {
@@ -1264,11 +1239,11 @@ export function useCodexAccountsBaseController() {
       ],
       [t],
     );
-  
+
     useEffect(() => {
       void reloadLocalAccessState();
     }, [reloadLocalAccessState]);
-  
+
     useEffect(() => {
       if (
         !localAccessState?.running ||
@@ -1285,19 +1260,19 @@ export function useCodexAccountsBaseController() {
       localAccessState?.running,
       reloadLocalAccessState,
     ]);
-  
+
     useEffect(() => {
       void reloadLocalAccessEntryVisibility();
     }, [reloadLocalAccessEntryVisibility]);
-  
+
     useEffect(() => {
       void reloadHideRelayQuota();
     }, [reloadHideRelayQuota]);
-  
+
     useEffect(() => {
       void reloadLocalAccessLaunchCurrent();
     }, [reloadLocalAccessLaunchCurrent]);
-  
+
     useEffect(() => {
       try {
         localStorage.setItem(
@@ -1308,7 +1283,7 @@ export function useCodexAccountsBaseController() {
         // ignore persistence failures
       }
     }, [localAccessDetailsExpanded]);
-  
+
     useEffect(() => {
       const handleConfigUpdated = () => {
         void reloadLocalAccessEntryVisibility();
@@ -1324,7 +1299,7 @@ export function useCodexAccountsBaseController() {
       reloadHideRelayQuota,
       reloadLocalAccessLaunchCurrent,
     ]);
-  
+
     useEffect(() => {
       const handleLocalAccessUpdated = () => {
         void reloadLocalAccessState();
@@ -1360,13 +1335,13 @@ export function useCodexAccountsBaseController() {
         unlisten?.();
       };
     }, [reloadLocalAccessLaunchCurrent, reloadLocalAccessState]);
-  
+
     useEffect(() => {
       if (!localAccessEntryVisible) {
         setShowLocalAccessModal(false);
       }
     }, [localAccessEntryVisible]);
-  
+
     useEffect(() => {
       if (!showExportModal) {
         return;
@@ -1382,7 +1357,7 @@ export function useCodexAccountsBaseController() {
       setIncludeExportSensitiveNotes(false);
       clearExportModalError();
     }, [clearExportModalError, exportJsonContent, showExportModal]);
-  
+
     useEffect(() => {
       if (!showExportModal) {
         return;
@@ -1395,11 +1370,11 @@ export function useCodexAccountsBaseController() {
       setFormattedSavingExportDocumentId(null);
       clearExportModalError();
     }, [clearExportModalError, exportFormat, showExportModal]);
-  
+
     const exportHasAgentIdentity = useMemo(() => {
       return hasCodexExportAgentIdentity(exportJsonContent);
     }, [exportJsonContent]);
-  
+
     const formattedExportResult = useMemo(() => {
       const exportFormatSupportsSensitiveNotes =
         exportFormat !== "sub2api" && exportFormat !== "auth_json";
@@ -1452,9 +1427,9 @@ export function useCodexAccountsBaseController() {
       exportJsonContent,
       includeExportSensitiveNotes,
     ]);
-  
+
     const formattedExportContent = formattedExportResult.content;
-  
+
     useEffect(() => {
       if (!showExportModal || !formattedExportResult.failed) {
         return;
@@ -1471,7 +1446,7 @@ export function useCodexAccountsBaseController() {
       showExportModal,
       t,
     ]);
-  
+
     const exportHasSensitiveNotes = useMemo(() => {
       return hasCodexExportSensitiveNotes(exportJsonContent);
     }, [exportJsonContent]);
@@ -1479,20 +1454,20 @@ export function useCodexAccountsBaseController() {
       exportHasSensitiveNotes &&
       exportFormat !== "sub2api" &&
       exportFormat !== "auth_json";
-  
+
     const formattedExportJsonContent = useMemo(() => {
       return formattedExportContent.type === "single"
         ? formattedExportContent.jsonContent
         : "";
     }, [formattedExportContent]);
-  
+
     const formattedExportDocuments = useMemo(() => {
       if (formattedExportContent.type !== "multiple") {
         return [];
       }
       return formattedExportContent.documents;
     }, [formattedExportContent]);
-  
+
     const handleExportByIds = useCallback(
       async (ids: string[], fileNameBase?: string) => {
         setExportFileNameBase(fileNameBase || "codex_accounts");
@@ -1500,7 +1475,7 @@ export function useCodexAccountsBaseController() {
       },
       [handleBaseExportByIds],
     );
-  
+
     const handleExport = useCallback(
       async (scopeIds?: string[]) => {
         setExportFileNameBase("codex_accounts");
@@ -1508,7 +1483,7 @@ export function useCodexAccountsBaseController() {
       },
       [handleBaseExport],
     );
-  
+
     const handleCloseExportModal = useCallback(() => {
       closeExportModal();
       setExportFormat("cockpit_tools");
@@ -1522,12 +1497,12 @@ export function useCodexAccountsBaseController() {
       setFormattedSavingExportDocumentId(null);
       clearExportModalError();
     }, [clearExportModalError, closeExportModal]);
-  
+
     const handleToggleExportJsonHidden = useCallback(() => {
       clearExportModalError();
       toggleExportJsonHidden();
     }, [clearExportModalError, toggleExportJsonHidden]);
-  
+
     const copyFormattedExportJson = useCallback(async () => {
       if (!formattedExportJsonContent || formattedExportDocuments.length > 0)
         return;
@@ -1549,7 +1524,7 @@ export function useCodexAccountsBaseController() {
       reportExportModalError,
       t,
     ]);
-  
+
     const saveFormattedExportJson = useCallback(async () => {
       if (
         !formattedExportJsonContent ||
@@ -1591,7 +1566,7 @@ export function useCodexAccountsBaseController() {
       saveJsonFile,
       t,
     ]);
-  
+
     const saveFormattedExportDocument = useCallback(
       async (documentId: string, jsonContent: string, fileNameBase: string) => {
         if (!jsonContent || formattedSavingExportDocumentId) return;
@@ -1624,7 +1599,7 @@ export function useCodexAccountsBaseController() {
         t,
       ],
     );
-  
+
     const saveAllFormattedExportDocuments = useCallback(async () => {
       if (!formattedExportDocuments.length || formattedBatchSavingExportJson)
         return;
@@ -1637,7 +1612,7 @@ export function useCodexAccountsBaseController() {
         } catch (error) {
           console.warn("[CodexExport] get downloads dir failed:", error);
         }
-  
+
         const selected = await openFileDialog({
           directory: true,
           multiple: false,
@@ -1646,7 +1621,7 @@ export function useCodexAccountsBaseController() {
         if (!selected || Array.isArray(selected)) {
           return;
         }
-  
+
         for (const document of formattedExportDocuments) {
           const targetPath = joinFilePath(
             selected,
@@ -1657,7 +1632,7 @@ export function useCodexAccountsBaseController() {
             content: document.jsonContent,
           });
         }
-  
+
         setFormattedExportSavedPath(selected);
         setFormattedExportSavedPathIsDirectory(true);
         setFormattedExportPathCopied(false);
@@ -1676,12 +1651,12 @@ export function useCodexAccountsBaseController() {
       reportExportModalError,
       t,
     ]);
-  
+
     const canOpenFormattedExportSavedDirectory = useMemo(
       () => Boolean(formattedExportSavedPath),
       [formattedExportSavedPath],
     );
-  
+
     const openFormattedExportSavedDirectory = useCallback(async () => {
       if (!formattedExportSavedPath) return;
       try {
@@ -1704,7 +1679,7 @@ export function useCodexAccountsBaseController() {
       reportExportModalError,
       t,
     ]);
-  
+
     const copyFormattedExportSavedPath = useCallback(async () => {
       if (!formattedExportSavedPath) return;
       try {
@@ -1724,12 +1699,12 @@ export function useCodexAccountsBaseController() {
       reportExportModalError,
       t,
     ]);
-  
+
     const formattedExportModalCustomContent = useMemo(() => {
       if (!formattedExportDocuments.length) {
         return undefined;
       }
-  
+
       return (
         <>
           <div className="export-json-actions">
@@ -1753,7 +1728,7 @@ export function useCodexAccountsBaseController() {
                 : t("codex.exportFormat.downloadAll", "一键下载全部")}
             </button>
           </div>
-  
+
           <div className="export-json-card-list">
             {formattedExportDocuments.map((document, index) => (
               <div key={document.id} className="export-json-card">
@@ -1792,7 +1767,7 @@ export function useCodexAccountsBaseController() {
                     </button>
                   </div>
                 </div>
-  
+
                 <textarea
                   className="export-json-textarea export-json-card-textarea"
                   readOnly
@@ -1806,7 +1781,7 @@ export function useCodexAccountsBaseController() {
               </div>
             ))}
           </div>
-  
+
           {formattedExportSavedPath ? (
             <div className="export-json-path-box">
               <div className="export-json-path-title">
@@ -1860,7 +1835,7 @@ export function useCodexAccountsBaseController() {
       t,
       handleToggleExportJsonHidden,
     ]);
-  
+
     useEffect(() => {
       try {
         localStorage.setItem(CODEX_OVERVIEW_LAYOUT_MODE_KEY, overviewLayoutMode);
@@ -1868,7 +1843,7 @@ export function useCodexAccountsBaseController() {
         // ignore persistence failures
       }
     }, [overviewLayoutMode]);
-  
+
     const handleChangeOverviewLayoutMode = useCallback(
       (mode: CodexOverviewLayoutMode) => {
         setOverviewLayoutMode(mode);
@@ -1878,13 +1853,13 @@ export function useCodexAccountsBaseController() {
       },
       [setViewMode],
     );
-  
+
     useEffect(() => {
       if (overviewLayoutMode !== "compact" && viewMode !== overviewLayoutMode) {
         setViewMode(overviewLayoutMode);
       }
     }, [overviewLayoutMode, setViewMode, viewMode]);
-  
+
     const toggleFilterTypeValue = useCallback((value: string) => {
       setFilterTypes((prev) => {
         if (prev.includes(value)) {
@@ -1893,11 +1868,11 @@ export function useCodexAccountsBaseController() {
         return [...prev, value];
       });
     }, []);
-  
+
     const clearFilterTypes = useCallback(() => {
       setFilterTypes([]);
     }, []);
-  
+
     const validateApiKeyCredentialInputs = useCallback(
       (
         apiKeyRaw: string,
@@ -1921,7 +1896,7 @@ export function useCodexAccountsBaseController() {
             ),
           };
         }
-  
+
         const rawBaseUrl = apiBaseUrlRaw.trim();
         if (!rawBaseUrl) {
           return { ok: true, apiKey };
@@ -1953,7 +1928,7 @@ export function useCodexAccountsBaseController() {
       },
       [t],
     );
-  
+
     const {
       accounts,
       loading,
@@ -1971,12 +1946,12 @@ export function useCodexAccountsBaseController() {
       updateAccountInstanceAccess,
     } = store;
     const localAccessCollection = localAccessState?.collection ?? null;
-  
+
     const getResetCreditsAvailable = useCallback((account: CodexAccount) => {
       const value = account.quota?.reset_credits_available;
       return typeof value === "number" && Number.isFinite(value) ? value : null;
     }, []);
-  
+
     const isAvailableResetCredit = useCallback((credit: CodexResetCredit) => {
       const normalizedStatus = (credit.status || credit.raw_status || "available")
         .trim()
@@ -1995,20 +1970,20 @@ export function useCodexAccountsBaseController() {
         credit.expires_at <= Math.floor(Date.now() / 1000)
       );
     }, []);
-  
+
     const getResetCreditDetails = useCallback((account: CodexAccount) => {
       return Array.isArray(account.quota?.reset_credits)
         ? account.quota.reset_credits
         : [];
     }, []);
-  
+
     const getResetCreditNextExpiresAt = useCallback(
       (account: CodexAccount) => {
         const explicit = account.quota?.reset_credits_next_expires_at;
         if (typeof explicit === "number" && Number.isFinite(explicit)) {
           return explicit;
         }
-  
+
         const next = getResetCreditDetails(account)
           .filter(isAvailableResetCredit)
           .map((credit) => credit.expires_at)
@@ -2021,7 +1996,7 @@ export function useCodexAccountsBaseController() {
       },
       [getResetCreditDetails, isAvailableResetCredit],
     );
-  
+
     const formatResetCreditTime = useCallback(
       (timestamp: number | null | undefined) => {
         return timestamp
@@ -2030,7 +2005,7 @@ export function useCodexAccountsBaseController() {
       },
       [t],
     );
-  
+
     const formatResetCreditAbsoluteTime = useCallback(
       (timestamp: number | null | undefined) => {
         return timestamp
@@ -2039,7 +2014,7 @@ export function useCodexAccountsBaseController() {
       },
       [t],
     );
-  
+
     const getResetCreditStatusLabel = useCallback(
       (credit: CodexResetCredit) => {
         const normalizedStatus = (credit.status || credit.raw_status || "")
@@ -2071,7 +2046,7 @@ export function useCodexAccountsBaseController() {
       },
       [isAvailableResetCredit, t],
     );
-  
+
     const getResetCreditStatusTone = useCallback(
       (credit: CodexResetCredit) => {
         const normalizedStatus = (credit.status || credit.raw_status || "")
@@ -2094,13 +2069,13 @@ export function useCodexAccountsBaseController() {
       },
       [isAvailableResetCredit],
     );
-  
+
     const buildResetCreditsTitle = useCallback(
       (account: CodexAccount, availableCount: number) => {
         if (availableCount <= 0) {
           return t("codex.quota.resetCreditNoCredits", "没有可用的主动重置次数");
         }
-  
+
         const nextExpiresAt = getResetCreditNextExpiresAt(account);
         if (nextExpiresAt) {
           return t("codex.quota.resetCreditsTitleWithExpiry", {
@@ -2110,14 +2085,14 @@ export function useCodexAccountsBaseController() {
               "可用于重置当前 5 小时窗口的剩余次数：{{count}}，最近到期：{{time}}",
           });
         }
-  
+
         return t("codex.quota.resetCreditsTitle", {
           count: availableCount,
         });
       },
       [formatResetCreditTime, getResetCreditNextExpiresAt, t],
     );
-  
+
     const resetCreditConfirmAccount = useMemo(
       () =>
         resetCreditConfirmAccountId
@@ -2127,7 +2102,7 @@ export function useCodexAccountsBaseController() {
           : null,
       [accounts, resetCreditConfirmAccountId],
     );
-  
+
     const resetCreditConfirmAvailableCount =
       resetCreditConfirmSnapshot?.available_count ??
       (resetCreditConfirmAccount
@@ -2139,14 +2114,14 @@ export function useCodexAccountsBaseController() {
     const isResetCreditConfirmSubmitting = resetCreditConfirmAccount
       ? resettingResetCreditAccountId === resetCreditConfirmAccount.id
       : false;
-  
+
     const loadResetCreditConfirmSnapshot = useCallback(
       async (accountId: string) => {
         const requestSeq = resetCreditConfirmRequestSeqRef.current + 1;
         resetCreditConfirmRequestSeqRef.current = requestSeq;
         setResetCreditConfirmLoading(true);
         setResetCreditConfirmSnapshot(null);
-  
+
         try {
           const snapshot = await codexService.getCodexResetCredits(accountId);
           if (resetCreditConfirmRequestSeqRef.current !== requestSeq) return;
@@ -2170,7 +2145,7 @@ export function useCodexAccountsBaseController() {
       },
       [setResetCreditConfirmError, t],
     );
-  
+
     const openResetCreditConfirmModal = useCallback(
       (account: CodexAccount) => {
         setResetCreditConfirmError(null);
@@ -2181,7 +2156,7 @@ export function useCodexAccountsBaseController() {
       },
       [loadResetCreditConfirmSnapshot, setResetCreditConfirmError],
     );
-  
+
     const closeResetCreditConfirmModal = useCallback(() => {
       if (resettingResetCreditAccountId) return;
       resetCreditConfirmRequestSeqRef.current += 1;
@@ -2191,11 +2166,11 @@ export function useCodexAccountsBaseController() {
       setResetCreditConfirmActionLocked(false);
       setResetCreditConfirmError(null);
     }, [resettingResetCreditAccountId, setResetCreditConfirmError]);
-  
+
     const handleConfirmConsumeResetCredit = useCallback(async () => {
       const account = resetCreditConfirmAccount;
       if (!account) return;
-  
+
       const availableCount = resetCreditConfirmAvailableCount;
       if (availableCount == null || availableCount <= 0) {
         setResetCreditConfirmError(
@@ -2203,11 +2178,11 @@ export function useCodexAccountsBaseController() {
         );
         return;
       }
-  
+
       setResetCreditConfirmError(null);
       setResetCreditConfirmActionLocked(false);
       setResettingResetCreditAccountId(account.id);
-  
+
       try {
         await codexService.consumeCodexResetCredit(account.id);
         try {
@@ -2242,7 +2217,7 @@ export function useCodexAccountsBaseController() {
       setResetCreditConfirmError,
       t,
     ]);
-  
+
     const handleRefreshSubscriptionInfo = useCallback(
       async (accountId: string) => {
         setRefreshingSubscriptionAccountId(accountId);
@@ -2256,7 +2231,7 @@ export function useCodexAccountsBaseController() {
       },
       [refreshSubscriptionInfo],
     );
-  
+
     const editingAccountNoteAccount = useMemo(
       () =>
         accounts.find((account) => account.id === editingAccountNoteId) || null,
@@ -2293,7 +2268,7 @@ export function useCodexAccountsBaseController() {
       editingAccountNoteAccount &&
       isCodexOpaqueAccessTokenOnlyAccount(editingAccountNoteAccount),
     );
-  
+
     const refreshSavedMfaRecords = useCallback(() => {
       setSavedMfaRecords(loadSavedMfaRecords());
     }, []);
@@ -2304,7 +2279,7 @@ export function useCodexAccountsBaseController() {
       accountName: activeAccountNoteDisplayName,
       remark: activeAccountNoteForm.note,
     });
-  
+
     const resetAccountNoteMailPreview = useCallback(() => {
       accountNoteMailPreviewSeqRef.current += 1;
       accountNoteMailPreviewSnapshotRef.current = null;
@@ -2312,7 +2287,7 @@ export function useCodexAccountsBaseController() {
       setAccountNoteMailPreviewError(null);
       setAccountNoteMailPreviewLoading(false);
     }, []);
-  
+
     const fetchAccountNoteMailPreviewForUrl = useCallback(
       async (rawUrl: string) => {
         const mailUrl = rawUrl.trim();
@@ -2325,7 +2300,7 @@ export function useCodexAccountsBaseController() {
           setAccountNoteMailPreviewLoading(false);
           return;
         }
-  
+
         setAccountNoteMailPreviewLoading(true);
         try {
           const response =
@@ -2395,7 +2370,7 @@ export function useCodexAccountsBaseController() {
       },
       [t],
     );
-  
+
     const updateActiveAccountNoteForm = useCallback(
       (update: Partial<CodexAccountNoteFormState>) => {
         if (activeAccountNoteMode === "pendingOAuth") {
@@ -2418,7 +2393,7 @@ export function useCodexAccountsBaseController() {
       },
       [activeAccountNoteMode, resetAccountNoteMailPreview, setAccountNoteError],
     );
-  
+
     const openAccountNoteModal = useCallback(
       (account: CodexAccount) => {
         setEditingAccountNoteId(account.id);
@@ -2441,7 +2416,7 @@ export function useCodexAccountsBaseController() {
         setAccountNoteError,
       ],
     );
-  
+
     const openPendingOAuthNoteModal = useCallback(() => {
       setPendingOAuthNoteModalOpen(true);
       setEditingAccountNoteId(null);
@@ -2461,7 +2436,7 @@ export function useCodexAccountsBaseController() {
       resetAccountNoteMailPreview,
       setAccountNoteError,
     ]);
-  
+
     const closeAccountNoteModal = useCallback(() => {
       if (savingAccountNote || savingPendingOAuthAccount) return;
       rememberActiveAccountNoteMfaQuery();
@@ -2482,7 +2457,7 @@ export function useCodexAccountsBaseController() {
       savingPendingOAuthAccount,
       setAccountNoteError,
     ]);
-  
+
     const handleSubmitAccountNote = useCallback(async () => {
       if (!activeAccountNoteMode || activeAccountNoteSaving) return;
       setSavingAccountNote(true);
@@ -2514,7 +2489,7 @@ export function useCodexAccountsBaseController() {
             ? { chatgptAccountId: activeAccountNoteForm.chatgptAccountId }
             : {}),
         };
-  
+
         if (normalizedTwoFactorSecret) {
           rememberActiveAccountNoteMfaQuery();
           setSavedMfaRecords(
@@ -2528,7 +2503,7 @@ export function useCodexAccountsBaseController() {
             }),
           );
         }
-  
+
         if (activeAccountNoteMode === "pendingOAuth") {
           setPendingOAuthNoteForm({
             ...activeAccountNoteForm,
@@ -2577,12 +2552,12 @@ export function useCodexAccountsBaseController() {
       store,
       t,
     ]);
-  
+
     const activeAccountNoteOtpToken = useMemo(() => {
       const secret = activeAccountNoteForm.twoFactorSecret.trim();
       return secret ? getMfaOtpToken(secret) : "";
     }, [activeAccountNoteForm.twoFactorSecret, mfaTimeRemaining]);
-  
+
     const copyAccountNoteValue = useCallback(
       async (copyKey: string, value?: string | null) => {
         const text = value?.trim();
@@ -2603,11 +2578,11 @@ export function useCodexAccountsBaseController() {
       },
       [setAccountNoteError, t],
     );
-  
+
     const handleRefreshAccountNoteMailPreview = useCallback(() => {
       void fetchAccountNoteMailPreviewForUrl(activeAccountNoteForm.mailUrl);
     }, [activeAccountNoteForm.mailUrl, fetchAccountNoteMailPreviewForUrl]);
-  
+
     const handleOpenAccountNoteMailUrl = useCallback(async () => {
       const mailUrl = activeAccountNoteForm.mailUrl.trim();
       if (!mailUrl) return;
@@ -2622,7 +2597,7 @@ export function useCodexAccountsBaseController() {
         );
       }
     }, [activeAccountNoteForm.mailUrl, setAccountNoteError, t]);
-  
+
     const renderAccountNoteButton = useCallback(
       (account: CodexAccount, className = "codex-account-note-chip") => {
         const hasNote = hasCodexAccountNoteDetails(account);
@@ -2723,7 +2698,6 @@ export function useCodexAccountsBaseController() {
     closeCliLaunchModal,
     closeCodexAddModal,
     closeExternalImportProgressModal,
-    closeLocalAccessRiskNotice,
     closeResetCreditConfirmModal,
     cockpitApiPanelAccountId,
     codexAccountsRef,
@@ -2817,8 +2791,6 @@ export function useCodexAccountsBaseController() {
     localAccessModalMode,
     localAccessPortKilling,
     localAccessRefreshing,
-    localAccessRiskNoticeAction,
-    localAccessRiskNoticeRemember,
     localAccessSaving,
     localAccessSidecarRestarting,
     localAccessStarting,
@@ -2862,7 +2834,6 @@ export function useCodexAccountsBaseController() {
     renderAccountNoteButton,
     reportExportModalError,
     requestDeleteTag,
-    requestLocalAccessRiskNotice,
     resetBatchImportState,
     resetCreditConfirmAccount,
     resetCreditConfirmActionLocked,
@@ -2880,7 +2851,6 @@ export function useCodexAccountsBaseController() {
     searchQuery,
     selected,
     selectedTerminal,
-    sessionWindowStats,
     setAccountNoteError,
     setAccountNoteFieldErrors,
     setAccountNoteMfaPickerOpen,
@@ -2934,7 +2904,6 @@ export function useCodexAccountsBaseController() {
     setLocalAccessModalMode,
     setLocalAccessPortKilling,
     setLocalAccessRefreshing,
-    setLocalAccessRiskNoticeRemember,
     setLocalAccessSaving,
     setLocalAccessSidecarRestarting,
     setLocalAccessStarting,
@@ -2953,7 +2922,6 @@ export function useCodexAccountsBaseController() {
     setSearchQuery,
     setSelected,
     setSelectedTerminal,
-    setSessionWindowStats,
     setShowAddToCodexGroupModal,
     setShowCodexGroupModal,
     setShowLocalAccessHealthModal,

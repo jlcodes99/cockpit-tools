@@ -252,7 +252,7 @@ test('latency views retain node results and cancellation without aggregate progr
       results: { us: { status: 'success' as const, value: { latencyMs: 42, checkedAt: Date.now() } } },
     };
     const picker = createElement(CodexProxyPicker, { source, itemId: 'us', selectedGroupId: 'region', selections: {}, busy: false, latency: currentLatency, choose: () => {}, chooseMember: () => {} });
-    const nodes = createElement(CodexProxyResourceNodes, { source, itemId: 'us', busy: false, latency: currentLatency, onChoose: () => {}, onInsecure: () => {} });
+    const nodes = createElement(CodexProxyResourceNodes, { source, itemId: 'us', busy: false, latency: currentLatency, onChoose: () => {} });
     for (const view of [picker, nodes]) {
       const html = renderToStaticMarkup(createElement(I18nextProvider, { i18n }, view));
       assert.doesNotMatch(html, /Testing|6\s*\/\s*55/);
@@ -266,12 +266,12 @@ test('latency views retain node results and cancellation without aggregate progr
   h.unmount();
 });
 
-test('a child policy waiting for certificate permission can enter the draft without granting permission', async () => {
+test('a child policy with declared certificate exceptions can be selected and tested directly', async () => {
   const pendingSource: ProxyCatalogSource = { ...source,
-    nodes: [{ id: 'tls', name: 'Certificate option node', protocol: 'hysteria2', supported: false, insecure: true, error: 'PROXY_TLS_INSECURE' }],
+    nodes: [{ id: 'tls', name: 'Certificate option node', protocol: 'hysteria2', supported: true, insecure: true, error: null }],
     groups: [group('region', 'US group', 'select', ['Automatic']), {
-      ...group('auto', 'Automatic', 'url-test', ['Certificate option node']), supported: false, error: 'SUBSCRIPTION_GROUP_UNAVAILABLE',
-      insecureNodeIds: ['tls'], issues: [{ name: 'Certificate option node', error: 'PROXY_TLS_INSECURE' }],
+      ...group('auto', 'Automatic', 'url-test', ['Certificate option node']), supported: true, error: null,
+      insecureNodeIds: [], issues: [],
     }],
   };
   const before = JSON.stringify(pendingSource);
@@ -280,20 +280,19 @@ test('a child policy waiting for certificate permission can enter the draft with
   h.props.source = pendingSource; h.props.itemId = 'region'; h.props.selectedGroupId = 'region';
   h.props.onCatalogChange = () => { catalogChanges++; };
   const childOption = h.manualSelect().props.options.find((option: any) => option.value === 'Automatic');
-  assert.equal(childOption.disabled, false, 'permission-only child groups must remain inspectable');
+  assert.equal(childOption.disabled, false, 'the child policy is available without a permission transaction');
   h.manualSelect().props.onChange('Automatic');
   assert.equal(h.props.itemId, 'region', 'the manual group remains the bound identity');
   assert.deepEqual(h.props.selections, { region: 'Automatic' });
-  assert.equal(selectionUtils.defaultProxySelections(pendingSource, h.props.itemId, h.props.selections), null, 'saving still waits for explicit permission');
+  assert.deepEqual(selectionUtils.defaultProxySelections(pendingSource, h.props.itemId, h.props.selections), { region: 'Automatic' });
   const issue = elements(h.render()).find((entry) => entry.type === CodexProxySelectionIssues);
   assert.equal(issue.props.target.id, 'auto');
-  assert.deepEqual(issue.props.target.insecureNodeIds, ['tls']);
-  assert.deepEqual(h.measured, [{ ids: [], onlyStale: true, groupId: 'auto' }], 'pending certificate options cannot be silently tested with weakened TLS');
+  assert.deepEqual(issue.props.target.insecureNodeIds, []);
+  assert.deepEqual(h.measured, [{ ids: ['tls'], onlyStale: true, groupId: 'auto' }], 'the declared node options are immediately testable');
   const html = await markup(pendingSource, 'region', 'region', h.props.selections, { onCatalogChange: h.props.onCatalogChange });
-  assert.match(html, /Certificate permission needed/);
-  assert.match(html, /Certificate option node/);
+  assert.doesNotMatch(html, /Certificate permission needed|Allow selected options/);
   assert.equal(catalogChanges, 0);
-  assert.equal(JSON.stringify(pendingSource), before, 'entering a draft never grants or mutates certificate permission');
+  assert.equal(JSON.stringify(pendingSource), before, 'selection never mutates source definitions');
   h.unmount();
 });
 

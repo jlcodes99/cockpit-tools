@@ -6,6 +6,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -81,6 +82,7 @@ func BuildErrorResponseBodyWithError(status int, errText string, err error) []by
 	trimmed := strings.TrimSpace(errText)
 
 	if coreauth.IsTerminalAuthError(err) {
+		errType, code := "authentication_error", "upstream_authentication_required"
 		message := errText
 		if trimmed != "" && json.Valid([]byte(trimmed)) {
 			var parsed map[string]any
@@ -94,17 +96,25 @@ func BuildErrorResponseBodyWithError(status int, errText string, err error) []by
 				}
 			}
 		}
+		// Cockpit uses the terminal marker for explicitly paused service scopes
+		// so WS clients see the rejection instead of silently reconnecting. This
+		// host policy must not ask the user to repair otherwise valid credentials.
+		var authErr *coreauth.Error
+		if errors.As(err, &authErr) && authErr.Code == "account_paused" {
+			errType, code = "invalid_request_error", "account_paused"
+			message = authErr.Message
+		}
 		r := false
 		payload, errMarshal := json.Marshal(ErrorResponse{
 			Error: ErrorDetail{
 				Message:   message,
-				Type:      "authentication_error",
-				Code:      "upstream_authentication_required",
+				Type:      errType,
+				Code:      code,
 				Retryable: &r,
 			},
 		})
 		if errMarshal != nil {
-			return []byte(fmt.Sprintf(`{"error":{"message":%q,"type":"authentication_error","code":"upstream_authentication_required","retryable":false}}`, message))
+			return []byte(fmt.Sprintf(`{"error":{"message":%q,"type":%q,"code":%q,"retryable":false}}`, message, errType, code))
 		}
 		return payload
 	}

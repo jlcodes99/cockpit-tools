@@ -122,7 +122,7 @@ func TestAutomaticRoutingListsUnionOfNativeAndProviderModels(t *testing.T) {
 	m := loadAutomaticRoutingManifest(t, automaticRoutingManifestPayload)
 	spec := m.apiKeyByValue["client-key"]
 
-	want := []string{"gpt-5.5", "shared", "deepseek-chat"}
+	want := []string{"shared", "deepseek-chat"}
 	if got := visibleModelsForAPIKey(m, spec); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("visible models = %#v, want %#v", got, want)
 	}
@@ -354,12 +354,12 @@ func TestAutomaticRoutingListsOnlyRecommendedGptModels(t *testing.T) {
 		listed[strings.ToLower(model)] = true
 	}
 
-	for _, expected := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"} {
+	for _, expected := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} {
 		if !listed[expected] {
 			t.Fatalf("推荐模型 %s 必须出现在模型列表里: %#v", expected, models)
 		}
 	}
-	for _, hidden := range []string{"gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"} {
+	for _, hidden := range []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"} {
 		if listed[hidden] {
 			t.Fatalf("历史模型 %s 不应出现在模型列表里: %#v", hidden, models)
 		}
@@ -678,7 +678,6 @@ func TestAutomaticRoutingPublishesRouteModelNamesAndReasoningLevels(t *testing.T
 		"gpt-5.6-sol":   "GPT-5.6 Sol",
 		"gpt-5.6-terra": "GPT-5.6 Terra",
 		"gpt-5.6-luna":  "GPT-5.6 Luna",
-		"gpt-5.5":       "GPT-5.5",
 		"gpt-reserve":   "GPT-5.6 Reserve",
 	} {
 		model := bySlug[slug]

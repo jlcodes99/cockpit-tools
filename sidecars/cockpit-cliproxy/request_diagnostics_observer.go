@@ -15,15 +15,16 @@ import (
 // HTTP calls have one collector. WebSocket usage is already emitted per upstream
 // execution; the observer uses that same execution identity for request details.
 type requestDiagnosticsObserver struct {
-	mu           sync.Mutex
-	base         *requestDiagnosticsCollector
-	websocket    bool
-	queue        *requestDiagnosticsQueue
-	byAttempt    map[any]*requestDiagnosticsCollector
-	byRequestID  map[string]*requestDiagnosticsCollector
-	clientBody   []byte
-	clientBytes  int
-	clientHeader http.Header
+	mu             sync.Mutex
+	base           *requestDiagnosticsCollector
+	websocket      bool
+	queue          *requestDiagnosticsQueue
+	byAttempt      map[any]*requestDiagnosticsCollector
+	byRequestID    map[string]*requestDiagnosticsCollector
+	clientBody     []byte
+	clientBytes    int
+	clientHeader   http.Header
+	clientIdentity diagnosticHeaderIdentity
 }
 
 func newRequestDiagnosticsObserver(m *manifest, id string, started time.Time, websocket bool, queue *requestDiagnosticsQueue) *requestDiagnosticsObserver {
@@ -52,6 +53,7 @@ func (o *requestDiagnosticsObserver) ClientPayload(ctx context.Context, body []b
 }
 
 func (o *requestDiagnosticsObserver) captureClient(_ context.Context, body []byte, headers http.Header, transport string, originalBytes int) {
+	o.captureClientIdentity(headers)
 	if !o.websocket {
 		o.base.mu.Lock()
 		defer o.base.mu.Unlock()
@@ -90,6 +92,8 @@ func (o *requestDiagnosticsObserver) ExecutionStarted(ctx context.Context, info 
 	}
 	id := websocketUsageRequestID(o.base.requestID, info.AuthID, info.Model, info.StartedAt)
 	d := newRequestDiagnosticsCollector(o.base.manifest, id, info.StartedAt)
+	d.clientIdentity = o.clientIdentity
+	d.truncated = !d.clientIdentity.captured || !d.clientIdentity.metadataCaptured
 	d.executions[identity] = info
 	d.captureLocked("client", 0, "websocket", o.clientHeader, o.clientBody, o.clientBytes)
 	o.byAttempt[identity] = d

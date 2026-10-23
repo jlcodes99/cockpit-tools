@@ -5,6 +5,8 @@ package registry
 import (
 	"strconv"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -62,22 +64,22 @@ func GetAIStudioModels() []*ModelInfo {
 
 // GetCodexFreeModels returns model definitions for the Codex free plan tier.
 func GetCodexFreeModels() []*ModelInfo {
-	return WithCodexBuiltins(cloneModelInfos(getModels().CodexFree))
+	return WithCodexBuiltins(getModels().CodexFree)
 }
 
 // GetCodexTeamModels returns model definitions for the Codex team plan tier.
 func GetCodexTeamModels() []*ModelInfo {
-	return withCodexPaidBuiltins(cloneModelInfos(getModels().CodexTeam))
+	return withCodexPaidBuiltins(getModels().CodexTeam)
 }
 
 // GetCodexPlusModels returns model definitions for the Codex plus plan tier.
 func GetCodexPlusModels() []*ModelInfo {
-	return withCodexPaidBuiltins(cloneModelInfos(getModels().CodexPlus))
+	return withCodexPaidBuiltins(getModels().CodexPlus)
 }
 
 // GetCodexProModels returns model definitions for the Codex pro plan tier.
 func GetCodexProModels() []*ModelInfo {
-	return withCodexPaidBuiltins(cloneModelInfos(getModels().CodexPro))
+	return withCodexPaidBuiltins(getModels().CodexPro)
 }
 
 // GetKimiModels returns the standard Kimi (Moonshot AI) model definitions.
@@ -126,12 +128,18 @@ func GetXAIModels() []*ModelInfo {
 func WithCodexBuiltins(models []*ModelInfo) []*ModelInfo {
 	active := make([]*ModelInfo, 0, len(models))
 	for _, model := range models {
-		if model != nil && !isRetiredCodexModelID(model.ID) {
-			active = append(active, model)
+		if model == nil || isRetiredCodexModelID(model.ID) {
+			continue
 		}
+		cloned := cloneModelInfo(model)
+		if cloned.MaxContextLength <= 0 {
+			if template, found := GetCodexModelContextTemplate(cloned.ID); found {
+				cloned.ContextLength = template.ContextWindow
+			}
+		}
+		active = append(active, cloned)
 	}
-	models = active
-	return upsertModelInfos(models,
+	return upsertModelInfos(active,
 		codexBuiltinImage15ModelInfo(),
 		codexBuiltinImage2ModelInfo(),
 		codexBuiltinImage25FlareModelInfo(),
@@ -163,7 +171,7 @@ func isRetiredCodexModelID(modelID string) bool {
 			return false
 		}
 	}
-	return major < 5 || major == 5 && minor < 5
+	return major < 5 || major == 5 && minor < 6
 }
 
 // withCodexPaidBuiltins keeps paid Codex model availability stable when the
@@ -185,10 +193,10 @@ func withCodexPaidBuiltins(models []*ModelInfo) []*ModelInfo {
 	return prioritizeModelInfoByID(models, codexBuiltinGPT61SolModelID)
 }
 
-// WithXAIBuiltins injects hard-coded xAI image/video model definitions that should
+// WithXAIBuiltins injects hard-coded xAI model definitions that should
 // not depend on remote models.json updates.
 func WithXAIBuiltins(models []*ModelInfo) []*ModelInfo {
-	return upsertModelInfos(models, xaiBuiltinImageModelInfo(), xaiBuiltinImageQualityModelInfo(), xaiBuiltinImage20ModelInfo(), xaiBuiltinVideoModelInfo(), xaiBuiltinVideo15ModelInfo(), xaiBuiltinVideo15PreviewModelInfo())
+	return upsertModelInfos(models, xaiBuiltinGrok47ModelInfo(), xaiBuiltinImageModelInfo(), xaiBuiltinImageQualityModelInfo(), xaiBuiltinImage20ModelInfo(), xaiBuiltinVideoModelInfo(), xaiBuiltinVideo15ModelInfo(), xaiBuiltinVideo15PreviewModelInfo())
 }
 
 func normalizeAntigravityCapabilityModelID(modelID string) string {
@@ -262,17 +270,25 @@ func codexBuiltinImage25SunburstModelInfo() *ModelInfo {
 // Limits and reasoning levels follow the official Codex client catalog.
 // Pricing is maintained by the host; the public output limit is 128K.
 func codexBuiltinGPT61SolModelInfo() *ModelInfo {
+	template, found := GetCodexModelContextTemplate(codexBuiltinGPT61SolModelID)
+	if !found {
+		log.Panicf("registry: missing context template in codex_client_models.json for model %q", codexBuiltinGPT61SolModelID)
+	}
 	return &ModelInfo{
 		ID: codexBuiltinGPT61SolModelID, Object: "model", OwnedBy: "openai", Type: "openai",
 		DisplayName: "GPT-6.1 Sol", Version: codexBuiltinGPT61SolModelID,
 		Description:   "Latest workhorse model for coding and everyday work.",
-		ContextLength: 272000, MaxCompletionTokens: 128000, SupportedParameters: []string{"tools"},
+		ContextLength: template.ContextWindow, MaxCompletionTokens: 128000, SupportedParameters: []string{"tools"},
 		SupportedInputModalities: []string{"text", "image"}, SupportedOutputModalities: []string{"text"},
 		Thinking: &ThinkingSupport{Levels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}},
 	}
 }
 
 func codexBuiltinGPT6AstraModelInfo() *ModelInfo {
+	template, found := GetCodexModelContextTemplate(codexBuiltinGPT6AstraModelID)
+	if !found {
+		log.Panicf("registry: missing context template in codex_client_models.json for model %q", codexBuiltinGPT6AstraModelID)
+	}
 	return &ModelInfo{
 		ID:                        codexBuiltinGPT6AstraModelID,
 		Object:                    "model",
@@ -282,7 +298,7 @@ func codexBuiltinGPT6AstraModelInfo() *ModelInfo {
 		DisplayName:               "GPT-6 Astra",
 		Version:                   codexBuiltinGPT6AstraModelID,
 		Description:               "Our most capable model, built for the hardest end-to-end work.",
-		ContextLength:             256000,
+		ContextLength:             template.ContextWindow,
 		MaxCompletionTokens:       128000,
 		SupportedParameters:       []string{"tools"},
 		SupportedInputModalities:  []string{"text", "image"},
@@ -292,6 +308,10 @@ func codexBuiltinGPT6AstraModelInfo() *ModelInfo {
 }
 
 func codexBuiltinGPT6SolModelInfo() *ModelInfo {
+	template, found := GetCodexModelContextTemplate(codexBuiltinGPT6SolModelID)
+	if !found {
+		log.Panicf("registry: missing context template in codex_client_models.json for model %q", codexBuiltinGPT6SolModelID)
+	}
 	return &ModelInfo{
 		ID:                        codexBuiltinGPT6SolModelID,
 		Object:                    "model",
@@ -301,7 +321,7 @@ func codexBuiltinGPT6SolModelInfo() *ModelInfo {
 		DisplayName:               "GPT-6 Sol",
 		Version:                   codexBuiltinGPT6SolModelID,
 		Description:               "GPT-6 Sol is built for complex coding and agentic workflows.",
-		ContextLength:             256000,
+		ContextLength:             template.ContextWindow,
 		MaxCompletionTokens:       128000,
 		SupportedParameters:       []string{"tools"},
 		SupportedInputModalities:  []string{"text", "image"},
@@ -311,6 +331,10 @@ func codexBuiltinGPT6SolModelInfo() *ModelInfo {
 }
 
 func codexBuiltinGPT6LunaModelInfo() *ModelInfo {
+	template, found := GetCodexModelContextTemplate(codexBuiltinGPT6LunaModelID)
+	if !found {
+		log.Panicf("registry: missing context template in codex_client_models.json for model %q", codexBuiltinGPT6LunaModelID)
+	}
 	return &ModelInfo{
 		ID:                        codexBuiltinGPT6LunaModelID,
 		Object:                    "model",
@@ -320,7 +344,7 @@ func codexBuiltinGPT6LunaModelInfo() *ModelInfo {
 		DisplayName:               "GPT-6 Luna",
 		Version:                   codexBuiltinGPT6LunaModelID,
 		Description:               "Our most efficient model for focused, high-volume tasks.",
-		ContextLength:             256000,
+		ContextLength:             template.ContextWindow,
 		MaxCompletionTokens:       128000,
 		SupportedParameters:       []string{"tools"},
 		SupportedInputModalities:  []string{"text", "image"},
@@ -530,23 +554,32 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 	}
 
 	data := getModels()
-	allModels := [][]*ModelInfo{
-		data.Claude,
-		data.Gemini,
-		data.Vertex,
-		data.AIStudio,
-		data.CodexFree,
-		data.CodexTeam,
-		data.CodexPlus,
-		data.CodexPro,
-		data.Kimi,
-		data.Antigravity,
-		data.XAI,
+	allModels := []struct {
+		models []*ModelInfo
+		codex  bool
+	}{
+		{data.Claude, false},
+		{data.Gemini, false},
+		{data.Vertex, false},
+		{data.AIStudio, false},
+		{data.CodexFree, true},
+		{data.CodexTeam, true},
+		{data.CodexPlus, true},
+		{data.CodexPro, true},
+		{data.Kimi, false},
+		{data.Antigravity, false},
+		{data.XAI, false},
 	}
-	for _, models := range allModels {
-		for _, m := range models {
+	for _, group := range allModels {
+		for _, m := range group.models {
 			if m != nil && m.ID == modelID {
-				return cloneModelInfo(m)
+				info := cloneModelInfo(m)
+				if group.codex && info.MaxContextLength <= 0 {
+					if template, found := GetCodexModelContextTemplate(info.ID); found {
+						info.ContextLength = template.ContextWindow
+					}
+				}
+				return info
 			}
 		}
 	}

@@ -61,6 +61,15 @@ test('ordinary OAuth card labels keep their existing email', () => {
   assert.equal(buildCodexAccountPresentation(oauth, () => fallback).displayName, 'person@example.com');
 });
 
+test('official authorization labels retain the account email instead of exposing the API host', () => {
+  const official = { ...apiAccount, id: 'chatgpt_plan_grant', email: 'person@example.com',
+    account_name: 'Internal grant label', api_provider_id: 'cockpit_chatgpt_plan',
+    api_base_url: 'https://api.openai.com/v1' };
+  assert.equal(resolveCodexAccountDisplayName(official, fallback), official.email);
+  assert.equal(resolveCodexHealthIssueDisplayName('api.openai.com', official.email, '', official.id, official, fallback), official.email);
+  assert.equal(resolveCodexAccountReferenceDisplayName(official.id, official.email, new Map(), fallback), official.email);
+});
+
 test("prefers a manually assigned API Key account name over the generated email", () => {
   assert.equal(
     resolveCodexHealthIssueDisplayName(

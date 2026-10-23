@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -22,6 +21,7 @@ import (
 	. "github.com/router-for-me/CLIProxyAPI/v7/internal/constant"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -803,11 +803,6 @@ const (
 	responsesStreamErrorFieldLimit   = 256
 )
 
-var (
-	responsesStreamSensitiveValuePattern = regexp.MustCompile(`(?i)((?:"?(?:api[_-]?key|access[_-]?token|token|authorization|secret)"?)\s*[=:]\s*"?)([^\s"&,;}]+)`)
-	responsesStreamBearerPattern         = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
-)
-
 func truncateResponsesStreamErrorText(text string, limit int) string {
 	runes := []rune(text)
 	if len(runes) <= limit {
@@ -817,8 +812,7 @@ func truncateResponsesStreamErrorText(text string, limit int) string {
 }
 
 func redactResponsesStreamErrorText(text string) string {
-	text = responsesStreamSensitiveValuePattern.ReplaceAllString(text, `${1}[REDACTED]`)
-	return responsesStreamBearerPattern.ReplaceAllString(text, "Bearer [REDACTED]")
+	return helps.RedactStreamTransportError(text)
 }
 
 func sanitizeResponsesStreamEventName(eventName string) string {

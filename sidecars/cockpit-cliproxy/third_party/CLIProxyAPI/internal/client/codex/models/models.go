@@ -89,7 +89,7 @@ func buildCodexClientModels(models []map[string]any, providersForModel Providers
 			continue
 		}
 
-		entry := cloneCodexClientModelMap(defaultTemplate)
+		entry := ConservativeFallbackTemplate(defaultTemplate)
 		applyCodexClientModelMetadata(entry, id, model, optimizeMultiAgentV2, clientVersion)
 		applyCodexClientMaxTokens(entry, model)
 		applyCodexClientSearchToolSupport(entry, id, false, providersForModel)
@@ -199,7 +199,7 @@ func loadCodexClientModelTemplatesSnapshot(raw []byte, revision uint64) (map[str
 				continue
 			}
 			templates[slug] = cloneCodexClientModelMap(model)
-			if slug == "gpt-5.5" {
+			if slug == "gpt-5.6-sol" {
 				defaultTemplate = cloneCodexClientModelMap(model)
 			}
 		}
@@ -422,6 +422,14 @@ func applyCodexClientThinkingMetadata(entry map[string]any, thinking *registry.T
 	}
 	if defaultLevel == "" {
 		defaultLevel = firstLevel
+	}
+	if preferred := normalizeCodexClientReasoningLevel(thinking.DefaultLevel, clientVersion); preferred != "" {
+		for _, raw := range levels {
+			if raw.(map[string]any)["effort"] == preferred {
+				defaultLevel = preferred
+				break
+			}
+		}
 	}
 
 	entry["supported_reasoning_levels"] = levels

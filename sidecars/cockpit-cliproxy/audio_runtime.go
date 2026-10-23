@@ -62,6 +62,7 @@ func (s *relayServer) forwardAudio(c *gin.Context, spec *apiKeySpec, a *audioReq
 	// credentials; ordinary transcription retains its OAuth preference.
 	if !spec.BoundOAuth {
 		candidates := (&cockpitSelector{manifest: s.manifest}).filterAuthsForAPIKeyScope(ctx, s.authManager.List())
+		candidates = unpausedServiceAuths(ctx, s.manifest, candidates)
 		hasOAuth, hasAPIKey := false, false
 		for _, auth := range candidates {
 			if auth == nil || auth.Provider != "codex" {
@@ -212,7 +213,19 @@ func (s *relayServer) forwardProviderAudio(c *gin.Context, gateway *providerGate
 	}
 	copyProviderGatewayDiagnosticHeaders(req.Header, c.Request.Header)
 	observeDirectGatewayRequest(req.Context(), key.account, model, req.Header, nil)
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	identityAuth, err := s.directGatewayIdentity(key.account, gateway.APIKey, gateway.BaseURL, false)
+	if err != nil {
+		release()
+		return nil, false, err
+	}
+	client, err := applyDirectGatewayIdentity(req, identityAuth)
+	if err != nil {
+		release()
+		return nil, false, err
+	}
+	if client == nil {
+		client = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		release()

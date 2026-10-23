@@ -51,9 +51,6 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
 pub const SORT_MODE_AUTO: &str = "auto";
 pub const SORT_MODE_MANUAL: &str = "manual";
 
-const DEFAULT_CODEBUDDY_GROUP_ID: &str = "codebuddy-suite";
-const DEFAULT_TRAE_GROUP_ID: &str = "trae-suite";
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrayLayoutGroup {
@@ -95,29 +92,7 @@ fn default_tray_platforms() -> Vec<String> {
 }
 
 fn default_platform_groups() -> Vec<TrayLayoutGroup> {
-    vec![
-        TrayLayoutGroup {
-            id: DEFAULT_CODEBUDDY_GROUP_ID.to_string(),
-            name: "CodeBuddy".to_string(),
-            platform_ids: vec![
-                PLATFORM_CODEBUDDY.to_string(),
-                PLATFORM_CODEBUDDY_CN.to_string(),
-                PLATFORM_WORKBUDDY.to_string(),
-            ],
-            default_platform_id: PLATFORM_CODEBUDDY.to_string(),
-        },
-        TrayLayoutGroup {
-            id: DEFAULT_TRAE_GROUP_ID.to_string(),
-            name: "Trae".to_string(),
-            platform_ids: vec![
-                PLATFORM_TRAE.to_string(),
-                PLATFORM_TRAE_SOLO.to_string(),
-                PLATFORM_TRAE_CN.to_string(),
-                PLATFORM_TRAE_SOLO_CN.to_string(),
-            ],
-            default_platform_id: PLATFORM_TRAE.to_string(),
-        },
-    ]
+    Vec::new()
 }
 
 fn default_ordered_entries() -> Vec<String> {
@@ -318,49 +293,6 @@ fn normalize_platform_groups(groups: &[TrayLayoutGroup]) -> Vec<TrayLayoutGroup>
             default_platform_id,
         });
         used_group_ids.insert(group_id);
-    }
-
-    let trae_suite_platforms = [
-        PLATFORM_TRAE,
-        PLATFORM_TRAE_SOLO,
-        PLATFORM_TRAE_CN,
-        PLATFORM_TRAE_SOLO_CN,
-    ];
-    if let Some(group) = normalized.iter_mut().find(|group| {
-        group
-            .platform_ids
-            .iter()
-            .any(|id| trae_suite_platforms.contains(&id.as_str()))
-    }) {
-        for platform in trae_suite_platforms {
-            if used_platforms.insert(platform.to_string()) {
-                group.platform_ids.push(platform.to_string());
-            }
-        }
-        if !group
-            .platform_ids
-            .iter()
-            .any(|id| id == &group.default_platform_id)
-        {
-            group.default_platform_id = PLATFORM_TRAE.to_string();
-        }
-    } else {
-        let platform_ids: Vec<String> = trae_suite_platforms
-            .iter()
-            .filter(|platform| !used_platforms.contains(**platform))
-            .map(|platform| (*platform).to_string())
-            .collect();
-        if !platform_ids.is_empty() {
-            let group_id =
-                normalize_group_id(DEFAULT_TRAE_GROUP_ID, normalized.len(), &used_group_ids);
-            normalized.push(TrayLayoutGroup {
-                id: group_id.clone(),
-                name: "Trae".to_string(),
-                platform_ids,
-                default_platform_id: PLATFORM_TRAE.to_string(),
-            });
-            used_group_ids.insert(group_id);
-        }
     }
 
     normalized
@@ -565,4 +497,97 @@ pub fn save_tray_layout(
     crate::modules::atomic_write::write_string_atomic(&path, &content)
         .map_err(|e| format!("保存托盘布局配置失败: {}", e))?;
     Ok(normalized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_independent_platform_entries(config: &TrayLayoutConfig) {
+        assert!(config.platform_groups.is_empty());
+        assert_eq!(config.ordered_platform_ids, default_order());
+        assert_eq!(
+            config.ordered_entry_ids,
+            default_order()
+                .iter()
+                .map(|platform| format!("platform:{}", platform))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn defaults_show_all_platforms_independently() {
+        assert_independent_platform_entries(&TrayLayoutConfig::default());
+    }
+
+    #[test]
+    fn missing_groups_deserialize_without_creating_builtin_groups() {
+        let config: TrayLayoutConfig = serde_json::from_str("{}").unwrap();
+        assert_independent_platform_entries(&normalize_config(config, true));
+    }
+
+    #[test]
+    fn normalizing_empty_groups_does_not_create_a_trae_group() {
+        for legacy_migration in [false, true] {
+            let config = normalize_config(TrayLayoutConfig::default(), legacy_migration);
+            assert_independent_platform_entries(&config);
+        }
+    }
+
+    #[test]
+    fn custom_group_retains_only_the_explicitly_selected_platforms() {
+        let config = normalize_config(
+            TrayLayoutConfig {
+                platform_groups: vec![TrayLayoutGroup {
+                    id: "my-tools".to_string(),
+                    name: "My tools".to_string(),
+                    platform_ids: vec![PLATFORM_CODEX.to_string(), PLATFORM_TRAE.to_string()],
+                    default_platform_id: PLATFORM_TRAE.to_string(),
+                }],
+                ..TrayLayoutConfig::default()
+            },
+            false,
+        );
+
+        assert_eq!(config.platform_groups.len(), 1);
+        let group = &config.platform_groups[0];
+        assert_eq!(group.id, "my-tools");
+        assert_eq!(group.name, "My tools");
+        assert_eq!(group.platform_ids, [PLATFORM_CODEX, PLATFORM_TRAE]);
+        assert_eq!(group.default_platform_id, PLATFORM_TRAE);
+        assert!(config
+            .ordered_entry_ids
+            .contains(&"group:my-tools".to_string()));
+        assert!(!config
+            .ordered_entry_ids
+            .contains(&"platform:trae".to_string()));
+        for platform in [PLATFORM_TRAE_SOLO, PLATFORM_TRAE_CN, PLATFORM_TRAE_SOLO_CN] {
+            assert!(config
+                .ordered_entry_ids
+                .contains(&format!("platform:{}", platform)));
+        }
+    }
+
+    #[test]
+    fn saved_builtin_named_groups_are_preserved_without_adding_members() {
+        let config: TrayLayoutConfig = serde_json::from_str(
+            r#"{
+                "platformGroups": [{
+                    "id": "trae-suite",
+                    "name": "My Trae",
+                    "platformIds": ["trae", "trae_solo"],
+                    "defaultPlatformId": "trae_solo"
+                }]
+            }"#,
+        )
+        .unwrap();
+        let normalized = normalize_config(config, true);
+
+        assert_eq!(normalized.platform_groups.len(), 1);
+        let group = &normalized.platform_groups[0];
+        assert_eq!(group.id, "trae-suite");
+        assert_eq!(group.name, "My Trae");
+        assert_eq!(group.platform_ids, [PLATFORM_TRAE, PLATFORM_TRAE_SOLO]);
+        assert_eq!(group.default_platform_id, PLATFORM_TRAE_SOLO);
+    }
 }

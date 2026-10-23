@@ -11,6 +11,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -195,10 +196,15 @@ func (h *Handler) Handle(c *gin.Context) {
 		return
 	}
 	upstreamBody, upstreamContentType, model, errPayload := prepareCallRequest(body, c.GetHeader("Content-Type"))
+	_, hasVoiceTarget := c.Request.Header[http.CanonicalHeaderKey("X-Cockpit-Voice-Target")]
+	callURL := upstreamCallURL
+	if errPayload == nil && hasVoiceTarget {
+		callURL, errPayload = callTargetURL(c.GetHeader("X-Cockpit-Voice-Target"))
+	}
 	if errPayload == nil {
 		upstreamBody, upstreamContentType, model, errPayload = applyClientSecretCallSession(upstreamBody, upstreamContentType, model, clientSecretSession(c))
 	}
-	if errPayload == nil {
+	if errPayload == nil && !hasVoiceTarget {
 		upstreamBody, model, errPayload = rewriteCallRequestModel(upstreamBody, upstreamContentType, model)
 	}
 	if errPayload != nil {
@@ -283,16 +289,19 @@ func (h *Handler) Handle(c *gin.Context) {
 
 	baseHeaders := protocolHeaders(c.Request.Header)
 	baseHeaders.Set("Content-Type", upstreamContentType)
+	if metadata := c.GetHeader("X-Codex-Turn-Metadata"); metadata != "" {
+		baseHeaders.Set("X-Codex-Turn-Metadata", metadata)
+	}
 	performRequest := func(current *auth.Auth) (*http.Response, error) {
 		headers := baseHeaders.Clone()
 		setAccountHeader(headers, current)
-		req, errRequest := h.authManager.NewHttpRequest(ctx, current, http.MethodPost, upstreamCallURL, upstreamBody, headers)
+		req, errRequest := h.authManager.NewHttpRequest(ctx, current, http.MethodPost, callURL, upstreamBody, headers)
 		if errRequest != nil {
 			return nil, errRequest
 		}
 		authType, authValue := current.AccountInfo()
 		helps.RecordAPIRequest(ctx, runtimeConfig, helps.UpstreamRequestLog{
-			URL:       upstreamCallURL,
+			URL:       callURL,
 			Method:    http.MethodPost,
 			Headers:   headersForLogging(req.Header),
 			Body:      upstreamBody,
@@ -302,6 +311,14 @@ func (h *Handler) Handle(c *gin.Context) {
 			AuthType:  authType,
 			AuthValue: authValue,
 		})
+		if hasVoiceTarget {
+			// Dynamic paths must not redirect the selected account's credentials.
+			client := helps.NewUtlsHTTPClient(ctx, runtimeConfig, current, 0)
+			client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+				return errors.New("Codex voice creation redirect is not allowed")
+			}
+			return client.Do(req)
+		}
 		return h.authManager.HttpRequest(ctx, current, req)
 	}
 
@@ -389,7 +406,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	callID := ""
 	if success {
 		callID = callIDFromLocation(resp.Header.Get("Location"))
-		if callID == "" && mediaSession != nil {
+		if callID == "" {
 			writeLiveError(c, http.StatusBadGateway, "Codex live response is missing a valid call ID")
 			return
 		}
@@ -454,6 +471,13 @@ func (h *Handler) Handle(c *gin.Context) {
 				mediaRetained = true
 			}
 		}
+	}
+	if success && !sessionStored {
+		if selection != nil {
+			selection.End("session_store_failed")
+		}
+		writeLiveError(c, http.StatusServiceUnavailable, "Codex voice session could not be stored")
+		return
 	}
 	writeResponseHeaders(c.Writer.Header(), responseHeaders)
 	c.Status(resp.StatusCode)
@@ -542,17 +566,83 @@ func readAndCloseUpstreamErrorBody(response *http.Response, label string) []byte
 	return payload
 }
 
+func callTargetURL(target string) (string, error) {
+	invalidTarget := errors.New("Codex voice target must be a relative path within the official backend API")
+	parsed, errParse := url.Parse(target)
+	if errParse != nil || !strings.HasPrefix(target, "/") || strings.ContainsAny(target, "\\#") {
+		return "", invalidTarget
+	}
+	if parsed.Scheme != "" || parsed.Host != "" || parsed.User != nil || parsed.Opaque != "" {
+		return "", invalidTarget
+	}
+	// Check every encoded layer so upstream path normalization cannot escape /backend-api.
+	decodedPath := parsed.EscapedPath()
+	for {
+		if strings.Contains(decodedPath, "//") || strings.ContainsAny(decodedPath, "\\?#") {
+			return "", invalidTarget
+		}
+		for _, segment := range strings.Split(decodedPath, "/") {
+			if segment == "." || segment == ".." {
+				return "", invalidTarget
+			}
+		}
+		for _, character := range decodedPath {
+			if character <= ' ' || character == '\u007f' {
+				return "", invalidTarget
+			}
+		}
+		if !strings.Contains(decodedPath, "%") {
+			break
+		}
+		decodedPath, errParse = url.PathUnescape(decodedPath)
+		if errParse != nil {
+			return "", invalidTarget
+		}
+	}
+	return "https://chatgpt.com/backend-api" + target, nil
+}
+
 func prepareCallRequest(body []byte, contentType string) ([]byte, string, string, error) {
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "application/json"
+	}
 	mediaType, params, errMediaType := mime.ParseMediaType(contentType)
-	if errMediaType == nil && strings.EqualFold(mediaType, "multipart/form-data") {
-		return multipartCallRequest(body, strings.TrimSpace(params["boundary"]))
+	if errMediaType != nil {
+		return nil, "", "", fmt.Errorf("invalid Codex live call Content-Type: %w", errMediaType)
+	}
+	if strings.EqualFold(mediaType, "multipart/form-data") {
+		var errPayload error
+		body, contentType, _, errPayload = multipartCallRequest(body, strings.TrimSpace(params["boundary"]))
+		if errPayload != nil {
+			return nil, "", "", errPayload
+		}
+		mediaType = "application/json"
+	}
+	switch strings.ToLower(mediaType) {
+	case "application/json":
+		var payload struct {
+			SDP     string          `json:"sdp"`
+			Session json.RawMessage `json:"session"`
+		}
+		if errDecode := json.Unmarshal(body, &payload); errDecode != nil {
+			return nil, "", "", fmt.Errorf("failed to decode Codex live call request: %w", errDecode)
+		}
+		if strings.TrimSpace(payload.SDP) == "" {
+			return nil, "", "", errors.New("Codex live call request requires an SDP offer")
+		}
+		if session := bytes.TrimSpace(payload.Session); len(session) > 0 && session[0] != '{' {
+			return nil, "", "", errors.New("Codex live call session must be an object")
+		}
+	case "application/sdp", "text/plain":
+		if len(bytes.TrimSpace(body)) == 0 {
+			return nil, "", "", errors.New("Codex live call request requires an SDP offer")
+		}
+	default:
+		return nil, "", "", errors.New("Codex live call request requires SDP, JSON or multipart")
 	}
 	model := modelFromJSON(body)
 	if model == "" {
 		model = defaultLiveModel
-	}
-	if strings.TrimSpace(contentType) == "" {
-		contentType = "application/json"
 	}
 	return body, contentType, model, nil
 }

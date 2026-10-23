@@ -162,10 +162,10 @@ jobs:
       - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
 
-      - name: 🦀 Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: 💾 Host build cache
+        uses: ./.github/actions/host-build-cache
         with:
-          key: windows-release
+          target: windows
 
       - name: 🐹 Go setup
         uses: actions/setup-go@v5
@@ -184,14 +184,6 @@ jobs:
 
       - name: 🔄 Sync versions
         run: npm run sync-version
-
-      - name: 💾 Cache Tauri tooling
-        uses: actions/cache@v4
-        with:
-          path: C:\Users\runneradmin\AppData\Local\tauri
-          key: tauri-deps-windows-latest-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
-          restore-keys: |
-            tauri-deps-windows-latest-
 
       - name: 🏗️ Build Windows app
         shell: bash
@@ -277,10 +269,10 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
-      - name: 🦀 Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: 💾 Host build cache
+        uses: ./.github/actions/host-build-cache
         with:
-          key: macos-aarch64-release
+          target: macos-aarch64
 
       - name: 🐹 Go setup
         uses: actions/setup-go@v5
@@ -300,14 +292,6 @@ jobs:
       - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: 💾 Cache Tauri tooling
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Caches/tauri
-          key: tauri-deps-macos-latest-aarch64-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
-          restore-keys: |
-            tauri-deps-macos-latest-aarch64-
-
       - name: 🏗️ Build macOS Apple Silicon app
         shell: bash
         env:
@@ -316,7 +300,25 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          npx tauri build --ci --target aarch64-apple-darwin
+          node scripts/tauri.cjs build --ci --target aarch64-apple-darwin
+
+      - name: 📦 Prepare Universal binary inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release/macos-universal.cjs --mode stage \
+            --target aarch64-apple-darwin --version "${VERSION}" \
+            --output "universal-inputs/aarch64-apple-darwin"
+
+      - name: 📤 Share Universal binary inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-inputs-aarch64
+          path: universal-inputs/aarch64-apple-darwin
+          overwrite: true
+          retention-days: 1
+          compression-level: 1
+          if-no-files-found: error
 
       - name: 📝 Rebuild DMG with the Gatekeeper troubleshooting note
         shell: bash
@@ -390,10 +392,10 @@ jobs:
         with:
           targets: x86_64-apple-darwin
 
-      - name: 🦀 Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: 💾 Host build cache
+        uses: ./.github/actions/host-build-cache
         with:
-          key: macos-x86_64-release
+          target: macos-x86_64
 
       - name: 🐹 Go setup
         uses: actions/setup-go@v5
@@ -413,14 +415,6 @@ jobs:
       - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: 💾 Cache Tauri tooling
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Caches/tauri
-          key: tauri-deps-macos-latest-x86_64-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
-          restore-keys: |
-            tauri-deps-macos-latest-x86_64-
-
       - name: 🏗️ Build macOS Intel app
         shell: bash
         env:
@@ -429,7 +423,25 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          npx tauri build --ci --target x86_64-apple-darwin
+          node scripts/tauri.cjs build --ci --target x86_64-apple-darwin
+
+      - name: 📦 Prepare Universal binary inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release/macos-universal.cjs --mode stage \
+            --target x86_64-apple-darwin --version "${VERSION}" \
+            --output "universal-inputs/x86_64-apple-darwin"
+
+      - name: 📤 Share Universal binary inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-inputs-x86_64
+          path: universal-inputs/x86_64-apple-darwin
+          overwrite: true
+          retention-days: 1
+          compression-level: 1
+          if-no-files-found: error
 
       - name: 📝 Rebuild DMG with the Gatekeeper troubleshooting note
         shell: bash
@@ -485,10 +497,11 @@ jobs:
 
   build-macos-universal:
     name: "🏗️ Build: macOS Universal"
-    # This is an independent source build; run it in parallel with the two
-    # architecture-specific jobs instead of waiting for their release assets.
+    # Reuse exact binaries from this run. Universal only merges and bundles.
     needs:
       - prepare-release
+      - build-macos-aarch64
+      - build-macos-x86_64
     runs-on: macos-latest
     permissions:
       contents: write
@@ -504,17 +517,6 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - name: 🦀 Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          key: macos-universal-release
-
-      - name: 🐹 Go setup
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: sidecars/cockpit-cliproxy/go.mod
-          cache-dependency-path: sidecars/cockpit-cliproxy/go.sum
-
       - name: ⚙️ Node.js setup
         uses: actions/setup-node@v4
         with:
@@ -527,15 +529,26 @@ jobs:
       - name: 🔄 Sync versions
         run: npm run sync-version
 
-      - name: 💾 Cache Tauri tooling
-        uses: actions/cache@v4
+      - name: 📥 Download ARM binary inputs
+        uses: actions/download-artifact@v4
         with:
-          path: ~/Library/Caches/tauri
-          key: tauri-deps-macos-latest-universal-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
-          restore-keys: |
-            tauri-deps-macos-latest-universal-
+          name: universal-inputs-aarch64
+          path: universal-inputs/aarch64-apple-darwin
 
-      - name: 🏗️ Build macOS Universal app
+      - name: 📥 Download Intel binary inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: universal-inputs-x86_64
+          path: universal-inputs/x86_64-apple-darwin
+
+      - name: 🔗 Verify and merge Universal binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release/macos-universal.cjs --mode merge \
+            --inputs universal-inputs --version "${VERSION}"
+
+      - name: 📦 Bundle macOS Universal app
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -543,7 +556,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          npx tauri build --ci --target universal-apple-darwin
+          node scripts/tauri.cjs bundle --ci --target universal-apple-darwin
 
       - name: 📝 Rebuild DMG with the Gatekeeper troubleshooting note
         shell: bash
@@ -609,10 +622,10 @@ jobs:
       - name: 🦀 Rust setup
         uses: dtolnay/rust-toolchain@stable
 
-      - name: 🦀 Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: 💾 Host build cache
+        uses: ./.github/actions/host-build-cache
         with:
-          key: linux-${{ matrix.label }}-release
+          target: linux-${{ matrix.label }}
 
       - name: 🐹 Go setup
         uses: actions/setup-go@v5
@@ -631,14 +644,6 @@ jobs:
 
       - name: 🔄 Sync versions
         run: npm run sync-version
-
-      - name: 💾 Cache Tauri tooling
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/tauri
-          key: tauri-deps-${{ matrix.platform }}-${{ hashFiles('package-lock.json', '**/Cargo.toml') }}
-          restore-keys: |
-            tauri-deps-${{ matrix.platform }}-
 
       - name: 🏗️ Build Linux app
         shell: bash

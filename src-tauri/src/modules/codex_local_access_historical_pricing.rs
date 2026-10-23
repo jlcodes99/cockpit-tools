@@ -1,6 +1,12 @@
 // Historical log estimates only. These entries are never offered as model presets.
 const HISTORICAL_CODEX_MODEL_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
     CodexLocalAccessPriceBookEntry {
+        model_id: "gpt-5.5",
+        session_long_context: true,
+        standard: codex_price(5.0, 0.5, 30.0),
+        priority: Some(codex_price(10.0, 1.0, 60.0)),
+    },
+    CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.4",
         session_long_context: true,
         standard: codex_price(2.5, 0.25, 15.0),

@@ -136,6 +136,7 @@ fn build_merged_auth_file_value(
 }
 
 fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, String> {
+    reject_chatgpt_plan_client_injection(account)?;
     if account.is_api_key_auth() {
         let api_key = normalize_optional_ref(account.openai_api_key.as_deref())
             .ok_or("API Key 账号缺少 OPENAI_API_KEY")?;
@@ -762,16 +763,10 @@ fn write_auth_file_to_dir_with_after_commit(
     account: &CodexAccount,
     after_commit: impl FnOnce(),
 ) -> Result<(), String> {
-    let preserve_bridge = crate::modules::config::get_user_config()
-        .codex_preserve_verified_external_bridge;
     // Inspect the previous auth before replacing it: this compatibility policy
     // applies only to OAuth -> OAuth, never to an old API Service/key route.
-    let bridge_url = if preserve_bridge {
-        let existing_auth = read_configured_codex_auth_value(base_dir).ok().flatten();
-        external_bridge::preserved_url(base_dir, account, existing_auth.as_ref(), true)
-    } else {
-        None
-    };
+    let existing_auth = read_configured_codex_auth_value(base_dir).ok().flatten();
+    let bridge_url = external_bridge::preserved_url(base_dir, account, existing_auth.as_ref());
     write_auth_file_to_dir_with_after_commit_and_bridge(base_dir, account, after_commit, bridge_url)
 }
 
@@ -881,6 +876,7 @@ pub(crate) fn write_prepared_account_bundle_to_dir(
     base_dir: &Path,
     account: &CodexAccount,
 ) -> Result<(), String> {
+    reject_chatgpt_plan_client_injection(account)?;
     let account = resolve_account_for_bundle_write(base_dir, account)?;
     write_auth_file_to_dir(base_dir, &account)?;
     write_managed_projection_to_dir(base_dir, &account)?;

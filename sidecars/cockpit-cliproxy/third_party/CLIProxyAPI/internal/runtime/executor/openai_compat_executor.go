@@ -193,7 +193,7 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 		b, _ := io.ReadAll(httpResp.Body)
 		helps.AppendAPIResponseChunk(ctx, e.cfg, b)
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), b))
-		err = statusErr{code: httpResp.StatusCode, msg: string(b)}
+		err = cliproxyexecutor.UpstreamRequestRejected(statusErr{code: httpResp.StatusCode, msg: string(b)})
 		return resp, err
 	}
 	body, err := io.ReadAll(httpResp.Body)
@@ -405,7 +405,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		if errClose := httpResp.Body.Close(); errClose != nil {
 			log.Errorf("openai compat executor: close response body error: %v", errClose)
 		}
-		err = statusErr{code: httpResp.StatusCode, msg: string(b)}
+		err = cliproxyexecutor.UpstreamRequestRejected(statusErr{code: httpResp.StatusCode, msg: string(b)})
 		return nil, err
 	}
 	out := make(chan cliproxyexecutor.StreamChunk)

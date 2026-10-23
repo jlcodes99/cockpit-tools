@@ -3,6 +3,17 @@ import type { CodexSwitchAuthFailure } from './codexSwitchAuthFailure';
 /** Lifecycle failures are retryable setup errors, not requests to reauthorize. */
 export function codexLaunchErrorKey(error: unknown): string | null {
   const code = String(error ?? '').replace(/^Error:\s*/, '');
+  // Startup repair adds instance/path context around these safe error codes.
+  // Both switch-and-start and instance launch use this shared presentation.
+  if (/\bCODEX_SESSION_VISIBILITY_ROLLBACK_FAILED\b/.test(code)) {
+    return 'codex.launchErrors.sessionRestoreFailed';
+  }
+  if (/\bCODEX_SESSION_VISIBILITY_TIMEOUT\b/.test(code)) {
+    return 'codex.launchErrors.sessionCheckTimeout';
+  }
+  if (/\bCODEX_SESSION_VISIBILITY_ROLLOUT_LINE_TOO_LARGE\b/.test(code)) {
+    return 'codex.launchErrors.sessionFileTooLarge';
+  }
   if (code === 'CODEX_SWITCH_BINDING_FAILED') return 'codex.launchErrors.bindingFailed';
   if (code === 'CODEX_PROCESS_SCAN_FAILED') return 'codex.launchErrors.processScanFailed';
   if (code === 'PROXY_ENTRY_PORT_UNAVAILABLE' || code === 'PROXY_RUNTIME_NOT_READY') {

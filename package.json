@@ -1,7 +1,7 @@
 {
   "name": "cockpit-tools",
   "private": true,
-  "version": "1.3.69",
+  "version": "1.3.74",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "proxy-engine:prepare": "node scripts/prepare-proxy-engine.cjs",
     "proxy-engine:bundle-config": "node scripts/proxy-engine-bundle-config.cjs",
     "test:go": "cd sidecars/cockpit-cliproxy && go test ./...",
+    "test:codex-parity": "node scripts/check_codex_native_go_parity.cjs",
     "test:codex-api-key-scope": "tsx --test src/utils/codexApiKeyAccountScope.test.ts",
     "typecheck": "tsc --noEmit",
     "prebuild": "npm run typecheck",
@@ -48,7 +49,7 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/cli": "2.10.1",
     "@types/blueimp-md5": "^2.18.2",
     "@types/otplib": "^7.0.0",
     "@types/react": "^19.1.8",

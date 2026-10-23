@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/proxyutil"
 	log "github.com/sirupsen/logrus"
@@ -25,6 +26,9 @@ func newDefaultRoundTripperProvider() *defaultRoundTripperProvider {
 func (p *defaultRoundTripperProvider) RoundTripperFor(auth *coreauth.Auth) http.RoundTripper {
 	if auth == nil {
 		return nil
+	}
+	if profile, err := helps.ManagedIdentityForAuth(auth); profile != nil || err != nil {
+		return helps.ManagedStandardTransport(auth, auth.ProxyURL, "sdk")
 	}
 	proxyStr := strings.TrimSpace(auth.ProxyURL)
 	if proxyStr == "" {

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { deferred, loadHookModule, settlePromises } from '../../tests/helpers/reactHookHarness';
 import type { CodexModelProvider } from './codexModelProviderService';
 import type { CodexAccount } from '../types/codex';
+import { buildCodexModelProviderAccountSnapshot } from '../utils/codexModelProviderAccountSync';
 
 function provider(): CodexModelProvider {
   return {
@@ -20,8 +21,8 @@ function account(key = 'sk-first'): CodexAccount {
     tokens: { access_token: '', id_token: '' }, created_at: 1, last_used: 1,
   };
 }
-function harness() {
-  let disk = JSON.stringify([provider()]);
+function harness(initial = provider()) {
+  let disk = JSON.stringify([initial]);
   let writeError: Error | null = null;
   let readError: Error | null = null;
   let gate: ReturnType<typeof deferred<void>> | null = null;
@@ -56,6 +57,16 @@ test('deleted provider keys stay removed after account reconciliation and disk r
   h.service.invalidateCodexModelProviderCache();
   const reloaded = await h.service.mergeCodexModelProviderApiKeysFromAccounts([account()]);
   assert.deepEqual(Array.from(reloaded[0].apiKeys, (key) => key.apiKey), ['sk-second']);
+});
+
+test('plan service references never become provider API keys even when their upstream URL matches', async () => {
+  const openai = { ...provider(), baseUrl: 'https://api.openai.com/v1' };
+  const h = harness(openai);
+  const plan = { ...account('chatgpt-plan-managed'), id: 'chatgpt_plan_reference',
+    api_provider_id: 'cockpit_chatgpt_plan', api_base_url: openai.baseUrl };
+  const merged = await h.service.mergeCodexModelProviderApiKeysFromAccounts([plan]);
+  assert.equal(h.writeCount(), 0);
+  assert.deepEqual(Array.from(merged[0].apiKeys, (entry) => entry.apiKey), ['sk-first', 'sk-second']);
 });
 
 test('explicit re-add clears the exclusion and new account keys still import', async () => {
@@ -170,4 +181,49 @@ test('legacy keys inherit provider settings without an automatic migration; expl
   assert.deepEqual(Array.from(saved.apiKeys[0].modelCatalog!), []);
   assert.equal(saved.apiKeys[1].modelCatalog, undefined);
   assert.deepEqual(Array.from(saved.modelCatalog!), ['legacy-model']);
+});
+
+test('loading capability defaults preserves credential vision policies and is idempotent', async () => {
+  const initial = provider();
+  initial.modelCatalog = ['Qwen-VL'];
+  initial.supportsVision = false;
+  initial.modelCapabilities = {};
+  initial.apiKeys[0].supportsVision = true;
+  initial.apiKeys[1].supportsVision = false;
+  initial.apiKeys[1].modelCapabilities = {};
+  initial.apiKeys.push({ id: 'legacy', name: 'Legacy', apiKey: 'sk-legacy', createdAt: 1, updatedAt: 1 });
+  const h = harness(initial);
+
+  const migrated = (await h.service.listCodexModelProviders())[0];
+  const first = buildCodexModelProviderAccountSnapshot(migrated, '', 'sk-first');
+  const second = buildCodexModelProviderAccountSnapshot(migrated, '', 'sk-second');
+  assert.deepEqual(first.apiModelVisionSupport, { 'qwen-vl': true });
+  assert.deepEqual(second.apiModelVisionSupport, { 'Qwen-VL': false });
+  assert.deepEqual(h.stored()[0].modelCapabilities, { 'qwen-vl': { supportsVision: false } });
+  assert.deepEqual(h.stored()[0].apiKeys[1].modelCapabilities, {});
+  assert.equal(h.stored()[0].apiKeys[2].modelCapabilities, undefined);
+  assert.equal(h.writeCount(), 1);
+
+  h.service.invalidateCodexModelProviderCache();
+  await h.service.listCodexModelProviders();
+  assert.equal(h.writeCount(), 1);
+  assert.deepEqual(h.stored()[0].apiKeys[0].modelCapabilities, { 'qwen-vl': { supportsVision: true } });
+});
+
+test('legacy provider expansion preserves an explicit credential opt-out and model override', async () => {
+  const initial = provider();
+  initial.modelCatalog = ['Qwen-VL', 'text-only'];
+  initial.supportsVision = true;
+  initial.apiKeys[0].supportsVision = false;
+  initial.apiKeys[0].modelCapabilities = {};
+  initial.apiKeys[1].modelCapabilities = { 'Qwen-VL': { supportsVision: false } };
+  const h = harness(initial);
+
+  const migrated = (await h.service.listCodexModelProviders())[0];
+  assert.deepEqual(buildCodexModelProviderAccountSnapshot(migrated, '', 'sk-first').apiModelVisionSupport,
+    { 'Qwen-VL': false, 'text-only': false });
+  assert.deepEqual(buildCodexModelProviderAccountSnapshot(migrated, '', 'sk-second').apiModelVisionSupport,
+    { 'qwen-vl': false, 'text-only': true });
+  assert.deepEqual(h.stored()[0].modelCapabilities,
+    { 'qwen-vl': { supportsVision: true }, 'text-only': { supportsVision: true } });
 });

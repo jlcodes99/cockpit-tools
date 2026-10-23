@@ -223,14 +223,24 @@
   flex-shrink: 0;
 }
 
-.codex-request-log-speed.fast {
+.codex-request-log-speed.adjusted {
+  min-width: 0;
+  height: auto;
+  min-height: 22px;
+  padding-block: 3px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.codex-request-log-speed:is(.fast, .ultrafast) {
   color: #7a4b00;
   border-color: rgba(217, 119, 6, 0.24);
   background: linear-gradient(180deg, rgba(255, 250, 241, 0.98), rgba(252, 240, 220, 0.94));
   box-shadow: 0 1px 2px rgba(146, 64, 14, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
-[data-theme="dark"] .codex-request-log-speed.fast {
+[data-theme="dark"] .codex-request-log-speed:is(.fast, .ultrafast) {
   color: #fbbf24;
   border-color: rgba(251, 191, 36, 0.28);
   background: rgba(251, 191, 36, 0.12);

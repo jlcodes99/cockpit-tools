@@ -6,6 +6,8 @@
  * 只保留我们已经支持的一键落盘客户端：Codex App / Codex CLI / Claude Code / Claude Desktop。
  */
 
+import { getCodexModelContextTemplate } from './codexModelContext';
+
 export type ApiKeyFunFamily =
   | "gemini"
   | "grok"
@@ -66,8 +68,8 @@ export const APIKEY_FUN_FAMILIES: readonly ApiKeyFunFamilyPreset[] = [
     id: "grok",
     label: "Grok",
     prefixes: ["grok-", "grok"],
-    preferredModels: ["grok-4.6", "grok-4.3", "grok-build-0.1"],
-    fallbackModel: "grok-4.6",
+    preferredModels: ["grok-4.7", "grok-4.6", "grok-4.3", "grok-build-0.1"],
+    fallbackModel: "grok-4.7",
     contextWindow: 500000,
     codexBaseUrl: "https://api.apikey.fan/v1",
     clients: ["codex_app", "codex_cli", "claude_code", "claude_desktop"],
@@ -106,7 +108,7 @@ export const APIKEY_FUN_FAMILIES: readonly ApiKeyFunFamilyPreset[] = [
     id: "codex",
     label: "ChatGPT",
     prefixes: ["gpt-", "o1", "o3", "o4", "codex-"],
-    preferredModels: ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5"],
+    preferredModels: ["gpt-5.6-sol", "gpt-5.6-luna"],
     fallbackModel: "gpt-5.6-sol",
     contextWindow: 272000,
     codexBaseUrl: "https://api.apikey.fan",
@@ -187,6 +189,7 @@ export function buildCodexConfigToml(input: {
   model: string;
 }): string {
   const { family, client, model } = input;
+  const contextWindow = getCodexModelContextTemplate(model)?.context_window ?? family.contextWindow;
   const supportsWebsockets = client === "codex_app" && family.id === "codex";
   const lines: string[] = [
     `model_provider = "codex"`,
@@ -197,12 +200,12 @@ export function buildCodexConfigToml(input: {
     lines.push(`model_reasoning_effort = "high"`);
   }
   // 压缩阈值统一按上下文窗口的 90% 派生；等于窗口值会导致永不触发压缩。
-  const autoCompactTokenLimit = Math.floor((family.contextWindow * 90) / 100);
+  const autoCompactTokenLimit = Math.floor((contextWindow * 90) / 100);
   lines.push(
     "disable_response_storage = true",
     'network_access = "enabled"',
     "windows_wsl_setup_acknowledged = true",
-    `model_context_window = ${family.contextWindow}`,
+    `model_context_window = ${contextWindow}`,
     `model_auto_compact_token_limit = ${autoCompactTokenLimit}`,
     "effective_context_window_percent = 95",
     "",

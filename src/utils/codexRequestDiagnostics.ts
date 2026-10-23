@@ -1,4 +1,39 @@
-import type { CodexLocalAccessRequestPayload } from '../types/codexLocalAccess';
+import type { CodexAuthorizationFallbackTrace, CodexLocalAccessRequestDetail, CodexLocalAccessRequestPayload, CodexServiceTierAdaptation } from '../types/codexLocalAccess';
+
+/** Only explicit gateway evidence establishes an adaptation, not response tier or route. */
+export function recordedServiceTierAdaptation(value?: CodexServiceTierAdaptation | null): CodexServiceTierAdaptation | null {
+  return value?.reason === 'official_default_only' && value.sentTier === 'default'
+    && Boolean(value.requestedTier?.trim()) ? value : null;
+}
+
+/** Display recorded provenance only, never guess a fallback from the final local route. */
+export function authorizationFallbackSummaryKey(trace?: CodexAuthorizationFallbackTrace | null): string | null {
+  if (!trace || trace.fromRoute !== 'official' || trace.toRoute !== 'local_gateway'
+    || !trace.fromAccountId || trace.fromAccountId !== trace.toAccountId) return null;
+  return 'codex.requestDiagnostics.authorizationFallback.summary';
+}
+
+export function authorizationFallbackReasonKey(reason: string): string {
+  const reasons = new Map([
+    ['eligibility_rejected', 'notEligible'], ['subscription_sharing_user_not_eligible', 'notEligible'], ['not_eligible', 'notEligible'],
+    ['reauthorize', 'authorization'], ['authorization', 'authorization'], ['authorization_failed', 'authorization'],
+    ['capability_unsupported', 'unsupported'], ['unsupported_capability', 'unsupported'], ['unsupported', 'unsupported'],
+    ['official_throttled', 'limited'], ['rate_limit', 'limited'], ['quota', 'limited'],
+    ['cooldown', 'paused'], ['circuit_open', 'paused'],
+    ['transport', 'unavailable'], ['upstream_error', 'unavailable'], ['unavailable', 'unavailable'],
+  ]);
+  return `codex.requestDiagnostics.authorizationFallback.reasons.${reasons.get(reason) || 'unavailable'}`;
+}
+
+/** Persisted endpoint IDs describe the route used then, independently of today's account binding. */
+export function requestAuthorizationRouteKey(accountId?: string | null, authorizationRoute?: 'official' | 'local_gateway' | null): string {
+  if (authorizationRoute === 'official') return 'codex.requestDiagnostics.routeOfficial';
+  if (authorizationRoute === 'local_gateway') return 'codex.requestDiagnostics.routeLocal';
+  const id = accountId?.trim();
+  if (!id) return 'common.unknown';
+  return id.startsWith('chatgpt_plan_')
+    ? 'codex.requestDiagnostics.routeOfficial' : 'codex.requestDiagnostics.routeLocal';
+}
 
 /** Legacy serviceTier mixes request and response values; never infer its source. */
 export function requestServiceTierPresentation(event: {
@@ -13,6 +48,7 @@ export function requestServiceTierPresentation(event: {
 export function requestedServiceTierLabelKey(tier: string): string | null {
   if (tier.toLowerCase() === 'auto') return 'codex.contextOverride.automatic';
   if (['priority', 'fast'].includes(tier.toLowerCase())) return 'codex.speed.fast';
+  if (tier.toLowerCase() === 'ultrafast') return 'codex.speed.ultrafast';
   if (['standard', 'default'].includes(tier.toLowerCase())) return 'codex.speed.standard';
   return null;
 }
@@ -20,7 +56,13 @@ export function requestedServiceTierLabelKey(tier: string): string | null {
 const PHASES = new Set([
   'selection', 'upstream_connect', 'upstream_response', 'stream_read',
   'downstream_delivery', 'client_canceled', 'stream_incomplete', 'completed',
+  'routing', 'upstream',
 ]);
+const PHASE_ALIASES = new Map(Object.entries({
+  dial: 'upstream_connect', stream_idle: 'stream_read', total_timeout: 'stream_read',
+  downstream: 'downstream_delivery', client_cancelled: 'client_canceled',
+  identity: 'selection', transport_fallback: 'upstream_connect',
+}));
 
 export function formatRequestDiagnosticError(cause: unknown, translate: (key: string) => string): string {
   const message = String(cause).replace(/^Error:\s*/, '');
@@ -28,7 +70,20 @@ export function formatRequestDiagnosticError(cause: unknown, translate: (key: st
 }
 
 export function requestDiagnosticPhaseKey(phase: string | null | undefined): string {
-  return `codex.requestDiagnostics.phases.${phase && PHASES.has(phase) ? phase : 'unknown'}`;
+  const normalized = phase && (PHASES.has(phase) ? phase : PHASE_ALIASES.get(phase));
+  return `codex.requestDiagnostics.phases.${normalized || 'unknown'}`;
+}
+
+/** Classify recorded stages, never an error code shared by local and upstream errors. */
+export function requestDiagnosticErrorSource(detail: CodexLocalAccessRequestDetail | null): string {
+  const phase = detail?.failurePhase;
+  if (phase === 'routing' || phase === 'selection' || phase === 'identity') return 'gateway';
+  // The native engine's generic "upstream" also includes validation after route
+  // selection. Only the explicit response stage is evidence of an upstream reply.
+  if (phase === 'upstream_response') return 'upstream';
+  if (phase === 'client_canceled' || phase === 'client_cancelled' || phase === 'downstream' || phase === 'downstream_delivery') return 'client';
+  if (phase && ['dial', 'upstream_connect', 'stream_read', 'stream_idle', 'total_timeout', 'stream_incomplete'].includes(phase)) return 'transport';
+  return 'unknown';
 }
 
 export function formatRequestPayloadBody(payload: Pick<CodexLocalAccessRequestPayload, 'body' | 'truncated'>): string {

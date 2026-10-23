@@ -1,0 +1,5 @@
+.btn.codex-official-entry { appearance: none; font: inherit; font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--bg-surface)); border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border)); display: inline-flex; align-items: center; gap: 7px; min-width: 0; white-space: normal; }
+.btn.codex-official-entry:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 13%, var(--bg-surface)); border-color: var(--primary); }
+.btn.codex-official-entry:disabled { opacity: .5; cursor: not-allowed; }
+.btn.codex-official-entry:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.codex-official-entry-emblem { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }

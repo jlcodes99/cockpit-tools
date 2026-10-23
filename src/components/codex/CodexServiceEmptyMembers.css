@@ -1,0 +1,11 @@
+.codex-service-empty-members {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+.codex-service-empty-members > strong { color: var(--text-primary); font-size: 13px; }
+.codex-service-empty-members > p { margin: 6px 0 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.codex-service-empty-members > .btn { margin-top: 10px; max-width: 100%; white-space: normal; }

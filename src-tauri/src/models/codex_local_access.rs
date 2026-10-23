@@ -92,11 +92,12 @@ impl Default for CodexLocalAccessImageGenerationMode {
 pub enum CodexLocalAccessGatewayMode {
     Legacy,
     Sidecar,
+    Native,
 }
 
 impl Default for CodexLocalAccessGatewayMode {
     fn default() -> Self {
-        Self::Sidecar
+        Self::Native
     }
 }
 
@@ -513,6 +514,98 @@ fn default_true() -> bool {
 pub struct CodexLocalAccessQuotaReserve {
     pub hourly_percent: i32,
     pub weekly_percent: i32,
+    // Legacy `strict: false` no longer disables quota protection.
+    #[serde(default = "default_true", skip_deserializing)]
+    pub strict: bool,
+    #[serde(default = "default_quota_safety_margin")]
+    pub safety_margin_percent: i32,
+}
+
+pub fn default_quota_safety_margin() -> i32 { 3 }
+
+pub const CODEX_CAPABILITY_IDS: &[&str] = &[
+    "function",
+    "custom",
+    "namespace",
+    "tool_search_client",
+    "tool_search",
+    "web_search",
+    "image_generation",
+    "file_search",
+    "code_interpreter",
+    "computer_use",
+    "mcp",
+    "programmatic_tool_calling",
+    "image_input",
+    "file_input",
+    "audio_input",
+    "video_input",
+    "compact",
+];
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexLocalAccessCapabilitySupport {
+    Supported,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessCapabilityOverride {
+    pub account_id: String,
+    pub model: String,
+    #[serde(default)]
+    pub capabilities: std::collections::BTreeMap<String, CodexLocalAccessCapabilitySupport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessCapabilityFallbackConfig {
+    // Kept in snapshots for compatibility; routing is always automatic.
+    #[serde(default = "default_true", skip_deserializing)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub account_ids: Vec<String>,
+    #[serde(default)]
+    pub overrides: Vec<CodexLocalAccessCapabilityOverride>,
+}
+
+impl Default for CodexLocalAccessCapabilityFallbackConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            account_ids: Vec::new(),
+            overrides: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessCompatModel {
+    pub account_id: String,
+    pub model: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessMultiAgentConfig {
+    #[serde(default = "default_true", skip_deserializing)]
+    pub optimize: bool,
+    #[serde(default = "default_true", skip_deserializing)]
+    pub orphan_delegation: bool,
+    #[serde(default, skip_deserializing, skip_serializing)]
+    pub compat_models: Vec<CodexLocalAccessCompatModel>,
+}
+impl Default for CodexLocalAccessMultiAgentConfig {
+    fn default() -> Self {
+        Self {
+            optimize: true,
+            orphan_delegation: true,
+            compat_models: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -542,6 +635,22 @@ pub struct CodexLocalAccessCollection {
     pub image_generation_main_model: Option<String>,
     #[serde(default)]
     pub image_generation_account_policies: HashMap<String, CodexLocalAccessImageGenerationPolicy>,
+    /// Inactive Codex image policies saved by an explicit authorization-mode switch.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub chatgpt_plan_codex_image_policies: HashMap<String, CodexLocalAccessImageGenerationPolicy>,
+    /// Reject stale whole-collection writes after a member authorization transaction.
+    #[serde(default)]
+    pub chatgpt_plan_service_revision: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paused_account_ids: Vec<String>,
+    /// Display-only origins. Actual route and checkpoint IDs remain independent.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub official_account_source_ids: HashMap<String, String>,
+    /// The original service member's selected independent ChatGPT credential.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub official_account_bindings: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub service_account_identity_fingerprints: HashMap<String, String>,
     /// 生图转发账号池：生图请求只允许落到所选 OAuth / API Key 来源。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_generation_account_ids: Vec<String>,
@@ -550,6 +659,13 @@ pub struct CodexLocalAccessCollection {
     pub image_generation_account_models: HashMap<String, String>,
     #[serde(default)]
     pub gateway_mode: CodexLocalAccessGatewayMode,
+    #[serde(default)]
+    pub capability_fallback: CodexLocalAccessCapabilityFallbackConfig,
+    #[serde(default)]
+    pub multi_agent: CodexLocalAccessMultiAgentConfig,
+    /// Marks the one-time switch to the native default. Later user choices survive upgrades.
+    #[serde(default)]
+    pub native_gateway_default_migrated: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream_proxy_url: Option<String>,
     #[serde(default)]
@@ -759,6 +875,13 @@ pub struct CodexLocalAccessProxyRoute {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessUsageEvent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization_route: Option<String>,
+    /// Derived from recorded attempts when reading a page; never inferred from today's mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization_fallback: Option<CodexLocalAccessAuthorizationFallbackTrace>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_tier_adaptation: Option<CodexLocalAccessServiceTierAdaptation>,
     #[serde(default)]
     pub timestamp: i64,
     #[serde(default)]
@@ -779,7 +902,7 @@ pub struct CodexLocalAccessUsageEvent {
     pub proxy_route: Option<CodexLocalAccessProxyRoute>,
     #[serde(default)]
     pub model_id: String,
-    /// 客户端请求的模型（保留路由命名空间前缀，如 `cpa/gpt-5.5`）。
+    /// 客户端请求的模型（保留路由命名空间前缀，如 `cpa/gpt-5.6-sol`）。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub requested_model: String,
     /// 实际发送给上游的模型（账号映射与路由改写之后）。
@@ -920,8 +1043,73 @@ pub struct CodexLocalAccessUsageEventPage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessCapabilityFallbackTrace {
+    pub reason: String,
+    pub capabilities: Vec<String>,
+    pub from_account_id: String,
+    pub from_model: String,
+    pub to_account_id: String,
+    pub to_model: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessAuthorizationFallbackTrace {
+    pub reason: String,
+    #[serde(default)]
+    pub trigger_stage: String,
+    pub from_account_id: String,
+    pub to_account_id: String,
+    pub from_route: String,
+    pub to_route: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessServiceTierAdaptation {
+    pub requested_tier: String,
+    pub sent_tier: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessRequestAttempt {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization_route: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization_fallback: Option<CodexLocalAccessAuthorizationFallbackTrace>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_tier_adaptation: Option<CodexLocalAccessServiceTierAdaptation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_request_id: Option<String>,
     pub sequence: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_pool_retired: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_http_version: Option<String>,
+    #[serde(default)]
+    pub upstream_identity_metadata_captured: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_installation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_chatgpt_account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_identity: Option<crate::modules::codex_api_identity::InstallationProfile>,
+    #[serde(default)]
+    pub upstream_identity_captured: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_thread_id: Option<String>,
     #[serde(default)]
     pub account_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -944,6 +1132,9 @@ pub struct CodexLocalAccessRequestAttempt {
     pub error_message: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure_phase: Option<String>,
+    /// Only records an actual capability-driven selection, not ordinary retries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_fallback: Option<CodexLocalAccessCapabilityFallbackTrace>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -973,6 +1164,18 @@ pub struct CodexLocalAccessRequestPayload {
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessRequestDetail {
     pub request_id: String,
+    #[serde(default)]
+    pub client_identity_metadata_captured: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_installation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_chatgpt_account_id: Option<String>,
+    #[serde(default)]
+    pub client_identity_captured: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_thread_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_response_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1088,6 +1291,8 @@ pub struct CodexLocalAccessProfileAttachment {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessState {
+    #[serde(default)]
+    pub service_members: Vec<CodexLocalAccessServiceMember>,
     pub recovering: bool,
     pub recovery_attempt: usize,
     pub recovery_total: usize,
@@ -1117,6 +1322,15 @@ pub struct CodexLocalAccessState {
     pub quota_reserve_status: Option<CodexLocalAccessQuotaReserveStatus>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessServiceMember {
+    pub source_account_id: String,
+    pub account_id: String,
+    pub mode: String,
+    pub paused: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessAppendAccountSkipped {
@@ -1131,19 +1345,6 @@ pub struct CodexLocalAccessAppendAccountsResult {
     pub synced_account_ids: Vec<String>,
     pub added_account_ids: Vec<String>,
     pub skipped_accounts: Vec<CodexLocalAccessAppendAccountSkipped>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexLocalAccessQuotaReserveStatus {
-    pub account_id: String,
-    pub snapshot_updated_at: Option<i64>,
-    pub snapshot_fresh: bool,
-    pub blocked: bool,
-    pub warning: bool,
-    pub effective_window: Option<String>,
-    pub effective_remaining_percent: Option<i32>,
-    pub effective_reserve_percent: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1217,4 +1418,61 @@ pub struct CodexInstanceGatewayView {
     pub log_api_key_id: String,
     /// 最近一次启动自愈失败原因；成功恢复或探测到运行中时为空。
     pub last_error: Option<String>,
+}
+
+#[cfg(test)]
+mod automatic_policy_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn reserve_defaults_remain_strict_and_roundtrip() {
+        let reserve: CodexLocalAccessQuotaReserve = serde_json::from_value(json!({
+            "hourlyPercent":20, "weeklyPercent":10, "strict":false
+        })).unwrap();
+        assert!(reserve.strict);
+        assert_eq!(reserve.safety_margin_percent, default_quota_safety_margin());
+        let encoded = serde_json::to_value(&reserve).unwrap();
+        assert_eq!(encoded["hourlyPercent"], 20);
+        assert_eq!(encoded["weeklyPercent"], 10);
+    }
+
+    #[test]
+    fn retired_flags_and_compatibility_lists_cannot_disable_automatic_capabilities() {
+        let multi: CodexLocalAccessMultiAgentConfig = serde_json::from_value(json!({
+            "optimize": false, "orphanDelegation": false,
+            "compatModels": [{"accountId":"legacy", "model":"legacy-model"}]
+        }))
+        .unwrap();
+        assert!(multi.optimize && multi.orphan_delegation);
+        assert!(multi.compat_models.is_empty());
+        assert!(serde_json::to_value(&multi)
+            .unwrap()
+            .get("compatModels")
+            .is_none());
+
+        let fallback: CodexLocalAccessCapabilityFallbackConfig = serde_json::from_value(json!({
+            "enabled": false, "accountIds": [], "overrides": []
+        }))
+        .unwrap();
+        assert!(fallback.enabled);
+        assert!(CodexLocalAccessCapabilityFallbackConfig::default().enabled);
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexLocalAccessQuotaReserveStatus {
+    pub account_id: String,
+    pub snapshot_updated_at: Option<i64>,
+    pub snapshot_fresh: bool,
+    pub blocked: bool,
+    pub warning: bool,
+    pub effective_window: Option<String>,
+    pub effective_remaining_percent: Option<f64>,
+    pub effective_reserve_percent: Option<i32>,
+    pub strict: bool,
+    pub safety_margin_percent: i32,
+    pub in_flight: usize,
+    pub awaiting_confirmation: bool,
 }

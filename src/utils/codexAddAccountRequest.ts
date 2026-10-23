@@ -1,3 +1,5 @@
+import type { CodexLocalAccessOAuthQuotaReserve } from '../types/codexLocalAccess';
+
 export const CODEX_OPEN_ADD_ACCOUNT_EVENT = 'codex-open-add-account';
 export const CODEX_SUITE_ENSURE_MOUNTED_EVENT = 'codex-suite-ensure-mounted';
 
@@ -12,7 +14,7 @@ export type CodexAddAccountTab =
 export type CodexOAuthBindingRetryDetail = {
   targetKind: 'local_access' | 'api_key_account';
   targetAccountId?: string;
-  quotaReserve?: { hourlyPercent: number; weeklyPercent: number } | null;
+  quotaReserve?: CodexLocalAccessOAuthQuotaReserve | null;
 };
 
 export type CodexOpenAddAccountDetail = {

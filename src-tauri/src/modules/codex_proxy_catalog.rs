@@ -47,6 +47,7 @@ struct Source {
     catalog: ParsedCatalog,
     updated_at: i64,
     last_attempt_at: Option<i64>,
+    #[serde(default)]
     auto_update: bool,
     error: Option<String>,
     revision: String,
@@ -301,7 +302,7 @@ fn view(store: &Store) -> CatalogView {
                     updated_at: s.updated_at,
                     revision: s.revision.clone(),
                     last_attempt_at: s.last_attempt_at,
-                    auto_update: s.auto_update,
+                    auto_update: has_subscription_url(s),
                     error: s.error.clone(),
                     needs_refresh: s.parser_version < PARSER_VERSION
                         && s.kind == "subscription"
@@ -482,6 +483,8 @@ fn read(path: &Path) -> Result<Store, String> {
         return Err("CATALOG_STORAGE".into());
     }
     for source in &mut store.sources {
+        // Old opt-out values are compatibility data, no longer runtime controls.
+        source.auto_update = has_subscription_url(source);
         parser::revalidate_retained_nodes(&mut source.catalog);
         revalidate_groups(&mut source.catalog).map_err(|_| "CATALOG_STORAGE")?;
     }
@@ -1200,13 +1203,13 @@ pub async fn import(
                 store.sources.push(Source {
                     id: uuid::Uuid::new_v4().to_string(),
                     name,
+                    auto_update: kind == "subscription" && url.is_some(),
                     kind,
                     url,
                     catalog,
                     network: Default::default(),
                     updated_at: chrono::Utc::now().timestamp_millis(),
                     last_attempt_at: None,
-                    auto_update: false,
                     error: None,
                     revision: uuid::Uuid::new_v4().to_string(),
                     default: None,
@@ -1230,7 +1233,7 @@ fn strategy_member_node(source: &Source, item_id: &str) -> Result<strategy::Stra
         .iter()
         .find(|node| node.id == item_id)
         .ok_or("CATALOG_CHANGED")?;
-    // 未获授权的节点（例如跳过证书校验）不进入策略：不把不可执行的成员复制成可用策略。
+    // 不可执行的节点不进入策略，保留实际协议及参数校验。
     if node.error.is_some() {
         return Err("CATALOG_INVALID".into());
     }
@@ -1412,7 +1415,8 @@ pub async fn refresh(request_id: String, source_id: String) -> Result<CatalogVie
                 }
                 commit(&state)?;
                 let mut catalog = catalog;
-                preserve_permissions(&s.catalog, &mut catalog)?;
+                parser::revalidate_retained_nodes(&mut catalog);
+                revalidate_groups(&mut catalog)?;
                 s.catalog = catalog;
                 s.parser_version = PARSER_VERSION;
                 // 节点消失时不静默换节点：清除默认项，由资源和账号页提示用户重新设置。
@@ -1694,7 +1698,7 @@ pub async fn clear_default(source_id: String) -> Result<CatalogView, String> {
     })
     .await
 }
-pub async fn set_auto_update(source_id: String, enabled: bool) -> Result<CatalogView, String> {
+pub async fn set_auto_update(source_id: String, _enabled: bool) -> Result<CatalogView, String> {
     let operation = Operation::begin(uuid::Uuid::new_v4().to_string())?;
     let state = operation.state.clone();
     blocking(move || {
@@ -1704,28 +1708,16 @@ pub async fn set_auto_update(source_id: String, enabled: bool) -> Result<Catalog
                 .iter_mut()
                 .find(|s| s.id == source_id)
                 .ok_or("CATALOG_NOT_FOUND")?;
-            if s.url.is_none() {
+            if !has_subscription_url(s) {
                 return Err("CATALOG_INVALID".into());
             }
             commit(&state)?;
-            s.auto_update = enabled;
+            s.auto_update = true;
             s.revision = uuid::Uuid::new_v4().to_string();
             Ok(view(store))
         })
     })
     .await
-}
-fn preserve_permissions(old: &ParsedCatalog, new: &mut ParsedCatalog) -> Result<(), String> {
-    for node in &mut new.nodes {
-        if node.error.as_deref() == Some("PROXY_TLS_INSECURE")
-            && old.nodes.iter().any(|old| {
-                old.id == node.id && old.error.is_none() && old.outbound == node.outbound
-            })
-        {
-            node.error = None;
-        }
-    }
-    revalidate_groups(new)
 }
 fn revalidate_groups(catalog: &mut ParsedCatalog) -> Result<(), String> {
     parser::validate(catalog)
@@ -1761,7 +1753,7 @@ pub async fn set_insecure(
     source_id: String,
     node_id: String,
     revision: String,
-    enabled: bool,
+    _enabled: bool,
 ) -> Result<CatalogView, String> {
     blocking(move || {
         mutate(&path()?, |store| {
@@ -1784,11 +1776,7 @@ pub async fn set_insecure(
             {
                 return Err("CATALOG_INVALID".into());
             }
-            n.error = if enabled {
-                None
-            } else {
-                Some("PROXY_TLS_INSECURE".into())
-            };
+            n.error = None;
             revalidate_groups(&mut s.catalog)?;
             drop_invalid_default(s);
             s.revision = uuid::Uuid::new_v4().to_string();
@@ -1798,13 +1786,13 @@ pub async fn set_insecure(
     .await
 }
 
-/// This is an explicit permission transaction, never an automatic repair. All
-/// affected definitions are validated before any permission or revision changes.
+/// Compatibility endpoint for older clients. Node-declared TLS exceptions are
+/// always accepted, while revision and subtree validation remain unchanged.
 pub async fn set_group_insecure(
     source_id: String,
     group_id: String,
     revision: String,
-    enabled: bool,
+    _enabled: bool,
 ) -> Result<CatalogView, String> {
     let guard = SourceGuard::new(source_id.clone())?;
     blocking(move || {
@@ -1838,7 +1826,7 @@ pub async fn set_group_insecure(
             }
             for node in &mut source.catalog.nodes {
                 if ids.contains(&node.id) {
-                    node.error = (!enabled).then(|| "PROXY_TLS_INSECURE".into());
+                    node.error = None;
                 }
             }
             revalidate_groups(&mut source.catalog)?;
@@ -1892,15 +1880,17 @@ pub async fn probe(
     })
     .await
 }
-/// Independent maintenance; only explicitly opted-in sources may contact the network.
+fn has_subscription_url(source: &Source) -> bool {
+    source.kind == "subscription"
+        && source.url.as_deref().is_some_and(|url| subscription_url(url).is_ok())
+}
+/// Independent maintenance: valid subscriptions refresh with the existing retry
+/// interval and source single-flight guard, regardless of legacy opt-out values.
 fn due_sources(sources: &[Source], now: i64) -> Vec<String> {
     sources
         .iter()
         .filter(|s| {
-            // 策略来源没有 URL，天然不参与订阅自动刷新；这里再按来源类型确认一次。
-            s.kind != strategy::KIND
-                && s.auto_update
-                && s.url.is_some()
+            has_subscription_url(s)
                 && now - s.last_attempt_at.unwrap_or(s.updated_at).max(s.updated_at)
                     >= REFRESH_INTERVAL_MS
         })

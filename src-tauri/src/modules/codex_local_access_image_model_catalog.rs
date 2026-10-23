@@ -188,7 +188,12 @@ fn persist_image_model_settings_with_sources(
         };
         let mut latest: CodexLocalAccessCollection = serde_json::from_value(document.clone())
             .map_err(|error| format!("读取最新生图型号配置失败: {}", error))?;
-        let update_main = main_model.is_some();
+        let normalized_main = normalize_image_generation_main_model(
+            latest.image_generation_main_model.clone(),
+        ).unwrap_or(None);
+        let migrated_main = normalized_main != latest.image_generation_main_model;
+        latest.image_generation_main_model = normalized_main;
+        let update_main = main_model.is_some() || migrated_main;
         let mut catalog_changed = false;
         if let Some(models) = source_models {
             for model in &models {
@@ -210,8 +215,9 @@ fn persist_image_model_settings_with_sources(
         if let Some(model) = selected_model {
             catalog_changed |= apply_selected_image_model(&mut latest, &model)?;
         }
-        let mut changed = catalog_changed;
+        let mut changed = catalog_changed || migrated_main;
         if let Some(model) = main_model {
+            let model = normalize_image_generation_main_model(model)?;
             changed |= latest.image_generation_main_model != model;
             latest.image_generation_main_model = model;
         }
@@ -262,7 +268,8 @@ fn publish_image_model_settings(
         {
             copy_image_model_catalog_fields(current, published);
         }
-        if update_main {
+        if update_main || normalize_image_generation_main_model(current.image_generation_main_model.clone())
+            .unwrap_or(None) != current.image_generation_main_model {
             current.image_generation_main_model = published.image_generation_main_model.clone();
         }
         current.updated_at = current.updated_at.max(published.updated_at);

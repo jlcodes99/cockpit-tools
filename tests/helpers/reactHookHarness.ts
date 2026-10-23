@@ -45,7 +45,7 @@ export function loadHookModule(file: URL, imports: Record<string, unknown>, glob
   const compiled = ts.transpileModule(readFileSync(file, 'utf8'), { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
-  vm.runInNewContext(compiled, { exports, crypto: globalThis.crypto, ...globals, require(name: string) {
+  vm.runInNewContext(compiled, { exports, crypto: globalThis.crypto, setTimeout, clearTimeout, ...globals, require(name: string) {
     if (name === 'react') return { ...hooks, createContext };
     if (name in imports) return imports[name];
     if (name.endsWith('.css')) return {};

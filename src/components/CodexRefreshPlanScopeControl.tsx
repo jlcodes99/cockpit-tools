@@ -7,6 +7,7 @@ import {
   buildCodexAutoRefreshPlanOptions,
   sanitizeCodexAutoRefreshPlanKeys,
 } from '../utils/codexAutoRefreshPlanScope';
+import './codex/CodexApiSetting.css';
 import './CodexRefreshPlanScopeControl.css';
 
 export function CodexRefreshPlanScopeControl({ value, onChange, disabled = false }: {
@@ -20,7 +21,11 @@ export function CodexRefreshPlanScopeControl({ value, onChange, disabled = false
     accounts.filter(isStandardCodexOAuthAccount),
   ), [accounts]);
   const selected = sanitizeCodexAutoRefreshPlanKeys(value);
-  return <div className="codex-refresh-scope">
+  return <div className="codex-api-setting codex-refresh-scope">
+    <div className="codex-refresh-scope-heading">
+      <strong className="codex-api-setting-title">{t('codex.autoRefreshScope.label')}</strong>
+    </div>
+    <p className="codex-refresh-scope-description">{t('codex.autoRefreshScope.description')}</p>
     <div className="codex-refresh-scope-options" role="group" aria-label={t('codex.autoRefreshScope.label')}>
       {options.map(({ key, count }) => <button
         key={key}

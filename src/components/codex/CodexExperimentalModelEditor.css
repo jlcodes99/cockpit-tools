@@ -407,10 +407,6 @@
   overflow-y: auto;
 }
 
-.codex-experimental-model-editor__list.has-open-menu {
-  padding-bottom: 150px;
-}
-
 .codex-experimental-model-editor__list.is-sorting {
   user-select: none;
 }
@@ -551,13 +547,10 @@
 
 .codex-experimental-model-editor__reasoning-menu,
 .codex-experimental-model-editor__context-menu {
-  position: absolute;
-  z-index: 8;
-  top: calc(100% + 4px);
-  right: 0;
-  left: 0;
+  position: fixed;
   display: flex;
-  min-width: 180px;
+  box-sizing: border-box;
+  overflow-y: auto;
   flex-direction: column;
   gap: 2px;
   padding: 5px;
@@ -569,6 +562,7 @@
 
 .codex-experimental-model-editor__reasoning-option,
 .codex-experimental-model-editor__context-option {
+  flex: 0 0 auto;
   width: 100%;
   min-height: 32px;
   padding: 6px 8px;
@@ -597,6 +591,12 @@
 .codex-experimental-model-editor__context-option:hover,
 .codex-experimental-model-editor__context-option.is-selected {
   background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codex-experimental-model-editor__reasoning-option:focus-visible,
+.codex-experimental-model-editor__context-option:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 
 .codex-experimental-model-editor__reasoning-option.is-muted {

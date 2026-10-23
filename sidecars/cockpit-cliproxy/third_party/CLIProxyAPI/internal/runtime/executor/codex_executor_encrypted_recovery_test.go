@@ -201,7 +201,7 @@ func TestCodexHTTPEncryptedRecoveryOnlyExplicitErrors(t *testing.T) {
 		{name: "500", body: codexRecovery400, status: 500, wantAttempts: 1},
 		{name: "apikey strict", body: codexRecovery400, status: 400, apiKey: true, wantAttempts: 1},
 		{name: "apikey compat", body: codexRecovery400, status: 400, apiKey: true, compat: true, wantAttempts: 1},
-		{name: "oauth compat", body: codexRecovery400, status: 400, compat: true, wantAttempts: 1},
+		{name: "oauth ignores legacy compat flag", body: codexRecovery400, status: 400, compat: true, wantAttempts: 2},
 		{name: "no encrypted", body: codexRecovery400, status: 400, noEncrypted: true, wantAttempts: 1},
 	}
 	for _, mode := range []string{"execute", "stream", "compact"} {
