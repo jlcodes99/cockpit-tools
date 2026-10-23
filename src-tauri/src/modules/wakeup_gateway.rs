@@ -593,16 +593,26 @@ fn antigravity_extension_bin_dir(root: &std::path::Path) -> std::path::PathBuf {
 
 #[cfg(target_os = "macos")]
 fn default_antigravity_app_root() -> std::path::PathBuf {
+    let candidate = std::path::PathBuf::from("/Applications/Antigravity.app");
+    if candidate.exists() {
+        return candidate;
+    }
     std::path::PathBuf::from("/Applications/Antigravity IDE.app")
 }
 
 #[cfg(target_os = "windows")]
 fn default_antigravity_app_root() -> std::path::PathBuf {
-    std::env::var("LOCALAPPDATA")
+    let local = std::env::var("LOCALAPPDATA")
         .map(std::path::PathBuf::from)
         .unwrap_or_default()
-        .join("Programs")
-        .join("Antigravity IDE")
+        .join("Programs");
+    for name in ["antigravity", "Antigravity", "Antigravity IDE"] {
+        let candidate = local.join(name);
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+    local.join("Antigravity IDE")
 }
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
