@@ -837,6 +837,14 @@ fn default_startup_page() -> String {
     "last".to_string()
 }
 
+/// 规范化 MiniMax Code 区域；仅支持 `cn` / `en`，非法值回退为 `cn`。
+pub fn normalize_minimax_code_region(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "en" | "global" | "us" => "en".to_string(),
+        _ => "cn".to_string(),
+    }
+}
+
 /// 规范化启动页配置；非法值回退为 `last`。
 pub fn normalize_startup_page(value: &str) -> String {
     let normalized = value.trim().to_ascii_lowercase();

@@ -110,6 +110,7 @@ mod tests {
         config.codebuddy_auto_refresh_minutes = -1;
         config.codebuddy_cn_auto_refresh_minutes = -1;
         config.workbuddy_auto_refresh_minutes = -1;
+        config.minimax_code_auto_refresh_minutes = -1;
         config.qoder_auto_refresh_minutes = -1;
         config.zcode_auto_refresh_minutes = -1;
         config.trae_auto_refresh_minutes = -1;
@@ -221,6 +222,7 @@ fn has_enabled_periodic_account_refresh(config: &modules::config::UserConfig) ->
         config.codebuddy_auto_refresh_minutes,
         config.codebuddy_cn_auto_refresh_minutes,
         config.workbuddy_auto_refresh_minutes,
+        config.minimax_code_auto_refresh_minutes,
         config.qoder_auto_refresh_minutes,
         config.zcode_auto_refresh_minutes,
         config.trae_auto_refresh_minutes,

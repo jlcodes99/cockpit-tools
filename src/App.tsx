@@ -161,6 +161,9 @@ const TraeAccountsPage = lazy(() =>
 const WorkbuddyAccountsPage = lazy(() =>
   import('./pages/WorkbuddyAccountsPage').then((module) => ({ default: module.WorkbuddyAccountsPage })),
 );
+const MinimaxCodeAccountsPage = lazy(() =>
+  import('./pages/MinimaxCodeAccountsPage').then((module) => ({ default: module.MinimaxCodeAccountsPage })),
+);
 const ZedAccountsPage = lazy(() =>
   import('./pages/ZedAccountsPage').then((module) => ({ default: module.ZedAccountsPage })),
 );;
@@ -4000,6 +4003,9 @@ function MainApp() {
           </VisibleBootPage>
           <VisibleBootPage when={page === 'workbuddy'}>
             <WorkbuddyAccountsPage />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'minimaxcode'}>
+            <MinimaxCodeAccountsPage />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'zed'}>
             <ZedAccountsPage />

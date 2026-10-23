@@ -7084,7 +7084,8 @@
     "addAccount": "MiniMax Code 계정 추가",
     "search": "MiniMax Code 계정 검색...",
     "usageNormal": "정상",
-    "usageAbnormal": "이상"
+    "usageAbnormal": "이상",
+    "placeholder": "MiniMax Code 계정 관리가 곧 제공됩니다."
   },
   "zcode": {
     "search": "ZCode 계정 검색...",

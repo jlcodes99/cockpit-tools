@@ -7084,7 +7084,8 @@
     "addAccount": "Přidat účet MiniMax Code",
     "search": "Hledat účty MiniMax Code...",
     "usageNormal": "Normální",
-    "usageAbnormal": "Abnormální"
+    "usageAbnormal": "Abnormální",
+    "placeholder": "Správa účtů MiniMax Code bude brzy k dispozici."
   },
   "zcode": {
     "search": "Hledat účty ZCode...",

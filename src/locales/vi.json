@@ -7084,7 +7084,8 @@
     "addAccount": "Thêm tài khoản MiniMax Code",
     "search": "Tìm kiếm tài khoản MiniMax Code...",
     "usageNormal": "Bình thường",
-    "usageAbnormal": "Bất thường"
+    "usageAbnormal": "Bất thường",
+    "placeholder": "Quản lý tài khoản MiniMax Code sẽ sớm ra mắt."
   },
   "zcode": {
     "search": "Tìm tài khoản ZCode...",

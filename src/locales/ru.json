@@ -7084,7 +7084,8 @@
     "addAccount": "Добавить аккаунт MiniMax Code",
     "search": "Поиск аккаунтов MiniMax Code...",
     "usageNormal": "В норме",
-    "usageAbnormal": "Аномально"
+    "usageAbnormal": "Аномально",
+    "placeholder": "Управление аккаунтами MiniMax Code скоро появится."
   },
   "zcode": {
     "search": "Поиск аккаунтов ZCode...",
