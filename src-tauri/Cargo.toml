@@ -20,6 +20,10 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 tempfile = "3"
 
 [dependencies]
+# Security overrides for transitive HIGH advisories (osv-scanner 2026-09-02)
+openssl = "0.10.80"
+rustls-webpki = "0.103.13"
+
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "unstable"] }
 # Reuse Tauri's web engine without its IPC bridge for untrusted generated HTML.
 wry = { version = "0.54", default-features = false, features = ["os-webview"] }
