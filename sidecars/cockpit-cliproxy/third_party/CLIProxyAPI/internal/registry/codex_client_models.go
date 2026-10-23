@@ -22,6 +22,7 @@ type codexClientModelsPayload struct {
 // locallyPinnedCodexClientModelSlugs lists the shipped Codex client models that
 // must stay in the catalog even when a remote registry lags behind.
 var locallyPinnedCodexClientModelSlugs = []string{
+	codexBuiltinGPT61SolModelID,
 	codexBuiltinGPT6AstraModelID,
 	codexBuiltinGPT6SolModelID,
 	codexBuiltinGPT6LunaModelID,
@@ -43,6 +44,10 @@ func mergeLocallyPinnedCodexClientModels(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("decode remote Codex client models: %w", err)
 	}
 
+	models, retiredRemoved, err := filterRetiredCodexClientModels(document, models)
+	if err != nil {
+		return nil, err
+	}
 	presentSlugs := make(map[string]struct{}, len(models))
 	for _, model := range models {
 		presentSlugs[strings.ToLower(strings.TrimSpace(fmt.Sprint(model["slug"])))] = struct{}{}
@@ -53,7 +58,7 @@ func mergeLocallyPinnedCodexClientModels(data []byte) ([]byte, error) {
 			missingSlugs = append(missingSlugs, slug)
 		}
 	}
-	if len(missingSlugs) == 0 {
+	if len(missingSlugs) == 0 && !retiredRemoved {
 		return append([]byte(nil), data...), nil
 	}
 
@@ -81,10 +86,44 @@ func mergeLocallyPinnedCodexClientModels(data []byte) ([]byte, error) {
 	return json.Marshal(document)
 }
 
+// filterRetiredCodexClientModels removes unavailable OAuth templates from both
+// the main catalog and its overrides without changing active model metadata.
+func filterRetiredCodexClientModels(document map[string]json.RawMessage, models []map[string]any) ([]map[string]any, bool, error) {
+	active := make([]map[string]any, 0, len(models))
+	for _, model := range models {
+		if !isRetiredCodexModelID(fmt.Sprint(model["slug"])) {
+			active = append(active, model)
+		}
+	}
+	retiredRemoved := len(active) != len(models)
+	models = active
+	if raw, exists := document["model_overrides"]; exists {
+		var overrides []map[string]any
+		if json.Unmarshal(raw, &overrides) == nil {
+			activeOverrides := make([]map[string]any, 0, len(overrides))
+			for _, model := range overrides {
+				if !isRetiredCodexModelID(fmt.Sprint(model["slug"])) {
+					activeOverrides = append(activeOverrides, model)
+				}
+			}
+			if len(activeOverrides) != len(overrides) {
+				retiredRemoved = true
+				encoded, err := json.Marshal(activeOverrides)
+				if err != nil {
+					return nil, false, fmt.Errorf("encode filtered model overrides: %w", err)
+				}
+				document["model_overrides"] = encoded
+			}
+		}
+	}
+	return models, retiredRemoved, nil
+}
+
 type codexClientModelsStore struct {
-	mu       sync.RWMutex
-	data     []byte
-	revision uint64
+	mu               sync.RWMutex
+	data             []byte
+	revision         uint64
+	contextTemplates map[string]CodexModelContextTemplate
 }
 
 var codexClientCatalogStore = &codexClientModelsStore{}
@@ -99,6 +138,49 @@ func init() {
 func GetCodexClientModelsJSON() []byte {
 	data, _ := GetCodexClientModelsSnapshot()
 	return data
+}
+
+type CodexModelContextTemplate struct {
+	ContextWindow         int  `json:"context_window"`
+	MaxContextWindow      int  `json:"max_context_window"`
+	AutoCompactTokenLimit *int `json:"auto_compact_token_limit"`
+}
+
+// GetCodexModelContextTemplate returns the model's context fields; Reserve follows Luna.
+func GetCodexModelContextTemplate(modelID string) (CodexModelContextTemplate, bool) {
+	modelID = strings.ToLower(strings.TrimSpace(modelID))
+	if modelID == "gpt-reserve" {
+		modelID = "gpt-5.6-luna"
+	}
+	codexClientCatalogStore.mu.RLock()
+	template, found := codexClientCatalogStore.contextTemplates[modelID]
+	codexClientCatalogStore.mu.RUnlock()
+	// Keep callers from mutating the immutable template shared by this revision.
+	if template.AutoCompactTokenLimit != nil {
+		compactLimit := *template.AutoCompactTokenLimit
+		template.AutoCompactTokenLimit = &compactLimit
+	}
+	return template, found
+}
+
+func decodeCodexModelContextTemplates(data []byte) (map[string]CodexModelContextTemplate, error) {
+	var catalog struct {
+		Models []struct {
+			Slug string `json:"slug"`
+			CodexModelContextTemplate
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		return nil, fmt.Errorf("decode Codex client model context fields: %w", err)
+	}
+	templates := make(map[string]CodexModelContextTemplate, len(catalog.Models))
+	for _, model := range catalog.Models {
+		key := strings.ToLower(model.Slug)
+		if _, found := templates[key]; !found {
+			templates[key] = model.CodexModelContextTemplate
+		}
+	}
+	return templates, nil
 }
 
 func CodexClientModelBaseInstructions(modelID string) string {
@@ -155,6 +237,35 @@ func loadCodexClientModelsFromBytes(data []byte, source string) (bool, error) {
 		return false, fmt.Errorf("%s: %w", source, err)
 	}
 
+	var document map[string]json.RawMessage
+	var payload codexClientModelsPayload
+	if err := json.Unmarshal(data, &document); err != nil {
+		return false, fmt.Errorf("%s: decode Codex client catalog: %w", source, err)
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return false, fmt.Errorf("%s: decode Codex client models: %w", source, err)
+	}
+	models, changed, err := filterRetiredCodexClientModels(document, payload.Models)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", source, err)
+	}
+	if changed {
+		encoded, err := json.Marshal(models)
+		if err != nil {
+			return false, fmt.Errorf("%s: encode active Codex client models: %w", source, err)
+		}
+		document["models"] = encoded
+		data, err = json.Marshal(document)
+		if err != nil {
+			return false, fmt.Errorf("%s: encode active Codex client catalog: %w", source, err)
+		}
+	}
+	// Decode once per load, outside the store lock. Readers see this index and
+	// the catalog bytes switch together when the revision advances.
+	contextTemplates, err := decodeCodexModelContextTemplates(data)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", source, err)
+	}
 	cloned := append([]byte(nil), data...)
 	codexClientCatalogStore.mu.Lock()
 	defer codexClientCatalogStore.mu.Unlock()
@@ -162,6 +273,7 @@ func loadCodexClientModelsFromBytes(data []byte, source string) (bool, error) {
 		return false, nil
 	}
 	codexClientCatalogStore.data = cloned
+	codexClientCatalogStore.contextTemplates = contextTemplates
 	codexClientCatalogStore.revision++
 	return true, nil
 }
@@ -192,8 +304,8 @@ func ValidateCodexClientModelsJSON(data []byte) error {
 			return fmt.Errorf("Codex client model catalog model %q: %w", slug, err)
 		}
 	}
-	if _, ok := seen["gpt-5.5"]; !ok {
-		return fmt.Errorf("Codex client model catalog is missing default template %q", "gpt-5.5")
+	if _, ok := seen["gpt-5.6-sol"]; !ok {
+		return fmt.Errorf("Codex client model catalog is missing default template %q", "gpt-5.6-sol")
 	}
 	return nil
 }

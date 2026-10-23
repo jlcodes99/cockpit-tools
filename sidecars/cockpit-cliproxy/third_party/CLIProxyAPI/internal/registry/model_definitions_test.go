@@ -1,6 +1,35 @@
 package registry
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestFallbackModelsMatchShippedCapabilities(t *testing.T) {
+	// A stale remote catalog must not remove the shipped capability fallback.
+	modelsCatalogStore.mu.Lock()
+	original := modelsCatalogStore.data
+	modelsCatalogStore.data = &staticModelsJSON{}
+	modelsCatalogStore.mu.Unlock()
+	t.Cleanup(func() {
+		modelsCatalogStore.mu.Lock()
+		modelsCatalogStore.data = original
+		modelsCatalogStore.mu.Unlock()
+	})
+	for _, models := range [][]*ModelInfo{withCodexPaidBuiltins(nil), WithXAIBuiltins(nil)} {
+		for _, want := range models {
+			for _, id := range []string{want.ID, " " + strings.ToUpper(want.ID) + " "} {
+				if got := LookupStaticModelInfo(id); !reflect.DeepEqual(got, want) {
+					t.Fatalf("LookupStaticModelInfo(%q) = %#v, want shipped capabilities %#v", id, got, want)
+				}
+			}
+		}
+	}
+	if got := LookupStaticModelInfo("gpt-6-unknown"); got != nil {
+		t.Fatalf("unknown model acquired capabilities: %#v", got)
+	}
+}
 
 func TestGetStaticModelDefinitionsByChannelSupportsGeminiInteractions(t *testing.T) {
 	models := GetStaticModelDefinitionsByChannel("gemini-interactions")
@@ -57,11 +86,13 @@ func TestWithXAIBuiltinsIncludesImage20(t *testing.T) {
 
 func TestPaidCodexModelsIncludeGPT6FamilyButFreeDoesNot(t *testing.T) {
 	wantOrder := []string{
+		codexBuiltinGPT61SolModelID,
 		codexBuiltinGPT6AstraModelID,
 		codexBuiltinGPT6SolModelID,
 		codexBuiltinGPT6LunaModelID,
 	}
 	wantDisplayNames := map[string]string{
+		codexBuiltinGPT61SolModelID:  "GPT-6.1 Sol",
 		codexBuiltinGPT6AstraModelID: "GPT-6 Astra",
 		codexBuiltinGPT6SolModelID:   "GPT-6 Sol",
 		codexBuiltinGPT6LunaModelID:  "GPT-6 Luna",
@@ -92,8 +123,10 @@ func TestPaidCodexModelsIncludeGPT6FamilyButFreeDoesNot(t *testing.T) {
 			if model == nil {
 				t.Fatalf("paid Codex models do not contain %s", modelID)
 			}
-			if model.ContextLength != 256000 || model.MaxCompletionTokens != 128000 {
-				t.Fatalf("%s limits = %d/%d, want 256000/128000", modelID, model.ContextLength, model.MaxCompletionTokens)
+			template := embeddedCodexClientModelForTest(t, modelID)
+			wantContext := int(template["context_window"].(float64))
+			if model.ContextLength != wantContext || model.MaxCompletionTokens != 128000 {
+				t.Fatalf("%s limits = %d/%d, want %d/128000", modelID, model.ContextLength, model.MaxCompletionTokens, wantContext)
 			}
 			if model.DisplayName != wantDisplayNames[modelID] {
 				t.Fatalf("%s display name = %q, want %q", modelID, model.DisplayName, wantDisplayNames[modelID])
@@ -144,8 +177,10 @@ func TestLookupStaticModelInfoFallsBackToShippedGPT6Builtins(t *testing.T) {
 		if model.ID != modelID {
 			t.Fatalf("LookupStaticModelInfo(%s).ID = %s, want %s", modelID, model.ID, modelID)
 		}
-		if model.ContextLength != 256000 || model.MaxCompletionTokens != 128000 {
-			t.Fatalf("%s limits = %d/%d, want 256000/128000", modelID, model.ContextLength, model.MaxCompletionTokens)
+		template := embeddedCodexClientModelForTest(t, modelID)
+		wantContext := int(template["context_window"].(float64))
+		if model.ContextLength != wantContext || model.MaxCompletionTokens != 128000 {
+			t.Fatalf("%s limits = %d/%d, want %d/128000", modelID, model.ContextLength, model.MaxCompletionTokens, wantContext)
 		}
 	}
 	if model := LookupStaticModelInfo("gpt-6-unknown"); model != nil {
@@ -207,5 +242,28 @@ func TestAntigravityWebSearchModelForRequiresRequestedModelCapability(t *testing
 	}
 	if got := AntigravityWebSearchModelFor("unknown-model"); got != "" {
 		t.Fatalf("unknown model should not get Antigravity web search model, got %q", got)
+	}
+}
+
+func TestCodexCatalogsDoNotRestoreRetiredModels(t *testing.T) {
+	for _, models := range [][]*ModelInfo{GetCodexFreeModels(), GetCodexPlusModels(), GetCodexTeamModels(), GetCodexProModels()} {
+		for _, model := range models {
+			if isRetiredCodexModelID(model.ID) {
+				t.Fatalf("retired built-in model: %s", model.ID)
+			}
+		}
+	}
+	models := WithCodexBuiltins([]*ModelInfo{{ID: "gpt-5.5"}, {ID: "gpt-5.4"}, {ID: "gpt-4.1"}, {ID: "gpt-6.1-sol"}, {ID: "custom-model"}})
+	found := false
+	for _, model := range models {
+		if isRetiredCodexModelID(model.ID) {
+			t.Fatalf("remote refresh restored %s", model.ID)
+		}
+		if model.ID == "custom-model" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("custom provider models must remain")
 	}
 }

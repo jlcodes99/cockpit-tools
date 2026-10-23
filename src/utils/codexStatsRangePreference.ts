@@ -12,7 +12,7 @@ export interface CodexStatsRangeSelection {
   range: CodexStatsTimeRange;
 }
 
-export type CodexSessionUsageRange = "7d" | "30d" | "month" | "all";
+export type CodexSessionUsageRange = "today" | "7d" | "30d" | "month" | "all";
 
 export const CODEX_SESSION_USAGE_RANGE_STORAGE_KEY =
   "agtools.codex.session_usage.range.v1";
@@ -83,7 +83,7 @@ export function persistCodexStatsRangeSelection(
 }
 
 export function normalizeCodexSessionUsageRange(value: unknown): CodexSessionUsageRange {
-  return value === "30d" || value === "month" || value === "all" ? value : "7d";
+  return value === "today" || value === "30d" || value === "month" || value === "all" ? value : "7d";
 }
 
 export function readCodexSessionUsageRange(storage?: RangePreferenceStorage): CodexSessionUsageRange {

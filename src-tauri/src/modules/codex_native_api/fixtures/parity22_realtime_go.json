@@ -1,0 +1,58 @@
+{
+  "offered_protocols": [
+    "realtime",
+    "vendor.control"
+  ],
+  "selected_protocol": "realtime",
+  "urls": [
+    {
+      "model": "gpt-realtime",
+      "path": "/v1/realtime",
+      "url": "wss://api.openai.com/v1/realtime?model=gpt-realtime"
+    },
+    {
+      "model": "gpt-realtime-preview",
+      "path": "/v1/realtime",
+      "url": "wss://api.openai.com/v1/realtime?model=gpt-realtime-preview"
+    },
+    {
+      "model": "custom-live-model",
+      "path": "/v1/realtime",
+      "url": "wss://api.openai.com/v1/realtime?model=custom-live-model"
+    },
+    {
+      "call_id": "rtc_fixture",
+      "model": "gpt-realtime",
+      "path": "/v1/live/rtc_fixture",
+      "url": "wss://api.openai.com/v1/live/rtc_fixture"
+    },
+    {
+      "call_id": "rtc_fixture",
+      "model": "gpt-realtime",
+      "path": "/v1/realtime/calls/rtc_fixture",
+      "url": "wss://api.openai.com/v1/realtime/calls/rtc_fixture"
+    },
+    {
+      "call_id": "rtc_fixture",
+      "model": "gpt-realtime",
+      "path": "/v1/realtime",
+      "url": "wss://api.openai.com/v1/realtime?intent=quicksilver\u0026call_id=rtc_fixture"
+    },
+    {
+      "call_id": "rtc_fixture",
+      "model": "gpt-realtime",
+      "path": "/backend-api/codex/rtc_fixture",
+      "url": "wss://chatgpt.com/backend-api/codex/rtc_fixture"
+    },
+    {
+      "call_id": "rtc_fixture",
+      "model": "gpt-realtime",
+      "path": "/backend-api/codex/realtime/calls/rtc_fixture",
+      "url": "wss://chatgpt.com/backend-api/codex/rtc_fixture"
+    },
+    {
+      "path": "/v1/realtime/calls/rtc_fixture/hangup",
+      "url": "https://api.openai.com/v1/realtime/calls/rtc_fixture/hangup"
+    }
+  ]
+}

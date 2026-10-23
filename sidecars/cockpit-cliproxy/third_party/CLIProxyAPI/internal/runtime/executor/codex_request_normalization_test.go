@@ -15,21 +15,22 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func TestNormalizeCodexInstructionsUsesModelBaseInstructions(t *testing.T) {
-	for _, body := range [][]byte{
-		[]byte(`{"model":"gpt-5.6-sol"}`),
-		[]byte(`{"instructions":null}`),
-		[]byte(`{"instructions":"  \n\t"}`),
-	} {
-		got := normalizeCodexInstructions(body, "gpt-5.6-sol")
-		if instructions := gjson.GetBytes(got, "instructions").String(); len(instructions) < 100 {
-			t.Fatalf("expected non-empty model base instructions, got %q from %s", instructions, body)
+func TestNormalizeCodexInstructionsMatchesCPAExplicitAndNativePolicy(t *testing.T) {
+	for _, body := range [][]byte{[]byte(`{"model":"gpt-5.6-sol"}`), []byte(`{"instructions":null}`)} {
+		got := normalizeCodexInstructions(body)
+		if value := gjson.GetBytes(got, "instructions"); value.Type != gjson.String || value.String() != "" {
+			t.Fatalf("missing instructions must become an empty string: %s", got)
+		}
+		if got := normalizeCodexInstructions(body, true); string(got) != string(body) {
+			t.Fatalf("native instructions changed: %s", got)
 		}
 	}
-
-	body := []byte(`{"instructions":"keep me"}`)
-	if got := gjson.GetBytes(normalizeCodexInstructions(body, "gpt-5.6-sol"), "instructions").String(); got != "keep me" {
-		t.Fatalf("explicit instructions = %q, want keep me", got)
+	for _, body := range [][]byte{[]byte(`{"instructions":"  \n\t"}`), []byte(`{"instructions":"keep me"}`), []byte(`{"instructions":""}`)} {
+		for _, native := range []bool{false, true} {
+			if got := normalizeCodexInstructions(body, native); string(got) != string(body) {
+				t.Fatalf("explicit instructions changed: %s", got)
+			}
+		}
 	}
 }
 

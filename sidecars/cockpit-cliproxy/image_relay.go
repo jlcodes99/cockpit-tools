@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/sjson"
 
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 
@@ -32,6 +33,8 @@ type imageRelayRequest struct {
 	responseFormat string
 	streamPrefix   string
 	requestedModel string
+	async          bool
+	count          int64
 }
 
 type imageRelayResult struct {
@@ -128,6 +131,8 @@ func buildImageGenerationRelayRequestWithModel(rawJSON []byte, imageToolModel st
 		responseFormat: normalizeImageResponseFormat(stringField(payload, "response_format")),
 		streamPrefix:   "image_generation",
 		requestedModel: imageModelOrDefault(payload),
+		async:          boolField(payload, "async"),
+		count:          imageRequestCount(payload),
 	}, nil
 }
 
@@ -181,6 +186,8 @@ func buildImageEditRelayRequestWithModel(c *gin.Context, imageToolModel string, 
 		responseFormat: normalizeImageResponseFormat(stringField(payload, "response_format")),
 		streamPrefix:   "image_edit",
 		requestedModel: imageModelOrDefault(payload),
+		async:          boolField(payload, "async"),
+		count:          imageRequestCount(payload),
 	}, nil
 }
 
@@ -203,6 +210,8 @@ func buildImageEditRelayRequestFromMultipartWithModel(c *gin.Context, imageToolM
 		"moderation":         strings.TrimSpace(c.PostForm("moderation")),
 		"response_format":    strings.TrimSpace(c.PostForm("response_format")),
 		"stream":             parseBoolString(c.PostForm("stream")),
+		"async":              parseBoolString(c.PostForm("async")),
+		"n":                  parseIntString(c.PostForm("n")),
 		"output_compression": parseIntString(c.PostForm("output_compression")),
 		"partial_images":     parseIntString(c.PostForm("partial_images")),
 	}
@@ -246,6 +255,8 @@ func buildImageEditRelayRequestFromMultipartWithModel(c *gin.Context, imageToolM
 		responseFormat: normalizeImageResponseFormat(stringField(payload, "response_format")),
 		streamPrefix:   "image_edit",
 		requestedModel: imageModelOrDefault(payload),
+		async:          boolField(payload, "async"),
+		count:          imageRequestCount(payload),
 	}, nil
 }
 
@@ -255,11 +266,31 @@ func (s *relayServer) handleImagesRelayRequest(c *gin.Context, imageReq imageRel
 	if requestedModel == "" {
 		requestedModel = defaultImagesToolModel
 	}
-	if !validateClientModelVisible(s.manifest, spec, requestedModel, defaultImagesToolModel) {
-		writeAPIError(c, http.StatusNotFound, fmt.Sprintf("模型 %s 不在当前 API Key 的可用模型范围内", requestedModel), "model_not_available")
+	if !validateClientModelVisible(s.manifest, spec, requestedModel, configuredImagesToolModel(s.manifest)) {
+		writeAPIError(c, http.StatusNotFound, s.manifest.modelUnavailableMessage(requestedModel), "model_not_available")
 		return
 	}
-	model := defaultImagesMainModel
+	selected, restore, sourceErr := s.prepareImageSource(c, configuredImagesToolModel(s.manifest))
+	defer restore()
+	if sourceErr != nil {
+		s.writeExecutorError(c, sourceErr)
+		return
+	}
+	if selected != nil && selected.ImageGenerationUpstream != nil {
+		if imageReq.async || (imageReq.count != 0 && imageReq.count != 1) {
+			writeAPIError(c, http.StatusBadRequest, "image API relay supports synchronous n=1 requests", "invalid_request")
+			return
+		}
+		s.handleImageAPIUpstream(c, selected, imageReq.body, &imageReq)
+		return
+	}
+	model := configuredImagesMainModel(s.manifest)
+	body, err := sjson.SetBytes(imageReq.body, "model", model)
+	if err != nil {
+		writeAPIError(c, http.StatusBadRequest, err.Error(), "invalid_request")
+		return
+	}
+	imageReq.body = body
 	req, opts := buildExecutorRequest(c, imageReq.body, model, sdktranslator.FormatOpenAIResponse, "", true)
 	startedAt := time.Now()
 	timeouts := s.streamTimeoutsForRequest(c.Request, imageReq.body, defaultImagesToolModel)
@@ -528,11 +559,12 @@ func buildImageTool(payload map[string]any, action string) (map[string]any, erro
 
 func buildImageToolWithModel(payload map[string]any, action string, imageToolModel string, allowModelFallback bool) (map[string]any, error) {
 	model := imageModelOrDefault(payload)
-	if strings.TrimSpace(imageToolModel) == "" {
+	imageToolModel = strings.TrimSpace(imageToolModel)
+	if imageToolModel == "" {
 		imageToolModel = defaultImagesToolModel
 	}
 	if modelBase(model) != defaultImagesToolModel && modelBase(model) != legacyImagesToolModel &&
-		modelBase(model) != modelBase(imageToolModel) {
+		model != imageToolModel {
 		// 已配置生图转发账号池的实例：客户端可能带着对话模型名发起生图请求，
 		// 这时回落到配置的图片模型，而不是直接报模型不支持。
 		if !allowModelFallback {
@@ -827,6 +859,8 @@ func mimeTypeFromOutputFormat(outputFormat string) string {
 		return "image/jpeg"
 	case "webp":
 		return "image/webp"
+	case "gif":
+		return "image/gif"
 	default:
 		if strings.Contains(outputFormat, "/") {
 			return outputFormat

@@ -11,9 +11,47 @@ export interface CodexExperimentalModelDefinition {
   display_name: string;
   /** undefined follows the official model reasoning levels; otherwise custom multi-select. */
   reasoning_efforts?: CodexReasoningEffort[];
+  default_reasoning_effort?: CodexReasoningEffort;
   /** Omitted values follow the model catalog metadata. */
   context_window?: number;
   auto_compact_token_limit?: number;
+}
+
+export interface CodexModelConfigApiService {
+  routingStrategy?: import('./codexLocalAccess').CodexLocalAccessRoutingStrategy;
+  modelPricings: import('./codexLocalAccess').CodexLocalAccessModelPricing[];
+  modelAliases: import('./codexLocalAccess').CodexLocalAccessModelAlias[];
+  accountModelRules: import('./codexLocalAccess').CodexLocalAccessAccountModelRule[];
+  customRoutingRules: import('./codexLocalAccess').CodexLocalAccessCustomRoutingRule[];
+  excludedModels: string[];
+}
+
+export interface CodexModelConfigDocument {
+  schema: 'cockpit-tools.codex-model-config';
+  version: 1;
+  models: CodexExperimentalModelDefinition[];
+  defaultModelId?: string | null;
+  apiService?: CodexModelConfigApiService;
+}
+
+export interface CodexModelConfigImportEntry {
+  section: 'models' | 'defaultModel' | 'prices' | 'aliases' | 'accountRules' | 'routing' | 'exclusions' | 'apiService';
+  id: string;
+  action: 'added' | 'updated' | 'conflict' | 'skipped' | 'error';
+  errorCode?: string;
+}
+
+export interface CodexModelConfigImportPreview {
+  revision: string;
+  entries: CodexModelConfigImportEntry[];
+  added: string[];
+  updated: string[];
+  conflicts: string[];
+  skipped: string[];
+  errors: string[];
+  committed: number;
+  models: CodexExperimentalModelDefinition[];
+  defaultModelId: string | null;
 }
 
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
@@ -35,7 +73,7 @@ export interface CodexQuickConfig {
   context_management_experimental_mode: boolean;
 }
 
-export type CodexAppSpeed = "standard" | "fast";
+export type CodexAppSpeed = "standard" | "fast" | "ultrafast";
 export type CodexFingerprintMode = "off" | "device" | "session" | "full";
 
 export interface CodexAppSpeedConfig {
@@ -45,6 +83,9 @@ export interface CodexAppSpeedConfig {
 
 /** Codex 账号数据 */
 export interface CodexAccount {
+  /** Fixed error code on a safe proxy target projection; never a credential URL. */
+  egress_proxy_error?: string | null;
+  egress_proxy_legacy_bound?: boolean;
   usage_updated_at?: number | null;
   id: string;
   email: string;
@@ -66,13 +107,18 @@ export interface CodexAccount {
   api_vision_routing_model?: string | null;
   api_instance_access_mode?: "gateway" | "direct" | "cdp" | string | null;
   api_startup_model?: string | null;
-  /** 网关模式下用于生图转发的 GPT(OAuth) 账号池。 */
+  /** 网关模式下用于生图转发的 OAuth / 图片 API Key 账号池。 */
   api_image_generation_account_ids?: string[] | null;
+  api_image_generation_account_models?: Record<string, string> | null;
   bound_oauth_account_id?: string | null;
   /** Grok 供应商账号绑定的 Grok 平台账号 ID：上游凭据来自该 Grok 账号（OAuth）。 */
   upstream_grok_account_id?: string | null;
   user_id?: string;
   plan_type?: string;
+  /** View-only subscription badge copied from an explicitly linked source. Never credentials or quota. */
+  service_source_plan_badge?: CodexPlanBadgePresentation;
+  /** Backend-owned historical service attribution; display only, never route authorization. */
+  api_service_source_account_id?: string;
   subscription_active_until?: string;
   subscription_query_last_attempt_at?: number;
   subscription_query_last_success_at?: number;
@@ -469,6 +515,7 @@ export interface CodexSessionUsageTotals {
 }
 
 export interface CodexSessionUsageBreakdownRow {
+  estimatedCostUsd?: number | null;
   key: string;
   label: string;
   inputTokens: number;
@@ -989,6 +1036,11 @@ export function isCodexApiKeyAccount(account: CodexAccount): boolean {
   return (account.auth_mode || "").trim().toLowerCase() === "apikey";
 }
 
+/** A service reference to separate ChatGPT plan credentials, never a Codex login. */
+export function isCodexChatgptPlanAccount(account: CodexAccount): boolean {
+  return account.api_provider_id === "cockpit_chatgpt_plan";
+}
+
 export function isCodexPendingOAuthAccount(account?: CodexAccount | null): boolean {
   if (!account) return false;
   if ((account.authorization_status || "").trim().toLowerCase() === "pending") {
@@ -1059,6 +1111,7 @@ function normalizeCodexPlanKey(planType?: string): string {
 }
 
 function getCodexEffectivePlanKey(account: CodexAccount): string {
+  if (isCodexChatgptPlanAccount(account)) return "chatgpt_plan";
   const planKey = normalizeCodexPlanKey(account.plan_type);
   if (
     planKey === "free" ||
@@ -1089,9 +1142,7 @@ export function isCodexEffectiveFreePlan(account: CodexAccount): boolean {
   return getCodexEffectivePlanKey(account) === "free";
 }
 
-function normalizeCodexAuthFilePlanType(
-  value?: string,
-): "prolite" | "promax" | undefined {
+function normalizeCodexProTier(value?: string): 100 | 200 | 500 | undefined {
   const normalized = (value || "")
     .trim()
     .toLowerCase()
@@ -1100,22 +1151,49 @@ function normalizeCodexAuthFilePlanType(
     normalized === "prolite" ||
     normalized === "pro-lite" ||
     normalized === "pro-5x" ||
-    normalized === "codex-pro-5x"
+    normalized === "codex-pro-5x" ||
+    normalized === "pro-100" ||
+    normalized === "chatgptprolite"
   ) {
-    return "prolite";
+    return 100;
+  }
+  if (
+    normalized === "pro" ||
+    normalized === "pro-20x" ||
+    normalized === "codex-pro-20x" ||
+    normalized === "pro-200" ||
+    normalized === "chatgptpro"
+  ) {
+    return 200;
   }
   if (
     normalized === "promax" ||
     normalized === "pro-max" ||
-    normalized === "pro-20x" ||
-    normalized === "codex-pro-20x"
+    normalized === "pro-500" ||
+    normalized === "chatgptpromax"
   ) {
-    return "promax";
+    return 500;
   }
   return undefined;
 }
 
+function getCodexProTier(account: CodexAccount): 100 | 200 | 500 {
+  const planTier = normalizeCodexProTier(account.plan_type);
+  if (planTier === 100 || planTier === 500) return planTier;
+
+  // Usage is an official response; it takes precedence over legacy filename hints.
+  const usagePlan = toStringValue(toJsonRecord(account.quota?.raw_data)?.plan_type);
+  const usageTier = normalizeCodexProTier(usagePlan);
+  if (usageTier) return usageTier;
+
+  // Older imports stored a generic `pro` and a filename hint. In that context
+  // `promax` meant 20x (200), whereas the official plan_type `promax` means 500.
+  const legacyTier = normalizeCodexProTier(account.auth_file_plan_type);
+  return legacyTier === 100 ? 100 : 200;
+}
+
 function getCodexPlanBadgeLabel(account: CodexAccount): string {
+  if (isCodexChatgptPlanAccount(account)) return account.plan_type?.trim() || "ChatGPT";
   if (isCodexNewApiAccount(account)) {
     return account.plan_type?.trim() || "Cockpit Api";
   }
@@ -1128,22 +1206,16 @@ function getCodexPlanBadgeLabel(account: CodexAccount): string {
     return baseLabel;
   }
 
-  const authFilePlanType =
-    normalizeCodexAuthFilePlanType(account.auth_file_plan_type) ??
-    normalizeCodexAuthFilePlanType(account.plan_type);
-  if (authFilePlanType === "prolite") {
-    return `${baseLabel} 5x`;
-  }
-  // CPA 对齐：plan_type='pro' 默认视为 20x（Pro Max），
-  // 只有显式声明 prolite/pro-lite/pro_lite 才是 5x
-  return `${baseLabel} 20x`;
+  return `${baseLabel} ${getCodexProTier(account)}`;
 }
 
 function getCodexPlanBadgeClass(account: CodexAccount): string {
+  const official = isCodexChatgptPlanAccount(account);
+  if (official && !account.plan_type?.trim()) return "api-key chatgpt-plan";
   if (isCodexNewApiAccount(account)) {
     return "api-key new-api-exclusive";
   }
-  const baseClass = getCodexEffectivePlanKey(account);
+  const baseClass = official ? normalizeCodexPlanKey(account.plan_type) : getCodexEffectivePlanKey(account);
   if (baseClass === "plus") {
     return "plus codex-plus";
   }
@@ -1151,13 +1223,13 @@ function getCodexPlanBadgeClass(account: CodexAccount): string {
     return baseClass;
   }
 
-  const authFilePlanType =
-    normalizeCodexAuthFilePlanType(account.auth_file_plan_type) ??
-    normalizeCodexAuthFilePlanType(account.plan_type);
-  if (authFilePlanType === "prolite") {
+  const proTier = getCodexProTier(account);
+  if (proTier === 100) {
     return "pro codex-pro-lite";
   }
-  // CPA 对齐：plan_type='pro' 默认视为 promax (20x)
+  if (proTier === 500) {
+    return "pro codex-pro-500";
+  }
   return "pro codex-pro-max";
 }
 
@@ -1168,10 +1240,15 @@ export interface CodexPlanBadgePresentation {
 
 export function getCodexPlanBadgePresentation(
   account: CodexAccount,
+  options?: { preserveRawNonProLabel?: boolean },
 ): CodexPlanBadgePresentation {
-  // Label stays the raw plan presentation (no i18n mapping). Style class is chrome only.
+  if (isCodexChatgptPlanAccount(account) && account.service_source_plan_badge) return { ...account.service_source_plan_badge };
+  // Plan labels stay text; appearance is handled by the existing capsule styles.
+  const label = options?.preserveRawNonProLabel && getCodexEffectivePlanKey(account) !== 'pro'
+    ? account.plan_type?.trim() || account.auth_file_plan_type?.trim() || getCodexPlanBadgeLabel(account)
+    : getCodexPlanBadgeLabel(account);
   return {
-    label: getCodexPlanBadgeLabel(account),
+    label,
     className: getCodexPlanBadgeClass(account),
   };
 }
@@ -1191,6 +1268,7 @@ export function getCodexPlanBadgePresentationWithStyle(
 }
 
 export function getCodexPlanFilterKey(account: CodexAccount): string {
+  if (isCodexChatgptPlanAccount(account)) return "CHATGPT_PLAN";
   if (isCodexPendingOAuthAccount(account)) return "PENDING";
   return getCodexEffectivePlanKey(account).toUpperCase();
 }

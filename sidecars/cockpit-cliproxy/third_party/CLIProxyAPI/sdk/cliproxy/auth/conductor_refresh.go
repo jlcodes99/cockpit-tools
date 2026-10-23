@@ -154,6 +154,9 @@ func (m *Manager) shouldRefresh(a *Auth, now time.Time) bool {
 	if !a.NextRefreshAfter.IsZero() && now.Before(a.NextRefreshAfter) {
 		return false
 	}
+	if a.RejectedAccessToken != "" && authAccessToken(a) == a.RejectedAccessToken {
+		return true
+	}
 	if evaluator, ok := a.Runtime.(RefreshEvaluator); ok && evaluator != nil {
 		return evaluator.ShouldRefresh(now, a)
 	}
@@ -406,11 +409,39 @@ func authHasRefreshCredential(auth *Auth) bool {
 	return authMetadataString(auth, "refreshToken") != ""
 }
 
+// CredentialsChanged excludes runtime availability and refresh timestamps.
+func CredentialsChanged(existing, incoming *Auth) bool {
+	if existing == nil || incoming == nil {
+		return false
+	}
+	for _, keys := range [][2]string{
+		{"access_token", "accessToken"}, {"refresh_token", "refreshToken"}, {"id_token", "idToken"},
+	} {
+		value := func(auth *Auth) string {
+			if token := authMetadataString(auth, keys[0]); token != "" {
+				return token
+			}
+			return authMetadataString(auth, keys[1])
+		}
+		if value(existing) != value(incoming) {
+			return true
+		}
+	}
+	key := func(auth *Auth) string {
+		if value := authAttribute(auth, AttributeAPIKey); value != "" {
+			return value
+		}
+		return authMetadataString(auth, "api_key")
+	}
+	return key(existing) != key(incoming)
+}
+
 func clearUnauthorizedModelStates(auth *Auth, now time.Time) []string {
 	if auth == nil || len(auth.ModelStates) == 0 {
 		return nil
 	}
 	var resumed []string
+	changed := false
 	for model, state := range auth.ModelStates {
 		if state == nil || state.LastError == nil {
 			continue
@@ -418,10 +449,17 @@ func clearUnauthorizedModelStates(auth *Auth, now time.Time) []string {
 		if state.LastError.StatusCode() != http.StatusUnauthorized && !strings.EqualFold(state.LastError.Code, "unauthorized") {
 			continue
 		}
+		changed = true
+		if state.Quota.Exceeded && (state.Quota.NextRecoverAt.IsZero() || state.Quota.NextRecoverAt.After(now)) {
+			state.LastError = nil
+			state.StatusMessage = state.Quota.Reason
+			state.UpdatedAt = now
+			continue
+		}
 		resetModelState(state, now)
 		resumed = append(resumed, model)
 	}
-	if len(resumed) > 0 {
+	if changed {
 		updateAggregatedAvailability(auth, now)
 	}
 	return resumed
@@ -437,7 +475,7 @@ func (m *Manager) tryRefreshExecutionAuthAfterUnauthorized(ctx context.Context, 
 	if m == nil || executor == nil || auth == nil || alreadyTried || execErr == nil {
 		return auth, false, nil
 	}
-	if !isUnauthorizedError(execErr) || auth.AuthKind() != AuthKindOAuth {
+	if isRequestStopError(execErr) || !isUnauthorizedError(execErr) || auth.AuthKind() != AuthKindOAuth {
 		return auth, false, nil
 	}
 
@@ -521,7 +559,7 @@ func (m *Manager) tryRefreshAfterUnauthorized(ctx context.Context, auth *Auth, e
 	}
 	// Request-scoped failures describe this request, not stale credentials.
 	// Refreshing would turn a direct error response into an implicit retry.
-	if isRequestScopedError(execErr) {
+	if isRequestStopError(execErr) || isRequestScopedError(execErr) {
 		return auth, false
 	}
 	if !isUnauthorizedError(execErr) || !authHasRefreshCredential(auth) {
@@ -553,6 +591,17 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, errors.New("auth id is empty")
+	}
+	if failedAccessToken != "" {
+		m.mu.Lock()
+		if current := m.auths[id]; current != nil && authAccessToken(current) == failedAccessToken {
+			current.RejectedAccessToken = failedAccessToken
+			current.Generation++
+			if m.scheduler != nil {
+				m.scheduler.upsertAuth(current.Clone())
+			}
+		}
+		m.mu.Unlock()
 	}
 
 	lockValue, _ := m.refreshLocks.LoadOrStore(id, newAuthRefreshLock())
@@ -592,6 +641,14 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 
 	base := auth.Clone()
 	updated, err := exec.Refresh(ctx, base.Clone())
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+		m.mu.Lock()
+		if current := m.auths[id]; current != nil && current.RegistrationEpoch == base.RegistrationEpoch && current.CredentialVersion == base.CredentialVersion && !CredentialsChanged(base, current) {
+			current.NextRefreshAfter = time.Now().Add(time.Second)
+		}
+		m.mu.Unlock()
+		m.queueRefreshReschedule(id)
+	}
 	if canceled := ctx.Err(); canceled != nil {
 		return nil, canceled
 	}
@@ -602,7 +659,7 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	log.Debugf("refreshed %s, %s, %v", auth.Provider, auth.ID, err)
 	now := time.Now()
 	if err != nil {
-		unauthorized := isUnauthorizedError(err)
+		unauthorized := isUnauthorizedError(err) || isInvalidGrantError(err)
 		shouldReschedule := false
 		m.mu.Lock()
 		if errCanceled := ctx.Err(); errCanceled != nil {
@@ -610,9 +667,10 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 			return nil, errCanceled
 		}
 		if current := m.auths[id]; current != nil {
-			if base != nil && current.RegistrationEpoch != base.RegistrationEpoch {
+			if current.RegistrationEpoch != base.RegistrationEpoch || current.CredentialVersion != base.CredentialVersion || CredentialsChanged(base, current) {
+				latest := current.Clone()
 				m.mu.Unlock()
-				return nil, err
+				return latest, nil
 			}
 			current.Generation++
 			current.UpdatedAt = now
@@ -622,6 +680,8 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 				current.Unavailable = true
 				current.Status = StatusError
 				if unauthorized {
+					current.LastError.Code = "unauthorized"
+					current.LastError.HTTPStatus = http.StatusUnauthorized
 					current.NextRefreshAfter = time.Time{}
 					current.StatusMessage = "unauthorized"
 				} else {
@@ -660,6 +720,7 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	updated.LastError = nil
 	updated.StatusMessage = ""
 	updated.Unavailable = false
+	updated.RejectedAccessToken = ""
 	if updated.Status == StatusError || updated.Status == "" {
 		updated.Status = StatusActive
 	}
@@ -672,8 +733,13 @@ func (m *Manager) refreshAuthForRequest(ctx context.Context, id, failedAccessTok
 	if errUpdate != nil && (errors.Is(errUpdate, context.Canceled) || errors.Is(errUpdate, context.DeadlineExceeded)) {
 		return nil, errUpdate
 	}
-	for _, model := range modelsToResume {
-		registry.GetGlobalRegistry().ResumeClientModel(id, model)
+	if saved != nil && saved.RegistrationEpoch == base.RegistrationEpoch && !CredentialsChanged(saved, updated) {
+		for _, model := range modelsToResume {
+			state := saved.ModelStates[model]
+			if state == nil || (!state.Unavailable && !state.Quota.Exceeded) {
+				registry.GetGlobalRegistry().ResumeClientModel(id, model)
+			}
+		}
 	}
 	if errUpdate != nil {
 		log.Debugf("persist refreshed auth %s (%s) failed: %v", auth.Provider, auth.ID, errUpdate)

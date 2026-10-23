@@ -1,5 +1,157 @@
 use super::*;
 
+#[test]
+fn default_exe_clears_profile_environment_and_stale_user_data_arguments() {
+    let mut command = Command::new("never-executed-chatgpt.exe");
+    command.env("CODEX_HOME", "old-home");
+    command.env("CODEX_ELECTRON_USER_DATA_PATH", "old-data");
+    let args = vec![
+        "--user-data-dir=old".into(),
+        "--user-data-dir".into(),
+        "old split".into(),
+        "--remote-debugging-port=9222".into(),
+    ];
+    prepare_codex_windows_default_command(&mut command, &args, None);
+    for name in ["CODEX_HOME", "CODEX_ELECTRON_USER_DATA_PATH"] {
+        assert!(command
+            .get_envs()
+            .any(|(key, value)| key == name && value.is_none()));
+    }
+    assert_eq!(
+        command.get_args().collect::<Vec<_>>(),
+        vec![std::ffi::OsStr::new("--remote-debugging-port=9222")]
+    );
+}
+
+#[test]
+fn default_custom_home_reaches_exe_and_store_without_managed_window_arguments() {
+    let args = vec![
+        "--user-data-dir=stale".into(),
+        "--remote-debugging-port=9222".into(),
+    ];
+    let inherited = vec![
+        ("CODEX_HOME".into(), "stale-home".into()),
+        ("CODEX_ELECTRON_USER_DATA_PATH".into(), "stale-data".into()),
+    ];
+    for home in [
+        r"D:\codex-home",
+        r"D:\李杰\Codex Data",
+        r"\\server\配置\Codex Home",
+    ] {
+        let selected = codex_default_home_env_override(
+            Path::new(home),
+            Some(Path::new(r"C:\Users\李杰\.codex")),
+        );
+        assert_eq!(selected.as_deref(), Some(home));
+        let mut exe = Command::new("never-executed-chatgpt.exe");
+        exe.envs(inherited.iter().cloned());
+        prepare_codex_windows_default_command(&mut exe, &args, selected.as_deref());
+        let store = request(selected.as_deref(), None, &args, &inherited);
+        let store_command = store.child_command();
+        for command in [&exe, &store_command] {
+            let env = command
+                .get_envs()
+                .collect::<std::collections::HashMap<_, _>>();
+            assert_eq!(
+                env[std::ffi::OsStr::new("CODEX_HOME")],
+                Some(std::ffi::OsStr::new(home))
+            );
+            assert!(env[std::ffi::OsStr::new("CODEX_ELECTRON_USER_DATA_PATH")].is_none());
+            assert_eq!(
+                command.get_args().collect::<Vec<_>>(),
+                vec![std::ffi::OsStr::new("--remote-debugging-port=9222")]
+            );
+        }
+        assert_eq!(store.app_user_data_dir, None);
+        assert!(is_codex_windows_default_process_dir(None, &HashSet::new()));
+    }
+}
+
+#[test]
+fn standard_home_does_not_require_codex_home_even_with_alternate_windows_spelling() {
+    let standard = Path::new(r"C:\Users\李杰\.codex");
+    for home in [
+        r"C:\Users\李杰\.codex",
+        "c:/users/李杰/.codex/",
+        r"\\?\C:\Users\李杰\.codex",
+    ] {
+        assert_eq!(
+            codex_default_home_env_override(Path::new(home), Some(standard)),
+            None
+        );
+    }
+}
+
+#[test]
+fn relative_default_home_is_resolved_before_package_activation() {
+    let relative = Path::new("Codex Home");
+    assert_eq!(
+        resolve_codex_default_launch_home(Some(relative)).unwrap(),
+        std::env::current_dir().unwrap().join(relative)
+    );
+}
+
+#[test]
+fn default_launch_reuses_the_home_where_configuration_was_written() {
+    let _guard = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    struct Restore(Option<std::ffi::OsString>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            match &self.0 {
+                Some(value) => std::env::set_var("CODEX_HOME", value),
+                None => std::env::remove_var("CODEX_HOME"),
+            }
+        }
+    }
+    let _restore = Restore(std::env::var_os("CODEX_HOME"));
+    let root = tempfile::tempdir().unwrap();
+    let configured = root.path().join("李杰 Codex Home");
+    std::fs::create_dir_all(&configured).unwrap();
+    std::env::set_var("CODEX_HOME", format!(" \"{}\" ", configured.display()));
+    let written_home = crate::modules::codex_account::get_codex_home();
+    std::fs::write(
+        written_home.join("config.toml"),
+        "model_provider = 'codex_local_access'\n",
+    )
+    .unwrap();
+    assert_eq!(
+        resolve_codex_default_launch_home(None).unwrap(),
+        written_home
+    );
+    std::env::set_var("CODEX_HOME", root.path().join("changed-after-write"));
+    assert_eq!(
+        resolve_codex_default_launch_home(Some(&written_home)).unwrap(),
+        configured
+    );
+    let home = codex_default_home_env_override(&written_home, Some(root.path()));
+    let command = request(home.as_deref(), None, &[], &[]).child_command();
+    let launched_home = command
+        .get_envs()
+        .find(|(key, _)| *key == "CODEX_HOME")
+        .unwrap()
+        .1
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(Path::new(launched_home).join("config.toml")).unwrap(),
+        "model_provider = 'codex_local_access'\n"
+    );
+    for empty in [None, Some(""), Some("  \"\"  ")] {
+        match empty {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        let standard = dirs::home_dir().unwrap().join(".codex");
+        let selected = resolve_codex_default_launch_home(None).unwrap();
+        assert_eq!(selected, standard);
+        assert_eq!(
+            codex_default_home_env_override(&selected, Some(&standard)),
+            None
+        );
+    }
+}
+
 fn package() -> CodexRegisteredLaunch {
     CodexRegisteredLaunch {
         family_name: "OpenAI.Codex_2p2nqsd0c76g0".into(),
@@ -10,88 +162,50 @@ fn package() -> CodexRegisteredLaunch {
     }
 }
 
-fn decode_inner_script(script: &str) -> String {
-    use base64::{engine::general_purpose, Engine};
-    let encoded = script
-        .split("-EncodedCommand ")
-        .nth(1)
-        .unwrap()
-        .split('\'')
-        .next()
-        .unwrap();
-    let bytes = general_purpose::STANDARD.decode(encoded).unwrap();
-    let units = bytes
-        .chunks_exact(2)
-        .map(|b| u16::from_le_bytes([b[0], b[1]]))
-        .collect::<Vec<_>>();
-    String::from_utf16(&units).unwrap()
+#[test]
+fn default_registration_probe_requires_exact_app_identity_and_gui() {
+    for invalid in ["", "pkg", "!App", "pkg!", "pkg!App!Other"] {
+        assert!(
+            build_codex_default_registered_launch_probe(invalid).is_err(),
+            "{invalid}"
+        );
+    }
+    let script = build_codex_default_registered_launch_probe(" OpenAI.Codex_pub!O'Brien ").unwrap();
+    assert!(script.contains("$family = 'OpenAI.Codex_pub'"));
+    assert!(script.contains("$appId = 'O''Brien'"));
+    assert!(script.contains("$application.Id -ne $appId"));
+    assert!(script.contains("-ieq 'ChatGPT.exe'"));
+    assert!(script.contains("[IO.Path]::IsPathRooted($relative)"));
+    assert!(script.contains("$exe.StartsWith($root + '\\'"));
+    assert!(script.contains("$matches.Count -ne 1"));
 }
 
+#[cfg(target_os = "windows")]
 #[test]
-fn package_script_preserves_child_identity_and_hidden_helper() {
-    let script =
-        build_codex_package_identity_script(&package(), "home", Path::new("data"), &[], &[]);
-    let activation = script
-        .lines()
-        .find(|line| line.starts_with("Invoke-CommandInDesktopPackage "))
-        .unwrap();
-    assert!(activation.contains("-PreventBreakaway"));
-    assert!(activation.contains("-WindowStyle Hidden"));
-    assert!(script.contains("$appId = 'CodexGui'"));
-    assert!(script.contains("$app.Count -ne 1"));
-    assert!(!script.contains("shell:AppsFolder"));
-    assert!(decode_inner_script(&script).contains("$psi.UseShellExecute = $false"));
+fn default_registration_resolves_selected_gui_and_rejects_runner() {
+    // Real PowerShell parsing with fake registration; no desktop is launched.
+    let setup = r#"
+function Get-AppxPackage {
+  [PSCustomObject]@{ Version=[version]'26.924'; PackageFamilyName='OpenAI.Codex_pub'; InstallLocation='C:\Program Files\WindowsApps\OpenAI.Codex_26.924_x64__pub' }
 }
-
-#[test]
-fn arguments_have_exactly_one_selected_profile() {
-    let args = vec![
-        "--user-data-dir=old".into(),
-        "--user-data-dir".into(),
-        "old split path".into(),
-        "--remote-debugging-port=9222".into(),
-        "--proxy-server=http://localhost:8000".into(),
-    ];
-    let script = build_codex_package_identity_script(
-        &package(),
-        "home",
-        Path::new(r"C:\Users\O'Brien\资料 space"),
-        &args,
-        &[],
-    );
-    let inner = decode_inner_script(&script);
-    assert_eq!(inner.matches("--user-data-dir").count(), 1);
-    assert!(!inner.contains("old split path"));
-    assert!(inner.contains("--remote-debugging-port=9222"));
-    assert!(inner.contains("--proxy-server=http://localhost:8000"));
-    assert!(inner.contains("O''Brien"));
-    assert!(inner.contains("资料 space"));
+function Get-AppxPackageManifest {
+  [PSCustomObject]@{ Package=@{ Applications=@{ Application=@(
+    @{Id='Runner';Executable='app\resources\codex.exe'},
+    @{Id='Gui';Executable='app\ChatGPT.exe'}
+  ) } } }
 }
-
-#[test]
-fn preserves_injection_and_proxy_environment_without_overriding_isolation() {
-    let script = build_codex_package_identity_script(
-        &package(),
-        "selected-home",
-        Path::new("selected-data"),
-        &[],
-        &[
-            (
-                "NODE_OPTIONS".into(),
-                "--require=\"C:\\a b\\hook.js\"".into(),
-            ),
-            ("HTTPS_PROXY".into(), "http://127.0.0.1:9123".into()),
-            ("CODEX_HOME".into(), "wrong-home".into()),
-        ],
-    );
-    let inner = decode_inner_script(&script);
-    assert!(inner.contains("'NODE_OPTIONS', '--require=\"C:\\a b\\hook.js\"'"));
-    assert!(inner.contains("'HTTPS_PROXY', 'http://127.0.0.1:9123'"));
-    assert!(inner.contains("$env:CODEX_ELECTRON_USER_DATA_PATH = 'selected-data'"));
-    assert!(
-        inner.find("$env:CODEX_HOME = 'selected-home'").unwrap()
-            > inner.find("wrong-home").unwrap()
-    );
+function Test-Path { return $true }
+"#;
+    let probe = build_codex_default_registered_launch_probe("OpenAI.Codex_pub!Gui").unwrap();
+    let output = codex_launch_powershell_output(&format!("{setup}\n{probe}")).unwrap();
+    let registered = parse_codex_registered_launch(&output).unwrap().unwrap();
+    assert_eq!(registered.app_id, "Gui");
+    assert!(registered.executable.ends_with(r"app\ChatGPT.exe"));
+    for id in ["Runner", "Missing"] {
+        let probe =
+            build_codex_default_registered_launch_probe(&format!("OpenAI.Codex_pub!{id}")).unwrap();
+        assert!(codex_launch_powershell_output(&format!("{setup}\n{probe}")).is_err());
+    }
 }
 
 #[test]
@@ -215,46 +329,459 @@ fn package_refresh_keeps_publisher_identity() {
     );
 }
 
+#[test]
+fn manifest_hint_matches_selected_executable_and_rejects_ambiguity() {
+    let path = PathBuf::from(&package().executable);
+    let manifest = r#"<Package><Applications>
+      <Application Id="Runner" Executable="app\resources\codex.exe"/>
+      <Application Id="Gui&amp;One" Executable="app\ChatGPT.exe"/>
+    </Applications></Package>"#;
+    let hint = codex_package_hint_from_manifest(&path, manifest).unwrap();
+    assert_eq!(hint.app_id, "Gui&One");
+    assert_eq!(hint.executable, package().executable);
+    assert_eq!(hint.family_name, "openai.codex_2p2nqsd0c76g0");
+    for invalid in [
+        r#"<Package><Application Id="Gui" Executable="app\resources\codex.exe"/></Package>"#,
+        r#"<Package><Application Id="Gui" Executable="app\ChatGPT.exe"/><Application Id="Other" Executable="app\ChatGPT.exe"/></Package>"#,
+        r#"<Package><Application Id="Gui" Executable="..\app\ChatGPT.exe"/></Package>"#,
+        r#"<Package><Application Id="" Executable="app\ChatGPT.exe"/></Package>"#,
+        r#"<Package><Application Id="Gui" Executable="app\ChatGPT.exe" invalid /></Package>"#,
+    ] {
+        assert!(
+            codex_package_hint_from_manifest(&path, invalid).is_none(),
+            "{invalid}"
+        );
+    }
+    assert!(
+        codex_package_hint_from_manifest(Path::new(r"C:\Tools\ChatGPT.exe"), manifest).is_none()
+    );
+}
+
+#[test]
+fn package_validation_failure_refreshes_once_and_uses_updated_executable() {
+    let old = package();
+    let mut updated = old.clone();
+    updated.executable = updated.executable.replace("26.924", "26.999");
+    let mut attempted = Vec::new();
+    let actual = activate_codex_package_with_refresh(
+        old,
+        |package| {
+            attempted.push(package.executable.clone());
+            if attempted.len() == 1 {
+                Err("CODEX_PACKAGE_REGISTRATION_CHANGED: changed".into())
+            } else {
+                Ok(())
+            }
+        },
+        || Ok(updated.clone()),
+    )
+    .unwrap();
+    assert_eq!(attempted.len(), 2);
+    assert_eq!(attempted[1], updated.executable);
+    assert_eq!(actual.executable, updated.executable);
+}
+
+#[test]
+fn activation_errors_never_trigger_ambiguous_or_unbounded_retries() {
+    for error in [
+        "activation timed out",
+        "CODEX_PACKAGE_REGISTRATION_CHANGED: changed",
+    ] {
+        let mut count = 0;
+        let result = activate_codex_package_with_refresh(
+            package(),
+            |_| {
+                count += 1;
+                Err(error.into())
+            },
+            || {
+                assert!(error.contains("CODEX_PACKAGE_REGISTRATION_CHANGED"));
+                Ok(package())
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(
+            count,
+            if error.contains("CODEX_PACKAGE_REGISTRATION_CHANGED") {
+                2
+            } else {
+                1
+            }
+        );
+    }
+    let result = activate_codex_package_with_refresh(
+        package(),
+        |_| Err("CODEX_PACKAGE_REGISTRATION_CHANGED".into()),
+        || Err("registry unavailable".into()),
+    );
+    assert_eq!(result.unwrap_err(), "registry unavailable");
+}
+
+fn request(
+    home: Option<&str>,
+    data: Option<&Path>,
+    args: &[String],
+    env: &[(String, String)],
+) -> codex_package_launcher::LaunchRequest {
+    codex_package_launch_request(
+        &package(),
+        home,
+        data,
+        args,
+        env,
+        std::env::temp_dir().join("unused-codex-test-receipt.json"),
+        "test-nonce".into(),
+    )
+}
+
+#[test]
+fn managed_and_default_commands_keep_selected_profiles_and_proxy_environment() {
+    let env = vec![
+        (
+            "HTTPS_PROXY".into(),
+            "http://user:secret@127.0.0.1:9123".into(),
+        ),
+        ("CODEX_HOME".into(), "wrong-home".into()),
+        ("CODEX_ELECTRON_USER_DATA_PATH".into(), "wrong-data".into()),
+    ];
+    let args = vec![
+        "--user-data-dir=old".into(),
+        "--user-data-dir".into(),
+        "old split".into(),
+        "--remote-debugging-port=9222".into(),
+        "--proxy-server=http://127.0.0.1:9123".into(),
+    ];
+    for managed in [false, true] {
+        let request = request(
+            managed.then_some("selected-home"),
+            managed.then_some(Path::new(r"C:\O'Brien\资料 space")),
+            &args,
+            &env,
+        );
+        let command = request.child_command();
+        let env = command
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|value| value.to_string_lossy().into_owned()),
+                )
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(
+            env["CODEX_HOME"].as_deref(),
+            managed.then_some("selected-home")
+        );
+        assert_eq!(
+            env["CODEX_ELECTRON_USER_DATA_PATH"].as_deref(),
+            managed.then_some(r"C:\O'Brien\资料 space")
+        );
+        assert_eq!(
+            env["HTTPS_PROXY"].as_deref(),
+            Some("http://user:secret@127.0.0.1:9123")
+        );
+        assert!(env[codex_package_launcher::PAYLOAD_ENV].is_none());
+        assert_eq!(
+            request
+                .args
+                .iter()
+                .filter(|arg| arg.starts_with("--user-data-dir"))
+                .count(),
+            usize::from(managed)
+        );
+        assert!(!request.args.iter().any(|arg| arg == "old split"));
+        assert!(request
+            .args
+            .contains(&"--remote-debugging-port=9222".into()));
+    }
+}
+
+#[test]
+fn activation_only_invokes_gui_helper_and_does_not_query_registration() {
+    let request = request(
+        Some("home"),
+        Some(Path::new("data")),
+        &[],
+        &[("HTTPS_PROXY".into(), "secret-proxy-value".into())],
+    );
+    let script =
+        build_codex_package_activation_script(&request, Path::new(r"C:\O'Brien\Cockpit Tools.exe"))
+            .unwrap();
+    assert!(script.contains("-PreventBreakaway"));
+    assert!(script.contains("-Command 'C:\\O''Brien\\Cockpit Tools.exe'"));
+    assert!(script.contains(codex_package_launcher::HELPER_ARG));
+    assert!(!script.contains("Get-AppxPackage"));
+    assert!(!script.contains("powershell.exe"));
+    assert!(!script.contains("secret-proxy-value"));
+    assert!(!script.contains("shell:AppsFolder"));
+}
+
+#[test]
+fn native_validation_rejects_old_installation_and_wrong_manifest_entry() {
+    let mut request = request(None, None, &[], &[]);
+    let root = Path::new(r"C:\Program Files\WindowsApps\OpenAI.Codex_26.924_x64__2p2nqsd0c76g0");
+    let manifest = r#"<Package><Applications><Application Id="CodexGui" Executable="app/ChatGPT.exe"/><Application Id="Runner" Executable="app/resources/codex.exe"/></Applications></Package>"#;
+    assert!(codex_package_launcher::matches_package_entry(
+        &request,
+        "openai.codex_2p2nqsd0c76g0",
+        root,
+        manifest
+    ));
+    assert!(!codex_package_launcher::matches_package_entry(
+        &request,
+        "OpenAI.Codex_other",
+        root,
+        manifest
+    ));
+    request.executable = request.executable.replace("26.924", "26.900");
+    assert!(!codex_package_launcher::matches_package_entry(
+        &request,
+        &request.family_name,
+        root,
+        manifest
+    ));
+    request.executable = package().executable;
+    request.app_id = "Runner".into();
+    assert!(!codex_package_launcher::matches_package_entry(
+        &request,
+        &request.family_name,
+        root,
+        manifest
+    ));
+}
+
+#[test]
+fn uncertain_activation_proceeds_to_confirmation_without_retry() {
+    let mut activated = 0;
+    let actual = activate_codex_package_with_refresh(
+        package(),
+        |_| {
+            activated += 1;
+            Err("CODEX_ACTIVATION_UNCERTAIN: timeout".into())
+        },
+        || panic!("Uncertain activation must never rediscover and relaunch"),
+    )
+    .unwrap();
+    assert_eq!(activated, 1);
+    assert_eq!(actual.executable, package().executable);
+}
+
+#[test]
+fn quick_path_validation_rejects_cli_dll_wrong_name_and_broken_files() {
+    let directory = std::env::temp_dir().join(format!("codex-pe-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("ChatGPT.exe");
+    let mut bytes = vec![0u8; 64 + 94];
+    bytes[..2].copy_from_slice(b"MZ");
+    bytes[60..64].copy_from_slice(&64u32.to_le_bytes());
+    bytes[64..68].copy_from_slice(b"PE\0\0");
+    for magic in [0x10bu16, 0x20b] {
+        bytes[88..90].copy_from_slice(&magic.to_le_bytes());
+        bytes[156..158].copy_from_slice(&2u16.to_le_bytes());
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(is_usable_codex_windows_gui_path(&path));
+        let wrong = directory.join("codex.exe");
+        std::fs::write(&wrong, &bytes).unwrap();
+        assert!(!is_usable_codex_windows_gui_path(&wrong));
+        std::fs::remove_file(wrong).unwrap();
+        bytes[156..158].copy_from_slice(&3u16.to_le_bytes());
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(!is_usable_codex_windows_gui_path(&path));
+    }
+    bytes[156..158].copy_from_slice(&2u16.to_le_bytes());
+    bytes[86..88].copy_from_slice(&0x2000u16.to_le_bytes());
+    std::fs::write(&path, &bytes).unwrap();
+    assert!(!is_usable_codex_windows_gui_path(&path));
+    std::fs::write(&path, b"not an executable").unwrap();
+    assert!(!is_usable_codex_windows_gui_path(&path));
+    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+}
+
+#[test]
+fn successful_launch_receipts_round_trip_without_waiting_for_timeout() {
+    use codex_package_launcher::{LaunchReply, PendingReceipt, Receipt};
+    for reply in [
+        LaunchReply::Spawned {
+            pid: 123,
+            validation_us: 1459,
+            helper_has_console: false,
+        },
+        LaunchReply::Validated {
+            validation_us: 1459,
+            helper_has_console: false,
+        },
+    ] {
+        let pending = PendingReceipt::new().unwrap();
+        std::fs::write(
+            &pending.path,
+            serde_json::to_vec(&Receipt {
+                nonce: pending.nonce.clone(),
+                reply,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        match pending
+            .wait(Duration::ZERO)
+            .expect("Successful launch receipt")
+        {
+            LaunchReply::Spawned {
+                pid,
+                validation_us,
+                helper_has_console,
+            } => {
+                assert_eq!(pid, 123);
+                assert_eq!(validation_us, 1459);
+                assert!(!helper_has_console);
+            }
+            LaunchReply::Validated {
+                validation_us,
+                helper_has_console,
+            } => {
+                assert_eq!(validation_us, 1459);
+                assert!(!helper_has_console);
+            }
+            reply => panic!("Unexpected reply: {reply:?}"),
+        }
+    }
+}
+
+#[test]
+fn receipts_are_isolated_authenticated_and_removed_after_attempt() {
+    use codex_package_launcher::{LaunchReply, PendingReceipt, Receipt};
+    let first = PendingReceipt::new().unwrap();
+    let second = PendingReceipt::new().unwrap();
+    let path = first.path.clone();
+    assert_ne!(first.path, second.path);
+    std::fs::write(
+        &first.path,
+        serde_json::to_vec(&Receipt {
+            nonce: second.nonce.clone(),
+            reply: LaunchReply::EntryStale,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(first.wait(Duration::from_millis(25)).is_none());
+    std::fs::write(
+        &first.path,
+        serde_json::to_vec(&Receipt {
+            nonce: first.nonce.clone(),
+            reply: LaunchReply::EntryStale,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        first.wait(Duration::from_millis(25)),
+        Some(LaunchReply::EntryStale)
+    ));
+    assert!(second.wait(Duration::from_millis(25)).is_none());
+    drop(first);
+    assert!(!path.exists());
+    assert!(!path.parent().unwrap().exists());
+}
+
 #[cfg(target_os = "windows")]
 #[test]
-fn activation_script_uses_matching_app_and_forces_child_identity_without_launching_gui() {
-    // Exercise PowerShell parsing/binding while replacing only the system calls.
-    let setup = r#"
-function Get-AppxPackage {
-  [PSCustomObject]@{ Version=[version]'26.924'; PackageFamilyName='OpenAI.Codex_2p2nqsd0c76g0'; InstallLocation='C:\Program Files\WindowsApps\OpenAI.Codex_26.924_x64__2p2nqsd0c76g0' }
+fn default_child_receives_proxy_and_selected_home_without_console() {
+    use std::os::windows::process::CommandExt;
+    let proxy = "socks5h://127.0.0.1:53669";
+    let mut env = account_proxy_env_pairs(proxy)
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), value))
+        .collect::<Vec<_>>();
+    env.push(("CODEX_HOME".into(), "wrong-home".into()));
+    env.push(("CODEX_ELECTRON_USER_DATA_PATH".into(), "wrong-data".into()));
+    let script = "$values=@{};foreach($key in @('ALL_PROXY','HTTP_PROXY','HTTPS_PROXY','CODEX_HOME','CODEX_ELECTRON_USER_DATA_PATH','COCKPIT_CODEX_PACKAGE_LAUNCH_PAYLOAD')){$values[$key]=[Environment]::GetEnvironmentVariable($key,'Process')};$values|ConvertTo-Json -Compress";
+    for selected_home in [None, Some(r"D:\李杰\Codex Home")] {
+        let mut request = request(selected_home, None, &[], &env);
+        request.executable = PathBuf::from(std::env::var("SystemRoot").unwrap())
+            .join(r"System32\WindowsPowerShell\v1.0\powershell.exe")
+            .to_string_lossy()
+            .into_owned();
+        request.args = vec![
+            "-NoProfile".into(),
+            "-NonInteractive".into(),
+            "-Command".into(),
+            script.into(),
+        ];
+        let output = crate::modules::process_timeout::output_with_timeout(
+            request.child_command().creation_flags(CREATE_NO_WINDOW),
+            Duration::from_secs(15),
+        )
+        .unwrap();
+        assert!(output.status.success());
+        let env: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        for key in ["ALL_PROXY", "HTTP_PROXY", "HTTPS_PROXY"] {
+            assert_eq!(env[key], proxy);
+        }
+        match selected_home {
+            Some(home) => assert_eq!(env["CODEX_HOME"], home),
+            None => assert!(env["CODEX_HOME"].is_null()),
+        }
+        for key in [
+            "CODEX_ELECTRON_USER_DATA_PATH",
+            codex_package_launcher::PAYLOAD_ENV,
+        ] {
+            assert!(env[key].is_null());
+        }
+    }
 }
-function Get-AppxPackageManifest {
-  [PSCustomObject]@{ Package=@{ Applications=@{ Application=@(
-    @{Id='Runner';Executable='app\resources\codex.exe'},
-    @{Id='CodexGui';Executable='app\ChatGPT.exe'}
-  ) } } }
-}
-function Invoke-CommandInDesktopPackage {
-  param($PackageFamilyName, $AppId, [switch]$PreventBreakaway, $Command, $Args)
-  [PSCustomObject]@{ family=$PackageFamilyName; app=$AppId; inherited=[bool]$PreventBreakaway; command=$Command; arguments=$Args } | ConvertTo-Json -Compress
-}
-"#;
-    let script = build_codex_package_identity_script(
-        &package(),
-        "managed-home",
-        Path::new("managed-data"),
-        &[],
-        &[],
-    );
-    let output = codex_launch_powershell_output(&format!("{setup}\n{script}")).unwrap();
-    let call: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert_eq!(call["app"], "CodexGui");
-    assert_eq!(call["family"], package().family_name);
-    assert_eq!(call["inherited"], true);
-    let arguments = call["arguments"].as_str().unwrap();
-    assert!(arguments.contains("-WindowStyle Hidden"));
-    assert!(arguments.contains("-EncodedCommand"));
-    let inner = decode_inner_script(arguments);
-    assert!(inner.contains("$env:CODEX_HOME = 'managed-home'"));
 
-    let mut stale = package();
-    stale.executable = stale.executable.replace("26.924", "26.900");
-    let stale_script =
-        build_codex_package_identity_script(&stale, "home", Path::new("data"), &[], &[]);
-    assert!(codex_launch_powershell_output(&format!("{setup}\n{stale_script}")).is_err());
+#[cfg(target_os = "windows")]
+#[test]
+#[ignore = "Command-only local package validation; never starts Codex or a UI"]
+fn local_manifest_preparation_matches_real_registration() {
+    use codex_package_launcher::{LaunchReply, PendingReceipt};
+    let path = PathBuf::from(
+        std::env::var("COCKPIT_CODEX_PROBE_EXPECTED_EXE").expect("Explicit GUI path required"),
+    );
+    let helper = PathBuf::from(
+        std::env::var("COCKPIT_CODEX_GUI_HELPER_EXE")
+            .expect("Explicit GUI subsystem host helper required"),
+    );
+    assert!(windows_executable_has_gui_subsystem(&helper));
+    assert!(is_usable_codex_windows_gui_path(&path));
+    let started = Instant::now();
+    let hint = codex_package_hint_from_path(&path).unwrap();
+    let manifest_us = started.elapsed().as_micros();
+    let registered = query_codex_registered_launch(&path).unwrap().unwrap();
+    assert_eq!(hint.app_id, registered.app_id);
+    assert!(hint
+        .family_name
+        .eq_ignore_ascii_case(&registered.family_name));
+    for managed in [false, true] {
+        let receipt = PendingReceipt::new().unwrap();
+        let mut request = codex_package_launch_request(
+            &hint,
+            managed.then_some("diagnostic-home"),
+            managed.then_some(Path::new("diagnostic-data")),
+            &[],
+            &[],
+            receipt.path.clone(),
+            receipt.nonce.clone(),
+        );
+        request.verify_only = true;
+        let script = build_codex_package_activation_script(&request, &helper).unwrap();
+        let started = Instant::now();
+        let output = codex_launch_powershell_output(&script).unwrap();
+        match receipt
+            .wait(Duration::from_secs(5))
+            .expect("Native helper receipt")
+        {
+            LaunchReply::Validated {
+                validation_us,
+                helper_has_console,
+            } => {
+                assert!(
+                    !helper_has_console,
+                    "Native package helper must not allocate a terminal"
+                );
+                println!("manifest_us={manifest_us} native_validation_us={validation_us} managed={managed} command_total_ms={} helper_has_console={helper_has_console} {}", started.elapsed().as_millis(), output.replace('\n', " "));
+            }
+            other => panic!("Unexpected native validation receipt: {other:?}"),
+        }
+    }
 }

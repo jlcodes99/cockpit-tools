@@ -102,7 +102,7 @@
         assert!(!super::account_wire_api_is_responses(&account));
     }
 
-    /// 历史遗留的 Codex/GPT 内置 id（例如 gpt-5.6-sol / gpt-5.6-terra）不能再作为 DeepSeek
+    /// 历史遗留的 Codex/GPT 内置 id（例如 gpt-5.4 / gpt-5.4-mini）不能再作为 DeepSeek
     /// 的客户端可见模型名：客户端会用内置 GPT 元数据生成工具定义，DeepSeek 上游只能把工具调用
     /// 写成文本标记（DSML）返回，链路无法解析，正文里就会直接出现原始标记。
     #[test]
@@ -120,15 +120,19 @@
         account.api_wire_api = Some("responses".to_string());
         account.api_model_mappings = vec![
             CodexApiModelMapping {
-                client_model: "gpt-5.6-sol".to_string(),
+                client_model: "gpt-5.5".to_string(),
                 upstream_model: "deepseek-v4-flash".to_string(),
             },
             CodexApiModelMapping {
-                client_model: "gpt-5.6-terra".to_string(),
+                client_model: "gpt-5.4".to_string(),
+                upstream_model: "deepseek-v4-flash".to_string(),
+            },
+            CodexApiModelMapping {
+                client_model: "gpt-5.4-mini".to_string(),
                 upstream_model: "deepseek-v4-pro".to_string(),
             },
             CodexApiModelMapping {
-                client_model: "gpt-5.6-luna".to_string(),
+                client_model: "gpt-5.3-codex".to_string(),
                 upstream_model: "deepseek-v4-flash".to_string(),
             },
             CodexApiModelMapping {
@@ -144,7 +148,7 @@
             .iter()
             .map(|mapping| mapping.client_model.as_str())
             .collect();
-        for legacy in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+        for legacy in ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"] {
             assert!(
                 !client_models
                     .iter()
@@ -159,9 +163,9 @@
             "用户自定义别名不能被清理"
         );
         for expected in [
-            "gpt-5.5",
-            "gpt-5.4",
-            "gpt-5.4-mini",
+            "gpt-5.6-luna",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
             "deepseek-flash",
             "deepseek-v4-flash",
             "deepseek-v4-pro",
@@ -176,12 +180,12 @@
         }
         // 目录壳位仍指向 DeepSeek 上游；历史 GPT 模型 id 不再被解析成 DeepSeek 模型。
         assert_eq!(
-            super::resolve_account_upstream_model(&account, "gpt-5.5"),
+            super::resolve_account_upstream_model(&account, "gpt-5.6-luna"),
             "deepseek-flash"
         );
         assert_eq!(
-            super::resolve_account_upstream_model(&account, "gpt-5.6-sol"),
-            "gpt-5.6-sol"
+            super::resolve_account_upstream_model(&account, "gpt-5.4"),
+            "gpt-5.4"
         );
     }
 
@@ -241,7 +245,7 @@
         );
         account.api_wire_api = Some("responses".to_string());
         account.api_model_mappings = vec![CodexApiModelMapping {
-            client_model: "gpt-5.4-mini".to_string(),
+            client_model: "gpt-5.6-terra".to_string(),
             upstream_model: "custom-vision".to_string(),
         }];
 
@@ -250,7 +254,7 @@
             account
                 .api_model_mappings
                 .iter()
-                .find(|mapping| mapping.client_model.eq_ignore_ascii_case("gpt-5.4-mini"))
+                .find(|mapping| mapping.client_model.eq_ignore_ascii_case("gpt-5.6-terra"))
                 .map(|mapping| mapping.upstream_model.as_str()),
             Some("custom-vision")
         );
@@ -844,7 +848,8 @@
         let content = fs::read_to_string(&config_path).expect("read official config");
         assert_builtin_provider_config(&content);
         assert!(!content.contains("relay.example.com"), "config: {content}");
-        assert!(content.contains("model = \"gpt-5.5\""), "config: {content}");
+        assert!(content.contains("model = \"gpt-5.6-sol\""), "config: {content}");
+        assert!(!content.contains("gpt-5.5"), "config: {content}");
         assert!(
             !base_dir.join(super::CODEX_PROVIDER_OVERRIDE_FILE).exists(),
             "快照只服务一次还原"
@@ -1304,12 +1309,12 @@ wire_api = "responses"
         );
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(config.contains("model = \"gpt-5.6-luna\""));
         assert!(!config.contains("model = \"gpt-5.6-sol\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         let catalog_path = super::deepseek_official_model_catalog_path(&base_dir);
         let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
-        assert!(catalog.contains("\"slug\": \"gpt-5.5\""));
+        assert!(catalog.contains("\"slug\": \"gpt-5.6-luna\""));
         assert!(catalog.contains("DeepSeek-V4-Flash"));
         assert!(catalog.contains("apply_patch_tool_type"));
         assert!(catalog.contains("shell_command"));
@@ -1352,14 +1357,14 @@ model_catalog_json = "cockpit-local-access-model-catalog.json"
         );
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(config.contains("model = \"gpt-5.6-luna\""));
         assert!(!config.contains("model = \"gpt-5.6-sol\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         let catalog_path = super::deepseek_official_model_catalog_path(&base_dir);
 
         let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
-        assert!(catalog.contains("\"slug\": \"gpt-5.5\""));
-        assert!(catalog.contains("\"slug\": \"gpt-5.4\""));
+        assert!(catalog.contains("\"slug\": \"gpt-5.6-luna\""));
+        assert!(catalog.contains("\"slug\": \"gpt-5.6-sol\""));
         assert!(catalog.contains("DeepSeek-V4-Flash"));
         assert!(catalog.contains("apply_patch_tool_type"));
         assert!(catalog.contains("shell_command"));
@@ -1390,7 +1395,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
         .expect("write leftover models.json");
         fs::write(
             instance_dir.join("models_cache.json"),
-            r#"{"models":[{"slug":"gpt-5.4"}]}"#,
+            r#"{"models":[{"slug":"gpt-5.6-sol"}]}"#,
         )
         .expect("write stale extra-instance model cache");
 
@@ -1414,7 +1419,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
 
         let catalog_path = super::deepseek_official_model_catalog_path(&instance_dir);
         let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(config.contains("model = \"gpt-5.6-luna\""));
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
         assert_eq!(
             catalog_path.file_name().and_then(|name| name.to_str()),
@@ -1433,7 +1438,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             .expect("models");
         let flash = models
             .iter()
-            .find(|model| model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.5"))
+            .find(|model| model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-luna"))
             .expect("flash shell slug");
         assert_eq!(
             flash
@@ -1452,7 +1457,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             Some("freeform")
         );
         assert!(models.iter().any(|model| {
-            model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.4")
+            model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-sol")
                 && model
                     .get("display_name")
                     .and_then(serde_json::Value::as_str)
@@ -1524,7 +1529,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
         write_account_bundle_to_dir(&instance_dir, &account).expect("write gateway bundle");
 
         let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.4\""));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
         assert!(config.contains("model_catalog_json"));
         assert!(instance_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
@@ -1716,8 +1721,8 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             Some("deepseek-flash".to_string()),
             Some(vec![other_api_key.id.clone()]),
         )
-        .expect_err("api key accounts cannot host images");
-        assert!(api_key_error.contains("OAuth"));
+        .expect_err("api key without current image model is rejected");
+        assert_eq!(api_key_error, "codex.localAccess.imageAccounts.sourceUnavailable");
 
         let self_error = update_account_instance_access(
             &account.id,
@@ -1725,8 +1730,8 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             Some("deepseek-flash".to_string()),
             Some(vec![account.id.clone()]),
         )
-        .expect_err("self binding rejected");
-        assert!(self_error.contains("自身"));
+        .expect_err("self without current image model is rejected");
+        assert_eq!(self_error, "codex.localAccess.imageAccounts.sourceUnavailable");
 
         let missing_error = update_account_instance_access(
             &account.id,
@@ -2098,4 +2103,92 @@ multi_agent = true
 
         fs::remove_dir_all(&managed_dir).expect("cleanup temp dir");
         fs::remove_dir_all(&baseline_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn api_image_source_self_selection_round_trips_and_rejects_other_model() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let _env = TestEnvGuard::new("codex-api-image-source-selection");
+        let mut account = CodexAccount::new_api_key(
+            "api-image-self".into(), "images@example.com".into(), "test-image-key".into(),
+            CodexApiProviderMode::Custom, Some("https://images.example/v1".into()),
+            Some("images".into()), Some("Images".into()), vec!["gpt-image-2.5".into()],
+        );
+        save_account(&account).unwrap();
+        let updated = update_account_instance_access(
+            &account.id, None, None, Some(vec![account.id.clone(), account.id.clone()]),
+        ).unwrap();
+        assert_eq!(updated.api_image_generation_account_ids, vec![account.id.clone()]);
+        assert_eq!(load_account(&account.id).unwrap().api_image_generation_account_ids, vec![account.id.clone()]);
+        account.api_model_catalog = vec!["gpt-image-2".into()];
+        save_account(&account).unwrap();
+        assert_eq!(update_account_instance_access(
+            &account.id, None, None, Some(vec![account.id.clone()]),
+        ).unwrap_err(), "codex.localAccess.imageAccounts.sourceUnavailable");
+    }
+
+    #[test]
+    fn image_source_uses_global_family_and_preserves_explicit_mapping_for_round_trip() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock().unwrap_or_else(|error| error.into_inner());
+        let _env = TestEnvGuard::new("codex-image-suffix-save");
+        let account = CodexAccount::new_api_key(
+            "api-suffix-source".into(), "images@example.com".into(), "test-key".into(),
+            CodexApiProviderMode::Custom, Some("https://images.example/v1".into()),
+            Some("images".into()), Some("Images".into()),
+            vec!["gpt-image-2.5-flare".into(), "gpt-image-2.5-vip".into()],
+        );
+        save_account(&account).unwrap();
+        assert_eq!(update_account_instance_access(&account.id, None, None, Some(vec![account.id.clone()])).unwrap_err(),
+            "codex.localAccess.imageAccounts.modelRequired");
+        let service_path = crate::modules::codex_local_access::model_config_service_file_path().unwrap();
+        fs::write(&service_path, serde_json::to_vec(&serde_json::json!({
+            "enabled": false, "port": 14998, "apiKey": "test-service", "accountIds": [],
+            "imageGenerationModel": "gpt-image-2.5", "createdAt": 1, "updatedAt": 1,
+        })).unwrap()).unwrap();
+        let selected = HashMap::from([(account.id.clone(), "gpt-image-2.5-vip".into())]);
+        let saved = super::update_account_instance_access_with_image_models(
+            &account.id, None, None, Some(vec![account.id.clone()]), Some(selected.clone()),
+        ).unwrap();
+        assert_eq!(saved.api_image_generation_account_models, selected);
+        assert_eq!(load_account(&account.id).unwrap().api_image_generation_account_models, selected);
+        let directory: serde_json::Value = serde_json::from_slice(&fs::read(&service_path).unwrap()).unwrap();
+        assert!(directory["imageGenerationModels"].as_array().unwrap().iter().any(|model| model == "gpt-image-2.5-vip"));
+        let mut deleted_directory = directory;
+        deleted_directory["imageGenerationDeletedModels"] = serde_json::json!(["gpt-image-2.5-vip"]);
+        fs::write(&service_path, serde_json::to_vec(&deleted_directory).unwrap()).unwrap();
+        assert_eq!(super::update_account_instance_access_with_image_models(
+            &account.id, None, None, Some(vec![account.id.clone()]), Some(selected.clone()),
+        ).unwrap_err(), "codex.localAccess.imageAccounts.modelRequired");
+        assert_eq!(load_account(&account.id).unwrap().api_image_generation_account_models, selected);
+        deleted_directory["imageGenerationDeletedModels"] = serde_json::json!([]);
+        fs::write(&service_path, serde_json::to_vec(&deleted_directory).unwrap()).unwrap();
+
+        let round_trip: CodexAccount = serde_json::from_value(serde_json::to_value(&saved).unwrap()).unwrap();
+        assert_eq!(round_trip.api_image_generation_account_models, selected);
+        let imported = super::import_account_struct(saved.clone()).unwrap();
+        assert_eq!(imported.api_image_generation_account_ids, vec![imported.id.clone()]);
+        assert_eq!(imported.api_image_generation_account_models.get(&imported.id).map(String::as_str), Some("gpt-image-2.5-vip"));
+        assert_eq!(load_account(&imported.id).unwrap().api_image_generation_account_models, imported.api_image_generation_account_models);
+
+        // Older callers do not erase the user's explicit suffix model.
+        assert_eq!(update_account_instance_access(&account.id, None, None, Some(vec![account.id.clone()])).unwrap()
+            .api_image_generation_account_models, selected);
+        // A valid legacy per-account choice cannot rescue an unsupported global full ID.
+        fs::write(&service_path, serde_json::to_vec(&serde_json::json!({
+            "enabled": false, "port": 14998, "apiKey": "test-service", "accountIds": [],
+            "imageGenerationModel": "gpt-image-2.5-missing", "createdAt": 1, "updatedAt": 1,
+        })).unwrap()).unwrap();
+        assert_eq!(super::update_account_instance_access_with_image_models(
+            &account.id, None, None, Some(vec![account.id.clone()]), Some(selected.clone()),
+        ).unwrap_err(), "codex.localAccess.imageAccounts.sourceUnavailable");
+        let old_id = account.id.clone();
+        // The saved source selector and model selector migrate together on a credential ID edit.
+        let mut migrated = saved;
+        assert!(super::replace_api_image_source_reference(&mut migrated, &old_id, "new-source"));
+        assert_eq!(migrated.api_image_generation_account_ids, vec!["new-source"]);
+        assert_eq!(migrated.api_image_generation_account_models.get("new-source").map(String::as_str), Some("gpt-image-2.5-vip"));
+        let cleared = update_account_instance_access(&old_id, None, None, Some(Vec::new())).unwrap();
+        assert!(cleared.api_image_generation_account_models.is_empty());
     }

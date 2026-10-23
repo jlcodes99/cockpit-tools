@@ -203,8 +203,8 @@ func TestCodexExecutorExecuteMissingCompletionIsRequestScoped(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing-completion error, got nil")
 	}
-	if got := statusCodeFromTestError(t, err); got != http.StatusRequestTimeout {
-		t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusRequestTimeout, err)
+	if got := statusCodeFromTestError(t, err); got != http.StatusBadGateway {
+		t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusBadGateway, err)
 	}
 	assertRequestScopedTestError(t, err)
 }
@@ -242,8 +242,8 @@ func TestCodexExecutorExecuteStreamMissingCompletionIsRequestScoped(t *testing.T
 	if streamErr == nil {
 		t.Fatal("expected missing-completion stream error, got nil")
 	}
-	if got := statusCodeFromTestError(t, streamErr); got != http.StatusRequestTimeout {
-		t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusRequestTimeout, streamErr)
+	if got := statusCodeFromTestError(t, streamErr); got != http.StatusBadGateway {
+		t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusBadGateway, streamErr)
 	}
 	assertRequestScopedTestError(t, streamErr)
 }
@@ -384,8 +384,8 @@ func TestCodexExecutorTransportFailureBeforeTerminalIsRequestScoped(t *testing.T
 			if terminalErr == nil {
 				t.Fatal("expected transport failure before terminal event")
 			}
-			if got := statusCodeFromTestError(t, terminalErr); got != http.StatusRequestTimeout {
-				t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusRequestTimeout, terminalErr)
+			if got := statusCodeFromTestError(t, terminalErr); got != http.StatusBadGateway {
+				t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusBadGateway, terminalErr)
 			}
 			assertRequestScopedTestError(t, terminalErr)
 		})

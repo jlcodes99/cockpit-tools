@@ -1,26 +1,24 @@
 //! Native Mihomo node boundary and lossless conversion of previously saved sing-box nodes.
-//! Option names follow MetaCubeX/mihomo v1.19.31 adapter/outbound sources.
+//! Native parameter semantics follow the pinned Mihomo decoder; the host enforces
+//! local-file, system-routing, certificate approval and resource safety boundaries.
 use super::{INVALID, UNSUPPORTED};
 use serde_json::{json, Value};
 
+/// Type names remain safe display identifiers; the pinned engine decides whether
+/// a normal outbound protocol exists. Control adapters can bypass the selected
+/// proxy, while mesh adapters create state files/listeners even without explicit
+/// paths, so those stay outside this account-proxy boundary.
 pub fn native_protocol(kind: &str) -> bool {
-    matches!(
-        kind,
-        "ss" | "ssr"
-            | "socks5"
-            | "http"
-            | "vmess"
-            | "vless"
-            | "trojan"
-            | "hysteria"
-            | "hysteria2"
-            | "tuic"
-            | "wireguard"
-            | "ssh"
-            | "snell"
-            | "anytls"
-            | "mieru"
-    )
+    !kind.is_empty()
+        && kind.len() <= 64
+        && kind.as_bytes()[0].is_ascii_lowercase()
+        && kind.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        && !matches!(
+            kind,
+            "direct" | "reject" | "dns" | "rematch"
+                | "pass" | "pass-rule" | "compatible"
+                | "tailscale" | "zerotier" | "easytier"
+        )
 }
 
 pub fn is_insecure(value: &Value) -> bool {
@@ -52,29 +50,23 @@ fn bounded_parameters(value: &Value, depth: usize) -> Result<(), String> {
                         | "detour"
                         | "bind-interface"
                         | "config-path"
-                        | "ca"
-                        | "ca-str"
                         | "client-cert"
                         | "client-key"
-                ) || key.ends_with("-path")
-                    || key.ends_with("-file")
-                {
+                ) {
                     return Err(UNSUPPORTED.into());
                 }
                 if ["skip-cert-verify", "insecure"].contains(&key.as_str()) && !value.is_boolean() {
                     return Err(INVALID.into());
                 }
-                // Mihomo treats certificate/private-key as either inline PEM or local paths.
-                // WireGuard's base64 private key is also inline, never read from a file.
-                if matches!(key.as_str(), "certificate" | "private-key") {
+                // TLS/SSH certificate material may be inline PEM or local paths.
+                // OpenVPN's CA is inline PEM; mesh adapters with file-backed state
+                // are blocked by native_protocol. Encoded WireGuard/MASQUE keys
+                // are consumed directly by those adapters, never as file names.
+                if matches!(key.as_str(), "certificate" | "private-key" | "ca" | "ca-str") {
                     let raw = value.as_str().ok_or(INVALID)?;
-                    use base64::Engine as _;
-                    if !raw.starts_with("-----BEGIN ")
-                        && !(key == "private-key"
-                            && map.get("type").is_some_and(|v| v == "wireguard")
-                            && base64::engine::general_purpose::STANDARD
-                                .decode(raw)
-                                .is_ok_and(|v| v.len() == 32))
+                    let encoded_key = key == "private-key"
+                        && matches!(map.get("type").and_then(Value::as_str), Some("wireguard" | "masque"));
+                    if !raw.is_empty() && !raw.starts_with("-----BEGIN ") && !encoded_key
                     {
                         return Err(UNSUPPORTED.into());
                     }
@@ -97,367 +89,17 @@ fn bounded_parameters(value: &Value, depth: usize) -> Result<(), String> {
 }
 
 pub fn validate_native_proxy(proxy: &Value) -> Result<(), String> {
-    let map = proxy.as_object().ok_or(INVALID)?;
+    proxy.as_object().ok_or(INVALID)?;
     let kind = proxy["type"].as_str().ok_or(INVALID)?;
     if !native_protocol(kind) {
         return Err(UNSUPPORTED.into());
     }
     bounded_parameters(proxy, 0)?;
-    let options: &[&str] = match kind {
-        "ss" => &[
-            "name",
-            "server",
-            "port",
-            "password",
-            "cipher",
-            "udp",
-            "plugin",
-            "plugin-opts",
-            "udp-over-tcp",
-            "udp-over-tcp-version",
-            "client-fingerprint",
-        ],
-        "ssr" => &[
-            "name",
-            "server",
-            "port",
-            "password",
-            "cipher",
-            "obfs",
-            "obfs-param",
-            "protocol",
-            "protocol-param",
-            "udp",
-        ],
-        "socks5" => &[
-            "name",
-            "server",
-            "port",
-            "username",
-            "password",
-            "tls",
-            "udp",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-        ],
-        "http" => &[
-            "name",
-            "server",
-            "port",
-            "username",
-            "password",
-            "tls",
-            "sni",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-            "headers",
-        ],
-        "vmess" => &[
-            "name",
-            "server",
-            "port",
-            "uuid",
-            "alterId",
-            "cipher",
-            "udp",
-            "network",
-            "tls",
-            "alpn",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-            "servername",
-            "ech-opts",
-            "shadow-tls-opts",
-            "restls-opts",
-            "jls-opts",
-            "reality-opts",
-            "tlsmirror-opts",
-            "mekya-opts",
-            "mkcp-opts",
-            "http-opts",
-            "h2-opts",
-            "grpc-opts",
-            "ws-opts",
-            "packet-addr",
-            "xudp",
-            "packet-encoding",
-            "global-padding",
-            "authenticated-length",
-            "client-fingerprint",
-        ],
-        "vless" => &[
-            "name",
-            "server",
-            "port",
-            "uuid",
-            "flow",
-            "tls",
-            "alpn",
-            "udp",
-            "packet-addr",
-            "xudp",
-            "packet-encoding",
-            "encryption",
-            "network",
-            "ech-opts",
-            "shadow-tls-opts",
-            "restls-opts",
-            "jls-opts",
-            "reality-opts",
-            "http-opts",
-            "h2-opts",
-            "grpc-opts",
-            "ws-opts",
-            "xhttp-opts",
-            "ws-headers",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-            "servername",
-            "client-fingerprint",
-        ],
-        "trojan" => &[
-            "name",
-            "server",
-            "port",
-            "password",
-            "alpn",
-            "sni",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-            "udp",
-            "network",
-            "ech-opts",
-            "shadow-tls-opts",
-            "restls-opts",
-            "jls-opts",
-            "reality-opts",
-            "grpc-opts",
-            "ws-opts",
-            "ss-opts",
-            "client-fingerprint",
-        ],
-        "hysteria" => &[
-            "name",
-            "server",
-            "port",
-            "ports",
-            "protocol",
-            "obfs-protocol",
-            "up",
-            "up-speed",
-            "down",
-            "down-speed",
-            "auth",
-            "auth-str",
-            "obfs",
-            "sni",
-            "ech-opts",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-            "alpn",
-            "recv-window-conn",
-            "recv-window",
-            "disable-mtu-discovery",
-            "fast-open",
-            "hop-interval",
-        ],
-        "hysteria2" => &[
-            "name",
-            "server",
-            "port",
-            "udp",
-            "ports",
-            "hop-interval",
-            "up",
-            "down",
-            "password",
-            "obfs",
-            "obfs-password",
-            "obfs-min-packet-size",
-            "obfs-max-packet-size",
-            "sni",
-            "ech-opts",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-            "alpn",
-            "cwnd",
-            "bbr-profile",
-            "udp-mtu",
-            "handshake-timeout",
-            "realm-opts",
-            "initial-stream-receive-window",
-            "max-stream-receive-window",
-            "initial-connection-receive-window",
-            "max-connection-receive-window",
-        ],
-        "tuic" => &[
-            "name",
-            "server",
-            "port",
-            "token",
-            "uuid",
-            "password",
-            "ip",
-            "heartbeat-interval",
-            "alpn",
-            "reduce-rtt",
-            "request-timeout",
-            "udp-relay-mode",
-            "congestion-controller",
-            "disable-sni",
-            "max-udp-relay-packet-size",
-            "fast-open",
-            "max-open-streams",
-            "cwnd",
-            "bbr-profile",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-            "recv-window-conn",
-            "recv-window",
-            "disable-mtu-discovery",
-            "max-datagram-frame-size",
-            "sni",
-            "ech-opts",
-            "udp-over-stream",
-            "udp-over-stream-version",
-        ],
-        "wireguard" => &[
-            "name",
-            "ip",
-            "ipv6",
-            "private-key",
-            "workers",
-            "mtu",
-            "udp",
-            "persistent-keepalive",
-            "ip-stack",
-            "amnezia-wg-option",
-            "peers",
-            "remote-dns-resolve",
-            "dns",
-            "refresh-server-ip-interval",
-            "server",
-            "port",
-            "public-key",
-            "pre-shared-key",
-            "reserved",
-            "allowed-ips",
-        ],
-        "ssh" => &[
-            "name",
-            "server",
-            "port",
-            "username",
-            "password",
-            "private-key",
-            "private-key-passphrase",
-            "host-key",
-            "host-key-algorithms",
-        ],
-        "snell" => &[
-            "name",
-            "server",
-            "port",
-            "psk",
-            "udp",
-            "version",
-            "reuse",
-            "obfs-opts",
-            "client-fingerprint",
-        ],
-        "anytls" => &[
-            "name",
-            "server",
-            "port",
-            "password",
-            "alpn",
-            "sni",
-            "ech-opts",
-            "shadow-tls-opts",
-            "restls-opts",
-            "jls-opts",
-            "client-fingerprint",
-            "skip-cert-verify",
-            "name-cert-verify",
-            "fingerprint",
-            "certificate",
-            "private-key",
-            "udp",
-            "client-metadata",
-            "idle-session-check-interval",
-            "idle-session-timeout",
-            "min-idle-session",
-            "disable-reuse",
-        ],
-        "mieru" => &[
-            "name",
-            "server",
-            "port",
-            "port-range",
-            "transport",
-            "udp",
-            "username",
-            "password",
-            "multiplexing",
-            "handshake-mode",
-            "traffic-pattern",
-        ],
-        _ => return Err(UNSUPPORTED.into()),
-    };
-    if map.keys().any(|k| {
-        !options.contains(&k.as_str())
-            && !["type", "tfo", "mptcp", "ip-version", "smux"].contains(&k.as_str())
-    }) {
-        return Err(UNSUPPORTED.into());
-    }
-    // Mihomo 1.19.31 always enables Hysteria2 UDP and ignores this common
-    // subscription flag. Accept the matching `true`, never pretend `false`
-    // disables UDP (Hysteria2Option has no UDP switch).
-    if kind == "hysteria2" && proxy.get("udp").is_some_and(|value| value != true) {
-        return Err(UNSUPPORTED.into());
-    }
-    if kind != "wireguard" || proxy.get("peers").is_none() {
-        let host = proxy["server"].as_str().ok_or(INVALID)?;
-        if host.is_empty()
-            || host.len() > 253
-            || host
-                .chars()
-                .any(|c| c.is_whitespace() || c.is_control() || "/@?#".contains(c))
-        {
-            return Err(INVALID.into());
-        }
-        if !proxy["port"]
-            .as_u64()
-            .is_some_and(|v| (1..=65535).contains(&v))
-            && !(kind == "mieru" && proxy["port-range"].is_string())
-        {
-            return Err(INVALID.into());
-        }
-    }
+    // The pinned engine decodes native protocol parameters and ignores unknown
+    // subscription metadata. Keeping a second option whitelist here rejects
+    // valid configurations as upstream adapters evolve. Preserve all parameters
+    // after the recursive host safety boundary above; let Mihomo validate their
+    // protocol semantics when its configuration is prepared.
     if proxy
         .get("skip-cert-verify")
         .is_some_and(|v| !v.is_boolean())
@@ -481,29 +123,6 @@ pub fn validate_native_proxy(proxy: &Value) -> Result<(), String> {
     {
         if !query.as_str().is_some_and(super::valid_dns_name) {
             return Err(INVALID.into());
-        }
-    }
-    if let Some(plugin) = proxy.get("plugin") {
-        if !plugin
-            .as_str()
-            .is_some_and(|p| ["obfs", "v2ray-plugin", "shadow-tls", "restls"].contains(&p))
-        {
-            return Err(UNSUPPORTED.into());
-        }
-    }
-    if let Some(ports) = proxy.get("ports") {
-        let ports = ports.as_str().ok_or(INVALID)?;
-        if ports.split(',').any(|s| {
-            let parts: Vec<_> = s.trim().split('-').collect();
-            parts.is_empty()
-                || parts.len() > 2
-                || parts
-                    .iter()
-                    .any(|p| p.parse::<u16>().ok().is_none_or(|v| v == 0))
-                || (parts.len() == 2
-                    && parts[0].parse::<u16>().unwrap() > parts[1].parse::<u16>().unwrap())
-        }) {
-            return Err(UNSUPPORTED.into());
         }
     }
     Ok(())
@@ -634,6 +253,10 @@ pub fn runtime_parts(input: Value) -> Result<(Vec<Value>, Vec<Value>), String> {
                 validate_native_group(&group, true)?;
                 group["name"] = json!(tag);
                 group["empty-fallback"] = json!("REJECT");
+                if group["type"] != "select" {
+                    // A saved `lazy: false` no longer disables demand-driven probes.
+                    group["lazy"] = json!(true);
+                }
                 groups.push(group);
             }
             "selector" | "urltest" => {
@@ -839,6 +462,72 @@ fn legacy_proxy(old: &Value, tag: &str) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_type_boundary_allows_core_protocols_and_rejects_control_and_mesh_adapters() {
+        for kind in ["vless", "shadowquic", "gost-relay", "sudoku", "trusttunnel", "masque", "openvpn", "future-proxy"] {
+            assert!(native_protocol(kind));
+            assert!(validate_native_proxy(&json!({"type":kind,"server":"example.org","port":443})).is_ok());
+        }
+        for kind in ["direct", "reject", "dns", "rematch", "pass", "pass-rule", "compatible", "tailscale", "zerotier", "easytier", "", "VLESS", "foo/bar", "foo\nbar"] {
+            assert!(!native_protocol(kind));
+            assert!(validate_native_proxy(&json!({"type":kind,"server":"example.org","port":443})).is_err());
+        }
+    }
+
+    #[test]
+    fn native_parameters_preserve_metadata_and_keep_recursive_file_routing_and_tls_boundaries() {
+        let proxy = json!({"type":"vless","server":"example.org","port":443,
+            "unknown-option":{"future-value":true,"subscription-path":"/tunnel","description-file":"template"},"cipher":"auto","alterId":0,
+            "plugin":"future-plugin","ports":"core-owned-syntax"});
+        assert!(validate_native_proxy(&proxy).is_ok());
+        for extra in [
+            json!({"Dialer_Proxy":"DIRECT"}),
+            json!({"Interface_Name":"eth0"}),
+            json!({"routing-mark":123}),
+            json!({"certificate":"/private/cert.pem"}),
+            json!({"CA":"/private/ca.pem"}),
+            json!({"ca_str":"/private/ca.pem"}),
+            json!({"private-key":"/private/key.pem"}),
+            json!({"config_path":"/private/config"}),
+            json!({"insecure":"true"}),
+            json!({"skip_cert_verify":1}),
+        ] {
+            let mut candidate = proxy.clone();
+            candidate["transport-options"] = extra;
+            assert!(validate_native_proxy(&candidate).is_err());
+        }
+        let mut approved = proxy;
+        approved["transport-options"] = json!({"skip_cert_verify":true});
+        assert!(validate_native_proxy(&approved).is_ok());
+        assert!(is_insecure(&approved));
+    }
+
+    #[test]
+    fn native_inline_ca_and_encoded_keys_never_become_local_paths() {
+        let mut proxy = json!({"type":"openvpn","server":"example.org","port":443,
+            "ca":"-----BEGIN CERTIFICATE-----\ninline\n-----END CERTIFICATE-----"});
+        assert!(validate_native_proxy(&proxy).is_ok());
+        proxy["ca"] = json!("ca.pem");
+        assert!(validate_native_proxy(&proxy).is_err());
+        proxy["ca"] = json!("-----BEGIN CERTIFICATE-----\ninline\n-----END CERTIFICATE-----");
+        proxy["ca-str"] = proxy["ca"].clone();
+        assert!(validate_native_proxy(&proxy).is_ok());
+        for (kind, key, accepted) in [
+            ("wireguard", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", true),
+            ("wireguard", "AQ==", true),
+            ("masque", "AQ==", true),
+            ("masque", "", true),
+            ("masque", "/private/key.pem", true),
+        ] {
+            let candidate = json!({"type":kind,"server":"example.org","port":443,"private-key":key});
+            // These adapters only decode inline key bytes; malformed encodings
+            // are engine configuration errors, never requests to read a path.
+            assert_eq!(validate_native_proxy(&candidate).is_ok(), accepted);
+        }
+        let ssh = json!({"type":"ssh","server":"example.org","port":22,"password":"secret"});
+        assert!(validate_native_proxy(&ssh).is_err());
+    }
+
     #[test]
     fn legacy_credentials_tls_transport_and_port_hopping_survive_conversion() {
         let (proxies, _) = runtime_parts(json!({"type":"socks","server":"localhost","server_port":1080,"version":"5","username":"user","password":"secret"})).unwrap();

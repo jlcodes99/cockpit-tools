@@ -145,49 +145,11 @@ pub fn all_antigravity_user_data_dirs() -> Vec<PathBuf> {
 }
 
 pub fn managed_instances_root_dir() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/antigravity"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let roaming_dir = roaming_app_data_dir()?;
-        return Ok(roaming_dir.join(".antigravity_cockpit\\instances\\antigravity"));
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/antigravity"));
-    }
-
-    #[allow(unreachable_code)]
-    Err("无法确定默认实例目录".to_string())
+    crate::modules::data_paths::managed_instances_root_dir("antigravity")
 }
 
 pub fn legacy_managed_instances_root_dir() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/antigravity-legacy"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let roaming_dir = roaming_app_data_dir()?;
-        return Ok(roaming_dir.join(".antigravity_cockpit\\instances\\antigravity-legacy"));
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-        return Ok(home.join(".antigravity_cockpit/instances/antigravity-legacy"));
-    }
-
-    #[allow(unreachable_code)]
-    Err("无法确定 Antigravity 默认实例目录".to_string())
+    crate::modules::data_paths::managed_instances_root_dir("antigravity-legacy")
 }
 
 pub fn global_storage_dir() -> Result<PathBuf, String> {

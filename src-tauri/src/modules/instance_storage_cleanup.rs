@@ -54,6 +54,8 @@ struct Registry {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RegistryEntry {
+    #[serde(default)]
+    id: Option<String>,
     user_data_dir: String,
 }
 
@@ -188,6 +190,9 @@ fn roots_and_defaults() -> Result<(Vec<PlatformRoot>, Vec<PathBuf>), String> {
         platform: "codex-app-data".into(),
         root: modules::account::get_data_dir()?.join("instances/codex-app-data"),
     });
+    for root in &mut roots {
+        root.root = modules::data_paths::without_compatibility_alias(&root.root);
+    }
     // Several legacy platform getters still resolve production paths even in a dev
     // process. Never use a dev registry to authorize deletion in production data.
     let data = modules::account::get_data_dir()?;
@@ -206,7 +211,45 @@ pub fn can_delete_registered_instance_directory(path: &Path) -> Result<bool, Str
     if !is_registered_instance_directory_owned(path, &roots, &defaults)? {
         return Ok(false);
     }
-    has_only_one_registered_owner(path, &modules::account::get_data_dir()?, &roots, &defaults)
+    let data = modules::account::get_data_dir()?;
+    let Some(owner) = modules::instance_directory_ownership::owner(path)? else {
+        return Ok(false);
+    };
+    if !has_matching_registered_owner(path, &data, &owner)? {
+        return Ok(false);
+    }
+    has_only_one_registered_owner(path, &data, &roots, &defaults)
+}
+
+fn has_matching_registered_owner(path: &Path, data: &Path, owner: &str) -> Result<bool, String> {
+    let target = path_key(path);
+    let mut found = false;
+    for entry in fs::read_dir(data).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .ends_with("instances.json")
+        {
+            continue;
+        }
+        let registry: Registry =
+            serde_json::from_slice(&fs::read(entry.path()).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        for entry in registry.instances {
+            if path_key(Path::new(&entry.user_data_dir)) == target {
+                if entry.id.as_deref() != Some(owner) {
+                    return Ok(false);
+                }
+                found = true;
+            }
+        }
+    }
+    Ok(found)
+}
+
+pub(crate) fn path_has_link_ancestor(path: &Path) -> Result<bool, String> {
+    has_link_ancestor(path)
 }
 
 // The deleting record is still present. Allow its sole exact reference, but
@@ -219,34 +262,40 @@ fn has_only_one_registered_owner(
 ) -> Result<bool, String> {
     let target = path_key(path);
     let app_root = roots.iter().find(|root| root.platform == "codex-app-data");
-    let app_data_target = app_root.is_some_and(|root| target.parent() == Some(path_key(&root.root).as_path()));
-    if app_data_target && defaults.iter().any(|home| {
-        app_root.is_some_and(|root| path_key(&root.root.join(app_data_hash(home))) == target)
-    }) {
+    let app_data_target =
+        app_root.is_some_and(|root| target.parent() == Some(path_key(&root.root).as_path()));
+    if app_data_target
+        && defaults.iter().any(|home| {
+            app_root.is_some_and(|root| path_key(&root.root.join(app_data_hash(home))) == target)
+        })
+    {
         return Ok(false);
     }
     let mut owners = 0;
     for entry in fs::read_dir(data).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.contains("_instances.json.invalid-json.") || name.starts_with("instances.json.invalid-json.") {
+        if name.contains("_instances.json.invalid-json.")
+            || name.starts_with("instances.json.invalid-json.")
+        {
             return Ok(false);
         }
         if name != "instances.json" && !name.ends_with("_instances.json") {
             continue;
         }
-        let registry: Registry = serde_json::from_slice(
-            &fs::read(entry.path()).map_err(|error| error.to_string())?,
-        ).map_err(|error| error.to_string())?;
+        let registry: Registry =
+            serde_json::from_slice(&fs::read(entry.path()).map_err(|error| error.to_string())?)
+                .map_err(|error| error.to_string())?;
         for entry in registry.instances {
             let reference = Path::new(entry.user_data_dir.trim());
             if !reference.is_absolute() {
                 return Ok(false);
             }
             let key = path_key(reference);
-            let references_app_data = app_data_target && app_root.is_some_and(|root| {
-                path_key(&root.root.join(app_data_hash(reference))) == target
-            });
+            let references_app_data = app_data_target
+                && app_root.is_some_and(|root| {
+                    path_key(&root.root.join(app_data_hash(reference))) == target
+                });
             if key == target || references_app_data {
                 owners += 1;
             } else if overlaps(&key, &target) {
@@ -262,6 +311,8 @@ fn is_registered_instance_directory_owned(
     roots: &[PlatformRoot],
     defaults: &[PathBuf],
 ) -> Result<bool, String> {
+    let unaliased = modules::data_paths::without_compatibility_alias(path);
+    let path = unaliased.as_path();
     if !path.is_absolute()
         || path
             .components()
@@ -272,6 +323,9 @@ fn is_registered_instance_directory_owned(
     }
     let metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
     if !metadata.is_dir() || is_link(&metadata) {
+        return Ok(false);
+    }
+    if modules::instance_directory_ownership::owner(path)?.is_none() {
         return Ok(false);
     }
     let key = path_key(path);
@@ -885,6 +939,108 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    struct PublicHomeGuard(Vec<(&'static str, Option<std::ffi::OsString>)>);
+    #[cfg(unix)]
+    impl PublicHomeGuard {
+        fn new(home: &Path) -> Self {
+            let keys = ["HOME", "COCKPIT_TOOLS_DATA_DIR"];
+            let previous = keys
+                .into_iter()
+                .map(|key| (key, std::env::var_os(key)))
+                .collect();
+            std::env::set_var("HOME", home);
+            std::env::remove_var("COCKPIT_TOOLS_DATA_DIR");
+            Self(previous)
+        }
+    }
+    #[cfg(unix)]
+    impl Drop for PublicHomeGuard {
+        fn drop(&mut self) {
+            for (key, value) in &self.0 {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stability_imported_managed_child_unregisters_and_created_owner_requires_matching_id() {
+        let _lock = modules::test_support::env_lock().lock().unwrap();
+        let fixture = Fixture::new();
+        let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &fixture.0);
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some(v) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", v),
+                    None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+                }
+            }
+        }
+        let _restore = Restore(previous);
+        let path = fixture.root().root.join("imported");
+        fs::create_dir_all(&path).unwrap();
+        fs::write(path.join("keep.txt"), "user content").unwrap();
+        let params = crate::modules::instance_store::CreateInstanceParams {
+            name: "Imported".into(),
+            user_data_dir: path.to_string_lossy().into_owned(),
+            working_dir: None,
+            extra_args: String::new(),
+            bind_account_id: None,
+            copy_source_instance_id: None,
+            init_mode: Some("existing_dir".into()),
+        };
+        let imported = modules::instance::create_instance(params.clone()).unwrap();
+        assert!(modules::instance_directory_ownership::owner(&path)
+            .unwrap()
+            .is_none());
+        modules::instance::delete_instance(&imported.id).unwrap();
+        assert_eq!(fs::read(path.join("keep.txt")).unwrap(), b"user content");
+        assert!(modules::instance::load_instance_store()
+            .unwrap()
+            .instances
+            .is_empty());
+        let created_path = fixture.root().root.join("created");
+        let created = modules::instance::create_instance(
+            crate::modules::instance_store::CreateInstanceParams {
+                name: "Created".into(),
+                user_data_dir: created_path.to_string_lossy().into_owned(),
+                init_mode: Some("empty".into()),
+                ..params
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            modules::instance_directory_ownership::owner(&created_path)
+                .unwrap()
+                .as_deref(),
+            Some(created.id.as_str())
+        );
+        assert!(has_matching_registered_owner(&created_path, &fixture.0, &created.id).unwrap());
+        assert!(!has_matching_registered_owner(
+            &created_path,
+            &fixture.0,
+            &uuid::Uuid::new_v4().to_string()
+        )
+        .unwrap());
+        // Do not invoke the system trash even for an owned temporary directory.
+    }
+
+    #[test]
+    fn stability_unmarked_direct_child_import_is_not_owned() {
+        let fixture = Fixture::new();
+        let root = fixture.root();
+        let profile = root.root.join("imported");
+        fs::create_dir_all(&profile).unwrap();
+        fs::write(profile.join("keep.txt"), "user data").unwrap();
+        assert!(!is_registered_instance_directory_owned(&profile, &[root], &[]).unwrap());
+        assert_eq!(fs::read(profile.join("keep.txt")).unwrap(), b"user data");
+    }
+
     #[test]
     fn registered_instance_deletion_only_owns_direct_managed_children() {
         let fixture = Fixture::new();
@@ -898,6 +1054,7 @@ mod tests {
         }
         fs::write(external.join("keep.txt"), "user data").unwrap();
         let roots = [root];
+        modules::instance_directory_ownership::test_mark_created(&profile);
         assert!(is_registered_instance_directory_owned(&profile, &roots, &[]).unwrap());
         for path in [
             Path::new("/"),
@@ -926,20 +1083,44 @@ mod tests {
         let profile = fixture.root().root.join("profile");
         fs::create_dir_all(&profile).unwrap();
         let registry = fixture.0.join("codex_instances.json");
-        fs::write(&registry, serde_json::json!({"instances":[{"userDataDir":profile}]}).to_string()).unwrap();
+        fs::write(
+            &registry,
+            serde_json::json!({"instances":[{"userDataDir":profile}]}).to_string(),
+        )
+        .unwrap();
         assert!(has_only_one_registered_owner(&profile, &fixture.0, &[], &[]).unwrap());
         let other = fixture.0.join("claude_instances.json");
-        for reference in [profile.clone(), profile.join("nested"), profile.parent().unwrap().to_path_buf()] {
-            fs::write(&other, serde_json::json!({"instances":[{"userDataDir":reference}]}).to_string()).unwrap();
+        for reference in [
+            profile.clone(),
+            profile.join("nested"),
+            profile.parent().unwrap().to_path_buf(),
+        ] {
+            fs::write(
+                &other,
+                serde_json::json!({"instances":[{"userDataDir":reference}]}).to_string(),
+            )
+            .unwrap();
             assert!(!has_only_one_registered_owner(&profile, &fixture.0, &[], &[]).unwrap());
         }
-        let app_root = PlatformRoot { platform: "codex-app-data".into(), root: fixture.0.join("instances/codex-app-data") };
+        let app_root = PlatformRoot {
+            platform: "codex-app-data".into(),
+            root: fixture.0.join("instances/codex-app-data"),
+        };
         let app_data = app_root.root.join(app_data_hash(&profile));
-        fs::write(&other, serde_json::json!({"instances":[{"userDataDir":profile}]}).to_string()).unwrap();
+        fs::write(
+            &other,
+            serde_json::json!({"instances":[{"userDataDir":profile}]}).to_string(),
+        )
+        .unwrap();
         assert!(!has_only_one_registered_owner(&app_data, &fixture.0, &[app_root], &[]).unwrap());
         fs::remove_file(other).unwrap();
-        let app_root = PlatformRoot { platform: "codex-app-data".into(), root: fixture.0.join("instances/codex-app-data") };
-        assert!(!has_only_one_registered_owner(&app_data, &fixture.0, &[app_root], &[profile]).unwrap());
+        let app_root = PlatformRoot {
+            platform: "codex-app-data".into(),
+            root: fixture.0.join("instances/codex-app-data"),
+        };
+        assert!(
+            !has_only_one_registered_owner(&app_data, &fixture.0, &[app_root], &[profile]).unwrap()
+        );
         fs::write(registry, "broken").unwrap();
         assert!(has_only_one_registered_owner(&app_data, &fixture.0, &[], &[]).is_err());
     }
@@ -968,6 +1149,170 @@ mod tests {
         let file = roots[0].root.join("not-a-directory");
         fs::write(&file, "keep").unwrap();
         assert!(!is_registered_instance_directory_owned(&file, &roots, &[]).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_data_alias_preserves_managed_scanning_and_registered_deletion() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let legacy = fixture.0.join(".antigravity_cockpit");
+        let alias = fixture.0.join(".cockpit_tools");
+        let legacy_root = legacy.join("instances/codex");
+        fs::create_dir_all(legacy_root.join("profile")).unwrap();
+        std::os::unix::fs::symlink(&legacy, &alias).unwrap();
+        let root = PlatformRoot {
+            platform: "codex".into(),
+            root: modules::data_paths::without_compatibility_alias(&alias.join("instances/codex")),
+        };
+        let roots = [root];
+        modules::instance_directory_ownership::test_mark_created(&legacy_root.join("profile"));
+        assert!(is_registered_instance_directory_owned(
+            &alias.join("instances/codex/profile"),
+            &roots,
+            &[]
+        )
+        .unwrap());
+        assert!(
+            is_registered_instance_directory_owned(&legacy_root.join("profile"), &roots, &[])
+                .unwrap()
+        );
+        let protection = Protection {
+            paths: vec![],
+            process_text: vec![],
+            runtime_paths: vec![],
+        };
+        let candidates = candidate_paths(&roots, &protection).unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].1, legacy_root.join("profile"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_data_alias_still_rejects_linked_profiles_and_intermediate_directories() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let legacy = fixture.0.join(".antigravity_cockpit");
+        let alias = fixture.0.join(".cockpit_tools");
+        let outside = fixture.0.join("outside");
+        fs::create_dir_all(legacy.join("instances/codex")).unwrap();
+        fs::create_dir_all(outside.join("profile")).unwrap();
+        std::os::unix::fs::symlink(&legacy, &alias).unwrap();
+        std::os::unix::fs::symlink(&outside, legacy.join("instances/codex/linked")).unwrap();
+        let roots = [PlatformRoot {
+            platform: "codex".into(),
+            root: legacy.join("instances/codex"),
+        }];
+        assert!(!is_registered_instance_directory_owned(
+            &alias.join("instances/codex/linked"),
+            &roots,
+            &[]
+        )
+        .unwrap());
+        std::os::unix::fs::symlink(&outside, legacy.join("instances/linked-parent")).unwrap();
+        let roots = [PlatformRoot {
+            platform: "codex".into(),
+            root: legacy.join("instances/linked-parent"),
+        }];
+        assert!(!is_registered_instance_directory_owned(
+            &alias.join("instances/linked-parent/profile"),
+            &roots,
+            &[]
+        )
+        .unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_alias_name_does_not_authorize_arbitrary_link_targets() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let legacy = fixture.0.join(".antigravity_cockpit");
+        let alias = fixture.0.join(".cockpit_tools");
+        let outside = fixture.0.join("outside");
+        fs::create_dir(&legacy).unwrap();
+        fs::create_dir_all(outside.join("instances/codex/profile")).unwrap();
+        std::os::unix::fs::symlink(&outside, &alias).unwrap();
+        let alias_root = alias.join("instances/codex");
+        assert_eq!(
+            modules::data_paths::without_compatibility_alias(&alias_root),
+            alias_root
+        );
+        let roots = [PlatformRoot {
+            platform: "codex".into(),
+            root: alias_root,
+        }];
+        assert!(!is_registered_instance_directory_owned(
+            &alias.join("instances/codex/profile"),
+            &roots,
+            &[]
+        )
+        .unwrap());
+        let protection = Protection {
+            paths: vec![],
+            process_text: vec![],
+            runtime_paths: vec![],
+        };
+        assert!(candidate_paths(&roots, &protection).unwrap().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn instance_with_public_alias_name_remains_a_link_and_is_never_owned() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let root = fixture.root();
+        let fake_legacy = root.root.join(".antigravity_cockpit");
+        let fake_alias = root.root.join(".cockpit_tools");
+        fs::create_dir_all(&fake_legacy).unwrap();
+        std::os::unix::fs::symlink(&fake_legacy, &fake_alias).unwrap();
+        assert_eq!(
+            modules::data_paths::without_compatibility_alias(&fake_alias),
+            fake_alias
+        );
+        assert!(!is_registered_instance_directory_owned(&fake_alias, &[root], &[]).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn custom_data_root_alias_keeps_its_existing_cleanup_link_policy() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let legacy = fixture.0.join(".antigravity_cockpit");
+        let alias = fixture.0.join(".cockpit_tools");
+        fs::create_dir_all(legacy.join("instances/codex/profile")).unwrap();
+        std::os::unix::fs::symlink(&legacy, &alias).unwrap();
+        std::env::set_var("COCKPIT_TOOLS_DATA_DIR", &alias);
+        let root = alias.join("instances/codex");
+        assert_eq!(
+            modules::data_paths::without_compatibility_alias(&root),
+            root
+        );
+        let roots = [PlatformRoot {
+            platform: "codex".into(),
+            root,
+        }];
+        assert!(!is_registered_instance_directory_owned(
+            &alias.join("instances/codex/profile"),
+            &roots,
+            &[]
+        )
+        .unwrap());
     }
 
     #[cfg(unix)]

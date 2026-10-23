@@ -394,6 +394,9 @@ func nextRefreshCheckAt(now time.Time, auth *Auth, interval time.Duration) (time
 	if !auth.NextRefreshAfter.IsZero() && now.Before(auth.NextRefreshAfter) {
 		return auth.NextRefreshAfter, true
 	}
+	if auth.RejectedAccessToken != "" && authAccessToken(auth) == auth.RejectedAccessToken {
+		return now, true
+	}
 
 	if evaluator, ok := auth.Runtime.(RefreshEvaluator); ok && evaluator != nil {
 		if interval <= 0 {

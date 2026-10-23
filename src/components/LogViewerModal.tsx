@@ -1,5 +1,8 @@
+import { SingleSelectDropdown } from './SingleSelectDropdown';
+import { useLogContentFilter } from '../hooks/useLogContentFilter';
+import type { LogLevelFilter } from '../utils/logContentFilter';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Copy, FileText, FolderOpen, RefreshCw, X } from 'lucide-react';
+import { Copy, FileText, FolderOpen, RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getLogSnapshot, openLogDirectory, type LogSnapshot } from '../services/logService';
 import { useEscClose } from '../hooks/useEscClose';
@@ -10,56 +13,17 @@ interface LogViewerModalProps {
   onClose: () => void;
 }
 
-type LogLevelFilter = 'ALL' | 'INFO' | 'WARN' | 'ERROR';
 
 const DEFAULT_LINE_LIMIT = 200;
 const MIN_LINE_LIMIT = 20;
 const MAX_LINE_LIMIT = 5000;
 const POLL_INTERVAL_MS = 1000;
 const FEEDBACK_DURATION_MS = 1200;
-const LOG_ENTRY_LEVEL_PATTERN = /^\S+\s+(INFO|WARN|ERROR)\s/;
-
 function clampLineLimit(value: number): number {
   if (!Number.isFinite(value)) {
     return DEFAULT_LINE_LIMIT;
   }
   return Math.min(MAX_LINE_LIMIT, Math.max(MIN_LINE_LIMIT, Math.round(value)));
-}
-
-function filterLogContent(content: string, level: LogLevelFilter): string {
-  if (level === 'ALL' || !content) {
-    return content;
-  }
-
-  const lines = content.split('\n');
-  const matchedEntries: string[] = [];
-  let currentEntry: string[] = [];
-  let currentLevel: LogLevelFilter | null = null;
-
-  const flushEntry = () => {
-    if (currentEntry.length > 0 && currentLevel === level) {
-      matchedEntries.push(currentEntry.join('\n'));
-    }
-    currentEntry = [];
-    currentLevel = null;
-  };
-
-  for (const line of lines) {
-    const matchedLevel = line.match(LOG_ENTRY_LEVEL_PATTERN)?.[1] as LogLevelFilter | undefined;
-    if (matchedLevel) {
-      flushEntry();
-      currentEntry = [line];
-      currentLevel = matchedLevel;
-      continue;
-    }
-
-    if (currentEntry.length > 0) {
-      currentEntry.push(line);
-    }
-  }
-
-  flushEntry();
-  return matchedEntries.join('\n');
 }
 
 export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
@@ -81,11 +45,19 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
   const [lineLimitDraft, setLineLimitDraft] = useState<string>(String(DEFAULT_LINE_LIMIT));
   const [selectedFileName, setSelectedFileName] = useState<string>('');
   const [levelFilter, setLevelFilter] = useState<LogLevelFilter>('ALL');
+  const [contentFilter, setContentFilter] = useState('');
+  const [useRegex, setUseRegex] = useState(false);
+  const filterInputRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const [snapshot, setSnapshot] = useState<LogSnapshot | null>(null);
   const [rawContent, setRawContent] = useState<string>('');
   const [visibleRawContent, setVisibleRawContent] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [snapshotError, setSnapshotError] = useState('');
+  const displayedError = error || snapshotError;
+  const snapshotInFlightRef = useRef(false);
+  const snapshotVersionRef = useRef(0);
   const [copied, setCopied] = useState<boolean>(false);
   const [pathCopied, setPathCopied] = useState<boolean>(false);
 
@@ -104,10 +76,17 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
     return date.toLocaleString();
   }, [snapshot?.modified_at_ms]);
 
-  const displayedContent = useMemo(
-    () => filterLogContent(visibleRawContent, levelFilter),
-    [levelFilter, visibleRawContent],
-  );
+  const filtered = useLogContentFilter(open, {
+    content: visibleRawContent, level: levelFilter, pattern: contentFilter, regex: useRegex,
+  });
+  const displayedContent = filtered.content;
+  const filterError = filtered.error ? t(`logViewer.search.errors.${filtered.error}`) : '';
+  useEffect(() => {
+    if (filterError) { filterInputRef.current?.focus(); filterInputRef.current?.scrollIntoView({ block: 'nearest' }); }
+  }, [filterError]);
+  useEffect(() => {
+    if (displayedError) errorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [displayedError]);
 
   const applyLineLimit = useCallback(() => {
     const parsed = Number.parseInt(lineLimitDraft.trim(), 10);
@@ -122,14 +101,15 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
   const loadSnapshot = useCallback(
     async (showLoading: boolean) => {
+      if (showLoading) { setError(''); setSnapshotError(''); setLoading(true); }
+      if (snapshotInFlightRef.current) return;
+      snapshotInFlightRef.current = true;
+      const version = snapshotVersionRef.current;
       try {
-        if (showLoading) {
-          setLoading(true);
-        }
-
         const next = await getLogSnapshot(selectedFileName || undefined, lineLimit);
+        if (version !== snapshotVersionRef.current) return;
         setSnapshot(next);
-        setError('');
+        setSnapshotError('');
         setRawContent(next.content);
 
         const marker = clearMarkerRef.current;
@@ -148,17 +128,17 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
         setVisibleRawContent(nextVisible);
       } catch (err) {
-        setError(String(err));
+        if (version === snapshotVersionRef.current) setSnapshotError(String(err));
       } finally {
-        if (showLoading) {
-          setLoading(false);
-        }
+        snapshotInFlightRef.current = false;
+        if (version === snapshotVersionRef.current) setLoading(false);
       }
     },
     [lineLimit, selectedFileName],
   );
 
   useEffect(() => {
+    snapshotVersionRef.current++;
     if (!open) {
       return;
     }
@@ -170,6 +150,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
     return () => {
       window.clearInterval(timer);
+      snapshotVersionRef.current++;
     };
   }, [loadSnapshot, open]);
 
@@ -196,7 +177,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
 
   const activeFileName = selectedFileName || snapshot?.log_file_name || '';
   const hasFilteredOutContent =
-    levelFilter !== 'ALL' &&
+    (levelFilter !== 'ALL' || Boolean(contentFilter.trim())) &&
     visibleRawContent.trim().length > 0 &&
     displayedContent.trim().length === 0;
 
@@ -207,6 +188,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
   };
 
   const handleCopyLogs = async () => {
+    setError('');
     try {
       await navigator.clipboard.writeText(displayedContent);
       setCopied(true);
@@ -217,6 +199,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
   };
 
   const handleCopyPath = async () => {
+    setError('');
     if (!snapshot?.log_file_path) {
       return;
     }
@@ -230,6 +213,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
   };
 
   const handleOpenDir = async () => {
+    setError('');
     try {
       await openLogDirectory();
     } catch (err) {
@@ -252,24 +236,10 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
             <div className="log-viewer-meta-item log-viewer-file-item">
               <FileText size={14} />
               {snapshot?.available_files?.length ? (
-                <div className="log-viewer-select-wrap">
-                  <select
-                    className="log-viewer-select"
-                    value={activeFileName}
-                    onChange={(event) => {
-                      setSelectedFileName(event.target.value);
-                      setError('');
-                    }}
-                    aria-label={t('logViewer.fileLabel', '日志文件')}
-                  >
-                    {snapshot.available_files.map((file) => (
-                      <option key={file.log_file_name} value={file.log_file_name}>
-                        {file.log_file_name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} />
-                </div>
+                <SingleSelectDropdown className="log-viewer-dropdown" value={activeFileName}
+                  options={snapshot.available_files.map((file) => ({ value: file.log_file_name, label: file.log_file_name }))}
+                  onChange={(value) => { setSelectedFileName(value); setError(''); }}
+                  ariaLabel={t('logViewer.fileLabel')} />
               ) : (
                 <span className="log-viewer-path-text">-</span>
               )}
@@ -287,21 +257,9 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
                 <span className="log-viewer-line-limit-label">
                   {t('logViewer.levelLabel', '级别')}
                 </span>
-                <div className="log-viewer-select-wrap log-viewer-level-select-wrap">
-                  <select
-                    className="log-viewer-select"
-                    value={levelFilter}
-                    onChange={(event) => setLevelFilter(event.target.value as LogLevelFilter)}
-                    aria-label={t('logViewer.levelLabel', '级别')}
-                  >
-                    {levelOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} />
-                </div>
+                <SingleSelectDropdown className="log-viewer-dropdown" value={levelFilter} options={levelOptions}
+                  onChange={(value) => setLevelFilter(value as LogLevelFilter)}
+                  ariaLabel={t('logViewer.levelLabel')} />
               </div>
               <div className="log-viewer-line-limit-wrap">
                 <span className="log-viewer-line-limit-label">
@@ -323,6 +281,20 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
                 />
               </div>
             </div>
+          </div>
+
+          <div className="log-viewer-search">
+            <input ref={filterInputRef} className={`log-viewer-search-input${filterError ? ' has-error' : ''}`}
+              value={contentFilter} maxLength={256} placeholder={t('logViewer.search.placeholder')}
+              aria-label={t('logViewer.search.placeholder')} aria-invalid={Boolean(filterError)}
+              aria-describedby={filterError ? 'log-filter-error' : undefined}
+              onChange={(event) => setContentFilter(event.target.value)} />
+            <button type="button" className="btn btn-secondary" aria-pressed={useRegex}
+              onClick={() => setUseRegex((value) => !value)}>{t('logViewer.search.regex')}</button>
+            <button type="button" className="btn btn-ghost" disabled={!contentFilter}
+              onClick={() => setContentFilter('')}>{t('common.clear')}</button>
+            {filtered.loading ? <span className="log-viewer-search-status">{t('common.loading')}</span> : null}
+            {filterError ? <p id="log-filter-error" className="log-viewer-error" role="alert">{filterError}</p> : null}
           </div>
 
           <div
@@ -347,7 +319,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
             )}
           </div>
 
-          {error ? <p className="log-viewer-error">{error}</p> : null}
+          {displayedError ? <p ref={errorRef} role="alert" className="log-viewer-error">{displayedError}</p> : null}
         </div>
 
         <div className="modal-footer log-viewer-footer">
@@ -368,7 +340,7 @@ export function LogViewerModal({ open, onClose }: LogViewerModalProps) {
               ? t('common.success', '成功')
               : `${t('common.copy', '复制')} ${t('error.fileCorrupted.filePath', '文件位置')}`}
           </button>
-          <button className="btn btn-primary" onClick={() => void handleCopyLogs()}>
+          <button className="btn btn-primary" disabled={filtered.loading || Boolean(filterError)} onClick={() => void handleCopyLogs()}>
             <Copy size={14} />
             {copied ? t('common.success', '成功') : `${t('common.copy', '复制')} ${logsLabel}`}
           </button>

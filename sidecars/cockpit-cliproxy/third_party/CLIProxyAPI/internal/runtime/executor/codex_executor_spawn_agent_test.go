@@ -49,10 +49,9 @@ func TestCodexExecutorOptimizeMultiAgentV2(t *testing.T) {
 	defer server.Close()
 
 	payload := codexSpawnAgentTestPayload()
-	auth := &cliproxyauth.Auth{Attributes: map[string]string{
+	auth := &cliproxyauth.Auth{Provider: "codex", Attributes: map[string]string{
 		"base_url": server.URL,
-		"api_key":  "test",
-	}}
+	}, Metadata: map[string]any{"access_token": "synthetic-access"}}
 
 	tests := []struct {
 		name    string
@@ -153,18 +152,20 @@ func TestCodexExecutorIsCompatConvertsAgentMessage(t *testing.T) {
 			wantRoleExists: true,
 		},
 		{
-			name:           "native model keeps agent_message",
+			name:           "legacy noncompat model uses public protocol automatically",
 			model:          "gpt-5.4",
 			enabled:        true,
-			wantType:       "agent_message",
-			wantRoleExists: false,
+			wantType:       "message",
+			wantRole:       "user",
+			wantRoleExists: true,
 		},
 		{
-			name:           "optimize disabled keeps agent_message",
+			name:           "compat conversion is independent of optional optimization",
 			model:          "deepseek-v4-flash",
 			enabled:        false,
-			wantType:       "agent_message",
-			wantRoleExists: false,
+			wantType:       "message",
+			wantRole:       "user",
+			wantRoleExists: true,
 		},
 	}
 	for _, tt := range tests {
@@ -260,16 +261,11 @@ func assertCodexSpawnAgentRequestMessage(t *testing.T, payload []byte, enabled b
 		t.Fatalf("Codex executor changed agent message metadata: %s", payload)
 	}
 	if enabled {
-		if message.Get("content.1.type").String() != "input_text" || message.Get("content.1.text").String() != "delegated task" {
-			t.Fatalf("Codex executor did not normalize agent message content: %s", payload)
+		if message.Get("content.1.type").String() != "input_text" || message.Get("content.1.text").String() != "delegated task" || message.Get("content.1.encrypted_content").Exists() {
+			t.Fatalf("CPA optimization failed to preserve task bytes in input_text: %s", payload)
 		}
-		if message.Get("content.1.encrypted_content").Exists() {
-			t.Fatalf("Codex executor preserved encrypted_content: %s", payload)
-		}
-		return
-	}
-	if message.Get("content.1.type").String() != "encrypted_content" || message.Get("content.1.encrypted_content").String() != "delegated task" {
-		t.Fatalf("disabled optimization changed agent message content: %s", payload)
+	} else if message.Get("content.1.type").String() != "encrypted_content" || message.Get("content.1.encrypted_content").String() != "delegated task" || message.Get("content.1.text").Exists() {
+		t.Fatalf("disabled optimization changed encrypted input: %s", payload)
 	}
 }
 

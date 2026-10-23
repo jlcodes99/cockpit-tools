@@ -45,6 +45,11 @@ type Record struct {
 	// RequestServiceTier is a deprecated input-only alias retained for existing
 	// plugin callers. It is normalized into ServiceTier and never emitted.
 	RequestServiceTier string
+	// UpstreamServiceTier stores the tier on the final outbound request body.
+	UpstreamServiceTier string
+	// UpstreamServiceTierObserved distinguishes an omitted outbound tier from
+	// executors that do not capture their final request body.
+	UpstreamServiceTierObserved bool
 	// ResponseServiceTier stores the final tier reported by the upstream response.
 	ResponseServiceTier string
 	// Generate reports whether the client requested actual generation.

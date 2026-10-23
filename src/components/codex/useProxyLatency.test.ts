@@ -87,3 +87,19 @@ test('an empty selection changes the displayed cache without testing any node', 
   assert.equal(h.flush().results.a.value.latencyMs, 30);
   h.unmount();
 });
+
+test('configuration failures and timeouts remain retryable and do not disable the source node', async () => {
+  const h = harness();
+  for (const code of ['PROXY_ENGINE_CONFIG_INVALID', 'PROXY_UNSUPPORTED_PROTOCOL', 'PROXY_PROBE_TIMEOUT']) {
+    h.start().measure(['a']); await settlePromises();
+    const request = h.requests[h.requests.length - 1];
+    request.result.reject(new Error(code)); await settlePromises();
+    assert.equal(h.flush().results.a.status, 'error');
+    assert.equal(h.flush().running, false);
+  }
+  h.flush().measure(['a'], true); await settlePromises();
+  assert.equal(h.requests.length, 4, 'failures must not prevent another measurement');
+  h.requests[3].result.resolve({ latencyMs: 20, checkedAt: Date.now() }); await settlePromises();
+  assert.equal(h.flush().results.a.status, 'success');
+  h.unmount();
+});

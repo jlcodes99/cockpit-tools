@@ -1,0 +1,194 @@
+{
+  "websocket_wire": {
+    "expected": {
+      "lite_header": "true",
+      "parallel_tool_calls": false,
+      "stream_options": null,
+      "tools": [
+        {
+          "name": "fixture",
+          "parameters": {
+            "properties": {},
+            "type": "object"
+          },
+          "type": "function"
+        }
+      ]
+    },
+    "input": {
+      "client_metadata": {
+        "ws_request_header_x_openai_internal_codex_responses_lite": true
+      },
+      "input": [],
+      "model": "gpt-5.6-sol",
+      "stream": true,
+      "tools": [
+        {
+          "type": "web_search"
+        },
+        {
+          "name": "fixture",
+          "parameters": {
+            "properties": {},
+            "type": "object"
+          },
+          "type": "function"
+        }
+      ],
+      "type": "response.create"
+    }
+  },
+  "wire": [
+    {
+      "expected": {
+        "lite_header": "",
+        "parallel_tool_calls": null,
+        "stream_options": {
+          "reasoning_summary_delivery": "sequential_cutoff"
+        },
+        "tools": null
+      },
+      "input": {
+        "input": [],
+        "model": "gpt-5.6-sol",
+        "stream": true,
+        "stream_options": {
+          "include_usage": true,
+          "reasoning_summary_delivery": "sequential_cutoff"
+        }
+      },
+      "name": "summary_stream"
+    },
+    {
+      "expected": {
+        "lite_header": "",
+        "parallel_tool_calls": null,
+        "stream_options": null,
+        "tools": null
+      },
+      "input": {
+        "input": [],
+        "model": "gpt-5.6-sol",
+        "stream": false,
+        "stream_options": {
+          "include_usage": true,
+          "reasoning_summary_delivery": "sequential_cutoff"
+        }
+      },
+      "name": "summary_buffered"
+    },
+    {
+      "expected": {
+        "lite_header": "true",
+        "parallel_tool_calls": false,
+        "stream_options": null,
+        "tools": [
+          {
+            "name": "fixture",
+            "parameters": {
+              "properties": {},
+              "type": "object"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "input": {
+        "client_metadata": {
+          "ws_request_header_x_openai_internal_codex_responses_lite": true
+        },
+        "input": [],
+        "model": "gpt-5.6-sol",
+        "stream": true,
+        "tools": [
+          {
+            "type": "web_search"
+          },
+          {
+            "name": "fixture",
+            "parameters": {
+              "properties": {},
+              "type": "object"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "name": "metadata_lite_stream"
+    },
+    {
+      "expected": {
+        "lite_header": "true",
+        "parallel_tool_calls": false,
+        "stream_options": null,
+        "tools": [
+          {
+            "name": "fixture",
+            "parameters": {
+              "properties": {},
+              "type": "object"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "input": {
+        "client_metadata": {
+          "ws_request_header_x_openai_internal_codex_responses_lite": " True "
+        },
+        "input": [],
+        "model": "gpt-5.6-sol",
+        "stream": false,
+        "tools": [
+          {
+            "type": "web_search"
+          },
+          {
+            "name": "fixture",
+            "parameters": {
+              "properties": {},
+              "type": "object"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "name": "metadata_lite_buffered"
+    }
+  ],
+  "wrapped_errors": [
+    {
+      "credential_scope": true,
+      "input": {
+        "body": {
+          "error": {
+            "code": "usage_limit_reached",
+            "message": "fixture quota",
+            "resets_in_seconds": 60,
+            "type": "usage_limit_reached"
+          }
+        },
+        "status": 429,
+        "type": "error"
+      },
+      "retry_after_ms": 60000,
+      "status": 429
+    },
+    {
+      "credential_scope": true,
+      "input": {
+        "body": {
+          "error": {
+            "message": "fixture quota without code",
+            "resets_in_seconds": 7,
+            "type": "usage_limit_reached"
+          }
+        },
+        "status": 429,
+        "type": "error"
+      },
+      "retry_after_ms": 7000,
+      "status": 429
+    }
+  ]
+}

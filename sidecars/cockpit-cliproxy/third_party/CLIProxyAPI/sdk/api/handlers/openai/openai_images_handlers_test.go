@@ -515,3 +515,15 @@ func TestSSEFrameAccumulatorKeepsMultipleFramesDistinct(t *testing.T) {
 		t.Fatalf("frames were overwritten during buffer compaction: %q", frames)
 	}
 }
+
+func TestHostedImagesResponsesUseLunaMainModel(t *testing.T) {
+	for _, tc := range []struct{ tool, want string }{
+		{`{"type":"image_generation","model":"gpt-image-2"}`, "gpt-5.6-luna"},
+		{`{"type":"image_generation","model":"custom/gpt-image-2"}`, "custom/gpt-5.6-luna"},
+	} {
+		request := buildImagesResponsesRequest("draw", nil, []byte(tc.tool))
+		if got := gjson.GetBytes(request, "model").String(); got != tc.want {
+			t.Fatalf("hosted image main model = %s, want %s", got, tc.want)
+		}
+	}
+}

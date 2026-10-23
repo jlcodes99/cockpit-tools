@@ -9,10 +9,13 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/codex/collaboration"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
 	log "github.com/sirupsen/logrus"
+	"github.com/tidwall/gjson"
 )
 
 type codexWebsocketSessionStore struct {
@@ -58,19 +61,26 @@ type codexWebsocketSession struct {
 	connCloser                *websocketConnectionCloser
 	wsURL                     string
 	proxyURL                  string
+	identityKey               string
 	authID                    string
 	multiAgentV2OptimizedConn *websocket.Conn
+	plaintextPolicyConn       *websocket.Conn
+	plaintextPolicy           collaboration.PlaintextPolicy
 	lifecycleBindMu           sync.Mutex
 	lifecycle                 cliproxyexecutor.ExecutionLifecycle
 	lifecycleModel            string
 
 	writeMu sync.Mutex
 
-	activeMu     sync.Mutex
-	activeConn   *websocket.Conn
-	activeCh     chan codexWebsocketRead
-	activeDone   <-chan struct{}
-	activeCancel context.CancelFunc
+	activeMu            sync.Mutex
+	activeConn          *websocket.Conn
+	activeCh            chan codexWebsocketRead
+	activeDone          <-chan struct{}
+	activeCancel        context.CancelFunc
+	terminalConn        *websocket.Conn
+	terminalErr         error
+	responseStateConn   *websocket.Conn
+	terminalResponseIDs helps.TerminalResponseIDs
 
 	readerConn *websocket.Conn
 
@@ -93,6 +103,11 @@ func (s *codexWebsocketSession) setActive(conn *websocket.Conn, ch chan codexWeb
 		return
 	}
 	s.activeMu.Lock()
+	s.setActiveLocked(conn, ch)
+	s.activeMu.Unlock()
+}
+
+func (s *codexWebsocketSession) setActiveLocked(conn *websocket.Conn, ch chan codexWebsocketRead) {
 	if s.activeCancel != nil {
 		s.activeCancel()
 		s.activeCancel = nil
@@ -105,7 +120,6 @@ func (s *codexWebsocketSession) setActive(conn *websocket.Conn, ch chan codexWeb
 		s.activeDone = activeCtx.Done()
 		s.activeCancel = activeCancel
 	}
-	s.activeMu.Unlock()
 }
 
 func (s *codexWebsocketSession) activate(conn *websocket.Conn) chan codexWebsocketRead {
@@ -113,8 +127,46 @@ func (s *codexWebsocketSession) activate(conn *websocket.Conn) chan codexWebsock
 		return nil
 	}
 	ch := make(chan codexWebsocketRead, 4096)
-	s.setActive(conn, ch)
+	s.activeMu.Lock()
+	defer s.activeMu.Unlock()
+	if s.terminalConn == conn && s.terminalErr != nil {
+		ch <- codexWebsocketRead{conn: conn, err: s.terminalErr}
+		close(ch)
+		return ch
+	}
+	s.setActiveLocked(conn, ch)
 	return ch
+}
+
+func (s *codexWebsocketSession) resetTerminalError(conn *websocket.Conn) {
+	if s == nil || conn == nil {
+		return
+	}
+	s.activeMu.Lock()
+	s.terminalConn = conn
+	s.terminalErr = nil
+	if s.responseStateConn != conn {
+		s.responseStateConn = conn
+		s.terminalResponseIDs.Reset()
+	}
+	s.activeMu.Unlock()
+}
+
+func (s *codexWebsocketSession) markTerminalError(conn *websocket.Conn, err error) bool {
+	if s == nil || conn == nil || err == nil {
+		return false
+	}
+	s.connMu.Lock()
+	if s.conn != conn {
+		s.connMu.Unlock()
+		return false
+	}
+	s.activeMu.Lock()
+	s.terminalConn = conn
+	s.terminalErr = err
+	s.activeMu.Unlock()
+	s.connMu.Unlock()
+	return true
 }
 
 func (s *codexWebsocketSession) activeForConn(conn *websocket.Conn) (chan codexWebsocketRead, <-chan struct{}) {
@@ -167,6 +219,65 @@ func (s *codexWebsocketSession) writeMessage(conn *websocket.Conn, msgType int, 
 	return conn.WriteMessage(msgType, payload)
 }
 
+// writeInterruptMessage preserves the captured connection and active read epoch.
+// Waiting for another writer is cancellable; cancelling an in-flight network
+// write closes only the captured socket, without selecting or dialing a successor.
+func (s *codexWebsocketSession) writeInterruptMessage(ctx context.Context, conn *websocket.Conn, readCh chan codexWebsocketRead, activeDone <-chan struct{}, payload []byte) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for !s.writeMu.TryLock() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-activeDone:
+			return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+		case <-ticker.C:
+		}
+	}
+	defer s.writeMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// The reader may record completion while this control waits for a writer,
+	// before the consumer finishes the current read epoch.
+	s.connMu.Lock()
+	s.activeMu.Lock()
+	current := s.conn == conn
+	alreadyTerminal := current && s.responseStateConn == conn && s.terminalResponseIDs.Contains(gjson.GetBytes(payload, "response_id").String())
+	active := current && s.activeConn == conn && s.activeCh == readCh
+	s.activeMu.Unlock()
+	s.connMu.Unlock()
+	if alreadyTerminal {
+		return nil
+	}
+	if !active {
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	}
+	select {
+	case <-activeDone:
+		return cliproxyexecutor.ErrNoActiveUpstreamWebsocket
+	default:
+	}
+	closeDone := make(chan struct{})
+	stopClose := context.AfterFunc(ctx, func() {
+		defer close(closeDone)
+		_ = conn.Close()
+	})
+	defer func() {
+		if !stopClose() {
+			<-closeDone
+		}
+	}()
+	errWrite := conn.WriteMessage(websocket.TextMessage, payload)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return errWrite
+}
+
 func (s *codexWebsocketSession) setMultiAgentV2Optimized(conn *websocket.Conn, optimized bool) {
 	if s == nil || conn == nil {
 		return
@@ -189,6 +300,25 @@ func (s *codexWebsocketSession) isMultiAgentV2Optimized(conn *websocket.Conn) bo
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
 	return s.conn == conn && s.multiAgentV2OptimizedConn == conn
+}
+
+// Update only after a successful send. Incremental requests inherit declarations
+// solely from this same live connection, never from namespace optimization state.
+func (s *codexWebsocketSession) plaintextPolicyForSentRequest(conn *websocket.Conn, request []byte, optimizedNamespace ...bool) collaboration.PlaintextPolicy {
+	policy := collaboration.PlaintextPolicyForRequest(request, optimizedNamespace...)
+	if s == nil || conn == nil {
+		return policy
+	}
+	s.connMu.Lock()
+	defer s.connMu.Unlock()
+	if s.conn != conn {
+		return policy
+	}
+	if gjson.GetBytes(request, "previous_response_id").String() != "" && s.plaintextPolicyConn == conn {
+		policy = policy.InheritContinuation(s.plaintextPolicy)
+	}
+	s.plaintextPolicyConn, s.plaintextPolicy = conn, policy
+	return policy
 }
 
 // sendTerminalWebsocketRead reports whether it invalidated a full channel's connection before waiting.
@@ -216,6 +346,7 @@ func (s *codexWebsocketSession) configureConn(conn *websocket.Conn) {
 	if s == nil || conn == nil {
 		return
 	}
+	s.resetTerminalError(conn)
 	s.resetUpstreamDisconnectError(conn)
 	conn.SetPingHandler(func(appData string) error {
 		// WriteControl is concurrency-safe; a data write must not starve pongs.
@@ -299,6 +430,8 @@ func (s *codexWebsocketSession) detachConnection(conn *websocket.Conn, lifecycle
 		s.conn = nil
 		s.connCloser = nil
 		s.multiAgentV2OptimizedConn = nil
+		s.plaintextPolicyConn = nil
+		s.plaintextPolicy = collaboration.PlaintextPolicy{}
 		if s.readerConn == conn {
 			s.readerConn = nil
 		}
@@ -349,6 +482,9 @@ func existingWebsocketSessionConn(sess *codexWebsocketSession, authID string, ws
 	if len(proxyURL) > 0 {
 		matches = matches && sess.proxyURL == strings.TrimSpace(proxyURL[0])
 	}
+	if len(proxyURL) > 1 {
+		matches = matches && sess.identityKey == proxyURL[1]
+	}
 	sess.connMu.Unlock()
 	if !matches || sess.upstreamDisconnectError(conn) != nil {
 		return nil, nil
@@ -365,6 +501,9 @@ func detachMismatchedWebsocketSessionConn(sess *codexWebsocketSession, authID st
 	defer sess.connMu.Unlock()
 	conn := sess.conn
 	proxyMatches := len(proxyURL) == 0 || sess.proxyURL == strings.TrimSpace(proxyURL[0])
+	if len(proxyURL) > 1 {
+		proxyMatches = proxyMatches && sess.identityKey == proxyURL[1]
+	}
 	if conn == nil || (strings.TrimSpace(sess.authID) == strings.TrimSpace(authID) && strings.TrimSpace(sess.wsURL) == strings.TrimSpace(wsURL) && proxyMatches) {
 		return nil, nil, "", "", nil
 	}
@@ -378,6 +517,8 @@ func detachMismatchedWebsocketSessionConn(sess *codexWebsocketSession, authID st
 	sess.conn = nil
 	sess.connCloser = nil
 	sess.multiAgentV2OptimizedConn = nil
+	sess.plaintextPolicyConn = nil
+	sess.plaintextPolicy = collaboration.PlaintextPolicy{}
 	if sess.readerConn == conn {
 		sess.readerConn = nil
 	}
@@ -493,7 +634,11 @@ func (e *CodexWebsocketsExecutor) ensureUpstreamConn(ctx context.Context, auth *
 	}
 
 	proxyURL := codexWebsocketProxyURL(e.cfg, auth)
-	if staleConn, staleCloser, staleAuthID, staleWSURL, staleLifecycle := detachMismatchedWebsocketSessionConn(sess, authID, wsURL, proxyURL); staleConn != nil {
+	identityKey, identityErr := helps.ManagedWebsocketKey(auth, proxyURL, wsURL, headers)
+	if identityErr != nil {
+		return nil, nil, nil, identityErr
+	}
+	if staleConn, staleCloser, staleAuthID, staleWSURL, staleLifecycle := detachMismatchedWebsocketSessionConn(sess, authID, wsURL, proxyURL, identityKey); staleConn != nil {
 		logCodexWebsocketDisconnected(sess.sessionID, staleAuthID, staleWSURL, "target_changed", nil)
 		if staleCloser != nil {
 			if errClose := staleCloser.Close(); errClose != nil {
@@ -539,8 +684,11 @@ func (e *CodexWebsocketsExecutor) ensureUpstreamConn(ctx context.Context, auth *
 	sess.conn = conn
 	sess.connCloser = closer
 	sess.multiAgentV2OptimizedConn = nil
+	sess.plaintextPolicyConn = nil
+	sess.plaintextPolicy = collaboration.PlaintextPolicy{}
 	sess.wsURL = wsURL
 	sess.proxyURL = proxyURL
+	sess.identityKey = identityKey
 	sess.authID = authID
 	sess.readerConn = conn
 	sess.connMu.Unlock()
@@ -555,15 +703,30 @@ func (e *CodexWebsocketsExecutor) readUpstreamLoop(sess *codexWebsocketSession, 
 	if e == nil || sess == nil || conn == nil {
 		return
 	}
+	var terminalCh chan codexWebsocketRead
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(codexResponsesWebsocketIdleTimeout))
 		msgType, payload, errRead := conn.ReadMessage()
 		if errRead != nil {
+			ch, done := sess.activeForConn(conn)
+			// The disconnect notification can reach the downstream before the
+			// executor consumes this read. Classify an active unfinished response
+			// here too, without turning an idle/completed close into a new failure.
+			activeReadFailure := ch != nil && ch != terminalCh
+			if activeReadFailure {
+				errRead = codexResponsesReadError(mapCodexWebsocketReadError(errRead))
+			}
+			sess.markTerminalError(conn, errRead)
 			invalidate := func() {
-				e.invalidateUpstreamConn(sess, conn, "upstream_disconnected", errRead)
+				if activeReadFailure {
+					// The executor delivers the failure before notifying the
+					// downstream, whose disconnect handler cancels its context.
+					e.invalidateUpstreamConnWithoutDisconnectNotify(sess, conn, "upstream_disconnected", errRead)
+				} else {
+					e.invalidateUpstreamConn(sess, conn, "upstream_disconnected", errRead)
+				}
 			}
 			invalidated := false
-			ch, done := sess.activeForConn(conn)
 			if ch != nil {
 				invalidated = sendTerminalWebsocketRead(ch, done, codexWebsocketRead{conn: conn, err: errRead}, invalidate)
 				if sess.clearActive(conn, ch) {
@@ -579,6 +742,7 @@ func (e *CodexWebsocketsExecutor) readUpstreamLoop(sess *codexWebsocketSession, 
 		if msgType != websocket.TextMessage {
 			if msgType == websocket.BinaryMessage {
 				errBinary := fmt.Errorf("codex websockets executor: unexpected binary message")
+				sess.markTerminalError(conn, errBinary)
 				invalidate := func() {
 					e.invalidateUpstreamConn(sess, conn, "unexpected_binary", errBinary)
 				}
@@ -598,9 +762,22 @@ func (e *CodexWebsocketsExecutor) readUpstreamLoop(sess *codexWebsocketSession, 
 			continue
 		}
 
+		// Record before delivery so an interrupt racing completion can be acknowledged.
+		if id := helps.TerminalResponseID(payload); id != "" {
+			sess.activeMu.Lock()
+			if sess.responseStateConn == conn {
+				sess.terminalResponseIDs.Add(id)
+			}
+			sess.activeMu.Unlock()
+		}
+
 		ch, done := sess.activeForConn(conn)
 		if ch == nil {
 			continue
+		}
+		switch gjson.GetBytes(payload, "type").String() {
+		case "response.completed", "response.done", "response.incomplete", "response.failed", "error":
+			terminalCh = ch
 		}
 		select {
 		case ch <- codexWebsocketRead{conn: conn, msgType: msgType, payload: payload}:
@@ -638,6 +815,8 @@ func (e *CodexWebsocketsExecutor) invalidateUpstreamConnWithNotify(sess *codexWe
 	sess.conn = nil
 	sess.connCloser = nil
 	sess.multiAgentV2OptimizedConn = nil
+	sess.plaintextPolicyConn = nil
+	sess.plaintextPolicy = collaboration.PlaintextPolicy{}
 	if sess.readerConn == conn {
 		sess.readerConn = nil
 	}
@@ -730,6 +909,8 @@ func closeCodexWebsocketSession(sess *codexWebsocketSession, reason string) {
 	sess.conn = nil
 	sess.connCloser = nil
 	sess.multiAgentV2OptimizedConn = nil
+	sess.plaintextPolicyConn = nil
+	sess.plaintextPolicy = collaboration.PlaintextPolicy{}
 	if sess.readerConn == conn {
 		sess.readerConn = nil
 	}

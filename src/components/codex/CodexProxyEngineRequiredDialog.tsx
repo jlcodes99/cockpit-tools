@@ -22,7 +22,7 @@ export function CodexProxyEngineRequiredDialog({ reason, onClose }: { reason: st
   const installJob = useRef<string | null>(null);
   useModalFocusTrap(root, true);
   useModalScrollLock(true);
-  useEscCloseTopmost(true, onClose);
+  useEscCloseTopmost(true, onClose, root);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (engine.active && engine.status?.jobId) installJob.current = engine.status.jobId;

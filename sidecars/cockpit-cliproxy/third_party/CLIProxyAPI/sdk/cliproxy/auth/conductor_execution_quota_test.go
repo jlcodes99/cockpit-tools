@@ -58,6 +58,7 @@ func (*quotaAttemptIsolationExecutor) HttpRequest(context.Context, *Auth, *http.
 }
 
 func setQuotaAttemptIsolationHeaders(ctx context.Context) {
+	cliproxyexecutor.MarkUpstreamAttempt(ctx)
 	internallogging.SetResponseHeaders(ctx, http.Header{
 		"X-Codex-Plan-Type":                   []string{"pro"},
 		"X-Codex-Primary-Used-Percent":        []string{"91"},

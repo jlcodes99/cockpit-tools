@@ -65,12 +65,33 @@ func RewriteCodexSpawnAgentDescription(ctx context.Context, headers http.Header,
 }
 
 // RewriteCodexMultiAgentV2Input converts official Codex multi-agent input into
-// standard Responses API messages when multi-agent v2 optimization is enabled.
-func RewriteCodexMultiAgentV2Input(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config) []byte {
+// standard Responses API messages when multi-agent v2 optimization or model
+// compatibility mode is enabled. When isCompat is true, it converts agent_message
+// items to portable message/user input and proactively removes non-standard metadata
+// fields (author, recipient, internal_chat_message_metadata_passthrough).
+func RewriteCodexMultiAgentV2Input(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config, isCompat ...bool) []byte {
+	compatMode := len(isCompat) > 0 && isCompat[0]
+	optimizeEnabled := compatMode || (cfg != nil && cfg.Codex.OptimizeMultiAgentV2 && isCodexMultiAgentClient(codexClientUserAgent(ctx, headers)))
+	if !compatMode && !optimizeEnabled {
+		return payload
+	}
+	return rewriteCodexAgentMessageInput(payload, optimizeEnabled, compatMode)
+}
+
+// RewriteCodexAgentMessagesForCompatibility adapts private message items for a
+// confirmed third-party endpoint, independently of optional client optimizations.
+func RewriteCodexAgentMessagesForCompatibility(payload []byte) []byte {
+	payload = removeCodexCollaborationMessageEncryption(payload, codexCollaborationMessageToolPaths(payload))
+	return rewritePortableCodexAgentMessageInput(payload)
+}
+
+// RewriteCodexPortableGatewayInput keeps the existing generic provider gateway's
+// metadata-preserving projection distinct from Codex model compatibility mode.
+func RewriteCodexPortableGatewayInput(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config) []byte {
 	if !codexMultiAgentV2Enabled(ctx, headers, cfg) {
 		return payload
 	}
-	return rewriteCodexAgentMessageInput(payload)
+	return RewriteCodexAgentMessagesForCompatibility(payload)
 }
 
 // RewriteCodexOrphanDelegationInputForConfig applies RewriteCodexOrphanDelegationInput
@@ -126,6 +147,8 @@ func OptimizeCodexMultiAgentV2Request(ctx context.Context, headers http.Header, 
 	if !codexMultiAgentV2Enabled(ctx, headers, cfg) {
 		return payload, false
 	}
+	// CPA v8.0.32 retypes message content only when this optimizer is enabled.
+	// This preserves the literal bytes; it does not decrypt ciphertext.
 	updated := rewriteCodexAgentMessageContent(payload)
 	if codexMultiAgentV2ToolsPrepared(ctx) {
 		updated = removeCodexCollaborationMessageEncryption(updated, codexCollaborationMessageToolPaths(updated))
@@ -195,7 +218,8 @@ func IsCodexClientUserAgent(userAgent string) bool {
 	return strings.HasPrefix(userAgent, "Codex Desktop/") ||
 		strings.HasPrefix(userAgent, "codex-tui/") ||
 		userAgent == "codex_cli_rs" ||
-		strings.HasPrefix(userAgent, "codex_cli_rs/")
+		strings.HasPrefix(userAgent, "codex_cli_rs/") ||
+		strings.HasPrefix(userAgent, "codex_exec/")
 }
 
 func isCodexMultiAgentClient(userAgent string) bool {
@@ -254,7 +278,7 @@ func loadCodexCatalogTemplates() (map[string]map[string]any, map[string]any, uin
 			continue
 		}
 		templates[modelID] = model
-		if modelID == "gpt-5.5" {
+		if defaultTemplate == nil || modelID == "gpt-5.5" {
 			defaultTemplate = model
 		}
 	}
@@ -401,7 +425,7 @@ func codexSpawnAgentModelsFromSources(availableModels []map[string]any, catalogJ
 			continue
 		}
 		templates[modelID] = model
-		if modelID == "gpt-5.5" {
+		if defaultTemplate == nil || modelID == "gpt-5.5" {
 			defaultTemplate = model
 		}
 	}
@@ -769,7 +793,55 @@ func restoreCodexCollaborationValue(value any) bool {
 	return changed
 }
 
-func rewriteCodexAgentMessageInput(payload []byte) []byte {
+func rewriteCodexAgentMessageInput(payload []byte, optimizeEnabled bool, compatMode bool) []byte {
+	input := gjson.GetBytes(payload, "input")
+	if !input.IsArray() {
+		return payload
+	}
+
+	updated := payload
+	if optimizeEnabled {
+		updated = rewriteCodexAgentMessageContent(payload)
+	}
+	for itemIndex, item := range input.Array() {
+		itemType := strings.TrimSpace(item.Get("type").String())
+		itemPath := fmt.Sprintf("input.%d", itemIndex)
+		if itemType == "agent_message" && optimizeEnabled {
+			var errSet error
+			updated, errSet = sjson.SetBytes(updated, itemPath+".role", "user")
+			if errSet != nil {
+				return payload
+			}
+			updated, errSet = sjson.SetBytes(updated, itemPath+".type", "message")
+			if errSet != nil {
+				return payload
+			}
+		}
+		if compatMode {
+			var errDelete error
+			if item.Get("author").Exists() {
+				if updated, errDelete = sjson.DeleteBytes(updated, itemPath+".author"); errDelete != nil {
+					return payload
+				}
+			}
+			if item.Get("recipient").Exists() {
+				if updated, errDelete = sjson.DeleteBytes(updated, itemPath+".recipient"); errDelete != nil {
+					return payload
+				}
+			}
+			if item.Get("internal_chat_message_metadata_passthrough").Exists() {
+				if updated, errDelete = sjson.DeleteBytes(updated, itemPath+".internal_chat_message_metadata_passthrough"); errDelete != nil {
+					return payload
+				}
+			}
+		}
+	}
+	return updated
+}
+
+// rewritePortableCodexAgentMessageInput retains the separate Grok adapter
+// contract, including its readable routing metadata. Codex uses CPA semantics.
+func rewritePortableCodexAgentMessageInput(payload []byte) []byte {
 	input := gjson.GetBytes(payload, "input")
 	if !input.IsArray() {
 		return payload

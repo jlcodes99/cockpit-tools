@@ -25,6 +25,8 @@ import (
 
 	sdkhandlers "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
 
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
@@ -214,12 +216,55 @@ func writeAPIError(c *gin.Context, status int, message, code string) {
 	})
 }
 
+// clientClosedRequestStatus 记录「客户端在响应写完前主动断开」。
+// 取值与内置 CLIProxyAPI 的 clienterror.StatusClientClosedRequest 一致，
+// 避免把下游取消记成网关侧 502。
+const clientClosedRequestStatus = 499
+
+// requestClientGone 判断本次失败是否由下游主动断开引起。
+// 这类请求既不能再写响应体，也不应记成网关侧 5xx：宿主会按状态与错误分类区分
+// 「用户取消」和「网关故障」，5xx + context canceled 会被判为网关取消。
+func requestClientGone(c *gin.Context, err error) bool {
+	if c != nil && c.Request != nil {
+		// 只认下游请求上下文的取消：执行器在重试或换号时会取消自己的 attempt
+		// context，那种 context.Canceled 不能当成客户端断开。
+		return errors.Is(c.Request.Context().Err(), context.Canceled)
+	}
+	return errors.Is(err, context.Canceled)
+}
+
+// forwardSafeErrorResponseHeaders 只转发内置 CLIProxyAPI 明确判定为安全的重试/冷却
+// 响应头（当前为 Retry-After），与 SDK 处理器 handlers_errors.go 的行为保持一致。
+// 上游未给出可安全转发的重试时间时不写该头，不自行编造退避时长。
+func forwardSafeErrorResponseHeaders(c *gin.Context, err error) {
+	if c == nil || err == nil {
+		return
+	}
+	headers := coreauth.SafeResponseHeaders(err)
+	if len(headers) == 0 {
+		return
+	}
+	for _, value := range headers.Values("Retry-After") {
+		c.Writer.Header().Add("Retry-After", value)
+	}
+}
+
 func (s *relayServer) writeExecutorError(c *gin.Context, err error) {
+	if requestClientGone(c, err) {
+		if err != nil {
+			_ = c.Error(err)
+		}
+		// 下游已经断开：只记录状态供请求日志归类，不再写响应体或延迟。
+		c.Status(clientClosedRequestStatus)
+		return
+	}
 	if s.tryWriteModerationNoticeFromError(c, err, sourceFormatFromRequest(c), requestPrefersStream(c)) {
 		return
 	}
 	status := statusCodeFromError(err)
 	code := "upstream_error"
+	var authError *coreauth.Error
+	paused := errors.As(err, &authError) && authError.Code == "account_paused"
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
 		code = "auth_failed"
 	} else if status == http.StatusTooManyRequests {
@@ -229,10 +274,14 @@ func (s *relayServer) writeExecutorError(c *gin.Context, err error) {
 	} else if status == http.StatusGatewayTimeout || status == http.StatusRequestTimeout {
 		code = errorCategory(status, errorMessage(err), false)
 	}
+	if paused {
+		code = "account_paused"
+	}
 	if err != nil {
 		_ = c.Error(err)
 	}
-	if shouldThrottleDownstreamExecutorError(status) {
+	forwardSafeErrorResponseHeaders(c, err)
+	if !paused && shouldThrottleDownstreamExecutorError(status) {
 		var ctx context.Context = context.Background()
 		if c != nil && c.Request != nil {
 			ctx = c.Request.Context()
@@ -241,7 +290,17 @@ func (s *relayServer) writeExecutorError(c *gin.Context, err error) {
 			return
 		}
 	}
-	writeAPIError(c, status, errorMessage(err), code)
+	var continuityError continuityControlError
+	if errors.As(err, &continuityError) {
+		c.Data(status, "application/json", []byte(continuityError.Error()))
+		return
+	}
+	message, structured := publicExecutorError(errorMessage(err))
+	if structured {
+		c.Data(status, "application/json", []byte(message))
+		return
+	}
+	writeAPIError(c, status, message, code)
 }
 
 func shouldThrottleDownstreamExecutorError(status int) bool {
@@ -374,21 +433,31 @@ func streamKeepAliveInterval(cfg *config.Config) time.Duration {
 
 func writeStreamTerminalError(c *gin.Context, err error) {
 	status := statusCodeFromError(err)
-	payload, marshalErr := json.Marshal(gin.H{
-		"error": gin.H{
-			"message": errorMessage(err),
-			"type":    "upstream_error",
-			"code":    status,
-		},
-	})
-	if marshalErr != nil {
-		return
+	message, structured := publicExecutorError(errorMessage(err))
+	payload := []byte(message)
+	if !structured {
+		var marshalErr error
+		payload, marshalErr = json.Marshal(gin.H{
+			"error": gin.H{
+				"message": message,
+				"type":    "upstream_error",
+				"code":    status,
+			},
+		})
+		if marshalErr != nil {
+			return
+		}
 	}
 	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(payload))
 }
 
 func writeStreamTerminalErrorForFormat(c *gin.Context, err error, sourceFormat sdktranslator.Format) {
 	if c == nil {
+		return
+	}
+	if requestClientGone(c, err) {
+		// 下游已断开：不写 SSE 终止事件，只更新状态供请求日志归类。
+		c.Status(clientClosedRequestStatus)
 		return
 	}
 	if relayServerFromContext(c).tryWriteModerationNoticeFromError(c, err, sourceFormat, true) {
@@ -399,7 +468,8 @@ func writeStreamTerminalErrorForFormat(c *gin.Context, err error, sourceFormat s
 		return
 	}
 	status := statusCodeFromError(err)
-	eventName, payload := sdkhandlers.BuildOpenAIResponsesStreamTerminalEvent(status, err, 0)
+	message, _ := publicExecutorError(errorMessage(err))
+	eventName, payload := sdkhandlers.BuildOpenAIResponsesStreamTerminalEvent(status, errors.New(message), 0)
 	_, _ = fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", eventName, string(payload))
 }
 
@@ -414,6 +484,10 @@ const (
 type relayStreamFramer struct {
 	mode      relayStreamFrameMode
 	responses responsesSSEFramer
+	chat      bool
+	done      bool
+	failed    bool
+	choices   map[int64]bool
 }
 
 func newRelayStreamFramer(sourceFormat sdktranslator.Format, path string) *relayStreamFramer {
@@ -427,7 +501,7 @@ func newRelayStreamFramer(sourceFormat sdktranslator.Format, path string) *relay
 	if strings.HasPrefix(strings.Split(path, "?")[0], "/v1/responses") {
 		mode = relayStreamFrameResponses
 	}
-	return &relayStreamFramer{mode: mode}
+	return &relayStreamFramer{mode: mode, chat: mode == relayStreamFrameOpenAI && sourceFormat == sdktranslator.FormatOpenAI}
 }
 
 func (f *relayStreamFramer) Write(w io.Writer, chunk []byte) error {
@@ -438,6 +512,34 @@ func (f *relayStreamFramer) Write(w io.Writer, chunk []byte) error {
 	case relayStreamFrameResponses:
 		return f.responses.WriteChunk(w, normalizeResponsesInputChunk(f.responses.HasPending(), chunk))
 	case relayStreamFrameOpenAI:
+		if f.chat {
+			payload, _ := responsesSSEDataPayload(chunk)
+			if bytes.Equal(bytes.TrimSpace(payload), []byte("[DONE]")) {
+				if f.done {
+					return nil
+				}
+				f.done = true
+			} else {
+				var value struct {
+					Error   json.RawMessage `json:"error"`
+					Choices []struct {
+						Index        int64   `json:"index"`
+						FinishReason *string `json:"finish_reason"`
+					} `json:"choices"`
+				}
+				if json.Unmarshal(payload, &value) == nil {
+					if len(value.Error) != 0 && string(value.Error) != "null" {
+						f.failed = true
+					}
+					if f.choices == nil {
+						f.choices = make(map[int64]bool)
+					}
+					for _, choice := range value.Choices {
+						f.choices[choice.Index] = f.choices[choice.Index] || choice.FinishReason != nil && *choice.FinishReason != ""
+					}
+				}
+			}
+		}
 		_, err := w.Write(frameOpenAIStreamChunk(chunk))
 		return err
 	default:
@@ -449,6 +551,17 @@ func (f *relayStreamFramer) Write(w io.Writer, chunk []byte) error {
 func (f *relayStreamFramer) Close(w io.Writer) error {
 	if f.mode == relayStreamFrameResponses {
 		return f.responses.Flush(w)
+	}
+	if f.chat && !f.done && !f.failed && len(f.choices) > 0 {
+		for _, complete := range f.choices {
+			if !complete {
+				return nil
+			}
+		}
+		if _, err := io.WriteString(w, "data: [DONE]\n\n"); err != nil {
+			return err
+		}
+		f.done = true
 	}
 	return nil
 }

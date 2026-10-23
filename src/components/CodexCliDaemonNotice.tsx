@@ -22,7 +22,7 @@ export function CodexCliDaemonNotice() {
     setCopyState('idle');
     setCommands((pending) => pending.slice(1));
   };
-  useEscCloseTopmost(Boolean(command), close);
+  useEscCloseTopmost(Boolean(command), close, dialog);
   useModalFocusTrap(dialog, Boolean(command));
   useModalScrollLock(Boolean(command));
 

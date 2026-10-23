@@ -25,9 +25,20 @@
   padding-bottom: 32px;
 }
 
+.codex-api-service-page .page-tabs-row-with-leading .page-tabs {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.codex-api-service-page .page-tabs .filter-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .codex-api-service-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 1.5fr);
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -45,6 +56,23 @@
 
 .codex-api-service-hero-main {
   min-width: 0;
+}
+
+.codex-api-service-hero-speed {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--codex-api-border-soft);
+}
+
+.codex-api-service-hero-speed .codex-speed-control {
+  width: 100%;
+  gap: 8px 12px;
+}
+
+.codex-api-service-hero-speed .codex-speed-control-hint {
+  flex: 1 1 260px;
+  max-width: none;
 }
 
 .codex-api-service-title-row {
@@ -88,6 +116,7 @@
 
 .codex-api-service-title-row h1 {
   min-width: 0;
+  white-space: nowrap;
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.2;
@@ -1020,6 +1049,11 @@
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
   transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.codex-api-service-key-card:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .codex-api-service-key-main {
@@ -2959,7 +2993,7 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
 }
 
 /* The sidebar consumes width even when the native window is wider than 860px. */
-@container (max-width: 760px) {
+@container (max-width: 900px) {
   .codex-api-service-hero { grid-template-columns: minmax(0, 1fr); align-items: start; }
   .codex-api-service-hero-actions, .codex-api-service-head-actions { justify-content: flex-start; }
   .codex-api-service-panel-head { flex-wrap: wrap; }

@@ -49,12 +49,13 @@
 .codex-experimental-model-summary__table-head,
 .codex-experimental-model-summary__row {
   display: grid;
-  min-width: 720px;
+  min-width: 820px;
   grid-template-columns:
     18px
     minmax(120px, 1.1fr)
     minmax(160px, 1.5fr)
     minmax(90px, 0.75fr)
+    minmax(90px, 0.7fr)
     minmax(105px, 0.85fr)
     52px;
   align-items: center;
@@ -63,13 +64,14 @@
 
 .codex-experimental-model-summary__table-head.has-source,
 .codex-experimental-model-summary__row.has-source {
-  min-width: 820px;
+  min-width: 910px;
   grid-template-columns:
     18px
     minmax(110px, 1fr)
     minmax(150px, 1.4fr)
     64px
     minmax(80px, 0.7fr)
+    minmax(90px, 0.7fr)
     minmax(105px, 0.85fr)
     52px;
 }
@@ -318,6 +320,7 @@
     minmax(160px, 1.4fr)
     minmax(130px, 1.1fr)
     minmax(110px, 0.9fr)
+    minmax(92px, 0.75fr)
     minmax(130px, 1fr)
     64px;
   align-items: center;
@@ -333,6 +336,7 @@
     minmax(120px, 1fr)
     76px
     minmax(110px, 0.9fr)
+    minmax(92px, 0.75fr)
     minmax(130px, 1fr)
     64px;
   align-items: center;
@@ -364,9 +368,34 @@
   padding-left: 2px;
 }
 
-.codex-experimental-model-editor__table-head.has-source > span:nth-child(7) {
+.codex-experimental-model-editor__table-head.has-source > span:nth-child(8) {
   text-align: center;
 }
+
+.codex-experimental-model-transfer-btn {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.codex-experimental-model-editor__default-effort {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.codex-experimental-model-default-effort-select .single-select-dropdown-trigger {
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--bg-secondary);
+  box-shadow: none;
+  gap: 4px;
+}
+.codex-experimental-model-default-effort-select .single-select-dropdown-value { font-size: 11px; }
+.codex-experimental-model-default-effort-select .single-select-dropdown-arrow { width: 16px; height: 16px; background: transparent; }
 
 .codex-experimental-model-editor__list {
   display: flex;
@@ -376,10 +405,6 @@
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
-}
-
-.codex-experimental-model-editor__list.has-open-menu {
-  padding-bottom: 150px;
 }
 
 .codex-experimental-model-editor__list.is-sorting {
@@ -522,13 +547,10 @@
 
 .codex-experimental-model-editor__reasoning-menu,
 .codex-experimental-model-editor__context-menu {
-  position: absolute;
-  z-index: 8;
-  top: calc(100% + 4px);
-  right: 0;
-  left: 0;
+  position: fixed;
   display: flex;
-  min-width: 180px;
+  box-sizing: border-box;
+  overflow-y: auto;
   flex-direction: column;
   gap: 2px;
   padding: 5px;
@@ -540,6 +562,7 @@
 
 .codex-experimental-model-editor__reasoning-option,
 .codex-experimental-model-editor__context-option {
+  flex: 0 0 auto;
   width: 100%;
   min-height: 32px;
   padding: 6px 8px;
@@ -568,6 +591,12 @@
 .codex-experimental-model-editor__context-option:hover,
 .codex-experimental-model-editor__context-option.is-selected {
   background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.codex-experimental-model-editor__reasoning-option:focus-visible,
+.codex-experimental-model-editor__context-option:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 
 .codex-experimental-model-editor__reasoning-option.is-muted {

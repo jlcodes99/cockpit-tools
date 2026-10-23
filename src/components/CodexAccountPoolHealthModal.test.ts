@@ -15,6 +15,9 @@ import type {
 import { isBlockingCodexAccountQuotaError } from "../utils/codexQuotaError";
 import { resolveCodexHealthIssueDisplayName } from "../utils/codexAccountDisplayName";
 import en from "../locales/en.json";
+import * as poolDiagnostic from "../utils/codexAccountPoolDiagnostic";
+import type { CodexApiKeyInspectionRequest } from "../utils/codexApiKeyInspection";
+const { codexAccountPoolDiagnosticReason } = poolDiagnostic;
 
 type Props = ComponentProps<typeof CodexAccountPoolHealthModal>;
 type Element = { type: unknown; props: Record<string, any> };
@@ -55,17 +58,43 @@ function pool(patch: Partial<CodexLocalAccessAccountPoolHealth> = {}): CodexLoca
 }
 
 // Run the actual render branches and action handlers, without browser or Tauri I/O.
-function render(patch: Partial<Props> = {}) {
+function render(
+  patch: Partial<Props> = {},
+  clear: (id: string, timestamp: number) => Promise<boolean> = async () => true,
+  copy: (value: string) => Promise<void> = async () => {},
+) {
   const recovered: string[][] = [];
+  const cleared: Array<[string, number]> = [];
+  const events: string[] = [];
+  const copied: string[] = [];
+  const slots: any[] = [];
+  let hookIndex = 0;
+  let errorMessage: string | null = null;
   const reauthorized: string[] = [];
+  const inspections: CodexApiKeyInspectionRequest[] = [];
+  const navigationOrder: string[] = [];
   const exports: Record<string, any> = {};
   const jsx = (type: unknown, props: Element["props"]): Element => ({ type, props });
   vm.runInNewContext(compiled, {
     exports,
+    window: { dispatchEvent(event: Event) { events.push(event.type); } },
+    Event,
+    navigator: { clipboard: { async writeText(value: string) { copied.push(value); await copy(value); } } },
     require(name: string) {
       if (name === "react") return {
-        useMemo: (factory: () => unknown) => factory(), useRef: (current: unknown) => ({ current }),
-        useState: (initial: any) => [typeof initial === "function" ? initial() : initial, () => {}],
+        useMemo: (factory: () => unknown) => factory(),
+        useRef: (current: unknown) => {
+          const index = hookIndex++;
+          if (!(index in slots)) slots[index] = { current };
+          return slots[index];
+        },
+        useState: (initial: any) => {
+          const index = hookIndex++;
+          if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
+          return [slots[index], (value: any) => {
+            slots[index] = typeof value === "function" ? value(slots[index]) : value;
+          }];
+        },
         useEffect() {},
       };
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
@@ -81,26 +110,43 @@ function render(patch: Partial<Props> = {}) {
       if (name === "../presentation/platformAccountPresentation") return {
         buildCodexAccountPresentation: () => ({ planLabel: "API", planClass: "api", quotaItems: [] }),
       };
+      if (name === "../utils/codexAccountPoolDiagnostic") return poolDiagnostic;
+      if (name === "../utils/codexApiKeyInspection") return {
+        requestCodexApiKeyInspection(request: CodexApiKeyInspectionRequest) {
+          navigationOrder.push("inspection");
+          inspections.push({ ...request });
+        },
+      };
+      if (name === "../services/codexLocalAccessService") return {
+        clearCodexLocalAccessPoolFailure: async (id: string, timestamp: number) => {
+          cleared.push([id, timestamp]);
+          return clear(id, timestamp);
+        },
+      };
       if (name === "../utils/codexQuotaError") return { isBlockingCodexAccountQuotaError };
       if (name === "../utils/codexAccountDisplayName") return { resolveCodexHealthIssueDisplayName };
       if (name === "./ModalErrorMessage") return {
         ModalErrorMessage: "modal-error",
-        useModalErrorState: () => ({ message: null, scrollKey: 0, set() {} }),
+        useModalErrorState: () => ({ message: errorMessage, scrollKey: 0, set(value: string | null) { errorMessage = value; } }),
       };
       if (name.endsWith(".css")) return {};
       throw new Error(`Unexpected import: ${name}`);
     },
   });
-  const props: Props = {
+  let props: Props = {
     isOpen: true, accountIds: ["deepseek"], accounts: [account("deepseek", "DeepSeek")],
     accountHealth: [], accountPoolHealth: [], actionBusy: false,
-    onClose() {},
+    onClose() { navigationOrder.push("closed"); },
     onRecover: async (id) => { recovered.push([id]); },
     onRecoverAll: async (ids) => { recovered.push(Array.from(ids)); },
     onReauthorize: (id) => { reauthorized.push(id); },
     ...patch,
   };
-  return { tree: exports.CodexAccountPoolHealthModal(props) as Element, recovered, reauthorized };
+  return {
+    get tree() { hookIndex = 0; return exports.CodexAccountPoolHealthModal(props) as Element; },
+    update(next: Partial<Props>) { props = { ...props, ...next }; },
+    recovered, reauthorized, cleared, copied, events, inspections, navigationOrder,
+  };
 }
 function elements(value: any): Element[] {
   if (Array.isArray(value)) return value.flatMap(elements);
@@ -165,7 +211,7 @@ test("real account diagnostics remain attributed and recoverable beside an unsco
 
 test("reported members use backend attribution even with a client model alias", () => {
   const app = render({ accountPoolHealth: [pool({ accountStatuses: [member("deepseek")] })] });
-  assert.equal(rows(app.tree).length, 1);
+  assert.equal(rows(app.tree).length, 2);
   assert.ok(text(app.tree).includes("DeepSeek"));
   assert.ok(!text(app.tree).includes(labels.poolUnattributedDetail));
   buttons(app.tree, labels.recover)[0].props.onClick();
@@ -204,6 +250,17 @@ test("suppressed failures leave an empty state without recovery actions", () => 
   assertNoRecovery(tree);
 });
 
+test("paused service members cannot be resumed by bulk health recovery", () => {
+  const app = render({
+    accountIds: ['paused', 'active'], accounts: [account('paused'), account('active')],
+    pausedAccountIds: ['paused'], accountHealth: [health('paused'), health('active')],
+    accountPoolHealth: [pool({ accountStatuses: [member('paused'), member('active')] })],
+  });
+  buttons(app.tree, labels.recoverAll)[0].props.onClick();
+  assert.deepEqual(app.recovered, [['active']]);
+  assert.deepEqual(app.reauthorized, []);
+});
+
 test("credential failures retain reauthorization in both account and member diagnostics", () => {
   for (const patch of [
     { accountHealth: [health("deepseek", { schedulerReason: "unauthorized" })] },
@@ -235,4 +292,207 @@ test("long pool lists keep the existing viewport bound and internally scrollable
   const body = declarations(".codex-account-pool-health-body");
   assert.equal(body["overflow-y"], "auto");
   assert.equal(body["min-height"], "0");
+});
+
+test("selection-stage reasons distinguish unknown diagnostics, missing candidates and scope mismatch", () => {
+  const reason = (patch: Partial<CodexLocalAccessAccountPoolHealth>) =>
+    codexAccountPoolDiagnosticReason(pool(patch)).key.split('.').pop();
+  assert.equal(reason({ candidateAuths: 3 }), "poolUnknownDetail");
+  assert.equal(reason({ diagnosticAvailable: true }), "poolNoCandidatesDetail");
+  assert.equal(reason({ diagnosticAvailable: true, candidateAuths: 1 }), "poolScopeMismatchDetail");
+  assert.equal(reason({ diagnosticAvailable: true, candidateAuths: 1, scopedAuths: 1 }), "poolUnknownDetail");
+  for (const counter of ["unavailableAuths", "modelExcludedAuths", "quotaReservedAuths", "imagePolicyBlockedAuths"] as const) {
+    const result = codexAccountPoolDiagnosticReason(pool({ diagnosticAvailable: true, candidateAuths: 2, scopedAuths: 2, [counter]: 1 }));
+    assert.ok(result.key.endsWith("poolBlockedDetail"));
+    assert.equal(Object.values(result.values).filter((count) => count === 1).length, 1);
+  }
+  const scoped = render({ accountPoolHealth: [pool({ diagnosticAvailable: true, candidateAuths: 1 })] });
+  assert.ok(text(scoped.tree).includes(labels.poolScopeMismatchDetail));
+  assert.ok(!text(scoped.tree).includes(labels.authDetail));
+});
+
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+test("clearing removes only the exact pool record, preserves account health and allows newer failures", async () => {
+  const app = render({ accountHealth: [health("deepseek")], accountPoolHealth: [pool(), pool({ apiKeyId: "key-2" })] });
+  buttons(app.tree, en.common.clearRecord)[0].props.onClick();
+  await settle();
+  assert.deepEqual(app.cleared, [["key-1", 1]]);
+  assert.deepEqual(app.events, ["codex-local-access-state-updated"]);
+  assert.equal(buttons(app.tree, en.common.clearRecord).length, 1);
+  assert.ok(text(app.tree).includes("DeepSeek"));
+  assert.ok(text(app.tree).includes(labels.clearSuccess));
+  app.update({ accountPoolHealth: [pool({ lastFailureAt: 2 })] });
+  assert.equal(buttons(app.tree, en.common.clearRecord).length, 1);
+});
+
+test("pool record can also be cleared when member diagnostics exist", async () => {
+  const app = render({ accountPoolHealth: [pool({ accountStatuses: [member("deepseek")] })] });
+  buttons(app.tree, en.common.clearRecord)[0].props.onClick();
+  await settle();
+  assert.equal(rows(app.tree).length, 0);
+  assert.ok(text(app.tree).includes(labels.clearSuccess));
+  assert.ok(text(app.tree).includes(labels.noIssues));
+  assert.equal(app.recovered.length, 0);
+});
+
+test("duplicate clear clicks submit once, keep the modal usable and show busy state", async () => {
+  let finish!: (value: boolean) => void;
+  const app = render({ accountPoolHealth: [pool()] }, () => new Promise((resolve) => { finish = resolve; }));
+  const button = buttons(app.tree, en.common.clearRecord)[0];
+  button.props.onClick();
+  button.props.onClick();
+  assert.equal(app.cleared.length, 1);
+  assert.equal(buttons(app.tree, en.common.clearingRecord)[0].props.disabled, true);
+  assert.equal(buttons(app.tree, en.common.close)[0].props.disabled, undefined);
+  finish(true);
+  await settle();
+  assert.equal(rows(app.tree).length, 0);
+});
+
+test("clear failures remain inside the open modal, retain the record and clear stale errors on retry", async () => {
+  let attempt = 0;
+  const app = render({ accountPoolHealth: [pool()] }, async () => {
+    attempt++;
+    if (attempt === 1) throw new Error("pool_diagnostic_clear_timeout");
+    return attempt !== 2;
+  });
+  const message = () => elements(app.tree).find((element) => element.type === "modal-error")?.props.message;
+  buttons(app.tree, en.common.clearRecord)[0].props.onClick();
+  await settle();
+  assert.equal(message(), labels.clearFailed.replace("{{error}}", "pool_diagnostic_clear_timeout"));
+  assert.equal(rows(app.tree).length, 1);
+  buttons(app.tree, en.common.clearRecord)[0].props.onClick();
+  assert.equal(message(), null);
+  await settle();
+  assert.equal(message(), labels.clearStale);
+  assert.equal(rows(app.tree).length, 1);
+  buttons(app.tree, en.common.clearRecord)[0].props.onClick();
+  await settle();
+  assert.equal(message(), null);
+  assert.equal(rows(app.tree).length, 0);
+});
+
+test("scope diagnostics describe each precise selection reason without account recovery", () => {
+  const reasons = ["scope_mismatch", "account_mapping_missing", "bound_account_not_loaded", "bound_account_not_candidate"];
+  const app = render({
+    accountIds: [],
+    accountPoolHealth: [pool({
+      diagnosticAvailable: true, candidateAuths: 1,
+      scopeDiagnostics: reasons.map((reasonCode) => ({ accountId: "deepseek", accountEmail: "fallback@example.com", reasonCode })),
+    })],
+  });
+  for (const reason of reasons) assert.ok(text(app.tree).includes(
+    labels[poolDiagnostic.codexAccountPoolScopeReasonKey(reason).split('.').pop() as keyof typeof labels],
+  ));
+  assert.ok(text(app.tree).includes("DeepSeek"));
+  assert.ok(text(app.tree).includes(labels.unmappedAccount));
+  assert.ok(!text(app.tree).includes("fallback@example.com"));
+  assert.ok(!text(app.tree).includes(labels.poolUnattributedDetail));
+  assertNoRecovery(app.tree);
+  assert.equal(buttons(app.tree, en.common.reauthorize).length, 0);
+});
+
+test("scope account names honor masking and never expose unknown credential IDs", () => {
+  const diagnostics = [
+    { accountId: "deepseek", accountEmail: "other@example.com", reasonCode: "scope_mismatch" },
+    { accountId: "secret-credential-id", accountEmail: "", reasonCode: "bound_account_not_loaded" },
+    { accountId: "unmapped-secret-id", accountEmail: "secret@example.com", reasonCode: "account_mapping_missing" },
+    { accountId: "unknown", accountEmail: "bound@example.com", reasonCode: "bound_account_not_candidate" },
+  ];
+  assert.equal(poolDiagnostic.codexAccountPoolScopeDisplayName(diagnostics[0], [account("deepseek", "Name")], "Unknown"), "Name");
+  assert.equal(poolDiagnostic.codexAccountPoolScopeDisplayName(diagnostics[3], [], "Unknown"), "bound@example.com");
+  const { tree } = render({ accountIds: [], accountPoolHealth: [pool({ scopeDiagnostics: diagnostics })], maskAccountText: () => "masked" });
+  assert.ok(text(tree).includes("masked"));
+  for (const secret of ["DeepSeek", "other@example.com", "secret-credential-id", "unmapped-secret-id", "secret@example.com", "bound@example.com"]) {
+    assert.ok(!text(tree).includes(secret), secret);
+  }
+  assertNoRecovery(tree);
+});
+
+test("known unloaded bound account IDs remain identifiable without claiming deletion", () => {
+  const diagnostic = { accountId: "bound-business-id", accountEmail: "", reasonCode: "bound_account_not_loaded" };
+  const app = render({ accountIds: [], accounts: [], accountPoolHealth: [pool({ scopeDiagnostics: [diagnostic] })] });
+  assert.ok(text(app.tree).includes(labels.accountReference.replace("{{id}}", "bound-business-id")));
+  assert.ok(text(app.tree).includes(labels.boundAccountNotLoadedDetail));
+  assert.ok(!text(app.tree).includes(labels.missingDetail));
+  assertNoRecovery(app.tree);
+  app.update({ maskAccountText: () => "masked bound account" });
+  assert.ok(!text(app.tree).includes("bound-business-id"));
+  assert.ok(text(app.tree).includes("masked bound account"));
+  app.update({ maskAccountText: undefined, accountPoolHealth: [pool({ scopeDiagnostics: [{ ...diagnostic, reasonCode: "account_mapping_missing" }] })] });
+  assert.ok(!text(app.tree).includes("bound-business-id"));
+  assert.ok(text(app.tree).includes(labels.unmappedAccount));
+});
+
+test("binding inspection closes the modal first and preserves internal key and request context", () => {
+  const app = render({ accountIds: [], accountPoolHealth: [pool({
+    apiKeyId: "__internal-instance-key__", requestKind: "image_edit",
+    scopeDiagnostics: [{ accountId: "", accountEmail: "", reasonCode: "account_mapping_missing" }],
+  })] });
+  buttons(app.tree, labels.inspectBinding)[0].props.onClick();
+  assert.deepEqual(app.navigationOrder, ["closed", "inspection"]);
+  assert.deepEqual(app.inspections, [{ apiKeyId: "__internal-instance-key__", requestKind: "image_edit" }]);
+  assert.equal(app.cleared.length, 0);
+  assert.equal(app.recovered.length, 0);
+  assert.equal(app.reauthorized.length, 0);
+});
+
+test("legacy unknown and missing candidate diagnostics offer configuration inspection", () => {
+  for (const diagnosticAvailable of [false, true]) {
+    const app = render({ accountIds: [], accountPoolHealth: [pool({ diagnosticAvailable })] });
+    buttons(app.tree, labels.inspectConfig)[0].props.onClick();
+    assert.deepEqual(app.inspections, [{ apiKeyId: "key-1", requestKind: "text" }]);
+    assertNoRecovery(app.tree);
+  }
+  assert.ok(poolDiagnostic.codexAccountPoolScopeReasonKey("unexpected_diagnostic").endsWith("scopeUnknownDetail"));
+});
+
+test("request diagnostics expose a timestamp and copy only the request ID", async () => {
+  const app = render({ accountPoolHealth: [pool({ requestId: " request-from-log ", lastFailureAt: 1_700_000_000_000 })] });
+  assert.ok(text(app.tree).includes(en.common.requestId));
+  assert.ok(text(app.tree).includes(en.common.failureTime));
+  assert.ok(text(app.tree).includes("request-from-log"));
+  assert.equal(elements(app.tree).find((element) => element.type === "time")?.props.dateTime, "2023-11-14T22:13:20.000Z");
+  await buttons(app.tree, en.common.copy)[0].props.onClick();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(app.copied, ["request-from-log"]);
+  assert.ok(text(app.tree).includes(en.common.copied));
+  assert.equal(app.cleared.length, 0);
+  assert.equal(app.recovered.length, 0);
+});
+
+test("copy errors remain inside the diagnostic dialog and legacy IDs are optional", async () => {
+  const app = render({ accountPoolHealth: [pool({ requestId: "request-1" })] }, undefined, async () => {
+    throw new Error("clipboard denied");
+  });
+  buttons(app.tree, en.common.copy)[0].props.onClick();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(elements(app.tree).find((element) => element.type === "modal-error")?.props.message.includes("clipboard denied"));
+  assert.deepEqual(app.navigationOrder, []);
+  app.update({ accountPoolHealth: [pool()] });
+  assert.equal(buttons(app.tree, en.common.copy).length, 0);
+});
+
+
+test("native model cooldown displays upstream reason and disappears when scheduler recovers", () => {
+  const app = render({ accountPoolHealth: [], accountHealth: [health("deepseek", {
+    cooldowns: [{ modelId: "gpt-6.1-sol", nextRetryAt: Date.now() + 60_000, remainingMs: 60_000, reason: "transient_upstream" }],
+  })] });
+  const content = text(app.tree);
+  assert.ok(content.includes("gpt-6.1-sol"));
+  assert.ok(content.includes(labels.upstreamDetail));
+  assert.ok(!content.includes(labels.noIssues));
+  app.update({ accountHealth: [health("deepseek", { available: true, schedulerAvailable: true, schedulerReason: null, cooldowns: [] })] });
+  assert.equal(rows(app.tree).length, 0);
+  assert.ok(text(app.tree).includes(labels.noIssues));
+});
+
+
+test("a busy native health snapshot shows loading without an account recovery action", () => {
+  const app = render({ accountPoolHealth: [], accountHealth: [health("deepseek", {
+    available: false, schedulerAvailable: null, schedulerReason: "state_refreshing", cooldowns: [],
+  })] });
+  assert.ok(text(app.tree).includes(en.common.loading));
+  assertNoRecovery(app.tree);
 });

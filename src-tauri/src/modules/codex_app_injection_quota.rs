@@ -1,5 +1,27 @@
 // API 服务注入的手动额度刷新：跨平台目标、有限并发与单飞。
 
+// A refresh may finish while an older snapshot request is still in flight.
+// `fetch_due` marks that result as obsolete until the post-refresh fetch starts.
+fn finish_quota_snapshot(
+    value: Option<QuotaResponse>,
+    fetch_due: bool,
+    quota: &mut QuotaResponse,
+    snapshot_pending: &mut bool,
+    refresh_error: &mut Option<&'static str>,
+) -> bool {
+    if fetch_due {
+        return false;
+    }
+    let was_manual = *snapshot_pending;
+    *snapshot_pending = false;
+    match value {
+        Some(value) => *quota = value,
+        None if was_manual && refresh_error.is_none() => *refresh_error = Some("refreshFailed"),
+        None => {}
+    }
+    true
+}
+
 #[derive(Default, Debug, PartialEq, Eq)]
 struct ApiServiceQuotaRefreshTargets {
     existing_account_count: usize,
@@ -169,6 +191,110 @@ async fn run_quota_refresh_singleflight(app: &AppHandle) -> Result<Option<(i32, 
 mod quota_refresh_tests {
     use super::*;
     use crate::models::codex::{CodexApiProviderMode, CodexTokens};
+
+    #[test]
+    fn obsolete_quota_snapshot_keeps_manual_loading_and_empty_pool() {
+        let mut quota = QuotaResponse::empty_pool();
+        let old = QuotaResponse {
+            account_count: Some(3),
+            five_hour_remaining_percent: Some(282),
+            ..Default::default()
+        };
+        let mut pending = true;
+        let mut error = None;
+        assert!(!finish_quota_snapshot(
+            Some(old),
+            true,
+            &mut quota,
+            &mut pending,
+            &mut error
+        ));
+        assert!(pending);
+        assert_eq!(quota.account_count, Some(0));
+        assert_eq!(quota.five_hour_remaining_percent, Some(0));
+        assert_eq!(error, None);
+        assert!(!finish_quota_snapshot(
+            None,
+            true,
+            &mut quota,
+            &mut pending,
+            &mut error
+        ));
+        assert!(pending);
+        assert_eq!(error, None);
+    }
+
+    #[test]
+    fn current_quota_snapshot_applies_and_finishes_manual_loading() {
+        let mut quota = QuotaResponse::default();
+        let updated = QuotaResponse {
+            account_count: Some(2),
+            weekly_remaining_percent: Some(170),
+            ..Default::default()
+        };
+        let mut pending = true;
+        let mut error = None;
+        assert!(finish_quota_snapshot(
+            Some(updated),
+            false,
+            &mut quota,
+            &mut pending,
+            &mut error
+        ));
+        assert!(!pending);
+        assert_eq!(quota.account_count, Some(2));
+        assert_eq!(quota.weekly_remaining_percent, Some(170));
+        assert_eq!(error, None);
+    }
+
+    #[test]
+    fn automatic_quota_failure_keeps_cache_without_manual_failure_message() {
+        let mut quota = QuotaResponse {
+            account_count: Some(3),
+            weekly_remaining_percent: Some(270),
+            ..Default::default()
+        };
+        let mut pending = false;
+        let mut error = None;
+        assert!(finish_quota_snapshot(
+            None,
+            false,
+            &mut quota,
+            &mut pending,
+            &mut error
+        ));
+        assert!(!pending);
+        assert_eq!(quota.account_count, Some(3));
+        assert_eq!(quota.weekly_remaining_percent, Some(270));
+        assert_eq!(error, None);
+        pending = true;
+        assert!(finish_quota_snapshot(
+            None,
+            false,
+            &mut quota,
+            &mut pending,
+            &mut error
+        ));
+        assert!(!pending);
+        assert_eq!(quota.account_count, Some(3));
+        assert_eq!(error, Some("refreshFailed"));
+    }
+
+    #[test]
+    fn current_quota_failure_preserves_more_specific_partial_error() {
+        let mut quota = QuotaResponse::empty_pool();
+        let mut pending = true;
+        let mut error = Some("refreshPartial");
+        assert!(finish_quota_snapshot(
+            None,
+            false,
+            &mut quota,
+            &mut pending,
+            &mut error
+        ));
+        assert!(!pending);
+        assert_eq!(error, Some("refreshPartial"));
+    }
 
     #[test]
     fn mixed_pool_refreshes_source_grok_ids_once_and_keeps_codex_ids() {

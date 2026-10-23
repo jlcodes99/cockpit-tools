@@ -1,26 +1,42 @@
 // Process 模块：Codex process discovery, startup and port-process management。
 // 通过 include! 保持原 modules::process 作用域和平台分支行为。
-/// 启动 Codex 默认桌面实例（不注入 CODEX_HOME，支持附加参数）。
+/// 启动 Codex 默认桌面实例，保留用户配置的数据目录。
 pub fn start_codex_default(extra_args: &[String]) -> Result<u32, String> {
-    start_codex_default_internal(extra_args, false, None)
+    start_codex_default_internal(extra_args, false, &CodexLaunchProxy::Inherit, None)
 }
 
 pub fn start_codex_default_fast_after_close(extra_args: &[String]) -> Result<u32, String> {
-    start_codex_default_internal(extra_args, true, None)
+    start_codex_default_internal(extra_args, true, &CodexLaunchProxy::Inherit, None)
 }
 
 pub fn start_codex_default_with_egress(
     extra_args: &[String],
-    egress_proxy_url: Option<&str>,
+    launch_proxy: &CodexLaunchProxy,
 ) -> Result<u32, String> {
-    start_codex_default_internal(extra_args, false, egress_proxy_url)
+    start_codex_default_internal(extra_args, false, launch_proxy, None)
 }
 
 pub fn start_codex_default_fast_after_close_with_egress(
     extra_args: &[String],
-    egress_proxy_url: Option<&str>,
+    launch_proxy: &CodexLaunchProxy,
 ) -> Result<u32, String> {
-    start_codex_default_internal(extra_args, true, egress_proxy_url)
+    start_codex_default_internal(extra_args, true, launch_proxy, None)
+}
+
+/// The launch transaction supplies the same home it used to write credentials/config.
+/// This does not turn the default instance into a managed multi-instance profile.
+pub fn start_codex_default_prepared_with_egress(
+    extra_args: &[String],
+    prepared_home: &Path,
+    fast_after_close: bool,
+    launch_proxy: &CodexLaunchProxy,
+) -> Result<u32, String> {
+    start_codex_default_internal(
+        extra_args,
+        fast_after_close,
+        launch_proxy,
+        Some(prepared_home),
+    )
 }
 
 fn build_codex_app_launch_args(extra_args: &[String]) -> Vec<String> {
@@ -33,7 +49,65 @@ fn build_codex_app_launch_args(extra_args: &[String]) -> Vec<String> {
 }
 
 fn build_codex_default_launch_args(extra_args: &[String]) -> Vec<String> {
-    build_codex_app_launch_args(extra_args)
+    #[cfg(target_os = "windows")]
+    {
+        build_codex_windows_profile_args(extra_args, None)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        build_codex_app_launch_args(extra_args)
+    }
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn prepare_codex_windows_default_command(
+    cmd: &mut Command,
+    extra_args: &[String],
+    codex_home: Option<&str>,
+) {
+    match codex_home {
+        Some(home) => {
+            cmd.env("CODEX_HOME", home);
+        }
+        None => {
+            cmd.env_remove("CODEX_HOME");
+        }
+    }
+    cmd.env_remove("CODEX_ELECTRON_USER_DATA_PATH")
+        .args(build_codex_windows_profile_args(extra_args, None));
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn codex_default_home_env_override(home: &Path, standard_home: Option<&Path>) -> Option<String> {
+    let home = home.to_string_lossy();
+    let normalized = |path: &str| {
+        normalize_windows_user_facing_path(path)
+            .replace('/', "\\")
+            .trim_end_matches('\\')
+            .to_lowercase()
+    };
+    if standard_home
+        .is_some_and(|standard| normalized(&home) == normalized(&standard.to_string_lossy()))
+    {
+        None
+    } else {
+        Some(home.into_owned())
+    }
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn resolve_codex_default_launch_home(prepared_home: Option<&Path>) -> Result<PathBuf, String> {
+    let home = prepared_home
+        .map(Path::to_path_buf)
+        .unwrap_or_else(crate::modules::codex_account::get_codex_home);
+    if home.is_absolute() {
+        Ok(home)
+    } else {
+        // Package activation can change the child working directory.
+        std::env::current_dir()
+            .map(|cwd| cwd.join(home))
+            .map_err(|error| format!("Resolve Codex home: {error}"))
+    }
 }
 
 #[cfg(any(test, target_os = "windows"))]
@@ -116,6 +190,7 @@ fn wait_for_codex_default_start_pid(
     let started = Instant::now();
     let mut stable_pid = None;
     let mut stable_count = 0usize;
+    let mut first_candidate_seen = false;
 
     while started.elapsed() < timeout {
         let fast_entries = collect_codex_windows_default_process_entries(
@@ -135,6 +210,13 @@ fn wait_for_codex_default_start_pid(
         );
         stable_pid = candidate;
         stable_count = streak;
+        if candidate.is_some() && !first_candidate_seen {
+            first_candidate_seen = true;
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] first default process elapsed_ms={}",
+                started.elapsed().as_millis()
+            ));
+        }
 
         if stable_count >= 3 {
             let old_pids_still_running = before_default_pids
@@ -191,10 +273,11 @@ fn wait_for_codex_default_start_pid(
 fn start_codex_default_internal(
     extra_args: &[String],
     fast_after_close: bool,
-    egress_proxy_url: Option<&str>,
+    launch_proxy: &CodexLaunchProxy,
+    prepared_home: Option<&Path>,
 ) -> Result<u32, String> {
     #[cfg(not(target_os = "windows"))]
-    let _ = fast_after_close;
+    let _ = (fast_after_close, prepared_home);
 
     #[cfg(target_os = "macos")]
     {
@@ -212,9 +295,9 @@ fn start_codex_default_internal(
             &args,
             true,
             &[],
-            egress_proxy_url,
+            launch_proxy,
         )
-            .map_err(|e| format!("启动 Codex 失败: {}", e))?;
+        .map_err(|e| format!("启动 Codex 失败: {}", e))?;
         crate::modules::logger::log_info("Codex 默认实例启动命令已发送（open -n -a）");
         let probe_started = Instant::now();
         let timeout = Duration::from_secs(6);
@@ -238,11 +321,18 @@ fn start_codex_default_internal(
     {
         use std::os::windows::process::CommandExt;
 
-        let launch_path_for_probe = resolve_codex_launch_path().ok();
+        let mut launch_path_for_probe = resolve_codex_launch_path().ok();
         let before_probe_started = Instant::now();
-        let default_home = crate::modules::codex_account::get_codex_home()
-            .to_string_lossy()
-            .to_string();
+        let default_home_path = resolve_codex_default_launch_home(prepared_home)?;
+        let standard_home = dirs::home_dir().map(|home| home.join(".codex"));
+        let codex_home_override =
+            codex_default_home_env_override(&default_home_path, standard_home.as_deref());
+        let default_home = default_home_path.to_string_lossy().into_owned();
+        crate::modules::logger::log_info(&format!(
+            "[Codex Start] default data directory={}, explicit_home={}",
+            default_home,
+            codex_home_override.is_some()
+        ));
         let default_app_dirs = get_default_codex_windows_app_user_data_dirs(default_home.as_str());
         let before_pids: HashSet<u32> = launch_path_for_probe
             .as_ref()
@@ -272,9 +362,8 @@ fn start_codex_default_internal(
                 app_user_model_id
             ));
             let args = build_codex_default_launch_args(extra_args);
-            let launch_env = egress_proxy_url
-                .map(account_proxy_env_pairs)
-                .unwrap_or_default()
+            let launch_env = launch_proxy
+                .env_overrides()
                 .into_iter()
                 .map(|(key, value)| (key.to_string(), value))
                 .collect::<Vec<_>>();
@@ -284,13 +373,15 @@ fn start_codex_default_internal(
                 .as_secs();
             match launch_codex_via_store_app_user_model_id(
                 &app_user_model_id,
-                None,
+                codex_home_override.as_deref(),
                 None,
                 &args,
                 &launch_env,
             ) {
                 Ok(()) => {
                     store_entry_launched = true;
+                    // Activation may have refreshed an old Store installation.
+                    launch_path_for_probe = resolve_codex_launch_path().ok();
                     crate::modules::logger::log_info(&format!(
                         "[Codex Start] 已通过系统入口启动 Codex: {}",
                         app_user_model_id
@@ -320,9 +411,10 @@ fn start_codex_default_internal(
                 }
                 Err(err) => {
                     crate::modules::logger::log_warn(&format!(
-                        "[Codex Start] 系统入口启动失败，准备回退可执行路径: {}",
+                        "[Codex Start] 系统入口启动失败，停止本次启动以避免重复激活: {}",
                         err
                     ));
+                    return Err(err);
                 }
             }
         } else {
@@ -353,7 +445,7 @@ fn start_codex_default_internal(
             launch_path_text
         ));
         let mut cmd = Command::new(&launch_path);
-        apply_effective_proxy_env_to_command(&mut cmd, egress_proxy_url);
+        apply_effective_proxy_env_to_command(&mut cmd, launch_proxy);
         if should_detach_child() {
             cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
             cmd.stdin(Stdio::null())
@@ -361,10 +453,7 @@ fn start_codex_default_internal(
                 .stderr(Stdio::null());
         }
         // Codex 是 GUI 应用，不设置 CREATE_NO_WINDOW，否则会导致其内部 spawn CLI 子进程失败。
-        let args = build_codex_default_launch_args(extra_args);
-        for arg in args {
-            cmd.arg(arg);
-        }
+        prepare_codex_windows_default_command(&mut cmd, extra_args, codex_home_override.as_deref());
 
         let launch_not_before_epoch_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -419,7 +508,7 @@ fn start_codex_default_internal(
     {
         let launch_path = resolve_codex_launch_path()?;
         let mut command = Command::new(&launch_path);
-        apply_effective_proxy_env_to_command(&mut command, egress_proxy_url);
+        apply_effective_proxy_env_to_command(&mut command, launch_proxy);
         sanitize_linux_gui_launch_env(&mut command);
         for arg in build_codex_default_launch_args(extra_args) {
             command.arg(arg);
@@ -449,7 +538,7 @@ fn start_codex_default_internal(
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = extra_args;
-        let _ = egress_proxy_url;
+        let _ = launch_proxy;
         Err("当前系统不支持 Codex 桌面应用启动".to_string())
     }
 }
@@ -619,6 +708,44 @@ fn close_windows_codex_default_pids(pids: &[u32], timeout_secs: u64) -> Result<(
 }
 
 #[cfg(target_os = "windows")]
+fn codex_windows_last_pid_is_stale(pid: u32) -> bool {
+    // last_pid 是历史提示，不是进程身份；Windows 可以把退出后的 PID 分配给其他程序。
+    // 在探测未命中后重新读取该 PID，同时覆盖探测期间退出的竞态。
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(pid)]),
+        true,
+        ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
+    );
+    let process = system.process(Pid::from_u32(pid));
+    let name = process.map(|process| process.name().to_string_lossy());
+    let exe = process
+        .and_then(|process| process.exe())
+        .map(|path| path.to_string_lossy());
+    let stale =
+        codex_windows_process_snapshot_is_stale(name.as_deref().map(|name| (name, exe.as_deref())));
+    crate::modules::logger::log_info(&format!(
+        "[Codex Close] rechecked last_pid={}, process_name={:?}, exe={:?}, stale={}",
+        pid, name, exe, stale
+    ));
+    stale
+}
+
+/// 仅放行明确已退出或不属于 ChatGPT 的旧 PID；路径/命令行不可读不等于进程已退出。
+#[cfg(any(test, target_os = "windows"))]
+fn codex_windows_process_snapshot_is_stale(process: Option<(&str, Option<&str>)>) -> bool {
+    let Some((name, exe)) = process else {
+        return true;
+    };
+    let identity = exe
+        .filter(|path| !path.trim().is_empty())
+        .and_then(|path| path.rsplit(['\\', '/']).next())
+        .unwrap_or(name)
+        .trim();
+    !identity.is_empty() && !identity.eq_ignore_ascii_case("chatgpt.exe")
+}
+
+#[cfg(target_os = "windows")]
 fn close_codex_default_windows(timeout_secs: u64) -> Result<(), String> {
     let launch_path = resolve_codex_launch_path()?;
     let launch_path_text = launch_path.to_string_lossy().to_string();
@@ -630,19 +757,11 @@ fn close_codex_default_windows(timeout_secs: u64) -> Result<(), String> {
         .ok()
         .and_then(|settings| settings.last_pid);
 
-    let mut all_entries = Vec::new();
-    let mut default_entries = Vec::new();
-    for attempt in 0..3 {
-        all_entries = collect_codex_process_entries_complete();
-        default_entries =
-            filter_codex_windows_default_process_entries(&all_entries, &default_app_dirs);
-        if !default_entries.is_empty() {
-            break;
-        }
-        if attempt < 2 {
-            thread::sleep(Duration::from_millis(180));
-        }
-    }
+    // An absent default instance is a normal state, not a reason to repeat a
+    // full process probe three times. Retain the last-PID ownership guard below.
+    let all_entries = try_collect_codex_process_entries_complete()?;
+    let default_entries =
+        filter_codex_windows_default_process_entries(&all_entries, &default_app_dirs);
 
     let mut pids = default_entries
         .iter()
@@ -666,6 +785,12 @@ fn close_codex_default_windows(timeout_secs: u64) -> Result<(), String> {
                     crate::modules::logger::log_info(&format!(
                         "[Codex Close] last_pid={} belongs to a managed instance (dir={:?}), skip default close",
                         pid, dir
+                    ));
+                }
+                None if codex_windows_last_pid_is_stale(pid) => {
+                    crate::modules::logger::log_info(&format!(
+                        "[Codex Close] ignoring stale last_pid={}, no default ChatGPT process found",
+                        pid
                     ));
                 }
                 None => {
@@ -695,7 +820,7 @@ fn close_codex_default_windows(timeout_secs: u64) -> Result<(), String> {
 
     let mut remaining = Vec::new();
     for attempt in 0..3 {
-        let entries = collect_codex_process_entries_complete();
+        let entries = try_collect_codex_process_entries_complete()?;
         remaining = filter_codex_windows_default_process_entries(&entries, &default_app_dirs)
             .into_iter()
             .map(|(pid, _)| pid)
@@ -759,97 +884,50 @@ pub fn close_codex_default(timeout_secs: u64) -> Result<(), String> {
     }
 }
 
-/// macOS 优雅关闭（osascript）的最长等待时间：超时即回落强杀，避免自动化权限
-/// 弹窗或 System Events 无响应把启动流程挂住。
-#[cfg(target_os = "macos")]
-const CODEX_GRACEFUL_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
-
 #[cfg(target_os = "macos")]
 fn request_codex_graceful_close(pid: u32) -> bool {
-    if pid == 0 || !is_pid_running(pid) {
+    if pid == 0 {
+        return true;
+    }
+    let Ok(native_pid) = i32::try_from(pid) else {
+        crate::modules::logger::log_warn(&format!(
+            "[Codex Close] graceful native terminate invalid pid={}",
+            pid
+        ));
+        return false;
+    };
+    if !is_pid_running(pid) {
         return true;
     }
 
-    let focus_script = format!(
-        "tell application \"System Events\" to set frontmost of (first process whose unix id is {}) to true",
-        pid
-    );
-    crate::modules::logger::log_info(&format!(
-        "[Codex Close] graceful osascript start pid={}",
-        pid
-    ));
-    // osascript 会等待 System Events 回应；自动化权限弹窗、权限被拒或 System Events
-    // 无响应时可能长时间不返回，进而让整个启动/关闭流程看起来卡死。这里改为带
-    // 超时的等待：超时后结束 osascript，直接回落到强杀流程。
-    let mut child = match Command::new("osascript")
-        .args([
-            "-e",
-            &focus_script,
-            "-e",
-            "tell application \"System Events\" to keystroke \"q\" using command down",
-        ])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-    {
-        Ok(child) => child,
-        Err(err) => {
+    objc2::rc::autoreleasepool(|_| {
+        let Some(application) =
+            objc2_app_kit::NSRunningApplication::runningApplicationWithProcessIdentifier(
+                native_pid,
+            )
+        else {
             crate::modules::logger::log_warn(&format!(
-                "[Codex Close] graceful osascript error pid={} err={}",
-                pid, err
-            ));
-            return false;
-        }
-    };
-    let deadline = Instant::now() + CODEX_GRACEFUL_CLOSE_TIMEOUT;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    crate::modules::logger::log_warn(&format!(
-                        "[Codex Close] graceful osascript 超时，改为强制关闭: pid={}, timeout_ms={}",
-                        pid,
-                        CODEX_GRACEFUL_CLOSE_TIMEOUT.as_millis()
-                    ));
-                    return false;
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            Err(err) => {
-                crate::modules::logger::log_warn(&format!(
-                    "[Codex Close] graceful osascript error pid={} err={}",
-                    pid, err
-                ));
-                return false;
-            }
-        }
-    };
-    match status {
-        Some(status) if status.success() => {
-            crate::modules::logger::log_info(&format!(
-                "[Codex Close] graceful osascript success pid={}",
+                "[Codex Close] graceful native terminate application unavailable pid={}",
                 pid
             ));
-            true
-        }
-        Some(_) => {
-            let mut stderr_text = String::new();
-            if let Some(mut stderr) = child.stderr.take() {
-                use std::io::Read;
-                let _ = stderr.read_to_string(&mut stderr_text);
-            }
-            crate::modules::logger::log_warn(&format!(
-                "[Codex Close] graceful osascript failed pid={} err={}",
-                pid,
-                stderr_text.trim()
+            return false;
+        };
+        // Send a normal quit request to this PID only. The caller still waits for
+        // actual process exit and falls back to its precise process cleanup.
+        let requested = application.terminate();
+        if requested {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Close] graceful native terminate requested pid={}",
+                pid
             ));
-            false
+        } else {
+            crate::modules::logger::log_warn(&format!(
+                "[Codex Close] graceful native terminate rejected pid={}",
+                pid
+            ));
         }
-        None => false,
-    }
+        requested
+    })
 }
 
 /// Request a normal Windows app shutdown before falling back to force close.
@@ -1102,7 +1180,7 @@ pub fn close_codex_instances(codex_homes: &[String], timeout_secs: u64) -> Resul
             }
         };
 
-        let entries = collect_codex_process_entries();
+        let entries = try_collect_codex_process_entries_complete()?;
         let mut pids: Vec<u32> = entries
             .iter()
             .filter_map(|(pid, dir)| {
@@ -1861,11 +1939,8 @@ pub fn kill_managed_sidecar_port_processes(
         let matching_sidecar =
             managed_sidecar_command_matches(&command_line, binary_name, config_path);
         let parent_running = parent_pid.is_some_and(is_pid_running);
-        let owned_or_orphaned = managed_sidecar_parent_allows_cleanup(
-            parent_pid,
-            current_parent_pid,
-            parent_running,
-        );
+        let owned_or_orphaned =
+            managed_sidecar_parent_allows_cleanup(parent_pid, current_parent_pid, parent_running);
         if !matching_sidecar || !owned_or_orphaned {
             return Err(format!(
                 "端口 {} 由其他运行中的进程占用，已保留该进程: pid={}, parent_pid={}",
@@ -1986,4 +2061,265 @@ fn kill_processes_by_pid(pids: &[u32]) -> Result<usize, String> {
 pub fn kill_port_processes(port: u16) -> Result<usize, String> {
     let pids = find_pids_by_port(port)?;
     kill_processes_by_pid(&pids)
+}
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "process_codex_graceful_close_tests.rs"]
+mod codex_graceful_close_tests;
+
+/// Stop a persisted sidecar writer only after its binary/config and owning
+/// process have been checked. A released listener alone does not prove that
+/// the process has stopped writing its continuity journal.
+pub fn stop_managed_sidecar_writer_for_handoff(
+    binary_name: &str,
+    config_path: &Path,
+    current_parent_pid: u32,
+) -> Result<usize, String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let candidates = managed_sidecar_writer_candidates(binary_name, config_path)?;
+    if candidates.len() > 32 {
+        return Err("Too many sidecar writers for one profile".into());
+    }
+    let mut writers = Vec::new();
+    for (pid, command_line) in candidates {
+        if pid == std::process::id() {
+            continue;
+        }
+        let parent = command_line_parent_pid(&command_line);
+        let parent_running = match parent {
+            Some(0) | None => false,
+            Some(pid) => handoff_pid_alive(pid)?,
+        };
+        if !sidecar_handoff_owner_allows_stop(parent, current_parent_pid, parent_running) {
+            return Err(format!(
+                "Sidecar writer belongs to another running host: pid={pid}"
+            ));
+        }
+        writers.push(pid);
+    }
+    for pid in &writers {
+        if std::time::Instant::now() >= deadline {
+            return Err("Sidecar handoff timed out before termination".into());
+        }
+        #[cfg(unix)]
+        {
+            if unsafe { libc::kill(*pid as libc::pid_t, libc::SIGKILL) } != 0 {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) {
+                    return Err(format!("Cannot stop sidecar writer: pid={pid}: {error}"));
+                }
+            }
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let output = crate::modules::process_timeout::output_with_timeout(
+                Command::new("taskkill")
+                    .args(["/F", "/PID", &pid.to_string()])
+                    .creation_flags(CREATE_NO_WINDOW),
+                std::time::Duration::from_secs(3)
+                    .min(deadline.saturating_duration_since(std::time::Instant::now())),
+            )
+            .map_err(|error| format!("Cannot stop sidecar writer: pid={pid}: {error}"))?;
+            if !output.status.success() && handoff_pid_alive(*pid)? {
+                return Err(format!("Cannot stop sidecar writer: pid={pid}"));
+            }
+        }
+    }
+    loop {
+        let mut remaining = Vec::new();
+        for pid in &writers {
+            if handoff_pid_alive(*pid)? {
+                remaining.push(*pid);
+            }
+        }
+        if remaining.is_empty() {
+            return Ok(writers.len());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(format!(
+                "Sidecar writer did not exit before handoff: {remaining:?}"
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
+fn handoff_pid_alive(pid: u32) -> Result<bool, String> {
+    #[cfg(unix)]
+    {
+        if unsafe { libc::kill(pid as libc::pid_t, 0) } == 0 {
+            return Ok(true);
+        }
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            Ok(false)
+        } else {
+            Err(format!(
+                "Cannot confirm sidecar process state: pid={pid}: {error}"
+            ))
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(is_pid_running(pid))
+    }
+}
+
+fn sidecar_handoff_owner_allows_stop(
+    parent: Option<u32>,
+    current: u32,
+    parent_running: bool,
+) -> bool {
+    parent == Some(0) || managed_sidecar_parent_allows_cleanup(parent, current, parent_running)
+}
+
+#[cfg(test)]
+mod sidecar_handoff_owner_tests {
+    #[test]
+    fn persisted_and_orphaned_writers_may_stop_but_other_hosts_are_preserved() {
+        assert!(super::sidecar_handoff_owner_allows_stop(Some(0), 42, false));
+        assert!(super::sidecar_handoff_owner_allows_stop(Some(42), 42, true));
+        assert!(super::sidecar_handoff_owner_allows_stop(Some(7), 42, false));
+        assert!(!super::sidecar_handoff_owner_allows_stop(Some(7), 42, true));
+        assert!(!super::sidecar_handoff_owner_allows_stop(None, 42, false));
+    }
+}
+
+fn managed_sidecar_writer_candidates(
+    binary_name: &str,
+    config_path: &Path,
+) -> Result<Vec<(u32, String)>, String> {
+    #[cfg(unix)]
+    {
+        let output = crate::modules::process_timeout::output_with_timeout(
+            Command::new("ps").args(["-axo", "pid=,command="]),
+            std::time::Duration::from_secs(3),
+        )
+        .map_err(|error| format!("Cannot inspect persisted sidecar writers: {error}"))?;
+        if !output.status.success() {
+            return Err("Cannot inspect persisted sidecar writers".into());
+        }
+        let mut pids = Vec::new();
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let line = line.trim();
+            let Some(boundary) = line.find(char::is_whitespace) else {
+                continue;
+            };
+            let Ok(pid) = line[..boundary].parse::<u32>() else {
+                continue;
+            };
+            let command = line[boundary..].trim();
+            if handoff_sidecar_command_matches(command, binary_name, config_path) {
+                pids.push((pid, command.to_string()));
+            }
+        }
+        Ok(pids)
+    }
+    #[cfg(windows)]
+    {
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing()
+                .with_exe(UpdateKind::Always)
+                .with_cmd(UpdateKind::Always),
+        );
+        Ok(system
+            .processes()
+            .iter()
+            .filter_map(|(pid, process)| {
+                let command = process
+                    .cmd()
+                    .iter()
+                    .map(|value| value.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                handoff_sidecar_command_matches(&command, binary_name, config_path)
+                    .then_some((pid.as_u32(), command))
+            })
+            .collect())
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (binary_name, config_path);
+        Err("Cannot inspect persisted sidecar writers on this platform".into())
+    }
+}
+
+fn handoff_sidecar_command_matches(command: &str, binary_name: &str, config_path: &Path) -> bool {
+    let normalize = |value: &str| {
+        #[cfg(windows)]
+        {
+            value.replace('\\', "/").to_ascii_lowercase()
+        }
+        #[cfg(not(windows))]
+        {
+            value.to_string()
+        }
+    };
+    let command = normalize(command);
+    if !command.contains(&normalize(binary_name)) {
+        return false;
+    }
+    let Some(position) = command
+        .match_indices("--config")
+        .map(|(position, _)| position)
+        .find(|position| {
+            *position == 0
+                || command[..*position]
+                    .chars()
+                    .last()
+                    .is_some_and(|value| value.is_whitespace() || value == '\'' || value == '"')
+        })
+    else {
+        return false;
+    };
+    let suffix = command[position + "--config".len()..].trim_start_matches(|value: char| {
+        value.is_whitespace() || value == '=' || value == '\'' || value == '"'
+    });
+    let expected = normalize(config_path.to_string_lossy().as_ref());
+    let Some(rest) = suffix.strip_prefix(&expected) else {
+        return false;
+    };
+    rest.is_empty()
+        || rest
+            .chars()
+            .next()
+            .is_some_and(|value| value.is_whitespace() || value == '\'' || value == '"')
+}
+
+#[cfg(test)]
+mod sidecar_handoff_config_tests {
+    use super::*;
+    #[test]
+    fn handoff_requires_the_exact_config_argument() {
+        let path = Path::new("/data/a config.yaml");
+        assert!(handoff_sidecar_command_matches(
+            "/app/cockpit-cliproxy --config '/data/a config.yaml' --parent-pid 0",
+            "cockpit-cliproxy",
+            path
+        ));
+        assert!(handoff_sidecar_command_matches(
+            "/app/cockpit-cliproxy --config=/data/a config.yaml --parent-pid 0",
+            "cockpit-cliproxy",
+            path
+        ));
+        assert!(!handoff_sidecar_command_matches(
+            "/app/cockpit-cliproxy --config '/data/a config.yaml.backup'",
+            "cockpit-cliproxy",
+            path
+        ));
+        assert!(!handoff_sidecar_command_matches(
+            "/app/unrelated --config '/data/a config.yaml'",
+            "cockpit-cliproxy",
+            path
+        ));
+        assert!(!handoff_sidecar_command_matches(
+            "/app/cockpit-cliproxy --config '/data/other.yaml'",
+            "cockpit-cliproxy",
+            path
+        ));
+    }
 }

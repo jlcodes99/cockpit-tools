@@ -3,18 +3,13 @@ import { useTranslation } from 'react-i18next';
 import {
   ArrowDown,
   ArrowUp,
-  Clock3,
-  FolderOpen,
-  Layers,
   MoreHorizontal,
   PanelTop,
   RotateCcw,
-  Server,
-  Globe2,
   GripVertical,
 } from 'lucide-react';
 import { CodexToolPageHeader } from './CodexToolPageHeader';
-import { CodexIcon } from '../icons/CodexIcon';
+import type { CodexRegisteredPage } from './codexPageRegistry';
 import type { CodexTab } from '../CodexOverviewTabsHeader';
 import {
   CODEX_TOP_TAB_LIMIT,
@@ -25,31 +20,14 @@ import {
 } from '../../utils/codexTopLayoutPreferences';
 
 interface CodexTopLayoutPageProps {
+  pages: CodexRegisteredPage[];
   layout: CodexTopLayoutPreference;
   onChange: (layout: CodexTopLayoutPreference) => void;
   onBack: () => void;
 }
 
-function tabMeta(tab: CodexTab) {
-  switch (tab) {
-    case 'overview':
-      return { labelKey: 'overview.title', fallback: '账号总览', icon: <CodexIcon className="tab-icon" /> };
-    case 'providers':
-      return { labelKey: 'codex.modelProviders.tab', fallback: '模型供应商', icon: <Server className="tab-icon" /> };
-    case 'wakeup':
-      return { labelKey: 'codex.wakeup.tab', fallback: '唤醒任务', icon: <Clock3 className="tab-icon" /> };
-    case 'instances':
-      return { labelKey: 'instances.title', fallback: '应用多开', icon: <Layers className="tab-icon" /> };
-    case 'proxy':
-      return { labelKey: 'codex.proxy.management', fallback: '代理管理', icon: <Globe2 className="tab-icon" /> };
-    case 'top-layout':
-      return { labelKey: 'codex.more.topLayoutTitle', fallback: '顶部布局', icon: <PanelTop className="tab-icon" /> };
-    case 'sessions':
-      return { labelKey: 'codex.sessionManager.title', fallback: '会话管理', icon: <FolderOpen className="tab-icon" /> };
-  }
-}
-
 export function CodexTopLayoutPage({
+  pages,
   layout,
   onChange,
   onBack,
@@ -57,8 +35,8 @@ export function CodexTopLayoutPage({
   const { t } = useTranslation();
   const [draggingTab, setDraggingTab] = useState<CodexTab | null>(null);
   const normalizedOrder = useMemo(
-    () => normalizeCodexTopLayout(layout).order,
-    [layout],
+    () => normalizeCodexTopLayout(layout, pages.map(page => page.id)).order,
+    [layout, pages],
   );
 
   useEffect(() => {
@@ -73,7 +51,7 @@ export function CodexTopLayoutPage({
   }, [draggingTab]);
 
   const moveTab = (index: number, offset: number) => {
-    onChange(moveCodexTopLayoutTab(layout, index, index + offset));
+    onChange(moveCodexTopLayoutTab(layout, index, index + offset, pages.map(page => page.id)));
   };
 
   return (
@@ -85,7 +63,7 @@ export function CodexTopLayoutPage({
           <div className={`codex-top-layout-list${draggingTab ? ' is-sorting' : ''}`}
             onMouseLeave={() => setDraggingTab(null)}>
             {normalizedOrder.map((tab, index) => {
-              const meta = tabMeta(tab);
+              const meta = pages.find(page => page.id === tab)!;
               const isTop = index < CODEX_TOP_TAB_LIMIT;
               return (
                 <div className={`codex-top-layout-item${draggingTab === tab ? ' is-dragging' : ''}${index === CODEX_TOP_TAB_LIMIT ? ' is-more-start' : ''}`} key={tab}
@@ -93,7 +71,7 @@ export function CodexTopLayoutPage({
                     if (!draggingTab) return;
                     if (!(event.buttons & 1)) { setDraggingTab(null); return; }
                     if (draggingTab !== tab) {
-                      onChange(moveCodexTopLayoutTab(layout, normalizedOrder.indexOf(draggingTab), index));
+                      onChange(moveCodexTopLayoutTab(layout, normalizedOrder.indexOf(draggingTab), index, pages.map(page => page.id)));
                     }
                   }}>
                   <div className="codex-top-layout-item-main">
@@ -108,7 +86,7 @@ export function CodexTopLayoutPage({
                     </button>
                     <span className="codex-top-layout-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
                     {meta.icon}
-                    <span>{t(meta.labelKey, meta.fallback)}</span>
+                    <span>{meta.label}</span>
                   </div>
                   <div className="codex-top-layout-order">
                     <button
@@ -151,7 +129,7 @@ export function CodexTopLayoutPage({
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => onChange(createDefaultCodexTopLayout())}
+            onClick={() => onChange(createDefaultCodexTopLayout(pages.map(page => page.id)))}
           >
             <RotateCcw size={14} />
             {t('codex.more.resetLayout', '恢复默认')}

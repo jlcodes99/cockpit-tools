@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { loadCodexTopLayoutPreference, normalizeCodexTopLayout, writeCodexTopLayoutPreference, type CodexTopLayoutPreference } from '../utils/codexTopLayoutPreferences';
 import {
   ACCOUNT_TRANSFER_SCHEMA,
   AccountTransferBundle,
@@ -239,6 +240,7 @@ export interface DataTransferConfigBundle {
   verification_records?: unknown;
   verification_history?: unknown;
   platform_layout_config?: unknown;
+  codex_top_layout?: CodexTopLayoutPreference;
   platform_layout_custom_icons?: unknown;
   compact_group_order?: unknown;
   compact_group_colors?: unknown;
@@ -1027,6 +1029,12 @@ function importCodexWakeupState(
 }
 
 async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransferConfigBundle> {
+  let codexTopLayout: CodexTopLayoutPreference;
+  try {
+    codexTopLayout = loadCodexTopLayoutPreference();
+  } catch {
+    throw new Error('codex_top_layout_read_failed');
+  }
   const [
     rawUserConfig,
     groupSettings,
@@ -1099,6 +1107,7 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
     verification_records: safeGetLocalStorageItem('agtools.mfa.vault.v2'),
     verification_history: safeGetLocalStorageItem('agtools.mfa.vault.history'),
     platform_layout_config: safeGetLocalStorageItem('agtools.platform_layout.v1'),
+    codex_top_layout: codexTopLayout,
     platform_layout_custom_icons: safeGetLocalStorageItem('agtools.platform_layout.custom_icons.v1'),
     compact_group_order: safeGetLocalStorageItem('compactGroupOrder'),
     compact_group_colors: safeGetLocalStorageItem('compactGroupColors'),
@@ -1107,7 +1116,17 @@ async function exportConfigBundle(registry: AccountRegistry): Promise<DataTransf
   };
 }
 
+function validateImportedCodexTopLayout(value: unknown): CodexTopLayoutPreference {
+  if (!isRecord(value) || !Array.isArray(value.order) || !value.order.every(tab => typeof tab === 'string')) {
+    throw new Error('codex_top_layout_invalid');
+  }
+  return normalizeCodexTopLayout(value);
+}
+
 async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<DataTransferConfigImportResult> {
+  // Validate before any writes. Older bundles intentionally retain the current layout.
+  const codexTopLayout = bundle.codex_top_layout === undefined ? undefined
+    : validateImportedCodexTopLayout(bundle.codex_top_layout);
   const registry = await loadAccountRegistry();
   let unresolvedAccountRefs = 0;
   let disabledTaskCount = 0;
@@ -1227,6 +1246,14 @@ async function importConfigBundle(bundle: DataTransferConfigBundle): Promise<Dat
   saveCurrentAccountRefreshMinutesMap(bundle.current_account_refresh_minutes);
   window.dispatchEvent(new Event('config-updated'));
   window.dispatchEvent(new Event('wakeup-tasks-updated'));
+  if (codexTopLayout !== undefined) {
+    try {
+      writeCodexTopLayoutPreference(codexTopLayout);
+    } catch {
+      // Other settings have already been applied; do not report a complete import.
+      throw new Error('codex_top_layout_import_failed');
+    }
+  }
 
   return {
     applied: true,

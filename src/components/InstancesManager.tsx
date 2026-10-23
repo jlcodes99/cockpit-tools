@@ -3696,6 +3696,7 @@ export function InstancesManager<TAccount extends AccountLike>({
                       </div>
                       {(formExperimentalModelCatalogEnabled || formModelRoutingEnabled) && (
                         <CodexExperimentalModelEditor
+                          instanceId={editing.id}
                           models={formExperimentalModels}
                           defaultModelId={formExperimentalDefaultModelId}
                           mode="summary"

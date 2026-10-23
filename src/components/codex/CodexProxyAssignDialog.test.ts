@@ -39,6 +39,7 @@ function harness(initial: Partial<ProxyAssignment> = {}) {
     './useProxyLatency': { useProxyLatency: () => ({ results: {}, running: false, cancel() {} }) },
     '../ModalErrorMessage': { ModalErrorMessage: 'error-message' },
     '../../utils/codexPreferences': { getCodexPlanBadgeStyle: () => 'default', CODEX_PLAN_BADGE_STYLE_CHANGED_EVENT: 'badge' },
+    '../../services/codexProxyTargetService': { applyCodexProxyAccountSnapshot() {} },
     '../../stores/useCodexAccountStore': { useCodexAccountStore: { getState: () => ({ applyAccountSnapshot() {} }) } },
     '../../services/codexProxyEngineService': { preflightCodexProxyEngine: async () => { preflights++; if (failure) throw new Error('engine failed'); } },
     '../../services/codexProxyCatalogService': {

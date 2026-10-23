@@ -29,6 +29,49 @@ async fn refresh_owned_takeovers_after_explicit_oauth_binding(
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 struct TakeoverOwnership {
     connection_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    managed_realtime_ws_base_url: Option<String>,
+}
+
+// A different loopback address may be a user's own voice server. Only a value
+// recorded while it was managed may follow a provider that has already moved.
+fn profile_has_managed_realtime_sideband(
+    profile_dir: &Path,
+    doc: &Document,
+) -> Result<bool, String> {
+    if doc.get("model_provider").and_then(|item| item.as_str())
+        != Some(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID)
+        || doc
+            .get("experimental_realtime_webrtc_call_base_url")
+            .is_some()
+    {
+        return Ok(false);
+    }
+    if has_managed_realtime_sideband_override(doc) {
+        return Ok(true);
+    }
+    let Some(content) = read_optional_profile_file(&profile_dir.join(TAKEOVER_OWNERSHIP_FILE))?
+    else {
+        return Ok(false);
+    };
+    let Some(record) = serde_json::from_str::<TakeoverOwnership>(&content).ok() else {
+        return Ok(false);
+    };
+    if takeover_connection_hash(doc).as_deref() != Some(record.connection_hash.as_str()) {
+        return Ok(false);
+    }
+    Ok(record
+        .managed_realtime_ws_base_url
+        .as_deref()
+        .is_some_and(|managed| {
+            is_loopback_realtime_sideband_url(managed)
+                && doc
+                    .get("experimental_realtime_ws_base_url")
+                    .and_then(|item| item.as_str())
+                    .is_some_and(|current| {
+                        current.trim_end_matches('/') == managed.trim_end_matches('/')
+                    })
+        }))
 }
 
 fn takeover_connection_hash(doc: &Document) -> Option<String> {
@@ -66,8 +109,18 @@ fn remember_takeover_ownership(profile_dir: &Path) -> Result<(), String> {
     ))?;
     let connection_hash = takeover_connection_hash(&doc)
         .ok_or_else(|| "Cannot record API service profile ownership".to_string())?;
-    let content = serde_json::to_string(&TakeoverOwnership { connection_hash })
-        .map_err(|error| error.to_string())?;
+    let managed_realtime_ws_base_url = profile_has_managed_realtime_sideband(profile_dir, &doc)?
+        .then(|| {
+            doc.get("experimental_realtime_ws_base_url")
+                .and_then(|item| item.as_str())
+                .map(str::to_owned)
+        })
+        .flatten();
+    let content = serde_json::to_string(&TakeoverOwnership {
+        connection_hash,
+        managed_realtime_ws_base_url,
+    })
+    .map_err(|error| error.to_string())?;
     write_string_atomic_if_changed(&profile_dir.join(TAKEOVER_OWNERSHIP_FILE), &content)?;
     Ok(())
 }
@@ -137,6 +190,7 @@ fn maintain_local_access_profile(
     if !owned {
         return Ok(());
     }
+    let managed_realtime_sideband = profile_has_managed_realtime_sideband(profile_dir, &doc)?;
     let provider = doc["model_providers"][CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID]
         .as_table_mut()
         .ok_or("Invalid API service provider table")?;
@@ -169,11 +223,18 @@ fn maintain_local_access_profile(
     {
         provider["supports_websockets"] = value(supports_websockets);
     }
-    if old_base != next_base
-        && doc
-            .get("experimental_realtime_ws_base_url")
-            .and_then(|item| item.as_str())
-            == Some(old_base.as_str())
+    if doc
+        .get("experimental_realtime_webrtc_call_base_url")
+        .is_none()
+        && ((managed_realtime_sideband
+            && doc
+                .get("experimental_realtime_ws_base_url")
+                .and_then(|item| item.as_str())
+                .is_some_and(|current| {
+                    current.trim_end_matches('/') != next_base.trim_end_matches('/')
+                }))
+            || (doc.get("experimental_realtime_ws_base_url").is_none()
+                && profile_api_key_uses_oauth_realtime(collection, &collection.api_key)))
     {
         doc["experimental_realtime_ws_base_url"] = value(next_base);
     }
@@ -218,6 +279,8 @@ fn persist_takeover_connection(
 ) -> Result<(), String> {
     let config_path = profile_config_path(profile_dir);
     let auth_path = profile_auth_path(profile_dir);
+    let ownership_path = profile_dir.join(TAKEOVER_OWNERSHIP_FILE);
+    let original_ownership = read_optional_profile_file(&ownership_path)?;
     let result = (|| {
         if config != original_config {
             crate::modules::codex_config_format::write_codex_config_toml_atomic(
@@ -233,7 +296,9 @@ fn persist_takeover_connection(
     if let Err(error) = result {
         let config_rollback = write_optional_profile_file(&config_path, Some(original_config));
         let auth_rollback = write_optional_profile_file(&auth_path, original_auth);
-        return Err(format!("API profile maintenance failed: {error}; config rollback={config_rollback:?}; auth rollback={auth_rollback:?}"));
+        let ownership_rollback =
+            write_optional_profile_file(&ownership_path, original_ownership.as_deref());
+        return Err(format!("API profile maintenance failed: {error}; config rollback={config_rollback:?}; auth rollback={auth_rollback:?}; ownership rollback={ownership_rollback:?}"));
     }
     Ok(())
 }

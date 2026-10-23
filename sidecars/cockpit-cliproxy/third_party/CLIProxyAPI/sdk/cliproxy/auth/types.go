@@ -50,6 +50,10 @@ type Auth struct {
 	ID string `json:"id"`
 	// RegistrationEpoch tracks monotonic registration cycles across unregister/re-register.
 	RegistrationEpoch uint64 `json:"registration_epoch,omitempty"`
+	// CredentialVersion changes only when credential material is replaced.
+	CredentialVersion uint64 `json:"credential_version,omitempty"`
+	// RejectedAccessToken prevents reselecting a token rejected during refresh.
+	RejectedAccessToken string `json:"-"`
 	// Generation tracks monotonic mutations to resolve scheduler/reconcile snapshot races.
 	Generation uint64 `json:"generation,omitempty"`
 	// Index is a stable runtime identifier derived from auth metadata (not persisted).
@@ -613,6 +617,9 @@ func (a *Auth) ExpirationTime() (time.Time, bool) {
 	if a == nil {
 		return time.Time{}, false
 	}
+	if a.RejectedAccessToken != "" && authAccessToken(a) == a.RejectedAccessToken {
+		return time.Unix(1, 0), true
+	}
 	if tokenStr := authAccessToken(a); tokenStr != "" {
 		if jwtExp, ok := parseJWTExp(tokenStr); ok {
 			return jwtExp, true
@@ -633,6 +640,9 @@ func (a *Auth) AccessTokenExpirationTime() (time.Time, bool) {
 	tokenStr := authAccessToken(a)
 	if tokenStr == "" {
 		return time.Time{}, false
+	}
+	if a.RejectedAccessToken != "" && tokenStr == a.RejectedAccessToken {
+		return time.Unix(1, 0), true
 	}
 	if jwtExp, ok := parseJWTExp(tokenStr); ok {
 		return jwtExp, true

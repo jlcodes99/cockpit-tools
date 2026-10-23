@@ -29,13 +29,13 @@ body.floating-card-overlay-root,
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 15px;
   background:
-    radial-gradient(circle at top left, rgba(255, 184, 76, 0.13), transparent 26%),
-    radial-gradient(circle at top right, rgba(84, 199, 255, 0.08), transparent 22%),
-    linear-gradient(180deg, rgba(10, 14, 20, 0.76), rgba(5, 7, 11, 0.68));
+    radial-gradient(circle at top left, rgba(255, 184, 76, calc(0.13 * var(--floating-card-background-opacity, 1))), transparent 26%),
+    radial-gradient(circle at top right, rgba(84, 199, 255, calc(0.08 * var(--floating-card-background-opacity, 1))), transparent 22%),
+    linear-gradient(180deg, rgba(10, 14, 20, calc(0.76 * var(--floating-card-background-opacity, 1))), rgba(5, 7, 11, calc(0.68 * var(--floating-card-background-opacity, 1))));
   box-shadow:
-    0 22px 50px rgba(0, 0, 0, 0.46),
-    0 0 0 1px rgba(255, 255, 255, 0.03),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 22px 50px rgba(0, 0, 0, calc(0.46 * var(--floating-card-background-opacity, 1))),
+    0 0 0 1px rgba(255, 255, 255, calc(0.03 * var(--floating-card-background-opacity, 1))),
+    inset 0 1px 0 rgba(255, 255, 255, calc(0.08 * var(--floating-card-background-opacity, 1)));
   overflow: hidden;
 }
 
@@ -44,11 +44,11 @@ body.floating-card-overlay-root,
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 16%),
+    linear-gradient(180deg, rgba(255, 255, 255, calc(0.04 * var(--floating-card-background-opacity, 1))), transparent 16%),
     repeating-linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.01) 0,
-      rgba(255, 255, 255, 0.01) 1px,
+      rgba(255, 255, 255, calc(0.01 * var(--floating-card-background-opacity, 1))) 0,
+      rgba(255, 255, 255, calc(0.01 * var(--floating-card-background-opacity, 1))) 1px,
       transparent 1px,
       transparent 4px
     );
@@ -119,13 +119,18 @@ body.floating-card-overlay-root,
 }
 
 .floating-card-platform-select {
+  appearance: none;
   width: 100%;
   min-width: 0;
   height: 24px;
   padding: 0 22px 0 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  background: rgba(11, 16, 23, 0.74);
+  background-color: rgba(11, 16, 23, 0.74);
+  background-image: linear-gradient(45deg, transparent 50%, #aeb8c4 50%), linear-gradient(135deg, #aeb8c4 50%, transparent 50%);
+  background-position: calc(100% - 10px) center, calc(100% - 6px) center;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
   color: #f3f6fa;
   font-size: 10px;
   font-weight: 700;
@@ -167,6 +172,11 @@ body.floating-card-overlay-root,
 
 .floating-card-icon-button,
 .floating-card-nav-button {
+  appearance: none;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
   width: 22px;
   height: 22px;
   display: inline-flex;
@@ -256,7 +266,7 @@ body.floating-card-overlay-root,
   padding: 3px 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  background: rgba(12, 18, 25, 0.72);
+  background: rgba(12, 18, 25, calc(0.72 * var(--floating-card-background-opacity, 1)));
   color: #cbd4df;
   font-size: 9px;
   font-weight: 700;
@@ -275,11 +285,11 @@ body.floating-card-overlay-root,
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 11px;
   background:
-    linear-gradient(180deg, rgba(17, 24, 33, 0.56), rgba(9, 13, 18, 0.5)),
-    linear-gradient(180deg, rgba(255, 184, 76, 0.03), transparent 40%);
+    linear-gradient(180deg, rgba(17, 24, 33, calc(0.56 * var(--floating-card-background-opacity, 1))), rgba(9, 13, 18, calc(0.5 * var(--floating-card-background-opacity, 1)))),
+    linear-gradient(180deg, rgba(255, 184, 76, calc(0.03 * var(--floating-card-background-opacity, 1))), transparent 40%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+    inset 0 1px 0 rgba(255, 255, 255, calc(0.03 * var(--floating-card-background-opacity, 1))),
+    inset 0 -1px 0 rgba(255, 255, 255, calc(0.02 * var(--floating-card-background-opacity, 1)));
 }
 
 .floating-card-account-head {
@@ -336,7 +346,7 @@ body.floating-card-overlay-root,
   min-width: 0;
   padding: 4px 6px;
   border-radius: 999px;
-  background: rgba(9, 14, 20, 0.72);
+  background: rgba(9, 14, 20, calc(0.72 * var(--floating-card-background-opacity, 1)));
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -413,10 +423,10 @@ body.floating-card-overlay-root,
 }
 
 .floating-card-plan.codex-pro-max {
-  border-color: rgba(255, 184, 76, 0.34);
-  background: linear-gradient(135deg, rgba(255, 247, 204, 0.95) 0%, rgba(246, 211, 101, 0.94) 42%, rgba(217, 155, 22, 0.94) 100%);
+  border-color: rgba(217, 171, 78, 0.3);
+  background: linear-gradient(135deg, rgba(255, 244, 212, 0.95) 0%, rgba(239, 211, 148, 0.94) 42%, rgba(212, 170, 84, 0.94) 100%);
   color: #5a3700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 1px 4px rgba(217, 155, 22, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38), 0 1px 4px rgba(217, 155, 22, 0.16);
 }
 
 .floating-card-plan--enterprise,
@@ -445,7 +455,7 @@ body.floating-card-overlay-root,
   gap: 4px;
   padding: 5px 6px;
   border-radius: 9px;
-  background: rgba(9, 14, 20, 0.76);
+  background: rgba(9, 14, 20, calc(0.76 * var(--floating-card-background-opacity, 1)));
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -500,7 +510,7 @@ body.floating-card-overlay-root,
   width: 100%;
   height: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, calc(0.07 * var(--floating-card-background-opacity, 1)));
   overflow: hidden;
 }
 
@@ -543,7 +553,7 @@ body.floating-card-overlay-root,
   padding: 5px 7px;
   border-radius: 9px;
   border: 1px solid rgba(255, 115, 115, 0.2);
-  background: rgba(255, 115, 115, 0.1);
+  background: rgba(255, 115, 115, calc(0.1 * var(--floating-card-background-opacity, 1)));
   color: #ff9f9f;
   font-size: 10px;
   line-height: 1.4;
@@ -576,6 +586,9 @@ body.floating-card-overlay-root,
 }
 
 .floating-card-button {
+  appearance: none;
+  font-family: inherit;
+  line-height: 1.2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -623,7 +636,8 @@ body.floating-card-overlay-root,
   inset: 0;
   z-index: 4;
   display: flex;
-  align-items: center;
+  align-items: safe center;
+  overflow-y: auto;
   justify-content: center;
   padding: 10px;
   background: rgba(4, 7, 11, 0.72);
@@ -635,6 +649,8 @@ body.floating-card-overlay-root,
   display: flex;
   width: 100%;
   max-width: 214px;
+  max-height: calc(100vh - 20px);
+  min-height: 0;
   flex-direction: column;
   gap: 8px;
   padding: 10px;
@@ -655,6 +671,17 @@ body.floating-card-overlay-root,
   font-weight: 800;
   line-height: 1.3;
 }
+
+.floating-card-close-confirm-body { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.floating-card-close-confirm-title, .floating-card-close-confirm-actions { flex-shrink: 0; }
+.floating-card-header-title { position: static; transform: none; max-width: 100%; flex: 1; text-align: left; }
+.floating-card-header-main { flex: 1; overflow: hidden; }
+.floating-card-header { flex-shrink: 0; }
+.floating-card-minimal-body { padding: 8px; min-height: 0; overflow-y: auto; }
+.floating-card-full-body { overflow-y: auto; }
+.floating-card-minimal-quotas { display: flex; flex-direction: column; gap: 8px; }
+.floating-card-window--minimal .floating-card-full-body,
+.floating-card-window--minimal .floating-card-footer { display: none; }
 
 .floating-card-close-confirm-message {
   color: #b5bec9;

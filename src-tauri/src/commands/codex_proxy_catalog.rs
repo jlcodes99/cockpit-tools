@@ -38,6 +38,7 @@ pub async fn codex_proxy_catalog_rename(
 ) -> Result<CatalogView, String> {
     let view = catalog::rename(source_id.clone(), name).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
+    crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }
 #[tauri::command]
@@ -58,6 +59,7 @@ pub async fn codex_proxy_catalog_refresh(
     crate::modules::codex_proxy_engine_preflight::require().await?;
     let view = catalog::refresh(request_id, source_id.clone()).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
+    crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }
 #[tauri::command]
@@ -226,6 +228,7 @@ async fn remove_source(source_id: String) -> Result<CatalogView, String> {
         }
     })?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, true).await;
+    crate::modules::codex_client_proxy::resync_source(&source_id, true).await?;
     Ok(removed)
 }
 /// 保存自建多节点策略：带 id 时保留原来源 ID，新建时生成新 ID。
@@ -244,6 +247,7 @@ pub async fn codex_proxy_strategy_save(
     if let Some(id) = id {
         // 统一代理引用同一策略时必须同步快照，否则账号仍走旧成员。
         crate::modules::codex_unified_proxy::resync_source(&id, false).await;
+    crate::modules::codex_client_proxy::resync_source(&id, false).await?;
     }
     Ok(view)
 }
@@ -287,6 +291,10 @@ pub async fn codex_proxy_catalog_bind(
     selections: BTreeMap<String, String>,
     group_id: Option<String>,
 ) -> Result<crate::models::codex::CodexAccount, String> {
+    if let Some(target) = crate::modules::codex_proxy_targets::desktop_target(&account_id).await? {
+        crate::modules::codex_client_proxy::save(target.clone(), crate::modules::codex_client_proxy::Mode::Independent, None, Some(source_id), Some(item_id), selections, group_id).await?;
+        return Ok(crate::modules::codex_client_proxy::target_view(&target).await?.account);
+    }
     crate::modules::codex_proxy_engine_preflight::require().await?;
     let _guard = catalog::SourceGuard::new(source_id.clone())?;
     let snapshot = catalog::snapshot_with_group(source_id, item_id, selections, group_id).await?;
@@ -312,6 +320,7 @@ pub async fn codex_proxy_catalog_network(
 ) -> Result<CatalogView, String> {
     let view = catalog::set_network(source_id.clone(), revision, network).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
+    crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }
 #[tauri::command]
@@ -323,6 +332,7 @@ pub async fn codex_proxy_catalog_insecure(
 ) -> Result<CatalogView, String> {
     let view = catalog::set_insecure(source_id.clone(), node_id, revision, enabled).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
+    crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }
 
@@ -335,5 +345,6 @@ pub async fn codex_proxy_catalog_group_insecure(
 ) -> Result<CatalogView, String> {
     let view = catalog::set_group_insecure(source_id.clone(), group_id, revision, enabled).await?;
     crate::modules::codex_unified_proxy::resync_source(&source_id, false).await;
+    crate::modules::codex_client_proxy::resync_source(&source_id, false).await?;
     Ok(view)
 }

@@ -9,6 +9,9 @@ use tokio::sync::{watch, Notify, Semaphore};
 
 #[path = "codex_pelican_store.rs"]
 mod store;
+#[path = "codex_pelican_provider.rs"]
+mod provider;
+pub use provider::{ProviderSource, ProviderTarget};
 
 const EVENT: &str = "codex://pelican-progress";
 const PREVIEW_CHARS: usize = 1600;
@@ -23,7 +26,10 @@ static MAINTENANCE: LazyLock<tokio::sync::Mutex<()>> =
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartRequest {
+    #[serde(default)]
     pub account_ids: Vec<String>,
+    #[serde(default)]
+    pub provider_targets: Vec<ProviderTarget>,
     pub prompt: String,
     pub model: String,
     pub effort: String,
@@ -63,6 +69,8 @@ pub struct Batch {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Item {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderSource>,
     pub id: String,
     pub account_id: String,
     pub account_email: String,
@@ -231,12 +239,15 @@ impl ActiveBatch {
     }
 }
 
-pub fn start(app: AppHandle, mut request: StartRequest) -> Result<Batch, String> {
+pub async fn start(app: AppHandle, mut request: StartRequest) -> Result<Batch, String> {
     let mut seen = HashSet::new();
     request
         .account_ids
         .retain(|id| !id.trim().is_empty() && seen.insert(id.clone()));
-    if request.account_ids.is_empty() || request.account_ids.len() > MAX_BATCH_ACCOUNTS {
+    let provider_mode = !request.provider_targets.is_empty();
+    if (request.account_ids.is_empty() && !provider_mode)
+        || request.account_ids.len() + request.provider_targets.len() > MAX_BATCH_ACCOUNTS
+        || (provider_mode && (!request.account_ids.is_empty())) {
         return Err("pelican.error.accountsRequired".into());
     }
     if request.account_ids.iter().any(|id| !valid_account_id(id)) {
@@ -254,6 +265,9 @@ pub fn start(app: AppHandle, mut request: StartRequest) -> Result<Batch, String>
         return Err("pelican.error.invalidRequest".into());
     }
     validate_concurrency(request.concurrency)?;
+    let mut provider_seen = HashSet::new();
+    request.provider_targets.retain(|target| provider_seen.insert((target.provider_id.clone(), target.api_key_id.clone(), target.model.trim().to_string())));
+    let provider_sources = if provider_mode { provider::sources(request.provider_targets).await? } else { Vec::new() };
     let batch = Batch {
         id: uuid::Uuid::new_v4().to_string(),
         revision: 1,
@@ -264,16 +278,19 @@ pub fn start(app: AppHandle, mut request: StartRequest) -> Result<Batch, String>
         model: request.model,
         effort: request.effort,
         concurrency: request.concurrency,
-        transport: "direct-chat".into(),
+        transport: if provider_mode { "provider-gateway" } else { "direct-chat" }.into(),
         error: None,
         delivery_instructions: crate::modules::codex_local_access::PELICAN_DELIVERY_INSTRUCTIONS
             .into(),
         items: request
             .account_ids
             .into_iter()
-            .map(|account_id| Item {
+            .map(|account_id| (account_id, None))
+            .chain(provider_sources.into_iter().map(|source| (format!("provider-{}", uuid::Uuid::new_v4()), Some(source))))
+            .map(|(account_id, provider)| Item {
                 id: uuid::Uuid::new_v4().to_string(),
-                account_email: account_id.clone(),
+                account_email: provider.as_ref().map(|source| source.provider_name.clone()).unwrap_or_else(|| account_id.clone()),
+                provider,
                 account_id,
                 status: "queued".into(),
                 started_at: None,
@@ -779,7 +796,9 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
     let account_id = item.account_id.clone();
     let item_id = item.id.clone();
     let account_id_for_load = account_id.clone();
-    let identity = tokio::select! {
+    let identity = if let Some(source) = &item.provider {
+        Ok((source.provider_name.clone(), None, None))
+    } else { tokio::select! {
         biased;
         _ = cancel.changed() => { finish_cancelled(&job, index).await; return; },
         result = tokio::time::timeout(IO_TIMEOUT, tokio::task::spawn_blocking(move || {
@@ -791,6 +810,7 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
             Ok((account.email, account.quota, account.usage_updated_at))
         })) => result.map_err(|_| "pelican.error.storageTimeout".to_string())
             .and_then(|result| result.map_err(|error| error.to_string())).and_then(|result| result),
+    }
     };
     let (email, cached_quota, quota_updated_at) = match identity {
         Ok(identity) => identity,
@@ -815,13 +835,7 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
     let partial = Arc::new(Mutex::new((String::new(), Instant::now())));
     let partial_delta = partial.clone();
     let delta_job = job.clone();
-    let result = crate::modules::codex_local_access::run_pelican_chat(
-        &item.account_id,
-        &batch.model,
-        &batch.effort,
-        &batch.prompt,
-        cancel,
-        move |delta| {
+    let on_delta = move |delta: String| {
             let preview = if let Ok(mut state) = partial_delta.lock() {
                 state.0.push_str(&delta);
                 if state.1.elapsed() < STREAM_EMIT_INTERVAL {
@@ -836,10 +850,21 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
             if let Some(preview) = preview {
                 let _ = delta_job.update_stream_preview(index, preview);
             }
-        },
-    )
-    .await;
+    };
+    let result = if let Some(source) = &item.provider {
+        match provider::request(source, &batch.id, &batch.prompt).await {
+            Ok(request) => crate::modules::codex_local_access::run_pelican_provider_chat(
+                request, batch.effort.clone(),  cancel.clone(), on_delta,
+            ).await,
+            Err(error) => Err(error),
+        }
+    } else {
+        crate::modules::codex_local_access::run_pelican_chat(
+            &item.account_id, &batch.model, &batch.effort, &batch.prompt, cancel.clone(), on_delta,
+        ).await
+    };
     let result_ok = result.is_ok();
+    let uses_official_authorization = result.as_ref().is_ok_and(|output| output.uses_official_authorization);
     let header_quota = result
         .as_ref()
         .ok()
@@ -886,7 +911,11 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
                 }
                 .into();
                 item.error = artifact_result.err();
-                item.quota = pelican_quota_usage(before_quota.as_ref(), output.quota.as_ref());
+                item.quota = if output.uses_official_authorization {
+                    None
+                } else {
+                    pelican_quota_usage(before_quota.as_ref(), output.quota.as_ref())
+                };
                 item.usage = output.usage;
                 item.response_id = output.response_id;
                 item.response_model = output.response_model;
@@ -900,7 +929,7 @@ async fn run_item(job: Arc<ActiveBatch>, semaphore: Arc<Semaphore>, index: usize
     if let Err(error) = persist(&job).await {
         job.storage_error(error);
     }
-    if result_ok && header_quota.is_none() {
+    if item.provider.is_none() && result_ok && !uses_official_authorization && header_quota.is_none() {
         if let Ok(updated) = updated {
             if let Some(finished_at) = updated
                 .items
@@ -1101,6 +1130,7 @@ mod tests {
             delivery_instructions: "standalone HTML".into(),
             error: Some("old batch error".into()),
             items: vec![Item {
+                provider: None,
                 id: item_id.clone(),
                 account_id: "account".into(),
                 account_email: "account@example.com".into(),

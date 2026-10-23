@@ -8,7 +8,8 @@ test('proxy account labels mask names, emails and dependency identities and reac
   let privateMode = true;
   const listeners = new Map<string, () => void>();
   const h = loadHookModule(new URL('./useCodexProxyExitEditor.ts', import.meta.url), {
-    'react-i18next': {}, '../../stores/useCodexAccountStore': {}, '../../utils/codexAccountProxy': {},
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) }, '../../stores/useCodexAccountStore': {}, '../../utils/codexAccountProxy': {},
+    '../../services/codexProxyTargetService': {},
     '../../services/codexProxyCatalogService': {}, '../../services/codexAccountProxyService': {},
     '../../utils/codexProxySelection': {}, './CodexProxyWorkspaceContext': {},
     '../../utils/codexProxyDraft': { codexProxyAccountName },
@@ -28,6 +29,7 @@ test('proxy account labels mask names, emails and dependency identities and reac
     assert.notEqual(resolveName(identity), codexProxyAccountName(identity));
   }
   assert.equal(resolveName(null), '');
+  assert.equal(resolveName({ id: '__api_service__', account_name: 'API 服务' }), 'API 服务', 'public service label is not an account identity');
   privateMode = false;
   listeners.get(PRIVACY_MODE_CHANGED_EVENT)!();
   for (const identity of identities) assert.equal(h.flush()(identity), codexProxyAccountName(identity));

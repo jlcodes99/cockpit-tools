@@ -86,16 +86,28 @@
   z-index: 10050;
 }
 
-.codex-launch-preview-modal {
+.modal.codex-launch-preview-modal {
   width: min(900px, calc(100vw - 40px));
   max-width: 900px;
-  max-height: min(900px, calc(100vh - 40px));
+  /* Match the overlay's two 24px gutters so its scrollbar is only a fallback. */
+  max-height: min(900px, calc(100vh - 48px));
+  max-height: min(900px, calc(100dvh - 48px));
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-color: var(--border-light);
   box-shadow: 0 32px 88px rgb(15 23 42 / 34%);
 }
 
+.modal.codex-launch-preview-modal > .modal-header,
+.modal.codex-launch-preview-modal > .modal-footer {
+  flex: 0 0 auto;
+}
+
 .codex-launch-preview-modal .modal-header,
-.codex-launch-preview-model-config-modal .modal-header {
+.codex-launch-preview-model-config-modal .modal-header,
+.codex-launch-preview-context-config-modal .modal-header {
   padding: 18px 24px 16px;
   border-bottom: 1px solid var(--border-light);
 }
@@ -127,12 +139,14 @@
 }
 
 .codex-launch-preview-modal .modal-header > div:first-child,
-.codex-launch-preview-model-config-modal .modal-header > div:first-child {
+.codex-launch-preview-model-config-modal .modal-header > div:first-child,
+.codex-launch-preview-context-config-modal .modal-header > div:first-child {
   min-width: 0;
 }
 
 .codex-launch-preview-modal .modal-header h2,
-.codex-launch-preview-model-config-modal .modal-header h2 {
+.codex-launch-preview-model-config-modal .modal-header h2,
+.codex-launch-preview-context-config-modal .modal-header h2 {
   margin: 0;
   color: var(--text-primary);
   font-weight: 720;
@@ -143,24 +157,29 @@
   font-size: 20px;
 }
 
-.codex-launch-preview-model-config-modal .modal-header h2 {
+.codex-launch-preview-model-config-modal .modal-header h2,
+.codex-launch-preview-context-config-modal .modal-header h2 {
   font-size: 20px;
 }
 
 .codex-launch-preview-modal .modal-header p,
-.codex-launch-preview-model-config-modal .modal-header p {
+.codex-launch-preview-model-config-modal .modal-header p,
+.codex-launch-preview-context-config-modal .modal-header p {
   margin: 4px 0 0;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
 }
 
-.codex-launch-preview-modal .modal-body {
+.modal.codex-launch-preview-modal > .modal-body {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 0;
   padding: 20px 24px 24px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .codex-launch-preview-summary-card {
@@ -355,7 +374,7 @@
 }
 
 .codex-launch-preview-header-speed .codex-speed-trigger,
-.codex-launch-preview-header-speed .codex-speed-trigger.fast {
+.codex-launch-preview-header-speed .codex-speed-trigger:is(.fast, .ultrafast) {
   height: 30px;
   padding-inline: 9px;
   border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
@@ -368,8 +387,8 @@
 .codex-launch-preview-header-speed .codex-speed-trigger:hover:not(:disabled),
 .codex-launch-preview-header-speed .codex-speed-trigger.open,
 .codex-launch-preview-header-speed
-  .codex-speed-trigger.fast:hover:not(:disabled),
-.codex-launch-preview-header-speed .codex-speed-trigger.fast.open {
+  .codex-speed-trigger:is(.fast, .ultrafast):hover:not(:disabled),
+.codex-launch-preview-header-speed .codex-speed-trigger:is(.fast, .ultrafast).open {
   border-color: var(--primary);
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
@@ -446,6 +465,14 @@
 
 .codex-launch-preview-facts > div.is-wide {
   grid-column: auto;
+}
+
+.codex-launch-preview-token-note {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .codex-launch-preview-facts span,
@@ -891,10 +918,13 @@
   backdrop-filter: blur(14px) saturate(110%);
 }
 
-.codex-launch-preview-model-config-modal {
+.modal.codex-launch-preview-model-config-modal {
   width: min(1120px, calc(100vw - 40px));
   max-width: none;
   max-height: min(880px, calc(100vh - 40px));
+  height: min(880px, calc(100vh - 40px));
+  height: min(880px, calc(100dvh - 40px));
+  max-height: min(880px, calc(100dvh - 40px));
   border-color: color-mix(in srgb, var(--primary) 12%, var(--border));
   box-shadow: 0 34px 90px rgb(15 23 42 / 36%);
 }
@@ -910,6 +940,8 @@
 
 .codex-launch-preview-model-config-modal .codex-experimental-model-editor {
   min-height: 0;
+  height: 0;
+  overflow: hidden;
   flex: 1;
   margin-top: 0;
 }
@@ -923,10 +955,13 @@
   padding: 16px 24px;
 }
 
-.codex-launch-preview-context-config-modal {
+.modal.codex-launch-preview-context-config-modal {
   width: min(560px, calc(100vw - 40px));
   max-width: 560px;
   max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  border-color: color-mix(in srgb, var(--primary) 12%, var(--border));
+  box-shadow: 0 34px 90px rgb(15 23 42 / 36%);
 }
 
 .codex-launch-preview-context-config-modal .modal-header {
@@ -1030,9 +1065,10 @@
     padding: 10px;
   }
 
-  .codex-launch-preview-modal {
+  .modal.codex-launch-preview-modal {
     width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
   }
 
   .codex-launch-preview-refresh-modal {
@@ -1043,7 +1079,7 @@
     padding: 17px 18px 14px;
   }
 
-  .codex-launch-preview-modal .modal-body {
+  .modal.codex-launch-preview-modal > .modal-body {
     padding: 14px 16px 18px;
   }
 
@@ -1137,7 +1173,7 @@
 }
 
 @media (max-width: 720px) {
-  .codex-launch-preview-context-config-modal {
+  .modal.codex-launch-preview-context-config-modal {
     width: min(440px, calc(100vw - 24px));
   }
 

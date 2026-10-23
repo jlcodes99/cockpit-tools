@@ -452,6 +452,7 @@ mod tests {
             error: None,
             delivery_instructions: "standalone HTML".into(),
             items: vec![super::super::Item {
+                provider: None,
                 id: uuid::Uuid::new_v4().to_string(),
                 account_id: "account".into(),
                 account_email: "email".into(),
@@ -594,6 +595,7 @@ mod tests {
         let kept = Batch {
             id: uuid::Uuid::new_v4().to_string(),
             items: vec![super::super::Item {
+                provider: None,
                 id: uuid::Uuid::new_v4().to_string(),
                 ..expired.items[0].clone()
             }],

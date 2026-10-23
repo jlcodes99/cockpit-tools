@@ -257,6 +257,47 @@
     }
 
     #[test]
+    fn general_config_patch_validates_codex_app_enhancements_atomically() {
+        let mut config = UserConfig::default();
+        config.language = "ja".to_string();
+        let updates = serde_json::json!({
+            "codex_app_native_fast_enabled": true,
+            "codex_app_api_quota_compat_enabled": true
+        });
+        apply_general_config_updates(&mut config, updates.as_object().unwrap()).unwrap();
+        assert!(config.codex_app_native_fast_enabled);
+        assert!(config.codex_app_api_quota_compat_enabled);
+        assert_eq!(config.language, "ja");
+        let invalid = serde_json::json!({
+            "codex_app_native_fast_enabled": false,
+            "codex_app_api_quota_compat_enabled": "invalid boolean"
+        });
+        assert!(apply_general_config_updates(&mut config, invalid.as_object().unwrap()).is_err());
+        assert!(config.codex_app_native_fast_enabled);
+        assert!(config.codex_app_api_quota_compat_enabled);
+    }
+
+    #[test]
+    fn general_config_patch_rejects_retired_codex_api_dictation_fields_atomically() {
+        for (field, value) in [
+            ("codex_app_api_dictation_enabled", serde_json::json!(true)),
+            (
+                "codex_app_api_dictation_model",
+                serde_json::json!("legacy-model"),
+            ),
+        ] {
+            let mut config = UserConfig::default();
+            let before = serde_json::to_value(&config).expect("serialize current configuration");
+            let mut updates = serde_json::json!({"codex_app_native_fast_enabled": false});
+            updates.as_object_mut().unwrap().insert(field.into(), value);
+            let error = apply_general_config_updates(&mut config, updates.as_object().unwrap())
+                .expect_err("retired dictation fields must not be writable");
+            assert!(error.contains(field));
+            assert_eq!(serde_json::to_value(&config).unwrap(), before);
+        }
+    }
+
+    #[test]
     fn general_config_patch_only_changes_submitted_fields() {
         let mut config = UserConfig {
             theme: "dark".to_string(),
@@ -372,4 +413,25 @@
         assert_eq!(config.codex_quota_alert_threshold, 40);
         assert_eq!(config.codex_quota_alert_primary_threshold, 15);
         assert_eq!(config.codex_quota_alert_secondary_threshold, 25);
+    }
+
+    #[test]
+    fn automatic_settings_ignore_legacy_opt_out_without_changing_other_preferences() {
+        let mut config: UserConfig = serde_json::from_value(serde_json::json!({
+            "codex_quota_sync_enabled": false,
+            "codex_preserve_verified_external_bridge": false
+        })).unwrap();
+        let updates = serde_json::json!({"codex_auto_restore_takeover_on_launch": false})
+            .as_object().unwrap().clone();
+        apply_general_config_updates(&mut config, &updates).unwrap();
+        let saved = serde_json::to_value(&config).unwrap();
+        assert!(saved.get("codex_quota_sync_enabled").is_none());
+        assert!(saved.get("codex_preserve_verified_external_bridge").is_none());
+        let loaded: UserConfig = serde_json::from_value(saved).unwrap();
+        assert!(!loaded.codex_auto_restore_takeover_on_launch);
+        assert!(loaded.codex_launch_on_switch);
+        for field in ["codex_quota_sync_enabled", "codex_preserve_verified_external_bridge"] {
+            let updates = serde_json::json!({(field): false}).as_object().unwrap().clone();
+            assert!(apply_general_config_updates(&mut config, &updates).is_err());
+        }
     }

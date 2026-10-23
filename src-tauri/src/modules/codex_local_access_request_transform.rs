@@ -963,7 +963,15 @@ fn build_responses_body_from_chat_completions(
     responses_obj.insert("store".to_string(), Value::Bool(false));
     responses_obj.insert("model".to_string(), Value::String(model.clone()));
     responses_obj.insert("input".to_string(), input);
-    responses_obj.insert("parallel_tool_calls".to_string(), Value::Bool(true));
+    responses_obj.insert(
+        "parallel_tool_calls".to_string(),
+        Value::Bool(
+            request_obj
+                .get("parallel_tool_calls")
+                .and_then(Value::as_bool)
+                .unwrap_or_else(|| !codex_protocol::codex_model_uses_responses_lite(&model)),
+        ),
+    );
     responses_obj.insert(
         "reasoning".to_string(),
         json!({
@@ -1057,6 +1065,7 @@ fn normalize_proxy_service_tier(value: &str) -> Option<&'static str> {
         "priority" | "fast" => Some("priority"),
         "ultrafast" => Some("ultrafast"),
         "flex" => Some("flex"),
+        "auto" => Some("auto"),
         "standard" | "default" => Some("standard"),
         _ => None,
     }
@@ -1068,6 +1077,7 @@ fn normalize_proxy_service_tier(value: &str) -> Option<&'static str> {
 fn normalize_upstream_inject_service_tier(value: &str) -> Option<&'static str> {
     match normalize_proxy_service_tier(value) {
         Some("priority") => Some("priority"),
+        Some("ultrafast") => Some("ultrafast"),
         Some("flex") => Some("flex"),
         _ => None,
     }

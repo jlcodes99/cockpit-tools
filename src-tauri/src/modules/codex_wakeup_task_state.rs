@@ -68,7 +68,14 @@ fn claim_in_state(
         return None;
     }
     task.last_run_at = Some(now);
-    task.last_status = Some("running".to_string());
+    task.last_status = Some(
+        if require_enabled && task.execution_mode.as_deref() == Some("confirm") {
+            "pending_confirmation"
+        } else {
+            "running"
+        }
+        .to_string(),
+    );
     task.last_message = None;
     task.last_success_count = None;
     task.last_failure_count = None;
@@ -107,6 +114,45 @@ pub fn claim_task_run(
     Ok(Some(task))
 }
 
+fn dispatch_settings(task: &CodexWakeupTask) -> serde_json::Value {
+    serde_json::json!({"account_ids":task.account_ids,"prompt":task.prompt,"model":task.model,
+        "model_display_name":task.model_display_name,"model_reasoning_effort":task.model_reasoning_effort,
+        "schedule":task.schedule,"execution_mode":task.execution_mode,"timeout":task.confirm_timeout_minutes})
+}
+
+/// Revalidate the exact claimed configuration after approval, before model I/O.
+pub fn authorize_task_dispatch(expected: &CodexWakeupTask, automatic: bool) -> Result<(), String> {
+    let _lock = TASKS_LOCK.lock().map_err(|_| "CODEX_WAKEUP_LOCK")?;
+    let _file_lock = lock_task_state()?;
+    let mut state = read_state_file()?;
+    authorize_in_state(&mut state, expected, automatic)?;
+    save_json_atomic(&tasks_path()?, &state)
+}
+
+fn authorize_in_state(
+    state: &mut CodexWakeupState,
+    expected: &CodexWakeupTask,
+    automatic: bool,
+) -> Result<(), String> {
+    if automatic && !state.enabled {
+        return Err(cancelled_error());
+    }
+    let task = state
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == expected.id)
+        .ok_or_else(cancelled_error)?;
+    if (automatic && !task.enabled)
+        || task.last_run_at != expected.last_run_at
+        || task.last_status != expected.last_status
+        || dispatch_settings(task) != dispatch_settings(expected)
+    {
+        return Err(cancelled_error());
+    }
+    task.last_status = Some("running".into());
+    Ok(())
+}
+
 fn record_dispatch_failure(task: &mut CodexWakeupTask, error: Option<&str>) {
     task.last_status = Some("error".to_string());
     task.last_message = error.map(str::to_string);
@@ -139,7 +185,10 @@ fn recover_interrupted_runs_with(
 ) -> Result<bool, String> {
     let mut changed = false;
     for task in &mut state.tasks {
-        if task.last_status.as_deref() != Some("running") {
+        if !matches!(
+            task.last_status.as_deref(),
+            Some("running" | "pending_confirmation")
+        ) {
             continue;
         }
         let Some(_lease) = acquire(&task.id)? else {
@@ -201,6 +250,60 @@ mod tests {
             }]
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn stability_confirm_claim_waits_before_dispatch_and_survives_restart() {
+        let mut state = state();
+        state.tasks[0].execution_mode = Some("confirm".into());
+        let task = claim_in_state(&mut state, "task-1", Some(100), true, 120).unwrap();
+        assert_eq!(task.last_status.as_deref(), Some("pending_confirmation"));
+        let mut restored: CodexWakeupState =
+            serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert!(claim_in_state(&mut restored, "task-1", Some(100), true, 180).is_none());
+        let dir =
+            std::env::temp_dir().join(format!("confirmation-restart-{}", uuid::Uuid::new_v4()));
+        assert!(
+            recover_interrupted_runs_with(&mut restored, |_| try_file_lock(&dir.join("lease")))
+                .unwrap()
+        );
+        assert_eq!(restored.tasks[0].last_status.as_deref(), Some("error"));
+        assert!(claim_in_state(&mut restored, "task-1", Some(100), true, 180).is_none());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn changed_disabled_deleted_or_replayed_confirmation_cannot_authorize_dispatch() {
+        let mut saved = state();
+        saved.tasks[0].execution_mode = Some("confirm".into());
+        let claimed = claim_in_state(&mut saved, "task-1", Some(100), true, 120).unwrap();
+        for change in [
+            "prompt",
+            "account",
+            "mode",
+            "disabled-task",
+            "disabled-global",
+            "deleted",
+            "reclaimed",
+        ] {
+            let mut edited = saved.clone();
+            match change {
+                "prompt" => edited.tasks[0].prompt = Some("different".into()),
+                "account" => edited.tasks[0].account_ids = vec!["different".into()],
+                "mode" => edited.tasks[0].execution_mode = Some("auto".into()),
+                "disabled-task" => edited.tasks[0].enabled = false,
+                "disabled-global" => edited.enabled = false,
+                "deleted" => edited.tasks.clear(),
+                _ => edited.tasks[0].last_run_at = Some(180),
+            }
+            assert!(
+                authorize_in_state(&mut edited, &claimed, true).is_err(),
+                "{change}"
+            );
+        }
+        authorize_in_state(&mut saved, &claimed, true).unwrap();
+        assert_eq!(saved.tasks[0].last_status.as_deref(), Some("running"));
+        assert!(authorize_in_state(&mut saved, &claimed, true).is_err());
     }
 
     #[test]

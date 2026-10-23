@@ -4,7 +4,9 @@ import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, mergeCodexModelProviderCredentialInput } from '../utils/codexModelProviderAccountSync';
-import { parseContextWindowDrafts } from '../utils/codexModelContextWindows';
+import { contextWindowDraftsFromRecord, parseContextWindowDrafts } from '../utils/codexModelContextWindows';
+import { resolveCodexModelProviderForApiKey } from '../utils/codexModelProviderKeyConfig';
+import { deferred } from '../../tests/helpers/reactHookHarness';
 
 function handler(name: string, state: Record<string, any>) {
   const file = 'useCodexAccountsAccessController.tsx';
@@ -44,7 +46,7 @@ function harness() {
     buildApiProviderPayload: () => ({ apiProviderMode: 'custom', apiProviderId: 'provider', apiProviderName: 'Relay',
       apiWireApi: 'responses', apiSupportsWebsockets: true }),
     buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, mergeCodexModelProviderCredentialInput,
-    parseContextWindowDrafts, isSameHttpBaseUrl: (a: string, b: string) => a === b,
+    parseContextWindowDrafts, resolveCodexModelProviderForApiKey, contextWindowDraftsFromRecord, isSameHttpBaseUrl: (a: string, b: string) => a === b,
     isRelayApiProviderTemplateId: () => false, resolveManagedProviderIdForAccount: () => 'provider',
     upsertCodexModelProviderFromCredential: async (input: any) => {
       writes.push(input);
@@ -112,6 +114,19 @@ test('credential editor saves an explicit protocol change and disables incompati
   assert.equal(h.state.error, null);
 });
 
+test('credential editor can disable API service catalog synchronization without disabling Codex synchronization', async () => {
+  const h = harness();
+  h.state.editingApiSyncModelCatalogToCodex = true;
+  h.state.editingApiSyncModelCatalogToApiService = false;
+
+  await handler('handleSubmitApiKeyCredentials', h.state)();
+
+  assert.equal(h.snapshots[0][12], true);
+  assert.equal(h.snapshots[0][15], false);
+  assert.equal(h.state.modalId, null);
+  assert.equal(h.state.error, null);
+});
+
 test('credentials validation and persistence failures stay visible in the open editor', async () => {
   const invalid = harness();
   invalid.state.validateApiKeyCredentialInputs = () => ({ ok: false, message: 'invalid key' });
@@ -134,4 +149,55 @@ test('explicit WebSocket false overrides the canonical provider when changing cr
     apiBaseUrl: 'https://relay.example/v1', apiKey: 'sk-test', wireApi: 'responses', supportsWebsockets: false,
   });
   assert.equal(input.supportsWebsockets, false);
+});
+
+
+test('changing the saved key loads its independent catalog and context draft', async () => {
+  const h = harness();
+  h.state.selectedEditingManagedProvider.apiKeys.push({
+    id: 'key-b', name: 'B', apiKey: 'key-b', modelCatalog: ['b'], modelContextWindows: { b: 256000 },
+  });
+  const drafts: Record<string, unknown> = {};
+  h.state.setEditingApiModelCatalogInput = (value: string) => { drafts.catalog = value; };
+  h.state.setEditingApiModelContextWindowsInput = (value: unknown) => { drafts.windows = value; };
+  h.state.setEditingApiKeyCredentialsValue = (value: string) => { drafts.key = value; };
+  await handler('handleSelectEditingManagedProviderApiKey', h.state)('key-b');
+  assert.equal(drafts.catalog, 'b');
+  assert.deepEqual(JSON.parse(JSON.stringify(drafts.windows)), { b: '256000' });
+  assert.equal(drafts.key, 'key-b');
+});
+
+test('editing one key keeps a different key account catalog and vision settings', async () => {
+  const h = harness();
+  h.state.accounts.push({
+    id: 'account-b', auth_mode: 'apikey', api_provider_id: 'provider',
+    api_base_url: h.state.editingApiBaseUrlCredentialsValue, openai_api_key: 'key-b',
+    api_provider_mode: 'custom', api_model_catalog: ['b'], api_model_context_windows: { b: 256000 },
+    api_supports_vision: true, api_model_vision_support: { b: true }, api_vision_routing_model: 'b',
+  });
+  await handler('handleSubmitApiKeyCredentials', h.state)();
+  const other = h.snapshots.find((snapshot) => snapshot.accountIds?.[0] === 'account-b');
+  assert.ok(other);
+  assert.deepEqual(other.apiModelCatalog, ['b']);
+  assert.deepEqual(other.apiModelContextWindows, { b: 256000 });
+  assert.deepEqual(other.apiModelVisionSupport, { b: true });
+  assert.equal(other.apiVisionRoutingModel, 'b');
+  assert.equal(other.apiWireApi, 'chat_completions', 'explicit provider protocol changes still synchronize');
+});
+
+test('late model fetch completion cannot overwrite the next key draft', async () => {
+  const h = harness();
+  const task = deferred<{ models: { id: string }[] }>();
+  const signature = JSON.stringify([h.state.editingApiBaseUrlCredentialsValue, h.state.editingApiKeyCredentialsValue]);
+  h.state.modelFetchState = { current: { edit: 0, editKey: signature } };
+  h.state.listModelProviderModels = async () => task.promise;
+  h.state.setEditingApiModelCatalogFetching = () => {};
+  h.state.parseApiModelCatalogText = (value: string) => value.split('\n');
+  let draft = 'b';
+  h.state.setEditingApiModelCatalogInput = (value: string) => { draft = value; };
+  const pending = handler('handleFetchEditingApiModelCatalog', h.state)();
+  h.state.modelFetchState.current.editKey = JSON.stringify([h.state.editingApiBaseUrlCredentialsValue, 'key-b']);
+  task.resolve({ models: [{ id: 'model-from-old-key' }] });
+  await pending;
+  assert.equal(draft, 'b');
 });

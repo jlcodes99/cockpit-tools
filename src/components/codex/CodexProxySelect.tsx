@@ -75,7 +75,7 @@ export function CodexProxySelect({ value, options, label, placeholder, searchPla
   const close = () => { setOpen(false); trigger.current?.focus({ preventScroll: true }); };
 
   // The shared stack runs at window capture before the underlying modal's Escape handler.
-  useEscCloseTopmost(open, close);
+  useEscCloseTopmost(open, close, menu);
   useLayoutEffect(() => {
     if (!measuring || ordering.current?.sort !== sort) ordering.current = { sort, ids: ordered.map((option) => option.value) };
   }, [ordered, sort, measuring]);

@@ -1,0 +1,201 @@
+[
+  {
+    "name": "o3_chat_high_over_body",
+    "model": "o3(high)",
+    "chat": true,
+    "input": {
+      "model": "o3",
+      "reasoning_effort": "low",
+      "messages": [
+        {
+          "role": "user",
+          "content": "raw 250ms cipher"
+        }
+      ]
+    },
+    "expected": {
+      "model": "o3",
+      "reasoning_effort": "high",
+      "messages": [
+        {
+          "role": "user",
+          "content": "raw 250ms cipher"
+        }
+      ]
+    }
+  },
+  {
+    "name": "o3_responses_high_over_body",
+    "model": "o3(high)",
+    "chat": false,
+    "input": {
+      "model": "o3",
+      "reasoning": {
+        "effort": "low",
+        "summary": "detailed"
+      },
+      "input": [
+        {
+          "type": "reasoning",
+          "encrypted_content": "cipher"
+        },
+        {
+          "type": "function_call",
+          "call_id": "raw-call",
+          "name": "tool",
+          "arguments": "raw 250ms"
+        }
+      ]
+    },
+    "expected": {
+      "model": "o3",
+      "reasoning": {
+        "effort": "high",
+        "summary": "detailed"
+      },
+      "input": [
+        {
+          "type": "reasoning",
+          "encrypted_content": "cipher"
+        },
+        {
+          "type": "function_call",
+          "call_id": "raw-call",
+          "name": "tool",
+          "arguments": "raw 250ms"
+        }
+      ]
+    }
+  },
+  {
+    "name": "custom_chat_budget",
+    "model": "custom(8192)",
+    "chat": true,
+    "input": {
+      "model": "custom",
+      "reasoning_effort": "high",
+      "messages": [
+        {
+          "role": "user",
+          "content": "history"
+        }
+      ]
+    },
+    "expected": {
+      "model": "custom",
+      "reasoning_effort": "medium",
+      "messages": [
+        {
+          "role": "user",
+          "content": "history"
+        }
+      ]
+    }
+  },
+  {
+    "name": "custom_responses_budget",
+    "model": "custom(8192)",
+    "chat": false,
+    "input": {
+      "model": "custom",
+      "reasoning": {
+        "effort": "high",
+        "summary": "detailed"
+      },
+      "input": [],
+      "client_metadata": {
+        "session_id": "raw-session",
+        "thread_id": "raw-thread"
+      }
+    },
+    "expected": {
+      "model": "custom",
+      "reasoning": {
+        "effort": "medium",
+        "summary": "detailed"
+      },
+      "input": [],
+      "client_metadata": {
+        "session_id": "raw-session",
+        "thread_id": "raw-thread"
+      }
+    }
+  },
+  {
+    "name": "custom_no_suffix_unchanged",
+    "model": "custom",
+    "chat": false,
+    "input": {
+      "model": "custom",
+      "reasoning": {
+        "effort": "low",
+        "summary": "detailed"
+      },
+      "input": [
+        {
+          "encrypted_content": "cipher"
+        }
+      ]
+    },
+    "expected": {
+      "model": "custom",
+      "reasoning": {
+        "effort": "low",
+        "summary": "detailed"
+      },
+      "input": [
+        {
+          "encrypted_content": "cipher"
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown_suffix_retains_body",
+    "model": "custom(unsupported)",
+    "chat": true,
+    "input": {
+      "model": "custom",
+      "reasoning_effort": "low",
+      "messages": []
+    },
+    "expected": {
+      "model": "custom",
+      "reasoning_effort": "low",
+      "messages": []
+    }
+  },
+  {
+    "name": "custom_auto",
+    "model": "custom(-1)",
+    "chat": false,
+    "input": {
+      "model": "custom",
+      "reasoning": {
+        "effort": "high"
+      },
+      "input": []
+    },
+    "expected": {
+      "model": "custom",
+      "reasoning": {
+        "effort": "auto"
+      },
+      "input": []
+    }
+  },
+  {
+    "name": "custom_max",
+    "model": "custom(max)",
+    "chat": true,
+    "input": {
+      "model": "custom",
+      "messages": []
+    },
+    "expected": {
+      "model": "custom",
+      "messages": [],
+      "reasoning_effort": "max"
+    }
+  }
+]

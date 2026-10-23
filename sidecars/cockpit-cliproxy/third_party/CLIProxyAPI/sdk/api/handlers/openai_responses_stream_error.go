@@ -40,8 +40,8 @@ var openAIResponsesStreamErrorClasses = map[int]openAIResponsesStreamErrorClass{
 	http.StatusForbidden:       {code: "insufficient_quota", errorType: openAIResponsesClientErrorType},
 	http.StatusTooManyRequests: {code: "rate_limit_exceeded", errorType: openAIResponsesClientErrorType},
 	http.StatusNotFound:        {code: "model_not_found", errorType: openAIResponsesClientErrorType},
-	// An incomplete stream is retryable: the request was valid, but the
-	// upstream connection ended before response.completed.
+	// Reserve request_timeout for proven timeouts. Premature EOF and transport
+	// failures carry their own structured code from the executor.
 	http.StatusRequestTimeout: {code: "request_timeout", errorType: openAIResponsesServerErrorType},
 }
 

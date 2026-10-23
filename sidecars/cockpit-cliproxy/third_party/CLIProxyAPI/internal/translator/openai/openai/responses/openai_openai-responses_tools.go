@@ -3,6 +3,7 @@ package responses
 import (
 	"strings"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/codex/collaboration"
 	translatorcommon "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/common"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -352,5 +353,6 @@ func pickRequestJSON(originalRequestRawJSON, requestRawJSON []byte) []byte {
 
 func applyResponsesFunctionCallNamespaceFields(item []byte, requestRawJSON []byte, qualifiedName string, itemPath string) []byte {
 	name, namespace := splitResponsesQualifiedFunctionCallFromRequest(requestRawJSON, qualifiedName)
-	return translatorcommon.SetResponsesToolCallIdentity(item, name, namespace, itemPath)
+	item = translatorcommon.SetResponsesToolCallIdentity(item, name, namespace, itemPath)
+	return collaboration.MarkPlaintextCalls(item)
 }

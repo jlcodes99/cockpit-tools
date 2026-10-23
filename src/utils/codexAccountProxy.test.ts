@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { loadHookModule } from '../../tests/helpers/reactHookHarness';
-import { canUseCodexAccountProxy } from './codexAccountProxy';
+import { canUseCodexAccountProxy, canUseCodexOAuthAccountProxy } from './codexAccountProxy';
 import type { CodexAccount } from '../types/codex';
 
 const account = {
@@ -20,10 +20,14 @@ test('proxy eligibility does not depend on subscription tier or refresh token', 
 
 test('provider, pending, web-session and agent accounts cannot use independent proxy', () => {
   for (const update of [
-    { auth_mode: 'apikey' }, { api_provider_mode: 'custom' as const },
+    { api_provider_mode: 'custom' as const },
     { api_provider_id: 'provider' }, { upstream_grok_account_id: 'grok' },
     { authorization_status: 'pending' }, { token_source_mode: 'chatgpt_web_session' },
   ]) assert.equal(canUseCodexAccountProxy({ ...account, ...update }), false);
+});
+
+test('API key and API service cards use the ordinary proxy eligibility', () => {
+  for (const id of ['provider-key', '__api_service__']) assert.equal(canUseCodexAccountProxy({ ...account, id, auth_mode: 'apikey', api_provider_mode: 'custom' }), true);
 });
 
 test('card and table proxy controls follow reset controls, outside footer actions', () => {
@@ -79,6 +83,7 @@ test('proxy page reports the effective exit mode instead of a saved-or-bound fla
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../utils/codexPreferences': { getCodexPlanBadgeStyle: () => 'default' },
     '../../utils/codexProxyPresentation': { proxySummary: () => 'Saved proxy' },
+    '../../services/codexProxyTargetService': { applyCodexProxyAccountSnapshot() {} },
     '../../stores/useCodexAccountStore': { useCodexAccountStore: {} },
     '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
     './CodexProxyBatchBindDialog': { CodexProxyBatchBindDialog: () => null },
@@ -111,4 +116,14 @@ test('proxy page reports the effective exit mode instead of a saved-or-bound fla
     const source = readFileSync(new URL(`../components/codex/${file}`, import.meta.url), 'utf8');
     assert.match(source, /codex\.proxy\.modeStale(?:Hint)?|codexProxyExitModeKey\(mode\)/, file);
   }
+});
+
+
+test('desktop card eligibility cannot opt API/service targets into OAuth authorization proxying', () => {
+  for (const id of ['api', '__api_service__']) {
+    const api = { ...account, id, auth_mode: 'apikey' };
+    assert.equal(canUseCodexAccountProxy(api), true);
+    assert.equal(canUseCodexOAuthAccountProxy(api), false);
+  }
+  assert.equal(canUseCodexOAuthAccountProxy(account), true);
 });

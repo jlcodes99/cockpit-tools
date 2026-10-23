@@ -33,7 +33,7 @@ export function CodexProxyResourceForm({ busy, error, onSubmit, onClose, onCance
   const root = useRef<HTMLDivElement>(null);
   useModalFocusTrap(root, true);
   useModalScrollLock(true);
-  useEscCloseTopmost(true, () => { if (!busy) onClose(); });
+  useEscCloseTopmost(true, () => { if (!busy) onClose(); }, root);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const value = mode === 'manual' ? proxyFormUrl(form) ?? '' : input;
   const resolvedKind = mode === 'manual' ? 'manual' : kind === 'auto' ? detectProxyInputKind(value) : kind as 'manual' | 'subscription';

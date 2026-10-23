@@ -73,7 +73,7 @@ func newNativeRouteTestRouter() (*gin.Engine, *nativeRouteTestRuntime, *apiKeySp
 		},
 	}
 	m := &manifest{
-		ModelIDs: []string{"gpt-5.5"}, APIKeys: []apiKeySpec{*spec},
+		ModelIDs: []string{"gpt-5.6-sol"}, APIKeys: []apiKeySpec{*spec},
 		apiKeyByValue: map[string]*apiKeySpec{spec.Key: spec},
 		accountByID:   make(map[string]*accountSpec), accountByAuthID: make(map[string]*accountSpec),
 	}
@@ -137,7 +137,7 @@ func TestNativeProviderRouteUsesOnlyBoundAccount(t *testing.T) {
 			if !reflect.DeepEqual(executionIdentity, before) || !reflect.DeepEqual(*spec, before) {
 				t.Fatal("native scope changed API-key identity, budget, policy or shared configuration")
 			}
-			w = nativeRouteTestRequest(router, spec.Key, "gpt-5.5", false)
+			w = nativeRouteTestRequest(router, spec.Key, "gpt-5.6-sol", false)
 			if w.Code != http.StatusOK || runtime.selected.ID != "oauth.json" {
 				t.Fatalf("default OAuth request was polluted by native route: status=%d selected=%v body=%s", w.Code, runtime.selected, w.Body.String())
 			}

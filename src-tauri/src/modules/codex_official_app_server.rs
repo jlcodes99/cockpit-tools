@@ -11,13 +11,22 @@ use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "macos")]
 const CODEX_APP_SERVER_MACOS_EXECUTABLES: &[&str] = &[
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
     "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
     "/Applications/Codex.app/Contents/Resources/codex",
 ];
 const CODEX_APP_SERVER_EXECUTABLE_ENV: &str = "CODEX_APP_SERVER_EXECUTABLE";
 const APP_SERVER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
+    rebuild_imported_thread_metadata(codex_home, &[])
+}
+
+pub fn rebuild_imported_thread_metadata(
+    codex_home: &Path,
+    mapped_threads: &[(String, String)],
+) -> Result<(), String> {
     let flow_started = Instant::now();
     crate::modules::logger::log_info(&format!(
         "[Codex Official AppServer] rebuild_thread_metadata flow started: codex_home={}",
@@ -103,7 +112,11 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
                         "name": "cockpit-tools",
                         "version": env!("CARGO_PKG_VERSION"),
                     },
-                    "capabilities": null,
+                    "capabilities": if mapped_threads.is_empty() {
+                        JsonValue::Null
+                    } else {
+                        json!({ "experimentalApi": true })
+                    },
                 },
             }),
         )?;
@@ -133,6 +146,9 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
             }),
         )?;
         wait_for_response(&receiver, 2)?;
+        if !mapped_threads.is_empty() {
+            assign_imported_threads_to_projects(&mut stdin, &receiver, mapped_threads)?;
+        }
         crate::modules::logger::log_info(&format!(
             "[Codex Official AppServer] thread/list finished: codex_home={}, elapsed_ms={}, total_ms={}",
             codex_home.display(),
@@ -179,6 +195,103 @@ pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
         ));
     }
     result
+}
+
+fn assign_imported_threads_to_projects(
+    stdin: &mut impl Write,
+    receiver: &mpsc::Receiver<String>,
+    mapped_threads: &[(String, String)],
+) -> Result<(), String> {
+    let mut request_id = 3;
+    let mut cursor = JsonValue::Null;
+    let mut projects = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut seen_cursors = std::collections::HashSet::new();
+    loop {
+        if Instant::now() >= deadline {
+            return Err("更新项目归属超时，已导入的会话将保留".into());
+        }
+        send_request(
+            stdin,
+            json!({
+                "method": "project/list", "id": request_id,
+                "params": { "cursor": cursor, "limit": 100 }
+            }),
+        )?;
+        let response = match wait_for_response_value_until(receiver, request_id, deadline) {
+            Ok(response) => response,
+            Err(error) => {
+                let message = error.message();
+                // Older Codex versions group by cwd and do not expose project identities.
+                if message.contains("-32601") || message.contains("unknown variant `project/list`")
+                {
+                    return Ok(());
+                }
+                return Err(message.to_string());
+            }
+        };
+        let result = response
+            .get("result")
+            .ok_or("project/list 响应缺少 result")?;
+        projects.extend(
+            result
+                .get("data")
+                .and_then(JsonValue::as_array)
+                .ok_or("project/list 响应缺少项目列表")?
+                .iter()
+                .cloned(),
+        );
+        request_id += 1;
+        cursor = result.get("nextCursor").cloned().unwrap_or(JsonValue::Null);
+        if cursor.is_null() {
+            break;
+        }
+        if !seen_cursors.insert(cursor.to_string()) || projects.len() >= 10_000 {
+            return Err("官方项目列表分页异常，已导入的会话将保留".into());
+        }
+    }
+    let mut warnings = Vec::new();
+    for (thread_id, cwd) in mapped_threads {
+        if Instant::now() >= deadline {
+            return Err("更新项目归属超时，已导入的会话将保留".into());
+        }
+        let project_id =
+            match crate::modules::codex_session_import_paths::project_id_for_cwd(&projects, cwd) {
+                Ok(Some(project_id)) => project_id,
+                Ok(None) => {
+                    warnings.push(format!(
+                        "未找到目标目录对应的 Codex 项目，请先在 Codex 中添加该项目: {}",
+                        cwd
+                    ));
+                    continue;
+                }
+                Err(error) => {
+                    warnings.push(error);
+                    continue;
+                }
+            };
+        send_request(
+            stdin,
+            json!({
+                "method": "thread/metadata/update", "id": request_id,
+                "params": { "threadId": thread_id, "projectId": project_id }
+            }),
+        )?;
+        if let Err(error) = wait_for_response_value_until(receiver, request_id, deadline) {
+            if error.is_timeout() {
+                return Err(error.message().to_string());
+            }
+            warnings.push(error.message().to_string());
+        }
+        request_id += 1;
+    }
+    warnings.sort();
+    warnings.dedup();
+    if warnings.is_empty() {
+        Ok(())
+    } else {
+        Err(warnings.join("；"))
+    }
 }
 
 /// 通过官方 app-server 的 `thread/delete` 删除会话线程（与官方客户端一致），
@@ -368,10 +481,9 @@ pub(crate) fn official_app_server_executable() -> Result<PathBuf, String> {
         .map(|path| path.display().to_string())
         .collect::<Vec<_>>()
         .join(", ");
-    Err(format!(
-        "未找到官方 Codex app-server 可执行文件: {}",
-        searched_paths
-    ))
+    let error = format!("未找到官方 Codex app-server 可执行文件: {}", searched_paths);
+    crate::modules::logger::log_warn(&format!("[Codex Official AppServer] {}", error));
+    Err(error)
 }
 
 fn add_codex_app_server_candidates(candidates: &mut Vec<PathBuf>) {
@@ -392,6 +504,26 @@ fn add_codex_app_server_candidates(candidates: &mut Vec<PathBuf>) {
 
 fn push_candidate_from_codex_launch_path(candidates: &mut Vec<PathBuf>, launch_path: &Path) {
     if let Some(app_server_path) = app_server_executable_from_codex_launch_path(launch_path) {
+        // Current macOS bundles contain a signed CLI helper. Preserve the old
+        // executable as a fallback for installations that have not upgraded.
+        if parent_file_name_eq(&app_server_path, "resources")
+            && path_file_name_eq(&app_server_path, "codex")
+            && app_server_path
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::parent)
+                .is_some_and(|root| {
+                    path_file_name_eq(root, "chatgpt.app") || path_file_name_eq(root, "codex.app")
+                })
+        {
+            push_candidate(
+                candidates,
+                app_server_path
+                    .parent()
+                    .unwrap()
+                    .join("codex-cli/CodexCLI.app/Contents/MacOS/codex"),
+            );
+        }
         push_candidate(candidates, app_server_path);
     }
 }
@@ -447,6 +579,16 @@ fn app_server_executable_from_codex_launch_path(path: &Path) -> Option<PathBuf> 
 }
 
 fn is_existing_app_server_path_shape(path: &Path) -> bool {
+    if path_file_name_eq(path, "codex") && parent_file_name_eq(path, "macos") {
+        if path
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .is_some_and(|root| path_file_name_eq(root, "codexcli.app"))
+        {
+            return true;
+        }
+    }
     if path_file_name_eq(path, "codex") && parent_file_name_eq(path, "resources") {
         return true;
     }
@@ -528,15 +670,33 @@ fn wait_for_response_value(
     receiver: &mpsc::Receiver<String>,
     request_id: i64,
 ) -> Result<JsonValue, AppServerWaitFailure> {
+    wait_for_response_value_until(
+        receiver,
+        request_id,
+        Instant::now() + APP_SERVER_RESPONSE_TIMEOUT,
+    )
+}
+
+fn wait_for_response_value_until(
+    receiver: &mpsc::Receiver<String>,
+    request_id: i64,
+    deadline: Instant,
+) -> Result<JsonValue, AppServerWaitFailure> {
+    let deadline = deadline.min(Instant::now() + APP_SERVER_RESPONSE_TIMEOUT);
     loop {
-        let line = receiver
-            .recv_timeout(APP_SERVER_RESPONSE_TIMEOUT)
-            .map_err(|_| {
-                AppServerWaitFailure::Timeout(format!(
-                    "等待官方 app-server 响应超时 (id={})",
-                    request_id
-                ))
-            })?;
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(AppServerWaitFailure::Timeout(format!(
+                "等待官方 app-server 响应超时 (id={})",
+                request_id
+            )));
+        }
+        let line = receiver.recv_timeout(remaining).map_err(|_| {
+            AppServerWaitFailure::Timeout(format!(
+                "等待官方 app-server 响应超时 (id={})",
+                request_id
+            ))
+        })?;
         let Ok(value) = serde_json::from_str::<JsonValue>(&line) else {
             continue;
         };
@@ -574,6 +734,104 @@ fn finish_child(child: &mut Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    include!("codex_official_app_server_isolated_tests.rs");
+
+    #[test]
+    fn imported_project_binding_rejects_repeated_pagination_cursor() {
+        let (sender, receiver) = mpsc::channel();
+        for id in [3, 4] {
+            sender
+                .send(json!({"id":id,"result":{"data":[],"nextCursor":"repeat"}}).to_string())
+                .unwrap();
+        }
+        let mut stdin = Vec::new();
+        assert!(assign_imported_threads_to_projects(
+            &mut stdin,
+            &receiver,
+            &[("thread".into(), "/new/project".into())]
+        )
+        .unwrap_err()
+        .contains("分页异常"));
+        assert_eq!(String::from_utf8(stdin).unwrap().lines().count(), 2);
+    }
+
+    #[test]
+    fn unrelated_notifications_do_not_extend_the_response_deadline() {
+        let (sender, receiver) = mpsc::channel();
+        for _ in 0..100 {
+            sender
+                .send(json!({"method":"notification"}).to_string())
+                .unwrap();
+        }
+        let error =
+            wait_for_response_value_until(&receiver, 3, Instant::now() + Duration::from_millis(10))
+                .err()
+                .unwrap();
+        assert!(error.is_timeout());
+    }
+
+    #[test]
+    fn imported_project_binding_paginates_and_updates_matching_project() {
+        let (sender, receiver) = mpsc::channel();
+        sender
+            .send(json!({"id":3,"result":{"data":[],"nextCursor":"page-2"}}).to_string())
+            .unwrap();
+        sender.send(json!({"id":4,"result":{"data":[{"id":"destination","roots":[{"path":"/b/project"}]}],"nextCursor":null}}).to_string()).unwrap();
+        sender
+            .send(json!({"id":5,"result":{}}).to_string())
+            .unwrap();
+        let mut stdin = Vec::new();
+        assign_imported_threads_to_projects(
+            &mut stdin,
+            &receiver,
+            &[("thread-1".into(), "/b/project".into())],
+        )
+        .unwrap();
+        let requests = String::from_utf8(stdin)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<JsonValue>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(requests[1]["params"]["cursor"], "page-2");
+        assert_eq!(requests[2]["method"], "thread/metadata/update");
+        assert_eq!(requests[2]["params"]["projectId"], "destination");
+        assert_eq!(requests[2]["params"]["threadId"], "thread-1");
+    }
+
+    #[test]
+    fn older_servers_without_project_api_keep_cwd_fallback() {
+        let (sender, receiver) = mpsc::channel();
+        sender
+            .send(
+                json!({"id":3,"error":{"code":-32600,"message":"unknown variant `project/list`"}})
+                    .to_string(),
+            )
+            .unwrap();
+        let mut stdin = Vec::new();
+        assign_imported_threads_to_projects(
+            &mut stdin,
+            &receiver,
+            &[("thread-1".into(), "/b/project".into())],
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8(stdin).unwrap().lines().count(), 1);
+    }
+
+    #[test]
+    fn unmatched_project_returns_warning_without_assigning_arbitrary_project() {
+        let (sender, receiver) = mpsc::channel();
+        sender.send(json!({"id":3,"result":{"data":[{"id":"other","roots":[{"path":"/other"}]}],"nextCursor":null}}).to_string()).unwrap();
+        let mut stdin = Vec::new();
+        let result = assign_imported_threads_to_projects(
+            &mut stdin,
+            &receiver,
+            &[("thread-1".into(), "/b/project".into())],
+        );
+        assert!(result
+            .unwrap_err()
+            .contains("未找到目标目录对应的 Codex 项目"));
+        assert_eq!(String::from_utf8(stdin).unwrap().lines().count(), 1);
+    }
 
     #[test]
     fn maps_macos_launch_binary_to_resources_app_server() {
@@ -585,6 +843,35 @@ mod tests {
             app_server_path,
             PathBuf::from("/Applications/Codex.app/Contents/Resources/codex")
         );
+    }
+
+    #[test]
+    fn prioritizes_nested_macos_cli_and_preserves_legacy_fallback() {
+        for root in ["/Applications/ChatGPT.app", "/Volumes/Apps Disk/Codex.app"] {
+            for launch in [
+                PathBuf::from(root),
+                PathBuf::from(root).join("Contents/MacOS/ChatGPT"),
+            ] {
+                let mut candidates = Vec::new();
+                push_candidate_from_codex_launch_path(&mut candidates, &launch);
+                assert_eq!(
+                    candidates,
+                    vec![
+                        PathBuf::from(root)
+                            .join("Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"),
+                        PathBuf::from(root).join("Contents/Resources/codex"),
+                    ]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn preserves_direct_nested_macos_cli_executable() {
+        let path = PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex");
+        let mut candidates = Vec::new();
+        push_candidate_from_codex_launch_path(&mut candidates, &path);
+        assert_eq!(candidates, vec![path]);
     }
 
     #[test]

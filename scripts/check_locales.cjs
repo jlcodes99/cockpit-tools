@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { collectRequiredTranslationReferences, collectBackendTranslationReferences, findMissingTranslationReferences } = require('./locale_references.cjs');
 
 // 配置
 const LOCALES_DIR = path.join(__dirname, '../src/locales');
@@ -152,6 +153,10 @@ function isAllowedEnglishReuse(key, value) {
     'nav.codebuddy',
     'nav.codebuddyCn',
     'nav.claude',
+    // Official subscription product names, including the refresh-scope selector.
+    'codex.autoRefreshScope.plans.go',
+    'codex.autoRefreshScope.plans.plus',
+    'codex.autoRefreshScope.plans.pro',
     'nav.gemini',
     'nav.qoder',
   ]);
@@ -236,6 +241,11 @@ function isAllowedEnglishReuse(key, value) {
     return true;
   }
 
+  // Token speed contains only the approximation symbol, interpolation and a protocol unit.
+  if (key === 'common.outputSpeed.value' && normalized === '≈ {{value}} tok/s') {
+    return true;
+  }
+
   // 套餐/层级代码通常直接沿用英文缩写
   if (/(^|\.)(plan|tier|filter)\.(free|plus|pro|ultra|team|business|enterprise|individual)$/.test(key)) {
     return true;
@@ -277,6 +287,10 @@ function isAllowedEnglishReuse(key, value) {
     'codex.launchPreview.imageGenSwitchNo',
     'codex.wakeup.runtimeCardTitle',
     'common.shared.columns.plan',
+    // Token 是专有词；Model（捷/印尼/波/土）和 Total（西/法/葡）为合法同形短标签。
+    'common.codexUsage.token',
+    'common.codexUsage.model',
+    'common.codexUsage.total',
     'gemini.quota.pro',
     'gemini.quota.flash',
     'settings.about.sponsor',
@@ -633,7 +647,17 @@ function main() {
   
   log(`✅ 详细报告已生成: ${reportPath}\n`, 'green');
 
-  const hasBlockingIssues = differences.size > 0
+  log('🔎 无回退文案的源码翻译引用检查', 'bright');
+  const referenceIssues = findMissingTranslationReferences(
+    [...collectRequiredTranslationReferences(path.join(__dirname, '../src')), ...collectBackendTranslationReferences(path.join(__dirname, '..'))], localeData,
+  );
+  for (const issue of referenceIssues.slice(0, 20)) {
+    log(`❌ ${path.relative(path.join(__dirname, '..'), issue.file)}:${issue.line} ${issue.key} 缺失于 ${issue.languages.join(', ')}`, 'red');
+  }
+  if (!referenceIssues.length) log('✅ 源码中的静态必需翻译键均已定义。', 'green');
+  else log(`❌ 共 ${referenceIssues.length} 处源码引用缺少翻译（即使所有语言同时缺失也会阻断）。`, 'red');
+
+  const hasBlockingIssues = referenceIssues.length > 0 || differences.size > 0
     || englishReuseIssues.length > 0
     || (FAIL_ON_PLATFORM_COMMON_DUP && platformCommonIssues.length > 0);
   if (hasBlockingIssues) {

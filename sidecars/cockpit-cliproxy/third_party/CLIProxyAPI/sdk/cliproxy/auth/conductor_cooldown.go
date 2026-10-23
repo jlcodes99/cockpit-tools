@@ -733,8 +733,16 @@ func cooldownReason(statusMessage string, quota QuotaState, lastErr *Error) stri
 	return ""
 }
 
+func isStaleExecutionResult(result Result, current *Auth) bool {
+	return current != nil && ((result.CredentialVersion > 0 && result.CredentialVersion < current.CredentialVersion) ||
+		(result.RegistrationEpoch > 0 && result.RegistrationEpoch < current.RegistrationEpoch))
+}
+
 // MarkResult records an execution result and notifies hooks.
 func (m *Manager) MarkResult(ctx context.Context, result Result) {
+	if skipUnsentExecutionResult(ctx, result) {
+		return
+	}
 	if result.AuthID == "" {
 		return
 	}
@@ -749,6 +757,18 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 
 	m.mu.Lock()
 	if auth, ok := m.auths[result.AuthID]; ok && auth != nil {
+		if isStaleExecutionResult(result, auth) {
+			m.mu.Unlock()
+			result.StaleCredential = true
+			m.hook.OnResult(ctx, result)
+			return
+		}
+		if result.Success && auth.RejectedAccessToken != "" && auth.RejectedAccessToken == authAccessToken(auth) && auth.LastError != nil && isInvalidGrantError(auth.LastError) {
+			m.mu.Unlock()
+			result.StaleCredential = true
+			m.hook.OnResult(ctx, result)
+			return
+		}
 		if barrier := m.authRecoveryBarriers[result.AuthID]; !barrier.IsZero() && !result.AttemptStartedAt.IsZero() && result.AttemptStartedAt.Before(barrier) {
 			m.mu.Unlock()
 			return
@@ -991,6 +1011,10 @@ func (m *Manager) updateSessionAffinity(result Result) {
 }
 
 func (m *Manager) recordExecutionResult(ctx context.Context, result Result, auth *Auth, ephemeral bool) {
+	if auth != nil {
+		result.CredentialVersion = auth.CredentialVersion
+		result.RegistrationEpoch = auth.RegistrationEpoch
+	}
 	if !ephemeral {
 		m.MarkResult(ctx, result)
 		return
@@ -1000,6 +1024,9 @@ func (m *Manager) recordExecutionResult(ctx context.Context, result Result, auth
 
 // reportHomeResult only observes a Home dispatch result and never updates local auth state.
 func (m *Manager) reportHomeResult(ctx context.Context, result Result, auth *Auth) {
+	if skipUnsentExecutionResult(ctx, result) {
+		return
+	}
 	if m == nil || result.AuthID == "" {
 		return
 	}
@@ -1012,6 +1039,9 @@ func (m *Manager) reportHomeResult(ctx context.Context, result Result, auth *Aut
 }
 
 func (m *Manager) recordAvailabilityNeutralResult(ctx context.Context, result Result) {
+	if skipUnsentExecutionResult(ctx, result) {
+		return
+	}
 	if result.AuthID == "" {
 		return
 	}
@@ -1019,6 +1049,12 @@ func (m *Manager) recordAvailabilityNeutralResult(ctx context.Context, result Re
 	var authSnapshot *Auth
 	m.mu.Lock()
 	if auth, ok := m.auths[result.AuthID]; ok && auth != nil {
+		if isStaleExecutionResult(result, auth) {
+			m.mu.Unlock()
+			result.StaleCredential = true
+			m.hook.OnResult(ctx, result)
+			return
+		}
 		now := time.Now()
 		auth.recordRecentRequest(now, result.Success)
 		if result.Success {
@@ -1452,6 +1488,11 @@ func resultErrorFromError(err error) *Error {
 func shouldSkipCredentialCooldown(err *Error) bool {
 	if err != nil && err.Code == ErrorCodeForceCooldown {
 		return false
+	}
+	// Local quota admission did not send a request or observe an upstream 429.
+	// Keep credential rotation available without poisoning its health state.
+	if err != nil && err.Code == "quota_reserved" && err.HTTPStatus == http.StatusTooManyRequests {
+		return true
 	}
 	return isRequestScopedResultError(err) || isConnectionLifecycleResultError(err)
 }

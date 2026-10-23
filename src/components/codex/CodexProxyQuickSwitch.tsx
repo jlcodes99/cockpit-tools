@@ -38,7 +38,7 @@ export function CodexProxyQuickSwitch({ accountId, displayName, initialBinding, 
     latency.cancel();
     onClose();
   };
-  useEscCloseTopmost(true, close);
+  useEscCloseTopmost(true, close, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
   useEffect(() => {

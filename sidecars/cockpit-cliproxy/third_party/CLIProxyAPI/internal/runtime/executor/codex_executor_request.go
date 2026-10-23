@@ -40,13 +40,26 @@ func translateCodexRequestPair(from, to sdktranslator.Format, model string, orig
 		}
 		return sdktranslator.TranslateRequest(from, to, model, raw, stream)
 	}
+	// OAuth translation strips unsupported tiers such as default/flex. Keep
+	// their explicit presence in the defaults-checking snapshot so a configured
+	// paid Fast default cannot silently replace a client's Standard choice.
+	preserveTierSelection := func(raw, translated []byte) []byte {
+		tier := gjson.GetBytes(raw, "service_tier")
+		if tier.Exists() && !gjson.GetBytes(translated, "service_tier").Exists() {
+			protected, errSet := sjson.SetRawBytes(append([]byte(nil), translated...), "service_tier", []byte(tier.Raw))
+			if errSet == nil {
+				return protected
+			}
+		}
+		return translated
+	}
 	if bytes.Equal(originalPayload, payload) {
 		body := translate(payload)
-		return body, body
+		return preserveTierSelection(originalPayload, body), body
 	}
 	originalTranslated := translate(originalPayload)
 	body := translate(payload)
-	return originalTranslated, body
+	return preserveTierSelection(originalPayload, originalTranslated), body
 }
 
 // PrepareRequest injects Codex credentials into the outgoing HTTP request.
@@ -65,7 +78,7 @@ func (e *CodexExecutor) PrepareRequest(req *http.Request, auth *cliproxyauth.Aut
 		attrs = auth.Attributes
 	}
 	util.ApplyCustomHeadersFromAttrs(req, attrs)
-	return nil
+	return helps.ApplyManagedIdentityRequest(req, auth)
 }
 
 // HttpRequest injects Codex credentials into the request and executes it.
@@ -81,15 +94,17 @@ func (e *CodexExecutor) HttpRequest(ctx context.Context, auth *cliproxyauth.Auth
 		return nil, err
 	}
 	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
-	return httpClient.Do(httpReq)
+	return helps.DoGuardedUpstreamHTTP(ctx, auth, httpClient, httpReq)
 }
 
 type codexIdentityConfuseState struct {
-	enabled                bool
-	authID                 string
-	originalPromptCacheKey string
-	promptCacheKey         string
-	turnIDs                []codexIdentityReplacement
+	managedAuth             *cliproxyauth.Auth
+	managedSkipInstallation bool
+	enabled                 bool
+	authID                  string
+	originalPromptCacheKey  string
+	promptCacheKey          string
+	turnIDs                 []codexIdentityReplacement
 }
 
 type codexIdentityReplacement struct {
@@ -101,6 +116,10 @@ func (e *CodexExecutor) cacheHelper(ctx context.Context, from sdktranslator.Form
 	var headers http.Header
 	if len(headerSets) > 0 {
 		headers = headerSets[0]
+	}
+	if cliproxyexecutor.ContinuityActive(ctx) {
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(rawJSON))
+		return httpReq, rawJSON, codexIdentityConfuseState{}, err
 	}
 	var cache helps.CodexCache
 	if sourceFormatEqual(from, sdktranslator.FormatClaude) {
@@ -143,6 +162,18 @@ func (e *CodexExecutor) cacheHelper(ctx context.Context, from sdktranslator.Form
 	rawJSON = helps.SanitizeCodexInputItemIDs(rawJSON)
 	var identityState codexIdentityConfuseState
 	rawJSON, identityState = applyCodexIdentityConfuseBody(e.cfg, auth, userPayload, rawJSON)
+	if _, identityErr := helps.ManagedIdentityForAuth(auth); identityErr != nil {
+		return nil, nil, codexIdentityConfuseState{}, identityErr
+	}
+	identityState.managedAuth = auth
+	identityState.managedSkipInstallation = !helps.ManagedIdentityProtocolApplies(auth, url)
+	if !identityState.managedSkipInstallation {
+		var identityErr error
+		rawJSON, identityErr = helps.ApplyManagedIdentity(auth, nil, rawJSON)
+		if identityErr != nil {
+			return nil, nil, codexIdentityConfuseState{}, identityErr
+		}
+	}
 	if identityState.promptCacheKey != "" {
 		cache.ID = identityState.promptCacheKey
 	}
@@ -185,6 +216,15 @@ func applyCodexIdentityConfuseBody(cfg *config.Config, auth *cliproxyauth.Auth, 
 func applyCodexIdentityConfuseHeaders(headers http.Header, state *codexIdentityConfuseState) {
 	if headers == nil {
 		return
+	}
+	if state != nil && state.managedAuth != nil {
+		defer func() {
+			if state.managedSkipInstallation {
+				_ = helps.StripManagedStandaloneIdentityHeaders(state.managedAuth, headers)
+			} else {
+				_, _ = helps.ApplyManagedIdentity(state.managedAuth, headers, nil)
+			}
+		}()
 	}
 	if state == nil || !state.enabled {
 		return
@@ -288,14 +328,34 @@ func applyCodexHeaders(r *http.Request, auth *cliproxyauth.Auth, token string, s
 	applyCodexHeadersFromSources(r, auth, token, stream, cfg, ginHeaders)
 }
 
-// applyCodexRoutingHint mirrors the native Codex client hint used by the
-// ChatGPT backend. It is derived after request translation so the tier cannot
-// become stale. API-key passthrough requests intentionally do not receive it.
-func applyCodexRoutingHint(headers http.Header, auth *cliproxyauth.Auth, model string, upstreamBody []byte) {
-	if headers == nil || codexAuthUsesAPIKey(auth) {
+const codexRoutingHintHeader = "X-Codex-Routing-Hint"
+
+// applyCodexRoutingHint sends the routing hint native Codex attaches to every
+// ChatGPT-backend Responses request: "model=<slug>" plus ";tier=<service_tier>"
+// when the body requests a tier (openai/codex rust-v0.155.0,
+// codex-rs/core/src/client.rs build_routing_hint_header). Without it, a
+// translated request carries service_tier=priority only in the body. Whether
+// the backend needs the header to grant priority is undocumented.
+//
+// The model is the resolved model written to the upstream body, while the tier
+// is read from the final body so payload rules cannot make the hint stale. A
+// hint forwarded by a native client names its original model and is replaced.
+// Operator configuration keeps precedence: when an auth "header:" rule for the
+// hint resolves to a value (static, or a "$Header" reference the request
+// carries), that value is sent, and callers apply models.json override_header
+// afterwards. A rule that resolves to nothing falls back to the derived hint.
+// API-key requests are not touched, matching native Codex, which sends no hint
+// to API-key providers.
+func applyCodexRoutingHint(ctx context.Context, headers http.Header, auth *cliproxyauth.Auth, baseModel string, upstreamBody []byte, clientHeaders http.Header) {
+	if headers == nil || codexAuthUsesAPIKey(auth) || codexUseSIWC(auth) {
 		return
 	}
-	model = strings.TrimSpace(model)
+	deleteHeaderCaseInsensitive(headers, codexRoutingHintHeader)
+	if operatorHint := codexOperatorHeaderValue(ctx, auth, clientHeaders, codexRoutingHintHeader); operatorHint != "" {
+		headers.Set(codexRoutingHintHeader, operatorHint)
+		return
+	}
+	model := strings.TrimSpace(baseModel)
 	if model == "" {
 		return
 	}
@@ -305,7 +365,22 @@ func applyCodexRoutingHint(headers http.Header, auth *cliproxyauth.Auth, model s
 			hint += ";tier=" + value
 		}
 	}
-	headers.Set("X-Codex-Routing-Hint", hint)
+	headers.Set(codexRoutingHintHeader, hint)
+}
+
+// codexOperatorHeaderValue returns the value the auth's "header:" rules
+// resolve to for name, using the same resolver that applied them to the
+// request, so dynamic references that resolve to nothing report "".
+func codexOperatorHeaderValue(ctx context.Context, auth *cliproxyauth.Auth, clientHeaders http.Header, name string) string {
+	if auth == nil || len(auth.Attributes) == 0 {
+		return ""
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	resolved := (&http.Request{Header: http.Header{}}).WithContext(ctx)
+	util.ApplyCustomHeadersFromAttrs(resolved, auth.Attributes, clientHeaders)
+	return strings.TrimSpace(resolved.Header.Get(name))
 }
 
 // applyModelHeaderOverrides forces models.json config.override_header onto upstream headers.
@@ -415,139 +490,26 @@ func applyCodexCloakingHeaders(headers http.Header, cfg *config.Config, isAPIKey
 	headers.Set("Originator", codexOriginator)
 }
 
-func normalizeCodexInstructions(body []byte, model ...string) []byte {
+func normalizeCodexInstructions(body []byte, nativeRequest ...bool) []byte {
+	// Preserve the host's legacy ID repair independently of CPA's instruction policy.
 	body = normalizeCodexCallIDs(body)
+	if len(nativeRequest) > 0 && nativeRequest[0] {
+		return body
+	}
 	instructions := gjson.GetBytes(body, "instructions")
-	if !instructions.Exists() || instructions.Type == gjson.Null || strings.TrimSpace(instructions.String()) == "" {
-		value := ""
-		if len(model) > 0 {
-			value = registry.CodexClientModelBaseInstructions(model[0])
-		}
-		body, _ = sjson.SetBytes(body, "instructions", value)
+	if !instructions.Exists() || instructions.Type == gjson.Null {
+		body, _ = sjson.SetBytes(body, "instructions", "")
 	}
 	return body
 }
 
-func codexCallItemRequiresID(itemType string) bool {
-	switch itemType {
-	case "function_call", "custom_tool_call", "tool_call", "mcp_tool_call":
-		return true
-	default:
-		return false
-	}
-}
-
-func codexCallOutputRequiresID(itemType string) bool {
-	switch itemType {
-	case "function_call_output", "custom_tool_call_output", "tool_call_output", "mcp_tool_call_output":
-		return true
-	default:
-		return false
-	}
-}
-
-func nextGeneratedCodexCallID(prefix string, index int, used map[string]struct{}) string {
-	base := fmt.Sprintf("%s_%d", prefix, index)
-	if _, exists := used[base]; !exists {
-		used[base] = struct{}{}
-		return base
-	}
-	for suffix := 1; ; suffix++ {
-		candidate := fmt.Sprintf("%s_%d", base, suffix)
-		if _, exists := used[candidate]; !exists {
-			used[candidate] = struct{}{}
-			return candidate
-		}
-	}
-}
-
-// NormalizeCodexCallIDs repairs historical tool replay items whose provider-specific
-// conversion omitted call_id. Strict Responses upstreams reject the whole request with
-// "missing field `call_id`" otherwise.
+// NormalizeCodexCallIDs repairs missing tool call IDs for Responses replay.
 func NormalizeCodexCallIDs(body []byte) []byte {
-	return normalizeCodexCallIDs(body)
+	return cliproxyexecutor.NormalizeResponsesCallIDs(body)
 }
 
 func normalizeCodexCallIDs(body []byte) []byte {
-	input := gjson.GetBytes(body, "input")
-	if !input.IsArray() {
-		return body
-	}
-	used := make(map[string]struct{})
-	for _, item := range input.Array() {
-		if callID := strings.TrimSpace(item.Get("call_id").String()); callID != "" {
-			used[callID] = struct{}{}
-		}
-	}
-	type pendingCall struct {
-		id   string
-		name string
-	}
-	pending := make([]pendingCall, 0)
-	dropInputIndices := make([]int, 0)
-	index := -1
-	input.ForEach(func(_, item gjson.Result) bool {
-		index++
-		itemType := strings.ToLower(strings.TrimSpace(item.Get("type").String()))
-		isCall := codexCallItemRequiresID(itemType)
-		isOutput := codexCallOutputRequiresID(itemType)
-		if !isCall && !isOutput {
-			return true
-		}
-		name := strings.TrimSpace(item.Get("name").String())
-		callID := strings.TrimSpace(item.Get("call_id").String())
-		if callID == "" {
-			if isCall {
-				callID = nextGeneratedCodexCallID("call_missing", index, used)
-			} else {
-				matched := -1
-				if name != "" {
-					for i, pendingCall := range pending {
-						if pendingCall.name == name {
-							matched = i
-							break
-						}
-					}
-				}
-				if matched < 0 && len(pending) > 0 {
-					matched = 0
-				}
-				if matched >= 0 {
-					callID = pending[matched].id
-					pending = append(pending[:matched], pending[matched+1:]...)
-				} else if codexCallOutputCanStandAlone(itemType, item) {
-					return true
-				} else {
-					dropInputIndices = append(dropInputIndices, index)
-					return true
-				}
-			}
-			body, _ = sjson.SetBytes(body, fmt.Sprintf("input.%d.call_id", index), callID)
-		}
-		if isCall {
-			pending = append(pending, pendingCall{id: callID, name: name})
-			return true
-		}
-		for i, pendingCall := range pending {
-			if pendingCall.id == callID {
-				pending = append(pending[:i], pending[i+1:]...)
-				break
-			}
-		}
-		return true
-	})
-	for index := len(dropInputIndices) - 1; index >= 0; index-- {
-		body, _ = sjson.DeleteBytes(body, fmt.Sprintf("input.%d", dropInputIndices[index]))
-	}
-	return body
-}
-
-func codexCallOutputCanStandAlone(itemType string, item gjson.Result) bool {
-	if itemType != "function_call_output" {
-		return false
-	}
-	name := item.Get("name")
-	return name.Type == gjson.String && strings.TrimSpace(name.String()) != ""
+	return cliproxyexecutor.NormalizeResponsesCallIDs(body)
 }
 
 var imageGenToolJSON = []byte(`{"type":"image_generation","output_format":"png"}`)

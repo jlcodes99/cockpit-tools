@@ -19,6 +19,15 @@ test('a dismissed batch cannot be resurrected by an already queued event', () =>
   assert.equal(mergePelicanSnapshot(latest, batch(), new Set()), latest);
 });
 
+test('creation order only selects the active batch before an explicit activation', () => {
+  const historical = batch('old', 8, 1);
+  const newer = batch('newer', 2, 5);
+  assert.equal(mergePelicanSnapshot(historical, newer, new Set()), newer);
+  assert.equal(mergePelicanSnapshot(historical, newer, new Set(), historical.id), historical);
+  const progress = { ...historical, revision: 9 };
+  assert.equal(mergePelicanSnapshot(historical, progress, new Set(), historical.id), progress);
+});
+
 test('progress counts all terminal results, not just successful HTML', () => {
   const value = batch();
   value.items = ['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted'].map((status, index) => ({

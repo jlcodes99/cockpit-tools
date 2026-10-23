@@ -6,19 +6,21 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useModalFocusTrap } from "../../hooks/useModalFocusTrap";
 import { useEscCloseTopmost } from "../../hooks/useEscClose";
 import { usePagination } from "../../hooks/usePagination";
+import { ModalErrorMessage } from "../ModalErrorMessage";
 import { MultiSelectFilterDropdown } from "../MultiSelectFilterDropdown";
 import { PaginationControls } from "../PaginationControls";
+import { SingleSelectDropdown } from "../SingleSelectDropdown";
+import { useCodexImageModelCatalog } from "./useCodexImageModelCatalog";
 import { SingleSelectFilterDropdown } from "../SingleSelectFilterDropdown";
 import {
   getCodexSubscriptionPresentation,
   isCodexApiKeyAccount,
-  isCodexAgentIdentityAccount,
-  isCodexWebSessionAccount,
   type CodexAccount,
 } from "../../types/codex";
 import { buildCodexAccountPresentation } from "../../presentation/platformAccountPresentation";
@@ -26,6 +28,8 @@ import {
   isPrivacyModeEnabledByDefault,
   maskSensitiveValue,
 } from "../../utils/privacy";
+import { eligibleImageAccountIds, isImageGenerationEligibleAccount, imageModelsForAccount, isImageModelInFamily, resolveImageAccountModel, selectedImageAccountModels } from "../../utils/codexImageAccounts";
+export { isImageGenerationEligibleAccount } from "../../utils/codexImageAccounts";
 import "./CodexImageAccountPickerModal.css";
 
 type SortField = "last_used" | "created_at" | "account" | "plan";
@@ -35,50 +39,77 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 export interface CodexImageAccountPickerModalProps {
   accounts: CodexAccount[];
   selectedIds: string[];
+  selectedModels?: Record<string, string>;
+  imageGenerationModel?: string | null;
   /** 信息区展示的对话账号 / 供应商名称。 */
   contextLabel?: string;
   /** 生图模型等附加设置；传入后与账号选择合并到同一个弹框里。 */
   imageModelControl?: ReactNode;
   saving?: boolean;
+  errorMessage?: string;
+  onClearError?: () => void;
   onCancel: () => void;
-  onConfirm: (accountIds: string[]) => void;
+  onConfirm: (accountIds: string[], models: Record<string, string>) => void;
 }
 
 function normalizePlanType(account: CodexAccount): string {
   return (account.plan_type || "").trim().toLowerCase();
 }
 
-export function isImageGenerationEligibleAccount(account: CodexAccount): boolean {
-  if (!account) return false;
-  if (isCodexApiKeyAccount(account)) return false;
-  if (isCodexAgentIdentityAccount(account)) return false;
-  if (isCodexWebSessionAccount(account)) return false;
-  return !normalizePlanType(account).includes("free");
-}
-
 export function CodexImageAccountPickerModal({
   accounts,
   selectedIds,
+  selectedModels,
+  imageGenerationModel,
   contextLabel,
   imageModelControl,
   saving = false,
+  errorMessage,
+  onClearError,
   onCancel,
   onConfirm,
 }: CodexImageAccountPickerModalProps) {
   const { t } = useTranslation();
+  const dialog = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(dialog, true);
   const [query, setQuery] = useState("");
   const [planFilters, setPlanFilters] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortField>("last_used");
   const [sortDesc, setSortDesc] = useState(true);
   const [draftIds, setDraftIds] = useState<string[]>(selectedIds);
+  const [draftModels, setDraftModels] = useState<Record<string, string>>(selectedModels ?? {});
+  const [locateAccountId, setLocateAccountId] = useState<string | null>(null);
+  const previousFamily = useRef(imageGenerationModel?.trim() || null);
+  const registry = useCodexImageModelCatalog(imageGenerationModel || undefined);
 
   // 该弹框会叠加在启动预览 / API 服务弹框之上，ESC 只关闭最上层，避免连带关闭底层弹框。
-  useEscCloseTopmost(!saving, onCancel);
+  useEscCloseTopmost(!saving, onCancel, dialog);
 
   const candidates = useMemo(
-    () => accounts.filter((account) => isImageGenerationEligibleAccount(account)),
-    [accounts],
+    () => accounts.filter((account) => isImageGenerationEligibleAccount(account, imageGenerationModel, registry.deleted)),
+    [accounts, imageGenerationModel, registry.deleted],
   );
+
+  useEffect(() => {
+    if (!imageGenerationModel || !registry.ready) return;
+    setDraftIds((ids) => {
+      const next = eligibleImageAccountIds(ids, accounts, imageGenerationModel, registry.deleted);
+      return next.length === ids.length ? ids : next;
+    });
+  }, [accounts, imageGenerationModel, registry.ready, registry.deleted]);
+
+  useEffect(() => {
+    if (!imageGenerationModel || !registry.ready) return;
+    const family = imageGenerationModel.trim();
+    const changed = previousFamily.current !== null && previousFamily.current !== family;
+    previousFamily.current = family;
+    setDraftModels((models) => {
+      const next = Object.fromEntries(Object.entries(models).filter(([id, model]) =>
+        draftIds.includes(id) && (!changed || isImageModelInFamily(model, family)),
+      ));
+      return JSON.stringify(next) === JSON.stringify(models) ? models : next;
+    });
+  }, [imageGenerationModel, draftIds, registry.ready]);
 
   const planCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -105,7 +136,7 @@ export function CodexImageAccountPickerModal({
         if (!planFilters.includes(plan)) return false;
       }
       if (!keyword) return true;
-      return [account.email, account.account_name, account.id, account.plan_type]
+      return [buildCodexAccountPresentation(account, t).displayName, account.api_base_url, account.api_provider_name, account.email, account.account_name, account.id, account.plan_type]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword));
     });
@@ -116,7 +147,7 @@ export function CodexImageAccountPickerModal({
           return ((left.created_at ?? 0) - (right.created_at ?? 0)) * direction;
         case "account":
           return (
-            String(left.email || "").localeCompare(String(right.email || "")) *
+            buildCodexAccountPresentation(left, t).displayName.localeCompare(buildCodexAccountPresentation(right, t).displayName) *
             direction
           );
         case "plan":
@@ -128,7 +159,7 @@ export function CodexImageAccountPickerModal({
           return ((left.last_used ?? 0) - (right.last_used ?? 0)) * direction;
       }
     });
-  }, [candidates, planFilters, query, sortBy, sortDesc]);
+  }, [candidates, planFilters, query, sortBy, sortDesc, t]);
 
   const pagination = usePagination({
     items: filtered,
@@ -138,6 +169,7 @@ export function CodexImageAccountPickerModal({
   });
 
   const toggleAccount = (accountId: string) => {
+    onClearError?.();
     setDraftIds((prev) =>
       prev.includes(accountId)
         ? prev.filter((value) => value !== accountId)
@@ -145,6 +177,38 @@ export function CodexImageAccountPickerModal({
     );
   };
 
+  const effectiveIds = eligibleImageAccountIds(draftIds, accounts, imageGenerationModel, registry.deleted);
+  const waitingForModel = !imageGenerationModel || !registry.ready;
+  const missingModelIds = effectiveIds.filter((id) => {
+    const account = accounts.find((item) => item.id === id)!;
+    return isCodexApiKeyAccount(account) && !resolveImageAccountModel(account, imageGenerationModel, draftModels, registry.deleted);
+  });
+  const missingSpecificModel = missingModelIds.length > 0;
+  const locateMissingModel = () => {
+    if (saving || !missingModelIds.length) return;
+    if (!filtered.some((account) => account.id === missingModelIds[0])) {
+      setQuery("");
+      setPlanFilters([]);
+    }
+    setLocateAccountId(missingModelIds[0]);
+  };
+  useEffect(() => {
+    if (!locateAccountId || saving) return;
+    const index = filtered.findIndex((account) => account.id === locateAccountId);
+    if (index < 0) { setLocateAccountId(null); return; }
+    const page = Math.floor(index / pagination.pageSize) + 1;
+    if (pagination.currentPage !== page) {
+      pagination.setCurrentPage(page);
+      return;
+    }
+    const row = Array.from(dialog.current?.querySelectorAll<HTMLElement>("[data-image-source-id]") ?? [])
+      .find((element) => element.dataset.imageSourceId === locateAccountId);
+    const trigger = row?.querySelector<HTMLButtonElement>(".single-select-dropdown-trigger");
+    if (!trigger) return;
+    row?.scrollIntoView({ block: "nearest" });
+    trigger.focus({ preventScroll: true });
+    setLocateAccountId(null);
+  }, [locateAccountId, filtered, pagination.currentPage, pagination.pageSize, pagination.pageItems, pagination.setCurrentPage, saving]);
   const selectedVisible = filtered.filter((account) =>
     draftIds.includes(account.id),
   );
@@ -154,6 +218,7 @@ export function CodexImageAccountPickerModal({
   return (
     <div className="modal-overlay" role="presentation">
       <div
+        ref={dialog} tabIndex={-1}
         className="modal-content codex-add-modal codex-oauth-binding-modal codex-image-account-picker"
         role="dialog"
         aria-modal="true"
@@ -174,12 +239,18 @@ export function CodexImageAccountPickerModal({
           </button>
         </div>
         <div className="modal-body">
+          <ModalErrorMessage message={errorMessage} />
+          {!registry.ready && !registry.syncError && <p role="status">{t("common.loading")}</p>}
+          {!imageModelControl && registry.syncError && <>
+            <ModalErrorMessage message={registry.syncError.startsWith("codex.localAccess.") ? t(registry.syncError) : registry.syncError} />
+            <button type="button" className="btn btn-secondary btn-sm" disabled={saving} onClick={registry.retry}>{t("common.retry")}</button>
+          </>}
           <div className="add-section">
             <div className="codex-oauth-binding-context">
               <p className="section-desc codex-oauth-binding-desc">
                 {t(
                   "codex.launchPreview.imageGenPickerDesc",
-                  "当遇到生图需求时会转发生图请求：先由基础模型处理，再由生图模型出图，会消耗所选账号的部分额度。",
+                  "当遇到生图需求时会转发生图请求：OAuth 来源使用基础模型和生图工具；API Key 来源使用所选图片模型和图片接口，费用或额度由对应上游计入。",
                 )}
               </p>
               {contextLabel?.trim() && (
@@ -193,15 +264,20 @@ export function CodexImageAccountPickerModal({
             </div>
 
             <div className="codex-oauth-binding-picker">
+              {imageModelControl && (
+                <div className="codex-image-account-picker-models">
+                  {imageModelControl}
+                </div>
+              )}
               <div className="codex-oauth-binding-picker-header">
                 <label>{t("codex.deepSeek.start.pickerTitle", "选择生图账号")}</label>
                 <div className="codex-oauth-binding-picker-controls">
-                  {imageModelControl}
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
                     disabled={saving || filtered.length === 0}
                     onClick={() => {
+                      onClearError?.();
                       if (allVisibleSelected) {
                         const visibleIds = new Set(filtered.map((item) => item.id));
                         setDraftIds((prev) =>
@@ -226,7 +302,7 @@ export function CodexImageAccountPickerModal({
                   <span>
                     {t(
                       "codex.deepSeek.start.pickerEmpty",
-                      "没有可用于生图的 OAuth 账号（Free 账号与 API Key 账号不支持）。",
+                      "没有可用的生图来源。API Key 账号须包含上方所选完整型号；OAuth 仅支持 gpt-image-2 / gpt-image-2.5 的非 Free 账号。",
                     )}
                   </span>
                 </div>
@@ -331,55 +407,71 @@ export function CodexImageAccountPickerModal({
                         );
                         const selected = draftIds.includes(account.id);
                         const emailText = maskSensitiveValue(
-                          account.email ||
-                            account.account_name ||
-                            presentation.displayName ||
-                            account.id,
+                          presentation.displayName || account.id,
                           isPrivacyModeEnabledByDefault(),
                         );
                         return (
-                          <label
+                          <div
                             key={account.id}
+                            data-image-source-id={account.id}
                             className={`codex-oauth-binding-row codex-image-account-row ${
                               selected ? "is-selected" : ""
-                            }`}
+                            } ${isCodexApiKeyAccount(account) ? "is-api-source" : "is-oauth-source"}`}
                             aria-label={emailText}
                             aria-disabled={saving}
                           >
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => toggleAccount(account.id)}
-                              disabled={saving}
-                            />
-                            <div className="codex-oauth-binding-row-main">
-                              <span
-                                className="codex-oauth-binding-row-name"
-                                title={emailText}
-                              >
-                                {emailText}
-                              </span>
-                              <span
-                                className={`tier-badge codex-oauth-binding-row-plan ${
-                                  presentation.planClass || "unknown"
-                                }`}
-                                title={presentation.planLabel}
-                              >
-                                {presentation.planLabel}
-                              </span>
-                              <span
-                                className={`codex-oauth-binding-row-term ${subscriptionInfo.tone}`}
-                                title={subscriptionInfo.titleText}
-                              >
-                                <Clock size={12} />
-                                <span>
-                                  {t("codex.subscription.label", "有效期")}
+                            <label className="codex-image-account-choice">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => toggleAccount(account.id)}
+                                disabled={saving}
+                              />
+                              <div className="codex-oauth-binding-row-main">
+                                <span
+                                  className="codex-oauth-binding-row-name"
+                                  title={emailText}
+                                >
+                                  {emailText}
                                 </span>
-                                <strong>{subscriptionInfo.valueText}</strong>
-                                <span>{subscriptionInfo.detailText}</span>
-                              </span>
-                            </div>
-                          </label>
+                                <span
+                                  className={`tier-badge codex-oauth-binding-row-plan ${
+                                    presentation.planClass || "unknown"
+                                  }`}
+                                  title={presentation.planLabel}
+                                >
+                                  {presentation.planLabel}
+                                </span>
+                                {!isCodexApiKeyAccount(account) && <span
+                                  className={`codex-oauth-binding-row-term ${subscriptionInfo.tone}`}
+                                  title={subscriptionInfo.titleText}
+                                >
+                                  <Clock size={12} />
+                                  <span>
+                                    {t("codex.subscription.label", "有效期")}
+                                  </span>
+                                  <strong>{subscriptionInfo.valueText}</strong>
+                                  <span>{subscriptionInfo.detailText}</span>
+                                </span>}
+                              </div>
+                            </label>
+                            {isCodexApiKeyAccount(account) && (
+                              <div className="codex-image-account-model">
+                                <SingleSelectDropdown
+                                  value={resolveImageAccountModel(account, imageGenerationModel, draftModels, registry.deleted) || ""}
+                                  options={imageModelsForAccount(account, imageGenerationModel, registry.deleted).map((model) => ({ value: model, label: model }))}
+                                  placeholder={t("codex.localAccess.imageAccounts.chooseModel")}
+                                  ariaLabel={`${emailText}: ${t("codex.localAccess.imageAccounts.upstreamModel")}`}
+                                  className="codex-image-account-model-select" menuClassName="codex-image-account-model-menu" menuWidth={290} menuMaxHeight={200}
+                                  disabled={saving || !selected || !registry.ready}
+                                  onChange={(model) => { if (saving || !selected || !registry.ready) return; onClearError?.(); setDraftModels((models) => ({ ...models, [account.id]: model })); }}
+                                />
+                                {selected && registry.ready && !resolveImageAccountModel(account, imageGenerationModel, draftModels, registry.deleted) && (
+                                  <small className="codex-image-account-model-error" role="alert">{t("codex.localAccess.imageAccounts.modelRequired")}</small>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -407,9 +499,15 @@ export function CodexImageAccountPickerModal({
 
         {/* 操作区固定在底部：正文再长也能直接取消 / 保存。 */}
         <div className="api-key-edit-actions codex-image-account-picker-actions">
+          {!waitingForModel && missingSpecificModel && <div className="codex-image-account-picker-model-hint">
+            <span role="alert">{t("codex.localAccess.imageAccounts.missingModels", { count: missingModelIds.length })}</span>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={saving} onClick={locateMissingModel}>
+              {t("codex.localAccess.imageAccounts.locateModel")}
+            </button>
+          </div>}
           <span className="codex-image-account-picker-count">
             {t("codex.deepSeek.start.imageGenSelected", {
-              count: draftIds.length,
+              count: effectiveIds.length,
               defaultValue: "已选 {{count}} 个账号",
             })}
           </span>
@@ -422,8 +520,8 @@ export function CodexImageAccountPickerModal({
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => onConfirm(draftIds)}
-            disabled={saving}
+            onClick={() => { if (!saving && !waitingForModel && !missingSpecificModel) onConfirm(effectiveIds, selectedImageAccountModels(effectiveIds, accounts, imageGenerationModel, draftModels, registry.deleted)); }}
+            disabled={saving || waitingForModel || missingSpecificModel}
           >
             {saving ? t("common.saving", "保存中...") : t("common.save", "保存")}
           </button>

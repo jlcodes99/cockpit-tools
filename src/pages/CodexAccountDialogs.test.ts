@@ -44,14 +44,37 @@ function renderedElements(node: ts.Node): ts.JsxElement[] {
   return [];
 }
 
+// Resolve only finite literal alternatives; a class must exist in every branch
+// to qualify as a structural boundary. Conditional decoration is not a boundary.
+function stringAlternatives(node: ts.Node): string[] {
+  const current = unwrap(node);
+  if (ts.isStringLiteral(current) || ts.isNoSubstitutionTemplateLiteral(current)) return [current.text];
+  if (ts.isJsxExpression(current) && current.expression) return stringAlternatives(current.expression);
+  if (ts.isConditionalExpression(current)) {
+    const yes = stringAlternatives(current.whenTrue);
+    const no = stringAlternatives(current.whenFalse);
+    return yes.length && no.length ? [...yes, ...no] : [];
+  }
+  if (ts.isTemplateExpression(current)) {
+    let values = [current.head.text];
+    for (const span of current.templateSpans) {
+      const alternatives = stringAlternatives(span.expression);
+      if (!alternatives.length) return [];
+      values = values.flatMap((value) => alternatives.map((alternative) => value + alternative + span.literal.text));
+    }
+    return values;
+  }
+  return [];
+}
+
 function classes(element: ts.JsxElement): string[] {
   const attribute = element.openingElement.attributes.properties.find(
     (candidate): candidate is ts.JsxAttribute =>
       ts.isJsxAttribute(candidate) && candidate.name.getText() === 'className',
   );
-  return attribute?.initializer && ts.isStringLiteral(attribute.initializer)
-    ? attribute.initializer.text.split(/\s+/)
-    : [];
+  const alternatives = attribute?.initializer ? stringAlternatives(attribute.initializer) : [];
+  const classesByBranch = alternatives.map((value) => value.split(/\s+/));
+  return classesByBranch[0]?.filter((value) => classesByBranch.every((branch) => branch.includes(value))) ?? [];
 }
 
 function oneElement(elements: ts.JsxElement[], className: string): ts.JsxElement {
@@ -81,7 +104,10 @@ function actionButton(footer: ts.JsxElement, handler: string): ts.JsxElement {
 function dialogFor(source: ts.SourceFile, visibility: string) {
   const branches = nodes(source, ts.isBinaryExpression).filter((node) =>
     node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
-    ts.isIdentifier(unwrap(node.left)) && node.left.getText(source) === visibility,
+    ts.isIdentifier(unwrap(node.left)) && node.left.getText(source) === visibility &&
+    // Hook enablement conditions use the same flag but do not render a portal.
+    ts.isCallExpression(unwrap(node.right)) &&
+    (unwrap(node.right) as ts.CallExpression).expression.getText(source) === 'createPortal',
   );
   assert.equal(branches.length, 1, `Expected one ${visibility} visibility branch`);
   const portal = unwrap(branches[0].right);
@@ -223,4 +249,15 @@ test('CSS: viewport bounds and one scrolling body keep the shell and action area
 test('CSS: dialog scroll boundaries contain wheel/touch chaining', () => {
   assert.equal(declarations('.codex-account-dialog-overlay')['overscroll-behavior'], 'contain');
   assert.equal(declarations('.modal-content.codex-account-dialog > .modal-body')['overscroll-behavior'], 'contain');
+});
+
+
+test('structure: official authorization is separate from the existing account-add shell', () => {
+  const { dialog } = dialogFor(addSource, 'showAddModal');
+  assert.equal(nodes(dialog, ts.isJsxSelfClosingElement).filter((element) =>
+    element.tagName.getText() === 'ChatGptPlanDialog').length, 0);
+  assert.equal(addSource.text.includes('chatgpt-plan-embedded'), false);
+  assert.equal(addSource.text.includes('chatgptPlan.addTab'), false);
+  const children = dialog.children.flatMap(renderedElements);
+  assert.ok(oneElement(children, 'modal-body'));
 });

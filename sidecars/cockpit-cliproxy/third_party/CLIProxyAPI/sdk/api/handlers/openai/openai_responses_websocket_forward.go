@@ -25,6 +25,7 @@ type responsesWebsocketForwardOptions struct {
 	toolCacheTurn     *responsesWebsocketToolCacheTurn
 	suppressError     func(*interfaces.ErrorMessage) bool
 	keepAliveInterval *time.Duration
+	localInterrupt    *responsesLocalInterrupt
 }
 
 func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
@@ -68,8 +69,16 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 		keepAliveC = keepAliveTicker.C
 	}
 
+	if opts.localInterrupt != nil {
+		opts.localInterrupt.begin(c.Request.Context())
+		defer opts.localInterrupt.end()
+	}
+	localFrames := opts.localInterrupt.framesChan()
+
 	for {
 		select {
+		case interruptPayload := <-localFrames:
+			return completeResponsesWebsocketLocalInterrupt(writer, wsTimelineLog, cancel, interruptPayload, outputItemsByIndex, outputItemsFallback, pendingToolCallIDs, opts.localInterrupt)
 		case <-c.Request.Context().Done():
 			cancel(c.Request.Context().Err())
 			return completedOutput, completedResponseID, sortedStringSet(pendingToolCallIDs), nil, c.Request.Context().Err()
@@ -140,6 +149,7 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 			payloads := websocketJSONPayloadsFromChunk(chunk)
 			for i := range payloads {
 				collectResponsesWebsocketOutputItem(payloads[i], outputItemsByIndex, &outputItemsFallback)
+				opts.localInterrupt.observeResponseID(payloads[i])
 				eventType := gjson.GetBytes(payloads[i], "type").String()
 				if isResponsesWebsocketCompletionEvent(eventType) {
 					payloads[i] = restoreResponsesWebsocketCompletionOutput(payloads[i], outputItemsByIndex, outputItemsFallback)
@@ -160,7 +170,11 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 						cancel(payloadErrMsg.Error)
 						return completedOutput, completedResponseID, sortedStringSet(pendingToolCallIDs), payloadErrMsg, nil
 					}
-				} else if isResponsesWebsocketCompletionEvent(eventType) {
+				} else if isResponsesWebsocketCompletionEvent(eventType) || eventType == "response.incomplete" {
+					opts.localInterrupt.end()
+					// response.incomplete ends the turn too. Codex uses it, with
+					// reason "interrupted", to acknowledge response.interrupt. Closing
+					// the client socket here would block the follow-up request.
 					completed = true
 					completedOutput = responseCompletedOutputFromPayload(payloads[i], outputItemsByIndex, outputItemsFallback)
 					completedResponseID = responseCompletedIDFromPayload(payloads[i])
@@ -209,6 +223,42 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 	}
 }
 
+func completeResponsesWebsocketLocalInterrupt(
+	writer *responsesWebsocketWriter,
+	wsTimelineLog websocketTimelineAppender,
+	cancel handlers.APIHandlerCancelFunc,
+	payload []byte,
+	outputItemsByIndex map[int64][]byte,
+	outputItemsFallback [][]byte,
+	pendingToolCallIDs map[string]struct{},
+	local *responsesLocalInterrupt,
+) ([]byte, string, []string, *interfaces.ErrorMessage, error) {
+	responseID := strings.TrimSpace(gjson.GetBytes(payload, "response_id").String())
+	output := responseCompletedOutputFromPayload([]byte(`{"response":{"output":[]}}`), outputItemsByIndex, outputItemsFallback)
+	incomplete := []byte(`{"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"interrupted"}}}`)
+	var errSet error
+	incomplete, errSet = sjson.SetBytes(incomplete, "response.id", responseID)
+	if errSet != nil {
+		cancel(errSet)
+		return output, responseID, sortedStringSet(pendingToolCallIDs), nil, errSet
+	}
+	incomplete, errSet = sjson.SetRawBytes(incomplete, "response.output", output)
+	if errSet != nil {
+		cancel(errSet)
+		return output, responseID, sortedStringSet(pendingToolCallIDs), nil, errSet
+	}
+	// This terminal event is synthesized locally, so it bypasses the upstream
+	// observer. Record it before ending the turn and publishing it to the client.
+	local.observeResponseID(incomplete)
+	local.end()
+	if errWrite := writeResponsesWebsocketPayload(writer, wsTimelineLog, incomplete, time.Now()); errWrite != nil {
+		cancel(errWrite)
+		return output, responseID, sortedStringSet(pendingToolCallIDs), nil, errWrite
+	}
+	cancel(context.Canceled)
+	return output, responseID, sortedStringSet(pendingToolCallIDs), nil, nil
+}
+
 func responsesWebsocketErrorStatus(errMsg *interfaces.ErrorMessage) int {
 	if errMsg == nil {
 		return 0
@@ -222,17 +272,27 @@ func responsesWebsocketErrorStatus(errMsg *interfaces.ErrorMessage) int {
 // shouldExposeResponsesUpstreamError reports whether a terminal upstream error
 // must reach the downstream client.
 //
-// Only request-shape failures are exposed: the client can act on them and no
-// credential rotation or retry can make the request succeed. Credential, quota
-// and transport failures stay silent so the client simply reconnects and retries;
-// a fresh connection carries no server-side transcript, so reconnecting already
-// implies a full context resend.
+// Request-shape failures and explicitly classified Responses read failures are
+// exposed before closing the socket. The close still forces a fresh connection
+// and full context resend. Other credential, quota and transport failures retain
+// their existing silent reconnect behavior.
 func shouldExposeResponsesUpstreamError(errMsg *interfaces.ErrorMessage) bool {
 	if errMsg == nil {
 		return false
 	}
 	if coreauth.IsTerminalAuthError(errMsg.Error) {
 		return true
+	}
+	if errMsg.Error != nil {
+		body := errMsg.Error.Error()
+		code := gjson.Get(body, "error.code").String()
+		if code == "" {
+			code = gjson.Get(body, "response.error.code").String()
+		}
+		switch code {
+		case "upstream_stream_error", "incomplete_upstream_stream", "request_timeout":
+			return true
+		}
 	}
 	return clienterror.IsRequestFault(responsesWebsocketErrorStatus(errMsg), errMsg.Error)
 }
@@ -554,6 +614,7 @@ func websocketJSONPayloadsFromChunk(chunk []byte) [][]byte {
 }
 
 func buildResponsesWebsocketErrorPayload(errMsg *interfaces.ErrorMessage) ([]byte, error) {
+	errMsg = sanitizeResponsesStreamErrorMessage(errMsg)
 	status := http.StatusInternalServerError
 	errText := http.StatusText(status)
 	if errMsg != nil {

@@ -62,7 +62,7 @@ export function CodexUnifiedProxyDialog({ kind, sourceId, itemId, groupId, selec
   const [error, setError] = useState('');
   const copy = dialogCopy[kind];
 
-  useEscCloseTopmost(true, () => { if (!busy) onClose(); });
+  useEscCloseTopmost(true, () => { if (!busy) onClose(); }, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
 
@@ -217,7 +217,7 @@ export function CodexUnifiedProxyPanel({ totalAccounts, catalog, view, onViewCha
     probeGeneration.current += 1; requestId.current = null; setTesting(false);
     setEditing(false); setDraft(null); setProbe(null); setError('');
   };
-  useEscCloseTopmost(editing && !dialog, closeEditor);
+  useEscCloseTopmost(editing && !dialog, closeEditor, editorDialog);
   useModalScrollLock(editing);
   useModalFocusTrap(editorDialog, editing && !dialog);
 

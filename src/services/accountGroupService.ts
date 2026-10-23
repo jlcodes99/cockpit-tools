@@ -1,6 +1,6 @@
 /**
  * 账号分组服务
- * 数据通过 Tauri 命令持久化到磁盘 (~/.antigravity_cockpit/account_groups.json)
+ * 数据通过 Tauri 命令持久化到磁盘 (~/.cockpit_tools/account_groups.json)
  * 内存中维护一份缓存避免频繁 IO
  */
 

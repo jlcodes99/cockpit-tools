@@ -4,26 +4,12 @@ use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
-    fn deep_repair_normalizes_replayed_response_item_ids() {
-        let content = concat!(
-            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"old\"}}\n",
-            "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"id\":\"fc_de28d1b9-9d75-9d1f-a581-a32e81c8494a_0\",\"call_id\":\"call-a9610ddc\",\"name\":\"apply_patch\",\"input\":\"patch\"}}\n",
-            "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"id\":\"b45f0d9b-159f-4517-b432-7adf31be8189\",\"call_id\":\"call_1\",\"name\":\"exec_command\"}}\n",
-            "{\"type\":\"response_item\",\"payload\":{\"type\":\"reasoning\",\"id\":\"rs_ok\"}}\n"
-        );
-
-        let rewrite = rewrite_rollout_session_meta_providers(content, "openai")
-            .expect("rewrite rollout session meta providers");
-
-        assert!(rewrite.rewrite_needed);
-        let updated = match rewrite.updated_content.expect("updated content") {
-            RolloutProviderUpdate::FullContent(content) => content,
-            other => panic!("unexpected rollout update: {:?}", other),
-        };
-        assert!(updated.contains("\"ctc_fc_de28d1b9-9d75-9d1f-a581-a32e81c8494a_0\""));
-        assert!(updated.contains("\"fc_b45f0d9b-159f-4517-b432-7adf31be8189\""));
-        assert!(updated.contains("\"rs_ok\""));
-        assert!(!updated.contains("\"fc_de28d1b9"));
+    fn deep_repair_only_scans_provider_and_response_item_ids() {
+        let content = "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\",\"model_provider\":\"old\"}}\r\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"id\":\"raw\"}}\r\n";
+        let facts = scan_rollout_session_meta_providers(content).unwrap();
+        assert_eq!(facts.thread_id.as_deref(), Some("thread-1"));
+        assert!(facts.providers.contains("old"));
+        assert_eq!(facts.session_meta_count, 1);
     }
 
     fn make_temp_dir(prefix: &str) -> PathBuf {
@@ -636,7 +622,7 @@ use super::*;
     }
 
     #[test]
-    fn quick_repair_updates_rollouts_referenced_by_official_state_dbs() {
+    fn quick_repair_preserves_rollouts_referenced_by_official_state_dbs() {
         let data_dir = make_temp_dir("codex-session-quick-referenced-rollout-test");
         let sqlite_dir = data_dir.join(SQLITE_DIR_NAME);
         fs::create_dir_all(&sqlite_dir).expect("create sqlite dir");
@@ -688,8 +674,7 @@ use super::*;
         let rollout_changes =
             collect_referenced_rollout_provider_changes(&data_dir, "relay", options, &selection)
                 .expect("collect referenced rollout changes");
-        assert_eq!(rollout_changes.len(), 1);
-        assert_eq!(rollout_changes[0].absolute_path, referenced_rollout);
+        assert!(rollout_changes.is_empty());
 
         let repaired = repair_single_instance(
             &data_dir,
@@ -706,7 +691,7 @@ use super::*;
 
         let referenced_content =
             fs::read_to_string(&referenced_rollout).expect("read referenced rollout");
-        assert!(referenced_content.contains("\"model_provider\":\"relay\""));
+        assert!(referenced_content.contains("\"model_provider\":\"old\""));
         assert!(referenced_content.contains("\"model_provider\":\"old-later\""));
         assert_eq!(
             fs::read_to_string(&unreferenced_rollout).expect("read unreferenced rollout"),
@@ -769,7 +754,6 @@ use super::*;
         assert_eq!(options.sqlite_scope, SqliteRepairScope::AllSessionDbs);
         assert!(options.repair_rollout);
         assert!(!options.repair_referenced_rollouts);
-        assert!(options.rewrite_all_session_meta);
         assert!(options.collect_rollout_thread_facts);
         assert!(options.repair_local_thread_catalog);
         assert!(options.normalize_global_state);
@@ -781,7 +765,7 @@ use super::*;
         let rollout_changes =
             collect_rollout_provider_changes(&data_dir, "relay", options, &selection)
                 .expect("collect deep rollout changes");
-        assert_eq!(rollout_changes.len(), 1);
+        assert!(rollout_changes.is_empty());
         let scan = count_sqlite_rows_to_update_for_options(&data_dir, "relay", options, &selection)
             .expect("scan compatibility sqlite");
         assert_eq!(scan.rows_to_update, 2);
@@ -821,8 +805,8 @@ use super::*;
 
         let referenced_content =
             fs::read_to_string(&referenced_rollout).expect("read deep repaired rollout");
-        assert!(referenced_content.contains("\"model_provider\":\"relay\""));
-        assert!(!referenced_content.contains("old-later"));
+        assert!(referenced_content.contains("\"model_provider\":\"old\""));
+        assert!(referenced_content.contains("old-later"));
 
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
@@ -836,7 +820,6 @@ use super::*;
         assert_eq!(options.sqlite_scope, SqliteRepairScope::OfficialStateDbs);
         assert!(!options.repair_rollout);
         assert!(options.repair_referenced_rollouts);
-        assert!(!options.rewrite_all_session_meta);
         assert!(!options.repair_session_index);
         assert!(!options.rebuild_metadata);
     }
@@ -1069,7 +1052,7 @@ use super::*;
             &selection,
         )
         .expect("collect rollout changes");
-        assert_eq!(changes.len(), 1);
+        assert_eq!(changes.len(), 0);
 
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
@@ -1135,7 +1118,7 @@ use super::*;
 
         assert_eq!(summary.instance_count, 1);
         assert_eq!(summary.mutated_instance_count, 1);
-        assert_eq!(summary.changed_rollout_file_count, 1);
+        assert_eq!(summary.changed_rollout_file_count, 0);
         assert_eq!(summary.updated_sqlite_row_count, 1);
         assert!(summary.backup_dirs.is_empty());
         assert_eq!(summary.items.len(), 1);
@@ -1265,7 +1248,7 @@ use super::*;
         assert_eq!(read_provider(&target_db, "target-thread"), "relay");
         assert!(fs::read_to_string(&target_rollout)
             .expect("read target rollout")
-            .contains("\"model_provider\":\"relay\""));
+            .contains("\"model_provider\":\"openai\""));
 
         assert_eq!(read_provider(&other_db, "other-thread"), "other-provider");
         assert_eq!(
@@ -1309,4 +1292,86 @@ use super::*;
 
         fs::remove_dir_all(&target_dir).expect("cleanup target dir");
         fs::remove_dir_all(&other_dir).expect("cleanup other dir");
+    }
+
+
+    #[test]
+    fn stability_repair_keeps_parent_child_byte_cursors_and_concurrent_append() {
+        use std::io::Write;
+        let dir = make_temp_dir("stability-lineage");
+        fs::create_dir_all(dir.join("sessions")).unwrap();
+        let parent = dir.join("sessions/rollout-parent.jsonl");
+        let child = dir.join("sessions/rollout-child.jsonl");
+        let bytes = "{ \"type\":\"session_meta\", \"payload\":{\"id\":\"parent\",\"model_provider\":\"长供应商\"}}\r\n{\"type\":\"session_meta\",\"payload\":{\"id\":\"parent\",\"model_provider\":\"another\"}}\r\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"id\":\"raw\",\"content\":\"中文🙂\"}}\r\n";
+        fs::write(&parent, bytes).unwrap();
+        let child_bytes = format!("{{\"type\":\"session_meta\",\"payload\":{{\"id\":\"child\",\"model_provider\":\"old\",\"history_base\":{{\"thread_id\":\"parent\",\"end_byte_offset\":{}}}}}}}\r\n", bytes.len());
+        fs::write(&child, &child_bytes).unwrap();
+        let db = Connection::open(dir.join(STATE_DB_FILE)).unwrap();
+        db.execute_batch("CREATE TABLE threads (id TEXT PRIMARY KEY, model_provider TEXT); INSERT INTO threads VALUES ('parent','old'),('child','old'); CREATE TABLE thread_turns (rollout_byte_offset INTEGER, rollout_end_byte_offset INTEGER); CREATE TABLE thread_history_projection_state (next_rollout_byte_offset INTEGER);").unwrap();
+        db.execute("INSERT INTO thread_turns VALUES (?1, ?1)", [bytes.len() as i64]).unwrap();
+        db.execute("INSERT INTO thread_history_projection_state VALUES (?1)", [bytes.len() as i64]).unwrap();
+        let options = CodexSessionVisibilityRepairOptions::full_provider_migration();
+        let selection = RepairTargetSelection::default();
+        let changes = collect_rollout_provider_changes(&dir, "openai", options, &selection).unwrap();
+        for c in &changes { normalize_rollout_timestamp(c).unwrap(); }
+        assert_eq!(fs::read(&parent).unwrap(), bytes.as_bytes());
+        assert_eq!(fs::read(&child).unwrap(), child_bytes.as_bytes());
+        repair_single_instance(&dir, "openai", &changes, true, false, false, options, &selection).unwrap();
+        let provider: String = db.query_row("SELECT model_provider FROM threads WHERE id='parent'", [], |r| r.get(0)).unwrap();
+        assert_eq!(provider, "openai");
+        let cursor: i64 = db.query_row("SELECT next_rollout_byte_offset FROM thread_history_projection_state", [], |row| row.get(0)).unwrap();
+        assert_eq!(cursor as usize, bytes.len());
+        let stale = collect_rollout_provider_changes(&dir, "relay", options, &selection).unwrap();
+        let mut append = fs::OpenOptions::new().append(true).open(&parent).unwrap();
+        append.write_all(b"{\"type\":\"event_msg\"}\r\n").unwrap();
+        let appended = fs::read(&parent).unwrap();
+        for c in &stale { normalize_rollout_timestamp(c).unwrap(); }
+        assert_eq!(fs::read(&parent).unwrap(), appended);
+        for _ in 0..2 {
+            let changes = collect_rollout_provider_changes(&dir, "relay", options, &selection).unwrap();
+            for c in &changes { normalize_rollout_timestamp(c).unwrap(); }
+        }
+        assert_eq!(fs::read(&parent).unwrap(), appended);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn stability_legacy_backup_restore_cannot_replace_rollout_or_lose_append() {
+        let dir = make_temp_dir("legacy-restore-bytes");
+        let backup = dir.join("backup/files/sessions");
+        let target = dir.join("live/sessions");
+        fs::create_dir_all(&backup).unwrap(); fs::create_dir_all(&target).unwrap();
+        fs::write(backup.join("rollout-parent.jsonl"), b"old history\r\n").unwrap();
+        let live = target.join("rollout-parent.jsonl");
+        fs::write(&live, b"old history\r\nconcurrent append\r\n").unwrap();
+        let before = fs::read(&live).unwrap();
+        restore_instance_files_from_backup(&dir.join("live"), &dir.join("backup"), false).unwrap();
+        assert_eq!(fs::read(live).unwrap(), before);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn stability_timestamp_repair_preserves_a_simultaneous_appender() {
+        use std::io::Write;
+        let dir = make_temp_dir("rollout-concurrent-append");
+        let path = dir.join("rollout-parent.jsonl");
+        let original = "{\"type\":\"session_meta\",\"payload\":{\"id\":\"parent\",\"model_provider\":\"中文🙂\"}}\r\n";
+        fs::write(&path, original).unwrap();
+        let metadata = fs::metadata(&path).unwrap();
+        let change = RolloutProviderChange { relative_path:PathBuf::from("rollout-parent.jsonl"), absolute_path:path.clone(), source_size:metadata.len(), source_modified_at:metadata.modified().ok(), source_identity:rollout_timestamp_identity(&metadata), target_modified_at:Some(UNIX_EPOCH + Duration::from_secs(1)) };
+        let start = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let writer_start = start.clone(); let writer_path = path.clone();
+        let writer = std::thread::spawn(move || {
+            let mut file = fs::OpenOptions::new().append(true).open(writer_path).unwrap();
+            writer_start.wait();
+            for n in 0..100 { file.write_all(format!("{{\"type\":\"event_msg\",\"n\":{n},\"text\":\"并发🙂\"}}\r\n").as_bytes()).unwrap(); std::thread::yield_now(); }
+        });
+        start.wait();
+        for _ in 0..100 { normalize_rollout_timestamp(&change).unwrap(); std::thread::yield_now(); }
+        writer.join().unwrap();
+        let actual = fs::read_to_string(path).unwrap();
+        let mut expected = original.to_string();
+        for n in 0..100 { expected.push_str(&format!("{{\"type\":\"event_msg\",\"n\":{n},\"text\":\"并发🙂\"}}\r\n")); }
+        assert_eq!(actual, expected);
+        fs::remove_dir_all(dir).unwrap();
     }

@@ -51,12 +51,13 @@ export type PlatformOverviewHeaderId =
   | 'trae_solo_cn'
   | 'workbuddy';
 
-interface PlatformOverviewTabsHeaderProps {
+interface PlatformOverviewTabsHeaderProps<T extends string> {
   platform: PlatformOverviewHeaderId;
-  active: PlatformOverviewTab;
-  onTabChange?: (tab: PlatformOverviewTab) => void;
-  tabs?: PlatformOverviewTab[];
-  tabPlacement?: Partial<Record<PlatformOverviewTab, 'top' | 'more'>>;
+  active: T;
+  onTabChange?: (tab: T) => void;
+  tabs?: T[];
+  tabPlacement?: Partial<Record<T, 'top' | 'more'>>;
+  pageRegistry?: { id: T; label: string; icon: ReactNode }[];
 }
 
 interface PlatformOverviewConfig {
@@ -65,7 +66,7 @@ interface PlatformOverviewConfig {
 }
 
 interface TabSpec {
-  key: PlatformOverviewTab;
+  key: string;
   label: string;
   icon: ReactNode;
 }
@@ -141,13 +142,14 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   },
 };
 
-export function PlatformOverviewTabsHeader({
+export function PlatformOverviewTabsHeader<T extends string = PlatformOverviewTab>({
   platform,
   active,
   onTabChange,
   tabs,
   tabPlacement,
-}: PlatformOverviewTabsHeaderProps) {
+  pageRegistry,
+}: PlatformOverviewTabsHeaderProps<T>) {
   const { t } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
@@ -194,9 +196,9 @@ export function PlatformOverviewTabsHeader({
       }),
     [switchablePlatforms, currentGroup, t],
   );
-  const tabOrder: PlatformOverviewTab[] =
+  const tabOrder: string[] =
     tabs && tabs.length > 0 ? tabs : ['overview', 'instances'];
-  const tabLabels: Record<PlatformOverviewTab, TabSpec> = {
+  const tabLabels: Record<string, TabSpec> = {
     overview: {
       key: 'overview',
       label: t('overview.title', '账号总览'),
@@ -236,12 +238,13 @@ export function PlatformOverviewTabsHeader({
       icon: <PanelTop className="tab-icon" />,
     },
   };
-  const tabSpecs: TabSpec[] = tabOrder.map((tab) => tabLabels[tab]);
+  const registry = pageRegistry ? Object.fromEntries(pageRegistry.map(page => [page.id, { key: page.id, label: page.label, icon: page.icon }])) : tabLabels;
+  const tabSpecs: TabSpec[] = tabOrder.flatMap((tab) => registry[tab] ? [registry[tab]] : []);
   const visibleTabSpecs = tabSpecs.filter(
-    (tab) => tabPlacement?.[tab.key] !== 'more',
+    (tab) => tabPlacement?.[tab.key as T] !== 'more',
   );
   const moreTabSpecs = tabSpecs.filter(
-    (tab) => tabPlacement?.[tab.key] === 'more',
+    (tab) => tabPlacement?.[tab.key as T] === 'more',
   );
   const hasMoreMenu = moreTabSpecs.length > 0 || platform === 'codex';
 
@@ -291,8 +294,9 @@ export function PlatformOverviewTabsHeader({
             {visibleTabSpecs.map((tab) => (
               <button
                 key={tab.key}
-                className={`filter-tab${active === tab.key ? ' active' : ''}`}
-                onClick={() => onTabChange?.(tab.key)}
+                className={`filter-tab${active === tab.key ? ' active' : ''}${tab.key.startsWith('plugin:') ? ' plugin-nav-tab' : ''}`}
+                title={tab.label}
+                onClick={() => onTabChange?.(tab.key as T)}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
@@ -320,9 +324,10 @@ export function PlatformOverviewTabsHeader({
                     type="button"
                     role="menuitem"
                     key={tab.key}
-                    className={`page-more-menu-item${active === tab.key ? ' active' : ''}`}
+                    className={`page-more-menu-item${active === tab.key ? ' active' : ''}${tab.key.startsWith('plugin:') ? ' plugin-nav-tab' : ''}`}
+                    title={tab.label}
                     onClick={() => {
-                      onTabChange?.(tab.key);
+                      onTabChange?.(tab.key as T);
                       setMoreOpen(false);
                     }}
                   >

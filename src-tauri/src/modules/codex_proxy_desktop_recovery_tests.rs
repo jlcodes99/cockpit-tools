@@ -238,3 +238,24 @@ async fn restored_entry_uses_current_direct_mode_and_forwards_without_client_res
     .await
     .unwrap();
 }
+
+#[test]
+fn card_client_routes_recover_only_the_running_default_or_managed_owner() {
+    let mut store = InstanceStore::new();
+    store.default_settings.last_pid = Some(71);
+    let mut registry = PortRegistry::default();
+    let id = crate::modules::codex_client_proxy::route_id("__api_service__");
+    registry.record(&id, 45991);
+    let entries = [running(71, None, 45991)];
+    assert_eq!(select_targets(&registry, &store, &entries, matches), vec![Target { account_id: id, port: 45991 }]);
+    assert!(select_targets(&registry, &store, &[], matches).is_empty());
+    assert!(select_targets(&registry, &store, &[running(72, None, 45991)], matches).is_empty());
+    store.default_settings.last_pid = None;
+    store.instances.push(serde_json::from_value(serde_json::json!({
+        "id":"fixture", "name":"fixture", "userDataDir":"/isolated/client", "extraArgs":"", "createdAt":0, "lastPid":73
+    })).unwrap());
+    let provider = crate::modules::codex_client_proxy::route_id("provider-fixture");
+    registry.record(&provider,45992);
+    assert_eq!(select_targets(&registry,&store,&[running(73,Some("/isolated/client"),45992)],matches), vec![Target { account_id: provider,port:45992 }]);
+    assert!(select_targets(&registry,&store,&[running(73,Some("/unrelated/client"),45992)],matches).is_empty());
+}

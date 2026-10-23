@@ -9,6 +9,7 @@ import { proxySourceInspectable } from '../../utils/codexProxyPickerModel';
 import { executeProxyBatch, proxyBatchCompletedSuccessfully, type BatchBindResult } from '../../utils/codexProxyBatch';
 import { summarizeProxyBatch, unifiedProxyActive } from '../../utils/codexProxyDraft';
 import { proxyErrorKey } from '../../services/codexAccountProxyService';
+import { getCodexProxyTarget, updateCodexProxyAccount, isCodexProxyTarget, type CodexProxyTargetAccount } from '../../services/codexProxyTargetService';
 import { useCodexAccountStore } from '../../stores/useCodexAccountStore';
 import { SingleSelectDropdown } from '../SingleSelectDropdown';
 import { ModalErrorMessage } from '../ModalErrorMessage';
@@ -51,11 +52,12 @@ export function CodexProxyAccountDialog({ accountId, initialTab, initialMode, on
   const activeUnified = unifiedProxyActive(unified);
   const sharedLabel = unified?.binding ? [unified.binding.sourceName, unified.binding.name, unified.binding.selectedName].filter(Boolean).join(' · ') : '';
   const effectiveLabel = editor.proxyDisabled ? t('codex.proxy.modeDisabled') : editor.bound ? proxySummary(editor.savedBinding) : activeUnified ? sharedLabel : t('codex.proxy.modeDefault');
-  const canSave = mode === 'disabled' ? !editor.proxyDisabled : mode === 'follow'
+  const targetReady = Boolean(editor.account) && !(editor.account as CodexProxyTargetAccount)?.proxyTargetLoading && !(editor.account as CodexProxyTargetAccount)?.proxyTargetError;
+  const canSave = targetReady && (mode === 'disabled' ? !editor.proxyDisabled : mode === 'follow'
     ? (editor.bound || editor.proxyDisabled) && Boolean(unified) && !unifiedErrorKey
-    : editor.selectionReady && !editor.saved;
+    : editor.selectionReady && !editor.saved);
 
-  useEscCloseTopmost(!noteOpen, () => { if (!editor.busy || editor.testing) onClose(); });
+  useEscCloseTopmost(!noteOpen, () => { if (!editor.busy || editor.testing) onClose(); }, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, !noteOpen);
   useEffect(() => {
@@ -89,7 +91,10 @@ export function CodexProxyAccountDialog({ accountId, initialTab, initialMode, on
           {t(value === 'edit' ? 'codex.proxy.managerAccounts.change' : 'codex.proxy.managerAccounts.details')}</button>)}
       </div>
       <div className="modal-body">
-        <ModalErrorMessage message={editor.error} />
+        <ModalErrorMessage message={editor.error || (editor.account?.egress_proxy_error ? t(proxyErrorKey(editor.account.egress_proxy_error)) : '')} />
+        {(editor.account as CodexProxyTargetAccount)?.proxyTargetError && <button type="button" className="btn btn-secondary compact" onClick={() => { void getCodexProxyTarget(accountId).catch(() => {}); }}>{t('common.retry')}</button>}
+        {editor.account?.egress_proxy_legacy_bound && <p className="codex-proxy-page-note">{t('codex.proxy.legacyBoundHint')}</p>}
+        {editor.account && isCodexProxyTarget(editor.account) && <p className="codex-proxy-page-note">{t('codex.proxy.cardScopeHint')}</p>}
         {submitted && editor.notice && <p className="codex-proxy-account-saved" role="status"><Check size={16} />{t('codex.proxy.saved')}</p>}
         {tab === 'edit' ? <>
           <div className="codex-proxy-account-mode-options" role="radiogroup" aria-label={t('codex.proxy.managerAccounts.mode')}>
@@ -126,12 +131,12 @@ export function CodexProxyAccountDialog({ accountId, initialTab, initialMode, on
           </div>}
           <p className="codex-proxy-page-note">{t('codex.proxy.restartHint')}</p>
         </> : <div className="codex-proxy-account-details">
-          <CodexProxyRuntimeStatusPanel accountId={accountId} revision={editor.savedBinding} />
+          <CodexProxyRuntimeStatusPanel accountId={accountId} revision={editor.savedBinding} desktopOnly={Boolean(editor.account && isCodexProxyTarget(editor.account))} />
           <div className="codex-proxy-account-check-actions">
             <button type="button" className="btn btn-secondary compact" disabled={measuring || !editor.bound} onClick={() => editor.test()}>
               {editor.testing ? <RefreshCw size={15} className="loading-spinner" /> : <Activity size={15} />}{t('codex.proxy.test')}</button>
             {editor.testing && <button type="button" className="btn btn-secondary compact" onClick={editor.cancelTest}>{t('codex.proxy.cancelCheck')}</button>}
-            <button type="button" className="btn btn-secondary compact" disabled={measuring} onClick={() => setNoteOpen(true)}><StickyNote size={15} />{t('codex.proxy.accounts.note')}</button>
+            {accountId !== '__api_service__' && <button type="button" className="btn btn-secondary compact" disabled={measuring} onClick={() => setNoteOpen(true)}><StickyNote size={15} />{t('codex.proxy.accounts.note')}</button>}
             {editor.account?.account_note?.trim() && <span className="codex-proxy-account-note-preview">{editor.account.account_note.trim()}</span>}
           </div>
           <CodexProxyRecentRequests inModal accountId={accountId} revision={JSON.stringify(editor.savedBinding)} />
@@ -170,7 +175,7 @@ export function CodexProxyFollowDialog({ accounts, onApplied, onClose }: {
   const resolveName = useCodexProxyAccountName();
   const summary = summarizeProxyBatch(results, accounts);
   const remaining = targets.filter((entry) => !results.some((result) => result.accountId === entry.account.id && result.ok));
-  useEscCloseTopmost(true, () => { if (!busy) onClose(); });
+  useEscCloseTopmost(true, () => { if (!busy) onClose(); }, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; cancelled.current = true; }; }, []);
@@ -182,7 +187,7 @@ export function CodexProxyFollowDialog({ accounts, onApplied, onClose }: {
       let completed: BatchBindResult[] = [];
       await executeProxyBatch(remaining, {
         cancelled: () => cancelled.current,
-        bind: (entry) => useCodexAccountStore.getState().updateAccountEgressProxy(entry.id, null),
+        bind: (entry) => updateCodexProxyAccount(entry.id),
         applied: onApplied,
         errorKey: proxyErrorKey,
         progress: (next) => {
@@ -224,7 +229,7 @@ function CodexProxyNoteDialog({ account, onClose }: { account: CodexAccount; onC
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  useEscCloseTopmost(true, () => { if (!busy) onClose(); });
+  useEscCloseTopmost(true, () => { if (!busy) onClose(); }, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
 

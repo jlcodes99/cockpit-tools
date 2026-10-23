@@ -198,9 +198,7 @@ fn codex_profile_dirs() -> Vec<PathBuf> {
 fn one_time_sanitize_state_path() -> PathBuf {
     modules::account::get_data_dir()
         .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".antigravity_cockpit")
+            crate::modules::data_paths::fallback_data_dir()
         })
         .join(ONE_TIME_MIGRATION_STATE_FILE)
 }
@@ -1043,7 +1041,7 @@ mod tests {
     }
 
     #[test]
-    fn one_time_migration_cleans_idle_rollouts_and_defers_active_ones() {
+    fn one_time_migration_preserves_idle_and_active_rollout_bytes() {
         let dir = make_temp_dir("codex-rollout-migration");
         let state_path = dir.join(ONE_TIME_MIGRATION_STATE_FILE);
         let profile_dir = dir.join("default");
@@ -1075,11 +1073,11 @@ mod tests {
         let outcome =
             run_one_time_sanitize_with(&state_path, vec![profile_dir.clone()]).expect("migration");
 
-        assert_eq!(outcome.rollout.files_changed, 1);
-        assert_eq!(outcome.rollout.removed_signatures, 1);
+        assert_eq!(outcome.rollout.files_changed, 0);
+        assert_eq!(outcome.rollout.removed_signatures, 0);
         assert_eq!(outcome.rollout.pending_files.len(), 1);
         let cleaned = fs::read_to_string(&idle_rollout).expect("read cleaned rollout");
-        assert!(!cleaned.contains("encrypted_content"));
+        assert!(cleaned.contains("encrypted_content"));
         let deferred = fs::read_to_string(&active_rollout).expect("read active rollout");
         assert!(
             deferred.contains("encrypted_content"),

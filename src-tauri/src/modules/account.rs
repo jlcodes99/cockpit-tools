@@ -16,6 +16,18 @@ use crate::modules;
 static ACCOUNT_INDEX_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
 static AUTO_SWITCH_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+struct AutoSwitchGuard<'a>(&'a AtomicBool);
+impl<'a> AutoSwitchGuard<'a> {
+    fn acquire(flag: &'a AtomicBool) -> Option<Self> {
+        (!flag.swap(true, Ordering::SeqCst)).then(|| Self(flag))
+    }
+}
+impl Drop for AutoSwitchGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
 static QUOTA_ALERT_LAST_SENT: std::sync::LazyLock<Mutex<HashMap<String, i64>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 static LIST_ACCOUNTS_CACHE: std::sync::LazyLock<Mutex<Option<ListAccountsCacheEntry>>> =
@@ -25,12 +37,6 @@ static LIST_ACCOUNTS_LOAD_LOCK: std::sync::LazyLock<Mutex<()>> =
 
 const QUOTA_ALERT_COOLDOWN_SECONDS: i64 = 300;
 const LIST_ACCOUNTS_CACHE_TTL_MS: u64 = 800;
-
-// 使用与 AntigravityCockpit 插件相同的数据目录
-const DATA_DIR: &str = ".antigravity_cockpit";
-const DEV_DATA_DIR: &str = ".antigravity_cockpit_dev";
-const DATA_DIR_ENV: &str = "COCKPIT_TOOLS_DATA_DIR";
-const PROFILE_ENV: &str = "COCKPIT_TOOLS_PROFILE";
 
 const ACCOUNTS_INDEX: &str = "accounts.json";
 const ACCOUNTS_DIR: &str = "accounts";
@@ -193,26 +199,11 @@ fn deserialize_account_from_storage(
 
 /// 获取数据目录路径
 pub fn is_dev_profile() -> bool {
-    std::env::var(PROFILE_ENV)
-        .map(|value| value.trim().eq_ignore_ascii_case("dev"))
-        .unwrap_or(false)
+    modules::data_paths::is_dev_profile()
 }
 
 pub fn resolve_data_dir() -> Result<PathBuf, String> {
-    if let Ok(raw) = std::env::var(DATA_DIR_ENV) {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty() {
-            return Ok(PathBuf::from(trimmed));
-        }
-    }
-
-    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
-    let dir_name = if is_dev_profile() {
-        DEV_DATA_DIR
-    } else {
-        DATA_DIR
-    };
-    Ok(home.join(dir_name))
+    modules::data_paths::resolve_data_dir()
 }
 
 pub fn get_data_dir() -> Result<PathBuf, String> {
@@ -699,12 +690,7 @@ fn find_matching_account_id(
             }
         }
         let mut sorted = email_matches;
-        sorted.sort_by_key(|acc| {
-            (
-                acc.disabled,
-                std::cmp::Reverse(acc.last_used),
-            )
-        });
+        sorted.sort_by_key(|acc| (acc.disabled, std::cmp::Reverse(acc.last_used)));
         if let Some(best) = sorted.first() {
             return Ok(Some(best.id.clone()));
         }
@@ -1026,8 +1012,10 @@ pub fn update_account_quota(account_id: &str, mut quota: QuotaData) -> Result<()
                 merged_quota.is_forbidden = quota.is_forbidden;
                 merged_quota.last_updated = quota.last_updated;
                 merged_quota.quota_summary_stale = true;
-                merged_quota.quota_summary_updated_at = existing_quota.quota_summary_updated_at
-                    .or_else(|| (!existing_quota.quota_summary_stale).then_some(existing_quota.last_updated));
+                merged_quota.quota_summary_updated_at =
+                    existing_quota.quota_summary_updated_at.or_else(|| {
+                        (!existing_quota.quota_summary_stale).then_some(existing_quota.last_updated)
+                    });
                 account.update_quota(merged_quota);
                 account.usage_updated_at = Some(chrono::Utc::now().timestamp());
                 save_account(&account)?;
@@ -1835,7 +1823,14 @@ pub fn run_quota_alert_if_needed() -> Result<Option<QuotaAlertPayload>, String> 
     Ok(Some(payload))
 }
 
-async fn run_auto_switch_if_needed_inner() -> Result<Option<Account>, String> {
+async fn run_auto_switch_if_needed_inner<F, Fut>(
+    current_account_id: Option<String>,
+    switch: F,
+) -> Result<Option<Account>, String>
+where
+    F: FnOnce(String, modules::antigravity_switch_history::AntigravityAutoSwitchReason) -> Fut,
+    Fut: std::future::Future<Output = Result<Account, String>>,
+{
     let cfg = crate::modules::config::get_user_config();
     if !cfg.auto_switch_enabled {
         return Ok(None);
@@ -1858,7 +1853,7 @@ async fn run_auto_switch_if_needed_inner() -> Result<Option<Account>, String> {
         modules::logger::log_warn("[AutoSwitch] 可监控模型分组为空，跳过自动切号");
         return Ok(None);
     }
-    let current_id = match get_current_account_id()? {
+    let current_id = match current_account_id {
         Some(id) => id,
         None => return Ok(None),
     };
@@ -1944,33 +1939,64 @@ async fn run_auto_switch_if_needed_inner() -> Result<Option<Account>, String> {
         trigger_context.rule
     ));
 
-    let switched = if cfg.antigravity_dual_switch_no_restart_enabled {
-        switch_account_dual_no_restart(
-            &target.id,
-            "auto",
-            "tools.account.auto_switch",
-            "auto_switch",
-            Some(reason_snapshot),
-        )
-        .await?
-    } else {
-        let switched = switch_account_internal(&target.id).await?;
-        modules::websocket::broadcast_account_switched(&switched.id, &switched.email);
-        switched
-    };
+    let switched = switch(target.id.clone(), reason_snapshot).await?;
     modules::websocket::broadcast_data_changed("auto_switch");
     Ok(Some(switched))
 }
 
-pub async fn run_auto_switch_if_needed() -> Result<Option<Account>, String> {
-    if AUTO_SWITCH_IN_PROGRESS.swap(true, Ordering::SeqCst) {
+pub(crate) async fn execute_ide_auto_switch(
+    account_id: String,
+    reason_snapshot: modules::antigravity_switch_history::AntigravityAutoSwitchReason,
+) -> Result<Account, String> {
+    let cfg = crate::modules::config::get_user_config();
+    let switched =
+        if cfg.antigravity_launch_on_switch && cfg.antigravity_dual_switch_no_restart_enabled {
+            switch_account_dual_no_restart(
+                &account_id,
+                "auto",
+                "tools.account.auto_switch",
+                "auto_switch",
+                Some(reason_snapshot),
+            )
+            .await?
+        } else {
+            let switched = switch_account_internal(&account_id).await?;
+            modules::websocket::broadcast_account_switched(&switched.id, &switched.email);
+            switched
+        };
+    Ok(switched)
+}
+
+pub(crate) async fn run_auto_switch_if_needed<F, Fut>(
+    current_account_id: Option<String>,
+    switch: F,
+) -> Result<Option<Account>, String>
+where
+    F: FnOnce(String, modules::antigravity_switch_history::AntigravityAutoSwitchReason) -> Fut,
+    Fut: std::future::Future<Output = Result<Account, String>>,
+{
+    let Some(_guard) = AutoSwitchGuard::acquire(&AUTO_SWITCH_IN_PROGRESS) else {
         modules::logger::log_info("[AutoSwitch] 自动切号进行中，跳过本次检查");
         return Ok(None);
-    }
+    };
 
-    let result = run_auto_switch_if_needed_inner().await;
-    AUTO_SWITCH_IN_PROGRESS.store(false, Ordering::SeqCst);
-    result
+    // Cancellation must release single-flight ownership as well as success/error.
+    run_auto_switch_if_needed_inner(current_account_id, switch).await
+}
+
+#[cfg(test)]
+mod auto_switch_guard_tests {
+    use super::*;
+    #[test]
+    fn single_flight_releases_on_completion_or_cancellation() {
+        let flag = AtomicBool::new(false);
+        let guard = AutoSwitchGuard::acquire(&flag).unwrap();
+        assert!(AutoSwitchGuard::acquire(&flag).is_none());
+        assert!(flag.load(Ordering::SeqCst));
+        drop(guard);
+        assert!(!flag.load(Ordering::SeqCst));
+        assert!(AutoSwitchGuard::acquire(&flag).is_some());
+    }
 }
 
 /// 批量刷新所有账号配额
@@ -2813,8 +2839,12 @@ mod note_tests {
             Some("proj-1".to_string()),
             Some("session-1".to_string()),
         );
-        let first = upsert_account("user@example.com".to_string(), Some("Original Name".to_string()), token1)
-            .expect("first add");
+        let first = upsert_account(
+            "user@example.com".to_string(),
+            Some("Original Name".to_string()),
+            token1,
+        )
+        .expect("first add");
         assert_eq!(load_account_index().unwrap().accounts.len(), 1);
 
         // 重新导入同一邮箱：新 refresh_token，无 project_id，无 session_id，邮箱大小写不同

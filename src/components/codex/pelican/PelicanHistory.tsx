@@ -49,7 +49,7 @@ export function PelicanHistory() {
     {loading && items.length > 0 && <p className="pelican-muted" role="status">{t('common.loading')}</p>}
     {!items.length && <p className="pelican-muted">{t(loading ? 'common.loading' : 'pelican.historyEmpty')}</p>}
     {items.map((batch) => <article key={batch.id} className="pelican-history-row">
-      <div><strong>{new Date(batch.createdAt).toLocaleString()}</strong><p className="pelican-muted">{batch.model} · {batch.effort} · {batch.items.length} · {t(`pelican.${batch.status}`)}</p></div>
+      <div><strong>{new Date(batch.createdAt).toLocaleString()}</strong><p className="pelican-muted">{batch.items.some((item) => item.provider) ? `${t('pelican.providers')} · ${[...new Set(batch.items.map((item) => item.provider?.model ?? batch.model))].join(', ')}` : batch.model} · {batch.effort} · {batch.items.length} · {t(`pelican.${batch.status}`)}</p></div>
       <div className="pelican-actions"><button className="btn btn-secondary" disabled={loading} onClick={async () => {
         error.clear(); setLoading(true);
         try { useCodexPelicanStore.getState().showBatch(await getPelican(batch.id)); }

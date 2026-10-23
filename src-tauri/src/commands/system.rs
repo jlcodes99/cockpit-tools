@@ -23,4 +23,6 @@ pub async fn save_ui_preferences(
 #[cfg(test)]
 mod tests {
     include!("system_tests.rs");
+    include!("system_tests_floating_appearance.rs");
+    include!("system_tests_codex_refresh_scope.rs");
 }

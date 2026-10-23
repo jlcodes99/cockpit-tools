@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 )
 
 func TestResetAuthStateIgnoresResultsFromOlderAttempts(t *testing.T) {
@@ -20,6 +22,7 @@ func TestResetAuthStateIgnoresResultsFromOlderAttempts(t *testing.T) {
 	}
 
 	oldAttempt := newUpstreamAttemptContext(context.Background())
+	cliproxyexecutor.MarkUpstreamAttempt(oldAttempt)
 	if _, err := manager.ResetAuthState(context.Background(), authID); err != nil {
 		t.Fatalf("reset auth state: %v", err)
 	}
@@ -45,6 +48,7 @@ func TestResetAuthStateIgnoresResultsFromOlderAttempts(t *testing.T) {
 	}
 
 	newAttempt := newUpstreamAttemptContext(context.Background())
+	cliproxyexecutor.MarkUpstreamAttempt(newAttempt)
 	manager.MarkResult(newAttempt, Result{
 		AuthID:   authID,
 		Provider: "codex",

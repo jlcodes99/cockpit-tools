@@ -1,0 +1,905 @@
+{
+  "schema_version": 1,
+  "scope": "现有Go宿主实际使用的SDK功能、可达依赖及生效配置；以行为兼容验收，不逐行复制未使用SDK代码",
+  "accepted_policy": "兼容Go已支持请求和配置，保留Rust多图等扩展能力及资源保护",
+  "go_baseline": {
+    "sdk": "github.com/router-for-me/CLIProxyAPI/v7",
+    "version": "v7.2.155",
+    "replace": "sidecars/cockpit-cliproxy/third_party/CLIProxyAPI",
+    "includes_local_isolation_changes": true,
+    "commit": "915e7a20b432546660c3cd15e90f9fa527490ecc",
+    "policy": "Go retains baseline continuation semantics; shared account installation profiles and transport isolation are applied to both engines"
+  },
+  "codex_wire_baseline": "f82e36592278a0a782fb0d0fc97e5fa10e832ac2",
+  "required_invariants": [
+    "Go/Rust在各网关范围内共享持久化归属与完整历史；各profile保持隔离，保留客户端Thread和密文",
+    "Rust caller/account/owner与Session/Thread/子Agent/opaque归属隔离",
+    "无归属但完整自包含的客户端历史自动接纳，不需要人工授权；仅缺登记不能拒绝未知密文",
+    "未知输入仅在完整有效成功响应后补记归属；准备、预热、失败、取消及输出修补不能伪造成功证据",
+    "自动续接遵守既有有界重试、账号池与输出前回退规则；失败保留历史和密文，不覆盖已成功代次",
+    "保留Rust250ms启动流保护",
+    "Go/Rust共用自动续接内核；人工恢复IPC、授权文件、claim与单次尝试分支已移除，旧完成记录仅读取兼容",
+    "不提交/推送/tag/发布",
+    "Go/Rust共享持久化安装身份；OAuth刷新不轮换身份；账号主体或APIkey更换不混用连接",
+    "Go/Rust保留已知caller/account/owner隔离；未知服务器引用先尝试checkpoint补全，缺少完整历史时真实失败"
+  ],
+  "fixes": [
+    {
+      "id": "A01",
+      "feature": "OAuth请求规范化与工具schema",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "codex_wire_tests.rs",
+        "fixtures/codex_wire_go.json"
+      ]
+    },
+    {
+      "id": "A02",
+      "feature": "GPT推理后缀与真实模型能力",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "gpt_thinking.rs",
+        "../codex_local_access_native_scheduler_tests.rs"
+      ]
+    },
+    {
+      "id": "A03",
+      "feature": "Responses Lite递归工具过滤",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "codex_wire_tests.rs"
+      ]
+    },
+    {
+      "id": "A04",
+      "feature": "compact流字段兼容",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "codex_wire_tests.rs"
+      ]
+    },
+    {
+      "id": "A05",
+      "feature": "成功/失败终态与自动历史成功补记契约",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "sse_framing_tests.rs",
+        "recovery_http_tests.rs"
+      ]
+    },
+    {
+      "id": "A06",
+      "feature": "canonical身份优先级",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "identity_tests.rs",
+        "recovery_http_tests.rs"
+      ]
+    },
+    {
+      "id": "A07",
+      "feature": "401刷新与受限换号",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "cooldown_retry_tests.rs",
+        "websocket_retry_tests.rs"
+      ]
+    },
+    {
+      "id": "A08",
+      "feature": "402受限换号",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "cooldown_retry_tests.rs",
+        "websocket_retry_tests.rs"
+      ]
+    },
+    {
+      "id": "A09",
+      "feature": "系统代理回退",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../codex_local_access_native_transport.rs"
+      ]
+    },
+    {
+      "id": "A10",
+      "feature": "显式代理与NO_PROXY优先级",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../codex_local_access_native_transport.rs"
+      ]
+    },
+    {
+      "id": "A11",
+      "feature": "选号排名与轮转作用域",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../codex_local_access_native_scheduler_tests.rs"
+      ]
+    },
+    {
+      "id": "A12",
+      "feature": "软亲和关闭与有界淘汰",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../codex_local_access_native_scheduler_tests.rs"
+      ]
+    },
+    {
+      "id": "A13",
+      "feature": "软亲和TTL与硬归属分离",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../codex_local_access_native_scheduler_tests.rs",
+        "identity_tests.rs"
+      ]
+    },
+    {
+      "id": "A14",
+      "feature": "每账号图片和普通并发联合准入",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../codex_local_access_native_images.rs",
+        "../codex_local_access_tests_native.rs"
+      ]
+    },
+    {
+      "id": "A15",
+      "feature": "Search可选模型/ID与缓存字段清理",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "auxiliary_tests.rs"
+      ]
+    },
+    {
+      "id": "A16",
+      "feature": "Gemini历史thought/signature兼容",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "compat_tests.rs"
+      ]
+    },
+    {
+      "id": "A17",
+      "feature": "Gemini/Ollama真实目录能力",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "compat_tests.rs",
+        "../codex_local_access_native_catalog.rs"
+      ]
+    },
+    {
+      "id": "A18",
+      "feature": "下游响应头过滤",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "http_parity_tests.rs"
+      ]
+    },
+    {
+      "id": "A19",
+      "feature": "人工恢复入口移除与自动历史失败保留、可重试",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "recovery_tests.rs",
+        "recovery_http_tests.rs",
+        "identity_rebuild_tests.rs"
+      ],
+      "regressions": [
+        "recovery_tests.rs::retired_manual_controls_are_not_registered_or_exposed_by_the_bridge",
+        "recovery_http_tests.rs::automatic_history_http_and_sse_preserve_unknown_cipher_and_commit_only_complete_success",
+        "identity_rebuild_tests.rs::failed_unregistered_history_never_activates_or_prevents_a_fresh_automatic_attempt"
+      ]
+    },
+    {
+      "id": "A20",
+      "feature": "自动历史引用去重、有界checkpoint与持久化归属分离",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "identity_capacity_tests.rs",
+        "identity_rebuild_tests.rs"
+      ],
+      "regressions": [
+        "identity_capacity_tests.rs::automatic_history_deduplicates_references_without_committing_unaccepted_ownership",
+        "identity_capacity_tests.rs::durable_capacity_keeps_new_requests_automatic_history_and_engine_handoff_usable",
+        "identity_rebuild_tests.rs::checkpoint_total_byte_budget_evicts_optional_history_without_erasing_ownership"
+      ]
+    },
+    {
+      "id": "A21",
+      "feature": "canonical token accounting v2",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../codex_local_access_native_usage.rs",
+        "fixtures/codex_usage_go.json"
+      ]
+    },
+    {
+      "id": "A22",
+      "feature": "实际脱敏代理路由诊断",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../codex_local_access_native_transport.rs",
+        "lifecycle.rs"
+      ]
+    },
+    {
+      "id": "A23",
+      "feature": "请求Content-Encoding大小写与编码链",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "http_parity_tests.rs"
+      ]
+    },
+    {
+      "id": "A24",
+      "feature": "Chat flat custom/hosted/namespace工具",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "chat_tools_parity_tests.rs",
+        "fixtures/chat_tools_go.json"
+      ]
+    },
+    {
+      "id": "A25",
+      "feature": "Realtime临时凭据预设/默认值/不可缓存",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "auxiliary_tests.rs"
+      ]
+    },
+    {
+      "id": "A26",
+      "feature": "Chat长工具名及输出恢复",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "chat_tools_parity_tests.rs"
+      ]
+    },
+    {
+      "id": "A27",
+      "feature": "辅助接口解压后清理Content-Encoding",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "auxiliary_transport_tests.rs"
+      ]
+    },
+    {
+      "id": "A28",
+      "feature": "OAuth音频multipart false空白兼容",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "auxiliary_transport_tests.rs"
+      ]
+    },
+    {
+      "id": "A29",
+      "feature": "Realtime Binary帧与JSON隔离校验",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "auxiliary_transport_tests.rs"
+      ]
+    },
+    {
+      "id": "A30",
+      "feature": "子会话只继承而不回写父软亲和",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../native_soft_affinity_regression_tests.rs",
+        "diagnostic_identity_http_tests.rs"
+      ]
+    },
+    {
+      "id": "A31",
+      "feature": "非GPT兼容模型保留推理后缀",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "thinking_suffix_tests.rs",
+        "mapping.rs",
+        "fixtures/openai_thinking_go.json"
+      ],
+      "historical_go_comparison": [
+        "Go TestOpenAIThinkingRustSharedGolden"
+      ]
+    },
+    {
+      "id": "A32",
+      "feature": "请求级错误和取消不清软亲和",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "../native_soft_affinity_regression_tests.rs",
+        "request_fault_tests.rs",
+        "request_fault_websocket_tests.rs",
+        "images_http_tests.rs",
+        "auxiliary_request_fault_tests.rs",
+        "fixtures/soft_affinity_failures_go.json"
+      ],
+      "historical_go_comparison": [
+        "Go TestSoftAffinityRustSharedFailureGolden"
+      ]
+    },
+    {
+      "id": "A33",
+      "feature": "原生Chat首事件错误统一重试",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "native_chat_bootstrap_tests.rs",
+        "fixtures/native_chat_bootstrap_go.json"
+      ]
+    },
+    {
+      "id": "A34",
+      "feature": "原生Chat上游用量请求与扩展参数保真",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "native_chat_bootstrap_tests.rs"
+      ],
+      "historical_go_comparison": [
+        "Go TestNativeChatForcedUsageKeepsProviderOptions"
+      ]
+    },
+    {
+      "id": "A35",
+      "feature": "图片OAuth认证与支付失败安全回退",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "images_credentials_retry_tests.rs",
+        "images_http_tests.rs"
+      ]
+    },
+    {
+      "id": "A36",
+      "feature": "全部模型目录与计数入口有界等待",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "catalog_deadline_tests.rs"
+      ]
+    },
+    {
+      "id": "A37",
+      "feature": "SSE声明错误保留原type并维持请求/认证分类",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "events.rs",
+        "native_chat_bootstrap_tests.rs",
+        "fixtures/native_chat_bootstrap_go.json"
+      ],
+      "historical_go_comparison": [
+        "Go TestNativeChatBootstrapRustSharedGolden"
+      ]
+    },
+    {
+      "id": "A38",
+      "feature": "官方Agent通信密文转发前登记、完整未知历史自动接纳与跨caller隔离",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "agent_communication.rs",
+        "identity_agent_communication_tests.rs",
+        "agent_communication_http_tests.rs",
+        "identity_automatic_history_tests.rs"
+      ],
+      "regressions": [
+        "identity_automatic_history_tests.rs::legacy_full_history_preserves_all_cipher_kinds_and_child_scope_across_engines",
+        "identity_automatic_history_tests.rs::automatic_history_rechecks_caller_provenance_before_binding",
+        "agent_communication_http_tests.rs::agent_communication_json_tool_messages_survive_restart_and_replay_without_transferring_ownership",
+        "agent_communication_http_tests.rs::agent_communication_failed_automatic_history_does_not_adopt_input_cipher"
+      ]
+    },
+    {
+      "id": "A39",
+      "feature": "Grok明文通信工具保留官方显式plaintext标记与已有加密证据",
+      "status": "validated_in_local_regression",
+      "evidence": [
+        "grok_wire.rs",
+        "agent_communication_plaintext_tests.rs"
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "id": "B01",
+      "disposition": "atomic_chunked_journal",
+      "reason": "交接事务仅在最终commit生效，保留历史Go交接格式读取与单条16MiB保护；旧完成记录不能重新生成或消费人工授权"
+    },
+    {
+      "id": "B02",
+      "disposition": "routing_expiry_preserves_owner",
+      "reason": "过期turn_state不能普通续接，但仍保留原账号/owner证据"
+    },
+    {
+      "id": "B03",
+      "disposition": "retain_effective_native_retry_settings",
+      "reason": "保留既有UI重试配置与Native实际生效行为，Go未接入配置不复制为无效设置"
+    },
+    {
+      "id": "B04",
+      "disposition": "retain_configurable_native_deadlines",
+      "reason": "保留Native毫秒精度、可配置连接/空闲/总截止时间，不锁死旧SDK固定时长"
+    },
+    {
+      "id": "B05",
+      "disposition": "retain_bounded_native_admission",
+      "reason": "保留有界全局/账号等待与执行截止时间，不逐字复制旧队列容量"
+    },
+    {
+      "id": "B06",
+      "disposition": "retain_current_quota",
+      "reason": "配额采用当前快照，保留实时读取"
+    },
+    {
+      "id": "B07",
+      "disposition": "retain_weighted_random",
+      "reason": "保留Native现有按权重随机策略，普通轮转作用域与排名兼容"
+    },
+    {
+      "id": "B08",
+      "disposition": "ignore_go_ignored_hints",
+      "reason": "Responses转换副本兼容Go忽略参数；APIKey Chat原请求透传"
+    },
+    {
+      "id": "B09",
+      "disposition": "match_local_estimator",
+      "reason": "对齐Go客户端协议预处理和估算规则，始终标明本地估算"
+    },
+    {
+      "id": "B10",
+      "disposition": "retain_image_batch_extension",
+      "reason": "保留多图批次；第三方async在提交远端任务前拒绝，OAuth沿用同步兼容"
+    },
+    {
+      "id": "B11",
+      "disposition": "retain_bounded_io",
+      "reason": "保留JSON/事件/WS/聚合上传大小上限；不恢复Go的无界读取"
+    },
+    {
+      "id": "B12",
+      "disposition": "retain_redirect_protection",
+      "reason": "保留认证请求禁止自动重定向；图片资源重定向仍逐跳验证目的地址"
+    },
+    {
+      "id": "B13",
+      "disposition": "preserve_protocol_error_envelopes",
+      "reason": "保留各协议错误外壳与真实状态/错误码/Retry-After，不虚构默认重试秒数"
+    },
+    {
+      "id": "B14",
+      "disposition": "retain_hot_config_and_safe_switch",
+      "reason": "保留Native动态读取与忙时切换保护，Go沿用现有重启行为"
+    },
+    {
+      "id": "B15",
+      "disposition": "forward_safe_handoff",
+      "reason": "允许忽略未知交接字段；已知归属、类型、版本、范围、校验和与最终事务commit仍严格验证，旧完成记录仅读取兼容"
+    }
+  ],
+  "verification": {
+    "status": "account_installation_alignment_validated_locally",
+    "commands": [
+      "cargo test --lib --locked --offline -- --test-threads=1",
+      "cargo check --locked --offline",
+      "GOPROXY=off GOSUMDB=off go test ./... -count=1 (Go host)",
+      "GOPROXY=off GOSUMDB=off go build ./cmd/server (SDK server)",
+      "npm run typecheck",
+      "node scripts/check_locales.cjs",
+      "tsx --test CodexGatewayModeControl.test.ts CodexRequestDetailModal.test.ts",
+      "git diff --check",
+      "git ls-files --others --exclude-standard -- sidecars/cockpit-cliproxy",
+      "GOPROXY=off GOSUMDB=off go test ./internal/runtime/executor/... ./sdk/cliproxy/... ./internal/client/codex/live -count=1"
+    ],
+    "rust_lib": {
+      "passed": 3028,
+      "failed": 0,
+      "ignored_existing": 22,
+      "seconds": 157.52,
+      "default_parallel": false
+    },
+    "go_host": "Final host ./... tests passed; SDK executor/auth/service/Realtime packages and targeted race tests passed; host and SDK server compile on the current host architecture",
+    "sdk_goldens": {
+      "wire_cases": 20,
+      "usage_cases": 14,
+      "chat_tool_cases": 13,
+      "token_count_cases": 17,
+      "go_recheck": "Historical output comparisons retained; shared account identity, protocol boundary, HTTP/SSE/WS and transport paths have new Go regression coverage",
+      "thinking_suffix_cases": 8,
+      "request_fault_cases": 19,
+      "native_chat_bootstrap_cases": 10,
+      "native_chat_forced_usage": "actual ExecuteStream request checked; provider options preserved"
+    },
+    "frontend": "Typecheck, all locale checks and strict modal sizing passed; earlier request-detail tests retained; no GUI interaction",
+    "gui_or_live_account_requests": false,
+    "commit_created": false,
+    "rust_production_check": {
+      "passed": true,
+      "seconds": 14.46
+    },
+    "historical_parallel_suite": "Previous parallel verification retained; the final account-installation full suite runs serially to isolate process environment fixtures",
+    "checked_at_utc": "2026-10-15T01:53:01.446039+00:00",
+    "sdk_production_build": "Current managed-identity SDK and Go host builds passed on the current host architecture",
+    "go_source_reverted": false,
+    "go_comparison_base": "915e7a20b432546660c3cd15e90f9fa527490ecc",
+    "agent_communication_new_regressions": 18,
+    "agent_communication_coverage": [
+      "official 3 tools and plaintext marker",
+      "JSON/SSE/real WS output before child launch",
+      "restart and byte-preserving continuation",
+      "cross-caller/account/owner rejection",
+      "complete self-contained unknown client history is accepted automatically without decrypting or altering ciphertext",
+      "new input provenance is recorded only after a valid complete successful response; failure and cancellation preserve unadopted input",
+      "HTTP/SSE/WS failures retain configured bounded retry and pre-output failover; observed output is not replayed and ciphertext is not deleted",
+      "Grok plaintext and encrypted metadata preserved"
+    ]
+  },
+  "boundaries": [
+    "shared golden covers known SDK inputs and local loopback fault injection, not every possible upstream payload",
+    "未执行真实账号网络调用或GUI测试",
+    "保留历史Go/v2大事务交接fixture原始数据与读取兼容；当前自动接纳不改写历史fixture或恢复人工授权",
+    "真实Windows系统代理/客户端与真实上游环境尚未现场验证",
+    "Native认证请求重定向保护及输入/资源上限属于明确保留差异",
+    "历史Go协议golden保持原始数据；当前Go/Rust自动续接、持久化归属及caller隔离由独立回归覆盖",
+    "未登记通信密文随完整自包含历史原样自动提交，完整有效成功后补记归属；已知其他caller或owner不能被覆盖，孤立工具结果与缺失checkpoint不能伪造完整历史"
+  ],
+  "excluded_unused_sdk_features": [
+    "standalone management UI/TUI",
+    "plugin pipelines not enabled by host",
+    "standalone cloud/object/Redis stores not used by host",
+    "standalone SDK server endpoints bypassed by host",
+    "SDK media relay not exposed in host config"
+  ],
+  "protocol_review": [
+    {
+      "branch": "Responses HTTP JSON/SSE",
+      "entry": "http.rs",
+      "evidence": [
+        "http_parity_tests.rs",
+        "cooldown_retry_tests.rs",
+        "recovery_http_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression",
+      "regressions": [
+        "recovery_http_tests.rs::automatic_history_http_and_sse_preserve_unknown_cipher_and_commit_only_complete_success"
+      ]
+    },
+    {
+      "branch": "Responses WS / HTTP bridge / Chat bridge",
+      "entry": "websocket.rs",
+      "evidence": [
+        "websocket_retry_tests.rs",
+        "websocket_bridge_tests.rs",
+        "recovery_http_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression",
+      "regressions": [
+        "recovery_http_tests.rs::automatic_history_websocket_http_bridge_accepts_full_history_without_a_control_file"
+      ]
+    },
+    {
+      "branch": "Responses compact",
+      "entry": "mapping.rs",
+      "evidence": [
+        "http_parity_tests.rs",
+        "recovery_http_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression",
+      "regressions": [
+        "recovery_http_tests.rs::automatic_history_compact_accepts_complete_unknown_cipher_without_a_generation_commit"
+      ]
+    },
+    {
+      "branch": "Native Chat HTTP JSON/SSE",
+      "entry": "native_chat.rs",
+      "evidence": [
+        "native_chat_bootstrap_tests.rs",
+        "native_chat_passthrough_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression"
+    },
+    {
+      "branch": "Legacy Completions extension",
+      "entry": "edge.rs",
+      "evidence": [
+        "native_chat_bootstrap_tests.rs",
+        "native_chat_passthrough_tests.rs"
+      ],
+      "boundary": "Go host does not mount this endpoint; preserve native upstream /completions capability and parameters",
+      "status": "reviewed_with_local_regression"
+    },
+    {
+      "branch": "Claude / Gemini / Ollama generation via Responses or Chat",
+      "entry": "compat_http.rs",
+      "evidence": [
+        "compat_native_chat_http_tests.rs",
+        "compat_hosted_tests.rs",
+        "compat_options_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression"
+    },
+    {
+      "branch": "Models / Claude and Gemini token counts / Ollama show",
+      "entry": "server.rs and compat_http.rs",
+      "evidence": [
+        "catalog_deadline_tests.rs",
+        "token_count.rs"
+      ],
+      "status": "reviewed_with_local_regression"
+    },
+    {
+      "branch": "Images APIKey / OAuth / forced Responses / multi-image batches",
+      "entry": "images_http.rs",
+      "evidence": [
+        "images_credentials_retry_tests.rs",
+        "images_http_tests.rs",
+        "images_batch_deadline_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression",
+      "boundary": "Forced OAuth Responses images accept complete unknown history unchanged and adopt input only after valid success; native APIKey Images reject opaque Responses state instead of flattening it into a prompt",
+      "regressions": [
+        "images_credentials_retry_tests.rs::forced_oauth_images_accept_complete_unknown_history_and_only_success_adopts_input",
+        "images_credentials_retry_tests.rs::forced_api_key_images_reject_opaque_history_without_dropping_it_or_holding_a_permit"
+      ]
+    },
+    {
+      "branch": "Audio multipart / JSON / text / binary",
+      "entry": "auxiliary.rs",
+      "evidence": [
+        "auxiliary_tests.rs",
+        "auxiliary_transport_tests.rs",
+        "auxiliary_request_fault_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression"
+    },
+    {
+      "branch": "Search",
+      "entry": "auxiliary.rs",
+      "evidence": [
+        "auxiliary_execution_tests.rs",
+        "auxiliary_transport_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression"
+    },
+    {
+      "branch": "Realtime HTTP / client secrets / calls / WS",
+      "entry": "auxiliary.rs",
+      "evidence": [
+        "auxiliary_tests.rs",
+        "auxiliary_transport_tests.rs",
+        "auxiliary_request_fault_tests.rs"
+      ],
+      "status": "reviewed_with_local_regression"
+    },
+    {
+      "branch": "Management / diagnostics / per-profile gateways / authentication aliases",
+      "entry": "diagnostics.rs and server.rs",
+      "evidence": [
+        "http_parity_tests.rs",
+        "diagnostic_identity_http_tests.rs",
+        "../codex_local_access_native_profiles.rs"
+      ],
+      "status": "reviewed_with_local_regression"
+    }
+  ],
+  "client_output_review": {
+    "baseline": "915e7a20b432546660c3cd15e90f9fa527490ecc / vendored CLIProxyAPI v7.2.155",
+    "scope": "Go host mounted client-facing outputs; independent Rust implementation retains native extensions, bounded resources, caller isolation and automatic complete-history continuation",
+    "validation": "validated_in_local_regression",
+    "branches": [
+      {
+        "protocol": "Responses JSON/SSE/compact",
+        "coverage": "output recovery, complete tool reconciliation, item IDs, usage defaults, error details/status/retry metadata, Codex/generic stream failures, EOF tail, single terminal",
+        "tests": [
+          "output_items.rs",
+          "output_usage.rs",
+          "output_error.rs",
+          "output_terminal_http_tests.rs",
+          "response_format_tests.rs",
+          "sse_framing_tests.rs",
+          "events_partial_error_tests.rs"
+        ]
+      },
+      {
+        "protocol": "Responses WebSocket and HTTP/Chat/Grok bridges",
+        "coverage": "true failed/incomplete/cancelled terminals, output/usage recovery, per-turn reset, history proof preservation, sanitized errors",
+        "tests": [
+          "websocket_output_parity_tests.rs",
+          "websocket_history.rs",
+          "upstream.rs",
+          "websocket.rs"
+        ]
+      },
+      {
+        "protocol": "Chat and native Chat; legacy Completions extension",
+        "coverage": "reasoning content, URL citations, images, tool done/item_id, usage/cache/native finish reasons, readable errors and single DONE",
+        "tests": [
+          "chat_output_parity_tests.rs",
+          "native_chat_passthrough_tests.rs",
+          "edge_tests.rs"
+        ]
+      },
+      {
+        "protocol": "Claude/Gemini/Ollama",
+        "coverage": "signatures, reasoning sections, stop reasons, usage, image output, creation time, aggregate Ollama terminal, error classification",
+        "tests": [
+          "compat_output_parity_tests.rs",
+          "edge_tests.rs",
+          "compat_native_chat_http_tests.rs"
+        ]
+      },
+      {
+        "protocol": "Images/APIKey/OAuth/Responses image bridge",
+        "coverage": "image usage/metadata, safe headers, partial and terminal output indexes/order, EOF, structured failure details",
+        "tests": [
+          "images_result.rs",
+          "images_http_tests.rs"
+        ]
+      },
+      {
+        "protocol": "Audio/search/Realtime/models/token count",
+        "coverage": "status/headers/binary and SSE passthrough, retry hints, model created field, canonical count model",
+        "tests": [
+          "auxiliary_tests.rs",
+          "auxiliary_transport_tests.rs",
+          "../codex_local_access_native_catalog.rs",
+          "edge_tests.rs",
+          "token_count.rs"
+        ]
+      }
+    ],
+    "boundaries": [
+      "Local fixtures and loopback transports do not prove every provider response or real proxy behavior.",
+      "Keep native tool identities, extensions, bounded resources, 250ms startup guard and account isolation; complete unknown history is accepted automatically and only valid success adopts its provenance.",
+      "Readable failure signaling does not repair upstream or proxy transport EOF."
+    ],
+    "checks": {
+      "cargo_test_lib": "2995 passed; 0 failed; 22 pre-existing ignored; --test-threads=1",
+      "cargo_test_log": "/private/tmp/cockpit-dmg12-full-tests.log",
+      "cargo_check": "passed; /private/tmp/cockpit-dmg12-cargo-check.log",
+      "git_diff_check": "passed",
+      "go_worktree_baseline": "No tracked, staged or untracked differences in sidecars/cockpit-cliproxy against 915e7a20b432546660c3cd15e90f9fa527490ecc",
+      "live_upstream": "not run",
+      "installed_dmg": "user installation pending; local test12 build details in accompanying build-info.json",
+      "frontend_typecheck": "passed; /private/tmp/cockpit-dmg12-typecheck.log",
+      "locales": "passed; /private/tmp/cockpit-dmg12-locales.log",
+      "modal_sizing": "passed; /private/tmp/cockpit-dmg12-modal.log",
+      "local_test_package": "target/local-test/Cockpit.Tools_1.3.68_rust-api-test-12-tool-integrity-durable-rebuild-go-baseline_arm64.dmg"
+    },
+    "review_boundary_fixes": [
+      {
+        "feature": "Chat function tool completion validates complete streamed JSON; custom input retains native freeform semantics; length/content_filter outputs remain incomplete",
+        "tests": [
+          "chat_upstream_stream_tests.rs",
+          "chat_tool_integrity_http_tests.rs"
+        ]
+      },
+      {
+        "feature": "Output repair preserves original identity event and aborts the current durable rebuild commit, including unindexed output; client output remains complete and existing response/cipher ownership remains usable",
+        "tests": [
+          "context_rebuild_output_evidence_tests.rs"
+        ],
+        "cases": "HTTP JSON/SSE, WS HTTP bridge/passthrough, restart and reconnect, original-account continuation, complete A→B, unknown-input success-only adoption, candidate generation rollback; repaired or unindexed output never fabricates proof"
+      }
+    ]
+  },
+  "account_installation_alignment": {
+    "store": "codex_api_account_identity.sqlite",
+    "authority": "Rust host",
+    "wire": "gatewayIdentity version/scope/installationId/revision",
+    "tests": [
+      "codex_api_identity_tests.rs",
+      "codex_local_access_tests_shared_api_identity.rs",
+      "account_installation_http_tests.rs",
+      "codex_local_access_native_transport_tests.rs",
+      "websocket_transport_identity_tests.rs",
+      "account_installation_auxiliary_tests.rs",
+      "codex_local_access_tests_native.rs",
+      "codex_local_access_native_proxy_bypass_tests.rs"
+    ],
+    "scope": "account installation and HTTP/WS transport; shared automatic history admission preserves caller isolation and immutable original cipher provenance",
+    "go_tests": [
+      "gateway_identity_test.go",
+      "gateway_identity_proxy_test.go",
+      "gateway_identity_endpoint_test.go",
+      "helps/managed_identity_test.go",
+      "codex_managed_identity_test.go",
+      "managed_identity_projection_test.go"
+    ],
+    "constraints": [
+      "Go preserves existing session/thread and opaque continuation semantics; no new unknown-upstream 409 gate",
+      "Complete unknown history is admitted automatically; existing caller/account provenance remains isolated and full-history replay does not transfer original ownership",
+      "Only actual outbound Bearer claims participate in Go principal consistency; unused ID tokens do not gate requests",
+      "Shared installation identity is not per-account UA/TLS fingerprint emulation",
+      "Managed Go account resolution prefers local ID, then exact auth-file ID, then API key plus canonical upstream URL; ambiguous evidence cannot authorize a different account",
+      "Go endpoint declarations agree with generated SDK configuration, including existing provider URL recovery",
+      "Go direct-provider transports retain inherited environment proxy bypass; explicit account or service routing remains authoritative"
+    ],
+    "verification_logs": {
+      "rust_lib": "/private/tmp/cockpit-native-review-fixes-full-tests.log",
+      "rust_check": "/private/tmp/cockpit-native-review-fixes-check.log",
+      "go_host": "/private/tmp/cockpit-go-shared-identity-endpoint-host-tests.log",
+      "go_race": "/private/tmp/cockpit-go-shared-identity-endpoint-race.log",
+      "go_sdk": "/private/tmp/cockpit-go-shared-identity-endpoint-sdk-tests.log"
+    }
+  },
+  "identity_metadata_diagnostics": {
+    "engines": [
+      "Go",
+      "Rust"
+    ],
+    "wire_headers": [
+      "Session-Id",
+      "Thread-Id",
+      "X-Codex-Installation-Id",
+      "Chatgpt-Account-Id"
+    ],
+    "account_profile": [
+      "installationId",
+      "scope",
+      "version",
+      "revision"
+    ],
+    "constraints": [
+      "Record actual headers separately from the selected account local profile; neither confirms upstream receipt",
+      "Installation metadata has an independent capture flag; old Session/Thread records cannot imply metadata capture",
+      "Snapshots survive disabled or cleared body recording and database reopen; old records are never backfilled",
+      "Attempt metadata cannot merge across account or start-time boundaries; profile snapshots are owned copies",
+      "Only explicit identity fields are retained; credentials and full headers are not retained when body logging is disabled",
+      "Diagnostic snapshots never authorize a continuation or replace automatic-history completeness and caller/owner checks"
+    ],
+    "regressions": [
+      "request_diagnostics_identity_test.go",
+      "diagnostic_identity_tests.rs",
+      "diagnostic_identity_http_tests.rs",
+      "request_identity_persistence_tests",
+      "CodexRequestDetailModal.test.ts"
+    ],
+    "verification_logs": {
+      "rust_lib": "/private/tmp/cockpit-identity-diagnostics-full-tests.log",
+      "rust_check": "/private/tmp/cockpit-identity-diagnostics-check.log",
+      "go_host": "/private/tmp/cockpit-identity-diagnostics-go-tests.log",
+      "go_race": "/private/tmp/cockpit-identity-diagnostics-go-race.log",
+      "frontend": "/private/tmp/cockpit-identity-diagnostics-ui-tests.log"
+    }
+  },
+  "native_free_agent_and_environment_proxy": {
+    "status": "validated_locally",
+    "go_source_unchanged_in_this_pass": true,
+    "regressions": [
+      "native_free_agent_identity_keeps_pool_eligibility_without_bypassing_restrictions",
+      "native_environment_proxy_honors_no_proxy_and_updates_cached_clients",
+      "native_environment_proxy_honors_lowercase_no_proxy",
+      "native_explicit_service_proxy_is_not_bypassed_by_environment"
+    ],
+    "constraints": [
+      "Free Agent Identity remains eligible under restrictFreeAccounts; ordinary Free OAuth, reauthorization, web-session and explicit exclusion fences remain effective",
+      "Only inherited environment proxies honor NO_PROXY/no_proxy; uppercase takes precedence, including an explicitly empty uppercase value",
+      "IP and CIDR exclusions, wildcard IP bypass, HTTP requests and real WebSocket upgrades are covered by isolated local-network fixtures",
+      "The captured bypass policy participates in the transport digest, so new requests and WebSocket turns cannot reuse a stale policy; existing clients retain their captured policy",
+      "Explicit account, API service, global and OS proxy selections remain authoritative",
+      "Automatic complete-history admission retains caller/account isolation, immutable observed provenance and existing retry/resource limits"
+    ],
+    "targeted_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "test_log": "/private/tmp/cockpit-native-review-fixes-targeted-tests.log",
+    "real_upstream_or_gui_tested": false,
+    "new_dmg_built": false,
+    "commit_created": false
+  },
+  "automatic_history_review": {
+    "status": "current_regression_references_checked; final full-suite result is reported separately",
+    "admission": "完整自包含历史中的未知reasoning、compaction、工具参数和Agent密文原样接纳；不解密、不摘要替换、不因缺登记409",
+    "state_dependencies": "previous_response_id增量优先用caller/thread作用域checkpoint补全；确实缺历史时返回真实缺失错误，资源句柄不能冒充完整输入",
+    "ownership": "已知其他caller状态拒绝；原账号/owner来源不可转移；未知输入仅完整有效成功后补记归属",
+    "failure": "失败、取消、超时与修补出的完整输出不提交未知输入或覆盖成功代次；原历史保留并遵守既有有界重试",
+    "removed_controls": "不存在人工恢复IPC、授权/claim文件或单次人工尝试；旧handoff完成记录仅为历史数据",
+    "regressions": [
+      "identity_automatic_history_tests.rs::cached_history_completes_incremental_input_containing_new_unregistered_agent_cipher",
+      "identity_automatic_history_tests.rs::unknown_incremental_state_requests_full_input_then_resumes_without_manual_recovery",
+      "identity_automatic_history_tests.rs::incomplete_tool_or_resource_history_is_not_silently_truncated",
+      "identity_automatic_history_tests.rs::invalid_completed_tool_output_cannot_publish_imported_input_or_generation",
+      "context_rebuild_output_evidence_tests.rs::output_evidence_repair_does_not_adopt_unknown_input_or_invent_a_missing_checkpoint",
+      "recovery_tests.rs::historical_completion_rows_remain_data_only_and_roundtrip_with_future_fields",
+      "continuity_transaction_tests.rs::large_legacy_completion_transaction_remains_invisible_until_final_commit"
+    ]
+  }
+}

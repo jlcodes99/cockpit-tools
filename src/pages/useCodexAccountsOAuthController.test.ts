@@ -20,7 +20,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     oauthProxyDefaultAccountId: null, oauthUrlCopied: false, reauthProxyDefault: false,
     reauthTargetAccountId: '', showAddModal: true, addTab: 'oauth',
     oauthAttemptSeqRef: { current: 1 }, oauthActiveRef: { current: true }, oauthLoginIdRef: { current: 'old' },
-    oauthCompletingRef: { current: false }, showAddModalRef: { current: true }, addTabRef: { current: 'oauth' },
+    oauthCompletingRef: { current: false }, oauthCompletedAccountRef: { current: null }, showAddModalRef: { current: true }, addTabRef: { current: 'oauth' },
     oauthProxyChangeSequence: { current: 0 }, oauthProxyChanging: { current: false },
     oauthStartTask: { current: null }, oauthCancelTask: { current: null }, oauthCancelLoginId: { current: null },
     t: (key: string) => key, oauthLog() {}, useCallback: (callback: unknown) => callback,

@@ -265,7 +265,7 @@ func (e *ClaudeExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, r
 		if fastRequest {
 			return resp, newClaudeFastDirectResponseError(httpResp, b)
 		}
-		return resp, classifyClaudeUpstreamError(httpResp.StatusCode, httpResp.Header, b)
+		return resp, cliproxyexecutor.UpstreamRequestRejected(classifyClaudeUpstreamError(httpResp.StatusCode, httpResp.Header, b))
 	}
 	decodedBody, err := decodeResponseBody(httpResp.Body, claudeResponseContentEncoding(httpResp.Header))
 	if err != nil {

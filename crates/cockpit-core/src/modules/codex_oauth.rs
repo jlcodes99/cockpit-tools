@@ -1162,21 +1162,23 @@ fn resolve_refreshed_id_token(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        if is_id_token_expired(id_token) {
-            return Err("Token 刷新响应中的 id_token 已过期或无效".to_string());
+        if !is_id_token_expired(id_token) {
+            return Ok(id_token.to_string());
         }
-        return Ok(id_token.to_string());
     }
 
     if let Some(id_token) = current_id_token
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .filter(|value| !is_id_token_expired(value))
     {
+        // OAuth refresh responses are allowed to omit id_token. Keep the old
+        // value long enough to persist a possibly rotated refresh_token.
         return Ok(id_token.to_string());
     }
 
-    Err("响应中缺少 id_token，且本地 id_token 已过期或无效".to_string())
+    // Codex app-server authentication is based on access_token. Persist the
+    // rotated token chain even when the response omits the optional OIDC token.
+    Ok(String::new())
 }
 
 pub async fn refresh_access_token_with_fallback(
@@ -1224,7 +1226,15 @@ pub async fn refresh_access_token_with_fallback(
     let token_response: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| format!("解析 Token 响应失败: {}", e))?;
 
-    let id_token = resolve_refreshed_id_token(&token_response, current_id_token)?;
+    refreshed_tokens_from_response(&token_response, refresh_token, current_id_token)
+}
+
+fn refreshed_tokens_from_response(
+    token_response: &serde_json::Value,
+    refresh_token: &str,
+    current_id_token: Option<&str>,
+) -> Result<CodexTokens, String> {
+    let id_token = resolve_refreshed_id_token(token_response, current_id_token)?;
 
     let access_token = token_response
         .get("access_token")
@@ -1295,39 +1305,67 @@ mod tests {
     }
 
     #[test]
-    fn refreshed_id_token_replaces_expired_current_value() {
+    fn refreshed_id_token_prefers_fresh_response_value() {
         let fresh = make_jwt(chrono::Utc::now().timestamp() + TOKEN_REFRESH_SKEW_SECONDS + 3600);
-        let expired = make_jwt(chrono::Utc::now().timestamp() - 3600);
+        let old = make_jwt(chrono::Utc::now().timestamp() - 3600);
         let response = serde_json::json!({ "id_token": fresh });
 
         assert_eq!(
-            resolve_refreshed_id_token(&response, Some(&expired))
-                .expect("replace expired id_token"),
+            resolve_refreshed_id_token(&response, Some(&old)).expect("resolve response id_token"),
             response["id_token"].as_str().unwrap()
         );
     }
 
     #[test]
-    fn refreshed_id_token_reuses_only_fresh_current_value() {
+    fn refreshed_id_token_reuses_fresh_current_value() {
         let fresh = make_jwt(chrono::Utc::now().timestamp() + TOKEN_REFRESH_SKEW_SECONDS + 3600);
+        let response = serde_json::json!({});
+
         assert_eq!(
-            resolve_refreshed_id_token(&serde_json::json!({}), Some(&fresh))
-                .expect("reuse fresh id_token"),
+            resolve_refreshed_id_token(&response, Some(&fresh)).expect("reuse fresh id_token"),
             fresh
         );
     }
 
     #[test]
-    fn refreshed_id_token_rejects_missing_value_when_current_is_expired() {
+    fn refreshed_id_token_keeps_current_value_when_response_omits_it() {
         let expired = make_jwt(chrono::Utc::now().timestamp() - 3600);
-        assert!(resolve_refreshed_id_token(&serde_json::json!({}), Some(&expired)).is_err());
+        let resolved = resolve_refreshed_id_token(&serde_json::json!({}), Some(&expired))
+            .expect("current id_token can be retained until runtime validation");
+
+        assert_eq!(resolved, expired);
     }
 
     #[test]
-    fn refreshed_id_token_rejects_expired_response_value() {
+    fn refreshed_id_token_omits_expired_response_value_without_losing_rotated_chain() {
         let expired = make_jwt(chrono::Utc::now().timestamp() - 3600);
-        assert!(
-            resolve_refreshed_id_token(&serde_json::json!({ "id_token": expired }), None).is_err()
+        let response = serde_json::json!({ "id_token": expired });
+
+        assert_eq!(
+            resolve_refreshed_id_token(&response, None)
+                .expect("access refresh result remains persistable"),
+            ""
         );
     }
+
+    #[test]
+    fn optional_identity_keeps_rotated_chain_and_existing_metadata() {
+        let old_id = make_jwt(chrono::Utc::now().timestamp() - 3600);
+        let response = serde_json::json!({"access_token":"rotated-access", "refresh_token":"rotated-refresh"});
+        let tokens = super::refreshed_tokens_from_response(&response, "old-refresh", Some(&old_id)).unwrap();
+        assert_eq!(tokens.access_token, "rotated-access");
+        assert_eq!(tokens.refresh_token.as_deref(), Some("rotated-refresh"));
+        assert_eq!(tokens.id_token, old_id);
+        let no_identity = super::refreshed_tokens_from_response(&response, "old-refresh", None).unwrap();
+        assert_eq!(no_identity.id_token, "");
+        assert_eq!(no_identity.refresh_token.as_deref(), Some("rotated-refresh"));
+    }
+
+    #[test]
+    fn optional_identity_keeps_refresh_fallback_but_still_requires_access_token() {
+        let tokens = super::refreshed_tokens_from_response(&serde_json::json!({"access_token":"new-access"}), "old-refresh", None).unwrap();
+        assert_eq!(tokens.refresh_token.as_deref(), Some("old-refresh"));
+        assert!(super::refreshed_tokens_from_response(&serde_json::json!({"refresh_token":"new-refresh"}), "old-refresh", None).unwrap_err().contains("access_token"));
+    }
+
 }

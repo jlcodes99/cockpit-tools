@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { deferred, loadHookModule, settlePromises } from '../../tests/helpers/reactHookHarness';
 
-function removalHarness(fetchAccounts = async (_options: unknown) => {}, fetchCurrentAccount = async (_options: unknown) => {}) {
+function removalHarness(fetchAccounts = async (_options: unknown) => {}, fetchCurrentAccount = async (_options: unknown) => {}, reloadTargets = async () => {}) {
   return loadHookModule(new URL('./codexProxyRemoval.ts', import.meta.url), {
+    '../services/codexProxyTargetService': { reloadCodexProxyTargets: reloadTargets },
     '../stores/useCodexAccountStore': { useCodexAccountStore: { getState: () => ({ fetchAccounts, fetchCurrentAccount }) } },
   }).exports;
 }
@@ -63,3 +64,14 @@ for (const failed of ['accounts', 'current']) {
     finish.resolve(); await assertion;
   });
 }
+
+
+test('source deletion waits for API/service projections and a failed projection refresh remains retryable', async () => {
+  const finish = deferred<void>(); let reads = 0;
+  const api = removalHarness(undefined, undefined, async () => { reads++; await finish.promise; });
+  let done = false; const pending = api.refreshCodexProxyAccounts().then(() => { done = true; });
+  await settlePromises(); assert.equal(done, false); assert.equal(reads, 1);
+  finish.resolve(); await pending; assert.equal(done, true);
+  const failed = removalHarness(undefined, undefined, async () => { throw new Error('target read failed'); });
+  await assert.rejects(failed.refreshCodexProxyAccounts(), /target read failed/);
+});

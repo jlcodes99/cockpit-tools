@@ -4,7 +4,8 @@ use crate::modules::codex_proxy_engine_install::{self as installer, EngineInstal
 pub async fn codex_proxy_activity_snapshot(
     account_id: String,
 ) -> Result<crate::modules::codex_proxy_activity::ProxyActivitySnapshot, String> {
-    crate::modules::codex_proxy_activity::snapshot(account_id).await
+    let id = crate::modules::codex_proxy_targets::runtime_id(&account_id).await?;
+    crate::modules::codex_proxy_activity::snapshot(id).await
 }
 
 /// 全账号流量汇总：只返回计数与字节数，读取失败按账号降级，不影响其他账号。
@@ -19,16 +20,18 @@ pub async fn codex_proxy_activity_set_enabled(
     account_id: String,
     enabled: bool,
 ) -> Result<(), String> {
-    crate::modules::codex_proxy_activity::set_enabled(account_id, enabled).await
+    let id = crate::modules::codex_proxy_targets::runtime_id(&account_id).await?;
+    crate::modules::codex_proxy_activity::set_enabled(id, enabled).await
 }
 
 #[tauri::command]
 pub async fn codex_proxy_activity_clear(account_id: String) -> Result<(), String> {
-    let account = crate::modules::codex_proxy_runtime::load(&account_id).await?;
+    let id = crate::modules::codex_proxy_targets::runtime_id(&account_id).await?;
+    let account = crate::modules::codex_proxy_runtime::load(&id).await?;
     if !crate::modules::codex_account_proxy::eligible(&account) {
         return Err("PROXY_ACCOUNT_UNSUPPORTED".into());
     }
-    crate::modules::codex_proxy_activity::clear(&account_id);
+    crate::modules::codex_proxy_activity::clear(&id);
     Ok(())
 }
 

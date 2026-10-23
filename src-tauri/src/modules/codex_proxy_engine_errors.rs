@@ -7,7 +7,13 @@ use std::sync::{
 use tokio::{io::AsyncReadExt, process::Child};
 pub fn classify(line: &[u8]) -> u8 {
     let s = String::from_utf8_lossy(line).to_ascii_lowercase();
-    if s.contains("no ech config") {
+    if s.contains("parse config error")
+        && (s.contains("unsupport proxy type") || s.contains("unsupported proxy type"))
+    {
+        7
+    } else if s.contains("parse config error") {
+        8
+    } else if s.contains("no ech config") {
         1
     } else if s.contains("certificate") || s.contains("x509:") {
         2
@@ -36,6 +42,8 @@ pub fn code(value: u8) -> Option<&'static str> {
         4 => Some("PROXY_DNS_FAILED"),
         5 => Some("PROXY_HANDSHAKE_FAILED"),
         6 => Some("PROXY_CONNECTION_REFUSED"),
+        7 => Some("PROXY_UNSUPPORTED_PROTOCOL"),
+        8 => Some("PROXY_ENGINE_CONFIG_INVALID"),
         _ => None,
     }
 }
@@ -186,6 +194,9 @@ mod tests {
             .with_ansi(false)
             .with_writer(move || writer.clone())
             .finish();
+        // Avoid caching a thread-local capture's callsite interest from a
+        // different thread that has no subscriber (tracing's single-dispatcher path).
+        let _interest_guard = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
         let _guard = tracing::subscriber::set_default(subscriber);
         let mut child = tokio::process::Command::new("/bin/sh")
             .args([
@@ -295,6 +306,8 @@ mod tests {
             ("x509: certificate expired secret", 2),
             ("lookup DNS failed", 4),
             ("handshake failed private-host", 5),
+            ("level=fatal msg=\"Parse config error: proxy 0: unsupport proxy type: private-secret\"", 7),
+            ("level=fatal msg=\"Parse config error: invalid certificate private-secret\"", 8),
             ("unknown secret", 0),
         ] {
             assert_eq!(classify(raw.as_bytes()), expected);

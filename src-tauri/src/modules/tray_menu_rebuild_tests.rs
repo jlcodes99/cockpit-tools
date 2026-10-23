@@ -1,6 +1,67 @@
 use super::*;
 use std::sync::atomic::AtomicUsize;
 
+fn sample_menu_snapshot() -> TrayMenuSnapshot {
+    TrayMenuSnapshot {
+        lang: "en".into(),
+        show_window: "Show".into(),
+        show_floating_card: "Quota".into(),
+        refresh_quota: "Refresh".into(),
+        settings: "Settings".into(),
+        quit: "Quit".into(),
+        more_platforms: "More".into(),
+        no_platform_selected: "None".into(),
+        visible_entries: vec![TrayMenuSnapshotEntry::Platform(TrayMenuSnapshotPlatform {
+            submenu_id: "codex".into(),
+            title: "Codex".into(),
+            platform_id: "codex".into(),
+            account: "account".into(),
+            quota_lines: vec!["80%".into()],
+        })],
+        overflow_entries: vec![],
+    }
+}
+
+#[test]
+fn unchanged_menu_is_skipped_only_after_successful_application() {
+    let cache = std::sync::Mutex::new(None);
+    let snapshot = sample_menu_snapshot();
+    assert!(
+        apply_changed_tray_menu(&cache, &snapshot, || Err("native menu failure".into())).is_err()
+    );
+    assert!(cache.lock().unwrap().is_none());
+    assert!(apply_changed_tray_menu(&cache, &snapshot, || {
+        assert!(
+            cache.try_lock().is_ok(),
+            "native work must not hold the cache lock"
+        );
+        Ok(())
+    })
+    .unwrap());
+    assert!(
+        !apply_changed_tray_menu(&cache, &snapshot, || panic!("unchanged menu rebuilt")).unwrap()
+    );
+}
+
+#[test]
+fn menu_language_quota_account_and_layout_changes_are_applied() {
+    let cache = std::sync::Mutex::new(None);
+    let mut snapshot = sample_menu_snapshot();
+    assert!(apply_changed_tray_menu(&cache, &snapshot, || Ok(())).unwrap());
+    snapshot.lang = "zh-CN".into();
+    assert!(apply_changed_tray_menu(&cache, &snapshot, || Ok(())).unwrap());
+    if let TrayMenuSnapshotEntry::Platform(platform) = &mut snapshot.visible_entries[0] {
+        platform.quota_lines = vec!["50%".into()];
+    }
+    assert!(apply_changed_tray_menu(&cache, &snapshot, || Ok(())).unwrap());
+    if let TrayMenuSnapshotEntry::Platform(platform) = &mut snapshot.visible_entries[0] {
+        platform.account = "other-account".into();
+    }
+    assert!(apply_changed_tray_menu(&cache, &snapshot, || Ok(())).unwrap());
+    snapshot.overflow_entries = std::mem::take(&mut snapshot.visible_entries);
+    assert!(apply_changed_tray_menu(&cache, &snapshot, || Ok(())).unwrap());
+}
+
 fn sample_info(label: &str) -> AccountDisplayInfo {
     AccountDisplayInfo {
         account: format!("email {label}"),
@@ -11,8 +72,7 @@ fn sample_info(label: &str) -> AccountDisplayInfo {
 #[test]
 fn split_overflow_keeps_first_visible_entries() {
     let entries = vec!["a", "b", "c", "d", "e", "f", "g", "h"];
-    let (visible, overflow) =
-        split_tray_menu_visible_overflow(entries, TRAY_PLATFORM_MAX_VISIBLE);
+    let (visible, overflow) = split_tray_menu_visible_overflow(entries, TRAY_PLATFORM_MAX_VISIBLE);
     assert_eq!(visible, vec!["a", "b", "c", "d", "e", "f"]);
     assert_eq!(overflow, vec!["g", "h"]);
 }

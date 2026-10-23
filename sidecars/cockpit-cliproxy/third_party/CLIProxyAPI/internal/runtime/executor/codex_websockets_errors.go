@@ -48,12 +48,15 @@ func parseCodexWebsocketErrorWithCooling(payload []byte, modelLevelCooling bool)
 	out := buildCodexWebsocketErrorPayload(payload, status)
 	headers := parseCodexWebsocketErrorHeaders(payload)
 	isUsageLimit := isCodexUsageLimitError(out)
+	if isUsageLimit {
+		status = http.StatusTooManyRequests
+	}
 	statusError := statusErr{
 		code:             status,
 		msg:              string(out),
 		credentialScoped: isUsageLimit && !modelLevelCooling,
 	}
-	if retryAfter := parseCodexRetryAfter(status, out, time.Now()); retryAfter != nil {
+	if retryAfter := parseCodexRetryAfter(status, appendCodexWebsocketResetHints(out, payload), time.Now()); retryAfter != nil {
 		statusError.retryAfter = retryAfter
 	} else if isCodexWebsocketConnectionLimitError(payload) {
 		retryAfter := time.Duration(0)
@@ -205,4 +208,15 @@ func closeHTTPResponseBody(resp *http.Response, logPrefix string) {
 	if errClose := resp.Body.Close(); errClose != nil {
 		log.Errorf("%s: %v", logPrefix, errClose)
 	}
+}
+
+// Preserve wrapper reset hints for quota classification without changing the
+// public websocket error envelope or copying arbitrary request metadata.
+func appendCodexWebsocketResetHints(out, payload []byte) []byte {
+	for _, key := range []string{"headers", "retry_after", "retry_after_seconds", "resets_at", "resets_in_seconds"} {
+		if value := gjson.GetBytes(payload, key); value.Exists() {
+			out, _ = sjson.SetRawBytes(out, key, []byte(value.Raw))
+		}
+	}
+	return out
 }

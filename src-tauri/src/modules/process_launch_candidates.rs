@@ -40,9 +40,6 @@ const DETACHED_PROCESS: u32 = 0x0000_0008;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 #[cfg(target_os = "windows")]
 const WINDOWS_PROCESS_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
-#[cfg(target_os = "windows")]
-static CODEX_STORE_APP_USER_MODEL_ID_CACHE: std::sync::OnceLock<String> =
-    std::sync::OnceLock::new();
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AppLaunchCandidate {
@@ -483,84 +480,31 @@ fn powershell_output_with_timeout(
     args: &[&str],
     timeout: Duration,
 ) -> std::io::Result<std::process::Output> {
-    use std::io::{Error, ErrorKind, Read};
-
     let mut last_error = None;
-    let (mut child, preview) = 'spawn: {
-        for executable in windows_powershell_executable_candidates_for_host() {
-            let spawn_guard =
-                crate::modules::app_lifecycle::acquire_process_spawn_guard("PowerShell")?;
-            let mut command = build_powershell_command(&executable, args);
-            command
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-            let preview = format_command_preview(&command);
-            log_command_trace_exec(&preview);
-            match command.spawn() {
-                Ok(child) => {
-                    drop(spawn_guard);
-                    break 'spawn (child, preview);
-                }
-                Err(error) => {
-                    drop(spawn_guard);
-                    crate::modules::logger::log_warn(&format!(
-                        "[PowerShell] 启动候选失败，尝试下一个: exe={} error={}",
-                        executable.display(),
-                        error
-                    ));
-                    last_error = Some(error);
-                }
+    for executable in windows_powershell_executable_candidates_for_host() {
+        let mut command = build_powershell_command(&executable, args);
+        let preview = format_command_preview(&command);
+        log_command_trace_exec(&preview);
+        let start = Instant::now();
+        // Drain both pipes while the process runs. Waiting for exit first blocks
+        // CIM probes once their output fills a pipe, producing false timeouts.
+        // The shared helper also bounds drains held open by descendants and
+        // acquires the lifecycle spawn guard itself.
+        let result = crate::modules::process_timeout::output_with_timeout(&mut command, timeout);
+        log_command_trace_result(&preview, &result, start.elapsed());
+        match result {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                last_error = Some(error);
             }
+            result => return result,
         }
-        let error = last_error.unwrap_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "未找到可用的 PowerShell（powershell.exe / pwsh.exe）",
-            )
-        });
-        if command_trace_enabled() {
-            crate::modules::logger::log_warn(&format!(
-                "[CmdTrace] SPAWN_ERROR elapsed=0ms err={}",
-                error
-            ));
-        }
-        return Err(error);
-    };
-    let start = Instant::now();
-
-    loop {
-        if let Some(status) = child.try_wait()? {
-            let mut stdout = Vec::new();
-            let mut stderr = Vec::new();
-            if let Some(mut out) = child.stdout.take() {
-                let _ = out.read_to_end(&mut stdout);
-            }
-            if let Some(mut err) = child.stderr.take() {
-                let _ = err.read_to_end(&mut stderr);
-            }
-            let result = Ok(std::process::Output {
-                status,
-                stdout,
-                stderr,
-            });
-            log_command_trace_result(&preview, &result, start.elapsed());
-            return result;
-        }
-
-        if start.elapsed() >= timeout {
-            let _ = child.kill();
-            let _ = child.wait();
-            let result = Err(Error::new(
-                ErrorKind::TimedOut,
-                format!("PowerShell 进程探测超时（{}ms）", timeout.as_millis()),
-            ));
-            log_command_trace_result(&preview, &result, start.elapsed());
-            return result;
-        }
-
-        thread::sleep(Duration::from_millis(100));
     }
+    Err(last_error.unwrap_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "未找到可用的 PowerShell（powershell.exe / pwsh.exe）",
+        )
+    }))
 }
 
 #[cfg(target_os = "windows")]
@@ -1873,16 +1817,12 @@ fn account_proxy_env_pairs(proxy_url: &str) -> Vec<(&'static str, String)> {
     pairs
 }
 
-pub fn apply_effective_proxy_env_to_command(cmd: &mut Command, egress_proxy_url: Option<&str>) {
-    let Some(proxy_url) = egress_proxy_url
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
+pub fn apply_effective_proxy_env_to_command(cmd: &mut Command, launch_proxy: &CodexLaunchProxy) {
+    if matches!(launch_proxy, CodexLaunchProxy::Inherit) {
         apply_managed_proxy_env_to_command(cmd);
         return;
-    };
-
-    let pairs = account_proxy_env_pairs(proxy_url);
+    }
+    let pairs = launch_proxy.env_overrides();
     log_managed_proxy_injection("account-env", cmd, &pairs);
     for (key, value) in pairs {
         cmd.env(key, value);
@@ -2004,8 +1944,13 @@ pub fn append_electron_proxy_args(args: &mut Vec<String>, proxy_url: &str) {
     if proxy_url.is_empty() {
         return;
     }
-    // An explicitly selected account or global proxy takes precedence over old
-    // launch flags; otherwise Chromium can bypass it.
+    clear_electron_proxy_args(args);
+    let chromium_proxy_url = proxy_url.replace("socks5h://", "socks5://");
+    args.push(format!("--proxy-server={chromium_proxy_url}"));
+    args.push("--proxy-bypass-list=localhost;127.0.0.1;[::1]".to_string());
+}
+
+fn clear_electron_proxy_args(args: &mut Vec<String>) {
     let mut cleaned = Vec::with_capacity(args.len());
     let mut iter = args.drain(..).peekable();
     while let Some(arg) = iter.next() {
@@ -2031,9 +1976,6 @@ pub fn append_electron_proxy_args(args: &mut Vec<String>, proxy_url: &str) {
     }
     drop(iter);
     *args = cleaned;
-    let chromium_proxy_url = proxy_url.replace("socks5h://", "socks5://");
-    args.push(format!("--proxy-server={chromium_proxy_url}"));
-    args.push("--proxy-bypass-list=localhost;127.0.0.1;[::1]".to_string());
 }
 
 #[cfg(target_os = "macos")]
@@ -2049,16 +1991,12 @@ pub fn append_managed_proxy_env_to_open_args(cmd: &mut Command) {
 }
 
 #[cfg(target_os = "macos")]
-pub fn append_effective_proxy_env_to_open_args(cmd: &mut Command, egress_proxy_url: Option<&str>) {
-    let Some(proxy_url) = egress_proxy_url
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
+pub fn append_effective_proxy_env_to_open_args(cmd: &mut Command, launch_proxy: &CodexLaunchProxy) {
+    if matches!(launch_proxy, CodexLaunchProxy::Inherit) {
         append_managed_proxy_env_to_open_args(cmd);
         return;
-    };
-
-    let pairs = account_proxy_env_pairs(proxy_url);
+    }
+    let pairs = launch_proxy.env_overrides();
     log_managed_proxy_injection("account-open-arg", cmd, &pairs);
     for (key, value) in pairs {
         cmd.arg("--env").arg(format!("{}={}", key, value));
@@ -2071,7 +2009,7 @@ pub fn append_managed_proxy_env_to_open_args(_cmd: &mut Command) {}
 #[cfg(not(target_os = "macos"))]
 pub fn append_effective_proxy_env_to_open_args(
     _cmd: &mut Command,
-    _egress_proxy_url: Option<&str>,
+    _launch_proxy: &CodexLaunchProxy,
 ) {
 }
 

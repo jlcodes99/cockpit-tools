@@ -526,9 +526,13 @@ pub fn get_downloads_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn get_auto_backup_settings() -> Result<AutoBackupSettings, String> {
-    let config = config::get_user_config();
-    build_auto_backup_settings(&config)
+pub async fn get_auto_backup_settings() -> Result<AutoBackupSettings, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let config = config::get_user_config();
+        build_auto_backup_settings(&config)
+    })
+    .await
+    .map_err(|error| format!("读取自动备份设置任务失败: {}", error))?
 }
 
 #[tauri::command]
@@ -618,7 +622,13 @@ pub fn copy_auto_backup_file(file_name: String, target_path: String) -> Result<S
 }
 
 #[tauri::command]
-pub fn list_auto_backup_files() -> Result<Vec<AutoBackupFileEntry>, String> {
+pub async fn list_auto_backup_files() -> Result<Vec<AutoBackupFileEntry>, String> {
+    tauri::async_runtime::spawn_blocking(list_auto_backup_files_sync)
+        .await
+        .map_err(|error| format!("读取备份列表任务失败: {}", error))?
+}
+
+fn list_auto_backup_files_sync() -> Result<Vec<AutoBackupFileEntry>, String> {
     let dir = get_auto_backup_dir_path()?;
     if !dir.exists() {
         return Ok(Vec::new());
@@ -782,8 +792,10 @@ pub fn open_auto_backup_dir() -> Result<(), String> {
 
 /// 获取定时备份与行为备份的空间占用明细。
 #[tauri::command]
-pub fn get_backup_usage() -> Result<modules::backup_storage::BackupUsageSummary, String> {
-    modules::backup_storage::get_backup_usage()
+pub async fn get_backup_usage() -> Result<modules::backup_storage::BackupUsageSummary, String> {
+    tauri::async_runtime::spawn_blocking(modules::backup_storage::get_backup_usage)
+        .await
+        .map_err(|error| format!("读取备份空间任务失败: {}", error))?
 }
 
 /// 修改本地备份根目录；迁移选项由前端在确认后传入。

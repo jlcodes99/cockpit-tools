@@ -24,7 +24,8 @@ type unauthorizedRefreshExecutor struct {
 
 func (e *unauthorizedRefreshExecutor) Identifier() string { return e.id }
 
-func (e *unauthorizedRefreshExecutor) Execute(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+func (e *unauthorizedRefreshExecutor) Execute(ctx context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+	cliproxyexecutor.MarkUpstreamAttempt(ctx)
 	e.mu.Lock()
 	e.executeCalls = append(e.executeCalls, auth.ID)
 	token := authAccessToken(auth)
@@ -39,7 +40,8 @@ func (e *unauthorizedRefreshExecutor) Execute(_ context.Context, auth *Auth, _ c
 	return cliproxyexecutor.Response{Payload: []byte(auth.ID + ":" + token)}, nil
 }
 
-func (e *unauthorizedRefreshExecutor) ExecuteStream(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+func (e *unauthorizedRefreshExecutor) ExecuteStream(ctx context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+	cliproxyexecutor.MarkUpstreamAttempt(ctx)
 	e.mu.Lock()
 	e.streamCalls = append(e.streamCalls, auth.ID)
 	token := authAccessToken(auth)

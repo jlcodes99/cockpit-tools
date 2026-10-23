@@ -13,6 +13,7 @@ import type {
   CodexInstanceGatewayStatus,
   CodexInstanceGatewayView,
 } from "../types/codexLocalAccess";
+import { summarizeCodexInstanceGateways } from "../utils/codexInstanceGatewaySummary";
 import "./CodexInstanceGatewaysModal.css";
 
 interface CodexInstanceGatewaysModalProps {
@@ -73,11 +74,7 @@ export function CodexInstanceGatewaysModal({
     return null;
   }
 
-  const total = gateways.length;
-  const running = gateways.filter(
-    (gateway) => gateway.status === "running",
-  ).length;
-  const issues = Math.max(0, total - running);
+  const { total, running, issues } = summarizeCodexInstanceGateways(gateways);
 
   const kindLabel = (kind: CodexInstanceGatewayView["kind"]) => {
     switch (kind) {

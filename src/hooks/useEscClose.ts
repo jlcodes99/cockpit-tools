@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
+import { modalCloseHandler, registerModal, topModal, unregisterModal } from './modalStack';
 
 /** ESC-to-close for modals without an explicit stacking policy. */
 export function useEscClose(isOpen: boolean, onClose: () => void) {
@@ -18,30 +19,34 @@ export function useEscClose(isOpen: boolean, onClose: () => void) {
   }, [isOpen]);
 }
 
-const topmostCloseHandlers: (() => void)[] = [];
+let topmostCloseHandlerCount = 0;
 
 function closeTopmost(event: KeyboardEvent) {
-  const close = topmostCloseHandlers[topmostCloseHandlers.length - 1];
-  if (event.key !== 'Escape' || !close) return;
+  if (event.key !== 'Escape') return;
+  const top = topModal(window);
+  if (!top) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  close();
+  modalCloseHandler(top)?.();
 }
 
-/** One capture listener closes only the most recently opened, still-mounted dialog. */
-export function useEscCloseTopmost(isOpen: boolean, onClose: () => void) {
+/** Close only the visible top layer. Callers without a ref retain legacy LIFO order. */
+export function useEscCloseTopmost(
+  isOpen: boolean,
+  onClose: () => void,
+  dialog?: RefObject<HTMLElement | null>,
+) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!isOpen) return;
-    const close = () => onCloseRef.current();
-    topmostCloseHandlers.push(close);
-    if (topmostCloseHandlers.length === 1) window.addEventListener('keydown', closeTopmost, true);
+    const entry = registerModal({ node: () => dialog?.current ?? null,
+      withoutNode: !dialog, close: () => onCloseRef.current() });
+    if (++topmostCloseHandlerCount === 1) window.addEventListener('keydown', closeTopmost, true);
     return () => {
-      const index = topmostCloseHandlers.indexOf(close);
-      if (index !== -1) topmostCloseHandlers.splice(index, 1);
-      if (!topmostCloseHandlers.length) window.removeEventListener('keydown', closeTopmost, true);
+      unregisterModal(entry);
+      if (--topmostCloseHandlerCount === 0) window.removeEventListener('keydown', closeTopmost, true);
     };
-  }, [isOpen]);
+  }, [isOpen, dialog]);
 }

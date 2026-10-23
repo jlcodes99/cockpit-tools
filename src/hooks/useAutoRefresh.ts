@@ -1,3 +1,4 @@
+import { createCodexAutomaticQuotaRefreshPredicate } from '../utils/codexAutoRefreshPlanScope';
 import { listenSafely as listen } from "../utils/tauriEventListener";
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -44,6 +45,7 @@ import {
   type AutoRefreshSchedulerTask,
 } from '../utils/autoRefreshScheduler';
 import { CURRENT_ACCOUNT_CHANGED_EVENT } from '../utils/accountSyncEvents';
+import { getAntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 import { refreshCodexApiKeyUsageForAccounts } from '../services/codexApiKeyUsageRefreshService';
 import * as codexService from '../services/codexService';
 import {
@@ -52,13 +54,13 @@ import {
   getCodexInheritPlatformQuotaRefreshAccountIds,
   resolveCodexGroupQuotaAutoRefreshMinutes,
 } from '../services/codexAccountGroupService';
-import { isCodexApiKeyAccount, isCodexNewApiAccount } from '../types/codex';
 
 interface GeneralConfig {
   language: string;
   theme: string;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_auto_refresh_plan_types?: string[];
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_wsl_config_dir: string;
@@ -410,6 +412,7 @@ export function useAutoRefresh() {
 
           const currentRefreshMinutesMap = loadCurrentAccountRefreshMinutesMap();
           const currentAccountEmails = getCurrentAccountEmails();
+          const eligibleCodexQuotaAccount = createCodexAutomaticQuotaRefreshPredicate(config.codex_auto_refresh_plan_types);
           const runProviderCurrentRefresh = async (
             fetchCurrentProviderAccountId: () => Promise<string | null>,
             refreshProviderToken: (accountId: string) => Promise<void>,
@@ -463,7 +466,7 @@ export function useAutoRefresh() {
                 if (!useAccountStore.getState().currentAccount?.id) {
                   return;
                 }
-                await invoke('refresh_current_quota');
+                await invoke('refresh_current_quota', { runtimeTarget: getAntigravityRuntimeTarget() });
                 await fetchAccounts();
                 await fetchCurrentAccount();
               },
@@ -480,10 +483,7 @@ export function useAutoRefresh() {
                   // 平台间隔只刷「继承平台 + 未分组」；自定义间隔分组由独立任务负责
                   const accounts = useCodexAccountStore.getState().accounts;
                   const refreshableIds = accounts
-                    .filter(
-                      (account) =>
-                        !isCodexApiKeyAccount(account) || isCodexNewApiAccount(account),
-                    )
+                    .filter(eligibleCodexQuotaAccount)
                     .map((account) => account.id);
                   const inheritIds =
                     await getCodexInheritPlatformQuotaRefreshAccountIds(refreshableIds);
@@ -839,8 +839,14 @@ export function useAutoRefresh() {
                   codexRefreshingRef,
                   async () => {
                     try {
-                      // 自定义分组任务目标明确，不因「不刷新」外的策略再过滤
-                      await codexService.refreshCodexQuotasBatch(uniqueIds, {
+                      // 自定义间隔遵守同一套餐筛选；手动刷新与当前账号任务不受影响
+                      const accountById = new Map(useCodexAccountStore.getState().accounts.map((account) => [account.id, account]));
+                      const eligibleIds = uniqueIds.filter((id) => {
+                        const account = accountById.get(id);
+                        return account && eligibleCodexQuotaAccount(account);
+                      });
+                      if (eligibleIds.length === 0) return;
+                      await codexService.refreshCodexQuotasBatch(eligibleIds, {
                         respectGroupQuotaRefresh: false,
                         background: true,
                       });

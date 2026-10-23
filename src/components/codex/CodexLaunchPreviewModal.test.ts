@@ -11,10 +11,20 @@ import { deferred, settlePromises } from "../../../tests/helpers/reactHookHarnes
 const source = ts.createSourceFile("CodexLaunchPreviewModal.tsx", readFileSync(
   new URL("./CodexLaunchPreviewModal.tsx", import.meta.url), "utf8",
 ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const names = ["requestClose", "persistDraft", "handleExecute", "handleInstanceChange", "applyContextConfig", "openModelConfig", "closeModelConfig"];
+const names = ["requestClose", "persistDraft", "handleExecute", "handleInstanceChange", "applyContextConfig", "openModelConfig", "closeModelConfig", "reloadContextConfig", "closeContextConfig"];
 const callbacks: string[] = [];
+let configReadSetup = '';
 const closeButtons: (string | undefined)[] = [];
 function visit(node: ts.Node) {
+  if (ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect') {
+    const effect = node.arguments[0];
+    if (effect && ts.isArrowFunction(effect) && ts.isBlock(effect.body) && effect.body.getText(source).includes('const session = ++configSession.current')) {
+      const statements = effect.body.statements;
+      const end = statements.findIndex((statement) => statement.getText(source) === 'setLoading(true);');
+      assert.ok(end >= 0);
+      configReadSetup = statements.slice(0, end + 1).map((statement) => statement.getText(source)).join('\n');
+    }
+  }
   if (ts.isVariableDeclaration(node) && names.includes(node.name.getText(source))) {
     assert.ok(node.initializer && ts.isCallExpression(node.initializer));
     callbacks.push(`const ${node.name.getText(source)} = ${node.initializer.arguments[0].getText(source)};`);
@@ -30,7 +40,8 @@ function visit(node: ts.Node) {
 }
 visit(source);
 assert.equal(callbacks.length, names.length);
-const compiled = ts.transpileModule(callbacks.join("\n") + `\nglobalThis.handlers = {${names.join(",")}};`, {
+assert.ok(configReadSetup);
+const compiled = ts.transpileModule(callbacks.join("\n") + `\nconst resetConfigReadState = () => {${configReadSetup}};\nglobalThis.handlers = {${names.join(",")}, resetConfigReadState};`, {
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
@@ -46,6 +57,8 @@ function harness(routing = false, overlay = "global-progress-overlay") {
   const savedInstance = { id: "synthetic", saved: true };
   const c: Record<string, any> = {
     configSession: { current: 1 }, configWritePending: { current: false },
+    contextReloadRequest: { current: 0 }, contextReloadPending: { current: false },
+    loading: false, contextConfigSnapshot: null,
     busy: false, checkingConfig: false, configReady: true, configBusy: false, contextConfigSaving: false,
     loadedConfig: {}, loadedInstanceKey: null, configLoadInputs: { current: { selectedInstance: store.instances[0] } },
     catalogEnabled: false, modelsError: null, models: [], defaultModelId: null,
@@ -71,7 +84,8 @@ function harness(routing = false, overlay = "global-progress-overlay") {
   };
   for (const name of ["setCheckingConfig", "setNotice", "setError", "setSaving", "setExecuting",
     "setChangingInstance", "setContextConfigError", "setContextConfigSaving", "setConfigLoadError",
-    "setLoadedInstanceKey", "setRoutingRoutes", "applyLoadedConfig", "setContextConfigSnapshot", "setContextConfigOpen"]) {
+    "setLoadedInstanceKey", "setRoutingRoutes", "applyLoadedConfig", "setContextConfigSnapshot", "setContextConfigOpen",
+    "setContextConfigReloading", "setLoadedTarget", "setRoutingEnabled", "setLoading"]) {
     c[name] = () => { if (closed) lateUpdates.push(name); else events.push(name); };
   }
   vm.runInNewContext(compiled, c);
@@ -79,6 +93,100 @@ function harness(routing = false, overlay = "global-progress-overlay") {
     completeWrite(context: boolean) { write.resolve(routing && !context ? { quickConfig: saved, instance: savedInstance } : saved); },
   };
 }
+
+test('context conflict refuses a write and can reload even while configBusy', async () => {
+  const h = harness();
+  let failure: string | null = null;
+  h.c.codexLaunchPreviewQuickConfigKey = (config: any) => JSON.stringify(config);
+  h.c.setConfigLoadError = (value: string | null) => { failure = value; };
+  const apply = h.c.handlers.applyContextConfig();
+  h.read.resolve({ changed: true });
+  await apply;
+  assert.equal(failure, 'CODEX_LAUNCH_PREVIEW_CONFIG_CHANGED');
+  assert.equal(h.events.includes('quick-write'), false);
+  const latest = { detected_model_context_window: 800000, detected_auto_compact_token_limit: 720000 };
+  let baseline: any;
+  let applied: any;
+  let draft: any;
+  Object.assign(h.c, {
+    configBusy: true,
+    loadCodexLaunchPreviewConfig: async () => latest,
+    normalizeCodexModelRoutingRoutes: () => [],
+    resolveStoredCompactLimitInput: (_context: number, compact: number) => String(compact),
+    applyLoadedConfig: (value: any) => { applied = value; },
+    setContextConfigSnapshot: (value: any) => { baseline = h.c.contextConfigSnapshot = value; },
+    setContextOverrideEnabled: (value: boolean) => { draft = { ...draft, enabled: value }; },
+    setContextWindowInput: (value: string) => { draft = { ...draft, contextWindowInput: value }; },
+    setCompactLimitInput: (value: string) => { draft = { ...draft, compactLimitInput: value }; },
+  });
+  await h.c.handlers.reloadContextConfig();
+  assert.equal(applied, latest);
+  assert.equal(failure, null);
+  assert.deepEqual({ ...baseline }, { enabled: true, contextWindowInput: '800000', compactLimitInput: '720000' });
+  const reloadedBaseline = { ...baseline };
+  h.c.handlers.closeContextConfig(false);
+  assert.deepEqual(draft, reloadedBaseline, 'Cancel restores the newly loaded baseline, not the stale draft');
+  assert.equal(h.c.contextReloadPending.current, false);
+  h.c.loadedConfig = latest;
+  h.c.configBusy = false;
+  h.write.resolve(latest);
+  await h.c.handlers.applyContextConfig();
+  assert.equal(h.events.includes('quick-write'), true, 'the reloaded snapshot can be saved again');
+});
+
+test('failed context reload preserves the draft and allows retry', async () => {
+  const h = harness();
+  let failure = '';
+  let attempts = 0;
+  Object.assign(h.c, {
+    configBusy: true,
+    setContextConfigError: (value: string) => { failure = value; },
+    loadCodexLaunchPreviewConfig: async () => { attempts += 1; throw new Error('timeout'); },
+  });
+  await h.c.handlers.reloadContextConfig();
+  assert.equal(failure, 'codex.launchPreview.configLoadTimeout');
+  assert.equal(h.events.includes('applyLoadedConfig'), false);
+  assert.equal(h.events.includes('setContextConfigSnapshot'), false);
+  assert.equal(h.c.contextReloadPending.current, false);
+  await h.c.handlers.reloadContextConfig();
+  assert.equal(attempts, 2);
+});
+
+test('context reload is single-flight and late completion after closing or target replacement is ignored', async () => {
+  for (const close of [false, true]) {
+    const h = harness();
+    const pending = h.c.handlers.reloadContextConfig();
+    await h.c.handlers.reloadContextConfig();
+    assert.equal(h.events.filter((event) => event === 'read').length, 1);
+    if (close) h.c.handlers.closeContextConfig(false);
+    else h.c.configSession.current += 1;
+    h.events.length = 0;
+    h.read.resolve({});
+    await pending;
+    assert.deepEqual(h.events, []);
+  }
+});
+
+test('a fresh target read clears the old context reload gate and can recover again', async () => {
+  const h = harness();
+  const first = h.c.handlers.reloadContextConfig();
+  let reloading = false;
+  h.c.setContextConfigReloading = (value: boolean) => { reloading = value; };
+  h.c.handlers.resetConfigReadState();
+  assert.equal(h.c.contextReloadPending.current, false);
+  assert.equal(reloading, false);
+  h.read.resolve({});
+  await first;
+  Object.assign(h.c, {
+    loadCodexLaunchPreviewConfig: async () => ({}),
+    normalizeCodexModelRoutingRoutes: () => [],
+    resolveStoredCompactLimitInput: () => '',
+  });
+  h.events.length = 0;
+  await h.c.handlers.reloadContextConfig();
+  assert.equal(h.events.includes('applyLoadedConfig'), true);
+  assert.equal(h.c.contextReloadPending.current, false);
+});
 
 test("upstream close policy allows the busy footer and global overlays, but retains child protection", () => {
   assert.deepEqual(closeButtons, ["{busy}", undefined]);

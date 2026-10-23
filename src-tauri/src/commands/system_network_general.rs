@@ -270,8 +270,11 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         ui_scale: user_config.ui_scale,
         auto_refresh_minutes: user_config.auto_refresh_minutes,
         codex_auto_refresh_minutes: user_config.codex_auto_refresh_minutes,
+        codex_auto_refresh_plan_types: user_config.codex_auto_refresh_plan_types,
         codex_sync_wsl: user_config.codex_sync_wsl,
         codex_app_ui_injection_enabled: user_config.codex_app_ui_injection_enabled,
+        codex_app_native_fast_enabled: user_config.codex_app_native_fast_enabled,
+        codex_app_api_quota_compat_enabled: user_config.codex_app_api_quota_compat_enabled,
         codex_oauth_app_version: user_config.codex_oauth_app_version,
         codex_wsl_config_dir: user_config.codex_wsl_config_dir,
         zed_auto_refresh_minutes: user_config.zed_auto_refresh_minutes,
@@ -305,6 +308,8 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         remember_main_window_state: user_config.remember_main_window_state,
         startup_page: config::normalize_startup_page(&user_config.startup_page),
         floating_card_always_on_top: user_config.floating_card_always_on_top,
+        floating_card_minimal: user_config.floating_card_minimal,
+        floating_card_background_opacity: config::normalize_floating_card_background_opacity(user_config.floating_card_background_opacity),
         app_auto_launch_enabled,
         token_keeper_enabled: user_config.token_keeper_enabled,
         auto_import_from_local_enabled: user_config.auto_import_from_local_enabled,
@@ -394,6 +399,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         openclaw_auth_overwrite_on_switch: user_config.openclaw_auth_overwrite_on_switch,
         hermes_auth_overwrite_on_switch: user_config.hermes_auth_overwrite_on_switch,
         codex_launch_on_switch: user_config.codex_launch_on_switch,
+        codex_auto_restore_takeover_on_launch: user_config.codex_auto_restore_takeover_on_launch,
         antigravity_launch_on_switch: user_config.antigravity_launch_on_switch,
         codex_restart_specified_app_on_switch: user_config.codex_restart_specified_app_on_switch,
         codex_local_access_entry_visible: user_config.codex_local_access_entry_visible,
@@ -618,6 +624,14 @@ pub fn patch_general_config(
     if menu_bar_quota_changed {
         if let Err(err) = modules::tray::update_tray_menu(&app) {
             modules::logger::log_warn(&format!("[Tray] 保存菜单栏额度设置后刷新失败: {}", err));
+        }
+    }
+
+    if updates.contains_key("floating_card_minimal") || updates.contains_key("floating_card_background_opacity") {
+        use tauri::Emitter;
+        if let Err(err) = app.emit(modules::floating_card_window::FLOATING_CARD_APPEARANCE_CHANGED_EVENT,
+            modules::floating_card_window::FloatingCardAppearance::from(&new_config)) {
+            modules::logger::log_warn(&format!("[FloatingCard] 通用设置外观通知失败: {}", err));
         }
     }
 

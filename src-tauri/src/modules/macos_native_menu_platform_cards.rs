@@ -878,22 +878,14 @@
                     }
                 }
                 let remaining_percent = min_quota_progress(&rows, !account.is_api_key_auth());
+                let title = account.display_name(&modules::i18n::translate(
+                    lang,
+                    "common.apiKeyAccount",
+                    &[],
+                ));
                 AccountCard {
                     id: account.id,
-                    title: if matches!(
-                        account.auth_mode,
-                        crate::models::codex::CodexAuthMode::Apikey
-                    ) && account
-                        .account_name
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .is_some()
-                    {
-                        account.account_name.unwrap_or(account.email)
-                    } else {
-                        account.email
-                    },
+                    title,
                     plan: account.plan_type,
                     updated_at: display_updated_at(
                         account.usage_updated_at,

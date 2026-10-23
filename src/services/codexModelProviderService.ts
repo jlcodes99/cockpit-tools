@@ -23,9 +23,10 @@ import {
   type ModelProviderUsageSummary,
 } from './modelProviderUsageService';
 import { moveCodexProviderApiKey } from '../utils/codexModelProviderApiKeyMove';
-import { expandLegacyProviderVisionCapabilities } from '../utils/codexModelProviderVision';
+import { migrateCodexModelProviderVisionCapabilities } from '../utils/codexModelProviderVisionMigration';
+import { cloneCodexProviderModelConfig, type CodexProviderModelConfig } from '../utils/codexModelProviderKeyConfig';
 
-export interface CodexModelProviderApiKey {
+export interface CodexModelProviderApiKey extends CodexProviderModelConfig {
   id: string;
   name: string;
   apiKey: string;
@@ -379,9 +380,21 @@ function cloneProviders(providers: CodexModelProvider[]): CodexModelProvider[] {
         )
       : undefined,
     visionRoutingModel: sanitizeName(provider.visionRoutingModel ?? '') || undefined,
-    apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey })),
+    apiKeys: provider.apiKeys.map((apiKey) => ({ ...apiKey, ...cloneCodexProviderModelConfig(apiKey) })),
     excludedApiKeyHashes: provider.excludedApiKeyHashes ? [...provider.excludedApiKeyHashes] : undefined,
   }));
+}
+
+function normalizeApiKeyModelConfig(value: CodexProviderModelConfig): CodexProviderModelConfig {
+  const config: CodexProviderModelConfig = {};
+  if (Array.isArray(value.modelCatalog)) config.modelCatalog = normalizeModelCatalog(value.modelCatalog) ?? [];
+  if (value.modelContextWindows !== undefined) {
+    config.modelContextWindows = normalizeModelContextWindows(value.modelContextWindows, config.modelCatalog ?? []) ?? {};
+  }
+  if (typeof value.supportsVision === 'boolean') config.supportsVision = value.supportsVision;
+  if (value.modelCapabilities !== undefined) config.modelCapabilities = normalizeModelCapabilities(value.modelCapabilities) ?? {};
+  if (value.visionRoutingModel !== undefined) config.visionRoutingModel = sanitizeName(value.visionRoutingModel ?? '') || null;
+  return config;
 }
 
 function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[] {
@@ -395,6 +408,7 @@ function toValidApiKeys(value: unknown, now: number): CodexModelProviderApiKey[]
       id: String((item as { id?: unknown }).id ?? createApiKeyId()),
       name: sanitizeName(String((item as { name?: unknown }).name ?? '')),
       apiKey: rawKey,
+      ...normalizeApiKeyModelConfig(item as CodexProviderModelConfig),
       createdAt: Number((item as { createdAt?: unknown }).createdAt ?? now),
       updatedAt: Number((item as { updatedAt?: unknown }).updatedAt ?? now),
     });
@@ -522,20 +536,19 @@ async function ensureProvidersLoaded(): Promise<CodexModelProvider[]> {
   const migration = migrateApiKeyFunProvider(loaded);
   loaded = migration.providers;
   let migratedDeepSeek = false;
-  let migratedLegacyVision = false;
+  let migratedVisionCapabilities = false;
   for (const provider of loaded) {
     migratedDeepSeek = enforceDeepSeekProvider(provider) || migratedDeepSeek;
-    // 旧版本的供应商级识图开关展开成逐模型能力，避免网关把图片当 text-only 丢弃。
-    if (expandLegacyProviderVisionCapabilities(provider)) {
+    if (migrateCodexModelProviderVisionCapabilities(provider)) {
       provider.updatedAt = Date.now();
-      migratedLegacyVision = true;
+      migratedVisionCapabilities = true;
     }
   }
   if (
     loaded.length !== loadedProviders.length ||
     migration.changed ||
     migratedDeepSeek ||
-    migratedLegacyVision ||
+    migratedVisionCapabilities ||
     loadResult.removedImageGenerationSetting ||
     loadResult.migratedSupportsWebsockets
   ) {
@@ -567,6 +580,8 @@ export const mergeCodexModelProviderApiKeysFromAccounts = serializedProviderMuta
     const providerBaseUrl = normalizeCodexModelProviderBaseUrl(provider.baseUrl);
     const linkedAccounts = accounts.filter((account) => {
       if ((account.auth_mode ?? '').toLowerCase() !== 'apikey') return false;
+      // A plan registration is a service reference, never a reusable API key.
+      if (account.api_provider_id === 'cockpit_chatgpt_plan') return false;
       const accountBaseUrl = normalizeCodexModelProviderBaseUrl(account.api_base_url ?? '');
       return (
         (account.api_provider_id?.trim() === provider.id && provider.id.length > 0) ||
@@ -851,7 +866,7 @@ export const addApiKeyToCodexModelProvider = serializedProviderMutation(async fu
   await allowExplicitApiKey(provider, apiKey);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
 });
 
 export const removeApiKeyFromCodexModelProvider = serializedProviderMutation(async function (
@@ -864,7 +879,7 @@ export const removeApiKeyFromCodexModelProvider = serializedProviderMutation(asy
   const removedKey = provider.apiKeys.find((item) => item.id === apiKeyId);
   const nextApiKeys = provider.apiKeys.filter((item) => item.id !== apiKeyId);
   if (nextApiKeys.length === provider.apiKeys.length) {
-    return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+    return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
   }
   provider.apiKeys = nextApiKeys;
   if (removedKey) {
@@ -874,7 +889,7 @@ export const removeApiKeyFromCodexModelProvider = serializedProviderMutation(asy
   }
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
 });
 
 /** Explicit rename for an existing provider API key (#1510). Does not rewrite key material. */
@@ -894,7 +909,7 @@ export const renameApiKeyOnCodexModelProvider = serializedProviderMutation(async
   apiKey.updatedAt = now;
   provider.updatedAt = now;
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
 });
 
 /** Replace the secret for an existing provider API key without changing its id. */
@@ -927,7 +942,7 @@ export const updateApiKeyOnCodexModelProvider = serializedProviderMutation(async
   existing.updatedAt = now;
   provider.updatedAt = now;
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
 });
 
 export async function testCodexModelProviderConnection(input: {
@@ -1096,30 +1111,9 @@ export const upsertCodexModelProviderFromCredential = serializedProviderMutation
   }
   await allowExplicitApiKey(provider, apiKey);
   provider.baseUrl = apiBaseUrl;
-  provider.modelCatalog =
-    normalizeModelCatalog(input.modelCatalog) ??
-    provider.modelCatalog ??
-    presetModelCatalogForBaseUrl(apiBaseUrl);
-  if (input.modelContextWindows !== undefined) {
-    provider.modelContextWindows = normalizeModelContextWindows(
-      input.modelContextWindows,
-      provider.modelCatalog ?? [],
-    );
-  } else {
-    provider.modelContextWindows = normalizeModelContextWindows(
-      provider.modelContextWindows,
-      provider.modelCatalog ?? [],
-    );
-  }
-  if (input.supportsVision !== undefined) {
-    provider.supportsVision = input.supportsVision === true;
-  }
-  if (input.modelCapabilities !== undefined) {
-    provider.modelCapabilities = normalizeModelCapabilities(input.modelCapabilities);
-  }
-  if (input.visionRoutingModel !== undefined) {
-    provider.visionRoutingModel = sanitizeName(input.visionRoutingModel ?? '') || undefined;
-  }
+  const key = provider.apiKeys.find((item) => sanitizeApiKey(item.apiKey) === apiKey)!;
+  Object.assign(key, normalizeApiKeyModelConfig(input));
+  key.updatedAt = Date.now();
   if (input.website !== undefined) {
     provider.website = sanitizeName(input.website ?? '') || undefined;
   }
@@ -1142,7 +1136,7 @@ export const upsertCodexModelProviderFromCredential = serializedProviderMutation
   enforceDeepSeekProvider(provider);
   provider.updatedAt = Date.now();
   await writeProviders(providers);
-  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item })) };
+  return { ...provider, apiKeys: provider.apiKeys.map((item) => ({ ...item, ...cloneCodexProviderModelConfig(item) })) };
 });
 
 function normalizeOptionalForCompare(value?: string | null): string {

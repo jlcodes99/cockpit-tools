@@ -9,6 +9,8 @@ pub mod codebuddy_cn_instance;
 pub mod codebuddy_instance;
 pub mod codebuddy_session;
 pub mod codex;
+pub mod chatgpt_plan;
+pub mod chatgpt_plan_service;
 pub mod codex_proxy_engine;
 pub mod codex_unified_proxy;
 pub mod codex_pelican;
@@ -18,6 +20,7 @@ pub(crate) mod codex_instance_gateway_watchdog;
 mod codex_instance_gateway_watchdog_state;
 mod codex_instance_model_catalog;
 mod codex_instance_routing;
+mod codex_instance_start_runtime;
 pub mod cursor;
 pub mod cursor_instance;
 pub mod data_transfer;
@@ -52,3 +55,8 @@ pub mod zcode_instance;
 pub mod zed;
 
 pub mod codex_proxy_catalog;
+
+pub mod codex_client_proxy;
+pub mod codex_capability_fallback;
+
+pub mod codex_multi_agent;

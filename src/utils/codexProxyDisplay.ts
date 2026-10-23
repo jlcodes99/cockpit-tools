@@ -1,3 +1,4 @@
+import { isCodexApiKeyAccount } from '../types/codex';
 import type { CodexAccount } from '../types/codex';
 import type { CodexProxyRuntimeStatus } from '../services/codexAccountProxyService';
 import { proxyPreviewBinding, proxyRuntimeRows } from './codexProxyPreview';
@@ -32,11 +33,11 @@ export function codexProxyCardPresentation(account: CodexAccount, status: CodexP
   const binding = account.egress_proxy_disabled
     ? { source: 'disabled' as const, summary: null }
     : proxyPreviewBinding(account.egress_proxy, status);
-  const modeKey = binding.source === 'disabled' ? 'codex.proxy.modeDisabled'
+  const modeKey = account.egress_proxy_error ? 'codex.proxy.modeStale' : binding.source === 'disabled' ? 'codex.proxy.modeDisabled'
     : binding.source === 'account' ? 'codex.proxy.modeIndependent'
       : binding.source === 'unified' ? 'codex.proxy.modeUnified'
         : binding.source === 'none' ? 'codex.proxy.modeDefault' : 'codex.proxy.managerAccounts.following';
-  const rows = proxyRuntimeRows(status);
+  const rows = proxyRuntimeRows(status, isCodexApiKeyAccount(account));
   const live = binding.source === 'disabled' || binding.source === 'none' ? []
     : rows.filter((row) => (row.kernelState ?? row.state) === 'running' && row.node);
   const nodes = [...new Set(live.map((row) => row.node!))].map((name) => {

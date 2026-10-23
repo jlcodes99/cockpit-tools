@@ -392,7 +392,7 @@ func TestHomeExecutionResultsDoNotMutateSameIDLocalAuth(t *testing.T) {
 						t.Fatalf("executor access token = %q, want Home token", got)
 					}
 				}
-				assertHomeExecutionResultStateUnchanged(t, manager, store, hook, beforeLocal, beforeScheduler, beforeModels)
+				assertHomeExecutionResultStateUnchanged(t, manager, store, hook, beforeLocal, beforeScheduler, beforeModels, outcome.prepareErr == nil)
 			})
 		}
 	}
@@ -410,7 +410,7 @@ func homeExecutionSchedulerAuthSnapshot(t *testing.T, manager *Manager, authID s
 	return entry.auths[authID].auth.Clone()
 }
 
-func assertHomeExecutionResultStateUnchanged(t *testing.T, manager *Manager, store *requestPrepareStore, hook *resultCaptureHook, beforeLocal, beforeScheduler *Auth, beforeModels []*registry.ModelInfo) {
+func assertHomeExecutionResultStateUnchanged(t *testing.T, manager *Manager, store *requestPrepareStore, hook *resultCaptureHook, beforeLocal, beforeScheduler *Auth, beforeModels []*registry.ModelInfo, expectResult bool) {
 	t.Helper()
 	current, ok := manager.GetByID(beforeLocal.ID)
 	if !ok {
@@ -428,8 +428,12 @@ func assertHomeExecutionResultStateUnchanged(t *testing.T, manager *Manager, sto
 	if got := store.saveCount.Load(); got != 0 {
 		t.Fatalf("Home execution save count = %d, want 0", got)
 	}
-	if results := hook.Results(); len(results) != 1 {
-		t.Fatalf("Home execution hook results = %#v, want exactly one ephemeral result", results)
+	wantResults := 0
+	if expectResult {
+		wantResults = 1
+	}
+	if results := hook.Results(); len(results) != wantResults {
+		t.Fatalf("Home execution hook results = %#v, want %d ephemeral results", results, wantResults)
 	}
 }
 
@@ -483,7 +487,7 @@ func TestManagerExecute_PreparesAndPersistsMissingRequestAuthMetadata(t *testing
 	}
 }
 
-func TestManagerExecute_PrepareAuth403TriggersCooldown(t *testing.T) {
+func TestManagerExecute_PrepareAuth403DoesNotRecordGenerationFailure(t *testing.T) {
 	previous := quotaCooldownDisabled.Load()
 	quotaCooldownDisabled.Store(false)
 	t.Cleanup(func() { quotaCooldownDisabled.Store(previous) })
@@ -516,11 +520,8 @@ func TestManagerExecute_PrepareAuth403TriggersCooldown(t *testing.T) {
 	if !ok {
 		t.Fatal("expected auth in manager")
 	}
-	if !current.Unavailable {
-		t.Fatal("expected auth to be marked unavailable after 403 prepare failure")
-	}
-	if current.Quota.NextRecoverAt.IsZero() && current.NextRetryAfter.IsZero() {
-		t.Fatal("expected auth cooldown to be scheduled after 403 prepare failure")
+	if current.Unavailable || current.Failed != 0 || current.LastError != nil || len(current.ModelStates) != 0 || !current.Quota.NextRecoverAt.IsZero() || !current.NextRetryAfter.IsZero() {
+		t.Fatalf("unsent preparation changed generation health: %#v", current)
 	}
 }
 

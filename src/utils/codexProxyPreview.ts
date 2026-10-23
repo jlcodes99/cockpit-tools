@@ -48,7 +48,7 @@ export function proxyPreviewBinding(saved: CodexAccount['egress_proxy'], status:
   return { source: saved ? 'account' as const : status ? 'none' as const : 'unknown' as const, summary: saved };
 }
 
-export function proxyRuntimeRows(status: CodexProxyRuntimeStatus | null): ProxyRuntimeRow[] {
+export function proxyRuntimeRows(status: CodexProxyRuntimeStatus | null, desktopOnly = false): ProxyRuntimeRow[] {
   // 账号通道与 API 服务通道展示内容一致时合并成一行：既包括「共用同一个代理」，也包括
   // 「两者都未绑定 / 都未启动」这类等价状态——未配置代理时不该出现两行完全相同的内容。
   const shared = !!status
@@ -62,7 +62,7 @@ export function proxyRuntimeRows(status: CodexProxyRuntimeStatus | null): ProxyR
     && status.accountPort === status.desktopPort
     && (status.accountNode ?? null) === (status.desktopNode ?? null)
     && (!status.desktopEntry || status.desktopEntry.port === status.accountPort));
-  return (unified ? ['shared'] as const : shared ? ['combined', 'desktop'] as const : ['account', 'sidecar', 'desktop'] as const).map((kind) => {
+  return (desktopOnly ? ['desktop'] as const : unified ? ['shared'] as const : shared ? ['combined', 'desktop'] as const : ['account', 'sidecar', 'desktop'] as const).map((kind) => {
     const source = kind === 'combined' || kind === 'shared' ? 'account' : kind;
     const row: ProxyRuntimeRow = { kind, state: status?.[source], port: status?.[`${source}Port`], node: status?.[`${source}Node`] };
     const sources = kind === 'shared' ? ['account', 'desktop', 'sidecar'] as const
@@ -89,9 +89,9 @@ export function proxyRuntimeRows(status: CodexProxyRuntimeStatus | null): ProxyR
   });
 }
 
-export function proxyRuntimeChanges(current: CodexProxyRuntimeStatus, previous?: CodexProxyRuntimeStatus) {
-  const old = proxyRuntimeRows(previous ?? null);
-  return proxyRuntimeRows(current).filter((row) => !previous || !old.some((entry) => JSON.stringify(entry) === JSON.stringify(row)));
+export function proxyRuntimeChanges(current: CodexProxyRuntimeStatus, previous?: CodexProxyRuntimeStatus, desktopOnly = false) {
+  const old = proxyRuntimeRows(previous ?? null, desktopOnly);
+  return proxyRuntimeRows(current, desktopOnly).filter((row) => !previous || !old.some((entry) => JSON.stringify(entry) === JSON.stringify(row)));
 }
 
 export function appendRuntimeSnapshot(history: ProxyRuntimeSnapshot[], status: CodexProxyRuntimeStatus, timestamp: number): ProxyRuntimeSnapshot[] {

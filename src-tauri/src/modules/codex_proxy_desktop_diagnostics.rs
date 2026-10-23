@@ -388,7 +388,14 @@ mod tests {
     #[tokio::test]
     async fn cancelled_relay_logs_both_snapshots_and_task_end_without_payload() {
         let capture = Capture::default();
+        // Keep heterogeneous dispatchers alive: tracing's single-dispatcher
+        // fast path otherwise caches `never` when an uninstrumented thread is
+        // the first to hit the shared logger callsite.
+        let _interest_guard = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
         let _guard = tracing::subscriber::set_default(capture.subscriber());
+        std::thread::spawn(|| logger::log_warn("outside diagnostic capture"))
+            .join()
+            .unwrap();
         let connection = Connection::new(100, 101);
         let (mut client, _client_peer) = tokio::io::duplex(8);
         let (mut upstream, _upstream_peer) = tokio::io::duplex(8);
@@ -410,11 +417,13 @@ mod tests {
         assert!(logs.contains("side=client") && logs.contains("side=upstream"));
         assert!(logs.contains("stage=relay") && logs.contains("outcome=task_dropped"));
         assert!(!logs.contains("outcome=tcp_eof"));
+        assert!(!logs.contains("outside diagnostic capture"));
     }
 
     #[tokio::test]
     async fn concurrent_scopes_keep_error_ids_and_completed_tasks_are_not_cancelled() {
         let capture = Capture::default();
+        let _interest_guard = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
         let _guard = tracing::subscriber::set_default(capture.subscriber());
         let first = Connection::new(100, 101);
         let second = Connection::new(100, 102);

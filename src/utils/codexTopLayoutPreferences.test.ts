@@ -8,6 +8,7 @@ import {
   writeCodexTopLayoutPreference,
   normalizeCodexTopLayout,
   moveCodexTopLayoutTab,
+  loadCodexTopLayoutPreference,
 } from './codexTopLayoutPreferences';
 
 test('default layout preserves all released tabs in the top row', () => {
@@ -16,6 +17,29 @@ test('default layout preserves all released tabs in the top row', () => {
   assert.ok(layout.order.slice(0, 5).every((tab) => layout.placement[tab] === 'top'));
   assert.equal(layout.placement.proxy, 'more');
   assert.equal(layout.placement['top-layout'], 'more');
+});
+
+test('strict storage access propagates failures so callers can offer retry', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  let failWrite = true;
+  let stored: string | null = null;
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: () => stored,
+    setItem: (_key: string, value: string) => { if (failWrite) throw Error('quota'); stored = value; },
+  } });
+  try {
+    const layout = moveCodexTopLayoutTab(createDefaultCodexTopLayout(), 5, 0);
+    assert.throws(() => writeCodexTopLayoutPreference(layout), /quota/);
+    assert.equal(stored, null);
+    failWrite = false; writeCodexTopLayoutPreference(layout);
+    assert.deepEqual(loadCodexTopLayoutPreference(), layout);
+    stored = '{corrupt';
+    assert.throws(loadCodexTopLayoutPreference);
+    assert.equal(stored, '{corrupt');
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+  }
 });
 
 test('saved layout normalizes stale tabs and survives invalid storage', () => {

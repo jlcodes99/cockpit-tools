@@ -7,7 +7,7 @@ pub async fn codex_pelican_start(
     app: tauri::AppHandle,
     request: StartRequest,
 ) -> Result<Batch, String> {
-    codex_pelican::start(app, request)
+    codex_pelican::start(app, request).await
 }
 
 #[tauri::command]

@@ -139,32 +139,11 @@ function isCursorEnterpriseAccount(account: CursorAccount): boolean {
 }
 
 function resolveCursorPlanLabel(account: CursorAccount): string {
-  const plan = getCursorPlanBadge(account);
-  const subscriptionStatus = (account.subscription_status || '')
-    .toLowerCase()
-    .trim();
-  const isTrialing = subscriptionStatus === 'trialing';
-
-  switch (plan) {
-    case 'ENTERPRISE':
-      return isCursorEnterpriseAccount(account) ? 'Enterprise' : 'Team';
-    case 'ULTRA':
-      return 'Ultra';
-    case 'PRO_PLUS':
-      return isTrialing ? 'Pro+ Trial' : 'Pro+';
-    case 'PRO':
-      return isTrialing ? 'Pro Trial' : 'Pro';
-    case 'FREE_TRIAL':
-      return 'Pro Trial';
-    case 'FREE':
-      return 'Free';
-    default:
-      return 'Unknown';
-  }
+  return account.membership_type?.trim() || account.plan_type?.trim() || 'Unknown';
 }
 
 export function getCursorPlanBadge(account: CursorAccount): CursorPlanBadge {
-  const membership = normalizeCursorMembershipType(account.membership_type);
+  const membership = normalizeCursorMembershipType(account.membership_type?.trim() || account.plan_type);
   switch (membership) {
     case 'free':
       return 'FREE';
@@ -197,8 +176,13 @@ export function getCursorPlanBadgeClass(
       return 'ultra';
     case 'enterprise':
       return account && !isCursorEnterpriseAccount(account) ? 'team' : 'enterprise';
+    case 'plus':
     case 'pro_plus':
       return 'plus';
+    case 'premium':
+      return 'pro';
+    case 'super':
+      return 'ultra';
     case 'pro':
     case 'free_trial':
       return 'pro';

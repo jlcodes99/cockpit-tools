@@ -147,7 +147,10 @@
 .pelican-table-scroll { overflow-y: auto; overflow-x: hidden; max-width: 100%; max-height: 100%; padding: 4px; }
 .pelican-table-scroll:focus-visible { outline: 2px solid var(--primary-color, #3576df); outline-offset: 2px; }
 .pelican-canvas-table { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; justify-items: stretch; align-content: start; }
-.pelican-account-tile { min-width: 0; overflow: hidden; border: 1px solid var(--border-color, #e1e5eb); border-radius: 8px; background: var(--bg-primary, #fff); }
+.pelican-account-tile { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--border-color, #e1e5eb); border-radius: 8px; background: var(--bg-primary, #fff); }
+.pelican-result-tags { display: flex; align-items: flex-start; gap: 4px; margin-top: auto; padding: 0 6px 6px; }
+.pelican-result-tag-list { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; min-height: 32px; }
+.pelican-tag-editor { position: fixed; inset: 0; z-index: 10030; }
 .pelican-account-tile h3 { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0; padding: 8px 6px; border-bottom: 1px solid var(--border-color, #e1e5eb); text-align: left; font-size: 10px; line-height: 1.3; }
 .pelican-account-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pelican-account-plan { flex: 0 0 auto; min-width: 0; }
@@ -156,6 +159,22 @@
 .pelican-canvas, .pelican-canvas-placeholder { width: 100%; height: 158px; margin: 0 auto; border: 1px solid var(--border-color, #d7dde6); border-radius: 6px; box-sizing: border-box; }
 .pelican-canvas { display: block; appearance: none; -webkit-appearance: none; font: inherit; color: inherit; padding: 0; background: #fff; overflow: hidden; cursor: zoom-in; }
 .pelican-canvas:hover { border-color: var(--primary-color, #3576df); }
+.pelican-canvas:disabled { opacity: .45; cursor: not-allowed; }
+.pelican-text-canvas { padding: 10px; text-align: left; color: var(--text-primary, #202939); background: var(--bg-secondary, #f6f7f9); }
+.pelican-text-canvas span { display: block; height: 100%; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.55; }
+.pelican-reference { flex: 0 0 auto; margin-bottom: 10px; }
+.pelican-reference p { margin: 8px 0 0; white-space: pre-line; }
+.pelican-score { margin-top: 8px; padding: 6px; border: 1px solid var(--border-color, #d7dde6); border-radius: 6px; font-size: 11px; overflow-wrap: anywhere; }
+.pelican-score summary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; cursor: pointer; font-weight: 600; }
+.pelican-score ul, .pelican-reference ul { margin: 8px 0 0; padding-left: 18px; }
+.pelican-score li span { display: block; margin-top: 3px; color: var(--text-secondary, #627084); }
+.pelican-score-passed > summary { color: #259467; }
+.pelican-score-failed > summary, .pelican-score-invalid > summary { color: #dc4545; }
+.pelican-score-partial > summary { color: var(--text-secondary, #627084); }
+.pelican-score-note { margin: 6px 0 0; color: var(--text-secondary, #627084); font-size: 10px; overflow-wrap: anywhere; }
+.pelican-notices { margin-top: 8px; }
+.pelican-notices summary { cursor: pointer; color: var(--text-secondary, #627084); }
+.pelican-notices pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
 .pelican-canvas iframe { display: block; width: 876px; height: 714px; border: 0; transform: scale(.18); transform-origin: top left; pointer-events: none; }
 .pelican-canvas-placeholder { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 8px; overflow: hidden; color: var(--text-secondary, #627084); background: var(--bg-secondary, #f6f7f9); }
 .pelican-canvas-placeholder.is-failed { color: #dc4545; background: rgba(220, 69, 69, .05); border-color: rgba(220, 69, 69, .25); }
@@ -228,3 +247,32 @@
   .pelican-confirm > p { padding-right: 18px; padding-left: 18px; }
   .pelican-confirm-actions { padding-right: 18px; padding-left: 18px; }
 }
+/* Provider tests share the dialog, with a compact key/model selector per channel. */
+.pelican-provider-setup { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pelican-provider-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; }
+.pelican-provider-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) minmax(180px, 1.5fr); gap: 10px; align-items: center; padding: 9px 12px; }
+.pelican-provider-row + .pelican-provider-row { border-top: 1px solid var(--border-color); }
+.pelican-provider-row > * { min-width: 0; }
+.pelican-setup .pelican-provider-choice { flex-direction: row; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.pelican-provider-model { display: flex; gap: 6px; min-width: 0; }
+.pelican-provider-model > * { min-width: 0; width: 50%; }
+.pelican-provider-row input:not([type="checkbox"]) { width: 100%; min-width: 0; box-sizing: border-box; }
+.pelican-provider-attribution { display: flex; flex-direction: column; gap: 3px; padding: 0 10px 8px; color: var(--text-secondary); font-size: 11px; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .pelican-provider-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .pelican-provider-model { grid-column: 1 / -1; }
+}
+
+.pelican-provider-mode { gap: 10px; }
+.pelican-provider-mode .pelican-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pelican-provider-mode .single-select-dropdown-trigger { min-height: 32px; padding: 0 9px; border-radius: 8px; }
+.pelican-provider-mode .single-select-dropdown-value { font-size: 12px; font-weight: 500; }
+.pelican-provider-mode .single-select-dropdown-arrow { width: 18px; height: 18px; }
+.pelican-provider-mode input:not([type="checkbox"]) { min-height: 32px; padding: 6px 9px; font-size: 12px; }
+.pelican-provider-mode textarea { min-height: 72px; font-size: 12px; }
+.pelican-provider-mode .btn { min-height: 30px; padding: 5px 10px; font-size: 12px; }
+.pelican-provider-mode .pelican-muted { font-size: 12px; }
+.pelican-provider-setup .pelican-section-heading { flex-wrap: wrap; justify-content: flex-end; }
+.pelican-provider-setup .pelican-section-heading strong { margin-right: auto; }
+
+.pelican-reference pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; }

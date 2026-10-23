@@ -9,6 +9,36 @@ pub async fn codex_local_access_get_state() -> Result<CodexLocalAccessState, Str
     codex_local_access::get_local_access_state().await
 }
 
+#[tauri::command]
+pub async fn codex_local_access_get_request_detail(
+    request_id: String,
+) -> Result<Option<crate::models::codex_local_access::CodexLocalAccessRequestDetail>, String> {
+    codex_local_access::get_local_access_request_detail(request_id).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_get_request_payload_logging() -> Result<bool, String> {
+    codex_local_access::get_local_access_request_payload_logging().await
+}
+
+#[tauri::command]
+pub fn codex_local_access_get_request_payload_logging_status(
+) -> codex_local_access::RequestPayloadLoggingStatus {
+    codex_local_access::get_local_access_request_payload_logging_status()
+}
+
+#[tauri::command]
+pub async fn codex_local_access_update_request_payload_logging(
+    enabled: bool,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_request_payload_logging(enabled).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_clear_request_payloads() -> Result<u64, String> {
+    codex_local_access::clear_local_access_request_payloads().await
+}
+
 /// 列出实例级本地网关（provider gateway / 混合模型路由 / 绑定 OAuth 本地网关）的只读快照。
 #[tauri::command]
 pub async fn codex_list_instance_gateways() -> Result<Vec<CodexInstanceGatewayView>, String> {
@@ -41,8 +71,9 @@ pub async fn codex_local_access_save_accounts(
     image_generation_account_policies: Option<
         HashMap<String, CodexLocalAccessImageGenerationPolicy>,
     >,
+    official_account_bindings: Option<HashMap<String, String>>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::save_local_access_accounts(
+    codex_local_access::save_local_access_accounts_with_official_bindings(
         account_ids,
         restrict_free_accounts.unwrap_or(true),
         backup_account_ids,
@@ -50,6 +81,7 @@ pub async fn codex_local_access_save_accounts(
         session_affinity,
         session_affinity_ttl_ms,
         image_generation_account_policies,
+        official_account_bindings,
     )
     .await
 }
@@ -73,6 +105,14 @@ pub async fn codex_local_access_recover_accounts(
     account_ids: Vec<String>,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::recover_local_access_accounts(account_ids).await
+}
+
+#[tauri::command]
+pub async fn codex_local_access_clear_pool_failure(
+    api_key_id: String,
+    last_failure_at: i64,
+) -> Result<bool, String> {
+    codex_local_access::clear_local_access_pool_failure(api_key_id, last_failure_at).await
 }
 
 #[tauri::command]
@@ -286,18 +326,45 @@ pub async fn codex_local_access_update_debug_logs(
 }
 
 #[tauri::command]
+pub async fn codex_local_access_update_image_generation_main_model(
+    image_generation_main_model: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_image_generation_main_model(image_generation_main_model)
+        .await
+}
+
+#[tauri::command]
 pub async fn codex_local_access_update_image_generation_model(
     image_generation_model: String,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_image_generation_model(image_generation_model).await
 }
 
+#[tauri::command]
+pub async fn codex_local_access_update_image_generation_model_catalog(
+    discovered_models: Option<Vec<String>>,
+    add_model: Option<String>,
+    remove_model: Option<String>,
+) -> Result<CodexLocalAccessState, String> {
+    codex_local_access::update_local_access_image_generation_model_catalog(
+        discovered_models,
+        add_model,
+        remove_model,
+    )
+    .await
+}
+
 /// 更新 API 服务的生图转发账号池（生图请求交给所选 OAuth 账号执行）。
 #[tauri::command]
 pub async fn codex_local_access_update_image_generation_accounts(
     account_ids: Vec<String>,
+    image_generation_account_models: Option<std::collections::HashMap<String, String>>,
 ) -> Result<CodexLocalAccessState, String> {
-    codex_local_access::update_local_access_image_generation_accounts(account_ids).await
+    codex_local_access::update_local_access_image_generation_accounts_with_models(
+        account_ids,
+        image_generation_account_models,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -467,32 +534,22 @@ pub async fn codex_local_access_activate(
     ));
 
     let default_settings_started = Instant::now();
-    if launch_target.is_default {
-        if let Err(e) = crate::modules::codex_instance::update_default_settings(
-            Some(Some(
-                crate::modules::codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID.to_string(),
-            )),
-            None,
-            None,
-            Some(false),
-            None,
-            None,
-        ) {
-            logger::log_warn(&format!("更新 Codex 默认实例为 API 服务模式失败: {}", e));
-        } else {
-            logger::log_info("已同步更新 Codex 默认实例为 API 服务模式");
-        }
+    let expected_prepared_binding = if launch_target.is_default {
+        let binding = crate::modules::codex_instance::bind_default_api_service_for_launch()?;
+        logger::log_info("已同步更新 Codex 默认实例为 API 服务模式");
         if let Err(e) =
             crate::modules::codex_instance::update_default_app_speed(api_service_speed.clone())
         {
             logger::log_warn(&format!("更新 Codex 默认实例 API 服务速度失败: {}", e));
         }
+        Some(binding)
     } else {
         logger::log_info(&format!(
             "已保留非默认实例绑定，不修改 Codex 默认实例: instance_id={}",
             target_instance_id
         ));
-    }
+        None
+    };
     logger::log_info(&format!(
         "[Codex API Service Switch][Backend] default settings update finished: elapsed_ms={}, total_ms={}",
         default_settings_started.elapsed().as_millis(),
@@ -535,7 +592,7 @@ pub async fn codex_local_access_activate(
                 true,
                 Some("instance-launch"),
                 None,
-                launch_target.bind_account_id.as_deref(),
+                expected_prepared_binding,
             )
             .await
         } else {

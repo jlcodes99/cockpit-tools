@@ -5,9 +5,9 @@
 //! ChatGPT 账号的自动压缩（remote compact）会把这段历史原样发给官方后端并失败：
 //! `The encrypted content ... could not be verified. Reason: Encrypted content could not be decrypted or parsed.`
 //!
-//! 网关响应出口已经不再产生这类字段（见 sidecar `responses_reasoning_sanitize.go`），
-//! 这里负责一次性清理已经落盘的旧日志：只删除非官方格式的 `encrypted_content`，
-//! 其它字段与行结构保持不变。正在写入的会话日志会跳过并记录，下次启动再补做。
+//! 网关响应出口负责新的第三方签名兼容。已有 rollout 可能被 SQLite 字节游标
+//! 和分页链引用，因此这里只识别并记录不兼容签名，不再改写磁盘日志。
+//! 旧历史的官方重放兼容仍可能需要回到原供应商，不能以破坏字节边界换取兼容。
 
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
@@ -81,9 +81,9 @@ fn sanitize_rollout_signatures_with_grace(
     };
 
     let mut summary = CodexRolloutSanitizeSummary::default();
-    let mut backups = Vec::new();
+    let backups = Vec::new();
     for path in candidates {
-        let Some((content, metadata)) = read_rollout_if_relevant(&path)? else {
+        let Some((content, _metadata)) = read_rollout_if_relevant(&path)? else {
             continue;
         };
         summary.files_scanned += 1;
@@ -93,39 +93,18 @@ fn sanitize_rollout_signatures_with_grace(
                 .push(path.to_string_lossy().to_string());
             continue;
         }
-        let (updated, removed) = sanitize_rollout_content(&content);
-        if removed == 0 {
-            continue;
+        // Even cold files may be referenced by SQLite byte cursors or a later
+        // history_base. A size/mtime check cannot protect the replacement
+        // window from external appenders. Keep the original bytes untouched.
+        let (_, incompatible) = sanitize_rollout_content(&content);
+        if incompatible > 0 {
+            modules::logger::log_warn(&format!(
+                "[Codex Rollout Sanitize] 保留字节寻址历史，跳过日志签名改写: {}",
+                path.display()
+            ));
         }
-        // 扫描期间被客户端追加写的文件不覆盖，留给下次启动处理。
-        if changed_since_read(&path, &metadata) {
-            summary
-                .pending_files
-                .push(path.to_string_lossy().to_string());
-            continue;
-        }
-        write_rollout_file(&path, &updated)?;
-        backups.extend(removed_signatures(&content, &path));
-        summary.files_changed += 1;
-        summary.removed_signatures += removed;
-        modules::logger::log_info(&format!(
-            "[Codex Rollout Sanitize] 已清理会话日志推理签名: file={}, removed={}",
-            path.display(),
-            removed
-        ));
     }
     Ok((summary, backups))
-}
-
-fn changed_since_read(path: &Path, metadata: &fs::Metadata) -> bool {
-    let Ok(current) = fs::metadata(path) else {
-        return true;
-    };
-    current.len() != metadata.len()
-        || !super::codex_session_file_time::same_modified_time_millis(
-            current.modified().ok(),
-            metadata.modified().ok(),
-        )
 }
 
 fn collect_rollout_candidates(data_dir: &Path) -> Vec<PathBuf> {
@@ -214,14 +193,6 @@ fn is_recently_modified(path: &Path, active_file_grace_seconds: u64) -> bool {
         .unwrap_or(false)
 }
 
-/// 原子写回，并保留原修改时间，避免会话列表顺序被这次清洗打乱。
-fn write_rollout_file(path: &Path, content: &str) -> Result<(), String> {
-    let original_modified_at = super::codex_session_file_time::read_modified_time(path);
-    super::atomic_write::write_bytes_atomic(path, content.as_bytes())?;
-    super::codex_session_file_time::restore_modified_time(path, original_modified_at)
-}
-
-/// 逐行清洗：只删除 reasoning 项里非官方格式的 `encrypted_content`。
 fn sanitize_rollout_content(content: &str) -> (String, usize) {
     let mut removed = 0;
     let mut result = String::with_capacity(content.len());
@@ -423,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_official_incompatible_rollout_signatures_rewrites_and_reports() {
+    fn sanitize_official_incompatible_rollout_signatures_preserves_history_bytes() {
         let dir = make_temp_dir("codex-rollout-sanitize");
         let session_dir = dir.join("sessions").join("2026").join("09").join("14");
         fs::create_dir_all(&session_dir).expect("create session dir");
@@ -437,13 +408,12 @@ mod tests {
         let (summary, backups) =
             sanitize_rollout_signatures_with_grace(&dir, &[], 0).expect("sanitize");
 
-        assert_eq!(summary.files_changed, 1);
-        assert_eq!(summary.removed_signatures, 1);
+        assert_eq!(summary.files_changed, 0);
+        assert_eq!(summary.removed_signatures, 0);
         assert!(summary.pending_files.is_empty());
-        assert_eq!(backups.len(), 1);
-        assert_eq!(backups[0].item_id, "r1");
+        assert!(backups.is_empty());
         let updated = fs::read_to_string(&rollout).expect("read rollout");
-        assert!(!updated.contains("encrypted_content"));
+        assert!(updated.contains("encrypted_content"));
 
         // 幂等：再次执行不再有改动。
         let (second, _) =
@@ -481,7 +451,7 @@ mod tests {
             .collect::<Vec<_>>();
         let (retried, _) =
             sanitize_rollout_signatures_with_grace(&dir, &retry_files, 0).expect("retry");
-        assert_eq!(retried.files_changed, 1);
+        assert_eq!(retried.files_changed, 0);
         assert!(retried.pending_files.is_empty());
     }
 }

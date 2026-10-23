@@ -2,14 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useCodexProxyAccountName } from './useCodexProxyExitEditor';
-import { ArrowDown, ArrowUp, Check, Layers, Pencil, Plus, RefreshCw, Search, Trash2, TriangleAlert, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Layers, Pencil, Plus, RefreshCw, Search, ShieldAlert, Trash2, TriangleAlert, X } from 'lucide-react';
 import { useEscCloseTopmost } from '../../hooks/useEscClose';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 import { useModalScrollLock } from '../../hooks/useModalScrollLock';
 import { ModalErrorMessage } from '../ModalErrorMessage';
 import { SingleSelectFilterDropdown } from '../SingleSelectFilterDropdown';
 import { proxyRemovalErrorKey, refreshCodexProxyAccounts, removeProxySourceWithRefresh, type ProxyRemovalProgress } from '../../utils/codexProxyRemoval';
-import { getProxyCatalogDependencies, type ProxyCatalog, type ProxyCatalogDependencies, type ProxyCatalogSource } from '../../services/codexProxyCatalogService';
+import { catalogUnsupportedKey, getProxyCatalogDependencies, type ProxyCatalog, type ProxyCatalogDependencies, type ProxyCatalogSource } from '../../services/codexProxyCatalogService';
+import { CodexProxySelectionIssues } from './CodexProxySelectionIssues';
 import {
   PROXY_STRATEGY_DEFAULTS, PROXY_STRATEGY_KINDS, PROXY_STRATEGY_LIMITS, PROXY_STRATEGY_OPTION_FIELDS, strategyOptionsForm, removeProxyStrategy,
   saveProxyStrategy, strategyCandidates, filterStrategyCandidates, isPossibleProxyNotice, strategyEditorMembers, strategyErrorKey, strategyHintKey, strategyKindKey, strategyKindOf,
@@ -17,6 +18,7 @@ import {
   type ProxyStrategyCandidate, type ProxyStrategyKind, type ProxyStrategyOptionField, type ProxyStrategyOptionsForm,
 } from '../../services/codexProxyStrategyService';
 import '../../styles/pages/codex-proxy-strategy.css';
+import '../../styles/pages/codex-proxy-picker-layout.css';
 
 type StrategyMemberItem = Pick<ProxyStrategyCandidate, 'sourceId' | 'itemId' | 'name' | 'sourceName'>;
 
@@ -43,7 +45,7 @@ export function CodexProxyStrategyPanel({ sources, busy, onCatalog, onRemoved }:
   const [editing, setEditing] = useState('');
   const [deleting, setDeleting] = useState('');
   const strategies = useMemo(() => strategyViews(sources), [sources]);
-  const candidates = useMemo(() => strategyCandidates(sources), [sources]);
+  const candidates = useMemo(() => strategyCandidates(sources, true), [sources]);
   const editingSource = editing && editing !== 'new' ? sources.find((entry) => entry.id === editing) ?? null : null;
   const deletingSource = deleting ? sources.find((entry) => entry.id === deleting) ?? null : null;
   const dialogOpen = editing !== '' || deleting !== '';
@@ -92,23 +94,25 @@ export function CodexProxyStrategyPanel({ sources, busy, onCatalog, onRemoved }:
         </li>;
       })}</ul>}
     {editing !== '' && <StrategyEditorDialog source={editingSource} sources={sources} busy={busy}
-      onClose={() => setEditing('')} onSaved={(next) => { onCatalog(next); setEditing(''); }} />}
+      onCatalogChange={onCatalog} onClose={() => setEditing('')} onSaved={(next) => { onCatalog(next); setEditing(''); }} />}
     {deletingSource && <StrategyDeleteDialog source={deletingSource} busy={busy} onClose={() => setDeleting('')}
       onRemoved={(next) => { onCatalog(next); onRemoved(deletingSource.id); setDeleting(''); }} />}
   </section>;
 }
 
 /** Creates or edits one strategy. Every failure stays in the dialog (rules 15-17). */
-export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }: {
+export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved, onCatalogChange }: {
   source: ProxyCatalogSource | null;
   sources: ProxyCatalogSource[];
   busy: boolean;
   onClose: () => void;
   onSaved: (next: ProxyCatalog) => void;
+  onCatalogChange: (next: ProxyCatalog) => void;
 }) {
   const { t } = useTranslation();
   const dialog = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  const issues = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
   // Members are read once on open: a replayed render must not rebuild the member order.
   const [initial] = useState(() => {
@@ -133,7 +137,11 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }
   const [submitted, setSubmitted] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
-  const candidates = useMemo(() => strategyCandidates(sources), [sources]);
+  const [inspecting, setInspecting] = useState<StrategyMemberItem | null>(null);
+  const [catalogPending, setCatalogPending] = useState(false);
+  const candidates = useMemo(() => strategyCandidates(sources, true), [sources]);
+  const inspectedSource = sources.find((entry) => entry.id === inspecting?.sourceId);
+  const inspectedNode = inspectedSource?.nodes.find((entry) => entry.id === inspecting?.itemId);
   const optionFields = PROXY_STRATEGY_OPTION_FIELDS[kind];
   const optionErrors = strategyOptionErrors(form, kind);
   const selected = useMemo(() => new Set(members.map(strategyMemberId)), [members]);
@@ -162,7 +170,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }
   /** Any edit clears the previous failure so nothing is reported twice (rule 17). */
   const edit = () => { if (error) setError(''); };
 
-  useEscCloseTopmost(true, () => { if (!saving) onClose(); });
+  useEscCloseTopmost(true, () => { if (!saving) onClose(); }, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
   useEffect(() => {
@@ -180,9 +188,13 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }
     });
     return () => cancelAnimationFrame(frame);
   }, [submitted]);
+  useEffect(() => { issues.current?.scrollIntoView({ block: 'nearest' }); }, [inspecting]);
 
   const add = (candidate: ProxyStrategyCandidate) => {
+    if (saving || busy || catalogPending || full) return;
     edit();
+    if (!candidate.supported) { setInspecting(candidate); return; }
+    setInspecting(null);
     setMembers((old) => old.length >= PROXY_STRATEGY_LIMITS.members
       || old.some((entry) => strategyMemberId(entry) === strategyMemberId(candidate))
       ? old
@@ -196,7 +208,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }
     return next;
   });
   const submit = async () => {
-    if (saving || busy) return;
+    if (saving || busy || catalogPending) return;
     setSubmitted(true);
     setError('');
     if (Object.keys(optionErrors).length) setAdvanced(true);
@@ -249,21 +261,23 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }
             <span className="codex-strategy-label">{t('codex.proxy.catalog.strategyMemberPick')}</span>
             <span className="codex-proxy-page-note">{t('codex.proxy.catalog.strategyMemberLimit', { count: PROXY_STRATEGY_LIMITS.members })}</span>
           </div>
-          <SingleSelectFilterDropdown value={candidateSource} disabled={saving}
+          <SingleSelectFilterDropdown value={candidateSource} disabled={saving || catalogPending}
             ariaLabel={t('codex.proxy.catalog.strategySourceFilter')}
             options={[{ value: '', label: t('codex.proxy.catalog.strategyAllSources') },
               ...sources.filter((entry) => entry.kind !== 'strategy').map((entry) => ({ value: entry.id, label: entry.name }))]}
-            onChange={setCandidateSource} />
+            onChange={(next) => { setCandidateSource(next); setInspecting(null); edit(); }} />
           <label className="codex-proxy-search codex-strategy-search"><Search size={15} aria-hidden="true" />
             <input value={query} disabled={saving} aria-label={t('codex.proxy.catalog.strategyMemberSearch')}
               placeholder={t('codex.proxy.catalog.strategyMemberSearch')} onChange={(event) => setQuery(event.target.value)} /></label>
           <div className="codex-strategy-columns">
             <div className="codex-strategy-candidates" role="group" aria-label={t('codex.proxy.catalog.strategyMemberPick')}>
               {visible.map((candidate) => <button key={strategyMemberId(candidate)} type="button" className="codex-strategy-candidate"
-                disabled={saving || full} onClick={() => add(candidate)} title={`${candidate.name} · ${candidate.sourceName}`}>
-                <Plus size={14} aria-hidden="true" />
+                disabled={saving || busy || catalogPending || full} onClick={() => add(candidate)} title={`${candidate.name} · ${candidate.sourceName}`}
+                aria-pressed={!!inspecting && strategyMemberId(inspecting) === strategyMemberId(candidate)}>
+                {candidate.supported ? <Plus size={14} aria-hidden="true" /> : <ShieldAlert size={14} aria-hidden="true" />}
                 <span><strong>{candidate.name}</strong><small>{candidate.sourceName} · {candidate.protocol.toUpperCase()}</small>
                   {candidate.server && <small>{candidate.server}{candidate.port ? `:${candidate.port}` : ''}</small>}
+                  {!candidate.supported && <small>{t(catalogUnsupportedKey(candidate))}</small>}
                   {isPossibleProxyNotice(candidate.name) && <small>{t('codex.proxy.catalog.strategyPossibleNotice')}</small>}
                 </span>
               </button>)}
@@ -289,6 +303,10 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }
               </li>)}</ol>
             </div>
           </div>
+          {inspectedSource && inspectedNode && <div ref={issues}>
+            <CodexProxySelectionIssues source={inspectedSource} target={inspectedNode} busy={saving || busy}
+              onCatalogChange={onCatalogChange} onPendingChange={setCatalogPending} />
+          </div>}
           {membersInvalid && <span className="codex-strategy-field-error" role="alert">{t('codex.proxy.catalog.strategyErrorMembers')}</span>}
           {membersDuplicated && <span className="codex-strategy-field-error" role="alert">
             {t('codex.proxy.catalog.strategyErrorDuplicateName')}</span>}
@@ -317,12 +335,6 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }
               {optionErrors[entry.field] && <span className="codex-strategy-field-error" role="alert">{fieldError(entry.field)}</span>}
             </label>)}
           </div>
-          <div className="codex-strategy-lazy">
-            <button type="button" role="switch" aria-checked={form.lazy} disabled={saving}
-              className={'codex-strategy-switch' + (form.lazy ? ' on' : '')} aria-label={t('codex.proxy.catalog.strategyLazy')}
-              onClick={() => { setForm((old) => ({ ...old, lazy: !old.lazy })); edit(); }}><span /></button>
-            <span>{t('codex.proxy.catalog.strategyLazy')}</span>
-          </div>
         </details>}
         <div className="codex-strategy-summary" role="group" aria-label={t('codex.proxy.catalog.strategySummary')}>
           <p className="codex-strategy-summary-title">{t('codex.proxy.catalog.strategySummary')}</p>
@@ -335,7 +347,7 @@ export function StrategyEditorDialog({ source, sources, busy, onClose, onSaved }
       </div>
       <footer className="modal-footer">
         <button type="button" className="btn btn-secondary" disabled={saving} onClick={onClose}>{t('common.cancel')}</button>
-        <button type="button" className="btn btn-primary" disabled={saving || busy} onClick={() => void submit()}>
+        <button type="button" className="btn btn-primary" disabled={saving || busy || catalogPending} onClick={() => void submit()}>
           {saving ? <RefreshCw size={15} className="loading-spinner" /> : <Check size={15} />}
           {t(saving ? 'common.processing' : 'common.save')}</button>
       </footer>
@@ -367,7 +379,7 @@ export function StrategyDeleteDialog({ source, busy, onClose, onRemoved, onBindi
     else onClose();
   };
 
-  useEscCloseTopmost(true, () => { if (!removing) close(); });
+  useEscCloseTopmost(true, () => { if (!removing) close(); }, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
   useEffect(() => {

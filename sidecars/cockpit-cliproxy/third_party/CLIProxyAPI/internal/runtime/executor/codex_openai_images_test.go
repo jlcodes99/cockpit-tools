@@ -315,3 +315,15 @@ func TestCodexExecutorDirectOpenAIImageEditUsesImagesEditEndpointForMultipart(t 
 		t.Fatalf("mask.image_url = %q, want mask-data data URL; body=%s", maskURL, string(gotBody))
 	}
 }
+
+func TestHostedImagesDefaultBaseModelIsLuna(t *testing.T) {
+	for _, executor := range []*CodexExecutor{nil, {}, {cfg: &config.Config{SDKConfig: config.SDKConfig{GPTImage2BaseModel: "invalid"}}}} {
+		if got := executor.resolveGPTImage2BaseModel(); got != "gpt-5.6-luna" {
+			t.Fatalf("default hosted image main model = %s, want gpt-5.6-luna", got)
+		}
+	}
+	executor := &CodexExecutor{cfg: &config.Config{SDKConfig: config.SDKConfig{GPTImage2BaseModel: "gpt-custom"}}}
+	if got := executor.resolveGPTImage2BaseModel(); got != "gpt-custom" {
+		t.Fatalf("explicit custom image main model changed: %s", got)
+	}
+}

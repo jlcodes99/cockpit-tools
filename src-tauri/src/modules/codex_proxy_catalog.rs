@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    error::Error as _,
     fs::{self, OpenOptions},
     path::{Path, PathBuf},
     sync::{
@@ -28,7 +29,7 @@ const MAX_BODY: usize = 2 * 1024 * 1024;
 const MAX_STORE: u64 = 32 * 1024 * 1024;
 const MAX_SOURCES: usize = 32;
 const REFRESH_INTERVAL_MS: i64 = 6 * 60 * 60 * 1000;
-const PARSER_VERSION: u8 = 1;
+const PARSER_VERSION: u8 = 2;
 const DEFAULT_LATENCY_URL: &str = "http://www.gstatic.com/generate_204";
 static DOWNLOADS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
 static IO: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
@@ -46,6 +47,7 @@ struct Source {
     catalog: ParsedCatalog,
     updated_at: i64,
     last_attempt_at: Option<i64>,
+    #[serde(default)]
     auto_update: bool,
     error: Option<String>,
     revision: String,
@@ -300,7 +302,7 @@ fn view(store: &Store) -> CatalogView {
                     updated_at: s.updated_at,
                     revision: s.revision.clone(),
                     last_attempt_at: s.last_attempt_at,
-                    auto_update: s.auto_update,
+                    auto_update: has_subscription_url(s),
                     error: s.error.clone(),
                     needs_refresh: s.parser_version < PARSER_VERSION
                         && s.kind == "subscription"
@@ -397,6 +399,8 @@ pub struct SourceDependencyAccount {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceDependenciesView {
+    client_targets: Vec<super::codex_client_proxy::Dependency>,
+    client_target_count: usize,
     source_id: String,
     revision: String,
     accounts: Vec<SourceDependencyAccount>,
@@ -479,6 +483,8 @@ fn read(path: &Path) -> Result<Store, String> {
         return Err("CATALOG_STORAGE".into());
     }
     for source in &mut store.sources {
+        // Old opt-out values are compatibility data, no longer runtime controls.
+        source.auto_update = has_subscription_url(source);
         parser::revalidate_retained_nodes(&mut source.catalog);
         revalidate_groups(&mut source.catalog).map_err(|_| "CATALOG_STORAGE")?;
     }
@@ -541,9 +547,9 @@ pub async fn list() -> Result<CatalogView, String> {
 /// dropping newly imported sources or resurrecting concurrently removed ones.
 pub async fn reorder(source_ids: Vec<String>) -> Result<CatalogView, String> {
     if source_ids.len() > MAX_SOURCES
-        || source_ids.iter().any(|id| {
-            id.trim().is_empty() || id.len() > 256 || id.chars().any(char::is_control)
-        })
+        || source_ids
+            .iter()
+            .any(|id| id.trim().is_empty() || id.len() > 256 || id.chars().any(char::is_control))
     {
         return Err("CATALOG_INVALID".into());
     }
@@ -944,7 +950,7 @@ async fn fetch(input: &str) -> Result<Download, String> {
     let origin = url.origin();
     let client = subscription_client_builder()
         .build()
-        .map_err(|_| "CATALOG_DOWNLOAD")?;
+        .map_err(|error| download_request_error(&error))?;
     fetch_with_client(client, url, origin).await
 }
 
@@ -967,26 +973,27 @@ async fn fetch_with_client(
 ) -> Result<Download, String> {
     // No account auth headers, cookies, remote converter or recursive provider fetches.
     for hop in 0..=3 {
-        let response = client.get(url.clone()).send().await.map_err(|e| {
-            if e.is_timeout() {
-                "CATALOG_TIMEOUT"
-            } else {
-                "CATALOG_DOWNLOAD"
-            }
-        })?;
+        let response = client
+            .get(url.clone())
+            .send()
+            .await
+            .map_err(|error| download_request_error(&error))?;
         if response.status().is_redirection() {
             if hop == 3 {
-                return Err("CATALOG_REDIRECT".into());
+                return Err(download_failure("CATALOG_REDIRECT", None));
             }
             let location = response
                 .headers()
                 .get(reqwest::header::LOCATION)
                 .and_then(|h| h.to_str().ok())
-                .ok_or("CATALOG_REDIRECT")?;
-            let next = url.join(location).map_err(|_| "CATALOG_REDIRECT")?;
-            subscription_url(next.as_str())?;
+                .ok_or_else(|| download_failure("CATALOG_REDIRECT", None))?;
+            let next = url
+                .join(location)
+                .map_err(|_| download_failure("CATALOG_REDIRECT", None))?;
+            subscription_url(next.as_str())
+                .map_err(|_| download_failure("CATALOG_REDIRECT", None))?;
             if next.origin() != origin {
-                return Err("CATALOG_REDIRECT".into());
+                return Err(download_failure("CATALOG_REDIRECT", None));
             }
             url = next;
             continue;
@@ -1009,7 +1016,13 @@ async fn fetch_with_client(
 }
 async fn read_response(mut response: reqwest::Response) -> Result<String, String> {
     if !response.status().is_success() {
-        return Err("CATALOG_DOWNLOAD".into());
+        let status = response.status().as_u16();
+        let code = if matches!(status, 401 | 403) {
+            "CATALOG_DOWNLOAD_DENIED"
+        } else {
+            "CATALOG_DOWNLOAD"
+        };
+        return Err(download_failure(code, Some(status)));
     }
     if response
         .content_length()
@@ -1018,13 +1031,59 @@ async fn read_response(mut response: reqwest::Response) -> Result<String, String
         return Err("CATALOG_LIMIT".into());
     }
     let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| "CATALOG_DOWNLOAD")? {
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| download_request_error(&error))?
+    {
         if body.len() + chunk.len() > MAX_BODY {
             return Err("CATALOG_LIMIT".into());
         }
         body.extend_from_slice(&chunk);
     }
     String::from_utf8(body).map_err(|_| "CATALOG_FORMAT".into())
+}
+
+fn download_failure(code: &'static str, status: Option<u16>) -> String {
+    // Neither the URL (which is a credential), response body nor raw error chain
+    // may reach logs or IPC. Only fixed categories and HTTP status are observable.
+    super::logger::log_warn(&format!(
+        "[ProxyCatalog] subscription_download_failed: code={code}, http_status={status:?}"
+    ));
+    code.into()
+}
+
+fn download_request_error(error: &reqwest::Error) -> String {
+    let code = if error.is_timeout() {
+        "CATALOG_TIMEOUT"
+    } else {
+        // Skip reqwest's outer Display because it embeds the private URL. Inspect
+        // only bounded source causes; their text is never displayed or logged.
+        download_cause_code(error.source())
+    };
+    download_failure(code, None)
+}
+
+fn download_cause_code(mut cause: Option<&(dyn std::error::Error + 'static)>) -> &'static str {
+    for _ in 0..8 {
+        let Some(error) = cause else { break };
+        if error.is::<native_tls::Error>() || error.is::<rustls::Error>() {
+            return "CATALOG_DOWNLOAD_TLS";
+        }
+        let text = error.to_string().to_ascii_lowercase();
+        if text.contains("tls") || text.contains("ssl") || text.contains("certificate") {
+            return "CATALOG_DOWNLOAD_TLS";
+        }
+        if text.contains("dns error")
+            || text.contains("failed to lookup address")
+            || text.contains("name or service not known")
+            || text.contains("nodename nor servname provided")
+        {
+            return "CATALOG_DOWNLOAD_DNS";
+        }
+        cause = error.source();
+    }
+    "CATALOG_DOWNLOAD"
 }
 
 async fn parsed(input: String) -> Result<ParsedCatalog, String> {
@@ -1144,13 +1203,13 @@ pub async fn import(
                 store.sources.push(Source {
                     id: uuid::Uuid::new_v4().to_string(),
                     name,
+                    auto_update: kind == "subscription" && url.is_some(),
                     kind,
                     url,
                     catalog,
                     network: Default::default(),
                     updated_at: chrono::Utc::now().timestamp_millis(),
                     last_attempt_at: None,
-                    auto_update: false,
                     error: None,
                     revision: uuid::Uuid::new_v4().to_string(),
                     default: None,
@@ -1174,7 +1233,7 @@ fn strategy_member_node(source: &Source, item_id: &str) -> Result<strategy::Stra
         .iter()
         .find(|node| node.id == item_id)
         .ok_or("CATALOG_CHANGED")?;
-    // 未获授权的节点（例如跳过证书校验）不进入策略：不把不可执行的成员复制成可用策略。
+    // 不可执行的节点不进入策略，保留实际协议及参数校验。
     if node.error.is_some() {
         return Err("CATALOG_INVALID".into());
     }
@@ -1356,7 +1415,8 @@ pub async fn refresh(request_id: String, source_id: String) -> Result<CatalogVie
                 }
                 commit(&state)?;
                 let mut catalog = catalog;
-                preserve_permissions(&s.catalog, &mut catalog)?;
+                parser::revalidate_retained_nodes(&mut catalog);
+                revalidate_groups(&mut catalog)?;
                 s.catalog = catalog;
                 s.parser_version = PARSER_VERSION;
                 // 节点消失时不静默换节点：清除默认项，由资源和账号页提示用户重新设置。
@@ -1430,6 +1490,7 @@ pub async fn dependencies(source_id: String) -> Result<SourceDependenciesView, S
     })
     .await?;
     let unified = crate::modules::codex_unified_proxy::ensure_loaded().await?;
+    let client_targets = super::codex_client_proxy::dependencies(&source_id).await?;
     let final_revision = source(&source_id).await?.revision;
     if final_revision != stored.revision {
         return Err("CATALOG_CHANGED".into());
@@ -1441,6 +1502,8 @@ pub async fn dependencies(source_id: String) -> Result<SourceDependenciesView, S
             .as_ref()
             .is_some_and(|reference| reference.source_id == source_id);
     Ok(SourceDependenciesView {
+        client_target_count: client_targets.len(),
+        client_targets,
         source_id,
         revision: stored.revision,
         account_count: accounts.len(),
@@ -1635,7 +1698,7 @@ pub async fn clear_default(source_id: String) -> Result<CatalogView, String> {
     })
     .await
 }
-pub async fn set_auto_update(source_id: String, enabled: bool) -> Result<CatalogView, String> {
+pub async fn set_auto_update(source_id: String, _enabled: bool) -> Result<CatalogView, String> {
     let operation = Operation::begin(uuid::Uuid::new_v4().to_string())?;
     let state = operation.state.clone();
     blocking(move || {
@@ -1645,28 +1708,16 @@ pub async fn set_auto_update(source_id: String, enabled: bool) -> Result<Catalog
                 .iter_mut()
                 .find(|s| s.id == source_id)
                 .ok_or("CATALOG_NOT_FOUND")?;
-            if s.url.is_none() {
+            if !has_subscription_url(s) {
                 return Err("CATALOG_INVALID".into());
             }
             commit(&state)?;
-            s.auto_update = enabled;
+            s.auto_update = true;
             s.revision = uuid::Uuid::new_v4().to_string();
             Ok(view(store))
         })
     })
     .await
-}
-fn preserve_permissions(old: &ParsedCatalog, new: &mut ParsedCatalog) -> Result<(), String> {
-    for node in &mut new.nodes {
-        if node.error.as_deref() == Some("PROXY_TLS_INSECURE")
-            && old.nodes.iter().any(|old| {
-                old.id == node.id && old.error.is_none() && old.outbound == node.outbound
-            })
-        {
-            node.error = None;
-        }
-    }
-    revalidate_groups(new)
 }
 fn revalidate_groups(catalog: &mut ParsedCatalog) -> Result<(), String> {
     parser::validate(catalog)
@@ -1702,7 +1753,7 @@ pub async fn set_insecure(
     source_id: String,
     node_id: String,
     revision: String,
-    enabled: bool,
+    _enabled: bool,
 ) -> Result<CatalogView, String> {
     blocking(move || {
         mutate(&path()?, |store| {
@@ -1725,11 +1776,7 @@ pub async fn set_insecure(
             {
                 return Err("CATALOG_INVALID".into());
             }
-            n.error = if enabled {
-                None
-            } else {
-                Some("PROXY_TLS_INSECURE".into())
-            };
+            n.error = None;
             revalidate_groups(&mut s.catalog)?;
             drop_invalid_default(s);
             s.revision = uuid::Uuid::new_v4().to_string();
@@ -1739,13 +1786,13 @@ pub async fn set_insecure(
     .await
 }
 
-/// This is an explicit permission transaction, never an automatic repair. All
-/// affected definitions are validated before any permission or revision changes.
+/// Compatibility endpoint for older clients. Node-declared TLS exceptions are
+/// always accepted, while revision and subtree validation remain unchanged.
 pub async fn set_group_insecure(
     source_id: String,
     group_id: String,
     revision: String,
-    enabled: bool,
+    _enabled: bool,
 ) -> Result<CatalogView, String> {
     let guard = SourceGuard::new(source_id.clone())?;
     blocking(move || {
@@ -1779,7 +1826,7 @@ pub async fn set_group_insecure(
             }
             for node in &mut source.catalog.nodes {
                 if ids.contains(&node.id) {
-                    node.error = (!enabled).then(|| "PROXY_TLS_INSECURE".into());
+                    node.error = None;
                 }
             }
             revalidate_groups(&mut source.catalog)?;
@@ -1833,15 +1880,17 @@ pub async fn probe(
     })
     .await
 }
-/// Independent maintenance; only explicitly opted-in sources may contact the network.
+fn has_subscription_url(source: &Source) -> bool {
+    source.kind == "subscription"
+        && source.url.as_deref().is_some_and(|url| subscription_url(url).is_ok())
+}
+/// Independent maintenance: valid subscriptions refresh with the existing retry
+/// interval and source single-flight guard, regardless of legacy opt-out values.
 fn due_sources(sources: &[Source], now: i64) -> Vec<String> {
     sources
         .iter()
         .filter(|s| {
-            // 策略来源没有 URL，天然不参与订阅自动刷新；这里再按来源类型确认一次。
-            s.kind != strategy::KIND
-                && s.auto_update
-                && s.url.is_some()
+            has_subscription_url(s)
                 && now - s.last_attempt_at.unwrap_or(s.updated_at).max(s.updated_at)
                     >= REFRESH_INTERVAL_MS
         })
@@ -1865,6 +1914,7 @@ pub async fn auto_refresh_loop() {
                 if refresh(uuid::Uuid::new_v4().to_string(), id).await.is_ok() {
                     // 统一代理引用同一来源时必须同步快照，否则自动刷新后账号仍走旧节点。
                     super::codex_unified_proxy::resync_source(&source_id, false).await;
+                    if super::codex_client_proxy::resync_source(&source_id, false).await.is_err() { super::logger::log_warn("[ClientProxy] source resync failed"); }
                 }
                 tokio::task::yield_now().await;
             }

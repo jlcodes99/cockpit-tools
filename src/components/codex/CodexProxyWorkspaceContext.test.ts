@@ -21,6 +21,8 @@ function setup() {
       catalogErrorKey: () => 'codex.proxy.catalog.errorRead',
     },
     '../../services/codexUnifiedProxyService': { getCodexUnifiedProxy: async () => null, unifiedProxyErrorKey: () => 'unified-error' },
+    './useCodexProxyTargets': { useCodexProxyTargets: (accounts: unknown[]) => accounts },
+    '../../services/codexProxyTargetService': { apiServiceProxyAccount: () => ({ id: '__api_service__', auth_mode: 'apikey' }) },
     './useCodexProxyTraffic': { useCodexProxyTraffic: () => ({}) },
     '../../utils/codexAccountProxy': { canUseCodexAccountProxy: () => true },
   });
@@ -72,3 +74,28 @@ for (const oldOutcome of ['success', 'failure'] as const) {
     h.unmount();
   });
 }
+
+test('API and service shortcuts share the ordinary accounts section without an extra client section', async () => {
+  let accounts = [{ id: 'api', auth_mode: 'apikey' }, { id: 'oauth', auth_mode: 'chatgpt' }];
+  let accountId = 'api';
+  const h = loadHookModule(new URL('./CodexProxyWorkspaceContext.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+    '../../services/codexProxyCatalogService': { getProxyCatalog: async () => ({ sources: [] }), catalogErrorKey: () => 'catalog-error' },
+    '../../services/codexUnifiedProxyService': { getCodexUnifiedProxy: async () => null, unifiedProxyErrorKey: () => 'unified-error' },
+    '../../types/codex': { isCodexApiKeyAccount: (account: any) => account.auth_mode === 'apikey' },
+    './useCodexProxyTargets': { useCodexProxyTargets: (accounts: unknown[]) => accounts },
+    '../../services/codexProxyTargetService': { apiServiceProxyAccount: () => ({ id: '__api_service__', auth_mode: 'apikey' }) },
+    './useCodexProxyTraffic': { useCodexProxyTraffic: () => ({}) },
+    '../../utils/codexAccountProxy': { canUseCodexAccountProxy: () => true },
+  });
+  h.render(() => h.exports.CodexProxyWorkspaceProvider({ accounts, accountId, children: null }));
+  const state = (): CodexProxyWorkspaceValue => h.flush().props.value;
+  assert.equal(state().section, 'accounts'); assert.equal(state().selectedId, 'api');
+  assert.ok(state().accounts.some((entry) => entry.id === '__api_service__'));
+  state().selectAccount('oauth'); assert.equal(state().selectedId, 'oauth');
+  state().selectAccount('__api_service__'); assert.equal(state().selectedId, '__api_service__');
+  state().goSection('resources'); assert.equal(state().section, 'resources');
+  accounts = accounts.map((account) => ({ ...account })); h.flush(); assert.equal(state().section, 'resources');
+  accountId = '__api_service__'; h.flush(); assert.equal(state().section, 'accounts');
+  await settlePromises(); h.unmount();
+});

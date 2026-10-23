@@ -3,6 +3,7 @@ package helps
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"math/big"
 	"strconv"
@@ -21,57 +22,77 @@ const (
 	codexComplexUnionBranchThreshold = 8
 )
 
+// codexNumericBoundKeywords lists the JSON Schema numeric bound keywords that
+// the Codex backend rejects with HTTP 500 when set to an integer outside int64.
+var codexNumericBoundKeywords = [...]string{
+	"minimum",
+	"maximum",
+	"exclusiveMinimum",
+	"exclusiveMaximum",
+}
+
 // NormalizeCodexToolSchemas inspects function tools in a Codex request payload
 // and simplifies pure constant union combinations (e.g. large oneOf branch sets
 // representing enums with descriptions, as emitted by MCP servers) into semantically
-// equivalent enum lists.
-// Only unions mathematically proven to be semantically equivalent to enum definitions
-// are modified; all other structures, property names, types, and constraints remain untouched.
+// equivalent enum lists, and sanitizes unsupported schema patterns.
+// It does not normalize tool integer types because upstream OpenAI Codex models
+// strictly validate reserved tool schemas (e.g. collaboration.wait_agent).
 func NormalizeCodexToolSchemas(body []byte) []byte {
-	tools := gjson.GetBytes(body, "tools")
-	if !tools.Exists() || !tools.IsArray() || len(tools.Array()) == 0 {
+	if len(body) == 0 {
 		return body
 	}
+	updatedTools, changed := normalizeCodexToolList(gjson.GetBytes(body, "tools"))
+	if !changed {
+		return body
+	}
+	out, errSet := sjson.SetRawBytes(body, "tools", updatedTools)
+	if errSet != nil {
+		return body
+	}
+	log.Debugf("codex: normalized tool schemas to prevent upstream failure")
+	return out
+}
 
-	toolsArray := tools.Array()
-	changed := false
-	for i, tool := range toolsArray {
-		updatedTool, toolChanged := normalizeCodexTool(tool)
-		if toolChanged {
-			var errSet error
-			body, errSet = sjson.SetRawBytes(body, "tools."+strconv.Itoa(i), updatedTool)
-			if errSet == nil {
-				changed = true
-			}
+// normalizeCodexToolList batches changed elements so a long request (or a wide
+// namespace) is copied once rather than once per tool. Copy the gaps verbatim
+// to retain array formatting and unchanged declarations.
+func normalizeCodexToolList(tools gjson.Result) ([]byte, bool) {
+	if !tools.IsArray() {
+		return nil, false
+	}
+	var out []byte
+	offset := 0
+	tools.ForEach(func(_, tool gjson.Result) bool {
+		updated, changed := normalizeCodexTool(tool)
+		if !changed {
+			return true
 		}
+		if out == nil {
+			out = make([]byte, 0, len(tools.Raw))
+		}
+		// ForEach indexes share the source of the containing array's index.
+		start := tool.Index - tools.Index
+		out = append(out, tools.Raw[offset:start]...)
+		out = append(out, updated...)
+		offset = start + len(tool.Raw)
+		return true
+	})
+	if out == nil {
+		return nil, false
 	}
-	if changed {
-		log.Debugf("codex: normalized tool schemas to prevent upstream failure")
-	}
-	return body
+	return append(out, tools.Raw[offset:]...), true
 }
 
 func normalizeCodexTool(tool gjson.Result) ([]byte, bool) {
 	toolType := tool.Get("type").String()
 	// Handle namespace tools (e.g. multi-agent nested tools)
 	if toolType == "namespace" {
-		nestedTools := tool.Get("tools")
-		if nestedTools.IsArray() && len(nestedTools.Array()) > 0 {
-			changed := false
-			raw := []byte(tool.Raw)
-			for j, nestedTool := range nestedTools.Array() {
-				updatedNested, nestedChanged := normalizeCodexTool(nestedTool)
-				if nestedChanged {
-					var errSet error
-					raw, errSet = sjson.SetRawBytes(raw, "tools."+strconv.Itoa(j), updatedNested)
-					if errSet == nil {
-						changed = true
-					}
-				}
-			}
-			return raw, changed
+		updatedTools, changed := normalizeCodexToolList(tool.Get("tools"))
+		if !changed {
+			return nil, false
 		}
-		return nil, false
+		updated, errSet := sjson.SetRawBytes([]byte(tool.Raw), "tools", updatedTools)
+		return updated, errSet == nil
 	}
 
 	if toolType != "function" && toolType != "custom" {
@@ -126,13 +147,20 @@ func normalizeCodexParameters(params gjson.Result) ([]byte, bool) {
 	return rawParams, changed
 }
 
-// stripIncompatiblePatternsFromJSON recursively removes pattern attributes containing
-// unsupported Unicode property escapes (\p{...} / \P{...}) from parameter schemas.
+// stripIncompatiblePatternsFromJSON recursively removes pattern attributes that strict
+// upstream validators reject: unsupported Unicode property escapes (\p{...} / \P{...})
+// and the octal NUL escape (\0), as well as integer numeric bounds (minimum, maximum,
+// exclusiveMinimum, exclusiveMaximum) outside the signed 64-bit integer range (#6579).
+// See util.HasUnsupportedUnicodePropertyEscape for the regex predicate and upstream errors.
 // It is schema-aware: only subschemas under known JSON Schema keyword locations are visited,
-// preventing accidental deletion of 'pattern' keys inside user data (e.g. description, default, enum).
+// preventing accidental deletion of keys inside user data (e.g. description, default, enum).
 func stripIncompatiblePatternsFromJSON(raw []byte) ([]byte, bool) {
 	rawStr := string(raw)
-	if !strings.Contains(rawStr, `\p{`) && !strings.Contains(rawStr, `\P{`) && !strings.Contains(rawStr, `\u`) {
+	// The fast path avoids parsing when no candidate escape or numeric bound is present.
+	// Patterns arrive JSON-escaped, so a literal backslash before '0' is `\\0` in the raw bytes.
+	// "inimum" and "aximum" match minimum, maximum, exclusiveMinimum, and exclusiveMaximum.
+	if !strings.Contains(rawStr, `\p{`) && !strings.Contains(rawStr, `\P{`) && !strings.Contains(rawStr, `\u`) &&
+		!strings.Contains(rawStr, `\\0`) && !strings.Contains(rawStr, "inimum") && !strings.Contains(rawStr, "aximum") {
 		return raw, false
 	}
 	var root any
@@ -141,6 +169,7 @@ func stripIncompatiblePatternsFromJSON(raw []byte) ([]byte, bool) {
 	if err := dec.Decode(&root); err != nil || root == nil {
 		return raw, false
 	}
+	// Verify no trailing garbage
 	var dummy any
 	if err := dec.Decode(&dummy); err != io.EOF {
 		return raw, false
@@ -157,6 +186,92 @@ func stripIncompatiblePatternsFromJSON(raw []byte) ([]byte, bool) {
 	return bytes.TrimSpace(buf.Bytes()), true
 }
 
+func isNumericBoundOutOfInt64(number json.Number) bool {
+	raw := strings.TrimSpace(number.String())
+	if raw == "" {
+		return false
+	}
+	if !strings.ContainsAny(raw, ".eE") {
+		_, errParse := strconv.ParseInt(raw, 10, 64)
+		return errors.Is(errParse, strconv.ErrRange)
+	}
+
+	s := raw
+	negative := false
+	if strings.HasPrefix(s, "-") {
+		negative = true
+		s = s[1:]
+	} else if strings.HasPrefix(s, "+") {
+		s = s[1:]
+	}
+
+	mantissa := s
+	var exp int64
+	if idx := strings.IndexAny(s, "eE"); idx >= 0 {
+		mantissa = s[:idx]
+		expStr := s[idx+1:]
+		parsedExp, errExp := strconv.ParseInt(expStr, 10, 64)
+		if errExp != nil {
+			if errors.Is(errExp, strconv.ErrRange) {
+				return !strings.HasPrefix(expStr, "-") && strings.Trim(mantissa, "0.") != ""
+			}
+			return false
+		}
+		exp = parsedExp
+	}
+
+	intPart := mantissa
+	fracPart := ""
+	if dotIdx := strings.IndexByte(mantissa, '.'); dotIdx >= 0 {
+		intPart = mantissa[:dotIdx]
+		fracPart = mantissa[dotIdx+1:]
+		if strings.IndexByte(fracPart, '.') >= 0 {
+			return false
+		}
+	}
+	if intPart == "" && fracPart == "" {
+		return false
+	}
+	for i := 0; i < len(intPart); i++ {
+		if intPart[i] < '0' || intPart[i] > '9' {
+			return false
+		}
+	}
+	for i := 0; i < len(fracPart); i++ {
+		if fracPart[i] < '0' || fracPart[i] > '9' {
+			return false
+		}
+	}
+
+	allDigits := intPart + fracPart
+	sig := strings.TrimLeft(allDigits, "0")
+	if sig == "" {
+		return false
+	}
+	if exp < -int64(len(raw)) {
+		return false
+	}
+	if exp > int64(len(raw))+20 {
+		return true
+	}
+	trimmed := strings.TrimRight(sig, "0")
+	trailingZeros := int64(len(sig) - len(trimmed))
+	effectiveExp := exp - int64(len(fracPart)) + trailingZeros
+	if effectiveExp < 0 {
+		return false
+	}
+	if effectiveExp > 19 || int64(len(trimmed))+effectiveExp > 19 {
+		return true
+	}
+
+	intStr := trimmed + strings.Repeat("0", int(effectiveExp))
+	if negative {
+		intStr = "-" + intStr
+	}
+	_, errParse := strconv.ParseInt(intStr, 10, 64)
+	return errors.Is(errParse, strconv.ErrRange)
+}
+
 func stripIncompatiblePatterns(v any) bool {
 	changed := false
 	switch schema := v.(type) {
@@ -165,7 +280,14 @@ func stripIncompatiblePatterns(v any) bool {
 			delete(schema, "pattern")
 			changed = true
 		}
+		for _, boundKey := range codexNumericBoundKeywords {
+			if boundVal, ok := schema[boundKey].(json.Number); ok && isNumericBoundOutOfInt64(boundVal) {
+				delete(schema, boundKey)
+				changed = true
+			}
+		}
 
+		// Inspect regex keys under patternProperties
 		if patternProps, ok := schema["patternProperties"].(map[string]any); ok {
 			for patternKey, subSchema := range patternProps {
 				if util.HasUnsupportedUnicodePropertyEscape(patternKey) {

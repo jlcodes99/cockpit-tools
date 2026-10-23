@@ -1,0 +1,108 @@
+.codex-api-setting {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.codex-api-setting :is(.codex-capability-setting-head, .codex-request-payload-row) > strong,
+.codex-api-setting-title {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.codex-api-setting-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.codex-api-setting .single-select-dropdown-trigger {
+  min-height: 32px;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  box-shadow: none;
+}
+
+.codex-api-setting .single-select-dropdown-value {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
+}
+
+.codex-api-setting .single-select-dropdown-arrow {
+  width: 16px;
+  height: 16px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.single-select-dropdown-menu.codex-api-setting-menu {
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.codex-api-setting-menu .single-select-dropdown-item {
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.codex-api-setting-menu .single-select-dropdown-item-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Shared components fit the surrounding settings rows without another card. */
+.settings-group > .codex-api-setting {
+  margin: 0;
+  padding: 18px 24px;
+  border: 0;
+  border-bottom: 1px solid var(--border-light);
+  border-radius: 0;
+  background: var(--bg-secondary);
+}
+
+.settings-group > .codex-api-setting:last-child {
+  border-bottom: 0;
+}
+
+.settings-group > .codex-api-setting:hover {
+  background: var(--bg-hover);
+}
+
+.codex-local-access-section > .codex-api-setting {
+  margin: 16px 0 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.codex-local-access-payload-details-body > .codex-api-setting {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 600px) {
+  .settings-group > .codex-api-setting {
+    padding: 16px;
+  }
+}

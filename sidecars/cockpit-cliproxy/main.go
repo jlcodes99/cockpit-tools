@@ -31,7 +31,11 @@ import (
 	_ "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator/builtin"
 )
 
-func runRelayHTTPServer(ctx context.Context, cfg *config.Config, handler http.Handler, emitter *eventEmitter) error {
+func runRelayHTTPServer(ctx context.Context, cfg *config.Config, handler http.Handler, emitter *eventEmitter, drains ...*gatewayDrain) error {
+	drain := newGatewayDrain()
+	if len(drains) > 0 && drains[0] != nil {
+		drain = drains[0]
+	}
 	host := "127.0.0.1"
 	port := 0
 	if cfg != nil {
@@ -45,7 +49,7 @@ func runRelayHTTPServer(ctx context.Context, cfg *config.Config, handler http.Ha
 		return err
 	}
 	server := &http.Server{
-		Handler:           handler,
+		Handler:           drain.wrap(handler),
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 	errCh := make(chan error, 1)
@@ -64,10 +68,17 @@ func runRelayHTTPServer(ctx context.Context, cfg *config.Config, handler http.Ha
 		emitter.emit(map[string]any{"type": "ready", "port": readyPort, "host": host})
 	}
 	select {
+	case <-drain.requested:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), gatewayReloadDrainLimit)
+		defer cancel()
+		// Explicit parent shutdown still cancels a retirement in progress.
+		stop := context.AfterFunc(ctx, cancel)
+		defer stop()
+		return drain.finish(shutdownCtx, server)
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		_ = drain.finish(shutdownCtx, server)
 		return ctx.Err()
 	case serveErr := <-errCh:
 		return serveErr
@@ -90,8 +101,8 @@ func normalizeCockpitLocale(locale string) string {
 }
 
 // defaultUsageServiceTier 返回 Cockpit 通过 payload.default 注入的服务等级。
-// 客户端未显式发送 service_tier 时，该档位就是实际上游使用的档位，
-// 用于统计与日志里区分快速/标准模式。
+// This is a request default, not confirmation of the server's processing tier.
+// Usage reporters prefer the final serialized upstream request when available.
 func defaultUsageServiceTier(cfg *config.Config) string {
 	if cfg == nil {
 		return ""
@@ -115,6 +126,7 @@ func main() {
 	quotaReserveStatePath := flag.String("quota-reserve-state", "", "Cockpit OAuth quota reserve state file")
 	quotaPoolStatePath := flag.String("quota-pool-state", "", "Cockpit account-pool quota state file")
 	parentPID := flag.Int("parent-pid", 0, "Cockpit Tools parent process id")
+	controlStdin := flag.Bool("control-stdin", false, "Read private gateway lifecycle commands from the parent pipe")
 	flag.Parse()
 
 	emitter := &eventEmitter{}
@@ -164,6 +176,10 @@ func main() {
 		tracker:      usageTracker,
 		tokenLimiter: tokenLimiter,
 	}
+	if m.ServiceTierControlEnabled {
+		policy.serviceTierDefault = newAPIServiceTierDefault(defaultUsageServiceTier(cfg))
+	}
+	defer policy.stopRequestDiagnostics()
 	hook := &authHook{manifest: m, emitter: emitter}
 	priorityState := newAPIKeyPriorityStateStore(*manifestPath)
 	selector := &cockpitSelector{
@@ -181,8 +197,22 @@ func main() {
 	defer stop()
 	ctx, cancel := context.WithCancel(signalCtx)
 	defer cancel()
-	quotaState.start(ctx, emitter)
-	m.quotaCooldowns.start(ctx, emitter)
+	runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
+	defer cancelRuntime()
+	drain := newGatewayDrain()
+	if *controlStdin {
+		go drain.control(os.Stdin, cancel)
+	}
+	if m.Continuity != nil {
+		m.continuityClient, err = startContinuityWorker(runtimeCtx, m.Continuity, m)
+		if err != nil {
+			emitter.emit(map[string]any{"type": "error", "message": "The local continuity worker could not be started"})
+			os.Exit(1)
+		}
+		defer m.continuityClient.Close()
+	}
+	quotaState.start(runtimeCtx, emitter)
+	m.quotaCooldowns.start(runtimeCtx, emitter)
 	monitorParentProcess(ctx, *parentPID, cancel, emitter)
 
 	coreusage.RegisterPlugin(&usagePlugin{
@@ -191,7 +221,7 @@ func main() {
 		defaultServiceTier: defaultUsageServiceTier(cfg),
 	})
 
-	runtime, err := newSidecarRuntime(ctx, absConfigPath, cfg, m, coreManager)
+	runtime, err := newSidecarRuntime(runtimeCtx, absConfigPath, cfg, m, coreManager)
 	if err != nil {
 		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
 		os.Exit(1)
@@ -221,8 +251,22 @@ func main() {
 		codexLive:          liveHandler,
 		quotaPoolStatePath: *quotaPoolStatePath,
 	}
-	if err := runRelayHTTPServer(ctx, cfg, relay.router(), emitter); err != nil && !errors.Is(err, context.Canceled) {
-		emitter.emit(map[string]any{"type": "error", "message": err.Error()})
+	go func() {
+		select {
+		case <-drain.requested:
+			policy.drainRequestDiagnostics()
+		case <-runtimeCtx.Done():
+		}
+	}()
+	if err := runRelayHTTPServer(ctx, cfg, relay.router(), emitter, drain); err != nil && !errors.Is(err, context.Canceled) {
+		eventType := "error"
+		select {
+		case <-drain.requested:
+			// A retired process must not overwrite the replacement's status.
+			eventType = "drain_failed"
+		default:
+		}
+		emitter.emit(map[string]any{"type": eventType, "message": err.Error()})
 		os.Exit(1)
 	}
 }

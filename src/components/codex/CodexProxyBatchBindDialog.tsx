@@ -79,7 +79,7 @@ export function CodexProxyBatchBindDialog({
   const overwrite = targets.filter((entry) => entry.willOverwrite).length;
   const summary = batchBindSummary(results);
 
-  useEscCloseTopmost(true, () => { if (!busy) onClose(); });
+  useEscCloseTopmost(true, () => { if (!busy) onClose(); }, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
 

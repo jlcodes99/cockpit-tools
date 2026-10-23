@@ -26,6 +26,7 @@
 }
 
 .codex-overview-selection-bar {
+  container: codex-selection-bar / inline-size;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1242,22 +1243,6 @@
 .codex-local-access-risk-notice-points {
   border-color: color-mix(in srgb, #f59e0b 14%, var(--border));
   background: color-mix(in srgb, var(--bg-tertiary) 88%, #f59e0b 12%);
-}
-
-.codex-local-access-risk-notice-remember {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
-  cursor: pointer;
-  user-select: none;
-}
-
-.codex-local-access-risk-notice-remember input[type="checkbox"] {
-  margin: 3px 0 0;
-  flex-shrink: 0;
 }
 
 .codex-api-switch-notice-modal {
@@ -2811,5 +2796,14 @@
 
   .codex-ssh-panel__item-actions .btn:not(.icon-only) span {
     display: none;
+  }
+}
+
+/* Keep toolbar actions together when the sidebar leaves little content width. */
+@container codex-selection-bar (max-width: 900px) {
+  .codex-overview-selection-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: flex-end;
   }
 }

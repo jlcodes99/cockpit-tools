@@ -2,28 +2,68 @@
 // 业务分片只在完整顶层 item 之间切开，通过 include! 保持同一模块作用域；
 // 调用方、网关生命周期、请求转换和账号池行为均与拆分前一致。
 include!("codex_local_access_foundation.rs");
+include!("codex_local_access_quota_reserve.rs");
 include!("codex_local_access_quota_cooldown.rs");
 include!("codex_local_access_request_transform.rs");
+include!("codex_local_access_historical_pricing.rs");
 include!("codex_local_access_routing_pricing.rs");
 include!("codex_local_access_request_logs.rs");
+include!("codex_local_access_request_diagnostics.rs");
+include!("codex_local_access_request_diagnostics_poll.rs");
 include!("codex_local_access_profile_takeover.rs");
 include!("codex_local_access_takeover_maintenance.rs");
 include!("codex_local_access_sidecar_config.rs");
 include!("codex_local_access_automatic_routing.rs");
+include!("codex_local_access_injection_display.rs");
 include!("codex_local_access_sidecar_runtime.rs");
+include!("codex_local_access_pool_diagnostics.rs");
 include!("codex_local_access_collection.rs");
+include!("codex_local_access_image_sources.rs");
+include!("codex_local_access_image_model_catalog.rs");
+include!("codex_local_access_model_config_transfer.rs");
+include!("codex_local_access_account_references.rs");
+include!("codex_local_access_key_recovery.rs");
+include!("codex_local_access_sidecar_retirement.rs");
 include!("codex_local_access_gateway_runtime.rs");
+include!("codex_local_access_native.rs");
+include!("codex_local_access_native_usage.rs");
+include!("codex_local_access_native_catalog.rs");
+include!("codex_local_access_continuity.rs");
+include!("codex_local_access_sidecar_continuity.rs");
+include!("codex_local_access_native_transport.rs");
+include!("codex_local_access_direct_identity.rs");
+include!("codex_local_access_official_background.rs");
+include!("codex_local_access_native_routes.rs");
+include!("codex_local_access_native_capability.rs");
+include!("codex_local_access_native_images.rs");
+include!("codex_local_access_native_diagnostics.rs");
+include!("codex_local_access_native_profiles.rs");
+include!("codex_local_access_service_tier_control.rs");
 include!("codex_local_access_provider_gateway.rs");
+include!("codex_local_access_provider_lifecycle.rs");
 include!("codex_local_access_provider_auth_sync.rs");
 include!("codex_local_access_instance_gateways.rs");
 include!("codex_local_access_probe_chat.rs");
 include!("codex_pelican_transport.rs");
+include!("codex_pelican_provider_transport.rs");
 include!("codex_local_access_commands.rs");
+include!("codex_local_access_capability_settings.rs");
+include!("codex_local_access_member_switch.rs");
+include!("codex_local_access_service_members.rs");
+include!("codex_local_access_official_members.rs");
 include!("codex_local_access_http.rs");
 // The retired in-process WebSocket gateway is retained only as a test oracle.
-// Production traffic is handled by the bundled CLIProxyAPI sidecar.
+// Production traffic is handled by the native engine or the optional CLIProxyAPI sidecar.
 #[cfg(test)]
 include!("codex_local_access_recovery.rs");
+
+#[cfg(test)]
+#[path = "codex_local_access_gateway_default_tests.rs"]
+mod gateway_default_tests;
+
+#[cfg(test)]
+#[path = "native_capability_integration_tests.rs"]
+mod native_capability_integration_tests;
 
 #[cfg(test)]
 mod tests {
@@ -44,14 +84,35 @@ mod tests {
     }
     include!("codex_local_access_tests_automatic_routing.rs");
     include!("codex_local_access_tests_sidecar_gateway.rs");
+    include!("codex_local_access_tests_shared_api_identity.rs");
+    include!("codex_local_access_tests_pool_failure_dismissal.rs");
     include!("codex_local_access_tests_proxy.rs");
     include!("codex_local_access_tests_provider_auth_sync.rs");
     include!("codex_local_access_tests_grok_lifecycle.rs");
     include!("codex_local_access_tests_pricing_profile.rs");
+    include!("codex_local_access_tests_long_price_override.rs");
     include!("codex_local_access_tests_request_routing.rs");
     include!("codex_local_access_tests_provider_gateway_vision.rs");
     include!("codex_local_access_tests_mixed_gateway_scope.rs");
     include!("codex_local_access_tests_takeover.rs");
     include!("codex_local_access_tests_takeover_maintenance.rs");
     include!("codex_local_access_tests_internal_service.rs");
+    include!("codex_local_access_tests_provider_admission.rs");
+    include!("codex_local_access_tests_image_main_model.rs");
+    include!("codex_local_access_tests_image_sources.rs");
+    include!("codex_local_access_tests_image_model_catalog.rs");
+    include!("codex_local_access_tests_inbound_key_recovery.rs");
+    include!("codex_local_access_tests_key_recovery.rs");
+    include!("codex_local_access_tests_service_transitions.rs");
+    include!("codex_local_access_tests_timeout_config.rs");
+    include!("codex_local_access_tests_provider_activation.rs");
+    include!("codex_local_access_tests_account_references.rs");
+    include!("codex_local_access_tests_request_diagnostics.rs");
+    include!("codex_local_access_tests_output_speed.rs");
+    include!("codex_local_access_tests_service_tier_evidence.rs");
+    include!("codex_local_access_tests_service_tier_control.rs");
+    include!("codex_local_access_tests_request_diagnostics_poll.rs");
 }
+
+include!("codex_local_access_multi_agent_settings.rs");
+include!("codex_local_access_native_multi_agent.rs");

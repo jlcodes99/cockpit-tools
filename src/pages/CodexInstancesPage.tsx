@@ -304,6 +304,7 @@ export function CodexInstancesContent({
           launchOptions.deepSeekAccessMode,
           null,
           launchOptions.imageGenerationAccountIds ?? [],
+            launchOptions.imageGenerationAccountModels ?? {},
         );
       }
       if (launchAccount && isDeepSeekAccount(launchAccount)) {
@@ -561,10 +562,7 @@ export function CodexInstancesContent({
       }
 
       const confirmed = await confirmDialog(
-        t(
-          "codex.instances.syncAllRecords.confirmMessage",
-          "会把所有 Codex 实例中的本地会话记录做一次全量同步；同 ID 会话会进行事件级合并，写入前会备份目标实例关键文件和旧会话文件。确认继续？",
-        ),
+        t("codex.instances.syncAllRecords.confirmMessage"),
         {
           title: t("codex.instances.syncAllRecords.title", "同步所有实例记录"),
           okLabel: t("common.confirm", "确认"),
@@ -774,10 +772,7 @@ export function CodexInstancesContent({
                   </div>
                 </div>
                 <div className="codex-sync-settings-hint">
-                  {t(
-                    "codex.instances.syncAllRecords.autoDesc",
-                    "关闭时保持多实例记录隔离；开启后仅在所有 Codex 实例已停止时，启动或关闭实例会自动合并本地记录。",
-                  )}
+                  {t("codex.instances.syncAllRecords.autoDesc")}
                 </div>
               </div>
             </div>

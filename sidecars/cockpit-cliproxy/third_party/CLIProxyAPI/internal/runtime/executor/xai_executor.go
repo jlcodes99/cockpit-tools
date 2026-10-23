@@ -15,10 +15,10 @@ import (
 var (
 	xaiDataTag  = []byte("data:")
 	xaiEventTag = []byte("event:")
-	// Codex 的 apply_patch 是 freeform(custom) 工具，声明里带 lark grammar 而不是
-	// JSON parameters，xAI 的 Responses 端点只接受 function 形态。请求侧降级为
-	// 单字段 JSON function，并把官方信封写进每轮 tool description；响应侧再还原
-	// 成客户端期望的 custom_tool_call，同时把独立成行的错误头尾改回官方信封。
+	// Codex apply_patch is a freeform (custom) tool with lark grammar instead of
+	// JSON parameters; xAI Responses accepts only function tools. Convert requests
+	// to a single-field JSON function with the official envelope in each tool
+	// description, then restore custom_tool_call responses and envelope markers.
 	xaiApplyPatchDescription = strings.Join([]string{
 		"Use apply_patch to edit local files. The input is freeform patch text, not JSON.",
 		"",
@@ -57,6 +57,7 @@ const (
 	xaiNamespaceToolType       = "namespace"
 	xaiToolSearchType          = "tool_search"
 	xaiWebSearchToolType       = "web_search"
+	xaiClientWebSearchAlias    = "clientfn_web_search"
 	xaiXSearchToolType         = "x_search"
 	xaiMaxTools                = 200
 	// Codex Desktop injects codex_app.automation_update with a large oneOf+$ref
@@ -82,8 +83,9 @@ const (
 	xaiTokenAuthHeader          = "X-XAI-Token-Auth"
 	xaiTokenAuthValue           = "xai-grok-cli"
 	xaiClientVersionHeader      = "x-grok-client-version"
-	// Keep in sync with the current Grok CLI client version that chat-proxy expects.
-	xaiClientVersionValue         = "0.2.120"
+	xaiCLIClientVersionHeader   = "x-grok-cli-version"
+	// The cached npm version is used at runtime; this pin is the offline fallback.
+	xaiClientVersionValue         = helps.DefaultXAIFallbackClientVersion
 	xaiClientIdentifierHeader     = "x-grok-client-identifier"
 	xaiClientIdentifierValue      = "grok-shell"
 	xaiAuthenticateResponseHeader = "x-authenticateresponse"
@@ -104,6 +106,11 @@ type XAIExecutor struct {
 // NewXAIExecutor creates a new xAI executor.
 func NewXAIExecutor(cfg *config.Config) *XAIExecutor {
 	return &XAIExecutor{cfg: cfg}
+}
+
+// StartXAIVersionUpdater refreshes the Grok CLI identity outside request paths.
+func StartXAIVersionUpdater(ctx context.Context, proxyURL string) {
+	helps.StartXAIVersionUpdater(ctx, proxyURL)
 }
 
 // Identifier returns the provider identifier.

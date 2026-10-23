@@ -205,6 +205,24 @@
   overflow-wrap: anywhere;
 }
 
+.codex-account-pool-health-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codex-account-pool-health-request > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-account-pool-health-request > .btn {
+  flex-shrink: 0;
+}
+
 .codex-account-pool-health-empty {
   min-height: 180px;
   display: flex;

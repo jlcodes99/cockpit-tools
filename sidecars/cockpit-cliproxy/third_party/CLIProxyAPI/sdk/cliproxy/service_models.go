@@ -145,7 +145,7 @@ func (s *Service) registerModelsForAuthWithCache(ctx context.Context, a *coreaut
 		models = registry.GetKimiModels()
 		models = applyExcludedModels(models, excluded)
 	case "xai":
-		models = registry.GetXAIModels()
+		models = defaultXAIModelsForAuth(a)
 		if entry := s.resolveConfigXAIKey(a); entry != nil {
 			if len(entry.Models) > 0 {
 				models = buildXAIConfigModels(entry)

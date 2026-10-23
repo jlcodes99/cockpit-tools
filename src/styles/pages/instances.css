@@ -1803,10 +1803,10 @@
 }
 
 .instances-page .instance-plan-badge.codex-pro-max {
-  background: linear-gradient(135deg, #fff7cc 0%, #f6d365 42%, #d99b16 100%);
-  border-color: rgba(180, 116, 11, 0.42);
+  background: linear-gradient(135deg, #fff4d4 0%, #efd394 42%, #d4aa54 100%);
+  border-color: rgba(180, 116, 11, 0.34);
   color: #5a3700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 3px rgba(180, 116, 11, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38), 0 1px 3px rgba(180, 116, 11, 0.12);
 }
 
 .instances-page .instance-plan-badge.ultra {

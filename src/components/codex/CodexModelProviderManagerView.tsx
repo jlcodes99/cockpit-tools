@@ -1,5 +1,5 @@
 import { ModalErrorMessage } from "../ModalErrorMessage";
-import { ArrowDownWideNarrow, ArrowDown, ArrowUp, Check, CircleAlert, ChevronDown, Copy, Clock, Database, ExternalLink, GripVertical, HelpCircle, KeyRound, Link2, LayoutGrid, Pencil, Plus, Rows3, Star, Trash2, X, Search, Settings, Activity, RefreshCw, RotateCw, Play } from "lucide-react";
+import { Bird, ArrowDownWideNarrow, ArrowDown, ArrowUp, Check, CircleAlert, ChevronDown, Copy, Clock, Database, ExternalLink, GripVertical, HelpCircle, KeyRound, Link2, LayoutGrid, Pencil, Plus, Rows3, Star, Trash2, X, Search, Settings, Activity, RefreshCw, RotateCw, Play } from "lucide-react";
 import { MultiSelectFilterDropdown } from "../MultiSelectFilterDropdown";
 import { SingleSelectFilterDropdown } from "../SingleSelectFilterDropdown";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
@@ -8,6 +8,7 @@ import { PaginationControls } from "../PaginationControls";
 import { CodexModelContextWindowTable } from "./CodexModelContextWindowTable";
 import { resolveNewApiQuotaSnapshot } from "../../services/modelProviderUsageService";
 import { CODEX_API_PROVIDER_CUSTOM_ID, CODEX_API_PROVIDER_PRESETS, DEEPSEEK_API_PROVIDER_ID, resolveCodexApiProviderPresetId } from "../../utils/codexProviderPresets";
+import { resolveCodexModelProviderForApiKey } from "../../utils/codexModelProviderKeyConfig";
 import { normalizeApiKeyFunOfficialUrl } from "../../utils/apikeyFunLinks";
 import { getCodexSubscriptionPresentation } from "../../types/codex";
 import { canConfigureCodexProviderVision, resolveCodexProviderCapabilityProfile } from "../../utils/codexProviderGateway";
@@ -28,6 +29,7 @@ export type CodexModelProviderManagerViewProps = ReturnType<typeof useCodexModel
 export function CodexModelProviderManagerView(props: CodexModelProviderManagerViewProps) {
   const {
     apiKeyPickerProviderId,
+    openProviderPelican,
     batchTestCancelling,
     batchTestDeleting,
     batchTestError,
@@ -367,6 +369,10 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
             )}
           </div>
           <div className="codex-overview-selection-actions">
+            <button type="button" className="btn btn-secondary" onClick={openProviderPelican}
+              disabled={filteredProviders.every((provider) => !getSelectedProviderApiKey(provider))}>
+              <Bird size={14} />{t("pelican.title")}
+            </button>
             <button
               type="button"
               className="btn btn-secondary"
@@ -927,7 +933,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                         }
                         placeholder={t(
                           "codex.modelProviders.batchTest.modelCustomPlaceholder",
-                          "输入模型 ID，例如 gpt-4.1-mini",
+                          "输入模型 ID，例如 gpt-6.1-sol",
                         )}
                         style={{ marginTop: 8 }}
                       />
@@ -1936,7 +1942,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                         <span className="provider-vision-toggle-desc">
                           {t(
                             "codex.modelProviders.vision.providerDefaultHint",
-                            "未单独设置的模型使用此默认值，GPT-5.5 及更新模型默认支持图片。可在模型列表中单独关闭。网关无法匹配视觉模型时会省略图片并继续处理文本。",
+                            "未单独设置的模型使用此默认值，GPT-5.6 Sol、GPT-5.6 Luna 等模型默认支持图片。可在模型列表中单独关闭。网关无法匹配视觉模型时会省略图片并继续处理文本。",
                           )}
                         </span>
                       </span>
@@ -1969,7 +1975,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                           onChange={(event) =>
                             mutateForm({ visionModelText: event.target.value })
                           }
-                          placeholder={"qwen-vl-plus\ngpt-4o"}
+                          placeholder={"qwen-vl-plus\ngpt-6.1-sol"}
                           disabled={saving}
                         />
                         <p className="api-provider-hint">
@@ -2794,7 +2800,8 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
       )}
 
       {providerDetailId && (() => {
-        const provider = providers.find((item) => item.id === providerDetailId);
+        const storedProvider = providers.find((item) => item.id === providerDetailId);
+        const provider = storedProvider ? resolveCodexModelProviderForApiKey(storedProvider, getSelectedProviderApiKey(storedProvider)?.apiKey) : null;
         if (!provider) return null;
         const usageState = providerUsageMap[provider.id];
         const primaryApiKey = getSelectedProviderApiKey(provider);

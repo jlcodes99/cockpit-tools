@@ -33,6 +33,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { useModalErrorState } from '../components/ModalErrorMessage'
+import { formatAntigravitySwitchError } from '../utils/antigravitySwitchError'
 import { useEscClose } from '../hooks/useEscClose'
 import { useMfaCountdown } from '../hooks/useMfaCountdown'
 import { useEnterConfirm } from '../hooks/useEnterConfirm'
@@ -196,7 +197,7 @@ export function useAccountsPageController({ onNavigate }: AccountsPageProps) {
   } = useAccountStore()
   const currentAccount = currentAccountsByTarget[antigravityRuntimeTarget] ?? null
 
-  const formatSwitchError = useCallback((error: unknown) => String(error), [])
+  const formatSwitchError = useCallback((error: unknown) => formatAntigravitySwitchError(t, error), [t])
 
   // ─── 验证状态标记 ────────────────────────────────────────────────────
   // 优先读 disabled_reason（新版后端写入），没有则回退到验证历史（向后兼容）

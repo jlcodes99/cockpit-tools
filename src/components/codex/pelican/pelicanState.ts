@@ -5,8 +5,12 @@ export function mergePelicanSnapshot(
   active: CodexPelicanBatch | null,
   batch: CodexPelicanBatch,
   dismissedIds: ReadonlySet<string>,
+  activatedBatchId: string | null = null,
 ): CodexPelicanBatch | null {
   if (dismissedIds.has(batch.id)) return active;
+  // Creation order is only a bootstrap heuristic. Explicitly starting or
+  // resuming a batch owns activation until another operation selects a batch.
+  if (activatedBatchId && batch.id !== activatedBatchId) return active;
   if (!active) return batch;
   if (active.id === batch.id) return batch.revision >= active.revision ? batch : active;
   return batch.createdAt > active.createdAt ? batch : active;

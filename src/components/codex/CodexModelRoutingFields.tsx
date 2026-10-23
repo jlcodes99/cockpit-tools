@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../../utils/codexAccountDisplayName";
 import type { TFunction } from "i18next";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { GitBranch, Info, Plus, RefreshCw, SlidersHorizontal, Trash2, X } from "lucide-react";
@@ -541,10 +542,8 @@ export function CodexModelRoutingEditor({
   const providerOptions = useMemo(
     () =>
       providerAccounts.map((account) => {
-        const name = shortCodexRouteAccountLabel(
-          account,
-          getAccountDisplayText?.(account) || account.email,
-        );
+        const name = getAccountDisplayText?.(account) ||
+          resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"));
         const catalogCount = account.api_model_catalog?.length ?? 0;
         return {
           value: account.id,
@@ -554,7 +553,7 @@ export function CodexModelRoutingEditor({
               : `${name} · 未获取列表`,
         };
       }),
-    [getAccountDisplayText, providerAccounts],
+    [getAccountDisplayText, providerAccounts, t],
   );
 
   const addManualModels = (routeId: string) => {
@@ -934,7 +933,7 @@ export function CodexModelRoutingEditor({
                       }}
                       placeholder={t(
                         "instances.form.modelRouting.manualPlaceholder",
-                        "gpt-5.5, grok-4.6",
+                        "gpt-5.6-sol, grok-4.6",
                       )}
                     />
                     <button
@@ -1284,10 +1283,8 @@ export function CodexModelRoutingSummary({
               const provider = providerAccounts.find(
                 (account) => account.id === route.providerAccountId,
               );
-              const accountName = shortCodexRouteAccountLabel(
-                provider,
-                getAccountDisplayText?.(provider!) || provider?.email,
-              );
+              const accountName = provider ? getAccountDisplayText?.(provider) ||
+                resolveCodexAccountDisplayName(provider, t("common.apiKeyAccount")) : "";
               const modelsCount = collectRouteUpstreamModels(route, provider).length;
               return (
                 <div
@@ -1428,7 +1425,7 @@ export function CodexModelRoutingFields({
             <p>
               {t(
                 "instances.form.modelRouting.rowSummary",
-                "普通模型使用当前订阅；带前缀模型（如 cpa/gpt-5.5）转发到第三方 API。两者都依赖本地分流服务。",
+                "普通模型使用当前订阅；带前缀模型（如 cpa/gpt-5.6-sol）转发到第三方 API。两者都依赖本地分流服务。",
               )}
             </p>
             <div className="codex-launch-preview-tool-meta">
@@ -1500,7 +1497,7 @@ export function CodexModelRoutingFields({
           <p className="form-hint">
             {t(
               "instances.form.modelRouting.summary",
-              "普通模型使用当前订阅；带前缀模型（如 cpa/gpt-5.5）转发到第三方 API。两者都依赖本地分流服务。",
+              "普通模型使用当前订阅；带前缀模型（如 cpa/gpt-5.6-sol）转发到第三方 API。两者都依赖本地分流服务。",
             )}
           </p>
         </div>

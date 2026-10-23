@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CodexAccount } from '../../types/codex';
-import { useCodexAccountStore } from '../../stores/useCodexAccountStore';
+import { applyCodexProxyAccountSnapshot, updateCodexProxyAccount, type CodexProxyTargetAccount } from '../../services/codexProxyTargetService';
 import { canUseCodexAccountProxy } from '../../utils/codexAccountProxy';
 import { isPrivacyModeEnabledByDefault, maskSensitiveValue, PRIVACY_MODE_CHANGED_EVENT } from '../../utils/privacy';
 import {
@@ -64,8 +64,7 @@ function cancelProbe(active: { accountId?: string; requestId: string } | null): 
 export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor {
   const { t } = useTranslation();
   const { accounts, catalog } = useCodexProxyWorkspace();
-  const updateAccountEgressProxy = useCodexAccountStore((state) => state.updateAccountEgressProxy);
-  const account = useMemo(
+  const account = useMemo<CodexProxyTargetAccount | undefined>(
     () => accounts.find((entry) => entry.id === accountId && canUseCodexAccountProxy(entry)),
     [accounts, accountId],
   );
@@ -87,7 +86,8 @@ export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor
   const restored = useMemo(() => restoreExitChoice(catalog, savedBinding), [catalog, savedBinding]);
   const currentDraft = draft?.accountId === accountId ? draft.choice : null;
   const choice = currentDraft ?? restored;
-  const { bound, saved, dirty } = exitDraftState(savedBinding, restored, choice);
+  const { bound: hasBinding, saved, dirty } = exitDraftState(savedBinding, restored, choice);
+  const bound = hasBinding || Boolean(account?.egress_proxy_error || account?.egress_proxy_legacy_bound);
   const source = catalog.sources.find((entry) => entry.id === choice.sourceId);
   const selected = source?.nodes.find((entry) => entry.id === choice.itemId) ?? source?.groups.find((entry) => entry.id === choice.itemId);
   const selections = useMemo(
@@ -129,7 +129,7 @@ export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor
   const cancelTest = useCallback(() => { cancelProbe(testingId.current); }, []);
 
   const test = useCallback(async () => {
-    if (operation.current || !account) return;
+    if (operation.current || !account || account.proxyTargetLoading || account.proxyTargetError) return;
     // Only a changed draft is attributed to the draft; otherwise the saved binding is checked.
     const scope: ProbeScope = selectionReady && dirty ? 'selection' : 'saved';
     if (scope === 'saved' && !bound) return;
@@ -158,14 +158,14 @@ export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor
   }, [account, bound, choice.itemId, choice.sourceId, dirty, selections, selectionReady, t]);
 
   const save = useCallback(async () => {
-    if (operation.current || !account || saved || !selectionReady) return;
+    if (operation.current || !account || account.proxyTargetLoading || account.proxyTargetError || saved || !selectionReady) return;
     operation.current = true;
     setBusy('save'); setError(''); setNotice('');
     const id = account.id;
     const current = generation.current;
     try {
       const updated = await bindProxyCatalog(id, choice.sourceId, choice.itemId, selections ?? {}, choice.groupId);
-      useCodexAccountStore.getState().applyAccountSnapshot(updated);
+      applyCodexProxyAccountSnapshot(updated);
       if (generation.current !== current) return;
       setOverrides((old) => ({ ...old, [id]: { binding: updated.egress_proxy ?? null, disabled: updated.egress_proxy_disabled ?? false } }));
       setDraft(null);
@@ -182,13 +182,13 @@ export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor
   }, [account, choice.groupId, choice.itemId, choice.sourceId, saved, selections, selectionReady, t]);
 
   const unbind = useCallback(async (disabled = false) => {
-    if (operation.current || !account || (!bound && proxyDisabled === disabled)) return;
+    if (operation.current || !account || account.proxyTargetLoading || account.proxyTargetError || (!bound && proxyDisabled === disabled)) return;
     operation.current = true;
     setBusy('unbind'); setError(''); setNotice('');
     const id = account.id;
     const current = generation.current;
     try {
-      const updated = await updateAccountEgressProxy(id, null, disabled);
+      const updated = await updateCodexProxyAccount(id, disabled);
       if (generation.current !== current) return;
       setOverrides((old) => ({ ...old, [id]: { binding: updated.egress_proxy ?? null, disabled: updated.egress_proxy_disabled ?? false } }));
       setDraft(null);
@@ -202,7 +202,7 @@ export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor
         setBusy('');
       }
     }
-  }, [account, bound, proxyDisabled, t, updateAccountEgressProxy]);
+  }, [account, bound, proxyDisabled, t]);
 
   const clearError = useCallback(() => setError(''), []);
 
@@ -219,7 +219,7 @@ export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor
     result: probe?.value,
     testing: busy === 'test',
     busy,
-    error,
+    error: error || (account?.proxyTargetError ? t('codex.proxy.runtimeReadFailed') : ''),
     notice,
     select,
     test: () => { void test(); },
@@ -230,12 +230,13 @@ export function useCodexProxyExitEditor(accountId: string): CodexProxyExitEditor
     clearError,
     savedBinding,
     resultScope: probe?.scope ?? '',
-    selectionReady,
+    selectionReady: selectionReady && !account?.proxyTargetLoading && !account?.proxyTargetError,
   };
 }
 
 /** Privacy-mode aware account label shared by the list, the rules table and the dialogs. */
 export function useCodexProxyAccountName(): (account?: CodexProxyAccountIdentity | null) => string {
+  const { t } = useTranslation();
   const [privacy, setPrivacy] = useState(isPrivacyModeEnabledByDefault);
   useEffect(() => {
     const sync = () => setPrivacy(isPrivacyModeEnabledByDefault());
@@ -243,7 +244,7 @@ export function useCodexProxyAccountName(): (account?: CodexProxyAccountIdentity
     return () => window.removeEventListener(PRIVACY_MODE_CHANGED_EVENT, sync);
   }, []);
   return useCallback(
-    (account?: CodexProxyAccountIdentity | null) => account ? maskSensitiveValue(codexProxyAccountName(account), privacy) : '',
-    [privacy],
+    (account?: CodexProxyAccountIdentity | null) => account ? account.id === '__api_service__' ? codexProxyAccountName(account) : maskSensitiveValue(codexProxyAccountName(account, t("common.apiKeyAccount")), privacy) : '',
+    [privacy, t],
   );
 }

@@ -120,7 +120,7 @@ fn now_unix_seconds() -> i64 {
 fn get_codex_batch_delete_jobs_dir() -> PathBuf {
     let data_dir = account::get_data_dir()
         .or_else(|_| account::resolve_data_dir())
-        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"));
+        .unwrap_or_else(|_| crate::modules::data_paths::fallback_data_dir());
     data_dir.join(CODEX_BATCH_DELETE_JOBS_DIR)
 }
 
@@ -734,6 +734,32 @@ pub fn get_codex_config_toml_path() -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexStoragePaths {
+    provider_store_path: String,
+    config_path: String,
+    auth_path: String,
+}
+
+#[tauri::command]
+pub async fn get_codex_storage_paths() -> Result<CodexStoragePaths, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let data_dir = account::get_data_dir()?;
+        let codex_home = codex_account::get_codex_home();
+        Ok(CodexStoragePaths {
+            provider_store_path: data_dir
+                .join("codex_model_providers.json")
+                .to_string_lossy()
+                .to_string(),
+            config_path: codex_home.join("config.toml").to_string_lossy().to_string(),
+            auth_path: codex_home.join("auth.json").to_string_lossy().to_string(),
+        })
+    })
+    .await
+    .map_err(|error| format!("读取 Codex 存储路径后台任务失败: {}", error))?
+}
+
 #[tauri::command]
 pub fn open_codex_config_toml(app: AppHandle) -> Result<(), String> {
     let path = codex_account::get_codex_home().join("config.toml");
@@ -816,41 +842,124 @@ pub async fn save_codex_model_catalog(
 }
 
 #[tauri::command]
-pub fn get_codex_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
-    codex_speed::get_app_speed_config()
+pub async fn get_codex_model_reasoning_efforts(
+    models: Vec<crate::models::codex::CodexExperimentalModelDefinition>,
+    instance_id: Option<String>,
+) -> Result<HashMap<String, Vec<String>>, String> {
+    if models.len() > 1000 { return Err("MODEL_CONFIG_TOO_MANY_ITEMS".to_string()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = codex_account::model_config_profile_dir(instance_id.as_deref().unwrap_or("__default__"))?;
+        Ok(codex_account::model_reasoning_efforts_for_profile(&dir, &models))
+    }).await.map_err(|_| "MODEL_CONFIG_READ_FAILED".to_string())?
 }
 
 #[tauri::command]
-pub fn save_codex_app_speed(speed: CodexAppSpeed) -> Result<CodexAppSpeedConfig, String> {
-    codex_speed::save_api_service_app_speed(speed)
+pub async fn preview_codex_model_config_import(instance_id: String, json_content: String,
+    conflict_strategy: Option<String>) -> Result<crate::models::codex::CodexModelConfigImportPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = codex_account::model_config_profile_dir(&instance_id)?;
+        codex_account::preview_model_config_import(&dir, &json_content,
+            conflict_strategy.as_deref().unwrap_or("keep_existing"))
+    }).await.map_err(|_| "MODEL_CONFIG_READ_FAILED".to_string())?
 }
 
 #[tauri::command]
-pub fn get_codex_api_service_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
-    codex_speed::get_api_service_app_speed_config()
+pub async fn import_codex_model_config(app: AppHandle, instance_id: String, json_content: String,
+    conflict_strategy: Option<String>, expected_revision: String)
+    -> Result<crate::models::codex::CodexModelConfigImportPreview, String> {
+    let event_instance_id = instance_id.clone();
+    let event_revision = expected_revision.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let dir = codex_account::model_config_profile_dir(&instance_id)?;
+        let result = codex_account::import_model_config(&dir, &json_content,
+            conflict_strategy.as_deref().unwrap_or("keep_existing"), &expected_revision)?;
+        crate::modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        Ok::<_, String>(result)
+    }).await.map_err(|_| "MODEL_CONFIG_WRITE_FAILED".to_string())?;
+    let (preview, before, after) = match result {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = app.emit("codex:model-config-imported", serde_json::json!({
+                "instanceId": event_instance_id, "status": "error", "errorCode": "MODEL_CONFIG_WRITE_FAILED"
+            }));
+            return Err(error);
+        }
+    };
+    crate::modules::codex_local_access::publish_model_config_service_import(&app, before, after).await;
+    if preview.committed > 0 {
+        crate::modules::codex_local_access::reload_active_gateway_after_model_config_import(event_instance_id.clone(), event_revision);
+        let _ = app.emit("codex:model-config-imported", serde_json::json!({
+            "instanceId": event_instance_id, "status": "saved", "committed": preview.committed,
+            "models": preview.models, "defaultModelId": preview.default_model_id,
+        }));
+    }
+    Ok(preview)
 }
 
 #[tauri::command]
-pub fn save_codex_api_service_app_speed(
+pub async fn export_codex_model_config(instance_id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = codex_account::model_config_profile_dir(&instance_id)?;
+        codex_account::export_model_config(&dir)
+    }).await.map_err(|_| "MODEL_CONFIG_READ_FAILED".to_string())?
+}
+
+#[tauri::command]
+pub async fn get_codex_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
+    tauri::async_runtime::spawn_blocking(codex_speed::get_app_speed_config)
+        .await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn save_codex_app_speed(speed: CodexAppSpeed) -> Result<CodexAppSpeedConfig, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let saved = codex_speed::write_official_app_speed(speed.clone())?;
+        crate::modules::codex_instance::update_default_app_speed(speed)?;
+        Ok(saved)
+    }).await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn get_codex_api_service_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
+    tauri::async_runtime::spawn_blocking(codex_speed::get_api_service_app_speed_config)
+        .await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn save_codex_api_service_app_speed(
     speed: CodexAppSpeed,
 ) -> Result<CodexAppSpeedConfig, String> {
-    let saved = codex_speed::save_api_service_app_speed(speed.clone())?;
-    if let Ok(settings) = crate::modules::codex_instance::load_default_settings() {
-        if settings.bind_account_id.as_deref()
-            == Some(crate::modules::codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID)
-        {
-            let _ = crate::modules::codex_instance::update_default_app_speed(speed);
+    // Serialize preference writes and runtime acknowledgements so an older save
+    // cannot overwrite a newer choice in the running API service.
+    let _speed_guard = codex_local_access::api_service_speed_save_lock().lock().await;
+    let runtime_speed = speed.clone();
+    let saved = tauri::async_runtime::spawn_blocking(move || {
+        let saved = codex_speed::save_api_service_app_speed(speed.clone())?;
+        let bind_id = crate::modules::codex_instance::CODEX_API_SERVICE_BIND_ACCOUNT_ID;
+        let settings = crate::modules::codex_instance::load_default_settings()?;
+        if settings.bind_account_id.as_deref() == Some(bind_id) {
+            codex_speed::write_official_app_speed(speed.clone())?;
+            crate::modules::codex_instance::update_default_app_speed(speed.clone())?;
         }
-    }
-    codex_local_access::trigger_gateway_reload_in_background("保存 API 服务速度配置");
+        for instance in crate::modules::codex_instance::update_bound_instances_app_speed(bind_id, speed.clone())? {
+            codex_speed::write_app_speed_for_dir(std::path::Path::new(&instance.user_data_dir), speed.clone())?;
+        }
+        Ok::<_, String>(saved)
+    }).await.map_err(|error| error.to_string())??;
+    codex_local_access::sync_running_api_service_speed(runtime_speed).await?;
     Ok(saved)
 }
 
 #[tauri::command]
-pub fn update_codex_account_app_speed(
+pub async fn update_codex_account_app_speed(
     account_id: String,
     speed: CodexAppSpeed,
 ) -> Result<CodexAccount, String> {
+    tauri::async_runtime::spawn_blocking(move || update_codex_account_app_speed_blocking(account_id, speed))
+        .await.map_err(|error| error.to_string())?
+}
+
+fn update_codex_account_app_speed_blocking(account_id: String, speed: CodexAppSpeed) -> Result<CodexAccount, String> {
     let account = codex_account::update_account_app_speed(&account_id, speed)?;
     let account_speed = account.app_speed.clone();
     let current_account_id = codex_account::load_account_index().current_account_id;
@@ -2236,11 +2345,11 @@ pub async fn update_codex_account_egress_proxy(
     egress_proxy_url: Option<String>,
     disabled: Option<bool>,
 ) -> Result<CodexAccount, String> {
-    let saved = if disabled.unwrap_or(false) {
-        crate::modules::codex_proxy_runtime::save_binding_with_mode(account_id, egress_proxy_url, true).await?
-    } else {
-        crate::modules::codex_proxy_runtime::save_binding(account_id, egress_proxy_url).await?
-    };
+    if let Some(target) = crate::modules::codex_proxy_targets::desktop_target(&account_id).await? {
+        // Desktop settings are never synchronized into provider sidecar auth files.
+        return crate::modules::codex_client_proxy::save_account_binding(target, egress_proxy_url, disabled.unwrap_or(false)).await;
+    }
+    let saved = crate::modules::codex_proxy_targets::save(account_id, egress_proxy_url, disabled.unwrap_or(false)).await?;
     tauri::async_runtime::spawn_blocking(move || {
     let account = saved;
     if codex_local_access::sync_sidecar_auth_file_for_account(&account).is_err() {
@@ -2262,27 +2371,30 @@ pub async fn test_codex_account_egress_proxy(
     request_id: String,
     proxy_url: Option<String>,
 ) -> Result<crate::modules::codex_proxy_probe::ProxyProbeResult, String> {
-    crate::modules::codex_proxy_probe::probe(account_id, request_id, proxy_url).await
+    let id = crate::modules::codex_proxy_targets::runtime_id(&account_id).await?;
+    crate::modules::codex_proxy_probe::probe(id, request_id, proxy_url).await
 }
 
 #[tauri::command]
-pub fn cancel_codex_account_egress_proxy(account_id: String, request_id: String) -> Result<(), String> {
-    crate::modules::codex_proxy_probe::cancel(&account_id, &request_id)
+pub async fn cancel_codex_account_egress_proxy(account_id: String, request_id: String) -> Result<(), String> {
+    let id = crate::modules::codex_proxy_targets::runtime_id(&account_id).await?;
+    crate::modules::codex_proxy_probe::cancel(&id, &request_id)
 }
 
 #[tauri::command]
 pub async fn measure_codex_account_proxy_latency(account_id: String) -> Result<crate::modules::codex_proxy_runtime::RuntimeStatus, String> {
-    crate::modules::codex_proxy_runtime::measure_current_latency(&account_id).await
+    crate::modules::codex_proxy_targets::status(&account_id, true).await
 }
 
 #[tauri::command]
 pub async fn get_codex_account_proxy_status(account_id: String) -> Result<crate::modules::codex_proxy_runtime::RuntimeStatus, String> {
-    crate::modules::codex_proxy_runtime::status(&account_id).await
+    crate::modules::codex_proxy_targets::status(&account_id, false).await
 }
 
 #[tauri::command]
 pub async fn restore_codex_account_proxy_entry(account_id: String) -> Result<(), String> {
-    crate::modules::codex_proxy_desktop_router::restore_account_entry(&account_id).await
+    let id = crate::modules::codex_proxy_targets::runtime_id(&account_id).await?;
+    crate::modules::codex_proxy_desktop_router::restore_account_entry(&id).await
 }
 
 /// 通过 Grok 平台账号添加 Codex 供应商账号。
@@ -2328,8 +2440,8 @@ pub async fn update_codex_api_key_credentials(
     account_name: Option<String>,
     api_model_context_windows: Option<std::collections::HashMap<String, i64>>,
 ) -> Result<CodexAccount, String> {
-    let account = codex_local_access::update_account_with_api_service_references(&account_id, || {
-        let mut account = codex_account::update_api_key_credentials(
+    let account = tauri::async_runtime::spawn_blocking(move || {
+        codex_account::update_api_key_credentials(
             &account_id,
             api_key,
             api_base_url,
@@ -2345,13 +2457,9 @@ pub async fn update_codex_api_key_credentials(
             api_vision_routing_model,
             account_name,
             api_model_context_windows,
-        )?;
-        if let Some(enabled) = api_sync_model_catalog_to_api_service {
-            account.api_sync_model_catalog_to_api_service = enabled;
-            codex_account::save_account(&account)?;
-        }
-        Ok(account)
-    }).await?;
+            api_sync_model_catalog_to_api_service,
+        )
+    }).await.map_err(|error| format!("更新 API Key 任务失败: {}", error))??;
     codex_local_access::refresh_api_service_models().await
         .map_err(|error| format!("账号配置已保存，但 API 服务刷新失败: {}", error))?;
     Ok(account)
@@ -2418,13 +2526,15 @@ pub async fn update_codex_account_instance_access(
     access_mode: Option<String>,
     startup_model: Option<String>,
     image_generation_account_ids: Option<Vec<String>>,
+    image_generation_account_models: Option<std::collections::HashMap<String, String>>,
 ) -> Result<CodexAccount, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        codex_account::update_account_instance_access(
+        codex_account::update_account_instance_access_with_image_models(
             &account_id,
             access_mode,
             startup_model,
             image_generation_account_ids,
+            image_generation_account_models,
         )
     })
     .await
@@ -2665,6 +2775,16 @@ pub async fn codex_wakeup_test(
         cancel_scope_id.as_deref(),
     )
     .await
+}
+
+#[tauri::command]
+pub fn codex_wakeup_pending_confirmations() -> Result<Vec<crate::modules::codex_wakeup_confirmation::ConfirmationRequest>, String> {
+    crate::modules::codex_wakeup_confirmation::list_pending()
+}
+
+#[tauri::command]
+pub fn codex_wakeup_respond_confirmation(request_id: String, approved: bool) -> Result<(), String> {
+    crate::modules::codex_wakeup_confirmation::respond(&request_id, approved)
 }
 
 #[tauri::command]

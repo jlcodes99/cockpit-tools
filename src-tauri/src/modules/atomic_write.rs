@@ -236,6 +236,25 @@ pub fn write_string_atomic(path: &Path, content: &str) -> Result<(), String> {
     write_string_atomic_internal(path, content, true)
 }
 
+/// Read, merge and replace under the same path lock used by ordinary writers.
+pub(crate) fn update_string_atomic<F>(path: &Path, build_content: F) -> Result<(), String>
+where
+    F: FnOnce(Option<&str>) -> Result<String, String>,
+{
+    let lock = path_write_lock(path)?;
+    let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
+    let current = match fs::read_to_string(path) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format_io_error("读取待更新文件", path, &error)),
+    };
+    let content = build_content(current.as_deref())?;
+    if current.as_deref() == Some(content.as_str()) {
+        return Ok(());
+    }
+    write_string_atomic_internal(path, &content, true)
+}
+
 /// Atomically replace credential material without creating a plaintext .bak file.
 pub fn write_secret_string_atomic(path: &Path, content: &str) -> Result<(), String> {
     let lock = path_write_lock(path)?;
@@ -278,6 +297,32 @@ where
     }
     let content = build_content()?;
     write_string_atomic_internal(path, &content, true)?;
+    Ok(true)
+}
+
+/// Compare exact bytes under the shared path lock; absence is a real expected state.
+/// Used by recoverable multi-file transactions so rollback cannot replace newer edits.
+pub(crate) fn replace_secret_string_if_matches(
+    path: &Path,
+    expected: Option<&str>,
+    replacement: Option<&str>,
+) -> Result<bool, String> {
+    let lock = path_write_lock(path)?;
+    let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
+    let current = match fs::read_to_string(path) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format_io_error("读取事务文件", path, &error)),
+    };
+    if current.as_deref() != expected { return Ok(false); }
+    match replacement {
+        Some(content) => write_secret_string_atomic_internal(path, content)?,
+        None => match fs::remove_file(path) {
+            Ok(()) => {},
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            Err(error) => return Err(format_io_error("回滚事务文件", path, &error)),
+        },
+    }
     Ok(true)
 }
 

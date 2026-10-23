@@ -274,6 +274,12 @@ func (s *Service) prepareCoreAuthForModelRegistration(ctx context.Context, auth 
 		return nil
 	}
 	auth = auth.Clone()
+	if s.hooks.OnAuthPrepared != nil {
+		if err := s.hooks.OnAuthPrepared(auth); err != nil {
+			log.Errorf("runtime auth projection rejected: %v", err)
+			return nil
+		}
+	}
 	s.ensureExecutorsForAuthWithContext(ctx, auth, false)
 
 	// IMPORTANT: Update coreManager FIRST, before model registration.

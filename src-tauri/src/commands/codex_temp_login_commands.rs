@@ -5,17 +5,13 @@
 
 /// 打开官方客户端完成一次登录：使用一次性的空白临时 profile。
 ///
-/// 读取到登录信息后会立即关闭官方客户端并清理临时 profile（含 macOS 钥匙串条目），
-/// 成功、失败、取消都会走同一套清理逻辑；进度通过 codex:temp-login-progress 事件回传。
-///
-/// `intercept_auth_url` 为 true 时，官方客户端的"打开浏览器"会被接管：授权地址直接
-/// 显示在弹框里（地址由官方生成，不做改写），不再弹浏览器；关闭时完全走官方原生流程。
+/// 关闭临时客户端后读取最终凭据，导入成功后清理临时 profile 和对应认证条目。
+/// 失败保留凭据供重试，明确取消则丢弃；进度通过 codex:temp-login-progress 回传。
 #[tauri::command]
 pub fn start_codex_temp_login(
     app: AppHandle,
-    intercept_auth_url: bool,
 ) -> Result<crate::modules::codex_temp_login::CodexTempLoginSession, String> {
-    crate::modules::codex_temp_login::start(app, intercept_auth_url)
+    crate::modules::codex_temp_login::start(app)
 }
 
 /// 取消官方客户端登录（仍会关闭客户端并清理临时 profile）。
@@ -24,19 +20,17 @@ pub fn cancel_codex_temp_login(session_id: String) -> Result<(), String> {
     crate::modules::codex_temp_login::cancel(session_id.as_str())
 }
 
-/// 用默认浏览器打开本次会话截获到的官方授权地址。
-///
-/// 地址由官方客户端生成并原样保存，这里只校验官方域名后交给系统浏览器。
 #[tauri::command]
-pub fn open_codex_temp_login_auth_url(app: AppHandle, url: String) -> Result<(), String> {
-    crate::modules::codex_temp_login::open_captured_auth_url(&app, url.as_str())
+pub fn retry_codex_temp_login_import(
+    app: AppHandle,
+    session_id: String,
+) -> Result<crate::modules::codex_temp_login::CodexTempLoginSession, String> {
+    crate::modules::codex_temp_login::retry_import(app, &session_id)
 }
 
 /// 手动触发一次残留清理（正常由启动巡检与定期巡检自动完成）。
 #[tauri::command]
-pub fn cleanup_codex_temp_login_artifacts() -> Result<
-    crate::modules::codex_temp_login::CodexTempLoginCleanupReport,
-    String,
-> {
+pub fn cleanup_codex_temp_login_artifacts(
+) -> Result<crate::modules::codex_temp_login::CodexTempLoginCleanupReport, String> {
     Ok(crate::modules::codex_temp_login::cleanup_stale_sessions())
 }

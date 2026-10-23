@@ -33,13 +33,13 @@ export function useCodexProxyRuntimeStatus(accountId: string, revision: unknown,
   return { status: enabled ? status : null, failed: enabled && failed };
 }
 
-export function CodexProxyRuntimeStatusPanel({ accountId, revision }: { accountId: string; revision: unknown }) {
+export function CodexProxyRuntimeStatusPanel({ accountId, revision, desktopOnly = false }: { accountId: string; revision: unknown; desktopOnly?: boolean }) {
   const { t } = useTranslation();
   const { status, failed } = useCodexProxyRuntimeStatus(accountId, revision);
   return <section className="codex-proxy-runtime" aria-label={t('codex.proxy.runtimeTitle')}>
     <strong>{t('codex.proxy.runtimeTitle')}</strong>
     {status ? <div className="codex-proxy-runtime-rows">
-      {proxyRuntimeRows(status).map((row) => <div key={row.kind} className={`codex-proxy-runtime-item is-${row.state}`}>
+      {proxyRuntimeRows(status, desktopOnly).map((row) => <div key={row.kind} className={`codex-proxy-runtime-item is-${row.state}`}>
         {t(proxyRuntimeLabelKey(row.kind))}
         <b>{row.state ? t(`codex.proxy.runtime_${row.state}`) : '—'}</b><CodexProxyRuntimePort row={row} />
         {row.node && <small className="codex-proxy-runtime-node">{t('codex.proxy.catalog.actualNode', { name: row.node })}</small>}

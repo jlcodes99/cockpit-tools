@@ -235,8 +235,8 @@ fn sqlite_provider_ids(db_path: &Path) -> Result<Vec<String>, String> {
 
 fn collect_rollout_provider_changes(
     data_dir: &Path,
-    target_provider: &str,
-    options: CodexSessionVisibilityRepairOptions,
+    _target_provider: &str,
+    _options: CodexSessionVisibilityRepairOptions,
     selection: &RepairTargetSelection,
 ) -> Result<Vec<RolloutProviderChange>, String> {
     let non_root_thread_ids = collect_non_root_thread_ids(&provider_sync_sqlite_paths(data_dir))?;
@@ -259,14 +259,8 @@ fn collect_rollout_provider_changes(
         }
         let rollout_paths = list_rollout_files(&root_dir)?;
         for rollout_path in rollout_paths {
-            let rewrite = if options.rewrite_all_session_meta {
-                let Some(content) = read_rollout_text(&rollout_path)? else {
-                    continue;
-                };
-                rewrite_rollout_session_meta_providers(&content, target_provider)?
-            } else {
-                rewrite_rollout_first_session_meta_provider(&rollout_path, target_provider)?
-            };
+            let Some(content) = read_rollout_text(&rollout_path)? else { continue; };
+            let rewrite = scan_rollout_session_meta_providers(&content)?;
             if rewrite.session_meta_count == 0 {
                 continue;
             }
@@ -299,18 +293,16 @@ fn collect_rollout_provider_changes(
                 fallback_modified_ms,
             )
             .and_then(modules::codex_session_file_time::system_time_from_unix_millis);
-            let current_modified_at =
-                modules::codex_session_file_time::read_modified_time(&rollout_path);
-            let source_size = fs::metadata(&rollout_path)
-                .map(|metadata| metadata.len())
-                .unwrap_or(0);
-            let provider_matches = !rewrite.rewrite_needed;
+            let source_metadata = fs::metadata(&rollout_path).map_err(|error| format!("{}: {}", rollout_path.display(), error))?;
+            let current_modified_at = source_metadata.modified().ok();
+            let source_size = source_metadata.len();
+            let source_identity = rollout_timestamp_identity(&source_metadata);
             let modified_time_matches = target_modified_at.is_none()
                 || modules::codex_session_file_time::same_modified_time_millis(
                     current_modified_at,
                     target_modified_at,
                 );
-            if provider_matches && modified_time_matches {
+            if modified_time_matches {
                 continue;
             }
 
@@ -320,10 +312,10 @@ fn collect_rollout_provider_changes(
             changes.push(RolloutProviderChange {
                 relative_path: relative_path.to_path_buf(),
                 absolute_path: rollout_path,
-                updated_content: rewrite.updated_content,
                 target_modified_at,
                 source_modified_at: current_modified_at,
                 source_size,
+                source_identity,
             });
         }
     }
@@ -340,6 +332,7 @@ fn collect_referenced_rollout_provider_changes(
 ) -> Result<Vec<RolloutProviderChange>, String> {
     let mut candidates: HashMap<PathBuf, Option<SystemTime>> = HashMap::new();
     for db_path in sqlite_candidate_paths_for_options(data_dir, options) {
+        check_launch_visibility_budget("scan_rollout_references")?;
         collect_referenced_rollout_paths_for_db(
             data_dir,
             &db_path,
@@ -351,21 +344,16 @@ fn collect_referenced_rollout_provider_changes(
     }
 
     let mut changes = Vec::new();
-    for (rollout_path, target_modified_at) in candidates {
+    for (index, (rollout_path, target_modified_at)) in candidates.into_iter().enumerate() {
+        check_launch_visibility_budget("scan_rollout_headers")?;
+        if index % 64 == 0 {
+            std::thread::yield_now();
+        }
         if !rollout_path.exists() || !is_plain_rollout_file(&rollout_path) {
             continue;
         }
-        let rewrite = if options.rewrite_all_session_meta {
-            let Some(content) = read_rollout_text(&rollout_path)? else {
-                continue;
-            };
-            rewrite_rollout_session_meta_providers(&content, target_provider)?
-        } else {
-            rewrite_rollout_first_session_meta_provider(&rollout_path, target_provider)?
-        };
-        if rewrite.session_meta_count == 0 || !rewrite.rewrite_needed {
-            continue;
-        }
+        let rewrite = scan_rollout_first_session_meta_provider(&rollout_path)?;
+        if rewrite.session_meta_count == 0 { continue; }
         if rewrite.non_root_agent {
             continue;
         }
@@ -381,18 +369,18 @@ fn collect_referenced_rollout_provider_changes(
             ));
             continue;
         };
-        let source_modified_at =
-            modules::codex_session_file_time::read_modified_time(&rollout_path);
-        let source_size = fs::metadata(&rollout_path)
-            .map(|metadata| metadata.len())
-            .unwrap_or(0);
+        let source_metadata = fs::metadata(&rollout_path).map_err(|error| format!("{}: {}", rollout_path.display(), error))?;
+        let source_modified_at = source_metadata.modified().ok();
+        if target_modified_at.is_none() || modules::codex_session_file_time::same_modified_time_millis(source_modified_at, target_modified_at) { continue; }
+        let source_size = source_metadata.len();
+        let source_identity = rollout_timestamp_identity(&source_metadata);
         changes.push(RolloutProviderChange {
             relative_path,
             absolute_path: rollout_path,
-            updated_content: rewrite.updated_content,
             target_modified_at,
             source_modified_at,
             source_size,
+            source_identity,
         });
     }
 
@@ -425,6 +413,7 @@ fn collect_referenced_rollout_paths_for_db(
             ));
         }
     };
+    configure_launch_visibility_connection(&connection)?;
 
     let mut table_info = connection
         .prepare("PRAGMA table_info(threads)")
@@ -503,6 +492,7 @@ fn collect_referenced_rollout_paths_for_db(
         })?;
 
     for row in rows {
+        check_launch_visibility_budget("read_rollout_references")?;
         let (thread_id, rollout_path, updated_at, updated_at_ms) = row.map_err(|error| {
             format_sqlite_read_error(db_path, "读取 SQLite rollout 引用失败", &error)
         })?;
@@ -527,180 +517,46 @@ fn collect_referenced_rollout_paths_for_db(
     Ok(())
 }
 
+// Rollouts are append-only byte-addressed history. Providers and item IDs
+// must be normalized outside these files, even when no history DB is visible.
 #[derive(Debug, Default)]
 struct RolloutProviderRewrite {
-    updated_content: Option<RolloutProviderUpdate>,
-    rewrite_needed: bool,
     thread_id: Option<String>,
     session_meta_count: usize,
     non_root_agent: bool,
     providers: HashSet<String>,
 }
 
-fn rewrite_rollout_session_meta_providers(
-    content: &str,
-    target_provider: &str,
-) -> Result<RolloutProviderRewrite, String> {
-    let mut rewrite = RolloutProviderRewrite::default();
-    let mut next_content = String::new();
-    for segment in content.split_inclusive('\n') {
-        let (line, line_ending) = split_line_ending(segment);
-        let mut next_line = line.to_string();
-        if !line.trim().is_empty() {
-            if let Ok(mut record) = serde_json::from_str::<JsonValue>(line) {
-                if record.get("type").and_then(JsonValue::as_str) == Some("session_meta") {
-                    let Some(payload) =
-                        record.get_mut("payload").and_then(JsonValue::as_object_mut)
-                    else {
-                        next_content.push_str(&next_line);
-                        next_content.push_str(line_ending);
-                        continue;
-                    };
-                    rewrite.session_meta_count += 1;
-                    rewrite.non_root_agent |= payload
-                        .get("source")
-                        .is_some_and(source_value_marks_non_root_agent);
-                    if let Some(provider) = payload
-                        .get("model_provider")
-                        .and_then(JsonValue::as_str)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                    {
-                        rewrite.providers.insert(provider.to_string());
-                    }
-                    if rewrite.thread_id.is_none() {
-                        rewrite.thread_id = payload
-                            .get("id")
-                            .or_else(|| payload.get("session_id"))
-                            .and_then(JsonValue::as_str)
-                            .map(str::to_string);
-                    }
-                    if payload.get("model_provider").and_then(JsonValue::as_str)
-                        != Some(target_provider)
-                    {
-                        payload.insert(
-                            "model_provider".to_string(),
-                            JsonValue::String(target_provider.to_string()),
-                        );
-                        next_line = serde_json::to_string(&record)
-                            .map_err(|error| format!("序列化 session_meta 失败: {}", error))?;
-                        rewrite.rewrite_needed = true;
-                    }
-                } else if record.get("type").and_then(JsonValue::as_str) == Some("response_item")
-                    && normalize_rollout_response_item_id(&mut record)
-                {
-                    next_line = serde_json::to_string(&record)
-                        .map_err(|error| format!("序列化 response_item 失败: {}", error))?;
-                    rewrite.rewrite_needed = true;
-                }
+fn scan_rollout_session_meta_providers(content: &str) -> Result<RolloutProviderRewrite, String> {
+    let mut facts = RolloutProviderRewrite::default();
+    for line in content.lines() {
+        if let Ok(record) = serde_json::from_str::<JsonValue>(line) {
+            if record.get("type").and_then(JsonValue::as_str) == Some("session_meta") {
+                scan_session_meta_record(&record, &mut facts);
             }
         }
-        next_content.push_str(&next_line);
-        next_content.push_str(line_ending);
     }
-    if !content.ends_with('\n') && next_content.ends_with('\n') {
-        next_content.pop();
-    }
-    if rewrite.rewrite_needed {
-        rewrite.updated_content = Some(RolloutProviderUpdate::FullContent(next_content));
-    }
-    Ok(rewrite)
+    Ok(facts)
 }
 
-/// Codes 客户端会把上游返回的 item id 原样落盘。第三方上游经常返回不带官方前缀
-/// 的 id，或在自定义工具调用上返回 `fc_` 前缀。切回官方账号后重放这类历史会被
-/// 官方接口以 `invalid_id_prefix` 整包拒绝，所以这里按条目类型补齐官方前缀。
-fn normalize_rollout_response_item_id(record: &mut JsonValue) -> bool {
-    let Some(payload) = record.get_mut("payload").and_then(JsonValue::as_object_mut) else {
-        return false;
-    };
-    let Some(prefix) = payload
-        .get("type")
-        .and_then(JsonValue::as_str)
-        .and_then(rollout_response_item_id_prefix)
-    else {
-        return false;
-    };
-    let Some(id) = payload
-        .get("id")
-        .and_then(JsonValue::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return false;
-    };
-    if id.starts_with(&format!("{prefix}_")) {
-        return false;
+fn scan_rollout_first_session_meta_provider(path: &Path) -> Result<RolloutProviderRewrite, String> {
+    let mut facts = RolloutProviderRewrite::default();
+    if let Some((line, _)) = read_first_line(path)? {
+        if let Some(record) = parse_session_meta_record(&line) {
+            scan_session_meta_record(&record, &mut facts);
+        }
     }
-    let normalized = format!("{prefix}_{id}");
-    payload.insert("id".to_string(), JsonValue::String(normalized));
-    true
+    Ok(facts)
 }
 
-fn rollout_response_item_id_prefix(item_type: &str) -> Option<&'static str> {
-    match item_type {
-        "message" => Some("msg"),
-        "reasoning" => Some("rs"),
-        "function_call" => Some("fc"),
-        "function_call_output" => Some("fco"),
-        "custom_tool_call" => Some("ctc"),
-        "custom_tool_call_output" => Some("ctco"),
-        _ => None,
+fn scan_session_meta_record(record: &JsonValue, facts: &mut RolloutProviderRewrite) {
+    let Some(payload) = record.get("payload").and_then(JsonValue::as_object) else { return; };
+    facts.session_meta_count += 1;
+    facts.non_root_agent |= payload.get("source").is_some_and(source_value_marks_non_root_agent);
+    if let Some(provider) = payload.get("model_provider").and_then(JsonValue::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+        facts.providers.insert(provider.to_string());
     }
-}
-
-fn rewrite_rollout_first_session_meta_provider(
-    path: &Path,
-    target_provider: &str,
-) -> Result<RolloutProviderRewrite, String> {
-    let Some((first_line, _separator)) = read_first_line(path)? else {
-        return Ok(RolloutProviderRewrite::default());
-    };
-    let Some(mut record) = parse_session_meta_record(&first_line) else {
-        return Ok(RolloutProviderRewrite::default());
-    };
-    let thread_id = session_meta_id(&record);
-    let current_provider = record
-        .get("payload")
-        .and_then(|payload| payload.get("model_provider"))
-        .and_then(JsonValue::as_str)
-        .unwrap_or("");
-    let non_root_agent = record
-        .get("payload")
-        .and_then(|payload| payload.get("source"))
-        .is_some_and(source_value_marks_non_root_agent);
-    let providers = (!current_provider.is_empty())
-        .then(|| current_provider.to_string())
-        .into_iter()
-        .collect();
-    if current_provider == target_provider {
-        return Ok(RolloutProviderRewrite {
-            updated_content: None,
-            rewrite_needed: false,
-            thread_id,
-            session_meta_count: 1,
-            non_root_agent,
-            providers,
-        });
-    }
-
-    let Some(payload) = record.get_mut("payload").and_then(JsonValue::as_object_mut) else {
-        return Ok(RolloutProviderRewrite::default());
-    };
-    payload.insert(
-        "model_provider".to_string(),
-        JsonValue::String(target_provider.to_string()),
-    );
-    let updated_first_line = serde_json::to_string(&record)
-        .map_err(|error| format!("序列化 session_meta 失败: {}", error))?;
-    Ok(RolloutProviderRewrite {
-        updated_content: Some(RolloutProviderUpdate::FirstLine(updated_first_line)),
-        rewrite_needed: true,
-        thread_id,
-        session_meta_count: 1,
-        non_root_agent,
-        providers,
-    })
+    if facts.thread_id.is_none() { facts.thread_id = session_meta_id(record); }
 }
 
 fn source_value_marks_non_root_agent(source: &JsonValue) -> bool {
@@ -724,13 +580,25 @@ fn source_text_marks_non_root_agent(source: &str) -> bool {
 }
 
 fn read_first_line(path: &Path) -> Result<Option<(String, String)>, String> {
+    check_launch_visibility_budget("read_rollout_header")?;
     let file = fs::File::open(path)
         .map_err(|error| format!("打开 rollout 文件失败 ({}): {}", path.display(), error))?;
-    let mut reader = BufReader::new(file);
+    // Limit only the launch path. Manual repair keeps its historical semantics;
+    // a malformed multi-GB first line must never be allocated during switching.
+    let limit = launch_visibility_budget()
+        .map(|_| MAX_LAUNCH_ROLLOUT_FIRST_LINE_BYTES + 1)
+        .unwrap_or(u64::MAX);
+    let mut reader = BufReader::new(std::io::Read::take(file, limit));
     let mut buffer = Vec::new();
     let bytes_read = reader
         .read_until(b'\n', &mut buffer)
         .map_err(|error| format!("读取 rollout 首行失败 ({}): {}", path.display(), error))?;
+    check_launch_visibility_budget("read_rollout_header")?;
+    if launch_visibility_budget().is_some()
+        && bytes_read as u64 > MAX_LAUNCH_ROLLOUT_FIRST_LINE_BYTES
+    {
+        return Err(format!("{LAUNCH_VISIBILITY_LINE_TOO_LARGE}: {}", path.display()));
+    }
     if bytes_read == 0 {
         return Ok(None);
     }

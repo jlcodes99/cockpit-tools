@@ -54,14 +54,13 @@ fn cookies_db_has_required_desktop_session(cookies_path: &Path) -> Result<bool, 
     if !cookies_path.exists() {
         return Ok(false);
     }
-    let conn = Connection::open_with_flags(cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| {
-            format!(
-                "读取 Claude Cookies 失败: path={}, error={}",
-                cookies_path.display(),
-                e
-            )
-        })?;
+    let conn = open_desktop_cookie_snapshot(cookies_path).map_err(|e| {
+        format!(
+            "读取 Claude Cookies 失败: path={}, error={}",
+            cookies_path.display(),
+            e
+        )
+    })?;
     let count: i64 = conn
         .query_row(
             "select count(distinct name) from cookies \
@@ -154,14 +153,13 @@ fn desktop_profile_metadata_from_cookies_db(
     source: &str,
 ) -> Result<ClaudeDesktopProfileMetadata, String> {
     let cookies_path = desktop_cookies_path(profile_dir);
-    let conn = Connection::open_with_flags(&cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| {
-            format!(
-                "读取 Claude Cookies 失败: path={}, error={}",
-                cookies_path.display(),
-                e
-            )
-        })?;
+    let conn = open_desktop_cookie_snapshot(&cookies_path).map_err(|e| {
+        format!(
+            "读取 Claude Cookies 失败: path={}, error={}",
+            cookies_path.display(),
+            e
+        )
+    })?;
     let mut stmt = conn
         .prepare(
             "select name, value, coalesce(length(encrypted_value), 0), expires_utc from cookies \
@@ -619,14 +617,13 @@ fn read_decrypted_desktop_cookie_export(
         return Err(format!("Claude Cookies 不存在: {}", cookies_path.display()));
     }
     let password = read_claude_safe_storage_password()?;
-    let conn = Connection::open_with_flags(&cookies_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| {
-            format!(
-                "读取 Claude Cookies 失败: path={}, error={}",
-                cookies_path.display(),
-                e
-            )
-        })?;
+    let conn = open_desktop_cookie_snapshot(&cookies_path).map_err(|e| {
+        format!(
+            "读取 Claude Cookies 失败: path={}, error={}",
+            cookies_path.display(),
+            e
+        )
+    })?;
     let mut stmt = conn
         .prepare(
             "select host_key, path, name, value, encrypted_value, expires_utc, is_secure, is_httponly \
@@ -1474,13 +1471,15 @@ fn copy_path_overwrite(src: &Path, dst: &Path) -> Result<(), String> {
             })?;
         }
         remove_path_if_exists(dst)?;
-        fs::copy(src, dst).map_err(|e| {
-            format!(
+        crate::modules::profile_file_copy::copy_profile_file(src, dst).map_err(|e| {
+            let error = format!(
                 "复制文件失败: from={}, to={}, error={}",
                 src.display(),
                 dst.display(),
                 e
-            )
+            );
+            logger::log_warn(&format!("[Claude Profile] {}", error));
+            error
         })?;
     }
     Ok(())
@@ -1955,7 +1954,7 @@ const CLAUDE_DESKTOP_LOCK_SENSITIVE_PATHS: &[&str] = &[
     "Session Storage/LOCK",
 ];
 
-/// 用与备份完全相同的 `fs::copy` 路径探测独占锁：复制到临时文件成功才算解锁。
+/// 用与备份完全相同的复制路径探测独占锁：复制到临时文件成功才算解锁。
 ///
 /// 不能用 `File::open` 之类的宽松探测代替——Windows 上 Chromium 允许共享读，
 /// 真正会失败的是复制（`CopyFileEx`），只有走同一条路径才能反映备份的真实结果。
@@ -1971,7 +1970,7 @@ fn find_locked_desktop_profile_path(target_dir: &Path) -> Option<(PathBuf, Strin
             now_ts_ms(),
             index
         ));
-        let result = fs::copy(&source, &probe_path);
+        let result = crate::modules::profile_file_copy::copy_profile_file(&source, &probe_path);
         let _ = fs::remove_file(&probe_path);
         if let Err(error) = result {
             return Some((source, error.to_string()));
@@ -1980,11 +1979,7 @@ fn find_locked_desktop_profile_path(target_dir: &Path) -> Option<(PathBuf, Strin
     None
 }
 
-fn wait_for_desktop_profile_release(
-    target_dir: &Path,
-    attempts: usize,
-    interval_ms: u64,
-) -> bool {
+fn wait_for_desktop_profile_release(target_dir: &Path, attempts: usize, interval_ms: u64) -> bool {
     for _ in 0..attempts {
         if find_locked_desktop_profile_path(target_dir).is_none() {
             return true;

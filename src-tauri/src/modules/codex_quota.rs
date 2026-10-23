@@ -136,6 +136,7 @@ pub(crate) fn is_local_proxy_error(message: &str) -> bool {
                 | "PROXY_CLIENT_FAILED"
                 | "PROXY_INVALID_URL"
                 | "PROXY_UNSUPPORTED_PROTOCOL"
+                | "PROXY_ENGINE_CONFIG_INVALID"
                 | "PROXY_RESOURCE_INVALID"
                 | "PROXY_UNSUPPORTED_OPTION"
                 | "PROXY_RESOURCE_SELECTION_REQUIRED"
@@ -150,7 +151,7 @@ pub(crate) fn is_local_proxy_error(message: &str) -> bool {
 
 /// Returns whether persistence is needed. Local infrastructure failures leave
 /// both cached quota and any genuine upstream error untouched.
-fn write_quota_error(account: &mut CodexAccount, message: String) -> bool {
+pub(crate) fn write_quota_error(account: &mut CodexAccount, message: String) -> bool {
     if is_local_proxy_error(&message) {
         if account
             .quota_error
@@ -167,6 +168,7 @@ fn write_quota_error(account: &mut CodexAccount, message: String) -> bool {
         message,
         timestamp: chrono::Utc::now().timestamp(),
     });
+    codex_account::observe_known_access_token_revocation(account);
     true
 }
 
@@ -174,7 +176,7 @@ fn write_quota_error(account: &mut CodexAccount, message: String) -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct WindowInfo {
     #[serde(rename = "used_percent")]
-    used_percent: Option<i32>,
+    used_percent: Option<f64>,
     #[serde(rename = "limit_window_seconds")]
     limit_window_seconds: Option<i64>,
     #[serde(rename = "reset_after_seconds")]
@@ -225,10 +227,12 @@ fn normalize_remaining_percentage(window: &WindowInfo) -> Result<i32, String> {
     let used = window
         .used_percent
         .ok_or_else(|| "配额窗口缺少 used_percent".to_string())?;
-    if !(0..=100).contains(&used) {
+    if !used.is_finite() || !(0.0..=100.0).contains(&used) {
         return Err(format!("配额窗口 used_percent 超出范围: {}", used));
     }
-    Ok(100 - used)
+    // Keep a positive fractional allowance usable. Integer reserve thresholds
+    // retain their exact boundary under ceil; raw_data keeps full precision.
+    Ok((100.0 - used).ceil() as i32)
 }
 
 fn normalize_window_minutes(window: &WindowInfo) -> Option<i64> {
@@ -1038,11 +1042,19 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
             error_message.push_str(&format!(" [error_code:{}]", code));
         }
         error_message.push_str(&format!(" [body_len:{}]", body_len));
+        if let Some(value) = headers.get("retry-after").and_then(|v| v.to_str().ok()) {
+            let seconds = value.parse::<u64>().ok().or_else(|| chrono::DateTime::parse_from_rfc2822(value).ok()
+                .map(|at| at.timestamp().saturating_sub(chrono::Utc::now().timestamp()).max(0) as u64));
+            if let Some(seconds) = seconds {
+                error_message.push_str(&format!(" [retry_after_seconds:{}]", seconds));
+            }
+        }
         append_http_error_diagnostics(&mut error_message, &headers, &body);
         return Err(error_message);
     }
 
     // 解析响应
+    validate_usage_identity(account, &body)?;
     let usage: UsageResponse =
         serde_json::from_str(&body).map_err(|e| format!("解析 JSON 失败: {}", e))?;
 
@@ -1050,6 +1062,21 @@ pub async fn fetch_quota(account: &CodexAccount) -> Result<FetchQuotaResult, Str
     let plan_type = usage.plan_type.clone();
 
     Ok(FetchQuotaResult { quota, plan_type })
+}
+
+fn validate_usage_identity(account: &CodexAccount, body: &str) -> Result<(), String> {
+    let payload: serde_json::Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+    for (key, expected) in [
+        ("account_id", account.account_id.as_deref()),
+        ("user_id", account.user_id.as_deref()),
+    ] {
+        if let (Some(expected), Some(actual)) = (expected, payload.get(key).and_then(|v| v.as_str())) {
+            if expected != actual {
+                return Err("CODEX_QUOTA_IDENTITY_MISMATCH".into());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// 从使用率响应中解析配额信息
@@ -1500,7 +1527,7 @@ pub async fn fetch_account_reset_credits(
         refresh_account_tokens(&mut account, "查询主动重置记录前 Token 已过期").await?;
         sync_subscription_expiry_from_current_id_token(&mut account);
         normalize_subscription_retry_state(&mut account);
-        codex_account::save_account(&account)?;
+        codex_account::save_account_preserving_egress_proxy(&account)?;
     }
 
     match fetch_reset_credits(&account).await {
@@ -1509,7 +1536,7 @@ pub async fn fetch_account_reset_credits(
             refresh_account_tokens(&mut account, "主动重置记录接口返回 401").await?;
             sync_subscription_expiry_from_current_id_token(&mut account);
             normalize_subscription_retry_state(&mut account);
-            codex_account::save_account(&account)?;
+            codex_account::save_account_preserving_egress_proxy(&account)?;
             fetch_reset_credits(&account).await
         }
         Err(error) => Err(error),
@@ -1580,7 +1607,7 @@ pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
         refresh_account_tokens(&mut account, "主动重置前 Token 已过期").await?;
         sync_subscription_expiry_from_current_id_token(&mut account);
         normalize_subscription_retry_state(&mut account);
-        codex_account::save_account(&account)?;
+        codex_account::save_account_preserving_egress_proxy(&account)?;
     }
 
     let redeem_request_id = uuid::Uuid::new_v4().to_string();
@@ -1590,7 +1617,7 @@ pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
             refresh_account_tokens(&mut account, "主动重置接口返回 401").await?;
             sync_subscription_expiry_from_current_id_token(&mut account);
             normalize_subscription_retry_state(&mut account);
-            codex_account::save_account(&account)?;
+            codex_account::save_account_preserving_egress_proxy(&account)?;
             post_reset_credit_once(&account, &redeem_request_id).await
         }
         Err(error) => Err(error),
@@ -1647,6 +1674,7 @@ async fn refresh_account_quota_once(
     account_id: &str,
     options: RefreshQuotaOptions,
     runtime_snapshot: &codex_account::CodexQuotaRuntimeSnapshot,
+    quota_only: bool,
 ) -> Result<CodexQuota, String> {
     let mut account = match codex_account::prepare_account_for_quota_query_with_runtime_snapshot(
         account_id,
@@ -1670,7 +1698,7 @@ async fn refresh_account_quota_once(
             }
             if let Some(mut stored_account) = codex_account::load_account(account_id) {
                 if write_quota_error(&mut stored_account, error.clone()) {
-                    if let Err(save_error) = codex_account::save_account(&stored_account) {
+                    if let Err(save_error) = codex_account::save_account_preserving_egress_proxy(&stored_account) {
                         logger::log_warn(&format!(
                             "准备 Codex 账号失败后写入配额错误失败: {}",
                             save_error
@@ -1687,7 +1715,7 @@ async fn refresh_account_quota_once(
                 Ok(result) => result,
                 Err(e) => {
                     if write_quota_error(&mut account, e.clone()) {
-                        if let Err(save_err) = codex_account::save_account(&account) {
+                        if let Err(save_err) = codex_account::save_account_preserving_egress_proxy(&account) {
                             logger::log_warn(&format!("写入 Cockpit Api 配额错误失败: {}", save_err));
                         }
                     }
@@ -1701,13 +1729,14 @@ async fn refresh_account_quota_once(
             account.replace_quota_preserving_team_history(result.quota.clone(), now_timestamp());
             account.quota_error = None;
             account.usage_updated_at = Some(now_timestamp());
-            codex_account::save_account(&account)?;
+            codex_account::save_account_preserving_egress_proxy(&account)?;
+            crate::modules::codex_quota_sync::publish(&account);
             return Ok(result.quota);
         }
         account.quota = None;
         account.quota_error = None;
         account.usage_updated_at = None;
-        let _ = codex_account::save_account(&account);
+        let _ = codex_account::save_account_preserving_egress_proxy(&account);
         return Err("API Key 账号不支持刷新配额，请在网页端查看。".to_string());
     }
     if account.is_agent_identity_auth() {
@@ -1715,7 +1744,7 @@ async fn refresh_account_quota_once(
             Ok(result) => result,
             Err(error) => {
                 if write_quota_error(&mut account, error.clone()) {
-                    if let Err(save_error) = codex_account::save_account(&account) {
+                    if let Err(save_error) = codex_account::save_account_preserving_egress_proxy(&account) {
                         logger::log_warn(&format!("写入 Agent Identity 配额错误失败: {}", save_error));
                     }
                 }
@@ -1729,7 +1758,8 @@ async fn refresh_account_quota_once(
         account.replace_quota_preserving_team_history(result.quota.clone(), now_timestamp());
         account.quota_error = None;
         account.usage_updated_at = Some(now_timestamp());
-        codex_account::save_account(&account)?;
+        codex_account::save_account_preserving_egress_proxy(&account)?;
+        crate::modules::codex_quota_sync::publish(&account);
         return Ok(result.quota);
     }
 
@@ -1742,13 +1772,13 @@ async fn refresh_account_quota_once(
                 sync_subscription_expiry_from_current_id_token(&mut account);
                 normalize_subscription_retry_state(&mut account);
 
-                codex_account::save_account(&account)?;
+                codex_account::save_account_preserving_egress_proxy(&account)?;
             }
             Err(e) => {
                 logger::log_error(&format!("账号 {} Token 刷新失败: {}", account.email, e));
                 let message = e;
                 if write_quota_error(&mut account, message.clone()) {
-                    if let Err(save_err) = codex_account::save_account(&account) {
+                    if let Err(save_err) = codex_account::save_account_preserving_egress_proxy(&account) {
                         logger::log_warn(&format!("写入 Codex 配额错误失败: {}", save_err));
                     }
                 }
@@ -1760,12 +1790,24 @@ async fn refresh_account_quota_once(
     let subscription_options = SubscriptionRefreshOptions {
         force: options.force_subscription_refresh,
     };
+    let quota_query_started = std::time::Instant::now();
     let result = match fetch_quota(&account).await {
         Ok(result) => result,
         Err(e) => {
+            if quota_only {
+                let original = account.clone();
+                let error = e.clone();
+                let saved = tokio::task::spawn_blocking(move || {
+                    codex_account::save_quota_sync_failure(&original, error, quota_query_started)
+                }).await;
+                if !matches!(saved, Ok(Ok(()))) {
+                    logger::log_warn("[Codex Quota Sync] failed to persist refresh failure");
+                }
+                return Err(e);
+            }
             // Retrying subscription through an unavailable local proxy only adds
             // more work to the same saturated resource and cannot repair quota.
-            if !is_local_proxy_error(&e) {
+            if !quota_only && !is_local_proxy_error(&e) {
                 if let Err(subscription_error) =
                     refresh_subscription_state(&mut account, subscription_options).await
                 {
@@ -1776,7 +1818,7 @@ async fn refresh_account_quota_once(
                 }
             }
             if write_quota_error(&mut account, e.clone()) {
-                if let Err(save_err) = codex_account::save_account(&account) {
+                if let Err(save_err) = codex_account::save_account_preserving_egress_proxy(&account) {
                     logger::log_warn(&format!("写入 Codex 配额错误失败: {}", save_err));
                 }
             }
@@ -1784,11 +1826,23 @@ async fn refresh_account_quota_once(
         }
     };
 
-    // 从 usage 响应中的 plan_type 更新订阅标识
-    if result.plan_type.is_some() {
-        sync_subscription_from_token(&mut account, result.plan_type.clone(), None);
+    // Commit only quota fields against the current credential/workspace identity.
+    // Notify every window before optional, potentially slow subscription work.
+    let original = account.clone();
+    let fresh_quota = result.quota.clone();
+    let fresh_plan = result.plan_type.clone();
+    account = tokio::task::spawn_blocking(move || {
+        codex_account::save_refreshed_quota(&original, fresh_quota, fresh_plan, quota_query_started)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    crate::modules::codex_local_access::confirm_gateway_quota_refresh(
+        account_id, &result.quota, quota_query_started,
+    );
+    if quota_only {
+        return Ok(result.quota);
     }
-
+    let before_subscription = account.clone();
     if let Err(subscription_error) =
         refresh_subscription_state(&mut account, subscription_options).await
     {
@@ -1798,10 +1852,11 @@ async fn refresh_account_quota_once(
         ));
     }
 
-    account.replace_quota_preserving_team_history(result.quota.clone(), now_timestamp());
-    account.quota_error = None;
-    account.usage_updated_at = Some(now_timestamp());
-    codex_account::save_account(&account)?;
+    tokio::task::spawn_blocking(move || {
+        codex_account::save_quota_subscription_maintenance(&before_subscription, &account)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     Ok(result.quota)
 }
@@ -1815,7 +1870,7 @@ async fn refresh_account_quota_with_runtime_snapshot(
         serde_json::json!({"account_id": account_id}),
     );
     let result =
-        refresh_account_quota_once(account_id, RefreshQuotaOptions::default(), runtime_snapshot)
+        refresh_account_quota_once(account_id, RefreshQuotaOptions::default(), runtime_snapshot, false)
             .await;
     crate::modules::codex_auth_diagnostic::log_event(
         "quota_refresh_flow_finished",
@@ -1840,6 +1895,39 @@ pub async fn refresh_account_quota(account_id: &str) -> Result<CodexQuota, Strin
 pub async fn refresh_account_quota_background(account_id: &str) -> Result<CodexQuota, String> {
     crate::modules::codex_quota_refresh_scheduler::refresh_account_background(account_id, None)
         .await
+}
+
+pub(crate) async fn refresh_active_account_quota(
+    account_id: &str,
+    runtime: Option<Arc<codex_account::CodexQuotaRuntimeSnapshot>>,
+) -> Result<CodexQuota, String> {
+    // Revalidate settings after queueing; disabling refresh must cancel pending sync.
+    let id = account_id.to_string();
+    let allowed = tokio::task::spawn_blocking(move || {
+        crate::modules::codex_quota_sync::is_eligible(&id)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if !allowed {
+        return Err("CODEX_QUOTA_SYNC_DISABLED".into());
+    }
+    let runtime = match runtime {
+        Some(runtime) => runtime,
+        None => Arc::new(codex_account::CodexQuotaRuntimeSnapshot::capture().await?),
+    };
+    let sync_started = std::time::Instant::now();
+    let mut result = refresh_account_quota_once(
+        account_id, RefreshQuotaOptions::default(), &runtime, true,
+    ).await;
+    if result.is_ok() && !crate::modules::codex_quota_sync::observed_since(account_id, sync_started) {
+        // Ownership deferral returns cached quota for existing manual callers.
+        // The activity worker must back off instead of treating it as a new GET.
+        result = Err("CODEX_QUOTA_SYNC_DEFERRED".into());
+    }
+    crate::modules::codex_local_access::reevaluate_bound_oauth_quota_reserve_after_refresh(
+        account_id, result.is_ok(),
+    ).await;
+    result
 }
 
 pub(crate) async fn refresh_account_quota_unqueued(
@@ -1879,13 +1967,14 @@ pub async fn refresh_freshly_authorized_account_quota(
         return Err("授权返回的 access_token 已过期，无法刷新配额".to_string());
     }
 
+    let query_started = std::time::Instant::now();
     let result = match fetch_quota(&account).await {
         Ok(result) => result,
         Err(error) => {
             if let Some(mut latest) = codex_account::load_account(account_id) {
                 if latest.token_generation == expected_token_generation {
                     if write_quota_error(&mut latest, error.clone()) {
-                        if let Err(save_error) = codex_account::save_account(&latest) {
+                        if let Err(save_error) = codex_account::save_account_preserving_egress_proxy(&latest) {
                             logger::log_warn(&format!(
                                 "写入 OAuth 授权后配额错误失败: account_id={}, error={}",
                                 account_id, save_error
@@ -1898,19 +1987,12 @@ pub async fn refresh_freshly_authorized_account_quota(
         }
     };
 
-    let mut latest = codex_account::load_account(account_id)
-        .ok_or_else(|| format!("账号不存在: {}", account_id))?;
-    if latest.token_generation != expected_token_generation {
-        return Err("配额请求期间账号凭据已发生变化，已丢弃旧请求结果".to_string());
-    }
-    if result.plan_type.is_some() {
-        sync_subscription_from_token(&mut latest, result.plan_type.clone(), None);
-    }
-    normalize_subscription_retry_state(&mut latest);
-    latest.replace_quota_preserving_team_history(result.quota.clone(), now_timestamp());
-    latest.quota_error = None;
-    latest.usage_updated_at = Some(now_timestamp());
-    codex_account::save_account(&latest)?;
+    let latest = codex_account::save_refreshed_quota(
+        &account, result.quota.clone(), result.plan_type.clone(), query_started,
+    )?;
+    let mut normalized = latest.clone();
+    normalize_subscription_retry_state(&mut normalized);
+    codex_account::save_quota_subscription_maintenance(&latest, &normalized)?;
 
     crate::modules::codex_local_access::reevaluate_bound_oauth_quota_reserve_after_refresh(
         account_id, true,
@@ -1933,7 +2015,7 @@ pub async fn refresh_account_quota_with_options(
     } else {
         codex_account::CodexQuotaRuntimeSnapshot::capture().await?
     };
-    let result = refresh_account_quota_once(account_id, options, &runtime_snapshot).await;
+    let result = refresh_account_quota_once(account_id, options, &runtime_snapshot, false).await;
     crate::modules::codex_local_access::reevaluate_bound_oauth_quota_reserve_after_refresh(
         account_id,
         result.is_ok(),
@@ -1975,7 +2057,7 @@ pub async fn refresh_account_subscription_info(
         account = codex_account::load_account(&account.id).unwrap_or(account);
         if quota.plan_type.is_some() {
             sync_subscription_from_token(&mut account, quota.plan_type, None);
-            codex_account::save_account(&account)?;
+            account = codex_account::save_account_preserving_egress_proxy(&account)?;
         }
         return Ok(account);
     }
@@ -1988,11 +2070,11 @@ pub async fn refresh_account_subscription_info(
 
     match refresh_subscription_state(&mut account, SubscriptionRefreshOptions { force }).await {
         Ok(_) => {
-            codex_account::save_account(&account)?;
+            account = codex_account::save_account_preserving_egress_proxy(&account)?;
             Ok(account)
         }
         Err(error) => {
-            if let Err(save_err) = codex_account::save_account(&account) {
+            if let Err(save_err) = codex_account::save_account_preserving_egress_proxy(&account) {
                 logger::log_warn(&format!("写入订阅刷新状态失败: {}", save_err));
             }
             Err(error)
@@ -2264,6 +2346,17 @@ mod tests {
         )
     }
 
+    #[test]
+    fn quota_sync_rejects_an_upstream_identity_mismatch() {
+        let mut account = subscription_test_account();
+        account.account_id = Some("workspace-a".into());
+        account.user_id = Some("user-a".into());
+        assert!(super::validate_usage_identity(&account, r#"{"account_id":"workspace-a","user_id":"user-a"}"#).is_ok());
+        assert!(super::validate_usage_identity(&account, r#"{"account_id":"workspace-b","user_id":"user-a"}"#).is_err());
+        assert!(super::validate_usage_identity(&account, r#"{"account_id":"workspace-a","user_id":"user-b"}"#).is_err());
+        assert!(super::validate_usage_identity(&account, r#"{"rate_limit":{}}"#).is_ok());
+    }
+
     fn cached_quota_test_account() -> CodexAccount {
         let mut account = subscription_test_account();
         account.quota = Some(
@@ -2291,6 +2384,7 @@ mod tests {
             "PROXY_RUNTIME_NOT_READY",
             "PROXY_ENGINE_TIMEOUT",
             "PROXY_ENGINE_START_FAILED",
+            "PROXY_ENGINE_CONFIG_INVALID",
             "PROXY_ENGINE_MISSING",
             "PROXY_CLIENT_FAILED",
             "PROXY_STATUS_FAILED",
@@ -2324,6 +2418,23 @@ mod tests {
             "PROXY_RUNTIME_BUSY".into()
         ));
         assert_eq!(serde_json::to_value(&account).unwrap(), before);
+    }
+
+    #[test]
+    fn upstream_access_revocation_marks_reauth_without_losing_cached_quota() {
+        let mut account = cached_quota_test_account();
+        let quota = serde_json::to_value(&account.quota).unwrap();
+        let tokens = serde_json::to_value(&account.tokens).unwrap();
+        assert!(write_quota_error(
+            &mut account,
+            "API error 401 [error_code:token_revoked]".into()
+        ));
+        assert!(account.requires_reauth);
+        assert!(account.reauth_reason.is_some());
+        assert_eq!(serde_json::to_value(&account.quota).unwrap(), quota);
+        assert_eq!(serde_json::to_value(&account.tokens).unwrap(), tokens);
+        assert!(!write_quota_error(&mut account, "PROXY_RUNTIME_BUSY".into()));
+        assert_eq!(account.quota_error.as_ref().unwrap().code.as_deref(), Some("token_revoked"));
     }
 
     #[test]
@@ -2429,10 +2540,14 @@ mod tests {
         };
 
         assert!(normalize_remaining_percentage(&window(None)).is_err());
-        assert!(normalize_remaining_percentage(&window(Some(-1))).is_err());
-        assert!(normalize_remaining_percentage(&window(Some(101))).is_err());
+        assert!(normalize_remaining_percentage(&window(Some(-1.0))).is_err());
+        assert!(normalize_remaining_percentage(&window(Some(101.0))).is_err());
+        assert!(normalize_remaining_percentage(&window(Some(f64::NAN))).is_err());
+        assert_eq!(normalize_remaining_percentage(&window(Some(89.75))).unwrap(), 11);
+        assert_eq!(normalize_remaining_percentage(&window(Some(99.75))).unwrap(), 1);
+        assert_eq!(normalize_remaining_percentage(&window(Some(100.0))).unwrap(), 0);
         assert_eq!(
-            normalize_remaining_percentage(&window(Some(37))).unwrap(),
+            normalize_remaining_percentage(&window(Some(37.0))).unwrap(),
             63
         );
     }

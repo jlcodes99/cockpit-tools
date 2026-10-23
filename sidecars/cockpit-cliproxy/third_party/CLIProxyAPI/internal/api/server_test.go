@@ -499,8 +499,9 @@ func TestCodexLiveRoutesRequireAuthAndAreRegistered(t *testing.T) {
 			t.Fatalf("%s unauthorized status = %d, want %d", path, unauthorizedRecorder.Code, http.StatusUnauthorized)
 		}
 
-		authorized := httptest.NewRequest(http.MethodPost, path, nil)
+		authorized := httptest.NewRequest(http.MethodPost, path, strings.NewReader("v=0\r\n"))
 		authorized.Header.Set("Authorization", "Bearer test-key")
+		authorized.Header.Set("Content-Type", "application/sdp")
 		authorizedRecorder := httptest.NewRecorder()
 		server.engine.ServeHTTP(authorizedRecorder, authorized)
 		if authorizedRecorder.Code != http.StatusServiceUnavailable {
@@ -577,12 +578,14 @@ func TestRealtimeStandardRoutesAndClientSecretAuth(t *testing.T) {
 	}
 
 	for _, testCase := range []struct {
-		method string
-		path   string
-		status int
+		method      string
+		path        string
+		body        io.Reader
+		contentType string
+		status      int
 	}{
 		{method: http.MethodGet, path: "/v1/realtime?model=gpt-realtime", status: http.StatusUpgradeRequired},
-		{method: http.MethodPost, path: "/v1/realtime", status: http.StatusServiceUnavailable},
+		{method: http.MethodPost, path: "/v1/realtime", body: strings.NewReader("v=0\r\n"), contentType: "application/sdp", status: http.StatusServiceUnavailable},
 		{method: http.MethodPost, path: "/v1/realtime/sessions", status: http.StatusOK},
 		{method: http.MethodPost, path: "/v1/realtime/transcription_sessions", status: http.StatusNotImplemented},
 		{method: http.MethodGet, path: "/v1/realtime/translations", status: http.StatusNotImplemented},
@@ -593,8 +596,11 @@ func TestRealtimeStandardRoutesAndClientSecretAuth(t *testing.T) {
 		{method: http.MethodPost, path: "/v1/realtime/calls/call-123/refer", status: http.StatusNotImplemented},
 		{method: http.MethodPost, path: "/v1/realtime/calls/call-123/hangup", status: http.StatusNotFound},
 	} {
-		request := httptest.NewRequest(testCase.method, testCase.path, nil)
+		request := httptest.NewRequest(testCase.method, testCase.path, testCase.body)
 		request.Header.Set("Authorization", "Bearer test-key")
+		if testCase.contentType != "" {
+			request.Header.Set("Content-Type", testCase.contentType)
+		}
 		recorder := httptest.NewRecorder()
 		server.engine.ServeHTTP(recorder, request)
 		if recorder.Code != testCase.status {
@@ -1832,13 +1838,13 @@ func TestModelsWithClientVersionReturnsCodexCatalog(t *testing.T) {
 	clientID := "test-client-version-catalog"
 	modelRegistry.RegisterClient(clientID, "openai", []*registry.ModelInfo{
 		{
-			ID:                  "gpt-5.5",
+			ID:                  "gpt-5.6-sol",
 			Object:              "model",
 			Created:             1776902400,
 			OwnedBy:             "openai",
 			Type:                "openai",
-			DisplayName:         "GPT 5.5",
-			Description:         "Frontier model for complex coding, research, and real-world work.",
+			DisplayName:         "GPT-5.6 Sol",
+			Description:         "Latest frontier agentic coding model.",
 			ContextLength:       272000,
 			MaxCompletionTokens: 64000,
 			Thinking:            &registry.ThinkingSupport{Levels: []string{"low", "medium", "high", "xhigh"}},
@@ -1893,28 +1899,28 @@ func TestModelsWithClientVersionReturnsCodexCatalog(t *testing.T) {
 		t.Fatal("expected codex catalog models")
 	}
 
-	var gpt55 map[string]any
+	var gptSol map[string]any
 	var custom map[string]any
 	for _, model := range resp.Models {
 		switch slug, _ := model["slug"].(string); slug {
-		case "gpt-5.5":
-			gpt55 = model
+		case "gpt-5.6-sol":
+			gptSol = model
 		case "custom-codex-model-test":
 			custom = model
 		}
 	}
-	if gpt55 == nil {
-		t.Fatal("expected gpt-5.5 codex catalog entry")
+	if gptSol == nil {
+		t.Fatal("expected gpt-5.6-sol codex catalog entry")
 	}
-	if _, ok := gpt55["minimal_client_version"]; !ok {
+	if _, ok := gptSol["minimal_client_version"]; !ok {
 		t.Fatal("expected minimal_client_version in codex catalog")
 	}
-	if got, _ := gpt55["max_tokens"].(float64); got != 64000 {
-		t.Fatalf("gpt-5.5 max_tokens = %v, want 64000", gpt55["max_tokens"])
+	if got, _ := gptSol["max_tokens"].(float64); got != 64000 {
+		t.Fatalf("gpt-5.6-sol max_tokens = %v, want 64000", gptSol["max_tokens"])
 	}
-	serviceTiers, ok := gpt55["service_tiers"].([]any)
+	serviceTiers, ok := gptSol["service_tiers"].([]any)
 	if !ok || len(serviceTiers) != 1 {
-		t.Fatalf("expected gpt-5.5 priority service tier, got %#v", gpt55["service_tiers"])
+		t.Fatalf("expected gpt-5.6-sol priority service tier, got %#v", gptSol["service_tiers"])
 	}
 	if custom == nil {
 		t.Fatal("expected custom model codex catalog entry")
@@ -1933,11 +1939,11 @@ func TestModelsWithClientVersionReturnsCodexCatalog(t *testing.T) {
 		t.Fatalf("custom context_window = %v, want 123456", custom["context_window"])
 	}
 	assertCodexSupportedReasoningLevels(t, custom, []string{"none", "minimal", "low", "medium", "high", "xhigh"})
-	if custom["base_instructions"] != gpt55["base_instructions"] {
-		t.Fatal("expected custom model to use gpt-5.5 base_instructions fallback")
+	if custom["base_instructions"] != gptSol["base_instructions"] {
+		t.Fatal("expected custom model to use gpt-5.6-sol base_instructions fallback")
 	}
 	if _, ok := custom["available_in_plans"].([]any); !ok {
-		t.Fatalf("expected custom model to use gpt-5.5 available_in_plans fallback, got %#v", custom["available_in_plans"])
+		t.Fatalf("expected custom model to use gpt-5.6-sol available_in_plans fallback, got %#v", custom["available_in_plans"])
 	}
 	if got, _ := custom["prefer_websockets"].(bool); got {
 		t.Fatalf("custom prefer_websockets = %v, want false", custom["prefer_websockets"])

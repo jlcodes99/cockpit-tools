@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useEffect,
   useMemo,
@@ -27,8 +28,15 @@ import {
 import {
   deriveAutoCompactTokenLimit,
   deriveAutoCompactTokenLimitInput,
+  getCodexModelContextTemplate,
   validateModelContext,
 } from "../../utils/codexModelContext";
+import { getCodexModelReasoningEfforts } from "../../services/codexService";
+import { CODEX_REASONING_EFFORT_ORDER, sortCodexReasoningEfforts, withSupportedReasoningEfforts } from "../../utils/codexModelConfig";
+import { dropdownLayer, dropdownPlacement, type DropdownPlacement } from "../../utils/dropdownPlacement";
+import { useEscCloseTopmost } from "../../hooks/useEscClose";
+import { SingleSelectDropdown } from "../SingleSelectDropdown";
+import { CodexModelConfigTransferModal } from "./CodexModelConfigTransferModal";
 import "./CodexExperimentalModelEditor.css";
 
 export interface CodexExperimentalModelSource {
@@ -45,6 +53,7 @@ export interface CodexAvailableChannel {
 }
 
 interface CodexExperimentalModelEditorProps {
+  instanceId?: string;
   models: CodexExperimentalModelDefinition[];
   defaultModelId?: string | null;
   resetModels?: CodexExperimentalModelDefinition[];
@@ -61,14 +70,6 @@ interface CodexExperimentalModelEditorProps {
 }
 
 const MODEL_ID_PATTERN = /^[A-Za-z0-9._:/-]+$/;
-const REASONING_EFFORT_OPTIONS: CodexReasoningEffort[] = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-];
 const CONTEXT_PRESETS = {
   preset_516k: { context_window: 516000, auto_compact_token_limit: 464400 },
   preset_1m: { context_window: 1000000, auto_compact_token_limit: 900000 },
@@ -275,6 +276,7 @@ function resolveContextPreset(
 export function validateCodexExperimentalModels(
   models: CodexExperimentalModelDefinition[],
   translate: (key: string, fallback: string) => string,
+  effectiveEfforts?: Record<string, CodexReasoningEffort[]>,
 ): string | null {
   if (models.length === 0) {
     return translate(
@@ -306,6 +308,10 @@ export function validateCodexExperimentalModels(
     }
     const contextError = validateModelContext(model);
     if (contextError) return translate(contextError, contextError);
+    const efforts = effectiveEfforts?.[model.model_id] ?? model.reasoning_efforts;
+    if (model.default_reasoning_effort && efforts && !efforts.includes(model.default_reasoning_effort)) {
+      return translate("codex.experimentalModels.defaultReasoningInvalid", "默认推理档位必须属于当前支持的档位。");
+    }
     seen.add(key);
   }
   return null;
@@ -326,6 +332,7 @@ function nextModelDefinition(
 }
 
 export function CodexExperimentalModelEditor({
+  instanceId = "__default__",
   models,
   defaultModelId = null,
   resetModels = [],
@@ -370,6 +377,33 @@ export function CodexExperimentalModelEditor({
     onModelsChange(nextModels);
   };
   const [managerOpen, setManagerOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [effectiveEfforts, setEffectiveEfforts] = useState<Record<string, CodexReasoningEffort[]>>({});
+  const [reasoningLoadFailed, setReasoningLoadFailed] = useState(false);
+  const [reasoningReload, setReasoningReload] = useState(0);
+  const modelsRef = useRef(models);
+  modelsRef.current = models;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const reasoningRequestKey = JSON.stringify(models.map((model) => ({
+    model_id: model.model_id, display_name: model.display_name, reasoning_efforts: model.reasoning_efforts,
+  })));
+  useEffect(() => {
+    let cancelled = false;
+    setReasoningLoadFailed(false);
+    void getCodexModelReasoningEfforts(JSON.parse(reasoningRequestKey), instanceId).then((result) => {
+      if (cancelled) return;
+      setEffectiveEfforts(result);
+      const latest = modelsRef.current;
+      const next = latest.map((model) => {
+        const efforts = result[model.model_id];
+        return model.default_reasoning_effort && efforts && !efforts.includes(model.default_reasoning_effort)
+          ? { ...model, default_reasoning_effort: undefined } : model;
+      });
+      if (next.some((model, index) => model !== latest[index])) onChangeRef.current(next);
+    }).catch(() => { if (!cancelled) setReasoningLoadFailed(true); });
+    return () => { cancelled = true; };
+  }, [reasoningRequestKey, reasoningReload, instanceId]);
   const [openReasoningIndex, setOpenReasoningIndex] = useState<number | null>(
     null,
   );
@@ -380,8 +414,56 @@ export function CodexExperimentalModelEditor({
   const [draggingModelId, setDraggingModelId] = useState<string | null>(null);
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
   const addMenuRef = useRef<HTMLDivElement | null>(null);
-  const reasoningPickerRef = useRef<HTMLDivElement | null>(null);
-  const contextPickerRef = useRef<HTMLDivElement | null>(null);
+  const pickerTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const pickerMenuRef = useRef<HTMLDivElement | null>(null);
+  const [pickerMenuStyle, setPickerMenuStyle] = useState<DropdownPlacement | null>(null);
+  const pickerOpen = !disabled && (mode === "inline" || managerOpen)
+    && (openReasoningIndex !== null || openContextIndex !== null);
+  const closePicker = (restoreFocus = true) => {
+    setOpenReasoningIndex(null);
+    setOpenContextIndex(null);
+    if (restoreFocus) pickerTriggerRef.current?.focus();
+  };
+  const focusPickerSelection = () => {
+    (pickerMenuRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?? pickerMenuRef.current?.querySelector<HTMLElement>('[role="option"]'))?.focus();
+  };
+  const openPicker = (kind: "reasoning" | "context", index: number) => {
+    if ((kind === "reasoning" ? openReasoningIndex : openContextIndex) === index) {
+      focusPickerSelection();
+      return;
+    }
+    setPickerMenuStyle(null);
+    setOpenReasoningIndex(kind === "reasoning" ? index : null);
+    setOpenContextIndex(kind === "context" ? index : null);
+  };
+  const handlePickerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Tab") {
+      event.preventDefault();
+      closePicker();
+      return;
+    }
+    const items = Array.from(pickerMenuRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? []);
+    if (!items.length) return;
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+      : event.key === "ArrowDown" ? (index + 1) % items.length
+      : event.key === "ArrowUp" ? (index - 1 + items.length) % items.length : -1;
+    if (next >= 0) {
+      event.preventDefault();
+      items[next].focus();
+    }
+  };
+  useEscCloseTopmost(pickerOpen, closePicker, pickerMenuRef);
+  useEffect(() => {
+    if (!pickerOpen || !pickerMenuStyle) return;
+    focusPickerSelection();
+  }, [pickerOpen, openReasoningIndex, openContextIndex, Boolean(pickerMenuStyle)]);
+  useEffect(() => {
+    if (!disabled && (mode === "inline" || managerOpen)) return;
+    setOpenReasoningIndex(null);
+    setOpenContextIndex(null);
+  }, [disabled, mode, managerOpen]);
 
   useEffect(() => {
     if (!addMenuOpen) return;
@@ -396,28 +478,37 @@ export function CodexExperimentalModelEditor({
   }, [addMenuOpen]);
 
   useEffect(() => {
-    if (openReasoningIndex === null) return;
+    if (!pickerOpen) return;
+    const updateMenuPosition = (event?: Event) => {
+      const target = event?.target;
+      if (event?.type === "scroll" && target instanceof Node && pickerMenuRef.current?.contains(target)) return;
+      const trigger = pickerTriggerRef.current;
+      if (!trigger) return;
+      const layers: string[] = [];
+      for (let ancestor: Element | null = trigger; ancestor; ancestor = ancestor.parentElement) {
+        layers.push(window.getComputedStyle(ancestor).zIndex);
+      }
+      const nextStyle = dropdownPlacement(trigger.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight }, "down", 180, 280, dropdownLayer(layers));
+      setPickerMenuStyle((previous) => previous && previous.top === nextStyle.top && previous.bottom === nextStyle.bottom
+        && previous.left === nextStyle.left && previous.width === nextStyle.width && previous.maxHeight === nextStyle.maxHeight
+        && previous.zIndex === nextStyle.zIndex ? previous : nextStyle);
+    };
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!reasoningPickerRef.current?.contains(target)) {
-        setOpenReasoningIndex(null);
-      }
+      if (pickerTriggerRef.current?.contains(target) || pickerMenuRef.current?.contains(target)) return;
+      closePicker(false);
     };
+    updateMenuPosition();
     document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [openReasoningIndex]);
-
-  useEffect(() => {
-    if (openContextIndex === null) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!contextPickerRef.current?.contains(target)) {
-        setOpenContextIndex(null);
-      }
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
     };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [openContextIndex]);
+  }, [openReasoningIndex, openContextIndex, managerOpen, pickerOpen]);
 
   useEffect(() => {
     if (draggingModelId === null) return;
@@ -602,6 +693,7 @@ export function CodexExperimentalModelEditor({
   const validationError = validateCodexExperimentalModels(
     models,
     (key, fallback) => t(key, fallback),
+    effectiveEfforts,
   );
   useEffect(() => {
     onValidationChange?.(validationError);
@@ -653,20 +745,18 @@ export function CodexExperimentalModelEditor({
       models.map((model, modelIndex) => {
         if (modelIndex !== index) return model;
         if (effort === "official") {
+          // The capability read below retains valid explicit defaults and clears unsupported ones.
           return { ...model, reasoning_efforts: undefined };
         }
         const current = model.reasoning_efforts ?? [];
         if (current.includes(effort)) {
           if (current.length === 1) return model;
-          return {
-            ...model,
-            reasoning_efforts: current.filter((item) => item !== effort),
-          };
+          return withSupportedReasoningEfforts(model, current.filter((item) => item !== effort));
         }
-        return { ...model, reasoning_efforts: [...current, effort] };
+        return withSupportedReasoningEfforts(model, [...current, effort]);
       }),
     );
-    if (effort === "official") setOpenReasoningIndex(null);
+    if (effort === "official") closePicker();
   };
 
   const applyContextPreset = (
@@ -687,20 +777,22 @@ export function CodexExperimentalModelEditor({
         return { ...model, ...CONTEXT_PRESETS[preset] };
       }),
     );
-    setOpenContextIndex(null);
+    closePicker();
   };
 
   const openCustomContextEditor = (index: number) => {
     const model = models[index];
-    setOpenContextIndex(null);
+    const template = model.context_window == null ? getCodexModelContextTemplate(model.model_id) : undefined;
+    closePicker();
     const contextWindow =
-      model.context_window ?? DEFAULT_CONTEXT_DRAFT.context_window;
+      model.context_window ?? template?.context_window ?? DEFAULT_CONTEXT_DRAFT.context_window;
     setCustomContextDraft({
       index,
       contextWindow: String(contextWindow),
-      // 不再用 1M 兜底：压缩阈值缺失时按上下文窗口的 90% 派生。
+      // 已保存值优先；无覆盖时读取模板，压缩阈值缺失时按窗口的 90% 派生。
       autoCompactTokenLimit: String(
         model.auto_compact_token_limit ??
+          (model.context_window == null ? template?.auto_compact_token_limit : undefined) ??
           (deriveAutoCompactTokenLimitInput(String(contextWindow)) ||
             DEFAULT_CONTEXT_DRAFT.auto_compact_token_limit),
       ),
@@ -802,6 +894,16 @@ export function CodexExperimentalModelEditor({
   };
 
   const showModelSource = Boolean(resolveModelSource);
+  const transferButton = <button type="button" className="btn btn-secondary codex-experimental-model-transfer-btn"
+    onClick={() => setTransferOpen(true)} disabled={disabled}>{t("codex.modelConfig.transfer")}</button>;
+  const transferDialog = transferOpen && <CodexModelConfigTransferModal instanceId={instanceId}
+    onClose={() => setTransferOpen(false)} onImported={(nextModels, nextDefaultId) => {
+      const previousIds = new Set(models.map((model) => model.model_id.toLowerCase()));
+      const nextIds = new Set(nextModels.map((model) => model.model_id.toLowerCase()));
+      models.filter((model) => !nextIds.has(model.model_id.toLowerCase())).forEach((model) => onModelRemoved?.(model.model_id));
+      nextModels.filter((model) => !previousIds.has(model.model_id.toLowerCase())).forEach((model) => onModelAdded?.(model.model_id));
+      onChange(nextModels); onDefaultModelChange?.(nextDefaultId);
+    }} />;
 
   const editorContent = (
     <div className="codex-experimental-model-editor">
@@ -810,6 +912,7 @@ export function CodexExperimentalModelEditor({
           {t("codex.experimentalModelCatalog.models.title", "模型列表")}
         </span>
         <div className="codex-experimental-model-editor__header-actions">
+          {transferButton}
           {resetAvailable && (
             <button
               type="button"
@@ -954,6 +1057,10 @@ export function CodexExperimentalModelEditor({
           </div>
         </div>
       </div>
+      {reasoningLoadFailed && <div className="codex-experimental-model-editor__error" role="alert">
+        {t("codex.modelConfig.errors.read")}{" "}
+        <button type="button" className="btn btn-secondary" onClick={() => setReasoningReload((value) => value + 1)}>{t("common.retry")}</button>
+      </div>}
 
       <div
         className={`codex-experimental-model-editor__table-head${
@@ -974,6 +1081,7 @@ export function CodexExperimentalModelEditor({
         <span>
           {t("codex.experimentalModelCatalog.models.reasoning", "推理强度")}
         </span>
+        <span>{t("codex.experimentalModels.defaultReasoning")}</span>
         <span>
           {t(
             "codex.experimentalModelCatalog.models.contextConfig",
@@ -987,10 +1095,8 @@ export function CodexExperimentalModelEditor({
 
       <div
         className={`codex-experimental-model-editor__list${
-          openReasoningIndex !== null || openContextIndex !== null
-            ? " has-open-menu"
-            : ""
-        }${draggingModelId ? " is-sorting" : ""}`}
+          draggingModelId ? " is-sorting" : ""
+        }`}
       >
         {models.map((model, index) => {
           const source = resolveModelSource?.(model.model_id);
@@ -1093,9 +1199,6 @@ export function CodexExperimentalModelEditor({
               )}
               <div
                 className="codex-experimental-model-editor__reasoning"
-                ref={
-                  openReasoningIndex === index ? reasoningPickerRef : undefined
-                }
               >
                 <span className="codex-experimental-model-editor__field-label">
                   {t(
@@ -1105,19 +1208,24 @@ export function CodexExperimentalModelEditor({
                 </span>
                 <div className="codex-experimental-model-editor__reasoning-picker">
                   <button
+                    ref={openReasoningIndex === index ? pickerTriggerRef : undefined}
                     type="button"
                     className="codex-experimental-model-editor__reasoning-trigger"
                     onClick={() => {
-                      setOpenContextIndex(null);
-                      setOpenReasoningIndex((current) =>
-                        current === index ? null : index,
-                      );
+                      if (openReasoningIndex === index) closePicker();
+                      else openPicker("reasoning", index);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                      event.preventDefault();
+                      openPicker("reasoning", index);
                     }}
                     disabled={disabled}
+                    aria-haspopup="listbox"
                     aria-expanded={openReasoningIndex === index}
                     title={
                       model.reasoning_efforts?.length
-                        ? model.reasoning_efforts.map(reasoningLabel).join("、")
+                        ? sortCodexReasoningEfforts(model.reasoning_efforts).map(reasoningLabel).join("、")
                         : t(
                             "codex.experimentalModelCatalog.models.followOfficial",
                             "跟随官方",
@@ -1126,7 +1234,7 @@ export function CodexExperimentalModelEditor({
                   >
                     <span>
                       {model.reasoning_efforts?.length
-                        ? model.reasoning_efforts.map(reasoningLabel).join("、")
+                        ? sortCodexReasoningEfforts(model.reasoning_efforts).map(reasoningLabel).join("、")
                         : t(
                             "codex.experimentalModelCatalog.models.followOfficial",
                             "跟随官方",
@@ -1134,10 +1242,19 @@ export function CodexExperimentalModelEditor({
                     </span>
                     <ChevronDown size={14} />
                   </button>
-                  {openReasoningIndex === index && (
-                    <div className="codex-experimental-model-editor__reasoning-menu">
+                  {pickerOpen && openReasoningIndex === index && createPortal(
+                    <div className="codex-experimental-model-editor__reasoning-menu"
+                      ref={pickerMenuRef}
+                      role="listbox"
+                      aria-label={t("codex.experimentalModelCatalog.models.reasoning")}
+                      aria-multiselectable="true"
+                      onKeyDown={handlePickerKeyDown}
+                      style={{ ...pickerMenuStyle, visibility: pickerMenuStyle ? "visible" : "hidden" }}>
                       <button
                         type="button"
+                        role="option"
+                        aria-selected={!model.reasoning_efforts?.length}
+                        tabIndex={-1}
                         className={`codex-experimental-model-editor__reasoning-option${
                           !model.reasoning_efforts?.length
                             ? " is-selected"
@@ -1158,13 +1275,16 @@ export function CodexExperimentalModelEditor({
                           "跟随官方",
                         )}
                       </button>
-                      {REASONING_EFFORT_OPTIONS.map((effort) => {
+                      {CODEX_REASONING_EFFORT_ORDER.map((effort) => {
                         const selected =
                           model.reasoning_efforts?.includes(effort) ?? false;
                         return (
                           <button
                             key={effort}
                             type="button"
+                            role="option"
+                            aria-selected={selected}
+                            tabIndex={-1}
                             className={`codex-experimental-model-editor__reasoning-option${
                               selected
                                 ? " is-selected"
@@ -1186,15 +1306,26 @@ export function CodexExperimentalModelEditor({
                           </button>
                         );
                       })}
-                    </div>
+                    </div>,
+                    document.body,
                   )}
                 </div>
               </div>
+              <div className="codex-experimental-model-editor__default-effort" title={t("codex.experimentalModels.defaultReasoningHint")}>
+                <span className="codex-experimental-model-editor__field-label">{t("codex.experimentalModels.defaultReasoning")}</span>
+                <SingleSelectDropdown value={model.default_reasoning_effort ?? ""}
+                  className="codex-experimental-model-default-effort-select"
+                  options={[{ value: "", label: t("codex.experimentalModels.defaultReasoningFollow") },
+                    ...sortCodexReasoningEfforts(effectiveEfforts[model.model_id] ?? model.reasoning_efforts ?? []).map((effort) => ({ value: effort, label: reasoningLabel(effort) }))]}
+                  disabled={disabled || reasoningLoadFailed || !effectiveEfforts[model.model_id]}
+                  ariaLabel={t("codex.experimentalModels.defaultReasoning")}
+                  onChange={(value) => onChange(models.map((item, itemIndex) => itemIndex === index
+                    ? { ...item, default_reasoning_effort: value ? value as CodexReasoningEffort : undefined } : item))} />
+                {model.default_reasoning_effort && effectiveEfforts[model.model_id] && !effectiveEfforts[model.model_id].includes(model.default_reasoning_effort)
+                  && <small role="alert" className="codex-experimental-model-editor__error">{t("codex.experimentalModels.defaultReasoningInvalid")}</small>}
+              </div>
               <div
                 className="codex-experimental-model-editor__context"
-                ref={
-                  openContextIndex === index ? contextPickerRef : undefined
-                }
               >
                 <span className="codex-experimental-model-editor__field-label">
                   {t(
@@ -1204,23 +1335,33 @@ export function CodexExperimentalModelEditor({
                 </span>
                 <div className="codex-experimental-model-editor__context-picker">
                   <button
+                    ref={openContextIndex === index ? pickerTriggerRef : undefined}
                     type="button"
                     className="codex-experimental-model-editor__context-trigger"
                     onClick={() => {
-                      setOpenReasoningIndex(null);
-                      setOpenContextIndex((current) =>
-                        current === index ? null : index,
-                      );
+                      if (openContextIndex === index) closePicker();
+                      else openPicker("context", index);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                      event.preventDefault();
+                      openPicker("context", index);
                     }}
                     disabled={disabled}
+                    aria-haspopup="listbox"
                     aria-expanded={openContextIndex === index}
                     title={contextLabel(model)}
                   >
                     <span>{contextLabel(model)}</span>
                     <ChevronDown size={14} />
                   </button>
-                  {openContextIndex === index && (
-                    <div className="codex-experimental-model-editor__context-menu">
+                  {pickerOpen && openContextIndex === index && createPortal(
+                    <div className="codex-experimental-model-editor__context-menu"
+                      ref={pickerMenuRef}
+                      role="listbox"
+                      aria-label={t("codex.experimentalModelCatalog.models.contextConfig")}
+                      onKeyDown={handlePickerKeyDown}
+                      style={{ ...pickerMenuStyle, visibility: pickerMenuStyle ? "visible" : "hidden" }}>
                       {(
                         [
                           [
@@ -1244,6 +1385,9 @@ export function CodexExperimentalModelEditor({
                         <button
                           key={preset}
                           type="button"
+                          role="option"
+                          aria-selected={resolveContextPreset(model) === preset}
+                          tabIndex={-1}
                           className={`codex-experimental-model-editor__context-option${
                             resolveContextPreset(model) === preset
                               ? " is-selected"
@@ -1260,7 +1404,8 @@ export function CodexExperimentalModelEditor({
                           {label}
                         </button>
                       ))}
-                    </div>
+                    </div>,
+                    document.body,
                   )}
                 </div>
                 {rowErrors[index]?.context && (
@@ -1349,6 +1494,8 @@ export function CodexExperimentalModelEditor({
             <span>
               {t("codex.experimentalModelCatalog.models.title", "模型列表")}
             </span>
+            <div className="codex-experimental-model-editor__header-actions">
+            {transferButton}
             <button
               type="button"
               className="codex-experimental-model-summary__manage"
@@ -1357,6 +1504,7 @@ export function CodexExperimentalModelEditor({
             >
               {t("codex.experimentalModelCatalog.models.manage", "管理")}
             </button>
+            </div>
           </div>
           <div
             className={`codex-experimental-model-summary__table-head${
@@ -1377,6 +1525,7 @@ export function CodexExperimentalModelEditor({
             <span>
               {t("codex.experimentalModelCatalog.models.reasoning", "推理强度")}
             </span>
+            <span>{t("codex.experimentalModels.defaultReasoning")}</span>
             <span>
               {t(
                 "codex.experimentalModelCatalog.models.contextConfig",
@@ -1437,11 +1586,15 @@ export function CodexExperimentalModelEditor({
                 )}
                 <span className="codex-experimental-model-summary__reasoning">
                   {model.reasoning_efforts?.length
-                    ? model.reasoning_efforts.map(reasoningLabel).join("、")
+                    ? sortCodexReasoningEfforts(model.reasoning_efforts).map(reasoningLabel).join("、")
                     : t(
                         "codex.experimentalModelCatalog.models.followOfficial",
                         "跟随官方",
                       )}
+                </span>
+                <span className="codex-experimental-model-summary__reasoning">
+                  {model.default_reasoning_effort ? reasoningLabel(model.default_reasoning_effort)
+                    : t("codex.experimentalModels.defaultReasoningFollow")}
                 </span>
                 <span className="codex-experimental-model-summary__context">
                   {contextLabel(model)}
@@ -1499,6 +1652,7 @@ export function CodexExperimentalModelEditor({
             onSave={saveCustomContext}
           />
         )}
+        {transferDialog}
       </>
     );
   }
@@ -1506,6 +1660,7 @@ export function CodexExperimentalModelEditor({
   return (
     <>
       {editorContent}
+      {transferDialog}
       {customContextDraft ? (
         <CustomContextDialog
           draft={customContextDraft}

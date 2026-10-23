@@ -1,3 +1,4 @@
+import { PelicanProviderSetup } from './PelicanProviderSetup';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCodexAccountStore } from '../../../stores/useCodexAccountStore';
@@ -5,24 +6,33 @@ import { useCodexPelicanStore } from '../../../stores/useCodexPelicanStore';
 import { getCodexWakeupState } from '../../../services/codexWakeupService';
 import { isCodexApiKeyAccount, isCodexWebSessionAccount } from '../../../types/codex';
 import type { CodexWakeupModelPreset } from '../../../types/codexWakeup';
-import { CODEX_PELICAN_DEFAULT_MODEL, CODEX_PELICAN_DEFAULT_PROMPT, CODEX_PELICAN_MAX_CONCURRENCY } from '../../../types/codexPelican';
+import { CODEX_PELICAN_MAX_CONCURRENCY } from '../../../types/codexPelican';
 import { SingleSelectDropdown } from '../../SingleSelectDropdown';
 import { ModalErrorMessage, useModalErrorState } from '../../ModalErrorMessage';
 import { pelicanError } from './pelicanUtils';
 import { defaultPelicanConcurrency, parsePelicanConcurrency } from './pelicanSetupModel';
 import { PelicanAccountSummary } from './PelicanAccountSummary';
+import { PELICAN_BENCHMARKS, PELICAN_BENCHMARK_IDS, pelicanBenchmark, pelicanBenchmarkLabel, type PelicanBenchmark } from './pelicanBenchmarks';
+import { PelicanReference } from './PelicanReference';
 
 export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
   const { t } = useTranslation();
+  const sourceMode = useCodexPelicanStore(state => state.sourceMode);
+  const providerTargets = useCodexPelicanStore(state => state.providerTargets);
+  const providerMode = sourceMode === 'providers';
+  const [providersValid, setProvidersValid] = useState(true);
   const accounts = useCodexAccountStore((state) => state.accounts);
   const initialIds = useCodexPelicanStore((state) => state.selectedAccountIds);
   const starting = useCodexPelicanStore((state) => state.starting);
   const [selected, setSelected] = useState(() => new Set(initialIds));
-  const [model, setModel] = useState(CODEX_PELICAN_DEFAULT_MODEL);
-  const [effort, setEffort] = useState('medium');
-  const [concurrency, setConcurrency] = useState(() => String(defaultPelicanConcurrency(initialIds.length)));
+  const draft = useCodexPelicanStore(state => state.draft);
+  const updateDraft = useCodexPelicanStore(state => state.updateDraft);
+  const {model, prompt, effort} = draft;
+  const setModel = (model: string) => updateDraft({model});
+  const setPrompt = (prompt: string) => updateDraft({prompt});
+  const setEffort = (effort: string) => updateDraft({effort});
+  const [concurrency, setConcurrency] = useState(() => String(providerMode ? draft.concurrency : defaultPelicanConcurrency(initialIds.length)));
   const concurrencyManuallyEdited = useRef(false);
-  const [prompt, setPrompt] = useState(CODEX_PELICAN_DEFAULT_PROMPT);
   const [search, setSearch] = useState('');
   const [presets, setPresets] = useState<CodexWakeupModelPreset[]>([]);
   const [localBusy, setBusy] = useState(false);
@@ -35,10 +45,11 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
   const selectedIds = eligible.filter((account) => selected.has(account.id)).map((account) => account.id);
 
   useEffect(() => {
+    if (providerMode) return;
     if (!concurrencyManuallyEdited.current) {
       setConcurrency(String(defaultPelicanConcurrency(selectedIds.length)));
     }
-  }, [selectedIds.length]);
+  }, [selectedIds.length, providerMode]);
 
   useEffect(() => {
     let disposed = false;
@@ -58,32 +69,46 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
   const submit = async () => {
     if (busy) return;
     error.clear(); setFieldError(null);
-    if (!model.trim()) return failField('model');
+    if (!providerMode && !model.trim()) return failField('model');
+    if (providerMode && (!providerTargets.length || !providersValid)) return failField('providers');
     const parsedConcurrency = parsePelicanConcurrency(concurrency);
     if (parsedConcurrency == null) return failField('concurrency');
     if (!prompt.trim()) return failField('prompt');
-    if (!selectedIds.length) return failField('accounts');
+    if (!providerMode && !selectedIds.length) return failField('accounts');
     setBusy(true);
     try {
-      await useCodexPelicanStore.getState().start({ accountIds: selectedIds, prompt, model: model.trim(), effort, concurrency: parsedConcurrency });
+      await useCodexPelicanStore.getState().start({ accountIds: providerMode ? [] : selectedIds, ...(providerMode ? {providerTargets} : {}), prompt, model: providerMode ? providerTargets[0].model.trim() : model.trim(), effort, concurrency: parsedConcurrency });
     } catch (cause) { error.set(pelicanError(cause, t)); }
     finally { setBusy(false); }
   };
 
+  const currentBenchmark = pelicanBenchmark(prompt);
+  const benchmarkOptions = PELICAN_BENCHMARK_IDS.map((value) => ({ value, label: pelicanBenchmarkLabel(value, t) }));
+  if (!PELICAN_BENCHMARK_IDS.includes(currentBenchmark)) {
+    benchmarkOptions.splice(benchmarkOptions.length - 1, 0, { value: currentBenchmark, label: `${pelicanBenchmarkLabel(currentBenchmark, t)} · ${t('pelican.legacyCase')}` });
+  }
+
   return <form className="pelican-setup" ref={formRef} onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-    <p className="pelican-muted">{t('pelican.description')}</p>
+    <p className="pelican-muted">{t(providerMode ? 'pelican.providerDescription' : 'pelican.description')}</p>
+    <p className="pelican-muted">{t('pelican.scoringHint')}</p>
+    <label>{t('pelican.benchmark')}
+      <SingleSelectDropdown value={currentBenchmark} ariaLabel={t('pelican.benchmark')} disabled={busy}
+        options={benchmarkOptions}
+        onChange={(value) => { setPrompt(PELICAN_BENCHMARKS[value as PelicanBenchmark]); fieldChanged(); }} />
+    </label>
     <label>{t('pelican.prompt')}
-      <textarea data-field="prompt" value={prompt} rows={4} maxLength={10000} disabled={busy} aria-invalid={fieldError === 'prompt'} onChange={(event) => { setPrompt(event.target.value); fieldChanged(); }} />
+      <textarea data-field="prompt" value={prompt} rows={4} maxLength={100000} disabled={busy} aria-invalid={fieldError === 'prompt'} onChange={(event) => { setPrompt(event.target.value); fieldChanged(); }} />
     </label>
     {fieldError === 'prompt' && <span className="pelican-field-error" role="alert">{t('pelican.required')}</span>}
+    <PelicanReference prompt={prompt} />
     <div className="pelican-fields">
-      <label>{t('pelican.model')}
+      {!providerMode && <label>{t('pelican.model')}
         <input data-field="model" value={model} maxLength={128} disabled={busy} aria-invalid={fieldError === 'model'} onChange={(event) => { setModel(event.target.value); fieldChanged(); }} />
         {fieldError === 'model' && <span className="pelican-field-error" role="alert">{t('pelican.required')}</span>}
         {presets.length > 0 && <SingleSelectDropdown value={presets.find((preset) => preset.model === model)?.id ?? ''}
           options={presets.map((preset) => ({ value: preset.id, label: preset.name }))} placeholder={t('pelican.model')} ariaLabel={t('pelican.model')} disabled={busy}
           onChange={(id) => { const preset = presets.find((entry) => entry.id === id); if (preset) { setModel(preset.model); setEffort(preset.default_reasoning_effort); fieldChanged(); } }} />}
-      </label>
+      </label>}
       <label>{t('pelican.effort')}<SingleSelectDropdown value={effort} ariaLabel={t('pelican.effort')} disabled={busy}
         options={['low', 'medium', 'high', 'xhigh', 'max'].map((value) => ({ value, label: t(`codex.wakeup.reasoningEfforts.${value}`) }))} onChange={(value) => { setEffort(value); fieldChanged(); }} /></label>
       <label>{t('pelican.concurrency')}
@@ -95,6 +120,7 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
       </label>
     </div>
     <p className="pelican-muted">{t('pelican.deliveryHelp')}</p>
+    {providerMode ? <PelicanProviderSetup busy={busy} invalid={fieldError === 'providers'} mask={mask} onValidChange={setProvidersValid} onChange={fieldChanged} /> : <>
     <div className="pelican-section-heading"><strong>{t('pelican.accounts')} ({selectedIds.length}/{eligible.length})</strong>
       <button type="button" className="btn btn-secondary" disabled={busy || !filtered.length} onClick={() => {
         const allSelected = filtered.every((account) => selected.has(account.id));
@@ -113,7 +139,7 @@ export function PelicanSetup({ mask }: { mask: (value: string) => string }) {
       </label>)}
     </div>
     {fieldError === 'accounts' && <span className="pelican-field-error" role="alert">{t('pelican.selectAccounts')}</span>}
-    <p className="pelican-muted">{t('pelican.accountHelp')}</p>
+    <p className="pelican-muted">{t('pelican.accountHelp')}</p></>}
     <ModalErrorMessage message={error.message} scrollKey={error.scrollKey} />
     <div className="pelican-actions"><button className="btn btn-primary" type="submit" disabled={busy}>{t(busy ? 'common.loading' : 'pelican.start')}</button></div>
   </form>;

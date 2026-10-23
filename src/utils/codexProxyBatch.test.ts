@@ -102,7 +102,7 @@ test('account table offers explicit batch assignment and confirmed restoration o
   assert.match(section, /<CodexProxyFollowDialog accounts=\{pickedAccounts\.filter/);
   const follow = readFileSync(new URL('../components/codex/CodexProxyAccountDialog.tsx', import.meta.url), 'utf8');
   assert.match(follow, /codex\.proxy\.managerAccounts\.followConfirm/);
-  assert.match(follow, /bind: \(entry\) => useCodexAccountStore\.getState\(\)\.updateAccountEgressProxy\(entry\.id, null\)/);
+  assert.match(follow, /bind: \(entry\) => updateCodexProxyAccount\(entry\.id\)/);
   assert.match(follow, /<ModalErrorMessage message=\{error\}/);
   assert.doesNotMatch(follow, /modal-overlay[^>]*onClick/);
   const assignment = readFileSync(new URL('../components/codex/CodexProxyAssignDialog.tsx', import.meta.url), 'utf8');
@@ -112,7 +112,7 @@ test('account table offers explicit batch assignment and confirmed restoration o
   assert.match(assignment, /previewCodexUnifiedProxy/);
   assert.match(assignment, /applyCodexUnifiedProxy/);
   assert.match(assignment, /cancelled: \(\) => cancelled\.current/);
-  assert.match(assignment, /applyAccountSnapshot\(updated\)/);
+  assert.match(assignment, /applyCodexProxyAccountSnapshot\(updated\)/);
   assert.doesNotMatch(assignment, /modal-overlay[^>]*onClick/);
   // Browsing/importing resources only prepares the local assignment dialog, never writes.
   const resourcesSection = readFileSync(new URL('../components/codex/CodexProxyResourcesSection.tsx', import.meta.url), 'utf8');

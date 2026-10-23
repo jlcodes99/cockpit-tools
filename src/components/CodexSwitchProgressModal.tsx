@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -265,7 +266,7 @@ export function CodexSwitchProgressModal() {
 
   const account = accounts.find((item) => item.id === state.accountId);
   const accountLabel =
-    account?.account_name || account?.email || state.accountId;
+    resolveCodexAccountDisplayName(account ?? { id: state.accountId }, t("common.apiKeyAccount"));
   const isError = state.status === "error";
   const isAuthRequired = state.status === "auth-required";
   const windowsOperationError = isError
@@ -501,7 +502,8 @@ export function CodexSwitchProgressModal() {
         launchAfterSwitch: state.launchAfterSwitch,
       });
     } catch (error) {
-      setActionError(String(error).replace(/^Error:\s*/, ""));
+      const errorKey = codexLaunchErrorKey(error);
+      setActionError(errorKey ? t(errorKey) : String(error).replace(/^Error:\s*/, ""));
     } finally {
       setRetryBusy(null);
     }
@@ -594,11 +596,11 @@ export function CodexSwitchProgressModal() {
           <div className="codex-switch-step-list">
             {state.steps.map((step) => {
               const detailLines = stepDetailLines(step);
+              const failureValue = step.details.error || state.error;
+              const failureKey = codexLaunchErrorKey(failureValue);
               const failure =
                 step.status === "error"
-                  ? conciseCodexCredentialFailure(
-                      step.details.error || state.error,
-                    )
+                  ? failureKey ? t(failureKey) : conciseCodexCredentialFailure(failureValue)
                   : null;
               const renderedDetailLines =
                 failure && !detailLines.some((line) => line.includes(failure))

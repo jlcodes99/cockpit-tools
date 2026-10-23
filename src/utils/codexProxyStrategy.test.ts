@@ -84,6 +84,23 @@ test('subscription notices are advisory only and remain selectable', () => {
   assert.equal(filterStrategyCandidates(candidates, '', '').length, 1);
 });
 
+test('member browsing retains blocked subscription nodes without making them executable', () => {
+  const blocked = Array.from({ length: 50 }, (_, index) => ({
+    ...node(`blocked-${index}`, `Region ${index}`, false),
+    protocol: index < 27 ? 'anytls' : 'hysteria2', insecure: true, error: 'PROXY_TLS_INSECURE',
+  }));
+  const subscription = source('sub', 'Subscription', 'subscription', [...blocked, node('notice', 'Website')]);
+  const sources = [subscription, source('saved', 'Saved strategy', 'strategy', [node('copy', 'Copy')])];
+  assert.equal(strategyCandidates(sources).length, 1);
+  const visible = strategyCandidates(sources, true);
+  assert.equal(visible.length, 51);
+  assert.equal(visible.filter((entry) => !entry.supported && entry.error === 'PROXY_TLS_INSECURE').length, 50);
+  assert.equal(filterStrategyCandidates(visible, 'Region 49', 'sub')[0].itemId, 'blocked-49');
+  const approved = { ...subscription, nodes: subscription.nodes.map((entry) => entry.id === 'blocked-49' ? { ...entry, supported: true, error: null } : entry) };
+  assert.deepEqual(strategyCandidates([approved]).map((entry) => entry.itemId), ['blocked-49', 'notice']);
+  assert.equal(subscription.nodes[49].supported, false, 'browsing must not mutate permission');
+});
+
 /** One saved strategy source as `codex_proxy_catalog_list` delivers it. The view is free-form JSON,
  * so a numeric field may still arrive as text even though the type declares a number. */
 const savedSource = (strategyOptions: Record<string, unknown> | null | undefined): ProxyCatalogSource =>
@@ -137,7 +154,7 @@ test('advanced fields accept only their documented ranges', () => {
 });
 
 test('blank advanced fields keep the engine default instead of sending zero', () => {
-  assert.deepEqual(strategyOptions({ ...emptyForm(), lazy: false }, 'url-test'), { lazy: false });
+  assert.deepEqual(strategyOptions({ ...emptyForm(), lazy: false }, 'url-test'), { lazy: true });
   assert.deepEqual(
     strategyOptions({ url: ' https://host/check ', interval: '600', timeout: '5', tolerance: '50', lazy: true }, 'url-test'),
     { lazy: true, url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50 },
@@ -145,10 +162,10 @@ test('blank advanced fields keep the engine default instead of sending zero', ()
   assert.deepEqual(strategyOptions({ ...emptyForm(), interval: '1' }, 'url-test'), { lazy: true });
 });
 
-test('a saved strategy restores every advanced field into the form', () => {
+test('a saved strategy restores numeric fields while legacy lazy false becomes enabled', () => {
   // The view already divided the stored milliseconds by 1000, so 5 here is the saved 5000 ms.
   const form = strategyOptionsForm(savedSource({ kind: 'url-test', url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50, lazy: false }));
-  assert.deepEqual(form, { url: 'https://host/check', interval: '600', timeout: '5', tolerance: '50', lazy: false });
+  assert.deepEqual(form, { url: 'https://host/check', interval: '600', timeout: '5', tolerance: '50', lazy: true });
   // Text and number inputs end up as the same form text; neither shape may become "NaN".
   assert.deepEqual(
     strategyOptionsForm(savedSource({ url: 'https://host/check', interval: '600', timeout: '5', tolerance: '50', lazy: false })),
@@ -170,11 +187,11 @@ test('a source without saved options restores a blank form, never undefined or N
   assert.deepEqual(strategyOptionErrors(form, 'url-test'), {});
 });
 
-test('restoring a saved strategy re-submits the same parameters, in seconds', () => {
+test('restoring a saved strategy retains numeric parameters and always enables lazy probing', () => {
   const form = strategyOptionsForm(savedSource({ kind: 'url-test', url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50, lazy: false }));
   // Both the form and the payload are seconds; only the encoder turns them into milliseconds.
   assert.deepEqual(strategyOptions(form, 'url-test'),
-    { lazy: false, url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50 });
+    { lazy: true, url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50 });
   // A kind only submits what it applies, so its own round trip stays exact as well.
   const fallback = strategyOptionsForm(savedSource({ kind: 'fallback', url: 'https://host/check', interval: 600, timeout: 5, lazy: true }));
   assert.deepEqual(strategyOptions(fallback, 'fallback'), { lazy: true, url: 'https://host/check', interval: 600, timeout: 5 });
@@ -198,9 +215,9 @@ test('a stored value the engine would reject stays visible instead of being re-s
 test('each kind only carries the options the engine applies to it', () => {
   const full = { url: 'https://host/check', interval: '600', timeout: '5', tolerance: '50', lazy: false };
   assert.deepEqual(strategyOptions(full, 'select'), {});
-  assert.deepEqual(strategyOptions(full, 'fallback'), { lazy: false, url: 'https://host/check', interval: 600, timeout: 5 });
-  assert.deepEqual(strategyOptions(full, 'url-test'), { lazy: false, url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50 });
-  assert.deepEqual(strategyOptions(full, 'load-balance'), { lazy: false, url: 'https://host/check', interval: 600 });
+  assert.deepEqual(strategyOptions(full, 'fallback'), { lazy: true, url: 'https://host/check', interval: 600, timeout: 5 });
+  assert.deepEqual(strategyOptions(full, 'url-test'), { lazy: true, url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50 });
+  assert.deepEqual(strategyOptions(full, 'load-balance'), { lazy: true, url: 'https://host/check', interval: 600 });
 });
 
 test('a strategy name may not shadow one of its member nodes', () => {
@@ -227,7 +244,7 @@ test('save and remove map to the documented IPC commands', async () => {
   await service.removeProxyStrategy('strategy');
   assert.equal(JSON.stringify(calls), JSON.stringify([
     { command: 'codex_proxy_strategy_save', args: { name: 'Primary', kind: 'fallback', members: [{ sourceId: 'a', itemId: '1' }], options: { lazy: true } } },
-    { command: 'codex_proxy_strategy_save', args: { id: 'strategy', name: 'Primary', kind: 'fallback', members: [{ sourceId: 'a', itemId: '1' }], options: { url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50, lazy: false } } },
+    { command: 'codex_proxy_strategy_save', args: { id: 'strategy', name: 'Primary', kind: 'fallback', members: [{ sourceId: 'a', itemId: '1' }], options: { url: 'https://host/check', interval: 600, timeout: 5, tolerance: 50, lazy: true } } },
     { command: 'codex_proxy_strategy_remove', args: { id: 'strategy' } },
   ]));
 });

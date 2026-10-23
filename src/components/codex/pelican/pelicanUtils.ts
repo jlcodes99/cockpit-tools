@@ -1,7 +1,9 @@
 import type { TFunction } from 'i18next';
+import { codexBackgroundError } from '../../../utils/codexBackgroundError';
 
 export function pelicanError(cause: unknown, t: TFunction): string {
   const message = cause instanceof Error ? cause.message : String(cause);
+  if (/^CHATGPT_PLAN_[A-Z_]+$/.test(message)) return codexBackgroundError(message, t);
   const known: Record<string, string> = {
     PELICAN_TIMEOUT: 'pelican.errorTimeout',
     PELICAN_STREAM_INCOMPLETE: 'pelican.errorStream',

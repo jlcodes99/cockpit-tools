@@ -1070,6 +1070,7 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
   } = useModalErrorState();
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone?: 'error' | 'success' } | null>(null);
+  const refreshRequestId = useRef(0);
   const setDeleteConfirm = useCallback((value: { ids: string[]; message: string } | null) => {
     setDeleteConfirmError(null);
     rawSetDeleteConfirm(value);
@@ -1097,15 +1098,29 @@ export function useProviderAccountsPage<TAccount extends ProviderAccountBase>(
 
   const handleRefresh = useCallback(
     async (accountId: string) => {
+      const requestId = ++refreshRequestId.current;
       setRefreshing(accountId);
+      setMessage(null);
       try {
         await refreshToken(accountId);
+        if (requestId === refreshRequestId.current) {
+          setMessage({ text: t('common.shared.refreshSuccess'), tone: 'success' });
+        }
       } catch (e) {
         console.error(e);
+        if (requestId === refreshRequestId.current) {
+          setMessage({
+            text: t('common.shared.refreshFailed', {
+              error: String(e).replace(/^Error:\s*/, '').trim(),
+            }),
+            tone: 'error',
+          });
+        }
+      } finally {
+        if (requestId === refreshRequestId.current) setRefreshing(null);
       }
-      setRefreshing(null);
     },
-    [refreshToken],
+    [refreshToken, t],
   );
 
   const handleRefreshAll = useCallback(async () => {

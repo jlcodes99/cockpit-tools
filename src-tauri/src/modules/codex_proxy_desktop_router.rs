@@ -12,7 +12,8 @@
 //! 启动时只为**已有生效出口**（独立绑定或统一代理）的账号安装入口：未绑定账号若也被注入
 //! 本地入口，会替代应用全局代理环境变量、用户自定义的 `--proxy-server`/PAC 参数与系统代理，
 //! 属于静默改变出口。因此未绑定账号保持原有启动参数，首次绑定后需要重启一次，之后换节点、
-//! 换策略或解绑都不再需要重启。显式“不使用代理”也安装固定入口以覆盖启动时的代理默认值。
+//! 换策略或解绑都不再需要重启。显式“不使用代理”的新启动不安装入口，
+//! 由启动层清除代理环境并强制客户端直连；旧客户端需重启才能脱离本地入口。
 //!
 //! 端口属于账号入口而不是某次内核：分配结果持久化在应用数据目录的
 //! `codex-proxy-desktop-ports.json`，宿主重启后优先复用，端口被占用时按确定性顺序探测
@@ -28,7 +29,7 @@ use rustls::{pki_types::ServerName, ClientConfig, RootCertStore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     fs,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::{Path, PathBuf},
@@ -49,12 +50,19 @@ const PORTS_VERSION: u32 = 1;
 /// 起始端口区间与既有确定性算法保持一致，避免升级后端口整体变化。
 const PORT_RANGE_START: u16 = 40_000;
 const PORT_RANGE_SIZE: u16 = 20_000;
-/// 记录端口被占用时向后探测的次数，耗尽即判定入口不可用并回退。
+/// 保留既有连续候选；Windows/WSL 大段保留端口占用时再分散探测，避免只在同一段重试。
 const PORT_ATTEMPTS: u16 = 64;
+const PORT_SCATTER_ATTEMPTS: u16 = 128;
+// 与 20_000 互质，且远大于连续候选宽度。所有候选仍位于原有受管区间。
+const PORT_SCATTER_STRIDE: u32 = 997;
 const MAX_PORT_RECORDS: usize = 1024;
 const REGISTRY_IO_TIMEOUT: Duration = Duration::from_secs(2);
 static ROUTES: LazyLock<Mutex<HashMap<String, u16>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 static ENTRY_STARTS: LazyLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+// Successful binds reserve ownership before any disk await. Account starts can race,
+// but neither a stopped listener nor a slow registry write lets another account steal its port.
+static PORT_OWNERS: LazyLock<Mutex<HashMap<String, u16>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 // Only acquired inside spawn_blocking; atomic read/modify/write cannot lose another account's port.
 static REGISTRY_WRITES: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -119,15 +127,17 @@ fn is_managed_port(port: u16) -> bool {
     port >= PORT_RANGE_START && port < PORT_RANGE_START + PORT_RANGE_SIZE
 }
 
-/// 候选端口：优先复用已记录端口，其次从确定性起点逐个向后探测并在区间内回绕。
+/// 优先复用记录和原 64 个连续候选，耗尽后跳出该区间。候选确定、有界且去重。
 fn candidate_ports(account_id: &str, recorded: Option<u16>) -> impl Iterator<Item = u16> {
     let start = recorded
         .filter(|port| is_managed_port(*port))
         .unwrap_or_else(|| preferred_port(account_id));
     let offset = u32::from(start - PORT_RANGE_START);
-    (0..PORT_ATTEMPTS).map(move |step| {
-        PORT_RANGE_START + ((offset + u32::from(step)) % u32::from(PORT_RANGE_SIZE)) as u16
-    })
+    let mut seen = HashSet::new();
+    (0..PORT_ATTEMPTS).map(u32::from)
+        .chain((1..=PORT_SCATTER_ATTEMPTS).map(|step| u32::from(step) * PORT_SCATTER_STRIDE))
+        .map(move |step| PORT_RANGE_START + ((offset + step) % u32::from(PORT_RANGE_SIZE)) as u16)
+        .filter(move |port| seen.insert(*port))
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -150,36 +160,48 @@ impl PortRegistry {
         self.version = PORTS_VERSION;
         self.ports.insert(account_id.to_owned(), port);
     }
+
+    fn reserved_for_other(&self, account_id: &str, port: u16) -> bool {
+        self.ports.iter().any(|(owner, reserved)| owner != account_id && *reserved == port)
+    }
 }
 
 fn registry_path() -> Result<PathBuf, String> {
     Ok(account::get_data_dir()?.join(PORTS_FILE))
 }
 
-/// 记录缺失、损坏或超限时只当成“还没有记录”。这里不隔离用户文件：端口记录可以重新
-/// 分配，损坏时重算比移动文件更安全。
+/// Recovery scans retain their read-only best-effort behavior. Allocation uses the
+/// checked read below: unknown ownership must never be treated as an empty registry.
 fn read_registry(path: &Path) -> PortRegistry {
+    read_registry_checked(path).unwrap_or_default()
+}
+
+fn read_registry_checked(path: &Path) -> Result<PortRegistry, String> {
+    if fs::metadata(path).is_ok_and(|meta| meta.len() > 4 * 1024 * 1024) {
+        logger::log_warn("[CodexProxy] 桌面入口端口记录文件过大，无法确认端口归属");
+        return Err("PROXY_ENTRY_PORT_UNAVAILABLE".into());
+    }
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return PortRegistry::default()
+            return Ok(PortRegistry::default())
         }
         Err(error) => {
             logger::log_warn(&format!("[CodexProxy] 读取桌面入口端口记录失败: {error}"));
-            return PortRegistry::default();
+            return Err("PROXY_ENTRY_PORT_UNAVAILABLE".into());
         }
     };
     match serde_json::from_str::<PortRegistry>(&content) {
-        Ok(registry) if registry.ports.len() <= MAX_PORT_RECORDS => registry,
+        Ok(registry) if registry.ports.len() <= MAX_PORT_RECORDS => Ok(registry),
         Ok(_) => {
-            logger::log_warn("[CodexProxy] 桌面入口端口记录条目过多，本次忽略该文件");
-            PortRegistry::default()
+            logger::log_warn("[CodexProxy] 桌面入口端口记录条目过多，无法确认端口归属");
+            Err("PROXY_ENTRY_PORT_UNAVAILABLE".into())
         }
         Err(error) => {
             logger::log_warn(&format!(
-                "[CodexProxy] 桌面入口端口记录解析失败，本次忽略该文件: {error}"
+                "[CodexProxy] 桌面入口端口记录解析失败，无法确认端口归属: {error}"
             ));
-            PortRegistry::default()
+            Err("PROXY_ENTRY_PORT_UNAVAILABLE".into())
         }
     }
 }
@@ -190,12 +212,12 @@ fn save_registry(path: &Path, registry: &PortRegistry) -> Result<(), String> {
     atomic_write::write_string_atomic(path, &content)
 }
 
-/// 端口记录读写放在阻塞线程池，超时或失败都只降级为“本次不持久化”，不影响入口可用性。
+/// 端口记录读写放在阻塞线程池。读取超时由调用方拒绝分配；写入超时保留已绑定入口。
 async fn registry_io<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
     match tokio::time::timeout(REGISTRY_IO_TIMEOUT, tokio::task::spawn_blocking(work)).await {
         Ok(Ok(value)) => Some(value),
         _ => {
-            logger::log_warn("[CodexProxy] 桌面入口端口记录读写超时，本次只使用内存分配");
+            logger::log_warn("[CodexProxy] 桌面入口端口记录读写超时或任务失败");
             None
         }
     }
@@ -206,24 +228,42 @@ async fn registry_io<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'stati
 /// 调用方持账号独立的启动锁，因此同一账号不会注册出两个入口，慢磁盘不会占住全局路由锁；
 /// 记录端口被占用时改绑确定性顺序里的下一个端口并写回记录。
 async fn install(account_id: &str, path: Option<&Path>) -> Result<(TcpListener, u16), String> {
-    let recorded = match path {
+    let registry = match path {
         Some(path) => {
             let path = path.to_path_buf();
-            let account_id = account_id.to_owned();
-            registry_io(move || read_registry(&path).recorded(&account_id))
-                .await
-                .flatten()
+            registry_io(move || read_registry_checked(&path))
+                .await.ok_or("PROXY_ENTRY_PORT_UNAVAILABLE")??
         }
-        None => None,
+        None => PortRegistry::default(),
     };
-    for port in candidate_ports(account_id, recorded) {
-        let Ok(listener) = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await else {
+    for (attempt, port) in candidate_ports(account_id, registry.recorded(account_id)).enumerate() {
+        // Socket bind is a local syscall; bounded batches yield even when every bind
+        // fails immediately, so a large excluded range cannot monopolize the runtime.
+        if attempt != 0 && attempt % 16 == 0 {
+            tokio::task::yield_now().await;
+        }
+        if registry.reserved_for_other(account_id, port) {
             continue;
-        };
+        }
+        let Some(listener) = bind_owned_port(account_id, port).await else { continue };
         persist_port(path, account_id, port).await;
         return Ok((listener, port));
     }
     Err("PROXY_ENTRY_PORT_UNAVAILABLE".into())
+}
+
+/// No registry I/O, engine work, or async socket wait runs under the ownership lock.
+/// Retain the successfully bound socket; probing then rebinding would reopen a race.
+async fn bind_owned_port(account_id: &str, port: u16) -> Option<TcpListener> {
+    let mut owners = PORT_OWNERS.lock().await;
+    if owners.iter().any(|(owner, owned)| owner != account_id && *owned == port) {
+        return None;
+    }
+    let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).ok()?;
+    listener.set_nonblocking(true).ok()?;
+    let listener = TcpListener::from_std(listener).ok()?;
+    owners.insert(account_id.to_owned(), port);
+    Some(listener)
 }
 
 /// 只在端口与记录不一致时写回，避免每次启动重写同一个文件。
@@ -233,7 +273,10 @@ async fn persist_port(path: Option<&Path>, account_id: &str, port: u16) {
     let account_id = account_id.to_owned();
     let outcome = registry_io(move || {
         let _write = REGISTRY_WRITES.lock().unwrap_or_else(|error| error.into_inner());
-        let mut registry = read_registry(&path);
+        let mut registry = read_registry_checked(&path)?;
+        if registry.reserved_for_other(&account_id, port) {
+            return Err("PROXY_ENTRY_PORT_UNAVAILABLE".into());
+        }
         if registry.recorded(&account_id) == Some(port) {
             return Ok(());
         }
@@ -296,9 +339,10 @@ async fn ensure_for_account(
     if !codex_account_proxy::eligible(account) {
         return Ok(None);
     }
-    // An explicit direct choice also uses the stable entry, overriding launch proxy defaults.
-    if !account.egress_proxy_disabled
-        && !codex_account_proxy::has_effective_proxy(account, unified_active)
+    // Keep old listeners alive for existing clients, but never inject them into
+    // a new explicit-direct launch: they stop when the host exits.
+    if account.egress_proxy_disabled
+        || !codex_account_proxy::has_effective_proxy(account, unified_active)
     {
         return Ok(None);
     }
@@ -367,9 +411,9 @@ async fn restore_exact_port(account_id: &str, port: u16) -> Result<(), String> {
             return if current == port { Ok(()) } else { Err("PROXY_ENTRY_PORT_UNAVAILABLE".into()) };
         }
     }
-    let listener = match TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await {
-        Ok(listener) => listener,
-        Err(_) => {
+    let listener = match bind_owned_port(account_id, port).await {
+        Some(listener) => listener,
+        None => {
             entry::recovery_failed(account_id, port, "PROXY_ENTRY_PORT_UNAVAILABLE");
             return Err("PROXY_ENTRY_PORT_UNAVAILABLE".into());
         }

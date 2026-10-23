@@ -2,6 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Activity, ArrowRight, Clock3, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useCodexProxyTargets } from './useCodexProxyTargets';
+import { getCodexProxyTarget, isCodexProxyTarget } from '../../services/codexProxyTargetService';
 import type { CodexAccount } from '../../types/codex';
 import { proxyRuntimeRows, proxyRuntimeChanges, proxyRuntimeLabelKey } from '../../utils/codexProxyPreview';
 import { useCodexAccountStore } from '../../stores/useCodexAccountStore';
@@ -35,7 +37,9 @@ export function CodexAccountProxyPreview({ account, displayName, onClose, onMana
   const titleId = useId();
   const dialog = useRef<HTMLDivElement>(null);
   const switchButton = useRef<HTMLButtonElement>(null);
-  const latestAccount = useCodexAccountStore((state) => state.accounts.find((entry) => entry.id === account.id)) ?? account;
+  const storedAccount = useCodexAccountStore((state) => state.accounts.find((entry) => entry.id === account.id)) ?? account;
+  const [latestAccount] = useCodexProxyTargets([storedAccount]);
+  const desktopOnly = isCodexProxyTarget(latestAccount);
   const bindingKey = JSON.stringify([account.id, latestAccount.egress_proxy_disabled ?? false,
     latestAccount.egress_proxy ?? null, latestAccount.egress_proxy_url ?? null]);
   const data = useCodexProxyPreview(account.id, bindingKey);
@@ -116,13 +120,13 @@ export function CodexAccountProxyPreview({ account, displayName, onClose, onMana
     requestAnimationFrame(() => switchButton.current?.focus({ preventScroll: true }));
   };
   const [activityView, setActivityView] = useState<'api' | 'proxy'>('api');
-  useEscCloseTopmost(!editing, onClose);
+  useEscCloseTopmost(!editing, onClose, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
 
-  const error = [measureError?.accountId === account.id ? t(measureError.key) : '',
+  const error = [latestAccount.proxyTargetError ? t('codex.proxy.runtimeReadFailed') : '', latestAccount.egress_proxy_error ? t(proxyErrorKey(latestAccount.egress_proxy_error)) : '', measureError?.accountId === account.id ? t(measureError.key) : '',
     restoreError?.accountId === account.id ? t(restoreError.key) : '',
-    data.statusError ? t('codex.proxy.runtimeUnavailable') : '',
+    data.statusError && !latestAccount.egress_proxy_error && !latestAccount.proxyTargetError ? t('codex.proxy.runtimeUnavailable') : '',
     data.requestsError ? t('codex.proxy.recentFailed') : ''].filter(Boolean).join(' · ');
 
   return createPortal(<><div className="modal-overlay codex-proxy-preview-overlay" inert={editing} aria-hidden={editing || undefined}>
@@ -135,13 +139,15 @@ export function CodexAccountProxyPreview({ account, displayName, onClose, onMana
       <div className="modal-body">
         <ModalErrorMessage message={error} />
         <CodexProxyDisplayControl showSample={false} />
-        <CodexProxyConnectionSummary account={latestAccount} status={data.status} failed={data.statusError}
+        {latestAccount.egress_proxy_legacy_bound && <p className="codex-proxy-page-note">{t('codex.proxy.legacyBoundHint')}</p>}
+        {desktopOnly && <p className="codex-proxy-page-note">{t('codex.proxy.cardScopeHint')}</p>}
+        <CodexProxyConnectionSummary account={latestAccount} status={data.status} failed={data.statusError || Boolean(latestAccount.proxyTargetError)}
           switchButtonRef={switchButton} onSwitch={() => openEditor('independent')}
           onFollow={() => openEditor('follow')} onDisable={() => openEditor('disabled')}
-          onMeasure={() => void measureLatency()} measuring={measuring || restoring} />
+          onMeasure={() => void measureLatency()} measuring={measuring || restoring || Boolean(latestAccount.proxyTargetLoading || latestAccount.proxyTargetError)} />
         <div className="codex-proxy-preview-help"><span>{t('codex.proxy.runtimeHint')}</span></div>
         <section className="codex-proxy-preview-runtime" aria-label={t('codex.proxy.runtimeTitle')}>
-          {proxyRuntimeRows(data.status).map((row) => <div key={row.kind}>
+          {proxyRuntimeRows(data.status, desktopOnly).map((row) => <div key={row.kind}>
             <span>{t(proxyRuntimeLabelKey(row.kind))}</span><strong className={`is-${row.state ?? 'unknown'}`}>
               <i />{row.state ? t(`codex.proxy.runtime_${row.state}`) : data.statusError ? '—' : t('codex.proxy.runtimeLoading')}</strong>
             <small title={row.node || undefined}>{row.node || '—'}</small><CodexProxyRuntimePort row={row} />
@@ -154,7 +160,7 @@ export function CodexAccountProxyPreview({ account, displayName, onClose, onMana
             <p>{t('codex.proxy.sessionHistoryHint')}</p>
             <ol className="codex-proxy-preview-timeline" tabIndex={0} aria-label={t('codex.proxy.sessionHistory')}>{data.history.map((entry, index) => <li key={`${entry.timestamp}-${index}`}>
               <time dateTime={new Date(entry.timestamp).toISOString()}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
-              <div>{proxyRuntimeChanges(entry.status, data.history[index + 1]?.status).map((row) => <div className="codex-proxy-preview-change" key={row.kind}>
+              <div>{proxyRuntimeChanges(entry.status, data.history[index + 1]?.status, desktopOnly).map((row) => <div className="codex-proxy-preview-change" key={row.kind}>
                 <span>{t(proxyRuntimeLabelKey(row.kind))}<b>{row.state ? t(`codex.proxy.runtime_${row.state}`) : '—'}</b></span>
                 {row.node && <small>{row.node}</small>}{row.port && <CodexProxyRuntimePort row={row} />}
                 <CodexProxyRuntimeDetails row={row} />
@@ -180,7 +186,7 @@ export function CodexAccountProxyPreview({ account, displayName, onClose, onMana
         </div>
       </div>
       <footer className="modal-footer">
-        <div><button type="button" className="btn btn-secondary" disabled={data.loading || restoring || measuring} onClick={() => { setRestoreError(null); setMeasureError(null); data.refresh(); }}><RefreshCw size={15} className={data.loading ? 'loading-spinner' : undefined} />{t('common.refresh')}</button>
+        <div><button type="button" className="btn btn-secondary" disabled={data.loading || restoring || measuring} onClick={() => { setRestoreError(null); setMeasureError(null); if (desktopOnly) void getCodexProxyTarget(account.id).catch(() => {}); data.refresh(); }}><RefreshCw size={15} className={data.loading ? 'loading-spinner' : undefined} />{t('common.refresh')}</button>
           {(restoring || data.status?.desktopEntry?.state !== 'listening') && <button type="button" className="btn btn-secondary" disabled={data.loading || restoring || measuring} onClick={() => void restoreEntry()}>
             <RefreshCw size={15} className={restoring ? 'loading-spinner' : undefined} />{t(restoring ? 'codex.proxy.restoringEntry' : 'codex.proxy.restoreEntry')}
           </button>}</div>

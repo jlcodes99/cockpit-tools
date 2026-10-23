@@ -1,7 +1,9 @@
+import { useCodexProxyTargets } from './useCodexProxyTargets';
 import { ChevronRight, RefreshCw, Shield, ShieldCheck, ShieldOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { CodexAccount } from '../../types/codex';
 import { useCodexProxyDisplay } from '../../hooks/useCodexProxyDisplay';
+import { getCodexProxyTarget } from '../../services/codexProxyTargetService';
 import { canUseCodexAccountProxy, requestCodexAccountProxy } from '../../utils/codexAccountProxy';
 import { codexProxyCardPresentation } from '../../utils/codexProxyDisplay';
 import { proxySummary } from '../../utils/codexProxyPresentation';
@@ -17,8 +19,9 @@ export function CodexAccountProxyCard({ account, placement }: {
   return <ProxyCard key={account.id} account={account} detailed={display === 'detailed'} />;
 }
 
-function ProxyCard({ account, detailed }: { account: CodexAccount; detailed: boolean }) {
+function ProxyCard({ account: sourceAccount, detailed }: { account: CodexAccount; detailed: boolean }) {
   const { t } = useTranslation();
+  const [account] = useCodexProxyTargets([sourceAccount]);
   const data = useCodexProxyCardData(account, detailed);
   const { saved, modeKey, nodes, rows } = codexProxyCardPresentation(account, data.status);
   const Icon = account.egress_proxy_disabled ? ShieldOff : saved ? ShieldCheck : Shield;
@@ -90,10 +93,10 @@ function ProxyCard({ account, detailed }: { account: CodexAccount; detailed: boo
         </span>
       </>}
     </button>
-    {(data.statusError || data.requestsError) && <div className={`codex-account-proxy-card-error${data.statusErrorKind === 'busy' ? ' is-busy' : ''}`} role="status">
-      <span>{t(data.statusError ? statusErrorKey : 'codex.proxy.recentFailed')}</span>
+    {(data.statusError || data.requestsError || account.proxyTargetError) && <div className={`codex-account-proxy-card-error${data.statusErrorKind === 'busy' ? ' is-busy' : ''}`} role="status">
+      <span>{t(account.proxyTargetError ? 'codex.proxy.runtimeReadFailed' : data.statusError ? statusErrorKey : 'codex.proxy.recentFailed')}</span>
       <button type="button" className="btn btn-secondary" disabled={data.loading} aria-label={t('codex.proxy.display.refresh')}
-        onClick={(event) => { event.stopPropagation(); data.refresh(); }}><RefreshCw size={12} />{t('common.retry')}</button>
+        onClick={(event) => { event.stopPropagation(); if (account.proxyTargetError) void getCodexProxyTarget(account.id).catch(() => {}); data.refresh(); }}><RefreshCw size={12} />{t('common.retry')}</button>
     </div>}
   </div>;
 }

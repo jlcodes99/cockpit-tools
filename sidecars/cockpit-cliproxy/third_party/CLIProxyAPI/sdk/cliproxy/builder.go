@@ -65,6 +65,10 @@ type Builder struct {
 // These callbacks provide opportunities to perform custom initialization
 // and cleanup operations during service startup and shutdown.
 type Hooks struct {
+	// OnAuthPrepared projects host-owned attributes before every runtime registration or update.
+	// Returning an error rejects the update; the callback must not perform slow I/O.
+	OnAuthPrepared func(*coreauth.Auth) error
+
 	// OnBeforeStart is called before the service starts, allowing configuration
 	// modifications or additional setup.
 	OnBeforeStart func(*config.Config)

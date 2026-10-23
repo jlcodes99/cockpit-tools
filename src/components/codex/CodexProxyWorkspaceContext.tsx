@@ -6,6 +6,8 @@ import { getCodexUnifiedProxy, unifiedProxyErrorKey, type CodexUnifiedProxyView 
 import type { CodexProxyTraffic } from '../../utils/codexProxyTraffic';
 import { useCodexProxyTraffic } from './useCodexProxyTraffic';
 import { canUseCodexAccountProxy } from '../../utils/codexAccountProxy';
+import { apiServiceProxyAccount } from '../../services/codexProxyTargetService';
+import { useCodexProxyTargets } from './useCodexProxyTargets';
 
 export type CodexProxySectionId = 'overview' | 'accounts' | 'resources' | 'connections' | 'rules' | 'logs' | 'tests' | 'settings';
 
@@ -38,8 +40,10 @@ interface Props {
 
 const CodexProxyWorkspaceContext = createContext<CodexProxyWorkspaceValue | null>(null);
 
-export function CodexProxyWorkspaceProvider({ accounts, accountId, children }: Props): ReactElement {
+export function CodexProxyWorkspaceProvider({ accounts: sourceAccounts, accountId, children }: Props): ReactElement {
   const { t } = useTranslation();
+  const serviceName = t('codex.localAccess.title');
+  const accounts = useCodexProxyTargets(useMemo(() => sourceAccounts.some((account) => account.id === '__api_service__') ? sourceAccounts : [...sourceAccounts, apiServiceProxyAccount(serviceName)], [sourceAccounts, serviceName]));
   const eligible = useMemo(() => accounts.filter(canUseCodexAccountProxy), [accounts]);
   const [selectedId, setSelectedId] = useState(accountId ?? eligible[0]?.id ?? '');
   const [section, setSection] = useState<CodexProxySectionId>(accountId ? 'accounts' : 'resources');

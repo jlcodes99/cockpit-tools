@@ -139,7 +139,7 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 		if updated, errDelete := sjson.DeleteBytes(translated, "stream"); errDelete == nil {
 			translated = updated
 		}
-		translated = sanitizeOpenAIResponsesReasoningEncryptedContent(ctx, "openai compat executor", translated)
+		translated = sanitizeOpenAIResponsesReasoningEncryptedContentWithCompat(ctx, "openai compat executor", translated, true)
 	}
 	reporter.SetTranslatedReasoningEffort(translated, to.String())
 
@@ -193,7 +193,7 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 		b, _ := io.ReadAll(httpResp.Body)
 		helps.AppendAPIResponseChunk(ctx, e.cfg, b)
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), b))
-		err = statusErr{code: httpResp.StatusCode, msg: string(b)}
+		err = cliproxyexecutor.UpstreamRequestRejected(statusErr{code: httpResp.StatusCode, msg: string(b)})
 		return resp, err
 	}
 	body, err := io.ReadAll(httpResp.Body)
@@ -405,7 +405,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		if errClose := httpResp.Body.Close(); errClose != nil {
 			log.Errorf("openai compat executor: close response body error: %v", errClose)
 		}
-		err = statusErr{code: httpResp.StatusCode, msg: string(b)}
+		err = cliproxyexecutor.UpstreamRequestRejected(statusErr{code: httpResp.StatusCode, msg: string(b)})
 		return nil, err
 	}
 	out := make(chan cliproxyexecutor.StreamChunk)
@@ -528,6 +528,17 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		errScan := scanner.Err()
 		if errScan == nil && !seenDone && !streamFailed && !streamAborted && len(frameData) > 0 {
 			_ = processFrame()
+		}
+		if errScan == nil && !seenDone && !streamFailed && !streamAborted && ctx.Err() == nil && responseFormat == sdktranslator.FormatOpenAIResponse && helps.CanFinalizeResponseStream(param) {
+			chunks := helps.TranslateStreamWithClaudeInputTokens(ctx, to, responseFormat, req.Model, opts.OriginalRequest, translated, []byte("data: [DONE]"), &param, claudeInputTokens)
+			for _, chunk := range chunks {
+				select {
+				case out <- cliproxyexecutor.StreamChunk{Payload: chunk}:
+				case <-ctx.Done():
+					return
+				}
+			}
+			seenDone = len(chunks) > 0
 		}
 		if streamFailed || streamAborted {
 			return

@@ -2,7 +2,7 @@
 // 通过 include! 保持原 modules::codex_account 作用域，完整保留私有调用关系。
 /// 刷新账号资料（团队名/结构）
 async fn refresh_account_profile_once(account_id: &str) -> Result<CodexAccount, String> {
-    let mut account = prepare_account_for_injection(account_id).await?;
+    let account = prepare_account_for_injection(account_id).await?;
     if account.is_api_key_auth() || account.is_agent_identity_auth() {
         return Ok(account);
     }
@@ -10,39 +10,68 @@ async fn refresh_account_profile_once(account_id: &str) -> Result<CodexAccount, 
     let (account_name, account_structure, account_id_from_remote) =
         fetch_remote_account_profile(&account).await?;
 
+    tokio::task::spawn_blocking(move || {
+        // Read/merge/write atomically, after the network call, preserving fresh quota/token data.
+        let _guard = CODEX_ACCOUNT_MUTATION_LOCK
+            .lock()
+            .map_err(|_| "CODEX_PROFILE_WRITE_LOCK_POISONED".to_string())?;
+        let mut current =
+            load_account(&account.id).ok_or_else(|| "CODEX_STALE_ACCOUNT".to_string())?;
+        if merge_codex_account_profile(
+            &mut current,
+            &account,
+            account_name,
+            account_structure,
+            account_id_from_remote,
+        ) {
+            save_account_with_tombstone_guard(&current)?;
+        }
+        Ok(current)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+fn merge_codex_account_profile(
+    current: &mut CodexAccount,
+    original: &CodexAccount,
+    name: Option<String>,
+    structure: Option<String>,
+    remote_id: Option<String>,
+) -> bool {
+    if current.token_generation != original.token_generation
+        || current.tokens.access_token != original.tokens.access_token
+        || current.account_id != original.account_id
+    {
+        return false;
+    }
     let mut changed = false;
-
-    if let Some(remote_account_id) = normalize_optional_value(account_id_from_remote) {
-        if normalize_optional_ref(account.account_id.as_deref()) != Some(remote_account_id.clone())
-        {
-            account.account_id = Some(remote_account_id);
-            changed = true;
+    for (field, initial, value) in [
+        (&mut current.account_name, &original.account_name, name),
+        (
+            &mut current.account_structure,
+            &original.account_structure,
+            structure,
+        ),
+        (&mut current.account_id, &original.account_id, remote_id),
+    ] {
+        if let Some(value) = normalize_optional_value(value) {
+            if field == initial && field.as_deref() != Some(value.as_str()) {
+                *field = Some(value);
+                changed = true;
+            }
         }
     }
-
-    if let Some(name) = normalize_optional_value(account_name) {
-        if normalize_optional_ref(account.account_name.as_deref()) != Some(name.clone()) {
-            account.account_name = Some(name);
-            changed = true;
-        }
-    }
-
-    if let Some(structure) = normalize_optional_value(account_structure) {
-        if normalize_optional_ref(account.account_structure.as_deref()) != Some(structure.clone()) {
-            account.account_structure = Some(structure);
-            changed = true;
-        }
-    }
-
-    if changed {
-        save_account(&account)?;
-    }
-
-    Ok(account)
+    changed
 }
 
 pub async fn refresh_account_profile(account_id: &str) -> Result<CodexAccount, String> {
-    refresh_account_profile_once(account_id).await
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        refresh_account_profile_once(account_id),
+    )
+    .await
+    .map_err(|_| "CODEX_PROFILE_REFRESH_TIMEOUT".to_string())?
 }
 
 /// 添加或更新账号

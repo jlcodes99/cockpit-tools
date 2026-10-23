@@ -12,7 +12,8 @@ const accounts: CodexAccount[] = [oauth('first'), oauth('second'),
 
 test('opening assignment never selects an account and stale/ineligible selections cannot become write targets', () => {
   assert.deepEqual(proxyAssignmentAccounts(accounts, []), []);
-  assert.deepEqual(proxyAssignmentAccounts(accounts, ['missing', 'provider', 'pending', 'key']), []);
+  assert.deepEqual(proxyAssignmentAccounts(accounts, ['key']).map((entry) => entry.id), ['key']);
+  assert.deepEqual(proxyAssignmentAccounts(accounts, ['missing', 'provider', 'pending']), []);
   assert.deepEqual(proxyAssignmentAccounts(accounts, ['second', 'second', 'provider']).map((a) => a.id), ['second']);
 });
 

@@ -38,49 +38,39 @@ function harness() {
   return { ...h, props, calls, applied, cancelled, pending, render, button, error };
 }
 
-test('viewing certificate and old-record issues does not grant permission or refresh the subscription', async () => {
-  const h = harness(); h.render(); await settlePromises();
+test('certificate exceptions have no permission prompt or request', async () => {
+  const h = harness(); const tree = elements(h.render()); await settlePromises();
   assert.equal(h.calls.length, 0);
-  assert.equal(h.button('codex.proxy.catalog.allowSelectedOptions').props.disabled, false);
-  h.button('codex.proxy.catalog.allowSelectedOptions').props.onClick();
-  assert.deepEqual(h.calls[0].args, ['source', 'region', 'revision-1', true]);
-  assert.equal(h.calls[0].action, 'group');
-  assert.equal(h.button('codex.proxy.catalog.allowSelectedOptions').props.disabled, true);
-  h.button('codex.proxy.catalog.allowSelectedOptions').props.onClick();
-  assert.equal(h.calls.length, 1, 'a double click must not create two permission transactions');
-  const next = { sources: [{ ...h.props.source, revision: 'revision-2' }] };
-  h.calls[0].result.resolve(next); await settlePromises();
-  assert.deepEqual(h.applied, [next]);
-  assert.equal(h.pending[h.pending.length - 1], false);
-  assert.equal(h.error(), ''); h.unmount();
+  assert.equal(h.button('codex.proxy.catalog.allowSelectedOptions'), undefined);
+  assert.equal(tree.some((entry) => entry.props?.className?.includes('is-permission')), false);
+  h.unmount();
 });
 
-test('a permission failure stays inline and retry uses the latest source revision', async () => {
-  const h = harness(); h.button('codex.proxy.catalog.allowSelectedOptions').props.onClick();
+test('a refresh failure stays inline and a retry clears the error', async () => {
+  const h = harness(); h.button('common.refresh').props.onClick();
   h.calls[0].result.reject(new Error('CATALOG_CHANGED')); await settlePromises();
   assert.equal(h.error(), catalogService.catalogErrorKey('CATALOG_CHANGED'));
-  assert.equal(h.applied.length, 0);
-  assert.equal(h.calls[1].action, 'read', 'a stale revision is recovered with a local metadata read, never a subscription download');
-  assert.equal(h.button('codex.proxy.catalog.allowSelectedOptions').props.disabled, true);
+  assert.equal(h.calls[1].action, 'read');
+  assert.equal(h.button('common.refresh').props.disabled, true);
   const source = { ...h.props.source, revision: 'revision-2' };
   h.calls[1].result.resolve({ sources: [source] }); await settlePromises();
   assert.deepEqual(h.applied, [{ sources: [source] }]);
   h.props.source = source; h.render();
   assert.equal(h.error(), '');
-  h.button('codex.proxy.catalog.allowSelectedOptions').props.onClick();
-  assert.equal(h.calls[2].args[2], 'revision-2');
+  h.button('common.refresh').props.onClick();
+  assert.equal(h.calls[2].action, 'refresh');
   h.calls[2].result.reject(new Error('https://private.invalid/?password=secret')); await settlePromises();
   assert.equal(h.error(), 'codex.proxy.catalog.failed'); h.unmount();
 });
 
-test('a source switch ignores the previous permission result and node approval remains node-scoped', async () => {
-  const h = harness(); h.button('codex.proxy.catalog.allowSelectedOptions').props.onClick();
+test('a source switch ignores the previous refresh result', async () => {
+  const h = harness(); h.button('common.refresh').props.onClick();
   h.props.source = { ...h.props.source, id: 'next-source' }; h.props.target = h.props.source.nodes[0]; h.render();
   h.calls[0].result.resolve({ sources: [] }); await settlePromises();
   assert.deepEqual(h.applied, []);
-  h.button('codex.proxy.catalog.allowSelectedOptions').props.onClick();
-  assert.equal(h.calls[1].action, 'node');
-  assert.deepEqual(h.calls[1].args, ['next-source', 'first', 'revision-1', true]);
+  h.button('common.refresh').props.onClick();
+  assert.equal(h.calls[1].action, 'refresh');
+  assert.equal(h.calls[1].args[1], 'next-source');
   h.unmount(); h.calls[1].result.resolve({ sources: [] }); await settlePromises();
   assert.deepEqual(h.applied, []);
 });

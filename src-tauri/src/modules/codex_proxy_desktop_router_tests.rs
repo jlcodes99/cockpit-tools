@@ -15,6 +15,9 @@ mod mode_tests;
 #[path = "codex_proxy_desktop_transport_tests.rs"]
 mod transport_tests;
 
+#[path = "codex_proxy_desktop_router_port_tests.rs"]
+mod port_tests;
+
 struct TempDir(PathBuf);
 
 impl TempDir {
@@ -109,6 +112,29 @@ impl Drop for LaunchFixture {
             None => std::env::remove_var("COCKPIT_TOOLS_DATA_DIR"),
         }
     }
+}
+
+/// Own every unavailable candidate so another test releasing its socket cannot
+/// turn an expected startup failure into a successful installation mid-assertion.
+async fn occupy_candidate_ports(tag: &str) -> (String, Vec<TcpListener>) {
+    for _ in 0..256 {
+        let id = format!("{tag}-{}", uuid::Uuid::new_v4());
+        let mut listeners = Vec::new();
+        let mut complete = true;
+        for port in candidate_ports(&id, None) {
+            match TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await {
+                Ok(listener) => listeners.push(listener),
+                Err(_) => {
+                    complete = false;
+                    break;
+                }
+            }
+        }
+        if complete {
+            return (id, listeners);
+        }
+    }
+    panic!("could not reserve every candidate port for fixture {tag}");
 }
 
 #[test]
@@ -275,62 +301,63 @@ async fn listener_cancellation_is_visible_and_next_launch_reinstalls_entry() {
 
 #[tokio::test]
 async fn occupied_entry_reports_start_failure_and_successful_retry() {
-    let id = "entry-listener-occupied";
-    let mut blockers = Vec::new();
-    for port in candidate_ports(id, None) {
-        // A port already held by another test/process is also unavailable.
-        if let Ok(listener) = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await {
-            blockers.push(listener);
-        }
-    }
+    let (id, blockers) = occupy_candidate_ports("entry-listener-occupied").await;
     assert_eq!(
-        ensure_route(id, None).await.unwrap_err(),
+        ensure_route(&id, None).await.unwrap_err(),
         "PROXY_ENTRY_PORT_UNAVAILABLE"
     );
-    let failed = entry_status(id).unwrap();
+    let failed = entry_status(&id).unwrap();
     assert_eq!(failed.state, "failed");
     assert_eq!(failed.port, None);
     drop(blockers);
-    ensure_route(id, None).await.unwrap();
-    let retry = entry_status(id).unwrap();
+    ensure_route(&id, None).await.unwrap();
+    let retry = entry_status(&id).unwrap();
     assert_eq!(retry.state, "listening");
     assert!(retry.last_error.is_none());
 }
 
 #[tokio::test]
 async fn desktop_launch_never_falls_back_when_configured_entry_cannot_listen() {
-    for mode in ["account", "unified", "disabled"] {
-        let id = format!("launch-entry-failure-{mode}");
+    for mode in ["account", "unified"] {
+        let (id, blockers) = occupy_candidate_ports(&format!("launch-entry-failure-{mode}")).await;
         let fixture = LaunchFixture::new(&id);
         let mut account = eligible_account(&id);
         match mode {
             "account" => account.egress_proxy_url = Some("http://127.0.0.1:9".into()),
-            "unified" => { codex_unified_proxy::enable(
-                codex_unified_proxy::Reference::default(), "cockpit-proxy://entry-startup-fixture".into(),
-            ).unwrap(); },
-            _ => account.egress_proxy_disabled = true,
+            "unified" => {
+                codex_unified_proxy::enable(
+                    codex_unified_proxy::Reference::default(),
+                    "cockpit-proxy://entry-startup-fixture".into(),
+                )
+                .unwrap();
+            }
+            _ => unreachable!(),
         }
         fixture.save(&account);
-        let mut blockers = Vec::new();
-        for port in candidate_ports(&id, None) {
-            if let Ok(listener) = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await {
-                blockers.push(listener);
-            }
-        }
-        assert_eq!(ensure(&id).await.unwrap_err(), "PROXY_ENTRY_PORT_UNAVAILABLE", "{mode}");
+        assert_eq!(
+            ensure(&id).await.unwrap_err(),
+            "PROXY_ENTRY_PORT_UNAVAILABLE",
+            "{mode}"
+        );
         if mode != "unified" {
-            // Native and disabled routes need no engine. Shared catalog routes
+            // Native routes need no engine. Shared catalog routes
             // have a separate engine prerequisite, covered by preflight_tests.
             assert_eq!(
-                crate::modules::codex_instance::preflight_egress_proxy_for_bind_account(Some(&id)).await.unwrap_err(),
-                "PROXY_ENTRY_PORT_UNAVAILABLE", "preflight stops before replacing the running client",
+                crate::modules::codex_instance::preflight_egress_proxy_for_bind_account(Some(&id))
+                    .await
+                    .unwrap_err(),
+                "PROXY_ENTRY_PORT_UNAVAILABLE",
+                "preflight stops before replacing the running client",
             );
         }
         let saved = codex_account::load_account(&id).unwrap();
         assert_eq!(saved.egress_proxy_disabled, account.egress_proxy_disabled);
         assert_eq!(saved.egress_proxy_url, account.egress_proxy_url);
         drop(blockers);
-        assert!(ensure(&id).await.unwrap().is_some(), "retry recovers {mode}");
+        assert!(
+            ensure(&id).await.unwrap().is_some(),
+            "retry recovers {mode}"
+        );
     }
 }
 

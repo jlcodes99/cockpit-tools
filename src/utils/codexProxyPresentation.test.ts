@@ -19,12 +19,12 @@ test('live proxy UI never reads legacy raw secrets and retains only backend save
     assert.doesNotMatch(source, /egress_proxy_url/);
   }
   const editor = readFileSync(new URL('../components/codex/useCodexProxyExitEditor.ts', import.meta.url), 'utf8');
-  assert.match(editor, /const updated = await updateAccountEgressProxy\(id, null, disabled\)/);
+  assert.match(editor, /const updated = await updateCodexProxyAccount\(id, disabled\)/);
   assert.match(editor, /const updated = await bindProxyCatalog\(id, choice\.sourceId, choice\.itemId, selections \?\? \{\}, choice\.groupId\)/);
   assert.equal((editor.match(/setOverrides\(\(old\) => \(\{ \.\.\.old, \[id\]: \{ binding: updated\.egress_proxy \?\? null, disabled: updated\.egress_proxy_disabled \?\? false \} \}\)\)/g) ?? []).length, 2);
   assert.match(editor, /const checked = scope === 'selection'\s+\? await probeProxyCatalog\(requestId, choice\.sourceId, choice\.itemId, selections \?\? \{\}\)\s+: await testCodexAccountProxy\(id, requestId, null\)/);
   // Saving an unchanged binding stays a no-op instead of rewriting the account.
-  assert.match(editor, /if \(operation\.current \|\| !account \|\| saved \|\| !selectionReady\) return;/);
+  assert.match(editor, /if \(operation\.current \|\| !account \|\| account.proxyTargetLoading \|\| account.proxyTargetError \|\| saved \|\| !selectionReady\) return;/);
 });
 
 test('simple proxy form handles IPv6, encoded authentication and default ports', () => {
@@ -59,9 +59,20 @@ test('runtime status styles distinguish missing, starting and running engines', 
 });
 
 
+test('subscription detection accepts custom HTTPS ports with a subscription path or query', () => {
+  for (const value of [
+    'https://example.test:8443/api/v1/client/subscription-id',
+    ' https://example.test:8443/sub?token=private ',
+    'https://example.test:8443/?token=private',
+    'https://[::1]:8443/sub',
+  ]) {
+    assert.equal(detectProxyInputKind(value), 'subscription', value);
+  }
+});
+
 test('subscription detection does not mistake multiline proxies or credential URLs for a subscription', () => {
   assert.equal(detectProxyInputKind(' https://example.test/sub?token=private '), 'subscription');
-  for (const value of ['https://user:pass@proxy.test:443', 'https://proxy.test:8443', 'https://proxy.test', 'socks5://u:p@host:1080', 'host:1080:u:p', 'https://one.test/sub\nhttps://two.test/sub']) {
+  for (const value of ['https://user:pass@proxy.test:443', 'https://user:pass@proxy.test:8443/sub', 'https://proxy.test:8443', 'https://proxy.test:8443/', 'https://proxy.test', 'http://example.test:8080/sub', 'socks5://u:p@host:1080', 'host:1080:u:p', 'https://one.test/sub\nhttps://two.test/sub']) {
     assert.equal(detectProxyInputKind(value), 'manual');
   }
 });

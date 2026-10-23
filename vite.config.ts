@@ -1,12 +1,23 @@
+import fs from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { assertReactSingleton } from "./scripts/react-singleton";
 
-// @ts-expect-error process is a nodejs global
+// Resolve linked checkouts and Windows SUBST aliases through one physical root.
+const projectRoot = fs.realpathSync.native(path.dirname(fileURLToPath(import.meta.url)));
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  root: projectRoot,
+  plugins: [react(), assertReactSingleton()],
+  resolve: {
+    dedupe: ["react", "react-dom", "scheduler"],
+    preserveSymlinks: false,
+  },
   base: "./",
   build: {
     rollupOptions: {

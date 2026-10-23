@@ -41,7 +41,7 @@ func TestCodexAPIServiceCapacityBeforeAndAfterOutput(t *testing.T) {
 		{"overload", codexOverloadEvent, "server_is_overloaded", 502, 503},
 		{"slow-down", `{"type":"response.failed","response":{"error":{"code":"slow_down","message":"busy"}}}`, "slow_down", 502, 0},
 		{"model-capacity", `{"type":"response.failed","response":{"error":{"type":"invalid_request_error","message":"Selected model is at capacity. Please try a different model."}}}`, "", 429, 429},
-		{"quota", `{"type":"response.failed","response":{"error":{"type":"usage_limit_reached","resets_in_seconds":60,"message":"quota exhausted"}}}`, "", 429, 0},
+		{"quota", `{"type":"response.failed","response":{"error":{"type":"usage_limit_reached","resets_in_seconds":60,"message":"quota exhausted"}}}`, "", 429, 429},
 	}
 	for _, ws := range []bool{false, true} {
 		for _, apiKey := range []bool{false, true} {

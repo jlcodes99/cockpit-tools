@@ -36,14 +36,16 @@ import (
 )
 
 type cockpitSelector struct {
-	manifest   *manifest
-	emitter    *eventEmitter
-	locale     string
-	quota      *quotaReserveStateStore
-	priorities *apiKeyPriorityStateStore
-	tracker    *requestUsageTracker
-	mu         sync.Mutex
-	cursor     int
+	manifest            *manifest
+	emitter             *eventEmitter
+	locale              string
+	quota               *quotaReserveStateStore
+	priorities          *apiKeyPriorityStateStore
+	tracker             *requestUsageTracker
+	mu                  sync.Mutex
+	cursor              int
+	rotationCursors     map[[32]byte]string
+	rotationCursorOrder [][32]byte
 }
 
 type recordingSelector struct {
@@ -209,11 +211,12 @@ func quotaReserveSnapshotsFromManifest(m *manifest) map[string]quotaReserveSnaps
 		}
 		reserve := account.QuotaReserve
 		snapshots[account.ID] = quotaReserveSnapshot{
-			SnapshotUpdatedAtUnixSeconds: reserve.SnapshotUpdatedAtUnixSeconds,
-			HourlyRemainingPercent:       reserve.HourlyRemainingPercent,
-			WeeklyRemainingPercent:       reserve.WeeklyRemainingPercent,
-			HourlyWindowPresent:          reserve.HourlyWindowPresent,
-			WeeklyWindowPresent:          reserve.WeeklyWindowPresent,
+			SnapshotVerifiedQueryStartedAtUnixMillis: reserve.SnapshotVerifiedQueryStartedAtUnixMillis,
+			SnapshotUpdatedAtUnixSeconds:             reserve.SnapshotUpdatedAtUnixSeconds,
+			HourlyRemainingPercent:                   reserve.HourlyRemainingPercent,
+			WeeklyRemainingPercent:                   reserve.WeeklyRemainingPercent,
+			HourlyWindowPresent:                      reserve.HourlyWindowPresent,
+			WeeklyWindowPresent:                      reserve.WeeklyWindowPresent,
 		}
 	}
 	return snapshots
@@ -476,8 +479,12 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 		auths = filtered
 		selectionStats.candidateAuths = 1
 	}
+	scopeCandidates := auths
 	auths = s.filterAuthsForAPIKeyScope(ctx, auths)
 	selectionStats.scopedAuths = len(auths)
+	if len(auths) == 0 {
+		selectionStats.scopeDiagnostics = s.diagnoseAPIKeyScope(ctx, scopeCandidates)
+	}
 	requestKind, _ := ctx.Value(requestKindContextKey).(string)
 	if isImageRequestKind(requestKind) {
 		beforeImagePolicy := len(auths)
@@ -494,7 +501,7 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 			}
 		}
 		if len(auths) == 0 {
-			err := authPoolUnavailableError(s.locale, selectionStats, "image generation is disabled for all selected accounts")
+			err := s.poolUnavailableError(model, selectionStats, "image generation is disabled for all selected accounts")
 			s.emitAuthPoolUnavailable(ctx, provider, model, selectionStats, err)
 			return nil, err
 		}
@@ -503,6 +510,11 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 	available := make([]*coreauth.Auth, 0, len(auths))
 	quotaReserveReasons := make([]string, 0)
 	for _, auth := range auths {
+		if serviceAuthPaused(ctx, s.manifest, auth) {
+			selectionStats.unavailableAuths++
+			selectionStats.members = append(selectionStats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "paused", "account is paused in this service"))
+			continue
+		}
 		if accountQuotaExhausted(s.manifest, s.accountForAuth(auth), now) && !isCodexReserveModel(model) {
 			selectionStats.unavailableAuths++
 			selectionStats.members = append(selectionStats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "quota_cooldown", "account quota is exhausted; wait for quota reset"))
@@ -533,7 +545,7 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 		if nextCtx, recovered := maybeAutoRecoverAuthPool(ctx, s.manifest, model, auths); recovered {
 			return s.Pick(nextCtx, provider, model, opts, auths)
 		}
-		err := authPoolUnavailableError(s.locale, selectionStats, noAuthAvailableError(quotaReserveReasons).Error())
+		err := s.poolUnavailableError(model, selectionStats, noAuthAvailableError(quotaReserveReasons).Error())
 		s.emitAuthPoolUnavailable(ctx, provider, model, selectionStats, err)
 		return nil, err
 	}
@@ -543,14 +555,14 @@ func (s *cockpitSelector) Pick(ctx context.Context, provider, model string, opts
 	s.cursor++
 	s.mu.Unlock()
 
-	ordered := s.orderAuths(available, start)
+	var ordered []*coreauth.Auth
 	if isImageRequestKind(requestKind) {
 		ordered = s.orderImageAuths(available, start)
 	} else {
-		ordered = s.prioritizeAuthsForAPIKey(ctx, ordered)
+		ordered = s.orderAuthsForRequest(ctx, provider, model, available, start)
 	}
 	if len(ordered) == 0 {
-		err := authPoolUnavailableError(s.locale, selectionStats, noAuthAvailableError(quotaReserveReasons).Error())
+		err := s.poolUnavailableError(model, selectionStats, noAuthAvailableError(quotaReserveReasons).Error())
 		s.emitAuthPoolUnavailable(ctx, provider, model, selectionStats, err)
 		return nil, err
 	}
@@ -611,6 +623,9 @@ func (s *cockpitSelector) ReportAuthSelectionFailure(ctx context.Context, provid
 	stats := authPoolSelectionStats{candidateAuths: len(candidates)}
 	auths := s.filterAuthsForAPIKeyScope(ctx, candidates)
 	stats.scopedAuths = len(auths)
+	if len(auths) == 0 {
+		stats.scopeDiagnostics = s.diagnoseAPIKeyScope(ctx, candidates)
+	}
 	requestKind, _ := ctx.Value(requestKindContextKey).(string)
 	if isImageRequestKind(requestKind) {
 		before := len(auths)
@@ -629,6 +644,11 @@ func (s *cockpitSelector) ReportAuthSelectionFailure(ctx context.Context, provid
 	}
 	now := time.Now()
 	for _, auth := range auths {
+		if serviceAuthPaused(ctx, s.manifest, auth) {
+			stats.unavailableAuths++
+			stats.members = append(stats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "paused", "account is paused in this service"))
+			continue
+		}
 		if accountQuotaExhausted(s.manifest, s.accountForAuth(auth), now) && !isCodexReserveModel(model) {
 			stats.unavailableAuths++
 			stats.members = append(stats.members, poolMemberDiagnostic(auth, s.accountForAuth(auth), false, "quota_cooldown", "account quota is exhausted; wait for quota reset"))
@@ -676,7 +696,7 @@ func (s *cockpitSelector) ReportAuthSelectionFailure(ctx context.Context, provid
 	if err != nil && strings.TrimSpace(err.Error()) != "" {
 		detail = strings.TrimSpace(err.Error())
 	}
-	diagnosticErr := authPoolUnavailableError(s.locale, stats, detail)
+	diagnosticErr := s.poolUnavailableError(model, stats, detail)
 	var authErr *coreauth.Error
 	if errors.As(err, &authErr) && authErr != nil && strings.TrimSpace(authErr.Code) != "" {
 		diagnosticErr.Code = authErr.Code
@@ -765,18 +785,7 @@ func (s *cockpitSelector) filterAuthsForAPIKeyScope(ctx context.Context, auths [
 	if s == nil || s.manifest == nil || ctx == nil {
 		return auths
 	}
-	spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec)
-	if spec == nil {
-		return auths
-	}
-
-	scopeAccountIDs := spec.AccountIDs
-	// 生图转发：请求走实例网关的生图账号池，而不是对话账号。
-	if requestKind, _ := ctx.Value(requestKindContextKey).(string); isImageRequestKind(requestKind) {
-		if imageAccountIDs := imageGenerationAccountIDsForSpec(spec); len(imageAccountIDs) > 0 {
-			scopeAccountIDs = imageAccountIDs
-		}
-	}
+	scopeAccountIDs := apiKeyScopeAccountIDs(ctx)
 	if len(scopeAccountIDs) == 0 {
 		return auths
 	}
@@ -857,11 +866,12 @@ func quotaReserveSnapshotFromSpec(account *accountSpec) *quotaReserveSnapshot {
 	}
 	reserve := account.QuotaReserve
 	return &quotaReserveSnapshot{
-		SnapshotUpdatedAtUnixSeconds: reserve.SnapshotUpdatedAtUnixSeconds,
-		HourlyRemainingPercent:       reserve.HourlyRemainingPercent,
-		WeeklyRemainingPercent:       reserve.WeeklyRemainingPercent,
-		HourlyWindowPresent:          reserve.HourlyWindowPresent,
-		WeeklyWindowPresent:          reserve.WeeklyWindowPresent,
+		SnapshotVerifiedQueryStartedAtUnixMillis: reserve.SnapshotVerifiedQueryStartedAtUnixMillis,
+		SnapshotUpdatedAtUnixSeconds:             reserve.SnapshotUpdatedAtUnixSeconds,
+		HourlyRemainingPercent:                   reserve.HourlyRemainingPercent,
+		WeeklyRemainingPercent:                   reserve.WeeklyRemainingPercent,
+		HourlyWindowPresent:                      reserve.HourlyWindowPresent,
+		WeeklyWindowPresent:                      reserve.WeeklyWindowPresent,
 	}
 }
 
@@ -1258,6 +1268,7 @@ func (s *cockpitSelector) emitAuthSelected(ctx context.Context, auth *coreauth.A
 	}
 	s.emitter.emit(requestDiagnosticPayload{
 		Type:            "auth_selected",
+		StartedAtMS:     requestStartedAtMS(ctx),
 		RequestID:       internallogging.GetRequestID(ctx),
 		RequestKind:     requestKind,
 		Model:           model,
@@ -1284,6 +1295,7 @@ type authPoolSelectionStats struct {
 	quotaReservedAuths      int
 	imagePolicyBlockedAuths int
 	members                 []authPoolMemberDiagnostic
+	scopeDiagnostics        []authPoolScopeDiagnostic
 }
 
 // authPoolMemberDiagnostic contains the selector's actual per-account decision.
@@ -1362,6 +1374,7 @@ func (s *cockpitSelector) emitAuthPoolUnavailable(
 	}
 	s.emitter.emit(requestDiagnosticPayload{
 		Type:                    "auth_pool_result",
+		StartedAtMS:             requestStartedAtMS(ctx),
 		RequestID:               internallogging.GetRequestID(ctx),
 		RequestKind:             requestKind,
 		Model:                   model,
@@ -1378,6 +1391,7 @@ func (s *cockpitSelector) emitAuthPoolUnavailable(
 		QuotaReservedAuths:      stats.quotaReservedAuths,
 		ImagePolicyBlockedAuths: stats.imagePolicyBlockedAuths,
 		AccountStatuses:         stats.members,
+		ScopeDiagnostics:        stats.scopeDiagnostics,
 	})
 }
 
@@ -1456,27 +1470,43 @@ type usagePlugin struct {
 	defaultServiceTier string
 }
 
-// usageServiceTier 解析一次请求实际生效的服务等级，供宿主在统计与日志中展示
-// 快速/标准模式。上游响应回传的档位最权威，其次是客户端请求的档位，最后回退到
-// Cockpit 自己注入的默认档位；"auto"/空值表示客户端没有指定，需要继续回退。
+// Codex OAuth response tiers are not authoritative Fast-mode confirmations.
+// Keep the request selection for that route; API-key routes still use the
+// upstream-reported processing tier for pricing and display.
 func usageServiceTier(record coreusage.Record, fallback string) string {
+	requested := requestedUsageServiceTier(record, fallback)
+	if strings.EqualFold(strings.TrimSpace(record.Provider), "codex") &&
+		strings.EqualFold(strings.TrimSpace(record.AuthType), "oauth") {
+		return normalizedUsageServiceTier(requested)
+	}
 	if tier := normalizedUsageServiceTier(record.ResponseServiceTier); tier != "" {
 		return tier
 	}
-	if tier := normalizedRequestedUsageServiceTier(record.ServiceTier); tier != "" {
-		return tier
-	}
-	if tier := normalizedRequestedUsageServiceTier(record.RequestServiceTier); tier != "" {
-		return tier
-	}
-	return normalizedUsageServiceTier(fallback)
+	return normalizedUsageServiceTier(requested)
 }
 
-// normalizedRequestedUsageServiceTier 归一化客户端请求的档位。空值、"auto" 和
-// "default" 都表示客户端没有指定档位，此时实际上游使用的是注入的默认档位。
+// Prefer the final serialized upstream payload. "auto" denotes an observed
+// absence of an explicit tier, not a confirmed server-side processing mode.
+func requestedUsageServiceTier(record coreusage.Record, fallback string) string {
+	if record.UpstreamServiceTierObserved {
+		if tier := strings.TrimSpace(record.UpstreamServiceTier); tier != "" {
+			return tier
+		}
+		return "auto"
+	}
+	for _, value := range []string{record.ServiceTier, record.RequestServiceTier} {
+		if normalizedRequestedUsageServiceTier(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return strings.TrimSpace(fallback)
+}
+
+// normalizedRequestedUsageServiceTier 归一化客户端请求的档位。空值和 "auto"
+// 表示未提供确定档位，此时回退注入的默认档位；显式 "default" 属于标准档。
 func normalizedRequestedUsageServiceTier(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "auto", "default":
+	case "", "auto":
 		return ""
 	default:
 		return normalizedUsageServiceTier(value)
@@ -1495,6 +1525,14 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 		spec = p.manifest.apiKeyByValue[strings.TrimSpace(record.APIKey)]
 	}
 	account := p.accountForRecord(record)
+	if account != nil {
+		if strings.TrimSpace(record.AuthType) == "" {
+			record.AuthType = account.AuthKind
+		}
+		if strings.TrimSpace(record.Provider) == "" {
+			record.Provider = normalizedSidecarProvider(account.Provider)
+		}
+	}
 	requestKind, _ := ctx.Value(requestKindContextKey).(string)
 	if strings.TrimSpace(requestKind) == "" {
 		requestKind = requestKindFromPath(internallogging.GetEndpoint(ctx))
@@ -1523,29 +1561,35 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 	}
 	status := record.Fail.StatusCode
 	success := !record.Failed
+	requestedTierEvidence := ""
+	if record.UpstreamServiceTierObserved {
+		requestedTierEvidence = requestedUsageServiceTier(record, "")
+	}
 	payload := usagePayload{
-		ProxyRoute:       record.ProxyRoute,
-		Type:             "usage",
-		RequestID:        internallogging.GetRequestID(ctx),
-		Provider:         record.Provider,
-		Model:            model,
-		Alias:            alias,
-		RequestedModel:   requestedModel,
-		UpstreamModel:    upstreamModel,
-		AccountID:        stringFromAccount(account, "id"),
-		AccountEmail:     stringFromAccount(account, "email"),
-		AuthID:           record.AuthID,
-		APIKeyID:         stringFromAPIKey(spec, "id"),
-		APIKeyLabel:      stringFromAPIKey(spec, "label"),
-		ClientInstanceID: clientInstanceIDFromContext(ctx),
-		RequestKind:      requestKind,
-		ServiceTier:      usageServiceTier(record, p.defaultServiceTier),
-		ReasoningEffort:  strings.TrimSpace(record.ReasoningEffort),
-		Success:          success,
-		Status:           status,
-		ErrorCategory:    errorCategory(status, record.Fail.Body, success),
-		ErrorMessage:     strings.TrimSpace(record.Fail.Body),
-		LatencyMS:        record.Latency.Milliseconds(),
+		ProxyRoute:           record.ProxyRoute,
+		Type:                 "usage",
+		RequestID:            internallogging.GetRequestID(ctx),
+		Provider:             record.Provider,
+		Model:                model,
+		Alias:                alias,
+		RequestedModel:       requestedModel,
+		UpstreamModel:        upstreamModel,
+		AccountID:            stringFromAccount(account, "id"),
+		AccountEmail:         stringFromAccount(account, "email"),
+		AuthID:               record.AuthID,
+		APIKeyID:             stringFromAPIKey(spec, "id"),
+		APIKeyLabel:          stringFromAPIKey(spec, "label"),
+		ClientInstanceID:     clientInstanceIDFromContext(ctx),
+		RequestKind:          requestKind,
+		ServiceTier:          usageServiceTier(record, p.defaultServiceTier),
+		RequestedServiceTier: requestedTierEvidence,
+		ResponseServiceTier:  strings.TrimSpace(record.ResponseServiceTier),
+		ReasoningEffort:      strings.TrimSpace(record.ReasoningEffort),
+		Success:              success,
+		Status:               status,
+		ErrorCategory:        errorCategory(status, record.Fail.Body, success),
+		ErrorMessage:         strings.TrimSpace(record.Fail.Body),
+		LatencyMS:            record.Latency.Milliseconds(),
 		Usage: usageDetails{
 			InputTokens:     record.Detail.InputTokens,
 			OutputTokens:    record.Detail.OutputTokens,
@@ -1556,6 +1600,10 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 		},
 		RequestedAtMS: record.RequestedAt.UnixMilli(),
 	}
+	if observer := requestDiagnosticsFromContext(ctx); observer != nil {
+		payload.OutputGenerationMS = observer.outputGenerationMS(ctx, record)
+		payload.outputComplete = observer.completedOutput(ctx)
+	}
 	// 上游响应头的旁路观测：只带出长度与分类，state 原文不落库。
 	if observation, ok := helps.TakeTurnStateObservation(payload.RequestID); ok {
 		length := observation.Length
@@ -1564,6 +1612,9 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 	}
 	if sink, ok := ctx.Value(websocketUsageContextKey).(*websocketUsageSink); ok {
 		sink.record(record, payload)
+		if observer := requestDiagnosticsFromContext(ctx); observer != nil {
+			observer.recordWebsocketUsage(ctx, record, payload)
+		}
 		return
 	}
 	p.tracker.record(payload)
@@ -1611,6 +1662,32 @@ func stringFromAPIKey(spec *apiKeySpec, field string) string {
 func errorCategory(status int, body string, success bool) string {
 	if success {
 		return ""
+	}
+	// Explicit upstream codes take precedence over transport text such as
+	// unexpected EOF, which can also describe a disconnected downstream client.
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+		Response struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		} `json:"response"`
+	}
+	if json.Unmarshal([]byte(body), &envelope) == nil {
+		code := strings.TrimSpace(envelope.Error.Code)
+		if code == "" {
+			code = strings.TrimSpace(envelope.Response.Error.Code)
+		}
+		switch strings.ToLower(code) {
+		case "upstream_stream_error":
+			return "upstream_stream_error"
+		case "incomplete_upstream_stream":
+			return "incomplete_upstream_stream"
+		case "request_timeout":
+			return "upstream_stream_timeout"
+		}
 	}
 	lower := strings.ToLower(body)
 	switch {
@@ -1661,6 +1738,7 @@ func errorCategory(status int, body string, success bool) string {
 type authHook struct {
 	manifest *manifest
 	emitter  *eventEmitter
+	tracker  *requestUsageTracker
 }
 
 func (h *authHook) OnAuthRegistered(_ context.Context, auth *coreauth.Auth) {
@@ -1672,6 +1750,15 @@ func (h *authHook) OnAuthUpdated(_ context.Context, auth *coreauth.Auth) {
 }
 
 func (h *authHook) OnResult(ctx context.Context, result coreauth.Result) {
+	if h != nil && h.tracker != nil {
+		h.tracker.completeQuotaProtection(ctx, result.AuthID)
+	}
+	if observer := requestDiagnosticsFromContext(ctx); observer != nil {
+		observer.recordResult(ctx, result)
+	}
+	if result.StaleCredential {
+		return
+	}
 	if h == nil || h.emitter == nil {
 		return
 	}
@@ -1716,6 +1803,7 @@ func (h *authHook) OnResult(ctx context.Context, result coreauth.Result) {
 	}
 	h.emitter.emit(requestDiagnosticPayload{
 		Type:            "auth_result",
+		StartedAtMS:     requestStartedAtMS(ctx),
 		RequestID:       internallogging.GetRequestID(ctx),
 		Provider:        result.Provider,
 		Model:           model,
@@ -1774,7 +1862,8 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 //
 // 账号并发闸门分两层插入：
 //   - accountSlotSelector 位于会话亲和选择器内部（自由选号路径），负责按候选顺序抢槽位；
-//   - accountConcurrencySelector 位于整条链最外层，覆盖会话亲和命中缓存的请求。
+//   - accountConcurrencySelector 位于会话亲和外层，覆盖命中缓存的请求；
+//   - 授权、暂停和模型账号范围过滤在配额保护与并发闸门之前执行。
 //
 // tracker 为 nil 或未配置账号并发时，两层都不插入，选择器行为与改动前完全一致。
 func buildCoreAuthSelectorWithConcurrency(cfg *config.Config, selector coreauth.Selector, m *manifest, quota *quotaReserveStateStore, tracker *requestUsageTracker) coreauth.Selector {
@@ -1817,8 +1906,23 @@ func buildCoreAuthSelectorWithConcurrency(cfg *config.Config, selector coreauth.
 			fallback: selector,
 		}
 	}
+	if manifestHasQuotaReserve(m) {
+		if quota == nil {
+			quota = newQuotaReserveStateStore("", m)
+		}
+		admission := quota.protectionCoordinator()
+		if tracker != nil {
+			tracker.mu.Lock()
+			tracker.quotaAdmission = admission
+			tracker.quotaManifest = m
+			tracker.quotaState = quota
+			tracker.mu.Unlock()
+		}
+		selector = &quotaProtectionSelector{manifest: m, quota: quota, fallback: selector, admission: admission, tracker: tracker}
+	}
 	if m != nil {
 		selector = &automaticModelScopeSelector{manifest: m, fallback: selector}
+		selector = &apiKeyScopeSelector{manifest: m, fallback: selector}
 	}
 	return selector
 }
@@ -1889,6 +1993,9 @@ func buildCoreAuthManager(cfg *config.Config, selector coreauth.Selector, hook c
 		dirSetter.SetBaseDir(cfg.AuthDir)
 	}
 	selector = buildCoreAuthSelectorWithConcurrency(cfg, selector, m, quota, tracker)
+	if authHook, ok := hook.(*authHook); ok && authHook != nil {
+		authHook.tracker = tracker
+	}
 	if tracker != nil {
 		selector = &recordingSelector{inner: selector, manifest: m, tracker: tracker}
 	}

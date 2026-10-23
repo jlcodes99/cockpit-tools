@@ -96,3 +96,8 @@
 .codex-oauth-proxy-field > .btn {
   justify-self: start;
 }
+
+/* Keep the account-source strip compact; narrow windows scroll horizontally. */
+.codex-account-dialog > .modal-tabs { flex-wrap: nowrap; overflow-x: auto; }
+.codex-account-dialog > .modal-tabs > .modal-tab { appearance: none; flex: 1 0 auto; min-width: max-content; height: 32px; padding: 0 8px; font-family: inherit; line-height: 1.4; white-space: nowrap; }
+.codex-account-dialog > .modal-tabs .modal-tab-label { white-space: nowrap; }

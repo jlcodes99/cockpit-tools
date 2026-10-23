@@ -3,6 +3,7 @@ import test from 'node:test';
 import { loadHookModule } from '../../../tests/helpers/reactHookHarness.ts';
 import * as order from '../../utils/codexExperimentalModelOrder.ts';
 import * as context from '../../utils/codexModelContext.ts';
+import * as modelConfig from '../../utils/codexModelConfig.ts';
 
 function elements(value: any): any[] {
   if (!value || typeof value !== 'object') return [];
@@ -15,6 +16,11 @@ test('editing model IDs and names retains row identity through edits, sorting an
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
+    '../../utils/codexModelConfig': modelConfig,
+    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../hooks/useEscClose': { useEscCloseTopmost() {} },
+    '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
+    './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
     'react-dom': { createPortal: (child: any) => child },
   }, { document: { addEventListener() {}, removeEventListener() {} }, window: { addEventListener() {}, removeEventListener() {} } });
   let models = [{ model_id: 'first', display_name: 'First' }, { model_id: 'second', display_name: 'Second' }];
@@ -46,6 +52,11 @@ test('editing context and reasoning keeps distinct row keys while model IDs temp
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../utils/codexExperimentalModelOrder': order,
     '../../utils/codexModelContext': context,
+    '../../utils/codexModelConfig': modelConfig,
+    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../hooks/useEscClose': { useEscCloseTopmost() {} },
+    '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
+    './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
     'react-dom': { createPortal: (child: any) => child },
   }, { document: { addEventListener() {}, removeEventListener() {} }, window: { addEventListener() {}, removeEventListener() {} } });
   let models = [{ model_id: 'same', display_name: 'First' }, { model_id: 'same', display_name: 'Second' }];
@@ -64,5 +75,38 @@ test('editing context and reasoning keeps distinct row keys while model IDs temp
     assert.deepEqual(rows().map((row) => row.key), initialKeys);
     assert.equal(elements(rows()[1]).some((node) => node.props?.value === 'Second'), true);
   }
+  h.unmount();
+});
+
+test('High then Medium, cancellation/reselection and all six levels retain canonical editor order', () => {
+  const h = loadHookModule(new URL('./CodexExperimentalModelEditor.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+    '../../utils/codexExperimentalModelOrder': order,
+    '../../utils/codexModelContext': context,
+    '../../utils/codexModelConfig': modelConfig,
+    '../../services/codexService': { getCodexModelReasoningEfforts: async () => ({}) },
+    '../../hooks/useEscClose': { useEscCloseTopmost() {} },
+    '../SingleSelectDropdown': { SingleSelectDropdown: () => null },
+    './CodexModelConfigTransferModal': { CodexModelConfigTransferModal: () => null },
+    'react-dom': { createPortal: (child: any) => child },
+  }, { document: { addEventListener() {}, removeEventListener() {} }, window: { addEventListener() {}, removeEventListener() {} } });
+  let models: any[] = [{ model_id: 'gpt-5.6-sol', display_name: 'Model' }];
+  h.render(() => h.exports.CodexExperimentalModelEditor({ models, mode: 'inline', onChange: (next: any[]) => { models = next; } }));
+  const toggle = (effort: string) => {
+    let tree = elements(h.flush());
+    if (!tree.some((node) => node.props?.className?.startsWith('codex-experimental-model-editor__reasoning-option'))) {
+      tree.find((node) => node.props?.className === 'codex-experimental-model-editor__reasoning-trigger').props.onClick();
+      tree = elements(h.flush());
+    }
+    tree.find((node) => node.props?.className?.startsWith('codex-experimental-model-editor__reasoning-option')
+      && node.key === effort)!.props.onClick();
+    h.flush();
+  };
+  toggle('high'); toggle('medium');
+  assert.deepEqual(models[0].reasoning_efforts, ['medium', 'high']);
+  toggle('medium'); toggle('medium');
+  assert.deepEqual(models[0].reasoning_efforts, ['medium', 'high']);
+  for (const effort of ['ultra', 'max', 'xhigh', 'low']) toggle(effort);
+  assert.deepEqual(models[0].reasoning_efforts, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
   h.unmount();
 });

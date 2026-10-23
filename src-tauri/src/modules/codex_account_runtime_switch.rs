@@ -67,10 +67,11 @@ async fn perform_managed_token_refresh(
     .await
     {
         Ok(new_tokens) => {
-            account.tokens = new_tokens;
-            sync_identity_from_tokens(&mut account);
-            mark_token_chain_updated(&mut account);
-            save_account(&account)?;
+            let (current, saved) = persist_refreshed_account(&account, new_tokens)?;
+            account = current;
+            if !saved {
+                return Ok(account);
+            }
             sync_managed_account_sidecar(&account);
             crate::modules::codex_auth_diagnostic::log_event(
                 "managed_token_refresh_saved",
@@ -89,6 +90,15 @@ async fn perform_managed_token_refresh(
             Ok(account)
         }
         Err(err) => {
+            // Another authorization/import may have replaced the chain while
+            // this request was in flight. A stale failure (including reused)
+            // must neither return old credentials nor invalidate the new chain.
+            let current = load_account(&account.id)
+                .ok_or_else(|| format!("账号已删除或无法读取，拒绝刷新写回: account_id={}", account.id))?;
+            if !account_matches_refresh_snapshot(&current, &account) {
+                return Ok(current);
+            }
+            account = current;
             let user_error = format_refresh_error_for_user(&err);
             crate::modules::codex_auth_diagnostic::log_event(
                 "managed_token_refresh_error",
@@ -112,7 +122,16 @@ async fn perform_managed_token_refresh(
                 return Ok(account);
             }
             if is_reauth_required_refresh_error(&err) {
-                let _ = mark_account_requires_reauth(&mut account, &user_error);
+                let (current, marked) = update_account_after_refresh_if_current(
+                    &account,
+                    |current| {
+                        current.requires_reauth = true;
+                        current.reauth_reason = Some(user_error.clone());
+                    },
+                )?;
+                if !marked {
+                    return Ok(current);
+                }
                 return Err(user_error);
             }
             Err(user_error)
@@ -145,6 +164,7 @@ async fn validate_managed_account_for_client_locked(
     if codex_oauth::is_token_expired(&account.tokens.access_token) {
         return Err("access_token 已过期，无法启动，请重新授权".to_string());
     }
+    reject_known_access_token_revocation(&account)?;
     logger::log_info(&format!(
         "本地 Codex 启动凭据校验通过: account_id={}, email={}, reason={}",
         account.id, account.email, reason
@@ -666,6 +686,9 @@ pub async fn prepare_account_for_injection(account_id: &str) -> Result<CodexAcco
 pub async fn prepare_account_for_injection_from_store(
     account_id: &str,
 ) -> Result<CodexAccount, String> {
+    if let Some(account) = load_account(account_id) {
+        reject_chatgpt_plan_client_injection(&account)?;
+    }
     ensure_managed_account_fresh(account_id).await
 }
 
@@ -1037,6 +1060,9 @@ where
     Fut: std::future::Future<Output = Result<(), String>>,
 {
     let _switch_guard = CODEX_ACCOUNT_SWITCH_LOCK.lock().await;
+    if let Some(account) = load_account(account_id) {
+        reject_chatgpt_plan_client_injection(&account)?;
+    }
     sync_active_official_account_before_switch().await?;
 
     let switch_lock_account_id = load_account_after_index_repair(account_id)

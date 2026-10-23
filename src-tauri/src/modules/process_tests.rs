@@ -1,5 +1,131 @@
 // Process 模块测试：平台路径、Codex 启动参数和进程清理行为。
 // 保持测试模块位于原作用域，super 引用和 cfg 条件不变。
+#[cfg(test)]
+mod codex_native_probe_policy_tests {
+    use super::{complete_native_codex_entries_or_probe, fresh_codex_entries_or_probe};
+
+    #[test]
+    fn complete_native_snapshot_including_no_client_avoids_powershell() {
+        for entries in [vec![], vec![(10, None), (20, Some("managed".into()))]] {
+            let actual = complete_native_codex_entries_or_probe(entries.clone(), true, || {
+                panic!("a complete native snapshot must not start PowerShell")
+            });
+            assert_eq!(actual, entries);
+        }
+    }
+
+    #[test]
+    fn incomplete_snapshot_recovers_missing_instances_and_managed_identity() {
+        let native = vec![(20, None)];
+        let actual = complete_native_codex_entries_or_probe(native, false, || {
+            vec![(10, None), (20, Some("managed".into()))]
+        });
+        assert_eq!(actual, vec![(10, None), (20, Some("managed".into()))]);
+    }
+
+    #[test]
+    fn failed_fallback_keeps_readable_native_instances() {
+        let native = vec![(20, Some("managed".into()))];
+        let actual = complete_native_codex_entries_or_probe(native.clone(), false, Vec::new);
+        assert_eq!(actual, native);
+    }
+
+    #[test]
+    fn stopping_requires_fresh_identity_and_never_treats_probe_failure_as_exit() {
+        let error = fresh_codex_entries_or_probe(vec![(20, None)], false, || None).unwrap_err();
+        assert_eq!(error, "CODEX_PROCESS_PROBE_FAILED");
+        let result = fresh_codex_entries_or_probe(Vec::new(), true, || {
+            panic!("confirmed absence needs no fallback")
+        })
+        .unwrap();
+        assert!(result.is_empty());
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod codex_local_probe_diagnostics {
+    #[test]
+    #[ignore = "read-only local diagnostic; set COCKPIT_CODEX_PROBE_EXPECTED_EXE explicitly"]
+    fn native_snapshot_matches_local_powershell_without_launching_or_stopping_clients() {
+        let expected = std::env::var("COCKPIT_CODEX_PROBE_EXPECTED_EXE")
+            .expect("explicit local Codex executable path required");
+        let started = std::time::Instant::now();
+        let (native, complete) = super::collect_codex_process_snapshot_from_sysinfo(&expected);
+        let native_ms = started.elapsed().as_millis();
+        let ps_started = std::time::Instant::now();
+        let fallback = super::collect_codex_process_entries_from_powershell(&expected);
+        println!("native_ms={native_ms}, native_complete={complete}, native_count={}, powershell_ms={}, powershell_count={}",
+            native.len(), ps_started.elapsed().as_millis(), fallback.len());
+        let normalize = |entries: Vec<(u32, Option<String>)>| {
+            entries
+                .into_iter()
+                .map(|(pid, dir)| (pid, dir.map(|dir| super::normalize_path_for_compare(&dir))))
+                .collect::<Vec<_>>()
+        };
+        let native = normalize(native);
+        let fallback = normalize(fallback);
+        if complete {
+            assert_eq!(
+                native, fallback,
+                "native identities must preserve default/managed ownership"
+            );
+        } else {
+            for entry in native {
+                assert!(fallback.contains(&entry));
+            }
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_powershell_probe_regression_tests {
+    use super::powershell_output_with_timeout;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn drains_stdout_and_stderr_larger_than_pipe_capacity() {
+        // Real PowerShell and OS pipes: the old wait-before-read loop times out
+        // on this output even though the script does not perform slow work.
+        let output = powershell_output_with_timeout(
+            &[
+                "-Command",
+                "[Console]::Out.Write(('o' * 200000)); [Console]::Error.Write(('e' * 200000))",
+            ],
+            Duration::from_secs(10),
+        )
+        .expect("large probe output must not deadlock");
+        assert!(output.status.success());
+        assert_eq!(output.stdout, vec![b'o'; 200000]);
+        assert_eq!(output.stderr, vec![b'e'; 200000]);
+    }
+
+    #[test]
+    fn slow_probe_still_times_out() {
+        let started = Instant::now();
+        let error = powershell_output_with_timeout(
+            &["-Command", "Start-Sleep -Seconds 30"],
+            Duration::from_millis(500),
+        )
+        .expect_err("unresponsive probes must remain bounded");
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn preserves_failed_probe_status_and_diagnostics() {
+        let output = powershell_output_with_timeout(
+            &[
+                "-Command",
+                "[Console]::Error.Write('probe failed'); exit 17",
+            ],
+            Duration::from_secs(10),
+        )
+        .expect("nonzero exit is a completed probe, not a spawn error");
+        assert_eq!(output.status.code(), Some(17));
+        assert_eq!(output.stderr, b"probe failed");
+    }
+}
+
 #[cfg(all(test, target_os = "windows"))]
 mod windows_passive_exec_scan_tests {
     use super::{
@@ -822,14 +948,52 @@ mod tests {
 #[cfg(test)]
 mod codex_windows_default_instance_tests {
     use super::{
-        filter_codex_windows_default_process_entries, is_codex_windows_default_process_dir,
-        next_codex_default_start_candidate, normalize_path_for_compare,
+        codex_windows_process_snapshot_is_stale, filter_codex_windows_default_process_entries,
+        is_codex_windows_default_process_dir, next_codex_default_start_candidate,
+        normalize_path_for_compare,
     };
     use std::collections::HashSet;
 
     const DEFAULT_APP_DIR: &str = r"C:\Users\me\AppData\Roaming\Codex\web\Codex";
     const MANAGED_APP_DIR: &str =
         r"C:\Users\me\AppData\Roaming\.antigravity_cockpit\instances\codex-app-data\5184";
+
+    #[test]
+    fn ignores_last_pid_reused_by_an_unrelated_process() {
+        assert!(codex_windows_process_snapshot_is_stale(Some((
+            "notepad.exe",
+            Some(r"C:\Windows\System32\notepad.exe"),
+        ))));
+        // PID 仍存在但路径不可读时，明确的非 ChatGPT 进程名也能证明历史 PID 已失效。
+        assert!(codex_windows_process_snapshot_is_stale(Some((
+            "explorer.exe",
+            None
+        ))));
+    }
+
+    #[test]
+    fn ignores_last_pid_that_exited_between_probes() {
+        assert!(codex_windows_process_snapshot_is_stale(None));
+    }
+
+    #[test]
+    fn preserves_ownership_guard_for_chatgpt_and_unreadable_identity() {
+        for process in [
+            ("ChatGPT.exe", None),
+            ("CHATGPT.EXE", Some("")),
+            ("", None),
+            (
+                "",
+                Some(r"C:\Program Files\WindowsApps\OpenAI.Codex_26.930_x64__test\app\ChatGPT.exe"),
+            ),
+            ("ChatGPT.exe", Some("C:/Apps/ChatGPT.exe")),
+        ] {
+            assert!(
+                !codex_windows_process_snapshot_is_stale(Some(process)),
+                "{process:?}"
+            );
+        }
+    }
 
     #[test]
     fn classifies_default_processes_without_mixing_managed_instances() {
@@ -946,43 +1110,8 @@ mod windows_codex_exe_match_tests {
 
 #[cfg(test)]
 mod codex_package_identity_launch_tests {
-    use super::{
-        quote_windows_command_argument, windowsapps_install_location_from_launch_path,
-        windowsapps_package_family,
-    };
+    use super::{windowsapps_install_location_from_launch_path, windowsapps_package_family};
     use std::path::Path;
-
-    #[test]
-    fn quotes_arguments_that_contain_spaces() {
-        // `--user-data-dir` 指向的实例目录常含空格，必须整体加引号。
-        assert_eq!(
-            quote_windows_command_argument(
-                r"--user-data-dir=C:\Users\some user\.antigravity_cockpit\ud"
-            ),
-            r#""--user-data-dir=C:\Users\some user\.antigravity_cockpit\ud""#
-        );
-    }
-
-    #[test]
-    fn leaves_simple_arguments_untouched() {
-        assert_eq!(
-            quote_windows_command_argument("--remote-debugging-port=9333"),
-            "--remote-debugging-port=9333"
-        );
-        assert_eq!(quote_windows_command_argument(""), "\"\"");
-    }
-
-    #[test]
-    fn escapes_embedded_quotes_and_backslash_runs() {
-        // CreateProcess 规则：引号前的反斜杠加倍，引号自身再转义一个。
-        assert_eq!(quote_windows_command_argument(r#"a"b"#), r#""a\"b""#);
-        assert_eq!(quote_windows_command_argument(r"a\b"), r"a\b");
-        // 以反斜杠结尾时收尾引号必须被保护，否则会把参数引号转义掉。
-        assert_eq!(
-            quote_windows_command_argument(r"C:\dir with space\"),
-            r#""C:\dir with space\\""#
-        );
-    }
 
     #[test]
     fn derives_install_location_from_store_launch_path() {

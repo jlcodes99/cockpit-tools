@@ -3,7 +3,9 @@ import type { TFunction } from "i18next";
 import type { CodexAccount } from "../types/codex";
 import {
   getCodexPlanFilterKey,
+  getCodexQuotaWindows,
   isCodexApiKeyAccount,
+  isCodexChatgptPlanAccount,
   isCodexNewApiAccount,
   isCodexPendingOAuthAccount,
 } from "../types/codex";
@@ -166,6 +168,7 @@ export function buildCodexPlanFilterOptions(
     includeZeroQuota?: boolean;
     includeExpired?: boolean;
     pendingLabel?: string;
+    chatgptPlanLabel?: string;
     errorLabel?: string;
     zeroQuotaLabel?: string;
     expiredLabel?: string;
@@ -196,7 +199,7 @@ export function buildCodexPlanFilterOptions(
       usedKeys.add(key);
       result.push({
         value: key,
-        label: `${key} (${getCodexPlanFilterCount(counts, key)})`,
+        label: `${key === 'CHATGPT_PLAN' ? options?.chatgptPlanLabel ?? 'ChatGPT' : key} (${getCodexPlanFilterCount(counts, key)})`,
       });
     });
 
@@ -358,6 +361,14 @@ interface CodexOverviewComparatorOptions {
   resolveSubscriptionTimestamp: (account: CodexAccount) => number | null;
 }
 
+function getQuotaSortWindow(account: CodexAccount, weekly: boolean) {
+  if (isCodexChatgptPlanAccount(account)) return undefined;
+  return getCodexQuotaWindows(account.quota).find((window) => {
+    const minutes = window.windowMinutes ?? (window.id === 'secondary' ? 10_080 : 300);
+    return (minutes >= 10_079) === weekly;
+  });
+}
+
 export function createCodexOverviewAccountComparator({
   sortBy,
   sortDirection,
@@ -406,14 +417,8 @@ export function createCodexOverviewAccountComparator({
       return sortDirection === "desc" ? diff : -diff;
     }
     if (sortBy === "weekly_reset" || sortBy === "hourly_reset") {
-      const leftReset =
-        sortBy === "weekly_reset"
-          ? (left.quota?.weekly_reset_time ?? null)
-          : (left.quota?.hourly_reset_time ?? null);
-      const rightReset =
-        sortBy === "weekly_reset"
-          ? (right.quota?.weekly_reset_time ?? null)
-          : (right.quota?.hourly_reset_time ?? null);
+      const leftReset = getQuotaSortWindow(left, sortBy === "weekly_reset")?.resetTime ?? null;
+      const rightReset = getQuotaSortWindow(right, sortBy === "weekly_reset")?.resetTime ?? null;
       if (leftReset == null && rightReset == null) return 0;
       if (leftReset == null) return 1;
       if (rightReset == null) return -1;
@@ -432,14 +437,11 @@ export function createCodexOverviewAccountComparator({
         : leftExpiry - rightExpiry;
     }
 
-    const leftValue =
-      sortBy === "weekly"
-        ? (left.quota?.weekly_percentage ?? -1)
-        : (left.quota?.hourly_percentage ?? -1);
-    const rightValue =
-      sortBy === "weekly"
-        ? (right.quota?.weekly_percentage ?? -1)
-        : (right.quota?.hourly_percentage ?? -1);
+    const leftValue = getQuotaSortWindow(left, sortBy === "weekly")?.percentage;
+    const rightValue = getQuotaSortWindow(right, sortBy === "weekly")?.percentage;
+    if (leftValue == null && rightValue == null) return 0;
+    if (leftValue == null) return 1;
+    if (rightValue == null) return -1;
     return sortDirection === "desc"
       ? rightValue - leftValue
       : leftValue - rightValue;
@@ -457,6 +459,10 @@ interface FilterCodexOverviewAccountsOptions {
   resolveDisplayName: (account: CodexAccount) => string;
   compareAccounts: (left: CodexAccount, right: CodexAccount) => number;
   isAbnormalAccount?: (account: CodexAccount) => boolean;
+  resolveAccountId?: (account: CodexAccount) => string;
+  resolvePlanKey?: (account: CodexAccount) => string;
+  isZeroQuotaAccount?: (account: CodexAccount) => boolean;
+  isSubscriptionExpiredAccount?: (account: CodexAccount) => boolean;
 }
 
 export function filterAndSortCodexOverviewAccounts({
@@ -470,6 +476,10 @@ export function filterAndSortCodexOverviewAccounts({
   resolveDisplayName,
   compareAccounts,
   isAbnormalAccount = isCodexOverviewAccountAbnormal,
+  resolveAccountId = (account) => account.id,
+  resolvePlanKey = getCodexPlanFilterKey,
+  isZeroQuotaAccount = isCodexOverviewAccountZeroQuota,
+  isSubscriptionExpiredAccount = isCodexOverviewAccountSubscriptionExpired,
 }: FilterCodexOverviewAccountsOptions): CodexAccount[] {
   let result = [...accounts];
   if (searchQuery.trim()) {
@@ -489,9 +499,9 @@ export function filterAndSortCodexOverviewAccounts({
         const matchesSpecial =
           (selectedTypes.has("ERROR") && isAbnormalAccount(account)) ||
           (selectedTypes.has(CODEX_ZERO_QUOTA_FILTER_VALUE) &&
-            isCodexOverviewAccountZeroQuota(account)) ||
+            isZeroQuotaAccount(account)) ||
           (selectedTypes.has(CODEX_EXPIRED_FILTER_VALUE) &&
-            isCodexOverviewAccountSubscriptionExpired(account));
+            isSubscriptionExpiredAccount(account));
         const planKeys = Array.from(selectedTypes).filter(
           (key) =>
             key !== "ERROR" &&
@@ -501,7 +511,7 @@ export function filterAndSortCodexOverviewAccounts({
         if (planKeys.length === 0) {
           return matchesSpecial;
         }
-        const matchesPlan = selectedTypes.has(getCodexPlanFilterKey(account));
+        const matchesPlan = selectedTypes.has(resolvePlanKey(account));
         // Multi-select is OR across plan tiers and special status filters.
         return matchesPlan || matchesSpecial;
       });
@@ -530,7 +540,7 @@ export function filterAndSortCodexOverviewAccounts({
           }
         }
       }
-      result = result.filter((account) => groupAccountIds.has(account.id));
+      result = result.filter((account) => groupAccountIds.has(resolveAccountId(account)));
     }
   }
   if (activeGroupId) {
@@ -539,7 +549,7 @@ export function filterAndSortCodexOverviewAccounts({
       return [];
     }
     const scopedIds = new Set(scopedGroup.accountIds);
-    result = result.filter((account) => scopedIds.has(account.id));
+    result = result.filter((account) => scopedIds.has(resolveAccountId(account)));
   }
   result.sort(compareAccounts);
   return result;

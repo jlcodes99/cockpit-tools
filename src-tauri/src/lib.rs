@@ -1,8 +1,20 @@
+// HTTP/2 transport and credential-refresh futures need the same trait-checking
+// depth in Windows production builds as in the test harness.
+#![recursion_limit = "256"]
+
 mod commands;
 pub mod error;
 mod models;
 mod modules;
 mod utils;
+
+#[cfg(test)]
+mod dependency_tls_tests;
+
+#[cfg(target_os = "windows")]
+pub fn try_run_codex_package_launcher() -> Option<i32> {
+    modules::process::codex_package_launcher::try_run()
+}
 
 use modules::config::CloseWindowBehavior;
 use modules::logger;
@@ -313,6 +325,9 @@ fn summarize_deep_link_args(args: &[String]) -> Vec<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Some(code) = modules::codex_continuity_worker::try_run() {
+        std::process::exit(code);
+    }
     logger::init_logger();
     modules::diagnostics::install_panic_hook();
     modules::diagnostics::start_frontend_ready_watchdog();
@@ -404,6 +419,9 @@ pub fn run() {
 
             // 一次性迁移：历史版本可能被自动开启的「模型管理」统一关闭，之后由用户自己决定。
             std::thread::spawn(|| {
+                // Recover interrupted explicit imports before other model maintenance
+                // can touch the same profiles. None of this gates the main window.
+                modules::codex_account::recover_pending_model_config_imports_for_known_profiles();
                 let migrated =
                     modules::codex_account::migrate_model_management_default_off_for_all_profiles();
                 if migrated > 0 {
@@ -412,11 +430,7 @@ pub fn run() {
                         migrated
                     ));
                 }
-            });
-
-            // 受管模型目录版本校验：升级后旧目录（没有版本戳或版本落后）在后台按当前
-            // 生成逻辑重建一次，避免用户不切号就一直在用旧的能力声明。
-            std::thread::spawn(|| {
+                // 受管模型目录版本校验在恢复和迁移后继续执行。
                 let rebuilt = modules::codex_account::rebuild_stale_managed_model_catalogs();
                 if rebuilt > 0 {
                     logger::log_info(&format!(
@@ -549,6 +563,7 @@ pub fn run() {
             // 官方客户端临时登录会留下一次性 profile，成功/失败/取消都会清理；
             // 这里额外启动巡检，兜住异常退出后残留的临时目录与钥匙串条目。
             modules::codex_temp_login::ensure_cleanup_loop_started();
+            modules::codex_quota_sync::ensure_started();
 
             // Wakeup restore/start and Deep Link registration/read can hit disk or OS
             // APIs — never block setup (window + skeleton tray first).
@@ -943,6 +958,8 @@ pub fn run() {
             commands::system::hide_floating_card_window,
             commands::system::hide_current_floating_card_window,
             commands::system::set_floating_card_always_on_top,
+            commands::system::update_floating_card_appearance,
+            commands::system::resize_current_floating_card_window,
             commands::system::set_current_floating_card_window_always_on_top,
             commands::system::set_floating_card_confirm_on_close,
             commands::system::save_floating_card_position,
@@ -1013,6 +1030,7 @@ pub fn run() {
             commands::codex::list_codex_accounts,
             commands::codex::get_current_codex_account,
             commands::codex::get_codex_config_toml_path,
+            commands::codex::get_codex_storage_paths,
             commands::codex::open_codex_config_toml,
             commands::codex::get_codex_quick_config,
             commands::codex::save_codex_context_management,
@@ -1046,7 +1064,7 @@ pub fn run() {
             commands::codex::import_codex_from_local,
             commands::codex::start_codex_temp_login,
             commands::codex::cancel_codex_temp_login,
-            commands::codex::open_codex_temp_login_auth_url,
+            commands::codex::retry_codex_temp_login_import,
             commands::codex::cleanup_codex_temp_login_artifacts,
             commands::codex::import_codex_from_json,
             commands::codex::export_codex_accounts,
@@ -1057,6 +1075,7 @@ pub fn run() {
             commands::codex::get_codex_batch_import_preview,
             commands::codex::confirm_codex_batch_import,
             commands::codex::refresh_codex_quota,
+            modules::codex_quota_sync::set_codex_quota_sync_disabled_emails,
             commands::codex::refresh_codex_quotas_batch,
             commands::codex::get_codex_reset_credits,
             commands::codex::consume_codex_reset_credit,
@@ -1064,6 +1083,22 @@ pub fn run() {
             commands::codex::refresh_all_codex_quotas,
             commands::codex::refresh_current_codex_quota,
             commands::codex::codex_oauth_login_start,
+            commands::chatgpt_plan::chatgpt_plan_start_login,
+            commands::chatgpt_plan::chatgpt_plan_poll_login,
+            commands::chatgpt_plan::chatgpt_plan_cancel_login,
+            commands::chatgpt_plan::chatgpt_plan_submit_callback_url,
+            commands::chatgpt_plan::chatgpt_plan_open_incognito_window,
+            commands::chatgpt_plan::chatgpt_plan_list_accounts,
+            commands::chatgpt_plan::chatgpt_plan_list_models,
+            commands::chatgpt_plan::chatgpt_plan_verify,
+            commands::chatgpt_plan::chatgpt_plan_check_authorization,
+            commands::chatgpt_plan::chatgpt_plan_bind_account,
+            commands::chatgpt_plan::chatgpt_plan_disconnect,
+            commands::chatgpt_plan_service::chatgpt_plan_join,
+            commands::chatgpt_plan_service::chatgpt_plan_set_service_mode,
+            commands::chatgpt_plan_service::chatgpt_plan_unbind_account,
+            commands::chatgpt_plan_service::chatgpt_plan_release_authorization,
+            commands::chatgpt_plan_service::chatgpt_plan_remove_from_service,
             commands::codex::codex_oauth_device_auth_start,
             commands::codex::codex_oauth_open_incognito_window,
             commands::codex::codex_oauth_login_completed,
@@ -1106,6 +1141,7 @@ pub fn run() {
             commands::codex_proxy_engine::codex_proxy_activity_summary,
             commands::codex_proxy_engine::codex_proxy_activity_set_enabled,
             commands::codex_proxy_engine::codex_proxy_activity_clear,
+            commands::codex_client_proxy::codex_proxy_target_get,
             commands::codex_unified_proxy::codex_unified_proxy_get,
             commands::codex_unified_proxy::codex_unified_proxy_preview,
             commands::codex_unified_proxy::codex_unified_proxy_apply,
@@ -1133,6 +1169,8 @@ pub fn run() {
             commands::codex::codex_wakeup_cancel_scope,
             commands::codex::codex_wakeup_release_scope,
             commands::codex::codex_wakeup_test,
+            commands::codex::codex_wakeup_pending_confirmations,
+            commands::codex::codex_wakeup_respond_confirmation,
             commands::codex::codex_wakeup_run_task,
             commands::codex::codex_wakeup_run_enabled_tasks,
             commands::codex::load_codex_account_groups,
@@ -1143,8 +1181,17 @@ pub fn run() {
             commands::codex::codex_model_provider_chat_test_batch,
             commands::codex::codex_cancel_model_provider_chat_test,
             commands::codex::codex_list_model_provider_models,
+            commands::codex::get_codex_model_reasoning_efforts,
+            commands::codex::preview_codex_model_config_import,
+            commands::codex::import_codex_model_config,
+            commands::codex::export_codex_model_config,
             commands::codex::codex_query_model_provider_usage,
             commands::codex::codex_local_access_get_state,
+            commands::codex::codex_local_access_get_request_detail,
+            commands::codex::codex_local_access_get_request_payload_logging,
+            commands::codex::codex_local_access_get_request_payload_logging_status,
+            commands::codex::codex_local_access_update_request_payload_logging,
+            commands::codex::codex_local_access_clear_request_payloads,
             commands::codex::codex_list_instance_gateways,
             commands::codex::codex_stop_instance_gateway,
             commands::codex::codex_restart_instance_gateway,
@@ -1152,6 +1199,7 @@ pub fn run() {
             commands::codex::codex_local_access_append_accounts,
             commands::codex::codex_local_access_remove_account,
             commands::codex::codex_local_access_recover_accounts,
+            commands::codex::codex_local_access_clear_pool_failure,
             commands::codex::codex_local_access_rotate_api_key,
             commands::codex::codex_local_access_update_bound_oauth_account,
             commands::codex::codex_local_access_clear_stats,
@@ -1176,6 +1224,8 @@ pub fn run() {
             commands::codex::codex_local_access_update_gateway_mode,
             commands::codex::codex_local_access_update_debug_logs,
             commands::codex::codex_local_access_update_image_generation_model,
+            commands::codex::codex_local_access_update_image_generation_model_catalog,
+            commands::codex::codex_local_access_update_image_generation_main_model,
             commands::codex::codex_local_access_update_image_generation_accounts,
             commands::codex::codex_local_access_update_access_scope,
             commands::codex::codex_local_access_update_client_base_url_host,
@@ -1564,6 +1614,7 @@ pub fn run() {
             commands::codex_instance::codex_preview_session_export,
             commands::codex_instance::codex_export_sessions,
             commands::codex_instance::codex_preview_session_import,
+            commands::codex_instance::codex_validate_session_import_paths,
             commands::codex_instance::codex_import_sessions,
             commands::codex_instance::codex_open_session_location,
             commands::codex_instance::codex_open_session_rollout,
@@ -1614,14 +1665,47 @@ pub fn run() {
                     modules::logger::log_info("[Window] 主窗口已销毁，应用继续在托盘运行");
                 } else {
                     let first_shutdown = modules::app_lifecycle::begin_shutdown();
+                    let wait_for_native =
+                        first_shutdown && modules::codex_local_access::native_api_running();
+                    if wait_for_native {
+                        api.prevent_exit();
+                        // An async timeout cannot preempt a synchronous filesystem/process probe.
+                        let watchdog_app = app_handle.clone();
+                        if let Err(error) = std::thread::Builder::new()
+                            .name("native-api-exit-watchdog".into())
+                            .spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_secs(20));
+                                watchdog_app.exit(0);
+                            })
+                        {
+                            modules::logger::log_warn(&format!(
+                                "Unable to start API exit watchdog: {error}"
+                            ));
+                            app_handle.exit(0);
+                        }
+                    }
                     if first_shutdown {
                         commands::codex_instance::restore_mixed_model_profiles_for_app_exit();
                     }
                     modules::codex_app_injection::stop_all();
                     modules::codex_proxy_engine::shutdown_all();
-                    tauri::async_runtime::spawn(async {
-                        modules::codex_local_access::shutdown_local_access_gateway_for_app_exit()
-                            .await;
+                    let app_to_exit = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if tokio::time::timeout(
+                            std::time::Duration::from_secs(20),
+                            modules::codex_local_access::shutdown_local_access_gateway_for_app_exit(
+                            ),
+                        )
+                        .await
+                        .is_err()
+                        {
+                            modules::logger::log_warn(
+                                "API service shutdown exceeded the exit deadline",
+                            );
+                        }
+                        if wait_for_native {
+                            app_to_exit.exit(0);
+                        }
                     });
                 }
             }

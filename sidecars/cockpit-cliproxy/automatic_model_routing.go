@@ -188,7 +188,7 @@ func containsAccountID(ids []string, id string) bool {
 // once that happens it is never replayed against another provider.
 func (s *relayServer) handleAutomaticModelRequest(c *gin.Context, spec *apiKeySpec, body []byte, model string, sourceFormat sdktranslator.Format, fixedAlt string) {
 	if !automaticClientModelVisible(s.manifest, spec, model) {
-		writeAPIError(c, http.StatusNotFound, fmt.Sprintf("model %s is not available for this API key", model), "model_not_available")
+		writeAPIError(c, http.StatusNotFound, s.manifest.modelUnavailableMessage(model), "model_not_available")
 		return
 	}
 	candidates := s.automaticCandidates(spec, model)

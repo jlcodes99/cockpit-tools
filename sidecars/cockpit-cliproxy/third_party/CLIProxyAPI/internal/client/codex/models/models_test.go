@@ -132,7 +132,7 @@ func TestCodexClientModelsResponse_InputModalitiesFromRegistry(t *testing.T) {
 
 func TestCodexClientModelsResponse_AppliesDisplayNameToTemplateModel(t *testing.T) {
 	resp := BuildResponse([]map[string]any{{
-		"id":           "gpt-5.5",
+		"id":           "gpt-5.6-sol",
 		"display_name": "Configured Codex Name",
 	}}, nil, false)
 	models, ok := resp["models"].([]map[string]any)
@@ -145,7 +145,7 @@ func TestCodexClientModelsResponse_AppliesDisplayNameToTemplateModel(t *testing.
 }
 
 func TestCodexClientModelsResponse_RewritesTemplateMultiAgentVersionWhenEnabled(t *testing.T) {
-	modelIDs := []string{"gpt-5.6-luna", "gpt-5.5"}
+	modelIDs := []string{"gpt-5.6-luna", "gpt-5.6-sol"}
 	resp := BuildResponse([]map[string]any{{"id": modelIDs[0]}, {"id": modelIDs[1]}}, nil, true)
 	models, ok := resp["models"].([]map[string]any)
 	if !ok {
@@ -162,7 +162,7 @@ func TestCodexClientModelsResponse_RewritesTemplateMultiAgentVersionWhenEnabled(
 func TestCodexClientModelsResponse_DisablesSearchToolForSynthesizedModels(t *testing.T) {
 	resp := BuildResponse([]map[string]any{
 		{"id": "custom-openai-compatible-model"},
-		{"id": "gpt-5.5"},
+		{"id": "gpt-5.6-sol"},
 	}, nil, false)
 	models, ok := resp["models"].([]map[string]any)
 	if !ok {
@@ -182,7 +182,7 @@ func TestCodexClientModelsResponse_DisablesSearchToolForSynthesizedModels(t *tes
 		t.Fatalf("custom supports_search_tool = %#v, want false", custom["supports_search_tool"])
 	}
 
-	official := bySlug["gpt-5.5"]
+	official := bySlug["gpt-5.6-sol"]
 	if official == nil {
 		t.Fatal("expected official template model entry")
 	}
@@ -194,13 +194,13 @@ func TestCodexClientModelsResponse_DisablesSearchToolForSynthesizedModels(t *tes
 func TestCodexClientModelsResponse_RequiresTemplateAndCodexProvidersForSearchTool(t *testing.T) {
 	providers := map[string][]string{
 		"new-codex-model": {"codex"},
-		"gpt-5.5":         {"openai-compatible-deepseek"},
+		"gpt-5.6-terra":   {"openai-compatible-deepseek"},
 		"gpt-5.4":         {"codex", "xai"},
 		"gpt-5.6-sol":     {"codex"},
 	}
 	resp := BuildResponse([]map[string]any{
 		{"id": "new-codex-model"},
-		{"id": "gpt-5.5"},
+		{"id": "gpt-5.6-terra"},
 		{"id": "gpt-5.4"},
 		{"id": "gpt-5.6-sol"},
 	}, func(id string) []string {
@@ -219,7 +219,7 @@ func TestCodexClientModelsResponse_RequiresTemplateAndCodexProvidersForSearchToo
 	if got, ok := bySlug["gpt-5.6-sol"]["supports_search_tool"].(bool); !ok || !got {
 		t.Errorf("gpt-5.6-sol supports_search_tool = %#v, want true", bySlug["gpt-5.6-sol"]["supports_search_tool"])
 	}
-	for _, slug := range []string{"new-codex-model", "gpt-5.5", "gpt-5.4"} {
+	for _, slug := range []string{"new-codex-model", "gpt-5.6-terra", "gpt-5.4"} {
 		if got, ok := bySlug[slug]["supports_search_tool"].(bool); !ok || got {
 			t.Errorf("%s supports_search_tool = %#v, want false", slug, bySlug[slug]["supports_search_tool"])
 		}
@@ -337,24 +337,24 @@ func TestLoadCodexClientModelTemplatesRefreshesOnRevision(t *testing.T) {
 		codexClientModelTemplatesMu.Unlock()
 	})
 
-	first := []byte(`{"models":[{"slug":"gpt-5.5","display_name":"First"}]}`)
+	first := []byte(`{"models":[{"slug":"gpt-5.6-sol","display_name":"First"}]}`)
 	templates, defaultTemplate, err := loadCodexClientModelTemplatesSnapshot(first, 100)
 	if err != nil {
 		t.Fatalf("load first snapshot: %v", err)
 	}
-	if got := stringModelValue(templates["gpt-5.5"], "display_name"); got != "First" {
+	if got := stringModelValue(templates["gpt-5.6-sol"], "display_name"); got != "First" {
 		t.Fatalf("first display_name = %q, want First", got)
 	}
 	if got := stringModelValue(defaultTemplate, "display_name"); got != "First" {
 		t.Fatalf("first default display_name = %q, want First", got)
 	}
 
-	second := []byte(`{"models":[{"slug":"gpt-5.5","display_name":"Second"}]}`)
+	second := []byte(`{"models":[{"slug":"gpt-5.6-sol","display_name":"Second"}]}`)
 	templates, defaultTemplate, err = loadCodexClientModelTemplatesSnapshot(second, 101)
 	if err != nil {
 		t.Fatalf("load second snapshot: %v", err)
 	}
-	if got := stringModelValue(templates["gpt-5.5"], "display_name"); got != "Second" {
+	if got := stringModelValue(templates["gpt-5.6-sol"], "display_name"); got != "Second" {
 		t.Fatalf("second display_name = %q, want Second", got)
 	}
 	if got := stringModelValue(defaultTemplate, "display_name"); got != "Second" {
@@ -365,7 +365,7 @@ func TestLoadCodexClientModelTemplatesRefreshesOnRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload cached revision: %v", err)
 	}
-	if got := stringModelValue(templates["gpt-5.5"], "display_name"); got != "Second" {
+	if got := stringModelValue(templates["gpt-5.6-sol"], "display_name"); got != "Second" {
 		t.Fatalf("cached display_name = %q, want Second", got)
 	}
 }
@@ -392,7 +392,7 @@ func TestCodexClientModelsResponseAppliesMaxContextLengthOverride(t *testing.T) 
 	resp := BuildResponse([]map[string]any{
 		{"id": "deepseek-v4-flash", "max_context_length": wantOverride},
 		{"id": "deepseek-v4-pro"},
-		{"id": "gpt-5.5", "max_context_length": wantOverride},
+		{"id": "gpt-5.6-sol", "max_context_length": wantOverride},
 	}, nil, false)
 	models, ok := resp["models"].([]map[string]any)
 	if !ok {
@@ -410,7 +410,7 @@ func TestCodexClientModelsResponseAppliesMaxContextLengthOverride(t *testing.T) 
 	}{
 		{slug: "deepseek-v4-flash", want: wantOverride},
 		{slug: "deepseek-v4-pro", want: wantDefault},
-		{slug: "gpt-5.5", want: wantOverride},
+		{slug: "gpt-5.6-sol", want: wantOverride},
 	} {
 		entry := bySlug[testCase.slug]
 		if entry == nil {
@@ -562,7 +562,7 @@ func TestCodexClientModelsResponseMapsMaxCompletionTokensToMaxTokens(t *testing.
 	const wantSynthesizedLimit = 32000
 
 	resp := BuildResponse([]map[string]any{
-		{"id": "gpt-5.5", "max_completion_tokens": wantTemplateLimit},
+		{"id": "gpt-5.6-sol", "max_completion_tokens": wantTemplateLimit},
 		{"id": "custom-output-limit-model", "max_completion_tokens": wantSynthesizedLimit},
 	}, nil, false)
 	models, ok := resp["models"].([]map[string]any)
@@ -579,7 +579,7 @@ func TestCodexClientModelsResponseMapsMaxCompletionTokensToMaxTokens(t *testing.
 		slug string
 		want int
 	}{
-		{slug: "gpt-5.5", want: wantTemplateLimit},
+		{slug: "gpt-5.6-sol", want: wantTemplateLimit},
 		{slug: "custom-output-limit-model", want: wantSynthesizedLimit},
 	} {
 		entry := bySlug[testCase.slug]
@@ -589,5 +589,22 @@ func TestCodexClientModelsResponseMapsMaxCompletionTokensToMaxTokens(t *testing.
 		if got := intModelValue(entry, "max_tokens"); got != testCase.want {
 			t.Errorf("%s max_tokens = %d, want %d", testCase.slug, got, testCase.want)
 		}
+	}
+}
+
+func TestCodexClientModelsUsesSolTemplateForExplicitAPIKeyGPT55(t *testing.T) {
+	templates, defaultTemplate, err := loadCodexClientModelTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if templates["gpt-5.5"] != nil || stringModelValue(defaultTemplate, "slug") != "gpt-5.6-sol" {
+		t.Fatal("retired template survived or the active default is unavailable")
+	}
+	response := BuildResponse([]map[string]any{{"id": "gpt-5.5", "display_name": "My API model"}}, func(string) []string {
+		return []string{"openai-compatible"}
+	}, false)
+	models := response["models"].([]map[string]any)
+	if len(models) != 1 || models[0]["slug"] != "gpt-5.5" || models[0]["display_name"] != "My API model" {
+		t.Fatalf("explicit API model changed: %#v", models)
 	}
 }

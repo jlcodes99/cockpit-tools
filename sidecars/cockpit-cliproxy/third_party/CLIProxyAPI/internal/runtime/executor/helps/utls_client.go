@@ -362,9 +362,19 @@ func newClaudeCodeRoundTripper(proxyURL string) http.RoundTripper {
 // fallbackRoundTripper uses provider-specific TLS fingerprints for protected
 // HTTPS hosts and falls back to the standard transport for all other requests.
 type fallbackRoundTripper struct {
-	anthropic http.RoundTripper
-	chrome    http.RoundTripper
-	fallback  http.RoundTripper
+	managedOwned bool
+	anthropic    http.RoundTripper
+	chrome       http.RoundTripper
+	fallback     http.RoundTripper
+}
+
+func (f *fallbackRoundTripper) CloseIdleConnections() {
+	if !f.managedOwned {
+		return
+	}
+	closeManagedIdle(f.anthropic)
+	closeManagedIdle(f.chrome)
+	closeManagedIdle(f.fallback)
 }
 
 func (f *fallbackRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -392,6 +402,30 @@ func NewUtlsHTTPClient(ctx context.Context, cfg *config.Config, auth *cliproxyau
 	}
 	if proxyURL == "" && cfg != nil {
 		proxyURL = strings.TrimSpace(cfg.ProxyURL)
+	}
+
+	profile, identityErr := ManagedIdentityForAuth(auth)
+	if identityErr != nil {
+		return &http.Client{Transport: unavailableManagedTransport{identityErr}, Timeout: timeout}
+	}
+	if profile != nil {
+		rt := ManagedTransport(auth, proxyURL, "utls", func() http.RoundTripper {
+			if proxyURL != "" {
+				if _, _, err := proxyutil.BuildDialer(proxyURL); err != nil {
+					return unavailableManagedTransport{fmt.Errorf("configured upstream proxy is unavailable")}
+				}
+			}
+			standard := cloneManagedDefaultTransport()
+			if proxyURL != "" {
+				var err error
+				standard, _, err = proxyutil.BuildHTTPTransport(proxyURL)
+				if err != nil || standard == nil {
+					return unavailableManagedTransport{fmt.Errorf("configured upstream proxy is unavailable")}
+				}
+			}
+			return &fallbackRoundTripper{managedOwned: true, anthropic: newClaudeCodeRoundTripper(proxyURL), chrome: newUtlsRoundTripper(proxyURL), fallback: standard}
+		})
+		return &http.Client{Transport: rt, Timeout: timeout}
 	}
 
 	var ctxRoundTripper http.RoundTripper

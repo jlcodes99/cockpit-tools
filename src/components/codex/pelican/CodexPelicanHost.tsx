@@ -116,7 +116,7 @@ export function CodexPelicanHost() {
       <div className="pelican-body">
         <ModalErrorMessage message={connectionError ? pelicanError(connectionError, t) : null} />
         {connectionError && <button className="btn btn-secondary" onClick={() => setListenerAttempt((attempt) => attempt + 1)}>{t('common.refresh')}</button>}
-        {state.view === 'setup' && <PelicanSetup mask={mask} />}
+        {state.view === 'setup' && <PelicanSetup key={state.sourceMode} mask={mask} />}
         {state.view === 'results' && batch && <PelicanResults batch={batch} mask={mask} />}
         {state.view === 'history' && <PelicanHistory />}
       </div>

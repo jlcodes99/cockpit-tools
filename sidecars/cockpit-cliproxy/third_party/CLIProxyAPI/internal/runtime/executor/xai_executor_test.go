@@ -246,8 +246,8 @@ func TestXAIExecutorExecuteShapesResponsesRequest(t *testing.T) {
 		t.Fatalf("input.2 exists, want consecutive reasoning item merged; body=%s", string(gotBody))
 	}
 	tools := gjson.GetBytes(gotBody, "tools").Array()
-	if len(tools) != 7 {
-		t.Fatalf("tools length = %d, want 7; body=%s", len(tools), string(gotBody))
+	if len(tools) != 8 {
+		t.Fatalf("tools length = %d, want 8; body=%s", len(tools), string(gotBody))
 	}
 	foundAutomationUpdate := false
 	foundNamespaceCustom := false
@@ -317,11 +317,11 @@ func TestXAIExecutorExecuteShapesResponsesRequest(t *testing.T) {
 	if got := gjson.GetBytes(gotBody, "tool_choice.tools.1.name").String(); got != "lookup" {
 		t.Fatalf("tool_choice.tools.1.name = %q, want lookup; body=%s", got, string(gotBody))
 	}
-	if got := gjson.GetBytes(gotBody, "tool_choice.tools.2.type").String(); got != "web_search" {
-		t.Fatalf("tool_choice.tools.2.type = %q, want web_search; body=%s", got, string(gotBody))
+	if got := gjson.GetBytes(gotBody, "tool_choice.tools.2.type").String(); got != "x_search" {
+		t.Fatalf("tool_choice.tools.2.type = %q, want x_search; body=%s", got, string(gotBody))
 	}
-	if got := gjson.GetBytes(gotBody, "tool_choice.tools.3.type").String(); got != "x_search" {
-		t.Fatalf("tool_choice.tools.3.type = %q, want x_search; body=%s", got, string(gotBody))
+	if got := gjson.GetBytes(gotBody, "tool_choice.tools.#").Int(); got != 3 {
+		t.Fatalf("mixed tool choice has %d entries, want 3 supported entries; body=%s", got, string(gotBody))
 	}
 	xSearchAllowedCount := 0
 	for _, tool := range gjson.GetBytes(gotBody, "tool_choice.tools").Array() {
@@ -995,7 +995,7 @@ func TestXAIExecutorPrepareHonorsInjectXSearchConfig(t *testing.T) {
 			if len(tools) != 1+wantXSearchCount {
 				t.Fatalf("tools length = %d, want %d; body=%s", len(tools), 1+wantXSearchCount, prepared.body)
 			}
-			if got := tools[0].Get("name").String(); got != "web_search" {
+			if got := tools[0].Get("name").String(); got != xaiClientWebSearchAlias {
 				t.Fatalf("client web_search tool missing; body=%s", prepared.body)
 			}
 			xSearchTools := 0
@@ -1125,18 +1125,12 @@ func TestXAIExecutorPrepareNormalizesClaudeWebSearchToolChoice(t *testing.T) {
 	}
 
 	choice := gjson.GetBytes(prepared.body, "tool_choice")
-	if got := choice.Get("type").String(); got != "allowed_tools" {
-		t.Fatalf("tool_choice.type = %q, want allowed_tools; body=%s", got, prepared.body)
+	if got := choice.String(); got != "required" {
+		t.Fatalf("tool_choice = %q, want required; body=%s", got, prepared.body)
 	}
-	if got := choice.Get("mode").String(); got != "required" {
-		t.Fatalf("tool_choice.mode = %q, want required; body=%s", got, prepared.body)
-	}
-	allowed := choice.Get("tools").Array()
-	if len(allowed) != 1 {
-		t.Fatalf("tool_choice.tools length = %d, want 1; body=%s", len(allowed), prepared.body)
-	}
-	if got := allowed[0].Get("type").String(); got != "web_search" {
-		t.Fatalf("tool_choice.tools.0.type = %q, want web_search; body=%s", got, prepared.body)
+	tools := gjson.GetBytes(prepared.body, "tools").Array()
+	if len(tools) != 1 || tools[0].Get("type").String() != "web_search" {
+		t.Fatalf("forced search must keep only hosted web_search; body=%s", prepared.body)
 	}
 }
 
@@ -1591,7 +1585,7 @@ func TestXAIExecutorPrepareResponsesRequestPreservesSupportedOutputControls(t *t
 	}
 }
 
-func TestXAIExecutorPrepareResponsesRequestDropsPayloadStopOverride(t *testing.T) {
+func TestXAIExecutorPrepareResponsesRequestDefersPayloadStopOverride(t *testing.T) {
 	t.Parallel()
 
 	exec := NewXAIExecutor(&config.Config{
@@ -1615,7 +1609,10 @@ func TestXAIExecutorPrepareResponsesRequestDropsPayloadStopOverride(t *testing.T
 		t.Fatalf("prepareResponsesRequest() error = %v", errPrepare)
 	}
 	if gjson.GetBytes(prepared.body, "stop").Exists() {
-		t.Fatalf("stop should be removed after payload config; body=%s", prepared.body)
+		t.Fatalf("stop should not be present before final payload config; body=%s", prepared.body)
+	}
+	if got := gjson.GetBytes(prepared.finalizePayload(prepared.body), "stop.0").String(); got != "END" {
+		t.Fatalf("explicit stop override was overwritten: %q", got)
 	}
 }
 
@@ -2518,10 +2515,13 @@ func TestXAIExecutorCompactUsesCompactEndpoint(t *testing.T) {
 	if gotAccept != "application/json" {
 		t.Fatalf("Accept = %q, want application/json", gotAccept)
 	}
-	for _, field := range []string{"stream", "max_output_tokens", "temperature", "top_p", "top_k", "stop"} {
+	for _, field := range []string{"stream", "max_output_tokens", "temperature", "top_p", "stop"} {
 		if gjson.GetBytes(gotBody, field).Exists() {
 			t.Fatalf("%s exists in compact body: %s", field, string(gotBody))
 		}
+	}
+	if got := gjson.GetBytes(gotBody, "top_k").Int(); got != 10 {
+		t.Fatalf("compact payload override top_k = %d, want 10", got)
 	}
 	if got := gjson.GetBytes(gotBody, "input.0.encrypted_content").String(); got != validEncryptedContent {
 		t.Fatalf("input.0.encrypted_content = %q, want valid sample; body=%s", got, string(gotBody))
@@ -3019,7 +3019,7 @@ func TestXAIExecutorAppliesThinkingSuffix(t *testing.T) {
 	}
 }
 
-func TestXAIExecutorExecuteStreamFiltersToolSearchTool(t *testing.T) {
+func TestXAIExecutorExecuteStreamLowersToolSearchTool(t *testing.T) {
 	var gotBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var errRead error
@@ -3056,8 +3056,8 @@ func TestXAIExecutorExecuteStreamFiltersToolSearchTool(t *testing.T) {
 	}
 
 	tools := gjson.GetBytes(gotBody, "tools").Array()
-	if len(tools) != 7 {
-		t.Fatalf("tools length = %d, want 7; body=%s", len(tools), string(gotBody))
+	if len(tools) != 8 {
+		t.Fatalf("tools length = %d, want 8; body=%s", len(tools), string(gotBody))
 	}
 	if gjson.GetBytes(gotBody, "input.0.content").Exists() {
 		t.Fatalf("input.0.content exists, want removed; body=%s", string(gotBody))
@@ -5973,6 +5973,16 @@ func TestXAICompactBaseURL(t *testing.T) {
 }
 
 func TestApplyXAIChatHeaders(t *testing.T) {
+	t.Run("pinned version meets upstream reported server floor", func(t *testing.T) {
+		// Upstream #6252 reports a 1.0.13 floor; do not regress to 0.2.x.
+		var major, minor, patch int
+		if n, err := fmt.Sscanf(xaiClientVersionValue, "%d.%d.%d", &major, &minor, &patch); err != nil || n != 3 {
+			t.Fatalf("invalid pinned Grok client version %q", xaiClientVersionValue)
+		}
+		if major < 1 || (major == 1 && minor == 0 && patch < 13) {
+			t.Fatalf("pinned Grok client version %q is below upstream reported floor 1.0.13", xaiClientVersionValue)
+		}
+	})
 	t.Run("non OAuth defaults to official API headers", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "https://example.invalid/responses", nil)
 		auth := &cliproxyauth.Auth{
@@ -6068,7 +6078,8 @@ func TestApplyXAIChatHeaders(t *testing.T) {
 				"base_url":                         xaiauth.CLIChatProxyBaseURL,
 				xaiUsingAPIAttr:                    "false",
 				"header:" + xaiTokenAuthHeader:     "custom-token-auth",
-				"header:" + xaiClientVersionHeader: "custom-client-version",
+				"header:" + xaiClientVersionHeader: "9.9.9",
+				"header:User-Agent":                "custom-agent/9.9.9",
 				"header:x-grok-client-identifier":  "custom-client-identifier",
 				"header:x-authenticateresponse":    "custom-authenticate-response",
 			},
@@ -6078,8 +6089,11 @@ func TestApplyXAIChatHeaders(t *testing.T) {
 		if got := req.Header.Get(xaiTokenAuthHeader); got != "custom-token-auth" {
 			t.Fatalf("%s = %q, want custom-token-auth", xaiTokenAuthHeader, got)
 		}
-		if got := req.Header.Get(xaiClientVersionHeader); got != "custom-client-version" {
-			t.Fatalf("%s = %q, want custom-client-version", xaiClientVersionHeader, got)
+		if got := req.Header.Get(xaiClientVersionHeader); got != "9.9.9" {
+			t.Fatalf("%s = %q, want 9.9.9", xaiClientVersionHeader, got)
+		}
+		if got := req.Header.Get("User-Agent"); got != "custom-agent/9.9.9" {
+			t.Fatalf("User-Agent = %q, want custom-agent/9.9.9", got)
 		}
 		if got := req.Header.Get("x-grok-client-identifier"); got != "custom-client-identifier" {
 			t.Fatalf("x-grok-client-identifier = %q, want custom-client-identifier", got)

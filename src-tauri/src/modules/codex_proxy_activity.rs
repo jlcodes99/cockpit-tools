@@ -588,7 +588,23 @@ async fn account_summary(account: CodexAccount) -> ProxyActivitySummaryEntry {
 
 pub async fn summary() -> Result<Vec<ProxyActivitySummaryEntry>, String> {
     let accounts = proxy_accounts().await?;
-    Ok(join_all(accounts.into_iter().map(account_summary)).await)
+    let mut result = join_all(accounts.into_iter().map(account_summary)).await;
+    let ids = super::codex_proxy_targets::desktop_ids().await?;
+    let ids = ids.into_iter().filter(|id| !result.iter().any(|row| row.account_id == *id)).collect::<Vec<_>>();
+    let special = futures::stream::iter(ids).map(|id| async move {
+        let route = super::codex_client_proxy::route_id(&id);
+        let entry = tokio::time::timeout(SUMMARY_ACCOUNT_TIMEOUT, async {
+            let account = codex_proxy_runtime::load(&route).await?;
+            Ok::<_, String>(account_summary(account).await)
+        }).await;
+        let entry = match entry {
+            Ok(Ok(entry)) => entry,
+            _ => summary_entry(&route, false, capture_enabled(&route), ConnectionTotals::default()),
+        };
+        ProxyActivitySummaryEntry { account_id: id, ..entry }
+    }).buffer_unordered(4).collect::<Vec<_>>().await;
+    result.extend(special);
+    Ok(result)
 }
 
 #[cfg(test)]

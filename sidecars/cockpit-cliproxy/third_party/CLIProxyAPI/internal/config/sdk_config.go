@@ -27,7 +27,7 @@ type SDKConfig struct {
 	// through the Image API.
 	//
 	// The value must start with "gpt-" (case-insensitive). If empty or invalid, the
-	// default base model ("gpt-5.5") is used.
+	// default base model ("gpt-5.6-luna") is used.
 	GPTImage2BaseModel string `yaml:"gpt-image-2-base-model,omitempty" json:"gpt-image-2-base-model,omitempty"`
 
 	// VideoResultAuthCacheTTL controls how long video IDs stay pinned to the credential

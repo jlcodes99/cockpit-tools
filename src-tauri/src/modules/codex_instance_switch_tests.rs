@@ -74,6 +74,62 @@ fn inaccessible_instance_store_fails_switch_binding_without_claiming_success() {
 }
 
 #[test]
+fn api_service_activation_uses_committed_binding_instead_of_previous_account() {
+    let _fixture = Fixture::new();
+    for (previous, follow_local) in [
+        (Some("previous-oauth"), false),
+        (Some("__provider_gateway__:previous-provider"), false),
+        (None, true),
+        (None, false),
+        (Some(CODEX_API_SERVICE_BIND_ACCOUNT_ID), false),
+    ] {
+        let mut store = InstanceStore::new();
+        store.default_settings.bind_account_id = previous.map(str::to_owned);
+        store.default_settings.follow_local_account = follow_local;
+        store.default_settings.extra_args = "--existing-option".into();
+        store.default_settings.launch_mode = InstanceLaunchMode::Cli;
+        save_instance_store(&store).unwrap();
+
+        let expected = bind_default_api_service_for_launch().unwrap();
+        let saved = load_default_settings().unwrap();
+        assert_eq!(expected, CODEX_API_SERVICE_BIND_ACCOUNT_ID);
+        assert_eq!(saved.bind_account_id.as_deref(), Some(expected));
+        assert!(!saved.follow_local_account);
+        assert_eq!(saved.extra_args, "--existing-option");
+        assert_eq!(saved.launch_mode, InstanceLaunchMode::Cli);
+        verify_prepared_launch_binding(Some(expected), saved.bind_account_id.as_deref()).unwrap();
+    }
+}
+
+#[test]
+fn api_service_binding_write_failure_does_not_prepare_a_launch_identity() {
+    let fixture = Fixture::new();
+    let path = fixture.root.join(CODEX_INSTANCES_FILE);
+    fs::create_dir(&path).unwrap();
+    fs::write(path.join("preserve"), "fixture").unwrap();
+    assert_eq!(
+        bind_default_api_service_for_launch().unwrap_err(),
+        "CODEX_SWITCH_BINDING_FAILED"
+    );
+    assert_eq!(
+        fs::read_to_string(path.join("preserve")).unwrap(),
+        "fixture"
+    );
+}
+
+#[test]
+fn api_service_launch_still_rejects_binding_changed_after_preparation() {
+    let _fixture = Fixture::new();
+    let expected = bind_default_api_service_for_launch().unwrap();
+    bind_default_account_for_switch("another-oauth").unwrap();
+    let saved = load_default_settings().unwrap();
+    assert_eq!(
+        verify_prepared_launch_binding(Some(expected), saved.bind_account_id.as_deref()).unwrap_err(),
+        "CODEX_SWITCH_BINDING_FAILED"
+    );
+}
+
+#[test]
 fn prepared_profile_rejects_changed_or_missing_binding_before_launch() {
     assert!(verify_prepared_launch_binding(Some("next"), Some("next")).is_ok());
     for actual in [None, Some("previous"), Some("__provider_gateway__:next")] {

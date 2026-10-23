@@ -44,6 +44,7 @@ func (e *XAIExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req 
 	reporter.SetTranslatedReasoningEffort(prepared.body, e.Identifier())
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
+	prepared.body = prepared.finalizePayload(prepared.body)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(prepared.body))
 	if err != nil {
 		return resp, err
@@ -72,7 +73,7 @@ func (e *XAIExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req 
 		}
 		helps.AppendAPIResponseChunk(ctx, e.cfg, data)
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), data))
-		return resp, xaiStatusErr(httpResp.StatusCode, data)
+		return resp, cliproxyexecutor.UpstreamRequestRejected(xaiStatusErr(httpResp.StatusCode, data))
 	}
 
 	data, err := io.ReadAll(httpResp.Body)
@@ -87,13 +88,24 @@ func (e *XAIExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req 
 	responseFilter := newXAIInternalXSearchResponseFilter(prepared.filterInternalXSearch, prepared.clientDeclaredTools)
 	namespaceRestorer := newXAINamespaceRestorer(prepared.namespaceTools)
 	applyPatchRestorer := newXAIApplyPatchRestorer(prepared.restoreApplyPatch)
+	toolSearchRestorer := helps.NewXAIClientToolSearchRestorer(prepared.clientToolSearch)
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		if !bytes.HasPrefix(line, xaiDataTag) {
 			continue
 		}
 		eventData := xaiNormalizeReasoningSummaryData(bytes.TrimSpace(line[len(xaiDataTag):]))
+		eventData, err = toolSearchRestorer.Apply(eventData)
+		if err != nil {
+			return resp, statusErr{code: http.StatusBadGateway, msg: err.Error()}
+		}
 		eventData = namespaceRestorer.restore(eventData)
+		eventData = helps.NormalizeXAICollaborationToolCalls(eventData)
+		eventData = restoreXAIClientWebSearchName(eventData, prepared.webSearchAlias)
 		eventData = responseFilter.apply(eventData)
+		eventData = applyPatchRestorer.applyStream(eventData)
+		if applyPatchRestorer != nil && applyPatchRestorer.err != nil {
+			return resp, statusErr{code: http.StatusBadGateway, msg: applyPatchRestorer.err.Error()}
+		}
 		if len(eventData) == 0 {
 			continue
 		}
@@ -107,7 +119,14 @@ func (e *XAIExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req 
 			}
 			completedData := xaiPatchCompletedOutput(eventData, outputItemsByIndex, outputItemsFallback)
 			completedData = applyPatchRestorer.restore(completedData)
-			completedData = helps.NormalizeCodexCollaborationToolCalls(completedData)
+			if errPatch := applyPatchRestorer.finish(); errPatch != nil {
+				return resp, statusErr{code: http.StatusBadGateway, msg: errPatch.Error()}
+			}
+			completedData, err = prepared.clientToolSearch.RestorePayload(completedData)
+			if err != nil {
+				return resp, statusErr{code: http.StatusBadGateway, msg: err.Error()}
+			}
+			completedData = helps.NormalizeXAICollaborationToolCalls(completedData)
 			completedData = xaiNormalizeReasoningSummaryData(completedData)
 			if eventType == "response.completed" {
 				// A truncated turn carries no replayable terminal state, so only a
@@ -170,6 +189,7 @@ func (e *XAIExecutor) executeCompactRequest(ctx context.Context, auth *cliproxya
 	reporter.SetTranslatedReasoningEffort(prepared.body, e.Identifier())
 
 	requestURL := strings.TrimSuffix(baseURL, "/") + "/responses/compact"
+	prepared.body = prepared.finalizePayload(prepared.body)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(prepared.body))
 	if err != nil {
 		return nil, nil, nil, err
@@ -202,7 +222,7 @@ func (e *XAIExecutor) executeCompactRequest(ctx context.Context, auth *cliproxya
 
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		helps.LogWithRequestID(ctx).Debugf("request error, error status: %d, error message: %s", httpResp.StatusCode, helps.SummarizeErrorBody(httpResp.Header.Get("Content-Type"), data))
-		err = xaiStatusErr(httpResp.StatusCode, data)
+		err = cliproxyexecutor.UpstreamRequestRejected(xaiStatusErr(httpResp.StatusCode, data))
 		return nil, nil, nil, err
 	}
 

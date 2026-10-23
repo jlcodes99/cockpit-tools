@@ -239,7 +239,7 @@ fn spawn_refresh(platform: PlatformId, account_id: Option<String>) {
                     .map_err(|err| err.to_string())
             }
             (PlatformId::Antigravity, None) => {
-                commands::account::refresh_current_quota(app.clone())
+                commands::account::refresh_current_quota(app.clone(), None)
                     .await
                     .map(|_| 0)
             }

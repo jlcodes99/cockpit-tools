@@ -327,14 +327,10 @@ pub fn parse(input: &str) -> Result<ParsedCatalog> {
         let node_name = name(text(m, "name")?)?;
         let protocol = text(m, "type")?;
         let result = clash_node(m);
-        let insecure = result
-            .as_ref()
-            .is_ok_and(super::codex_proxy_catalog_binding::is_insecure);
         let error = result
             .as_ref()
             .err()
-            .map(|e| safe_node_error(e))
-            .or_else(|| insecure.then(|| "PROXY_TLS_INSECURE".into()));
+            .map(|e| safe_node_error(e));
         nodes.push(ParsedNode {
             id: id("node", &node_name),
             name: node_name,
@@ -384,33 +380,29 @@ fn clash_node(m: &Map<String, Value>) -> Result<Value> {
     };
     if let Some((from, to)) = alias {
         if let Some(value) = proxy.get(from).cloned() {
-            if proxy.get(to).is_some_and(|existing| existing != &value) {
-                return Err(INVALID.into());
+            if proxy.get(to).is_none() {
+                proxy[to] = value;
             }
-            proxy[to] = value;
-            proxy.as_object_mut().ok_or(INVALID)?.remove(from);
         }
     }
-    // mport is a subscription alias. Conflicts are rejected rather than hidden.
+    // Preserve subscription aliases; an explicit native field takes precedence.
+    // Fill missing native fields for compatibility without rejecting template metadata.
     if let Some(mport) = proxy.get("mport").cloned() {
-        if proxy.get("ports").is_some_and(|ports| ports != &mport) {
-            return Err(UNSUPPORTED.into());
+        if proxy.get("ports").is_none() {
+            proxy["ports"] = mport;
         }
-        proxy["ports"] = mport;
-        proxy.as_object_mut().ok_or(INVALID)?.remove("mport");
     }
     super::codex_proxy_catalog_binding::validate_native_proxy(&proxy)?;
     Ok(json!({"type":"mihomo", "proxy":proxy}))
 }
 
-/// Recheck retained definitions against current capabilities without changing
-/// user permissions. A missing rejected definition requires an explicit refresh.
+/// Recheck retained definitions against current capabilities. Node-declared TLS
+/// exceptions are accepted automatically; missing definitions still need a refresh.
 pub(super) fn revalidate_retained_nodes(catalog: &mut ParsedCatalog) {
     for node in &mut catalog.nodes {
         let Some(outbound) = node.outbound.as_ref() else {
             continue;
         };
-        let approved = node.error.is_none();
         let result = if outbound["type"] == "mihomo" {
             outbound["proxy"]
                 .as_object()
@@ -429,9 +421,7 @@ pub(super) fn revalidate_retained_nodes(catalog: &mut ParsedCatalog) {
         };
         match result {
             Ok(current) => {
-                node.error = (!approved
-                    && super::codex_proxy_catalog_binding::is_insecure(&current))
-                .then(|| "PROXY_TLS_INSECURE".into());
+                node.error = None;
                 if current["type"] == "mihomo" {
                     node.protocol = current["proxy"]["type"]
                         .as_str()
@@ -544,7 +534,7 @@ fn clash_group(value: &Value, node_names: &[String], has_providers: bool) -> Res
 }
 
 pub(super) fn validate(catalog: &mut ParsedCatalog) -> Result<()> {
-    // Availability is derived from the current capabilities and permissions.
+    // Availability is derived from the current capabilities.
     // Recompute it for persisted catalogs; keep actual parse/option failures.
     for group in &mut catalog.groups {
         if group

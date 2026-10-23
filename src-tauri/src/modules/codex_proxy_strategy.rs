@@ -62,7 +62,6 @@ struct Resolved {
     interval: Option<u64>,
     timeout_ms: Option<u64>,
     tolerance: Option<u16>,
-    lazy: Option<bool>,
 }
 
 /// 策略来源的四种分组类型都按 Mihomo 原生策略执行；订阅自带分组保持原有的 select/url-test 限制，
@@ -148,7 +147,6 @@ fn resolved(options: &StrategyOptions) -> Result<Resolved, String> {
                 u16::try_from(value).map_err(|_| INVALID.to_string())
             })
             .transpose()?,
-        lazy: options.lazy,
     })
 }
 
@@ -209,11 +207,8 @@ pub fn options_view(catalog: &ParsedCatalog) -> Option<Value> {
     {
         object.insert("timeout".into(), json!(timeout_ms / 1000));
     }
-    if let Some(lazy) = native
-        .and_then(|value| value.get("lazy"))
-        .and_then(Value::as_bool)
-    {
-        object.insert("lazy".into(), json!(lazy));
+    if group.kind != "select" {
+        object.insert("lazy".into(), json!(true));
     }
     Some(value)
 }
@@ -236,9 +231,7 @@ fn native(kind: &str, resolved: &Resolved) -> Value {
             native["timeout"] = json!(timeout);
         }
     }
-    if let Some(lazy) = resolved.lazy {
-        native["lazy"] = json!(lazy);
-    }
+    native["lazy"] = json!(true);
     native
 }
 
@@ -447,7 +440,7 @@ mod tests {
         assert_eq!(group["interval"], 30);
         assert_eq!(group["tolerance"], DEFAULT_TOLERANCE);
         assert!(group.get("timeout").is_none());
-        assert!(group.get("lazy").is_none());
+        assert_eq!(group["lazy"], true);
         assert_eq!(catalog.groups[0].tolerance, Some(DEFAULT_TOLERANCE));
     }
 
@@ -470,7 +463,7 @@ mod tests {
         assert_eq!(view["interval"], 90);
         assert_eq!(view["timeout"], 7);
         assert_eq!(view["tolerance"], 120);
-        assert_eq!(view["lazy"], false, "lazy 为 false 时同样要回读");
+        assert_eq!(view["lazy"], true, "旧 lazy false 也必须启用惰性探测");
         // 回读只含类型与已保存的选项字段。
         assert_eq!(view.as_object().unwrap().len(), 6);
 
@@ -487,7 +480,7 @@ mod tests {
         assert_eq!(view["interval"], 30);
         assert_eq!(view["tolerance"], DEFAULT_TOLERANCE);
         assert!(view.get("timeout").is_none(), "未设置的 timeout 回读为空");
-        assert!(view.get("lazy").is_none(), "未设置的 lazy 回读为空");
+        assert_eq!(view["lazy"], true, "缺少旧字段时也固定启用");
     }
 
     #[test]

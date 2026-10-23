@@ -17,6 +17,8 @@ function harness(restore = async (_accountId: string) => {}, measure = async (_a
     refresh() { calls.refreshed++; } };
   const h = loadHookModule(new URL('./CodexAccountProxyPreview.tsx', import.meta.url), {
     'react-dom': { createPortal: (content: unknown) => content },
+    './useCodexProxyTargets': { useCodexProxyTargets: (accounts: unknown[]) => accounts },
+    '../../services/codexProxyTargetService': { isCodexProxyTarget: (account: any) => account.auth_mode === 'apikey' },
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../utils/codexProxyPreview': { proxyRuntimeRows: () => [], proxyPreviewBinding: (summary: unknown) => ({ summary }) },
     '../../stores/useCodexAccountStore': { useCodexAccountStore: (select: (state: any) => unknown) => select({ accounts: [account] }) },

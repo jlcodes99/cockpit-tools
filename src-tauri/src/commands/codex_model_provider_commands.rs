@@ -1,3 +1,5 @@
+use crate::modules::codex_provider_protocol::normalize_model_provider_wire_api;
+
 // Codex 模型供应商命令实现。
 //
 // 本片段由 `commands/codex.rs` 通过 `include!` 纳入 `commands::codex` 模块，集中负责供应商
@@ -333,59 +335,15 @@ fn emit_model_provider_chat_test_progress(
     let _ = app.emit(CODEX_MODEL_PROVIDER_CHAT_TEST_PROGRESS_EVENT, payload);
 }
 
-fn normalize_model_provider_wire_api(value: Option<&str>, base_url: &str) -> String {
-    match value.map(str::trim) {
-        Some("chat_completions") | Some("chat") => return "chat_completions".to_string(),
-        Some("responses") => return "responses".to_string(),
-        _ => {}
-    }
-    // DeepSeek defaults to official Responses when the caller did not choose a protocol.
-    if reqwest::Url::parse(base_url.trim())
-        .ok()
-        .and_then(|url| url.host_str().map(str::to_string))
-        .is_some_and(|host| host.eq_ignore_ascii_case("api.deepseek.com"))
-    {
-        return "responses".to_string();
-    }
-    let lower = base_url.trim().to_ascii_lowercase();
-    if lower.contains("/chat/completions")
-        || lower.contains("api.moonshot.cn")
-        || lower.contains("api.siliconflow.cn")
-        || lower.contains("api.siliconflow.com")
-        || lower.contains("open.bigmodel.cn")
-        || lower.contains("api.z.ai")
-        || lower.contains("volces.com")
-        || lower.contains("bytepluses.com")
-        || lower.contains("qianfan.baidubce.com")
-        || lower.contains("dashscope.aliyuncs.com")
-        || lower.contains("api.stepfun.com")
-        || lower.contains("api.stepfun.ai")
-        || lower.contains("modelscope.cn")
-        || lower.contains("api.longcat.chat")
-        || lower.contains("api.minimax.io")
-        || lower.contains("api.mini-max.chat")
-        || lower.contains("api.minimaxi.com")
-        || lower.contains("api.mimo.dev")
-        || lower.contains("token-plan-cn.xiaomimimo.com")
-        || lower.contains("api.novita.ai")
-        || lower.contains("integrate.api.nvidia.com")
-        || lower.contains("runapi.co")
-        || lower.contains("relaxycode.com")
-        || lower.contains("compshare.cn")
-        || lower.contains("api.lemondata.cc")
-        || lower.contains("e-flowcode.cc")
-        || lower.contains("cc-api.pipellm.ai")
-        || lower.contains("openrouter.ai")
-        || lower.contains("api.therouter.ai")
-    {
-        "chat_completions".to_string()
-    } else {
-        "responses".to_string()
-    }
-}
-
-const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY: &[&str] =
-    &["gpt-5.5", "gpt-5.4", "gpt-5", "gpt-4.1", "gpt-4o"];
+const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY: &[&str] = &[
+    crate::modules::codex_wakeup::DEFAULT_WAKEUP_MODEL,
+    "gpt-6.1-sol",
+    "gpt-6-astra",
+    "gpt-6-sol",
+    "gpt-6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+];
 
 fn is_image_generation_model_id(model_id: &str) -> bool {
     let lower = model_id.trim().to_ascii_lowercase();

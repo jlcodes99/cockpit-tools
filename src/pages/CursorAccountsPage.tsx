@@ -229,7 +229,7 @@ export function CursorAccountsPage() {
   );
 
   const resolvePlanLabel = useCallback(
-    (account: CursorAccount) => getCursorPlanDisplayName(account).toUpperCase(),
+    (account: CursorAccount) => getCursorPlanDisplayName(account),
     [],
   );
 
@@ -241,7 +241,7 @@ export function CursorAccountsPage() {
 
   const resolvePlanBadgeClass = useCallback(
     (account: CursorAccount) =>
-      getCursorPlanBadgeClass(account.membership_type, account),
+      getCursorPlanBadgeClass(account.membership_type?.trim() || account.plan_type, account),
     [],
   );
 

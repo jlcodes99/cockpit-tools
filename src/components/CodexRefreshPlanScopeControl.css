@@ -1,0 +1,23 @@
+.codex-refresh-scope { width: 100%; min-width: 0; }
+.codex-refresh-scope-heading { display: flex; align-items: center; min-height: 32px; }
+.codex-refresh-scope-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.codex-refresh-scope-option.btn {
+  font-size: 12px;
+  min-height: 32px;
+  min-width: 0;
+  max-width: 100%;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  box-shadow: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.codex-refresh-scope-option.is-selected { border-color: var(--primary); background: var(--primary-light); }
+.codex-refresh-scope-option.is-selected:hover:not(:disabled) { background: var(--bg-hover); }
+.codex-refresh-scope-option:disabled { opacity: 0.5; cursor: not-allowed; }
+.codex-refresh-scope-count { flex-shrink: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.codex-refresh-scope-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.codex-refresh-scope-actions .btn { min-height: 32px; font-size: 12px; padding: 6px 10px; border-radius: 8px; }
+
+.codex-refresh-scope-description { margin: 8px 0 12px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }

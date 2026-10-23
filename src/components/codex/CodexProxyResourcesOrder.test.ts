@@ -100,3 +100,16 @@ test('an incomplete explicit group is passed to the dialog instead of falling ba
   assert.deepEqual(Object.keys(h.assignments[0][2]), []);
   h.h.unmount();
 });
+
+
+test('subscription resources expose automatic updates as information without an opt-out or certificate toggle', async () => {
+  const entry = { ...source('subscription'), kind: 'subscription' as const, autoUpdate: false,
+    nodes: [{ id: 'one', name: 'one', protocol: 'http', supported: true, insecure: true, error: null }] };
+  const h = harness([entry]); await settlePromises();
+  nodes(h.h.flush()).find((node) => node.props.className === 'codex-resource-entry-main')!.props.onClick();
+  const tree = nodes(h.h.flush());
+  assert.equal(tree.some((node) => node.props.role === 'switch'), false);
+  assert.ok(tree.some((node) => node.type === 'p' && node.props.children === 'codex.proxy.catalog.autoUpdate'));
+  assert.equal(tree.find((node) => node.type === 'nodes')!.props.onInsecure, undefined);
+  h.h.unmount();
+});

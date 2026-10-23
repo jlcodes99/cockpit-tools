@@ -850,6 +850,7 @@ multi_agent = true
             None,
             None,
             None,
+            Some(true),
         )
         .expect("update API key account");
 
@@ -868,6 +869,8 @@ multi_agent = true
         assert_eq!(updated.api_provider_mode, CodexApiProviderMode::Custom);
         assert_eq!(updated.api_provider_id.as_deref(), Some("after_relay"));
         assert_eq!(updated.api_provider_name.as_deref(), Some("After Relay"));
+        assert!(updated.api_sync_model_catalog_to_api_service);
+        assert!(load_account(&updated.id).unwrap().api_sync_model_catalog_to_api_service);
     }
 
     #[test]

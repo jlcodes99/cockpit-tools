@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -110,4 +112,39 @@ func (e *CodexExecutor) resolveCodexConfig(auth *cliproxyauth.Auth) *config.Code
 		}
 	}
 	return nil
+}
+
+// Public API-key endpoints use portable Responses input for every model. OAuth
+// and Agent Identity routes keep Codex's private envelope regardless of stale
+// per-model compatibility metadata. Model grants are resolved before this stage.
+func (e *CodexExecutor) resolveCodexModelIsCompat(auth *cliproxyauth.Auth, _ cliproxyexecutor.Request, _ string) bool {
+	if auth == nil {
+		return false
+	}
+	return auth.AuthKind() == cliproxyauth.AuthKindAPIKey
+}
+
+func codexUseSIWC(auth *cliproxyauth.Auth) bool {
+	if auth == nil {
+		return false
+	}
+	enabled := false
+	if len(auth.Attributes) > 0 {
+		if raw := strings.TrimSpace(auth.Attributes["use_siwc"]); raw != "" {
+			if parsed, errParse := strconv.ParseBool(raw); errParse == nil {
+				enabled = parsed
+			}
+		}
+	}
+	if !enabled && auth.Metadata != nil {
+		switch v := auth.Metadata["use_siwc"].(type) {
+		case bool:
+			enabled = v
+		case string:
+			if parsed, errParse := strconv.ParseBool(strings.TrimSpace(v)); errParse == nil {
+				enabled = parsed
+			}
+		}
+	}
+	return enabled
 }

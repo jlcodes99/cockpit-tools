@@ -11,23 +11,29 @@
 }
 
 .modal-content.codex-oauth-binding-modal.codex-image-account-picker .add-section {
+  flex: 0 0 auto;
   overflow: visible;
 }
 
 .modal-content.codex-oauth-binding-modal.codex-image-account-picker
   .codex-oauth-binding-picker {
+  flex: 0 0 auto;
   overflow: visible;
 }
 
 /* 正文自身滚动，账号列表不再单独滚动，避免出现两层滚动条。 */
 .modal-content.codex-oauth-binding-modal.codex-image-account-picker
   .codex-oauth-binding-list {
+  flex: 0 0 auto;
+  min-height: 0;
   max-height: none;
+  gap: 4px;
 }
 
 /* 底部操作区固定在弹框底部：正文滚动时取消/保存始终可见。 */
 .modal-content.codex-oauth-binding-modal.codex-image-account-picker
   .codex-image-account-picker-actions {
+  flex-wrap: wrap;
   padding: 13px 24px 18px;
   background: rgba(236, 244, 250, 0.46);
 }
@@ -36,6 +42,22 @@
   .modal-content.codex-oauth-binding-modal.codex-image-account-picker
   .codex-image-account-picker-actions {
   background: rgba(2, 6, 23, 0.22);
+}
+
+.codex-image-account-picker-model-hint {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+  color: var(--danger, #dc2626);
+  font-size: 11px;
+}
+
+.codex-image-account-picker-model-hint > span {
+  flex: 1 1 220px;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {
@@ -100,6 +122,32 @@
   padding-inline: 12px;
 }
 
+.codex-image-account-picker-models {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+
+.codex-image-account-picker .codex-oauth-binding-picker-header {
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.codex-image-account-picker .codex-oauth-binding-picker-header > label:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.codex-image-account-picker .codex-oauth-binding-picker-controls {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  width: auto;
+  justify-content: flex-end;
+}
+
 .codex-image-account-picker-count {
   margin-right: auto;
   align-self: center;
@@ -113,4 +161,142 @@
   input[type="checkbox"] {
   background: rgba(30, 41, 59, 0.9);
   border-color: rgba(148, 163, 184, 0.6);
+}
+
+/* 独立两列布局；覆盖 OAuth 行主区域的继承 grid，型号控件始终在 label 外。 */
+.codex-image-account-picker .codex-oauth-binding-row.codex-image-account-row {
+  flex: 0 0 auto;
+  display: grid;
+  height: auto;
+  grid-template-columns: minmax(0, 1fr) 188px;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 9px 11px;
+  cursor: default;
+}
+
+.codex-image-account-picker .codex-image-account-choice {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.codex-image-account-picker .codex-oauth-binding-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.codex-image-account-picker .codex-oauth-binding-row-name {
+  flex: 1 1 120px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.codex-image-account-picker .codex-oauth-binding-row-plan {
+  position: static;
+  flex: 0 0 auto;
+  max-width: 104px;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  padding: 4px 8px;
+}
+
+.codex-image-account-picker .codex-oauth-binding-row-term {
+  grid-column: 1 / -1;
+}
+
+.codex-image-account-picker .codex-image-account-model {
+  width: 188px;
+  min-width: 0;
+}
+
+.codex-image-account-picker .codex-image-account-model-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.codex-image-account-picker .codex-image-account-model-select .single-select-dropdown-trigger {
+  height: 29px;
+  min-height: 29px;
+  padding: 3px 8px;
+  gap: 6px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.codex-image-account-picker .codex-image-account-model-select .single-select-dropdown-value {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-image-account-picker .codex-image-account-model-select .single-select-dropdown-arrow {
+  width: 16px;
+  height: 16px;
+  background: transparent;
+}
+
+.codex-image-account-model-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--danger, #dc2626);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .codex-image-account-picker .codex-oauth-binding-row.codex-image-account-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .codex-image-account-picker .codex-image-account-model {
+    width: 100%;
+    padding-left: 26px;
+    box-sizing: border-box;
+  }
+}
+
+.codex-image-account-picker .codex-image-account-row.is-oauth-source {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 菜单通过 portal 挂载，单独命名避免继承共享大号菜单的尺寸。 */
+.single-select-dropdown-menu.codex-image-account-model-menu {
+  padding: 5px;
+  border-radius: 9px;
+}
+
+.codex-image-account-model-menu .single-select-dropdown-item {
+  min-height: 29px;
+  padding: 4px 8px;
+  gap: 6px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.codex-image-account-model-menu .single-select-dropdown-item-label {
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.codex-image-account-model-menu .single-select-dropdown-item-check {
+  width: 14px;
+  height: 14px;
+}
+
+.codex-image-account-model-menu .single-select-dropdown-item-check svg {
+  width: 12px;
+  height: 12px;
 }

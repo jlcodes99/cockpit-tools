@@ -70,6 +70,8 @@ type PersistedPlatformLayout = {
   antigravityGroupFirstMigrated?: boolean;
   traeSuiteDefaultGroupRestored?: boolean;
   codexApiServiceSuiteMigrated?: boolean;
+  independentPlatformsMigrated?: boolean;
+  codexApiServiceDefaultGrouped?: boolean;
   apiRelaySidebarVisible?: boolean;
   apiRelayDashboardVisible?: boolean;
   apiRelayEntryOrder?: number;
@@ -89,6 +91,8 @@ interface PlatformLayoutState {
   antigravityGroupFirstMigrated: boolean;
   traeSuiteDefaultGroupRestored: boolean;
   codexApiServiceSuiteMigrated: boolean;
+  independentPlatformsMigrated: boolean;
+  codexApiServiceDefaultGrouped: boolean;
   apiRelaySidebarVisible: boolean;
   apiRelayDashboardVisible: boolean;
   apiRelayEntryOrder: number;
@@ -133,6 +137,8 @@ interface NormalizedLayoutStateData {
   antigravityGroupFirstMigrated: boolean;
   traeSuiteDefaultGroupRestored: boolean;
   codexApiServiceSuiteMigrated: boolean;
+  independentPlatformsMigrated: boolean;
+  codexApiServiceDefaultGrouped: boolean;
   apiRelaySidebarVisible: boolean;
   apiRelayDashboardVisible: boolean;
   apiRelayEntryOrder: number;
@@ -298,7 +304,7 @@ function createDefaultCodexSuiteGroup(): PlatformLayoutGroup {
   };
 }
 
-function defaultPlatformGroups(): PlatformLayoutGroup[] {
+function legacyDefaultPlatformGroups(): PlatformLayoutGroup[] {
   return [
     {
       id: DEFAULT_ANTIGRAVITY_GROUP_ID,
@@ -323,6 +329,100 @@ function defaultPlatformGroups(): PlatformLayoutGroup[] {
     },
     createDefaultTraeSuiteGroup(),
   ];
+}
+
+function defaultPlatformGroups(): PlatformLayoutGroup[] {
+  return [createDefaultCodexSuiteGroup()];
+}
+
+// Only retire untouched generated groups. Renamed groups, custom icons, changed
+// membership/defaults and later explicit grouping remain user-owned.
+function isAutomaticPlatformGroup(group: PlatformLayoutGroup): boolean {
+  const preset = legacyDefaultPlatformGroups().find((item) => item.id === group.id);
+  const platformId = group.platformIds[0];
+  // Older upgrades expanded generated singleton groups without changing IDs.
+  const expandedSingletonIds: Partial<Record<PlatformId, PlatformId[]>> = {
+    antigravity: ['antigravity', 'antigravity_ide'],
+    codex: ['codex', 'codex_api_service'],
+  };
+  const singletonIds = group.id === `platform-${platformId}`
+    ? group.platformIds.length === 1 ? [platformId] : expandedSingletonIds[platformId]
+    : undefined;
+  const expected = preset ?? (singletonIds ? {
+        id: group.id,
+        name: normalizeGroupName(undefined, platformId),
+        platformIds: singletonIds,
+        defaultPlatformId: platformId,
+        iconKind: 'platform' as const,
+        iconPlatformId: platformId,
+      } : null);
+  if (!expected || group.name !== expected.name
+    || group.defaultPlatformId !== expected.defaultPlatformId
+    || group.iconKind !== 'platform' || group.iconPlatformId !== expected.iconPlatformId
+    || group.platformIds.length !== expected.platformIds.length
+    || group.platformIds.some((id, index) => id !== expected.platformIds[index])) {
+    return false;
+  }
+  return (group.childConfigs ?? []).every((child) =>
+    child.iconKind !== 'custom' && !child.iconCustomDataUrl
+    && (!child.iconPlatformId || child.iconPlatformId === child.platformId)
+    && (!child.name || child.name === normalizeGroupName(undefined, child.platformId)));
+}
+
+function migrateAutomaticPlatformGroups(raw: PersistedPlatformLayout): PersistedPlatformLayout {
+  const groups = normalizePlatformGroups(raw.platformGroups, false);
+  const removed = new Map((raw.independentPlatformsMigrated === true ? [] : groups.filter((group) =>
+    isAutomaticPlatformGroup(group)
+    && !CODEX_SUITE_PLATFORM_IDS.every((id) => group.platformIds.includes(id))))
+    .map((group) => [makeGroupEntryId(group.id), group.platformIds.map(makePlatformEntryId)]));
+  const expand = (entries: PlatformLayoutEntryId[] | undefined) => Array.isArray(entries)
+    ? entries.flatMap((entry) => removed.get(entry) ?? [entry]) : undefined;
+  const oldRelayPosition = raw.apiRelayEntryOrder;
+  const apiRelayEntryOrder = typeof oldRelayPosition === 'number'
+    && Number.isFinite(oldRelayPosition) && Array.isArray(raw.orderedEntryIds)
+    ? expand(raw.orderedEntryIds.slice(0, Math.max(0, Math.trunc(oldRelayPosition))))!.length
+    : oldRelayPosition;
+  return restoreDefaultCodexGroup({
+    ...raw,
+    platformGroups: groups.filter((group) => !removed.has(makeGroupEntryId(group.id))),
+    orderedEntryIds: expand(raw.orderedEntryIds),
+    hiddenEntryIds: expand(raw.hiddenEntryIds),
+    sidebarEntryIds: expand(raw.sidebarEntryIds),
+    apiRelayEntryOrder,
+    independentPlatformsMigrated: true,
+  });
+}
+
+function restoreDefaultCodexGroup(raw: PersistedPlatformLayout): PersistedPlatformLayout {
+  if (raw.codexApiServiceDefaultGrouped === true) return raw;
+  const groups = raw.platformGroups ?? [];
+  // Do not move either entry out of a user-created group. A later explicit
+  // separation is also retained once this default has been applied.
+  if (groups.some((group) => group.platformIds.some((id) => CODEX_SUITE_PLATFORM_IDS.includes(id)))) {
+    return { ...raw, codexApiServiceDefaultGrouped: true };
+  }
+  const group = createDefaultCodexSuiteGroup();
+  const existingIds = new Set(groups.map((item) => item.id));
+  let suffix = 1;
+  while (existingIds.has(group.id)) group.id = `${DEFAULT_CODEX_GROUP_ID}-${suffix++}`;
+  const entryId = makeGroupEntryId(group.id);
+  const regroup = (entries: PlatformLayoutEntryId[] | undefined) => Array.isArray(entries)
+    ? [...new Set(entries.map((entry) =>
+      entry === makePlatformEntryId('codex') || entry === makePlatformEntryId('codex_api_service')
+        ? entryId : entry))] : undefined;
+  const oldRelayPosition = raw.apiRelayEntryOrder;
+  return {
+    ...raw,
+    platformGroups: [...groups, group],
+    orderedEntryIds: regroup(raw.orderedEntryIds),
+    hiddenEntryIds: regroup(raw.hiddenEntryIds),
+    sidebarEntryIds: regroup(raw.sidebarEntryIds),
+    apiRelayEntryOrder: typeof oldRelayPosition === 'number' && Number.isFinite(oldRelayPosition)
+      && Array.isArray(raw.orderedEntryIds)
+      ? regroup(raw.orderedEntryIds.slice(0, Math.max(0, Math.trunc(oldRelayPosition))))!.length
+      : oldRelayPosition,
+    codexApiServiceDefaultGrouped: true,
+  };
 }
 
 function sanitizePlatformIds(list: unknown): PlatformId[] {
@@ -474,50 +574,6 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   return fallbackPlatform.charAt(0).toUpperCase() + fallbackPlatform.slice(1);
 }
 
-function normalizeAntigravitySuiteGroupName(name: string, platformIds: PlatformId[]): string {
-  if (
-    platformIds.includes('antigravity')
-    && platformIds.includes('antigravity_ide')
-    && (name === 'Antigravity IDE' || name === 'Antigravity')
-  ) {
-    return 'Antigravity';
-  }
-  return name;
-}
-
-function isDefaultTraeSuiteSingletonGroup(group: PlatformLayoutGroup): boolean {
-  const platformId = group.platformIds[0];
-  return (
-    group.platformIds.length === 1
-    && TRAE_SUITE_PLATFORM_IDS.includes(platformId)
-    && group.id === `platform-${platformId}`
-    && group.name === normalizeGroupName(undefined, platformId)
-    && group.defaultPlatformId === platformId
-    && group.iconKind === 'platform'
-    && group.iconPlatformId === platformId
-    && (group.childConfigs ?? []).length === 0
-  );
-}
-
-function restoreDefaultTraeSuiteGroup(groups: PlatformLayoutGroup[]): PlatformLayoutGroup[] {
-  const singletonIndexes = TRAE_SUITE_PLATFORM_IDS.map((platformId) =>
-    groups.findIndex((group) =>
-      group.platformIds.length === 1
-      && group.platformIds[0] === platformId
-      && isDefaultTraeSuiteSingletonGroup(group)
-    )
-  );
-  if (singletonIndexes.some((index) => index < 0)) {
-    return groups;
-  }
-
-  const singletonIndexSet = new Set(singletonIndexes);
-  const insertIndex = Math.min(...singletonIndexes);
-  const next = groups.filter((_, index) => !singletonIndexSet.has(index));
-  next.splice(insertIndex, 0, createDefaultTraeSuiteGroup());
-  return next;
-}
-
 function normalizeGroupChildName(raw: unknown, platformId: PlatformId): string | undefined {
   if (typeof raw !== 'string') {
     return undefined;
@@ -589,13 +645,7 @@ function normalizeGroupChildConfigs(
 function normalizePlatformGroups(
   raw: unknown,
   fallbackToDefault: boolean,
-  options: {
-    restoreDefaultTraeSuiteGroup?: boolean;
-    attachCodexApiServiceToCodexGroup?: boolean;
-  } = {},
 ): PlatformLayoutGroup[] {
-  const shouldRestoreDefaultTraeSuiteGroup = options.restoreDefaultTraeSuiteGroup === true;
-  const shouldAttachCodexApiService = options.attachCodexApiServiceToCodexGroup === true;
   const source = Array.isArray(raw) ? raw : (fallbackToDefault ? defaultPlatformGroups() : []);
   const result: PlatformLayoutGroup[] = [];
   const usedPlatformIds = new Set<PlatformId>();
@@ -636,10 +686,7 @@ function normalizePlatformGroups(
 
     result.push({
       id: groupId,
-      name: normalizeAntigravitySuiteGroupName(
-        normalizeGroupName(record.name, defaultPlatformId),
-        platformIds,
-      ),
+      name: normalizeGroupName(record.name, defaultPlatformId),
       platformIds,
       defaultPlatformId,
       iconKind,
@@ -650,109 +697,6 @@ function normalizePlatformGroups(
     usedGroupIds.add(groupId);
   });
 
-  if (!usedPlatformIds.has('antigravity_ide')) {
-    const antigravityGroup = result.find((group) => group.platformIds.includes('antigravity'));
-    if (antigravityGroup) {
-      antigravityGroup.platformIds = [...antigravityGroup.platformIds, 'antigravity_ide'];
-      antigravityGroup.defaultPlatformId = 'antigravity_ide';
-      antigravityGroup.iconPlatformId =
-        antigravityGroup.iconKind === 'custom' ? antigravityGroup.iconPlatformId : 'antigravity_ide';
-      if (antigravityGroup.name === 'Antigravity IDE' || antigravityGroup.name === 'Antigravity') {
-        antigravityGroup.name = 'Antigravity';
-      }
-      antigravityGroup.childConfigs = normalizeGroupChildConfigs(
-        [
-          ...(antigravityGroup.childConfigs ?? []),
-          { platformId: 'antigravity', name: 'Antigravity' },
-          { platformId: 'antigravity_ide', name: 'Antigravity IDE' },
-        ],
-        antigravityGroup.platformIds,
-      );
-      usedPlatformIds.add('antigravity_ide');
-    }
-  }
-
-  // One-time upgrade: attach Codex API Service into the existing Codex group.
-  // After migration, users can set it as group default or move it out; do not re-attach.
-  if (shouldAttachCodexApiService && !usedPlatformIds.has('codex_api_service')) {
-    const codexGroup = result.find((group) => group.platformIds.includes('codex'));
-    if (codexGroup) {
-      codexGroup.platformIds = [...codexGroup.platformIds, 'codex_api_service'];
-      if (codexGroup.iconKind !== 'custom' && !codexGroup.iconPlatformId) {
-        codexGroup.iconPlatformId = 'codex';
-      }
-      if (!codexGroup.platformIds.includes(codexGroup.defaultPlatformId)) {
-        codexGroup.defaultPlatformId = 'codex';
-      }
-      codexGroup.childConfigs = normalizeGroupChildConfigs(
-        codexGroup.childConfigs ?? [],
-        codexGroup.platformIds,
-      );
-      usedPlatformIds.add('codex_api_service');
-    }
-  }
-
-  if (shouldRestoreDefaultTraeSuiteGroup) {
-    const restoredTraeSuiteGroups = restoreDefaultTraeSuiteGroup(result);
-    if (restoredTraeSuiteGroups !== result) {
-      result.splice(0, result.length, ...restoredTraeSuiteGroups);
-    }
-  }
-
-  const missingTraeSuiteIds = TRAE_SUITE_PLATFORM_IDS.filter(
-    (platformId) => !usedPlatformIds.has(platformId),
-  );
-  if (shouldRestoreDefaultTraeSuiteGroup && missingTraeSuiteIds.length > 0) {
-    const traeGroup =
-      result.find((group) => group.id === DEFAULT_TRAE_GROUP_ID)
-      ?? result.find((group) => group.platformIds.includes('trae'));
-    if (traeGroup) {
-      traeGroup.platformIds = [...traeGroup.platformIds, ...missingTraeSuiteIds];
-      if (!TRAE_SUITE_PLATFORM_IDS.includes(traeGroup.defaultPlatformId)) {
-        traeGroup.defaultPlatformId = 'trae';
-      }
-      if (traeGroup.iconKind !== 'custom') {
-        traeGroup.iconPlatformId = 'trae';
-      }
-      if (traeGroup.name === 'platform-trae' || traeGroup.name === 'Trae') {
-        traeGroup.name = 'Trae';
-      }
-      traeGroup.childConfigs = normalizeGroupChildConfigs(
-        [
-          ...(traeGroup.childConfigs ?? []),
-          { platformId: 'trae', name: 'Trae' },
-          { platformId: 'trae_solo', name: 'TRAE SOLO' },
-          { platformId: 'trae_cn', name: 'Trae CN' },
-          { platformId: 'trae_solo_cn', name: 'TRAE SOLO CN' },
-        ],
-        traeGroup.platformIds,
-      );
-      missingTraeSuiteIds.forEach((platformId) => usedPlatformIds.add(platformId));
-    }
-  }
-
-  for (const platformId of ALL_PLATFORM_IDS) {
-    if (usedPlatformIds.has(platformId)) {
-      continue;
-    }
-    let singletonId = `platform-${platformId}`;
-    let index = 1;
-    while (usedGroupIds.has(singletonId)) {
-      index += 1;
-      singletonId = `platform-${platformId}-${index}`;
-    }
-    result.push({
-      id: singletonId,
-      name: normalizeGroupName(undefined, platformId),
-      platformIds: [platformId],
-      defaultPlatformId: platformId,
-      iconKind: 'platform',
-      iconPlatformId: platformId,
-      childConfigs: [],
-    });
-    usedGroupIds.add(singletonId);
-    usedPlatformIds.add(platformId);
-  }
 
   return result;
 }
@@ -832,32 +776,6 @@ function buildEntryOrderFromPlatformOrder(
     }
   }
   return entries;
-}
-
-function findDefaultAntigravityGroup(groups: PlatformLayoutGroup[]): PlatformLayoutGroup | null {
-  return groups.find((group) => group.id === DEFAULT_ANTIGRAVITY_GROUP_ID)
-    ?? groups.find((group) =>
-      group.platformIds.includes('antigravity') && group.platformIds.includes('antigravity_ide')
-    )
-    ?? null;
-}
-
-function promoteDefaultAntigravityGroupEntry(
-  entries: PlatformLayoutEntryId[],
-  groups: PlatformLayoutGroup[],
-): PlatformLayoutEntryId[] {
-  const group = findDefaultAntigravityGroup(groups);
-  if (!group) {
-    return entries;
-  }
-
-  const groupEntryId = makeGroupEntryId(group.id);
-  const index = entries.indexOf(groupEntryId);
-  if (index <= 0) {
-    return entries;
-  }
-
-  return [groupEntryId, ...entries.filter((entryId) => entryId !== groupEntryId)];
 }
 
 function normalizeEntryOrder(
@@ -1166,19 +1084,12 @@ function normalizeStateData(
   },
   options: {
     allowLegacyTrayMigration?: boolean;
-    promoteAntigravityGroupEntry?: boolean;
-    attachCodexApiServiceToCodexGroup?: boolean;
   } = {},
 ): NormalizedLayoutStateData {
   const normalizedPlatformOrder = normalizeOrder(raw.orderedPlatformIds);
-  const platformGroups = normalizePlatformGroups(raw.platformGroups, false, {
-    attachCodexApiServiceToCodexGroup: options.attachCodexApiServiceToCodexGroup === true,
-  })
+  const platformGroups = normalizePlatformGroups(raw.platformGroups, false)
     .map((group) => sortGroupPlatformsByOrder(group, normalizedPlatformOrder));
-  const normalizedEntryIds = normalizeEntryOrder(raw.orderedEntryIds, platformGroups, normalizedPlatformOrder);
-  const orderedEntryIds = options.promoteAntigravityGroupEntry === true
-    ? promoteDefaultAntigravityGroupEntry(normalizedEntryIds, platformGroups)
-    : normalizedEntryIds;
+  const orderedEntryIds = normalizeEntryOrder(raw.orderedEntryIds, platformGroups, normalizedPlatformOrder);
   const orderedPlatformIds = derivePlatformOrderFromEntryOrder(
     orderedEntryIds,
     platformGroups,
@@ -1216,9 +1127,11 @@ function normalizeStateData(
     hiddenEntryIds,
     sidebarEntryIds,
     antigravityGroupFirstMigrated:
-      raw.antigravityGroupFirstMigrated !== false || options.promoteAntigravityGroupEntry === true,
+      raw.antigravityGroupFirstMigrated !== false,
     traeSuiteDefaultGroupRestored: raw.traeSuiteDefaultGroupRestored !== false,
     codexApiServiceSuiteMigrated: raw.codexApiServiceSuiteMigrated !== false,
+    independentPlatformsMigrated: true,
+    codexApiServiceDefaultGrouped: true,
     apiRelaySidebarVisible: raw.apiRelaySidebarVisible !== false,
     apiRelayDashboardVisible: raw.apiRelayDashboardVisible !== false,
     apiRelayEntryOrder: normalizeApiRelayEntryOrder(raw.apiRelayEntryOrder, orderedEntryIds.length),
@@ -1251,10 +1164,8 @@ function loadPersistedState(): NormalizedLayoutStateData {
       return defaults;
     }
 
-    const parsed = JSON.parse(raw) as PersistedPlatformLayout;
+    const parsed = migrateAutomaticPlatformGroups(JSON.parse(raw) as PersistedPlatformLayout);
     const antigravityGroupFirstMigrated = parsed.antigravityGroupFirstMigrated === true;
-    const traeSuiteDefaultGroupRestored = parsed.traeSuiteDefaultGroupRestored === true;
-    const codexApiServiceSuiteMigrated = parsed.codexApiServiceSuiteMigrated === true;
     const orderedPlatformIds = normalizeOrder(parsed.orderedPlatformIds ?? defaultPlatformOrder());
     const hiddenPlatformIds = normalizeHidden(parsed.hiddenPlatformIds ?? []);
     const sidebarPlatformIds = normalizeSidebar(
@@ -1265,10 +1176,6 @@ function loadPersistedState(): NormalizedLayoutStateData {
     const platformGroups = normalizePlatformGroups(
       parsed.platformGroups,
       parsed.platformGroups === undefined,
-      {
-        restoreDefaultTraeSuiteGroup: !traeSuiteDefaultGroupRestored,
-        attachCodexApiServiceToCodexGroup: !codexApiServiceSuiteMigrated,
-      },
     ).map((group) => sortGroupPlatformsByOrder(group, orderedPlatformIds));
 
     const orderedEntryIds = normalizeEntryOrder(parsed.orderedEntryIds, platformGroups, orderedPlatformIds);
@@ -1306,8 +1213,6 @@ function loadPersistedState(): NormalizedLayoutStateData {
       apiRelaySidebarVisible: parsed.apiRelaySidebarVisible,
       apiRelayDashboardVisible: parsed.apiRelayDashboardVisible,
       apiRelayEntryOrder: parsed.apiRelayEntryOrder,
-    }, {
-      promoteAntigravityGroupEntry: !antigravityGroupFirstMigrated,
     });
     // Normalize in memory only. Startup migration is not a user edit and must
     // not get a fresh revision before durable preferences have been loaded.
@@ -1350,6 +1255,8 @@ function persist(
     | 'antigravityGroupFirstMigrated'
     | 'traeSuiteDefaultGroupRestored'
     | 'codexApiServiceSuiteMigrated'
+    | 'independentPlatformsMigrated'
+    | 'codexApiServiceDefaultGrouped'
     | 'apiRelaySidebarVisible'
     | 'apiRelayDashboardVisible'
     | 'apiRelayEntryOrder'

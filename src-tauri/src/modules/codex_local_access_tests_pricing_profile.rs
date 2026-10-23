@@ -2423,3 +2423,143 @@ supports_websockets = false
         assert!(snapshot.events.is_empty());
         assert_eq!(stats.events.len(), 1);
     }
+
+    #[test]
+    fn gpt_6_1_sol_does_not_inherit_legacy_model_prices() {
+        use super::{normalize_known_openai_codex_model, price_book_entry_for_model};
+        assert_eq!(
+            normalize_known_openai_codex_model("codex/gpt-6.1-sol-2026-09-30").as_deref(),
+            Some("gpt-6.1-sol")
+        );
+        let pricing = price_book_entry_for_model("gpt-6.1-sol").expect("official price");
+        assert_eq!(pricing.model_id, "gpt-6.1-sol");
+        assert_eq!(pricing.standard.input_usd_per_million, 2.0);
+        assert_eq!(pricing.standard.cached_input_usd_per_million, 0.1);
+        assert_eq!(pricing.standard.output_usd_per_million, 10.0);
+        assert_eq!(
+            price_book_entry_for_model("codex/gpt-6.1-sol")
+                .unwrap()
+                .model_id,
+            "gpt-6.1-sol"
+        );
+    }
+
+    #[test]
+    fn grok_47_prices_match_official_inclusive_long_context_and_exact_aliases() {
+        for model in ["grok-4.7", "grok-4.7-latest", "xai/grok-4.7", "team/GROK-4.7(high)"] {
+            for (input_tokens, rates) in [(199_999, (2.0, 0.5, 6.0)), (200_000, (4.0, 1.0, 12.0)), (200_001, (4.0, 1.0, 12.0))] {
+                let usage = UsageCapture { input_tokens, cached_tokens: 100_000, output_tokens: 10_000, ..Default::default() };
+                for tier in [None, Some("priority"), Some("flex")] {
+                    let pricing = resolve_effective_model_pricing(None, Some(model), Some(&usage), tier).unwrap();
+                    assert_eq!((pricing.input_usd_per_million, pricing.cached_input_usd_per_million.unwrap(), pricing.output_usd_per_million), rates, "{model}/{input_tokens}/{tier:?}");
+                    let expected = (input_tokens - 100_000) as f64 * rates.0 / 1_000_000.0 + 100_000.0 * rates.1 / 1_000_000.0 + 10_000.0 * rates.2 / 1_000_000.0;
+                    assert!((calculate_usage_cost_usd(Some(&usage), Some(&pricing)) - expected).abs() < 1e-10);
+                }
+            }
+        }
+        for unknown in ["grok-4.7-build-fast", "grok-4.7-preview", "grok-4.70", "grok-5", "custom-grok-4.7"] {
+            assert!(super::price_book_entry_for_model(unknown).is_none(), "{unknown}");
+        }
+    }
+
+    #[test]
+    fn grok_47_custom_prices_override_defaults_and_follow_aliases() {
+        let mut collection = test_local_access_collection(vec![]);
+        let mut pricing = super::resolve_base_model_pricing(None, "grok-4.7").unwrap();
+        pricing.input_usd_per_million = 10.0;
+        pricing.cached_input_usd_per_million = Some(3.0);
+        pricing.output_usd_per_million = 20.0;
+        pricing.standard_long_price_override = false;
+        collection.model_pricings = super::normalize_model_pricings(vec![pricing]);
+        for model in ["grok-4.7", "grok-4.7-latest", "xai/grok-4.7(high)"] {
+            for (input_tokens, expected) in [(199_999, (10.0, 3.0, 20.0)), (200_000, (20.0, 6.0, 40.0))] {
+                let usage = UsageCapture { input_tokens, ..Default::default() };
+                let pricing = resolve_effective_model_pricing(Some(&collection), Some(model), Some(&usage), None).unwrap();
+                assert_eq!((pricing.input_usd_per_million, pricing.cached_input_usd_per_million.unwrap(), pricing.output_usd_per_million), expected);
+            }
+        }
+        super::sanitize_collection_structure(&mut collection).unwrap();
+        assert_eq!(collection.model_pricings[0].input_usd_per_million, 10.0);
+    }
+
+    #[test]
+    fn gpt_61_costs_cover_cache_writes_tiers_and_long_context() {
+        for (input_part, tier, expected) in [
+            (50_000, None, 1.23),
+            (50_000, Some("fast"), 2.46),
+            (50_000, Some("flex"), 0.615),
+            (100_000, None, 2.42),
+            (100_000, Some("priority"), 4.84),
+            (100_000, Some("flex"), 1.21),
+        ] {
+            let mut breakdown = CodexTokenBreakdown::default();
+            breakdown.schema_version = 2;
+            breakdown.quality = "complete".into();
+            breakdown.input.uncached_tokens = input_part;
+            breakdown.input.cache_read_tokens = input_part;
+            breakdown.input.cache_write_tokens = input_part;
+            breakdown.input.total_tokens = input_part * 3;
+            breakdown.output.non_reasoning_tokens = 100_000;
+            breakdown.output.total_tokens = 100_000;
+            breakdown.total_tokens = input_part * 3 + 100_000;
+            let usage = UsageCapture {
+                input_tokens: input_part * 3,
+                output_tokens: 100_000,
+                total_tokens: breakdown.total_tokens,
+                cached_tokens: input_part,
+                token_breakdown: Some(breakdown),
+                ..Default::default()
+            };
+            let pricing =
+                resolve_effective_model_pricing(None, Some("gpt-6.1-sol"), Some(&usage), tier).unwrap();
+            let cost = calculate_usage_cost_usd(Some(&usage), Some(&pricing));
+            assert!(
+                (cost - expected).abs() < 1e-10,
+                "{input_part:?}/{tier:?}: {cost} != {expected}"
+            );
+        }
+        for (tokens, expected_input) in [(272_000, 2.0), (272_001, 4.0)] {
+            let usage = UsageCapture {
+                input_tokens: tokens,
+                ..Default::default()
+            };
+            let pricing =
+                resolve_effective_model_pricing(None, Some("gpt-6.1-sol"), Some(&usage), None).unwrap();
+            assert_eq!(pricing.input_usd_per_million, expected_input);
+        }
+    }
+
+    #[test]
+    fn retired_prices_are_history_only_and_upgrade_preserves_custom_rates() {
+        use super::{
+            default_model_pricing_presets, price_book_entry_to_model_pricing,
+            HISTORICAL_CODEX_MODEL_PRICE_BOOK,
+        };
+        assert!(default_model_pricing_presets()
+            .iter()
+            .all(|price| {
+                price.model_id != "gpt-5.5"
+                    && !crate::modules::codex_wakeup::is_codex_model_before_5_5(&price.model_id)
+            }));
+        let legacy = price_book_entry_to_model_pricing(
+            HISTORICAL_CODEX_MODEL_PRICE_BOOK
+                .iter()
+                .find(|entry| entry.model_id == "gpt-5.4")
+                .unwrap(),
+        );
+        let mut collection = test_local_access_collection(vec![]);
+        collection.model_pricing_version = 4;
+        let mut customized = legacy.clone();
+        customized.model_id = "gpt-5.4-mini".into();
+        customized.input_usd_per_million = 99.0;
+        collection.model_pricings = vec![legacy, customized.clone()];
+        super::sanitize_collection_structure(&mut collection).unwrap();
+        assert_eq!(
+            collection.model_pricing_version,
+            DEFAULT_MODEL_PRICING_VERSION
+        );
+        assert_eq!(collection.model_pricings.len(), 1);
+        assert_eq!(collection.model_pricings[0].input_usd_per_million, 99.0);
+        assert_eq!(collection.model_pricings[0].model_id, customized.model_id);
+        assert!(!super::sanitize_collection_structure(&mut collection).unwrap());
+    }

@@ -32,29 +32,7 @@ pub struct UnifiedProxyPreview {
 
 /// 可用账号与「已有独立绑定」的账号清单；账号读取是磁盘操作，必须离开异步线程。
 async fn account_totals() -> Result<(Vec<String>, Vec<String>, Vec<String>), String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let mut eligible = Vec::new();
-        let mut independent = Vec::new();
-        let mut disabled = Vec::new();
-        for account in crate::modules::codex_account::list_accounts() {
-            if !crate::modules::codex_account_proxy::eligible(&account) {
-                continue;
-            }
-            if account.egress_proxy_disabled {
-                disabled.push(account.id.clone());
-            } else if account
-                .egress_proxy_url
-                .as_deref()
-                .is_some_and(|value| !value.trim().is_empty())
-            {
-                independent.push(account.id.clone());
-            }
-            eligible.push(account.id);
-        }
-        (eligible, independent, disabled)
-    })
-    .await
-    .map_err(|_| "UNIFIED_PROXY_FAILED".to_string())
+    crate::modules::codex_proxy_targets::account_totals().await
 }
 
 async fn current_view() -> Result<UnifiedProxyView, String> {

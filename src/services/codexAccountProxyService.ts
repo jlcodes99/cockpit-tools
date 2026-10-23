@@ -104,9 +104,13 @@ export function proxyErrorKey(error: unknown, fallback: 'saveFailed' | 'probeFai
   if (code === 'UNIFIED_PROXY_STORAGE' || code === 'UNIFIED_PROXY_LOADING') return 'codex.proxy.unified.errorRead';
   if (code === 'UNIFIED_PROXY_TIMEOUT') return 'codex.proxy.unified.errorTimeout';
   if (code === 'PROXY_BINDING_CHANGED' && fallback === 'probeFailed') return 'codex.proxy.currentLatencyChanged';
+  if (code === 'PROXY_ENGINE_CONFIG_INVALID') return 'codex.proxy.catalog.reasonInvalid';
   const compatibility: Record<string,string> = {PROXY_ECH_DNS:'errorEchDns',PROXY_DNS_FAILED:'errorDns',PROXY_TLS_FAILED:'errorTls',PROXY_HANDSHAKE_FAILED:'errorHandshake',PROXY_CONNECTION_REFUSED:'errorRefused',PROXY_CONNECT_TIMEOUT:'errorConnectTimeout',PROXY_TARGET_FAILED:'errorTarget',PROXY_INTERFACE_FAILED:'errorInterface',PROXY_NETWORK_INVALID:'errorInterface'};
   if (compatibility[code]) return 'codex.proxy.catalog.' + compatibility[code];
   const keys: Record<string, string> = {
+    CLIENT_PROXY_STORAGE: 'runtimeReadFailed', CLIENT_PROXY_TIMEOUT: 'operationTimeout', CLIENT_PROXY_FAILED: 'saveFailed',
+    CLIENT_PROXY_TARGET_UNSUPPORTED: 'unsupportedAccount', CLIENT_PROXY_BOUND_OAUTH_MISSING: 'boundAccountUnavailable',
+    CLIENT_PROXY_BOUND_PROXY_MISSING: 'boundProxyUnavailable', CLIENT_PROXY_STALE: 'sourceUnavailable',
     PROXY_INVALID_URL: 'invalidUrl', PROXY_UNSUPPORTED_PROTOCOL: 'unsupportedProtocol',
     PROXY_ACCOUNT_UNSUPPORTED: 'unsupportedAccount', PROXY_SAVE_FAILED: 'saveFailed',
     PROXY_PROBE_TIMEOUT: 'probeTimeout', PROXY_PROBE_BUSY: 'probeBusy',

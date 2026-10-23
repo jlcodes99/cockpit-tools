@@ -16,9 +16,46 @@ pub(crate) const GROK_PROVIDER_NAME: &str = "Grok";
 /// Grok CLI 聊天代理地址：OAuth（订阅）账号的默认上游。
 pub(crate) const GROK_CLI_CHAT_PROXY_BASE_URL: &str = "https://cli-chat-proxy.grok.com/v1";
 /// Grok 账号带入 Codex 的默认模型目录；用户可在「模型与能力」中继续增删。
-pub(crate) const GROK_CODEX_MODELS: &[&str] = &["grok-4.6", "grok-4.5", "grok-4.3"];
+pub(crate) const GROK_CODEX_MODELS: &[&str] = &["grok-4.7", "grok-4.6", "grok-4.5", "grok-4.3"];
 /// 默认支持图片输入的 Grok 模型（与上游能力对齐，可被用户覆盖）。
-pub(crate) const GROK_VISION_CODEX_MODELS: &[&str] = &["grok-4.6", "grok-4.5", "grok-4.3"];
+pub(crate) const GROK_VISION_CODEX_MODELS: &[&str] = GROK_CODEX_MODELS;
+const GROK_MODEL_CATALOG_VERSION: u32 = 1;
+
+/// Only the unchanged old default list follows new defaults. Partial/custom lists,
+/// including an intentionally empty list, remain under the user's control.
+fn upgrade_grok_default_model_catalog(account: &mut CodexAccount) -> bool {
+    if !is_grok_upstream_provider(account)
+        || account.grok_model_catalog_version.unwrap_or(0) >= GROK_MODEL_CATALOG_VERSION
+    {
+        return false;
+    }
+    account.grok_model_catalog_version = Some(GROK_MODEL_CATALOG_VERSION);
+    if account.api_model_catalog != ["grok-4.6", "grok-4.5", "grok-4.3"] {
+        return true;
+    }
+    // In the absence of an explicit startup selection, the old first item was
+    // the default. Adding a new model must not silently change that selection.
+    if normalize_optional_ref(account.api_startup_model.as_deref()).is_none() {
+        account.api_startup_model = account.api_model_catalog.first().cloned();
+    }
+    account.api_model_catalog.insert(0, "grok-4.7".to_string());
+    account
+        .api_model_vision_support
+        .entry("grok-4.7".to_string())
+        .or_insert(true);
+    true
+}
+
+fn select_grok_provider_model_catalog(
+    supplied: Option<Vec<String>>,
+    existing: Option<&CodexAccount>,
+) -> Vec<String> {
+    normalize_api_model_catalog(supplied.unwrap_or_else(|| {
+        existing
+            .map(|account| account.api_model_catalog.clone())
+            .unwrap_or_else(grok_provider_model_catalog)
+    }))
+}
 
 /// 账号是否绑定 Grok 平台账号作为上游（即 Grok 供应商账号）。
 pub fn is_grok_upstream_provider(account: &CodexAccount) -> bool {
@@ -144,13 +181,11 @@ pub fn upsert_grok_provider_account(
         Some(value) => value,
         None => grok_account.email.clone(),
     };
-    let catalog = normalize_api_model_catalog(
-        model_catalog
-            .filter(|models| !models.is_empty())
-            .unwrap_or_else(grok_provider_model_catalog),
-    );
     let mut index = load_account_index();
-    let mut account = load_account(&account_id).unwrap_or_else(|| {
+    let existing = load_account(&account_id);
+    let is_new = existing.is_none();
+    let catalog = select_grok_provider_model_catalog(model_catalog, existing.as_ref());
+    let mut account = existing.unwrap_or_else(|| {
         CodexAccount::new_api_key(
             account_id.clone(),
             email.clone(),
@@ -171,11 +206,14 @@ pub fn upsert_grok_provider_account(
     account.api_provider_id = Some(GROK_PROVIDER_ID.to_string());
     account.api_provider_name = Some(GROK_PROVIDER_NAME.to_string());
     account.api_model_catalog = catalog;
+    account.grok_model_catalog_version = Some(GROK_MODEL_CATALOG_VERSION);
     account.api_wire_api = Some("responses".to_string());
     account.api_supports_websockets = false;
-    account.api_supports_vision = true;
-    account.api_model_vision_support = grok_provider_vision_support();
-    account.api_vision_routing_model = None;
+    if is_new {
+        account.api_supports_vision = true;
+        account.api_model_vision_support = grok_provider_vision_support();
+        account.api_vision_routing_model = None;
+    }
     account.api_sync_model_catalog_to_codex = false;
     account.plan_type = Some(API_KEY_LOGIN_PLAN_TYPE.to_string());
     account.upstream_grok_account_id = Some(grok_account_id.to_string());
@@ -275,9 +313,59 @@ mod grok_provider_tests {
     #[test]
     fn default_model_catalog_covers_grok_models() {
         let catalog = grok_provider_model_catalog();
+        assert_eq!(catalog.first().map(String::as_str), Some("grok-4.7"));
         assert!(catalog.iter().any(|model| model == "grok-4.6"));
         assert!(catalog.iter().any(|model| model == "grok-4.5"));
+        assert!(!catalog.iter().any(|model| model.contains("build-fast")));
         assert!(grok_provider_vision_support().values().all(|value| *value));
+    }
+
+    #[test]
+    fn old_default_catalog_upgrades_once_and_keeps_startup_and_capabilities() {
+        let mut account = grok_provider_account();
+        account.api_model_catalog = vec!["grok-4.6".into(), "grok-4.5".into(), "grok-4.3".into()];
+        account
+            .api_model_vision_support
+            .insert("grok-4.7".into(), false);
+        assert!(upgrade_grok_default_model_catalog(&mut account));
+        assert_eq!(account.api_model_catalog, grok_provider_model_catalog());
+        assert_eq!(account.api_startup_model.as_deref(), Some("grok-4.6"));
+        assert_eq!(account.api_model_vision_support["grok-4.7"], false);
+        assert!(!upgrade_grok_default_model_catalog(&mut account));
+        account.api_model_catalog.remove(0);
+        let encoded = serde_json::to_value(&account).unwrap();
+        let mut account: CodexAccount = serde_json::from_value(encoded).unwrap();
+        assert!(!upgrade_grok_default_model_catalog(&mut account));
+        assert!(!account
+            .api_model_catalog
+            .iter()
+            .any(|model| model == "grok-4.7"));
+    }
+
+    #[test]
+    fn explicit_grok_catalog_edits_and_startup_selection_are_preserved() {
+        for catalog in [
+            vec![],
+            vec!["grok-4.6".into()],
+            vec!["custom-model".into(), "grok-4.6".into()],
+        ] {
+            let mut account = grok_provider_account();
+            account.api_model_catalog = catalog.clone();
+            account.api_startup_model = Some("custom-model".into());
+            assert!(upgrade_grok_default_model_catalog(&mut account));
+            assert!(!upgrade_grok_default_model_catalog(&mut account));
+            assert_eq!(
+                select_grok_provider_model_catalog(None, Some(&account)),
+                catalog
+            );
+            assert_eq!(account.api_startup_model.as_deref(), Some("custom-model"));
+        }
+        let mut account = grok_provider_account();
+        account.api_model_catalog = vec!["grok-4.6".into(), "grok-4.5".into(), "grok-4.3".into()];
+        account.api_startup_model = Some("grok-4.3".into());
+        assert!(upgrade_grok_default_model_catalog(&mut account));
+        assert_eq!(account.api_startup_model.as_deref(), Some("grok-4.3"));
+        assert!(select_grok_provider_model_catalog(Some(vec![]), Some(&account)).is_empty());
     }
 
     #[test]

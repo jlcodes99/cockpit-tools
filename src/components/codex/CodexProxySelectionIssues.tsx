@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, ShieldAlert } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ModalErrorMessage } from '../ModalErrorMessage';
-import { cancelProxyCatalog, catalogErrorKey, catalogUnsupportedKey, getProxyCatalog, refreshProxyCatalog, setProxyGroupInsecure, setProxyNodeInsecure,
+import { cancelProxyCatalog, catalogErrorKey, catalogUnsupportedKey, getProxyCatalog, refreshProxyCatalog,
   type ProxyCatalog, type ProxyCatalogGroup, type ProxyCatalogNode, type ProxyCatalogSource } from '../../services/codexProxyCatalogService';
 
-/** Configuration permission is explicit and scoped to the displayed choice, never an account rebind. */
+/** Unsupported definitions remain visible; refresh is local to this source. */
 export function CodexProxySelectionIssues({ source, target, busy, onCatalogChange, onPendingChange }: {
   source: ProxyCatalogSource;
   target?: ProxyCatalogGroup | ProxyCatalogNode;
@@ -33,29 +33,19 @@ export function CodexProxySelectionIssues({ source, target, busy, onCatalogChang
   useEffect(() => { setError(''); }, [target?.id, source.revision]);
   const group = target && 'kind' in target ? target : undefined;
   const node = target && 'protocol' in target ? target : undefined;
-  const permissionNodes = group
-    ? source.nodes.filter((node) => group.insecureNodeIds?.includes(node.id))
-    : node?.insecure && node.error === 'PROXY_TLS_INSECURE' ? [node] : [];
   const issues = group ? group.issues ?? [] : node?.error ? [{ name: node.name, error: node.error }] : [];
-  const run = async (kind: 'refresh' | 'allow') => {
+  const run = async () => {
     if (working.current || busy || !onCatalogChange) return;
-    working.current = true; setPending(kind); setError(''); notify.current(true);
+    working.current = true; setPending('refresh'); setError(''); notify.current(true);
     const current = lifetime.current;
     try {
-      let catalog: ProxyCatalog;
-      if (kind === 'refresh') {
-        const id = crypto.randomUUID(); request.current = id;
-        catalog = await refreshProxyCatalog(id, source.id);
-      } else if (group) {
-        catalog = await setProxyGroupInsecure(source.id, group.id, source.revision, true);
-      } else if (target) {
-        catalog = await setProxyNodeInsecure(source.id, target.id, source.revision, true);
-      } else return;
+      const id = crypto.randomUUID(); request.current = id;
+      const catalog = await refreshProxyCatalog(id, source.id);
       if (lifetime.current === current) onCatalogChange(catalog);
     } catch (caught) {
       if (lifetime.current === current) setError(t(catalogErrorKey(caught)));
       // A background subscription update can invalidate the displayed revision. Re-read
-      // metadata once so a deliberate retry applies to the newly displayed node options.
+      // metadata once so a deliberate retry uses the latest source.
       if (lifetime.current === current && String(caught).replace(/^Error:\s*/, '') === 'CATALOG_CHANGED') {
         try {
           const catalog = await getProxyCatalog();
@@ -75,18 +65,11 @@ export function CodexProxySelectionIssues({ source, target, busy, onCatalogChang
     {source.needsRefresh && <div className="codex-picker-issue-card" role="status">
       <RefreshCw size={17} /><div><strong>{t('codex.proxy.catalog.refreshRequired')}</strong>
         <p>{t('codex.proxy.catalog.refreshRequiredHint')}</p></div>
-      {onCatalogChange && <button type="button" className="btn btn-secondary compact" disabled={busy || Boolean(pending)} onClick={() => void run('refresh')}>
+      {onCatalogChange && <button type="button" className="btn btn-secondary compact" disabled={busy || Boolean(pending)} onClick={() => void run()}>
         {pending === 'refresh' && <RefreshCw size={14} className="loading-spinner" />}{t('common.refresh')}</button>}
       {pending === 'refresh' && <button type="button" className="btn btn-secondary compact" onClick={() => {
         if (request.current) void cancelProxyCatalog(request.current).catch((caught) => setError(t(catalogErrorKey(caught))));
       }}>{t('common.cancel')}</button>}
-    </div>}
-    {permissionNodes.length > 0 && <div className="codex-picker-issue-card is-permission">
-      <ShieldAlert size={17} /><div><strong>{t('codex.proxy.catalog.permissionRequired', { count: permissionNodes.length })}</strong>
-        <p>{t('codex.proxy.catalog.permissionHint')}</p>
-        <ul>{permissionNodes.map((node) => <li key={node.id}>{node.name}</li>)}</ul></div>
-      {onCatalogChange && <button type="button" className="btn btn-secondary compact" disabled={busy || Boolean(pending)} onClick={() => void run('allow')}>
-        {pending === 'allow' && <RefreshCw size={14} className="loading-spinner" />}{t('codex.proxy.catalog.allowSelectedOptions')}</button>}
     </div>}
     {issues.some((issue) => issue.error !== 'PROXY_TLS_INSECURE') && <details className="codex-picker-issue-details" open>
       <summary>{t('codex.proxy.catalog.memberIssues')}</summary>

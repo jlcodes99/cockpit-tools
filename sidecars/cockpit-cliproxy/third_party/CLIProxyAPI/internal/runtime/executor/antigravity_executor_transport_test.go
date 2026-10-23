@@ -176,12 +176,22 @@ func TestNewAntigravityHTTPClientKeepsForeignRoundTripper(t *testing.T) {
 // the pool limit: with Go's default of 2 idle connections per host, repeated waves of
 // concurrent requests on one credential keep re-handshaking.
 func TestAntigravityConcurrentRequestsReusePooledConnections(t *testing.T) {
+	const (
+		waves      = 3
+		perWave    = 8
+		totalConns = waves * perWave
+	)
+	arrived := make(chan struct{}, perWave)
+	release := make(chan struct{})
 	var mu sync.Mutex
 	remotes := map[string]struct{}{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		remotes[r.RemoteAddr] = struct{}{}
+		waveRelease := release
 		mu.Unlock()
+		arrived <- struct{}{}
+		<-waveRelease
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -189,11 +199,6 @@ func TestAntigravityConcurrentRequestsReusePooledConnections(t *testing.T) {
 	auth := antigravityAuthWithIDAndProxy("concurrent-reuse", "")
 	client := &http.Client{Transport: antigravityHTTP11Transport(auth, http.DefaultTransport.(*http.Transport))}
 
-	const (
-		waves      = 3
-		perWave    = 8
-		totalConns = waves * perWave
-	)
 	for wave := 0; wave < waves; wave++ {
 		start := make(chan struct{})
 		var wg sync.WaitGroup
@@ -216,7 +221,25 @@ func TestAntigravityConcurrentRequestsReusePooledConnections(t *testing.T) {
 			}()
 		}
 		close(start)
+		// Hold every response until all requests occupy a connection. Otherwise
+		// fast responses can satisfy pending dials, whose late connections then
+		// enter the idle pool and inflate the distinct-address count next wave.
+		timer := time.NewTimer(5 * time.Second)
+		for range perWave {
+			select {
+			case <-arrived:
+			case <-timer.C:
+				close(release)
+				wg.Wait()
+				t.Fatalf("wave %d: timed out waiting for %d concurrent upstream requests", wave, perWave)
+			}
+		}
+		timer.Stop()
+		close(release)
 		wg.Wait()
+		mu.Lock()
+		release = make(chan struct{})
+		mu.Unlock()
 	}
 
 	mu.Lock()

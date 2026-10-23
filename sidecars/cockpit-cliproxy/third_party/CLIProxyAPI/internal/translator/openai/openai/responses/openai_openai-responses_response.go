@@ -52,6 +52,8 @@ type oaiToResponsesState struct {
 	// these are emitted as custom_tool_call items instead of function_call
 	CustomToolNames map[string]struct{}
 	FinishReason    string
+	ChoiceFinishes  map[int]string
+	FuncChoices     map[string]int
 	// usage aggregation
 	PromptTokens     int64
 	CachedTokens     int64
@@ -59,6 +61,42 @@ type oaiToResponsesState struct {
 	TotalTokens      int64
 	ReasoningTokens  int64
 	UsageSeen        bool
+}
+
+func (st *oaiToResponsesState) finishReasonForChoice(index int) string {
+	if reason, seen := st.ChoiceFinishes[index]; seen {
+		return reason
+	}
+	return st.FinishReason
+}
+
+// CanFinalizeResponseStream validates clean EOF without a source [DONE] marker.
+func (st *oaiToResponsesState) CanFinalizeResponseStream() bool {
+	if !st.Started || st.CompletedEmitted || st.FinishReason == "" || len(st.MsgItemAdded)+len(st.FuncItemAdded) == 0 || st.ReasoningID != "" {
+		return false
+	}
+	// A finish marker for one alternative does not finish the other choices.
+	for _, reason := range st.ChoiceFinishes {
+		if reason == "" {
+			return false
+		}
+	}
+	for idx := range st.MsgItemAdded {
+		if !st.MsgItemDone[idx] {
+			return false
+		}
+	}
+	for key := range st.FuncItemAdded {
+		if !st.FuncItemDone[key] {
+			return false
+		}
+		if _, incomplete := incompleteByFinishReason(st.ChoiceFinishes[st.FuncChoices[key]]); !incomplete && !st.FuncItemCustom[key] {
+			if args := st.FuncArgsBuf[key]; args != nil && args.Len() > 0 && !gjson.Valid(args.String()) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // responseIDCounter provides a process-wide unique counter for synthesized response identifiers.
@@ -182,7 +220,7 @@ func buildResponsesCompletedEvent(st *oaiToResponsesState, requestRawJSON []byte
 				txt = b.String()
 			}
 			msgStatus := "completed"
-			if _, isInc := incompleteByFinishReason(st.FinishReason); isInc {
+			if _, isInc := incompleteByFinishReason(st.finishReasonForChoice(i)); isInc {
 				msgStatus = "incomplete"
 			}
 			item := []byte(`{"id":"","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":""}],"role":"assistant"}`)
@@ -204,7 +242,7 @@ func buildResponsesCompletedEvent(st *oaiToResponsesState, requestRawJSON []byte
 			callID := st.FuncCallIDs[key]
 			name := st.FuncNames[key]
 			toolStatus := "completed"
-			if _, isInc := incompleteByFinishReason(st.FinishReason); isInc {
+			if _, isInc := incompleteByFinishReason(st.finishReasonForChoice(st.FuncChoices[key])); isInc {
 				toolStatus = "incomplete"
 			}
 			if st.FuncItemCustom[key] {
@@ -216,6 +254,10 @@ func buildResponsesCompletedEvent(st *oaiToResponsesState, requestRawJSON []byte
 				item = applyResponsesFunctionCallNamespaceFields(item, requestRawJSON, name, "")
 				outputItems = append(outputItems, completedOutputItem{index: st.FuncOutputIx[key], raw: item})
 				continue
+			}
+			finishReason := st.finishReasonForChoice(st.FuncChoices[key])
+			if args == "" && (finishReason == "tool_calls" || finishReason == "stop") {
+				args = "{}"
 			}
 			item := []byte(`{"id":"","type":"function_call","status":"completed","arguments":"","call_id":"","name":""}`)
 			item, _ = sjson.SetBytes(item, "id", fmt.Sprintf("fc_%s", callID))
@@ -428,6 +470,8 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 		st.TotalTokens = 0
 		st.ReasoningTokens = 0
 		st.FinishReason = ""
+		st.ChoiceFinishes = make(map[int]string)
+		st.FuncChoices = make(map[string]int)
 		st.UsageSeen = false
 		st.CompletedEmitted = false
 		// response.created
@@ -506,7 +550,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 		out = append(out, emitRespEvent("response.content_part.done", partDone))
 
 		msgStatus := "completed"
-		if _, isInc := incompleteByFinishReason(st.FinishReason); isInc {
+		if _, isInc := incompleteByFinishReason(st.finishReasonForChoice(idx)); isInc {
 			msgStatus = "incomplete"
 		}
 		itemDone := []byte(`{"type":"response.output_item.done","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":""}],"role":"assistant"}}`)
@@ -519,7 +563,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 		st.MsgItemDone[idx] = true
 	}
 
-	finalizeOpenItems := func() {
+	finalizeOpenItems := func(choiceIndex *int) {
 		if len(st.MsgItemAdded) > 0 {
 			idxs := make([]int, 0, len(st.MsgItemAdded))
 			for idx := range st.MsgItemAdded {
@@ -527,6 +571,9 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 			}
 			sort.Slice(idxs, func(i, j int) bool { return st.MsgOutputIx[idxs[i]] < st.MsgOutputIx[idxs[j]] })
 			for _, idx := range idxs {
+				if choiceIndex != nil && idx != *choiceIndex {
+					continue
+				}
 				emitMessageItemDone(idx)
 			}
 		}
@@ -549,18 +596,25 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 			return left < right || (left == right && keys[i] < keys[j])
 		})
 		for _, key := range keys {
+			if choiceIndex != nil && st.FuncChoices[key] != *choiceIndex {
+				continue
+			}
 			if st.FuncItemDone[key] {
 				continue
 			}
 			b := st.FuncArgsBuf[key]
 			hasArgs := b != nil && b.Len() > 0
-			_, isIncomplete := incompleteByFinishReason(st.FinishReason)
-			isExplicitToolFinish := st.FinishReason == "tool_calls" || st.FinishReason == "stop"
+			finishReason := st.finishReasonForChoice(st.FuncChoices[key])
+			_, isIncomplete := incompleteByFinishReason(finishReason)
+			isExplicitToolFinish := finishReason == "tool_calls" || finishReason == "stop"
 
 			// If stream ended without finish_reason:
 			// If no arguments or partial/invalid JSON arguments were received, do not synthesize empty arguments
 			// or complete the in-flight tool call item as successfully completed.
-			if st.FinishReason == "" && (!hasArgs || !gjson.Valid(b.String())) {
+			if finishReason == "" && (!hasArgs || !gjson.Valid(b.String())) {
+				continue
+			}
+			if !st.FuncItemCustom[key] && !isIncomplete && hasArgs && !gjson.Valid(b.String()) {
 				continue
 			}
 
@@ -576,7 +630,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 			args := "{}"
 			if hasArgs {
 				args = b.String()
-			} else if isIncomplete || !isExplicitToolFinish {
+			} else if isIncomplete || !isExplicitToolFinish || st.FuncItemCustom[key] {
 				args = ""
 			}
 			if isIncomplete {
@@ -627,7 +681,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 	}
 
 	if isDone {
-		finalizeOpenItems()
+		finalizeOpenItems(nil)
 		hasActiveUnfinishedTool := false
 		for key := range st.FuncItemAdded {
 			if !st.FuncItemDone[key] {
@@ -650,6 +704,9 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 	if choices := root.Get("choices"); choices.Exists() && choices.IsArray() {
 		choices.ForEach(func(_, choice gjson.Result) bool {
 			idx := int(choice.Get("index").Int())
+			if _, seen := st.ChoiceFinishes[idx]; !seen {
+				st.ChoiceFinishes[idx] = ""
+			}
 			delta := choice.Get("delta")
 			if delta.Exists() {
 				if c := delta.Get("content"); c.Exists() && c.String() != "" {
@@ -741,6 +798,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 						if st.FuncArgsBuf[key] == nil {
 							st.FuncArgsBuf[key] = &strings.Builder{}
 							st.FuncOutputIx[key] = allocOutputIndex()
+							st.FuncChoices[key] = idx
 						}
 						if newCallID := tc.Get("id").String(); newCallID != "" && st.FuncCallIDs[key] == "" {
 							st.FuncCallIDs[key] = newCallID
@@ -763,9 +821,13 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 			// finish_reason triggers item-level finalization. response.completed is
 			// deferred until the terminal [DONE] marker so late usage-only chunks can
 			// still populate response.usage.
-			if fr := choice.Get("finish_reason"); fr.Exists() && fr.String() != "" {
-				st.FinishReason = fr.String()
-				finalizeOpenItems()
+			if fr := choice.Get("finish_reason"); fr.Exists() && fr.Type != gjson.Null && fr.String() != "" {
+				// Preserve an incomplete alternative even if a later one finishes normally.
+				if _, incomplete := incompleteByFinishReason(st.FinishReason); !incomplete {
+					st.FinishReason = fr.String()
+				}
+				st.ChoiceFinishes[idx] = fr.String()
+				finalizeOpenItems(&idx)
 			}
 
 			return true

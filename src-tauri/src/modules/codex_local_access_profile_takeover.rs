@@ -382,7 +382,20 @@ fn set_provider_header_value(
     }
 }
 
+fn is_loopback_realtime_sideband_url(base: &str) -> bool {
+    url::Url::parse(base).ok().is_some_and(|url| {
+        matches!(url.scheme(), "http" | "https")
+            && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+    })
+}
+
 fn has_managed_realtime_sideband_override(doc: &Document) -> bool {
+    if doc
+        .get("experimental_realtime_webrtc_call_base_url")
+        .is_some()
+    {
+        return false;
+    }
     let base_url = doc
         .get("model_providers")
         .and_then(|item| item.get(CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID))
@@ -392,16 +405,34 @@ fn has_managed_realtime_sideband_override(doc: &Document) -> bool {
         .get("experimental_realtime_ws_base_url")
         .and_then(|item| item.as_str());
     match (base_url, sideband_url) {
-        (Some(base), Some(sideband)) if base.trim_end_matches('/') == sideband.trim_end_matches('/') => {
-            url::Url::parse(base).ok().is_some_and(|url| {
-                matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
-            })
+        (Some(base), Some(sideband))
+            if base.trim_end_matches('/') == sideband.trim_end_matches('/') =>
+        {
+            is_loopback_realtime_sideband_url(base)
         }
         _ => false,
     }
 }
 
+pub(crate) fn has_managed_voice_gateway_config(config_text: &str) -> bool {
+    if !is_cockpit_managed_local_access_config(config_text) {
+        return false;
+    }
+    let Ok(doc) = crate::modules::codex_config_format::read_codex_config_doc_from_str(config_text) else {
+        return false;
+    };
+    doc.get("experimental_realtime_webrtc_call_base_url").is_none()
+        && has_managed_realtime_sideband_override(&doc)
+}
+
 fn remove_codex_local_access_config(config_text: &str) -> Result<String, String> {
+    remove_codex_local_access_config_with_realtime_ownership(config_text, false)
+}
+
+fn remove_codex_local_access_config_with_realtime_ownership(
+    config_text: &str,
+    managed_realtime_sideband: bool,
+) -> Result<String, String> {
     if config_text.trim().is_empty() {
         return Ok(String::new());
     }
@@ -417,7 +448,7 @@ fn remove_codex_local_access_config(config_text: &str) -> Result<String, String>
         return Ok(config_text.to_string());
     }
 
-    if has_managed_realtime_sideband_override(&doc) {
+    if has_managed_realtime_sideband_override(&doc) || managed_realtime_sideband {
         doc.remove("experimental_realtime_ws_base_url");
     }
     let _ = doc.remove("model_provider");
@@ -496,6 +527,36 @@ fn restore_config_toml_from_takeover_backup(
     current_config: Option<&str>,
     backup_config: Option<&str>,
 ) -> Result<Option<String>, String> {
+    restore_config_toml_from_takeover_backup_with_realtime_ownership(
+        current_config,
+        backup_config,
+        false,
+    )
+}
+
+fn restore_profile_config_toml_from_takeover_backup(
+    profile_dir: &Path,
+    current_config: Option<&str>,
+    backup_config: Option<&str>,
+) -> Result<Option<String>, String> {
+    let managed_realtime_sideband = current_config
+        .map(crate::modules::codex_config_format::read_codex_config_doc_from_str)
+        .transpose()?
+        .map(|doc| profile_has_managed_realtime_sideband(profile_dir, &doc))
+        .transpose()?
+        .unwrap_or(false);
+    restore_config_toml_from_takeover_backup_with_realtime_ownership(
+        current_config,
+        backup_config,
+        managed_realtime_sideband,
+    )
+}
+
+fn restore_config_toml_from_takeover_backup_with_realtime_ownership(
+    current_config: Option<&str>,
+    backup_config: Option<&str>,
+    managed_realtime_sideband: bool,
+) -> Result<Option<String>, String> {
     let current_config = current_config.unwrap_or_default();
     let mut current_doc = if current_config.trim().is_empty() {
         Document::new()
@@ -531,9 +592,11 @@ fn restore_config_toml_from_takeover_backup(
         .and_then(|item| item.as_str())
         .is_some_and(is_cockpit_managed_model_catalog_name);
     if current_selected_local_access {
-        let restore_realtime_sideband = has_managed_realtime_sideband_override(&current_doc);
-        let cleaned = remove_codex_local_access_config(
+        let restore_realtime_sideband = has_managed_realtime_sideband_override(&current_doc)
+            || managed_realtime_sideband;
+        let cleaned = remove_codex_local_access_config_with_realtime_ownership(
             &crate::modules::codex_config_format::codex_config_doc_to_string(&mut current_doc),
+            restore_realtime_sideband,
         )?;
         current_doc = if cleaned.trim().is_empty() {
             Document::new()
@@ -910,7 +973,8 @@ fn restore_profile_takeover_backup(
         return Ok(false);
     }
 
-    let restored_config = restore_config_toml_from_takeover_backup(
+    let restored_config = restore_profile_config_toml_from_takeover_backup(
+        &profile_dir,
         current_config.as_deref(),
         backup.config_toml.as_deref(),
     )?;
@@ -953,7 +1017,11 @@ fn cleanup_profile_takeover_without_backup(
             || (allow_rotated_managed_key && is_cockpit_managed_local_access_config(&config_text))
         {
             managed = true;
-            let cleaned = remove_codex_local_access_config(&config_text)?;
+            let doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(&config_text)?;
+            let managed_realtime_sideband = profile_has_managed_realtime_sideband(profile_dir, &doc)?;
+            let cleaned = remove_codex_local_access_config_with_realtime_ownership(
+                &config_text, managed_realtime_sideband,
+            )?;
             let cleaned_content = if cleaned.trim().is_empty() {
                 None
             } else {
@@ -984,6 +1052,14 @@ fn cleanup_profile_takeover_without_backup(
 fn restore_takeover_profiles_after_disable(
     collection: &CodexLocalAccessCollection,
 ) -> Result<(), String> {
+    restore_takeover_profiles_after_disable_checked(collection, || Ok(()))
+}
+
+fn restore_takeover_profiles_after_disable_checked(
+    collection: &CodexLocalAccessCollection,
+    check: impl Fn() -> Result<(), String>,
+) -> Result<(), String> {
+    check()?;
     let backups = load_takeover_backups()?;
     let default_profile = codex_account::get_codex_home();
     let default_key = normalize_profile_dir_key(&default_profile);
@@ -1013,6 +1089,7 @@ fn restore_takeover_profiles_after_disable(
     let mut restored_profiles = HashSet::new();
     let mut remaining_backups = Vec::new();
     for backup in backups.profiles {
+        check()?;
         if protect_default_profile && backup.profile_dir == default_key {
             remaining_backups.push(backup);
             continue;
@@ -1031,6 +1108,7 @@ fn restore_takeover_profiles_after_disable(
         }
     }
 
+    check()?;
     save_takeover_backups(&CodexLocalAccessTakeoverBackups {
         version: CODEX_LOCAL_ACCESS_TAKEOVER_BACKUP_VERSION,
         profiles: remaining_backups,
@@ -1038,6 +1116,7 @@ fn restore_takeover_profiles_after_disable(
 
     let mut cleaned_without_backup = 0usize;
     for (profile_key, profile_dir) in target_profiles {
+        check()?;
         if restored_profiles.contains(&profile_key) {
             continue;
         }

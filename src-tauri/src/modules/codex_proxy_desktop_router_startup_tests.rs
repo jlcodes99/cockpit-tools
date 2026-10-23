@@ -1,6 +1,18 @@
 //! Startup preparation tests. All sockets target loopback; no desktop UI is launched.
 use super::*;
 
+trait ProxyUrl {
+    fn into_proxy_url(self) -> String;
+}
+impl ProxyUrl for crate::modules::process::CodexLaunchProxy {
+    fn into_proxy_url(self) -> String {
+        match self {
+            Self::Proxy(url) => url,
+            other => panic!("expected a local entry, got {other:?}"),
+        }
+    }
+}
+
 async fn local_socks_greeting(url: &str) -> TcpStream {
     let port = url::Url::parse(url).unwrap().port().unwrap();
     let mut client = tokio::time::timeout(
@@ -50,7 +62,7 @@ fn verify_launch_injection(proxy: &str) {
     );
     // Inspect the real command builder without launching a GUI or contacting any server.
     let mut command = std::process::Command::new("unused-test-client");
-    crate::modules::process::apply_effective_proxy_env_to_command(&mut command, Some(proxy));
+    crate::modules::process::apply_effective_proxy_env_to_command(&mut command, &crate::modules::process::CodexLaunchProxy::Proxy(proxy.into()));
     for key in [
         "HTTP_PROXY",
         "HTTPS_PROXY",
@@ -68,7 +80,7 @@ fn verify_launch_injection(proxy: &str) {
     #[cfg(target_os = "macos")]
     {
         let mut open = std::process::Command::new("/usr/bin/open");
-        crate::modules::process::append_effective_proxy_env_to_open_args(&mut open, Some(proxy));
+        crate::modules::process::append_effective_proxy_env_to_open_args(&mut open, &crate::modules::process::CodexLaunchProxy::Proxy(proxy.into()));
         let args: Vec<_> = open
             .get_args()
             .map(|value| value.to_string_lossy().into_owned())
@@ -82,6 +94,37 @@ fn verify_launch_injection(proxy: &str) {
 }
 
 #[tokio::test]
+async fn explicit_direct_launch_needs_no_listener_even_when_ports_and_shared_config_are_unavailable() {
+    let fixture = LaunchFixture::new("direct-no-listener");
+    let mut account = eligible_account("direct-no-listener");
+    account.egress_proxy_disabled = true;
+    // A stale binding and a broken shared config cannot override explicit direct.
+    account.egress_proxy_url = Some("http://127.0.0.1:9".into());
+    fixture.save(&account);
+    fs::write(fixture.temp.0.join("codex-unified-proxy.json"), "{broken").unwrap();
+    let mut blockers = Vec::new();
+    for port in candidate_ports(&account.id, None) {
+        if let Ok(listener) = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await {
+            blockers.push(listener);
+        }
+    }
+    crate::modules::codex_instance::preflight_egress_proxy_for_bind_account(Some(&account.id))
+        .await.unwrap();
+    let mode = crate::modules::codex_instance::resolve_egress_proxy_for_bind_account(Some(&account.id))
+        .await.unwrap();
+    assert_eq!(mode, crate::modules::process::CodexLaunchProxy::Direct);
+    assert!(route_port(&account.id).await.is_none());
+    assert!(!fixture.temp.ports_file().exists());
+    let mut args = vec!["--proxy-server=socks5://127.0.0.1:48825".into()];
+    mode.append_electron_args(&mut args);
+    assert_eq!(args, ["--no-proxy-server"]);
+    let saved = codex_account::load_account(&account.id).unwrap();
+    assert!(saved.egress_proxy_disabled);
+    assert_eq!(saved.egress_proxy_url, account.egress_proxy_url);
+    drop(blockers);
+}
+
+#[tokio::test]
 async fn startup_resolver_without_account_or_shared_proxy_creates_no_entry() {
     let fixture = LaunchFixture::new("startup-without-proxy");
     let account = eligible_account("startup-without-proxy");
@@ -90,7 +133,7 @@ async fn startup_resolver_without_account_or_shared_proxy_creates_no_entry() {
         crate::modules::codex_instance::resolve_egress_proxy_for_bind_account(Some(&account.id))
             .await
             .expect("startup proxy resolution");
-    assert!(proxy.is_none());
+    assert_eq!(proxy, crate::modules::process::CodexLaunchProxy::Inherit);
     assert!(route_port(&account.id).await.is_none());
     assert!(!fixture.temp.ports_file().exists());
     let status = codex_proxy_runtime::status(&account.id).await.unwrap();
@@ -128,7 +171,7 @@ async fn startup_resolver_routes_through_local_proxy_and_injects_client_settings
         crate::modules::codex_instance::resolve_egress_proxy_for_bind_account(Some(&account.id))
             .await
             .unwrap()
-            .expect("bound account must get a desktop proxy entry");
+            .into_proxy_url();
     verify_launch_injection(&proxy);
     let status = codex_proxy_runtime::status(&account.id).await.unwrap();
     let entry = status.desktop_entry.unwrap();
@@ -247,7 +290,7 @@ async fn startup_request_uses_native_authenticated_proxy_without_an_engine() {
         crate::modules::codex_instance::resolve_egress_proxy_for_bind_account(Some(&account.id))
             .await
             .unwrap()
-            .unwrap();
+            .into_proxy_url();
     verify_launch_injection(&proxy);
     let before = codex_proxy_runtime::status(&account.id).await.unwrap();
     assert_eq!(before.desktop, "direct");
@@ -375,7 +418,7 @@ async fn local_account_startup_prepares_ports_without_external_requests() {
         crate::modules::codex_instance::resolve_egress_proxy_for_bind_account(Some(&account.id))
             .await
             .unwrap()
-            .expect("startup returns a local proxy entry");
+            .into_proxy_url();
     verify_launch_injection(&proxy);
     drop(local_socks_greeting(&proxy).await);
     let after_launch = codex_proxy_runtime::status(&account.id).await.unwrap();

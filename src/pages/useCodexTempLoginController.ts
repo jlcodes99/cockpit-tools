@@ -25,7 +25,7 @@ type CodexTempLoginControllerContext = Pick<
 
 /**
  * 「官方登录」业务域：打开官方客户端在一个一次性空白 profile 里完成登录，
- * 后端读取登录信息后立即关闭客户端并清理临时 profile。
+ * 后端先关闭客户端，再读取最终登录信息；导入成功后清理临时 profile。
  */
 export function useCodexTempLoginController(
   context: CodexTempLoginControllerContext,
@@ -49,17 +49,9 @@ export function useCodexTempLoginController(
   const [tempLoginCancelling, setTempLoginCancelling] = useState(false);
   const [tempLoginError, setTempLoginError] = useState<string | null>(null);
   const [tempLoginNotice, setTempLoginNotice] = useState<string | null>(null);
-  // 官方客户端生成的授权地址（原样展示，可复制到本机任意浏览器完成登录）。
-  const [tempLoginAuthUrl, setTempLoginAuthUrl] = useState<string | null>(null);
-  const [tempLoginAuthUrlCopied, setTempLoginAuthUrlCopied] = useState(false);
-  // 主进程注入未生效时才提示：本次仍由官方客户端照常打开浏览器登录。
-  const [tempLoginAuthUrlUnavailable, setTempLoginAuthUrlUnavailable] =
-    useState(false);
-  // 是否接管官方"打开浏览器"以直接展示授权地址；默认开，关闭即完全走官方原生流程。
-  const [tempLoginInterceptAuthUrl, setTempLoginInterceptAuthUrl] =
-    useState(true);
-
+  const [tempLoginRecoverable, setTempLoginRecoverable] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
+  const recoverySessionIdRef = useRef<string | null>(null);
   const syncToApiServiceRef = useRef(syncImportedToApiService);
   syncToApiServiceRef.current = syncImportedToApiService;
 
@@ -93,9 +85,6 @@ export function useCodexTempLoginController(
     setTempLoginRunning(false);
     setTempLoginCancelling(false);
     setTempLoginPhase(null);
-    setTempLoginAuthUrl(null);
-    setTempLoginAuthUrlCopied(false);
-    setTempLoginAuthUrlUnavailable(false);
   }, []);
 
   /**
@@ -104,6 +93,11 @@ export function useCodexTempLoginController(
    */
   const describeTempLoginFailure = useCallback(
     (message: string): string => {
+      if (message.startsWith("CODEX_TEMP_LOGIN_RECOVERY:")) {
+        const path = message.slice("CODEX_TEMP_LOGIN_RECOVERY:".length).split("|")[0];
+        return t("codex.tempLogin.recovery", { path });
+      }
+      if (message === "CODEX_TEMP_LOGIN_CLOSED") return t("codex.tempLogin.closedWithoutLogin");
       const parsed = parseWindowsOperationError(message, {
         operation: "launch_app",
       });
@@ -120,7 +114,7 @@ export function useCodexTempLoginController(
 
   const reportTempLoginFailure = useCallback(
     (message: string) => {
-      setTempLoginError(message);
+      setTempLoginError(describeTempLoginFailure(message));
       page.setAddStatus("error");
       page.setAddMessage(
         t("codex.tempLogin.failed", "官方登录失败：{{error}}").replace(
@@ -131,39 +125,6 @@ export function useCodexTempLoginController(
     },
     [describeTempLoginFailure, page, t],
   );
-
-  /** 复制官方客户端生成的授权地址（原样复制，不做任何改写）。 */
-  const handleCopyCodexTempLoginAuthUrl = useCallback(async () => {
-    if (!tempLoginAuthUrl) return;
-    try {
-      await navigator.clipboard.writeText(tempLoginAuthUrl);
-      setTempLoginAuthUrlCopied(true);
-      window.setTimeout(() => setTempLoginAuthUrlCopied(false), 2000);
-    } catch (error) {
-      console.warn("[Codex Temp Login] 复制授权地址失败:", error);
-      setTempLoginNotice(
-        t(
-          "common.shared.export.copyFailed",
-          "复制失败，请手动复制",
-        ),
-      );
-    }
-  }, [t, tempLoginAuthUrl]);
-
-  /** 用系统默认浏览器打开该地址（后端只允许官方域名）。 */
-  const handleOpenCodexTempLoginAuthUrl = useCallback(async () => {
-    if (!tempLoginAuthUrl) return;
-    try {
-      await codexTempLoginService.openCodexTempLoginAuthUrl(tempLoginAuthUrl);
-    } catch (error) {
-      setTempLoginNotice(
-        t(
-          "codex.tempLogin.authUrl.openFailed",
-          "打开授权地址失败：{{error}}",
-        ).replace("{{error}}", String(error).replace(/^Error:\s*/, "")),
-      );
-    }
-  }, [t, tempLoginAuthUrl]);
 
   const handleTempLoginCompleted = useCallback(
     async (account: CodexAccount | null, accountId: string | null) => {
@@ -233,6 +194,8 @@ export function useCodexTempLoginController(
         }
 
         if (payload.phase === "completed") {
+          recoverySessionIdRef.current = null;
+          setTempLoginRecoverable(false);
           resetTempLoginState();
           setTempLoginError(null);
           setTempLoginNotice(null);
@@ -244,6 +207,7 @@ export function useCodexTempLoginController(
         }
 
         if (payload.phase === "failed") {
+          if (payload.error?.startsWith("CODEX_TEMP_LOGIN_RECOVERY:")) { recoverySessionIdRef.current = payload.sessionId; setTempLoginRecoverable(true); }
           resetTempLoginState();
           reportTempLoginFailure(
             payload.error?.trim() ||
@@ -257,6 +221,10 @@ export function useCodexTempLoginController(
 
         if (payload.phase === "cancelled") {
           resetTempLoginState();
+          if (payload.error) {
+            reportTempLoginFailure(payload.error);
+            return;
+          }
           setTempLoginError(null);
           setTempLoginNotice(
             t("codex.tempLogin.cancelled", "已取消官方登录，临时配置已清理。"),
@@ -266,10 +234,6 @@ export function useCodexTempLoginController(
           return;
         }
 
-        // 订阅较晚或事件顺序变化时，从进度事件里补齐已截获的地址。
-        if (payload.authUrl) {
-          setTempLoginAuthUrl(payload.authUrl);
-        }
         setTempLoginPhase(payload.phase);
         page.setAddStatus("loading");
         page.setAddMessage(phaseMessage(payload.phase));
@@ -291,49 +255,6 @@ export function useCodexTempLoginController(
     };
   }, [handleTempLoginCompleted, page, phaseMessage, reportTempLoginFailure, resetTempLoginState, t]);
 
-  /**
-   * 订阅「官方授权地址」事件：官方客户端生成的地址被截获后立即展示，
-   * 注入未生效时给出降级提示（官方会照常打开浏览器登录）。
-   */
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: UnlistenFn | null = null;
-
-    void codexTempLoginService
-      .listenCodexTempLoginAuthUrl((payload) => {
-        if (disposed) return;
-        if (sessionIdRef.current && payload.sessionId !== sessionIdRef.current) {
-          return;
-        }
-        if (payload.status === "captured") {
-          const url = payload.url?.trim();
-          if (!url) return;
-          setTempLoginAuthUrl(url);
-          setTempLoginAuthUrlCopied(false);
-          setTempLoginAuthUrlUnavailable(false);
-          return;
-        }
-        if (payload.status === "unavailable") {
-          setTempLoginAuthUrlUnavailable(true);
-        }
-      })
-      .then((dispose) => {
-        if (disposed) {
-          dispose();
-          return;
-        }
-        unlisten = dispose;
-      })
-      .catch((error) => {
-        console.warn("[Codex Temp Login] 订阅授权地址失败:", error);
-      });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
-
   /** 添加账号弹框关闭时，终止仍在进行的官方登录，避免留下无人接管的临时 profile。 */
   useEffect(() => {
     if (showAddModal || !sessionIdRef.current) return;
@@ -351,21 +272,19 @@ export function useCodexTempLoginController(
     [],
   );
 
-  const handleStartCodexTempLogin = useCallback(async () => {
+  const handleStartCodexTempLogin = useCallback(async (fresh = false) => {
     if (sessionIdRef.current) return;
     setTempLoginError(null);
     setTempLoginNotice(null);
-    setTempLoginAuthUrl(null);
-    setTempLoginAuthUrlCopied(false);
-    setTempLoginAuthUrlUnavailable(false);
     setTempLoginPhase("preparing");
     setTempLoginRunning(true);
     page.setAddStatus("loading");
     page.setAddMessage(phaseMessage("preparing"));
     try {
-      const session = await codexTempLoginService.startCodexTempLogin(
-        tempLoginInterceptAuthUrl,
-      );
+      if (fresh) { recoverySessionIdRef.current = null; setTempLoginRecoverable(false); }
+      const session = recoverySessionIdRef.current
+        ? await codexTempLoginService.retryCodexTempLoginImport(recoverySessionIdRef.current)
+        : await codexTempLoginService.startCodexTempLogin();
       sessionIdRef.current = session.sessionId;
     } catch (error) {
       resetTempLoginState();
@@ -376,7 +295,6 @@ export function useCodexTempLoginController(
     phaseMessage,
     reportTempLoginFailure,
     resetTempLoginState,
-    tempLoginInterceptAuthUrl,
   ]);
 
   const handleCancelCodexTempLogin = useCallback(async () => {
@@ -397,19 +315,13 @@ export function useCodexTempLoginController(
 
   return {
     handleCancelCodexTempLogin,
-    handleCopyCodexTempLoginAuthUrl,
-    handleOpenCodexTempLoginAuthUrl,
     handleStartCodexTempLogin,
-    tempLoginAuthUrl,
-    tempLoginAuthUrlCopied,
-    tempLoginAuthUrlUnavailable,
-    tempLoginInterceptAuthUrl,
     tempLoginCancelling,
     tempLoginError,
+    tempLoginRecoverable,
     tempLoginNotice,
     tempLoginPhase,
     tempLoginPhaseMessage: phaseMessage,
     tempLoginRunning,
-    setTempLoginInterceptAuthUrl,
   };
 }

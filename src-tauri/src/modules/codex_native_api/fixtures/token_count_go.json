@@ -1,0 +1,97 @@
+[
+  {
+    "name": "five_chars_floor",
+    "body": "{\"model\":\"fixture\",\"messages\":[{\"role\":\"user\",\"content\":\"abcde\"}]}",
+    "count": 1
+  },
+  {
+    "name": "unicode_runes",
+    "body": "{\"model\":\"fixture\",\"messages\":[{\"role\":\"user\",\"content\":\"你好世界今天\"}]}",
+    "count": 1
+  },
+  {
+    "name": "system_prompt_content",
+    "body": "{\"model\":\"fixture\",\"system\":\"1234\",\"prompt\":\"12345\",\"messages\":[{\"content\":[{\"type\":\"text\",\"text\":\"123456\"}]}]}",
+    "count": 3
+  },
+  {
+    "name": "ignore_unrelated_scalar_strings",
+    "body": "{\"model\":\"long model name\",\"tools\":[{\"name\":\"very long tool name\",\"description\":\"very long description\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"one\":{\"type\":\"string\",\"description\":\"not counted\"}}}}],\"messages\":[{\"role\":\"user\",\"content\":\"abcde\"}]}",
+    "count": 1
+  },
+  {
+    "name": "array_scalar_recursion",
+    "body": "{\"model\":\"fixture\",\"tools\":[{\"input_schema\":{\"required\":[\"one\",\"two\"]}}],\"messages\":[{\"content\":\"ab\"}]}",
+    "count": 2
+  },
+  {
+    "name": "case_and_whitespace_keys",
+    "body": "{\" Text \":\"12345\",\"CONTENT\":\"abcde\",\"unrelated\":\"ignored\"}",
+    "count": 2
+  },
+  {
+    "name": "no_text_uses_body_bytes",
+    "body": "{  \"model\" : \"fixture\", \"messages\" : [] }",
+    "count": 10
+  },
+  {
+    "name": "no_text_unicode_body_bytes",
+    "body": "{\"model\":\"你好\",\"input\":[]}",
+    "count": 7
+  },
+  {
+    "name": "empty_string_uses_body_bytes",
+    "body": "{\"model\":\"fixture\",\"messages\":[{\"content\":\"\"}]}",
+    "count": 11
+  },
+  {
+    "name": "invalid_json_minimum",
+    "body": "{broken",
+    "count": 1
+  },
+  {
+    "name": "minimal_text_minimum",
+    "body": "{\"messages\":[{\"content\":\"x\"}]}",
+    "count": 1
+  },
+  {
+    "name": "gemini_original_protocol",
+    "body": "{\"model\":\"fixture\",\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"abcde\"}]}],\"generationConfig\":{\"maxOutputTokens\":100}}",
+    "count": 1
+  },
+  {
+    "name": "handler_whitespace_model_trim",
+    "body": "{  \"model\" : \"original\", \"messages\" : [] }",
+    "count": 8,
+    "preprocessed": true,
+    "model": " fixture "
+  },
+  {
+    "name": "handler_gemini_model_injection",
+    "body": "{ \"contents\": [] }",
+    "count": 8,
+    "preprocessed": true,
+    "model": "fixture"
+  },
+  {
+    "name": "handler_html_escaping",
+    "body": "{\"model\":\"original\",\"metadata\":{\"url\":\"https://example.invalid/?a=\u003cx\u003e\u0026b=1\",\"separator\":\"\u2028\u2029\"}}",
+    "count": 29,
+    "preprocessed": true,
+    "model": "fixture"
+  },
+  {
+    "name": "handler_float_round_trip",
+    "body": "{\"model\":\"original\",\"config\":{\"whole\":1.0,\"big\":9007199254740993,\"fixed\":1e20,\"scientific\":1e21,\"small\":1e-7,\"threshold\":1e-6,\"zero\":-0.0}}",
+    "count": 39,
+    "preprocessed": true,
+    "model": "fixture"
+  },
+  {
+    "name": "handler_arrays_and_html_keys",
+    "body": "{\"model\":\"original\",\"\u003cmetadata\u003e\":[1.0,2.5,1e22,null,true,{\"\u0026key\":\"\u003c\u003e\u0026\"}]}",
+    "count": 25,
+    "preprocessed": true,
+    "model": "fixture"
+  }
+]

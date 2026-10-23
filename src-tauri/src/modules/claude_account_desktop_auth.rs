@@ -698,7 +698,7 @@ pub fn open_desktop_verification_window(account_id: &str) -> Result<(), String> 
         .and_then(|value| normalize_non_empty(Some(value)))
         .map(PathBuf::from)
         .ok_or_else(|| "Claude 账号缺少 profile 快照".to_string())?;
-    ensure_desktop_profile_logged_in(&profile_dir)?;
+    ensure_desktop_verification_profile(&profile_dir)?;
     let status_file = profile_dir.join("claude_desktop_verification_status.json");
     let export_file = desktop_auth_export_path(&profile_dir);
     let _ = remove_path_if_exists(&status_file);

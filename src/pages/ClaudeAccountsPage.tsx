@@ -2540,7 +2540,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
             isCliSubPlatform
               ? isDesktopRuntime
                   ? t('claude.desktopOAuth.cliUnsupported', 'Claude 账号不能启动 Claude Code CLI')
-                  : t('claude.cli.quickLaunch', 'CLI 启动')
+                  : t('common.cliQuickLaunch', 'CLI 启动')
               : isApiKey
                 ? t('claude.apiKey.switchDisabled', 'API Key 账号不能写入本地登录态')
                 : isDesktopGateway

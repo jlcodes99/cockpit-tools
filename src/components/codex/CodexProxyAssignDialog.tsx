@@ -11,7 +11,7 @@ import { proxyAssignmentAccounts } from '../../utils/codexProxyAssignment';
 import { canUseCodexAccountProxy } from '../../utils/codexAccountProxy';
 import { getCodexPlanBadgePresentation } from '../../types/codex';
 import { CODEX_PLAN_BADGE_STYLE_CHANGED_EVENT, getCodexPlanBadgeStyle, withCodexPlanBadgeStyle } from '../../utils/codexPreferences';
-import { useCodexAccountStore } from '../../stores/useCodexAccountStore';
+import { applyCodexProxyAccountSnapshot } from '../../services/codexProxyTargetService';
 import { useCodexProxyWorkspace } from './CodexProxyWorkspaceContext';
 import { useCodexProxyAccountName } from './useCodexProxyExitEditor';
 import { ModalErrorMessage } from '../ModalErrorMessage';
@@ -71,7 +71,7 @@ export function CodexProxyAssignDialog({ choice: initialChoice, onClose }: { cho
   const summary = batchBindSummary(results);
   const allVisible = visible.length > 0 && visible.every((entry) => selectedIds.includes(entry.id));
 
-  useEscCloseTopmost(true, () => { if (!running.current) onClose(); });
+  useEscCloseTopmost(true, () => { if (!running.current) onClose(); }, dialog);
   useModalScrollLock(true);
   useModalFocusTrap(dialog, true);
   useEffect(() => {
@@ -135,7 +135,7 @@ export function CodexProxyAssignDialog({ choice: initialChoice, onClose }: { cho
           cancelled: () => cancelled.current,
           bind: (account) => bindProxyCatalog(account.id, choice.sourceId, choice.itemId, selections!, choice.groupId),
           applied: (updated) => {
-            useCodexAccountStore.getState().applyAccountSnapshot(updated);
+            applyCodexProxyAccountSnapshot(updated);
             if (mounted.current) setAppliedIds((old) => [...old, updated.id]);
           },
           errorKey: catalogErrorKey,
@@ -186,8 +186,9 @@ export function CodexProxyAssignDialog({ choice: initialChoice, onClose }: { cho
             }}>{t(allVisible ? 'codex.proxy.batchClearAll' : 'common.selectAll')}</button>
           </div>
           <div className="codex-proxy-assign-accounts">{visible.map((account) => {
-            const plan = account.plan_type?.trim();
-            const planClass = plan ? withCodexPlanBadgeStyle(getCodexPlanBadgePresentation(account).className, planBadgeStyle) : '';
+            const badge = getCodexPlanBadgePresentation(account, { preserveRawNonProLabel: true });
+            const plan = account.plan_type?.trim() ? badge.label : undefined;
+            const planClass = plan ? withCodexPlanBadgeStyle(badge.className, planBadgeStyle) : '';
             return <button key={account.id} type="button" className={`btn codex-proxy-assign-account${selectedIds.includes(account.id) ? ' is-active' : ''}`} disabled={busy} aria-pressed={selectedIds.includes(account.id)} onClick={() => toggle(account.id)}>
               {selectedIds.includes(account.id) ? <CheckSquare size={17} /> : <Square size={17} />}
               <span className="codex-proxy-assign-account-name">{name(account)}</span>

@@ -96,6 +96,17 @@ pub(crate) async fn refresh_account_background(
     .await
 }
 
+/// Activity synchronization shares the same per-account flight and background
+/// permit, but never waits for optional subscription enrichment.
+pub(crate) async fn refresh_active_account(
+    account_id: &str,
+    runtime: Option<std::sync::Arc<CodexQuotaRuntimeSnapshot>>,
+) -> RefreshResult {
+    refresh_with_operation(account_id, RefreshPriority::Background, Some(background_epoch()), |id| async move {
+        Box::pin(crate::modules::codex_quota::refresh_active_account_quota(&id, runtime)).await
+    }).await
+}
+
 pub(crate) async fn refresh_account_with_priority(
     account_id: &str,
     runtime_snapshot: Option<std::sync::Arc<CodexQuotaRuntimeSnapshot>>,

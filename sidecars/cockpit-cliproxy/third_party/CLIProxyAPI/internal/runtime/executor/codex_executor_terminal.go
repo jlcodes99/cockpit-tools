@@ -2,6 +2,10 @@ package executor
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"io"
+	"net"
 	"net/http"
 	"sort"
 	"strconv"
@@ -13,10 +17,11 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-const codexIncompleteStreamMessage = "stream error: stream disconnected before completion: stream closed before response.completed"
+const codexIncompleteStreamMessage = "stream closed before response.completed"
 
 type codexIncompleteStreamError struct {
 	statusErr
+	cause error
 }
 
 type codexEmptyIncompleteStreamError struct {
@@ -32,15 +37,41 @@ func newCodexEmptyIncompleteStreamError() codexEmptyIncompleteStreamError {
 
 func (codexEmptyIncompleteStreamError) IsRequestScoped() bool { return true }
 
-func newCodexIncompleteStreamError() codexIncompleteStreamError {
+func newCodexIncompleteStreamError(cause error) codexIncompleteStreamError {
+	status, code, message := http.StatusBadGateway, "incomplete_upstream_stream", codexIncompleteStreamMessage
+	if cause != nil && !errors.Is(cause, io.EOF) {
+		code, message = "upstream_stream_error", helps.RedactStreamTransportError(cause.Error())
+		var timeout net.Error
+		if errors.Is(cause, context.DeadlineExceeded) || errors.As(cause, &timeout) && timeout.Timeout() {
+			status, code = http.StatusRequestTimeout, "request_timeout"
+		}
+	}
+	body := []byte(`{"error":{"type":"server_error"}}`)
+	body, _ = sjson.SetBytes(body, "error.code", code)
+	body, _ = sjson.SetBytes(body, "error.message", message)
 	return codexIncompleteStreamError{statusErr: statusErr{
-		code: http.StatusRequestTimeout,
-		msg:  codexIncompleteStreamMessage,
-	}}
+		code: status,
+		msg:  string(body),
+	}, cause: cause}
 }
+
+func (e codexIncompleteStreamError) Unwrap() error { return e.cause }
 
 func (codexIncompleteStreamError) IsRequestScoped() bool {
 	return true
+}
+
+// Preserve cancellation and structured WebSocket failures, while giving transport
+// failures the same request-scoped classification as HTTP response-body reads.
+func codexResponsesReadError(cause error) error {
+	if errors.Is(cause, context.Canceled) {
+		return cause
+	}
+	var status interface{ StatusCode() int }
+	if errors.As(cause, &status) {
+		return cause
+	}
+	return newCodexIncompleteStreamError(cause)
 }
 
 // Streamed Codex responses may emit response.output_item.done events while leaving
@@ -218,6 +249,16 @@ func codexTerminalFailureBody(eventData []byte) ([]byte, bool) {
 	}
 	if len(body) == 0 {
 		body = []byte(`{"error":{"message":"upstream stream failed without error details"}}`)
+	}
+	// Transport envelopes may carry reset hints outside the nested error.
+	for _, key := range []string{"headers", "retry_after", "retry_after_seconds", "resets_at", "resets_in_seconds"} {
+		value := gjson.GetBytes(eventData, key)
+		if !value.Exists() {
+			value = gjson.GetBytes(eventData, "response."+key)
+		}
+		if value.Exists() {
+			body, _ = sjson.SetRawBytes(body, key, []byte(value.Raw))
+		}
 	}
 	if seq := gjson.GetBytes(eventData, "sequence_number"); seq.Exists() {
 		body, _ = sjson.SetBytes(body, "sequence_number", seq.Int())
@@ -398,46 +439,52 @@ func isCodexModelCapacityError(errorBody []byte) bool {
 	return false
 }
 
-// isCodexUsageLimitError reports whether the error body represents a Codex
-// quota/plan-limit exhaustion (error.type == "usage_limit_reached"). This is the
-// signal Codex emits when a credential's usage quota is depleted, and it carries
-// reset timing (resets_at/resets_in_seconds) parsed by parseCodexRetryAfter.
-// Transient per-minute rate limits (rate_limit_error/rate_limit_exceeded) are
-// intentionally excluded, as they should be retried rather than cooled down.
+// isCodexUsageLimitError recognizes structured account quota failures without
+// treating transient request-rate limits or generated text as quota exhaustion.
 func isCodexUsageLimitError(errorBody []byte) bool {
-	if len(errorBody) == 0 {
-		return false
-	}
-	candidates := []string{
-		gjson.GetBytes(errorBody, "error.type").String(),
-		gjson.GetBytes(errorBody, "type").String(),
-	}
-	for _, candidate := range candidates {
-		if strings.EqualFold(strings.TrimSpace(candidate), "usage_limit_reached") {
-			return true
-		}
-	}
-	return false
+	return helps.CodexQuotaExhaustion(errorBody)
 }
 
 func parseCodexRetryAfter(statusCode int, errorBody []byte, now time.Time) *time.Duration {
-	if statusCode != http.StatusTooManyRequests || len(errorBody) == 0 {
+	if statusCode != http.StatusTooManyRequests || !isCodexUsageLimitError(errorBody) {
 		return nil
 	}
-	for _, quota := range []gjson.Result{gjson.GetBytes(errorBody, "error"), gjson.ParseBytes(errorBody)} {
-		if !strings.EqualFold(strings.TrimSpace(quota.Get("type").String()), "usage_limit_reached") {
-			continue
-		}
+	// Prefer an explicit reset instant over relative hints. Inspect all envelope
+	// positions because SSE and websocket peers may attach timing to the wrapper.
+	nodes := []gjson.Result{gjson.GetBytes(errorBody, "error"), gjson.ParseBytes(errorBody), gjson.GetBytes(errorBody, "body.error"), gjson.GetBytes(errorBody, "body")}
+	for _, quota := range nodes {
 		if resetsAt := quota.Get("resets_at").Int(); resetsAt > 0 {
-			resetAtTime := time.Unix(resetsAt, 0)
-			if resetAtTime.After(now) {
-				retryAfter := resetAtTime.Sub(now)
-				return &retryAfter
+			if delay := time.Unix(resetsAt, 0).Sub(now); delay > 0 {
+				return &delay
 			}
 		}
-		if resetsInSeconds := quota.Get("resets_in_seconds").Int(); resetsInSeconds > 0 {
-			retryAfter := time.Duration(resetsInSeconds) * time.Second
-			return &retryAfter
+	}
+	for _, quota := range nodes {
+		for _, field := range []string{"resets_in_seconds", "retry_after_seconds", "retry_after"} {
+			seconds := quota.Get(field).Float()
+			if seconds > 0 && seconds <= float64((1<<63-1)/int64(time.Second)) {
+				delay := time.Duration(seconds * float64(time.Second))
+				return &delay
+			}
+		}
+	}
+	for _, quota := range nodes {
+		var delay *time.Duration
+		quota.Get("headers").ForEach(func(key, value gjson.Result) bool {
+			if !strings.EqualFold(key.String(), "Retry-After") {
+				return true
+			}
+			if seconds, errParse := strconv.ParseFloat(value.String(), 64); errParse == nil && seconds > 0 && seconds <= float64((1<<63-1)/int64(time.Second)) {
+				parsed := time.Duration(seconds * float64(time.Second))
+				delay = &parsed
+			} else if resetAt, errParse := http.ParseTime(value.String()); errParse == nil && resetAt.After(now) {
+				parsed := resetAt.Sub(now)
+				delay = &parsed
+			}
+			return delay == nil
+		})
+		if delay != nil {
+			return delay
 		}
 	}
 	return nil
@@ -449,20 +496,6 @@ func parseCodexRetryAfter(statusCode int, errorBody []byte, now time.Time) *time
 // so the limit must comfortably exceed the four handshake frames observed in practice. Once the
 // limit is reached the stream is released and the original unbuffered semantics apply.
 const codexBootstrapMaxBufferedEvents = 16
-
-// isCodexHandshakeMetadataEvent reports whether an event carries no generated output and is
-// therefore safe to hold back before the downstream response headers are committed. Keeping a type
-// allow-list rather than a fixed event count matters for the websocket transport, where the
-// handshake frames arrive before response.created and would otherwise exhaust a small counter
-// before the rejection event is seen.
-func isCodexHandshakeMetadataEvent(eventType string) bool {
-	switch eventType {
-	case "response.created", "response.in_progress", "codex.rate_limits", "codex.response.metadata":
-		return true
-	default:
-		return false
-	}
-}
 
 // observeCodexTokenEvent inspects a stream payload and marks TTFT on the first substantive token event.
 func observeCodexTokenEvent(reporter *helps.UsageReporter, payload []byte) {
@@ -505,3 +538,35 @@ func isCodexOverloadBootstrapFailure(body []byte) bool {
 		return false
 	}
 }
+
+// Account-scoped quota and disabled-account errors can rotate before output,
+// while retaining the shared unbuffered error mapping and Retry-After parsing.
+func isCodexRetryableBootstrapFailure(body []byte) bool {
+	if helps.CodexBootstrapInputError(body) {
+		return false
+	}
+	if _, ok := helps.CodexBootstrapAccountFailureStatus(body); ok {
+		return true
+	}
+	if codexTerminalErrorIsContextLength(body) {
+		return false
+	}
+	return isCodexOverloadBootstrapFailure(body)
+}
+
+func newCodexBootstrapFailureErr(body []byte, modelLevelCooling bool) statusErr {
+	if status, ok := helps.CodexBootstrapAccountFailureStatus(body); ok {
+		if status == http.StatusForbidden {
+			// Some upstreams pair disabled-account codes with invalid_request_error.
+			// Normalize that contradictory type only on the pre-output path, keeping
+			// the original structured code and message for credential diagnostics.
+			body, _ = sjson.SetBytes(body, "error.type", "permission_error")
+		}
+		err := newCodexStatusErrWithCooling(status, body, modelLevelCooling)
+		err.credentialScoped = true
+		return err
+	}
+	return newCodexBootstrapOverloadErr(body)
+}
+
+const codexBootstrapMaxBufferedBytes = 64 << 10

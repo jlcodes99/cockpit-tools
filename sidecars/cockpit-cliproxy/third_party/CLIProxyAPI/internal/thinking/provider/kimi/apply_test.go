@@ -31,23 +31,29 @@ func TestApply_ModeNone_UsesDisabledThinking(t *testing.T) {
 	}
 }
 
-func TestApply_ModeLevel_UsesReasoningEffort(t *testing.T) {
+func TestApply_ModeLevel_UsesNativeThinkingAndPreservesKeep(t *testing.T) {
 	applier := NewApplier()
 	modelInfo := &registry.ModelInfo{
 		ID:       "kimi-k2.5",
 		Thinking: &registry.ThinkingSupport{Min: 1024, Max: 32000, ZeroAllowed: true, DynamicAllowed: true},
 	}
-	body := []byte(`{"model":"kimi-k2.5","thinking":{"type":"disabled"}}`)
+	body := []byte(`{"model":"kimi-k2.5","reasoning_effort":"low","thinking":{"type":"disabled","keep":"all"}}`)
 
 	out, errApply := applier.Apply(body, thinking.ThinkingConfig{Mode: thinking.ModeLevel, Level: thinking.LevelHigh}, modelInfo)
 	if errApply != nil {
 		t.Fatalf("Apply() error = %v", errApply)
 	}
-	if got := gjson.GetBytes(out, "reasoning_effort").String(); got != "high" {
-		t.Fatalf("reasoning_effort = %q, want %q, body=%s", got, "high", string(out))
+	if got := gjson.GetBytes(out, "thinking.type").String(); got != "enabled" {
+		t.Fatalf("thinking.type = %q, want enabled", got)
 	}
-	if gjson.GetBytes(out, "thinking").Exists() {
-		t.Fatalf("thinking should be removed when reasoning_effort is used, body=%s", string(out))
+	if got := gjson.GetBytes(out, "thinking.effort").String(); got != "high" {
+		t.Fatalf("thinking.effort = %q, want high", got)
+	}
+	if got := gjson.GetBytes(out, "thinking.keep").String(); got != "all" {
+		t.Fatalf("thinking.keep = %q, want all", got)
+	}
+	if gjson.GetBytes(out, "reasoning_effort").Exists() {
+		t.Fatalf("legacy reasoning_effort should be removed, body=%s", out)
 	}
 }
 

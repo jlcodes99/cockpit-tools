@@ -1,4 +1,21 @@
 import type { CodexExperimentalModelDefinition } from '../types/codex';
+import modelTemplates from '../../sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/internal/registry/models/codex_client_models.json';
+
+/** 已知模型使用原始模板窗口；Reserve 沿用 Luna，无模板时保留调用方的原有回落。 */
+export function getCodexModelContextTemplate(modelId: string) {
+  const model = modelId.trim().toLowerCase();
+  const slug = model === 'gpt-reserve' ? 'gpt-5.6-luna' : model;
+  const template = modelTemplates.models.find((entry) => entry.slug === slug);
+  if (!template) return undefined;
+  const { context_window, max_context_window, auto_compact_token_limit } = template;
+  if (!Number.isSafeInteger(context_window) || context_window <= 0 ||
+      !Number.isSafeInteger(max_context_window) || max_context_window < context_window ||
+      !Number.isSafeInteger(auto_compact_token_limit) || auto_compact_token_limit <= 0 ||
+      auto_compact_token_limit >= context_window) {
+    throw new Error(`Invalid context fields in codex_client_models.json: ${slug}`);
+  }
+  return { context_window, max_context_window, auto_compact_token_limit };
+}
 
 /** 自动压缩阈值统一取上下文窗口的 90%（与 1M 档 1000000/900000 一致）。 */
 export const AUTO_COMPACT_PERCENT = 90;

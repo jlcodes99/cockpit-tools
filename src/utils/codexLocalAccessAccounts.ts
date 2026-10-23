@@ -1,11 +1,25 @@
 import {
   isCodexApiKeyAccount,
+  isCodexChatgptPlanAccount,
   isCodexAgentIdentityAccount,
   isCodexEffectiveFreePlan,
   isCodexPendingOAuthAccount,
   isCodexWebSessionAccount,
   type CodexAccount,
 } from '../types/codex.ts';
+import type { CodexLocalAccessImageGenerationPolicy } from '../types/codexLocalAccess';
+import { getCodexServiceEndpoint } from './chatgptPlanOverview';
+
+/** Plan grants cannot enable hosted image generation, even in a stale draft. */
+export function resolveCodexMemberImagePolicy(
+  account: CodexAccount,
+  configured?: CodexLocalAccessImageGenerationPolicy,
+  official = false,
+): CodexLocalAccessImageGenerationPolicy {
+  account = getCodexServiceEndpoint(account);
+  if (official || isCodexChatgptPlanAccount(account)) return 'disabled';
+  return configured ?? (isCodexApiKeyAccount(account) ? 'disabled' : 'inherit');
+}
 
 const CHAT_COMPLETIONS_PROVIDER_HOSTS = [
   "api.deepseek.com",
@@ -78,6 +92,7 @@ export function getCodexLocalAccessAccountIneligibleReason(
   account: CodexAccount,
   restrictFreeAccounts: boolean,
 ): CodexLocalAccessAccountIneligibleReason | null {
+  account = getCodexServiceEndpoint(account);
   // Pending / incomplete OAuth accounts cannot serve API traffic.
   if (isCodexPendingOAuthAccount(account)) {
     return "pending_oauth";
@@ -132,6 +147,7 @@ export function filterCodexLocalAccessAccountIds(
   accountIds: string[],
   accounts: CodexAccount[],
   restrictFreeAccounts: boolean,
+  retainedPausedIds: readonly string[] = [],
 ): string[] {
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const seen = new Set<string>();
@@ -139,7 +155,8 @@ export function filterCodexLocalAccessAccountIds(
 
   for (const accountId of accountIds) {
     const account = accountById.get(accountId);
-    if (!account || !isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts)) {
+    // Retaining a paused member is separate from admitting a new usable account.
+    if (!retainedPausedIds.includes(accountId) && (!account || !isCodexLocalAccessEligibleAccount(account, restrictFreeAccounts))) {
       continue;
     }
     if (!seen.has(accountId)) {
@@ -156,6 +173,7 @@ export function resolveCodexLocalAccessInitialAccountIds(
   accounts: CodexAccount[],
   restrictFreeAccounts: boolean,
   accountsLoaded: boolean,
+  retainedPausedIds: readonly string[] = [],
 ): string[] {
   if (!accountsLoaded) {
     return Array.from(new Set(accountIds));
@@ -164,6 +182,7 @@ export function resolveCodexLocalAccessInitialAccountIds(
     accountIds,
     accounts,
     restrictFreeAccounts,
+    retainedPausedIds,
   );
 }
 

@@ -109,6 +109,38 @@ mod tests {
         );
         assert_eq!(restart_notice(&other.0).await, None);
         drop(listener);
+    }
+
+    #[tokio::test]
+    async fn an_exited_daemon_leaves_a_stale_socket_without_a_notice() {
+        const CHILD_HOME: &str = "COCKPIT_TEST_EXITED_DAEMON_HOME";
+        if let Some(home) = std::env::var_os(CHILD_HOME) {
+            let listener = UnixListener::bind(
+                Path::new(&home).join("app-server-control/app-server-control.sock"),
+            )
+            .unwrap();
+            drop(listener);
+            return;
+        }
+        let home = TestHome::new();
+        // A concurrent Command::spawn can briefly inherit a listener even with
+        // CLOEXEC. Create the stale socket in a child and wait for its exit, so
+        // this process and its other children never own that listening FD.
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "modules::codex_cli_daemon::tests::an_exited_daemon_leaves_a_stale_socket_without_a_notice",
+                "--nocapture",
+            ])
+            .env(CHILD_HOME, &home.0)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
         assert!(home.socket().exists());
         assert_eq!(restart_notice(&home.0).await, None);
     }

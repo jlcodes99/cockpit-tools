@@ -267,7 +267,8 @@ async fn run_task(
         scope: scope.clone(),
         _lease: lease,
     };
-    codex_wakeup::resolve_cancel_flag(Some(&scope))?;
+    let cancel_flag =
+        codex_wakeup::resolve_cancel_flag(Some(&scope))?.ok_or("CODEX_WAKEUP_CANCEL_SCOPE")?;
     let require_enabled = trigger_type != "manual_task";
     lock_or_recover(active_run_scopes(), "codex wakeup scopes lock").insert(
         task_id.to_string(),
@@ -287,18 +288,28 @@ async fn run_task(
         task_id: Some(task.id.clone()),
         task_name: Some(task.name.clone()),
     };
-    let result = codex_wakeup::run_batch(
+    let result = crate::modules::codex_wakeup_confirmation::dispatch(
         app,
-        task.account_ids.clone(),
-        task.prompt.clone(),
-        codex_wakeup::CodexWakeupExecutionConfig {
-            model: task.model.clone(),
-            model_display_name: task.model_display_name.clone(),
-            model_reasoning_effort: task.model_reasoning_effort.clone(),
+        &task,
+        require_enabled,
+        cancel_flag,
+        async {
+            codex_wakeup::authorize_task_dispatch(&task, require_enabled)?;
+            codex_wakeup::run_batch(
+                app,
+                task.account_ids.clone(),
+                task.prompt.clone(),
+                codex_wakeup::CodexWakeupExecutionConfig {
+                    model: task.model.clone(),
+                    model_display_name: task.model_display_name.clone(),
+                    model_reasoning_effort: task.model_reasoning_effort.clone(),
+                },
+                context,
+                run_id,
+                Some(&scope),
+            )
+            .await
         },
-        context,
-        run_id,
-        Some(&scope),
     )
     .await;
 

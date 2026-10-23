@@ -9,6 +9,7 @@ require (
 	github.com/router-for-me/CLIProxyAPI/v7 v7.2.155
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
+	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0
 )
 

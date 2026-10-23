@@ -18,7 +18,7 @@ export interface CodexCliStatus {
 
 export type CodexWakeupScheduleKind = 'daily' | 'weekly' | 'interval' | 'quota_reset' | 'startup';
 export type CodexWakeupQuotaResetWindow = 'either' | 'primary_window' | 'secondary_window';
-export type CodexWakeupReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type CodexWakeupReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 export type WakeupTaskExecutionMode = 'auto' | 'confirm';
 export type WakeupTaskHistoryStatus =
   | 'success'

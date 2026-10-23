@@ -504,7 +504,7 @@ fn spawn_open_app_with_options_and_env(
         args,
         force_new_instance,
         env_pairs,
-        None,
+        &CodexLaunchProxy::Inherit,
     )
 }
 
@@ -514,13 +514,18 @@ fn spawn_open_app_with_options_and_env_and_egress(
     args: &[String],
     force_new_instance: bool,
     env_pairs: &[(&str, &str)],
-    egress_proxy_url: Option<&str>,
+    launch_proxy: &CodexLaunchProxy,
 ) -> Result<u32, String> {
     let mut cmd = Command::new("open");
     sanitize_macos_gui_launch_env(&mut cmd);
-    append_effective_proxy_env_to_open_args(&mut cmd, egress_proxy_url);
+    if !matches!(launch_proxy, CodexLaunchProxy::Direct) {
+        append_effective_proxy_env_to_open_args(&mut cmd, launch_proxy);
+    }
     for (key, value) in env_pairs {
         cmd.arg("--env").arg(format!("{}={}", key, value));
+    }
+    if matches!(launch_proxy, CodexLaunchProxy::Direct) {
+        append_effective_proxy_env_to_open_args(&mut cmd, launch_proxy);
     }
     if force_new_instance {
         cmd.arg("-n");
@@ -1449,9 +1454,10 @@ fn detect_zcode_exec_path() -> Option<std::path::PathBuf> {
                 candidates.push(std::path::PathBuf::from(root).join("ZCode/ZCode.exe"));
             }
         }
-        if let Some(path) = candidates.into_iter().find(|path| {
-            can_probe_passive_windows_path(&path.to_string_lossy()) && path.is_file()
-        }) {
+        if let Some(path) = candidates
+            .into_iter()
+            .find(|path| can_probe_passive_windows_path(&path.to_string_lossy()) && path.is_file())
+        {
             return Some(path);
         }
         if let Some(path) = detect_windows_exec_path_by_signatures(
@@ -2070,6 +2076,37 @@ fn is_chatgpt_store_gui_exe(path: &std::path::Path) -> bool {
         .is_some_and(|value| value.eq_ignore_ascii_case("ChatGPT.exe"))
 }
 
+/// Read only the PE headers. A desktop path must not resolve to a console CLI,
+/// DLL or script merely because its filename exists.
+#[cfg(any(test, target_os = "windows"))]
+fn windows_executable_has_gui_subsystem(path: &Path) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    let check = || -> std::io::Result<bool> {
+        let mut file = std::fs::File::open(path)?;
+        let mut dos = [0u8; 64];
+        file.read_exact(&mut dos)?;
+        if &dos[..2] != b"MZ" {
+            return Ok(false);
+        }
+        let offset = u32::from_le_bytes(dos[60..64].try_into().unwrap());
+        file.seek(SeekFrom::Start(u64::from(offset)))?;
+        let mut pe = [0u8; 94];
+        file.read_exact(&mut pe)?;
+        let magic = u16::from_le_bytes([pe[24], pe[25]]);
+        let characteristics = u16::from_le_bytes([pe[22], pe[23]]);
+        Ok(&pe[..4] == b"PE\0\0"
+            && matches!(magic, 0x10b | 0x20b)
+            && u16::from_le_bytes([pe[92], pe[93]]) == 2
+            && characteristics & 0x2000 == 0)
+    };
+    check().unwrap_or(false)
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn is_usable_codex_windows_gui_path(path: &Path) -> bool {
+    is_chatgpt_store_gui_exe(path) && windows_executable_has_gui_subsystem(path)
+}
+
 /// 读取 `AppxManifest.xml` 里 `Application Id="App"` 的 `Executable`。
 #[cfg(any(test, target_os = "windows"))]
 fn appx_manifest_gui_executable(install_location: &std::path::Path) -> Option<String> {
@@ -2232,12 +2269,7 @@ if ($entry -and -not [string]::IsNullOrWhiteSpace($entry.AppID)) {
   Write-Output ([string]$entry.AppID.Trim())
 }"#;
 
-    let output = powershell_output(&["-Command", script]).ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = codex_launch_powershell_output(script).ok()?;
     for line in stdout.lines() {
         let app_user_model_id = line.trim().trim_matches('"');
         if !app_user_model_id.is_empty() {
@@ -2269,12 +2301,7 @@ if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.PackageFamilyName)) {
   Write-Output ([string]($pkg.PackageFamilyName.Trim() + '!App'))
 }"#;
 
-    let output = powershell_output(&["-Command", script]).ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = codex_launch_powershell_output(script).ok()?;
     for line in stdout.lines() {
         let app_user_model_id = line.trim().trim_matches('"');
         if !app_user_model_id.is_empty() {
@@ -2305,28 +2332,15 @@ fn detect_codex_store_app_user_model_id_uncached() -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn detect_codex_store_app_user_model_id() -> Option<String> {
-    if let Some(app_user_model_id) = CODEX_STORE_APP_USER_MODEL_ID_CACHE.get() {
-        return Some(app_user_model_id.clone());
+    // A configured GUI path already identifies its manifest entry. Registration
+    // is validated by the shared activation script, not by Get-StartApps here.
+    if let Ok(path) = resolve_codex_launch_path() {
+        if let Some(package) = codex_package_hint_from_path(&path) {
+            return Some(format!("{}!{}", package.family_name, package.app_id));
+        }
     }
-
-    let detected = detect_codex_store_app_user_model_id_uncached();
-    if let Some(ref app_user_model_id) = detected {
-        let _ = CODEX_STORE_APP_USER_MODEL_ID_CACHE.set(app_user_model_id.clone());
-    }
-    detected
-}
-
-#[cfg(target_os = "windows")]
-fn powershell_argument_list_clause(values: &[String]) -> String {
-    let arguments = values
-        .iter()
-        .filter(|value| !value.trim().is_empty())
-        .map(|value| format!("'{}'", escape_powershell_single_quoted(value)))
-        .collect::<Vec<_>>();
-    if arguments.is_empty() {
-        return String::new();
-    }
-    format!(" -ArgumentList @({})", arguments.join(", "))
+    // No permanent unkeyed cache: a Store update or path change must take effect.
+    detect_codex_store_app_user_model_id_uncached()
 }
 
 #[cfg(target_os = "windows")]
@@ -2342,50 +2356,59 @@ fn launch_codex_via_store_app_user_model_id(
         return Err("Codex AppUserModelId 为空".to_string());
     }
 
-    let escaped = escape_powershell_single_quoted(app_user_model_id);
-    let mut env_pairs: Vec<(&str, String)> = managed_proxy_env_pairs();
-    if let Some(codex_home) = codex_home.map(str::trim).filter(|value| !value.is_empty()) {
-        env_pairs.push(("CODEX_HOME", codex_home.to_string()));
-    }
-    if let Some(app_user_data_dir) = app_user_data_dir
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        env_pairs.push((
-            "CODEX_ELECTRON_USER_DATA_PATH",
-            app_user_data_dir.to_string(),
-        ));
-    }
-    for (key, value) in extra_env {
-        env_pairs.push((key.as_str(), value.clone()));
-    }
-    let env_lines = env_pairs
+    let probe = build_codex_default_registered_launch_probe(app_user_model_id)?;
+    let configured = resolve_codex_launch_path().ok();
+    let hint = configured
+        .as_deref()
+        .and_then(codex_package_hint_from_path)
+        .filter(|package| {
+            format!("{}!{}", package.family_name, package.app_id)
+                .eq_ignore_ascii_case(app_user_model_id)
+        });
+    let package = match hint {
+        Some(package) => package,
+        None => parse_codex_registered_launch(&codex_launch_powershell_output(&probe)?)?
+            .ok_or_else(|| "No registered Codex GUI application".to_string())?,
+    };
+    let mut env_pairs = managed_proxy_env_pairs()
         .into_iter()
-        .map(|(key, value)| format!("$env:{}='{}'", key, escape_powershell_single_quoted(&value)))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let argument_list = powershell_argument_list_clause(extra_args);
-    let script = format!(
-        r#"{env_lines}
-$appId='{escaped}';
-$target='shell:AppsFolder\' + $appId
-Start-Process -FilePath $target{argument_list} -ErrorAction Stop | Out-Null"#
-    );
-
-    let output = powershell_output(&["-Command", &script])
-        .map_err(|e| format!("系统入口启动调用失败: {}", e))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr_head = stderr.trim().chars().take(400).collect::<String>();
-        return Err(format!(
-            "系统入口启动失败: status={}, stderr={}",
-            output.status,
-            if stderr_head.is_empty() {
-                "<empty>".to_string()
+        .map(|(key, value)| (key.to_string(), value))
+        .collect::<Vec<_>>();
+    env_pairs.extend_from_slice(extra_env);
+    let confirmed = activate_codex_package_with_refresh(
+        package,
+        |package| {
+            run_codex_package_activation(
+                package,
+                codex_home.map(str::trim).filter(|value| !value.is_empty()),
+                app_user_data_dir
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(Path::new),
+                extra_args,
+                &env_pairs,
+            )
+        },
+        || {
+            if let Some(path) = configured.as_deref() {
+                query_codex_registered_launch(path)?
+                    .ok_or_else(|| "No registered Codex GUI application".into())
             } else {
-                stderr_head
+                parse_codex_registered_launch(&codex_launch_powershell_output(&probe)?)?
+                    .ok_or_else(|| "No registered Codex GUI application".into())
             }
-        ));
+        },
+    )?;
+    if let Some(path) = configured.as_deref() {
+        if normalized_windows_path_text(Path::new(&confirmed.executable))
+            != normalized_windows_path_text(path)
+        {
+            update_app_path_in_config(
+                "codex",
+                Path::new(&confirmed.executable),
+                &path.to_string_lossy(),
+            );
+        }
     }
     Ok(())
 }
@@ -2774,10 +2797,10 @@ pub fn ensure_vscode_launch_path_configured() -> Result<(), String> {
 pub fn ensure_codex_launch_path_configured() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        if detect_codex_store_app_user_model_id().is_some() {
+        if resolve_codex_launch_path().is_ok() {
             return Ok(());
         }
-        if resolve_codex_launch_path().is_ok() {
+        if detect_codex_store_app_user_model_id().is_some() {
             return Ok(());
         }
         return Err("未检测到 Codex 商店安装，请先在 Microsoft Store 安装 Codex".to_string());
@@ -3088,7 +3111,7 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
 /// Windows：解析 Codex 桌面端启动路径。
 ///
 /// 规则（按优先级）：
-/// 1. 配置里的启动路径存在 → 直接使用（含用户手填的 npm 版 CLI）。
+/// 1. 配置里的路径存在且是桌面主程序 → 直接使用；CLI 与辅助程序不能作为桌面入口。
 /// 2. 未配置或路径已经不可用 → 按当前用户已注册的商店包解析
 ///    （PFN → InstallLocation → 清单里的 `Executable`），解析成功即**写回配置**作为新的启动路径。
 ///    商店更新换目录后旧目录若还在但已不能执行，由启动失败后的重新解析兜底。
@@ -3102,16 +3125,18 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
     let configured_path = normalize_custom_path(Some(&configured)).map(std::path::PathBuf::from);
 
     if let Some(path) = configured_path.as_deref() {
-        if path.is_file() {
+        if is_usable_codex_windows_gui_path(path) {
             return Ok(path.to_path_buf());
         }
         crate::modules::logger::log_warn(&format!(
-            "[Codex Start] 配置的启动路径已失效，准备重新探测: {}",
+            "[Codex Start] 配置路径已失效或不是桌面主程序，准备重新探测: {}",
             path.to_string_lossy()
         ));
     }
 
-    if let Some(detected) = detect_codex_store_gui_exe() {
+    if let Some(detected) =
+        detect_codex_store_gui_exe().filter(|path| is_usable_codex_windows_gui_path(path))
+    {
         update_app_path_in_config("codex", &detected, &configured);
         crate::modules::logger::log_info(&format!(
             "[Codex Start] 已自动探测并写回 Codex 启动路径: {}",

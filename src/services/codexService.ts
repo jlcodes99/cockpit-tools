@@ -11,11 +11,14 @@ import {
   CodexProviderWireApi,
   CodexQuickConfig,
   CodexExperimentalModelDefinition,
+  CodexModelConfigImportPreview,
+  CodexReasoningEffort,
   CodexQuota,
   CodexResetCreditsSnapshot,
 } from '../types/codex';
 import { normalizeCodexSwitchError } from '../utils/codexSwitchAuthFailure';
 import type { CodexOAuthProxyUse } from '../utils/codexOAuthReauthProxy';
+import { getCachedCodexLaunchPreviewConfig, rememberCodexLaunchPreviewConfig } from './codexLaunchPreviewConfigService';
 
 export interface CodexOAuthLoginStartResponse {
   loginId: string;
@@ -44,6 +47,16 @@ export async function getCurrentCodexAccount(): Promise<CodexAccount | null> {
 /** 获取当前 Codex config.toml 路径 */
 export async function getCodexConfigTomlPath(): Promise<string> {
   return await invoke('get_codex_config_toml_path');
+}
+
+export interface CodexStoragePaths {
+  providerStorePath: string;
+  configPath: string;
+  authPath: string;
+}
+
+export async function getCodexStoragePaths(): Promise<CodexStoragePaths> {
+  return await invoke('get_codex_storage_paths');
 }
 
 /** 打开当前 Codex config.toml */
@@ -91,6 +104,48 @@ export async function saveCodexModelCatalog(
     experimentalModelCatalogModels,
     experimentalModelCatalogDefaultModelId: experimentalModelCatalogDefaultModelId ?? null,
   });
+}
+
+export async function getCodexModelReasoningEfforts(
+  models: CodexExperimentalModelDefinition[],
+  instanceId = '__default__',
+): Promise<Record<string, CodexReasoningEffort[]>> {
+  return await invoke('get_codex_model_reasoning_efforts', { models, instanceId });
+}
+
+export async function previewCodexModelConfigImport(input: {
+  instanceId: string;
+  jsonContent: string;
+  conflictStrategy?: 'keep_existing' | 'replace';
+}): Promise<CodexModelConfigImportPreview> {
+  return await invoke('preview_codex_model_config_import', {
+    ...input, conflictStrategy: input.conflictStrategy ?? 'keep_existing',
+  });
+}
+
+export async function importCodexModelConfig(input: {
+  instanceId: string;
+  jsonContent: string;
+  conflictStrategy?: 'keep_existing' | 'replace';
+  expectedRevision: string;
+}): Promise<CodexModelConfigImportPreview> {
+  const result = await invoke<CodexModelConfigImportPreview>('import_codex_model_config', {
+    ...input, conflictStrategy: input.conflictStrategy ?? 'keep_existing',
+  });
+  // A confirmed transaction can finish after its dialog closes. Update only its target cache.
+  const cached = getCachedCodexLaunchPreviewConfig(input.instanceId);
+  if (cached && result.committed > 0) {
+    rememberCodexLaunchPreviewConfig(input.instanceId, {
+      ...cached,
+      experimental_model_catalog_models: result.models,
+      experimental_model_catalog_default_model_id: result.defaultModelId,
+    });
+  }
+  return result;
+}
+
+export async function exportCodexModelConfig(instanceId: string): Promise<string> {
+  return await invoke('export_codex_model_config', { instanceId });
 }
 
 /** 获取 Codex 官方 App 速度配置 */
@@ -710,12 +765,14 @@ export async function updateCodexAccountInstanceAccess(
   accessMode?: string | null,
   startupModel?: string | null,
   imageGenerationAccountIds?: string[] | null,
+  imageGenerationAccountModels?: Record<string, string> | null,
 ): Promise<CodexAccount> {
   return await invoke('update_codex_account_instance_access', {
     accountId,
     accessMode: accessMode ?? null,
     startupModel: startupModel ?? null,
     imageGenerationAccountIds: imageGenerationAccountIds ?? null,
+    imageGenerationAccountModels: imageGenerationAccountModels ?? null,
   });
 }
 

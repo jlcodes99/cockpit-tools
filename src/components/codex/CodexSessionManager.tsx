@@ -20,6 +20,7 @@ import type {
 } from '../../types/codex';
 import type { InstanceProfile } from '../../types/instance';
 import { useCodexInstanceStore } from '../../stores/useCodexInstanceStore';
+import { validateSessionImportPaths } from '../../services/codexInstanceService';
 import {
   filterCodexSessionsByKind,
   type CodexSessionKindFilter,
@@ -288,6 +289,7 @@ export function CodexSessionManager() {
   const [exportSelectionFilter, setExportSelectionFilter] = useState<ExportSelectionFilter>('all');
   const [importPreview, setImportPreview] = useState<CodexSessionImportPreview | null>(null);
   const [importTargetInstanceId, setImportTargetInstanceId] = useState('');
+  const [importCwdMappings, setImportCwdMappings] = useState<Record<string, string>>({});
   const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -332,6 +334,15 @@ export function CodexSessionManager() {
     scrollKey: importModalErrorScrollKey,
     set: setImportModalError,
   } = useModalErrorState();
+  const [importPathErrors, setImportPathErrors] = useState<Record<string, string>>({});
+  const importPathInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  useEffect(() => {
+    const source = Object.keys(importPathErrors)[0];
+    if (!source) return;
+    const input = importPathInputs.current[source];
+    input?.scrollIntoView({ block: 'center' });
+    input?.focus();
+  }, [importPathErrors]);
   const {
     message: exportModalError,
     scrollKey: exportModalErrorScrollKey,
@@ -437,6 +448,17 @@ export function CodexSessionManager() {
   const importReadyItems = useMemo(
     () => importPreview?.items.filter((item) => item.status === 'ready') ?? [],
     [importPreview],
+  );
+  const importSourceCwds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          importReadyItems
+            .map((item) => item.cwd.trim())
+            .filter((cwd) => cwd.length > 0),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [importReadyItems],
   );
   const exportPreviewItems = useMemo(
     () => exportPreview?.items ?? [],
@@ -863,10 +885,7 @@ export function CodexSessionManager() {
       }
 
       const confirmed = await confirmDialog(
-        t(
-          'codex.sessionManager.confirm.syncMessage',
-          '会将缺失会话的 rollout、session_index 条目和会话文件时间同步到所有实例，并对同 ID 会话做事件级合并，随后触发官方 Codex 重建会话索引；写入前会备份目标文件。确认继续？',
-        ),
+        t('codex.sessionManager.confirm.syncMessage'),
         {
           title: t('codex.sessionManager.actions.syncSessions', '同步会话'),
           okLabel: t('common.confirm', '确认'),
@@ -1347,6 +1366,8 @@ export function CodexSessionManager() {
     setMessage(null);
     setShowImportModal(true);
     setImportPreview(null);
+    setImportCwdMappings({});
+    setImportPathErrors({});
     setSelectedImportIds([]);
     setImportModalError(null);
     try {
@@ -1370,6 +1391,8 @@ export function CodexSessionManager() {
     if (importing || loadingImportPreview) return;
     setShowImportModal(false);
     setImportPreview(null);
+    setImportCwdMappings({});
+    setImportPathErrors({});
     setSelectedImportIds([]);
     setImportModalError(null);
   };
@@ -1378,6 +1401,7 @@ export function CodexSessionManager() {
 
   const handleChangeImportTarget = async (targetInstanceId: string) => {
     setImportTargetInstanceId(targetInstanceId);
+    setImportPathErrors({});
     setImportModalError(null);
     const filePath = importPreview?.importFilePath;
     if (!filePath || !targetInstanceId) return;
@@ -1426,6 +1450,26 @@ export function CodexSessionManager() {
 
     setImporting(true);
     setImportModalError(null);
+    setImportPathErrors({});
+    const selectedSources = new Set(importReadyItems
+      .filter((item) => selectedImportIds.includes(item.sessionId)).map((item) => item.cwd.trim()));
+    const cwdMappings = Object.fromEntries(Object.entries(importCwdMappings)
+      .map(([source, target]) => [source.trim(), target.trim()] as const)
+      .filter(([source, target]) => selectedSources.has(source) && target.length > 0 && source !== target));
+    try {
+      if (Object.keys(cwdMappings).length > 0) {
+        const errors = await validateSessionImportPaths(cwdMappings);
+        if (Object.keys(errors).length > 0) {
+          setImportPathErrors(errors);
+          setImporting(false);
+          return;
+        }
+      }
+    } catch (error) {
+      setImportModalError(String(error));
+      setImporting(false);
+      return;
+    }
     const transferId = createSessionTransferId();
     transferTaskIdRef.current = transferId;
     setTransferTask({
@@ -1441,6 +1485,7 @@ export function CodexSessionManager() {
         importPreview.importFilePath,
         importTargetInstanceId,
         selectedImportIds,
+        cwdMappings,
         transferId,
       );
       setTransferTask((current) =>
@@ -1649,56 +1694,6 @@ export function CodexSessionManager() {
           />
         </div>
         <div className="codex-session-manager__actions">
-          <div className="codex-session-manager__action-group is-selection">
-            <button
-              className="btn btn-secondary codex-session-manager__action-button"
-              type="button"
-              onClick={toggleAllSessions}
-              disabled={loading || allSessionIds.length === 0}
-              title={
-                allSessionsSelected
-                  ? t('codex.sessionManager.actions.clearSelectedSessions', '取消全选')
-                  : t('codex.sessionManager.actions.selectAllSessions', '全选全部会话')
-              }
-              aria-label={
-                allSessionsSelected
-                  ? t('codex.sessionManager.actions.clearSelectedSessions', '取消全选')
-                  : t('codex.sessionManager.actions.selectAllSessions', '全选全部会话')
-              }
-            >
-              {allSessionsSelected ? <X size={14} /> : <Check size={14} />}
-              {allSessionsSelected
-                ? t('codex.sessionManager.actions.clearSelectedSessions', '取消全选')
-                : t('codex.sessionManager.actions.selectAllSessions', '全选全部会话')}
-            </button>
-            <button
-              className="btn btn-secondary codex-session-manager__action-button"
-              type="button"
-              onClick={() => void handleOpenSyncTargetModal()}
-              disabled={syncing || syncingToInstance || repairingVisibility || deleting || loading || exporting || selectedIds.length === 0}
-            >
-              <Copy size={14} className={syncingToInstance ? 'icon-spin' : undefined} />
-              {t('codex.sessionManager.actions.copyToInstance', '复制到实例')} ({selectedIds.length})
-            </button>
-            <button
-              className="btn btn-secondary codex-session-manager__action-button"
-              type="button"
-              onClick={() => void handleExportSessions()}
-              disabled={syncing || syncingToInstance || repairingVisibility || deleting || loading || loadingExportPreview || exporting || selectedIds.length === 0}
-            >
-              <Download size={14} className={loadingExportPreview || exporting ? 'icon-spin' : undefined} />
-              {t('codex.sessionManager.actions.exportSessions', '导出会话')} ({selectedIds.length})
-            </button>
-            <button
-              className="btn btn-danger codex-session-manager__action-button"
-              type="button"
-              onClick={() => void handleMoveToTrash()}
-              disabled={deleting || loading || syncing || syncingToInstance || repairingVisibility || selectedIds.length === 0}
-            >
-              <Trash2 size={14} />
-              {t('codex.sessionManager.actions.moveToTrash', '移到废纸篓')} ({selectedIds.length})
-            </button>
-          </div>
           <div className="codex-session-manager__action-group is-maintenance">
             <button
               className="btn btn-secondary codex-session-manager__action-button"
@@ -1751,6 +1746,58 @@ export function CodexSessionManager() {
               {t('common.refresh', '刷新')}
             </button>
           </div>
+          {allSessionIds.length > 0 && (
+            <div className="codex-session-manager__action-group is-selection">
+              <button
+                className="btn btn-secondary codex-session-manager__action-button"
+                type="button"
+                onClick={toggleAllSessions}
+                disabled={loading || allSessionIds.length === 0}
+                title={
+                  allSessionsSelected
+                    ? t('codex.sessionManager.actions.clearSelectedSessions', '取消全选')
+                    : t('codex.sessionManager.actions.selectAllSessions', '全选全部会话')
+                }
+                aria-label={
+                  allSessionsSelected
+                    ? t('codex.sessionManager.actions.clearSelectedSessions', '取消全选')
+                    : t('codex.sessionManager.actions.selectAllSessions', '全选全部会话')
+                }
+              >
+                {allSessionsSelected ? <X size={14} /> : <Check size={14} />}
+                {allSessionsSelected
+                  ? t('codex.sessionManager.actions.clearSelectedSessions', '取消全选')
+                  : t('codex.sessionManager.actions.selectAllSessions', '全选全部会话')}
+              </button>
+              <button
+                className="btn btn-secondary codex-session-manager__action-button"
+                type="button"
+                onClick={() => void handleOpenSyncTargetModal()}
+                disabled={syncing || syncingToInstance || repairingVisibility || deleting || loading || exporting || selectedIds.length === 0}
+              >
+                <Copy size={14} className={syncingToInstance ? 'icon-spin' : undefined} />
+                {t('codex.sessionManager.actions.copyToInstance', '复制到实例')} ({selectedIds.length})
+              </button>
+              <button
+                className="btn btn-secondary codex-session-manager__action-button"
+                type="button"
+                onClick={() => void handleExportSessions()}
+                disabled={syncing || syncingToInstance || repairingVisibility || deleting || loading || loadingExportPreview || exporting || selectedIds.length === 0}
+              >
+                <Download size={14} className={loadingExportPreview || exporting ? 'icon-spin' : undefined} />
+                {t('codex.sessionManager.actions.exportSessions', '导出会话')} ({selectedIds.length})
+              </button>
+              <button
+                className="btn btn-danger codex-session-manager__action-button"
+                type="button"
+                onClick={() => void handleMoveToTrash()}
+                disabled={deleting || loading || syncing || syncingToInstance || repairingVisibility || selectedIds.length === 0}
+              >
+                <Trash2 size={14} />
+                {t('codex.sessionManager.actions.moveToTrash', '移到废纸篓')} ({selectedIds.length})
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2350,6 +2397,56 @@ export function CodexSessionManager() {
                       : t('codex.sessionManager.importModal.selectReady', '选择可导入')}
                   </button>
                 </div>
+              ) : null}
+              {!loadingImportPreview && importSourceCwds.length > 0 ? (
+                <section className="codex-session-import-mappings">
+                  <div className="codex-session-import-mappings__intro">
+                    <strong>
+                      {t('codex.sessionManager.importModal.cwdMappingTitle', '项目路径映射（可选）')}
+                    </strong>
+                    <p>
+                      {t(
+                        'codex.sessionManager.importModal.cwdMappingHint',
+                        '将源工作目录映射到此电脑上已添加到 Codex 的项目路径；留空则保留源路径。',
+                      )}
+                    </p>
+                  </div>
+                  <div className="codex-session-import-mappings__list">
+                    {importSourceCwds.map((sourceCwd) => (
+                      <label className="codex-session-import-mappings__row" key={sourceCwd}>
+                        <code className="codex-session-import-mappings__source" title={sourceCwd}>
+                          {sourceCwd}
+                        </code>
+                        <input
+                          className="codex-session-import-mappings__target"
+                          ref={(input) => { importPathInputs.current[sourceCwd.trim()] = input; }}
+                          aria-invalid={Boolean(importPathErrors[sourceCwd.trim()])}
+                          type="text"
+                          value={importCwdMappings[sourceCwd] ?? ''}
+                          placeholder={t(
+                            'codex.sessionManager.importModal.cwdTargetPlaceholder',
+                            '输入此电脑上的项目绝对路径',
+                          )}
+                          aria-label={`${t('codex.sessionManager.importModal.cwdMappingTitle', '项目路径映射')}: ${sourceCwd}`}
+                          disabled={importing}
+                          onChange={(event) => {
+                            setImportPathErrors({});
+                            setImportModalError(null);
+                            setImportCwdMappings((previous) => ({
+                              ...previous,
+                              [sourceCwd]: event.target.value,
+                            }));
+                          }}
+                        />
+                        {importPathErrors[sourceCwd.trim()] ? (
+                          <span className="codex-session-import-mappings__error" role="alert">
+                            {t(`codex.sessionManager.importModal.${importPathErrors[sourceCwd.trim()]}`)}
+                          </span>
+                        ) : null}
+                      </label>
+                    ))}
+                  </div>
+                </section>
               ) : null}
               {loadingImportPreview ? (
                 <div className="codex-session-restore-modal__empty">

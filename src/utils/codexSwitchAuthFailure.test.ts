@@ -3,6 +3,7 @@ import test from "node:test";
 import type { CodexAccount } from "../types/codex.ts";
 import {
   getCodexJwtExpiration,
+  isCodexAccountReauthRequired,
   isCodexApiOnlyAccessTokenUsable,
   isCodexApiServiceAuthRejected,
   isCodexClientReauthNoticeOnly,
@@ -122,6 +123,7 @@ test("server-revoked authorization is terminal and never API-only", () => {
   assert.equal(isCodexServerRevokedReauth(account), true);
   assert.equal(isCodexApiOnlyAccessTokenUsable(account, now), false);
   assert.equal(isCodexClientReauthNoticeOnly(account, now), false);
+  assert.equal(isCodexAccountReauthRequired(account), true);
 
   const quotaRejected = accountWithAccessToken(jwt(now + 3600));
   quotaRejected.client_auth_status = "login_required";
@@ -132,6 +134,29 @@ test("server-revoked authorization is terminal and never API-only", () => {
   };
   assert.equal(isCodexServerRevokedReauth(quotaRejected), true);
   assert.equal(isCodexApiOnlyAccessTokenUsable(quotaRejected, now), false);
+  assert.equal(isCodexAccountReauthRequired(quotaRejected), true);
+});
+
+test("reauthorization follows account state even without an error code", () => {
+  const account = accountWithAccessToken("at-opaque-token");
+  assert.equal(isCodexAccountReauthRequired(account), false);
+  account.requires_reauth = true;
+  for (const reason of [
+    "Codex 登录授权已被服务端撤销，无法自动刷新。请重新登录 Codex 账号。",
+    "Codex 登录授权已过期，无法自动刷新。请重新登录 Codex 账号。",
+    "Codex 登录授权无效，无法自动刷新。请重新登录 Codex 账号。",
+    undefined,
+  ]) {
+    account.reauth_reason = reason;
+    assert.equal(isCodexAccountReauthRequired(account), true);
+  }
+
+  account.reauth_reason = "Token 刷新失败: error_code=refresh_token_reused";
+  assert.equal(isCodexAccountReauthRequired(account), false);
+
+  account.reauth_reason = undefined;
+  account.auth_mode = "apikey";
+  assert.equal(isCodexAccountReauthRequired(account), false);
 });
 
 test("refresh token 401 alone does not invalidate a still-usable access token", () => {
@@ -191,3 +216,22 @@ test("recognizes id_token failures that require client reauthorization", () => {
   account.tokens.access_token = jwt(now + 120);
   assert.equal(isCodexClientReauthNoticeOnly(account, now), false);
 });
+
+for (const reason of ['refresh_token_expired', 'refresh_token_invalidated', 'token_invalidated', 'token_revoked', 'invalid_grant', 'invalid_refresh_token']) {
+  test(`refresh classification recognizes stable OAuth denial ${reason} across translated prefixes`, () => {
+    assert.equal(isCodexRefreshTokenReauthReason(`Token-Aktualisierung fehlgeschlagen: status=400 error_code=${reason}`), true);
+  });
+}
+for (const reason of [
+  'Token 刷新失败：Token 刷新请求失败: error sending request for url (https://auth.openai.com/oauth/token)',
+  'refresh request failed: TLS certificate expired',
+  'PROXY_AUTH_FAILED: refresh status=401 Unauthorized',
+  'refresh status=403 unsupported_country_region_territory',
+  'refresh status=503 upstream unavailable',
+  'refresh response JSON parse failed',
+  'refresh_token_reused',
+]) {
+  test(`ordinary refresh failure does not require login: ${reason}`, () => {
+    assert.equal(isCodexRefreshTokenReauthReason(reason), false);
+  });
+}

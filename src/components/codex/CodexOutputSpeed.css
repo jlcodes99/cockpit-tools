@@ -1,0 +1,3 @@
+.codex-output-speed { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.codex-output-speed-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; color: var(--text-secondary); font-size: 12px; margin: 0 0 10px; }
+.codex-output-speed-summary > span { overflow-wrap: anywhere; }

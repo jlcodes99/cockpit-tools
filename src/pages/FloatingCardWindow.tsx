@@ -1,12 +1,12 @@
-import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, ExternalLink, Pin, PinOff, RefreshCw, Star, Undo2, X } from 'lucide-react';
+import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, ExternalLink, Pin, PinOff, RefreshCw, Star, Undo2, X, Minimize2, Maximize2, Blend } from 'lucide-react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
-import { LogicalSize } from '@tauri-apps/api/dpi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { TauriEvent, emit, listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { dismissBootSplash } from '../utils/bootSplash';
+import { useCodexQuotaSync } from '../hooks/useCodexQuotaSync';
 import {
   buildAntigravityAccountPresentation,
   buildClaudeAccountPresentation,
@@ -29,6 +29,7 @@ import * as traeService from '../services/traeService';
 import type { TraePlatformId } from '../services/traeService';
 import {
   getFloatingCardContext,
+  resizeCurrentFloatingCardWindow,
   hideCurrentFloatingCardWindow,
   hideFloatingCardWindow,
   saveFloatingCardPosition,
@@ -101,6 +102,8 @@ import {
   resolveCurrentOrMostRecentAccount,
 } from '../utils/floatingCardSelectors';
 import { changeLanguage, normalizeLanguage } from '../i18n';
+import { useFloatingCardAppearance } from '../hooks/useFloatingCardAppearance';
+import { floatingCardTargetHeight, nextFloatingCardOpacity } from '../utils/floatingCardAppearance';
 import {
   ACCOUNTS_CHANGED_EVENT,
   ACTIVE_PLATFORM_FOCUS_EVENT,
@@ -116,8 +119,6 @@ const windowInstance = getCurrentWindow();
 const FLOATING_CARD_WINDOW_LABEL = 'floating-card';
 const INSTANCE_FLOATING_CARD_WINDOW_LABEL_PREFIX = 'instance-floating-card-';
 const DEFAULT_INSTANCE_ID = '__default__';
-const FLOATING_CARD_BASE_HEIGHT = 290;
-const FLOATING_CARD_MAX_HEIGHT = 520;
 const FLOATING_CARD_NO_DRAG_SELECTOR =
   'button, select, input, textarea, a, option, [role="button"], [data-floating-card-no-drag="true"]';
 
@@ -238,6 +239,7 @@ function findInstanceById(instances: InstanceProfile[], instanceId: string): Ins
 }
 
 export function FloatingCardWindow() {
+  useCodexQuotaSync();
   const { t } = useTranslation();
   const currentWindowLabel = windowInstance.label;
   const isPrimaryFloatingCardWindow = currentWindowLabel === FLOATING_CARD_WINDOW_LABEL;
@@ -304,6 +306,8 @@ export function FloatingCardWindow() {
     currentAccountId: zedCurrentId,
   } = useZedAccountStore();
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const minimalBodyRef = useRef<HTMLDivElement | null>(null);
+  const appearance = useFloatingCardAppearance();
   const previousInstanceContextRef = useRef<FloatingCardInstanceContext | null>(null);
   const [displayGroups, setDisplayGroups] = useState<DisplayGroup[]>([]);
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformId>(loadInitialPlatform);
@@ -1484,21 +1488,15 @@ export function FloatingCardWindow() {
     let cancelled = false;
     const frameId = window.requestAnimationFrame(() => {
       if (cancelled) return;
-      const contentHeight = Math.max(
-        shell.scrollHeight,
-        document.documentElement.scrollHeight,
-        document.body.scrollHeight,
-      );
-      const targetHeight = Math.max(
-        FLOATING_CARD_BASE_HEIGHT,
-        Math.min(FLOATING_CARD_MAX_HEIGHT, Math.ceil(contentHeight)),
-      );
+      const contentHeight = appearance.minimal
+        ? (minimalBodyRef.current?.scrollHeight ?? 0) + (shell.querySelector('.floating-card-header')?.getBoundingClientRect().height ?? 30) + 2
+        : Math.max(shell.scrollHeight, document.documentElement.scrollHeight, document.body.scrollHeight);
+      const targetHeight = floatingCardTargetHeight(appearance.minimal, contentHeight, closeConfirmOpen);
       if (Math.abs(targetHeight - window.innerHeight) <= 2) {
         return;
       }
 
-      void windowInstance
-        .setSize(new LogicalSize(window.innerWidth, targetHeight))
+      void resizeCurrentFloatingCardWindow(targetHeight)
         .catch((error) => console.error('Failed to resize floating card window:', error));
     });
 
@@ -1508,6 +1506,9 @@ export function FloatingCardWindow() {
     };
   }, [
     accountIndex,
+    appearance.minimal,
+    appearance.error,
+    closeConfirmOpen,
     accounts.length,
     currentAccount?.id,
     errorText,
@@ -1522,7 +1523,8 @@ export function FloatingCardWindow() {
   ]);
 
   return (
-    <div className="floating-card-window">
+    <div className={`floating-card-window${appearance.minimal ? ' floating-card-window--minimal' : ''}`}
+      style={{ '--floating-card-background-opacity': appearance.backgroundOpacity } as CSSProperties}>
       <div className="floating-card-shell" ref={shellRef} onMouseDown={handleWindowDragStart}>
         <div className="floating-card-header">
           <div className="floating-card-header-main">
@@ -1531,6 +1533,18 @@ export function FloatingCardWindow() {
           </div>
 
           <div className="floating-card-header-actions">
+            <button type="button" className="floating-card-icon-button" disabled={appearance.busy}
+              onClick={() => void appearance.update({ minimal: !appearance.minimal })}
+              title={t(`settings.general.${appearance.minimal ? 'floatingCardFull' : 'floatingCardMinimal'}`)}
+              aria-label={t(`settings.general.${appearance.minimal ? 'floatingCardFull' : 'floatingCardMinimal'}`)}>
+              {appearance.minimal ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
+            </button>
+            <button type="button" className="floating-card-icon-button" disabled={appearance.busy}
+              onClick={() => void appearance.update({ backgroundOpacity: nextFloatingCardOpacity(appearance.backgroundOpacity) })}
+              title={t('settings.general.floatingCardOpacityValue', { value: Math.round(appearance.backgroundOpacity * 100) })}
+              aria-label={t('settings.general.floatingCardOpacityValue', { value: Math.round(appearance.backgroundOpacity * 100) })}>
+              <Blend size={15} />
+            </button>
             <button
               className="floating-card-icon-button"
               type="button"
@@ -1552,7 +1566,18 @@ export function FloatingCardWindow() {
           </div>
         </div>
 
-        <div className="floating-card-body">
+        {appearance.minimal && <div className="floating-card-minimal-body" ref={minimalBodyRef}>
+          <div className="floating-card-minimal-quotas" title={presentation ? maskAccountText(presentation.displayName) : platformLabel}>
+            {viewedAccount && visibleQuotaItems.length > 0 ? visibleQuotaItems.map((item) => (
+              <div className="floating-card-quota-top" key={item.key}>
+                <span className="floating-card-quota-label">{item.label}</span>
+                <span className={`floating-card-quota-value floating-card-quota-value--${item.quotaClass || 'high'}`}>{item.valueText || '--'}</span>
+              </div>
+            )) : <div className="floating-card-empty-text">{t(platformLoading ? 'common.loading' : !viewedAccount ? 'floatingCard.empty.title' : 'common.shared.quota.noData')}</div>}
+          </div>
+          {(errorText || appearance.error) && <div className="floating-card-error" role="alert">{errorText || t(appearance.error, { defaultValue: appearance.error })}</div>}
+        </div>}
+        <div className="floating-card-body floating-card-full-body">
           <div className="floating-card-hud-strip">
             <div className="floating-card-platform-slot">
               {platformLocked ? (
@@ -1702,6 +1727,7 @@ export function FloatingCardWindow() {
           )}
 
           {errorText ? <div className="floating-card-error">{errorText}</div> : null}
+          {appearance.error ? <div className="floating-card-error" role="alert">{t(appearance.error, { defaultValue: appearance.error })}</div> : null}
         </div>
 
         <div className="floating-card-footer">
@@ -1772,6 +1798,7 @@ export function FloatingCardWindow() {
               <div className="floating-card-close-confirm-title">
                 {t('floatingCard.closeConfirm.title', '关闭悬浮卡片？')}
               </div>
+              <div className="floating-card-close-confirm-body">
               <div className="floating-card-close-confirm-message">
                 {t('floatingCard.closeConfirm.message', {
                   path: closeConfirmPath,
@@ -1786,6 +1813,7 @@ export function FloatingCardWindow() {
                 />
                 <span>{t('floatingCard.closeConfirm.dontAskAgain', '不再提示')}</span>
               </label>
+              </div>
               <div className="floating-card-close-confirm-actions">
                 <button
                   className="floating-card-button floating-card-button--secondary"

@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	defaultImagesMainModel      = "gpt-5.5"
+	defaultImagesMainModel      = "gpt-5.6-luna"
 	gptImage15Model             = "gpt-image-1.5"
 	defaultImagesToolModel      = "gpt-image-2.5"
 	legacyImagesToolModel       = "gpt-image-2"

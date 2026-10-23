@@ -16,7 +16,7 @@ function account(message: string): CodexAccount {
 }
 
 test('local proxy errors and real token-refresh wrappers do not mark accounts abnormal', () => {
-  for (const code of ['PROXY_RUNTIME_LIMIT', 'PROXY_RUNTIME_BUSY', 'PROXY_RUNTIME_CAPACITY', 'PROXY_RUNTIME_READ_TIMEOUT', 'PROXY_ENGINE_START_FAILED', 'ENGINE_INSTALL_BUSY']) {
+  for (const code of ['PROXY_RUNTIME_LIMIT', 'PROXY_RUNTIME_BUSY', 'PROXY_RUNTIME_CAPACITY', 'PROXY_RUNTIME_READ_TIMEOUT', 'PROXY_ENGINE_START_FAILED', 'PROXY_ENGINE_CONFIG_INVALID', 'ENGINE_INSTALL_BUSY']) {
     for (const prefix of ['', 'Token 已过期且刷新失败: ', 'Token 已过期，刷新 Token 失败: Token 已过期且刷新失败: ']) {
       const value = account(prefix + code);
       assert.equal(isLocalCodexProxyError(value.quota_error?.message), true);
@@ -62,4 +62,5 @@ test('runtime messages distinguish busy, active capacity and read failure', () =
   assert.equal(proxyErrorKey('PROXY_RUNTIME_CAPACITY'), 'codex.proxy.runtimeCapacity');
   assert.equal(proxyErrorKey('PROXY_RUNTIME_FAILED'), 'codex.proxy.runtimeReadFailed');
   assert.equal(proxyErrorKey('PROXY_RUNTIME_READ_TIMEOUT'), 'codex.proxy.runtimeReadFailed');
+  assert.equal(proxyErrorKey('PROXY_ENGINE_CONFIG_INVALID', 'probeFailed'), 'codex.proxy.catalog.reasonInvalid');
 });

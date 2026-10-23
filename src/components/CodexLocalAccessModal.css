@@ -1444,6 +1444,54 @@
   color: var(--text-primary);
 }
 
+.codex-local-access-modal .codex-local-access-payload-details {
+  position: relative;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.codex-local-access-modal .codex-local-access-payload-details > summary {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  list-style: none;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 6px;
+  color: var(--text-primary);
+  background: transparent;
+  font-family: inherit;
+}
+
+.codex-local-access-modal .codex-local-access-payload-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.codex-local-access-modal .codex-local-access-payload-details > summary:hover {
+  background: var(--bg-hover);
+}
+
+.codex-local-access-modal .codex-local-access-payload-details > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.codex-local-access-modal .codex-local-access-payload-chevron {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.codex-local-access-modal .codex-local-access-payload-details[open] .codex-local-access-payload-chevron {
+  transform: rotate(180deg);
+}
+
+.codex-local-access-modal .codex-local-access-payload-details-body {
+  padding-top: 10px;
+}
+
 .codex-local-access-section-title svg {
   flex-shrink: 0;
   color: var(--primary);
@@ -2614,6 +2662,12 @@
   display: none;
 }
 
+.codex-local-access-member-mainline .tier-badge.chatgpt-plan,
+.codex-local-access-account-stat-main .tier-badge.chatgpt-plan {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .codex-local-access-member-mainline .tier-badge.free,
 .codex-local-access-account-stat-main .tier-badge.free {
   background: var(--plan-free-bg);
@@ -2643,9 +2697,9 @@
 }
 
 .codex-local-access-member-mainline
-  .tier-badge.pro:not(.codex-pro-lite):not(.codex-pro-max),
+  .tier-badge.pro:not(.codex-pro-lite):not(.codex-pro-max):not(.codex-pro-500),
 .codex-local-access-account-stat-main
-  .tier-badge.pro:not(.codex-pro-lite):not(.codex-pro-max) {
+  .tier-badge.pro:not(.codex-pro-lite):not(.codex-pro-max):not(.codex-pro-500) {
   background: var(--plan-pro-bg);
   color: var(--plan-pro-color);
   border: 1px solid var(--plan-pro-border);
@@ -3379,3 +3433,36 @@
 .codex-local-access-grok-member-error {
   color: var(--danger, #dc2626);
 }
+
+/* Keep action failures visible while the settings body scrolls. */
+.codex-local-access-error-area {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: min(25vh, 160px);
+  margin: 0 20px 12px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+
+.codex-local-access-error-area .codex-local-access-inline-error {
+  margin-bottom: 0;
+}
+.codex-official-member-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-surface));
+}
+.codex-official-member-hint p { flex: 1 1 260px; margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+
+/* Split the existing 18rem identity slot; priority/image/plan columns keep their positions. */
+.codex-member-identity-slot { flex: 0 0 18rem; width: 18rem; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.codex-local-access-member-list .codex-member-identity-slot .group-account-email { flex: 1 1 0; min-width: 0; width: auto; max-width: none; }
+.codex-member-access-mode { flex: 0 0 98px; width: 98px; }
+.codex-member-access-mode .single-select-dropdown-trigger { min-height: 30px; padding: 5px 8px; font-size: 12px; }

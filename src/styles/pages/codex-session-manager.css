@@ -924,13 +924,50 @@
   box-shadow: 0 10px 24px -24px rgba(15, 23, 42, 0.42);
 }
 
+.codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__search {
+  grid-template-columns: minmax(0, 1fr) auto minmax(120px, 160px);
+}
+
+.codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__kind-filter.single-select-dropdown {
+  width: 100%;
+  min-width: 0;
+}
+
 .codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__actions {
-  gap: 9px 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__action-group {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+}
+
+.codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__action-group.is-selection {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 .codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__action-button {
+  flex: 0 1 auto;
+  min-width: 0;
   min-height: 36px;
+  height: auto;
+  padding: 8px 12px;
+  white-space: normal;
+  text-align: center;
   border-radius: 10px;
+}
+
+.codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__action-button.btn-danger:disabled {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-muted);
 }
 
 .codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__list {
@@ -1064,6 +1101,18 @@
   }
 }
 
+@media (max-width: 560px) {
+  .codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__search {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__kind-filter.single-select-dropdown {
+    grid-column: 1 / -1;
+    width: min(160px, 100%);
+    justify-self: start;
+  }
+}
+
 @media (max-width: 480px) {
   .codex-session-manager:not(.codebuddy-session-manager) .codex-session-usage-summary__metrics,
   .codex-session-manager:not(.codebuddy-session-manager) .codex-session-usage__cards {
@@ -1122,8 +1171,10 @@
   width: min(560px, calc(100vw - 32px));
 }
 
-.codex-session-import-modal {
+.modal.codex-session-import-modal {
   width: min(820px, calc(100vw - 32px));
+  max-width: 820px;
+  max-height: calc(100vh - 32px);
 }
 
 .codex-session-export-modal {
@@ -1221,6 +1272,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: 0;
   max-height: 68vh;
   overflow: auto;
 }
@@ -1251,6 +1303,85 @@
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-secondary);
+}
+
+.codex-session-import-mappings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+}
+
+.codex-session-import-mappings__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.codex-session-import-mappings__intro p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.codex-session-import-mappings__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codex-session-import-mappings__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.codex-session-import-mappings__source {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.codex-session-import-mappings__target {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.codex-session-import-mappings__target:focus {
+  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  border-color: var(--primary);
+}
+
+.codex-session-import-mappings__target:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.codex-session-import-mappings__target[aria-invalid="true"] {
+  border-color: var(--danger, #dc2626);
+}
+
+.codex-session-import-mappings__error {
+  grid-column: 1 / -1;
+  color: var(--danger, #dc2626);
+  font-size: 12px;
 }
 
 .codex-session-export-modal__hint {
@@ -1965,6 +2096,10 @@
   .codex-session-import-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .codex-session-import-mappings__row {
+    grid-template-columns: 1fr;
   }
 
   .codex-session-import-row__right {

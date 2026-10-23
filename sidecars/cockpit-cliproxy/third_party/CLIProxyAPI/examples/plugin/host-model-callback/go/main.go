@@ -71,7 +71,7 @@ import (
 )
 
 const (
-	defaultModel        = "gpt-5.5"
+	defaultModel        = "gpt-5.6-sol"
 	defaultPrompt       = "Summarize host model callbacks in one short sentence."
 	pluginName          = "host-model-callback"
 	resourcePath        = "/status"

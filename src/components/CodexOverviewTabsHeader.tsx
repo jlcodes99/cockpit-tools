@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import {
   PlatformOverviewTabsHeader,
   PlatformOverviewTab,
@@ -8,6 +8,7 @@ import { CODEX_SUITE_ENSURE_MOUNTED_EVENT } from '../utils/codexAddAccountReques
 export type CodexTab = PlatformOverviewTab;
 
 interface CodexOverviewTabsHeaderProps {
+  pageRegistry?: { id: CodexTab; label: string; icon: ReactNode }[];
   active: CodexTab;
   onTabChange?: (tab: CodexTab) => void;
   tabs?: CodexTab[];
@@ -19,6 +20,7 @@ export function CodexOverviewTabsHeader({
   onTabChange,
   tabs,
   tabPlacement,
+  pageRegistry,
 }: CodexOverviewTabsHeaderProps) {
   useEffect(() => {
     if (!onTabChange) return;
@@ -31,6 +33,7 @@ export function CodexOverviewTabsHeader({
 
   return (
     <PlatformOverviewTabsHeader
+      pageRegistry={pageRegistry}
       platform="codex"
       active={active}
       onTabChange={onTabChange}

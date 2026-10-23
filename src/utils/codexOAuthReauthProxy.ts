@@ -1,5 +1,5 @@
 import type { CodexAccount } from '../types/codex';
-import { canUseCodexAccountProxy } from './codexAccountProxy';
+import { canUseCodexOAuthAccountProxy } from './codexAccountProxy';
 import { proxySummary } from './codexProxyPresentation';
 
 /** 后端返回的出口外观；字段与账号响应里的脱敏摘要保持一致。 */
@@ -26,7 +26,7 @@ export interface CodexOAuthProxyUse {
  * 重新授权已有账号是否默认沿用该账号生效出口。
  *
  * 首次添加没有账号记录，macOS 当前构建不支持内置授权窗口代理，
- * 非普通 OAuth 账号也没有账号代理，这几种情况都保持原有默认行为。
+ * API 卡片的代理只控制桌面启动，不用于 OAuth 授权，这几种情况都保持原有默认行为。
  */
 export function shouldDefaultReauthProxy(options: {
   active: boolean;
@@ -34,7 +34,7 @@ export function shouldDefaultReauthProxy(options: {
   account: CodexAccount | null | undefined;
 }): boolean {
   if (!options.active || options.isMacOS || !options.account) return false;
-  return canUseCodexAccountProxy(options.account);
+  return canUseCodexOAuthAccountProxy(options.account);
 }
 
 /**

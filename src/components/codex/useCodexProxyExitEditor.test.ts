@@ -13,6 +13,7 @@ function editorHarness() {
   });
   const h = loadHookModule(new URL('./useCodexProxyExitEditor.ts', import.meta.url), {
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+    '../../services/codexProxyTargetService': { applyCodexProxyAccountSnapshot: (value: unknown) => applied.push(value), updateCodexProxyAccount: async () => ({}) },
     '../../stores/useCodexAccountStore': { useCodexAccountStore: store },
     '../../utils/codexAccountProxy': { canUseCodexAccountProxy: () => true },
     '../../utils/privacy': {},
@@ -38,7 +39,7 @@ function editorHarness() {
       sources: [{ id: 'source', nodes: [{ id: 'node', supported: true }], groups: [] }],
     } }) },
   });
-  return { ...h, requests, cancelled, writes, applied, select: (id: string) => h.render(() => h.exports.useCodexProxyExitEditor(id)) };
+  return { ...h, accounts, requests, cancelled, writes, applied, select: (id: string) => h.render(() => h.exports.useCodexProxyExitEditor(id)) };
 }
 
 for (const fail of [false, true]) {
@@ -149,4 +150,18 @@ test('a failed optional exit check leaves a valid draft saveable without another
   assert.equal(h.flush().savedBinding, account.egress_proxy);
   assert.deepEqual(h.applied, [account]);
   h.unmount();
+});
+
+
+test('unreadable or loading API target cannot persist an independent draft or direct mode', () => {
+  for (const state of ['proxyTargetLoading', 'proxyTargetError']) {
+    const h = editorHarness();
+    Object.assign(h.accounts[0], { auth_mode: 'apikey', [state]: true });
+    h.select('A').select({ sourceId: 'source', itemId: 'node', groupId: '', selections: {} });
+    assert.equal(h.flush().selectionReady, false);
+    h.flush().save(); h.flush().unbind(true); h.flush().test();
+    assert.equal(h.writes.length, 0); assert.equal(h.requests.length, 0);
+    assert.equal(h.flush().busy, '');
+    h.unmount();
+  }
 });

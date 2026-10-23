@@ -4,7 +4,7 @@ import { deferred, loadHookModule, settlePromises } from '../../tests/helpers/re
 import * as previewUtils from '../utils/codexProxyPreview';
 import * as prerequisites from '../utils/codexProxyEnginePrerequisite';
 import { createCodexProxyStatusEvents, type CodexProxyStatusUpdate } from '../utils/codexProxyStatusEvents';
-import type { CodexProxyRuntimeStatus } from './codexAccountProxyService';
+import { proxyErrorKey, type CodexProxyRuntimeStatus } from './codexAccountProxyService';
 
 const measured: CodexProxyRuntimeStatus = { account: 'running', desktop: 'running', accountPort: 1234, desktopPort: 1234,
   accountSelection: { name: 'node', delayMs: 200, checkedAt: 100 } };
@@ -52,4 +52,15 @@ for (const readFails of [false, true]) test(`failed measurement refreshes shared
   assert.equal(h.updates[0].status?.accountSelection?.delayMs ?? null, null);
   assert.equal(h.updates[0].status?.accountSelection?.checkedAt ?? null, readFails ? null : 101);
   assert.equal(h.service.proxyErrorKey('PROXY_LATENCY_NOT_RUNNING', 'probeFailed'), 'codex.proxy.currentLatencyNotRunning');
+});
+
+
+test('legacy and current target errors use ordinary proxy translations', () => {
+  for (const [code, key] of [
+    ['CLIENT_PROXY_BOUND_OAUTH_MISSING', 'boundAccountUnavailable'],
+    ['CLIENT_PROXY_BOUND_PROXY_MISSING', 'boundProxyUnavailable'],
+    ['CLIENT_PROXY_STALE', 'sourceUnavailable'],
+    ['CLIENT_PROXY_STORAGE', 'runtimeReadFailed'],
+    ['CLIENT_PROXY_TIMEOUT', 'operationTimeout'],
+  ]) assert.equal(proxyErrorKey(code), `codex.proxy.${key}`);
 });

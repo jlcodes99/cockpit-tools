@@ -107,6 +107,9 @@ func TestCodexWebsocketsExecutorRestoresMultiAgentV2NamespaceAcrossIncrementalTu
 				t.Fatalf("first upstream namespace = %q, want collaboration-optimize", namespace)
 			}
 			assertCodexSpawnAgentClientNamespace(t, firstClientPayload)
+			if !strings.Contains(string(firstClientPayload), `"encrypted_function_args":[]`) {
+				t.Fatalf("first plaintext call missing metadata: %s", firstClientPayload)
+			}
 
 			secondRequest := []byte(`{"model":"gpt-5.4","previous_response_id":"resp_1","input":[{"type":"function_call_output","call_id":"call_1","output":"done"}]}`)
 			secondClientPayload := execute(secondRequest)
@@ -115,6 +118,9 @@ func TestCodexWebsocketsExecutorRestoresMultiAgentV2NamespaceAcrossIncrementalTu
 				t.Fatalf("incremental upstream request unexpectedly contains collaboration tools: %s", secondUpstreamPayload)
 			}
 			assertCodexSpawnAgentClientNamespace(t, secondClientPayload)
+			if !strings.Contains(string(secondClientPayload), `"encrypted_function_args":[]`) {
+				t.Fatalf("incremental call lost the same connection's plaintext policy: %s; upstream=%s", secondClientPayload, secondUpstreamPayload)
+			}
 
 			conflictingRequest := []byte(`{"model":"gpt-5.4","tools":[{"type":"namespace","name":"collaboration-optimize","tools":[{"type":"function","name":"spawn_agent","description":"User-defined tool."}]}],"input":[{"type":"message","role":"user","content":"use the user-defined namespace"}]}`)
 			conflictingClientPayload := execute(conflictingRequest)
@@ -134,6 +140,9 @@ func TestCodexWebsocketsExecutorRestoresMultiAgentV2NamespaceAcrossIncrementalTu
 			}
 			if !strings.Contains(string(fourthClientPayload), `"namespace":"collaboration-optimize"`) {
 				t.Fatalf("user-defined namespace was rewritten on the post-conflict incremental turn: %s", fourthClientPayload)
+			}
+			if strings.Contains(string(conflictingClientPayload), `"encrypted_function_args":[]`) || strings.Contains(string(fourthClientPayload), `"encrypted_function_args":[]`) {
+				t.Fatal("unknown declarations inherited a stale plaintext policy")
 			}
 
 			fifthClientPayload := execute(codexSpawnAgentTestPayload())
@@ -194,10 +203,9 @@ func TestCodexWebsocketsExecutorOptimizeMultiAgentV2(t *testing.T) {
 	}))
 	defer server.Close()
 
-	auth := &cliproxyauth.Auth{Attributes: map[string]string{
+	auth := &cliproxyauth.Auth{Provider: "codex", Attributes: map[string]string{
 		"base_url": server.URL,
-		"api_key":  "test",
-	}}
+	}, Metadata: map[string]any{"access_token": "synthetic-access"}}
 	req := cliproxyexecutor.Request{Model: "gpt-5.4", Payload: codexSpawnAgentTestPayload()}
 	opts := cliproxyexecutor.Options{
 		SourceFormat: sdktranslator.FromString("openai-response"),

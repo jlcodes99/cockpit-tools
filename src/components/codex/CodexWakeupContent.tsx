@@ -31,7 +31,9 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEscClose } from '../../hooks/useEscClose';
+import { useEscCloseTopmost } from '../../hooks/useEscClose';
+import { codexBackgroundError } from '../../utils/codexBackgroundError';
+import { DEFAULT_WAKEUP_MODEL } from '../../utils/codexTestModel';
 import {
   CodexAccount,
   getCodexEffectiveQuotaPercentages,
@@ -75,6 +77,8 @@ import {
   maskSensitiveValue,
   PRIVACY_MODE_CHANGED_EVENT,
 } from '../../utils/privacy';
+import { useWakeupModalFocus } from './useWakeupModalFocus';
+import { useWakeupTaskValidation } from './useWakeupTaskValidation';
 import { isReducedMotionEnabled } from '../../utils/reducedMotion';
 
 const WAKEUP_ACCOUNT_PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
@@ -239,9 +243,8 @@ const WEEKDAY_OPTIONS = [
 
 const DEFAULT_PROMPT = 'hi';
 const QUICK_TIME_OPTIONS = ['07:00', '08:00', '09:00', '10:00', '14:00', '18:00', '22:00'];
-const REASONING_EFFORT_OPTIONS: CodexWakeupReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+const REASONING_EFFORT_OPTIONS: CodexWakeupReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 // 所有唤醒默认落在 GPT-5.6 Luna；5.5 之前的模型不再作为唤醒目标。
-const DEFAULT_WAKEUP_MODEL = 'gpt-5.6-luna';
 const DEFAULT_WAKEUP_REASONING_EFFORT: CodexWakeupReasoningEffort = 'medium';
 const QUOTA_RESET_MIN_REFRESH_MINUTES = 2;
 const MAX_STARTUP_DELAY_MINUTES = 1440;
@@ -1033,6 +1036,7 @@ export function CodexWakeupContent({
       buildCodexPlanFilterOptions(wakeupTierCounts, {
         includeError: false,
         pendingLabel: t('codex.pendingAuth.badge', '待授权'),
+        chatgptPlanLabel: t('chatgptPlan.title'),
       }),
     [t, wakeupTierCounts],
   );
@@ -1076,6 +1080,8 @@ export function CodexWakeupContent({
     scrollKey: taskModalErrorScrollKey,
     set: setTaskModalError,
   } = useModalErrorState();
+  const taskValidation = useWakeupTaskValidation(taskDraft, showTaskModal);
+  useEffect(() => { setTaskModalError(null); }, [taskDraft, showTaskModal, setTaskModalError]);
   const [taskAccountFilters, setTaskAccountFilters] = useState<AccountPickerFilters>(createEmptyAccountPickerFilters());
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [presetModalSource, setPresetModalSource] = useState<'task' | 'test' | 'page'>('page');
@@ -1127,6 +1133,9 @@ export function CodexWakeupContent({
   );
   const [runtimeConfigDirty, setRuntimeConfigDirty] = useState(false);
   const [runtimeGuideConfigError, setRuntimeGuideConfigError] = useState<string | null>(null);
+  const modalFocus = useWakeupModalFocus({ task: showTaskModal, test: showTestModal,
+    history: showHistoryModal, results: Boolean(executionSession), preset: showPresetModal,
+    runtime: showRuntimeGuideModal }, taskValidation.dialog);
   const showCodexCliInput = true;
   const showNodeInput = true;
   const showRuntimeConfigCard = true;
@@ -2243,11 +2252,11 @@ export function CodexWakeupContent({
     setTestModelReasoningEffort(resolvedModelSelection.modelReasoningEffort);
   }, [cancelRunningTest, resolvedModelSelection, testing]);
 
-  useEscClose(showRuntimeGuideModal, closeRuntimeGuideModal);
-  useEscClose(showPresetModal, closePresetModal);
-  useEscClose(showTaskModal, closeTaskModal);
-  useEscClose(showTestModal, closeTestModal);
-  useEscClose(showHistoryModal, () => setShowHistoryModal(false));
+  useEscCloseTopmost(showRuntimeGuideModal && modalFocus.top === 'runtime', closeRuntimeGuideModal, modalFocus.runtime);
+  useEscCloseTopmost(showPresetModal && modalFocus.top === 'preset', closePresetModal, modalFocus.preset);
+  useEscCloseTopmost(showTaskModal && modalFocus.top === 'task', closeTaskModal, modalFocus.task);
+  useEscCloseTopmost(showTestModal && modalFocus.top === 'test', closeTestModal, modalFocus.test);
+  useEscCloseTopmost(showHistoryModal && modalFocus.top === 'history', () => setShowHistoryModal(false), modalFocus.history);
 
   const persistTasks = useCallback(
     async (
@@ -2311,28 +2320,30 @@ export function CodexWakeupContent({
   );
 
   const handleSaveTask = useCallback(async () => {
+    setTaskModalError(null);
+    taskValidation.clear();
     const trimmedName = taskDraft.name.trim();
     if (!trimmedName) {
-      setTaskModalError(t('codex.wakeup.taskNameRequired'));
+      taskValidation.report('name', t('codex.wakeup.taskNameRequired'));
       return;
     }
     if (taskDraft.accountIds.length === 0) {
-      setTaskModalError(t('codex.wakeup.taskAccountsRequired'));
+      taskValidation.report('accounts', t('codex.wakeup.taskAccountsRequired'));
       return;
     }
     if (!selectedTaskPreset) {
-      setTaskModalError(t('codex.wakeup.taskModelRequired'));
+      taskValidation.report('model', t('codex.wakeup.taskModelRequired'));
       return;
     }
     if (
       !taskDraft.modelReasoningEffort ||
       !selectedTaskPreset.allowed_reasoning_efforts.includes(taskDraft.modelReasoningEffort)
     ) {
-      setTaskModalError(t('codex.wakeup.taskReasoningEffortRequired'));
+      taskValidation.report('reasoning', t('codex.wakeup.taskReasoningEffortRequired'));
       return;
     }
     if (taskDraft.scheduleKind === 'weekly' && taskDraft.weeklyDays.length === 0) {
-      setTaskModalError(t('codex.wakeup.weeklyDaysRequired'));
+      taskValidation.report('weeklyDays', t('codex.wakeup.weeklyDaysRequired'));
       return;
     }
     setTaskModalError(null);
@@ -2352,7 +2363,7 @@ export function CodexWakeupContent({
         : undefined;
     const nextAccountIds = filterExistingWakeupAccountIds(taskDraft.accountIds, oauthAccountIdSet);
     if (nextAccountIds.length === 0) {
-      setTaskModalError(t('codex.wakeup.taskAccountsRequired'));
+      taskValidation.report('accounts', t('codex.wakeup.taskAccountsRequired'));
       return;
     }
     const nextTask: CodexWakeupTask = {
@@ -2400,7 +2411,7 @@ export function CodexWakeupContent({
     } catch (error) {
       setTaskModalError(String(error));
     }
-  }, [oauthAccountIdSet, persistTasks, selectedTaskPreset, state.tasks, t, taskDraft]);
+  }, [oauthAccountIdSet, persistTasks, selectedTaskPreset, state.tasks, t, taskDraft, taskValidation.report, taskValidation.clear]);
 
   const handleRunTask = useCallback(
     async (task: CodexWakeupTask) => {
@@ -2823,8 +2834,9 @@ export function CodexWakeupContent({
       )}
 
       {showRuntimeGuideModal && (
-        <div className="modal-overlay">
+        <div className="modal-overlay" style={{ zIndex: 10030 }}>
           <div
+            ref={modalFocus.runtime} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="codex-wakeup-runtime-title"
             className="modal wakeup-modal codex-wakeup-runtime-guide-modal"
             onClick={(event) => event.stopPropagation()}
           >
@@ -2838,8 +2850,8 @@ export function CodexWakeupContent({
               >
                 <ChevronLeft size={14} />
               </button>
-              <h2>{runtimeGuideTitle}</h2>
-              <button className="modal-close" onClick={closeRuntimeGuideModal} disabled={runtimeGuideRefreshing}>
+              <h2 id="codex-wakeup-runtime-title">{runtimeGuideTitle}</h2>
+              <button className="modal-close" aria-label={t('common.close')} onClick={closeRuntimeGuideModal} disabled={runtimeGuideRefreshing}>
                 <X />
               </button>
             </div>
@@ -2930,7 +2942,7 @@ export function CodexWakeupContent({
 
       {showPresetModal && (
         <div className="modal-overlay codex-wakeup-preset-overlay">
-          <div className="modal modal-lg wakeup-modal codex-wakeup-modal" onClick={(event) => event.stopPropagation()}>
+          <div ref={modalFocus.preset} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="codex-wakeup-preset-title" className="modal modal-lg wakeup-modal codex-wakeup-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               {presetModalSource !== 'page' && (
                 <button
@@ -2943,8 +2955,8 @@ export function CodexWakeupContent({
                   <ChevronLeft size={14} />
                 </button>
               )}
-              <h2>{t('codex.wakeup.presetManagerTitle')}</h2>
-              <button className="modal-close" onClick={closePresetModal} disabled={saving}>
+              <h2 id="codex-wakeup-preset-title">{t('codex.wakeup.presetManagerTitle')}</h2>
+              <button className="modal-close" aria-label={t('common.close')} onClick={closePresetModal} disabled={saving}>
                 <X />
               </button>
             </div>
@@ -3087,28 +3099,32 @@ export function CodexWakeupContent({
 
       {showTaskModal && (
         <div className="modal-overlay">
-          <div className="modal modal-lg wakeup-modal codex-wakeup-modal" onClick={(event) => event.stopPropagation()}>
+          <div ref={taskValidation.dialog} role="dialog" aria-modal="true" aria-labelledby="codex-wakeup-task-title" tabIndex={-1} className="modal modal-lg wakeup-modal codex-wakeup-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <button className="btn btn-secondary icon-only" onClick={closeTaskModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
-              <h2>{taskDraft.id ? t('codex.wakeup.editTaskTitle') : t('codex.wakeup.createTaskTitle')}</h2>
-              <button className="modal-close" onClick={closeTaskModal}>
+              <h2 id="codex-wakeup-task-title">{taskDraft.id ? t('codex.wakeup.editTaskTitle') : t('codex.wakeup.createTaskTitle')}</h2>
+              <button className="modal-close" aria-label={t('common.close')} onClick={closeTaskModal}>
                 <X />
               </button>
             </div>
             <div className="modal-body codex-wakeup-modal-body">
               <ModalErrorMessage message={taskModalError} scrollKey={taskModalErrorScrollKey} />
-              <div className="wakeup-form-group">
-                <label>{t('codex.wakeup.taskNameLabel')}</label>
+              <div className="wakeup-form-group" data-wakeup-field="name">
+                <label htmlFor="codex-wakeup-task-name">{t('codex.wakeup.taskNameLabel')}</label>
                 <input
+                  id="codex-wakeup-task-name"
                   className="wakeup-input"
+                  aria-invalid={taskValidation.invalid('name')}
+                  aria-describedby={taskValidation.invalid('name') ? 'wakeup-field-name-error' : undefined}
                   value={taskDraft.name}
                   onChange={(event) => setTaskDraft((current) => ({ ...current, name: event.target.value }))}
                   placeholder={t('codex.wakeup.taskNamePlaceholder')}
                 />
+                {taskValidation.message('name')}
               </div>
 
               <div className="wakeup-form-group">
-                <label>{t('common.status', '状态')}</label>
+                <label>{t('common.status')}</label>
                 <div className="wakeup-toggle-group">
                   <button
                     className={`btn btn-secondary ${taskDraft.enabled ? 'is-active' : ''}`}
@@ -3125,8 +3141,9 @@ export function CodexWakeupContent({
                 </div>
               </div>
 
-              <div className="wakeup-form-group">
+              <div className="wakeup-form-group" data-wakeup-field="accounts" tabIndex={-1}>
                 <label>{t('codex.wakeup.taskAccountsLabel')}</label>
+                {taskValidation.message('accounts')}
                 <p className="wakeup-hint">{t('codex.wakeup.taskAccountsHint')}</p>
                 {renderAccountPickerFilters(
                   taskAccountFilters,
@@ -3195,7 +3212,8 @@ export function CodexWakeupContent({
                 </div>
                 <p className="wakeup-hint">{t('codex.wakeup.taskModelHint')}</p>
                 <div className="codex-wakeup-dual-select">
-                  <div className="codex-wakeup-dual-select-field">
+                  <div className="codex-wakeup-dual-select-field" data-wakeup-field="model" tabIndex={-1}>
+                    {taskValidation.message('model')}
                     <WakeupSingleSelectDropdown
                       value={taskDraft.modelPresetId}
                       options={modelPresetOptions}
@@ -3203,7 +3221,8 @@ export function CodexWakeupContent({
                       onSelect={handleSelectTaskPreset}
                     />
                   </div>
-                  <div className="codex-wakeup-dual-select-field codex-wakeup-dual-select-field-compact">
+                  <div className="codex-wakeup-dual-select-field codex-wakeup-dual-select-field-compact" data-wakeup-field="reasoning" tabIndex={-1}>
+                    {taskValidation.message('reasoning')}
                     <WakeupSingleSelectDropdown
                       value={taskDraft.modelReasoningEffort}
                       options={taskReasoningOptions}
@@ -3359,8 +3378,9 @@ export function CodexWakeupContent({
 
               {taskDraft.scheduleKind === 'weekly' && (
                 <>
-                  <div className="wakeup-form-group">
+                  <div className="wakeup-form-group" data-wakeup-field="weeklyDays" tabIndex={-1}>
                     <label>{t('codex.wakeup.weeklyDaysLabel')}</label>
+                    {taskValidation.message('weeklyDays')}
                     <div className="wakeup-chip-grid">
                       {WEEKDAY_OPTIONS.map((item) => {
                         const active = taskDraft.weeklyDays.includes(item.value);
@@ -3510,11 +3530,11 @@ export function CodexWakeupContent({
 
       {showTestModal && (
         <div className="modal-overlay">
-          <div className="modal modal-lg wakeup-modal wakeup-test-modal codex-wakeup-modal" onClick={(event) => event.stopPropagation()}>
+          <div ref={modalFocus.test} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="codex-wakeup-test-title" className="modal modal-lg wakeup-modal wakeup-test-modal codex-wakeup-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <button className="btn btn-secondary icon-only" onClick={closeTestModal} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
-              <h2>{t('codex.wakeup.testTitle')}</h2>
-              <button className="modal-close" onClick={closeTestModal}>
+              <h2 id="codex-wakeup-test-title">{t('codex.wakeup.testTitle')}</h2>
+              <button className="modal-close" aria-label={t('common.close')} onClick={closeTestModal}>
                 <X />
               </button>
             </div>
@@ -3653,11 +3673,11 @@ export function CodexWakeupContent({
 
       {showHistoryModal && (
         <div className="modal-overlay">
-          <div className="modal wakeup-modal wakeup-history-modal codex-wakeup-history-modal" onClick={(event) => event.stopPropagation()}>
+          <div ref={modalFocus.history} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="codex-wakeup-history-title" className="modal wakeup-modal wakeup-history-modal codex-wakeup-history-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <button className="btn btn-secondary icon-only" onClick={() => setShowHistoryModal(false)} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
-              <h2>{t('codex.wakeup.historyTitle')}</h2>
-              <button className="modal-close" onClick={() => setShowHistoryModal(false)}>
+              <h2 id="codex-wakeup-history-title">{t('codex.wakeup.historyTitle')}</h2>
+              <button className="modal-close" aria-label={t('common.close')} onClick={() => setShowHistoryModal(false)}>
                 <X />
               </button>
             </div>
@@ -3743,6 +3763,7 @@ export function CodexWakeupContent({
           className="modal-overlay"
         >
           <div
+            ref={modalFocus.results} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="codex-wakeup-results-title"
             className="modal codex-wakeup-modal codex-wakeup-results-modal"
             onClick={(event) => event.stopPropagation()}
           >
@@ -3754,9 +3775,10 @@ export function CodexWakeupContent({
                   setShowHistoryModal(true);
                 }} title={t('common.back', '返回')} aria-label={t('common.back', '返回')}><ChevronLeft size={14} /></button>
               )}
-              <h2>{t('codex.wakeup.resultsTitle')}</h2>
+              <h2 id="codex-wakeup-results-title">{t('codex.wakeup.resultsTitle')}</h2>
               <button
                 className="modal-close"
+                aria-label={t('common.close')}
                 onClick={() => { setExecutionSession(null); setExecutionSessionFromHistory(false); }}
                 disabled={executionSession.running}
               >
@@ -3764,7 +3786,7 @@ export function CodexWakeupContent({
               </button>
             </div>
             <div className="modal-body codex-wakeup-modal-body codex-wakeup-results-body">
-              <ModalErrorMessage message={executionSession.errorText} />
+              <ModalErrorMessage message={executionSession.errorText ? codexBackgroundError(executionSession.errorText, t) : undefined} />
               <section className="codex-wakeup-results-summary-bar">
                 <div className="codex-wakeup-results-summary-copy">
                   <div className="codex-wakeup-results-summary-head">
@@ -3921,7 +3943,7 @@ export function CodexWakeupContent({
                             ? t('codex.wakeup.executionRunningDesc')
                             : record.status === 'success'
                               ? record.reply || t('codex.wakeup.historyNoReply')
-                              : record.error || t('codex.wakeup.historyUnknownError')}
+                              : record.error ? codexBackgroundError(record.error, t) : t('codex.wakeup.historyUnknownError')}
                       </p>
                       <div className="codex-wakeup-execution-row-meta">
                         {record.timestamp && <span>{formatHistoryTimestamp(record.timestamp)}</span>}

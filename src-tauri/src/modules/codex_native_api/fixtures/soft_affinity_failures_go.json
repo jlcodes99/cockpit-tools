@@ -1,0 +1,21 @@
+[
+  {"name":"forbidden cyber policy is request scoped","status":403,"body":"{\"error\":{\"code\":\"cyber_policy\",\"type\":\"invalid_request_error\",\"message\":\"Policy rejected this prompt\"}}","skip":true},
+  {"name":"unauthorized generic invalid request is request scoped","status":401,"body":"{\"error\":{\"code\":\"invalid_request_error\",\"message\":\"Malformed request\"}}","skip":true},
+  {"name":"unauthorized authentication type wins generic request code","status":401,"body":"{\"error\":{\"code\":\"invalid_request_error\",\"type\":\"authentication_error\",\"message\":\"Invalid API key\"}}","skip":false},
+  {"name":"expired key remains credential failure","status":401,"body":"{\"error\":{\"code\":\"invalid_api_key\",\"message\":\"Expired API key\"}}","skip":false},
+  {"name":"payment status wins generic request body","status":402,"body":"{\"error\":{\"code\":\"invalid_request_error\",\"message\":\"Payment required\"}}","skip":false},
+  {"name":"quota status wins generic request body","status":429,"body":"{\"error\":{\"code\":\"invalid_request_error\",\"message\":\"Quota exhausted\"}}","skip":false},
+  {"name":"model not found wins generic request type","status":400,"body":"{\"error\":{\"code\":\"model_not_found\",\"type\":\"invalid_request_error\",\"message\":\"Model missing\"}}","skip":false},
+  {"name":"unsupported model message wins generic request type","status":400,"body":"{\"error\":{\"type\":\"invalid_request_error\",\"message\":\"requested model is not supported\"}}","skip":false},
+  {"name":"ordinary invalid parameter preserves affinity","status":400,"body":"{\"error\":{\"code\":\"invalid_request_error\",\"message\":\"Invalid parameter\"}}","skip":true},
+  {"name":"unpersisted item 404 preserves affinity","status":404,"body":"Item with id fixture-item not found. Items are not persisted when `store` is set to false.","skip":true},
+  {"name":"invalid grant wins generic request body","status":400,"body":"{\"error\":{\"code\":\"invalid_request_error\",\"message\":\"invalid_grant\"}}","skip":false},
+  {"name":"cloudflare wins generic request body","status":403,"body":"{\"error\":{\"code\":\"invalid_request_error\",\"message\":\"cloudflare challenge\"}}","skip":false},
+  {"name":"upstream overload unbinds","status":503,"body":"{\"error\":{\"type\":\"overloaded_error\",\"message\":\"Server overloaded\"}}","skip":false},
+  {"name":"generic request type on server status preserves affinity","status":503,"body":"{\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Request cannot be represented\"}}","skip":true},
+  {"name":"client cancellation preserves affinity","status":499,"kind":"context_cancelled","body":"context canceled","skip":true},
+  {"name":"classified connection lifecycle preserves affinity","status":503,"code":"connection_lifecycle","body":"websocket close 1000","skip":true},
+  {"name":"bad request usage limit code stays request scoped","status":400,"body":"{\"error\":{\"code\":\"usage_limit_reached\",\"message\":\"Usage limited\"}}","skip":true},
+  {"name":"bad request insufficient quota code stays request scoped","status":400,"body":"{\"error\":{\"code\":\"insufficient_quota\",\"message\":\"Quota is insufficient\"}}","skip":true},
+  {"name":"forbidden deactivated account with request type stays request scoped","status":403,"body":"{\"error\":{\"code\":\"account_deactivated\",\"type\":\"invalid_request_error\",\"message\":\"Account deactivated\"}}","skip":true}
+]

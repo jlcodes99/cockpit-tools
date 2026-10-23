@@ -102,42 +102,11 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
     ));
 
     #[cfg(target_os = "macos")]
-    {
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
-        use std::process::Command;
-
-        let encoded_payload = STANDARD.encode(&payload_json);
-        let keychain_value = format!("go-keyring-base64:{}", encoded_payload);
-
-        let _ = Command::new("security")
-            .args([
-                "delete-generic-password",
-                "-s",
-                "gemini",
-                "-a",
-                "antigravity",
-            ])
-            .output();
-
-        let output = Command::new("security")
-            .args([
-                "add-generic-password",
-                "-s",
-                "gemini",
-                "-a",
-                "antigravity",
-                "-w",
-                &keychain_value,
-                "-A",
-            ])
-            .output()
-            .map_err(|e| format!("执行 macOS Keychain 写入命令失败: {}", e))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("写入 macOS Keychain 失败: {}", stderr.trim()));
-        }
-    }
+    write_antigravity_keychain_payload(
+        &payload_json,
+        std::ffi::OsStr::new("security"),
+        std::time::Duration::from_secs(15),
+    )?;
 
     #[cfg(target_os = "windows")]
     {
@@ -169,7 +138,6 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
 
         #[link(name = "advapi32")]
         extern "system" {
-            fn CredDeleteW(target_name: *const u16, type_: u32, flags: u32) -> i32;
             fn CredWriteW(credential: *const CredentialW, flags: u32) -> i32;
         }
 
@@ -205,7 +173,7 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
         };
 
         unsafe {
-            let _ = CredDeleteW(target_wide.as_ptr(), CRED_TYPE_GENERIC, 0);
+            // CredWriteW replaces an existing target without deleting it first.
             if CredWriteW(&credential, 0) == 0 {
                 return Err(format!(
                     "写入 Windows Credential Manager 失败: {}",
@@ -217,33 +185,23 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
 
     #[cfg(target_os = "linux")]
     {
-        use std::io::Write;
-        use std::process::{Command, Stdio};
+        use std::process::Command;
 
-        let mut child = Command::new("secret-tool")
-            .args([
-                "store",
-                "--label=gemini",
-                "service",
-                "gemini",
-                "username",
-                "antigravity",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("启动 Linux secret-tool 失败: {}", e))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(payload_json.as_bytes())
-                .map_err(|e| format!("写入 Linux secret-tool 输入失败: {}", e))?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|e| format!("等待 Linux secret-tool 失败: {}", e))?;
+        let mut command = Command::new("secret-tool");
+        command.args([
+            "store",
+            "--label=gemini",
+            "service",
+            "gemini",
+            "username",
+            "antigravity",
+        ]);
+        let output = crate::modules::process_timeout::output_with_input_timeout(
+            &mut command,
+            payload_json.as_bytes(),
+            std::time::Duration::from_secs(15),
+        )
+        .map_err(|e| format!("执行 Linux secret-tool 写入命令失败: {}", e))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("Linux secret-tool 写入失败: {}", stderr.trim()));
@@ -251,6 +209,38 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
     }
 
     crate::modules::logger::log_info("[Antigravity 2.0] 系统凭据写入完成");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn write_antigravity_keychain_payload(
+    payload_json: &str,
+    program: &std::ffi::OsStr,
+    timeout: std::time::Duration,
+) -> Result<(), String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use std::process::Command;
+
+    let keychain_value = format!("go-keyring-base64:{}", STANDARD.encode(payload_json));
+    // Update in place so a failed write leaves the existing credential intact.
+    let mut command = Command::new(program);
+    command.args([
+        "add-generic-password",
+        "-U",
+        "-s",
+        "gemini",
+        "-a",
+        "antigravity",
+        "-w",
+        &keychain_value,
+        "-A",
+    ]);
+    let output = crate::modules::process_timeout::output_with_timeout(&mut command, timeout)
+        .map_err(|e| format!("执行 macOS Keychain 写入命令失败: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("写入 macOS Keychain 失败: {}", stderr.trim()));
+    }
     Ok(())
 }
 
@@ -352,3 +342,7 @@ pub fn read_antigravity_system_credential() -> Result<Option<AntigravitySystemCr
     };
     parse_antigravity_system_credential(&secret).map(Some)
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "antigravity_credential_tests.rs"]
+mod tests;

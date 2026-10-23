@@ -1,3 +1,4 @@
+import { reloadCodexProxyTargets } from '../services/codexProxyTargetService';
 import type { ProxyCatalog } from '../services/codexProxyCatalogService';
 import { useCodexAccountStore } from '../stores/useCodexAccountStore';
 
@@ -13,6 +14,7 @@ export async function refreshCodexProxyAccounts(): Promise<void> {
   const results = await Promise.allSettled([
     store.fetchAccounts({ throwOnError: true }),
     store.fetchCurrentAccount({ throwOnError: true }),
+    reloadCodexProxyTargets(),
   ]);
   const failed = results.find((result) => result.status === 'rejected');
   if (failed?.status === 'rejected') throw failed.reason;

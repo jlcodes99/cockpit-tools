@@ -1,4 +1,9 @@
-import { useState, useEffect, useMemo, useCallback, type ReactElement } from "react";
+import { prepareCodexServiceJoins } from "../utils/codexServiceJoin";
+import { chatGptPlanErrorKey, listChatGptPlanAccounts } from "../services/chatgptPlanService";
+import { canChooseCodexServiceAuthorization } from "../utils/codexAccountServiceNavigation";
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
+import { listenSafely as listen } from "../utils/tauriEventListener";
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactElement } from "react";
 import { RefreshCw, CircleAlert, Eye, EyeOff, Link2 } from "lucide-react";
 import * as codexService from "../services/codexService";
 import * as codexInstanceService from "../services/codexInstanceService";
@@ -11,7 +16,6 @@ import { buildCodexAccountPresentation } from "../presentation/platformAccountPr
 import { recoverCodexBatchImportStartFromPreview } from "../utils/codexBatchImportQueue";
 import { CodexSwitchAccountError } from "../utils/codexSwitchAuthFailure";
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
  import {
@@ -35,6 +39,7 @@ import { CODEX_API_PROVIDER_CUSTOM_ID, COCKPIT_API_PROVIDER_ID, findCodexApiProv
 import { APIKEY_FUN_PROVIDER_BASE_URL } from "../utils/apikeyFunLinks";
 import { APIKEY_FUN_PREFILL_EVENT, consumeApiKeyFunPrefill, type ApiKeyFunPrefillPayload } from "../utils/apiKeyFunPrefill";
 import { findCodexModelProviderById, findCodexModelProviderByBaseUrl, queryCodexModelProviderUsage, saveCodexModelProviderDetectedIntegrationType, type CodexModelProvider, upsertCodexModelProviderFromCredential } from "../services/codexModelProviderService";
+import { resolveCodexModelProviderForApiKey } from "../utils/codexModelProviderKeyConfig";
 import { buildCodexModelProviderAccountSnapshot, findCodexAccountsReferencingModelProvider, mergeCodexModelProviderCredentialInput } from "../utils/codexModelProviderAccountSync";
 import { CODEX_API_KEY_USAGE_REFRESHED_EVENT, readCodexApiKeyUsageCache, writeCodexApiKeyUsageCache, type CodexApiKeyUsageState } from "../services/codexApiKeyUsageRefreshService";
 import { isModelProviderUsageUnavailableError, listModelProviderModels } from "../services/modelProviderUsageService";
@@ -44,6 +49,8 @@ import { CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY, DEFAULT_CODEX_API_BASE_URL, DEF
 import { useCodexApiKeyUsageFormatting } from "./codexApiKeyUsageFormatting";
 import { renderCodexApiKeyUsagePanel } from "./codexApiKeyUsagePanel";
 import type { CodexAccountsAccessControllerContext } from "./codexAccountsAccessControllerContract";
+import { DEFAULT_OAUTH_HOURLY_QUOTA_RESERVE_PERCENT, DEFAULT_OAUTH_WEEKLY_QUOTA_RESERVE_PERCENT, resolveOAuthBindingQuotaReserve } from "./codexAccountsControllerModel";
+import { useCodexAccountSync } from "../hooks/useCodexAccountSync";
 
 /** 封装 useCodexAccountsPageController 的 useCodexAccountsAccessController 业务域状态与动作。 */
 export function useCodexAccountsAccessController(context: CodexAccountsAccessControllerContext) {
@@ -276,7 +283,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [oauthAccounts],
     );
-  
+
     const resetOAuthBindingModal = useCallback(() => {
       setOauthBindingTargetKind(null);
       setOauthBindingAccountId(null);
@@ -289,12 +296,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setOauthBindingQuotaReserveFieldErrors({});
       setOauthBindingError(null);
     }, [setOauthBindingError]);
-  
+
     const closeOAuthBindingModal = useCallback(() => {
       if (oauthBindingSaving) return;
       resetOAuthBindingModal();
     }, [oauthBindingSaving, resetOAuthBindingModal]);
-  
+
     const openOAuthBindingModal = useCallback(
       (account: CodexAccount, options?: { autoSwitch?: boolean }) => {
         if (!isCodexApiKeyAccount(account)) return;
@@ -316,25 +323,10 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [resolveBoundOAuthAccount, setOauthBindingError],
     );
-  
+
     const openLocalAccessOAuthBindingModal = useCallback(
       (options?: { autoSwitch?: boolean }) => {
-        const persistedQuotaReserve =
-          localAccessCollection?.boundOauthQuotaReserve ?? null;
-        const hourlyPercent = persistedQuotaReserve
-          ? parseOAuthQuotaReservePercent(
-              String(persistedQuotaReserve.hourlyPercent),
-            )
-          : null;
-        const weeklyPercent = persistedQuotaReserve
-          ? parseOAuthQuotaReservePercent(
-              String(persistedQuotaReserve.weeklyPercent),
-            )
-          : null;
-        const quotaReserve =
-          hourlyPercent !== null && weeklyPercent !== null
-            ? { hourlyPercent, weeklyPercent }
-            : null;
+        const quotaReserve = resolveOAuthBindingQuotaReserve(localAccessCollection);
         setOauthBindingTargetKind("local_access");
         setOauthBindingAccountId(null);
         setOauthBindingSelectedAccountId(
@@ -353,21 +345,22 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [
         boundLocalAccessOAuthAccount,
+        localAccessCollection?.boundOauthAccountId,
         localAccessCollection?.boundOauthQuotaReserve,
         setOauthBindingError,
       ],
     );
-  
+
     const openOAuthBindingQuotaReserveEditor = useCallback(() => {
       setOauthBindingHourlyReserveDraft(
         oauthBindingQuotaReserve
           ? String(oauthBindingQuotaReserve.hourlyPercent)
-          : "",
+          : String(DEFAULT_OAUTH_HOURLY_QUOTA_RESERVE_PERCENT),
       );
       setOauthBindingWeeklyReserveDraft(
         oauthBindingQuotaReserve
           ? String(oauthBindingQuotaReserve.weeklyPercent)
-          : "",
+          : String(DEFAULT_OAUTH_WEEKLY_QUOTA_RESERVE_PERCENT),
       );
       setOauthBindingQuotaReserveFieldErrors({});
       setOauthBindingQuotaReserveEditorOpen(true);
@@ -375,12 +368,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         oauthBindingHourlyReserveInputRef.current?.focus();
       });
     }, [oauthBindingQuotaReserve]);
-  
+
     const closeOAuthBindingQuotaReserveEditor = useCallback(() => {
       setOauthBindingQuotaReserveEditorOpen(false);
       setOauthBindingQuotaReserveFieldErrors({});
     }, []);
-  
+
     const handleOAuthBindingQuotaReserveToggle = useCallback(
       (checked: boolean) => {
         setOauthBindingError(null);
@@ -394,7 +387,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [openOAuthBindingQuotaReserveEditor, setOauthBindingError],
     );
-  
+
     const validateOAuthBindingQuotaReserveField = useCallback(
       (field: keyof OAuthBindingQuotaReserveFieldErrors, rawValue: string) => {
         const valid = parseOAuthQuotaReservePercent(rawValue) !== null;
@@ -410,8 +403,8 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [t],
     );
-  
-    const confirmOAuthBindingQuotaReserveEditor = useCallback(() => {
+
+    const confirmOAuthBindingQuotaReserveEditor = useCallback((protection?: { safetyMarginPercent: number }) => {
       const hourlyPercent = parseOAuthQuotaReservePercent(
         oauthBindingHourlyReserveDraft,
       );
@@ -440,11 +433,11 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         });
         return;
       }
-      setOauthBindingQuotaReserve({ hourlyPercent, weeklyPercent });
+      setOauthBindingQuotaReserve({ hourlyPercent, weeklyPercent, ...protection, strict: true });
       setOauthBindingQuotaReserveEditorOpen(false);
       setOauthBindingQuotaReserveFieldErrors({});
     }, [oauthBindingHourlyReserveDraft, oauthBindingWeeklyReserveDraft, t]);
-  
+
     const formatCodexAuthFailureMessage = useCallback(
       (rawError: unknown) => {
         const raw = String(rawError)
@@ -500,7 +493,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [t],
     );
-  
+
     const executeCodexAccountSwitch = useCallback(
       async (
         accountId: string,
@@ -524,7 +517,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           if (showSuccessMessage) {
             setMessage({
               text: t("codex.switched", {
-                email: maskAccountText(account.email),
+                email: maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))),
               }),
             });
           }
@@ -539,7 +532,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [maskAccountText, setMessage, switchAccount, t],
     );
-  
+
     const getCodexSwitchOrLaunchBlockedReason = useCallback(
       (account?: CodexAccount | null): string | null => {
         if (isCodexAgentIdentityAccount(account)) {
@@ -558,7 +551,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [t],
     );
-  
+
     const [launchPreviewAccount, setLaunchPreviewAccount] =
       useState<CodexAccount | null>(null);
     const [launchPreviewInstanceId, setLaunchPreviewInstanceId] = useState(
@@ -593,7 +586,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         launchPreviewAccount
       );
     }, [accounts, launchPreviewAccount]);
-  
+
     const launchPreviewInstanceOptions = useMemo(() => {
       const values = codexInstanceStore.instances
         .map((instance) => ({
@@ -618,7 +611,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       }
       return values;
     }, [codexInstanceStore.instances, t]);
-  
+
     const launchPreviewInstanceLabel = useMemo(
       () =>
         launchPreviewInstanceOptions.find(
@@ -690,7 +683,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setLaunchPreviewCliIntent(false);
       }
     }, [launchPreviewAccount, launchPreviewCliIntent]);
-  
+
     const handleSwitch = async (accountId: string) => {
       const account = codexAccountsRef.current.find(
         (item) => item.id === accountId,
@@ -721,7 +714,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setLaunchPreviewCliIntent(false);
       setLaunchPreviewAccount(account ?? null);
     };
-  
+
     const handleExecuteLaunchPreview = useCallback(
       async (
         launchAfterSwitch: boolean,
@@ -737,6 +730,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             launchOptions.deepSeekAccessMode,
             null,
             launchOptions.imageGenerationAccountIds ?? [],
+            launchOptions.imageGenerationAccountModels ?? {},
           );
         }
         if (launchPreviewCliIntent) {
@@ -763,6 +757,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           await codexInstanceStore.updateInstance({
             instanceId: launchPreviewInstanceId,
             bindAccountId,
+            appSpeed: launchAccount.app_speed ?? "standard",
             deferBindAccountApplication: true,
           });
           if (launchAfterSwitch) {
@@ -818,7 +813,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         updateAccountInstanceAccess,
       ],
     );
-  
+
     const handleSubmitOAuthBinding = useCallback(async () => {
       if (oauthBindingTargetKind === "api_key_account" && !oauthBindingAccount) {
         return;
@@ -859,12 +854,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
         return;
       }
-  
+
       const quotaReserve =
         oauthBindingTargetKind === "local_access"
           ? oauthBindingQuotaReserve
           : null;
-  
+
       setOauthBindingSaving(true);
       try {
         if (oauthBindingTargetKind === "local_access") {
@@ -913,13 +908,13 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       updateApiKeyBoundOAuthAccount,
       resetOAuthBindingModal,
     ]);
-  
+
     const handleClearOAuthBinding = useCallback(async () => {
       if (!oauthBindingTargetKind) return;
       if (oauthBindingTargetKind === "api_key_account" && !oauthBindingAccount) {
         return;
       }
-  
+
       setOauthBindingSaving(true);
       setOauthBindingError(null);
       try {
@@ -984,7 +979,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       selectedOAuthBindingAccount,
       setReauthRetryOAuthBinding,
     ]);
-  
+
     const findCachedCodexCliInstance = (
       bindAccountId: string,
       workingDir: string,
@@ -1000,7 +995,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         ) ?? null
       );
     };
-  
+
     const buildCodexCliInstanceDraft = async (
       modal: CodexCliLaunchModalState,
       workingDir: string,
@@ -1030,7 +1025,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           },
         };
       }
-  
+
       let defaults = codexCliInstanceDefaultsRef.current;
       if (!defaults) {
         defaults = await codexInstanceService.getInstanceDefaults();
@@ -1057,7 +1052,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         },
       };
     };
-  
+
     const resolveCodexCliInstance = async (
       draft: CodexCliInstanceDraft,
     ): Promise<InstanceProfile> => {
@@ -1066,7 +1061,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         draft.workingDir,
       );
       if (cached) return cached;
-  
+
       const instances = await codexInstanceService.listInstances();
       const normalizedWorkingDir = normalizePathForCompare(draft.workingDir);
       const existing = instances.find(
@@ -1077,7 +1072,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           normalizePathForCompare(instance.workingDir) === normalizedWorkingDir,
       );
       if (existing) return existing;
-  
+
       return await codexInstanceService.createInstance({
         name: draft.name,
         userDataDir: draft.userDataDir,
@@ -1089,7 +1084,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         initMode: "copy",
       });
     };
-  
+
     const prepareCodexCliLaunch = async (
       modal: CodexCliLaunchModalState,
       workingDirOverride?: string,
@@ -1110,7 +1105,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
         return null;
       }
-  
+
       setCliLaunchingAccountId(modal.accountId);
       setCliLaunchModal((prev) =>
         prev
@@ -1181,7 +1176,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setCliLaunchingAccountId(null);
       }
     };
-  
+
     const openCodexCliLaunchModal = (
       target: "account" | "apiService",
       accountId: string,
@@ -1227,7 +1222,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         target.bindAccountId,
       );
     }, [pendingCliLaunchTarget, openCodexCliLaunchModal]);
-  
+
     const handleLaunchCodexCli = async (account: CodexAccount) => {
       const blockedReason = getCodexSwitchOrLaunchBlockedReason(account);
       if (blockedReason) {
@@ -1252,7 +1247,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setLaunchPreviewCliIntent(true);
       setLaunchPreviewAccount(account);
     };
-  
+
     const handleLaunchLocalAccessCli = () => {
       if (cliLaunchModal || cliLaunchingAccountId) return;
       if (!localAccessCollection) {
@@ -1268,7 +1263,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         t("codex.localAccess.title", "API 服务"),
       );
     };
-  
+
     const updateCodexCliWorkingDir = (workingDir: string) => {
       setCliLaunchModal((prev) =>
         prev
@@ -1289,7 +1284,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           : prev,
       );
     };
-  
+
     const handleChooseCodexCliWorkingDir = async () => {
       if (!cliLaunchModal || cliLaunchModal.preparing || cliLaunchModal.executing)
         return;
@@ -1303,7 +1298,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       updateCodexCliWorkingDir(selected);
       await prepareCodexCliLaunch(next, selected);
     };
-  
+
     const handleCopyCodexCliCommand = async () => {
       if (!cliLaunchModal || cliLaunchModal.preparing) return;
       const prepared = cliLaunchModal.terminalCommand
@@ -1338,7 +1333,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
       }
     };
-  
+
     async function prepareCodexCliRuntime(
       modal: CodexCliLaunchModalState,
     ): Promise<CodexCliLaunchModalState | null> {
@@ -1418,7 +1413,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setCliLaunchingAccountId(null);
       }
     }
-  
+
     const handleExecuteCodexCli = async () => {
       if (!cliLaunchModal || cliLaunchModal.preparing || cliLaunchModal.executing)
         return;
@@ -1472,7 +1467,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setCliLaunchingAccountId(null);
       }
     };
-  
+
     useEffect(() => {
       const draft = cliLaunchModal?.instanceDraft;
       if (!draft || cliLaunchModal.preparing || cliLaunchModal.executing) return;
@@ -1517,7 +1512,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         disposed = true;
       };
     }, [selectedTerminal]);
-  
+
     /** 读取指定实例（或默认实例）的本机账号，并把账号落到当前目标分组。 */
     const importCodexLocalAccount = async (
       instanceId: string | null,
@@ -1547,7 +1542,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       page.setAddMessage(
         t("codex.import.successMsg", "导入成功: {{email}}").replace(
           "{{email}}",
-          maskAccountText(account.email),
+          maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))),
         ),
       );
       setTimeout(() => {
@@ -1642,7 +1637,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setLocalImportInstances(null);
       setLocalImportError(null);
     };
-  
+
     const startBatchImportFromPaths = async (
       paths: string[],
       checkQuota: boolean,
@@ -1660,7 +1655,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setBatchImportCheckQuota(checkQuota);
       setBatchImportBusy(true);
       batchImportSessionIdRef.current = "__pending__";
-  
+
       try {
         const progressUnlisten =
           await listen<codexService.CodexBatchImportProgress>(
@@ -1738,7 +1733,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           previewUnlisten,
           completedUnlisten,
         ];
-  
+
         const started = await codexService.startCodexBatchImportFromFiles(
           paths,
           checkQuota,
@@ -1783,7 +1778,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setBatchImportError(String(e).replace(/^Error:\s*/, ""));
       }
     };
-  
+
     const handleImportFromFiles = async () => {
       try {
         const selected = await openFileDialog({
@@ -1805,7 +1800,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setBatchImportError(String(e).replace(/^Error:\s*/, ""));
       }
     };
-  
+
     const handleBatchImportCheckQuotaChange = async (checkQuota: boolean) => {
       if (
         batchImportBusy ||
@@ -1821,7 +1816,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       // 切换检测开关后按新模式重新解析，避免残留旧检测结果。
       await startBatchImportFromPaths(batchImportFilePaths, checkQuota);
     };
-  
+
     const handleCancelBatchImport = async () => {
       if (!batchImportSessionId) {
         return;
@@ -1837,7 +1832,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         }
       }
     };
-  
+
     const handleCloseBatchImport = async () => {
       if (batchImportResult) {
         resetBatchImportState();
@@ -1858,7 +1853,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       }
       setBatchImportOpen(false);
     };
-  
+
     const handleDismissBatchImportTask = () => {
       // 进行中：先取消会话再清理；空闲/失败：直接丢弃，避免任务条无法关闭（#1445）
       if (batchImportBusy && batchImportSessionId) {
@@ -1874,7 +1869,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       }
       resetBatchImportState();
     };
-  
+
     const toggleBatchImportItem = (itemId: string) => {
       if (!batchImportSelectableIdSet.has(itemId)) return;
       setBatchImportSelectedIds((prev) =>
@@ -1883,7 +1878,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           : [...prev, itemId],
       );
     };
-  
+
     const selectAllBatchImportAccounts = () => {
       const items = batchImportPreview?.items ?? [];
       const ids = items
@@ -1892,7 +1887,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setBatchImportFilter("all");
       setBatchImportSelectedIds(ids);
     };
-  
+
     const selectReadyBatchImportAccounts = () => {
       const items = batchImportPreview?.items ?? [];
       const ids = items
@@ -1905,12 +1900,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setBatchImportFilter("ready");
       setBatchImportSelectedIds(ids);
     };
-  
+
     const clearBatchImportSelection = () => {
       setBatchImportFilter("all");
       setBatchImportSelectedIds([]);
     };
-  
+
     const handleConfirmBatchImport = async (
       options: { addToApiService?: boolean } = {},
     ) => {
@@ -1978,38 +1973,33 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             reason: "import",
           });
         }
-  
+
         if (options.addToApiService) {
-          const importedIds = result.imported
-            .map((account) => account.id)
-            .filter(Boolean);
-          const nextLocalAccessAccountIds = Array.from(
-            new Set([
-              ...(localAccessCollection?.accountIds ?? []),
-              ...importedIds,
-            ]),
-          );
           setLocalAccessSaving(true);
           try {
-            const nextState =
-              await codexLocalAccessService.saveCodexLocalAccessAccounts(
-                nextLocalAccessAccountIds,
-                localAccessCollection?.restrictFreeAccounts ?? true,
-              );
-            setLocalAccessState(nextState);
-            if (importedIds.length > 0) {
-              await ensureLocalAccessEntryVisible();
-              setImportApiServiceGuideCount(importedIds.length);
+            const grants = result.imported.some(canChooseCodexServiceAuthorization) ? await listChatGptPlanAccounts() : [];
+            const prepared = await prepareCodexServiceJoins(result.imported, grants, localAccessCollection?.accountIds ?? [], setLocalAccessState);
+            if (prepared.resumedIds.length) { await ensureLocalAccessEntryVisible(); setImportApiServiceGuideCount(prepared.resumedIds.length); }
+            if (prepared.localIds.length > 0) {
+              const appended = await codexLocalAccessService.appendCodexLocalAccessAccounts(prepared.localIds);
+              setLocalAccessState(appended.state);
+              if (appended.syncedAccountIds.length > 0) {
+                await ensureLocalAccessEntryVisible();
+                setImportApiServiceGuideCount(appended.syncedAccountIds.length);
+              }
             }
             window.dispatchEvent(new Event("codex-local-access-state-updated"));
+            if (prepared.failures.length) throw new Error(prepared.failures.map(({ accountId, error }) => {
+              const account = result.imported.find((candidate) => candidate.id === accountId);
+              const label = maskAccountText(account ? resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")) : accountId);
+              const raw = String(error).replace(/^Error:\s*/, "");
+              return `${label}: ${raw.startsWith("CHATGPT_PLAN_") ? t(chatGptPlanErrorKey(error)) : raw}`;
+            }).join("\n"));
           } catch (apiError) {
-            apiServiceError = t(
-              "codex.batchImport.addToApiServiceFailed",
-              "账号已导入，但添加到 API 服务失败: {{error}}",
-            ).replace("{{error}}", String(apiError).replace(/^Error:\s*/, ""));
-          } finally {
-            setLocalAccessSaving(false);
-          }
+            apiServiceError = t("codex.batchImport.addToApiServiceFailed",
+              "账号已导入，但添加到 API 服务失败: {{error}}")
+              .replace("{{error}}", String(apiError).replace(/^Error:\s*/, ""));
+          } finally { setLocalAccessSaving(false); }
         } else if (result.imported.length > 0) {
           try {
             await syncImportedAccountsToApiService(
@@ -2022,7 +2012,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             ).replace("{{error}}", String(error).replace(/^Error:\s*/, ""));
           }
         }
-  
+
         if (apiServiceError) {
           setBatchImportError(apiServiceError);
         }
@@ -2038,7 +2028,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setBatchImportBusy(false);
       }
     };
-  
+
     const handleResumeBatchImport = async () => {
       if (!batchImportSessionId || batchImportBusy) return;
       setBatchImportBusy(true);
@@ -2057,7 +2047,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setBatchImportError(String(e).replace(/^Error:\s*/, ""));
       }
     };
-  
+
     const handleSelectApiProviderPreset = useCallback(
       (providerId: string) => {
         apiProviderPresetExplicitlySelectedRef.current = true;
@@ -2097,7 +2087,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [selectedManagedProviderApiKey, sponsorApiProviderTemplates],
     );
-  
+
     const handleSelectManagedProvider = useCallback(
       (providerId: string) => {
         apiProviderPresetExplicitlySelectedRef.current = true;
@@ -2106,7 +2096,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         const provider = managedProviders.find((item) => item.id === providerId);
         if (!provider) return;
         setApiBaseUrlInput(provider.baseUrl);
-        const effective = provider;
+        const effective = resolveCodexModelProviderForApiKey(provider, provider.apiKeys[0]?.apiKey);
         setApiModelCatalogInput((effective.modelCatalog ?? []).join("\n"));
         setApiModelContextWindowsInput(
           contextWindowDraftsFromRecord(
@@ -2127,7 +2117,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [managedProviders],
     );
-  
+
     const handleSelectManagedProviderApiKey = useCallback(
       (apiKeyId: string) => {
         setManagedProviderApiKeyId(apiKeyId);
@@ -2145,7 +2135,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           (item) => item.id === apiKeyId,
         );
         if (key) {
-          const effective = selectedManagedProvider!;
+          const effective = resolveCodexModelProviderForApiKey(selectedManagedProvider!, key.apiKey);
           setApiModelCatalogInput((effective.modelCatalog ?? []).join("\n"));
           setApiModelContextWindowsInput(contextWindowDraftsFromRecord(effective.modelContextWindows, effective.modelCatalog ?? []));
           setApiKeyInput(key.apiKey);
@@ -2154,7 +2144,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [selectedManagedProvider],
     );
-  
+
     const handleApiKeyInputChange = useCallback(
       (value: string) => {
         setApiKeyInput(value);
@@ -2164,11 +2154,14 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           value.trim() !== selectedManagedProviderApiKey.apiKey.trim()
         ) {
           setManagedProviderApiKeyId("");
+          const effective = selectedManagedProvider ? resolveCodexModelProviderForApiKey(selectedManagedProvider, value) : null;
+          setApiModelCatalogInput((effective?.modelCatalog ?? []).join("\n"));
+          setApiModelContextWindowsInput(contextWindowDraftsFromRecord(effective?.modelContextWindows, effective?.modelCatalog ?? []));
         }
       },
-      [selectedManagedProviderApiKey],
+      [selectedManagedProvider, selectedManagedProviderApiKey],
     );
-  
+
     const handleApiBaseUrlInputChange = useCallback(
       (value: string) => {
         setApiBaseUrlInput(value);
@@ -2183,7 +2176,13 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [selectedManagedProvider],
     );
-  
+
+    const modelFetchState = useRef({ add: 0, edit: 0, addKey: "", editKey: "" });
+    modelFetchState.current.addKey = JSON.stringify([apiBaseUrlInput.trim(), apiKeyInput.trim()]);
+    modelFetchState.current.editKey = JSON.stringify([editingApiBaseUrlCredentialsValue.trim(), editingApiKeyCredentialsValue.trim()]);
+    useEffect(() => { setApiModelCatalogFetching(false); }, [apiBaseUrlInput, apiKeyInput]);
+    useEffect(() => { setEditingApiModelCatalogFetching(false); }, [editingApiBaseUrlCredentialsValue, editingApiKeyCredentialsValue]);
+
     const handleFetchApiModelCatalog = useCallback(async () => {
       const apiKey = apiKeyInput.trim();
       const baseUrl = apiBaseUrlInput.trim() || DEFAULT_CODEX_API_BASE_URL;
@@ -2198,8 +2197,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       }
       setApiModelCatalogFetching(true);
       setApiModelCatalogError(null);
+      const requestId = ++modelFetchState.current.add;
+      const requestKey = JSON.stringify([apiBaseUrlInput.trim(), apiKeyInput.trim()]);
+      const isCurrent = () => modelFetchState.current.add === requestId && modelFetchState.current.addKey === requestKey;
       try {
         const result = await listModelProviderModels({ baseUrl, apiKey });
+        if (!isCurrent()) return;
         const models = parseApiModelCatalogText(
           result.models.map((model) => model.id).join("\n"),
         );
@@ -2214,6 +2217,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         }
         setApiModelCatalogInput(models.join("\n"));
       } catch (error) {
+        if (!isCurrent()) return;
         setApiModelCatalogError(
           t("codex.api.modelCatalog.fetchFailed", {
             defaultValue: "获取上游模型失败：{{error}}",
@@ -2221,31 +2225,31 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           }),
         );
       } finally {
-        setApiModelCatalogFetching(false);
+        if (isCurrent()) setApiModelCatalogFetching(false);
       }
     }, [apiBaseUrlInput, apiKeyInput, t]);
-  
+
     const applyApiKeyFunPrefill = useCallback(
       (request: ApiKeyFunPrefillPayload) => {
         if (request.target !== "codex") return;
         const apiKey = request.apiKey.trim();
         if (!apiKey) return;
-  
+
         pendingApiKeyFunCodexPrefillRef.current = request;
         openCodexAddModal("apikey");
       },
       [openCodexAddModal],
     );
-  
+
     useEffect(() => {
       if (!showAddModal || addTab !== "apikey") return;
       const request = pendingApiKeyFunCodexPrefillRef.current;
       if (!request) return;
       pendingApiKeyFunCodexPrefillRef.current = null;
-  
+
       const apiKey = request.apiKey.trim();
       if (!apiKey) return;
-  
+
       const requestBaseUrl =
         request.baseUrl?.trim() || APIKEY_FUN_PROVIDER_BASE_URL;
       const normalizedRequestBaseUrl =
@@ -2270,7 +2274,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             searchable.includes("api.apikey.fun")
           );
         }) ?? null;
-  
+
       skipManagedProviderApiKeyAutofillRef.current = true;
       apiProviderPresetExplicitlySelectedRef.current = true;
       apiKeyFunPrefillModelCatalogRef.current = request.modelCatalog ?? null;
@@ -2301,7 +2305,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       sponsorApiProviderTemplates,
       t,
     ]);
-  
+
     useEffect(() => {
       const consumePrefill = () => {
         const request = consumeApiKeyFunPrefill("codex");
@@ -2315,7 +2319,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         window.removeEventListener(APIKEY_FUN_PREFILL_EVENT, consumePrefill);
       };
     }, [applyApiKeyFunPrefill]);
-  
+
     const handleSelectEditingApiProviderPreset = useCallback(
       (providerId: string) => {
         setEditingApiProviderPresetId(providerId);
@@ -2341,7 +2345,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [],
     );
-  
+
     const handleSelectEditingManagedProvider = useCallback(
       (providerId: string) => {
         setEditingApiProviderPresetId(CODEX_API_PROVIDER_CUSTOM_ID);
@@ -2352,7 +2356,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setEditingApiWireApi(resolveCodexProviderCapabilityProfile({ baseUrl: provider.baseUrl, wireApi: provider.wireApi }).wireApi);
         setEditingApiSupportsWebsockets(provider.supportsWebsockets === true);
         setEditingApiCredentialsError(null);
-        const effective = provider;
+        const effective = resolveCodexModelProviderForApiKey(provider, provider.apiKeys[0]?.apiKey);
         setEditingApiModelCatalogInput((effective.modelCatalog ?? []).join("\n"));
         setEditingApiModelContextWindowsInput(
           contextWindowDraftsFromRecord(
@@ -2373,7 +2377,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [managedProviders],
     );
-  
+
     const handleSelectEditingManagedProviderApiKey = useCallback(
       (apiKeyId: string) => {
         setEditingManagedProviderApiKeyId(apiKeyId);
@@ -2390,7 +2394,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           (item) => item.id === apiKeyId,
         );
         if (key) {
-          const effective = selectedEditingManagedProvider!;
+          const effective = resolveCodexModelProviderForApiKey(selectedEditingManagedProvider!, key.apiKey);
           setEditingApiModelCatalogInput((effective.modelCatalog ?? []).join("\n"));
           setEditingApiModelContextWindowsInput(contextWindowDraftsFromRecord(effective.modelContextWindows, effective.modelCatalog ?? []));
           setEditingApiKeyCredentialsValue(key.apiKey);
@@ -2399,7 +2403,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [selectedEditingManagedProvider],
     );
-  
+
     const handleEditingApiKeyCredentialsChange = useCallback(
       (value: string) => {
         setEditingApiKeyCredentialsValue(value);
@@ -2410,11 +2414,14 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           value.trim() !== selectedEditingManagedProviderApiKey.apiKey.trim()
         ) {
           setEditingManagedProviderApiKeyId("");
+          const effective = selectedEditingManagedProvider ? resolveCodexModelProviderForApiKey(selectedEditingManagedProvider, value) : null;
+          setEditingApiModelCatalogInput((effective?.modelCatalog ?? []).join("\n"));
+          setEditingApiModelContextWindowsInput(contextWindowDraftsFromRecord(effective?.modelContextWindows, effective?.modelCatalog ?? []));
         }
       },
-      [selectedEditingManagedProviderApiKey],
+      [selectedEditingManagedProvider, selectedEditingManagedProviderApiKey],
     );
-  
+
     const handleEditingApiBaseUrlCredentialsChange = useCallback(
       (value: string) => {
         setEditingApiBaseUrlCredentialsValue(value);
@@ -2430,7 +2437,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [selectedEditingManagedProvider],
     );
-  
+
     const handleFetchEditingApiModelCatalog = useCallback(async () => {
       const apiKey = editingApiKeyCredentialsValue.trim();
       const baseUrl =
@@ -2446,8 +2453,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       }
       setEditingApiModelCatalogFetching(true);
       setEditingApiModelCatalogError(null);
+      const requestId = ++modelFetchState.current.edit;
+      const requestKey = JSON.stringify([editingApiBaseUrlCredentialsValue.trim(), editingApiKeyCredentialsValue.trim()]);
+      const isCurrent = () => modelFetchState.current.edit === requestId && modelFetchState.current.editKey === requestKey;
       try {
         const result = await listModelProviderModels({ baseUrl, apiKey });
+        if (!isCurrent()) return;
         const models = parseApiModelCatalogText(
           result.models.map((model) => model.id).join("\n"),
         );
@@ -2462,6 +2473,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         }
         setEditingApiModelCatalogInput(models.join("\n"));
       } catch (error) {
+        if (!isCurrent()) return;
         setEditingApiModelCatalogError(
           t("codex.api.modelCatalog.fetchFailed", {
             defaultValue: "获取上游模型失败：{{error}}",
@@ -2469,10 +2481,10 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           }),
         );
       } finally {
-        setEditingApiModelCatalogFetching(false);
+        if (isCurrent()) setEditingApiModelCatalogFetching(false);
       }
     }, [editingApiBaseUrlCredentialsValue, editingApiKeyCredentialsValue, t]);
-  
+
     const closeQuickSwitchModal = useCallback(() => {
       if (quickSwitchSubmitting) return;
       setQuickSwitchAccountId(null);
@@ -2480,7 +2492,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setQuickSwitchApiKeyId("");
       setQuickSwitchError(null);
     }, [quickSwitchSubmitting]);
-  
+
     const openQuickSwitchProviderModal = useCallback(
       (account: CodexAccount) => {
         if (!isCodexApiKeyAccount(account)) return;
@@ -2495,7 +2507,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
         const fallbackApiKey =
           matchedApiKey ?? fallbackProvider?.apiKeys[0] ?? null;
-  
+
         setQuickSwitchAccountId(account.id);
         setQuickSwitchProviderId(fallbackProvider?.id ?? "");
         setQuickSwitchApiKeyId(fallbackApiKey?.id ?? "");
@@ -2503,7 +2515,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [managedProviders],
     );
-  
+
     const handleSelectQuickSwitchProvider = useCallback(
       (providerId: string) => {
         setQuickSwitchProviderId(providerId);
@@ -2513,12 +2525,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [managedProviders],
     );
-  
+
     const handleSelectQuickSwitchApiKey = useCallback((apiKeyId: string) => {
       setQuickSwitchApiKeyId(apiKeyId);
       setQuickSwitchError(null);
     }, []);
-  
+
     const handleSubmitQuickSwitch = useCallback(async () => {
       if (!quickSwitchAccount) return;
       if (!selectedQuickSwitchProvider) {
@@ -2533,11 +2545,11 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
         return;
       }
-  
+
       setQuickSwitchSubmitting(true);
       setQuickSwitchError(null);
       try {
-        const effective = selectedQuickSwitchProvider;
+        const effective = resolveCodexModelProviderForApiKey(selectedQuickSwitchProvider, selectedQuickSwitchApiKey.apiKey);
         await updateApiKeyCredentials(
           quickSwitchAccount.id,
           selectedQuickSwitchApiKey.apiKey,
@@ -2598,7 +2610,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       t,
       updateApiKeyCredentials,
     ]);
-  
+
     const handleOpenProviderLink = useCallback(async (url: string) => {
       try {
         await openUrl(url);
@@ -2606,7 +2618,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         await navigator.clipboard.writeText(url).catch(() => {});
       }
     }, []);
-  
+
     const handleApiKeyLogin = async () => {
       const validation = validateApiKeyCredentialInputs(
         apiKeyInput,
@@ -2652,11 +2664,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           managedProviderId,
           newManagedProviderNameInput,
           selectedManagedProviderApiKey?.name,
+          validation.apiKey,
         ),
         apiModelCatalog: apiModelCatalogDraft,
         apiModelContextWindows: parsedWindows.windows,
       };
-  
+
       page.setAddStatus("loading");
       page.setAddMessage(t("common.shared.token.importing", "正在导入..."));
       try {
@@ -2692,7 +2705,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             }));
             finalProviderPayload = {
               ...providerPayload,
-              ...buildCodexModelProviderAccountSnapshot(savedProvider, selectedManagedProviderApiKey?.name),
+              ...buildCodexModelProviderAccountSnapshot(savedProvider, selectedManagedProviderApiKey?.name, validation.apiKey),
               accountName: providerPayload.accountName || savedProvider.name,
             };
             try {
@@ -2762,7 +2775,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         page.setAddMessage(
           `${t("codex.import.successMsg", "导入成功: {{email}}").replace(
             "{{email}}",
-            maskAccountText(account.email),
+            maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))),
           )}${
             Object.keys(parsedWindows.windows).length > 0 ||
             apiSyncModelCatalogToCodex
@@ -2774,7 +2787,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           }`,
         );
         setApiKeyInput("");
-        setApiBaseUrlInput(DEFAULT_CODEX_API_BASE_URL);
+        setApiBaseUrlInput("");
         setApiProviderPresetId(defaultApiProviderPresetId);
         setManagedProviderId("");
         setManagedProviderApiKeyId("");
@@ -2792,7 +2805,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
       }
     };
-  
+
     const performTokenImport = async (rawContent: string) => {
       const trimmed = rawContent.trim();
       if (!trimmed) {
@@ -2810,7 +2823,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
         return;
       }
-  
+
       setImporting(true);
       setTokenImportProgress({ current: 0, total: payloads.length });
       page.setAddStatus("loading");
@@ -2919,7 +2932,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         setTokenImportProgress(null);
       }
     };
-  
+
     const handleTokenImport = async () => {
       const trimmed = tokenInput.trim();
       if (!trimmed) {
@@ -2941,21 +2954,21 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       }
       await performTokenImport(trimmed);
     };
-  
+
     const clearInlineRename = useCallback(() => {
       setEditingApiKeyNameId(null);
       setEditingApiKeyNameValue("");
     }, []);
-  
+
     const handleAccountNameDoubleClick = useCallback((account: CodexAccount) => {
       if (!isCodexApiKeyAccount(account)) return;
       inlineRenameDiscardRef.current = false;
       setEditingApiKeyNameId(account.id);
       setEditingApiKeyNameValue(
-        (account.account_name || account.email || "").trim(),
+        resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
       );
-    }, []);
-  
+    }, [t]);
+
     const handleSubmitInlineRename = useCallback(
       async (account: CodexAccount) => {
         if (inlineRenameDiscardRef.current) {
@@ -2964,17 +2977,17 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         }
         if (!isCodexApiKeyAccount(account)) return;
         if (editingApiKeyNameId !== account.id) return;
-  
+
         const nextName = editingApiKeyNameValue.trim();
         const currentName = (account.account_name || "").trim();
-        const fallbackName = (account.email || "").trim();
+        const fallbackName = resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"));
         const unchanged =
-          nextName === currentName || (!currentName && nextName === fallbackName);
+          nextName === currentName || nextName === fallbackName;
         if (unchanged) {
           clearInlineRename();
           return;
         }
-  
+
         setSavingApiKeyNameId(account.id);
         try {
           await updateAccountName(account.id, nextName);
@@ -2998,7 +3011,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         updateAccountName,
       ],
     );
-  
+
     const toggleAccountApiKeyVisible = useCallback((accountId: string) => {
       setVisibleApiKeyAccountIds((prev) => {
         const next = new Set(prev);
@@ -3010,7 +3023,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         return next;
       });
     }, []);
-  
+
     const resolveApiKeyDisplayText = useCallback(
       (account: CodexAccount, visible: boolean) => {
         const apiKey = (account.openai_api_key || "").trim();
@@ -3019,7 +3032,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [t],
     );
-  
+
     const renderApiKeyRevealLine = useCallback(
       (account: CodexAccount): ReactElement => {
         const visible = visibleApiKeyAccountIds.has(account.id);
@@ -3053,7 +3066,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         visibleApiKeyAccountIds,
       ],
     );
-  
+
     const renderOAuthBindingLine = useCallback(
       (account: CodexAccount): ReactElement => {
         const boundAccount = resolveBoundOAuthAccount(account);
@@ -3119,7 +3132,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         t,
       ],
     );
-  
+
     const resolveApiProviderDisplayName = useCallback(
       (account: CodexAccount): string => {
         const providerMode = inferCodexAccountProviderMode(account);
@@ -3149,7 +3162,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [managedProviders, t],
     );
-  
+
     const resolveUsageProviderForApiKeyAccount = useCallback(
       (account: CodexAccount): CodexModelProvider | null => {
         if (!isCodexApiKeyAccount(account) || isCodexNewApiAccount(account)) {
@@ -3165,7 +3178,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [managedProviders],
     );
-  
+
     const refreshApiKeyUsage = useCallback(
       async (account: CodexAccount, provider?: CodexModelProvider | null) => {
         if (
@@ -3236,7 +3249,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [reloadManagedProviders, resolveUsageProviderForApiKeyAccount],
     );
-  
+
     const canRefreshApiKeyUsage = useCallback(
       (account: CodexAccount, provider?: CodexModelProvider | null): boolean => {
         if (
@@ -3257,7 +3270,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [resolveUsageProviderForApiKeyAccount],
     );
-  
+
     const shouldAutoRefreshApiKeyUsage = useCallback(
       (account: CodexAccount, provider?: CodexModelProvider | null): boolean => {
         if (!canRefreshApiKeyUsage(account, provider)) {
@@ -3278,7 +3291,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [apiKeyUsageMap, canRefreshApiKeyUsage],
     );
-  
+
     const refreshApiKeyUsageByAccountId = useCallback(
       async (accountId: string, options?: { force?: boolean }) => {
         const account = accounts.find((item) => item.id === accountId);
@@ -3299,11 +3312,11 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         shouldAutoRefreshApiKeyUsage,
       ],
     );
-  
+
     useEffect(() => {
       writeCodexApiKeyUsageCache(apiKeyUsageMap);
     }, [apiKeyUsageMap]);
-  
+
     useEffect(() => {
       for (const account of accounts) {
         const provider = resolveUsageProviderForApiKeyAccount(account);
@@ -3319,7 +3332,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       resolveUsageProviderForApiKeyAccount,
       shouldAutoRefreshApiKeyUsage,
     ]);
-  
+
     useEffect(() => {
       const syncUsageCache = () => setApiKeyUsageMap(readCodexApiKeyUsageCache());
       window.addEventListener(
@@ -3332,7 +3345,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           syncUsageCache,
         );
     }, []);
-  
+
     useEffect(() => {
       const accountIds = new Set(accounts.map((account) => account.id));
       const chatCompletionsAccountIds = new Set(
@@ -3361,60 +3374,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         return changed ? next : previous;
       });
     }, [accounts]);
-  
-    useEffect(() => {
-      let unlistenAccountsChanged: UnlistenFn | null = null;
-      let unlistenCurrentChanged: UnlistenFn | null = null;
-  
-      void listen("accounts:changed", async (event) => {
-        const payload = event.payload as {
-          platformId?: string;
-          accountId?: string | null;
-          reason?: string;
-        } | null;
-        if (payload?.platformId !== "codex") return;
-        if (payload.reason === "delete") return;
-        if (
-          payload.reason === "client-auth-observation" ||
-          payload.reason === "client-auth-launch"
-        ) {
-          // CDP 已完成连续确认并落盘，立即回读权威账号快照，避免卡片等待轮询。
-          await Promise.all([fetchAccounts(), fetchCurrentAccount()]);
-          return;
-        }
-        if (payload.accountId) {
-          await refreshApiKeyUsageByAccountId(payload.accountId, {
-            force: false,
-          });
-          return;
-        }
-      }).then((fn) => {
-        unlistenAccountsChanged = fn;
-      });
-  
-      void listen("accounts:current-changed", async (event) => {
-        const payload = event.payload as {
-          platformId?: string;
-          accountId?: string | null;
-          reason?: string;
-        } | null;
-        if (payload?.platformId !== "codex") return;
-        if (payload.reason === "delete") return;
-        if (payload.accountId) {
-          await refreshApiKeyUsageByAccountId(payload.accountId, {
-            force: false,
-          });
-        }
-      }).then((fn) => {
-        unlistenCurrentChanged = fn;
-      });
-  
-      return () => {
-        unlistenAccountsChanged?.();
-        unlistenCurrentChanged?.();
-      };
-    }, [fetchAccounts, fetchCurrentAccount, refreshApiKeyUsageByAccountId]);
-  
+
+    useCodexAccountSync({ fetchAccounts, fetchCurrentAccount, refreshApiKeyUsageByAccountId });
+
     // 额度展示格式化统一由独立 hook 提供，保持原有签名与行为。
     const {
       formatApiKeyUsageMoney,
@@ -3460,7 +3422,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         t,
       ],
     );
-  
+
     const closeApiKeyCredentialsModal = useCallback(() => {
       if (savingApiKeyCredentials) return;
       setEditingApiKeyCredentialsId(null);
@@ -3481,7 +3443,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setEditingApiModelCatalogFetching(false);
       setEditingApiModelCatalogError(null);
     }, [savingApiKeyCredentials]);
-  
+
     const openApiKeyCredentialsModal = useCallback(
       (account: CodexAccount) => {
         if (!isCodexApiKeyAccount(account)) return;
@@ -3496,7 +3458,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         );
         const canonicalBaseUrl = matchedProvider?.baseUrl.trim() || initialBaseUrl;
         const canonicalApiKey = matchedProviderKey?.apiKey.trim() || initialApiKey;
-        const effective = matchedProvider ?? null;
+        const effective = matchedProvider ? resolveCodexModelProviderForApiKey(matchedProvider, initialApiKey) : null;
         const canonicalModelCatalog = effective?.modelCatalog ?? account.api_model_catalog ?? [];
         const canonicalContextWindows = effective?.modelContextWindows ?? account.api_model_context_windows;
 
@@ -3540,7 +3502,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [managedProviders],
     );
-  
+
     const handleSubmitApiKeyCredentials = useCallback(async () => {
       const accountId = editingApiKeyCredentialsId;
       if (!accountId || savingApiKeyCredentials) return;
@@ -3587,6 +3549,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           editingManagedProviderId,
           editingNewManagedProviderNameInput,
           selectedEditingManagedProviderApiKey?.name,
+          validation.apiKey,
         ),
         apiModelCatalog: editingApiModelCatalogDraft,
         apiModelContextWindows: parsedWindows.windows,
@@ -3661,6 +3624,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           ? buildCodexModelProviderAccountSnapshot(
               accountProvider,
               selectedEditingManagedProviderApiKey?.name,
+              validation.apiKey,
             )
           : {
               ...providerPayload,
@@ -3702,7 +3666,16 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             const key = accountProvider.apiKeys.find((item) => item.apiKey.trim() === linked.openai_api_key?.trim());
             updatedAccountCount += await codexService.syncCodexApiKeyProviderAccounts({
               accountIds: [linkedId],
-              ...buildCodexModelProviderAccountSnapshot(accountProvider, key?.name),
+              ...buildCodexModelProviderAccountSnapshot(accountProvider, key?.name, linked.openai_api_key),
+              // Transport remains provider-wide; a different key keeps its own account model state.
+              ...(linked.openai_api_key?.trim() !== validation.apiKey ? {
+                apiProviderMode: linked.api_provider_mode,
+                apiModelCatalog: linked.api_model_catalog,
+                apiModelContextWindows: linked.api_model_context_windows,
+                apiSupportsVision: linked.api_supports_vision === true,
+                apiModelVisionSupport: linked.api_model_vision_support ?? {},
+                apiVisionRoutingModel: linked.api_vision_routing_model ?? undefined,
+              } : {}),
             });
           }
           if (updatedAccountCount > 0) {

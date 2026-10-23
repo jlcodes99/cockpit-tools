@@ -17,6 +17,8 @@ test('all display modes retain the original proxy action and supplementary cards
   let display: CodexProxyDisplay = 'compact';
   const account = { id: 'account', egress_proxy: { protocol: 'resource', name: 'Auto' } } as CodexAccount;
   const imports = {
+    './useCodexProxyTargets': { useCodexProxyTargets: (accounts: unknown[]) => accounts },
+    '../../services/codexProxyTargetService': { isCodexProxyTarget: (account: any) => account.auth_mode === 'apikey' },
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../hooks/useCodexProxyDisplay': { useCodexProxyDisplay: () => display },
     '../../utils/codexAccountProxy': { canUseCodexAccountProxy, requestCodexAccountProxy: (id: string) => opened.push(id) },
@@ -61,6 +63,8 @@ test('persistent read failures explain local pressure or capacity and retain the
   let refreshed = 0;
   const account = { id: 'account', egress_proxy: { protocol: 'resource', name: 'Auto' } } as CodexAccount;
   const h = loadHookModule(new URL('./CodexAccountProxyCard.tsx', import.meta.url), {
+    './useCodexProxyTargets': { useCodexProxyTargets: (accounts: unknown[]) => accounts },
+    '../../services/codexProxyTargetService': { isCodexProxyTarget: (account: any) => account.auth_mode === 'apikey' },
     'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
     '../../hooks/useCodexProxyDisplay': { useCodexProxyDisplay: () => 'summary' },
     '../../utils/codexAccountProxy': { canUseCodexAccountProxy, requestCodexAccountProxy() {} },

@@ -409,6 +409,7 @@ func TestWarnLogOnUpstreamFailure_NonStream(t *testing.T) {
 	exec := &mockCustomErrorExecutor{
 		identifier: "codex",
 		executeFn: func(ctx context.Context, auth *Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+			cliproxyexecutor.MarkUpstreamAttempt(ctx)
 			time.Sleep(5 * time.Millisecond)
 			return cliproxyexecutor.Response{}, errors.New("500 Internal Server Error: upstream timeout")
 		},

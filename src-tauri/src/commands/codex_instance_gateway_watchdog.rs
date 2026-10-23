@@ -30,6 +30,15 @@ fn now() -> u64 {
     START.elapsed().as_secs()
 }
 
+fn is_oauth_binding(account_id: Option<&str>) -> bool {
+    account_id.map(str::trim).is_some_and(|id| {
+        !id.is_empty()
+            && !modules::codex_instance::is_api_service_bind_account_id(id)
+            && modules::codex_instance::parse_provider_gateway_bind_account_id(id).is_none()
+            && !modules::codex_local_access::is_local_access_runtime_account_id(id)
+    })
+}
+
 fn enabled_targets(store: &InstanceStore) -> BTreeMap<String, Target> {
     let mut targets = BTreeMap::new();
     if store
@@ -37,6 +46,8 @@ fn enabled_targets(store: &InstanceStore) -> BTreeMap<String, Target> {
         .model_routing
         .as_ref()
         .is_some_and(|r| r.enabled)
+        && (store.default_settings.follow_local_account
+            || is_oauth_binding(store.default_settings.bind_account_id.as_deref()))
     {
         targets.insert(
             "__default__".into(),
@@ -44,7 +55,9 @@ fn enabled_targets(store: &InstanceStore) -> BTreeMap<String, Target> {
         );
     }
     for instance in &store.instances {
-        if instance.model_routing.as_ref().is_some_and(|r| r.enabled) {
+        if instance.model_routing.as_ref().is_some_and(|r| r.enabled)
+            && is_oauth_binding(instance.bind_account_id.as_deref())
+        {
             targets.insert(instance.id.clone(), Target::Instance(instance.clone()));
         }
     }
@@ -202,7 +215,8 @@ async fn check_profile(lease: Lease, target: Target, app: AppHandle) -> Result<(
     if !current(&lease) {
         return Ok(());
     }
-    let (target_instance_id, profile_dir, account_id, routing, last_pid, is_default) = match target {
+    let (target_instance_id, profile_dir, account_id, routing, last_pid, is_default) = match target
+    {
         Target::Default(s) => (
             crate::modules::codex_instance::CODEX_DEFAULT_INSTANCE_ID.to_string(),
             modules::codex_instance::get_default_codex_home()?,
@@ -223,6 +237,11 @@ async fn check_profile(lease: Lease, target: Target, app: AppHandle) -> Result<(
     let (Some(account_id), Some(routing)) = (account_id, routing.filter(|r| r.enabled)) else {
         return Ok(());
     };
+    // Following the local account can change after the target snapshot was saved.
+    // Runtime identities must never reach the OAuth account lookup.
+    if !is_oauth_binding(Some(&account_id)) {
+        return Ok(());
+    }
     if !modules::instance::is_profile_initialized(&profile_dir) || !current(&lease) {
         return Ok(());
     }
@@ -331,6 +350,36 @@ mod tests {
     use crate::models::CodexInstanceModelRouting;
 
     #[test]
+    fn runtime_bindings_are_not_oauth_watchdog_targets() {
+        for id in [
+            None,
+            Some(""),
+            Some("__api_service__"),
+            Some(" __api_service__ "),
+            Some("__provider_gateway__:provider-account"),
+        ] {
+            assert!(!is_oauth_binding(id));
+            let mut store = InstanceStore::new();
+            store.default_settings.bind_account_id = id.map(str::to_string);
+            store.default_settings.follow_local_account = false;
+            store.default_settings.model_routing = Some(CodexInstanceModelRouting {
+                enabled: true,
+                ..Default::default()
+            });
+            store.instances.push(
+                serde_json::from_value(serde_json::json!({
+                    "id": "managed", "name": "Fixture", "userDataDir": "/unused-profile",
+                    "extraArgs": "", "bindAccountId": id, "createdAt": 0,
+                    "modelRouting": {"enabled": true}
+                }))
+                .unwrap(),
+            );
+            assert!(enabled_targets(&store).is_empty());
+        }
+        assert!(is_oauth_binding(Some("oauth-account")));
+    }
+
+    #[test]
     fn disabled_store_has_no_targets_or_timer() {
         let store = InstanceStore::new();
         let mut c = Control::default();
@@ -346,6 +395,7 @@ mod tests {
             enabled: true,
             ..Default::default()
         });
+        store.default_settings.bind_account_id = Some("oauth-account".into());
         let mut c = Control::default();
         assert!(update(&mut c, &store));
         assert!(c.state.arm());

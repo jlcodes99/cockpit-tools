@@ -2,7 +2,7 @@
 //!
 //! 管理模型分组设置，与插件端共享同一份配置文件
 //!
-//! 文件路径: ~/.antigravity_cockpit/group_settings.json
+//! 文件路径: ~/.cockpit_tools/group_settings.json
 //!
 //! 设计说明:
 //! - 两端使用同一个 modelId (API 返回的 models Key)

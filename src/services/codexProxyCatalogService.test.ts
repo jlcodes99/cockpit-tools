@@ -84,11 +84,17 @@ test('error allowlist never interpolates URLs, file paths, or raw backend messag
   for (const input of ['https://user:secret@host/?token=secret', 'CATALOG_DOWNLOAD: secret', '/Users/user/private-file']) {
     assert.equal(service.catalogErrorKey(input), 'codex.proxy.catalog.failed');
   }
-  assert.equal(service.catalogErrorKey(new Error('CATALOG_REDIRECT')), 'codex.proxy.catalog.downloadFailed');
+  assert.equal(service.catalogErrorKey(new Error('CATALOG_REDIRECT')), 'codex.proxy.catalog.downloadRedirect');
+  assert.equal(service.catalogErrorKey('CATALOG_DOWNLOAD'), 'codex.proxy.catalog.downloadFailed');
+  assert.equal(service.catalogErrorKey('CATALOG_DOWNLOAD_DENIED'), 'codex.proxy.catalog.downloadDenied');
+  assert.equal(service.catalogErrorKey('CATALOG_DOWNLOAD_TLS'), 'codex.proxy.catalog.downloadTls');
+  assert.equal(service.catalogErrorKey('CATALOG_DOWNLOAD_DNS'), 'codex.proxy.catalog.errorDns');
   assert.equal(service.catalogErrorKey('CATALOG_FINISHING'), 'codex.proxy.catalog.busy');
   assert.equal(service.catalogErrorKey('CATALOG_CANCELLED'), 'common.cancelled');
   assert.equal(service.catalogErrorKey('CATALOG_PARTIAL_UNBIND'), 'codex.proxy.catalog.partialDelete');
   assert.equal(service.catalogErrorKey('PROXY_ENGINE_MISSING'), 'codex.proxy.engineMissing');
+  assert.equal(service.catalogErrorKey('PROXY_UNSUPPORTED_PROTOCOL'), 'codex.proxy.unsupportedProtocol');
+  assert.equal(service.catalogErrorKey('PROXY_ENGINE_CONFIG_INVALID'), 'codex.proxy.catalog.reasonInvalid');
 });
 
 test('unavailable resource reasons distinguish protocol limits, group limits and missing members', () => {
@@ -98,7 +104,7 @@ test('unavailable resource reasons distinguish protocol limits, group limits and
     SUBSCRIPTION_GROUP_TIMEOUT: 'reasonGroupTimeout',
     SUBSCRIPTION_PROVIDER_UNSUPPORTED: 'reasonProvider', SUBSCRIPTION_GROUP_UNAVAILABLE: 'reasonMembers',
     PROXY_UNSUPPORTED_OPTION: 'reasonOptions', SUBSCRIPTION_INVALID: 'reasonInvalid',
-    PROXY_TLS_INSECURE: 'reasonTlsInsecure', PROXY_TRANSPORT_UNSUPPORTED: 'reasonTransport',
+    PROXY_TLS_INSECURE: 'refreshRequired', PROXY_TRANSPORT_UNSUPPORTED: 'reasonTransport',
     PROXY_ECH_UNSUPPORTED: 'reasonEch',
   };
   for (const [error, key] of Object.entries(reasons)) {

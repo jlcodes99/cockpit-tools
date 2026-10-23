@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Filter } from 'lucide-react';
 import { useDropdownPanelPlacement } from '../hooks/useDropdownPanelPlacement';
+import { useEscCloseTopmost } from '../hooks/useEscClose';
 import './AccountFilterDropdown.css'
 
 export interface MultiSelectFilterOption {
@@ -33,6 +34,10 @@ export function MultiSelectFilterDropdown({
 }: MultiSelectFilterDropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  useEscCloseTopmost(open, () => {
+    setOpen(false);
+    rootRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, rootRef);
   const selectedCount = selectedValues.length;
   const { panelPlacement, panelRef, scrollContainerStyle } = useDropdownPanelPlacement(
     rootRef,

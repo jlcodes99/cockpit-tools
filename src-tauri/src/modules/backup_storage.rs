@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
-use crate::modules::{account, codex_account, codex_instance, config};
+use crate::modules::{account, backup_directory_recovery, codex_account, codex_instance, config};
 
 const DEFAULT_BACKUP_DIR_NAME: &str = "backups";
 const BEHAVIOR_DIR_NAME: &str = "behavior";
@@ -62,6 +62,7 @@ pub struct BackupDirectoryMigrationPreview {
     pub file_count: u64,
     pub size_bytes: u64,
     pub sources: Vec<BackupMigrationSourceSummary>,
+    pub source_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -144,6 +145,9 @@ pub fn default_backup_root_dir() -> Result<PathBuf, String> {
 }
 
 pub fn get_backup_root_dir() -> Result<PathBuf, String> {
+    if let Some(path) = backup_directory_recovery::read_override()? {
+        return Ok(path);
+    }
     let configured = config::get_user_config()
         .backup_directory
         .trim()
@@ -243,7 +247,18 @@ fn validate_backup_target(target_directory: &str) -> Result<(PathBuf, PathBuf), 
     if target.as_os_str().is_empty() || !target.is_absolute() {
         return Err("备份目录必须是非空绝对路径".to_string());
     }
-    let current = get_backup_root_dir()?;
+    // This path is only for comparison/display when the source cannot be read.
+    // Migration still requires successful source resolution; switching does not.
+    let current = get_backup_root_dir().unwrap_or_else(|_| {
+        let configured = config::get_user_config().backup_directory;
+        if configured.trim().is_empty() {
+            account::get_data_dir()
+                .unwrap_or_else(|_| crate::modules::data_paths::fallback_data_dir())
+                .join(DEFAULT_BACKUP_DIR_NAME)
+        } else {
+            PathBuf::from(configured.trim())
+        }
+    });
     let current_cmp = normalize_comparison_path(&current);
     let target_cmp = normalize_comparison_path(&target);
     if target_cmp != current_cmp
@@ -344,6 +359,7 @@ fn build_migration_manifest(
     target_directory: &str,
     cancellable: bool,
 ) -> Result<MigrationManifest, String> {
+    get_backup_root_dir()?;
     let (current_root, target_root) = validate_backup_target(target_directory)?;
     let target_cmp = normalize_comparison_path(&target_root);
     if normalize_comparison_path(&current_root) == target_cmp {
@@ -360,8 +376,23 @@ fn build_migration_manifest(
     let mut cleanup_seen = HashSet::new();
 
     let mut collect_root = |root: PathBuf, target_prefix: PathBuf, source: &str| {
-        if !root.exists() {
-            return Ok(());
+        let metadata = match fs::symlink_metadata(&root) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(format!("读取备份迁移源失败({}): {}", root.display(), error)),
+        };
+        if !root.is_dir() {
+            return Err(format!("备份迁移源目录不可用: {}", root.display()));
+        }
+        if metadata.file_type().is_symlink() {
+            return Err(format!("无法安全迁移链接备份目录: {}", root.display()));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                return Err(format!("无法安全迁移链接备份目录: {}", root.display()));
+            }
         }
         let root_cmp = normalize_comparison_path(&root);
         if target_cmp.starts_with(&root_cmp) || root_cmp.starts_with(&target_cmp) {
@@ -454,7 +485,20 @@ fn summarize_migration_sources(files: &[MigrationFile]) -> Vec<BackupMigrationSo
 pub fn preview_backup_root_dir_change(
     target_directory: &str,
 ) -> Result<BackupDirectoryMigrationPreview, String> {
-    let manifest = build_migration_manifest(target_directory, false)?;
+    let (current, target) = validate_backup_target(target_directory)?;
+    let manifest = match build_migration_manifest(target_directory, false) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            return Ok(BackupDirectoryMigrationPreview {
+                old_directory: current.to_string_lossy().to_string(),
+                new_directory: target.to_string_lossy().to_string(),
+                file_count: 0,
+                size_bytes: 0,
+                sources: Vec::new(),
+                source_error: Some(error),
+            })
+        }
+    };
     let file_count = manifest.files.len() as u64;
     let size_bytes = manifest.files.iter().map(|file| file.size_bytes).sum();
     Ok(BackupDirectoryMigrationPreview {
@@ -463,6 +507,7 @@ pub fn preview_backup_root_dir_change(
         file_count,
         size_bytes,
         sources: summarize_migration_sources(&manifest.files),
+        source_error: None,
     })
 }
 
@@ -661,6 +706,24 @@ where
     Ok(copied)
 }
 
+fn persist_backup_directory(target: &Path) -> Result<(), String> {
+    // Recovery changes only the backup location. Never move account data or
+    // overwrite an unreadable config with the default in-memory configuration.
+    if backup_directory_recovery::has_override()?
+        || account::get_data_dir()
+            .map(|path| !path.is_dir())
+            .unwrap_or(true)
+    {
+        return backup_directory_recovery::save_override(target);
+    }
+    let target_value = target.to_string_lossy().to_string();
+    config::patch_user_config(move |current_config| {
+        current_config.backup_directory = target_value;
+        Ok(())
+    })?;
+    Ok(())
+}
+
 pub fn change_backup_root_dir_with_progress<F>(
     target_directory: &str,
     migrate_existing: bool,
@@ -706,7 +769,10 @@ where
         &mut on_progress,
     );
     let (current, target) = validate_backup_target(target_directory)?;
-    if normalize_comparison_path(&current) == normalize_comparison_path(&target) {
+    if get_backup_root_dir().is_ok()
+        && normalize_comparison_path(&current) == normalize_comparison_path(&target)
+    {
+        backup_directory_recovery::prepare_target(&target)?;
         return Ok(BackupDirectoryChangeResult {
             old_directory: current.to_string_lossy().to_string(),
             new_directory: target.to_string_lossy().to_string(),
@@ -719,14 +785,9 @@ where
         });
     }
     if !migrate_existing {
-        fs::create_dir_all(&target)
-            .map_err(|error| format!("创建新备份目录失败({}): {}", target.display(), error))?;
+        backup_directory_recovery::prepare_target(&target)?;
         emit("switching", 0, 0, 0, 0, None, None, false, &mut on_progress);
-        let target_value = target.to_string_lossy().to_string();
-        config::patch_user_config(move |current_config| {
-            current_config.backup_directory = target_value;
-            Ok(())
-        })?;
+        persist_backup_directory(&target)?;
         emit("completed", 0, 0, 0, 0, None, None, false, &mut on_progress);
         return Ok(BackupDirectoryChangeResult {
             old_directory: current.to_string_lossy().to_string(),
@@ -762,13 +823,7 @@ where
         return Err("backup_migration_cancelled".to_string());
     }
 
-    fs::create_dir_all(&manifest.target_root).map_err(|error| {
-        format!(
-            "创建新备份目录失败({}): {}",
-            manifest.target_root.display(),
-            error
-        )
-    })?;
+    backup_directory_recovery::prepare_target(&manifest.target_root)?;
     let stage_root = manifest.target_root.join(format!(
         "{}{}",
         MIGRATION_STAGING_PREFIX,
@@ -963,11 +1018,7 @@ where
     }
     let _ = remove_path_if_exists(&stage_root);
 
-    let target_value = manifest.target_root.to_string_lossy().to_string();
-    if let Err(error) = config::patch_user_config(move |current_config| {
-        current_config.backup_directory = target_value;
-        Ok(())
-    }) {
+    if let Err(error) = persist_backup_directory(&manifest.target_root) {
         rollback_finalized_files(&manifest.target_root, &finalized);
         return Err(error);
     }
@@ -1408,6 +1459,7 @@ pub fn cleanup_behavior_backups() -> Result<BackupCleanupResult, String> {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+    include!("backup_storage_isolated_tests.rs");
 
     fn make_temp_dir(label: &str) -> PathBuf {
         let suffix = SystemTime::now()
@@ -1420,6 +1472,133 @@ mod tests {
         ));
         fs::create_dir_all(&path).expect("create temp dir");
         path
+    }
+
+    struct RecoveryFixture {
+        root: PathBuf,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl RecoveryFixture {
+        fn new() -> Self {
+            let root = make_temp_dir("directory-recovery");
+            fs::write(root.join("broken-data"), b"original user data").unwrap();
+            let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+            std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", root.join("broken-data"));
+            Self { root, previous }
+        }
+
+        fn marker(&self) -> PathBuf {
+            self.root.join("broken-data.backup-directory.json")
+        }
+    }
+
+    impl Drop for RecoveryFixture {
+        fn drop(&mut self) {
+            if let Some(previous) = &self.previous {
+                std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", previous);
+            } else {
+                std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR");
+            }
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn switch_only_recovers_unreadable_source_and_survives_a_fresh_disk_read() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = RecoveryFixture::new();
+        fs::write(fixture.marker(), b"{broken preference").unwrap();
+        let target = fixture.root.join("new-backups");
+        let target_text = target.to_string_lossy();
+        let preview = preview_backup_root_dir_change(&target_text).unwrap();
+        assert!(preview.source_error.is_some());
+        assert!(
+            change_backup_root_dir_with_progress(&target_text, true, "reject-migrate", |_| {})
+                .is_err()
+        );
+        assert_eq!(fs::read(fixture.marker()).unwrap(), b"{broken preference");
+
+        let result =
+            change_backup_root_dir_with_progress(&target_text, false, "recover-switch", |_| {})
+                .unwrap();
+        assert!(!result.migrated);
+        assert_eq!(get_backup_root_dir().unwrap(), target);
+        let saved: serde_json::Value =
+            serde_json::from_slice(&fs::read(fixture.marker()).unwrap()).unwrap();
+        assert_eq!(saved["directory_path"], target_text.as_ref());
+        assert_eq!(
+            fs::read(fixture.root.join("broken-data")).unwrap(),
+            b"original user data"
+        );
+        assert_eq!(
+            fs::read(
+                fixture
+                    .marker()
+                    .with_file_name("broken-data.backup-directory.json.bak")
+            )
+            .unwrap(),
+            b"{broken preference"
+        );
+    }
+
+    #[test]
+    fn initial_directory_recovery_and_later_changes_use_the_same_persistent_location() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = RecoveryFixture::new();
+        let first = fixture.root.join("first-backups");
+        persist_backup_directory(&first).unwrap();
+        fs::write(first.join("old-backup.json"), b"saved backup").unwrap();
+        let second = fixture.root.join("second-backups");
+        let preview = preview_backup_root_dir_change(&second.to_string_lossy()).unwrap();
+        // The backup preference recovered; historical backups under the still
+        // broken application data root remain unreadable and cannot be migrated.
+        assert!(preview.source_error.is_some());
+        change_backup_root_dir_with_progress(
+            &second.to_string_lossy(),
+            false,
+            "switch-again",
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(get_backup_root_dir().unwrap(), second);
+        assert_eq!(
+            fs::read(first.join("old-backup.json")).unwrap(),
+            b"saved backup"
+        );
+        assert_eq!(
+            fs::read(fixture.root.join("broken-data")).unwrap(),
+            b"original user data"
+        );
+    }
+
+    #[test]
+    fn recovery_rejects_invalid_targets_without_replacing_the_saved_location() {
+        let _lock = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = RecoveryFixture::new();
+        let saved = fixture.root.join("saved-backups");
+        persist_backup_directory(&saved).unwrap();
+        let before = fs::read(fixture.marker()).unwrap();
+        let invalid = fixture.root.join("occupied-target");
+        fs::write(&invalid, b"keep target file").unwrap();
+        assert!(change_backup_root_dir_with_progress(
+            &invalid.to_string_lossy(),
+            false,
+            "invalid-target",
+            |_| {}
+        )
+        .is_err());
+        assert!(preview_backup_root_dir_change("relative-folder").is_err());
+        assert!(preview_backup_root_dir_change(&saved.join("nested").to_string_lossy()).is_err());
+        assert_eq!(get_backup_root_dir().unwrap(), saved);
+        assert_eq!(fs::read(fixture.marker()).unwrap(), before);
+        assert_eq!(fs::read(invalid).unwrap(), b"keep target file");
     }
 
     #[test]

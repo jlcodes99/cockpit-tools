@@ -15,6 +15,7 @@ import type {
   CodexLocalAccessOAuthQuotaReserve,
   CodexLocalAccessPortCleanupResult,
   CodexLocalAccessRequestLogQuery,
+  CodexLocalAccessRequestDetail,
   CodexLocalAccessRoutingStrategy,
   CodexLocalAccessScope,
   CodexLocalAccessState,
@@ -39,6 +40,7 @@ export async function saveCodexLocalAccessAccounts(
   sessionAffinity?: boolean,
   sessionAffinityTtlMs?: number,
   imageGenerationAccountPolicies?: Record<string, CodexLocalAccessImageGenerationPolicy>,
+  officialAccountBindings?: Record<string, string>,
 ): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_save_accounts", {
     accountIds,
@@ -48,6 +50,7 @@ export async function saveCodexLocalAccessAccounts(
     sessionAffinity: sessionAffinity ?? null,
     sessionAffinityTtlMs: sessionAffinityTtlMs ?? null,
     imageGenerationAccountPolicies: imageGenerationAccountPolicies ?? null,
+    officialAccountBindings: officialAccountBindings ?? null,
   });
 }
 
@@ -63,10 +66,28 @@ export async function removeCodexLocalAccessAccount(
   return await invoke("codex_local_access_remove_account", { accountId });
 }
 
+/** Both historical endpoints of one explicitly linked card may still be members. */
+export async function removeCodexLocalAccessAccounts(accountIds: string[]): Promise<CodexLocalAccessState> {
+  let state: CodexLocalAccessState | undefined;
+  for (const id of new Set(accountIds)) state = await removeCodexLocalAccessAccount(id);
+  return state ?? getCodexLocalAccessState();
+}
+
 export async function recoverCodexLocalAccessAccounts(
   accountIds: string[],
 ): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_recover_accounts", { accountIds });
+}
+
+/** Remove only this diagnostic; false means a newer failure must remain visible. */
+export async function clearCodexLocalAccessPoolFailure(
+  apiKeyId: string,
+  lastFailureAt: number,
+): Promise<boolean> {
+  return await invoke("codex_local_access_clear_pool_failure", {
+    apiKeyId,
+    lastFailureAt,
+  });
 }
 
 export async function rotateCodexLocalAccessApiKey(): Promise<CodexLocalAccessState> {
@@ -136,6 +157,30 @@ export async function queryCodexLocalAccessStats(
   return await invoke("codex_local_access_query_stats", { startAt, endAt });
 }
 
+export async function getCodexLocalAccessRequestDetail(
+  requestId: string,
+): Promise<CodexLocalAccessRequestDetail | null> {
+  return await invoke("codex_local_access_get_request_detail", { requestId });
+}
+
+export async function getCodexLocalAccessRequestPayloadLogging(): Promise<boolean> {
+  return await invoke("codex_local_access_get_request_payload_logging");
+}
+
+export async function getCodexLocalAccessRequestPayloadLoggingStatus(): Promise<{ pending: boolean; error?: string | null }> {
+  return await invoke("codex_local_access_get_request_payload_logging_status");
+}
+
+export async function updateCodexLocalAccessRequestPayloadLogging(
+  enabled: boolean,
+): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_update_request_payload_logging", { enabled });
+}
+
+export async function clearCodexLocalAccessRequestPayloads(): Promise<number> {
+  return await invoke("codex_local_access_clear_request_payloads");
+}
+
 export async function queryCodexLocalAccessAccountWindowStats(
   queries: CodexLocalAccessAccountWindowQuery[],
 ): Promise<CodexLocalAccessAccountWindowStats[]> {
@@ -149,7 +194,8 @@ export async function prepareCodexLocalAccessForRestart(): Promise<CodexLocalAcc
 }
 
 export async function restartCodexLocalAccessSidecar(): Promise<CodexLocalAccessState> {
-  return await invoke("codex_local_access_restart_sidecar");
+  const state = await invoke<CodexLocalAccessState>("codex_local_access_restart_sidecar");
+  return state;
 }
 
 export async function killCodexLocalAccessPort(): Promise<CodexLocalAccessPortCleanupResult> {
@@ -267,6 +313,14 @@ export async function updateCodexLocalAccessDebugLogs(
   });
 }
 
+export async function updateCodexLocalAccessImageGenerationMainModel(
+  imageGenerationMainModel: string | null,
+): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_update_image_generation_main_model", {
+    imageGenerationMainModel,
+  });
+}
+
 export async function updateCodexLocalAccessImageGenerationModel(
   imageGenerationModel: string,
 ): Promise<CodexLocalAccessState> {
@@ -275,11 +329,26 @@ export async function updateCodexLocalAccessImageGenerationModel(
   });
 }
 
+/** 累积发现、手动新增或删除持久化的图片模型目录；不会启动服务。 */
+export async function updateCodexLocalAccessImageGenerationModelCatalog(
+  discoveredModels?: string[],
+  addModel?: string,
+  removeModel?: string,
+): Promise<CodexLocalAccessState> {
+  return await invoke("codex_local_access_update_image_generation_model_catalog", {
+    discoveredModels: discoveredModels ?? null,
+    addModel: addModel ?? null,
+    removeModel: removeModel ?? null,
+  });
+}
+
 export async function updateCodexLocalAccessImageGenerationAccounts(
   accountIds: string[],
+  imageGenerationAccountModels?: Record<string, string> | null,
 ): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_update_image_generation_accounts", {
     accountIds,
+    imageGenerationAccountModels: imageGenerationAccountModels ?? null,
   });
 }
 
@@ -360,7 +429,8 @@ export async function deleteCodexLocalAccessApiKey(
 export async function setCodexLocalAccessEnabled(
   enabled: boolean,
 ): Promise<CodexLocalAccessState> {
-  return await invoke("codex_local_access_set_enabled", { enabled });
+  const state = await invoke<CodexLocalAccessState>("codex_local_access_set_enabled", { enabled });
+  return state;
 }
 
 export async function activateCodexLocalAccess(
@@ -369,10 +439,11 @@ export async function activateCodexLocalAccess(
   const startedAt = performance.now();
   console.info("[Codex API Service Switch][Service] invoke codex_local_access_activate started");
   try {
-    return await invoke("codex_local_access_activate", {
+    const state = await invoke<CodexLocalAccessState>("codex_local_access_activate", {
       autoRepairMode: null,
       instanceId: instanceId ?? null,
     });
+    return state;
   } finally {
     console.info(
       "[Codex API Service Switch][Service] invoke codex_local_access_activate finished",

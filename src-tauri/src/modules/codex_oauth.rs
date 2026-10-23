@@ -813,12 +813,6 @@ pub fn open_incognito_oauth_window(app: &AppHandle, auth_url: &str) -> Result<()
         return Err("Codex OAuth 授权地址与当前登录会话不匹配".to_string());
     }
 
-    if let Some(window) = app.get_webview_window(OAUTH_WINDOW_LABEL) {
-        window
-            .destroy()
-            .map_err(|error| format!("重置 Codex OAuth 无痕窗口失败: {}", error))?;
-    }
-
     let browser_proxy = if pending.proxy_required {
         if cfg!(target_os = "macos") {
             return Err("PROXY_OAUTH_BROWSER_UNSUPPORTED".into());
@@ -828,9 +822,35 @@ pub fn open_incognito_oauth_window(app: &AppHandle, auth_url: &str) -> Result<()
     } else {
         None
     };
-    let callback_port = pending.port;
-    let mut builder =
-        WebviewWindowBuilder::new(app, OAUTH_WINDOW_LABEL, WebviewUrl::External(parsed));
+    let callback = Url::parse(&format!("http://localhost:{}/auth/callback", pending.port))
+        .map_err(|_| "Codex OAuth callback is invalid")?;
+    build_incognito_oauth_window(
+        app,
+        OAUTH_WINDOW_LABEL,
+        "Codex OAuth",
+        parsed,
+        callback,
+        browser_proxy,
+        &pending.login_id,
+    )
+}
+
+/// Shared ephemeral WebView for independent OAuth registrations. The caller
+/// must supply its own session-owned URL and exact loopback callback.
+/// This uses the native WebView, not a shell/browser subprocess on Windows.
+pub(crate) fn build_incognito_oauth_window(
+    app: &AppHandle,
+    label: &str,
+    title: &str,
+    authorize: Url,
+    callback: Url,
+    browser_proxy: Option<Url>,
+    login_id: &str,
+) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(label) {
+        window.destroy().map_err(|_| "OAuth window reset failed")?;
+    }
+    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(authorize));
     if let Some(proxy) = browser_proxy {
         #[cfg(windows)]
         {
@@ -841,7 +861,7 @@ pub fn open_incognito_oauth_window(app: &AppHandle, auth_url: &str) -> Result<()
                 .app_cache_dir()
                 .map_err(|_| "PROXY_OAUTH_UNAVAILABLE")?
                 .join("oauth-proxy-webview")
-                .join(&pending.login_id);
+                .join(login_id);
             builder = builder.data_directory(isolated);
         }
         builder = builder.proxy_url(proxy).on_new_window(|_, _| {
@@ -851,13 +871,18 @@ pub fn open_incognito_oauth_window(app: &AppHandle, auth_url: &str) -> Result<()
         });
     }
     builder
-        .title("Codex OAuth")
+        .title(title)
         .inner_size(920.0, 720.0)
         .min_inner_size(640.0, 560.0)
         .center()
         .incognito(true)
         .on_navigation(move |url| {
-            if is_callback_navigation(url, callback_port) {
+            if url.origin() == callback.origin()
+                && url.path() == callback.path()
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.fragment().is_none()
+            {
                 logger::log_info("Codex OAuth 无痕窗口正在访问本地回调地址");
                 return true;
             }
@@ -873,10 +898,6 @@ pub fn open_incognito_oauth_window(app: &AppHandle, auth_url: &str) -> Result<()
         .build()
         .map_err(|error| format!("创建 Codex OAuth 无痕窗口失败: {}", error))?;
 
-    logger::log_info(&format!(
-        "Codex OAuth 无痕窗口已打开: login_id={}, port={}",
-        pending.login_id, pending.port
-    ));
     Ok(())
 }
 
