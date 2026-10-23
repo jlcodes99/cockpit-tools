@@ -7078,6 +7078,14 @@
       "timeRangeError": "開始時間は終了時間より後にできません"
     }
   },
+  "minimaxCode": {
+    "title": "MiniMax Codeアカウント管理",
+    "noAccounts": "MiniMax Code アカウントがありません",
+    "addAccount": "MiniMax Code アカウントを追加",
+    "search": "MiniMax Code アカウントを検索...",
+    "usageNormal": "正常",
+    "usageAbnormal": "異常"
+  },
   "zcode": {
     "search": "ZCode アカウントを検索...",
     "flowNotice": {

@@ -7078,6 +7078,14 @@
       "timeRangeError": "Počáteční čas nesmí být pozdější než koncový čas"
     }
   },
+  "minimaxCode": {
+    "title": "Správa účtů MiniMax Code",
+    "noAccounts": "Žádné účty MiniMax Code",
+    "addAccount": "Přidat účet MiniMax Code",
+    "search": "Hledat účty MiniMax Code...",
+    "usageNormal": "Normální",
+    "usageAbnormal": "Abnormální"
+  },
   "zcode": {
     "search": "Hledat účty ZCode...",
     "flowNotice": {

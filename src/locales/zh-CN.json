@@ -7426,6 +7426,14 @@
       }
     }
   },
+  "minimaxCode": {
+    "title": "MiniMax Code 账号管理",
+    "noAccounts": "暂无 MiniMax Code 账号",
+    "addAccount": "添加 MiniMax Code 账号",
+    "search": "搜索 MiniMax Code 账号...",
+    "usageNormal": "正常",
+    "usageAbnormal": "异常"
+  },
   "mfaVault": {
     "pageDesc": "安全地保存并管理您的 MFA 备用恢复码、安全密码集及其他敏感认证信息。以下MFA账号均在本地存储，误删、清缓存、换/丢设备均会导致MFA丢失，建议备份MFA。您也可以从备份中导入MFA。",
     "manualAdd": "手动添加凭证",

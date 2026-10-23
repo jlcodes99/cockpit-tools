@@ -7078,6 +7078,14 @@
       "timeRangeError": "Время начала не может быть позже времени окончания"
     }
   },
+  "minimaxCode": {
+    "title": "Управление аккаунтами MiniMax Code",
+    "noAccounts": "Нет аккаунтов MiniMax Code",
+    "addAccount": "Добавить аккаунт MiniMax Code",
+    "search": "Поиск аккаунтов MiniMax Code...",
+    "usageNormal": "В норме",
+    "usageAbnormal": "Аномально"
+  },
   "zcode": {
     "search": "Поиск аккаунтов ZCode...",
     "flowNotice": {

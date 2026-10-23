@@ -7078,6 +7078,14 @@
       "timeRangeError": "Başlangıç zamanı bitiş zamanından sonra olamaz"
     }
   },
+  "minimaxCode": {
+    "title": "MiniMax Code Hesap Yönetimi",
+    "noAccounts": "MiniMax Code hesabı yok",
+    "addAccount": "MiniMax Code Hesabı Ekle",
+    "search": "MiniMax Code hesaplarını ara...",
+    "usageNormal": "Normal​",
+    "usageAbnormal": "Anormal"
+  },
   "zcode": {
     "search": "ZCode hesaplarını ara...",
     "flowNotice": {

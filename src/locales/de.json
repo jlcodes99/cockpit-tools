@@ -7078,6 +7078,14 @@
       "timeRangeError": "Die Startzeit darf nicht nach der Endzeit liegen"
     }
   },
+  "minimaxCode": {
+    "title": "MiniMax Code-Kontenverwaltung",
+    "noAccounts": "Keine MiniMax Code-Konten",
+    "addAccount": "MiniMax Code-Konto hinzufügen",
+    "search": "MiniMax Code-Konten durchsuchen...",
+    "usageNormal": "Standard",
+    "usageAbnormal": "Anomal"
+  },
   "zcode": {
     "search": "ZCode-Konten suchen...",
     "flowNotice": {

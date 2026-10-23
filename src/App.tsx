@@ -391,6 +391,11 @@ interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
   trae_cn_app_scan_roots: string;
   trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
+  minimax_code_app_path: string;
+  minimax_code_auto_refresh_minutes: number;
+  minimax_code_region: string;
+  minimax_code_quota_alert_enabled: boolean;
+  minimax_code_quota_alert_threshold: number;
   zed_app_path: string;
 }
 

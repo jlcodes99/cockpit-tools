@@ -7078,6 +7078,14 @@
       "timeRangeError": "L'ora di inizio non può essere successiva all'ora di fine"
     }
   },
+  "minimaxCode": {
+    "title": "Gestione account MiniMax Code",
+    "noAccounts": "Nessun account MiniMax Code",
+    "addAccount": "Aggiungi account MiniMax Code",
+    "search": "Cerca account MiniMax Code...",
+    "usageNormal": "Stato normale",
+    "usageAbnormal": "Anomalo"
+  },
   "zcode": {
     "search": "Cerca account ZCode...",
     "flowNotice": {

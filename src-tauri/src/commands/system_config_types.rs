@@ -120,6 +120,8 @@ pub struct GeneralConfig {
     pub codebuddy_cn_auto_refresh_minutes: i32,
     /// WorkBuddy 自动刷新间隔（分钟），-1 表示禁用
     pub workbuddy_auto_refresh_minutes: i32,
+    /// MiniMax Code 自动刷新间隔（分钟），-1 表示禁用
+    pub minimax_code_auto_refresh_minutes: i32,
     /// Qoder 自动刷新间隔（分钟），-1 表示禁用
     pub qoder_auto_refresh_minutes: i32,
     /// ZCode 自动刷新间隔（分钟），-1 表示禁用
@@ -223,6 +225,10 @@ pub struct GeneralConfig {
     pub trae_solo_cn_app_scan_roots: String,
     /// WorkBuddy 启动路径（为空则使用默认路径）
     pub workbuddy_app_path: String,
+    /// MiniMax Code 启动路径（为空则使用默认路径）
+    pub minimax_code_app_path: String,
+    /// MiniMax Code 区域
+    pub minimax_code_region: String,
     /// 切换 WorkBuddy 账号时是否在本机账号间合并本地会话
     pub workbuddy_share_sessions_on_switch: bool,
     /// 切换 Codex 时是否自动重启 OpenCode
@@ -347,6 +353,10 @@ pub struct GeneralConfig {
     pub workbuddy_quota_alert_enabled: bool,
     /// WorkBuddy 配额预警阈值（百分比）
     pub workbuddy_quota_alert_threshold: i32,
+    /// 是否启用 MiniMax Code 配额预警通知
+    pub minimax_code_quota_alert_enabled: bool,
+    /// MiniMax Code 配额预警阈值（百分比）
+    pub minimax_code_quota_alert_threshold: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1171,6 +1181,7 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "codebuddy_auto_refresh_minutes"
             | "codebuddy_cn_auto_refresh_minutes"
             | "workbuddy_auto_refresh_minutes"
+            | "minimax_code_auto_refresh_minutes"
             | "qoder_auto_refresh_minutes"
             | "zcode_auto_refresh_minutes"
             | "trae_auto_refresh_minutes"
@@ -1230,6 +1241,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "trae_cn_app_scan_roots"
             | "trae_solo_cn_app_scan_roots"
             | "workbuddy_app_path"
+            | "minimax_code_app_path"
+            | "minimax_code_region"
             | "workbuddy_share_sessions_on_switch"
             | "opencode_sync_on_switch"
             | "opencode_auth_overwrite_on_switch"
@@ -1296,6 +1309,8 @@ fn is_general_config_patch_field(key: &str) -> bool {
             | "trae_solo_cn_quota_alert_threshold"
             | "workbuddy_quota_alert_enabled"
             | "workbuddy_quota_alert_threshold"
+            | "minimax_code_quota_alert_enabled"
+            | "minimax_code_quota_alert_threshold"
     )
 }
 
@@ -1409,6 +1424,7 @@ fn apply_general_config_updates(
     trim_string_field!("trae_cn_app_scan_roots", trae_cn_app_scan_roots);
     trim_string_field!("trae_solo_cn_app_scan_roots", trae_solo_cn_app_scan_roots);
     normalize_app_path_field!("workbuddy_app_path", workbuddy_app_path);
+    normalize_app_path_field!("minimax_code_app_path", minimax_code_app_path);
 
     if updates.contains_key("auto_switch_scope_mode") {
         let normalized = next.auto_switch_scope_mode.trim();

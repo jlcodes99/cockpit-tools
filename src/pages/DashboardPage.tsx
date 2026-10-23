@@ -2680,6 +2680,7 @@ export function DashboardPage({
     trae_cn: stats.trae_cn,
     trae_solo_cn: stats.trae_solo_cn,
     workbuddy: stats.workbuddy,
+    minimaxcode: 0,
   };
 
   const entryCounts = useMemo(() => {
