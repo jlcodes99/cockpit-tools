@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.3.74] - 2026-10-23
+## [Unreleased]
 
 ### Added
 
@@ -17,8 +17,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - **Cursor switch restart restores the previous workspace**: on restart, Cockpit reopens the last folder/workspace so the prior IDE chat context is not lost to a blank welcome page.
-
-## [Unreleased]
 
 ### Changed
 
