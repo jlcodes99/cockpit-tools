@@ -627,7 +627,7 @@ fn launch_windows_codex_managed_instance(
         .as_ref()
         .map(|p| PathBuf::from(&p.executable))
         .unwrap_or_else(|| configured.to_path_buf());
-    if normalized_windows_path_text(&launch_path) != normalized_windows_path_text(configured) {
+    if codex_store_confirmation_may_replace_configured(configured, &launch_path) {
         update_app_path_in_config("codex", &launch_path, &configured.to_string_lossy());
     }
     let before: HashSet<u32> =
@@ -661,7 +661,7 @@ fn launch_windows_codex_managed_instance(
         )
         .map_err(|error| fail(&launch_path, "activation", &error))?;
         launch_path = PathBuf::from(&confirmed.executable);
-        if normalized_windows_path_text(&launch_path) != normalized_windows_path_text(configured) {
+        if codex_store_confirmation_may_replace_configured(configured, &launch_path) {
             update_app_path_in_config("codex", &launch_path, &configured.to_string_lossy());
         }
         package = Some(confirmed);

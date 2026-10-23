@@ -355,7 +355,23 @@ fn start_codex_default_internal(
         ));
 
         let mut store_entry_launched = false;
-        let app_user_model_id = detect_codex_store_app_user_model_id();
+        let keep_configured_exe = launch_path_for_probe
+            .as_deref()
+            .is_some_and(codex_default_launch_uses_configured_exe);
+        // 本机装了商店版时，旧逻辑会无条件激活商店入口，再把确认到的商店 exe 写回配置。
+        // 用户已经选定非商店 ChatGPT.exe 时必须跳过这一步，否则每次切号启动都会改回默认路径。
+        let app_user_model_id = if let Some(path) = launch_path_for_probe
+            .as_deref()
+            .filter(|path| codex_default_launch_uses_configured_exe(path))
+        {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] 保留用户指定的非商店 Codex 路径，跳过系统商店入口: {}",
+                path.to_string_lossy()
+            ));
+            None
+        } else {
+            detect_codex_store_app_user_model_id()
+        };
         if let Some(app_user_model_id) = app_user_model_id {
             crate::modules::logger::log_info(&format!(
                 "[Codex Start] 启动策略候选=system-store-entry app_id={}",
@@ -417,7 +433,7 @@ fn start_codex_default_internal(
                     return Err(err);
                 }
             }
-        } else {
+        } else if !keep_configured_exe {
             crate::modules::logger::log_warn(
                 "[Codex Start] 未探测到 Codex AppUserModelId，准备回退可执行路径",
             );

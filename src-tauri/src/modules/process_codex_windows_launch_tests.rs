@@ -567,6 +567,66 @@ fn uncertain_activation_proceeds_to_confirmation_without_retry() {
 }
 
 #[test]
+fn explicit_unpackaged_chatgpt_exe_is_not_replaced_by_store_default() {
+    let directory = std::env::temp_dir().join(format!(
+        "codex-portable-path-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let path = directory.join("ChatGPT.exe");
+    // A locked or non-PE selection used to fail the GUI check and get overwritten.
+    std::fs::write(&path, b"not an executable").unwrap();
+    let store = Path::new(
+        r"C:\Program Files\WindowsApps\OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0\app\ChatGPT.exe",
+    );
+    assert!(!is_usable_codex_windows_gui_path(&path));
+    assert!(is_explicit_unpackaged_codex_gui_path(&path));
+    assert!(should_keep_configured_codex_launch_path(&path));
+    assert!(codex_default_launch_uses_configured_exe(&path));
+    assert!(!codex_store_confirmation_may_replace_configured(&path, store));
+
+    let missing = directory.join("missing").join("ChatGPT.exe");
+    assert!(!should_keep_configured_codex_launch_path(&missing));
+    assert!(!codex_default_launch_uses_configured_exe(&missing));
+    assert!(codex_store_confirmation_may_replace_configured(
+        &missing, store
+    ));
+
+    let old_store = Path::new(
+        r"C:\Program Files\WindowsApps\OpenAI.Codex_0.0.0.1_x64__2p2nqsd0c76g0\app\ChatGPT.exe",
+    );
+    let new_store = Path::new(
+        r"C:\Program Files\WindowsApps\OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0\app\ChatGPT.exe",
+    );
+    let other_family = Path::new(
+        r"C:\Program Files\WindowsApps\OpenAI.ChatGPT_1.0.0.0_x64__otherpub\app\ChatGPT.exe",
+    );
+    assert!(!codex_default_launch_uses_configured_exe(old_store));
+    assert!(codex_store_confirmation_may_replace_configured(
+        old_store, new_store
+    ));
+    assert!(!codex_store_confirmation_may_replace_configured(
+        old_store,
+        other_family
+    ));
+    let legacy = Path::new(
+        r"C:\Program Files\WindowsApps\OpenAI.Codex_0.0.0.1_x64__2p2nqsd0c76g0\app\Codex.exe",
+    );
+    assert!(codex_store_confirmation_may_replace_configured(
+        legacy, new_store
+    ));
+
+    let cli = directory.join("codex.exe");
+    std::fs::write(&cli, b"not an executable").unwrap();
+    assert!(!should_keep_configured_codex_launch_path(&cli));
+    assert!(codex_store_confirmation_may_replace_configured(&cli, store));
+
+    std::fs::remove_file(&path).unwrap();
+    std::fs::remove_file(cli).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+}
+
+#[test]
 fn quick_path_validation_rejects_cli_dll_wrong_name_and_broken_files() {
     let directory = std::env::temp_dir().join(format!("codex-pe-test-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&directory).unwrap();

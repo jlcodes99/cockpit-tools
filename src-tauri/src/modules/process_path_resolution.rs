@@ -2107,6 +2107,64 @@ fn is_usable_codex_windows_gui_path(path: &Path) -> bool {
     is_chatgpt_store_gui_exe(path) && windows_executable_has_gui_subsystem(path)
 }
 
+/// 用户在界面里选定的非商店 `ChatGPT.exe`。商店目录只是安装位置提示，不是这种选择。
+#[cfg(any(test, target_os = "windows"))]
+fn is_explicit_unpackaged_codex_gui_path(path: &Path) -> bool {
+    is_chatgpt_store_gui_exe(path) && !is_windowsapps_launch_path(path)
+}
+
+/// 文件不存在才算失效。占用、拒绝访问等读取失败不能当成“路径没了”。
+#[cfg(any(test, target_os = "windows"))]
+fn codex_path_metadata_keeps_selection(path: &Path) -> bool {
+    match std::fs::metadata(path) {
+        Ok(metadata) => metadata.is_file(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => true,
+    }
+}
+
+/// 已选中且仍存在的非商店 `ChatGPT.exe` 必须原样保留。
+///
+/// PE 读失败（例如主程序正在运行）不能触发商店路径回写。商店路径仍要求能确认是桌面主程序，
+/// 这样同一包更新后的旧目录才可以刷新。
+#[cfg(any(test, target_os = "windows"))]
+fn should_keep_configured_codex_launch_path(path: &Path) -> bool {
+    if is_explicit_unpackaged_codex_gui_path(path) {
+        return codex_path_metadata_keeps_selection(path);
+    }
+    is_usable_codex_windows_gui_path(path)
+}
+
+/// 默认实例切号启动：非商店选择直接执行该文件，不激活本机已注册的商店包。
+#[cfg(any(test, target_os = "windows"))]
+fn codex_default_launch_uses_configured_exe(path: &Path) -> bool {
+    is_explicit_unpackaged_codex_gui_path(path) && codex_path_metadata_keeps_selection(path)
+}
+
+/// 只有空路径、已缺失的选择、旧官方商店路径，或同一商店包家族的新安装目录，才允许写回。
+#[cfg(any(test, target_os = "windows"))]
+fn codex_store_confirmation_may_replace_configured(configured: &Path, confirmed: &Path) -> bool {
+    if normalized_windows_path_text(configured) == normalized_windows_path_text(confirmed) {
+        return false;
+    }
+    if is_explicit_unpackaged_codex_gui_path(configured)
+        && codex_path_metadata_keeps_selection(configured)
+    {
+        return false;
+    }
+    if is_windowsapps_launch_path(configured) {
+        return match (
+            codex_store_package_family_from_path(configured),
+            codex_store_package_family_from_path(confirmed),
+        ) {
+            (Some(current), Some(next)) => current.eq_ignore_ascii_case(&next),
+            _ => is_windowsapps_launch_path(confirmed) && is_chatgpt_store_gui_exe(confirmed),
+        };
+    }
+    !is_explicit_unpackaged_codex_gui_path(configured)
+        || !codex_path_metadata_keeps_selection(configured)
+}
+
 /// 读取 `AppxManifest.xml` 里 `Application Id="App"` 的 `Executable`。
 #[cfg(any(test, target_os = "windows"))]
 fn appx_manifest_gui_executable(install_location: &std::path::Path) -> Option<String> {
@@ -2334,7 +2392,12 @@ fn detect_codex_store_app_user_model_id_uncached() -> Option<String> {
 fn detect_codex_store_app_user_model_id() -> Option<String> {
     // A configured GUI path already identifies its manifest entry. Registration
     // is validated by the shared activation script, not by Get-StartApps here.
+    // An explicit non-Store selection must not fall through to the registered
+    // Store package; that fallback was replacing the saved launch path.
     if let Ok(path) = resolve_codex_launch_path() {
+        if codex_default_launch_uses_configured_exe(&path) {
+            return None;
+        }
         if let Some(package) = codex_package_hint_from_path(&path) {
             return Some(format!("{}!{}", package.family_name, package.app_id));
         }
@@ -2400,14 +2463,17 @@ fn launch_codex_via_store_app_user_model_id(
         },
     )?;
     if let Some(path) = configured.as_deref() {
-        if normalized_windows_path_text(Path::new(&confirmed.executable))
-            != normalized_windows_path_text(path)
+        let confirmed_path = Path::new(&confirmed.executable);
+        if codex_store_confirmation_may_replace_configured(path, confirmed_path) {
+            update_app_path_in_config("codex", confirmed_path, &path.to_string_lossy());
+        } else if normalized_windows_path_text(confirmed_path) != normalized_windows_path_text(path)
+            && is_explicit_unpackaged_codex_gui_path(path)
         {
-            update_app_path_in_config(
-                "codex",
-                Path::new(&confirmed.executable),
-                &path.to_string_lossy(),
-            );
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] 保留用户指定的 Codex 路径，不写回商店路径: configured={} store={}",
+                path.to_string_lossy(),
+                confirmed_path.to_string_lossy()
+            ));
         }
     }
     Ok(())
@@ -3111,21 +3177,23 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
 /// Windows：解析 Codex 桌面端启动路径。
 ///
 /// 规则（按优先级）：
-/// 1. 配置里的路径存在且是桌面主程序 → 直接使用；CLI 与辅助程序不能作为桌面入口。
-/// 2. 未配置或路径已经不可用 → 按当前用户已注册的商店包解析
-///    （PFN → InstallLocation → 清单里的 `Executable`），解析成功即**写回配置**作为新的启动路径。
-///    商店更新换目录后旧目录若还在但已不能执行，由启动失败后的重新解析兜底。
-/// 3. 商店包解析不到 → 遗留商店路径迁移（旧版 `Codex.exe` → `ChatGPT.exe`）。
+/// 1. 配置里的非商店 `ChatGPT.exe` 仍存在 → 原样使用，不探测、不写回商店路径。
+///    读 PE 失败（文件被占用）也不视为失效。
+/// 2. 配置里的商店路径存在且是桌面主程序 → 直接使用。CLI 与辅助程序不能作为桌面入口。
+/// 3. 未配置、文件已不存在，或商店路径已经不可用 → 按当前用户已注册的商店包解析
+///    （PFN → InstallLocation → 清单里的 `Executable`），解析成功即**写回配置**。
+///    只刷新同一商店包家族；不能用本机默认商店包替换用户选定的其他安装。
+/// 4. 商店包解析不到 → 遗留商店路径迁移（旧版 `Codex.exe` → `ChatGPT.exe`）。
 ///
 /// 全程只读包注册信息：不扫描 WindowsApps 目录（普通用户会被拒，带 `-Filter` 的枚举
-/// 还可能静默返回空），也不依赖客户端是否正在运行；只接受 `ChatGPT.exe`。
+/// 还可能静默返回空），也不依赖客户端是否正在运行；自动探测只接受 `ChatGPT.exe`。
 #[cfg(target_os = "windows")]
 fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
     let configured = config::get_user_config().codex_app_path;
     let configured_path = normalize_custom_path(Some(&configured)).map(std::path::PathBuf::from);
 
     if let Some(path) = configured_path.as_deref() {
-        if is_usable_codex_windows_gui_path(path) {
+        if should_keep_configured_codex_launch_path(path) {
             return Ok(path.to_path_buf());
         }
         crate::modules::logger::log_warn(&format!(
@@ -3137,11 +3205,22 @@ fn resolve_codex_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(detected) =
         detect_codex_store_gui_exe().filter(|path| is_usable_codex_windows_gui_path(path))
     {
-        update_app_path_in_config("codex", &detected, &configured);
-        crate::modules::logger::log_info(&format!(
-            "[Codex Start] 已自动探测并写回 Codex 启动路径: {}",
-            detected.to_string_lossy()
-        ));
+        let allow_write = configured_path.as_deref().is_none_or(|path| {
+            codex_store_confirmation_may_replace_configured(path, &detected)
+        });
+        if allow_write {
+            update_app_path_in_config("codex", &detected, &configured);
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] 已自动探测并写回 Codex 启动路径: {}",
+                detected.to_string_lossy()
+            ));
+        } else if let Some(path) = configured_path.as_deref() {
+            crate::modules::logger::log_info(&format!(
+                "[Codex Start] 保留用户指定的 Codex 路径，不写回商店路径: configured={} store={}",
+                path.to_string_lossy(),
+                detected.to_string_lossy()
+            ));
+        }
         return Ok(detected);
     }
 

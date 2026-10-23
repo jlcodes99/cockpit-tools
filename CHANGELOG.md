@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Keep a selected non-Store Codex launch path on Windows across account switch and start. An existing custom `ChatGPT.exe` is launched as configured. The path is rewritten only when it is empty, missing, a legacy Store `Codex.exe`, or a newer install of the same Store package.
+
 ## [1.3.73] - 2026-10-22
 
 ### Changed
