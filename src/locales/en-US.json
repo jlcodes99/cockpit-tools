@@ -6719,7 +6719,12 @@
       "quotaFailed": "Quota query failed ({{count}})",
       "cleanQuotaFailedAction": "Delete quota-failed accounts ({{count}})",
       "cleanQuotaFailedConfirm": "Delete all {{count}} account(s) with quota query failures?"
-    }
+    },
+    "manualQuotaExhausted": "Manual zero",
+    "manualQuotaExhaustedTooltip": "This account's quota was manually set to 0 and will be skipped when suggesting a switch after a quota alert",
+    "manualQuotaExhaustedSet": "Account quota marked as manually exhausted",
+    "manualQuotaExhaustedCleared": "Manual quota zero cleared for this account",
+    "manualQuotaExhaustedFailed": "Failed to update manual quota flag: {{error}}"
   },
   "breakout": {
     "gameOver": "Game Over",

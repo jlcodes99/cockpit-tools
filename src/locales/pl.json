@@ -6399,7 +6399,12 @@
       "quotaFailed": "Zapytanie o limit nie powiodło się ({{count}})",
       "cleanQuotaFailedAction": "Usuń konta z nieudanym zapytaniem o limit ({{count}})",
       "cleanQuotaFailedConfirm": "Usunąć wszystkie {{count}} kont, dla których zapytanie o limit nie powiodło się?"
-    }
+    },
+    "manualQuotaExhausted": "Ręczne zero",
+    "manualQuotaExhaustedTooltip": "Limit tego konta ustawiono ręcznie na 0 i nie będzie sugerowany przy alercie przełączenia",
+    "manualQuotaExhaustedSet": "Limit konta oznaczono jako ręcznie wyczerpany",
+    "manualQuotaExhaustedCleared": "Cofnięto ręczne wyzerowanie limitu dla tego konta",
+    "manualQuotaExhaustedFailed": "Nie udało się zaktualizować ręcznej flagi limitu: {{error}}"
   },
   "breakout": {
     "gameOver": "Koniec gry",

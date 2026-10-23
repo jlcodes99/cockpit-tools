@@ -1133,12 +1133,117 @@ fn sanitize_macos_gui_launch_env(cmd: &mut Command) {
 #[cfg(target_os = "linux")]
 fn sanitize_macos_gui_launch_env(_cmd: &mut Command) {}
 
+fn file_uri_to_fs_path(uri: &str) -> Option<String> {
+    let trimmed = uri.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if !trimmed.to_ascii_lowercase().starts_with("file:") {
+        let path = PathBuf::from(trimmed);
+        return path.exists().then(|| path.to_string_lossy().to_string());
+    }
+    let parsed = url::Url::parse(trimmed).ok()?;
+    let path = parsed.to_file_path().ok()?;
+    path.exists()
+        .then(|| path.to_string_lossy().to_string())
+}
+
+fn push_unique_open_candidate(out: &mut Vec<String>, value: Option<&str>) {
+    let Some(raw) = value.map(str::trim).filter(|v| !v.is_empty()) else {
+        return;
+    };
+    let Some(path) = file_uri_to_fs_path(raw) else {
+        return;
+    };
+    if !out.iter().any(|existing| existing == &path) {
+        out.push(path);
+    }
+}
+
+fn collect_open_candidates_from_window_value(value: &serde_json::Value, out: &mut Vec<String>) {
+    if let Some(obj) = value.as_object() {
+        push_unique_open_candidate(out, obj.get("folder").and_then(|v| v.as_str()));
+        push_unique_open_candidate(out, obj.get("workspace").and_then(|v| v.as_str()));
+        push_unique_open_candidate(out, obj.get("folderUri").and_then(|v| v.as_str()));
+        push_unique_open_candidate(out, obj.get("workspaceUri").and_then(|v| v.as_str()));
+        push_unique_open_candidate(out, obj.get("configURIPath").and_then(|v| v.as_str()));
+        push_unique_open_candidate(out, obj.get("configPath").and_then(|v| v.as_str()));
+    }
+}
+
+/// Read the last opened folder/workspace from Cursor's profile storage so we can
+/// reopen it after an account-switch restart (instead of an empty welcome window).
+pub fn resolve_last_cursor_open_path(user_data_dir: &Path) -> Option<String> {
+    let storage_path = user_data_dir
+        .join("User")
+        .join("globalStorage")
+        .join("storage.json");
+    let content = fs::read_to_string(&storage_path).ok()?;
+    let root: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let mut candidates = Vec::new();
+
+    if let Some(windows_state) = root.get("windowsState") {
+        collect_open_candidates_from_window_value(
+            windows_state
+                .get("lastActiveWindow")
+                .unwrap_or(&serde_json::Value::Null),
+            &mut candidates,
+        );
+        if let Some(opened) = windows_state.get("openedWindows").and_then(|v| v.as_array()) {
+            for window in opened {
+                collect_open_candidates_from_window_value(window, &mut candidates);
+            }
+        }
+    }
+
+    if let Some(backup) = root.get("backupWorkspaces") {
+        if let Some(folders) = backup.get("folders").and_then(|v| v.as_array()) {
+            for folder in folders {
+                collect_open_candidates_from_window_value(folder, &mut candidates);
+            }
+        }
+        if let Some(workspaces) = backup.get("workspaces").and_then(|v| v.as_array()) {
+            for workspace in workspaces {
+                collect_open_candidates_from_window_value(workspace, &mut candidates);
+            }
+        }
+    }
+
+    let chosen = candidates.into_iter().next()?;
+    modules::logger::log_info(&format!(
+        "[Cursor Start] 恢复关闭前工作区/对话目录: {}",
+        chosen
+    ));
+    Some(chosen)
+}
+
+fn append_cursor_window_and_open_args(
+    cmd: &mut Command,
+    use_new_window: bool,
+    open_path: Option<&str>,
+) {
+    let open_path = open_path.map(str::trim).filter(|value| !value.is_empty());
+    if open_path.is_some() {
+        // Opening an explicit folder/workspace always needs a fresh window target.
+        cmd.arg("--new-window");
+    } else if use_new_window {
+        cmd.arg("--new-window");
+    }
+    // When neither flag is set, Cursor restores previous windows from profile storage.
+    // Avoid `--reuse-window` here: after a full quit there is no window to reuse, and
+    // that flag tends to land on the welcome page instead of the previous chat.
+    for arg in open_path.into_iter() {
+        cmd.arg(arg);
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn spawn_cursor_windows(
     launch_path: &Path,
     user_data_dir: &str,
     extra_args: &[String],
     use_new_window: bool,
+    open_path: Option<&str>,
 ) -> Result<u32, String> {
     use std::os::windows::process::CommandExt;
 
@@ -1149,11 +1254,7 @@ fn spawn_cursor_windows(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     cmd.arg("--user-data-dir").arg(user_data_dir.trim());
-    if use_new_window {
-        cmd.arg("--new-window");
-    } else {
-        cmd.arg("--reuse-window");
-    }
+    append_cursor_window_and_open_args(&mut cmd, use_new_window, open_path);
     for arg in extra_args {
         if !arg.trim().is_empty() {
             cmd.arg(arg.trim());
@@ -1170,6 +1271,7 @@ fn spawn_cursor_macos_open(
     user_data_dir: &str,
     extra_args: &[String],
     use_new_window: bool,
+    open_path: Option<&str>,
 ) -> Result<u32, String> {
     let app_root = normalize_macos_app_root(launch_path).ok_or("APP_PATH_NOT_FOUND:cursor")?;
     let target = user_data_dir.trim();
@@ -1180,11 +1282,7 @@ fn spawn_cursor_macos_open(
     cmd.arg("-n").arg("-a").arg(&app_root);
     cmd.arg("--args");
     cmd.arg("--user-data-dir").arg(target);
-    if use_new_window {
-        cmd.arg("--new-window");
-    } else {
-        cmd.arg("--reuse-window");
-    }
+    append_cursor_window_and_open_args(&mut cmd, use_new_window, open_path);
     for arg in extra_args {
         if !arg.trim().is_empty() {
             cmd.arg(arg.trim());
@@ -1215,6 +1313,7 @@ fn spawn_cursor_unix(
     user_data_dir: &str,
     extra_args: &[String],
     use_new_window: bool,
+    open_path: Option<&str>,
 ) -> Result<u32, String> {
     let mut cmd = Command::new(launch_path);
     crate::modules::process::apply_managed_proxy_env_to_command(&mut cmd);
@@ -1223,11 +1322,7 @@ fn spawn_cursor_unix(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     cmd.arg("--user-data-dir").arg(user_data_dir.trim());
-    if use_new_window {
-        cmd.arg("--new-window");
-    } else {
-        cmd.arg("--reuse-window");
-    }
+    append_cursor_window_and_open_args(&mut cmd, use_new_window, open_path);
     for arg in extra_args {
         if !arg.trim().is_empty() {
             cmd.arg(arg.trim());
@@ -1242,6 +1337,7 @@ pub fn start_cursor_with_args_with_new_window(
     user_data_dir: &str,
     extra_args: &[String],
     use_new_window: bool,
+    open_path: Option<&str>,
 ) -> Result<u32, String> {
     let target = user_data_dir.trim();
     if target.is_empty() {
@@ -1251,22 +1347,40 @@ pub fn start_cursor_with_args_with_new_window(
 
     #[cfg(target_os = "windows")]
     {
-        return spawn_cursor_windows(&launch_path, target, extra_args, use_new_window);
+        return spawn_cursor_windows(
+            &launch_path,
+            target,
+            extra_args,
+            use_new_window,
+            open_path,
+        );
     }
 
     #[cfg(target_os = "macos")]
     {
-        return spawn_cursor_macos_open(&launch_path, target, extra_args, use_new_window);
+        return spawn_cursor_macos_open(
+            &launch_path,
+            target,
+            extra_args,
+            use_new_window,
+            open_path,
+        );
     }
 
     #[cfg(target_os = "linux")]
     {
-        return spawn_cursor_unix(&launch_path, target, extra_args, use_new_window);
+        return spawn_cursor_unix(
+            &launch_path,
+            target,
+            extra_args,
+            use_new_window,
+            open_path,
+        );
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
-        let _ = (target, extra_args, use_new_window);
+        let _ = (target, extra_args, use_new_window, open_path);
         Err("Cursor 应用多开仅支持 macOS、Windows 和 Linux".to_string())
     }
 }
@@ -1274,12 +1388,14 @@ pub fn start_cursor_with_args_with_new_window(
 pub fn start_cursor_default_with_args_with_new_window(
     extra_args: &[String],
     use_new_window: bool,
+    open_path: Option<&str>,
 ) -> Result<u32, String> {
     let default_dir = get_default_cursor_user_data_dir()?;
     start_cursor_with_args_with_new_window(
         &default_dir.to_string_lossy(),
         extra_args,
         use_new_window,
+        open_path,
     )
 }
 

@@ -6399,7 +6399,12 @@
       "quotaFailed": "Truy vấn hạn ngạch thất bại ({{count}})",
       "cleanQuotaFailedAction": "Xóa tài khoản có truy vấn hạn ngạch thất bại ({{count}})",
       "cleanQuotaFailedConfirm": "Xóa tất cả {{count}} tài khoản có truy vấn hạn ngạch thất bại?"
-    }
+    },
+    "manualQuotaExhausted": "Đặt về 0 thủ công",
+    "manualQuotaExhaustedTooltip": "Hạn mức tài khoản này đã được đặt thủ công về 0 và sẽ không được gợi ý khi cảnh báo đổi tài khoản",
+    "manualQuotaExhaustedSet": "Đã đánh dấu hạn mức tài khoản là hết thủ công",
+    "manualQuotaExhaustedCleared": "Đã hủy đặt hạn mức về 0 thủ công cho tài khoản này",
+    "manualQuotaExhaustedFailed": "Cập nhật cờ hạn mức thủ công thất bại: {{error}}"
   },
   "breakout": {
     "gameOver": "Kết thúc game",

@@ -6399,7 +6399,12 @@
       "quotaFailed": "Dotaz kvóty selhal ({{count}})",
       "cleanQuotaFailedAction": "Smazat účty s neúspěšným dotazem kvóty ({{count}})",
       "cleanQuotaFailedConfirm": "Odstranit všech {{count}} účtů, u kterých selhal dotaz kvóty?"
-    }
+    },
+    "manualQuotaExhausted": "Ruční nula",
+    "manualQuotaExhaustedTooltip": "Kvóta tohoto účtu byla ručně nastavena na 0 a nebude navrhována při upozornění na přepnutí",
+    "manualQuotaExhaustedSet": "Kvóta účtu označena jako ručně vyčerpaná",
+    "manualQuotaExhaustedCleared": "Ruční vynulování kvóty u tohoto účtu zrušeno",
+    "manualQuotaExhaustedFailed": "Aktualizace ruční značky kvóty selhala: {{error}}"
   },
   "breakout": {
     "gameOver": "Konec hry",

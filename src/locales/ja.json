@@ -6399,7 +6399,12 @@
       "quotaFailed": "クォータ照会に失敗（{{count}}）",
       "cleanQuotaFailedAction": "クォータ照会に失敗したアカウントを削除（{{count}}）",
       "cleanQuotaFailedConfirm": "クォータ照会に失敗した{{count}}件のアカウントをすべて削除しますか？"
-    }
+    },
+    "manualQuotaExhausted": "手動ゼロ",
+    "manualQuotaExhaustedTooltip": "このアカウントのクォータは手動で 0 に設定されており、クォータ警告の切替候補から除外されます",
+    "manualQuotaExhaustedSet": "アカウントのクォータを手動で使い切り済みにしました",
+    "manualQuotaExhaustedCleared": "このアカウントの手動クォータゼロを解除しました",
+    "manualQuotaExhaustedFailed": "手動クォータフラグの更新に失敗しました: {{error}}"
   },
   "breakout": {
     "gameOver": "ゲームオーバー",

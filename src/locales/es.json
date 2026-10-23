@@ -6399,7 +6399,12 @@
       "quotaFailed": "Error al consultar la cuota ({{count}})",
       "cleanQuotaFailedAction": "Eliminar cuentas con error de cuota ({{count}})",
       "cleanQuotaFailedConfirm": "¿Eliminar las {{count}} cuentas cuya consulta de cuota falló?"
-    }
+    },
+    "manualQuotaExhausted": "Cero manual",
+    "manualQuotaExhaustedTooltip": "La cuota de esta cuenta se estableció manualmente en 0 y no se sugerirá al cambiar por alerta de cuota",
+    "manualQuotaExhaustedSet": "Cuota de la cuenta marcada como agotada manualmente",
+    "manualQuotaExhaustedCleared": "Se quitó el cero manual de cuota de esta cuenta",
+    "manualQuotaExhaustedFailed": "Error al actualizar la marca de cuota manual: {{error}}"
   },
   "breakout": {
     "gameOver": "Juego terminado",

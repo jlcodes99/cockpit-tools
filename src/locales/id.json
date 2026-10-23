@@ -6546,7 +6546,12 @@
       "quotaFailed": "Permintaan kuota gagal ({{count}})",
       "cleanQuotaFailedAction": "Hapus akun dengan permintaan kuota gagal ({{count}})",
       "cleanQuotaFailedConfirm": "Hapus semua {{count}} akun yang permintaan kuotanya gagal?"
-    }
+    },
+    "manualQuotaExhausted": "Nol manual",
+    "manualQuotaExhaustedTooltip": "Kuota akun ini disetel manual ke 0 dan tidak akan disarankan saat peringatan ganti akun",
+    "manualQuotaExhaustedSet": "Kuota akun ditandai habis secara manual",
+    "manualQuotaExhaustedCleared": "Nol manual kuota untuk akun ini dibatalkan",
+    "manualQuotaExhaustedFailed": "Gagal memperbarui tanda kuota manual: {{error}}"
   },
   "breakout": {
     "gameOver": "Game Over​",

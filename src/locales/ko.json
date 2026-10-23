@@ -6399,7 +6399,12 @@
       "quotaFailed": "할당량 조회 실패 ({{count}})",
       "cleanQuotaFailedAction": "할당량 조회 실패 계정 삭제 ({{count}})",
       "cleanQuotaFailedConfirm": "할당량 조회에 실패한 계정 {{count}}개를 모두 삭제하시겠습니까?"
-    }
+    },
+    "manualQuotaExhausted": "수동 0",
+    "manualQuotaExhaustedTooltip": "이 계정의 할당량이 수동으로 0으로 설정되어 할당량 경고 전환 추천에서 제외됩니다",
+    "manualQuotaExhaustedSet": "계정 할당량을 수동 소진으로 표시했습니다",
+    "manualQuotaExhaustedCleared": "이 계정의 수동 할당량 0을 해제했습니다",
+    "manualQuotaExhaustedFailed": "수동 할당량 플래그 업데이트 실패: {{error}}"
   },
   "breakout": {
     "gameOver": "게임 종료",

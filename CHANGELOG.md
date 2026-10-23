@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Cursor manual quota zero**: mark an account’s remaining quota as 0 when the official API still reports usage available but the account is rate-limited or unusable; quota-alert switch suggestions skip these accounts, and the mark can be cleared in one click. The official reset time is preserved while the mark is active.
+
+### Fixed
+
+- **Cursor switch restart restores the previous workspace**: on restart, Cockpit reopens the last folder/workspace so the prior IDE chat context is not lost to a blank welcome page.
+
 ### Changed
 
 - Remove APIMart advertising from the Chinese and English README pages.
