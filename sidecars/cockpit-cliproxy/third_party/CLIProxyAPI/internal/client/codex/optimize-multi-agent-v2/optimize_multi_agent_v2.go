@@ -816,6 +816,14 @@ func rewriteCodexAgentMessageInput(payload []byte, optimizeEnabled bool, compatM
 			if errSet != nil {
 				return payload
 			}
+			// amsg_ identifies a private Codex envelope, not an upstream
+			// Responses message. Omit it only from the compatibility copy;
+			// canonical history and tool call/reference IDs stay unchanged.
+			if compatMode && strings.HasPrefix(item.Get("id").String(), "amsg_") {
+				if updated, errSet = sjson.DeleteBytes(updated, itemPath+".id"); errSet != nil {
+					return payload
+				}
+			}
 		}
 		if compatMode {
 			var errDelete error
