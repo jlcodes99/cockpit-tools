@@ -8,6 +8,7 @@ use std::{sync::Mutex, time::Duration};
 
 struct HostFixture {
     base: String,
+    model: String,
     limit: u16,
     selections: Mutex<Vec<RouteRequest>>,
     failures: Mutex<Vec<u16>>,
@@ -116,7 +117,7 @@ impl Host for HostFixture {
                 account_id: account.into(),
                 owner_id: format!("owner-{account}"),
                 base_url: format!("{}/{}", self.base, account),
-                model: "upstream-model".into(),
+                model: self.model.clone(),
                 headers: HeaderMap::new(),
                 client: reqwest::Client::builder().no_proxy().build().unwrap(),
                 proxy_url: None,
@@ -169,6 +170,9 @@ struct Fixture {
 }
 impl Fixture {
     async fn new(first: String, limit: u16) -> Self {
+        Self::with_model(first, limit, "upstream-model").await
+    }
+    async fn with_model(first: String, limit: u16, model: &str) -> Self {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let mut app = Router::new();
         for account in ["a", "b"] {
@@ -195,6 +199,7 @@ impl Fixture {
         });
         let host = Arc::new(HostFixture {
             base: format!("http://{addr}"),
+            model: model.into(),
             limit,
             selections: Mutex::new(vec![]),
             failures: Mutex::new(vec![]),
@@ -241,6 +246,69 @@ impl Fixture {
         self.handle.shutdown(Duration::from_secs(2)).await.unwrap();
         self.upstream.abort();
     }
+}
+
+#[tokio::test]
+async fn minimax_flash_normalizes_the_final_http_request_and_preserves_history() {
+    for model in ["MiniMax-M3.1-Flash", "minimax-m3.1-flash-free", "MiniMax-M3", "MiniMax-M2.7", "custom-model"] {
+        let wire = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+        let fixture = Fixture::with_model(wire.into(), 0, model).await;
+        let messages = json!([
+            {"role":"assistant","content":"prior answer","reasoning_content":"prior reasoning","tool_calls":[{"id":"call_fixture","type":"function","function":{"name":"lookup","arguments":"{}"}}]},
+            {"role":"tool","tool_call_id":"call_fixture","content":"fixture result"},
+            {"role":"user","content":[{"type":"text","text":"Describe this"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AA=="}}]}
+        ]);
+        for effort in ["low", "medium", "high", "xhigh", "max", "none"] {
+            let response = fixture.send("chat/completions", json!({
+                "messages":messages,"reasoning_effort":effort,
+                "thinking":{"type":"disabled"},"service_tier":"priority","reasoning_split":false
+            })).await;
+            assert!(response.status().is_success());
+            assert!(response.text().await.unwrap().contains("ok"));
+            let seen = fixture.seen.lock().unwrap();
+            let body = &seen.last().unwrap().1;
+            assert_eq!(body["model"], model);
+            assert_eq!(body["messages"], messages);
+            if model.to_lowercase().contains("m3.1-flash") {
+                assert_eq!(body["thinking"], json!({"type":"adaptive"}));
+                assert_eq!(body["reasoning_effort"], if effort == "none" { "max" } else { effort });
+                assert!(body.get("service_tier").is_none());
+                assert!(body.get("reasoning_split").is_none());
+            } else {
+                assert_eq!(body["thinking"]["type"], "disabled");
+                assert_eq!(body["reasoning_effort"], effort);
+                assert_eq!(body["service_tier"], "priority");
+                assert_eq!(body["reasoning_split"], false);
+            }
+        }
+        fixture.finish().await;
+    }
+}
+
+#[tokio::test]
+async fn minimax_flash_responses_route_serializes_max_effort_for_chat_upstream() {
+    let wire = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+    let fixture = Fixture::with_model(wire.into(), 0, "MiniMax-M3.1-Flash").await;
+    for effort in [None, Some("max"), Some("none")] {
+        let mut input = json!({"model":"client-model","stream":true,"input":[{"role":"user","content":[{"type":"input_text","text":"describe"},{"type":"input_image","image_url":"data:image/png;base64,AA=="}]}]});
+        if let Some(effort) = effort {
+            input["reasoning"] = json!({"effort":effort});
+        }
+        let response = reqwest::Client::builder().no_proxy().build().unwrap()
+            .post(format!("http://{}/v1/responses", fixture.handle.addr))
+            .bearer_auth("fixture").json(&input).send().await.unwrap();
+        assert!(response.status().is_success());
+        assert!(response.text().await.unwrap().contains("ok"));
+        let seen = fixture.seen.lock().unwrap();
+        let body = &seen.last().unwrap().1;
+        assert_eq!(body["model"], "MiniMax-M3.1-Flash");
+        assert_eq!(body["reasoning_effort"], "max");
+        assert_eq!(body["thinking"]["type"], "adaptive");
+        assert!(body["messages"].to_string().contains("data:image/png;base64,AA=="));
+        assert!(body.get("service_tier").is_none());
+        assert!(body.get("reasoning_split").is_none());
+    }
+    fixture.finish().await;
 }
 
 #[tokio::test]
