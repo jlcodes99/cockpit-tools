@@ -2,7 +2,6 @@ use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 use crate::models::minimax_code::{MinimaxCodeOAuthCompletePayload, MinimaxCodeOAuthStartResponse};
-use crate::modules::logger;
 
 const ACCOUNT_ORIGIN_CN: &str = "https://account.minimax.cn";
 const ACCOUNT_ORIGIN_EN: &str = "https://account.minimax.io";
@@ -17,6 +16,7 @@ const AUDIENCE: &str = "agent-backend";
 const DEVICE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
 const OAUTH_TIMEOUT_SECONDS: i64 = 900;
 const OAUTH_POLL_INTERVAL_MS: u64 = 5000;
+const SLOW_DOWN_BACKOFF_MS: u64 = 5000;
 
 #[derive(Clone)]
 struct PendingOAuthState {
@@ -28,7 +28,8 @@ struct PendingOAuthState {
     verification_uri_complete: Option<String>,
     region: String,
     expires_at: i64,
-    cancelled: bool,
+    expires_in: i64,
+    interval_seconds: u64,
 }
 
 lazy_static::lazy_static! {
@@ -44,7 +45,7 @@ pub fn resolve_agent_origin(region: &str) -> &'static str {
     if region == "en" { AGENT_ORIGIN_EN } else { AGENT_ORIGIN_CN }
 }
 
-fn build_client() -> Result<reqwest::Client, String> {
+pub(crate) fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .user_agent("MiniMax Code")
         .timeout(std::time::Duration::from_secs(30))
@@ -120,7 +121,7 @@ pub async fn start_login(region: &str) -> Result<MinimaxCodeOAuthStartResponse, 
         .and_then(|v| v.as_str())
         .ok_or_else(|| "device/code 响应缺少 verification_uri".to_string())?.to_string();
     let verification_uri_complete = body.get("verification_uri_complete").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let expires_in = body.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(OAUTH_TIMEOUT_SECONDS) as u64;
+    let expires_in = body.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(OAUTH_TIMEOUT_SECONDS).max(1);
     let interval_seconds = body.get("interval").and_then(|v| v.as_i64()).unwrap_or(5).max(1) as u64;
 
     let login_id = generate_login_id();
@@ -134,8 +135,9 @@ pub async fn start_login(region: &str) -> Result<MinimaxCodeOAuthStartResponse, 
             verification_uri: verification_uri.clone(),
             verification_uri_complete: verification_uri_complete.clone(),
             region: region.to_string(),
-            expires_at: now_timestamp() + OAUTH_TIMEOUT_SECONDS,
-            cancelled: false,
+            expires_at: now_timestamp() + expires_in,
+            expires_in,
+            interval_seconds,
         });
     }
 
@@ -144,7 +146,7 @@ pub async fn start_login(region: &str) -> Result<MinimaxCodeOAuthStartResponse, 
         verification_uri,
         verification_uri_complete,
         user_code,
-        expires_in,
+        expires_in: expires_in as u64,
         interval_seconds,
     })
 }
@@ -152,7 +154,7 @@ pub async fn start_login(region: &str) -> Result<MinimaxCodeOAuthStartResponse, 
 /// Step 2: poll for the token, then fetch user info + quota.
 pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePayload, String> {
     let client = build_client()?;
-    let start = now_timestamp();
+    let mut poll_interval_ms = OAUTH_POLL_INTERVAL_MS;
     let mut last_error: Option<String> = None;
 
     loop {
@@ -162,12 +164,15 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
                 None => return Err("没有待处理的登录请求".to_string()),
                 Some(s) => {
                     if s.login_id != login_id { return Err("login_id 不匹配".to_string()); }
-                    if s.cancelled { return Err("登录已取消".to_string()); }
-                    if now_timestamp() > s.expires_at { return Err("登录超时".to_string()); }
-                    (s.device_code.clone(), s.code_verifier.clone(), s.region.clone())
+                    (s.device_code.clone(), s.code_verifier.clone(), s.region.clone(), s.expires_at)
                 }
             }
         };
+
+        if now_timestamp() > snapshot.3 {
+            clear_pending_oauth_login(login_id)?;
+            return Err(last_error.map(|e| format!("登录超时 ({e})")).unwrap_or_else(|| "登录超时".to_string()));
+        }
 
         let origin = resolve_account_origin(&snapshot.2);
         let url = format!("{origin}{TOKEN_PATH}");
@@ -188,8 +193,11 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
             .map_err(|e| format!("解析 token 响应失败: {e}"))?;
 
         if let Some(err) = body.get("error").and_then(|v| v.as_str()) {
-            if err == "authorization_pending" || err == "slow_down" {
+            if err == "authorization_pending" {
                 last_error = Some(err.to_string());
+            } else if err == "slow_down" {
+                last_error = Some(err.to_string());
+                poll_interval_ms = poll_interval_ms.saturating_add(SLOW_DOWN_BACKOFF_MS);
             } else {
                 let desc = body.get("error_description").and_then(|v| v.as_str()).unwrap_or("");
                 return Err(format!("OAuth 失败 ({err}): {desc}"));
@@ -204,12 +212,16 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
 
             clear_pending_oauth_login(login_id)?;
 
-            let (uid, nickname, email) = fetch_user_info(&client, &access_token, &snapshot.2).await
-                .unwrap_or((None, None, String::new()));
+            let (uid, nickname, email_raw) = fetch_user_info(&client, &access_token, &snapshot.2).await?;
+            let email = if email_raw.trim().is_empty() { uid.clone().unwrap_or_default() } else { email_raw };
+            if email.trim().is_empty() {
+                clear_pending_oauth_login(login_id)?;
+                return Err("获取 MiniMax Code 账号信息失败：未返回 uid 或邮箱".to_string());
+            }
             let quota_raw = fetch_credit_details(&client, &access_token, &snapshot.2).await.ok();
 
             return Ok(MinimaxCodeOAuthCompletePayload {
-                email: if email.is_empty() { "unknown".to_string() } else { email },
+                email,
                 uid, nickname, access_token, refresh_token, token_type, expires_at,
                 region: Some(snapshot.2.clone()),
                 auth_file: None,
@@ -219,11 +231,7 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
             });
         }
 
-        if now_timestamp() - start > OAUTH_TIMEOUT_SECONDS {
-            clear_pending_oauth_login(login_id)?;
-            return Err(last_error.map(|e| format!("登录超时 ({e})")).unwrap_or_else(|| "登录超时".to_string()));
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(OAUTH_POLL_INTERVAL_MS)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(poll_interval_ms)).await;
     }
 }
 
@@ -231,7 +239,6 @@ pub fn cancel_login(login_id: Option<&str>) -> Result<(), String> {
     let mut pending = PENDING_OAUTH_STATE.lock().map_err(|_| "获取锁失败".to_string())?;
     if let Some(state) = pending.as_mut() {
         if login_id.is_none() || login_id == Some(state.login_id.as_str()) {
-            state.cancelled = true;
             *pending = None;
         }
     }
@@ -241,14 +248,18 @@ pub fn cancel_login(login_id: Option<&str>) -> Result<(), String> {
 pub fn peek_pending_login() -> Option<MinimaxCodeOAuthStartResponse> {
     let pending = PENDING_OAUTH_STATE.lock().ok()?;
     let state = pending.as_ref()?;
-    if state.cancelled || now_timestamp() > state.expires_at { return None; }
+    let now = now_timestamp();
+    if now > state.expires_at { return None; }
+    // Remaining validity derived from the server-provided `expires_in`.
+    let started_at = state.expires_at - state.expires_in;
+    let remaining_seconds = state.expires_in.saturating_sub(now - started_at).max(0);
     Some(MinimaxCodeOAuthStartResponse {
         login_id: state.login_id.clone(),
         verification_uri: state.verification_uri.clone(),
         verification_uri_complete: state.verification_uri_complete.clone(),
         user_code: state.user_code.clone(),
-        expires_in: OAUTH_TIMEOUT_SECONDS as u64,
-        interval_seconds: OAUTH_POLL_INTERVAL_MS / 1000,
+        expires_in: remaining_seconds as u64,
+        interval_seconds: state.interval_seconds,
     })
 }
 
@@ -303,11 +314,14 @@ pub async fn fetch_credit_details(
 pub async fn build_payload_from_token(access_token: &str, region: Option<&str>) -> Result<MinimaxCodeOAuthCompletePayload, String> {
     let client = build_client()?;
     let region = region.unwrap_or("cn").to_string();
-    let (uid, nickname, email) = fetch_user_info(&client, access_token, &region).await
-        .unwrap_or((None, None, String::new()));
+    let (uid, nickname, email_raw) = fetch_user_info(&client, access_token, &region).await?;
+    let email = if email_raw.trim().is_empty() { uid.clone().unwrap_or_default() } else { email_raw };
+    if email.trim().is_empty() {
+        return Err("获取 MiniMax Code 账号信息失败：未返回 uid 或邮箱".to_string());
+    }
     let quota_raw = fetch_credit_details(&client, access_token, &region).await.ok();
     Ok(MinimaxCodeOAuthCompletePayload {
-        email: if email.is_empty() { "unknown".to_string() } else { email },
+        email,
         uid, nickname,
         access_token: access_token.to_string(),
         refresh_token: None,
@@ -323,7 +337,6 @@ pub async fn build_payload_from_token(access_token: &str, region: Option<&str>) 
 
 /// Refresh an access token using the refresh token.
 pub async fn refresh_token(
-    access_token: &str,
     refresh_token: &str,
     region: &str,
 ) -> Result<Value, String> {
@@ -351,7 +364,7 @@ pub async fn refresh_token(
 }
 
 /// Build a payload from the MiniMax client's local `auth.json` (used by local import).
-pub fn payload_from_local_record(id: &str, rec: &Value, auth_file: &str) -> MinimaxCodeOAuthCompletePayload {
+pub fn payload_from_local_record(id: &str, region: &str, rec: &Value, auth_file: &str) -> MinimaxCodeOAuthCompletePayload {
     let access = rec.get("accessToken").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let refresh = rec.get("refreshToken").and_then(|v| v.as_str()).map(|s| s.to_string());
     let token_type = rec.get("tokenType").and_then(|v| v.as_str()).map(|s| s.to_string());
@@ -364,7 +377,7 @@ pub fn payload_from_local_record(id: &str, rec: &Value, auth_file: &str) -> Mini
         refresh_token: refresh,
         token_type,
         expires_at,
-        region: Some("cn".to_string()),
+        region: Some(region.to_string()),
         auth_file: Some(auth_file.to_string()),
         quota_raw: None,
         auth_raw: Some(rec.clone()),

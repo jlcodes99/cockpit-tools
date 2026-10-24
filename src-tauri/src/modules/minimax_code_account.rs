@@ -704,7 +704,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<MinimaxCodeAccou
     // renews them in the local auth.json. Re-read that file first so we always
     // use the freshest access token before attempting a refresh.
     if let Some(auth_file) = account.auth_file.clone() {
-        if let Some((_id, rec, _path)) = read_minimax_code_auth_file(Path::new(&auth_file)) {
+        if let Some((_id, _region, rec, _path)) = read_minimax_code_auth_file(Path::new(&auth_file)) {
             if let Some(access) = rec
                 .get("accessToken")
                 .and_then(|v| v.as_str())
@@ -737,7 +737,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<MinimaxCodeAccou
 
     // (b) Refresh the access token when a refresh token is available.
     if let Some(refresh_token) = account.refresh_token.as_deref() {
-        match minimax_code_oauth::refresh_token(&account.access_token, refresh_token, &region).await {
+        match minimax_code_oauth::refresh_token(refresh_token, &region).await {
             Ok(token_data) => {
                 if let Some(access) = token_data
                     .get("access_token")
@@ -777,11 +777,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<MinimaxCodeAccou
     }
 
     // (c) Refresh quota and store the raw body on the account.
-    let client = reqwest::Client::builder()
-        .user_agent("MiniMax Code")
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+    let client = minimax_code_oauth::build_client()?;
     let mut quota_refresh_error: Option<String> = None;
     let quota_raw =
         match minimax_code_oauth::fetch_credit_details(&client, &account.access_token, &region).await
@@ -983,11 +979,6 @@ fn import_from_json_value(value: Value) -> Result<Vec<MinimaxCodeAccount>, Strin
 fn upsert_account_record_from_payload(
     payload: MinimaxCodeOAuthCompletePayload,
 ) -> Result<MinimaxCodeAccount, String> {
-    drop(
-        MINIMAX_CODE_ACCOUNT_INDEX_LOCK
-            .lock()
-            .map_err(|_| "获取锁失败".to_string())?,
-    );
     let now = now_ts();
     let incoming_uid = normalize_identity(payload.uid.as_deref());
     let incoming_email = normalize_email_identity(Some(payload.email.as_str()));
@@ -1270,7 +1261,8 @@ fn collect_auth_files(dir: &PathBuf, out: &mut Vec<PathBuf>, depth: usize) {
 }
 
 /// Read the first non-empty account from a MiniMax `auth.json`.
-pub fn read_minimax_code_auth_file(path: &std::path::Path) -> Option<(String, Value, String)> {
+/// Returns `(account_id, region, record, auth_file_path)`.
+pub fn read_minimax_code_auth_file(path: &std::path::Path) -> Option<(String, String, Value, String)> {
     let raw = std::fs::read_to_string(path).ok()?;
     let parsed: Value = serde_json::from_str(&raw).ok()?;
     let records = parsed.get("records")?.as_object()?;
@@ -1278,7 +1270,9 @@ pub fn read_minimax_code_auth_file(path: &std::path::Path) -> Option<(String, Va
         let access = rec.get("accessToken").and_then(|v| v.as_str()).unwrap_or("");
         if access.is_empty() { continue; }
         let id = key.rsplit('\u{0}').next().unwrap_or(key).to_string();
-        return Some((id, rec.clone(), path.to_string_lossy().to_string()));
+        let prefix = key.split('\u{0}').next().unwrap_or(key);
+        let region = prefix.rsplit('.').next().unwrap_or("cn").to_string();
+        return Some((id, region, rec.clone(), path.to_string_lossy().to_string()));
     }
     None
 }
@@ -1287,8 +1281,8 @@ pub fn read_minimax_code_auth_file(path: &std::path::Path) -> Option<(String, Va
 pub fn import_payload_from_local() -> Result<Vec<MinimaxCodeOAuthCompletePayload>, String> {
     let mut out = Vec::new();
     for file in find_minimax_code_auth_files() {
-        if let Some((id, rec, path)) = read_minimax_code_auth_file(&file) {
-            out.push(crate::modules::minimax_code_oauth::payload_from_local_record(&id, &rec, &path));
+        if let Some((id, region, rec, path)) = read_minimax_code_auth_file(&file) {
+            out.push(crate::modules::minimax_code_oauth::payload_from_local_record(&id, &region, &rec, &path));
         }
     }
     Ok(out)
@@ -1356,13 +1350,50 @@ mod minimax_code_local_import_tests {
     fn read_auth_file_returns_first_non_empty_record() {
         let home = TempHome::new();
         let file = write_fake_auth_file(&home.0);
-        let (id, rec, path) = read_minimax_code_auth_file(&file).expect("auth file should parse");
+        let (id, region, rec, path) = read_minimax_code_auth_file(&file).expect("auth file should parse");
         assert_eq!(id, "abc123");
+        assert_eq!(region, "cn");
         assert_eq!(
             rec.get("accessToken").and_then(|v| v.as_str()),
             Some("mmoat_test_token")
         );
         assert!(path.ends_with("auth.json"));
+    }
+
+    #[test]
+    fn read_auth_file_parses_region_from_record_key() {
+        let home = TempHome::new();
+        let dir = home
+            .0
+            .join(".minimax")
+            .join("auth")
+            .join("prod")
+            .join("en")
+            .join("mcode-public");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("auth.json");
+        let body = json!({
+            "schemaVersion": 1,
+            "records": {
+                "com.minimax.mcode.oauth.prod.en\u{0}abc": {
+                    "accessToken": "mmoat_en_token",
+                    "refreshToken": "mmort_en_refresh",
+                    "tokenType": "Bearer",
+                    "clientId": "mcode-public",
+                    "expiresAtMs": 1792767948636_i64
+                }
+            }
+        });
+        fs::write(&file, body.to_string()).unwrap();
+
+        let (id, region, rec, _path) =
+            read_minimax_code_auth_file(&file).expect("auth file should parse");
+        assert_eq!(id, "abc");
+        assert_eq!(region, "en");
+        assert_eq!(
+            rec.get("accessToken").and_then(|v| v.as_str()),
+            Some("mmoat_en_token")
+        );
     }
 
     #[test]
