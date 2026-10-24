@@ -25,6 +25,15 @@ static MINIMAX_CODE_INSTANCE_STORE_LOCK: std::sync::LazyLock<Mutex<()>> =
 
 const MINIMAX_CODE_INSTANCES_FILE: &str = "minimax_code_instances.json";
 
+/// 客户端 `MCODE_OAUTH_CLIENT_ID`（见 app.asar `contracts.js`）。
+pub const MINIMAX_CODE_OAUTH_CLIENT_ID: &str = "mcode-public";
+/// 客户端 `MCODE_OAUTH_SCOPES`。
+pub const MINIMAX_CODE_OAUTH_SCOPES: &[&str] = &["agent.default"];
+/// 客户端 `MCODE_OAUTH_AUDIENCE`。
+pub const MINIMAX_CODE_OAUTH_AUDIENCE: &str = "agent-backend";
+/// 客户端服务键前缀：`com.minimax.mcode.oauth.<buildEnv>.<region>`。
+pub const MINIMAX_CODE_OAUTH_SERVICE_BASE: &str = "com.minimax.mcode.oauth";
+
 fn instances_path() -> Result<PathBuf, String> {
     let data_dir = modules::account::get_data_dir()?;
     Ok(instances_path_for(&data_dir))
@@ -80,6 +89,7 @@ pub fn update_default_settings(
 }
 
 /// 默认实例设置的读写（可注入数据根，供测试使用）。
+#[cfg(test)]
 fn update_default_settings_at(
     data_dir: &std::path::Path,
     bind_account_id: Option<Option<String>>,
@@ -116,10 +126,13 @@ pub fn get_default_minimax_code_data_dir() -> Result<PathBuf, String> {
     Ok(home.join(".minimax"))
 }
 
-/// 读取用户显式设置的 MiniMax data root（`MINIMAX_DATA_DIR` / `MAVIS_DATA_DIR`）。
-/// 与客户端 `getExplicitPublicDataDirEnv()` 的优先级保持一致。
+/// 读取用户显式设置的 MiniMax data root。
+///
+/// 优先级与客户端 `getExplicitDataDirArg()` 对齐：
+/// `--data-dir`（由启动器处理）→ `MINIMAX_DATA_DIR` → `MAVIS_DATA_DIR` → `DATA_DIR`。
+/// 这里只能看到环境变量部分，`--data-dir` 不经过本进程。
 pub fn explicit_minimax_code_data_dir() -> Option<PathBuf> {
-    ["MINIMAX_DATA_DIR", "MAVIS_DATA_DIR"]
+    ["MINIMAX_DATA_DIR", "MAVIS_DATA_DIR", "DATA_DIR"]
         .iter()
         .find_map(|key| {
             std::env::var(key)
@@ -404,25 +417,179 @@ pub fn clear_all_pids() -> Result<(), String> {
     Ok(())
 }
 
+/// 客户端命名空间里的 buildEnv/region。
+///
+/// 客户端 `createAuthNamespace` 用 `MAVIS_BUILD_ENV`/`NEXT_PUBLIC_BUILD_ENV` 决定
+/// buildEnv（默认 `prod`），用 `NEXT_PUBLIC_LOCALE`/区域配置决定 region（`cn`/`en`）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MinimaxCodeAuthScope {
+    pub build_env: String,
+    pub region: String,
+}
+
+impl MinimaxCodeAuthScope {
+    pub const DEFAULT_BUILD_ENV: &'static str = "prod";
+    pub const DEFAULT_REGION: &'static str = "cn";
+
+    pub fn default_scope() -> Self {
+        Self {
+            build_env: Self::DEFAULT_BUILD_ENV.to_string(),
+            region: Self::DEFAULT_REGION.to_string(),
+        }
+    }
+
+    pub fn service_prefix(&self) -> String {
+        format!(
+            "{}.{}.{}",
+            MINIMAX_CODE_OAUTH_SERVICE_BASE, self.build_env, self.region
+        )
+    }
+
+    pub fn is_valid_build_env(value: &str) -> bool {
+        matches!(value, "dev" | "test" | "staging" | "prod")
+    }
+
+    pub fn is_valid_region(value: &str) -> bool {
+        matches!(value, "cn" | "en")
+    }
+}
+
+/// 把客户端的 buildEnv/region 字符串归一到枚举值；非法值返回 `None`。
+fn normalize_build_env(value: &str) -> Option<&'static str> {
+    match value {
+        "dev" => Some("dev"),
+        "test" => Some("test"),
+        "staging" => Some("staging"),
+        "prod" => Some("prod"),
+        _ => None,
+    }
+}
+
+fn normalize_region(value: &str) -> Option<&'static str> {
+    match value {
+        "cn" => Some("cn"),
+        "en" => Some("en"),
+        _ => None,
+    }
+}
+
+/// 客户端命名空间路径：`<data root>/auth/<buildEnv>/<region>/mcode-public`。
+pub fn minimax_code_namespace_home(data_dir: &std::path::Path, scope: &MinimaxCodeAuthScope) -> PathBuf {
+    data_dir
+        .join("auth")
+        .join(&scope.build_env)
+        .join(&scope.region)
+        .join(MINIMAX_CODE_OAUTH_CLIENT_ID)
+}
+
 /// 解析某个实例 data root 下应当写入的 `auth.json` 路径。
 ///
-/// 客户端命名空间为 `<data root>/auth/<buildEnv>/<region>/<clientId>/auth.json`。
-/// buildEnv/region 由客户端运行时决定，无法可靠预知，因此：
-/// - 已有 `auth.json` 时直接复用其所在目录（保证与客户端布局一致）；
-/// - 否则回退到 `prod/cn/mcode-public`（当前正式版的默认布局）。
-pub fn resolve_minimax_code_auth_file_path(data_dir: &std::path::Path) -> PathBuf {
+/// buildEnv/region 的解析顺序（与客户端布局保持一致）：
+/// 1. data root 下已有 `auth-state.json` → 读它的 `buildEnv`/`region`；
+/// 2. 否则已有 `auth.json` → 从记录键前缀 `com.minimax.mcode.oauth.<buildEnv>.<region>` 取；
+/// 3. 否则回退到 `prod`/`cn`（当前正式版的默认值）。
+///
+/// `preferred_region` 用于账号自带 region（例如导入的 `en` 账号）覆盖默认值。
+#[cfg(test)]
+pub fn resolve_minimax_code_auth_file_path_with_scope(
+    data_dir: &std::path::Path,
+    preferred_region: Option<&str>,
+) -> PathBuf {
+    // 已有 auth.json 时直接复用其所在命名空间（可能与默认 prod/cn 不同，
+    // 例如 staging/en）。这是最可靠的信号，避免写到一个客户端不会读的新目录。
     if let Some(existing) = find_auth_file_under(data_dir) {
         return existing;
     }
-    data_dir
-        .join("auth")
-        .join("prod")
-        .join("cn")
-        .join("mcode-public")
-        .join("auth.json")
+    let scope = resolve_minimax_code_auth_scope(data_dir, preferred_region);
+    minimax_code_namespace_home(data_dir, &scope).join("auth.json")
 }
 
-fn find_auth_file_under(data_dir: &std::path::Path) -> Option<PathBuf> {
+#[cfg(test)]
+pub fn resolve_minimax_code_auth_file_path(data_dir: &std::path::Path) -> PathBuf {
+    resolve_minimax_code_auth_file_path_with_scope(data_dir, None)
+}
+
+/// 解析 data root 对应的 buildEnv/region（见 `resolve_minimax_code_auth_file_path`）。
+///
+/// 解析顺序：
+/// 1. `auth-state.json` 里的 `buildEnv`/`region`（客户端自己写的，最权威）；
+/// 2. `auth.json` 记录键前缀 `com.minimax.mcode.oauth.<buildEnv>.<region>`；
+/// 3. 命名空间目录结构 `<data root>/auth/<buildEnv>/<region>/mcode-public`；
+/// 4. 账号自带的 `preferred_region`，否则 `prod`/`cn`。
+pub fn resolve_minimax_code_auth_scope(
+    data_dir: &std::path::Path,
+    preferred_region: Option<&str>,
+) -> MinimaxCodeAuthScope {
+    if let Some(scope) = read_scope_from_auth_state(data_dir) {
+        return scope;
+    }
+    if let Some(scope) = read_scope_from_auth_file(data_dir) {
+        return scope;
+    }
+    let fallback_region = preferred_region
+        .map(str::trim)
+        .and_then(normalize_region)
+        .unwrap_or(MinimaxCodeAuthScope::DEFAULT_REGION);
+    if let Some(scope) = read_scope_from_namespace_dirs(data_dir) {
+        // 账号显式指定的 region 优先于从目录推断的结果。
+        if preferred_region
+            .map(str::trim)
+            .and_then(normalize_region)
+            .is_some_and(|value| value != scope.region)
+        {
+            return MinimaxCodeAuthScope {
+                build_env: scope.build_env,
+                region: fallback_region.to_string(),
+            };
+        }
+        return scope;
+    }
+    MinimaxCodeAuthScope {
+        build_env: MinimaxCodeAuthScope::DEFAULT_BUILD_ENV.to_string(),
+        region: fallback_region.to_string(),
+    }
+}
+
+/// 扫描 `<data root>/auth/*/*/<clientId>` 目录，取第一个合法的 buildEnv/region。
+fn read_scope_from_namespace_dirs(data_dir: &std::path::Path) -> Option<MinimaxCodeAuthScope> {
+    let auth_root = data_dir.join("auth");
+    let Ok(envs) = fs::read_dir(&auth_root) else {
+        return None;
+    };
+    for env_entry in envs.flatten() {
+        let Ok(regions) = fs::read_dir(env_entry.path()) else {
+            continue;
+        };
+        for region_entry in regions.flatten() {
+            let client_dir = region_entry.path();
+            if client_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_none_or(|name| name != MINIMAX_CODE_OAUTH_CLIENT_ID)
+            {
+                continue;
+            }
+            let env_name = env_entry.file_name();
+            let region_name = region_entry.file_name();
+            let build_env = env_name.to_str();
+            let region = region_name.to_str();
+            if let (Some(build_env), Some(region)) = (build_env, region) {
+                if let (Some(build_env), Some(region)) =
+                    (normalize_build_env(build_env), normalize_region(region))
+                {
+                    return Some(MinimaxCodeAuthScope {
+                        build_env: build_env.to_string(),
+                        region: region.to_string(),
+                    });
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 从 data root 下任意命名空间的 `auth-state.json` 读取 buildEnv/region。
+fn read_scope_from_auth_state(data_dir: &std::path::Path) -> Option<MinimaxCodeAuthScope> {
     let auth_root = data_dir.join("auth");
     let mut stack = vec![auth_root];
     while let Some(dir) = stack.pop() {
@@ -433,12 +600,111 @@ fn find_auth_file_under(data_dir: &std::path::Path) -> Option<PathBuf> {
             let path = entry.path();
             if path.is_dir() {
                 stack.push(path);
-            } else if path.file_name().and_then(|name| name.to_str()) == Some("auth.json") {
-                return Some(path);
+                continue;
+            }
+            if path.file_name().and_then(|name| name.to_str()) != Some("auth-state.json") {
+                continue;
+            }
+            let Ok(raw) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw) else {
+                continue;
+            };
+            let build_env = parsed
+                .get("buildEnv")
+                .and_then(|value| value.as_str())
+                .and_then(normalize_build_env);
+            let region = parsed
+                .get("region")
+                .and_then(|value| value.as_str())
+                .and_then(normalize_region);
+            // 客户端允许两者同时缺省（isOptionalAuthScope），此时用默认值。
+            if build_env.is_none() && region.is_none() {
+                return Some(MinimaxCodeAuthScope::default_scope());
+            }
+            if let (Some(build_env), Some(region)) = (build_env, region) {
+                return Some(MinimaxCodeAuthScope {
+                    build_env: build_env.to_string(),
+                    region: region.to_string(),
+                });
             }
         }
     }
     None
+}
+
+/// 从 data root 下任意命名空间的 `auth.json` 记录键前缀读取 buildEnv/region。
+fn read_scope_from_auth_file(data_dir: &std::path::Path) -> Option<MinimaxCodeAuthScope> {
+    let auth_file = find_auth_file_under(data_dir)?;
+    let raw = fs::read_to_string(&auth_file).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let key = parsed.get("records")?.as_object()?.keys().next()?;
+    let service = key.split('\u{0}').next()?;
+    let mut parts = service.rsplit('.');
+    let region = parts.next().and_then(normalize_region)?;
+    let build_env = parts.next().and_then(normalize_build_env)?;
+    Some(MinimaxCodeAuthScope {
+        build_env: build_env.to_string(),
+        region: region.to_string(),
+    })
+}
+
+/// 在 data root 下查找 `auth.json`。
+///
+/// 优先返回 buildEnv/region 与目标一致的命名空间，避免任意 DFS 命中到旧版本/其它环境的目录。
+fn find_auth_file_under(data_dir: &std::path::Path) -> Option<PathBuf> {
+    find_auth_file_under_with_scope(data_dir, None)
+}
+
+fn find_auth_file_under_with_scope(
+    data_dir: &std::path::Path,
+    preferred: Option<&MinimaxCodeAuthScope>,
+) -> Option<PathBuf> {
+    let auth_root = data_dir.join("auth");
+    let mut stack = vec![auth_root];
+    let mut fallback: Option<PathBuf> = None;
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.file_name().and_then(|name| name.to_str()) != Some("auth.json") {
+                continue;
+            }
+            if let Some(scope) = preferred {
+                if namespace_matches_scope(&path, scope) {
+                    return Some(path);
+                }
+                if fallback.is_none() {
+                    fallback = Some(path);
+                }
+                continue;
+            }
+            return Some(path);
+        }
+    }
+    fallback
+}
+
+/// 判断 `auth.json` 所在命名空间是否与目标 buildEnv/region 匹配。
+fn namespace_matches_scope(auth_file: &std::path::Path, scope: &MinimaxCodeAuthScope) -> bool {
+    let Some(namespace) = auth_file.parent() else {
+        return false;
+    };
+    let Some(region_dir) = namespace.parent() else {
+        return false;
+    };
+    let Some(env_dir) = region_dir.parent() else {
+        return false;
+    };
+    env_dir.file_name().and_then(|name| name.to_str()) == Some(scope.build_env.as_str())
+        && region_dir.file_name().and_then(|name| name.to_str()) == Some(scope.region.as_str())
 }
 
 #[cfg(test)]
@@ -487,7 +753,7 @@ mod minimax_code_instance_tests {
         assert_eq!(resolved, home.join(".minimax"));
     }
 
-    /// `auth.json` 解析：已有文件时复用其目录，否则回落到默认命名空间。
+    /// `auth.json` 解析：已有文件时复用其命名空间，否则回落到默认命名空间。
     #[test]
     fn auth_file_path_reuses_existing_namespace() {
         let data_dir = temp_data_dir("authpath");
@@ -511,6 +777,29 @@ mod minimax_code_instance_tests {
         assert_eq!(
             fallback,
             fresh.join("auth").join("prod").join("cn").join("mcode-public").join("auth.json")
+        );
+    }
+
+    /// 已有 `auth-state.json` 时，buildEnv/region 必须从它读取（而不是硬编码）。
+    #[test]
+    fn auth_file_path_prefers_scope_from_auth_state() {
+        let data_dir = temp_data_dir("authstate");
+        // 一个非默认的命名空间，只有 auth-state.json，没有 auth.json。
+        let namespace = data_dir.join("auth").join("staging").join("en").join("mcode-public");
+        fs::create_dir_all(&namespace).expect("create namespace dir");
+        fs::write(
+            namespace.join("auth-state.json"),
+            b"{\"schemaVersion\":2,\"status\":\"authenticated\",\"storeKind\":\"file\",\
+              \"clientId\":\"mcode-public\",\"scopes\":[\"agent.default\"],\
+              \"audience\":\"agent-backend\",\"buildEnv\":\"staging\",\"region\":\"en\",\
+              \"generation\":1,\"expiresAtMs\":1792767948636}",
+        )
+        .expect("write auth-state.json");
+
+        assert_eq!(
+            resolve_minimax_code_auth_file_path(&data_dir),
+            namespace.join("auth.json"),
+            "buildEnv/region 应从 auth-state.json 解析"
         );
     }
 

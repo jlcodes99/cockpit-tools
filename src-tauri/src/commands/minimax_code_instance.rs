@@ -282,6 +282,8 @@ pub async fn minimax_code_start_instance(instance_id: String) -> Result<Instance
         true,
     )?;
 
+    // 直接记录启动器返回的 PID。`resolve_minimax_code_pid` 只信任持久化的 PID，
+    // 不会猜测，因此这里不能再做一次「重新解析」（那会把别的实例的 PID 拿来用）。
     let updated = modules::minimax_code_instance::update_instance_after_start(&instance.id, pid)?;
     let running_pid = resolve_running_pid(Some(pid), Some(&updated.user_data_dir));
     let initialized = is_profile_initialized(&updated.user_data_dir);
