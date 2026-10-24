@@ -994,6 +994,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
           return 'TRAE SOLO CN';
         case 'workbuddy':
           return 'WorkBuddy';
+        case 'minimaxcode':
+          return 'MiniMax Code';
         case 'zed':
           return 'Zed';
       }

@@ -26,8 +26,9 @@ pub const PLATFORM_TRAE_SOLO: &str = "trae_solo";
 pub const PLATFORM_TRAE_CN: &str = "trae_cn";
 pub const PLATFORM_TRAE_SOLO_CN: &str = "trae_solo_cn";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
+pub const PLATFORM_MINIMAX_CODE: &str = "minimax_code";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 19] = [
     PLATFORM_CLAUDE_MANAGER,
     PLATFORM_CODEX,
     PLATFORM_ANTIGRAVITY,
@@ -46,6 +47,7 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
     PLATFORM_TRAE_CN,
     PLATFORM_TRAE_SOLO_CN,
     PLATFORM_WORKBUDDY,
+    PLATFORM_MINIMAX_CODE,
 ];
 
 pub const SORT_MODE_AUTO: &str = "auto";
@@ -135,6 +137,7 @@ fn normalize_platform_id(id: &str) -> Option<&'static str> {
         PLATFORM_TRAE_CN | "trae-cn" => Some(PLATFORM_TRAE_CN),
         PLATFORM_TRAE_SOLO_CN | "trae-solo-cn" => Some(PLATFORM_TRAE_SOLO_CN),
         PLATFORM_WORKBUDDY => Some(PLATFORM_WORKBUDDY),
+        PLATFORM_MINIMAX_CODE => Some(PLATFORM_MINIMAX_CODE),
         _ => None,
     }
 }
@@ -196,6 +199,7 @@ fn normalize_tray_platforms(
         PLATFORM_TRAE_CN,
         PLATFORM_TRAE_SOLO_CN,
         PLATFORM_WORKBUDDY,
+        PLATFORM_MINIMAX_CODE,
     ] {
         let already_present = contains_platform(&sanitized, new_platform);
         let was_in_raw_order = raw_order_has_new.contains(&new_platform);
@@ -405,6 +409,7 @@ fn normalize_config(
         PLATFORM_TRAE_CN,
         PLATFORM_TRAE_SOLO_CN,
         PLATFORM_WORKBUDDY,
+        PLATFORM_MINIMAX_CODE,
     ]
     .iter()
     .filter(|&&p| config.ordered_platform_ids.iter().any(|id| id.trim() == p))

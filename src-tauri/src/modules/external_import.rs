@@ -68,6 +68,7 @@ fn resolve_provider_and_page(value: &str) -> Option<(&'static str, &'static str)
         "zcode" => Some(("zcode", "zcode")),
         "trae" => Some(("trae", "trae")),
         "workbuddy" => Some(("workbuddy", "workbuddy")),
+        "minimaxcode" => Some(("minimaxcode", "minimaxcode")),
         "zed" => Some(("zed", "zed")),
         _ => None,
     }

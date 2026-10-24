@@ -364,6 +364,20 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
     workbuddyQuotaAlertThresholdCustomMode,
     workbuddyQuotaAlertThresholdIsPreset,
     workbuddyShareSessionsOnSwitch,
+    minimaxCodeAppPath,
+    minimaxCodeAutoRefresh,
+    minimaxCodeAutoRefreshCustomMode,
+    minimaxCodeAutoRefreshIsPreset,
+    minimaxCodeQuotaAlertEnabled,
+    minimaxCodeQuotaAlertThreshold,
+    minimaxCodeQuotaAlertThresholdCustomMode,
+    minimaxCodeQuotaAlertThresholdIsPreset,
+    setMinimaxCodeAppPath,
+    setMinimaxCodeAutoRefresh,
+    setMinimaxCodeAutoRefreshCustomMode,
+    setMinimaxCodeQuotaAlertEnabled,
+    setMinimaxCodeQuotaAlertThreshold,
+    setMinimaxCodeQuotaAlertThresholdCustomMode,
     zcodeAppPath,
     zcodeAutoRefresh,
     zcodeAutoRefreshCustomMode,
@@ -3385,6 +3399,197 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                           >
                             {!workbuddyQuotaAlertThresholdIsPreset && (
                               <option value={workbuddyQuotaAlertThreshold}>{workbuddyQuotaAlertThreshold}%</option>
+                            )}
+                            <option value="0">0%</option>
+                            <option value="20">20%</option>
+                            <option value="40">40%</option>
+                            <option value="60">60%</option>
+                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ order: platformSettingsOrder.minimaxcode }}>
+                <div className="group-title">{t('quickSettings.minimaxCode.title', 'MiniMax Code 设置')}</div>
+                <div className="settings-group">
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('settings.general.minimaxCodeAutoRefresh', 'MiniMax Code 自动刷新配额')}</div>
+                      <div className="row-desc">{t('settings.general.minimaxCodeAutoRefreshDesc', '后台自动更新频率')}</div>
+                    </div>
+                    <div className="row-control">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {minimaxCodeAutoRefreshCustomMode ? (
+                          <div className="settings-inline-input" style={{ minWidth: '120px', width: 'auto' }}>
+                            <input
+                              type="number"
+                              min={1}
+                              max={999}
+                              className="settings-select settings-select--input-mode settings-select--with-unit"
+                              value={minimaxCodeAutoRefresh}
+                              placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
+                              onChange={(e) => setMinimaxCodeAutoRefresh(sanitizeNumberInput(e.target.value))}
+                              onBlur={() => {
+                                const normalized = normalizeNumberInput(minimaxCodeAutoRefresh, 1, 999);
+                                if (REFRESH_PRESET_VALUES.includes(normalized)) {
+                                  setMinimaxCodeAutoRefreshCustomMode(false);
+                                }
+                                setMinimaxCodeAutoRefresh(normalized);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const normalized = normalizeNumberInput(minimaxCodeAutoRefresh, 1, 999);
+                                  setMinimaxCodeAutoRefreshCustomMode(false);
+                                  setMinimaxCodeAutoRefresh(normalized);
+                                }
+                              }}
+                            />
+                            <span className="settings-input-unit">{t('settings.general.minutes')}</span>
+                          </div>
+                        ) : (
+                          <select
+                            className="settings-select"
+                            style={{ minWidth: '120px', width: 'auto' }}
+                            value={minimaxCodeAutoRefresh}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'custom') {
+                                setMinimaxCodeAutoRefreshCustomMode(true);
+                                setMinimaxCodeAutoRefresh(minimaxCodeAutoRefresh !== '-1' ? minimaxCodeAutoRefresh : '1');
+                                return;
+                              }
+                              setMinimaxCodeAutoRefreshCustomMode(false);
+                              setMinimaxCodeAutoRefresh(val);
+                            }}
+                          >
+                            {!minimaxCodeAutoRefreshIsPreset && (
+                              <option value={minimaxCodeAutoRefresh}>
+                                {minimaxCodeAutoRefresh} {t('settings.general.minutes')}
+                              </option>
+                            )}
+                            <option value="-1">{t('settings.general.autoRefreshDisabled')}</option>
+                            <option value="2">2 {t('settings.general.minutes')}</option>
+                            <option value="5">5 {t('settings.general.minutes')}</option>
+                            <option value="10">10 {t('settings.general.minutes')}</option>
+                            <option value="15">15 {t('settings.general.minutes')}</option>
+                            <option value="custom">{t('settings.general.autoRefreshCustom')}</option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {renderCurrentAccountRefreshRow('minimaxcode')}
+                  {renderAccountLevelRefreshConfig('minimaxcode')}
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('settings.general.minimaxCodeAppPath', 'MiniMax Code 启动路径')}</div>
+                      <div className="row-desc">{t('settings.general.minimaxCodeAppPathDesc', '留空则使用默认路径')}</div>
+                    </div>
+                    <div className="row-control row-control--grow">
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                        <input
+                          type="text"
+                          className="settings-input settings-input--path"
+                          value={minimaxCodeAppPath}
+                          placeholder={t('settings.general.minimaxCodeAppPathPlaceholder', '默认路径')}
+                          onChange={(e) => setMinimaxCodeAppPath(e.target.value)}
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handlePickAppPath('minimaxcode')}
+                          disabled={isAppPathResetDetecting('minimaxcode')}
+                        >
+                          {t('settings.general.minimaxCodePathSelect', '选择')}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleResetAppPath('minimaxcode')}
+                          disabled={isAppPathResetDetecting('minimaxcode')}
+                        >
+                          <RefreshCw size={16} className={isAppPathResetDetecting('minimaxcode') ? 'spin' : undefined} />
+                          {isAppPathResetDetecting('minimaxcode')
+                            ? t('common.loading', '加载中...')
+                            : getResetLabelByTarget('minimaxcode')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-row">
+                    <div className="row-label">
+                      <div className="row-title">{t('quickSettings.quotaAlert.enable', '超额预警')}</div>
+                      <div className="row-desc">{t('quickSettings.quotaAlert.hint', '当当前账号任意模型配额低于阈值时，发送原生通知并在页面提示快捷切号。')}</div>
+                    </div>
+                    <div className="row-control">
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={minimaxCodeQuotaAlertEnabled}
+                          onChange={(e) => setMinimaxCodeQuotaAlertEnabled(e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                  {minimaxCodeQuotaAlertEnabled && (
+                    <div className="settings-row" style={{ animation: 'fadeUp 0.3s ease both' }}>
+                      <div className="row-label">
+                        <div className="row-title">{t('quickSettings.quotaAlert.threshold', '预警阈值')}</div>
+                        <div className="row-desc">{t('quickSettings.quotaAlert.thresholdDesc', '任意模型配额低于此百分比时触发预警')}</div>
+                      </div>
+                      <div className="row-control">
+                        {minimaxCodeQuotaAlertThresholdCustomMode ? (
+                          <div className="settings-inline-input">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              className="settings-select settings-select--input-mode settings-select--with-unit"
+                              value={minimaxCodeQuotaAlertThreshold}
+                              placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                              onChange={(e) => setMinimaxCodeQuotaAlertThreshold(sanitizeNumberInput(e.target.value))}
+                              onBlur={() => {
+                                const normalized = normalizeNumberInput(minimaxCodeQuotaAlertThreshold, 0, 100);
+                                if (THRESHOLD_PRESET_VALUES.includes(normalized)) {
+                                  setMinimaxCodeQuotaAlertThresholdCustomMode(false);
+                                }
+                                setMinimaxCodeQuotaAlertThreshold(normalized);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const normalized = normalizeNumberInput(minimaxCodeQuotaAlertThreshold, 0, 100);
+                                  setMinimaxCodeQuotaAlertThresholdCustomMode(false);
+                                  setMinimaxCodeQuotaAlertThreshold(normalized);
+                                }
+                              }}
+                            />
+                            <span className="settings-input-unit">%</span>
+                          </div>
+                        ) : (
+                          <select
+                            className="settings-select"
+                            value={minimaxCodeQuotaAlertThreshold}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'custom') {
+                                setMinimaxCodeQuotaAlertThresholdCustomMode(true);
+                                setMinimaxCodeQuotaAlertThreshold(minimaxCodeQuotaAlertThreshold || '20');
+                                return;
+                              }
+                              setMinimaxCodeQuotaAlertThresholdCustomMode(false);
+                              setMinimaxCodeQuotaAlertThreshold(val);
+                            }}
+                          >
+                            {!minimaxCodeQuotaAlertThresholdIsPreset && (
+                              <option value={minimaxCodeQuotaAlertThreshold}>{minimaxCodeQuotaAlertThreshold}%</option>
                             )}
                             <option value="0">0%</option>
                             <option value="20">20%</option>

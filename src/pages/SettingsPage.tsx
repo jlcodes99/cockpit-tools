@@ -64,6 +64,7 @@ import { useClaudeAccountStore } from '../stores/useClaudeAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
@@ -76,6 +77,7 @@ import { getGrokAccountDisplayEmail } from '../types/grok';
 import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
+import { getMinimaxCodeAccountDisplayEmail } from '../types/minimaxCode';
 import { getQoderAccountDisplayEmail } from '../types/qoder';
 import { getZcodeAccountDisplayEmail } from '../types/zcode';
 import {
@@ -195,10 +197,12 @@ interface GeneralConfig {
   trae_solo_cn_app_scan_roots: string;
   workbuddy_app_path: string;
   workbuddy_share_sessions_on_switch: boolean;
+  minimax_code_app_path: string;
   zed_app_path: string;
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
+  minimax_code_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
@@ -224,6 +228,8 @@ interface GeneralConfig {
   zed_quota_alert_threshold: number;
   workbuddy_quota_alert_enabled: boolean;
   workbuddy_quota_alert_threshold: number;
+  minimax_code_quota_alert_enabled: boolean;
+  minimax_code_quota_alert_threshold: number;
   opencode_sync_on_switch: boolean;
   opencode_auth_overwrite_on_switch: boolean;
   openclaw_auth_overwrite_on_switch: boolean;
@@ -284,6 +290,7 @@ type AppPathTarget =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'minimaxcode'
   | 'zed';
 
 type TraeAppPathTarget = 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn';
@@ -590,10 +597,12 @@ export function useSettingsPageController() {
   const [traeSoloCnAppPath, setTraeSoloCnAppPath] = useState('');
   const [workbuddyAppPath, setWorkbuddyAppPath] = useState('');
   const [workbuddyShareSessionsOnSwitch, setWorkbuddyShareSessionsOnSwitch] = useState(false);
+  const [minimaxCodeAppPath, setMinimaxCodeAppPath] = useState('');
   const [zedAppPath, setZedAppPath] = useState('');
   const [codebuddyAutoRefresh, setCodebuddyAutoRefresh] = useState('10');
   const [codebuddyCnAutoRefresh, setCodebuddyCnAutoRefresh] = useState('10');
   const [workbuddyAutoRefresh, setWorkbuddyAutoRefresh] = useState('10');
+  const [minimaxCodeAutoRefresh, setMinimaxCodeAutoRefresh] = useState('10');
   const [qoderAutoRefresh, setQoderAutoRefresh] = useState('10');
   const [zcodeAutoRefresh, setZcodeAutoRefresh] = useState('10');
   const [traeAutoRefresh, setTraeAutoRefresh] = useState('10');
@@ -633,9 +642,12 @@ export function useSettingsPageController() {
   const [zedQuotaAlertThreshold, setZedQuotaAlertThreshold] = useState('20');
   const [workbuddyQuotaAlertEnabled, setWorkbuddyQuotaAlertEnabled] = useState(false);
   const [workbuddyQuotaAlertThreshold, setWorkbuddyQuotaAlertThreshold] = useState('20');
+  const [minimaxCodeQuotaAlertEnabled, setMinimaxCodeQuotaAlertEnabled] = useState(false);
+  const [minimaxCodeQuotaAlertThreshold, setMinimaxCodeQuotaAlertThreshold] = useState('20');
   const [codebuddyAutoRefreshCustomMode, setCodebuddyAutoRefreshCustomMode] = useState(false);
   const [codebuddyCnAutoRefreshCustomMode, setCodebuddyCnAutoRefreshCustomMode] = useState(false);
   const [workbuddyAutoRefreshCustomMode, setWorkbuddyAutoRefreshCustomMode] = useState(false);
+  const [minimaxCodeAutoRefreshCustomMode, setMinimaxCodeAutoRefreshCustomMode] = useState(false);
   const [codebuddyQuotaAlertThresholdCustomMode, setCodebuddyQuotaAlertThresholdCustomMode] = useState(false);
   const [qoderAutoRefreshCustomMode, setQoderAutoRefreshCustomMode] = useState(false);
   const [zcodeAutoRefreshCustomMode, setZcodeAutoRefreshCustomMode] = useState(false);
@@ -652,6 +664,7 @@ export function useSettingsPageController() {
   const [zedQuotaAlertThresholdCustomMode, setZedQuotaAlertThresholdCustomMode] = useState(false);
   const [codebuddyCnQuotaAlertThresholdCustomMode, setCodebuddyCnQuotaAlertThresholdCustomMode] = useState(false);
   const [workbuddyQuotaAlertThresholdCustomMode, setWorkbuddyQuotaAlertThresholdCustomMode] = useState(false);
+  const [minimaxCodeQuotaAlertThresholdCustomMode, setMinimaxCodeQuotaAlertThresholdCustomMode] = useState(false);
   const [appPathResetDetectingTargets, setAppPathResetDetectingTargets] = useState<Set<AppPathTarget>>(new Set());
   const [claudeLaunchCandidates, setClaudeLaunchCandidates] = useState<ClaudeDesktopLaunchCandidate[]>([]);
   const [traeAppScanRoots, setTraeAppScanRoots] = useState('');
@@ -1011,6 +1024,7 @@ export function useSettingsPageController() {
       !codebuddyAutoRefresh.trim() ||
       !codebuddyCnAutoRefresh.trim() ||
       !workbuddyAutoRefresh.trim() ||
+      !minimaxCodeAutoRefresh.trim() ||
       !qoderAutoRefresh.trim() ||
       !zcodeAutoRefresh.trim() ||
       !traeAutoRefresh.trim() ||
@@ -1033,6 +1047,7 @@ export function useSettingsPageController() {
     const codebuddyAutoRefreshNum = parseInt(codebuddyAutoRefresh, 10) || -1;
     const codebuddyCnAutoRefreshNum = parseInt(codebuddyCnAutoRefresh, 10) || -1;
     const workbuddyAutoRefreshNum = parseInt(workbuddyAutoRefresh, 10) || -1;
+    const minimaxCodeAutoRefreshNum = parseInt(minimaxCodeAutoRefresh, 10) || -1;
     const qoderAutoRefreshNum = parseInt(qoderAutoRefresh, 10) || -1;
     const zcodeAutoRefreshNum = parseInt(zcodeAutoRefresh, 10) || -1;
     const traeAutoRefreshNum = parseInt(traeAutoRefresh, 10) || -1;
@@ -1057,6 +1072,7 @@ export function useSettingsPageController() {
     const parsedCodebuddyQuotaAlertThreshold = Number.parseInt(codebuddyQuotaAlertThreshold, 10);
     const parsedCodebuddyCnQuotaAlertThreshold = Number.parseInt(codebuddyCnQuotaAlertThreshold, 10);
     const parsedWorkbuddyQuotaAlertThreshold = Number.parseInt(workbuddyQuotaAlertThreshold, 10);
+    const parsedMinimaxCodeQuotaAlertThreshold = Number.parseInt(minimaxCodeQuotaAlertThreshold, 10);
     const parsedQoderQuotaAlertThreshold = Number.parseInt(qoderQuotaAlertThreshold, 10);
     const parsedTraeQuotaAlertThreshold = Number.parseInt(traeQuotaAlertThreshold, 10);
     const parsedTraeSoloQuotaAlertThreshold = Number.parseInt(traeSoloQuotaAlertThreshold, 10);
@@ -1087,6 +1103,7 @@ export function useSettingsPageController() {
       codebuddy_auto_refresh_minutes: codebuddyAutoRefreshNum,
       codebuddy_cn_auto_refresh_minutes: codebuddyCnAutoRefreshNum,
       workbuddy_auto_refresh_minutes: workbuddyAutoRefreshNum,
+      minimax_code_auto_refresh_minutes: minimaxCodeAutoRefreshNum,
       qoder_auto_refresh_minutes: qoderAutoRefreshNum,
       zcode_auto_refresh_minutes: zcodeAutoRefreshNum,
       trae_auto_refresh_minutes: traeAutoRefreshNum,
@@ -1146,6 +1163,7 @@ export function useSettingsPageController() {
       trae_solo_cn_app_scan_roots: traeSoloCnAppScanRoots,
       workbuddy_app_path: workbuddyAppPath,
       workbuddy_share_sessions_on_switch: workbuddyShareSessionsOnSwitch,
+      minimax_code_app_path: minimaxCodeAppPath,
       zed_app_path: zedAppPath,
       opencode_sync_on_switch: opencodeSyncOnSwitch,
       opencode_auth_overwrite_on_switch: opencodeAuthOverwriteOnSwitch,
@@ -1211,6 +1229,10 @@ export function useSettingsPageController() {
       workbuddy_quota_alert_threshold: Number.isNaN(parsedWorkbuddyQuotaAlertThreshold)
         ? 20
         : parsedWorkbuddyQuotaAlertThreshold,
+      minimax_code_quota_alert_enabled: minimaxCodeQuotaAlertEnabled,
+      minimax_code_quota_alert_threshold: Number.isNaN(parsedMinimaxCodeQuotaAlertThreshold)
+        ? 20
+        : parsedMinimaxCodeQuotaAlertThreshold,
       qoder_quota_alert_enabled: qoderQuotaAlertEnabled,
       qoder_quota_alert_threshold: Number.isNaN(parsedQoderQuotaAlertThreshold)
         ? 20
@@ -1322,6 +1344,7 @@ export function useSettingsPageController() {
     traeSoloCnAutoRefresh,
     zedAutoRefresh,
     workbuddyAutoRefresh,
+    minimaxCodeAutoRefresh,
     qoderAutoRefresh,
     zcodeAutoRefresh,
     cursorAutoRefresh,
@@ -1381,6 +1404,7 @@ export function useSettingsPageController() {
     traeSoloCnAppScanRoots,
     workbuddyAppPath,
     workbuddyShareSessionsOnSwitch,
+    minimaxCodeAppPath,
     zedAppPath,
     opencodeSyncOnSwitch,
     opencodeAuthOverwriteOnSwitch,
@@ -1423,6 +1447,8 @@ export function useSettingsPageController() {
     codebuddyCnQuotaAlertThreshold,
     workbuddyQuotaAlertEnabled,
     workbuddyQuotaAlertThreshold,
+    minimaxCodeQuotaAlertEnabled,
+    minimaxCodeQuotaAlertThreshold,
     qoderQuotaAlertEnabled,
     qoderQuotaAlertThreshold,
     traeQuotaAlertEnabled,
@@ -1735,10 +1761,12 @@ export function useSettingsPageController() {
       setTraeLaunchCandidates([]);
       setWorkbuddyAppPath(config.workbuddy_app_path || '');
       setWorkbuddyShareSessionsOnSwitch(config.workbuddy_share_sessions_on_switch ?? false);
+      setMinimaxCodeAppPath(config.minimax_code_app_path || '');
       setZedAppPath(config.zed_app_path || '');
       setCodebuddyAutoRefresh(String(config.codebuddy_auto_refresh_minutes ?? 10));
       setCodebuddyCnAutoRefresh(String(config.codebuddy_cn_auto_refresh_minutes ?? 10));
       setWorkbuddyAutoRefresh(String(config.workbuddy_auto_refresh_minutes ?? 10));
+      setMinimaxCodeAutoRefresh(String(config.minimax_code_auto_refresh_minutes ?? 10));
       setQoderAutoRefresh(String(config.qoder_auto_refresh_minutes ?? 10));
       setZcodeAutoRefresh(String(config.zcode_auto_refresh_minutes ?? 10));
       setTraeAutoRefresh(String(config.trae_auto_refresh_minutes ?? 10));
@@ -1755,6 +1783,8 @@ export function useSettingsPageController() {
       setCodebuddyCnQuotaAlertThreshold(String(config.codebuddy_cn_quota_alert_threshold ?? 20));
       setWorkbuddyQuotaAlertEnabled(config.workbuddy_quota_alert_enabled ?? false);
       setWorkbuddyQuotaAlertThreshold(String(config.workbuddy_quota_alert_threshold ?? 20));
+      setMinimaxCodeQuotaAlertEnabled(config.minimax_code_quota_alert_enabled ?? false);
+      setMinimaxCodeQuotaAlertThreshold(String(config.minimax_code_quota_alert_threshold ?? 20));
       setQoderQuotaAlertEnabled(config.qoder_quota_alert_enabled ?? false);
       setQoderQuotaAlertThreshold(String(config.qoder_quota_alert_threshold ?? 20));
       setTraeQuotaAlertEnabled(config.trae_quota_alert_enabled ?? false);
@@ -2084,6 +2114,8 @@ export function useSettingsPageController() {
       setTraeLaunchCandidates([]);
     } else if (target === 'workbuddy') {
       setWorkbuddyAppPath(path);
+    } else if (target === 'minimaxcode') {
+      setMinimaxCodeAppPath(path);
     } else if (target === 'zed') {
       setZedAppPath(path);
     } else {
@@ -2122,6 +2154,8 @@ export function useSettingsPageController() {
         return getTraeAppDisplayName(target);
       case 'workbuddy':
         return 'WorkBuddy';
+      case 'minimaxcode':
+        return 'MiniMax Code';
       case 'zed':
         return 'Zed';
       case 'opencode':
@@ -2162,6 +2196,9 @@ export function useSettingsPageController() {
     }
     if (target === 'workbuddy') {
       return t('settings.general.workbuddyPathReset', '重置默认');
+    }
+    if (target === 'minimaxcode') {
+      return t('settings.general.minimaxCodePathReset', '重置默认');
     }
     if (target === 'zed') {
       return t('settings.general.zedPathReset', '重置默认');
@@ -2405,7 +2442,7 @@ export function useSettingsPageController() {
       case 'workbuddy':
         return parseRefresh(workbuddyAutoRefresh) > 0;
       case 'minimaxcode':
-        return true;
+        return parseRefresh(minimaxCodeAutoRefresh) > 0;
       case 'qoder':
         return parseRefresh(qoderAutoRefresh) > 0;
       case 'zcode':
@@ -2562,6 +2599,8 @@ export function useSettingsPageController() {
         return getProviderAccounts(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail);
       case 'workbuddy':
         return getProviderAccounts(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail);
+      case 'minimaxcode':
+        return getProviderAccounts(useMinimaxCodeAccountStore, getMinimaxCodeAccountDisplayEmail);
       case 'qoder':
         return getProviderAccounts(useQoderAccountStore, getQoderAccountDisplayEmail);
       case 'zcode':
@@ -3055,6 +3094,7 @@ export function useSettingsPageController() {
   const codebuddyAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(codebuddyAutoRefresh);
   const codebuddyCnAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(codebuddyCnAutoRefresh);
   const workbuddyAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(workbuddyAutoRefresh);
+  const minimaxCodeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(minimaxCodeAutoRefresh);
   const qoderAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(qoderAutoRefresh);
   const zcodeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(zcodeAutoRefresh);
   const traeAutoRefreshIsPreset = REFRESH_PRESET_VALUES.includes(traeAutoRefresh);
@@ -3075,6 +3115,7 @@ export function useSettingsPageController() {
   const codebuddyQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(codebuddyQuotaAlertThreshold);
   const codebuddyCnQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(codebuddyCnQuotaAlertThreshold);
   const workbuddyQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(workbuddyQuotaAlertThreshold);
+  const minimaxCodeQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(minimaxCodeQuotaAlertThreshold);
   const qoderQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(qoderQuotaAlertThreshold);
   const traeQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeQuotaAlertThreshold);
   const traeSoloQuotaAlertThresholdIsPreset = THRESHOLD_PRESET_VALUES.includes(traeSoloQuotaAlertThreshold);
@@ -3383,6 +3424,14 @@ export function useSettingsPageController() {
     menuBarQuotaModalOpen,
     menuBarQuotaPlatform,
     menuBarQuotaPlatformOptions,
+    minimaxCodeAppPath,
+    minimaxCodeAutoRefresh,
+    minimaxCodeAutoRefreshCustomMode,
+    minimaxCodeAutoRefreshIsPreset,
+    minimaxCodeQuotaAlertEnabled,
+    minimaxCodeQuotaAlertThreshold,
+    minimaxCodeQuotaAlertThresholdCustomMode,
+    minimaxCodeQuotaAlertThresholdIsPreset,
     needsRestart,
     networkSaving,
     normalizeNumberInput,
@@ -3524,6 +3573,12 @@ export function useSettingsPageController() {
     setKiroQuotaAlertEnabled,
     setKiroQuotaAlertThreshold,
     setKiroQuotaAlertThresholdCustomMode,
+    setMinimaxCodeAppPath,
+    setMinimaxCodeAutoRefresh,
+    setMinimaxCodeAutoRefreshCustomMode,
+    setMinimaxCodeQuotaAlertEnabled,
+    setMinimaxCodeQuotaAlertThreshold,
+    setMinimaxCodeQuotaAlertThresholdCustomMode,
     setLanguage,
     setMenuBarQuotaDraftPlatform,
     setMenuBarQuotaDraftShowPrefix,

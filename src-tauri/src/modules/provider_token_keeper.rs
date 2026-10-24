@@ -11,8 +11,8 @@ use tokio::sync::Notify;
 
 use crate::modules::{
     codebuddy_account, codebuddy_cn_account, codex_account, config, cursor_account,
-    github_copilot_account, grok_account, kiro_account, kiro_instance, logger, process,
-    trae_account, workbuddy_account,
+    github_copilot_account, grok_account, kiro_account, kiro_instance, logger,
+    minimax_code_account, process, trae_account, workbuddy_account,
 };
 
 const TOKEN_KEEPER_TICK_SECONDS: u64 = 60;
@@ -130,6 +130,8 @@ async fn run_refresh_cycle(app_handle: &AppHandle) {
     refreshed_any |=
         refresh_platform_if_due("codebuddy_cn", refresh_due_codebuddy_cn_accounts).await;
     refreshed_any |= refresh_platform_if_due("workbuddy", refresh_due_workbuddy_accounts).await;
+    refreshed_any |=
+        refresh_platform_if_due("minimaxcode", refresh_due_minimax_code_accounts).await;
     refreshed_any |= refresh_platform_if_due("trae", refresh_due_trae_accounts).await;
 
     if refreshed_any {
@@ -755,6 +757,63 @@ async fn refresh_due_workbuddy_accounts() -> bool {
                 mark_attempt_failure(&key);
                 logger::log_warn(&format!(
                     "[TokenKeeper][WorkBuddy] Token 保活失败，进入退避: account_id={}, error={}",
+                    account.id, err
+                ));
+            }
+        }
+    }
+
+    refreshed_any
+}
+
+async fn refresh_due_minimax_code_accounts() -> bool {
+    let accounts = match list_accounts_blocking(
+        "minimaxcode",
+        minimax_code_account::list_accounts_checked,
+    )
+    .await
+    {
+        Ok(accounts) => accounts,
+        Err(err) => {
+            logger::log_warn(&format!(
+                "[TokenKeeper][MiniMax Code] 读取账号列表失败，跳过本轮保活: {}",
+                err
+            ));
+            return false;
+        }
+    };
+
+    let mut refreshed_any = false;
+    let mut attempted_refreshes = 0usize;
+
+    for account in accounts {
+        if reached_platform_refresh_limit(attempted_refreshes) {
+            break;
+        }
+        // MiniMax stores `expires_at` in epoch milliseconds (see `expiresAtMs`).
+        if !expires_at_milliseconds_due(account.expires_at) {
+            continue;
+        }
+
+        let key = format!("minimaxcode:{}", account.id);
+        if !allow_attempt(&key) {
+            continue;
+        }
+
+        attempted_refreshes += 1;
+        match minimax_code_account::refresh_account_token(&account.id).await {
+            Ok(updated) => {
+                clear_attempt_backoff(&key);
+                refreshed_any = true;
+                logger::log_info(&format!(
+                    "[TokenKeeper][MiniMax Code] Token 保活成功: account_id={}, email={}",
+                    updated.id, updated.email
+                ));
+            }
+            Err(err) => {
+                mark_attempt_failure(&key);
+                logger::log_warn(&format!(
+                    "[TokenKeeper][MiniMax Code] Token 保活失败，进入退避: account_id={}, error={}",
                     account.id, err
                 ));
             }
