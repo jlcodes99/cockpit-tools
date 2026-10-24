@@ -458,6 +458,7 @@ fn resolve_macos_app_root_from_config(app: &str) -> Option<String> {
         "codebuddy" => current.codebuddy_app_path,
         "codebuddy_cn" => current.codebuddy_cn_app_path,
         "zcode" => current.zcode_app_path,
+        "minimax_code" => current.minimax_code_app_path,
         _ => String::new(),
     };
     let trimmed = raw.trim();

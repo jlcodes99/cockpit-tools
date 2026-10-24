@@ -1326,11 +1326,56 @@ fn resolve_minimax_code_launch_path_from(
     Err("未找到 MiniMax Code 客户端可执行文件".to_string())
 }
 
+/// The MiniMax client's credential record key is
+/// `{service}\0{base64url(sha256("<dataDir>/auth\0mcode-public"))}`.
+///
+/// The account component is **not** the Cockpit account id — it is a hash of the
+/// namespace's auth home, so it differs per data root (i.e. per managed instance).
+/// Verified against the installed client (`app.asar` `createAuthNamespace` +
+/// `FileStore` `credentialKey`) and against the on-disk `auth.json` on this machine.
+///
+/// The hash input uses the OS path separator (`Path::join`), which on Windows yields
+/// `C:\...\auth` — matching the client's `join(resolve(dataDir), 'auth')`.
+#[cfg(test)]
+pub fn minimax_code_record_key(data_dir: &str, service_prefix: &str) -> String {
+    minimax_code_record_key_for_auth_home(
+        Path::new(data_dir).join("auth").to_string_lossy().as_ref(),
+        service_prefix,
+    )
+}
+
+/// `auth_home` = `<data root>/auth`，与客户端 `join(resolve(dataDir), 'auth')` 一致。
+pub fn minimax_code_record_key_for_auth_home(
+    auth_home: &str,
+    service_prefix: &str,
+) -> String {
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(
+        format!(
+            "{}\u{0}{}",
+            auth_home,
+            crate::modules::minimax_code_instance::MINIMAX_CODE_OAUTH_CLIENT_ID
+        )
+        .as_bytes(),
+    );
+    let account_component = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(hasher.finalize());
+    format!("{}\u{0}{}", service_prefix, account_component)
+}
+
+/// 计算 `expiresAtMs` 的兜底值：账号没有过期时间时，给一个足够远的未来时间，
+/// 让客户端 `parseStoredCredential` 的 `Number.isFinite` 校验通过。
+const MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS: i64 = 4_102_444_800_000; // 2100-01-01T00:00:00Z
+
 /// Switch the local MiniMax client to `account` by rewriting its `auth.json`.
-/// The client keeps the FIRST non-empty `accessToken` record, so only the target
-/// account's record is written back. The pre-switch login state is preserved at
-/// `<file>.json.cockpit.bak` (only the first backup is kept, never overwritten).
-/// Returns the auth file path.
+///
+/// The record key is recomputed from the target data root (see `minimax_code_record_key`),
+/// and a matching `auth-state.json` is written alongside so the client's
+/// `MCodeOAuthCore.getStatus()` accepts the credential instead of reporting `error`.
+/// The pre-switch login state is preserved at `<file>.json.cockpit.bak` (only the first
+/// backup is kept, never overwritten). Returns the auth file path.
 pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathBuf, String> {
     switch_minimax_code_account_impl(account, None)
 }
@@ -1339,14 +1384,10 @@ pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathB
 /// `data_dir` (the instance's own `MINIMAX_DATA_DIR`).
 ///
 /// The MiniMax client derives its credential namespace from the data root:
-/// `<data root>/auth/<buildEnv>/<region>/<clientId>/auth.json`
-/// (see `createAuthNamespace` in the client bundle). Passing a per-instance data root
-/// therefore gives each managed instance its own login state — the foundation of
-/// MiniMax Code multi-instance support.
-///
-/// When the instance has no `auth.json` yet, the record key prefix is inherited from
-/// the account's stored `auth_file` (or any global `auth.json`) so the namespace layout
-/// matches what the client would have created itself.
+/// `<data root>/auth/<buildEnv>/<region>/<clientId>/auth.json`, and its record key
+/// hashes the same auth home. Passing a per-instance data root therefore gives each
+/// managed instance its own login state — the foundation of MiniMax Code multi-instance
+/// support.
 pub fn switch_minimax_code_account_to_data_dir(
     account: &MinimaxCodeAccount,
     data_dir: &Path,
@@ -1358,34 +1399,54 @@ fn switch_minimax_code_account_impl(
     account: &MinimaxCodeAccount,
     data_dir: Option<&Path>,
 ) -> Result<PathBuf, String> {
-    let auth_file = match data_dir {
+    use crate::modules::minimax_code_instance as instance;
+
+    // `parseStoredCredential` rejects a record without a non-empty refreshToken.
+    // Refuse loudly instead of writing a record the client would discard as corrupt.
+    let refresh_token = account
+        .refresh_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "该账号缺少 refreshToken，无法切换".to_string())?
+        .to_string();
+
+    let (auth_file, data_root, namespace_home) = match data_dir {
         // Managed instance: always target the instance's own namespace.
-        Some(root) => crate::modules::minimax_code_instance::resolve_minimax_code_auth_file_path(root),
-        None => account
-            .auth_file
-            .as_ref()
-            .map(PathBuf::from)
-            .filter(|p| p.is_file())
-            .or_else(|| find_minimax_code_auth_files().into_iter().next())
-            .ok_or_else(|| "未找到 MiniMax Code 登录态文件".to_string())?,
+        Some(root) => {
+            let scope = instance::resolve_minimax_code_auth_scope(root, account.region.as_deref());
+            let namespace_home = instance::minimax_code_namespace_home(root, &scope);
+            (namespace_home.join("auth.json"), root.to_path_buf(), namespace_home)
+        }
+        None => {
+            let auth_file = account
+                .auth_file
+                .as_ref()
+                .map(PathBuf::from)
+                .filter(|p| p.is_file())
+                .or_else(|| find_minimax_code_auth_files().into_iter().next())
+                .ok_or_else(|| "未找到 MiniMax Code 登录态文件".to_string())?;
+            // 全局实例：沿用现有命名空间。data root 从
+            // `<data root>/auth/<buildEnv>/<region>/<clientId>/auth.json` 反推。
+            let namespace_home = auth_file
+                .parent()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."));
+            let data_root = namespace_home
+                .parent()
+                .and_then(|region_dir| region_dir.parent())
+                .and_then(|env_dir| env_dir.parent())
+                .and_then(|auth| auth.parent())
+                .map(PathBuf::from)
+                .unwrap_or_else(|| namespace_home.clone());
+            (auth_file, data_root, namespace_home)
+        }
     };
+
     if let Some(parent) = auth_file.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("创建 MiniMax Code 登录态目录失败: {e}"))?;
     }
-    // For a fresh instance namespace, borrow the record key prefix from an existing
-    // auth file so the client recognises the layout verbatim.
-    let prefix_hint = if data_dir.is_some() && !auth_file.is_file() {
-        account
-            .auth_file
-            .as_ref()
-            .map(PathBuf::from)
-            .filter(|p| p.is_file())
-            .or_else(|| find_minimax_code_auth_files().into_iter().next())
-            .and_then(|source| read_auth_file_prefix(&source))
-    } else {
-        None
-    };
 
     let raw = std::fs::read_to_string(&auth_file)
         .unwrap_or_else(|_| "{\"schemaVersion\":1,\"records\":{}}".to_string());
@@ -1397,67 +1458,78 @@ fn switch_minimax_code_account_impl(
 
     // Preserve the client's current login state before overwriting it. The backup
     // uses a distinct `.cockpit.bak` path and is written only once, so a later
-    // switch can never clobber the first (oldest) login state.
+    // switch can never clobber the first (oldest) login state. The paired
+    // `auth-state.json` is backed up alongside so a restore can be consistent.
     let bak = auth_file.with_extension("json.cockpit.bak");
     if !bak.exists() {
         let _ = std::fs::copy(&auth_file, &bak);
+        if let Some(state_path) = auth_state_path(&namespace_home) {
+            if state_path.is_file() {
+                let _ = std::fs::copy(&state_path, state_path.with_extension("json.cockpit.bak"));
+            }
+        }
     }
 
-    let records = parsed
+    // 客户端的 record key 由 data root 决定，必须重新计算，不能沿用账号 id。
+    // `auth_home` 与客户端 `join(resolve(dataDir), 'auth')` 一致（OS 路径分隔符）。
+    let auth_home = data_root.join("auth");
+    // 优先按命名空间目录结构推断（与客户端实际使用的布局一致），
+    // 再回退到 auth-state.json / auth.json 记录键前缀。
+    let scope = scope_from_namespace_home(&namespace_home).unwrap_or_else(|| {
+        instance::resolve_minimax_code_auth_scope(&data_root, account.region.as_deref())
+    });
+    let target_key = minimax_code_record_key_for_auth_home(
+        &auth_home.to_string_lossy(),
+        &scope.service_prefix(),
+    );
+
+    let mut record = serde_json::json!({
+        "schemaVersion": 1,
+        "tokenType": "Bearer",
+        "clientId": instance::MINIMAX_CODE_OAUTH_CLIENT_ID,
+        "scopes": instance::MINIMAX_CODE_OAUTH_SCOPES,
+        "audience": instance::MINIMAX_CODE_OAUTH_AUDIENCE,
+        "accessToken": account.access_token,
+        "refreshToken": refresh_token,
+        "expiresAtMs": account.expires_at.unwrap_or(MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS),
+        "generation": 1,
+    });
+    // Preserve an existing record's optional fields (subject/accountId/loginEpoch) when
+    // we are updating in place rather than creating a fresh namespace.
+    let existing_record = parsed
         .get("records")
         .and_then(|v| v.as_object())
-        .cloned()
-        .unwrap_or_default();
-    // Reuse the target account's own key prefix when it already exists so the
-    // env/region/clientId layout is preserved verbatim; otherwise fall back to any
-    // existing key, then to the default prod/cn prefix.
-    let target_suffix = format!("\u{0}{}", account.id);
-    let prefix = records
-        .keys()
-        .find(|key| key.ends_with(&target_suffix))
-        .or_else(|| records.keys().next())
-        .and_then(|key| key.split('\u{0}').next().map(|s| s.to_string()))
-        .filter(|s| !s.is_empty())
-        .or(prefix_hint)
-        .unwrap_or_else(|| "com.minimax.mcode.oauth.prod.cn".to_string());
-    let target_key = format!("{}\u{0}{}", prefix, account.id);
-
-    let mut record = records
-        .get(&target_key)
-        .cloned()
-        .or_else(|| records.values().next().cloned())
-        .unwrap_or_else(|| {
-            serde_json::json!({
-                "schemaVersion": 1, "tokenType": "Bearer", "clientId": "mcode-public",
-                "scopes": ["agent.default"], "audience": "agent-backend", "generation": 1
-            })
-        });
+        .and_then(|records| {
+            records
+                .get(&target_key)
+                .or_else(|| records.values().next())
+        })
+        .cloned();
+    if let Some(existing) = existing_record {
+        if let (Some(obj), Some(existing_obj)) = (record.as_object_mut(), existing.as_object()) {
+            // `loginEpoch` 必须是可选项字符串或整数，直接沿用原值即可。
+            for key in ["subject", "accountId", "loginEpoch"] {
+                if let Some(value) = existing_obj.get(key) {
+                    obj.insert(key.to_string(), value.clone());
+                }
+            }
+        }
+    }
     if let Some(obj) = record.as_object_mut() {
-        obj.insert("accessToken".into(), Value::String(account.access_token.clone()));
-        // Only overwrite when we actually hold a refresh token: a `None` must not
-        // blank a refresh token the client has already renewed locally.
-        if let Some(refresh) = account
-            .refresh_token
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            obj.insert("refreshToken".into(), Value::String(refresh.to_string()));
-        }
-        match account.expires_at {
-            Some(ms) => {
-                obj.insert("expiresAtMs".into(), serde_json::json!(ms));
-            }
-            None => {
-                // Drop a stale expiry copied from another account's record.
-                obj.remove("expiresAtMs");
-            }
-        }
         let generation = obj.get("generation").and_then(|v| v.as_i64()).unwrap_or(0);
         obj.insert("generation".into(), serde_json::json!(generation + 1));
     }
+    let generation = record
+        .get("generation")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1);
+    let expires_at_ms = record
+        .get("expiresAtMs")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS);
 
-    // Keep only the target record: the client takes the first non-empty token.
+    // Keep only the target record: the client's FileStore keys by the computed record key,
+    // and `parsePayload` validates every record it finds.
     let mut new_records = serde_json::Map::new();
     new_records.insert(target_key, record);
     parsed["records"] = Value::Object(new_records);
@@ -1474,21 +1546,102 @@ fn switch_minimax_code_account_impl(
             .as_bytes(),
     )
     .map_err(|e| format!("写入 MiniMax Code 登录态失败: {e}"))?;
+
+    write_minimax_code_auth_state(&namespace_home, &scope, generation, expires_at_ms)?;
+
     Ok(auth_file)
 }
 
-/// Read only the record key prefix (`com.minimax.mcode.oauth.<buildEnv>.<region>`) from
-/// an `auth.json`. Never returns token material.
-fn read_auth_file_prefix(path: &Path) -> Option<String> {
-    let raw = std::fs::read_to_string(path).ok()?;
-    let parsed: Value = serde_json::from_str(&raw).ok()?;
-    parsed
-        .get("records")?
-        .as_object()?
-        .keys()
-        .next()
-        .and_then(|key| key.split('\u{0}').next().map(|s| s.to_string()))
-        .filter(|value| !value.is_empty())
+/// `<namespaceHome>/auth-state.json`。
+fn auth_state_path(namespace_home: &Path) -> Option<PathBuf> {
+    if namespace_home.as_os_str().is_empty() {
+        return None;
+    }
+    Some(namespace_home.join("auth-state.json"))
+}
+
+/// 写 `auth-state.json`。
+///
+/// 客户端 `MCodeOAuthCore.getStatus()` 在 `status === "authenticated"` 时会取
+/// `credentialStore.get(namespace.credentialKey)`，并要求
+/// `credential.generation === state.generation`，否则直接返回 `error`。因此
+/// `generation` 必须与 `auth.json` 里的记录一致。
+///
+/// 已存在 `auth-state.json` 时复用它的 `schemaVersion`/`buildEnv`/`region`（并沿用其
+/// `expiresAtMs`），只把 `generation` 对齐到记录。
+fn write_minimax_code_auth_state(
+    namespace_home: &Path,
+    scope: &crate::modules::minimax_code_instance::MinimaxCodeAuthScope,
+    generation: i64,
+    expires_at_ms: i64,
+) -> Result<(), String> {
+    use crate::modules::minimax_code_instance as instance;
+
+    let state_path = auth_state_path(namespace_home)
+        .ok_or_else(|| "无法确定 MiniMax Code auth-state.json 路径".to_string())?;
+    if let Some(parent) = state_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("创建 MiniMax Code 登录态目录失败: {e}"))?;
+    }
+
+    // 客户端 `parseState` 拒绝任何名字匹配 access/refresh token 等敏感模式的键。
+    let mut state = serde_json::json!({
+        "schemaVersion": 2,
+        "status": "authenticated",
+        "storeKind": "file",
+        "clientId": instance::MINIMAX_CODE_OAUTH_CLIENT_ID,
+        "scopes": instance::MINIMAX_CODE_OAUTH_SCOPES,
+        "audience": instance::MINIMAX_CODE_OAUTH_AUDIENCE,
+        "buildEnv": scope.build_env,
+        "region": scope.region,
+        "generation": generation,
+        "expiresAtMs": expires_at_ms,
+    });
+    if let Some(existing_raw) = std::fs::read_to_string(&state_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+    {
+        if let Some(obj) = state.as_object_mut() {
+            for key in ["schemaVersion", "buildEnv", "region", "expiresAtMs"] {
+                if let Some(value) = existing_raw.get(key) {
+                    obj.insert(key.to_string(), value.clone());
+                }
+            }
+            if let Some(authorization) = existing_raw.get("authorization") {
+                obj.insert("authorization".to_string(), authorization.clone());
+            }
+        }
+    }
+
+    crate::modules::atomic_write::write_bytes_atomic(
+        &state_path,
+        serde_json::to_string_pretty(&state)
+            .map_err(|e| e.to_string())?
+            .as_bytes(),
+    )
+    .map_err(|e| format!("写入 MiniMax Code auth-state.json 失败: {e}"))?;
+    Ok(())
+}
+
+/// 从命名空间目录 `<data root>/auth/<buildEnv>/<region>/<clientId>` 读取 buildEnv/region。
+/// 与客户端 `createAuthNamespace` 的布局一一对应。
+fn scope_from_namespace_home(
+    namespace_home: &Path,
+) -> Option<crate::modules::minimax_code_instance::MinimaxCodeAuthScope> {
+    use crate::modules::minimax_code_instance as instance;
+    let region_dir = namespace_home.parent()?;
+    let env_dir = region_dir.parent()?;
+    let build_env = env_dir.file_name().and_then(|name| name.to_str())?;
+    let region = region_dir.file_name().and_then(|name| name.to_str())?;
+    if !instance::MinimaxCodeAuthScope::is_valid_build_env(build_env)
+        || !instance::MinimaxCodeAuthScope::is_valid_region(region)
+    {
+        return None;
+    }
+    Some(instance::MinimaxCodeAuthScope {
+        build_env: build_env.to_string(),
+        region: region.to_string(),
+    })
 }
 
 /// Ask every running MiniMax Code client (matched by exact exe path) to exit.
@@ -1724,12 +1877,34 @@ mod minimax_code_switch_tests {
         }
     }
 
+    /// 客户端真实的 record key：`{service}\0{base64url(sha256("<data root>/auth\0mcode-public"))}`。
+    fn record_key_for(auth_file: &Path, service_prefix: &str) -> String {
+        minimax_code_record_key(&data_root_of(auth_file).to_string_lossy(), service_prefix)
+    }
+
+    /// 从 `<data root>/auth/<buildEnv>/<region>/<clientId>/auth.json` 反推 data root。
+    fn data_root_of(auth_file: &Path) -> PathBuf {
+        auth_file
+            .parent()
+            .and_then(|client_dir| client_dir.parent())
+            .and_then(|region_dir| region_dir.parent())
+            .and_then(|env_dir| env_dir.parent())
+            .and_then(|auth| auth.parent())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
+
     fn write_two_record_auth_file(dir: &Path) -> PathBuf {
-        let file = dir.join("auth.json");
+        // 用真实的命名空间布局，record key 也由客户端算法生成，
+        // 这样测试才与真实客户端一致（而不是用假的账号 id 当后缀）。
+        let namespace = dir.join("auth").join("prod").join("cn").join("mcode-public");
+        fs::create_dir_all(&namespace).unwrap();
+        let file = namespace.join("auth.json");
+        let service = "com.minimax.mcode.oauth.prod.cn";
         let body = json!({
             "schemaVersion": 1,
             "records": {
-                "com.minimax.mcode.oauth.prod.cn\u{0}account_a": {
+                record_key_for(&file, service): {
                     "accessToken": "mmoat_account_a",
                     "refreshToken": "mmort_account_a",
                     "tokenType": "Bearer",
@@ -1739,9 +1914,9 @@ mod minimax_code_switch_tests {
                     "expiresAtMs": 1792767948636_i64,
                     "generation": 7
                 },
-                "com.minimax.mcode.oauth.prod.cn\u{0}account_b": {
-                    "accessToken": "mmoat_account_b",
-                    "refreshToken": "mmort_account_b",
+                "com.minimax.mcode.oauth.prod.cn\u{0}other_account": {
+                    "accessToken": "mmoat_other",
+                    "refreshToken": "mmort_other",
                     "tokenType": "Bearer",
                     "clientId": "mcode-public",
                     "scopes": ["agent.default"],
@@ -1788,8 +1963,8 @@ mod minimax_code_switch_tests {
         let (key, record) = records.iter().next().unwrap();
         assert_eq!(
             key,
-            "com.minimax.mcode.oauth.prod.cn\u{0}account_b",
-            "record key must reuse the existing prefix and target account id"
+            &record_key_for(&auth_file, "com.minimax.mcode.oauth.prod.cn"),
+            "record key must be the client's sha256-derived key, not the Cockpit account id"
         );
         assert_eq!(
             record.get("accessToken").and_then(|v| v.as_str()),
@@ -1799,8 +1974,11 @@ mod minimax_code_switch_tests {
             record.get("refreshToken").and_then(|v| v.as_str()),
             Some("mmort_target_refresh")
         );
-        // generation bumped from the reused record (9 -> 10).
-        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(10));
+        // 全新记录从 generation 1 起，写入时 +1 → 2。
+        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(2));
+        // 客户端 parseStoredCredential 要求有限的 expiresAtMs。
+        let expires = record.get("expiresAtMs").and_then(|v| v.as_i64());
+        assert_eq!(expires, Some(1792767948636_i64));
 
         assert!(
             cockpit_bak.is_file(),
@@ -1830,7 +2008,10 @@ mod minimax_code_switch_tests {
         let records = read_records(&auth_file);
         assert_eq!(records.len(), 1);
         let (key, record) = records.iter().next().unwrap();
-        assert_eq!(key, "com.minimax.mcode.oauth.prod.cn\u{0}account_a");
+        assert_eq!(
+            key,
+            &record_key_for(&auth_file, "com.minimax.mcode.oauth.prod.cn")
+        );
         assert_eq!(
             record.get("accessToken").and_then(|v| v.as_str()),
             Some("mmoat_switch_two")
@@ -1842,10 +2023,16 @@ mod minimax_code_switch_tests {
             2,
             "a later switch must not overwrite the first-state backup"
         );
-        assert!(backup_records.contains_key("com.minimax.mcode.oauth.prod.cn\u{0}account_b"));
+        assert!(backup_records.contains_key(&record_key_for(
+            &auth_file,
+            "com.minimax.mcode.oauth.prod.cn"
+        )));
         assert_eq!(
             backup_records
-                .get("com.minimax.mcode.oauth.prod.cn\u{0}account_a")
+                .get(&record_key_for(
+                    &auth_file,
+                    "com.minimax.mcode.oauth.prod.cn"
+                ))
                 .and_then(|item| item.get("accessToken"))
                 .and_then(|value| value.as_str()),
             Some("mmoat_account_a"),
@@ -1858,20 +2045,42 @@ mod minimax_code_switch_tests {
         let tmp = TempDir::new();
         let auth_file = tmp.0.join("auth.json");
         fs::write(&auth_file, "[1, 2, 3]").unwrap();
-        let account = fake_account("account_b", "mmoat_target", None, None, &auth_file);
+        let account = fake_account(
+            "account_b",
+            "mmoat_target",
+            Some("mmort_target"),
+            None,
+            &auth_file,
+        );
         let err = switch_minimax_code_account(&account).expect_err("array JSON must be rejected");
         assert_eq!(err, "MiniMax Code 登录态文件格式非法");
+    }
+
+    /// 账号缺少 refreshToken 时必须明确报错，而不是写一条客户端会判为 corrupt 的记录。
+    #[test]
+    fn switch_refuses_account_without_refresh_token() {
+        let tmp = TempDir::new();
+        let auth_file = tmp.0.join("auth.json");
+        fs::write(&auth_file, "{\"schemaVersion\":1,\"records\":{}}").unwrap();
+        let account = fake_account("account_b", "mmoat_target", None, None, &auth_file);
+        let err = switch_minimax_code_account(&account)
+            .expect_err("missing refreshToken must be rejected");
+        assert_eq!(err, "该账号缺少 refreshToken，无法切换");
     }
 
     #[test]
     fn switch_derives_prefix_from_another_record_when_target_absent() {
         let tmp = TempDir::new();
-        let auth_file = tmp.0.join("auth.json");
-        // Only an `en` record exists, and it is not the target account.
+        // 真实命名空间布局：buildEnv/region 由目录决定（不再硬编码 cn）。
+        let namespace = tmp.0.join("auth").join("prod").join("en").join("mcode-public");
+        fs::create_dir_all(&namespace).unwrap();
+        let auth_file = namespace.join("auth.json");
+        // 只存在一个 `en` 记录，且它不是目标账号。
+        let service = "com.minimax.mcode.oauth.prod.en";
         let body = json!({
             "schemaVersion": 1,
             "records": {
-                "com.minimax.mcode.oauth.prod.en\u{0}account_x": {
+                record_key_for(&auth_file, service): {
                     "accessToken": "mmoat_x",
                     "refreshToken": "mmort_x",
                     "tokenType": "Bearer",
@@ -1891,7 +2100,7 @@ mod minimax_code_switch_tests {
         let (key, record) = records.iter().next().unwrap();
         assert_eq!(
             key,
-            "com.minimax.mcode.oauth.prod.en\u{0}account_missing",
+            &record_key_for(&auth_file, "com.minimax.mcode.oauth.prod.en"),
             "prefix must be derived from the other existing key, not hardcoded cn"
         );
         assert_eq!(
@@ -1907,35 +2116,25 @@ mod minimax_code_switch_tests {
             Some("mcode-public"),
             "reused record shape should be preserved"
         );
-        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(4));
+        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(2));
+        // 账号没有 expiresAtMs 时必须写一个有限的兜底值（客户端校验要求）。
+        let expires = record.get("expiresAtMs").and_then(|v| v.as_i64());
         assert!(
-            record.get("expiresAtMs").is_none(),
-            "stale expiresAtMs should be removed when the account has none"
+            expires.is_some_and(|value| value > 0),
+            "a finite expiresAtMs must be written even when the account has none"
         );
     }
 
+    /// 账号没有 refreshToken 时明确报错（原「保留客户端已有 refreshToken」的行为已废弃：
+    /// 客户端 `parseStoredCredential` 要求 refreshToken 非空）。
     #[test]
-    fn switch_does_not_blank_existing_refresh_token_when_account_has_none() {
+    fn switch_without_refresh_token_is_rejected_even_with_existing_record() {
         let tmp = TempDir::new();
         let auth_file = write_two_record_auth_file(&tmp.0);
         let account = fake_account("account_b", "mmoat_new_access", None, None, &auth_file);
-        switch_minimax_code_account(&account).expect("switch should succeed");
-
-        let records = read_records(&auth_file);
-        let record = records.values().next().unwrap();
-        assert_eq!(
-            record.get("accessToken").and_then(|v| v.as_str()),
-            Some("mmoat_new_access")
-        );
-        assert_eq!(
-            record.get("refreshToken").and_then(|v| v.as_str()),
-            Some("mmort_account_b"),
-            "a None refresh token must not blank the client's existing one"
-        );
-        assert!(
-            record.get("expiresAtMs").is_none(),
-            "stale expiresAtMs should be removed when the account has none"
-        );
+        let err = switch_minimax_code_account(&account)
+            .expect_err("missing refreshToken must be rejected");
+        assert_eq!(err, "该账号缺少 refreshToken，无法切换");
     }
 
     #[test]
@@ -1966,5 +2165,234 @@ mod minimax_code_switch_tests {
         )
         .expect("a missing config override must fall back to candidates");
         assert_eq!(resolved, candidate);
+    }
+
+    // ---------------------------------------------------------------- --
+    // 真实客户端契约：record key + auth-state.json
+    // ---------------------------------------------------------------- //
+
+    /// 独立复算客户端的 record key（与 `minimax_code_record_key` 的实现无关）。
+    fn expected_record_key(data_dir: &str, service_prefix: &str) -> String {
+        use base64::Engine;
+        use sha2::{Digest, Sha256};
+        let auth_home = Path::new(data_dir).join("auth");
+        let mut hasher = Sha256::new();
+        hasher.update(format!("{}\u{0}mcode-public", auth_home.to_string_lossy()).as_bytes());
+        let account = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hasher.finalize());
+        format!("{}\u{0}{}", service_prefix, account)
+    }
+
+    #[test]
+    fn record_key_matches_the_client_algorithm() {
+        let tmp = TempDir::new();
+        let service = "com.minimax.mcode.oauth.prod.cn";
+        let got = minimax_code_record_key(&tmp.0.to_string_lossy(), service);
+        let expected = expected_record_key(&tmp.0.to_string_lossy(), service);
+        assert_eq!(got, expected, "record key must match the client's sha256 derivation");
+        assert!(got.starts_with(&format!("{}\u{0}", service)));
+        // 两个不同的 data root 必须得到不同的 key（多开隔离的根本）。
+        let other = TempDir::new();
+        let other_key = minimax_code_record_key(&other.0.to_string_lossy(), service);
+        assert_ne!(got, other_key, "record keys must differ per data root");
+    }
+
+    #[test]
+    fn switch_to_data_dir_writes_client_key_and_auth_state() {
+        use crate::modules::minimax_code_instance as instance;
+
+        let tmp = TempDir::new();
+        let data_root = tmp.0.join("instance-data");
+        let namespace = data_root
+            .join("auth")
+            .join("prod")
+            .join("cn")
+            .join(instance::MINIMAX_CODE_OAUTH_CLIENT_ID);
+        fs::create_dir_all(&namespace).unwrap();
+        let auth_file = namespace.join("auth.json");
+        let service = "com.minimax.mcode.oauth.prod.cn";
+
+        let account = MinimaxCodeAccount {
+            id: "cockpit-account-id".to_string(),
+            email: "real@example.com".to_string(),
+            ..fake_account(
+                "unused",
+                "mmoat_real",
+                Some("mmort_real"),
+                Some(1792767948636_i64),
+                &auth_file,
+            )
+        };
+
+        let returned = switch_minimax_code_account_to_data_dir(&account, &data_root)
+            .expect("switch should succeed");
+        assert_eq!(returned, auth_file);
+
+        // auth.json：恰好一条记录，key 是客户端算法算出来的那个。
+        let records = read_records(&auth_file);
+        assert_eq!(records.len(), 1, "exactly one record must remain");
+        let expected_key = expected_record_key(&data_root.to_string_lossy(), service);
+        let (key, record) = records.iter().next().unwrap();
+        assert_eq!(
+            key, &expected_key,
+            "the written key must be the client's sha256-derived key"
+        );
+        assert_ne!(
+            key,
+            &format!("{}\u{0}{}", service, account.id),
+            "the Cockpit account id must NOT be used as the key suffix"
+        );
+        assert_eq!(
+            record.get("accessToken").and_then(|v| v.as_str()),
+            Some("mmoat_real")
+        );
+        assert_eq!(
+            record.get("refreshToken").and_then(|v| v.as_str()),
+            Some("mmort_real")
+        );
+        assert_eq!(
+            record.get("clientId").and_then(|v| v.as_str()),
+            Some("mcode-public")
+        );
+        assert_eq!(
+            record.get("audience").and_then(|v| v.as_str()),
+            Some("agent-backend")
+        );
+        assert_eq!(
+            record.get("tokenType").and_then(|v| v.as_str()),
+            Some("Bearer")
+        );
+        let generation = record.get("generation").and_then(|v| v.as_i64()).unwrap();
+        let expires_at_ms = record.get("expiresAtMs").and_then(|v| v.as_i64());
+        assert!(expires_at_ms.is_some_and(|value| value > 0));
+
+        // auth-state.json：客户端 getStatus() 要求 generation 与记录一致，否则返回 error。
+        let state_path = namespace.join("auth-state.json");
+        assert!(state_path.is_file(), "auth-state.json must be written");
+        let state_raw = fs::read_to_string(&state_path).unwrap();
+        let state: Value = serde_json::from_str(&state_raw).unwrap();
+        assert_eq!(state.get("status").and_then(|v| v.as_str()), Some("authenticated"));
+        assert_eq!(state.get("storeKind").and_then(|v| v.as_str()), Some("file"));
+        assert_eq!(
+            state.get("clientId").and_then(|v| v.as_str()),
+            Some("mcode-public")
+        );
+        assert_eq!(
+            state.get("buildEnv").and_then(|v| v.as_str()),
+            Some("prod"),
+            "buildEnv must be resolved, not hardcoded by accident"
+        );
+        assert_eq!(state.get("region").and_then(|v| v.as_str()), Some("cn"));
+        assert_eq!(
+            state.get("generation").and_then(|v| v.as_i64()),
+            Some(generation),
+            "auth-state.json generation must equal the record generation"
+        );
+        assert_eq!(
+            state.get("expiresAtMs").and_then(|v| v.as_i64()),
+            expires_at_ms
+        );
+        // 客户端 parseState 拒绝任何敏感字段名。
+        assert!(
+            !state_raw.to_lowercase().contains("accesstoken")
+                && !state_raw.to_lowercase().contains("refreshtoken"),
+            "auth-state.json must not contain token material"
+        );
+    }
+
+    /// 空实例（没有任何 auth.json / auth-state.json）也必须写出完整可用的记录。
+    #[test]
+    fn switch_to_fresh_instance_writes_usable_credential() {
+        let tmp = TempDir::new();
+        let data_root = tmp.0.join("fresh-instance");
+
+        let account = fake_account(
+            "fresh-account",
+            "mmoat_fresh",
+            Some("mmort_fresh"),
+            None,
+            &tmp.0.join("auth.json"),
+        );
+        switch_minimax_code_account_to_data_dir(&account, &data_root)
+            .expect("switch should succeed");
+
+        let namespace = data_root
+            .join("auth")
+            .join("prod")
+            .join("cn")
+            .join(crate::modules::minimax_code_instance::MINIMAX_CODE_OAUTH_CLIENT_ID);
+        let records = read_records(&namespace.join("auth.json"));
+        assert_eq!(records.len(), 1);
+        let (_, record) = records.iter().next().unwrap();
+        // 客户端 parseStoredCredential 的全部必填项。
+        assert!(record.get("accessToken").and_then(|v| v.as_str()).is_some());
+        assert_eq!(
+            record.get("refreshToken").and_then(|v| v.as_str()),
+            Some("mmort_fresh")
+        );
+        assert_eq!(
+            record.get("expiresAtMs").and_then(|v| v.as_i64()),
+            Some(MINIMAX_CODE_FALLBACK_EXPIRES_AT_MS),
+            "a finite fallback expiry must be written"
+        );
+        let state: Value = serde_json::from_str(
+            &fs::read_to_string(namespace.join("auth-state.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(state.get("status").and_then(|v| v.as_str()), Some("authenticated"));
+        assert_eq!(
+            state.get("generation").and_then(|v| v.as_i64()),
+            record.get("generation").and_then(|v| v.as_i64())
+        );
+    }
+
+    /// 解析出的命名空间路径必须与客户端布局一致。
+    #[test]
+    fn auth_scope_resolves_namespace_layout() {
+        use crate::modules::minimax_code_instance as instance;
+        let tmp = TempDir::new();
+        let data_root = tmp.0.join("scope-instance");
+
+        // 全新实例：默认 prod/cn。
+        assert_eq!(
+            instance::resolve_minimax_code_auth_file_path(&data_root),
+            data_root
+                .join("auth")
+                .join("prod")
+                .join("cn")
+                .join(instance::MINIMAX_CODE_OAUTH_CLIENT_ID)
+                .join("auth.json")
+        );
+
+        // 已有 auth.json 的 en 命名空间 → 沿用 en。
+        let en_namespace = data_root.join("auth").join("prod").join("en").join("mcode-public");
+        fs::create_dir_all(&en_namespace).unwrap();
+        let en_auth = en_namespace.join("auth.json");
+        let key = expected_record_key(&data_root.to_string_lossy(), "com.minimax.mcode.oauth.prod.en");
+        fs::write(
+            &en_auth,
+            json!({
+                "schemaVersion": 1,
+                "records": { key: {
+                    "accessToken": "mmoat_en", "refreshToken": "mmort_en",
+                    "tokenType": "Bearer", "clientId": "mcode-public",
+                    "scopes": ["agent.default"], "audience": "agent-backend",
+                    "expiresAtMs": 1792767948636_i64, "generation": 1
+                }}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            instance::resolve_minimax_code_auth_file_path(&data_root),
+            en_auth,
+            "an existing namespace must be reused"
+        );
+
+        // 账号自带 region=en 时，全新实例应落在 en 目录。
+        let other = TempDir::new();
+        let fresh_root = other.0.join("fresh");
+        let scope = instance::resolve_minimax_code_auth_scope(&fresh_root, Some("en"));
+        assert_eq!(scope.region, "en");
+        assert_eq!(scope.service_prefix(), "com.minimax.mcode.oauth.prod.en");
     }
 }
