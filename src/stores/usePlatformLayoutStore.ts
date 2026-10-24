@@ -323,7 +323,7 @@ function legacyDefaultPlatformGroups(): PlatformLayoutGroup[] {
     {
       id: DEFAULT_CODEBUDDY_GROUP_ID,
       name: 'CodeBuddy',
-      platformIds: ['codebuddy', 'codebuddy_cn', 'workbuddy', 'minimaxcode'],
+      platformIds: ['codebuddy', 'codebuddy_cn', 'workbuddy'],
       defaultPlatformId: 'codebuddy',
       iconKind: 'platform',
       iconPlatformId: 'codebuddy',
