@@ -86,7 +86,7 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   TAccount extends CodebuddySuiteAccountBase,
 > {
   pageClassName: string;
-  quickSettingsType?: "codebuddy_cn" | "workbuddy" | "zcode" | "grok";
+  quickSettingsType?: "codebuddy_cn" | "workbuddy" | "zcode" | "grok" | "minimaxcode";
   searchPlaceholderKey: string;
   searchPlaceholderDefault: string;
   flowNotice: {

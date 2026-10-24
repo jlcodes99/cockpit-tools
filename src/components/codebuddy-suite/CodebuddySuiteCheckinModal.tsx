@@ -680,6 +680,8 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
 
 // 便捷导出：WorkBuddy 签到弹窗
 import * as workbuddyService from '../../services/workbuddyService';
+import * as minimaxCodeService from '../../services/minimaxCodeService';
+import type { MinimaxCodeAccount } from '../../types/minimaxCode';
 import { getAccountDisplayEmail } from '../../utils/codebuddy-suite';
 export function WorkbuddyCheckinModal({
   accounts,
@@ -695,6 +697,42 @@ export function WorkbuddyCheckinModal({
       accounts={accounts}
       getCheckinStatus={workbuddyService.getCheckinStatusWorkbuddy}
       performCheckin={workbuddyService.checkinWorkbuddy}
+      getDisplayEmail={getAccountDisplayEmail}
+      onClose={onClose}
+      onCheckinComplete={onCheckinComplete}
+    />
+  );
+}
+
+// 便捷导出：MiniMax Code 签到弹窗
+export function MinimaxCodeCheckinModal({
+  accounts,
+  onClose,
+  onCheckinComplete,
+}: {
+  accounts: MinimaxCodeAccount[];
+  onClose: () => void;
+  onCheckinComplete?: () => void;
+}) {
+  return (
+    <CodebuddySuiteCheckinModal
+      accounts={accounts}
+      getCheckinStatus={async (accountId) => {
+        const status = await minimaxCodeService.getCheckinStatusMinimaxCode(accountId);
+        return {
+          today_checked_in: status.todayCheckedIn,
+          active: status.active,
+          streak_days: status.streakDays,
+          daily_credit: status.points,
+          today_credit: null,
+          next_streak_day: null,
+          is_streak_day: null,
+          checkin_dates: null,
+          streak_bonus_days: null,
+          streak_bonus_credit: null,
+        };
+      }}
+      performCheckin={minimaxCodeService.checkinMinimaxCode}
       getDisplayEmail={getAccountDisplayEmail}
       onClose={onClose}
       onCheckinComplete={onCheckinComplete}

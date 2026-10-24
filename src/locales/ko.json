@@ -7078,13 +7078,150 @@
       "timeRangeError": "시작 시간은 종료 시간보다 늦을 수 없습니다"
     }
   },
-  "minimaxCode": {
+    "minimaxCode": {
     "title": "MiniMax Code 계정 관리",
     "noAccounts": "MiniMax Code 계정이 없습니다",
     "addAccount": "MiniMax Code 계정 추가",
-    "search": "MiniMax Code 계정 검색...",
+    "flowNotice": {
+      "title": "MiniMax Code 계정 관리 안내 (클릭하여 펼치기/접기)",
+      "desc": "계정 전환은 최신 MiniMax Code 공식 클라이언트 구조에 맞춰 로컬 로그인 파일을 씁니다. 로컬 가져오기도 같은 파일을 읽습니다. 데이터는 로컬에서만 처리됩니다.",
+      "permission": "권한 범위: 로컬 가져오기와 계정 전환을 위해 MiniMax Code 로그인 파일(~/.minimax/auth/auth.json)을 읽고 씁니다. 기존 state.vscdb는 더 이상 읽거나 수정하지 않습니다.",
+      "network": "네트워크 범위: OAuth 로그인과 Token 갱신은 MiniMax Code 요청이 필요하고, 할당량 조회는 과금 API를 호출합니다. 로컬 로그인 파일이나 원본 자격 증명은 업로드되지 않습니다."
+    },
+    "nickname": "닉네임",
+    "enterprise": "기업",
+    "usage": "사용 상태",
+    "creditsBalance": "크레딧 잔액",
     "usageNormal": "정상",
     "usageAbnormal": "이상",
+    "usageViewDetail": "상세 보기",
+    "usageDetailTitle": "사용량 상태 상세",
+    "oauthWaiting": "인증 완료를 기다리는 중...",
+    "oauthDesc": "아래 버튼을 클릭하면 브라우저에서 MiniMax Code 인증 페이지를 엽니다.",
+    "oauthDescWebview": "아래 버튼을 클릭하면 내장 WebView에서 MiniMax Code 인증 페이지를 엽니다.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "IDE 로그인 정보만 인증",
+        "item1": "브라우저에서 OAuth를 완료하면 계정을 추가해 IDE 전환에 사용할 수 있습니다.",
+        "item2": "할당량 조회 파라미터는 자동으로 바인딩되지 않습니다.",
+        "item3": "할당량 표시가 필요하면 계정 카드에서 \"할당량 조회\"를 수동 실행하세요."
+      }
+    },
+    "oauthWebviewTab": "WebView 인증",
+    "oauthOpenWebview": "WebView에서 열기",
+    "oauthOpenWebviewIncognito": "시크릿 WebView에서 열기",
+    "oauthOpenWebviewFailed": "WebView 열기 실패: {{error}}",
+    "oauthOpenBrowserFallback": "브라우저에서 열기 (대체)",
+    "oauthOpenBrowserFailed": "브라우저 열기 실패: {{error}}",
+    "oauthWebviewProgressHint": "WebView 상단에 가로 단계 표시줄이 표시되어 멈춘 단계를 쉽게 찾을 수 있습니다.",
+    "oauthFlow": {
+      "prepare": "인증 링크 준비",
+      "authorize": "인증 링크를 열고 승인",
+      "bind": "인증 결과를 폴링해 계정 바인딩",
+      "retryPrepare": "인증 링크 다시 생성",
+      "retryAuthorize": "인증 링크 다시 요청",
+      "retryBind": "인증 폴링 다시 시도",
+      "error": "흐름 오류: {{error}}"
+    },
+    "tokenDesc": "MiniMax Code access token을 붙여 넣으세요:",
+    "jsonDesc": "MiniMax Code 계정이 포함된 JSON 파일을 선택하세요:",
+    "import": {
+      "localDesc": "로컬 MiniMax Code 클라이언트 또는 JSON 파일에서 계정 데이터를 가져올 수 있습니다.",
+      "localClient": "로컬 MiniMax Code에서 가져오기"
+    },
+    "search": "MiniMax Code 계정 검색...",
+    "quotaQuery": {
+      "failedRefreshCompact": "할당량 새로고침 실패",
+      "sectionTitle": "할당량 조회",
+      "empty": "아직 바인딩된 할당량 조회 정보가 없습니다",
+      "packageUnknown": "플랜 정보 알 수 없음",
+      "quotaLabel": "남은 할당량",
+      "updatedAt": "최근 조회: {{time}}",
+      "cycleRange": "주기: {{start}} - {{end}}",
+      "cycleUnknown": "주기 정보 없음",
+      "expireAt": "만료 시간: {{time}}",
+      "expireUnknown": "만료 시간: 없음",
+      "packageTitle": {
+        "base": "기본 체험 패키지",
+        "activity": "활동 증정 패키지"
+      }
+    },
+    "extraCredit": {
+      "title": "추가 크레딧"
+    },
+    "oauthUrlInputPlaceholder": "인증 URL을 수동으로 입력할 수 있습니다",
+    "oauthInvalidUrl": "인증 URL 형식이 올바르지 않습니다. 전체 URL을 입력하세요.",
+    "oauthGotoWebview": "열려 있는 WebView를 입력한 URL로 이동",
+    "oauthGotoWebviewSuccess": "WebView에 입력한 URL로 이동하도록 요청했습니다.",
+    "oauthGotoWebviewFailed": "WebView 이동 실패: {{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "이 WebView 안에서 이동할 URL 입력",
+    "oauthWebviewInlineGo": "이동",
+    "oauthSuccessClosePrompt": "계정 추가가 완료되었습니다. 지금 이 WebView를 닫을까요?\n\"WebView 닫기\"를 선택하면 바로 닫고, \"나중에\"를 선택하면 그대로 유지합니다.",
+    "oauthSuccessCloseTitle": "계정 추가 완료",
+    "oauthSuccessCloseNowLabel": "WebView 닫기",
+    "oauthSuccessCloseLaterLabel": "나중에",
+    "oauthSuccessCloseNowStatus": "✅ 계정 추가가 완료되었습니다. 창을 닫는 중...",
+    "oauthSuccessCloseLaterStatus": "✅ 계정 추가가 완료되었습니다. 이 WebView는 계속 열려 있습니다.",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 인증 링크 준비",
+        "authorize": "2 인증 링크를 열고 승인",
+        "bind": "3 인증 결과를 폴링해 계정 바인딩",
+        "complete": "5 완료(수동으로 닫기)"
+      },
+      "status": {
+        "loginConfirm": "이 페이지에서 로그인 및 권한 부여를 완료하세요."
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "MiniMax Code 다중 인스턴스는 macOS, Windows, Linux에서만 지원됩니다."
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "checkin": {
+      "title": "일일 체크인",
+      "modalTitle": "일일 체크인",
+      "status": "체크인 상태",
+      "checkedIn": "체크인 완료",
+      "notCheckedIn": "미체크인",
+      "button": "출석",
+      "button.loading": "체크인 중...",
+      "done": "완료",
+      "success": "체크인 성공! {{days}}일 연속",
+      "failure": "출석 실패: {{message}}",
+      "failure.network": "네트워크 오류입니다. 잠시 후 다시 시도해 주세요",
+      "lastCheckin": "마지막 체크인: {{time}}",
+      "streak": "{{days}}일 연속",
+      "reward": "보상: {{reward}}",
+      "refreshStatus": "새로고침",
+      "checkAll": "전체 체크인",
+      "noAccounts": "계정 없음",
+      "querying": "로딩 중...",
+      "streakDays": "{{days}}일",
+      "streakRewardCountdown": "보너스 보상까지 {{days}}일 남음",
+      "streakRewardToday": "오늘 보너스 보상을 받을 수 있습니다!",
+      "recentDates": "최근: ",
+      "claimed": "수령 완료",
+      "queryFailed": "조회 실패",
+      "retry": "재시도",
+      "inactive": "사용 불가",
+      "inactiveHint": "이 계정에서는 출석체크를 사용할 수 없습니다",
+      "autoCheckinSettings": "자동 출석 체크 설정",
+      "autoCheckinLabel": "자동 출석 체크",
+      "autoCheckinOff": "자동 출석 체크 꺼짐",
+      "autoCheckinEnabledHint": "자동 출석 체크 활성화: {{start}} ~ {{end}} 사이 무작위 체크인",
+      "autoCheckinDisabledHint": "자동 출석 체크 비활성화",
+      "enableAutoCheckin": "자동 출석 체크 활성화",
+      "enableAutoCheckinDesc": "지정된 시간 내에서 매일 무작위로 자동 출석 체크를 진행합니다",
+      "randomTimeRange": "무작위 출석 체크 시간대",
+      "startTime": "시작 시간",
+      "endTime": "종료 시간",
+      "timeRangeHint": "매일 이 시간대 내에서 무작위 시간을 선택하여 백그라운드 출석 체크를 완료합니다.",
+      "timeRangeError": "시작 시간은 종료 시간보다 늦을 수 없습니다"
+    },
     "placeholder": "MiniMax Code 계정 관리가 곧 제공됩니다."
   },
   "zcode": {

@@ -14,6 +14,7 @@ import { useGrokAccountStore } from '../stores/useGrokAccountStore';
 import { useCodebuddyAccountStore } from '../stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from '../stores/useCodebuddyCnAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
 import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
@@ -26,6 +27,7 @@ import { getGrokAccountDisplayEmail } from '../types/grok';
 import { getClaudeAccountDisplayEmail } from '../types/claude';
 import { getCodebuddyAccountDisplayEmail } from '../types/codebuddy';
 import { getWorkbuddyAccountDisplayEmail } from '../types/workbuddy';
+import { getMinimaxCodeAccountDisplayEmail } from '../types/minimaxCode';
 import { getQoderAccountDisplayEmail } from '../types/qoder';
 import { getZcodeAccountDisplayEmail } from '../types/zcode';
 import {
@@ -72,6 +74,7 @@ interface GeneralConfig {
   codebuddy_auto_refresh_minutes: number;
   codebuddy_cn_auto_refresh_minutes: number;
   workbuddy_auto_refresh_minutes: number;
+  minimax_code_auto_refresh_minutes: number;
   qoder_auto_refresh_minutes: number;
   zcode_auto_refresh_minutes: number;
   trae_auto_refresh_minutes: number;
@@ -201,6 +204,7 @@ function getCurrentAccountEmails(): Record<CurrentAccountRefreshPlatform, string
     codebuddy: getProviderEmail(useCodebuddyAccountStore, getCodebuddyAccountDisplayEmail),
     codebuddy_cn: getProviderEmail(useCodebuddyCnAccountStore, getCodebuddyAccountDisplayEmail),
     workbuddy: getProviderEmail(useWorkbuddyAccountStore, getWorkbuddyAccountDisplayEmail),
+    minimaxcode: getProviderEmail(useMinimaxCodeAccountStore, getMinimaxCodeAccountDisplayEmail),
     qoder: getProviderEmail(useQoderAccountStore, getQoderAccountDisplayEmail),
     zcode: getProviderEmail(useZcodeAccountStore, getZcodeAccountDisplayEmail),
     trae: getTraeProviderEmail('trae'),
@@ -245,6 +249,9 @@ export function useAutoRefresh() {
   const refreshAllWorkbuddyTokens = useWorkbuddyAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentWorkbuddyAccountId = useWorkbuddyAccountStore((state) => state.fetchCurrentAccountId);
   const refreshWorkbuddyToken = useWorkbuddyAccountStore((state) => state.refreshToken);
+  const refreshAllMinimaxCodeTokens = useMinimaxCodeAccountStore((state) => state.refreshAllTokens);
+  const fetchCurrentMinimaxCodeAccountId = useMinimaxCodeAccountStore((state) => state.fetchCurrentAccountId);
+  const refreshMinimaxCodeToken = useMinimaxCodeAccountStore((state) => state.refreshToken);
   const refreshAllQoderTokens = useQoderAccountStore((state) => state.refreshAllTokens);
   const fetchCurrentQoderAccountId = useQoderAccountStore((state) => state.fetchCurrentAccountId);
   const refreshQoderToken = useQoderAccountStore((state) => state.refreshToken);
@@ -279,6 +286,8 @@ export function useAutoRefresh() {
   const codebuddyCnCurrentRefreshingRef = useRef(false);
   const workbuddyRefreshingRef = useRef(false);
   const workbuddyCurrentRefreshingRef = useRef(false);
+  const minimaxcodeRefreshingRef = useRef(false);
+  const minimaxcodeCurrentRefreshingRef = useRef(false);
   const qoderRefreshingRef = useRef(false);
   const qoderCurrentRefreshingRef = useRef(false);
   const zcodeRefreshingRef = useRef(false);
@@ -663,6 +672,23 @@ export function useAutoRefresh() {
               },
             },
             {
+              key: 'minimaxcode',
+              label: 'MiniMax Code',
+              intervalMinutes: config.minimax_code_auto_refresh_minutes,
+              currentMinutes: resolveCurrentMinutes('minimaxcode', currentAccountEmails.minimaxcode, currentRefreshMinutesMap),
+              fullRefreshingRef: minimaxcodeRefreshingRef,
+              currentRefreshingRef: minimaxcodeCurrentRefreshingRef,
+              runFullRefresh: async () => {
+                await refreshAllMinimaxCodeTokens();
+              },
+              runCurrentRefresh: async () => {
+                await runProviderCurrentRefresh(
+                  fetchCurrentMinimaxCodeAccountId,
+                  refreshMinimaxCodeToken,
+                );
+              },
+            },
+            {
               key: 'qoder',
               label: 'Qoder',
               intervalMinutes: config.qoder_auto_refresh_minutes,
@@ -905,6 +931,7 @@ export function useAutoRefresh() {
     fetchTraeAccounts,
     fetchCurrentWindsurfAccountId,
     fetchCurrentWorkbuddyAccountId,
+    fetchCurrentMinimaxCodeAccountId,
     fetchCurrentZedAccountId,
     fetchAccounts,
     refreshAllCodebuddyCnTokens,
@@ -919,6 +946,7 @@ export function useAutoRefresh() {
     refreshAllZcodeTokens,
     refreshAllWindsurfTokens,
     refreshAllWorkbuddyTokens,
+    refreshAllMinimaxCodeTokens,
     refreshAllZedTokens,
     refreshCodebuddyCnToken,
     refreshCodebuddyToken,
@@ -932,6 +960,7 @@ export function useAutoRefresh() {
     refreshTraeToken,
     refreshWindsurfToken,
     refreshWorkbuddyToken,
+    refreshMinimaxCodeToken,
     refreshZedToken,
     stopScheduler,
   ]);
