@@ -1408,6 +1408,16 @@ pub fn run() {
             commands::workbuddy_instance::workbuddy_stop_instance,
             commands::workbuddy_instance::workbuddy_open_instance_window,
             commands::workbuddy_instance::workbuddy_close_all_instances,
+            // MiniMax Code Instance Commands
+            commands::minimax_code_instance::minimax_code_get_instance_defaults,
+            commands::minimax_code_instance::minimax_code_list_instances,
+            commands::minimax_code_instance::minimax_code_create_instance,
+            commands::minimax_code_instance::minimax_code_update_instance,
+            commands::minimax_code_instance::minimax_code_delete_instance,
+            commands::minimax_code_instance::minimax_code_start_instance,
+            commands::minimax_code_instance::minimax_code_stop_instance,
+            commands::minimax_code_instance::minimax_code_open_instance_window,
+            commands::minimax_code_instance::minimax_code_close_all_instances,
             // CodeBuddy Instance Commands
             commands::codebuddy_instance::codebuddy_get_instance_defaults,
             commands::codebuddy_instance::codebuddy_list_instances,

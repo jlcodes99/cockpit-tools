@@ -1125,11 +1125,6 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
     serde_json::to_string_pretty(&accounts).map_err(|e| format!("导出失败:{}", e))
 }
 
-pub fn get_default_minimax_code_data_dir() -> Option<PathBuf> {
-    let home = dirs::home_dir()?;
-    Some(home.join(".minimax"))
-}
-
 fn json_amount(value: Option<&Value>) -> f64 {
     match value {
         Some(Value::Number(n)) => n.as_f64().unwrap_or(0.0),
@@ -1337,13 +1332,60 @@ fn resolve_minimax_code_launch_path_from(
 /// `<file>.json.cockpit.bak` (only the first backup is kept, never overwritten).
 /// Returns the auth file path.
 pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathBuf, String> {
-    let auth_file = account
-        .auth_file
-        .as_ref()
-        .map(PathBuf::from)
-        .filter(|p| p.is_file())
-        .or_else(|| find_minimax_code_auth_files().into_iter().next())
-        .ok_or_else(|| "未找到 MiniMax Code 登录态文件".to_string())?;
+    switch_minimax_code_account_impl(account, None)
+}
+
+/// Switch a **managed instance** to `account` by rewriting the `auth.json` inside
+/// `data_dir` (the instance's own `MINIMAX_DATA_DIR`).
+///
+/// The MiniMax client derives its credential namespace from the data root:
+/// `<data root>/auth/<buildEnv>/<region>/<clientId>/auth.json`
+/// (see `createAuthNamespace` in the client bundle). Passing a per-instance data root
+/// therefore gives each managed instance its own login state — the foundation of
+/// MiniMax Code multi-instance support.
+///
+/// When the instance has no `auth.json` yet, the record key prefix is inherited from
+/// the account's stored `auth_file` (or any global `auth.json`) so the namespace layout
+/// matches what the client would have created itself.
+pub fn switch_minimax_code_account_to_data_dir(
+    account: &MinimaxCodeAccount,
+    data_dir: &Path,
+) -> Result<PathBuf, String> {
+    switch_minimax_code_account_impl(account, Some(data_dir))
+}
+
+fn switch_minimax_code_account_impl(
+    account: &MinimaxCodeAccount,
+    data_dir: Option<&Path>,
+) -> Result<PathBuf, String> {
+    let auth_file = match data_dir {
+        // Managed instance: always target the instance's own namespace.
+        Some(root) => crate::modules::minimax_code_instance::resolve_minimax_code_auth_file_path(root),
+        None => account
+            .auth_file
+            .as_ref()
+            .map(PathBuf::from)
+            .filter(|p| p.is_file())
+            .or_else(|| find_minimax_code_auth_files().into_iter().next())
+            .ok_or_else(|| "未找到 MiniMax Code 登录态文件".to_string())?,
+    };
+    if let Some(parent) = auth_file.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("创建 MiniMax Code 登录态目录失败: {e}"))?;
+    }
+    // For a fresh instance namespace, borrow the record key prefix from an existing
+    // auth file so the client recognises the layout verbatim.
+    let prefix_hint = if data_dir.is_some() && !auth_file.is_file() {
+        account
+            .auth_file
+            .as_ref()
+            .map(PathBuf::from)
+            .filter(|p| p.is_file())
+            .or_else(|| find_minimax_code_auth_files().into_iter().next())
+            .and_then(|source| read_auth_file_prefix(&source))
+    } else {
+        None
+    };
 
     let raw = std::fs::read_to_string(&auth_file)
         .unwrap_or_else(|_| "{\"schemaVersion\":1,\"records\":{}}".to_string());
@@ -1376,6 +1418,7 @@ pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathB
         .or_else(|| records.keys().next())
         .and_then(|key| key.split('\u{0}').next().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
+        .or(prefix_hint)
         .unwrap_or_else(|| "com.minimax.mcode.oauth.prod.cn".to_string());
     let target_key = format!("{}\u{0}{}", prefix, account.id);
 
@@ -1434,15 +1477,43 @@ pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathB
     Ok(auth_file)
 }
 
+/// Read only the record key prefix (`com.minimax.mcode.oauth.<buildEnv>.<region>`) from
+/// an `auth.json`. Never returns token material.
+fn read_auth_file_prefix(path: &Path) -> Option<String> {
+    let raw = std::fs::read_to_string(path).ok()?;
+    let parsed: Value = serde_json::from_str(&raw).ok()?;
+    parsed
+        .get("records")?
+        .as_object()?
+        .keys()
+        .next()
+        .and_then(|key| key.split('\u{0}').next().map(|s| s.to_string()))
+        .filter(|value| !value.is_empty())
+}
+
+/// Ask every running MiniMax Code client (matched by exact exe path) to exit.
+///
+/// **Multi-instance limitation.** The MiniMax client does not expose its
+/// `MINIMAX_DATA_DIR` on the process command line (the Electron main process runs as
+/// `"…\MiniMax Code.exe"` with no data-dir argument), so a running process cannot be
+/// attributed to a specific managed instance data root. PID matching is therefore
+/// exe-path based, and closing before a switch closes *all* MiniMax Code windows.
+/// Each instance still owns an isolated `auth.json` under its own data root, so account
+/// bindings are never mixed — but only one MiniMax Code instance can be logged in /
+/// in the foreground at a time.
+pub fn close_minimax_code_instances(timeout_secs: u64) -> Result<(), String> {
+    let exe = resolve_minimax_code_launch_path()?;
+    close_running_minimax_code_client(&exe, timeout_secs)
+}
+
 /// Ask a running MiniMax Code client (matched by exact exe path) to exit so the
 /// injected `auth.json` is actually picked up. Returns a clear error when the
 /// client cannot be closed, instead of injecting into a live process that would
 /// silently revert the change on exit.
-fn close_running_minimax_code_client(exe: &Path) -> Result<(), String> {
-    const CLOSE_TIMEOUT_SECS: u64 = 10;
+fn close_running_minimax_code_client(exe: &Path, timeout_secs: u64) -> Result<(), String> {
     crate::modules::process::close_processes_by_exact_exe_paths(
         &[exe.to_path_buf()],
-        CLOSE_TIMEOUT_SECS,
+        timeout_secs,
     )
     .map_err(|_| "MiniMax Code 正在运行，请稍后重试".to_string())?;
     // Give the OS a moment to release the file handle before rewriting auth.json.
@@ -1456,7 +1527,7 @@ pub fn switch_and_launch(account: &MinimaxCodeAccount) -> Result<PathBuf, String
     // exit, which would silently revert the injection. So: resolve the exe, close
     // any running instance, inject, and only then relaunch.
     let exe = resolve_minimax_code_launch_path()?;
-    close_running_minimax_code_client(&exe)?;
+    close_running_minimax_code_client(&exe, 10)?;
     switch_minimax_code_account(account)?;
     std::process::Command::new(&exe)
         .spawn()

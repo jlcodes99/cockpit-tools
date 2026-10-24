@@ -51,6 +51,7 @@ pub mod windsurf_instance;
 pub mod workbuddy;
 pub mod workbuddy_instance;
 pub mod minimax_code;
+pub mod minimax_code_instance;
 pub mod zcode;
 pub mod zcode_instance;
 pub mod zed;

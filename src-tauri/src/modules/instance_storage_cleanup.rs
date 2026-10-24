@@ -161,6 +161,7 @@ fn roots_and_defaults() -> Result<(Vec<PlatformRoot>, Vec<PathBuf>), String> {
     platform!("codebuddy_cn", codebuddy_cn_instance);
     platform!("qoder", qoder_instance);
     platform!("workbuddy", workbuddy_instance);
+    platform!("minimax_code", minimax_code_instance);
     platform!("zcode", zcode_instance);
     platform!("grok", grok_instance);
     use modules::trae_account::TraePlatformKind;

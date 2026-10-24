@@ -39,6 +39,7 @@ fn load_instance_store_by_platform(platform: &str) -> Result<InstanceStore, Stri
         "zcode" => modules::zcode_instance::load_instance_store(),
         "trae" => modules::trae_instance::load_instance_store(),
         "workbuddy" => modules::workbuddy_instance::load_instance_store(),
+        "minimax_code" => modules::minimax_code_instance::load_instance_store(),
         _ => Err("不支持的实例平台".to_string()),
     }
 }
@@ -58,6 +59,7 @@ fn save_instance_store_by_platform(platform: &str, store: &InstanceStore) -> Res
         "zcode" => modules::zcode_instance::save_instance_store(store),
         "trae" => modules::trae_instance::save_instance_store(store),
         "workbuddy" => modules::workbuddy_instance::save_instance_store(store),
+        "minimax_code" => modules::minimax_code_instance::save_instance_store(store),
         _ => Err("不支持的实例平台".to_string()),
     }
 }
