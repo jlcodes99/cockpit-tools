@@ -38,6 +38,13 @@ lazy_static::lazy_static! {
 
 fn now_timestamp() -> i64 { chrono::Utc::now().timestamp() }
 
+/// Convert a server-provided `expires_in` (seconds) into an epoch-milliseconds
+/// expiry. MiniMax's local `auth.json` stores `expiresAtMs`, so `expires_at` in the
+/// account model is kept in milliseconds for consistency (see `workbuddy_oauth`).
+pub fn expires_at_from_expires_in(expires_in: i64) -> i64 {
+    chrono::Utc::now().timestamp_millis() + expires_in.saturating_mul(1000)
+}
+
 pub fn resolve_account_origin(region: &str) -> &'static str {
     if region == "en" { ACCOUNT_ORIGIN_EN } else { ACCOUNT_ORIGIN_CN }
 }
@@ -207,7 +214,7 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
                 .ok_or_else(|| "token 响应缺少 access_token".to_string())?.to_string();
             let refresh_token = body.get("refresh_token").and_then(|v| v.as_str()).map(|s| s.to_string());
             let expires_at = body.get("expires_in").and_then(|v| v.as_i64())
-                .map(|secs| chrono::Utc::now().timestamp() + secs);
+                .map(expires_at_from_expires_in);
             let token_type = body.get("token_type").and_then(|v| v.as_str()).map(|s| s.to_string());
 
             clear_pending_oauth_login(login_id)?;
@@ -384,5 +391,29 @@ pub fn payload_from_local_record(id: &str, region: &str, rec: &Value, auth_file:
         profile_raw: None,
         status: Some("normal".to_string()),
         status_reason: None,
+    }
+}
+
+#[cfg(test)]
+mod expires_at_tests {
+    use super::expires_at_from_expires_in;
+
+    #[test]
+    fn expires_at_from_expires_in_is_epoch_milliseconds() {
+        let before_ms = chrono::Utc::now().timestamp_millis();
+        let expires_at = expires_at_from_expires_in(3600);
+        let after_ms = chrono::Utc::now().timestamp_millis();
+
+        let expected_min = before_ms + 3_600_000;
+        let expected_max = after_ms + 3_600_000;
+        assert!(
+            (expected_min..=expected_max).contains(&expires_at),
+            "expires_at={expires_at} should be within [{expected_min}, {expected_max}]"
+        );
+        // Sanity: a millisecond epoch is far larger than a seconds epoch.
+        assert!(
+            expires_at > 1_000_000_000_000,
+            "expires_at looks like seconds, not milliseconds: {expires_at}"
+        );
     }
 }

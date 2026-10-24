@@ -764,7 +764,9 @@ async fn refresh_account_token_once(account_id: &str) -> Result<MinimaxCodeAccou
                     account.token_type = Some(token_type.to_string());
                 }
                 if let Some(expires_in) = token_data.get("expires_in").and_then(|v| v.as_i64()) {
-                    account.expires_at = Some(chrono::Utc::now().timestamp() + expires_in);
+                    // Keep the model in epoch milliseconds, matching `expiresAtMs`.
+                    account.expires_at =
+                        Some(minimax_code_oauth::expires_at_from_expires_in(expires_in));
                 }
             }
             Err(err) => {
@@ -1291,35 +1293,48 @@ pub fn import_payload_from_local() -> Result<Vec<MinimaxCodeOAuthCompletePayload
 /// Resolve the MiniMax client exe (config override, then candidates).
 pub fn resolve_minimax_code_launch_path() -> Result<PathBuf, String> {
     let configured = crate::modules::config::get_user_config().minimax_code_app_path;
-    if !configured.trim().is_empty() {
-        let path = PathBuf::from(configured.trim());
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(local) = dirs::data_local_dir() {
+        candidates.push(
+            local
+                .join("Programs")
+                .join("MiniMax Code")
+                .join("MiniMax Code.exe"),
+        );
+    }
+    candidates.push(PathBuf::from(
+        r"D:\Programs\MiniMax Code\MiniMax Code.exe",
+    ));
+    candidates.push(PathBuf::from(
+        r"C:\Program Files\MiniMax Code\MiniMax Code.exe",
+    ));
+    resolve_minimax_code_launch_path_from(&configured, &candidates)
+}
+
+/// Resolver core, split out so tests can supply a deterministic candidate list.
+fn resolve_minimax_code_launch_path_from(
+    configured: &str,
+    candidates: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let trimmed = configured.trim();
+    if !trimmed.is_empty() {
+        let path = PathBuf::from(trimmed);
         if path.is_file() {
             return Ok(path);
         }
     }
-    if let Some(local) = dirs::data_local_dir() {
-        let p = local
-            .join("Programs")
-            .join("MiniMax Code")
-            .join("MiniMax Code.exe");
-        if p.is_file() {
-            return Ok(p);
-        }
-    }
-    for c in [
-        r"D:\Programs\MiniMax Code\MiniMax Code.exe",
-        r"C:\Program Files\MiniMax Code\MiniMax Code.exe",
-    ] {
-        let p = PathBuf::from(c);
-        if p.is_file() {
-            return Ok(p);
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Ok(candidate.clone());
         }
     }
     Err("未找到 MiniMax Code 客户端可执行文件".to_string())
 }
 
 /// Switch the local MiniMax client to `account` by rewriting its `auth.json`.
-/// Backs up the existing file to `<file>.json.bak` first (never overwrites an existing backup).
+/// The client keeps the FIRST non-empty `accessToken` record, so only the target
+/// account's record is written back. The pre-switch login state is preserved at
+/// `<file>.json.cockpit.bak` (only the first backup is kept, never overwritten).
 /// Returns the auth file path.
 pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathBuf, String> {
     let auth_file = account
@@ -1334,9 +1349,14 @@ pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathB
         .unwrap_or_else(|_| "{\"schemaVersion\":1,\"records\":{}}".to_string());
     let mut parsed: Value = serde_json::from_str(&raw)
         .unwrap_or_else(|_| serde_json::json!({"schemaVersion": 1, "records": {}}));
+    if !parsed.is_object() {
+        return Err("MiniMax Code 登录态文件格式非法".to_string());
+    }
 
-    // Backup the client's current login state (keep the first backup).
-    let bak = auth_file.with_extension("json.bak");
+    // Preserve the client's current login state before overwriting it. The backup
+    // uses a distinct `.cockpit.bak` path and is written only once, so a later
+    // switch can never clobber the first (oldest) login state.
+    let bak = auth_file.with_extension("json.cockpit.bak");
     if !bak.exists() {
         let _ = std::fs::copy(&auth_file, &bak);
     }
@@ -1346,10 +1366,15 @@ pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathB
         .and_then(|v| v.as_object())
         .cloned()
         .unwrap_or_default();
+    // Reuse the target account's own key prefix when it already exists so the
+    // env/region/clientId layout is preserved verbatim; otherwise fall back to any
+    // existing key, then to the default prod/cn prefix.
+    let target_suffix = format!("\u{0}{}", account.id);
     let prefix = records
         .keys()
-        .next()
-        .and_then(|k| k.split('\u{0}').next().map(|s| s.to_string()))
+        .find(|key| key.ends_with(&target_suffix))
+        .or_else(|| records.keys().next())
+        .and_then(|key| key.split('\u{0}').next().map(|s| s.to_string()))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "com.minimax.mcode.oauth.prod.cn".to_string());
     let target_key = format!("{}\u{0}{}", prefix, account.id);
@@ -1366,15 +1391,27 @@ pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathB
         });
     if let Some(obj) = record.as_object_mut() {
         obj.insert("accessToken".into(), Value::String(account.access_token.clone()));
-        obj.insert(
-            "refreshToken".into(),
-            Value::String(account.refresh_token.clone().unwrap_or_default()),
-        );
-        if let Some(ms) = account.expires_at {
-            obj.insert("expiresAtMs".into(), serde_json::json!(ms));
+        // Only overwrite when we actually hold a refresh token: a `None` must not
+        // blank a refresh token the client has already renewed locally.
+        if let Some(refresh) = account
+            .refresh_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            obj.insert("refreshToken".into(), Value::String(refresh.to_string()));
         }
-        let gen = obj.get("generation").and_then(|v| v.as_i64()).unwrap_or(0);
-        obj.insert("generation".into(), serde_json::json!(gen + 1));
+        match account.expires_at {
+            Some(ms) => {
+                obj.insert("expiresAtMs".into(), serde_json::json!(ms));
+            }
+            None => {
+                // Drop a stale expiry copied from another account's record.
+                obj.remove("expiresAtMs");
+            }
+        }
+        let generation = obj.get("generation").and_then(|v| v.as_i64()).unwrap_or(0);
+        obj.insert("generation".into(), serde_json::json!(generation + 1));
     }
 
     // Keep only the target record: the client takes the first non-empty token.
@@ -1385,18 +1422,42 @@ pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathB
         parsed["schemaVersion"] = serde_json::json!(1);
     }
 
-    crate::modules::atomic_write::write_string_atomic(
+    // `write_bytes_atomic` replaces via temp-file + rename and creates no `.bak`,
+    // so it never touches the first-state backup above.
+    crate::modules::atomic_write::write_bytes_atomic(
         &auth_file,
-        &serde_json::to_string_pretty(&parsed).map_err(|e| e.to_string())?,
+        serde_json::to_string_pretty(&parsed)
+            .map_err(|e| e.to_string())?
+            .as_bytes(),
     )
     .map_err(|e| format!("写入 MiniMax Code 登录态失败: {e}"))?;
     Ok(auth_file)
 }
 
+/// Ask a running MiniMax Code client (matched by exact exe path) to exit so the
+/// injected `auth.json` is actually picked up. Returns a clear error when the
+/// client cannot be closed, instead of injecting into a live process that would
+/// silently revert the change on exit.
+fn close_running_minimax_code_client(exe: &Path) -> Result<(), String> {
+    const CLOSE_TIMEOUT_SECS: u64 = 10;
+    crate::modules::process::close_processes_by_exact_exe_paths(
+        &[exe.to_path_buf()],
+        CLOSE_TIMEOUT_SECS,
+    )
+    .map_err(|_| "MiniMax Code 正在运行，请稍后重试".to_string())?;
+    // Give the OS a moment to release the file handle before rewriting auth.json.
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    Ok(())
+}
+
 /// Switch + launch the client. Returns the launched exe path.
 pub fn switch_and_launch(account: &MinimaxCodeAccount) -> Result<PathBuf, String> {
-    switch_minimax_code_account(account)?;
+    // A running client keeps the previous login in memory and rewrites auth.json on
+    // exit, which would silently revert the injection. So: resolve the exe, close
+    // any running instance, inject, and only then relaunch.
     let exe = resolve_minimax_code_launch_path()?;
+    close_running_minimax_code_client(&exe)?;
+    switch_minimax_code_account(account)?;
     std::process::Command::new(&exe)
         .spawn()
         .map_err(|e| format!("启动 MiniMax Code 失败: {e}"))?;
@@ -1556,6 +1617,42 @@ mod minimax_code_switch_tests {
         }
     }
 
+    fn fake_account(
+        id: &str,
+        access_token: &str,
+        refresh_token: Option<&str>,
+        expires_at: Option<i64>,
+        auth_file: &Path,
+    ) -> MinimaxCodeAccount {
+        MinimaxCodeAccount {
+            id: id.to_string(),
+            email: format!("{id}@example.com"),
+            uid: None,
+            nickname: None,
+            tags: None,
+            access_token: access_token.to_string(),
+            refresh_token: refresh_token.map(|value| value.to_string()),
+            token_type: Some("Bearer".to_string()),
+            expires_at,
+            region: Some("cn".to_string()),
+            auth_file: Some(auth_file.to_string_lossy().to_string()),
+            plan_type: None,
+            quota_raw: None,
+            auth_raw: None,
+            profile_raw: None,
+            status: Some("normal".to_string()),
+            status_reason: None,
+            quota_query_last_error: None,
+            quota_query_last_error_at: None,
+            usage_updated_at: None,
+            last_checkin_time: None,
+            checkin_streak: None,
+            checkin_rewards: None,
+            created_at: 1,
+            last_used: 1,
+        }
+    }
+
     fn write_two_record_auth_file(dir: &Path) -> PathBuf {
         let file = dir.join("auth.json");
         let body = json!({
@@ -1579,7 +1676,7 @@ mod minimax_code_switch_tests {
                     "scopes": ["agent.default"],
                     "audience": "agent-backend",
                     "expiresAtMs": 1792767948636_i64,
-                    "brandNew": true
+                    "generation": 9
                 }
             }
         });
@@ -1587,45 +1684,34 @@ mod minimax_code_switch_tests {
         file
     }
 
+    fn read_records(file: &Path) -> serde_json::Map<String, Value> {
+        let raw = fs::read_to_string(file).unwrap();
+        let parsed: Value = serde_json::from_str(&raw).unwrap();
+        parsed
+            .get("records")
+            .and_then(|value| value.as_object())
+            .cloned()
+            .unwrap()
+    }
+
     #[test]
     fn switch_minimax_code_account_rewrites_single_target_record() {
         let tmp = TempDir::new();
         let auth_file = write_two_record_auth_file(&tmp.0);
+        let cockpit_bak = auth_file.with_extension("json.cockpit.bak");
 
-        let account = MinimaxCodeAccount {
-            id: "account_b".to_string(),
-            email: "b@example.com".to_string(),
-            uid: None,
-            nickname: None,
-            tags: None,
-            access_token: "mmoat_target_token".to_string(),
-            refresh_token: Some("mmort_target_refresh".to_string()),
-            token_type: Some("Bearer".to_string()),
-            expires_at: Some(1792767948636_i64),
-            region: Some("cn".to_string()),
-            auth_file: Some(auth_file.to_string_lossy().to_string()),
-            plan_type: None,
-            quota_raw: None,
-            auth_raw: None,
-            profile_raw: None,
-            status: Some("normal".to_string()),
-            status_reason: None,
-            quota_query_last_error: None,
-            quota_query_last_error_at: None,
-            usage_updated_at: None,
-            last_checkin_time: None,
-            checkin_streak: None,
-            checkin_rewards: None,
-            created_at: 1,
-            last_used: 1,
-        };
-
-        let returned = switch_minimax_code_account(&account).expect("switch should succeed");
+        // First switch: account_b.
+        let account_b = fake_account(
+            "account_b",
+            "mmoat_target_token",
+            Some("mmort_target_refresh"),
+            Some(1792767948636_i64),
+            &auth_file,
+        );
+        let returned = switch_minimax_code_account(&account_b).expect("switch should succeed");
         assert_eq!(returned, auth_file);
 
-        let raw = fs::read_to_string(&auth_file).unwrap();
-        let parsed: Value = serde_json::from_str(&raw).unwrap();
-        let records = parsed.get("records").and_then(|v| v.as_object()).unwrap();
+        let records = read_records(&auth_file);
         assert_eq!(records.len(), 1, "only the target record should remain");
 
         let (key, record) = records.iter().next().unwrap();
@@ -1642,20 +1728,172 @@ mod minimax_code_switch_tests {
             record.get("refreshToken").and_then(|v| v.as_str()),
             Some("mmort_target_refresh")
         );
-        // generation bumped from the reused record (account_b had none -> 1).
-        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(1));
+        // generation bumped from the reused record (9 -> 10).
+        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(10));
 
-        let bak = auth_file.with_extension("json.bak");
-        assert!(bak.is_file(), "backup should exist at {bak:?}");
-        let backup_raw = fs::read_to_string(&bak).unwrap();
-        let backup: Value = serde_json::from_str(&backup_raw).unwrap();
+        assert!(
+            cockpit_bak.is_file(),
+            "first-state backup should exist at {cockpit_bak:?}"
+        );
         assert_eq!(
-            backup
-                .get("records")
-                .and_then(|v| v.as_object())
-                .map(|m| m.len()),
-            Some(2),
+            read_records(&cockpit_bak).len(),
+            2,
             "backup must preserve the original two records"
         );
+        // The atomic writer must not create its own `.bak` and clobber the first-state backup.
+        assert!(
+            !auth_file.with_extension("json.bak").exists(),
+            "writer-owned .bak must not be created"
+        );
+
+        // Second switch: account_a. The first-state backup must survive untouched.
+        let account_a = fake_account(
+            "account_a",
+            "mmoat_switch_two",
+            Some("mmort_switch_two"),
+            None,
+            &auth_file,
+        );
+        switch_minimax_code_account(&account_a).expect("second switch should succeed");
+
+        let records = read_records(&auth_file);
+        assert_eq!(records.len(), 1);
+        let (key, record) = records.iter().next().unwrap();
+        assert_eq!(key, "com.minimax.mcode.oauth.prod.cn\u{0}account_a");
+        assert_eq!(
+            record.get("accessToken").and_then(|v| v.as_str()),
+            Some("mmoat_switch_two")
+        );
+
+        let backup_records = read_records(&cockpit_bak);
+        assert_eq!(
+            backup_records.len(),
+            2,
+            "a later switch must not overwrite the first-state backup"
+        );
+        assert!(backup_records.contains_key("com.minimax.mcode.oauth.prod.cn\u{0}account_b"));
+        assert_eq!(
+            backup_records
+                .get("com.minimax.mcode.oauth.prod.cn\u{0}account_a")
+                .and_then(|item| item.get("accessToken"))
+                .and_then(|value| value.as_str()),
+            Some("mmoat_account_a"),
+            "backup still holds the original account_a token"
+        );
+    }
+
+    #[test]
+    fn switch_rejects_non_object_auth_file_without_panicking() {
+        let tmp = TempDir::new();
+        let auth_file = tmp.0.join("auth.json");
+        fs::write(&auth_file, "[1, 2, 3]").unwrap();
+        let account = fake_account("account_b", "mmoat_target", None, None, &auth_file);
+        let err = switch_minimax_code_account(&account).expect_err("array JSON must be rejected");
+        assert_eq!(err, "MiniMax Code 登录态文件格式非法");
+    }
+
+    #[test]
+    fn switch_derives_prefix_from_another_record_when_target_absent() {
+        let tmp = TempDir::new();
+        let auth_file = tmp.0.join("auth.json");
+        // Only an `en` record exists, and it is not the target account.
+        let body = json!({
+            "schemaVersion": 1,
+            "records": {
+                "com.minimax.mcode.oauth.prod.en\u{0}account_x": {
+                    "accessToken": "mmoat_x",
+                    "refreshToken": "mmort_x",
+                    "tokenType": "Bearer",
+                    "clientId": "mcode-public",
+                    "expiresAtMs": 1792767948636_i64,
+                    "generation": 3
+                }
+            }
+        });
+        fs::write(&auth_file, body.to_string()).unwrap();
+
+        let account =
+            fake_account("account_missing", "mmoat_new", Some("mmort_new"), None, &auth_file);
+        switch_minimax_code_account(&account).expect("switch should succeed");
+
+        let records = read_records(&auth_file);
+        let (key, record) = records.iter().next().unwrap();
+        assert_eq!(
+            key,
+            "com.minimax.mcode.oauth.prod.en\u{0}account_missing",
+            "prefix must be derived from the other existing key, not hardcoded cn"
+        );
+        assert_eq!(
+            record.get("accessToken").and_then(|v| v.as_str()),
+            Some("mmoat_new")
+        );
+        assert_eq!(
+            record.get("refreshToken").and_then(|v| v.as_str()),
+            Some("mmort_new")
+        );
+        assert_eq!(
+            record.get("clientId").and_then(|v| v.as_str()),
+            Some("mcode-public"),
+            "reused record shape should be preserved"
+        );
+        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(4));
+        assert!(
+            record.get("expiresAtMs").is_none(),
+            "stale expiresAtMs should be removed when the account has none"
+        );
+    }
+
+    #[test]
+    fn switch_does_not_blank_existing_refresh_token_when_account_has_none() {
+        let tmp = TempDir::new();
+        let auth_file = write_two_record_auth_file(&tmp.0);
+        let account = fake_account("account_b", "mmoat_new_access", None, None, &auth_file);
+        switch_minimax_code_account(&account).expect("switch should succeed");
+
+        let records = read_records(&auth_file);
+        let record = records.values().next().unwrap();
+        assert_eq!(
+            record.get("accessToken").and_then(|v| v.as_str()),
+            Some("mmoat_new_access")
+        );
+        assert_eq!(
+            record.get("refreshToken").and_then(|v| v.as_str()),
+            Some("mmort_account_b"),
+            "a None refresh token must not blank the client's existing one"
+        );
+        assert!(
+            record.get("expiresAtMs").is_none(),
+            "stale expiresAtMs should be removed when the account has none"
+        );
+    }
+
+    #[test]
+    fn resolve_launch_path_prefers_existing_config_override() {
+        let tmp = TempDir::new();
+        let fake_exe = tmp.0.join("MiniMax Code.exe");
+        fs::write(&fake_exe, b"fake").unwrap();
+        let resolved = resolve_minimax_code_launch_path_from(&fake_exe.to_string_lossy(), &[])
+            .expect("config override should win over candidates");
+        assert_eq!(resolved, fake_exe);
+    }
+
+    #[test]
+    fn resolve_launch_path_errors_when_nothing_found() {
+        let err = resolve_minimax_code_launch_path_from("", &[])
+            .expect_err("no configured path and no candidates must error");
+        assert_eq!(err, "未找到 MiniMax Code 客户端可执行文件");
+    }
+
+    #[test]
+    fn resolve_launch_path_falls_back_to_candidates() {
+        let tmp = TempDir::new();
+        let candidate = tmp.0.join("candidate.exe");
+        fs::write(&candidate, b"fake").unwrap();
+        let resolved = resolve_minimax_code_launch_path_from(
+            r"C:\definitely\not\installed\MiniMax Code.exe",
+            std::slice::from_ref(&candidate),
+        )
+        .expect("a missing config override must fall back to candidates");
+        assert_eq!(resolved, candidate);
     }
 }
