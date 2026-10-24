@@ -2884,7 +2884,7 @@ export function SettingsGeneralPanel(props: SettingsPageViewProps) {
                           onClick={() => setZcodeAppPath('')}
                           disabled={isAppPathResetDetecting('zcode') || !zcodeAppPath.trim()}
                         >
-                          {t('common.clear', '清除')}
+                          {t('common.clear')}
                         </button>
                         <button
                           className="btn btn-secondary"
