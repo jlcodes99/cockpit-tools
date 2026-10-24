@@ -129,7 +129,11 @@ func NormalizeResponsesCallIDs(body []byte, preserveOpaque ...bool) []byte {
 // Keep this envelope aligned with native responses_host_results::is_host_result.
 // Payload and explicit call ID validity belong to the continuity validator.
 func codexHostResult(item gjson.Result) bool {
-	if item.Get("type").String() != "function_call_output" || item.Get("namespace").String() != "codex_app" {
+	if item.Get("type").String() != "function_call_output" {
+		return false
+	}
+	namespace := item.Get("namespace").String()
+	if namespace != "codex_app" && namespace != "codex_tui" {
 		return false
 	}
 	switch item.Get("name").String() {
