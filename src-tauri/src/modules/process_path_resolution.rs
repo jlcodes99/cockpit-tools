@@ -2838,6 +2838,18 @@ pub fn ensure_workbuddy_launch_path_configured() -> Result<(), String> {
     resolve_workbuddy_launch_path().map(|_| ())
 }
 
+/// MiniMax Code 客户端 exe 解析。
+///
+/// 直接复用账号模块里的解析器（配置覆盖 → 常见安装路径），避免两份候选逻辑漂移。
+/// 解析失败时回填用户配置，保持与其它平台一致的行为。
+pub(crate) fn resolve_minimax_code_launch_path() -> Result<std::path::PathBuf, String> {
+    crate::modules::minimax_code_account::resolve_minimax_code_launch_path()
+}
+
+pub fn ensure_minimax_code_launch_path_configured() -> Result<(), String> {
+    resolve_minimax_code_launch_path().map(|_| ())
+}
+
 fn resolve_vscode_launch_path() -> Result<std::path::PathBuf, String> {
     if let Some(custom) = normalize_custom_path(Some(&config::get_user_config().vscode_app_path)) {
         #[cfg(target_os = "macos")]

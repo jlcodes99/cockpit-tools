@@ -479,6 +479,26 @@ pub fn close_trae_platform_instances(
     Ok(())
 }
 
+/// Close running MiniMax Code clients.
+///
+/// **Multi-instance limitation.** The MiniMax client does not put its data root on the
+/// process command line (the Electron main process runs as `"…\MiniMax Code.exe"` with no
+/// `--data-dir` / `--user-data-dir`), so a live process cannot be attributed to one of the
+/// managed instance data roots. Matching is therefore exe-path based and closes *all*
+/// MiniMax Code windows. `user_data_dirs` is accepted for API symmetry with the other
+/// platforms and only affects logging.
+///
+/// Each instance still owns an isolated `auth.json` under its own data root, so account
+/// bindings are never mixed — but only one MiniMax Code instance can be logged in at a
+/// time.
+pub fn close_minimax_code_instances(
+    user_data_dirs: &[String],
+    timeout_secs: u64,
+) -> Result<(), String> {
+    let _ = user_data_dirs;
+    crate::modules::minimax_code_account::close_minimax_code_instances(timeout_secs)
+}
+
 pub fn close_workbuddy_instances(
     user_data_dirs: &[String],
     timeout_secs: u64,
