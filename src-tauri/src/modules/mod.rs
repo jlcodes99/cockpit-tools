@@ -105,6 +105,7 @@ pub mod kiro_instance;
 pub mod kiro_oauth;
 pub mod minimax_code_account;
 pub mod minimax_code_api;
+pub mod minimax_code_auto_checkin;
 pub mod minimax_code_oauth;
 pub mod linux_updater;
 pub mod logger;
