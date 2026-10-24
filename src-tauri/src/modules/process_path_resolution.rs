@@ -458,7 +458,7 @@ fn resolve_macos_app_root_from_config(app: &str) -> Option<String> {
         "codebuddy" => current.codebuddy_app_path,
         "codebuddy_cn" => current.codebuddy_cn_app_path,
         "zcode" => current.zcode_app_path,
-        "minimax_code" => current.minimax_code_app_path,
+        "minimaxcode" | "minimax_code" => current.minimax_code_app_path,
         _ => String::new(),
     };
     let trimmed = raw.trim();
@@ -3315,6 +3315,15 @@ fn detect_and_save_app_path_raw(app: &str, force: bool) -> Option<String> {
             if let Some(detected) = detect_workbuddy_exec_path() {
                 update_app_path_in_config("workbuddy", &detected, &current.workbuddy_app_path);
                 return Some(config::get_user_config().workbuddy_app_path);
+            }
+        }
+        "minimaxcode" | "minimax_code" => {
+            if !force && !current.minimax_code_app_path.trim().is_empty() {
+                return Some(current.minimax_code_app_path);
+            }
+            if let Ok(detected) = resolve_minimax_code_launch_path() {
+                update_app_path_in_config("minimaxcode", &detected, &current.minimax_code_app_path);
+                return Some(config::get_user_config().minimax_code_app_path);
             }
         }
         _ => {}
