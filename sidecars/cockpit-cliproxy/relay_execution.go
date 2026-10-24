@@ -62,6 +62,36 @@ func (s *relayServer) executeStreamWithOpenTimeout(
 			timer.Stop()
 			if out.err != nil || out.result == nil {
 				cancelAttempt()
+				if s.isAutoRetryWhenOverload() && isOverloadError(out.err) {
+					s.clearOverloadCooldowns()
+					s.emitExecutorDiagnostic(
+						c,
+						"stream_overload_retry",
+						model,
+						"execute_stream",
+						startedAt,
+						fmt.Sprintf("overload_detected attempt=%d err=%v", attempt, out.err),
+					)
+					if c != nil && c.Writer != nil {
+						if !c.Writer.Written() {
+							setEventStreamHeaders(c.Writer.Header())
+							c.Status(http.StatusOK)
+						}
+						_, _ = c.Writer.Write([]byte(": keep-alive\n\n"))
+						if flusher, ok := c.Writer.(http.Flusher); ok {
+							flusher.Flush()
+						}
+					}
+					retryTimer := time.NewTimer(1500 * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						retryTimer.Stop()
+						return nil, ctx.Err()
+					case <-retryTimer.C:
+					}
+					attempt--
+					continue
+				}
 				return out.result, out.err
 			}
 			// 流已建立：执行器的 chunk 生产 goroutine 仍在监听这次 attempt 的 context，
@@ -396,4 +426,89 @@ func normalizeGeminiModelPath(model string) string {
 		model = model[index+len("/models/"):]
 	}
 	return strings.TrimSpace(model)
+}
+
+func (s *relayServer) isAutoRetryWhenOverload() bool {
+	if s == nil {
+		return false
+	}
+	if s.manifest != nil && s.manifest.AutoRetryWhenOverload {
+		return true
+	}
+	if s.cfg != nil && s.cfg.Streaming.AutoRetryWhenOverload {
+		return true
+	}
+	return false
+}
+
+func (s *relayServer) clearOverloadCooldowns() bool {
+	if s == nil {
+		return false
+	}
+	if s.authManager != nil {
+		return s.authManager.ClearOverloadCooldowns()
+	}
+	if s.manifest != nil && s.manifest.authManager != nil {
+		return s.manifest.authManager.ClearOverloadCooldowns()
+	}
+	return false
+}
+
+func isOverloadError(err error) bool {
+	if err == nil {
+		return false
+	}
+	type statusCoder interface {
+		StatusCode() int
+	}
+	if sc, ok := err.(statusCoder); ok {
+		code := sc.StatusCode()
+		if code == http.StatusBadGateway || code == http.StatusServiceUnavailable || code == http.StatusTooManyRequests {
+			return true
+		}
+	}
+	type httpStatusCoder interface {
+		HTTPStatus() int
+	}
+	if sc, ok := err.(httpStatusCoder); ok {
+		code := sc.HTTPStatus()
+		if code == http.StatusBadGateway || code == http.StatusServiceUnavailable || code == http.StatusTooManyRequests {
+			return true
+		}
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "server_is_overloaded") ||
+		strings.Contains(msg, "servers are currently overloaded") ||
+		strings.Contains(msg, "service_unavailable_error") ||
+		strings.Contains(msg, "model_at_capacity") ||
+		strings.Contains(msg, "model is at capacity") ||
+		strings.Contains(msg, "slow_down") ||
+		strings.Contains(msg, "capacity_exceeded") ||
+		strings.Contains(msg, "server_overload") ||
+		strings.Contains(msg, "upstream_overload") ||
+		strings.Contains(msg, "502") ||
+		strings.Contains(msg, "503") ||
+		strings.Contains(msg, "bad gateway") ||
+		strings.Contains(msg, "service unavailable") ||
+		strings.Contains(msg, "auth_unavailable") ||
+		strings.Contains(msg, "cooling down") ||
+		strings.Contains(msg, "no account is currently schedulable") ||
+		strings.Contains(msg, "no auth available") {
+		return true
+	}
+	return false
+}
+
+func isPayloadOverload(payload []byte) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	lower := bytes.ToLower(payload)
+	return bytes.Contains(lower, []byte("server_is_overloaded")) ||
+		bytes.Contains(lower, []byte("servers are currently overloaded")) ||
+		bytes.Contains(lower, []byte("service_unavailable_error")) ||
+		bytes.Contains(lower, []byte("model_at_capacity")) ||
+		bytes.Contains(lower, []byte("model is at capacity")) ||
+		bytes.Contains(lower, []byte("slow_down")) ||
+		bytes.Contains(lower, []byte("capacity_exceeded"))
 }

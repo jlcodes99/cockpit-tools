@@ -1588,7 +1588,27 @@ fn is_unauthorized_error(message: &str) -> bool {
     message.contains("401") || message.contains(&StatusCode::UNAUTHORIZED.to_string())
 }
 
+static ACTIVE_RESET_CREDIT_CONSUMES: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
+
 pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
+    {
+        let mut active = ACTIVE_RESET_CREDIT_CONSUMES
+            .lock()
+            .map_err(|e| format!("获取重置锁失败: {}", e))?;
+        if active.contains(account_id) {
+            return Err("该账号正在执行主动重置，请勿重复操作".to_string());
+        }
+        active.insert(account_id.to_string());
+    }
+    let result = consume_reset_credit_inner(account_id).await;
+    if let Ok(mut active) = ACTIVE_RESET_CREDIT_CONSUMES.lock() {
+        active.remove(account_id);
+    }
+    result
+}
+
+async fn consume_reset_credit_inner(account_id: &str) -> Result<(), String> {
     let mut account = codex_account::prepare_account_for_injection(account_id).await?;
     if account.is_api_key_auth() {
         return Err("API Key 账号不支持主动重置额度".to_string());
@@ -1621,6 +1641,64 @@ pub async fn consume_reset_credit(account_id: &str) -> Result<(), String> {
             post_reset_credit_once(&account, &redeem_request_id).await
         }
         Err(error) => Err(error),
+    }
+}
+
+pub async fn maybe_auto_consume_reset_credit_on_limit(
+    account: &CodexAccount,
+    quota: &mut CodexQuota,
+) {
+    if account.is_api_key_auth() {
+        return;
+    }
+    let available_credits = quota.reset_credits_available.unwrap_or(0);
+    if available_credits <= 0 {
+        return;
+    }
+
+    let Ok(Some(collection)) = crate::modules::codex_local_access::load_collection_from_disk() else {
+        return;
+    };
+    let timeouts = &collection.timeouts;
+
+    let hit_5h_limit = timeouts.auto_reset_usage_on_5h_limit
+        && (quota.hourly_percentage <= 0 || (quota.hourly_window_present == Some(true) && quota.hourly_percentage == 0));
+    let hit_week_limit = timeouts.auto_reset_usage_on_week_limit
+        && (quota.weekly_percentage <= 0 || (quota.weekly_window_present == Some(true) && quota.weekly_percentage == 0));
+
+    if !hit_5h_limit && !hit_week_limit {
+        return;
+    }
+
+    let reason = if hit_5h_limit && hit_week_limit {
+        "同时达到 5 小时和周使用限额"
+    } else if hit_5h_limit {
+        "达到 5 小时使用限额"
+    } else {
+        "达到周使用限额"
+    };
+
+    logger::log_info(&format!(
+        "Codex 账号 {} {}，检测到可用重置次数 {}，触发自动 Reset usage",
+        account.email, reason, available_credits
+    ));
+
+    match consume_reset_credit(&account.id).await {
+        Ok(()) => {
+            logger::log_info(&format!(
+                "Codex 账号 {} 自动 Reset usage 成功，正在重新拉取最新配额",
+                account.email
+            ));
+            if let Ok(fresh) = fetch_quota(account).await {
+                *quota = fresh.quota;
+            }
+        }
+        Err(error) => {
+            logger::log_warn(&format!(
+                "Codex 账号 {} 自动 Reset usage 失败: {}",
+                account.email, error
+            ));
+        }
     }
 }
 
@@ -1829,8 +1907,12 @@ async fn refresh_account_quota_once(
     // Commit only quota fields against the current credential/workspace identity.
     // Notify every window before optional, potentially slow subscription work.
     let original = account.clone();
-    let fresh_quota = result.quota.clone();
+    let mut fresh_quota = result.quota.clone();
     let fresh_plan = result.plan_type.clone();
+
+    maybe_auto_consume_reset_credit_on_limit(&account, &mut fresh_quota).await;
+
+    let final_quota = fresh_quota.clone();
     account = tokio::task::spawn_blocking(move || {
         codex_account::save_refreshed_quota(&original, fresh_quota, fresh_plan, quota_query_started)
     })
@@ -1840,7 +1922,7 @@ async fn refresh_account_quota_once(
         account_id, &result.quota, quota_query_started,
     );
     if quota_only {
-        return Ok(result.quota);
+        return Ok(final_quota);
     }
     let before_subscription = account.clone();
     if let Err(subscription_error) =
@@ -1858,7 +1940,7 @@ async fn refresh_account_quota_once(
     .await
     .map_err(|e| e.to_string())??;
 
-    Ok(result.quota)
+    Ok(final_quota)
 }
 
 async fn refresh_account_quota_with_runtime_snapshot(

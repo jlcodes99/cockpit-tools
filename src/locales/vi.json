@@ -4733,6 +4733,8 @@
         "singleStatusAttempts": "Thử lại một tài khoản",
         "singleStatusBaseDelay": "Trễ cơ bản tài khoản (ms)",
         "singleStatusMaxDelay": "Trễ tối đa tài khoản (ms)",
+        "autoRetryWhenOverload": "Tự động thử lại khi quá tải",
+        "autoRetryWhenOverloadHint": "Tự động thử lại yêu cầu lên upstream khi máy chủ quá tải (server_is_overloaded / 502 / 503) thay vì trả lỗi về ngay cho người dùng",
         "maxDelayGteBase": "Độ trễ tối đa không được nhỏ hơn độ trễ cơ bản",
         "longWaitPreset": "Mẫu chờ lâu",
         "shortWaitPreset": "Mẫu chờ ngắn",
@@ -4748,7 +4750,11 @@
         "presetDeleted": "Đã xóa mẫu",
         "presetNameRequired": "Nhập tên mẫu",
         "deletePresetConfirm": "Xóa mẫu tùy chỉnh này?",
-        "deletePresetTitle": "Xóa mẫu"
+        "deletePresetTitle": "Xóa mẫu",
+        "autoResetUsageOn5hLimit": "Tự động dùng \"Reset usage\" khi chạm giới hạn 5h",
+        "autoResetUsageOn5hLimitHint": "Tự động kích hoạt lượt đặt lại (Reset usage) khi tài khoản chạm ngưỡng sử dụng 5 giờ",
+        "autoResetUsageOnWeekLimit": "Tự động dùng \"Reset usage\" khi chạm giới hạn tuần",
+        "autoResetUsageOnWeekLimitHint": "Tự động kích hoạt lượt đặt lại (Reset usage) khi tài khoản chạm ngưỡng sử dụng tuần"
       },
       "accountModelRules": {
         "action": "Chặn mô hình",

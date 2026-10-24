@@ -110,6 +110,7 @@ func parity22MediaFixture(t *testing.T, name string, value any) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				saved = bytes.ReplaceAll(saved, []byte("\r\n"), []byte("\n"))
 				if !bytes.Equal(saved, encoded) {
 					t.Fatalf("Go media fixture drift: %s; regenerate with COCKPIT_UPDATE_PARITY22_MEDIA=1", path)
 				}

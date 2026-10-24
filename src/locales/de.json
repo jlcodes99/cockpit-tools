@@ -4748,7 +4748,13 @@
         "presetDeleted": "Profil gelöscht",
         "presetNameRequired": "Profilnamen eingeben",
         "deletePresetConfirm": "Dieses eigene Profil löschen?",
-        "deletePresetTitle": "Profil löschen"
+        "deletePresetTitle": "Profil löschen",
+        "autoRetryWhenOverload": "Bei Überlastung automatisch wiederholen",
+        "autoRetryWhenOverloadHint": "Anfragen automatisch wiederholen, wenn der Server überlastet ist (502 / 503)",
+        "autoResetUsageOn5hLimit": "Automatisch „Nutzung zurücksetzen“ bei 5h-Limit nutzen",
+        "autoResetUsageOn5hLimitHint": "Verfügbare Reset-Guthaben automatisch nutzen, wenn das 5-Stunden-Limit erreicht ist",
+        "autoResetUsageOnWeekLimit": "Automatisch „Nutzung zurücksetzen“ bei Wochenlimit nutzen",
+        "autoResetUsageOnWeekLimitHint": "Verfügbare Reset-Guthaben automatisch nutzen, wenn das Wochenlimit erreicht ist"
       },
       "accountModelRules": {
         "action": "Modelle sperren",

@@ -4748,7 +4748,13 @@
         "presetDeleted": "方案已刪除",
         "presetNameRequired": "請輸入方案名稱",
         "deletePresetConfirm": "確定要刪除此自訂方案嗎？",
-        "deletePresetTitle": "刪除方案"
+        "deletePresetTitle": "刪除方案",
+        "autoRetryWhenOverload": "過載時自動重試",
+        "autoRetryWhenOverloadHint": "遇到上游伺服器過載（如 server_is_overloaded / 502 / 503）時自動重試，不立即向客戶端返回錯誤",
+        "autoResetUsageOn5hLimit": "達到 5 小時限額時自動使用 Reset usage",
+        "autoResetUsageOn5hLimitHint": "當帳號達到 5 小時使用限額且存在可用重置次數時，自動執行 Reset usage",
+        "autoResetUsageOnWeekLimit": "達到週限額時自動使用 Reset usage",
+        "autoResetUsageOnWeekLimitHint": "當帳號達到每週使用限額且存在可用重置次數時，自動執行 Reset usage"
       },
       "accountModelRules": {
         "action": "停用模型",

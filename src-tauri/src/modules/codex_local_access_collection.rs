@@ -52,7 +52,7 @@ fn allocate_initial_local_port(bind_host: &str) -> Result<u16, String> {
         .unwrap_or_else(|| allocate_random_local_port(bind_host))
 }
 
-fn load_collection_from_disk() -> Result<Option<CodexLocalAccessCollection>, String> {
+pub(crate) fn load_collection_from_disk() -> Result<Option<CodexLocalAccessCollection>, String> {
     let path = local_access_file_path()?;
     load_collection_from_path(&path)
 }

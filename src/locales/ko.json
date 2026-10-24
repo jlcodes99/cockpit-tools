@@ -4748,7 +4748,13 @@
         "presetDeleted": "프리셋이 삭제되었습니다",
         "presetNameRequired": "프리셋 이름을 입력하세요",
         "deletePresetConfirm": "이 사용자 프리셋을 삭제할까요?",
-        "deletePresetTitle": "프리셋 삭제"
+        "deletePresetTitle": "프리셋 삭제",
+        "autoRetryWhenOverload": "과부하 시 자동 재시도",
+        "autoRetryWhenOverloadHint": "업스트림 서버 과부하(502 / 503 등) 시 클라이언트에 즉시 오류를 반환하지 않고 자동 재시도합니다",
+        "autoResetUsageOn5hLimit": "5시간 한도 도달 시 \"사용량 재설정\" 자동 사용",
+        "autoResetUsageOn5hLimitHint": "계정이 5시간 한도에 도달하고 사용 가능한 재설정 횟수가 있을 때 자동으로 재설정합니다",
+        "autoResetUsageOnWeekLimit": "주간 한도 도달 시 \"사용량 재설정\" 자동 사용",
+        "autoResetUsageOnWeekLimitHint": "계정이 주간 한도에 도달하고 사용 가능한 재설정 횟수가 있을 때 자동으로 재설정합니다"
       },
       "accountModelRules": {
         "action": "모델 차단",

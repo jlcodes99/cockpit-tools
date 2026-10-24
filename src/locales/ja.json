@@ -4748,7 +4748,13 @@
         "presetDeleted": "プリセットを削除しました",
         "presetNameRequired": "プリセット名を入力してください",
         "deletePresetConfirm": "このカスタムプリセットを削除しますか？",
-        "deletePresetTitle": "プリセットを削除"
+        "deletePresetTitle": "プリセットを削除",
+        "autoRetryWhenOverload": "過負荷時に自動再試行",
+        "autoRetryWhenOverloadHint": "サーバー過負荷（502 / 503など）発生時にクライアントへ即時エラーを返さず自動再試行します",
+        "autoResetUsageOn5hLimit": "5時間制限到達時に「使用状況をリセット」を自動適用",
+        "autoResetUsageOn5hLimitHint": "アカウントが5時間制限に達し、利用可能なリセット回数がある場合に自動でリセットします",
+        "autoResetUsageOnWeekLimit": "週間制限到達時に「使用状況をリセット」を自動適用",
+        "autoResetUsageOnWeekLimitHint": "アカウントが週間制限に達し、利用可能なリセット回数がある場合に自動でリセットします"
       },
       "accountModelRules": {
         "action": "モデル除外",

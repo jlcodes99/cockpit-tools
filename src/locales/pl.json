@@ -4748,7 +4748,13 @@
         "presetDeleted": "Profil usunięty",
         "presetNameRequired": "Podaj nazwę profilu",
         "deletePresetConfirm": "Usunąć ten własny profil?",
-        "deletePresetTitle": "Usuń profil"
+        "deletePresetTitle": "Usuń profil",
+        "autoRetryWhenOverload": "Automatycznie ponawiaj przy przeciążeniu",
+        "autoRetryWhenOverloadHint": "Automatycznie ponawiaj żądania w przypadku przeciążenia serwera upstream (502 / 503)",
+        "autoResetUsageOn5hLimit": "Automatycznie użyj „Zresetuj użycie” po osiągnięciu limitu 5h",
+        "autoResetUsageOn5hLimitHint": "Automatycznie wykorzystuj dostępne kredyty resetowania, gdy konto osiągnie limit 5 godzin",
+        "autoResetUsageOnWeekLimit": "Automatycznie użyj „Zresetuj użycie” po osiągnięciu limitu tygodniowego",
+        "autoResetUsageOnWeekLimitHint": "Automatycznie wykorzystuj dostępne kredyty resetowania, gdy konto osiągnie limit tygodniowy"
       },
       "accountModelRules": {
         "action": "Blokuj modele",

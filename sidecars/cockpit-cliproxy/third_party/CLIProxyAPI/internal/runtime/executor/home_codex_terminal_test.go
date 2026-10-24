@@ -102,3 +102,21 @@ func TestHomeCodexTerminalStreamFailureUsesFreshDispatchOnNextRequest(t *testing
 
 	manager.CloseExecutionSession("terminal-home-session")
 }
+
+func TestCodexTerminalFailureBody_TopLevelErrorWithoutType(t *testing.T) {
+	raw := []byte(`{"error":{"code":"server_is_overloaded","message":"Our servers are currently overloaded. Please try again later.","param":null,"type":"service_unavailable_error"},"sequence_number":2}`)
+	body, ok := codexTerminalFailureBody(raw)
+	if !ok {
+		t.Fatal("expected codexTerminalFailureBody to succeed for top-level error payload without type field")
+	}
+	if !isCodexRetryableBootstrapFailure(body) {
+		t.Fatal("expected isCodexRetryableBootstrapFailure to return true for server_is_overloaded payload")
+	}
+	streamErr, _, okErr := codexTerminalFailureErrWithCooling(raw, false)
+	if !okErr {
+		t.Fatal("expected codexTerminalFailureErrWithCooling to return ok=true")
+	}
+	if streamErr.StatusCode() != http.StatusBadGateway {
+		t.Fatalf("expected status 502, got %d", streamErr.StatusCode())
+	}
+}

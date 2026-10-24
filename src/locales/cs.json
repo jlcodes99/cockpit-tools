@@ -4748,7 +4748,13 @@
         "presetDeleted": "Sada smazána",
         "presetNameRequired": "Zadejte název sady",
         "deletePresetConfirm": "Smazat tuto vlastní sadu?",
-        "deletePresetTitle": "Smazat sadu"
+        "deletePresetTitle": "Smazat sadu",
+        "autoRetryWhenOverload": "Automaticky opakovat při přetížení",
+        "autoRetryWhenOverloadHint": "Automaticky opakovat požadavky při přetížení upstream serveru (502 / 503)",
+        "autoResetUsageOn5hLimit": "Automaticky použít „Resetovat využití“ při dosažení 5h limitu",
+        "autoResetUsageOn5hLimitHint": "Automaticky uplatnit dostupné resety při dosažení 5hodinového limitu účtu",
+        "autoResetUsageOnWeekLimit": "Automaticky použít „Resetovat využití“ při dosažení týdenního limitu",
+        "autoResetUsageOnWeekLimitHint": "Automaticky uplatnit dostupné resety při dosažení týdenního limitu účtu"
       },
       "accountModelRules": {
         "action": "Blokovat modely",

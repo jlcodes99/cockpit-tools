@@ -4748,7 +4748,13 @@
         "presetDeleted": "Profilo eliminato",
         "presetNameRequired": "Inserisci il nome del profilo",
         "deletePresetConfirm": "Eliminare questo profilo personalizzato?",
-        "deletePresetTitle": "Elimina profilo"
+        "deletePresetTitle": "Elimina profilo",
+        "autoRetryWhenOverload": "Riprova automaticamente in caso di sovraccarico",
+        "autoRetryWhenOverloadHint": "Riprova automaticamente le richieste quando il server upstream è sovraccarico (502 / 503)",
+        "autoResetUsageOn5hLimit": "Usa automaticamente \"Reimposta utilizzo\" se si raggiunge il limite di 5 ore",
+        "autoResetUsageOn5hLimitHint": "Usa automaticamente i crediti di ripristino quando l'account raggiunge il limite di 5 ore",
+        "autoResetUsageOnWeekLimit": "Usa automaticamente \"Reimposta utilizzo\" se si raggiunge il limite settimanale",
+        "autoResetUsageOnWeekLimitHint": "Usa automaticamente i crediti di ripristino quando l'account raggiunge il limite settimanale"
       },
       "accountModelRules": {
         "action": "Blocca modelli",
