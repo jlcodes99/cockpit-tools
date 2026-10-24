@@ -91,7 +91,7 @@ fn now_ts() -> i64 {
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
+    super::account_http::client_builder()?
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
