@@ -37,6 +37,7 @@ export const TRAE_SOLO_CURRENT_ACCOUNT_ID_KEY = 'agtools.trae_solo.current_accou
 export const TRAE_CN_CURRENT_ACCOUNT_ID_KEY = 'agtools.trae_cn.current_account_id';
 export const TRAE_SOLO_CN_CURRENT_ACCOUNT_ID_KEY = 'agtools.trae_solo_cn.current_account_id';
 export const WORKBUDDY_CURRENT_ACCOUNT_ID_KEY = 'agtools.workbuddy.current_account_id';
+export const MINIMAX_CODE_CURRENT_ACCOUNT_ID_KEY = 'agtools.minimaxcode.current_account_id';
 export const ZED_CURRENT_ACCOUNT_ID_KEY = 'agtools.zed.current_account_id';
 
 type TimestampedAccount = {
@@ -60,6 +61,7 @@ export type StoredCurrentPlatformId =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'minimaxcode'
   | 'zed';
 
 const CURRENT_ACCOUNT_STORAGE_KEYS: Record<StoredCurrentPlatformId, string> = {
@@ -77,6 +79,7 @@ const CURRENT_ACCOUNT_STORAGE_KEYS: Record<StoredCurrentPlatformId, string> = {
   trae_cn: TRAE_CN_CURRENT_ACCOUNT_ID_KEY,
   trae_solo_cn: TRAE_SOLO_CN_CURRENT_ACCOUNT_ID_KEY,
   workbuddy: WORKBUDDY_CURRENT_ACCOUNT_ID_KEY,
+  minimaxcode: MINIMAX_CODE_CURRENT_ACCOUNT_ID_KEY,
   zed: ZED_CURRENT_ACCOUNT_ID_KEY,
 };
 

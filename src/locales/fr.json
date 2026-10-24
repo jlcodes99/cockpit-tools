@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Plateforme Zed",
     "expandSidebar": "Développer la barre latérale",
     "collapseSidebar": "Réduire la barre latérale",
@@ -1158,6 +1160,12 @@
       "workbuddyAppPathPlaceholder": "Chemin par defaut",
       "workbuddyPathSelect": "Selectionner",
       "workbuddyPathReset": "Reinitialiser par defaut",
+      "minimaxCodeAppPath": "Chemin de lancement de MiniMax Code",
+      "minimaxCodeAppPathDesc": "Laisser vide pour utiliser le chemin par defaut",
+      "minimaxCodeAppPathPlaceholder": "Chemin par defaut",
+      "minimaxCodePathSelect": "Selectionner",
+      "minimaxCodeAppPathPathSelect": "Selectionner",
+      "minimaxCodePathReset": "Reinitialiser par defaut",
       "openclawAuthOverwrite": "Écraser la connexion OpenClaw lors du changement de Codex",
       "openclawAuthOverwriteDesc": "Si désactivé, seul Codex est changé et OpenClaw conserve son état de connexion actuel",
       "ghcpOpencodeAuthOverwrite": "Écraser la connexion OpenCode lors du changement de GitHub Copilot",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "Sélectionner",
       "workbuddyAutoRefresh": "Actualisation automatique du quota WorkBuddy",
       "workbuddyAutoRefreshDesc": "Fréquence de l'actualisation automatique en arrière-plan",
+      "minimaxCodeAutoRefresh": "Actualisation automatique du quota MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Fréquence de l'actualisation automatique en arrière-plan",
       "codexLocalAccessEntryVisible": "Afficher l'entrée du service API",
       "codexLocalAccessEntryVisibleDesc": "Contrôle uniquement l'affichage de l'entrée du service API dans la vue d'ensemble Codex. Cela n'arrête pas le service API local ; vous pourrez le réactiver ici ou dans les réglages rapides.",
       "codexLocalAccessEnabled": "Activer le service API",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "Parametres WorkBuddy",
       "appPath": "Chemin WorkBuddy"
+    },
+    "minimaxCode": {
+      "title": "Parametres MiniMax Code",
+      "appPath": "Chemin MiniMax Code"
     },
     "zcode": {
       "title": "Paramètres ZCode",

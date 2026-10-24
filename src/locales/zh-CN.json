@@ -662,6 +662,8 @@
     "traeCn": "Trae CN",
     "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "切换到经典布局",
     "switchClassicLayoutTitle": "切换至经典侧边栏布局",
     "switchClassicLayoutDesc": "经典布局将展示完整平台导航，并支持可折叠侧边栏。你可在“设置 > 通用 > 侧边栏布局”中随时切换回原始布局。",
@@ -1430,6 +1432,12 @@
       "workbuddyAppPathPlaceholder": "默认路径",
       "workbuddyPathSelect": "选择",
       "workbuddyPathReset": "重置默认",
+      "minimaxCodeAppPath": "MiniMax Code 启动路径",
+      "minimaxCodeAppPathDesc": "留空则使用默认路径",
+      "minimaxCodeAppPathPlaceholder": "默认路径",
+      "minimaxCodePathSelect": "选择",
+      "minimaxCodeAppPathPathSelect": "选择",
+      "minimaxCodePathReset": "重置默认",
       "openclawAuthOverwrite": "切换 Codex 时覆盖 OpenClaw 登录信息",
       "openclawAuthOverwriteDesc": "关闭后仅切换 Codex，不会改写 OpenClaw 当前登录态",
       "ghcpOpencodeAuthOverwrite": "切换 GitHub Copilot 时覆盖 OpenCode 登录信息",
@@ -1462,6 +1470,8 @@
       "qoderPathSelect": "选择",
       "workbuddyAutoRefresh": "WorkBuddy 自动刷新配额",
       "workbuddyAutoRefreshDesc": "后台自动更新频率",
+      "minimaxCodeAutoRefresh": "MiniMax Code 自动刷新配额",
+      "minimaxCodeAutoRefreshDesc": "后台自动更新频率",
       "codexAppSpeed": "Codex 速度",
       "codexAppSpeedDesc": "保存为官方 Codex 启动速度；每次从本应用启动 Codex 前都会写入。",
       "codexAppSpeedStandard": "标准",
@@ -6460,6 +6470,10 @@
     "workbuddy": {
       "title": "WorkBuddy 设置",
       "appPath": "WorkBuddy 路径"
+    },
+    "minimaxCode": {
+      "title": "MiniMax Code 设置",
+      "appPath": "MiniMax Code 路径"
     },
     "claudeRefreshInterval": "配额自动刷新",
     "claude": {

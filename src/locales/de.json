@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Zed-Plattform",
     "expandSidebar": "Seitenleiste erweitern",
     "collapseSidebar": "Seitenleiste einklappen",
@@ -1162,6 +1164,12 @@
       "workbuddyAppPathPlaceholder": "Standardpfad",
       "workbuddyPathSelect": "Auswählen",
       "workbuddyPathReset": "Auf Standard zurücksetzen",
+      "minimaxCodeAppPath": "MiniMax Code-Startpfad",
+      "minimaxCodeAppPathDesc": "Leer lassen, um den Standardpfad zu verwenden",
+      "minimaxCodeAppPathPlaceholder": "Standardpfad",
+      "minimaxCodePathSelect": "Auswählen",
+      "minimaxCodeAppPathPathSelect": "Auswählen",
+      "minimaxCodePathReset": "Auf Standard zurücksetzen",
       "openclawAuthOverwrite": "OpenClaw-Anmeldung beim Wechsel von Codex überschreiben",
       "openclawAuthOverwriteDesc": "Wenn deaktiviert, wird nur Codex gewechselt und OpenClaw behält den aktuellen Anmeldestatus",
       "ghcpOpencodeAuthOverwrite": "OpenCode-Anmeldung beim Wechsel von GitHub Copilot überschreiben",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "Auswählen",
       "workbuddyAutoRefresh": "WorkBuddy Auto-Aktualisierung",
       "workbuddyAutoRefreshDesc": "Häufigkeit der automatischen Aktualisierung im Hintergrund",
+      "minimaxCodeAutoRefresh": "MiniMax Code Auto-Aktualisierung",
+      "minimaxCodeAutoRefreshDesc": "Häufigkeit der automatischen Aktualisierung im Hintergrund",
       "codexLocalAccessEntryVisible": "API-Service-Eintrag anzeigen",
       "codexLocalAccessEntryVisibleDesc": "Steuert nur, ob der API-Service-Eintrag in der Codex-Übersicht angezeigt wird. Der lokale API-Service wird dadurch nicht gestoppt; du kannst ihn hier oder in den Schnelleinstellungen wieder einblenden.",
       "codexLocalAccessEnabled": "API-Service aktivieren",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "WorkBuddy-Einstellungen",
       "appPath": "WorkBuddy-Pfad"
+    },
+    "minimaxCode": {
+      "title": "MiniMax Code-Einstellungen",
+      "appPath": "MiniMax Code-Pfad"
     },
     "zcode": {
       "title": "ZCode-Einstellungen",

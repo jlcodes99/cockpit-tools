@@ -1,9 +1,9 @@
-.minimax-code-accounts-page .minimax-code-quota-item {
+.minimax-code-accounts-page .minimaxCode-quota-item {
   gap: 8px;
   padding-top: 2px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-header {
+.minimax-code-accounts-page .minimaxCode-quota-header {
   justify-content: space-between;
   align-items: center;
 }
@@ -13,22 +13,22 @@
   line-height: 1;
 }
 
-.minimax-code-accounts-page .minimax-code-extra-credit {
+.minimax-code-accounts-page .minimaxCode-extra-credit {
   gap: 6px;
 }
 
-.minimax-code-accounts-page .minimax-code-official-quota-list {
+.minimax-code-accounts-page .minimaxCode-official-quota-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.minimax-code-accounts-page .minimax-code-official-quota-row .quota-header {
+.minimax-code-accounts-page .minimaxCode-official-quota-row .quota-header {
   min-width: 0;
   margin-bottom: 6px;
 }
 
-.minimax-code-accounts-page .minimax-code-official-quota-row .quota-label {
+.minimax-code-accounts-page .minimaxCode-official-quota-row .quota-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -37,11 +37,11 @@
   color: var(--text-primary);
 }
 
-.minimax-code-accounts-page .minimax-code-official-quota-meta {
+.minimax-code-accounts-page .minimaxCode-official-quota-meta {
   font-size: 11px;
 }
 
-.minimax-code-accounts-page .minimax-code-official-quota-meta-wrap {
+.minimax-code-accounts-page .minimaxCode-official-quota-meta-wrap {
   display: flex;
   flex-direction: column;
   margin-top: 6px;
@@ -50,7 +50,7 @@
   width: 100%;
 }
 
-.minimax-code-accounts-page .minimax-code-table-usage {
+.minimax-code-accounts-page .minimaxCode-table-usage {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -58,17 +58,17 @@
   width: 100%;
 }
 
-.minimax-code-accounts-page .minimax-code-table-usage .minimax-code-official-quota-list {
+.minimax-code-accounts-page .minimaxCode-table-usage .minimaxCode-official-quota-list {
   width: 100%;
 }
 
-.minimax-code-accounts-page .minimax-code-usage-status {
+.minimax-code-accounts-page .minimaxCode-usage-status {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
-.minimax-code-accounts-page .minimax-code-usage-detail-trigger {
+.minimax-code-accounts-page .minimaxCode-usage-detail-trigger {
   border: none;
   background: transparent;
   padding: 0;
@@ -77,7 +77,7 @@
   cursor: pointer;
 }
 
-.minimax-code-accounts-page .minimax-code-usage-detail-trigger:hover {
+.minimax-code-accounts-page .minimaxCode-usage-detail-trigger:hover {
   text-decoration: underline;
 }
 
@@ -87,23 +87,23 @@
   line-height: 1.4;
 }
 
-.minimax-code-accounts-page .minimax-code-usage-detail-modal {
+.minimax-code-accounts-page .minimaxCode-usage-detail-modal {
   max-width: 560px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-query-modal {
+.minimax-code-accounts-page .minimaxCode-quota-query-modal {
   max-width: 720px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-mode-tabs {
+.minimax-code-accounts-page .minimaxCode-quota-mode-tabs {
   width: 100%;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-mode-tabs .add-tab {
+.minimax-code-accounts-page .minimaxCode-quota-mode-tabs .add-tab {
   min-height: 34px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-steps {
+.minimax-code-accounts-page .minimaxCode-quota-steps {
   margin: 0 0 12px;
   padding-left: 20px;
   font-size: 13px;
@@ -111,13 +111,13 @@
   line-height: 1.8;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-step-with-actions {
+.minimax-code-accounts-page .minimaxCode-quota-step-with-actions {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-url-actions {
+.minimax-code-accounts-page .minimaxCode-quota-url-actions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -125,7 +125,7 @@
   margin-right: 8px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-url-text {
+.minimax-code-accounts-page .minimaxCode-quota-url-text {
   display: inline-flex;
   align-items: center;
   min-height: 30px;
@@ -140,40 +140,40 @@
   word-break: break-all;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-url-buttons {
+.minimax-code-accounts-page .minimaxCode-quota-url-buttons {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-url-buttons .btn {
+.minimax-code-accounts-page .minimaxCode-quota-url-buttons .btn {
   min-height: 30px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-form {
+.minimax-code-accounts-page .minimaxCode-quota-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-grid {
+.minimax-code-accounts-page .minimaxCode-quota-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-field {
+.minimax-code-accounts-page .minimaxCode-quota-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-field > span {
+.minimax-code-accounts-page .minimaxCode-quota-field > span {
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.minimax-code-accounts-page .minimax-code-quota-field input {
+.minimax-code-accounts-page .minimaxCode-quota-field input {
   width: 100%;
   height: 38px;
   padding: 8px 12px;
@@ -184,28 +184,28 @@
   font-size: 13px;
 }
 
-.minimax-code-accounts-page .minimax-code-quota-field input:focus {
+.minimax-code-accounts-page .minimaxCode-quota-field input:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-.minimax-code-accounts-page .minimax-code-quota-query-modal .token-input {
+.minimax-code-accounts-page .minimaxCode-quota-query-modal .token-input {
   min-height: 120px;
 }
 
-.minimax-code-accounts-page .minimax-code-oauth-feature-card {
+.minimax-code-accounts-page .minimaxCode-oauth-feature-card {
   border: 1px solid var(--border);
   background: var(--bg-tertiary);
   border-radius: var(--radius-md);
   padding: 10px 12px;
 }
 
-.minimax-code-accounts-page .minimax-code-oauth-feature-card.oauth {
+.minimax-code-accounts-page .minimaxCode-oauth-feature-card.oauth {
   border-color: rgba(59, 130, 246, 0.2);
 }
 
-.minimax-code-accounts-page .minimax-code-oauth-feature-card .feature-title {
+.minimax-code-accounts-page .minimaxCode-oauth-feature-card .feature-title {
   margin: 0 0 6px;
   font-size: 13px;
   line-height: 1.45;
@@ -213,7 +213,7 @@
   font-weight: 600;
 }
 
-.minimax-code-accounts-page .minimax-code-oauth-feature-card .feature-list {
+.minimax-code-accounts-page .minimaxCode-oauth-feature-card .feature-list {
   margin: 0;
   padding-left: 18px;
   display: flex;
@@ -225,7 +225,7 @@
 }
 
 @media (max-width: 720px) {
-  .minimax-code-accounts-page .minimax-code-quota-grid {
+  .minimax-code-accounts-page .minimaxCode-quota-grid {
     grid-template-columns: 1fr;
   }
 }

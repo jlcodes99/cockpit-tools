@@ -21,6 +21,8 @@ const MINIMAX_CODE_CURRENT_ACCOUNT_ID_KEY = 'agtools.minimaxcode.current_account
 const minimaxCodePlatformConfig: CodebuddySuiteAccountsPlatformConfig<MinimaxCodeAccount> = {
   pageClassName: 'minimax-code-accounts-page',
   quickSettingsType: 'minimaxcode',
+  checkinModalTitleKey: 'minimaxCode.checkin.modalTitle',
+  checkinModalTitleDefault: '每日签到',
   searchPlaceholderKey: 'minimaxCode.search',
   searchPlaceholderDefault: '搜索 MiniMax Code 账号...',
   flowNotice: {

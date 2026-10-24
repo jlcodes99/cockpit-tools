@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Zed 平台",
     "expandSidebar": "展開側邊欄",
     "collapseSidebar": "收起側邊欄",
@@ -1158,6 +1160,12 @@
       "workbuddyAppPathPlaceholder": "預設路徑",
       "workbuddyPathSelect": "選擇",
       "workbuddyPathReset": "重設預設",
+      "minimaxCodeAppPath": "MiniMax Code 啟動路徑",
+      "minimaxCodeAppPathDesc": "留空則使用預設路徑",
+      "minimaxCodeAppPathPlaceholder": "預設路徑",
+      "minimaxCodePathSelect": "選擇",
+      "minimaxCodeAppPathPathSelect": "選擇",
+      "minimaxCodePathReset": "重設預設",
       "openclawAuthOverwrite": "切換 Codex 時覆蓋 OpenClaw 登入",
       "openclawAuthOverwriteDesc": "關閉時，僅切換 Codex，OpenClaw 保持目前登入狀態",
       "ghcpOpencodeAuthOverwrite": "切換 GitHub Copilot 時覆蓋 OpenCode 登入",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "選擇",
       "workbuddyAutoRefresh": "WorkBuddy 自動刷新配額",
       "workbuddyAutoRefreshDesc": "背景自動更新頻率",
+      "minimaxCodeAutoRefresh": "MiniMax Code 自動刷新配額",
+      "minimaxCodeAutoRefreshDesc": "背景自動更新頻率",
       "codexLocalAccessEntryVisible": "顯示 API 服務入口",
       "codexLocalAccessEntryVisibleDesc": "僅控制 Codex 總覽中的 API 服務入口是否顯示，不會停止本機 API 服務；關閉後可在這裡或快速設定中重新開啟。",
       "codexLocalAccessEnabled": "啟用 API 服務",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "WorkBuddy 設定",
       "appPath": "WorkBuddy 路徑"
+    },
+    "minimaxCode": {
+      "title": "MiniMax Code 設定",
+      "appPath": "MiniMax Code 路徑"
     },
     "zcode": {
       "title": "ZCode 設定",

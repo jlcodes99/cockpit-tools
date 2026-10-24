@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Zed Platformu",
     "expandSidebar": "Kenar çubuğunu genişlet",
     "collapseSidebar": "Kenar çubuğunu daralt",
@@ -1162,6 +1164,12 @@
       "workbuddyAppPathPlaceholder": "Varsayılan yol",
       "workbuddyPathSelect": "Seç",
       "workbuddyPathReset": "Varsayılana sıfırla",
+      "minimaxCodeAppPath": "MiniMax Code Başlatma Yolu",
+      "minimaxCodeAppPathDesc": "Varsayılan yol için boş bırakın",
+      "minimaxCodeAppPathPlaceholder": "Varsayılan yol",
+      "minimaxCodePathSelect": "Seç",
+      "minimaxCodeAppPathPathSelect": "Seç",
+      "minimaxCodePathReset": "Varsayılana sıfırla",
       "openclawAuthOverwrite": "Codex'i değiştirirken OpenClaw oturum açma bilgilerinin üzerine yazın",
       "openclawAuthOverwriteDesc": "Kapalıyken yalnızca Codex açılır ve OpenClaw mevcut oturum açma durumunu korur",
       "ghcpOpencodeAuthOverwrite": "GitHub Copilot değiştirirken OpenCode oturum açma bilgilerinin üzerine yazın",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "Seç",
       "workbuddyAutoRefresh": "WorkBuddy Otomatik Kota Yenileme",
       "workbuddyAutoRefreshDesc": "Arka planda otomatik yenileme sıklığı",
+      "minimaxCodeAutoRefresh": "MiniMax Code Otomatik Kota Yenileme",
+      "minimaxCodeAutoRefreshDesc": "Arka planda otomatik yenileme sıklığı",
       "codexLocalAccessEntryVisible": "API Hizmeti girişini göster",
       "codexLocalAccessEntryVisibleDesc": "Yalnızca API Hizmeti girişinin Codex genel görünümünde gösterilip gösterilmeyeceğini kontrol eder. Yerel API hizmetini durdurmaz; buradan veya Hızlı Ayarlar'dan yeniden açabilirsiniz.",
       "codexLocalAccessEnabled": "API Hizmetini etkinleştir",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "WorkBuddy Ayarları",
       "appPath": "WorkBuddy Yolu"
+    },
+    "minimaxCode": {
+      "title": "MiniMax Code Ayarları",
+      "appPath": "MiniMax Code Yolu"
     },
     "zcode": {
       "title": "ZCode Ayarları",
