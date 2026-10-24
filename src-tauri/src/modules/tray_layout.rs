@@ -614,5 +614,13 @@ mod tests {
         assert_eq!(normalized.len(), SUPPORTED_PLATFORM_IDS.len());
         assert!(normalized.contains(&PLATFORM_MINIMAX_CODE.to_string()));
         assert!(!normalized.iter().any(|id| id == "minimax_code"));
+
+        // Legacy persisted ids used the "minimax_code" spelling before the
+        // canonical frontend id ("minimaxcode") was adopted. It is intentionally
+        // not recognized as a distinct platform, but normalize_order re-adds the
+        // canonical id so an old persisted list does not drop the platform.
+        assert!(normalize_platform_id("minimax_code").is_none());
+        let legacy = normalize_order(&["minimax_code".to_string()]);
+        assert!(legacy.contains(&PLATFORM_MINIMAX_CODE.to_string()));
     }
 }

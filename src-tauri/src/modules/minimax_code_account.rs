@@ -1296,20 +1296,38 @@ pub fn import_payload_from_local() -> Result<Vec<MinimaxCodeOAuthCompletePayload
 pub fn resolve_minimax_code_launch_path() -> Result<PathBuf, String> {
     let configured = crate::modules::config::get_user_config().minimax_code_app_path;
     let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Some(local) = dirs::data_local_dir() {
-        candidates.push(
-            local
-                .join("Programs")
-                .join("MiniMax Code")
-                .join("MiniMax Code.exe"),
-        );
+
+    #[cfg(target_os = "macos")]
+    {
+        candidates.push(PathBuf::from(
+            "/Applications/MiniMax Code.app/Contents/MacOS/MiniMax Code",
+        ));
     }
-    candidates.push(PathBuf::from(
-        r"D:\Programs\MiniMax Code\MiniMax Code.exe",
-    ));
-    candidates.push(PathBuf::from(
-        r"C:\Program Files\MiniMax Code\MiniMax Code.exe",
-    ));
+
+    #[cfg(target_os = "linux")]
+    {
+        candidates.push(PathBuf::from("/usr/bin/minimax-code"));
+        candidates.push(PathBuf::from("/usr/local/bin/minimax-code"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local) = dirs::data_local_dir() {
+            candidates.push(
+                local
+                    .join("Programs")
+                    .join("MiniMax Code")
+                    .join("MiniMax Code.exe"),
+            );
+        }
+        candidates.push(PathBuf::from(
+            r"D:\Programs\MiniMax Code\MiniMax Code.exe",
+        ));
+        candidates.push(PathBuf::from(
+            r"C:\Program Files\MiniMax Code\MiniMax Code.exe",
+        ));
+    }
+
     resolve_minimax_code_launch_path_from(&configured, &candidates)
 }
 

@@ -3318,6 +3318,9 @@ fn detect_and_save_app_path_raw(app: &str, force: bool) -> Option<String> {
             }
         }
         "minimaxcode" | "minimax_code" => {
+            // `force` only skips the cached-config short-circuit below; the
+            // resolver still prefers an already-configured path, so a re-detect
+            // returns the configured path rather than re-scanning candidates.
             if !force && !current.minimax_code_app_path.trim().is_empty() {
                 return Some(current.minimax_code_app_path);
             }
