@@ -33,6 +33,53 @@ fn parity22_api_account(model: &str) -> CodexAccount {
 }
 
 #[test]
+fn native_client_catalog_does_not_grant_chatgpt_credentials_provider_models() {
+    let _env = crate::modules::test_support::env_lock().lock().unwrap();
+    struct CatalogRestore(Option<Vec<String>>);
+    impl Drop for CatalogRestore {
+        fn drop(&mut self) {
+            *API_SERVICE_EXPERIMENTAL_MODEL_CATALOG
+                .get_or_init(|| Mutex::new(None))
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = self.0.take();
+        }
+    }
+    let _catalog = {
+        let mut catalog = API_SERVICE_EXPERIMENTAL_MODEL_CATALOG
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        CatalogRestore(catalog.replace(vec!["gemini-4-argon".into(), "gpt-6.1-sol".into()]))
+    };
+    let collection = native_test_collection();
+    let oauth = native_test_account();
+    let provider = parity22_api_account("gemini-4-argon");
+    let provider_plan = native_model_route_plan(&collection, None, "gemini-4-argon").unwrap();
+    assert!(native_plan_account_model(&provider_plan, &oauth).is_none());
+    assert_eq!(
+        native_plan_account_model(&provider_plan, &provider).as_deref(),
+        Some("gemini-4-argon")
+    );
+    let mut official = oauth.clone();
+    official.api_provider_id = Some("cockpit_chatgpt_plan".into());
+    assert!(native_plan_account_model(&provider_plan, &official).is_none());
+    let native_plan = native_model_route_plan(&collection, None, "gpt-6.1-sol").unwrap();
+    for account in [&oauth, &official] {
+        assert_eq!(
+            native_plan_account_model(&native_plan, account).as_deref(),
+            Some("gpt-6.1-sol")
+        );
+    }
+    // A fetched account catalog remains authoritative, unlike the client catalog.
+    official.api_model_catalog = vec!["account-specific-model".into()];
+    let granted = native_model_route_plan(&collection, None, "account-specific-model").unwrap();
+    assert_eq!(
+        native_plan_account_model(&granted, &official).as_deref(),
+        Some("account-specific-model")
+    );
+}
+
+#[test]
 fn parity22_model_rules_match_go_and_keep_all_permission_layers() {
     for case in parity22_policy_fixture()["rules"].as_array().unwrap() {
         assert_eq!(

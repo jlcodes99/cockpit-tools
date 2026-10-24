@@ -13,16 +13,25 @@ fn native_is_oauth_authorization_account(account: &CodexAccount) -> bool {
     !account.is_api_key_auth() || native_is_chatgpt_plan_account(account)
 }
 
+fn native_default_codex_model(model: &str) -> bool {
+    // The client catalog also contains third-party provider models. It is not
+    // evidence that a ChatGPT credential can serve those models.
+    default_codex_model_ids()
+        .iter()
+        .any(|candidate| candidate.eq_ignore_ascii_case(model.trim()))
+        || (is_gpt_or_codex_namespace_model(model)
+            && api_service_routable_codex_model_ids()
+                .iter()
+                .chain(api_service_supported_codex_model_ids().iter())
+                .any(|candidate| candidate.eq_ignore_ascii_case(model.trim())))
+}
+
 fn native_chatgpt_plan_model(account: &CodexAccount, model: &str) -> Option<String> {
     if account.api_model_catalog.is_empty() {
         // Cold catalog is not absent consent. Retain the existing public/key
         // model ACL and only route locally known Codex models until GET /models
         // supplies this grant's real catalog; never expose arbitrary models.
-        return api_service_routable_codex_model_ids()
-            .iter()
-            .chain(api_service_supported_codex_model_ids().iter())
-            .any(|candidate| candidate.eq_ignore_ascii_case(model.trim()))
-            .then(|| model.trim().to_owned());
+        return native_default_codex_model(model).then(|| model.trim().to_owned());
     }
     account
         .api_model_catalog
@@ -426,6 +435,12 @@ fn native_plan_account_model(
                     .into_iter()
                     .find(|(client, _)| client.trim().eq_ignore_ascii_case(model.trim()))
                     .map(|(_, upstream)| upstream);
+            }
+            if !account.is_api_key_auth()
+                && !codex_account::is_grok_upstream_provider(account)
+                && !native_default_codex_model(&model)
+            {
+                return None;
             }
             // Native/empty Responses pools accept the existing hidden routable models,
             // not names that are declared only by a different provider's route.
