@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Zed 플랫폼",
     "expandSidebar": "사이드바 확장",
     "collapseSidebar": "사이드바 축소",
@@ -1162,6 +1164,12 @@
       "workbuddyAppPathPlaceholder": "기본 경로",
       "workbuddyPathSelect": "선택",
       "workbuddyPathReset": "기본값으로 재설정",
+      "minimaxCodeAppPath": "MiniMax Code 실행 경로",
+      "minimaxCodeAppPathDesc": "비워 두면 기본 경로를 사용합니다",
+      "minimaxCodeAppPathPlaceholder": "기본 경로",
+      "minimaxCodePathSelect": "선택",
+      "minimaxCodeAppPathPathSelect": "선택",
+      "minimaxCodePathReset": "기본값으로 재설정",
       "openclawAuthOverwrite": "Codex 전환 시 OpenClaw 로그인 덮어쓰기",
       "openclawAuthOverwriteDesc": "끄면 Codex만 전환되고 OpenClaw는 현재 로그인 상태를 유지합니다",
       "ghcpOpencodeAuthOverwrite": "GitHub Copilot 전환 시 OpenCode 로그인 덮어쓰기",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "선택",
       "workbuddyAutoRefresh": "WorkBuddy 자동 할당량 갱신",
       "workbuddyAutoRefreshDesc": "백그라운드 자동 갱신 빈도",
+      "minimaxCodeAutoRefresh": "MiniMax Code 자동 할당량 갱신",
+      "minimaxCodeAutoRefreshDesc": "백그라운드 자동 갱신 빈도",
       "codexLocalAccessEntryVisible": "API 서비스 항목 표시",
       "codexLocalAccessEntryVisibleDesc": "Codex 개요에서 API 서비스 항목을 표시할지만 제어합니다. 로컬 API 서비스 자체를 중지하지 않으며, 여기나 빠른 설정에서 다시 켤 수 있습니다.",
       "codexLocalAccessEnabled": "API 서비스 사용",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "WorkBuddy 설정",
       "appPath": "WorkBuddy 경로"
+    },
+    "minimaxCode": {
+      "title": "MiniMax Code 설정",
+      "appPath": "MiniMax Code 경로"
     },
     "zcode": {
       "title": "ZCode 설정",

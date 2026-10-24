@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Piattaforma Zed",
     "expandSidebar": "Espandi la barra laterale",
     "collapseSidebar": "Comprimi la barra laterale",
@@ -1158,6 +1160,12 @@
       "workbuddyAppPathPlaceholder": "Percorso predefinito",
       "workbuddyPathSelect": "Seleziona",
       "workbuddyPathReset": "Ripristina predefinito",
+      "minimaxCodeAppPath": "Percorso di avvio di MiniMax Code",
+      "minimaxCodeAppPathDesc": "Lascia vuoto per usare il percorso predefinito",
+      "minimaxCodeAppPathPlaceholder": "Percorso predefinito",
+      "minimaxCodePathSelect": "Seleziona",
+      "minimaxCodeAppPathPathSelect": "Seleziona",
+      "minimaxCodePathReset": "Ripristina predefinito",
       "openclawAuthOverwrite": "Sovrascrivi il login OpenClaw quando cambi Codex",
       "openclawAuthOverwriteDesc": "Se disattivato, viene cambiato solo Codex e OpenClaw mantiene lo stato di accesso corrente",
       "ghcpOpencodeAuthOverwrite": "Sovrascrivi il login OpenCode quando cambi GitHub Copilot",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "Seleziona",
       "workbuddyAutoRefresh": "Aggiornamento automatico quota WorkBuddy",
       "workbuddyAutoRefreshDesc": "Frequenza di aggiornamento automatico in background",
+      "minimaxCodeAutoRefresh": "Aggiornamento automatico quota MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Frequenza di aggiornamento automatico in background",
       "codexLocalAccessEntryVisible": "Mostra voce del servizio API",
       "codexLocalAccessEntryVisibleDesc": "Controlla solo se la voce del servizio API viene mostrata nella panoramica Codex. Non arresta il servizio API locale; puoi riattivarla qui o nelle Impostazioni rapide.",
       "codexLocalAccessEnabled": "Abilita servizio API",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "Impostazioni WorkBuddy",
       "appPath": "Percorso WorkBuddy"
+    },
+    "minimaxCode": {
+      "title": "Impostazioni MiniMax Code",
+      "appPath": "Percorso MiniMax Code"
     },
     "zcode": {
       "title": "Impostazioni ZCode",

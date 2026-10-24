@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Platforma Zed",
     "expandSidebar": "Rozbalit postranní panel",
     "collapseSidebar": "Sbalit postranní panel",
@@ -1158,6 +1160,12 @@
       "workbuddyAppPathPlaceholder": "Výchozí cesta",
       "workbuddyPathSelect": "Vybrat",
       "workbuddyPathReset": "Obnovit výchozí",
+      "minimaxCodeAppPath": "Spouštěcí cesta MiniMax Code",
+      "minimaxCodeAppPathDesc": "Pro výchozí cestu ponechte prázdné",
+      "minimaxCodeAppPathPlaceholder": "Výchozí cesta",
+      "minimaxCodePathSelect": "Vybrat",
+      "minimaxCodeAppPathPathSelect": "Vybrat",
+      "minimaxCodePathReset": "Obnovit výchozí",
       "openclawAuthOverwrite": "Při přepnutí Codexu přepsat přihlášení OpenClaw",
       "openclawAuthOverwriteDesc": "Pokud je vypnuto, přepne se pouze Codex a OpenClaw zůstane v aktuálním přihlášení",
       "ghcpOpencodeAuthOverwrite": "Při přepnutí GitHub Copilot přepsat přihlášení OpenCode",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "Vybrat",
       "workbuddyAutoRefresh": "Automatické obnovení kvóty WorkBuddy",
       "workbuddyAutoRefreshDesc": "Frekvence automatického obnovení na pozadí",
+      "minimaxCodeAutoRefresh": "Automatické obnovení kvóty MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Frekvence automatického obnovení na pozadí",
       "codexLocalAccessEntryVisible": "Zobrazit položku služby API",
       "codexLocalAccessEntryVisibleDesc": "Určuje pouze, zda se v přehledu Codex zobrazuje položka služby API. Místní službu API to nezastaví; můžete ji znovu zapnout zde nebo v rychlém nastavení.",
       "codexLocalAccessEnabled": "Zapnout službu API",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "Nastavení WorkBuddy",
       "appPath": "Cesta WorkBuddy"
+    },
+    "minimaxCode": {
+      "title": "Nastavení MiniMax Code",
+      "appPath": "Cesta MiniMax Code"
     },
     "zcode": {
       "title": "Nastavení ZCode",

@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Plataforma Zed",
     "expandSidebar": "Expandir barra lateral",
     "collapseSidebar": "Contraer barra lateral",
@@ -1158,6 +1160,12 @@
       "workbuddyAppPathPlaceholder": "Ruta predeterminada",
       "workbuddyPathSelect": "Seleccionar",
       "workbuddyPathReset": "Restablecer por defecto",
+      "minimaxCodeAppPath": "Ruta de inicio de MiniMax Code",
+      "minimaxCodeAppPathDesc": "Déjelo vacío para usar la ruta predeterminada",
+      "minimaxCodeAppPathPlaceholder": "Ruta predeterminada",
+      "minimaxCodePathSelect": "Seleccionar",
+      "minimaxCodeAppPathPathSelect": "Seleccionar",
+      "minimaxCodePathReset": "Restablecer por defecto",
       "openclawAuthOverwrite": "Sobrescribir inicio de sesión de OpenClaw al cambiar Codex",
       "openclawAuthOverwriteDesc": "Si está desactivado, solo se cambia Codex y OpenClaw mantiene su sesión actual",
       "ghcpOpencodeAuthOverwrite": "Sobrescribir inicio de sesión de OpenCode al cambiar GitHub Copilot",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "Seleccionar",
       "workbuddyAutoRefresh": "Actualización automática de cuota WorkBuddy",
       "workbuddyAutoRefreshDesc": "Frecuencia de actualización automática en segundo plano",
+      "minimaxCodeAutoRefresh": "Actualización automática de cuota MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Frecuencia de actualización automática en segundo plano",
       "codexLocalAccessEntryVisible": "Mostrar acceso del servicio API",
       "codexLocalAccessEntryVisibleDesc": "Solo controla si el acceso del servicio API se muestra en la vista general de Codex. No detiene el servicio API local; puedes volver a mostrarlo aquí o en Ajustes rápidos.",
       "codexLocalAccessEnabled": "Activar servicio API",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "Configuración de WorkBuddy",
       "appPath": "Ruta de WorkBuddy"
+    },
+    "minimaxCode": {
+      "title": "Configuración de MiniMax Code",
+      "appPath": "Ruta de MiniMax Code"
     },
     "zcode": {
       "title": "Configuración de ZCode",

@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Nền tảng Zed",
     "expandSidebar": "Mở rộng thanh bên",
     "collapseSidebar": "Thu gọn thanh bên",
@@ -1162,6 +1164,12 @@
       "workbuddyAppPathPlaceholder": "Đường dẫn mặc định",
       "workbuddyPathSelect": "Chọn",
       "workbuddyPathReset": "Đặt lại mặc định",
+      "minimaxCodeAppPath": "Đường dẫn khởi động MiniMax Code",
+      "minimaxCodeAppPathDesc": "Để trống để dùng đường dẫn mặc định",
+      "minimaxCodeAppPathPlaceholder": "Đường dẫn mặc định",
+      "minimaxCodePathSelect": "Chọn",
+      "minimaxCodeAppPathPathSelect": "Chọn",
+      "minimaxCodePathReset": "Đặt lại mặc định",
       "openclawAuthOverwrite": "Ghi đè đăng nhập OpenClaw khi chuyển đổi Codex",
       "openclawAuthOverwriteDesc": "Khi tắt, chỉ Codex được chuyển đổi và OpenClaw giữ trạng thái đăng nhập hiện tại",
       "ghcpOpencodeAuthOverwrite": "Ghi đè đăng nhập OpenCode khi chuyển đổi GitHub Copilot",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "Chọn",
       "workbuddyAutoRefresh": "Tự động làm mới hạn ngạch WorkBuddy",
       "workbuddyAutoRefreshDesc": "Tần suất tự động làm mới nền",
+      "minimaxCodeAutoRefresh": "Tự động làm mới hạn ngạch MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Tần suất tự động làm mới nền",
       "codexLocalAccessEntryVisible": "Hiển thị mục Dịch vụ API",
       "codexLocalAccessEntryVisibleDesc": "Chỉ kiểm soát việc mục Dịch vụ API có hiển thị trong tổng quan Codex hay không. Thao tác này không dừng dịch vụ API cục bộ; bạn có thể bật lại tại đây hoặc trong Cài đặt nhanh.",
       "codexLocalAccessEnabled": "Bật Dịch vụ API",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "Cài đặt WorkBuddy",
       "appPath": "Đường dẫn WorkBuddy"
+    },
+    "minimaxCode": {
+      "title": "Cài đặt MiniMax Code",
+      "appPath": "Đường dẫn MiniMax Code"
     },
     "zcode": {
       "title": "Cài đặt ZCode",

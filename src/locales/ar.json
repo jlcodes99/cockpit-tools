@@ -655,6 +655,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "منصة Zed",
     "expandSidebar": "توسيع الشريط الجانبي",
     "collapseSidebar": "طي الشريط الجانبي",
@@ -1205,6 +1207,12 @@
       "workbuddyAppPathPlaceholder": "المسار الافتراضي",
       "workbuddyPathSelect": "اختيار",
       "workbuddyPathReset": "إعادة إلى الافتراضي",
+      "minimaxCodeAppPath": "مسار تشغيل MiniMax Code",
+      "minimaxCodeAppPathDesc": "اتركه فارغًا لاستخدام المسار الافتراضي",
+      "minimaxCodeAppPathPlaceholder": "المسار الافتراضي",
+      "minimaxCodePathSelect": "اختيار",
+      "minimaxCodeAppPathPathSelect": "اختيار",
+      "minimaxCodePathReset": "إعادة إلى الافتراضي",
       "openclawAuthOverwrite": "استبدال تسجيل دخول OpenClaw عند تبديل Codex",
       "openclawAuthOverwriteDesc": "عند التعطيل، يتم تبديل Codex فقط ويحتفظ OpenClaw بحالة تسجيل الدخول الحالية",
       "ghcpOpencodeAuthOverwrite": "استبدال تسجيل دخول OpenCode عند تبديل GitHub Copilot",
@@ -1280,6 +1288,8 @@
       "qoderPathSelect": "اختر",
       "workbuddyAutoRefresh": "تحديث تلقائي لحصة WorkBuddy",
       "workbuddyAutoRefreshDesc": "تكرار التحديث التلقائي في الخلفية",
+      "minimaxCodeAutoRefresh": "تحديث تلقائي لحصة MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "تكرار التحديث التلقائي في الخلفية",
       "codexLocalAccessEntryVisible": "إظهار مدخل خدمة API",
       "codexLocalAccessEntryVisibleDesc": "يتحكم هذا فقط في ظهور مدخل خدمة API ضمن نظرة Codex العامة. لن يوقف خدمة API المحلية؛ ويمكنك إعادة إظهاره هنا أو من الإعدادات السريعة.",
       "codexLocalAccessEnabled": "تفعيل خدمة API",
@@ -6174,6 +6184,10 @@
     "workbuddy": {
       "title": "إعدادات WorkBuddy",
       "appPath": "مسار WorkBuddy"
+    },
+    "minimaxCode": {
+      "title": "إعدادات MiniMax Code",
+      "appPath": "مسار MiniMax Code"
     },
     "zcode": {
       "title": "إعدادات ZCode",

@@ -665,7 +665,7 @@ function getQuotaAlertPlatformLabel(
     case 'trae':
       return t('nav.trae', 'Trae');
     case 'minimaxcode':
-      return 'MiniMax Code';
+      return t('nav.minimaxcode', 'MiniMax Code');
     case 'zed':
       return t('nav.zed', 'Zed');
     default:

@@ -661,6 +661,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "Beralih ke tata letak klasik",
     "switchClassicLayoutTitle": "Beralih ke tata letak bilah sisi klasik",
     "switchClassicLayoutDesc": "Tata letak klasik menampilkan navigasi platform secara lengkap dan mendukung penciutan bilah sisi. Anda dapat beralih kembali kapan saja di Pengaturan > Umum > Tata Letak Bilah Sisi.",
@@ -1243,6 +1245,12 @@
       "workbuddyAppPathPlaceholder": "Jalur bawaan",
       "workbuddyPathSelect": "Pilih",
       "workbuddyPathReset": "Atur ulang ke bawaan",
+      "minimaxCodeAppPath": "Jalur Peluncuran MiniMax Code",
+      "minimaxCodeAppPathDesc": "Biarkan kosong untuk jalur bawaan",
+      "minimaxCodeAppPathPlaceholder": "Jalur bawaan",
+      "minimaxCodePathSelect": "Pilih",
+      "minimaxCodeAppPathPathSelect": "Pilih",
+      "minimaxCodePathReset": "Atur ulang ke bawaan",
       "openclawAuthOverwrite": "Timpa login OpenClaw saat mengganti Codex",
       "openclawAuthOverwriteDesc": "Jika dinonaktifkan, hanya Codex yang diganti dan OpenClaw mempertahankan status login saat ini",
       "ghcpOpencodeAuthOverwrite": "Timpa login OpenCode saat mengganti GitHub Copilot",
@@ -1280,6 +1288,8 @@
       "qoderPathSelect": "Pilih",
       "workbuddyAutoRefresh": "Auto Refresh Kuota WorkBuddy",
       "workbuddyAutoRefreshDesc": "Frekuensi auto-refresh di latar belakang",
+      "minimaxCodeAutoRefresh": "Auto Refresh Kuota MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Frekuensi auto-refresh di latar belakang",
       "codexLocalAccessEntryVisible": "Tampilkan entri Layanan API",
       "codexLocalAccessEntryVisibleDesc": "Hanya mengatur apakah entri Layanan API ditampilkan di ringkasan Codex. Ini tidak menghentikan layanan API lokal; Anda bisa menyalakannya lagi di sini atau di Pengaturan Cepat.",
       "codexLocalAccessEnabled": "Aktifkan Layanan API",
@@ -6282,6 +6292,10 @@
     "workbuddy": {
       "title": "WorkBuddy Settings​",
       "appPath": "WorkBuddy Path​"
+    },
+    "minimaxCode": {
+      "title": "MiniMax Code Settings​",
+      "appPath": "MiniMax Code Path​"
     },
     "filterPersistence": {
       "title": "Simpan Filter",

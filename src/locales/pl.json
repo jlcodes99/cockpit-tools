@@ -608,6 +608,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Platforma Zed",
     "expandSidebar": "Rozwiń pasek boczny",
     "collapseSidebar": "Zwiń pasek boczny",
@@ -1162,6 +1164,12 @@
       "workbuddyAppPathPlaceholder": "Domyślna ścieżka",
       "workbuddyPathSelect": "Wybierz",
       "workbuddyPathReset": "Przywróć domyślne",
+      "minimaxCodeAppPath": "Ścieżka uruchamiania MiniMax Code",
+      "minimaxCodeAppPathDesc": "Pozostaw puste, aby użyć domyślnej ścieżki",
+      "minimaxCodeAppPathPlaceholder": "Domyślna ścieżka",
+      "minimaxCodePathSelect": "Wybierz",
+      "minimaxCodeAppPathPathSelect": "Wybierz",
+      "minimaxCodePathReset": "Przywróć domyślne",
       "openclawAuthOverwrite": "Nadpisuj logowanie OpenClaw podczas przełączania Codex",
       "openclawAuthOverwriteDesc": "Gdy wyłączone, przełączany jest tylko Codex, a OpenClaw zachowuje bieżący stan logowania",
       "ghcpOpencodeAuthOverwrite": "Nadpisuj logowanie OpenCode podczas przełączania GitHub Copilot",
@@ -1233,6 +1241,8 @@
       "qoderPathSelect": "Wybierz",
       "workbuddyAutoRefresh": "Automatyczne odświeżanie limitu WorkBuddy",
       "workbuddyAutoRefreshDesc": "Częstotliwość automatycznego odświeżania w tle",
+      "minimaxCodeAutoRefresh": "Automatyczne odświeżanie limitu MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Częstotliwość automatycznego odświeżania w tle",
       "codexLocalAccessEntryVisible": "Pokaż wpis usługi API",
       "codexLocalAccessEntryVisibleDesc": "Steruje tylko tym, czy wpis usługi API jest widoczny w przeglądzie Codex. Nie zatrzymuje lokalnej usługi API; możesz go ponownie włączyć tutaj lub w szybkich ustawieniach.",
       "codexLocalAccessEnabled": "Włącz usługę API",
@@ -6127,6 +6137,10 @@
     "workbuddy": {
       "title": "Ustawienia WorkBuddy",
       "appPath": "Ścieżka WorkBuddy"
+    },
+    "minimaxCode": {
+      "title": "Ustawienia MiniMax Code",
+      "appPath": "Ścieżka MiniMax Code"
     },
     "zcode": {
       "title": "Ustawienia ZCode",

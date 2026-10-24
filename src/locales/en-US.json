@@ -662,6 +662,8 @@
     "traeCn": "Trae CN",
     "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "Switch to classic layout",
     "switchClassicLayoutTitle": "Switch to the classic sidebar layout",
     "switchClassicLayoutDesc": "The classic layout shows the full platform navigation and supports sidebar collapsing. You can switch back anytime in Settings > General > Sidebar Layout.",
@@ -1430,6 +1432,12 @@
       "workbuddyAppPathPlaceholder": "Default path",
       "workbuddyPathSelect": "Select",
       "workbuddyPathReset": "Reset to default",
+      "minimaxCodeAppPath": "MiniMax Code Launch Path",
+      "minimaxCodeAppPathDesc": "Leave empty for default path",
+      "minimaxCodeAppPathPlaceholder": "Default path",
+      "minimaxCodePathSelect": "Select",
+      "minimaxCodeAppPathPathSelect": "Select",
+      "minimaxCodePathReset": "Reset to default",
       "openclawAuthOverwrite": "Overwrite OpenClaw login when switching Codex",
       "openclawAuthOverwriteDesc": "When off, only Codex is switched and OpenClaw keeps its current login state",
       "ghcpOpencodeAuthOverwrite": "Overwrite OpenCode login when switching GitHub Copilot",
@@ -1462,6 +1470,8 @@
       "qoderPathSelect": "Select",
       "workbuddyAutoRefresh": "WorkBuddy Auto Refresh",
       "workbuddyAutoRefreshDesc": "Background auto-refresh frequency",
+      "minimaxCodeAutoRefresh": "MiniMax Code Auto Refresh",
+      "minimaxCodeAutoRefreshDesc": "Background auto-refresh frequency",
       "codexAppSpeed": "Codex Speed",
       "codexAppSpeedDesc": "Saves the official Codex launch speed; this app writes it before each Codex launch.",
       "codexAppSpeedStandard": "Standard",
@@ -6460,6 +6470,10 @@
     "workbuddy": {
       "title": "WorkBuddy Settings",
       "appPath": "WorkBuddy Path"
+    },
+    "minimaxCode": {
+      "title": "MiniMax Code Settings",
+      "appPath": "MiniMax Code Path"
     },
     "claudeRefreshInterval": "Quota auto refresh",
     "claude": {
