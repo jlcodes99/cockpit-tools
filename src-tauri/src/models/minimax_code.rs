@@ -92,6 +92,10 @@ pub struct MinimaxCodeOAuthStartResponse {
 #[derive(Debug, Clone)]
 pub struct MinimaxCodeOAuthCompletePayload {
     pub email: String,
+    /// Optional explicit account id (used by local import, where there is no uid).
+    /// When present it becomes the identity seed so accounts imported from
+    /// different data dirs do not collapse onto the same id.
+    pub id: Option<String>,
     pub uid: Option<String>,
     pub nickname: Option<String>,
     pub access_token: String,

@@ -229,6 +229,7 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
 
             return Ok(MinimaxCodeOAuthCompletePayload {
                 email,
+                id: None,
                 uid, nickname, access_token, refresh_token, token_type, expires_at,
                 region: Some(snapshot.2.clone()),
                 auth_file: None,
@@ -329,6 +330,7 @@ pub async fn build_payload_from_token(access_token: &str, region: Option<&str>) 
     let quota_raw = fetch_credit_details(&client, access_token, &region).await.ok();
     Ok(MinimaxCodeOAuthCompletePayload {
         email,
+        id: None,
         uid, nickname,
         access_token: access_token.to_string(),
         refresh_token: None,
@@ -377,7 +379,10 @@ pub fn payload_from_local_record(id: &str, region: &str, rec: &Value, auth_file:
     let token_type = rec.get("tokenType").and_then(|v| v.as_str()).map(|s| s.to_string());
     let expires_at = rec.get("expiresAtMs").and_then(|v| v.as_i64());
     MinimaxCodeOAuthCompletePayload {
-        email: id.to_string(),
+        // The record key's account component is `base64url(sha256("<dataDir>/auth\0mcode-public"))`
+        // — a stable per-data-dir identifier, so use it as the identity seed.
+        email: format!("MiniMax Code 本机账号 ({})", &id[..id.len().min(12)]),
+        id: Some(id.to_string()),
         uid: None,
         nickname: None,
         access_token: access,

@@ -622,9 +622,13 @@ pub fn upsert_account(payload: MinimaxCodeOAuthCompletePayload) -> Result<Minima
     let incoming_uid = normalize_identity(payload.uid.as_deref());
     let incoming_email = normalize_email_identity(Some(payload.email.as_str()));
 
+    // Local import has no uid and its email is not a real address, so fall back to
+    // the payload's explicit id (the client's per-data-dir record key). Without it,
+    // every locally imported account would collapse onto the same id.
     let identity_seed = incoming_uid
         .clone()
         .or_else(|| incoming_email.clone())
+        .or_else(|| payload.id.clone())
         .unwrap_or_else(|| "minimax_code_user".to_string())
         .to_lowercase();
     let generated_id = format!("minimax_code_{:x}", md5::compute(identity_seed.as_bytes()));
@@ -806,6 +810,7 @@ async fn refresh_account_token_once(account_id: &str) -> Result<MinimaxCodeAccou
     let created_at = account.created_at;
     let payload = MinimaxCodeOAuthCompletePayload {
         email: account.email.clone(),
+        id: Some(account.id.clone()),
         uid: account.uid.clone(),
         nickname: account.nickname.clone(),
         access_token: account.access_token.clone(),
@@ -1084,8 +1089,15 @@ fn payload_from_import_value(raw: Value) -> Result<MinimaxCodeOAuthCompletePaylo
 
     let expires_at = json_object_i64_field(obj, &["expires_at", "expiresAt", "expiresAtMs"]);
 
+    // Preserve an explicit id when the imported payload carries one (local export).
+    let explicit_id = obj
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     Ok(MinimaxCodeOAuthCompletePayload {
         email,
+        id: explicit_id,
         uid,
         nickname,
         access_token,
@@ -1833,6 +1845,57 @@ mod minimax_code_local_import_tests {
             file,
             out
         );
+    }
+
+    #[test]
+    fn local_import_ids_differ_per_data_dir() {
+        // Two data dirs produce two different record-key account components, so the
+        // two locally imported accounts must not collapse onto the same id.
+        let write = |home: &Path, account: &str| -> PathBuf {
+            let dir = home
+                .join(".minimax")
+                .join("auth")
+                .join("prod")
+                .join("cn")
+                .join("mcode-public");
+            fs::create_dir_all(&dir).unwrap();
+            let file = dir.join("auth.json");
+            let body = json!({
+                "schemaVersion": 1,
+                "records": {
+                    format!("com.minimax.mcode.oauth.prod.cn\u{0}{}", account): {
+                        "accessToken": "mmoat_test_token",
+                        "refreshToken": "mmort_test_refresh",
+                        "tokenType": "Bearer",
+                        "clientId": "mcode-public",
+                        "scopes": ["agent.default"],
+                        "audience": "agent-backend",
+                        "expiresAtMs": 1792767948636_i64,
+                        "generation": 31
+                    }
+                }
+            });
+            fs::write(&file, serde_json::to_string_pretty(&body).unwrap()).unwrap();
+            file
+        };
+
+        let home = TempHome::new();
+        let a = write(&home.0, "hash_a");
+        let b_dir = home.0.join("second");
+        fs::create_dir_all(&b_dir).unwrap();
+        let b = write(&b_dir, "hash_b");
+
+        let pa = read_minimax_code_auth_file(&a).expect("read a");
+        let pb = read_minimax_code_auth_file(&b).expect("read b");
+        let ida = crate::modules::minimax_code_oauth::payload_from_local_record(
+            &pa.0, &pa.1, &pa.2, &pa.3,
+        );
+        let idb = crate::modules::minimax_code_oauth::payload_from_local_record(
+            &pb.0, &pb.1, &pb.2, &pb.3,
+        );
+        assert_eq!(ida.id.as_deref(), Some("hash_a"));
+        assert_eq!(idb.id.as_deref(), Some("hash_b"));
+        assert_ne!(ida.id, idb.id, "accounts from different data dirs must not collide");
     }
 }
 
