@@ -213,10 +213,11 @@ pub(crate) enum PlatformId {
     TraeCn,
     TraeSoloCn,
     Workbuddy,
+    MinimaxCode,
 }
 
 impl PlatformId {
-    pub(crate) fn default_order() -> [Self; 18] {
+    pub(crate) fn default_order() -> [Self; 19] {
         [
             Self::Claude,
             Self::Codex,
@@ -236,6 +237,7 @@ impl PlatformId {
             Self::TraeCn,
             Self::TraeSoloCn,
             Self::Workbuddy,
+            Self::MinimaxCode,
         ]
     }
 
@@ -259,6 +261,7 @@ impl PlatformId {
             crate::modules::tray_layout::PLATFORM_TRAE_CN => Some(Self::TraeCn),
             crate::modules::tray_layout::PLATFORM_TRAE_SOLO_CN => Some(Self::TraeSoloCn),
             crate::modules::tray_layout::PLATFORM_WORKBUDDY => Some(Self::Workbuddy),
+            crate::modules::tray_layout::PLATFORM_MINIMAX_CODE => Some(Self::MinimaxCode),
             _ => None,
         }
     }
@@ -283,6 +286,7 @@ impl PlatformId {
             Self::TraeCn => crate::modules::tray_layout::PLATFORM_TRAE_CN,
             Self::TraeSoloCn => crate::modules::tray_layout::PLATFORM_TRAE_SOLO_CN,
             Self::Workbuddy => crate::modules::tray_layout::PLATFORM_WORKBUDDY,
+            Self::MinimaxCode => crate::modules::tray_layout::PLATFORM_MINIMAX_CODE,
         }
     }
 
@@ -306,6 +310,7 @@ impl PlatformId {
             Self::TraeCn => "Trae CN",
             Self::TraeSoloCn => "TRAE SOLO CN",
             Self::Workbuddy => "WorkBuddy",
+            Self::MinimaxCode => "MiniMax Code",
         }
     }
 
@@ -329,6 +334,7 @@ impl PlatformId {
             Self::TraeCn => "trae-cn",
             Self::TraeSoloCn => "trae-solo-cn",
             Self::Workbuddy => "workbuddy",
+            Self::MinimaxCode => "minimax_code",
         }
     }
 }
@@ -933,6 +939,7 @@ fn get_account_display_info(platform: PlatformId, lang: &str) -> AccountDisplayI
             build_trae_display_info(lang, platform)
         }
         PlatformId::Workbuddy => build_workbuddy_display_info(lang),
+        PlatformId::MinimaxCode => build_minimax_code_display_info(lang),
     }
 }
 
@@ -1683,6 +1690,74 @@ fn build_workbuddy_usage_status_line(
         account.dosage_notify_code.as_deref(),
         account.dosage_notify_zh.as_deref(),
         account.dosage_notify_en.as_deref(),
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_minimax_code_display_info(lang: &str) -> AccountDisplayInfo {
+    let accounts = crate::modules::minimax_code_account::list_accounts();
+    build_minimax_code_family_display_info(lang, resolve_minimax_code_current_account(&accounts))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_minimax_code_family_display_info(
+    lang: &str,
+    account: Option<crate::models::minimax_code::MinimaxCodeAccount>,
+) -> AccountDisplayInfo {
+    let Some(account) = account else {
+        return AccountDisplayInfo {
+            account: format!("📧 {}", get_text("not_logged_in", lang)),
+            quota_lines: vec!["—".to_string()],
+        };
+    };
+
+    let display_email = first_non_empty(&[
+        Some(account.email.as_str()),
+        account.nickname.as_deref(),
+        account.uid.as_deref(),
+        Some(account.id.as_str()),
+    ])
+    .unwrap_or("—");
+
+    AccountDisplayInfo {
+        account: format!("📧 {}", display_email),
+        quota_lines: vec![build_minimax_code_usage_status_line(lang, &account)],
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_minimax_code_usage_status_line(
+    lang: &str,
+    account: &crate::models::minimax_code::MinimaxCodeAccount,
+) -> String {
+    let label = get_text("plan", lang);
+    let value = account
+        .plan_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            account
+                .status
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or("--");
+    format!("{}: {}", label, value)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn resolve_minimax_code_current_account(
+    accounts: &[crate::models::minimax_code::MinimaxCodeAccount],
+) -> Option<crate::models::minimax_code::MinimaxCodeAccount> {
+    crate::modules::minimax_code_account::resolve_current_account_id(accounts).and_then(
+        |account_id| {
+            accounts
+                .iter()
+                .find(|account| account.id == account_id)
+                .cloned()
+        },
     )
 }
 

@@ -10,6 +10,8 @@ import { getGrokUsage } from '../types/grok';
 import type { GitHubCopilotAccount } from '../types/githubCopilot';
 import type { KiroAccount } from '../types/kiro';
 import { getKiroCreditsSummary, isKiroAccountBanned } from '../types/kiro';
+import type { MinimaxCodeAccount } from '../types/minimaxCode';
+import { getMiniMaxCodeQuotaGroups } from '../utils/minimaxCode/parser';
 import type { PlatformId } from '../types/platform';
 import type { QoderAccount } from '../types/qoder';
 import { getQoderSubscriptionInfo } from '../types/qoder';
@@ -553,6 +555,50 @@ export function getRecommendedWorkbuddyAccount(
     const baseResources = model.resources.filter(
       (resource) => resource.total > 0 || resource.remain > 0,
     );
+
+    let avgRemainPercent = -1;
+    if (baseResources.length > 0) {
+      const totalRemainPercent = baseResources.reduce((sum, resource) => {
+        const percent = resource.remainPercent ?? (
+          resource.total > 0 ? Math.max(0, (resource.remain / resource.total) * 100) : 0
+        );
+        return sum + percent;
+      }, 0);
+      avgRemainPercent = totalRemainPercent / baseResources.length;
+    }
+
+    return {
+      remaining: avgRemainPercent,
+      freshness: account.last_used || account.created_at || 0,
+    };
+  };
+
+  return others.reduce((best, candidate) => {
+    const bestScore = getScore(best);
+    const candidateScore = getScore(candidate);
+    if (candidateScore.remaining !== bestScore.remaining) {
+      return candidateScore.remaining > bestScore.remaining ? candidate : best;
+    }
+    return candidateScore.freshness > bestScore.freshness ? candidate : best;
+  });
+}
+
+export function getRecommendedMiniMaxCodeAccount(
+  accounts: MinimaxCodeAccount[],
+  currentId: string | null | undefined,
+): MinimaxCodeAccount | null {
+  if (accounts.length <= 1) return null;
+  const others = accounts.filter((account) => account.id !== currentId);
+  if (others.length === 0) return null;
+
+  const getScore = (account: MinimaxCodeAccount) => {
+    const groups = getMiniMaxCodeQuotaGroups(
+      account,
+      (key, defaultValue) => defaultValue ?? key,
+    );
+    const baseResources = groups
+      .flatMap((group) => group.items)
+      .filter((resource) => resource.total > 0 || resource.remain > 0);
 
     let avgRemainPercent = -1;
     if (baseResources.length > 0) {

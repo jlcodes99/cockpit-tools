@@ -688,6 +688,7 @@
             PlatformId::Codebuddy => build_codebuddy_cards(lang),
             PlatformId::CodebuddyCn => build_codebuddy_cn_cards(lang),
             PlatformId::Workbuddy => build_workbuddy_cards(lang),
+            PlatformId::MinimaxCode => build_minimax_code_cards(lang),
             PlatformId::Zed => build_zed_cards(lang),
         }
     }
@@ -2158,6 +2159,92 @@
                     id: account.id.clone(),
                     title,
                     plan: Some(resolve_workbuddy_plan_badge(&account)),
+                    updated_at: display_updated_at(
+                        account.usage_updated_at,
+                        account.last_used,
+                        account.created_at,
+                    ),
+                    quota_rows: rows,
+                    remaining_percent,
+                }
+            })
+            .collect();
+        (cards, current_id, None)
+    }
+
+    fn resolve_minimax_code_plan_badge(
+        account: &crate::models::minimax_code::MinimaxCodeAccount,
+    ) -> String {
+        account
+            .plan_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_uppercase())
+            .unwrap_or_else(|| "FREE".to_string())
+    }
+
+    fn resolve_minimax_code_resource_label(lang: &str, resource: &ResourceQuotaEntry) -> String {
+        resource.package_name.clone().unwrap_or_else(|| {
+            translate_or(
+                lang,
+                "minimaxCode.quotaQuery.packageUnknown",
+                "套餐信息未知",
+                &[],
+            )
+        })
+    }
+
+    fn build_minimax_code_cards(
+        lang: &str,
+    ) -> (Vec<AccountCard>, Option<String>, Option<String>) {
+        let mut accounts = modules::minimax_code_account::list_accounts();
+        let current_id = modules::minimax_code_account::resolve_current_account_id(&accounts);
+        accounts
+            .sort_by_key(|account| std::cmp::Reverse(account.last_used.max(account.created_at)));
+        let cards = accounts
+            .into_iter()
+            .map(|account| {
+                let model = build_resource_quota_model(account.quota_raw.as_ref(), None);
+                let mut resources = model.resources.clone();
+                if model.extra.total > 0.0 || model.extra.remain > 0.0 || model.extra.used > 0.0 {
+                    resources.push(model.extra);
+                }
+                let rows: Vec<QuotaRow> = resources
+                    .into_iter()
+                    .filter(|resource| resource.total > 0.0 || resource.remain > 0.0)
+                    .map(|resource| {
+                        let used = format_quota_number(resource.used);
+                        let total = format_quota_number(resource.total);
+                        make_progress_row(
+                            resolve_minimax_code_resource_label(lang, &resource),
+                            translate_or(
+                                lang,
+                                "minimaxCode.quota.usedOfTotal",
+                                "{{used}} / {{total}}",
+                                &[("used", used.as_str()), ("total", total.as_str())],
+                            ),
+                            resource.used_percent,
+                            format_resource_time_text(
+                                lang,
+                                &resource,
+                                "minimaxCode.quotaQuery.updatedAt",
+                                "minimaxCode.quotaQuery.expireAt",
+                            ),
+                            resource_remaining_tone(&resource),
+                        )
+                    })
+                    .collect();
+                let title = account
+                    .nickname
+                    .clone()
+                    .filter(|text| !text.trim().is_empty())
+                    .unwrap_or_else(|| account.email.clone());
+                let remaining_percent = min_quota_progress(&rows, false);
+                AccountCard {
+                    id: account.id.clone(),
+                    title,
+                    plan: Some(resolve_minimax_code_plan_badge(&account)),
                     updated_at: display_updated_at(
                         account.usage_updated_at,
                         account.last_used,
