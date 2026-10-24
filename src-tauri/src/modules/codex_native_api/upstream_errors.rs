@@ -68,9 +68,22 @@ pub(crate) fn request_fault(status: u16, body: &Value) -> bool {
     }) {
         return true;
     }
-    (text.contains("item with id")
-        && text.contains("not found")
-        && text.contains("items are not persisted when `store` is set to false"))
+    // Gemini can reject a request inside an HTTP-200 stream without a usable
+    // HTTP status or request-error code. The resulting gateway 502
+    // must not penalize an otherwise usable account. Match the provider's exact
+    // rejection text, not arbitrary server errors mentioning an argument.
+    ((500..=599).contains(&status)
+        && !super::diagnostics::upstream_error_metadata_status(status, body).1
+        && super::diagnostics::upstream_error_metadata(body)
+            .0
+            .is_some_and(|message| {
+                message
+                    .trim()
+                    .eq_ignore_ascii_case("Request contains an invalid argument.")
+            }))
+        || (text.contains("item with id")
+            && text.contains("not found")
+            && text.contains("items are not persisted when `store` is set to false"))
         || matches!(status, 400 | 409 | 413 | 422 | 499)
 }
 
@@ -339,8 +352,9 @@ pub(super) fn chat_failure(value: &Value, fallback: u16) -> Option<ServiceError>
                 401
             }
             "account_deactivated" | "account_suspended" => 403,
-            code if super::chatgpt_plan_wire::error_status(code).is_some() =>
-                super::chatgpt_plan_wire::error_status(code).unwrap(),
+            code if super::chatgpt_plan_wire::error_status(code).is_some() => {
+                super::chatgpt_plan_wire::error_status(code).unwrap()
+            }
             _ => {
                 // Opening probes use zero to distinguish an absent upstream
                 // status from the normal reporting fallback of 502.
@@ -466,6 +480,33 @@ pub(super) fn flat_error_details(value: &Value) -> Value {
 mod tests {
     use super::*;
     use crate::modules::codex_native_api::events::SseDecoder;
+
+    #[test]
+    fn google_invalid_argument_stream_is_request_scoped() {
+        // Observed Gemini failure text arrives after HTTP 200, without a
+        // usable HTTP status. Keep the public error but do not cool credentials.
+        let event = json!({"type":"error","error":{
+            "message":"Request contains an invalid argument."
+        }});
+        let error = chat_failure(&event, 502).unwrap();
+        assert_eq!(error.status, 502);
+        assert_eq!(error.code, REQUEST_SCOPED);
+        assert_eq!(error.message, "Request contains an invalid argument.");
+        let mut observation = super::super::events::ResponseObservation::default();
+        observation.observe(&event);
+        assert!(observation.request_scoped);
+
+        for (status, body) in [
+            (503, json!({"error":{"message":"Server overloaded"}})),
+            (
+                401,
+                json!({"error":{"type":"authentication_error","message":"Request contains an invalid argument."}}),
+            ),
+            (429, event.clone()),
+        ] {
+            assert!(!request_fault(status, &body), "{status}: {body}");
+        }
+    }
 
     #[test]
     fn request_scope_and_auth_type_match_actual_go_soft_failure_fixture() {

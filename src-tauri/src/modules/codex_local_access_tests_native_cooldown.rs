@@ -55,6 +55,13 @@ fn native_connection_failures_do_not_cool_accounts_or_shorten_existing_cooldown(
     for (status, code) in codes {
         host.record_failure_cooldown(&native_cooldown_report(status, code));
     }
+    let mut request_fault = native_cooldown_report(502, "upstream_error");
+    request_fault.error_message = Some("Request contains an invalid argument.".into());
+    request_fault.diagnostics = Some(native_api::diagnostics::DiagnosticContext {
+        upstream_request_scoped: true,
+        ..Default::default()
+    });
+    host.record_failure_cooldown(&request_fault);
     assert!(host.cooldowns.lock().unwrap().is_empty());
 
     let until = Instant::now() + Duration::from_secs(3600);
