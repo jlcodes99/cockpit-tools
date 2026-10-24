@@ -132,8 +132,8 @@ fn native_reserve_catalog_and_aliases_keep_key_scope_prefix_and_model_acl() {
             .unwrap();
     key.account_ids = vec!["pool-a".into()];
     key.allowed_models = vec!["reserve-alias".into()];
-    let canonical = native_model_for_key(&collection, Some(&key), "team/reserve-alias").unwrap();
-    let plan = native_model_route_plan(&collection, Some(&key), &canonical).unwrap();
+    let public = native_model_for_route_plan(&collection, Some(&key), "team/reserve-alias").unwrap();
+    let plan = native_model_route_plan(&collection, Some(&key), &public).unwrap();
     assert_eq!(
         native_operation_model(&collection, &plan, &account, None, false).as_deref(),
         Some("gpt-reserve")

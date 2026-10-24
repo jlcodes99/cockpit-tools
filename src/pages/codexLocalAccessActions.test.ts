@@ -93,3 +93,50 @@ for (const [file, toggleName, activateName] of [
     assert.deepEqual(h.calls.busy, [true, false]);
   });
 }
+
+test('custom model saves preserve per-account upstream names and existing global rules', async () => {
+  const modelAliases = [{ name: 'existing', alias: 'public', fork: true }];
+  const excludedModels = ['excluded-model'];
+  const models = [
+    { clientModel: 'shared-model', accountId: 'account-a', upstreamModel: 'upstream-a' },
+    { clientModel: 'shared-model', accountId: 'account-b', upstreamModel: 'upstream-b' },
+  ];
+  const next = { collection: { modelAliases, excludedModels, customModels: models } };
+  const writes: unknown[][] = [];
+  let savedState: unknown;
+  const save = handler('./CodexApiServicePage.tsx', 'handleSaveCustomModels', {
+    collection: { modelAliases, excludedModels },
+    codexLocalAccessService: {
+      updateCodexLocalAccessModelRules: async (...args: unknown[]) => { writes.push(args); return next; },
+    },
+    runAction: async (action: () => Promise<void>) => action(),
+    setState: (value: unknown) => { savedState = value; },
+    t: (key: string) => key,
+  });
+
+  await save(models);
+  assert.deepEqual(writes[0], [modelAliases, excludedModels, models]);
+  assert.equal(savedState, next);
+
+  await save([]);
+  assert.deepEqual(writes[1], [modelAliases, excludedModels, []]);
+});
+
+test('global model rule saves leave custom bindings unchanged', async () => {
+  const writes: unknown[][] = [];
+  const modelAliases = [{ name: 'existing', alias: 'public', fork: true }];
+  const excludedModels = ['excluded-model'];
+  const save = handler('./CodexApiServicePage.tsx', 'handleSaveModelRules', {
+    modelAliasesText: 'existing=public', excludedModelsText: 'excluded-model',
+    parseModelAliasText: () => modelAliases,
+    parseModelRuleText: () => excludedModels,
+    codexLocalAccessService: {
+      updateCodexLocalAccessModelRules: async (...args: unknown[]) => { writes.push(args); return {}; },
+    },
+    runAction: async (action: () => Promise<void>) => action(),
+    setState() {}, t: (key: string) => key,
+  });
+
+  await save();
+  assert.deepEqual(writes, [[modelAliases, excludedModels]]);
+});

@@ -39,6 +39,7 @@ struct NativeModelRoutePlan {
     oauth_only: bool,
     provider: bool,
     automatic: bool,
+    automatic_service_models: bool,
     gateway: Option<CodexLocalAccessProviderGateway>,
     xai: bool,
 }
@@ -91,6 +92,8 @@ fn native_model_route_plan(
         oauth_only: false,
         provider: false,
         automatic: key
+            .is_none_or(|key| key.model_routing.is_none() && key.provider_gateway.is_none()),
+        automatic_service_models: key
             .is_none_or(|key| key.model_routing.is_none() && key.provider_gateway.is_none()),
         gateway: None,
         xai: false,
@@ -202,6 +205,7 @@ mod native_provider_routes_tests {
             vec!["model-a".into()],
         );
         account.api_wire_api = Some("chat_completions".into());
+        account.api_sync_model_catalog_to_api_service = true;
         account
     }
     fn oauth() -> CodexAccount {
@@ -333,7 +337,7 @@ mod native_provider_routes_tests {
         let mut collection = collection();
         collection.account_ids = vec!["provider".into()];
         collection.model_aliases =
-            serde_json::from_value(json!([{"alias":"public","sourceModel":"mapped"}])).unwrap();
+            serde_json::from_value(json!([{"alias":"public","sourceModel":"mapped","fork":true}])).unwrap();
         let mut account = provider();
         account.api_model_catalog.push("mapped".into());
         account
@@ -402,9 +406,33 @@ mod native_provider_routes_tests {
 }
 
 fn native_plan_account_model(
+    collection: &CodexLocalAccessCollection,
     plan: &NativeModelRoutePlan,
     account: &CodexAccount,
 ) -> Option<String> {
+    if plan.automatic_service_models {
+        let model = if codex_account::is_grok_upstream_provider(account) {
+            native_api::grok_thinking::parse_model(&plan.model).ok()?.0
+        } else {
+            plan.model.clone()
+        };
+        if native_is_chatgpt_plan_account(account)
+            && !native_automatic_custom_model(collection, &model)
+        {
+            // This service-only OAuth projection has its own server catalog,
+            // not a normal provider's catalog-synchronization preference.
+            return native_chatgpt_plan_model(
+                account,
+                native_automatic_canonical_model(collection, &model),
+            );
+        }
+        let upstream = native_automatic_account_model(collection, account, &model)?;
+        return if native_is_chatgpt_plan_account(account) {
+            native_chatgpt_plan_model(account, &upstream)
+        } else {
+            Some(upstream)
+        };
+    }
     // Explicit provider routes do not broaden this grant's catalog. A cold
     // catalog uses only the pre-existing local Codex model allowlist.
     if native_is_chatgpt_plan_account(account) {
@@ -739,7 +767,7 @@ fn native_model_visible(
         && native_eligible(account)
         && (!plan.oauth_only || native_is_oauth_authorization_account(account))
         && !native_xai_base_denied(collection, key, plan, account)
-        && native_plan_account_model(plan, account).is_some_and(|upstream| {
+        && native_plan_account_model(collection, plan, account).is_some_and(|upstream| {
             !native_excluded(&collection.excluded_models, &upstream)
                 && !key.is_some_and(|key| native_excluded(&key.excluded_models, &upstream))
                 && !collection.account_model_rules.iter().any(|rule| {
@@ -777,7 +805,7 @@ fn native_catalog(
             .collect::<Vec<_>>();
         let mut fallback = api_service_supported_codex_model_ids();
         fallback.push(CODEX_GPT_RESERVE_MODEL_ID.into());
-        candidates.extend(automatic_api_service_pool_model_ids(&scoped, fallback));
+        candidates.extend(api_service_pool_model_ids(collection, &scoped, fallback));
         // Server-provided plan models are already filtered for visibility.
         // Do not reduce them to the older Codex client's recommended set.
         for account in scoped
@@ -838,7 +866,7 @@ fn native_catalog(
         if ids.contains(&exposed) {
             continue;
         }
-        let Ok(model) = native_model_for_key(collection, key, &exposed) else {
+        let Ok(model) = native_model_for_route_plan(collection, key, &exposed) else {
             continue;
         };
         let Ok(plan) = native_model_route_plan(collection, key, &model) else {
@@ -856,7 +884,7 @@ fn native_catalog(
             ids.push(exposed.clone());
             selected.push((
                 exposed,
-                native_plan_account_model(&plan, account).unwrap_or_default(),
+                native_plan_account_model(collection, &plan, account).unwrap_or_default(),
                 account,
                 plan,
             ));
@@ -1003,8 +1031,9 @@ async fn native_select_route_once(
 ) -> Result<native_contract::Route, native_contract::ServiceError> {
     let collection = host.collection().await?;
     let key = native_caller_key(&collection, caller)?;
-    let public_model = native_model_for_key(&collection, key, &request.model)?;
-    let plan = native_model_route_plan(&collection, key, &public_model)?;
+    let public_model = native_model_for_route_plan(&collection, key, &request.model)?;
+    let mut plan = native_model_route_plan(&collection, key, &public_model)?;
+    native_preserve_explicit_account_models(host, caller, &collection, &mut plan);
     // A continuation pins the credential namespace, never an account's currently
     // selected mode. Only the current explicit binding can translate that pin.
     if let Some(grant) = request
@@ -1892,7 +1921,7 @@ fn native_operation_model(
     image_input: bool,
 ) -> Option<String> {
     if operation.is_none() || operation == Some("responses.websocket") {
-        let model = native_plan_account_model(plan, account)?;
+        let model = native_plan_account_model(collection, plan, account)?;
         if !plan.provider
             && native_is_reserve_model(&model)
             && !account_has_gpt_reserve_entitlement(account)
@@ -1910,12 +1939,23 @@ fn native_operation_model(
             Some(model)
         };
     }
+    if plan.automatic_service_models && native_automatic_custom_model(collection, &plan.model) {
+        // Audio and other auxiliary operations keep their existing implicit
+        // model support, but an explicitly bound public name must not escape
+        // to an unbound account or lose its per-account upstream name.
+        return native_plan_account_model(collection, plan, account);
+    }
+    let client_model = if plan.automatic_service_models {
+        native_automatic_canonical_model(collection, &plan.model)
+    } else {
+        &plan.model
+    };
     let model = account
         .api_model_mappings
         .iter()
-        .find(|mapping| mapping.client_model == plan.model)
+        .find(|mapping| mapping.client_model == client_model)
         .map(|mapping| mapping.upstream_model.clone())
-        .unwrap_or_else(|| plan.model.clone());
+        .unwrap_or_else(|| client_model.to_owned());
     Some(model)
 }
 

@@ -2431,6 +2431,7 @@ pub async fn update_codex_api_key_credentials(
     api_provider_name: Option<String>,
     api_model_catalog: Option<Vec<String>>,
     api_sync_model_catalog_to_codex: Option<bool>,
+    api_sync_model_catalog_to_api_service: Option<bool>,
     api_wire_api: Option<String>,
     api_supports_websockets: Option<bool>,
     api_supports_vision: Option<bool>,
@@ -2439,24 +2440,29 @@ pub async fn update_codex_api_key_credentials(
     account_name: Option<String>,
     api_model_context_windows: Option<std::collections::HashMap<String, i64>>,
 ) -> Result<CodexAccount, String> {
-    tauri::async_runtime::spawn_blocking(move || codex_account::update_api_key_credentials(
-        &account_id,
-        api_key,
-        api_base_url,
-        api_provider_mode,
-        api_provider_id,
-        api_provider_name,
-        api_model_catalog.unwrap_or_default(),
-        api_sync_model_catalog_to_codex,
-        api_wire_api,
-        api_supports_websockets.unwrap_or(false),
-        api_supports_vision.unwrap_or(false),
-        api_model_vision_support.unwrap_or_default(),
-        api_vision_routing_model,
-        account_name,
-        api_model_context_windows,
-    ))
-    .await.map_err(|error| format!("更新 API Key 任务失败: {}", error))?
+    let account = tauri::async_runtime::spawn_blocking(move || {
+        codex_account::update_api_key_credentials(
+            &account_id,
+            api_key,
+            api_base_url,
+            api_provider_mode,
+            api_provider_id,
+            api_provider_name,
+            api_model_catalog.unwrap_or_default(),
+            api_sync_model_catalog_to_codex,
+            api_wire_api,
+            api_supports_websockets.unwrap_or(false),
+            api_supports_vision.unwrap_or(false),
+            api_model_vision_support.unwrap_or_default(),
+            api_vision_routing_model,
+            account_name,
+            api_model_context_windows,
+            api_sync_model_catalog_to_api_service,
+        )
+    }).await.map_err(|error| format!("更新 API Key 任务失败: {}", error))??;
+    codex_local_access::refresh_api_service_models().await
+        .map_err(|error| format!("账号配置已保存，但 API 服务刷新失败: {}", error))?;
+    Ok(account)
 }
 
 #[tauri::command]
@@ -2474,7 +2480,7 @@ pub async fn sync_codex_api_key_provider_accounts(
     api_vision_routing_model: Option<String>,
     api_model_context_windows: Option<std::collections::HashMap<String, i64>>,
 ) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let count = tauri::async_runtime::spawn_blocking(move || {
         codex_account::sync_api_key_provider_accounts(
             account_ids,
             api_base_url,
@@ -2491,7 +2497,10 @@ pub async fn sync_codex_api_key_provider_accounts(
         )
     })
     .await
-    .map_err(|error| format!("同步 Codex 供应商账号快照任务失败: {}", error))?
+    .map_err(|error| format!("同步 Codex 供应商账号快照任务失败: {}", error))??;
+    codex_local_access::refresh_api_service_models().await
+        .map_err(|error| format!("供应商配置已保存，但 API 服务刷新失败: {}", error))?;
+    Ok(count)
 }
 
 #[tauri::command]

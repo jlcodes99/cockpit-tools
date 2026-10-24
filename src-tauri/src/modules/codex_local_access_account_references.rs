@@ -75,6 +75,9 @@ fn replace_collection_account_references(
     for rule in &mut collection.custom_routing_rules {
         changed |= replace(&mut rule.account_id, old_id, new_id);
     }
+    for model in &mut collection.custom_models {
+        changed |= replace(&mut model.account_id, old_id, new_id);
+    }
     for rule in &mut collection.account_model_rules {
         changed |= replace(&mut rule.account_id, old_id, new_id);
     }

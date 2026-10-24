@@ -93,7 +93,7 @@ async fn native_capability_fallback_decision(
 ) -> Result<native_contract::CapabilityFallbackDecision, native_contract::ServiceError> {
     let collection = host.collection().await?;
     let key = native_caller_key(&collection, caller)?;
-    let public_model = native_model_for_key(&collection, key, &request.model)?;
+    let public_model = native_model_for_route_plan(&collection, key, &request.model)?;
     let plan = native_model_route_plan(&collection, key, &public_model)?;
     if caller.id != NATIVE_INTERNAL_CALLER && !plan.account_ids.contains(&route.account_id) {
         return Err(native_error(

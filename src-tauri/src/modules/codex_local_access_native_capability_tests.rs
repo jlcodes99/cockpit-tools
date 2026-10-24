@@ -12,6 +12,7 @@ fn account(id: &str) -> CodexAccount {
         vec!["gpt-fixture".into()],
     );
     account.api_wire_api = Some("responses".into());
+    account.api_sync_model_catalog_to_api_service = true;
     account.egress_proxy_disabled = true;
     account
 }

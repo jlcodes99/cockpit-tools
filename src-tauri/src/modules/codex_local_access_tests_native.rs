@@ -552,6 +552,7 @@ fn native_test_routing_host() -> NativeHostBridge {
         account.api_base_url = Some("https://example.invalid/v1".into());
         account.api_wire_api = Some("responses".into());
         account.api_model_catalog = vec!["gpt-fixture".into()];
+        account.api_sync_model_catalog_to_api_service = true;
         account.egress_proxy_disabled = true;
         host.account_overrides.insert(id.into(), account);
     }

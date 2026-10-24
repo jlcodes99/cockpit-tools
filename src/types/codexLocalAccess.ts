@@ -83,6 +83,12 @@ export interface CodexLocalAccessModelAlias {
   fork: boolean;
 }
 
+export interface CodexLocalAccessCustomModel {
+  clientModel: string;
+  accountId: string;
+  upstreamModel: string;
+}
+
 export interface CodexLocalAccessModelPricing {
   modelId: string;
   longContextThresholdTokens?: number | null;
@@ -176,6 +182,7 @@ export interface CodexLocalAccessCollection {
   customRoutingRules: CodexLocalAccessCustomRoutingRule[];
   accountModelRules: CodexLocalAccessAccountModelRule[];
   modelAliases: CodexLocalAccessModelAlias[];
+  customModels?: CodexLocalAccessCustomModel[];
   modelPricingVersion: number;
   modelPricings: CodexLocalAccessModelPricing[];
   debugLogs: boolean;

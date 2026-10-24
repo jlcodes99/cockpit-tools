@@ -110,6 +110,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     editingApiModelCatalogSyncAvailable,
     editingApiProviderPresetId,
     editingApiSyncModelCatalogToCodex,
+    editingApiSyncModelCatalogToApiService,
     editingManagedProviderApiKeyId,
     editingManagedProviderId,
     editingNewManagedProviderNameInput,
@@ -302,6 +303,7 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
     setEditingApiModelCatalogError,
     setEditingApiModelCatalogInput,
     setEditingApiSyncModelCatalogToCodex,
+    setEditingApiSyncModelCatalogToApiService,
     setEditingNewManagedProviderNameInput,
     setExportFormat,
     setGroupByTag,
@@ -1843,6 +1845,18 @@ export function CodexAccountsOverviewPanel(props: CodexAccountsViewProps) {
                             <span className="codex-import-api-service-switch" />
                           </label>
                         )}
+                        <label className="codex-import-api-service-toggle api-model-catalog-sync-toggle">
+                          <span className="codex-import-api-service-toggle-copy">
+                            <strong>{t("codex.api.modelCatalog.syncApiService", "同步模型供应商到 Codex API 服务")}</strong>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={editingApiSyncModelCatalogToApiService}
+                            disabled={savingApiKeyCredentials}
+                            onChange={(event) => setEditingApiSyncModelCatalogToApiService(event.target.checked)}
+                          />
+                          <span className="codex-import-api-service-switch" />
+                        </label>
                       </>
                     )}
                   </div>

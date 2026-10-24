@@ -20,6 +20,11 @@ fn key_rotation_preserves_public_key_scopes_and_pool_settings() {
         account_id: "old".into(),
         excluded_models: vec!["hidden".into()],
     }];
+    collection.custom_models = vec![CodexLocalAccessCustomModel {
+        client_model: "custom".into(),
+        account_id: "old".into(),
+        upstream_model: "vendor".into(),
+    }];
     assert!(super::replace_collection_account_references(
         &mut collection,
         "old",
@@ -37,6 +42,8 @@ fn key_rotation_preserves_public_key_scopes_and_pool_settings() {
     assert_eq!(collection.api_keys[0].inherit_account_pool, Some(false));
     assert_eq!(collection.custom_routing_rules[0].account_id, "new");
     assert_eq!(collection.account_model_rules[0].account_id, "new");
+    assert_eq!(collection.custom_models[0].account_id, "new");
+    assert_eq!(collection.custom_models[0].upstream_model, "vendor");
     assert_eq!(
         collection.account_model_rules[0].excluded_models,
         vec!["hidden"]
@@ -108,6 +115,7 @@ fn full_key_edit_migrates_persisted_references_and_failed_edits_remain_retryable
             false,
             false,
             HashMap::new(),
+            None,
             None,
             None,
             None,

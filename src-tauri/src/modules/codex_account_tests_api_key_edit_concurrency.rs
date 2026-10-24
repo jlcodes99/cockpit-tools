@@ -121,6 +121,7 @@ fn api_key_edit_parallel_credentials_preserve_all_rotated_accounts() {
                         None,
                         None,
                         None,
+                        Some(n % 2 == 0),
                     )
                     .unwrap()
                 })
@@ -136,6 +137,7 @@ fn api_key_edit_parallel_credentials_preserve_all_rotated_accounts() {
     for (n, (original, edited)) in accounts.iter().zip(&edited).enumerate() {
         assert!(index.accounts.iter().any(|item| item.id == edited.id));
         assert!(load_account(&original.id).is_none());
+        assert_eq!(load_account(&edited.id).unwrap().api_sync_model_catalog_to_api_service, n % 2 == 0);
         assert_eq!(
             load_account(&edited.id).unwrap().openai_api_key.as_deref(),
             Some(format!("sk-concurrency-after-{n}").as_str())
@@ -232,6 +234,7 @@ fn api_key_edit_shared_destination_cannot_overwrite_another_account() {
                         None,
                         None,
                         None,
+                        None,
                     )
                 })
             })
@@ -257,4 +260,47 @@ fn api_key_edit_shared_destination_cannot_overwrite_another_account() {
         .accounts
         .iter()
         .any(|item| item.id == accounts[losing].id));
+}
+
+#[test]
+fn api_key_edit_same_account_keeps_service_sync_with_its_credential_snapshot() {
+    let _lock = crate::modules::test_support::env_lock()
+        .lock().unwrap_or_else(|error| error.into_inner());
+    let _env = TestEnvGuard::new("codex-key-edit-service-sync");
+    let original = seed_api_key_edit_accounts(1).remove(0);
+    let barrier = std::sync::Barrier::new(8);
+    std::thread::scope(|scope| {
+        let handles = (0..8).map(|n| {
+            let original = &original;
+            let barrier = &barrier;
+            scope.spawn(move || {
+                barrier.wait();
+                update_api_key_credentials(
+                    &original.id, original.openai_api_key.clone().unwrap(),
+                    Some(format!("https://relay-{n}.example.invalid/v1")),
+                    Some(CodexApiProviderMode::Custom), Some("fixture".into()),
+                    Some("Fixture".into()), vec![format!("model-{n}")],
+                    Some(false), Some("responses".into()), false, false,
+                    HashMap::new(), None, Some(format!("edit-{n}")), None, Some(n % 2 == 0),
+                ).unwrap()
+            })
+        }).collect::<Vec<_>>();
+        for (n, handle) in handles.into_iter().enumerate() {
+            let edited = handle.join().unwrap();
+            assert_eq!(edited.account_name, Some(format!("edit-{n}")));
+            assert_eq!(edited.api_sync_model_catalog_to_api_service, n % 2 == 0);
+        }
+    });
+    let saved = load_account(&original.id).unwrap();
+    let n: usize = saved.account_name.as_ref().unwrap().strip_prefix("edit-").unwrap().parse().unwrap();
+    assert_eq!(saved.api_base_url, Some(format!("https://relay-{n}.example.invalid/v1")));
+    assert_eq!(saved.api_model_catalog, vec![format!("model-{n}")]);
+    assert_eq!(saved.api_sync_model_catalog_to_api_service, n % 2 == 0);
+    let unchanged = update_api_key_credentials(
+        &saved.id, saved.openai_api_key.clone().unwrap(), saved.api_base_url.clone(),
+        Some(CodexApiProviderMode::Custom), saved.api_provider_id.clone(), saved.api_provider_name.clone(),
+        saved.api_model_catalog.clone(), None, Some("responses".into()), false, false,
+        HashMap::new(), None, None, None, None,
+    ).unwrap();
+    assert_eq!(unchanged.api_sync_model_catalog_to_api_service, saved.api_sync_model_catalog_to_api_service);
 }

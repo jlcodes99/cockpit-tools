@@ -493,6 +493,7 @@ pub fn update_api_key_credentials(
     api_vision_routing_model: Option<String>,
     account_name: Option<String>,
     api_model_context_windows: Option<HashMap<String, i64>>,
+    api_sync_model_catalog_to_api_service: Option<bool>,
 ) -> Result<CodexAccount, String> {
     // Serialize overlapping old/new IDs without holding the global account lock
     // through profile or gateway reference migration. Different accounts remain parallel.
@@ -534,6 +535,9 @@ pub fn update_api_key_credentials(
 
     let sync_model_catalog_to_codex =
         api_sync_model_catalog_to_codex.unwrap_or(account.api_sync_model_catalog_to_codex);
+    if let Some(enabled) = api_sync_model_catalog_to_api_service {
+        account.api_sync_model_catalog_to_api_service = enabled;
+    }
     apply_api_key_fields(
         &mut account,
         &normalized_key,

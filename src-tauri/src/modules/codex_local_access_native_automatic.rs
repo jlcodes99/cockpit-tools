@@ -1,5 +1,76 @@
 // Reuse the host's public routing/catalog policy, while keeping native wire execution independent.
 
+fn native_model_for_route_plan(
+    collection: &CodexLocalAccessCollection,
+    key: Option<&CodexLocalAccessApiKey>,
+    model: &str,
+) -> Result<String, native_contract::ServiceError> {
+    let canonical = native_model_for_key(collection, key, model)?;
+    if key.is_none_or(|key| key.model_routing.is_none() && key.provider_gateway.is_none()) {
+        // Automatic slots already expand aliases once. Keep the client name
+        // for account binding, without changing token-count or image contracts.
+        let public = strip_model_prefix(model, key.and_then(|key| key.model_prefix.as_deref()));
+        Ok(native_api::gpt_thinking::model_name(public).to_owned())
+    } else {
+        Ok(canonical)
+    }
+}
+
+fn native_automatic_canonical_model<'a>(
+    collection: &'a CodexLocalAccessCollection,
+    model: &'a str,
+) -> &'a str {
+    collection
+        .model_aliases
+        .iter()
+        .find(|alias| alias.alias.eq_ignore_ascii_case(model))
+        .map(|alias| alias.source_model.as_str())
+        .unwrap_or(model)
+}
+
+fn native_automatic_custom_model(collection: &CodexLocalAccessCollection, model: &str) -> bool {
+    collection.custom_models.iter().any(|custom| {
+        apply_model_aliases_to_ids(vec![custom.client_model.clone()], &collection.model_aliases)
+            .iter()
+            .any(|client| client.eq_ignore_ascii_case(model))
+    })
+}
+
+fn native_automatic_account_model(
+    collection: &CodexLocalAccessCollection,
+    account: &CodexAccount,
+    model: &str,
+) -> Option<String> {
+    // Hidden native models remain routable even though they are not all shown
+    // in the catalog. The shared slots enforce custom overrides and opt-outs.
+    let mut fallback = api_service_supported_codex_model_ids();
+    fallback.extend(api_service_routable_codex_model_ids());
+    fallback.push(CODEX_GPT_RESERVE_MODEL_ID.into());
+    automatic_api_service_route_models(collection, account, &fallback)
+        .into_iter()
+        .find(|entry| {
+            entry["clientModel"]
+                .as_str()
+                .is_some_and(|client| client.eq_ignore_ascii_case(model.trim()))
+        })
+        .and_then(|entry| entry["upstreamModel"].as_str().map(str::to_owned))
+}
+
+fn native_preserve_explicit_account_models(
+    host: &NativeHostBridge,
+    caller: &native_contract::Caller,
+    collection: &CodexLocalAccessCollection,
+    plan: &mut NativeModelRoutePlan,
+) {
+    if plan.automatic && (caller.id == NATIVE_INTERNAL_CALLER || host.profile_dir.is_some()) {
+        // Internal target-account requests and instance profiles do not inherit
+        // public API-service mappings or a provider's catalog-sync preference.
+        plan.automatic_service_models = false;
+        plan.model = native_automatic_canonical_model(collection, &plan.model).to_owned();
+        plan.full_model = plan.model.clone();
+    }
+}
+
 fn native_xai_base_denied(
     collection: &CodexLocalAccessCollection,
     key: Option<&CodexLocalAccessApiKey>,

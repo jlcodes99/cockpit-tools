@@ -15,6 +15,7 @@ fn account(id: &str, wire: &str) -> CodexAccount {
         vec!["custom-agent".into(), "gpt-6.1-sol".into()],
     );
     account.api_wire_api = Some(wire.into());
+    account.api_sync_model_catalog_to_api_service = true;
     account
 }
 fn entry(catalog: &Value, id: &str) -> Value {

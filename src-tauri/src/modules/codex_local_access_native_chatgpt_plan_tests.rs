@@ -162,9 +162,9 @@ fn chatgpt_plan_catalog_preserves_server_models_and_never_falls_back_to_codex_mo
         assert!(account.api_model_catalog.iter().any(|model| model == id));
     }
     let plan = native_model_route_plan(&collection, None, "unavailable-model").unwrap();
-    assert!(native_plan_account_model(&plan, &account).is_none());
+    assert!(native_plan_account_model(&collection, &plan, &account).is_none());
     account.api_model_catalog.clear();
-    assert!(native_plan_account_model(&plan, &account).is_none());
+    assert!(native_plan_account_model(&collection, &plan, &account).is_none());
 }
 
 #[test]
@@ -173,12 +173,27 @@ fn chatgpt_plan_explicit_provider_routes_cannot_broaden_the_official_model_catal
     let account = account();
     let mut plan = native_model_route_plan(&collection, None, "unavailable-model").unwrap();
     plan.provider = true;
-    assert!(native_plan_account_model(&plan, &account).is_none());
+    assert!(native_plan_account_model(&collection, &plan, &account).is_none());
     plan.model = "gpt-6.1-sol".into();
     assert_eq!(
-        native_plan_account_model(&plan, &account).as_deref(),
+        native_plan_account_model(&collection, &plan, &account).as_deref(),
         Some("gpt-6.1-sol")
     );
+}
+
+#[test]
+fn chatgpt_plan_custom_models_require_the_binding_and_server_catalog() {
+    let mut collection = collection();
+    let account = account();
+    collection.custom_models = serde_json::from_value(json!([
+        {"clientModel":"gpt-6.1-sol","accountId":"other-account","upstreamModel":"gpt-6.1-sol"}
+    ])).unwrap();
+    let plan = native_model_route_plan(&collection, None, "gpt-6.1-sol").unwrap();
+    assert!(native_plan_account_model(&collection, &plan, &account).is_none());
+    collection.custom_models[0].account_id = account.id.clone();
+    assert_eq!(native_plan_account_model(&collection, &plan, &account).as_deref(), Some("gpt-6.1-sol"));
+    collection.custom_models[0].upstream_model = "unavailable-server-model".into();
+    assert!(native_plan_account_model(&collection, &plan, &account).is_none());
 }
 
 #[test]

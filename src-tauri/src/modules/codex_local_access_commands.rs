@@ -34,6 +34,7 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         custom_routing_rules: Vec::new(),
         account_model_rules: Vec::new(),
         model_aliases: Vec::new(),
+        custom_models: Vec::new(),
         suppress_oauth_model_alias: false,
         model_pricing_version: DEFAULT_MODEL_PRICING_VERSION,
         model_pricings: Vec::new(),
@@ -494,9 +495,17 @@ pub async fn update_local_access_account_model_rules(
     snapshot_state().await
 }
 
+pub async fn refresh_api_service_models() -> Result<(), String> {
+    ensure_runtime_loaded_without_start().await?;
+    ensure_gateway_matches_runtime().await?;
+    emit_local_access_state_updated();
+    Ok(())
+}
+
 pub async fn update_local_access_model_rules(
     model_aliases: Vec<CodexLocalAccessModelAlias>,
     excluded_models: Vec<String>,
+    custom_models: Option<Vec<CodexLocalAccessCustomModel>>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
 
@@ -509,6 +518,9 @@ pub async fn update_local_access_model_rules(
         return Err("本地接入集合尚未创建".to_string());
     };
 
+    if let Some(models) = custom_models {
+        collection.custom_models = validate_custom_api_service_models(models, &collection)?;
+    }
     collection.model_aliases = normalize_model_aliases(model_aliases);
     collection.excluded_models = normalize_model_rule_list(excluded_models);
     collection.updated_at = now_ms();
@@ -519,7 +531,8 @@ pub async fn update_local_access_model_rules(
         sync_runtime_collection(&mut runtime, collection);
     }
 
-    ensure_gateway_matches_runtime().await?;
+    ensure_gateway_matches_runtime().await
+        .map_err(|error| format!("模型配置已保存，但 API 服务刷新失败: {}", error))?;
     snapshot_state().await
 }
 

@@ -10,6 +10,7 @@ fn native_automatic_fixture() -> CodexAccount {
         vec!["client-text".into(), "client-vision".into()],
     );
     account.api_wire_api = Some("chat_completions".into());
+    account.api_sync_model_catalog_to_api_service = true;
     account.egress_proxy_disabled = true;
     account.api_model_mappings = vec![
         crate::models::codex::CodexApiModelMapping {
@@ -28,6 +29,169 @@ fn native_automatic_fixture() -> CodexAccount {
         .api_model_vision_support
         .insert("upstream-vision".into(), true);
     account
+}
+
+#[test]
+fn native_automatic_custom_models_keep_per_account_names_and_override_unbound_catalogs() {
+    let mut collection = native_test_collection();
+    collection.account_ids.push("unbound".into());
+    collection.custom_models = serde_json::from_value(json!([
+        {"clientModel":"custom-chat","accountId":"pool-a","upstreamModel":"vendor-a"},
+        {"clientModel":"custom-chat","accountId":"pool-b","upstreamModel":"vendor-b"}
+    ])).unwrap();
+    let mut a = native_automatic_fixture();
+    a.api_sync_model_catalog_to_api_service = false;
+    let mut b = a.clone();
+    b.id = "pool-b".into();
+    let mut unbound = a.clone();
+    unbound.id = "unbound".into();
+    unbound.api_sync_model_catalog_to_api_service = true;
+    unbound.api_model_catalog = vec!["custom-chat".into()];
+    let plan = native_model_route_plan(&collection, None, "custom-chat").unwrap();
+    assert_eq!(native_plan_account_model(&collection, &plan, &a).as_deref(), Some("vendor-a"));
+    assert_eq!(native_plan_account_model(&collection, &plan, &b).as_deref(), Some("vendor-b"));
+    assert!(native_plan_account_model(&collection, &plan, &unbound).is_none());
+    assert_eq!(native_operation_model(&collection, &plan, &b, Some("audio.speech"), false).as_deref(), Some("vendor-b"));
+    assert!(native_operation_model(&collection, &plan, &unbound, Some("audio.speech"), false).is_none());
+
+    let mut key = native_test_key();
+    key.inherit_account_pool = Some(false);
+    key.account_ids = vec!["pool-b".into()];
+    let scoped = native_model_route_plan(&collection, Some(&key), "custom-chat").unwrap();
+    assert!(!native_model_visible(&collection, Some(&key), &scoped, &a));
+    assert!(native_model_visible(&collection, Some(&key), &scoped, &b));
+    let catalog = native_catalog(&collection, Some(&key), &[a.clone(), b.clone(), unbound.clone()]).unwrap();
+    assert_eq!(catalog["data"].as_array().unwrap().len(), 1);
+    assert_eq!(catalog["data"][0]["id"], "custom-chat");
+    key.account_ids.clear();
+    let empty = native_catalog(&collection, Some(&key), &[a, b, unbound]).unwrap();
+    assert!(empty["data"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn native_automatic_disabled_catalog_sync_has_no_default_fallback_but_allows_custom_models() {
+    let mut collection = native_test_collection();
+    let mut account = native_automatic_fixture();
+    account.api_sync_model_catalog_to_api_service = false;
+    account.api_wire_api = Some("responses".into());
+    for empty_catalog in [false, true] {
+        if empty_catalog {
+            account.api_model_catalog.clear();
+            account.api_model_mappings.clear();
+        }
+        let catalog = native_catalog(&collection, None, &[account.clone()]).unwrap();
+        assert!(catalog["data"].as_array().unwrap().is_empty());
+        let model = api_service_supported_codex_model_ids().into_iter().next().unwrap();
+        let plan = native_model_route_plan(&collection, None, &model).unwrap();
+        assert!(native_plan_account_model(&collection, &plan, &account).is_none());
+    }
+    collection.custom_models = serde_json::from_value(json!([
+        {"clientModel":"gpt-private-custom","accountId":"pool-a","upstreamModel":"vendor-private"}
+    ])).unwrap();
+    let plan = native_model_route_plan(&collection, None, "gpt-private-custom").unwrap();
+    assert_eq!(native_plan_account_model(&collection, &plan, &account).as_deref(), Some("vendor-private"));
+    let catalog = native_catalog(&collection, None, &[account]).unwrap();
+    assert_eq!(catalog["data"][0]["id"], "gpt-private-custom");
+}
+
+#[test]
+fn native_automatic_custom_aliases_expand_once_and_do_not_restore_unbound_candidates() {
+    let mut collection = native_test_collection();
+    collection.custom_models = serde_json::from_value(json!([
+        {"clientModel":"source","accountId":"pool-a","upstreamModel":"vendor-private"}
+    ])).unwrap();
+    collection.model_aliases = serde_json::from_value(json!([
+        {"sourceModel":"source","alias":"public","fork":false},
+        {"sourceModel":"public","alias":"second","fork":false}
+    ])).unwrap();
+    let mut account = native_automatic_fixture();
+    account.api_sync_model_catalog_to_api_service = false;
+    let mut unbound = native_automatic_fixture();
+    unbound.id = "pool-b".into();
+    unbound.api_model_catalog = vec!["source".into()];
+    let model = native_model_for_route_plan(&collection, None, "public").unwrap();
+    assert_eq!(model, "public");
+    let plan = native_model_route_plan(&collection, None, &model).unwrap();
+    assert_eq!(native_plan_account_model(&collection, &plan, &account).as_deref(), Some("vendor-private"));
+    assert!(native_plan_account_model(&collection, &plan, &unbound).is_none());
+    let catalog = native_catalog(&collection, None, &[account.clone(), unbound]).unwrap();
+    assert_eq!(catalog["data"].as_array().unwrap().len(), 1);
+    assert_eq!(catalog["data"][0]["id"], "public");
+    for hidden in ["source", "second"] {
+        let plan = native_model_route_plan(&collection, None, hidden).unwrap();
+        assert!(native_plan_account_model(&collection, &plan, &account).is_none());
+    }
+}
+
+#[test]
+fn native_automatic_custom_rules_do_not_change_internal_or_profile_model_contracts() {
+    let mut collection = native_test_collection();
+    collection.custom_models = serde_json::from_value(json!([
+        {"clientModel":"client-text","accountId":"pool-b","upstreamModel":"other-vendor"}
+    ])).unwrap();
+    collection.model_aliases = serde_json::from_value(json!([
+        {"sourceModel":"client-text","alias":"public","fork":false}
+    ])).unwrap();
+    let mut account = native_automatic_fixture();
+    account.api_sync_model_catalog_to_api_service = false;
+    let public = native_model_route_plan(&collection, None, "public").unwrap();
+    assert!(native_plan_account_model(&collection, &public, &account).is_none());
+    let mut host = NativeHostBridge::for_collection(collection.clone());
+    let mut internal = public.clone();
+    native_preserve_explicit_account_models(&host, &native_test_caller(NATIVE_INTERNAL_CALLER), &collection, &mut internal);
+    assert_eq!(native_plan_account_model(&collection, &internal, &account).as_deref(), Some("upstream-text"));
+    host.profile_dir = Some(PathBuf::from("fixture-profile-not-opened"));
+    let mut profile = public;
+    native_preserve_explicit_account_models(&host, &native_test_caller(NATIVE_PRIMARY_CALLER), &collection, &mut profile);
+    assert_eq!(native_plan_account_model(&collection, &profile, &account).as_deref(), Some("upstream-text"));
+    let auxiliary = native_model_route_plan(&collection, None, "whisper-1").unwrap();
+    assert_eq!(native_operation_model(&collection, &auxiliary, &account, Some("audio.transcriptions"), false).as_deref(), Some("whisper-1"));
+
+    let mut grok = native_model_route_plan(&collection, None, "grok-4.3(8192)").unwrap();
+    native_preserve_explicit_account_models(&host, &native_test_caller(NATIVE_INTERNAL_CALLER), &collection, &mut grok);
+    assert_eq!(grok.full_model, "grok-4.3(8192)");
+    let mut key = native_test_key();
+    key.model_routing = Some(serde_json::from_value(json!({"defaultRoute":"oauth","failurePolicy":"strict","routes":[{"id":"xai","namespace":"grok","providerAccountId":"pool-a","nativeProvider":"xai","providerGateway":{"baseUrl":"https://example.invalid/v1","apiKey":"fixture","upstreamModel":"grok-4.3","upstreamModels":["grok-4.3"]}}]})).unwrap());
+    let mut explicit = native_model_route_plan(&collection, Some(&key), "grok/grok-4.3(8192)").unwrap();
+    native_preserve_explicit_account_models(&host, &native_test_caller(NATIVE_PRIMARY_CALLER), &collection, &mut explicit);
+    assert_eq!(explicit.full_model, "grok/grok-4.3(8192)");
+    assert_eq!(explicit.model, "grok-4.3");
+    assert!(explicit.xai && explicit.provider && !explicit.automatic_service_models);
+}
+
+#[tokio::test]
+async fn native_automatic_custom_route_and_retry_never_escape_the_key_account_scope() {
+    let _env = crate::modules::test_support::env_lock()
+        .lock().unwrap_or_else(|error| error.into_inner());
+    let _data = super::native_capability_integration_tests::NativeInstallationTestData::new();
+    let mut collection = native_test_collection();
+    collection.max_retry_interval_ms = 0;
+    collection.custom_models = serde_json::from_value(json!([
+        {"clientModel":"custom-chat","accountId":"pool-a","upstreamModel":"vendor-a"},
+        {"clientModel":"custom-chat","accountId":"pool-b","upstreamModel":"vendor-b"}
+    ])).unwrap();
+    let mut key = native_test_key();
+    key.inherit_account_pool = Some(false);
+    key.account_ids = vec!["pool-b".into()];
+    collection.api_keys = vec![key.clone()];
+    let mut host = NativeHostBridge::for_collection(collection);
+    for id in ["pool-a", "pool-b"] {
+        let mut account = native_automatic_fixture();
+        account.id = id.into();
+        account.api_sync_model_catalog_to_api_service = false;
+        host.account_overrides.insert(id.into(), account);
+    }
+    let caller = native_test_caller(&key.id);
+    let mut request = native_test_route_request("custom-scope");
+    request.requires_permit = false;
+    request.model = "custom-chat".into();
+    let route = native_select_route(&host, &caller, request.clone()).await.unwrap();
+    assert_eq!(route.account_id, "pool-b");
+    assert_eq!(route.model, "vendor-b");
+    host.collection_override.as_mut().unwrap().api_keys[0].account_ids.clear();
+    let error = native_select_route(&host, &caller, request.clone()).await.err().unwrap();
+    assert_eq!(error.code, "no_available_account");
+    assert!(native_retry_cooldown_wait(&host, &caller, request, Duration::from_secs(1)).await.unwrap().is_none());
 }
 
 #[test]
@@ -241,17 +405,25 @@ fn native_gateway_vision_uses_current_account_capabilities_without_overriding_ex
 }
 
 #[test]
-fn native_automatic_catalog_hides_retired_gpt_names_but_keeps_request_routing() {
+fn native_automatic_catalog_keeps_explicit_provider_models_without_expanding_oauth_defaults() {
     let collection = native_test_collection();
     let mut account = native_automatic_fixture();
     account.api_model_catalog = vec!["gpt-4.1".into(), "client-text".into()];
     let catalog = native_catalog(&collection, None, &[account.clone()]).unwrap();
-    assert!(!catalog["data"]
+    assert!(catalog["data"]
         .as_array()
         .unwrap()
         .iter()
         .any(|entry| entry["id"] == "gpt-4.1"));
     assert!(native_account_model(&account, "gpt-4.1").is_some());
+    let mut oauth = native_test_account();
+    oauth.id = "pool-b".into();
+    let default_catalog = native_catalog(&collection, None, &[oauth]).unwrap();
+    assert!(!default_catalog["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["id"] == "gpt-4.1"));
 }
 
 #[tokio::test]
@@ -265,9 +437,9 @@ async fn native_automatic_third_party_names_skip_oauth_pool_and_preserve_native_
     let mut oauth = native_test_account();
     oauth.id = "pool-b".into();
     let provider_plan = native_model_route_plan(&collection, None, "client-text").unwrap();
-    assert!(native_plan_account_model(&provider_plan, &oauth).is_none());
+    assert!(native_plan_account_model(&collection, &provider_plan, &oauth).is_none());
     assert_eq!(
-        native_plan_account_model(&provider_plan, &account).as_deref(),
+        native_plan_account_model(&collection, &provider_plan, &account).as_deref(),
         Some("upstream-text")
     );
     let native_model = api_service_routable_codex_model_ids()
@@ -276,7 +448,7 @@ async fn native_automatic_third_party_names_skip_oauth_pool_and_preserve_native_
         .unwrap();
     let native_plan = native_model_route_plan(&collection, None, &native_model).unwrap();
     assert_eq!(
-        native_plan_account_model(&native_plan, &oauth).as_deref(),
+        native_plan_account_model(&collection, &native_plan, &oauth).as_deref(),
         Some(native_model.as_str())
     );
     let mut host = NativeHostBridge::for_collection(collection);
@@ -299,12 +471,12 @@ fn native_automatic_empty_responses_pool_does_not_claim_undeclared_provider_mode
     account.api_model_catalog.clear();
     account.api_model_mappings.clear();
     let plan = native_model_route_plan(&collection, None, "other-provider-only").unwrap();
-    assert!(native_plan_account_model(&plan, &account).is_none());
+    assert!(native_plan_account_model(&collection, &plan, &account).is_none());
     let mut key = native_test_key();
     key.provider_gateway = Some(serde_json::from_value(json!({"baseUrl":"https://example.invalid/v1","apiKey":"fixture","upstreamModel":"other-provider-only"})).unwrap());
     let explicit = native_model_route_plan(&collection, Some(&key), "other-provider-only").unwrap();
     assert_eq!(
-        native_plan_account_model(&explicit, &account).as_deref(),
+        native_plan_account_model(&collection, &explicit, &account).as_deref(),
         Some("other-provider-only")
     );
 }
@@ -358,7 +530,7 @@ fn native_xai_suffix_is_route_scoped_and_checks_full_and_base_model_acl() {
     let plan = native_model_route_plan(&collection, Some(&key), "grok/grok-4.3(8192)").unwrap();
     let account = native_automatic_fixture();
     assert_eq!(
-        native_plan_account_model(&plan, &account).as_deref(),
+        native_plan_account_model(&collection, &plan, &account).as_deref(),
         Some("grok-4.3")
     );
     assert!(!native_xai_base_denied(

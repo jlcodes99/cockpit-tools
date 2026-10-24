@@ -13,8 +13,9 @@ async fn native_retry_cooldown_wait(
         return native_image_retry_cooldown_wait(host, caller, &collection, key, request, max_wait)
             .await;
     }
-    let model = native_model_for_key(&collection, key, &request.model)?;
-    let plan = native_model_route_plan(&collection, key, &model)?;
+    let model = native_model_for_route_plan(&collection, key, &request.model)?;
+    let mut plan = native_model_route_plan(&collection, key, &model)?;
+    native_preserve_explicit_account_models(host, caller, &collection, &mut plan);
     let ids = if caller.id == NATIVE_INTERNAL_CALLER {
         request
             .target_account_id

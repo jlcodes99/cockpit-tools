@@ -375,7 +375,7 @@ async fn native_prepare_official_local_fallback(
             "Official fallback authorization changed",
         ));
     }
-    let public_model = native_model_for_key(&collection, key, &request.model)?;
+    let public_model = native_model_for_route_plan(&collection, key, &request.model)?;
     let plan = native_model_route_plan(&collection, key, &public_model)?;
     let source = host
         .load_accounts(vec![intent.snapshot.source_account_id.clone()])

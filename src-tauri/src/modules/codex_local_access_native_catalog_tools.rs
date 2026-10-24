@@ -34,7 +34,7 @@ fn native_apply_profile_catalog_tool_capabilities(
             let Some(slug) = model["slug"].as_str() else {
                 continue;
             };
-            let Ok(public) = native_model_for_key(collection, key, slug) else {
+            let Ok(public) = native_model_for_route_plan(collection, key, slug) else {
                 continue;
             };
             let Ok(plan) = native_model_route_plan(collection, key, &public) else {

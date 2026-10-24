@@ -280,9 +280,13 @@ func TestAccountConcurrencyWrapsSelectorChainWhenEnabled(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected authorization scope at the outermost layer, got %#v", chain)
 	}
-	concurrency, ok := scope.fallback.(*accountConcurrencySelector)
+	modelScope, ok := scope.fallback.(*automaticModelScopeSelector)
 	if !ok {
-		t.Fatalf("expected concurrency gate immediately inside authorization scope, got %#v", scope.fallback)
+		t.Fatalf("expected model scope inside authorization scope, got %#v", scope.fallback)
+	}
+	concurrency, ok := modelScope.fallback.(*accountConcurrencySelector)
+	if !ok {
+		t.Fatalf("expected concurrency gate immediately inside model scope, got %#v", modelScope.fallback)
 	}
 	if _, ok := concurrency.fallback.(*quotaCooldownSelector); !ok {
 		t.Fatalf("expected quota cooldown selector below the concurrency gate, got %#v", chain)
@@ -303,6 +307,86 @@ func TestReleaseAccountSlotsFreesSlotForNextRequest(t *testing.T) {
 	}
 	if !tracker.tryReserveAccountSlot("second", "auth-a", 1) {
 		t.Fatal("expected reservation to succeed after release")
+	}
+}
+
+func TestAutomaticModelScopeRestrictsAffinityAndConcurrencyWait(t *testing.T) {
+	a, b := testAuth("auth-a"), testAuth("auth-b")
+	accountA := &accountSpec{ID: "a", AuthID: a.ID}
+	accountB := &accountSpec{ID: "b", AuthID: b.ID}
+	m := &manifest{MaxAccountConcurrency: 1, accountByAuthID: map[string]*accountSpec{a.ID: accountA, b.ID: accountB}}
+	tracker := newRequestUsageTracker()
+	cfg := &config.Config{}
+	cfg.Routing.SessionAffinity = true
+	selector := buildCoreAuthSelectorWithConcurrency(cfg, &orderedAuthSelector{order: []string{a.ID, b.ID}}, m, nil, tracker)
+	defer selector.(coreauth.StoppableSelector).Stop()
+	spec := &apiKeySpec{ID: "client", ModelRouting: &modelRoutingSpec{Automatic: true, NativeModelAccounts: map[string][]string{"custom": {"a"}}}}
+	ctx := context.WithValue(accountConcurrencyRequestContext("first"), clientAPIKeyContextKey, spec)
+	opts := cliproxyexecutor.Options{Headers: http.Header{"X-Session-ID": {"model-scope"}}}
+	first, err := selector.Pick(ctx, "codex", "custom", opts, []*coreauth.Auth{a, b})
+	if err != nil || first == nil || first.ID != a.ID {
+		t.Fatalf("initial affinity: auth=%v err=%v", first, err)
+	}
+	tracker.releaseAccountSlots("first")
+	spec.ModelRouting.NativeModelAccounts["custom"] = []string{"b"}
+	ctx = context.WithValue(accountConcurrencyRequestContext("second"), clientAPIKeyContextKey, spec)
+	second, err := selector.Pick(ctx, "codex", "custom", opts, []*coreauth.Auth{a, b})
+	if err != nil || second == nil || second.ID != b.ID {
+		t.Fatalf("stale affinity escaped scope: auth=%v err=%v", second, err)
+	}
+	// A is idle, but only the occupied B is allowed in the waiting path.
+	ctx = context.WithValue(accountConcurrencyRequestContext("third"), clientAPIKeyContextKey, spec)
+	selected, err := selector.Pick(ctx, "codex", "custom", cliproxyexecutor.Options{}, []*coreauth.Auth{a, b})
+	if err == nil || selected != nil {
+		t.Fatalf("concurrency wait escaped scope: auth=%v err=%v", selected, err)
+	}
+}
+
+func TestAutomaticModelScopeUsesRequestAliasAndPreservesImageRouting(t *testing.T) {
+	a, b := testAuth("auth-a"), testAuth("auth-b")
+	m := &manifest{accountByAuthID: map[string]*accountSpec{a.ID: {ID: "a"}, b.ID: {ID: "b"}}}
+	selector := &automaticModelScopeSelector{manifest: m, fallback: &orderedAuthSelector{order: []string{a.ID, b.ID}}}
+	spec := &apiKeySpec{ModelRouting: &modelRoutingSpec{Automatic: true, NativeModelAccounts: map[string][]string{"alias": {"b"}}}}
+	ctx := context.WithValue(context.Background(), clientAPIKeyContextKey, spec)
+	ctx = context.WithValue(ctx, requestModelContextKey, "alias")
+	selected, err := selector.Pick(ctx, "codex", "upstream", cliproxyexecutor.Options{}, []*coreauth.Auth{a, b})
+	if err != nil || selected == nil || selected.ID != b.ID {
+		t.Fatalf("request alias scope: auth=%v err=%v", selected, err)
+	}
+	ctx = context.WithValue(ctx, requestKindContextKey, "image_generation")
+	selected, err = selector.Pick(ctx, "codex", "gpt-image-2", cliproxyexecutor.Options{}, []*coreauth.Auth{a, b})
+	if err != nil || selected == nil || selected.ID != a.ID {
+		t.Fatalf("image scope must use existing image selection: auth=%v err=%v", selected, err)
+	}
+}
+
+func TestAutomaticModelScopePreservesPauseAndRotation(t *testing.T) {
+	base, auths := rotationSelectorForTest()
+	base.manifest.PausedAccountIDs = []string{"c"}
+	selector := buildCoreAuthSelector(nil, base, base.manifest, nil)
+	spec := &apiKeySpec{ID: "custom-scope", AccountIDs: []string{"a", "b", "c"},
+		ModelRouting: &modelRoutingSpec{Automatic: true, NativeModelAccounts: map[string][]string{"custom": {"b", "c"}}}}
+	ctx := context.WithValue(context.Background(), clientAPIKeyContextKey, spec)
+	pick := func(want string) {
+		t.Helper()
+		selected, err := selector.Pick(ctx, "codex", "custom", cliproxyexecutor.Options{}, auths)
+		if err != nil || selected == nil || selected.ID != want+".json" {
+			t.Fatalf("model-scoped rotation: selected=%#v err=%v want=%s", selected, err, want)
+		}
+	}
+	pick("b")
+	base.manifest.PausedAccountIDs = nil
+	pick("c")
+	pick("b")
+	// An active account outside this model cannot replace its paused candidates.
+	base.manifest.PausedAccountIDs = []string{"b", "c"}
+	if selected, err := selector.Pick(ctx, "codex", "custom", cliproxyexecutor.Options{}, auths); selected != nil || err == nil {
+		t.Fatalf("paused model candidates escaped to another account: selected=%#v err=%v", selected, err)
+	}
+	base.manifest.PausedAccountIDs = nil
+	spec.AccountIDs = []string{"a"}
+	if selected, err := selector.Pick(ctx, "codex", "custom", cliproxyexecutor.Options{}, auths); selected != nil || err == nil {
+		t.Fatalf("model candidates escaped the API key scope: selected=%#v err=%v", selected, err)
 	}
 }
 

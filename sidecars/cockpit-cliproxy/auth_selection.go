@@ -1862,7 +1862,8 @@ func buildCoreAuthSelector(cfg *config.Config, selector coreauth.Selector, m *ma
 //
 // 账号并发闸门分两层插入：
 //   - accountSlotSelector 位于会话亲和选择器内部（自由选号路径），负责按候选顺序抢槽位；
-//   - accountConcurrencySelector 位于整条链最外层，覆盖会话亲和命中缓存的请求。
+//   - accountConcurrencySelector 位于会话亲和外层，覆盖命中缓存的请求；
+//   - 授权、暂停和模型账号范围过滤在配额保护与并发闸门之前执行。
 //
 // tracker 为 nil 或未配置账号并发时，两层都不插入，选择器行为与改动前完全一致。
 func buildCoreAuthSelectorWithConcurrency(cfg *config.Config, selector coreauth.Selector, m *manifest, quota *quotaReserveStateStore, tracker *requestUsageTracker) coreauth.Selector {
@@ -1920,9 +1921,66 @@ func buildCoreAuthSelectorWithConcurrency(cfg *config.Config, selector coreauth.
 		selector = &quotaProtectionSelector{manifest: m, quota: quota, fallback: selector, admission: admission, tracker: tracker}
 	}
 	if m != nil {
+		selector = &automaticModelScopeSelector{manifest: m, fallback: selector}
 		selector = &apiKeyScopeSelector{manifest: m, fallback: selector}
 	}
 	return selector
+}
+
+// Filter before concurrency waiting and affinity so cached selections and WebSockets
+// cannot escape the model's configured account candidates.
+type automaticModelScopeSelector struct {
+	manifest *manifest
+	fallback coreauth.Selector
+}
+
+func (s *automaticModelScopeSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*coreauth.Auth) (*coreauth.Auth, error) {
+	requestKind, _ := ctx.Value(requestKindContextKey).(string)
+	if isImageRequestKind(requestKind) {
+		return s.fallback.Pick(ctx, provider, model, opts, auths)
+	}
+	spec, _ := ctx.Value(clientAPIKeyContextKey).(*apiKeySpec)
+	if spec == nil || spec.ModelRouting == nil || !spec.ModelRouting.Automatic || spec.ModelRouting.NativeModelAccounts == nil {
+		return s.fallback.Pick(ctx, provider, model, opts, auths)
+	}
+	allowed := make(map[string]bool)
+	if requested, _ := ctx.Value(requestModelContextKey).(string); strings.TrimSpace(requested) != "" {
+		model = requested
+	}
+	key := strings.ToLower(stripModelPrefix(model, spec))
+	for _, id := range spec.ModelRouting.NativeModelAccounts[key] {
+		allowed[id] = true
+	}
+	for _, route := range spec.ModelRouting.Routes {
+		for _, mapping := range route.Models {
+			if strings.EqualFold(mapping.ClientModel, key) {
+				allowed[route.ProviderAccountID] = true
+			}
+		}
+	}
+	filtered := make([]*coreauth.Auth, 0, len(auths))
+	for _, auth := range auths {
+		account := accountForAuthInManifest(s.manifest, auth)
+		if account != nil && allowed[account.ID] && (len(spec.AccountIDs) == 0 || containsAccountID(spec.AccountIDs, account.ID)) {
+			filtered = append(filtered, auth)
+		}
+	}
+	return s.fallback.Pick(ctx, provider, model, opts, filtered)
+}
+
+func (s *automaticModelScopeSelector) OnResult(result coreauth.Result) {
+	forwardAuthSelectionResult(s.fallback, result)
+}
+func (s *automaticModelScopeSelector) Stop() {
+	if stoppable, ok := s.fallback.(coreauth.StoppableSelector); ok {
+		stoppable.Stop()
+	}
+}
+func (s *automaticModelScopeSelector) ReportAuthSelectionFailure(ctx context.Context, provider, model string, candidates []*coreauth.Auth, err error) error {
+	if reporter, ok := s.fallback.(coreauth.AuthSelectionFailureReporter); ok {
+		return reporter.ReportAuthSelectionFailure(ctx, provider, model, candidates, err)
+	}
+	return err
 }
 
 func accountConcurrencyEnabled(m *manifest, tracker *requestUsageTracker) bool {

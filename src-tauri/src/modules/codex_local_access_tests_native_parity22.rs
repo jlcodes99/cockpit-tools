@@ -29,6 +29,7 @@ fn parity22_api_account(model: &str) -> CodexAccount {
         vec![model.into()],
     );
     account.egress_proxy_disabled = true;
+    account.api_sync_model_catalog_to_api_service = true;
     account
 }
 
