@@ -80,13 +80,39 @@ fn env_quality_is_insider_or_dev() -> bool {
     )
 }
 
-fn official_antigravity_version_for_cloud_code() -> String {
-    let version = crate::modules::wakeup_gateway::official_antigravity_app_version();
-    let trimmed = version.trim();
-    if trimmed.is_empty() {
-        return DEFAULT_CLOUD_CODE_IDE_VERSION.to_string();
+fn resolve_cloud_code_version(
+    official_version: &str,
+    detect_installed_version: impl FnOnce() -> Option<String>,
+) -> String {
+    let trimmed = official_version.trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_string();
     }
-    trimmed.to_string()
+
+    detect_installed_version()
+        .map(|version| version.trim().to_string())
+        .filter(|version| !version.is_empty())
+        .unwrap_or_else(|| DEFAULT_CLOUD_CODE_IDE_VERSION.to_string())
+}
+
+fn official_antigravity_version_for_cloud_code() -> String {
+    resolve_cloud_code_version(
+        &crate::modules::wakeup_gateway::official_antigravity_app_version(),
+        || {
+            // The wakeup reader only knows product.json/Info.plist. Reuse the
+            // version badge's detector for ASAR installs (Windows VersionInfo),
+            // including when the configured path points to a CLI launcher.
+            // A successful detection is cached to avoid repeated native probes
+            // for every account and quota request.
+            crate::commands::system::get_cached_antigravity_installed_version_info_for_target(None)
+                .or_else(|| {
+                    crate::commands::system::resolve_antigravity_installed_version_info_for_target(
+                        None,
+                    )
+                })
+                .map(|info| info.version)
+        },
+    )
 }
 
 fn load_code_assist_user_agent_os() -> &'static str {
@@ -1474,6 +1500,44 @@ pub async fn fetch_quota_with_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cloud_code_version_uses_installed_metadata_when_wakeup_metadata_is_missing() {
+        assert_eq!(
+            resolve_cloud_code_version("", || Some("2.17.0".to_string())),
+            "2.17.0"
+        );
+    }
+
+    #[test]
+    fn cloud_code_version_preserves_explicit_or_legacy_metadata_without_scanning() {
+        assert_eq!(
+            resolve_cloud_code_version(" 1.23.3\n", || {
+                panic!("installed metadata must not override the wakeup version")
+            }),
+            "1.23.3"
+        );
+    }
+
+    #[test]
+    fn cloud_code_version_trims_installed_metadata() {
+        assert_eq!(
+            resolve_cloud_code_version(" \n", || Some(" 2.17.0.0\r\n".to_string())),
+            "2.17.0.0"
+        );
+    }
+
+    #[test]
+    fn cloud_code_version_keeps_compatibility_default_without_installed_metadata() {
+        assert_eq!(
+            resolve_cloud_code_version("", || None),
+            DEFAULT_CLOUD_CODE_IDE_VERSION
+        );
+        assert_eq!(
+            resolve_cloud_code_version("", || Some(" \n".to_string())),
+            DEFAULT_CLOUD_CODE_IDE_VERSION
+        );
+    }
 
     #[test]
     fn test_format_google_validation_url_empty_authuser() {
