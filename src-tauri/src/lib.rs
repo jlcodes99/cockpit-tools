@@ -702,6 +702,7 @@ pub fn run() {
 
             apply_startup_minimized(&app.handle());
             modules::workbuddy_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
+            modules::minimax_code_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
 
             Ok(())
         })
@@ -1389,6 +1390,13 @@ pub fn run() {
             commands::minimax_code::minimax_code_oauth_login_peek,
             commands::minimax_code::minimax_code_oauth_login_complete,
             commands::minimax_code::minimax_code_oauth_login_cancel,
+            commands::minimax_code::get_checkin_status_minimax_code,
+            commands::minimax_code::checkin_minimax_code,
+            commands::minimax_code::get_minimax_code_auto_checkin_config,
+            commands::minimax_code::save_minimax_code_auto_checkin_config,
+            commands::minimax_code::get_minimax_code_auto_checkin_logs,
+            commands::minimax_code::clear_minimax_code_auto_checkin_logs,
+            commands::minimax_code::run_minimax_code_auto_checkin_now,
             // WorkBuddy Instance Commands
             commands::workbuddy_instance::workbuddy_get_instance_defaults,
             commands::workbuddy_instance::workbuddy_list_instances,

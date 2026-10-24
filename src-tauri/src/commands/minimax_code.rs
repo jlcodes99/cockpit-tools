@@ -1,5 +1,9 @@
+use tauri::Emitter;
+
 use crate::models::minimax_code::{MinimaxCodeAccount, MinimaxCodeOAuthStartResponse};
-use crate::modules::{logger, minimax_code_account, minimax_code_oauth};
+use crate::modules::{
+    logger, minimax_code_account, minimax_code_api, minimax_code_auto_checkin, minimax_code_oauth,
+};
 
 #[tauri::command]
 pub fn list_minimax_code_accounts() -> Result<Vec<MinimaxCodeAccount>, String> {
@@ -114,4 +118,68 @@ pub async fn minimax_code_oauth_login_complete(
 #[tauri::command]
 pub fn minimax_code_oauth_login_cancel(login_id: Option<String>) -> Result<(), String> {
     minimax_code_oauth::cancel_login(login_id.as_deref())
+}
+
+#[tauri::command]
+pub async fn get_checkin_status_minimax_code(
+    account_id: String,
+) -> Result<minimax_code_api::MinimaxCodeCheckinStatus, String> {
+    let account = minimax_code_account::load_account(&account_id)
+        .ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    minimax_code_api::get_checkin_status(
+        &account.access_token,
+        account.region.as_deref().unwrap_or("cn"),
+    ).await
+}
+
+#[tauri::command]
+pub async fn checkin_minimax_code(
+    app: tauri::AppHandle,
+    account_id: String,
+) -> Result<minimax_code_api::MinimaxCodeCheckinResult, String> {
+    let account = minimax_code_account::load_account(&account_id)
+        .ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    let region = account.region.as_deref().unwrap_or("cn").to_string();
+    let response = minimax_code_api::perform_checkin(&account.access_token, &region).await?;
+    if response.success {
+        let now = chrono::Utc::now().timestamp();
+        let streak = response.streak_days
+            .and_then(|v| i32::try_from(v).ok())
+            .unwrap_or_else(|| account.checkin_streak.unwrap_or(0).saturating_add(1));
+        let reward = response.credit.map(|credit| serde_json::json!({ "credit": credit }));
+        minimax_code_account::update_checkin_info(&account_id, Some(now), streak, reward)?;
+        let _ = crate::modules::tray::update_tray_menu(&app);
+        let _ = app.emit("minimaxcode:checkin_completed", serde_json::json!({
+            "accountId": account_id, "success": true, "credit": response.credit, "streakDays": response.streak_days,
+        }));
+    }
+    Ok(response)
+}
+
+#[tauri::command]
+pub fn get_minimax_code_auto_checkin_config(
+) -> Result<minimax_code_auto_checkin::MinimaxCodeAutoCheckinConfig, String> {
+    minimax_code_auto_checkin::get_config_checked()
+}
+#[tauri::command]
+pub fn save_minimax_code_auto_checkin_config(
+    config: minimax_code_auto_checkin::MinimaxCodeAutoCheckinConfig,
+) -> Result<(), String> {
+    minimax_code_auto_checkin::save_config(&config)
+}
+#[tauri::command]
+pub fn get_minimax_code_auto_checkin_logs(
+) -> Result<Vec<minimax_code_auto_checkin::MinimaxCodeAutoCheckinLogRecord>, String> {
+    minimax_code_auto_checkin::get_logs_checked()
+}
+#[tauri::command]
+pub fn clear_minimax_code_auto_checkin_logs() -> Result<(), String> {
+    minimax_code_auto_checkin::save_logs(&[])
+}
+#[tauri::command]
+pub async fn run_minimax_code_auto_checkin_now(
+    app: tauri::AppHandle,
+    force: Option<bool>,
+) -> Result<String, String> {
+    minimax_code_auto_checkin::run_minimax_code_auto_checkin_cycle_if_needed(&app, force.unwrap_or(false)).await
 }
