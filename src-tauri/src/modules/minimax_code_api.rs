@@ -13,6 +13,7 @@ const CLAIM_PATH: &str = "/minimax-cloud/api/v1/signin/claim";
 const STATUS_UPCOMING: i64 = 1;
 const STATUS_CLAIMABLE: i64 = 2;
 const STATUS_CLAIMED: i64 = 3;
+const STATUS_DISABLED: i64 = 4;
 
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,8 @@ pub struct MinimaxCodeCheckinStatus {
 #[serde(rename_all = "camelCase")]
 pub struct MinimaxCodeCheckinResult {
     pub success: bool,
+    #[serde(default)]
+    pub already_claimed: bool,
     pub message: Option<String>,
     pub credit: Option<i64>,
     pub streak_days: Option<i32>,
@@ -85,9 +88,25 @@ fn check_base_resp(body: &Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Maps an upstream `status` code to `(today_checked_in, active, message)`.
+/// `points` is the day's total reward, used only for the claimable message.
+fn classify_status(status: i64, points: i64) -> (bool, bool, String) {
+    match status {
+        STATUS_CLAIMABLE => (false, true, format!("可签到 +{points} 积分")),
+        STATUS_CLAIMED => (true, true, "今日已签到".to_string()),
+        STATUS_UPCOMING => (false, false, "今日暂不可签".to_string()),
+        STATUS_DISABLED => (false, false, "今日签到不可用".to_string()),
+        _ => (false, true, "签到状态未知".to_string()),
+    }
+}
+
+fn encode_timezone() -> String {
+    url::form_urlencoded::byte_serialize(iana_timezone().as_bytes()).collect::<String>()
+}
+
 pub async fn get_checkin_status(access_token: &str, region: &str) -> Result<MinimaxCodeCheckinStatus, String> {
     let origin = super::minimax_code_oauth::resolve_agent_origin(region);
-    let tz = iana_timezone();
+    let tz = encode_timezone();
     let url = format!("{origin}{STATUS_PATH}?timezone_id={tz}");
     let client = super::minimax_code_oauth::build_client()?;
     let body = request_with_retry(&client, &url, access_token, false).await?;
@@ -106,12 +125,7 @@ pub async fn get_checkin_status(access_token: &str, region: &str) -> Result<Mini
     let bonus = today.get("bonus_points").and_then(|v| v.as_i64()).unwrap_or(0);
     let day_index = today.get("day_no").and_then(|v| v.as_i64()).map(|v| v as i32);
 
-    let (today_checked_in, active, message) = match status {
-        STATUS_CLAIMABLE => (false, true, format!("可签到 +{} 积分", points + bonus)),
-        STATUS_CLAIMED => (true, true, "今日已签到".to_string()),
-        STATUS_UPCOMING => (false, false, "今日暂不可签".to_string()),
-        _ => (false, true, "签到状态未知".to_string()),
-    };
+    let (today_checked_in, active, message) = classify_status(status, points + bonus);
 
     Ok(MinimaxCodeCheckinStatus {
         today_checked_in,
@@ -126,7 +140,7 @@ pub async fn get_checkin_status(access_token: &str, region: &str) -> Result<Mini
 
 pub async fn perform_checkin(access_token: &str, region: &str) -> Result<MinimaxCodeCheckinResult, String> {
     let origin = super::minimax_code_oauth::resolve_agent_origin(region);
-    let tz = iana_timezone();
+    let tz = encode_timezone();
     let url = format!("{origin}{CLAIM_PATH}?timezone_id={tz}");
     let client = super::minimax_code_oauth::build_client()?;
     let body = request_with_retry(&client, &url, access_token, true).await?;
@@ -135,10 +149,11 @@ pub async fn perform_checkin(access_token: &str, region: &str) -> Result<Minimax
     let data = &body["data"];
     let result = data.get("claim_result").and_then(|v| v.as_i64()).unwrap_or(0);
     let points = data.get("points").and_then(|v| v.as_i64()).unwrap_or(0);
+    let already_claimed = result == 2;
     match result {
-        1 => Ok(MinimaxCodeCheckinResult { success: true, message: Some(format!("签到成功 +{points} 积分")), credit: Some(points), streak_days: None }),
-        2 => Ok(MinimaxCodeCheckinResult { success: true, message: Some("今日已签到".to_string()), credit: Some(points), streak_days: None }),
-        _ => Ok(MinimaxCodeCheckinResult { success: false, message: Some("上游未返回领取结果".to_string()), credit: None, streak_days: None }),
+        1 => Ok(MinimaxCodeCheckinResult { success: true, already_claimed, message: Some(format!("签到成功 +{points} 积分")), credit: Some(points), streak_days: None }),
+        2 => Ok(MinimaxCodeCheckinResult { success: true, already_claimed, message: Some("今日已签到".to_string()), credit: Some(points), streak_days: None }),
+        _ => Ok(MinimaxCodeCheckinResult { success: false, already_claimed, message: Some("上游未返回领取结果".to_string()), credit: None, streak_days: None }),
     }
 }
 
@@ -188,5 +203,27 @@ mod tests {
     #[test]
     fn iana_timezone_is_never_empty() {
         assert!(!iana_timezone().is_empty());
+    }
+
+    #[test]
+    fn classify_status_maps_disabled_to_inactive() {
+        let (checked_in, active, _) = classify_status(STATUS_DISABLED, 0);
+        assert!(!checked_in);
+        assert!(!active);
+    }
+
+    #[test]
+    fn classify_status_maps_known_states() {
+        assert_eq!(classify_status(STATUS_CLAIMABLE, 30).1, true);
+        assert_eq!(classify_status(STATUS_CLAIMABLE, 30).2, "可签到 +30 积分");
+        assert_eq!(classify_status(STATUS_CLAIMED, 0).0, true);
+        assert_eq!(classify_status(STATUS_UPCOMING, 0).1, false);
+    }
+
+    #[test]
+    fn encode_timezone_is_never_empty_and_has_no_raw_slashes() {
+        let encoded = encode_timezone();
+        assert!(!encoded.is_empty());
+        assert!(!encoded.contains('/'));
     }
 }

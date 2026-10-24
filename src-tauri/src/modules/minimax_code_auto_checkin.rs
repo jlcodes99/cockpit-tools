@@ -496,6 +496,18 @@ pub async fn run_minimax_code_auto_checkin_cycle_if_needed(
     let target_account_count = target_accounts.len();
 
     for account in target_accounts {
+        // MiniMax tokens are ~1h and the client renews them locally; reload before
+        // check-in so a stale in-memory token does not burn the retry budget.
+        let account = match crate::modules::minimax_code_account::refresh_account_token(&account.id).await {
+            Ok(refreshed) => refreshed,
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[MinimaxCodeAutoCheckin] 账号 {} 刷新失败，使用已存 token: {}",
+                    account.id, err
+                ));
+                account.clone()
+            }
+        };
         let email_display = if !account.email.trim().is_empty() {
             account.email.clone()
         } else {
