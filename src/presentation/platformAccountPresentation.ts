@@ -18,6 +18,12 @@ import type {
   WorkbuddyAccount,
   WorkbuddyOfficialQuotaResource,
 } from "../types/workbuddy";
+import type { MinimaxCodeAccount } from "../types/minimaxCode";
+import {
+  getMinimaxCodeAccountDisplayEmail,
+  getMinimaxCodePlanBadge,
+} from "../types/minimaxCode";
+import { getMiniMaxCodeQuotaGroups } from "../utils/minimaxCode/parser";
 import type { ZedAccount } from "../types/zed";
 import type { ZcodeAccount } from "../types/zcode";
 import {
@@ -1384,6 +1390,46 @@ export function buildWorkbuddyAccountPresentation(
       "workbuddy.usageNormal",
       "workbuddy.usageAbnormal",
     ),
+  };
+}
+
+export function buildMiniMaxCodeAccountPresentation(
+  account: MinimaxCodeAccount,
+  t: Translate,
+): UnifiedAccountPresentation {
+  const planLabel = getMinimaxCodePlanBadge(account);
+  const groups = getMiniMaxCodeQuotaGroups(account, t);
+  const resources = groups.flatMap((group) => group.items);
+  const quotaItems: UnifiedQuotaMetric[] = resources.map((resource, index) => ({
+    key: `resource_${index}`,
+    label:
+      resource.packageName ??
+      t("minimaxCode.extraCredit.title", "Credit Package"),
+    percentage: resource.usedPercent,
+    progressPercent: resource.usedPercent,
+    quotaClass: "high",
+    valueText: t("minimaxCode.quota.usedOfTotal", "{{used}} / {{total}}", {
+      used: resource.used,
+      total: resource.total,
+    }),
+    resetText: resolveResourceTimeText(
+      resource,
+      t,
+      "minimaxCode.quotaQuery.updatedAt",
+      "minimaxCode.quotaQuery.expireAt",
+    ),
+    resetAt: resource.expireAt ?? resource.refreshAt ?? null,
+    used: resource.used,
+    total: resource.total,
+    left: resource.remain,
+    showProgress: true,
+  }));
+  return {
+    id: account.id,
+    displayName: getMinimaxCodeAccountDisplayEmail(account),
+    planLabel,
+    planClass: resolveSimplePlanClass(planLabel),
+    quotaItems,
   };
 }
 

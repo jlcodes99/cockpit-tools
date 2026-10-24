@@ -11,6 +11,7 @@ import { CodebuddyIcon } from '../icons/CodebuddyIcon';
 import { QoderIcon } from '../icons/QoderIcon';
 import { TraeCnIcon, TraeIcon, TraeSoloCnIcon, TraeSoloIcon } from '../icons/TraeIcon';
 import { WorkbuddyIcon } from '../icons/WorkbuddyIcon';
+import { MinimaxCodeIcon } from '../icons/MinimaxCodeIcon';
 import { ZedIcon } from '../icons/ZedIcon';
 import { ZcodeIcon } from '../icons/ZcodeIcon';
 import { ManualHelpIconButton } from '../ManualHelpIconButton';
@@ -49,7 +50,8 @@ export type PlatformOverviewHeaderId =
   | 'trae_solo'
   | 'trae_cn'
   | 'trae_solo_cn'
-  | 'workbuddy';
+  | 'workbuddy'
+  | 'minimaxcode';
 
 interface PlatformOverviewTabsHeaderProps<T extends string> {
   platform: PlatformOverviewHeaderId;
@@ -139,6 +141,10 @@ const CONFIGS: Record<PlatformOverviewHeaderId, PlatformOverviewConfig> = {
   workbuddy: {
     platformLabel: 'WorkBuddy',
     overviewIcon: <WorkbuddyIcon className="tab-icon" />,
+  },
+  minimaxcode: {
+    platformLabel: 'MiniMax Code',
+    overviewIcon: <MinimaxCodeIcon className="tab-icon" />,
   },
 };
 

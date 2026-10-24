@@ -7078,13 +7078,150 @@
       "timeRangeError": "Время начала не может быть позже времени окончания"
     }
   },
-  "minimaxCode": {
+    "minimaxCode": {
     "title": "Управление аккаунтами MiniMax Code",
     "noAccounts": "Нет аккаунтов MiniMax Code",
     "addAccount": "Добавить аккаунт MiniMax Code",
-    "search": "Поиск аккаунтов MiniMax Code...",
+    "flowNotice": {
+      "title": "Информация об управлении аккаунтами MiniMax Code (нажмите, чтобы развернуть/свернуть)",
+      "desc": "Переключение аккаунта записывает локальный файл входа по актуальной структуре официального клиента MiniMax Code; локальный импорт читает тот же файл. Данные обрабатываются только локально.",
+      "permission": "Область доступа: чтение и запись файла входа MiniMax Code (~/.minimax/auth/auth.json) для локального импорта и переключения аккаунтов; устаревший state.vscdb больше не читается и не изменяется.",
+      "network": "Сетевой доступ: вход по OAuth и обновление токена требуют запросов к MiniMax Code; запросы квоты обращаются к billing API. Локальные файлы входа и исходные учетные данные не загружаются."
+    },
+    "nickname": "Псевдоним",
+    "enterprise": "Корпоративный",
+    "usage": "Статус использования",
+    "creditsBalance": "Баланс кредитов",
     "usageNormal": "В норме",
     "usageAbnormal": "Аномально",
+    "usageViewDetail": "Подробнее",
+    "usageDetailTitle": "Подробности статуса использования",
+    "oauthWaiting": "Ожидание авторизации...",
+    "oauthDesc": "Нажмите кнопку ниже, чтобы открыть страницу авторизации MiniMax Code в браузере.",
+    "oauthDescWebview": "Нажмите кнопку ниже, чтобы открыть страницу авторизации MiniMax Code во встроенном WebView.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Только вход в IDE",
+        "item1": "Добавьте аккаунт после завершения OAuth в браузере, затем используйте его для переключения в IDE.",
+        "item2": "Параметры запроса квоты не привязываются автоматически.",
+        "item3": "Если нужен показ квоты, вручную запустите «Запросить квоту» на карточке аккаунта."
+      }
+    },
+    "oauthWebviewTab": "OAuth в WebView",
+    "oauthOpenWebview": "Открыть в WebView",
+    "oauthOpenWebviewIncognito": "Открыть в WebView инкогнито",
+    "oauthOpenWebviewFailed": "Не удалось открыть WebView: {{error}}",
+    "oauthOpenBrowserFallback": "Открыть в браузере (резервный вариант)",
+    "oauthOpenBrowserFailed": "Не удалось открыть браузер: {{error}}",
+    "oauthWebviewProgressHint": "В верхней части WebView отображается горизонтальная шкала шагов, чтобы легче было найти зависший этап.",
+    "oauthFlow": {
+      "prepare": "Подготовить ссылку OAuth",
+      "authorize": "Открыть ссылку авторизации и подтвердить",
+      "bind": "Опросить результат авторизации и привязать аккаунт",
+      "retryPrepare": "Сгенерировать ссылку OAuth заново",
+      "retryAuthorize": "Повторно запросить ссылку авторизации",
+      "retryBind": "Повторить опрос авторизации",
+      "error": "Ошибка потока: {{error}}"
+    },
+    "tokenDesc": "Вставьте токен доступа MiniMax Code:",
+    "jsonDesc": "Выберите JSON-файл с аккаунтами MiniMax Code:",
+    "import": {
+      "localDesc": "Импортируйте данные аккаунта из локального клиента MiniMax Code или из JSON-файла.",
+      "localClient": "Импорт из локального MiniMax Code"
+    },
+    "search": "Поиск аккаунтов MiniMax Code...",
+    "quotaQuery": {
+      "failedRefreshCompact": "Не удалось обновить квоту",
+      "sectionTitle": "Запрос квоты",
+      "empty": "Привязанной информации о запросе квоты пока нет",
+      "packageUnknown": "Неизвестный пакет",
+      "quotaLabel": "Оставшаяся квота",
+      "updatedAt": "Последний запрос: {{time}}",
+      "cycleRange": "Цикл: {{start}} - {{end}}",
+      "cycleUnknown": "Информация о цикле недоступна",
+      "expireAt": "Истекает: {{time}}",
+      "expireUnknown": "Срок действия: Н/Д",
+      "packageTitle": {
+        "base": "Базовый пакет опыта",
+        "activity": "Подарочный пакет активности"
+      }
+    },
+    "extraCredit": {
+      "title": "Пакет кредитов"
+    },
+    "oauthUrlInputPlaceholder": "Вы можете вручную ввести URL авторизации",
+    "oauthInvalidUrl": "Недопустимый URL авторизации. Введите полный URL.",
+    "oauthGotoWebview": "Перейти в открытом WebView по введенному URL",
+    "oauthGotoWebviewSuccess": "В WebView отправлен запрос на переход по введенному URL.",
+    "oauthGotoWebviewFailed": "Не удалось выполнить переход в WebView: {{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "Введите URL для перехода в этом WebView",
+    "oauthWebviewInlineGo": "Перейти",
+    "oauthSuccessClosePrompt": "Аккаунт успешно добавлен. Закрыть этот WebView сейчас?\nВыберите \"Закрыть WebView\", чтобы закрыть сейчас, или \"Позже\", чтобы оставить его открытым.",
+    "oauthSuccessCloseTitle": "Аккаунт добавлен",
+    "oauthSuccessCloseNowLabel": "Закрыть WebView",
+    "oauthSuccessCloseLaterLabel": "Позже",
+    "oauthSuccessCloseNowStatus": "✅ Аккаунт добавлен. Закрываем окно...",
+    "oauthSuccessCloseLaterStatus": "✅ Аккаунт добавлен. Этот WebView останется открытым.",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 Подготовить ссылку OAuth",
+        "authorize": "2 Открыть ссылку авторизации и подтвердить",
+        "bind": "3 Опросить результат авторизации и привязать аккаунт",
+        "complete": "5 Готово (закройте вручную)"
+      },
+      "status": {
+        "loginConfirm": "Пожалуйста, завершите вход и авторизацию на этой странице."
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "Мультиэкземпляр MiniMax Code поддерживается только в macOS, Windows и Linux."
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "checkin": {
+      "title": "Ежедневный check-in",
+      "modalTitle": "Ежедневный check-in",
+      "status": "Статус check-in",
+      "checkedIn": "Отмечено",
+      "notCheckedIn": "Не отмечено",
+      "button": "Отметиться",
+      "button.loading": "Выполняется check-in...",
+      "done": "Готово",
+      "success": "Check-in выполнен! Серия {{days}} дней",
+      "failure": "Не удалось отметиться: {{message}}",
+      "failure.network": "Ошибка сети, попробуйте позже",
+      "lastCheckin": "Последний check-in: {{time}}",
+      "streak": "Серия {{days}} дней",
+      "reward": "Награда: {{reward}}",
+      "refreshStatus": "Обновить",
+      "checkAll": "Отметить все",
+      "noAccounts": "Нет аккаунтов",
+      "querying": "Загрузка...",
+      "streakDays": "{{days}} дней",
+      "streakRewardCountdown": "До бонусной награды осталось {{days}} дней",
+      "streakRewardToday": "Бонусная награда доступна сегодня!",
+      "recentDates": "Недавние: ",
+      "claimed": "Получено",
+      "queryFailed": "Сбой запроса",
+      "retry": "Повтор",
+      "inactive": "Недоступно",
+      "inactiveHint": "Чек-ин недоступен для этого аккаунта",
+      "autoCheckinSettings": "Настройки автоматической отметки",
+      "autoCheckinLabel": "Авто-отметка",
+      "autoCheckinOff": "Авто-отметка выключена",
+      "autoCheckinEnabledHint": "Авто-отметка включена: случайная отметка между {{start}} и {{end}}",
+      "autoCheckinDisabledHint": "Авто-отметка отключена",
+      "enableAutoCheckin": "Включить авто-отметку",
+      "enableAutoCheckinDesc": "Ежедневно выполняет случайную отметку в указанном временном интервале",
+      "randomTimeRange": "Случайный интервал времени отметки",
+      "startTime": "Время начала",
+      "endTime": "Время окончания",
+      "timeRangeHint": "Ежедневно выбирает случайное время в этом интервале для выполнения фоновой отметки.",
+      "timeRangeError": "Время начала не может быть позже времени окончания"
+    },
     "placeholder": "Управление аккаунтами MiniMax Code скоро появится."
   },
   "zcode": {

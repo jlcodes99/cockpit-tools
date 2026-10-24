@@ -7125,13 +7125,150 @@
       "timeRangeError": "لا يمكن أن يكون وقت البدء متأخرًا عن وقت الانتهاء"
     }
   },
-  "minimaxCode": {
+    "minimaxCode": {
     "title": "إدارة حسابات MiniMax Code",
     "noAccounts": "لا توجد حسابات MiniMax Code",
     "addAccount": "إضافة حساب MiniMax Code",
-    "search": "ابحث في حسابات MiniMax Code...",
+    "flowNotice": {
+      "title": "معلومات إدارة حسابات MiniMax Code (انقر للتوسيع/الطي)",
+      "desc": "يكتب تبديل الحسابات ملف تسجيل الدخول المحلي وفق بنية أحدث عميل MiniMax Code الرسمي؛ ويقرأ الاستيراد المحلي الملف نفسه. تتم معالجة البيانات محليًا فقط.",
+      "permission": "نطاق الأذونات: قراءة ملف تسجيل دخول MiniMax Code وكتابته (~/.minimax/auth/auth.json) للاستيراد المحلي وتبديل الحسابات؛ لم يعد يتم قراءة state.vscdb القديم أو تعديله.",
+      "network": "نطاق الشبكة: يتطلب تسجيل دخول OAuth وتحديث الرمز طلبات شبكة إلى MiniMax Code؛ وتستدعي استعلامات الحصة واجهات فوترة API. لا يتم رفع ملفات تسجيل الدخول المحلية أو بيانات الاعتماد الخام."
+    },
+    "nickname": "الاسم المستعار",
+    "enterprise": "المؤسسة",
+    "usage": "حالة الاستخدام",
+    "creditsBalance": "رصيد النقاط",
     "usageNormal": "طبيعي",
     "usageAbnormal": "غير طبيعي",
+    "usageViewDetail": "عرض التفاصيل",
+    "usageDetailTitle": "تفاصيل حالة الاستخدام",
+    "oauthWaiting": "بانتظار التفويض...",
+    "oauthDesc": "انقر الزر أدناه لفتح صفحة تفويض MiniMax Code في متصفحك.",
+    "oauthDescWebview": "انقر الزر أدناه لفتح صفحة تفويض MiniMax Code في WebView المدمج.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "تسجيل دخول IDE فقط",
+        "item1": "أضف الحساب بعد إكمال OAuth في المتصفح، ثم استخدمه للتبديل داخل IDE.",
+        "item2": "لا يتم ربط معلمات استعلام الحصة تلقائيًا.",
+        "item3": "إذا احتجت عرض الحصة، شغّل \"استعلام الحصة\" يدويًا من بطاقة الحساب."
+      }
+    },
+    "oauthWebviewTab": "OAuth عبر WebView",
+    "oauthOpenWebview": "فتح في WebView",
+    "oauthOpenWebviewIncognito": "فتح في WebView المتخفي",
+    "oauthOpenWebviewFailed": "فشل فتح WebView: {{error}}",
+    "oauthOpenBrowserFallback": "فتح في المتصفح (بديل)",
+    "oauthOpenBrowserFailed": "فشل فتح المتصفح: {{error}}",
+    "oauthWebviewProgressHint": "يتم عرض شريط خطوات أفقي أعلى WebView لتحديد المرحلة المتوقفة.",
+    "oauthFlow": {
+      "prepare": "تحضير رابط OAuth",
+      "authorize": "فتح رابط التفويض وتأكيده",
+      "bind": "استطلاع نتيجة التفويض وربط الحساب",
+      "retryPrepare": "إعادة إنشاء رابط OAuth",
+      "retryAuthorize": "طلب رابط التفويض مرة أخرى",
+      "retryBind": "إعادة محاولة استطلاع التفويض",
+      "error": "خطأ في المسار: {{error}}"
+    },
+    "tokenDesc": "ألصق رمز الوصول الخاص بـ MiniMax Code:",
+    "jsonDesc": "اختر ملف JSON يحتوي على حسابات MiniMax Code:",
+    "import": {
+      "localDesc": "استيراد بيانات الحساب من عميل MiniMax Code المحلي أو من ملف JSON.",
+      "localClient": "استيراد من MiniMax Code المحلي"
+    },
+    "search": "ابحث في حسابات MiniMax Code...",
+    "quotaQuery": {
+      "failedRefreshCompact": "فشل تحديث الحصة",
+      "sectionTitle": "استعلام الحصة",
+      "empty": "لا توجد معلومات ربط لاستعلام الحصة بعد",
+      "packageUnknown": "باقة غير معروفة",
+      "quotaLabel": "الحصة المتبقية",
+      "updatedAt": "آخر استعلام: {{time}}",
+      "cycleRange": "الدورة: {{start}} - {{end}}",
+      "cycleUnknown": "معلومات الدورة غير متاحة",
+      "expireAt": "ينتهي في: {{time}}",
+      "expireUnknown": "وقت الانتهاء: غير متاح",
+      "packageTitle": {
+        "base": "حزمة التجربة الأساسية",
+        "activity": "حزمة هدية النشاط"
+      }
+    },
+    "extraCredit": {
+      "title": "باقة الرصيد"
+    },
+    "oauthUrlInputPlaceholder": "يمكنك إدخال رابط التفويض يدويًا",
+    "oauthInvalidUrl": "رابط تفويض غير صالح. يرجى إدخال رابط كامل.",
+    "oauthGotoWebview": "توجيه WebView المفتوح إلى الرابط المُدخل",
+    "oauthGotoWebviewSuccess": "تم طلب توجيه WebView إلى الرابط المُدخل.",
+    "oauthGotoWebviewFailed": "فشل توجيه WebView: {{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "أدخل رابطًا للتنقل داخل WebView هذا",
+    "oauthWebviewInlineGo": "انتقال",
+    "oauthSuccessClosePrompt": "تمت إضافة الحساب بنجاح. هل تريد إغلاق WebView الآن؟\nاختر \"إغلاق WebView\" للإغلاق الآن، أو \"لاحقًا\" للإبقاء عليه مفتوحًا.",
+    "oauthSuccessCloseTitle": "تمت إضافة الحساب",
+    "oauthSuccessCloseNowLabel": "إغلاق WebView",
+    "oauthSuccessCloseLaterLabel": "لاحقًا",
+    "oauthSuccessCloseNowStatus": "✅ تمت إضافة الحساب. جارٍ إغلاق النافذة...",
+    "oauthSuccessCloseLaterStatus": "✅ تمت إضافة الحساب. سيبقى WebView مفتوحًا.",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 تحضير رابط OAuth",
+        "authorize": "2 فتح رابط التفويض وتأكيده",
+        "bind": "3 استطلاع نتيجة التفويض وربط الحساب",
+        "complete": "5 تم (إغلاق يدوي)"
+      },
+      "status": {
+        "loginConfirm": "يرجى إكمال تسجيل الدخول والتفويض في هذه الصفحة."
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "تعدد مثيلات MiniMax Code مدعوم فقط على macOS وWindows وLinux."
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "checkin": {
+      "title": "التسجيل اليومي",
+      "modalTitle": "التسجيل اليومي",
+      "status": "حالة التسجيل",
+      "checkedIn": "تم التسجيل",
+      "notCheckedIn": "لم يتم التسجيل",
+      "button": "تسجيل الحضور",
+      "button.loading": "جاري التسجيل...",
+      "done": "تم",
+      "success": "تم التسجيل بنجاح! {{days}} يوم متتالي",
+      "failure": "فشل تسجيل الحضور: {{message}}",
+      "failure.network": "خطأ في الشبكة، يرجى المحاولة لاحقًا",
+      "lastCheckin": "آخر تسجيل: {{time}}",
+      "streak": "{{days}} يوم متتالي",
+      "reward": "المكافأة: {{reward}}",
+      "refreshStatus": "تحديث الحالة",
+      "checkAll": "تسجيل الكل",
+      "noAccounts": "لا توجد حسابات",
+      "querying": "جارٍ التحميل...",
+      "streakDays": "{{days}} يوم",
+      "streakRewardCountdown": "يتبقى {{days}} يومًا للحصول على المكافأة الإضافية",
+      "streakRewardToday": "المكافأة الإضافية متاحة اليوم!",
+      "recentDates": "الأيام الأخيرة: ",
+      "claimed": "تم الاستلام",
+      "queryFailed": "فشل الاستعلام",
+      "retry": "إعادة",
+      "inactive": "غير متاح",
+      "inactiveHint": "تسجيل الحضور غير مفعّل لهذا الحساب",
+      "autoCheckinSettings": "إعدادات تسجيل الوصول التلقائي",
+      "autoCheckinLabel": "تسجيل الوصول التلقائي",
+      "autoCheckinOff": "إيقاف تسجيل الوصول التلقائي",
+      "autoCheckinEnabledHint": "تم تمكين تسجيل الوصول التلقائي: تسجيل عشوائي بين {{start}} و {{end}}",
+      "autoCheckinDisabledHint": "تم تعطيل تسجيل الوصول التلقائي",
+      "enableAutoCheckin": "تمكين تسجيل الوصول التلقائي",
+      "enableAutoCheckinDesc": "تسجيل الوصول يوميًا بشكل عشوائي ضمن النطاق الزمني المحدد",
+      "randomTimeRange": "النطاق الزمني لتسجيل الوصول العشوائي",
+      "startTime": "وقت البدء",
+      "endTime": "وقت الانتهاء",
+      "timeRangeHint": "يختار وقتًا عشوائيًا يوميًا ضمن هذا النطاق لإكمال تسجيل الوصول في الخلفية.",
+      "timeRangeError": "لا يمكن أن يكون وقت البدء متأخرًا عن وقت الانتهاء"
+    },
     "placeholder": "ستتوفر إدارة حسابات MiniMax Code قريبًا."
   },
   "zcode": {

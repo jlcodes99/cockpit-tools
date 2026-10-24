@@ -28,6 +28,7 @@ type InstancesAppType =
   | 'trae_cn'
   | 'trae_solo_cn'
   | 'workbuddy'
+  | 'minimax_code'
   | 'zcode';
 
 interface PlatformInstancesContentProps<TAccount extends AccountLike> {

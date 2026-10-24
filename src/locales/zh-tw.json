@@ -7078,13 +7078,150 @@
       "timeRangeError": "開始時間不能晚於結束時間"
     }
   },
-  "minimaxCode": {
+    "minimaxCode": {
     "title": "MiniMax Code 帳號管理",
     "noAccounts": "暫無 MiniMax Code 帳號",
     "addAccount": "新增 MiniMax Code 帳號",
-    "search": "搜尋 MiniMax Code 帳號...",
+    "flowNotice": {
+      "title": "MiniMax Code 帳號管理說明（點擊展開/收起）",
+      "desc": "切換帳號會依新版 MiniMax Code 官方用戶端規則寫入本機登入檔；本機匯入讀取同一檔案，資料僅在本機處理。",
+      "permission": "權限範圍：讀取並寫入 MiniMax Code 登入檔（~/.minimax/auth/auth.json），用於本機匯入與帳號切換；不再讀取或修改舊版 state.vscdb。",
+      "network": "網路範圍：OAuth 登入與 Token 刷新需連線請求 MiniMax Code；配額查詢需呼叫計費 API。不會上傳本機登入檔或憑證原文。"
+    },
+    "nickname": "暱稱",
+    "enterprise": "企業",
+    "usage": "用量狀態",
+    "creditsBalance": "積分餘額",
     "usageNormal": "正常",
     "usageAbnormal": "異常",
+    "usageViewDetail": "查看詳情",
+    "usageDetailTitle": "用量狀態詳情",
+    "oauthWaiting": "等待授權完成...",
+    "oauthDesc": "點擊下方按鈕將在瀏覽器中開啟 MiniMax Code 授權頁面。",
+    "oauthDescWebview": "點擊下方按鈕將在內建 WebView 中開啟 MiniMax Code 授權頁面。",
+    "oauthFeature": {
+      "oauth": {
+        "title": "僅授權 IDE 登入資訊",
+        "item1": "在瀏覽器完成 OAuth 後即可新增帳號並用於 IDE 切換。",
+        "item2": "不會自動綁定配額查詢參數。",
+        "item3": "如需顯示配額，請在帳號卡片中手動執行「查詢配額」綁定。"
+      }
+    },
+    "oauthWebviewTab": "WebView 授權",
+    "oauthOpenWebview": "在 WebView 中開啟",
+    "oauthOpenWebviewIncognito": "在無痕 WebView 中開啟",
+    "oauthOpenWebviewFailed": "開啟 WebView 失敗：{{error}}",
+    "oauthOpenBrowserFallback": "在瀏覽器中開啟（備用）",
+    "oauthOpenBrowserFailed": "開啟瀏覽器失敗：{{error}}",
+    "oauthWebviewProgressHint": "WebView 頂部會顯示橫向步驟條，便於定位卡住的步驟。",
+    "oauthFlow": {
+      "prepare": "準備授權連結",
+      "authorize": "開啟授權連結並確認授權",
+      "bind": "輪詢授權結果並綁定帳號",
+      "retryPrepare": "重新產生授權連結",
+      "retryAuthorize": "重新請求授權連結",
+      "retryBind": "重新輪詢授權結果",
+      "error": "流程異常：{{error}}"
+    },
+    "tokenDesc": "貼上 MiniMax Code 的 access token：",
+    "jsonDesc": "選擇包含 MiniMax Code 帳號的 JSON 檔案：",
+    "import": {
+      "localDesc": "支援從本機 MiniMax Code 用戶端或 JSON 檔案匯入帳號資料。",
+      "localClient": "從本機 MiniMax Code 匯入"
+    },
+    "search": "搜尋 MiniMax Code 帳號...",
+    "quotaQuery": {
+      "failedRefreshCompact": "刷新配額失敗",
+      "sectionTitle": "配額查詢",
+      "empty": "暫無綁定的配額查詢資訊",
+      "packageUnknown": "套餐資訊未知",
+      "quotaLabel": "剩餘配額",
+      "updatedAt": "最近查詢：{{time}}",
+      "cycleRange": "週期：{{start}} - {{end}}",
+      "cycleUnknown": "週期資訊暫無",
+      "expireAt": "到期時間：{{time}}",
+      "expireUnknown": "到期時間：暫無",
+      "packageTitle": {
+        "base": "基礎體驗包",
+        "activity": "活動贈送包"
+      }
+    },
+    "extraCredit": {
+      "title": "加量包"
+    },
+    "oauthUrlInputPlaceholder": "可手動輸入授權網址",
+    "oauthInvalidUrl": "授權連結格式不正確，請輸入完整 URL。",
+    "oauthGotoWebview": "讓已開啟的 WebView 跳轉到輸入網址",
+    "oauthGotoWebviewSuccess": "已請求 WebView 跳轉到輸入網址。",
+    "oauthGotoWebviewFailed": "WebView 跳轉失敗：{{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "在此輸入網址並在目前 WebView 跳轉",
+    "oauthWebviewInlineGo": "跳轉",
+    "oauthSuccessClosePrompt": "帳號新增完成，是否關閉 WebView？\n點擊「關閉 WebView」將立即關閉；點擊「稍後再說」則保持目前頁面開啟。",
+    "oauthSuccessCloseTitle": "帳號新增完成",
+    "oauthSuccessCloseNowLabel": "關閉 WebView",
+    "oauthSuccessCloseLaterLabel": "稍後再說",
+    "oauthSuccessCloseNowStatus": "✅ 帳號新增完成，視窗即將關閉…",
+    "oauthSuccessCloseLaterStatus": "✅ 帳號新增完成，已保持目前頁面開啟。",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 準備授權連結",
+        "authorize": "2 開啟授權連結並確認授權",
+        "bind": "3 輪詢授權結果並綁定帳號",
+        "complete": "5 完成（手動關閉）"
+      },
+      "status": {
+        "loginConfirm": "請在此頁面完成登入與授權。"
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "MiniMax Code 多執行個體僅在 macOS、Windows 和 Linux 上支援。"
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "checkin": {
+      "title": "每日簽到",
+      "modalTitle": "每日簽到",
+      "status": "簽到狀態",
+      "checkedIn": "已簽到",
+      "notCheckedIn": "未簽到",
+      "button": "簽到",
+      "button.loading": "簽到中...",
+      "done": "已完成",
+      "success": "簽到成功！連續簽到 {{days}} 天",
+      "failure": "簽到失敗：{{message}}",
+      "failure.network": "網路異常，請稍後重試",
+      "lastCheckin": "最後簽到：{{time}}",
+      "streak": "連續簽到 {{days}} 天",
+      "reward": "獎勵：{{reward}}",
+      "refreshStatus": "刷新狀態",
+      "checkAll": "一鍵簽到",
+      "noAccounts": "暫無帳號",
+      "querying": "查詢中...",
+      "streakDays": "{{days}} 天",
+      "streakRewardCountdown": "再簽 {{days}} 天可得大禮包",
+      "streakRewardToday": "今日可獲得大禮包！",
+      "recentDates": "近期簽到：",
+      "claimed": "已領取",
+      "queryFailed": "狀態查詢失敗",
+      "retry": "重試",
+      "inactive": "不可用",
+      "inactiveHint": "簽到活動未開啟或不適用目前帳號",
+      "autoCheckinSettings": "自動簽到設定",
+      "autoCheckinLabel": "自動簽到",
+      "autoCheckinOff": "自動簽到未開啟",
+      "autoCheckinEnabledHint": "自動簽到已開啟：將在 {{start}} 至 {{end}} 隨機簽到",
+      "autoCheckinDisabledHint": "自動簽到未開啟",
+      "enableAutoCheckin": "開啟自動簽到",
+      "enableAutoCheckinDesc": "每天在指定時間段內隨機選取一個時間完成自動簽到",
+      "randomTimeRange": "隨機簽到時間段",
+      "startTime": "開始時間",
+      "endTime": "結束時間",
+      "timeRangeHint": "應用程式保持執行時，會在這個時間段內隨機選取一個時間點完成背景自動簽到。",
+      "timeRangeError": "開始時間不能晚於結束時間"
+    },
     "placeholder": "MiniMax Code 帳號管理即將推出。"
   },
   "zcode": {

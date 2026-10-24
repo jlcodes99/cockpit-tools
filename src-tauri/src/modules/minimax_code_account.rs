@@ -533,6 +533,13 @@ fn normalize_account_index(index: &mut MinimaxCodeAccountIndex) -> Vec<MinimaxCo
     normalized
 }
 
+pub(crate) fn resolve_current_account_id(accounts: &[MinimaxCodeAccount]) -> Option<String> {
+    crate::modules::provider_current_state::resolve_existing_current_account_id(
+        "minimaxcode",
+        accounts.iter().map(|account| account.id.as_str()),
+    )
+}
+
 pub fn list_accounts() -> Vec<MinimaxCodeAccount> {
     let mut index = load_account_index();
     let had_index_accounts = !index.accounts.is_empty();

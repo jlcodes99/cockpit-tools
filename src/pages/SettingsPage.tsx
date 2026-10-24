@@ -2404,6 +2404,8 @@ export function useSettingsPageController() {
         return parseRefresh(codebuddyCnAutoRefresh) > 0;
       case 'workbuddy':
         return parseRefresh(workbuddyAutoRefresh) > 0;
+      case 'minimaxcode':
+        return false;
       case 'qoder':
         return parseRefresh(qoderAutoRefresh) > 0;
       case 'zcode':

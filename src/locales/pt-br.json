@@ -7078,13 +7078,150 @@
       "timeRangeError": "O horário de início não pode ser posterior ao horário de término"
     }
   },
-  "minimaxCode": {
+    "minimaxCode": {
     "title": "Gerenciamento de contas do MiniMax Code",
     "noAccounts": "Nenhuma conta MiniMax Code",
     "addAccount": "Adicionar conta MiniMax Code",
-    "search": "Pesquisar contas do MiniMax Code...",
+    "flowNotice": {
+      "title": "Informacoes de gerenciamento de conta do MiniMax Code (clique para expandir/recolher)",
+      "desc": "A troca de conta grava o arquivo local de login seguindo o layout mais recente do cliente oficial do MiniMax Code; a importação local lê o mesmo arquivo. Os dados são processados somente localmente.",
+      "permission": "Escopo de permissão: ler e gravar o arquivo de login do MiniMax Code (~/.minimax/auth/auth.json) para importação local e troca de conta; o state.vscdb legado não é mais lido nem modificado.",
+      "network": "Escopo de rede: login OAuth e renovação de token exigem requisições para MiniMax Code; consultas de cota chamam APIs de cobrança. Arquivos locais de login e credenciais brutas não são enviados."
+    },
+    "nickname": "Apelido",
+    "enterprise": "Empresa",
+    "usage": "Status de uso",
+    "creditsBalance": "Saldo de créditos",
     "usageNormal": "Estado normal",
     "usageAbnormal": "Anormal",
+    "usageViewDetail": "Ver detalhes",
+    "usageDetailTitle": "Detalhes do status de uso",
+    "oauthWaiting": "Aguardando autorizacao...",
+    "oauthDesc": "Clique no botao abaixo para abrir a pagina de autorizacao do MiniMax Code no navegador.",
+    "oauthDescWebview": "Clique no botao abaixo para abrir a pagina de autorizacao do MiniMax Code na WebView incorporada.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Somente login do IDE",
+        "item1": "Adicione a conta apos concluir o OAuth no navegador e use-a para alternancia no IDE.",
+        "item2": "Os parametros de consulta de cota nao sao vinculados automaticamente.",
+        "item3": "Se precisar exibir a cota, execute manualmente \"Consultar cota\" no cartao da conta."
+      }
+    },
+    "oauthWebviewTab": "OAuth na WebView",
+    "oauthOpenWebview": "Abrir na WebView",
+    "oauthOpenWebviewIncognito": "Abrir na WebView anonima",
+    "oauthOpenWebviewFailed": "Falha ao abrir a WebView: {{error}}",
+    "oauthOpenBrowserFallback": "Abrir no navegador (fallback)",
+    "oauthOpenBrowserFailed": "Falha ao abrir o navegador: {{error}}",
+    "oauthWebviewProgressHint": "Uma barra horizontal de etapas e mostrada no topo da WebView para localizar pontos travados.",
+    "oauthFlow": {
+      "prepare": "Preparar link OAuth",
+      "authorize": "Abrir link de autorizacao e confirmar",
+      "bind": "Verificar resultado da autenticacao e vincular conta",
+      "retryPrepare": "Gerar novamente o link OAuth",
+      "retryAuthorize": "Solicitar novamente o link de autorizacao",
+      "retryBind": "Tentar novamente a verificacao da autenticacao",
+      "error": "Erro do fluxo: {{error}}"
+    },
+    "tokenDesc": "Cole seu token de acesso do MiniMax Code:",
+    "jsonDesc": "Selecione um arquivo JSON contendo contas do MiniMax Code:",
+    "import": {
+      "localDesc": "Importe dados de conta do cliente local do MiniMax Code ou de um arquivo JSON.",
+      "localClient": "Importar do MiniMax Code local"
+    },
+    "search": "Pesquisar contas do MiniMax Code...",
+    "quotaQuery": {
+      "failedRefreshCompact": "Falha na atualizacao da cota",
+      "sectionTitle": "Consulta de cota",
+      "empty": "Ainda nao ha informacoes vinculadas de consulta de cota",
+      "packageUnknown": "Pacote desconhecido",
+      "quotaLabel": "Cota restante",
+      "updatedAt": "Ultima consulta: {{time}}",
+      "cycleRange": "Ciclo: {{start}} - {{end}}",
+      "cycleUnknown": "Informacoes do ciclo indisponiveis",
+      "expireAt": "Expira em: {{time}}",
+      "expireUnknown": "Expiracao: N/A",
+      "packageTitle": {
+        "base": "Pacote de experiência básica",
+        "activity": "Pacote de bônus de atividade"
+      }
+    },
+    "extraCredit": {
+      "title": "Pacote de creditos"
+    },
+    "oauthUrlInputPlaceholder": "Voce pode inserir manualmente uma URL de autorizacao",
+    "oauthInvalidUrl": "URL de autorizacao invalida. Informe uma URL completa.",
+    "oauthGotoWebview": "Navegar a WebView aberta para a URL informada",
+    "oauthGotoWebviewSuccess": "Solicitacao enviada para a WebView navegar ate a URL informada.",
+    "oauthGotoWebviewFailed": "Falha ao navegar na WebView: {{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "Digite uma URL para abrir nesta WebView",
+    "oauthWebviewInlineGo": "Ir",
+    "oauthSuccessClosePrompt": "Conta adicionada com sucesso. Fechar esta WebView agora?\nEscolha \"Fechar WebView\" para fechar agora, ou \"Depois\" para mantê-la aberta.",
+    "oauthSuccessCloseTitle": "Conta adicionada",
+    "oauthSuccessCloseNowLabel": "Fechar WebView",
+    "oauthSuccessCloseLaterLabel": "Depois",
+    "oauthSuccessCloseNowStatus": "✅ Conta adicionada. Fechando janela...",
+    "oauthSuccessCloseLaterStatus": "✅ Conta adicionada. Esta WebView permanecera aberta.",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 Preparar link OAuth",
+        "authorize": "2 Abrir link de autorizacao e confirmar",
+        "bind": "3 Verificar resultado da autenticacao e vincular conta",
+        "complete": "5 Concluído (fechar manualmente)"
+      },
+      "status": {
+        "loginConfirm": "Conclua o login e a autorização nesta página."
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "A multiinstância MiniMax Code é compatível apenas com macOS, Windows e Linux."
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "checkin": {
+      "title": "Check-in diário",
+      "modalTitle": "Check-in diário",
+      "status": "Status do check-in",
+      "checkedIn": "Check-in concluído",
+      "notCheckedIn": "Sem check-in",
+      "button": "Registrar presença",
+      "button.loading": "Fazendo check-in...",
+      "done": "Concluído",
+      "success": "Check-in realizado com sucesso! Sequência de {{days}} dias",
+      "failure": "Falha ao registrar presença: {{message}}",
+      "failure.network": "Erro de rede, tente novamente mais tarde",
+      "lastCheckin": "Último check-in: {{time}}",
+      "streak": "Sequência de {{days}} dias",
+      "reward": "Recompensa: {{reward}}",
+      "refreshStatus": "Atualizar",
+      "checkAll": "Fazer check-in em todos",
+      "noAccounts": "Sem contas",
+      "querying": "Carregando...",
+      "streakDays": "{{days}} dias",
+      "streakRewardCountdown": "Faltam {{days}} dias para a recompensa bônus",
+      "streakRewardToday": "Recompensa bônus disponível hoje!",
+      "recentDates": "Recentes: ",
+      "claimed": "Resgatado",
+      "queryFailed": "Falha na consulta",
+      "retry": "Tentar de novo",
+      "inactive": "Indisponível",
+      "inactiveHint": "Check-in inativo nesta conta",
+      "autoCheckinSettings": "Configurações de check-in automático",
+      "autoCheckinLabel": "Check-in Automático",
+      "autoCheckinOff": "Check-in Automático Desligado",
+      "autoCheckinEnabledHint": "Check-in automático ativado: check-in aleatório entre {{start}} e {{end}}",
+      "autoCheckinDisabledHint": "Check-in automático desativado",
+      "enableAutoCheckin": "Ativar check-in automático",
+      "enableAutoCheckinDesc": "Realiza check-in diário aleatório dentro da janela de tempo especificada",
+      "randomTimeRange": "Intervalo de tempo para check-in aleatório",
+      "startTime": "Horário de início",
+      "endTime": "Horário de término",
+      "timeRangeHint": "Seleciona diariamente um horário aleatório dentro deste intervalo para concluir o check-in.",
+      "timeRangeError": "O horário de início não pode ser posterior ao horário de término"
+    },
     "placeholder": "O gerenciamento de contas do MiniMax Code estará disponível em breve."
   },
   "zcode": {
