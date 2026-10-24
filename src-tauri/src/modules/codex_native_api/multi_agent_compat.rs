@@ -3,7 +3,7 @@
 //! delegation are independent gates. No function in this module decrypts data.
 use axum::http::HeaderMap;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[path = "multi_agent_compat_integer.rs"]
 mod integer;
@@ -32,6 +32,7 @@ pub struct Options {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Context {
     pub optimized_namespace: bool,
+    restored_flat_tools: HashSet<String>,
     plaintext_enabled: bool,
     plaintext: plaintext::Policy,
 }
@@ -44,7 +45,7 @@ impl Context {
     /// client-visible history. Arguments and tool result payloads are opaque.
     pub fn restore(&self, value: &mut Value) {
         if self.optimized_namespace {
-            restore_value(value);
+            restore_value(value, &self.restored_flat_tools);
         }
         if self.plaintext_enabled {
             self.plaintext.mark(value, false);
@@ -119,6 +120,7 @@ pub(super) fn prepare(
         ..Default::default()
     };
     if enabled {
+        context.restored_flat_tools = restored_flat_tools(body);
         rewrite_agent_content(body);
         let conflict = has_namespace_conflict(body);
         let markdown = if options.tools_prepared || conflict {
@@ -410,9 +412,51 @@ fn rewrite_orphans(headers: &HeaderMap, body: &mut Value, enabled: bool) {
     }
 }
 
-fn restore_value(value: &mut Value) {
+/// A chained CPA may already have changed an optimized flat call back to
+/// `collaboration__tool`. Only recover identities declared by this request;
+/// an explicitly declared flat tool with the same name remains authoritative.
+fn restored_flat_tools(body: &Value) -> HashSet<String> {
+    let mut names = HashSet::new();
+    let mut conflicts = HashSet::new();
+    let mut roots = Vec::new();
+    if let Some(tools) = body.get("tools").and_then(Value::as_array) {
+        roots.push(tools);
+    }
+    if let Some(input) = body.get("input").and_then(Value::as_array) {
+        for item in input {
+            if field(item, "type") == "additional_tools" {
+                if let Some(tools) = item.get("tools").and_then(Value::as_array) {
+                    roots.push(tools);
+                }
+            }
+        }
+    }
+    for tools in roots {
+        for tool in tools {
+            if field(tool, "type") == "namespace" && field(tool, "name") == COLLABORATION {
+                if let Some(children) = tool.get("tools").and_then(Value::as_array) {
+                    for child in children {
+                        if matches!(field(child, "type"), "function" | "custom") {
+                            names.insert(field(child, "name").to_owned());
+                        }
+                    }
+                }
+            } else if matches!(field(tool, "type"), "function" | "custom") {
+                conflicts.insert(field(tool, "name"));
+            }
+        }
+    }
+    names.retain(|name| {
+        !name.is_empty() && !conflicts.contains(format!("collaboration__{name}").as_str())
+    });
+    names
+}
+
+fn restore_value(value: &mut Value, restored_flat_tools: &HashSet<String>) {
     match value {
-        Value::Array(items) => items.iter_mut().for_each(restore_value),
+        Value::Array(items) => items
+            .iter_mut()
+            .for_each(|item| restore_value(item, restored_flat_tools)),
         Value::Object(object) => {
             let kind = object
                 .get("type")
@@ -438,8 +482,26 @@ fn restore_value(value: &mut Value) {
                     {
                         object.insert("namespace".into(), json!(COLLABORATION));
                         object.insert("name".into(), json!(name));
-                    } else if let Some(name) = name.strip_prefix("collaboration-optimize__") {
-                        object.insert("name".into(), json!(format!("collaboration__{name}")));
+                    } else if let Some(name) = name
+                        .strip_prefix("collaboration-optimize__")
+                        .filter(|name| !name.is_empty())
+                    {
+                        object.insert("namespace".into(), json!(COLLABORATION));
+                        object.insert("name".into(), json!(name));
+                    } else if let Some(name) = name
+                        .strip_prefix("collaboration__")
+                        .filter(|name| restored_flat_tools.contains(*name))
+                        .filter(|_| {
+                            object
+                                .get("namespace")
+                                .and_then(Value::as_str)
+                                .is_none_or(|namespace| {
+                                    matches!(namespace, "" | COLLABORATION | OPTIMIZED)
+                                })
+                        })
+                    {
+                        object.insert("namespace".into(), json!(COLLABORATION));
+                        object.insert("name".into(), json!(name));
                     }
                 }
             }
@@ -454,7 +516,7 @@ fn restore_value(value: &mut Value) {
                 {
                     continue;
                 }
-                restore_value(child);
+                restore_value(child, restored_flat_tools);
             }
         }
         _ => {}
