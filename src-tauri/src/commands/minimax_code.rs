@@ -139,13 +139,23 @@ pub async fn checkin_minimax_code(
 ) -> Result<minimax_code_api::MinimaxCodeCheckinResult, String> {
     let account = minimax_code_account::load_account(&account_id)
         .ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    // MiniMax tokens are ~1h and the client renews them locally; refresh first so a
+    // stale token does not burn the retry budget.
+    let account = match minimax_code_account::refresh_account_token(&account_id).await {
+        Ok(refreshed) => refreshed,
+        Err(_) => account,
+    };
     let region = account.region.as_deref().unwrap_or("cn").to_string();
     let response = minimax_code_api::perform_checkin(&account.access_token, &region).await?;
     if response.success {
         let now = chrono::Utc::now().timestamp();
-        let streak = response.streak_days
-            .and_then(|v| i32::try_from(v).ok())
-            .unwrap_or_else(|| account.checkin_streak.unwrap_or(0).saturating_add(1));
+        let streak = if response.already_claimed {
+            account.checkin_streak.unwrap_or(0)
+        } else {
+            response.streak_days
+                .and_then(|v| i32::try_from(v).ok())
+                .unwrap_or_else(|| account.checkin_streak.unwrap_or(0).saturating_add(1))
+        };
         let reward = response.credit.map(|credit| serde_json::json!({ "credit": credit }));
         minimax_code_account::update_checkin_info(&account_id, Some(now), streak, reward)?;
         let _ = crate::modules::tray::update_tray_menu(&app);
