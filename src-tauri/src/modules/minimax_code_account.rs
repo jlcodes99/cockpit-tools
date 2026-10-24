@@ -1288,6 +1288,121 @@ pub fn import_payload_from_local() -> Result<Vec<MinimaxCodeOAuthCompletePayload
     Ok(out)
 }
 
+/// Resolve the MiniMax client exe (config override, then candidates).
+pub fn resolve_minimax_code_launch_path() -> Result<PathBuf, String> {
+    let configured = crate::modules::config::get_user_config().minimax_code_app_path;
+    if !configured.trim().is_empty() {
+        let path = PathBuf::from(configured.trim());
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    if let Some(local) = dirs::data_local_dir() {
+        let p = local
+            .join("Programs")
+            .join("MiniMax Code")
+            .join("MiniMax Code.exe");
+        if p.is_file() {
+            return Ok(p);
+        }
+    }
+    for c in [
+        r"D:\Programs\MiniMax Code\MiniMax Code.exe",
+        r"C:\Program Files\MiniMax Code\MiniMax Code.exe",
+    ] {
+        let p = PathBuf::from(c);
+        if p.is_file() {
+            return Ok(p);
+        }
+    }
+    Err("未找到 MiniMax Code 客户端可执行文件".to_string())
+}
+
+/// Switch the local MiniMax client to `account` by rewriting its `auth.json`.
+/// Backs up the existing file to `<file>.json.bak` first (never overwrites an existing backup).
+/// Returns the auth file path.
+pub fn switch_minimax_code_account(account: &MinimaxCodeAccount) -> Result<PathBuf, String> {
+    let auth_file = account
+        .auth_file
+        .as_ref()
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
+        .or_else(|| find_minimax_code_auth_files().into_iter().next())
+        .ok_or_else(|| "未找到 MiniMax Code 登录态文件".to_string())?;
+
+    let raw = std::fs::read_to_string(&auth_file)
+        .unwrap_or_else(|_| "{\"schemaVersion\":1,\"records\":{}}".to_string());
+    let mut parsed: Value = serde_json::from_str(&raw)
+        .unwrap_or_else(|_| serde_json::json!({"schemaVersion": 1, "records": {}}));
+
+    // Backup the client's current login state (keep the first backup).
+    let bak = auth_file.with_extension("json.bak");
+    if !bak.exists() {
+        let _ = std::fs::copy(&auth_file, &bak);
+    }
+
+    let records = parsed
+        .get("records")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let prefix = records
+        .keys()
+        .next()
+        .and_then(|k| k.split('\u{0}').next().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "com.minimax.mcode.oauth.prod.cn".to_string());
+    let target_key = format!("{}\u{0}{}", prefix, account.id);
+
+    let mut record = records
+        .get(&target_key)
+        .cloned()
+        .or_else(|| records.values().next().cloned())
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "schemaVersion": 1, "tokenType": "Bearer", "clientId": "mcode-public",
+                "scopes": ["agent.default"], "audience": "agent-backend", "generation": 1
+            })
+        });
+    if let Some(obj) = record.as_object_mut() {
+        obj.insert("accessToken".into(), Value::String(account.access_token.clone()));
+        obj.insert(
+            "refreshToken".into(),
+            Value::String(account.refresh_token.clone().unwrap_or_default()),
+        );
+        if let Some(ms) = account.expires_at {
+            obj.insert("expiresAtMs".into(), serde_json::json!(ms));
+        }
+        let gen = obj.get("generation").and_then(|v| v.as_i64()).unwrap_or(0);
+        obj.insert("generation".into(), serde_json::json!(gen + 1));
+    }
+
+    // Keep only the target record: the client takes the first non-empty token.
+    let mut new_records = serde_json::Map::new();
+    new_records.insert(target_key, record);
+    parsed["records"] = Value::Object(new_records);
+    if parsed.get("schemaVersion").is_none() {
+        parsed["schemaVersion"] = serde_json::json!(1);
+    }
+
+    crate::modules::atomic_write::write_string_atomic(
+        &auth_file,
+        &serde_json::to_string_pretty(&parsed).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("写入 MiniMax Code 登录态失败: {e}"))?;
+    Ok(auth_file)
+}
+
+/// Switch + launch the client. Returns the launched exe path.
+pub fn switch_and_launch(account: &MinimaxCodeAccount) -> Result<PathBuf, String> {
+    switch_minimax_code_account(account)?;
+    let exe = resolve_minimax_code_launch_path()?;
+    std::process::Command::new(&exe)
+        .spawn()
+        .map_err(|e| format!("启动 MiniMax Code 失败: {e}"))?;
+    Ok(exe)
+}
+
 #[cfg(test)]
 mod minimax_code_local_import_tests {
     use super::*;
@@ -1407,6 +1522,140 @@ mod minimax_code_local_import_tests {
             "expected to find {:?}, got {:?}",
             file,
             out
+        );
+    }
+}
+
+#[cfg(test)]
+mod minimax_code_switch_tests {
+    use super::*;
+    use serde_json::json;
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            let unique = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let dir = std::env::temp_dir().join(format!(
+                "cockpit-minimax-code-switch-{}-{}",
+                std::process::id(),
+                unique
+            ));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn write_two_record_auth_file(dir: &Path) -> PathBuf {
+        let file = dir.join("auth.json");
+        let body = json!({
+            "schemaVersion": 1,
+            "records": {
+                "com.minimax.mcode.oauth.prod.cn\u{0}account_a": {
+                    "accessToken": "mmoat_account_a",
+                    "refreshToken": "mmort_account_a",
+                    "tokenType": "Bearer",
+                    "clientId": "mcode-public",
+                    "scopes": ["agent.default"],
+                    "audience": "agent-backend",
+                    "expiresAtMs": 1792767948636_i64,
+                    "generation": 7
+                },
+                "com.minimax.mcode.oauth.prod.cn\u{0}account_b": {
+                    "accessToken": "mmoat_account_b",
+                    "refreshToken": "mmort_account_b",
+                    "tokenType": "Bearer",
+                    "clientId": "mcode-public",
+                    "scopes": ["agent.default"],
+                    "audience": "agent-backend",
+                    "expiresAtMs": 1792767948636_i64,
+                    "brandNew": true
+                }
+            }
+        });
+        fs::write(&file, body.to_string()).unwrap();
+        file
+    }
+
+    #[test]
+    fn switch_minimax_code_account_rewrites_single_target_record() {
+        let tmp = TempDir::new();
+        let auth_file = write_two_record_auth_file(&tmp.0);
+
+        let account = MinimaxCodeAccount {
+            id: "account_b".to_string(),
+            email: "b@example.com".to_string(),
+            uid: None,
+            nickname: None,
+            tags: None,
+            access_token: "mmoat_target_token".to_string(),
+            refresh_token: Some("mmort_target_refresh".to_string()),
+            token_type: Some("Bearer".to_string()),
+            expires_at: Some(1792767948636_i64),
+            region: Some("cn".to_string()),
+            auth_file: Some(auth_file.to_string_lossy().to_string()),
+            plan_type: None,
+            quota_raw: None,
+            auth_raw: None,
+            profile_raw: None,
+            status: Some("normal".to_string()),
+            status_reason: None,
+            quota_query_last_error: None,
+            quota_query_last_error_at: None,
+            usage_updated_at: None,
+            last_checkin_time: None,
+            checkin_streak: None,
+            checkin_rewards: None,
+            created_at: 1,
+            last_used: 1,
+        };
+
+        let returned = switch_minimax_code_account(&account).expect("switch should succeed");
+        assert_eq!(returned, auth_file);
+
+        let raw = fs::read_to_string(&auth_file).unwrap();
+        let parsed: Value = serde_json::from_str(&raw).unwrap();
+        let records = parsed.get("records").and_then(|v| v.as_object()).unwrap();
+        assert_eq!(records.len(), 1, "only the target record should remain");
+
+        let (key, record) = records.iter().next().unwrap();
+        assert_eq!(
+            key,
+            "com.minimax.mcode.oauth.prod.cn\u{0}account_b",
+            "record key must reuse the existing prefix and target account id"
+        );
+        assert_eq!(
+            record.get("accessToken").and_then(|v| v.as_str()),
+            Some("mmoat_target_token")
+        );
+        assert_eq!(
+            record.get("refreshToken").and_then(|v| v.as_str()),
+            Some("mmort_target_refresh")
+        );
+        // generation bumped from the reused record (account_b had none -> 1).
+        assert_eq!(record.get("generation").and_then(|v| v.as_i64()), Some(1));
+
+        let bak = auth_file.with_extension("json.bak");
+        assert!(bak.is_file(), "backup should exist at {bak:?}");
+        let backup_raw = fs::read_to_string(&bak).unwrap();
+        let backup: Value = serde_json::from_str(&backup_raw).unwrap();
+        assert_eq!(
+            backup
+                .get("records")
+                .and_then(|v| v.as_object())
+                .map(|m| m.len()),
+            Some(2),
+            "backup must preserve the original two records"
         );
     }
 }

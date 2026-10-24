@@ -87,6 +87,27 @@ pub async fn import_minimax_code_from_local(app: tauri::AppHandle) -> Result<Vec
 }
 
 #[tauri::command]
+pub async fn inject_minimax_code_to_client(
+    app: tauri::AppHandle,
+    account_id: String,
+) -> Result<String, String> {
+    let account = minimax_code_account::load_account(&account_id)
+        .ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    crate::modules::provider_current_state::set_current_account_id(
+        "minimaxcode",
+        Some(account_id.as_str()),
+    )?;
+    let email = account.email.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::modules::minimax_code_account::switch_and_launch(&account)
+    })
+    .await
+    .map_err(|e| format!("MiniMax Code 切号后台任务失败: {e}"))??;
+    let _ = crate::modules::tray::update_tray_menu(&app);
+    Ok(format!("切换完成: {} ({})", email, result.display()))
+}
+
+#[tauri::command]
 pub async fn minimax_code_oauth_login_start(
     region: Option<String>,
 ) -> Result<MinimaxCodeOAuthStartResponse, String> {
