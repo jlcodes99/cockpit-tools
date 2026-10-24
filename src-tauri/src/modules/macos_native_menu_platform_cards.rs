@@ -2195,6 +2195,17 @@
         })
     }
 
+    /// MiniMax Code account cards for the macOS native menu.
+    ///
+    /// Known limitation: MiniMax stores the raw `credit/details` body on
+    /// `quota_raw` (`{ code, msg, data: { details: [...] } }`), while
+    /// `build_resource_quota_model` expects the shared CodeBuddy
+    /// `Response.Data.Accounts` envelope. As a result `quota_rows` is empty here
+    /// and the card renders the account title + plan badge only. The frontend
+    /// renders MiniMax quota correctly by wrapping the body via
+    /// `getMiniMaxCodeQuotaGroups`; normalizing it on the backend would require
+    /// mapping `credit_type`/`granted_amount`/`consumed_amount`/`remaining_amount`
+    /// onto the shared resource shape.
     fn build_minimax_code_cards(
         lang: &str,
     ) -> (Vec<AccountCard>, Option<String>, Option<String>) {

@@ -334,7 +334,7 @@ impl PlatformId {
             Self::TraeCn => "trae-cn",
             Self::TraeSoloCn => "trae-solo-cn",
             Self::Workbuddy => "workbuddy",
-            Self::MinimaxCode => "minimax_code",
+            Self::MinimaxCode => "minimaxcode",
         }
     }
 }

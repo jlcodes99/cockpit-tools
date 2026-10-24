@@ -979,12 +979,12 @@ pub fn start_minimax_code_default_with_args_with_new_window(
 ) -> Result<u32, String> {
     #[cfg(target_os = "macos")]
     {
-        let app_root = resolve_macos_app_root_from_config("minimax_code").or_else(|| {
+        let app_root = resolve_macos_app_root_from_config("minimaxcode").or_else(|| {
             resolve_minimax_code_launch_path()
                 .ok()
                 .and_then(|p| resolve_macos_app_root_from_launch_path(&p))
         });
-        let app_root = app_root.ok_or_else(|| app_path_missing_error("minimax_code"))?;
+        let app_root = app_root.ok_or_else(|| app_path_missing_error("minimaxcode"))?;
 
         let mut args: Vec<String> = Vec::new();
         if use_new_window {

@@ -892,7 +892,7 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             common_paths: &["WorkBuddy\\WorkBuddy.exe"],
             supports_multi_instance: true,
         }),
-        "minimax_code" => Some(WindowsAppLaunchSignature {
+        "minimaxcode" | "minimax_code" => Some(WindowsAppLaunchSignature {
             label: "MiniMax Code",
             exe_names: &["MiniMax Code.exe"],
             command_names: &["minimax code", "minimaxcode"],
@@ -2147,7 +2147,7 @@ fn update_app_path_in_config(app: &str, path: &Path, expected_current: &str) {
             "trae_cn" => &mut current.trae_cn_app_path,
             "trae_solo_cn" => &mut current.trae_solo_cn_app_path,
             "workbuddy" => &mut current.workbuddy_app_path,
-            "minimax_code" => &mut current.minimax_code_app_path,
+            "minimaxcode" | "minimax_code" => &mut current.minimax_code_app_path,
             _ => return Ok(()),
         };
         if app_path_matches_snapshot(configured_path, expected_current)
