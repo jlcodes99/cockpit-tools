@@ -22,21 +22,38 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 )
 
-func hostResultHistory() []any {
+func hostResultHistory(namespace string) []any {
 	return []any{
 		map[string]any{"role": "user", "content": "original task"},
 		map[string]any{"type": "function_call", "name": "read_file", "call_id": "real-call", "arguments": "{}"},
-		map[string]any{"type": "function_call_output", "namespace": "codex_app", "name": "create_thread", "output": "Original host result\n  exact text  "},
+		map[string]any{"type": "function_call_output", "namespace": namespace, "name": "create_thread", "output": "Original host result\n  exact text  "},
 		map[string]any{"type": "function_call_output", "call_id": "real-call", "output": "original file contents"},
-		map[string]any{"type": "function_call_output", "namespace": "codex_app", "name": "send_message_to_thread", "call_id": "", "output": []any{map[string]any{"type": "input_text", "text": "Host payload:"}, map[string]any{"type": "encrypted_content", "encrypted_content": "host-cipher"}}},
+		map[string]any{"type": "function_call_output", "namespace": namespace, "name": "send_message_to_thread", "call_id": "", "output": []any{map[string]any{"type": "input_text", "text": "Host payload:"}, map[string]any{"type": "encrypted_content", "encrypted_content": "host-cipher"}}},
 	}
 }
 
 func TestRealContinuityWorkerHostResultsChildAndRestart(t *testing.T) {
-	runRealContinuityWorkerHistory(t, "first", true, hostResultHistory(), true, true)
+	for _, namespace := range []string{"codex_app", "codex_tui"} {
+		t.Run(namespace, func(t *testing.T) {
+			runRealContinuityWorkerHistory(t, "first", true, hostResultHistory(namespace), true, true)
+		})
+	}
 }
 
 func TestRealContinuityWorkerHostResultsQuotaFailoverAndRestart(t *testing.T) {
+	for _, namespace := range []string{"codex_app", "codex_tui"} {
+		t.Run(namespace, func(t *testing.T) {
+			for _, omittedMarker := range []bool{false, true} {
+				t.Run(fmt.Sprintf("omitted_plaintext_marker=%t", omittedMarker), func(t *testing.T) {
+					runRealContinuityWorkerHostResultsQuotaFailoverAndRestart(t, namespace, omittedMarker)
+				})
+			}
+		})
+	}
+}
+
+func runRealContinuityWorkerHostResultsQuotaFailoverAndRestart(t *testing.T, namespace string, omittedMarker bool) {
+	t.Helper()
 	executable := os.Getenv("COCKPIT_CONTINUITY_TEST_EXE")
 	if executable == "" {
 		t.Fatal("build the Rust host and set COCKPIT_CONTINUITY_TEST_EXE")
@@ -46,6 +63,9 @@ func TestRealContinuityWorkerHostResultsQuotaFailoverAndRestart(t *testing.T) {
 	var bodies []map[string]any
 	var headers []http.Header
 	output := []any{map[string]any{"type": "reasoning", "id": "reasoning-a", "summary": []any{}, "encrypted_content": "original-cipher-a"}}
+	if omittedMarker {
+		output = append(output, map[string]any{"type": "function_call", "id": "followup-item", "namespace": "collaboration", "name": "followup_task", "call_id": "followup-call", "arguments": `{"message":"Keep the original task history."}`, "encrypted_function_args": []any{}})
+	}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -132,9 +152,21 @@ func TestRealContinuityWorkerHostResultsQuotaFailoverAndRestart(t *testing.T) {
 			t.Fatalf("continuation failed: %d %s", w.Code, w.Body.String())
 		}
 	}
-	initial := hostResultHistory()
+	initial := hostResultHistory(namespace)
 	send(initial, "", "host-response-1")
-	follow := append(append([]any{}, initial...), output...)
+	follow := append([]any{}, initial...)
+	for _, item := range output {
+		replayed := make(map[string]any)
+		for key, value := range item.(map[string]any) {
+			if !omittedMarker || key != "encrypted_function_args" {
+				replayed[key] = value
+			}
+		}
+		follow = append(follow, replayed)
+	}
+	if omittedMarker {
+		follow = append(follow, map[string]any{"type": "function_call_output", "call_id": "followup-call", "output": "follow-up delivered"})
+	}
 	follow = append(follow, map[string]any{"role": "user", "content": "continue the same task"})
 	send(follow, "host-response-1", "host-response-3")
 	m.continuityClient.Close()

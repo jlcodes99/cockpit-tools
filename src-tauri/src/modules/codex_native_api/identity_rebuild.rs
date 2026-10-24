@@ -143,17 +143,7 @@ pub(super) fn full_input(
     let Some(previous) = checkpoint_store::transcript(connection, caller, thread, previous)? else {
         return Ok(false);
     };
-    let strip = |items: &[Value]| {
-        items
-            .iter()
-            .map(|item| {
-                let mut item = item.clone();
-                item.as_object_mut().map(|o| o.remove("id"));
-                item
-            })
-            .collect::<Vec<_>>()
-    };
-    Ok(strip(input).starts_with(&strip(&previous)))
+    Ok(matches_checkpoint_prefix(&previous, input))
 }
 
 pub(super) fn blob_accepted(
@@ -567,18 +557,52 @@ pub(in crate::modules::codex_native_api) fn paired_tools(items: &[Value]) -> boo
     pending.is_empty()
 }
 
+/// Compare against an authenticated caller/thread checkpoint, never arbitrary
+/// client history. Some clients omit an empty plaintext marker on replay. Only
+/// that direction is equivalent, and only for the otherwise identical call.
+/// Keep the input and opaque-reference validation unchanged.
+fn matches_checkpoint_prefix(previous: &[Value], incoming: &[Value]) -> bool {
+    incoming.len() >= previous.len()
+        && previous.iter().zip(incoming).all(|(saved, replayed)| {
+            let (Some(saved), Some(replayed)) = (saved.as_object(), replayed.as_object()) else {
+                return false;
+            };
+            let mut saved = saved.clone();
+            let mut replayed = replayed.clone();
+            saved.remove("id");
+            replayed.remove("id");
+            if saved == replayed {
+                return true;
+            }
+            let omitted_plaintext_marker = saved.get("type").and_then(Value::as_str)
+                == Some("function_call")
+                && saved.get("namespace").and_then(Value::as_str) == Some("collaboration")
+                && matches!(
+                    saved.get("name").and_then(Value::as_str),
+                    Some("spawn_agent" | "send_message" | "followup_task")
+                )
+                && saved
+                    .get("call_id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| !id.trim().is_empty())
+                && saved
+                    .get("encrypted_function_args")
+                    .and_then(Value::as_array)
+                    .is_some_and(Vec::is_empty)
+                && !replayed.contains_key("encrypted_function_args");
+            if !omitted_plaintext_marker {
+                return false;
+            }
+            saved.remove("encrypted_function_args");
+            saved == replayed
+        })
+}
+
 fn merge_checkpoint(previous: Vec<Value>, incoming: &[Value]) -> Option<Vec<Value>> {
-    let without_ids = |items: &[Value]| {
-        items
-            .iter()
-            .map(|item| {
-                let mut item = item.clone();
-                item.as_object_mut()?.remove("id");
-                Some(item)
-            })
-            .collect::<Option<Vec<_>>>()
-    };
-    if without_ids(incoming)?.starts_with(&without_ids(&previous)?) {
+    if !previous.iter().chain(incoming).all(Value::is_object) {
+        return None;
+    }
+    if matches_checkpoint_prefix(&previous, incoming) {
         return Some(incoming.to_vec());
     }
     // Incremental input may only finish pending tools or append a fresh user turn.

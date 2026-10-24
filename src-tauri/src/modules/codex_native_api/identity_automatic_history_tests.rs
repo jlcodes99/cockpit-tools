@@ -4,6 +4,9 @@ use serde_json::json;
 #[path = "identity_host_results_tests.rs"]
 mod host_results;
 
+#[path = "identity_checkpoint_marker_tests.rs"]
+mod checkpoint_markers;
+
 fn fixture() -> (tempfile::TempDir, IdentityStore) {
     let temp = tempfile::tempdir().unwrap();
     let store = IdentityStore::open(temp.path().join("identity.sqlite")).unwrap();

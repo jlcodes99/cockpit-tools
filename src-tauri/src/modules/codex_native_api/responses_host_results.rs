@@ -1,10 +1,10 @@
-//! Codex Desktop can inject these host results without a model-issued call.
+//! Codex clients can inject these host results without a model-issued call.
 //! Recognize the envelope exactly; replay validation still checks its payload.
 use serde_json::Value;
 
 pub(super) fn is_host_result(item: &Value) -> bool {
     item["type"] == "function_call_output"
-        && item["namespace"] == "codex_app"
+        && matches!(item["namespace"].as_str(), Some("codex_app" | "codex_tui"))
         && matches!(
             item["name"].as_str(),
             Some("create_thread" | "send_message_to_thread")
