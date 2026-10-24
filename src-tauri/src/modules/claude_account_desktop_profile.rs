@@ -1538,151 +1538,16 @@ fn restore_desktop_profile_snapshot(snapshot_dir: &Path, target_dir: &Path) -> R
     Ok(())
 }
 
-fn build_desktop_gateway_provider_config(account: &ClaudeAccount) -> Result<Value, String> {
-    if account.auth_mode != ClaudeAuthMode::DesktopGateway {
-        return Err("账号不是 Claude Gateway 类型".to_string());
-    }
-    let connection_mode = crate::modules::claude_desktop_gateway::normalize_connection_mode(
-        account.desktop_gateway_connection_mode.as_deref(),
-    );
-    let (base_url, api_key, auth_scheme) = if connection_mode == "local_mapping" {
-        let endpoint = crate::modules::claude_desktop_gateway::ensure_gateway_for_account(account)?;
-        (endpoint.base_url, endpoint.api_key, "bearer".to_string())
-    } else {
-        let api_key = account
-            .api_key
-            .as_deref()
-            .and_then(|value| normalize_non_empty(Some(value)))
-            .ok_or_else(|| "Claude Gateway 账号缺少 API Key".to_string())?;
-        let base_url = account
-            .api_base_url
-            .as_deref()
-            .and_then(|value| normalize_non_empty(Some(value)))
-            .ok_or_else(|| "Claude Gateway 账号缺少 Base URL".to_string())?;
-        let auth_scheme =
-            normalize_desktop_gateway_auth_scheme(account.desktop_gateway_auth_scheme.as_deref());
-        (
-            base_url,
-            api_key.to_string(),
-            if auth_scheme == "auto" {
-                "bearer".to_string()
-            } else {
-                auth_scheme
-            },
-        )
-    };
-    let credential_kind = account
-        .desktop_gateway_credential_kind
-        .as_deref()
-        .and_then(|value| normalize_non_empty(Some(value)))
-        .unwrap_or_else(|| "static".to_string());
-    if credential_kind != "static" {
-        return Err("当前仅支持 static Gateway API Key".to_string());
-    }
-    let mut config = json!({
-        "coworkEgressAllowedHosts": ["*"],
-        "disableDeploymentModeChooser": true,
-        "inferenceProvider": "gateway",
-        "inferenceGatewayBaseUrl": base_url,
-        "inferenceGatewayApiKey": api_key,
-        "inferenceGatewayAuthScheme": auth_scheme,
-    });
-    if let Some(models) = account
-        .desktop_gateway_models
-        .as_ref()
-        .filter(|items| !items.is_empty())
-    {
-        let mapping_meta = crate::modules::claude_desktop_gateway::normalize_model_mappings(
-            account.desktop_gateway_model_mappings.clone(),
-        )
-        .unwrap_or_default()
-        .into_iter()
-        .map(|mapping| (mapping.desktop_model.to_ascii_lowercase(), mapping))
-        .collect::<BTreeMap<_, _>>();
-        config["inferenceModels"] = Value::Array(
-            models
-                .iter()
-                .filter_map(|model| {
-                    let name = normalize_non_empty(Some(model))?;
-                    let mut item = json!({ "name": name.clone() });
-                    if let Some(mapping) = mapping_meta.get(&name.to_ascii_lowercase()) {
-                        if let Some(label_override) = mapping
-                            .label_override
-                            .as_deref()
-                            .and_then(|value| normalize_non_empty(Some(value)))
-                        {
-                            item["labelOverride"] = Value::String(label_override);
-                        }
-                        if mapping.supports_1m.unwrap_or(false) {
-                            item["supports1m"] = Value::Bool(true);
-                        }
-                    }
-                    Some(item)
-                })
-                .collect(),
-        );
-    }
-    Ok(config)
-}
-
-fn is_claude_desktop_gateway_config(value: &Value) -> bool {
-    value
-        .get("inferenceProvider")
-        .and_then(Value::as_str)
-        .is_some_and(|provider| provider.eq_ignore_ascii_case("gateway"))
-        || value
-            .get("deploymentMode")
-            .and_then(Value::as_str)
-            .is_some_and(|mode| mode.eq_ignore_ascii_case("3p"))
-}
-
-fn write_desktop_deployment_mode(config_path: &Path, mode: &str) -> Result<(), String> {
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| {
-            format!(
-                "创建 Claude Desktop 配置目录失败: path={}, error={}",
-                parent.display(),
-                e
-            )
-        })?;
-    }
-    let mut config = read_config_file(config_path)?.unwrap_or_else(|| json!({}));
-    if !config.is_object() {
-        config = json!({});
-    }
-    let object = config
-        .as_object_mut()
-        .ok_or_else(|| "Claude Desktop 配置结构非法".to_string())?;
-    object.insert(
-        "deploymentMode".to_string(),
-        Value::String(mode.to_string()),
-    );
-    write_config_file(config_path, &config)
-}
-
-fn config_library_gateway_ids(config_library_dir: &Path) -> Result<BTreeSet<String>, String> {
+fn desktop_gateway_managed_config_ids() -> Result<BTreeSet<String>, String> {
     let mut ids = BTreeSet::new();
-    if !config_library_dir.exists() {
-        return Ok(ids);
-    }
-    for entry in fs::read_dir(config_library_dir).map_err(|e| {
-        format!(
-            "读取 Claude configLibrary 失败: path={}, error={}",
-            config_library_dir.display(),
-            e
-        )
-    })? {
-        let entry = entry.map_err(|e| format!("读取 Claude configLibrary 项失败: {}", e))?;
-        let path = entry.path();
-        if path.file_name().and_then(|value| value.to_str()) == Some("_meta.json")
-            || path.extension().and_then(|value| value.to_str()) != Some("json")
-        {
-            continue;
-        }
-        if let Some(config) = read_config_file(&path)? {
-            if is_claude_desktop_gateway_config(&config) {
-                if let Some(stem) = path.file_stem().and_then(|value| value.to_str()) {
-                    ids.insert(stem.to_string());
+    for summary in load_index()?.accounts {
+        if let Some(account) = load_account_file(&summary.id) {
+            if account.auth_mode != ClaudeAuthMode::DesktopGateway {
+                continue;
+            }
+            if let Some(id) = account.desktop_gateway_config_id {
+                if uuid::Uuid::parse_str(&id).is_ok() {
+                    ids.insert(id);
                 }
             }
         }
@@ -1690,142 +1555,50 @@ fn config_library_gateway_ids(config_library_dir: &Path) -> Result<BTreeSet<Stri
     Ok(ids)
 }
 
-fn remove_gateway_configs_from_config_library(config_library_dir: &Path) -> Result<(), String> {
-    if !config_library_dir.exists() {
-        return Ok(());
-    }
-    let mut gateway_ids = config_library_gateway_ids(config_library_dir)?;
-    let meta_path = config_library_dir.join("_meta.json");
-    let mut meta = read_config_file(&meta_path)?.unwrap_or_else(|| json!({}));
-    if let Some(entries) = meta.get("entries").and_then(Value::as_array) {
-        for entry in entries {
-            let is_gateway_entry = entry
-                .get("provider")
-                .and_then(Value::as_str)
-                .is_some_and(|provider| provider.eq_ignore_ascii_case("gateway"));
-            if is_gateway_entry {
-                if let Some(id) = entry.get("id").and_then(Value::as_str) {
-                    gateway_ids.insert(id.to_string());
-                }
-            }
-        }
-    }
-
-    for id in &gateway_ids {
-        remove_path_if_exists(&config_library_dir.join(format!("{}.json", id)))?;
-    }
-
-    if meta.is_object() {
-        let object = meta
-            .as_object_mut()
-            .ok_or_else(|| "Claude configLibrary 元数据结构非法".to_string())?;
-        let mut entries = object
-            .get("entries")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        entries.retain(|entry| {
-            let id_removed = entry
-                .get("id")
-                .and_then(Value::as_str)
-                .map(|id| gateway_ids.contains(id))
-                .unwrap_or(false);
-            let provider_gateway = entry
-                .get("provider")
-                .and_then(Value::as_str)
-                .is_some_and(|provider| provider.eq_ignore_ascii_case("gateway"));
-            !id_removed && !provider_gateway
-        });
-
-        let should_clear_applied = object
-            .get("appliedId")
-            .and_then(Value::as_str)
-            .map(|id| gateway_ids.contains(id))
-            .unwrap_or(false);
-        if should_clear_applied {
-            if let Some(next_id) = entries
-                .iter()
-                .find_map(|entry| entry.get("id").and_then(Value::as_str))
-            {
-                object.insert("appliedId".to_string(), Value::String(next_id.to_string()));
-            } else {
-                object.remove("appliedId");
-            }
-        }
-        object.insert("entries".to_string(), Value::Array(entries));
-        write_config_file(&meta_path, &meta)?;
-    }
-
-    Ok(())
-}
-
 fn remove_desktop_gateway_profile_config(target_dir: &Path) -> Result<(), String> {
-    let desktop_config_path = target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME);
-    if let Some(config) = read_config_file(&desktop_config_path)? {
-        if is_claude_desktop_gateway_config(&config) {
-            remove_path_if_exists(&desktop_config_path)?;
-        }
-    }
-
-    let config_library_dir = target_dir.join(CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR);
-    remove_gateway_configs_from_config_library(&config_library_dir)?;
-    Ok(())
+    crate::modules::claude_desktop_gateway_config::remove_managed(
+        &target_dir.join(CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR),
+        &[target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME)],
+        &desktop_gateway_managed_config_ids()?,
+    )
 }
 
 fn write_desktop_gateway_config_library(
     account: &ClaudeAccount,
     config_library_dir: &Path,
+    deployment_paths: &[PathBuf],
 ) -> Result<String, String> {
     let config_id = account
         .desktop_gateway_config_id
         .as_deref()
-        .filter(|value| UUID_RE.is_match(value))
+        .filter(|value| uuid::Uuid::parse_str(value).is_ok())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let mut known_ids = desktop_gateway_managed_config_ids()?;
+    known_ids.insert(config_id.clone());
     let account_name = account.email.trim();
     let entry_name = if account_name.is_empty() {
         "Default"
     } else {
         account_name
     };
-    fs::create_dir_all(&config_library_dir)
-        .map_err(|e| format!("创建 Claude Gateway configLibrary 失败: {}", e))?;
-    remove_gateway_configs_from_config_library(config_library_dir)?;
-    let meta_path = config_library_dir.join("_meta.json");
-    let mut meta = read_config_file(&meta_path)?.unwrap_or_else(|| json!({}));
-    if !meta.is_object() {
-        meta = json!({});
-    }
-    let object = meta
-        .as_object_mut()
-        .ok_or_else(|| "Claude configLibrary 元数据结构非法".to_string())?;
-    let mut entries = object
-        .get("entries")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    entries.retain(|entry| entry.get("id").and_then(Value::as_str) != Some(config_id.as_str()));
-    entries.push(json!({
-        "id": config_id.clone(),
-        "name": entry_name,
-    }));
-    object.insert("appliedId".to_string(), Value::String(config_id.clone()));
-    object.insert("entries".to_string(), Value::Array(entries));
-    write_config_file(&meta_path, &meta)?;
-    write_config_file(
-        &config_library_dir.join(format!("{}.json", config_id)),
-        &build_desktop_gateway_provider_config(account)?,
+    let generated = crate::modules::claude_desktop_gateway_config::build_provider_config(account)?;
+    crate::modules::claude_desktop_gateway_config::apply(
+        config_library_dir,
+        deployment_paths,
+        &config_id,
+        entry_name,
+        &generated,
+        &known_ids,
     )?;
     Ok(config_id)
 }
 
 fn write_desktop_gateway_profile(account: &ClaudeAccount, target_dir: &Path) -> Result<(), String> {
-    fs::create_dir_all(target_dir)
-        .map_err(|e| format!("创建 Claude Gateway profile 失败: {}", e))?;
-    write_desktop_deployment_mode(&target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME), "3p")?;
     let config_id = write_desktop_gateway_config_library(
         account,
         &target_dir.join(CLAUDE_DESKTOP_CONFIG_LIBRARY_DIR),
+        &[target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME)],
     )?;
     validate_desktop_deployment_mode(&target_dir.join(CLAUDE_DESKTOP_CONFIG_FILE_NAME), "3p")?;
     validate_desktop_gateway_meta(
@@ -1839,9 +1612,14 @@ fn write_desktop_gateway_profile(account: &ClaudeAccount, target_dir: &Path) -> 
 
 fn write_default_desktop_gateway_profile(account: &ClaudeAccount) -> Result<(), String> {
     let paths = get_default_claude_desktop_gateway_config_paths()?;
-    write_desktop_deployment_mode(&paths.normal_config_path, "3p")?;
-    write_desktop_deployment_mode(&paths.threep_config_path, "3p")?;
-    let config_id = write_desktop_gateway_config_library(account, &paths.config_library_dir)?;
+    let config_id = write_desktop_gateway_config_library(
+        account,
+        &paths.config_library_dir,
+        &[
+            paths.normal_config_path.clone(),
+            paths.threep_config_path.clone(),
+        ],
+    )?;
     validate_desktop_deployment_mode(&paths.normal_config_path, "3p")?;
     validate_desktop_deployment_mode(&paths.threep_config_path, "3p")?;
     validate_desktop_gateway_meta(&paths.config_library_meta_path(), &config_id)?;
@@ -1858,9 +1636,14 @@ fn write_default_desktop_gateway_profile(account: &ClaudeAccount) -> Result<(), 
 
 fn restore_default_desktop_gateway_official_config() -> Result<(), String> {
     let paths = get_default_claude_desktop_gateway_config_paths()?;
-    write_desktop_deployment_mode(&paths.normal_config_path, "1p")?;
-    write_desktop_deployment_mode(&paths.threep_config_path, "1p")?;
-    remove_gateway_configs_from_config_library(&paths.config_library_dir)?;
+    crate::modules::claude_desktop_gateway_config::remove_managed(
+        &paths.config_library_dir,
+        &[
+            paths.normal_config_path.clone(),
+            paths.threep_config_path.clone(),
+        ],
+        &desktop_gateway_managed_config_ids()?,
+    )?;
     validate_desktop_deployment_mode(&paths.normal_config_path, "1p")?;
     validate_desktop_deployment_mode(&paths.threep_config_path, "1p")?;
     Ok(())

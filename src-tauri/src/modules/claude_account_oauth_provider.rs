@@ -63,16 +63,7 @@ fn build_desktop_gateway_account_id(api_key: &str, api_base_url: &str) -> String
 }
 
 fn normalize_desktop_gateway_auth_scheme(value: Option<&str>) -> String {
-    match value
-        .and_then(|item| normalize_non_empty(Some(item)))
-        .map(|item| item.to_ascii_lowercase().replace('_', "-"))
-        .as_deref()
-    {
-        Some("auto") => "auto".to_string(),
-        Some("x-api-key") => "x-api-key".to_string(),
-        Some("sso") => "sso".to_string(),
-        _ => "bearer".to_string(),
-    }
+    crate::modules::claude_desktop_gateway::normalize_auth_scheme(value)
 }
 
 fn normalize_api_provider_base_url(raw: Option<&str>) -> Result<Option<String>, String> {

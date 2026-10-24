@@ -51,6 +51,20 @@ pub fn is_claude_desktop_model(model: &str) -> bool {
     normalized.starts_with("claude-") || normalized.starts_with("anthropic/claude-")
 }
 
+pub fn normalize_auth_scheme(value: Option<&str>) -> String {
+    match value
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(|item| item.to_ascii_lowercase().replace('_', "-"))
+        .as_deref()
+    {
+        Some("auto") => "auto".to_string(),
+        Some("x-api-key") => "x-api-key".to_string(),
+        Some("sso") => "sso".to_string(),
+        _ => "bearer".to_string(),
+    }
+}
+
 pub fn normalize_connection_mode(value: Option<&str>) -> String {
     match value
         .map(str::trim)
@@ -80,7 +94,7 @@ pub fn normalize_model_mappings(
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
-        let supports_1m = mapping.supports_1m.filter(|value| *value);
+        let supports_1m = mapping.supports_1m;
         seen.entry(key)
             .or_insert_with(|| ClaudeDesktopGatewayModelMapping {
                 desktop_model,

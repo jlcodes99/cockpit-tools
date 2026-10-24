@@ -1,0 +1,22 @@
+[package]
+name = "cockpit-claude-desktop-gateway-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+sha2 = "0.10"
+tempfile = "3"
+base64 = "0.22"
+rand = "0.8"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+tiny_http = "0.12"
+url = "2.5"
+md5 = "0.7"
+
+[lib]
+path = "lib.rs"

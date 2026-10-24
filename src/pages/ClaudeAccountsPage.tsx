@@ -579,7 +579,7 @@ function normalizeClaudeDesktopGatewayMappings(
       desktopModel,
       upstreamModel,
       labelOverride: upstreamModel,
-      ...(mapping.supports1m === true ? { supports1m: true } : {}),
+      ...(typeof mapping.supports1m === 'boolean' ? { supports1m: mapping.supports1m } : {}),
     });
   });
   return result;
