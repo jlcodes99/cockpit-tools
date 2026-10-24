@@ -1386,6 +1386,7 @@ pub fn run() {
             commands::minimax_code::add_minimax_code_account_with_token,
             commands::minimax_code::update_minimax_code_account_tags,
             commands::minimax_code::get_minimax_code_accounts_index_path,
+            commands::minimax_code::inject_minimax_code_to_client,
             commands::minimax_code::minimax_code_oauth_login_start,
             commands::minimax_code::minimax_code_oauth_login_peek,
             commands::minimax_code::minimax_code_oauth_login_complete,
