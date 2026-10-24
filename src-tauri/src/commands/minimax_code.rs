@@ -91,19 +91,33 @@ pub async fn inject_minimax_code_to_client(
     app: tauri::AppHandle,
     account_id: String,
 ) -> Result<String, String> {
+    logger::log_info(&format!(
+        "[MiniMax Code Switch] 开始切换账号: account_id={}",
+        account_id
+    ));
     let account = minimax_code_account::load_account(&account_id)
         .ok_or_else(|| format!("账号不存在: {account_id}"))?;
-    crate::modules::provider_current_state::set_current_account_id(
-        "minimaxcode",
-        Some(account_id.as_str()),
-    )?;
     let email = account.email.clone();
+
+    // Switch first and publish the new current account only on success: a failed
+    // switch must not leave the app pointing at an account the client is not using.
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::modules::minimax_code_account::switch_and_launch(&account)
     })
     .await
     .map_err(|e| format!("MiniMax Code 切号后台任务失败: {e}"))??;
+
+    crate::modules::provider_current_state::set_current_account_id(
+        "minimaxcode",
+        Some(account_id.as_str()),
+    )?;
     let _ = crate::modules::tray::update_tray_menu(&app);
+    logger::log_info(&format!(
+        "[MiniMax Code Switch] 切换完成: account_id={}, email={}, client={}",
+        account_id,
+        email,
+        result.display()
+    ));
     Ok(format!("切换完成: {} ({})", email, result.display()))
 }
 
