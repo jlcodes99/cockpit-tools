@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Remove APIMart advertising from the Chinese and English README pages.
+
 ## [1.3.73] - 2026-10-22
 
 ### Changed
