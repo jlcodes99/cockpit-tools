@@ -696,7 +696,9 @@ fn default_child_receives_proxy_and_selected_home_without_console() {
         .collect::<Vec<_>>();
     env.push(("CODEX_HOME".into(), "wrong-home".into()));
     env.push(("CODEX_ELECTRON_USER_DATA_PATH".into(), "wrong-data".into()));
-    let script = "$values=@{};foreach($key in @('ALL_PROXY','HTTP_PROXY','HTTPS_PROXY','CODEX_HOME','CODEX_ELECTRON_USER_DATA_PATH','COCKPIT_CODEX_PACKAGE_LAUNCH_PAYLOAD')){$values[$key]=[Environment]::GetEnvironmentVariable($key,'Process')};$values|ConvertTo-Json -Compress";
+    // Windows PowerShell otherwise writes non-ASCII homes in its console code
+    // page, while the JSON reader expects UTF-8 bytes.
+    let script = "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);$values=@{};foreach($key in @('ALL_PROXY','HTTP_PROXY','HTTPS_PROXY','CODEX_HOME','CODEX_ELECTRON_USER_DATA_PATH','COCKPIT_CODEX_PACKAGE_LAUNCH_PAYLOAD')){$values[$key]=[Environment]::GetEnvironmentVariable($key,'Process')};$values|ConvertTo-Json -Compress";
     for selected_home in [None, Some(r"D:\李杰\Codex Home")] {
         let mut request = request(selected_home, None, &[], &env);
         request.executable = PathBuf::from(std::env::var("SystemRoot").unwrap())

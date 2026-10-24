@@ -634,13 +634,12 @@ mod codex_linux_layout_tests {
         linux_codex_discovery_paths, select_codex_direct_app_server_descendants,
         CodexProcessTreeEntry,
     };
-    use std::ffi::OsString;
     use std::path::{Path, PathBuf};
 
     #[test]
     fn discovery_includes_official_linux_package_and_path_launchers() {
         let home = Path::new("/home/demo");
-        let path = OsString::from("/custom/bin:/usr/bin");
+        let path = std::env::join_paths(["/custom/bin", "/usr/bin"]).unwrap();
         let candidates = linux_codex_discovery_paths(Some(home), Some(path.as_os_str()));
         assert!(candidates.contains(&PathBuf::from("/usr/bin/chatgpt")));
         assert!(candidates.contains(&PathBuf::from("/usr/lib/chatgpt/ChatGPT")));

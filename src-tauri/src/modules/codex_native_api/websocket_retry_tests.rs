@@ -467,10 +467,9 @@ impl Fixture {
             }));
             base
         } else if broken_first {
-            let unused = TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let base = format!("http://{}/a", unused.local_addr().unwrap());
-            drop(unused);
-            base
+            // Port zero is not a connectable endpoint. A released loopback
+            // port can spend the whole request budget in Windows TCP retries.
+            "http://127.0.0.1:0/a".into()
         } else {
             format!("http://{address}/a")
         };

@@ -5,6 +5,25 @@ pub fn env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+/// Isolate test credentials and proxy settings while keeping Windows sockets
+/// usable: Winsock needs the system root, and temporary files need a writable
+/// location instead of falling back to the Windows installation directory.
+pub fn isolated_test_process() -> std::process::Command {
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command.env_clear();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+        if let Some(system_root) = std::env::var_os("SystemRoot") {
+            command.env("SystemRoot", system_root);
+        }
+        let temp = std::env::temp_dir();
+        command.env("TEMP", &temp).env("TMP", &temp);
+    }
+    command
+}
+
 /// Audit fixture declarations in test source without modifying process env.
 /// A single holder must precede the data guard and use lexical RAII cleanup.
 /// TestCacheGuard owns this same mutex; taking both holders would deadlock.

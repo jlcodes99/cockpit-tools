@@ -27,14 +27,8 @@ fn check_proxy_env_in_fresh_process(test_name: &str, scenario: &str) {
         uuid::Uuid::new_v4()
     )));
     std::fs::create_dir(&directory.0).expect("create isolated proxy environment");
-    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
+    let mut command = crate::modules::test_support::isolated_test_process();
     let status = command
-        .env_clear()
         .env("HOME", &directory.0)
         .env("USERPROFILE", &directory.0)
         .env("CODEX_HOME", directory.0.join("codex-home"))
@@ -95,6 +89,20 @@ fn check_proxy_env_restore_scenario(scenario: &str) {
         "absent" => keys.iter().map(|key| (*key, None)).collect(),
         _ => panic!("unknown synthetic proxy environment scenario"),
     };
+    // Windows aliases differently cased names to one variable. Keep all name
+    // assertions, but give each alias the same synthetic startup value.
+    #[cfg(windows)]
+    let original: Vec<_> = original
+        .iter()
+        .map(|(key, _)| {
+            let value = original
+                .iter()
+                .find(|(candidate, _)| candidate.eq_ignore_ascii_case(key))
+                .unwrap()
+                .1;
+            (*key, value)
+        })
+        .collect();
     for (key, value) in &original {
         if let Some(value) = value {
             std::env::set_var(key, value);

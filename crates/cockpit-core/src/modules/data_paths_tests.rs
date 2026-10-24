@@ -300,6 +300,7 @@ fn inaccessible_or_invalid_roots_return_errors_instead_of_empty_accounts() {
     fs::write(root.current(), "occupied file").unwrap();
     assert!(select_root(&root.0, false).is_err());
     assert!(select_root(&root.current(), false).is_err());
+    assert!(select_root(&root.current().join("missing-child"), false).is_err());
     fs::write(root.legacy(), "invalid legacy file").unwrap();
     assert!(select_root(&root.0, false).is_err());
 }

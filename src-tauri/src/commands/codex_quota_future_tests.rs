@@ -62,7 +62,7 @@ fn command_body(name: &str) -> &'static str {
 fn quota_refresh_keeps_early_boxing_boundaries_and_async_commands() {
     // A size check alone can miss a removed boundary when another child remains
     // boxed. Check each boundary as well, including the auto-switch worker.
-    let source = include_str!("codex_account_commands.rs");
+    let source = include_str!("codex_account_commands.rs").replace("\r\n", "\n");
     for (name, refresh) in [
         (
             "refresh_codex_quota",
@@ -113,5 +113,7 @@ fn windows_stack_reserve_is_target_based_and_scoped_to_app_binary() {
     ));
     assert!(build.contains(&expected));
     // The package's implicit src/main.rs binary must match the linker directive.
-    assert!(include_str!("../../Cargo.toml").contains("[package]\nname = \"cockpit-tools\""));
+    assert!(include_str!("../../Cargo.toml")
+        .replace("\r\n", "\n")
+        .contains("[package]\nname = \"cockpit-tools\""));
 }

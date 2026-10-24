@@ -1044,8 +1044,11 @@ mod tests {
             .unwrap_or_else(|error| error.into_inner());
         let env = TestDataDirGuard::new("cockpit-codex-routing-update-rollback");
 
-        let profile_path = env.root.join("profile-is-a-file");
-        std::fs::write(&profile_path, "not a directory").expect("write blocked profile path");
+        let profile_path = env.root.join("blocked-speed-config");
+        // Block the config file itself: an invalid parent is reported at a
+        // different stage on Windows, before the config.toml write is reached.
+        std::fs::create_dir_all(profile_path.join("config.toml"))
+            .expect("create blocked speed config");
         let mut store = crate::models::InstanceStore::new();
         store.instances.push(InstanceProfile {
             id: "routing-rollback-instance".to_string(),

@@ -393,7 +393,9 @@ mod tests {
         }
         async fn wait_closed(url: &str) {
             let url = tauri::Url::parse(url).unwrap();
-            timeout(Duration::from_secs(2), async {
+            // A refused connection can take about two seconds on Windows.
+            // Leave time to observe its error after the listener is dropped.
+            timeout(Duration::from_secs(5), async {
                 loop {
                     if TcpStream::connect(("127.0.0.1", url.port().unwrap()))
                         .await

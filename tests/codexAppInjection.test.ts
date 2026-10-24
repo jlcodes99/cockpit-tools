@@ -295,7 +295,7 @@ function dropdown(model: string, hidden = false) {
   return dropdown;
 }
 
-function harness(kind: ScriptKind, composers: ReturnType<typeof composer>[]) {
+function harness(kind: ScriptKind, composers: ReturnType<typeof composer>[], locale = 'en-US') {
   const html = new Element('html');
   const body = new Element();
   const head = new Element();
@@ -326,6 +326,14 @@ function harness(kind: ScriptKind, composers: ReturnType<typeof composer>[]) {
   let now = Date.now();
   class Clock extends Date { static now() { return now; } }
   const context = { getComputedStyle: (node: Element) => ({ display: node.hidden ? "none" : node.style.display || "block", visibility: node.style.visibility || "visible" }), document, window, Date: Clock, ResizeObserver, MutationObserver, requestAnimationFrame: (fn: () => void) => fn() };
+  // The shipped dialog uses the browser's default number locale. Keep the real
+  // Intl implementation, but give this VM an explicit locale instead of the OS's.
+  runInNewContext(`{
+    const toLocaleString = Number.prototype.toLocaleString;
+    Number.prototype.toLocaleString = function(locales, options) {
+      return toLocaleString.call(this, locales ?? ${JSON.stringify(locale)}, options);
+    };
+  }`, context);
   const namespace = kind === 'injection_script' ? '__cockpitCodexInjection' : '__cockpitDeepSeekBalance';
   const marker = kind === 'injection_script' ? 'quota-footer' : 'deepseek-balance';
   return {
@@ -811,6 +819,18 @@ test('overview uses real quotas, current chat metrics and service totals without
   assert.doesNotMatch(h.details().textContent, /not-an-overview-card|Recent account|Loading/);
   assert.equal(h.root().dialogState.summary.requests, 6);
 });
+
+for (const [locale, expected] of [['en-US', '4.6K'], ['zh-CN', '4567'], ['de-DE', '4567']]) {
+  test(`dialog totals use the browser number locale (${locale}) independently of English labels`, () => {
+    const h = harness('injection_script', [composer('gpt-6-sol')], locale);
+    h.evaluate();
+    h.host().click();
+    dialogResponse(h, { summary: { totalTokens: 4567 } });
+    const tokens = h.details().querySelector('.stats-grid')!.querySelectorAll('dl')
+      .find(node => node.querySelector('dt')!.textContent === 'Total tokens')!;
+    assert.equal(tokens.querySelector('dd')!.textContent, expected);
+  });
+}
 
 test('the shipped wrapper reports a dialog request only while open and ingests the host response', () => {
   const h = harness('injection_script', [composer('gpt-6-sol')]);

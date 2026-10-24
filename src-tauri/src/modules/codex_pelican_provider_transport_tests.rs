@@ -178,10 +178,14 @@ async fn pelican_provider_cancel_closes_stream_and_removes_temporary_gateway() {
         stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").await.unwrap();
         let _ = started.send(());
         let mut remaining = Vec::new();
-        timeout(Duration::from_secs(10), stream.read_to_end(&mut remaining))
+        let closed = timeout(Duration::from_secs(10), stream.read_to_end(&mut remaining))
             .await
-            .unwrap()
-            .unwrap();
+            .expect("cancelled stream must close before the deadline");
+        if let Err(error) = closed {
+            // Cancelling an in-flight HTTP response can close TCP with either
+            // EOF or a reset. Other read errors must still fail this fixture.
+            assert_eq!(error.kind(), std::io::ErrorKind::ConnectionReset);
+        }
     });
     let request = CodexModelProviderGatewayChatTestRequest {
         run_id: uuid::Uuid::new_v4().to_string(),
@@ -217,7 +221,10 @@ async fn pelican_provider_cancel_closes_stream_and_removes_temporary_gateway() {
             .as_deref(),
         Some("PELICAN_CANCELLED")
     );
-    upstream.await.unwrap();
+    timeout(Duration::from_secs(10), upstream)
+        .await
+        .expect("upstream cancellation task must finish before the deadline")
+        .unwrap();
     assert!(std::fs::read_dir(provider_gateway_sidecars_dir().unwrap())
         .unwrap()
         .all(|entry| !entry

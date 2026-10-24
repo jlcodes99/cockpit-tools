@@ -164,6 +164,27 @@ pub(super) fn binding_snapshot(profile: &Path) -> Result<Option<String>, String>
         field(&metadata.dev().to_le_bytes());
         field(&metadata.ino().to_le_bytes());
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::Storage::FileSystem::{
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_READ_ATTRIBUTES,
+        };
+        // NTFS can preserve creation time when a file is replaced at the same
+        // path. Include its real identity, just as dev/ino do on Unix.
+        let file = std::fs::OpenOptions::new()
+            .access_mode(FILE_READ_ATTRIBUTES.0)
+            .open(&path)
+            .map_err(|error| format!("output-speed database identity unavailable: {error}"))?;
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
+        // The owned file keeps this handle valid throughout the query.
+        unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut info) }
+            .map_err(|error| format!("output-speed database identity unavailable: {error}"))?;
+        field(&info.dwVolumeSerialNumber.to_le_bytes());
+        field(&info.nFileIndexHigh.to_le_bytes());
+        field(&info.nFileIndexLow.to_le_bytes());
+    }
     field(format!("{:?}", metadata.created().ok()).as_bytes());
     Ok(Some(format!("{:x}", hash.finalize())))
 }
