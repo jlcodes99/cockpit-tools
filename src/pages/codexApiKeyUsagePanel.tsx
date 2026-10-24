@@ -146,7 +146,14 @@ export function renderCodexApiKeyUsagePanel({
         ? unlimitedText
         : `${availableText} / ${grantedText}`;
     const quotaBarWidth =
-      summary.quotaUnlimited === true ? 100 : usedPercent;
+      summary.quotaUnlimited === true
+        ? 100
+        : quota.granted != null && quota.granted > 0 && quota.available != null
+          ? Math.max(
+              0,
+              Math.min(100, Math.round((quota.available / quota.granted) * 100)),
+            )
+          : 0;
     return (
       <div
         className="quota-item codex-api-key-quota-item new-api"
