@@ -412,7 +412,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 				continue
 			}
 			if isRequestInvalidError(errStream) && !canFallbackCapability(req, execOpts, errStream) {
-				return nil, errStream
+				return nil, preserveContinuityUpstreamError(errStream, upstreamErr)
 			}
 			lastErr = errStream
 			if result.CredentialScope {

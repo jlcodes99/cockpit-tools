@@ -158,6 +158,15 @@
     "providerClear": "清除選取"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "上游服務",
+      "proxyConnection": "透過代理「{{proxy}}」連線至 {{target}} 失敗，可能與代理或網路有關，請檢查代理或更換節點後重試。",
+      "proxyTimeout": "透過代理「{{proxy}}」連線至 {{target}} 逾時，可能與代理或網路有關，請檢查代理或更換節點後重試。",
+      "proxyAuth": "代理「{{proxy}}」驗證失敗，請檢查代理使用者名稱或密碼。",
+      "localProxyUnavailable": "無法連線至本機代理「{{proxy}}」，請檢查代理服務是否執行中。",
+      "directConnection": "連線至 {{target}} 失敗，請檢查網路後重試。",
+      "directTimeout": "連線至 {{target}} 逾時，請檢查網路後重試。"
+    },
     "codexUsage": {
       "title": "額度與用量",
       "session": "目前對話",
@@ -3613,6 +3622,7 @@
         "expand": "展開",
         "collapse": "收起",
         "repairVisibility": "修復可見性",
+        "repairIndex": "修復會話索引",
         "restoreSessions": "還原工作階段",
         "exportSessions": "匯出會話",
         "importSessions": "匯入會話",
@@ -3645,6 +3655,10 @@
         "clear": "清空"
       },
       "messages": {
+        "deleteNotConfirmed": "用戶端未確認刪除完成，已停止本機清理並保留備份：{{error}}",
+        "historyReadFailed": "無法安全讀取會話歷史：{{error}}",
+        "restoreIndexRetry": "會話檔案已保留，但更新會話清單失敗；垃圾桶原件仍在，可修復問題後重試：{{error}}",
+        "importIndexRetry": "會話檔案已匯入，但更新會話清單失敗；檔案與匯入包已保留，可修復問題後重試：{{error}}",
         "pickOne": "請至少選擇一條會話",
         "syncNeedTwo": "至少需要兩個實例才能同步會話",
         "pickRestoreOne": "請至少選擇一個要還原的工作階段",
@@ -3755,7 +3769,18 @@
         "title": "修復歷史工作階段",
         "description": "在 SQLite 索引、本機會話目錄及工作區狀態中統一供應商資訊。原始 rollout 日誌逐位元組保留，僅校正檔案時間。修復前先建立本機備份。",
         "stopInstanceHint": "完整修復前請先完全結束所選 Codex App/ChatGPT 執行個體；仍可先預覽變更。",
-        "encryptedContentWarning": "偵測到由其他 Provider 或帳號加密的歷史內容。中繼資料可以移轉，但繼續或壓縮這些工作階段仍可能失敗；需要可靠續聊時請切回原 Provider/帳號或開啟新工作階段。"
+        "encryptedContentWarning": "偵測到由其他 Provider 或帳號加密的歷史內容。中繼資料可以移轉，但繼續或壓縮這些工作階段仍可能失敗；需要可靠續聊時請切回原 Provider/帳號或開啟新工作階段。",
+        "modeHistory": "編輯／分支修復",
+        "modeHistoryDesc": "修復索引異常導致的訊息編輯和建立聊天分支失敗。",
+        "historyStopHint": "修復前請先完全結束所選用戶端及使用該執行個體的 CLI；仍可先預覽變更。",
+        "historyDescription": "檢查所選對話及祖先歷史，僅重建異常的分頁索引。聊天記錄、帳號與 Provider 保持原樣；執行前須結束目標用戶端及相關 CLI。",
+        "historyPreview": "發現 {{count}} 段可重建的異常歷史索引；聊天記錄保持原樣。",
+        "historySuccess": "已重設 {{count}} 段異常歷史索引。請重新開啟用戶端和對話以重建；備份已保留。",
+        "historyNoChanges": "未發現可安全重建的異常歷史索引。",
+        "historyFailed": "歷史索引修復未完成：{{error}}",
+        "historyRunning": "請先完全結束目標用戶端及使用此執行個體的 CLI，再重試。",
+        "historyScan": "正在檢查歷史索引（{{current}}/{{total}}）…",
+        "historyReset": "正在備份並重設異常索引…"
       },
       "importModal": {
         "title": "匯入會話",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "調度選項",
+        "sessionIdentityMapping": "工作階段 ID 對應",
+        "sessionIdentityMappingEnableHint": "開啟後，切換上游帳號會使用獨立的 Session-Id 和 Thread-Id，會話識別碼隔離更強，但跨帳號快取重用可能減少。同一帳號內仍重用既有對應。",
+        "sessionIdentityMappingDisableHint": "關閉後，保留用戶端原始 Session-Id 和 Thread-Id。不同上游帳號可能共用相同識別碼，隔離性減弱，但跨帳號快取重用可能增加。",
+        "sessionIdentityMappingCacheNote": "快取命中率還取決於上游規則、帳號範圍和請求內容，不保證因切換而升降。",
+        "sessionIdentityMappingSaveNote": "確認後仍需儲存設定才會生效。",
         "sessionAffinity": "會話親和",
         "sessionAffinityTtl": "過期時間（秒）",
         "responsesWebsockets": "WebSocket 回應傳輸",

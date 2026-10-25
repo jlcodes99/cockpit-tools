@@ -1791,6 +1791,7 @@ fn sync_runtime_collection(
     if let Some(handle) = runtime.native_handle.as_ref() {
         handle.set_cooling_disabled(collection.disable_cooling);
         handle.set_session_affinity_enabled(collection.session_affinity);
+        handle.set_session_identity_mapping_enabled(collection.session_identity_mapping_enabled);
     }
     // Start the maintenance thread without waiting for SQLite/schema/body cleanup.
     let _ = request_diagnostics_writer();

@@ -400,7 +400,7 @@ export interface CodexSessionVisibilityRepairItem {
   running: boolean;
 }
 
-export type CodexSessionVisibilityRepairMode = 'quick' | 'deep';
+export type CodexSessionVisibilityRepairMode = 'quick' | 'deep' | 'history';
 export type CodexSessionVisibilityAutoRepairMode =
   | 'legacy_before_4eb75d96'
   | 'legacy_4eb75d96'
@@ -468,6 +468,7 @@ export interface CodexSessionVisibilityRepairSummary {
   encryptedContentWarning?: string | null;
   skippedSqliteFileCount: number;
   metadataRebuildFailedCount: number;
+  historyProjectionCount?: number;
   items: CodexSessionVisibilityRepairItem[];
   backupDirs: string[];
   message: string;

@@ -146,6 +146,135 @@ test('missing replies time out with retry feedback without replacing existing ro
   assert.ok(h.details.innerHTML.includes(usageLabels.dataFailed));
 });
 
+test('transient failures retry with backoff, preserve verified statistics and resume refresh after recovery', () => {
+  const h = harness();
+  h.respond({ summary: { requests: 37 } });
+  h.api.refresh(h.root);
+  const failed = h.api.query(h.root);
+  h.respond({ error: true }, failed);
+  h.advance(1999);
+  assert.equal(h.api.query(h.root).requestToken, failed.requestToken);
+  h.advance(1);
+  const retry = h.api.query(h.root);
+  assert.notEqual(retry.requestToken, failed.requestToken);
+  assert.equal(h.root.dialogState.summary.requests, 37);
+  assert.equal(h.root.dialogState.error, false);
+  const count = h.dispatched.length;
+  h.advance(3000);
+  h.api.query(h.root);
+  assert.equal(h.dispatched.length, count, 'an in-flight retry is not duplicated');
+  h.respond({ summary: { requests: 38 } }, retry);
+  h.advance(5001);
+  assert.notEqual(h.api.query(h.root).requestToken, retry.requestToken);
+  assert.equal(h.root.dialogState.summary.requests, 38);
+  h.respond({ error: true });
+  const nextFailure = h.api.query(h.root);
+  h.advance(2000);
+  assert.notEqual(h.api.query(h.root).requestToken, nextFailure.requestToken, 'success resets backoff');
+});
+
+test('automatic retries stop after three attempts and manual retry starts a new bounded recovery', () => {
+  const h = harness();
+  let pending = h.api.query(h.root);
+  for (const delay of [2000, 5000, 10000]) {
+    h.respond({ error: true }, pending);
+    h.advance(delay - 1);
+    assert.equal(h.api.query(h.root).requestToken, pending.requestToken);
+    h.advance(1);
+    const retry = h.api.query(h.root);
+    assert.notEqual(retry.requestToken, pending.requestToken);
+    pending = retry;
+  }
+  h.respond({ error: true }, pending);
+  h.advance(60000);
+  assert.equal(h.api.query(h.root).requestToken, pending.requestToken);
+  assert.equal(h.root.dialogState.error, true);
+  h.action('retry');
+  const manual = h.api.query(h.root);
+  assert.notEqual(manual.requestToken, pending.requestToken);
+  h.respond({ error: true }, manual);
+  h.advance(2000);
+  assert.notEqual(h.api.query(h.root).requestToken, manual.requestToken);
+});
+
+test('a timed out pagination read retries the same cursor without replacing the verified snapshot', () => {
+  const h = harness();
+  h.action('tab', 'logs');
+  h.respond({ requests: { rows: [row(1)], nextCursor: 'page-2' } });
+  h.action('more');
+  const failed = h.api.query(h.root);
+  h.advance(10001);
+  h.api.query(h.root);
+  h.advance(2000);
+  const retry = h.api.query(h.root);
+  assert.notEqual(retry.requestToken, failed.requestToken);
+  assert.equal(retry.cursor, 'page-2');
+  assert.equal(h.root.dialogState.rows.length, 1);
+  h.respond({ requests: { rows: [row(1), row(2)], nextCursor: null } }, retry);
+  h.advance(60000);
+  assert.equal(h.api.query(h.root).requestToken, retry.requestToken, 'pagination does not restart automatically');
+  assert.deepEqual(Array.from(h.root.dialogState.rows, (item) => item.id), [1, 2]);
+});
+
+test('service outages retry finitely while unlinked sessions and invalid schemas wait for manual action', () => {
+  for (const reason of ['service_unavailable', 'unlinked_session', 'schema_unavailable', 'binding_changed']) {
+    const h = harness();
+    let pending = h.api.query(h.root);
+    h.respond({ available: false, unavailableReason: reason }, pending);
+    if (reason === 'service_unavailable') {
+      for (const delay of [2000, 5000, 10000]) {
+        h.advance(delay);
+        const retry = h.api.query(h.root);
+        assert.notEqual(retry.requestToken, pending.requestToken);
+        h.root.render();
+        assert.ok(!h.details.innerHTML.includes(usageLabels.serviceUnavailable), 'resubmission clears the old error');
+        h.respond({ available: false, unavailableReason: reason }, retry);
+        pending = retry;
+      }
+    }
+    h.advance(60000);
+    assert.equal(h.api.query(h.root).requestToken, pending.requestToken, reason);
+  }
+});
+
+test('host disconnection pauses retries and reconnection starts a fresh read without opening the main window', () => {
+  const h = harness();
+  h.respond({ summary: { requests: 37 } });
+  h.api.refresh(h.root);
+  const failed = h.api.query(h.root);
+  h.respond({ error: true }, failed);
+  h.root.hostAvailable = false;
+  h.api.query(h.root);
+  const count = h.dispatched.length;
+  h.advance(60000);
+  assert.equal(h.api.query(h.root), null);
+  assert.equal(h.dispatched.length, count);
+  h.root.hostAvailable = true;
+  const retry = h.api.query(h.root);
+  assert.notEqual(retry.requestToken, failed.requestToken);
+  assert.equal(h.root.dialogState.summary.requests, 37);
+  h.respond({ summary: { requests: 38 } }, retry);
+  assert.equal(h.root.dialogState.summary.requests, 38);
+});
+
+test('closing the dialog cancels retry work and switching binding rejects late recovery replies', () => {
+  const h = harness();
+  const old = h.api.query(h.root);
+  h.respond({ error: true }, old);
+  h.root.quotaDetailsOpen = false;
+  h.api.cancel(h.root);
+  const count = h.dispatched.length;
+  h.advance(60000);
+  assert.equal(h.api.query(h.root), null);
+  assert.equal(h.dispatched.length, count);
+  h.root.quotaDetailsOpen = true;
+  h.root.usageState.__binding.binding = 'another-service';
+  const next = h.api.query(h.root);
+  assert.notEqual(next.requestToken, old.requestToken);
+  h.respond({ ...old, summary: { requests: 999 } }, next);
+  assert.equal(h.root.dialogState.summary, null);
+});
+
 test('unlinked chat and unavailable service have different messages, neither claims an empty successful query', () => {
   const h = harness();
   h.action('tab', 'logs');

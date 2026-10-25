@@ -6,6 +6,7 @@ include!("process_codex_launch_proxy.rs");
 include!("process_passive_wsl.rs");
 include!("process_path_resolution.rs");
 include!("process_codex_windows_launch.rs");
+include!("process_codex_windows_default_launch.rs");
 #[cfg(any(test, target_os = "windows"))]
 #[path = "process_codex_package_launcher.rs"]
 pub(crate) mod codex_package_launcher;

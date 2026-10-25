@@ -38,39 +38,65 @@
     }
     if (candidates.size !== 1) return fail('ambiguous-module');
     const initialUrl = [...candidates][0], initialSource = read(initialUrl);
-    const initial = fast.prepareLive(initialSource, initialUrl);
+    let initial = fast.prepareLive(initialSource, initialUrl);
     if (!initial.ok) return fail(initial.diagnostics?.reason || 'initial-transform-failed');
+    const modules = [];
+    if ((initial.mode || 'full') === 'full' && (root.__cockpitEnhancements?.quotaCompat === true
+      || root.__cockpitEnhancements?.apiService === true)) {
+      try {
+        const contract = quota.transform(initialSource, initialUrl);
+        if (!contract.ok) throw Error(contract.diagnostics?.reason || 'quota-contract-failed');
+        const primaryUrls = new Set(
+          [...initialSource.matchAll(/["'`]\.\/app-primary-[A-Za-z0-9_-]+\.js["'`]/g)]
+            .map(match => new URL(match[0].slice(1, -1), initialUrl).href),
+        );
+        if (primaryUrls.size !== 1) throw Error('primary-module-not-unique');
+        const primaryUrl = [...primaryUrls][0];
+        const primary = quota.transformComposer(
+          read(primaryUrl), primaryUrl, initialUrl, contract.diagnostics?.bindings,
+        );
+        if (!primary.ok) throw Error(primary.diagnostics?.reason || 'composer-transform-failed');
+        const currentLayout = contract.diagnostics?.bindings?.layout === 'adapter-v1';
+        const primaryKind = currentLayout ? 'quota-primary' : 'quota';
+        const prepared = `${fast.rewriteModuleSync(primary.patchedSource, primaryUrl)}
+;window.__cockpitNativeFastComplete?.(${JSON.stringify(primaryKind)});
+//# sourceURL=${primaryUrl}
+`;
+        modules.push({ url: primaryUrl, source: prepared });
+        if (currentLayout) {
+          const adapterUrl = new URL(contract.diagnostics.bindings.adapterPath, initialUrl).href;
+          if (!fast.localAdapter(adapterUrl, initialUrl)) throw Error('quota-adapter-url-invalid');
+          const adapter = quota.transformAdapter(read(adapterUrl), adapterUrl, initialUrl,
+            primaryUrl, primary.diagnostics?.bindings);
+          if (!adapter.ok) throw Error(adapter.diagnostics?.reason || 'quota-adapter-contract-mismatch');
+          const preparedAdapter = `${fast.rewriteModuleSync(adapter.patchedSource, adapterUrl)}
+;window.__cockpitNativeFastComplete?.("quota");
+//# sourceURL=${adapterUrl}
+`;
+          modules.push({ url: adapterUrl, source: preparedAdapter });
+        }
+      } catch (error) {
+        const reason = typeof error?.message === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(error.message)
+          ? error.message : 'quota-primary-unavailable';
+        // Restart from the untouched initial module, never publish a partial
+        // quota patch after the primary module failed its own contract.
+        initial = fast.prepareFastOnly(initialSource, initialUrl, reason);
+        if (!initial.ok) return fail(initial.diagnostics?.reason || 'initial-transform-failed');
+        modules.length = 0;
+      }
+    }
     const initialPrepared = `${fast.rewriteModuleSync(initial.patchedSource, initialUrl)}
 ;window.__cockpitNativeFastComplete?.();
 //# sourceURL=${initialUrl}
 `;
-    const modules = [];
-    if (root.__cockpitEnhancements?.quotaCompat === true
-      || root.__cockpitEnhancements?.apiService === true) {
-      const contract = quota.transform(initialSource, initialUrl);
-      if (!contract.ok) return fail(contract.diagnostics?.reason || 'quota-contract-failed');
-      const primaryUrls = new Set(
-        [...initialSource.matchAll(/["'`]\.\/app-primary-[A-Za-z0-9_-]+\.js["'`]/g)]
-          .map(match => new URL(match[0].slice(1, -1), initialUrl).href),
-      );
-      if (primaryUrls.size !== 1) return fail('primary-module-not-unique');
-      const primaryUrl = [...primaryUrls][0];
-      const primary = quota.transformComposer(
-        read(primaryUrl), primaryUrl, initialUrl, contract.diagnostics?.bindings,
-      );
-      if (!primary.ok) return fail(primary.diagnostics?.reason || 'composer-transform-failed');
-      const prepared = `${fast.rewriteModuleSync(primary.patchedSource, primaryUrl)}
-;window.__cockpitNativeFastComplete?.("quota");
-//# sourceURL=${primaryUrl}
-`;
-      modules.push({ url: primaryUrl, source: prepared });
-    }
-    const installed = fast.installModule(initialPrepared, initialUrl, modules, 'full');
+    const mode = initial.mode || 'full';
+    const installed = fast.installModule(initialPrepared, initialUrl, modules, mode, initial.quotaReason ?? null);
     return record({
       ok: installed.ok,
       reason: installed.reason || 'preloaded-before-document',
       initialUrl,
       primaryUrls: modules.map(module => module.url),
+      ...(mode === 'fast-only' ? { mode, quotaReason: initial.quotaReason } : {}),
     });
   } catch {
     return fail('startup-preload-failed');

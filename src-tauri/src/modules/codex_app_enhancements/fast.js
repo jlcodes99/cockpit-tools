@@ -28,6 +28,7 @@
     if (typeof source !== "string" || source.length > LIMIT) return failure(source, "source-limit");
     const edits = [];
     const count = { ui: 0, request: 0, queued: 0, explicit: 0 };
+    let queuedPolicy = null;
     const matches = (pattern) => source.matchAll(new RegExp(pattern, "g"));
     const enclosing = (at) => {
       const start = source.lastIndexOf("function ", at);
@@ -38,16 +39,16 @@
       edits.push({ start, end: start + before.length, text: after });
     };
 
-    for (const match of matches(`(?<identity>${NAME})\\?\\.authMethod===\`chatgpt\`\\|\\|\\k<identity>\\?\\.authMethod===\`personalAccessToken\``)) {
+    for (const match of matches(`(?<identity>${NAME})\\?\\.authMethod===\`chatgpt\`\\|\\|\\k<identity>\\?\\.authMethod===\`personalAccessToken\`(?:\\|\\|\\k<identity>\\?\\.authMethod===\`amazonBedrock\`)?`)) {
       const before = enclosing(match.index);
       const after = source.slice(match.index + match[0].length, match.index + match[0].length + 1100);
       const host = before.match(new RegExp(`(?<host>${NAME})=(?<argument>${NAME})\\?\\.hostId\\?\\?${NAME},${match.groups.identity}=${NAME}\\(\\k<host>\\),${NAME}=$`));
-      if (!host || !/isPending:/.test(after) || !/serviceTierAccess:/.test(after)
+      if (!host || !after.startsWith(",") || !/isPending:/.test(after) || !/serviceTierAccess:/.test(after)
         || !after.includes(`!!${match.groups.identity}?.isLoading`)) continue;
       add("ui", match.index, match[0], `(${match[0]}||${allowExpression(host.groups.host, `${match.groups.identity}?.authMethod`)})`);
     }
 
-    for (const match of matches(`(?<auth>${NAME})!==\`chatgpt\`&&\\k<auth>!==\`personalAccessToken\``)) {
+    for (const match of matches(`(?<auth>${NAME})!==\`chatgpt\`&&\\k<auth>!==\`personalAccessToken\`(?:&&\\k<auth>!==\`amazonBedrock\`)?`)) {
       const before = enclosing(match.index);
       const signature = before.match(new RegExp(`^function ${NAME}\\((?<scope>${NAME}),(?<host>${NAME})\\)\\{let ${match.groups.auth}=await ${NAME}\\(\\k<scope>,\\k<host>\\);if\\($`));
       const after = source.slice(match.index + match[0].length, match.index + match[0].length + 500);
@@ -67,16 +68,40 @@
       if (!before.endsWith(`${manager}.getHostId()===\`local\`&&await ${storage}.readGlobalState(\`use-copilot-auth-if-available\`)===!0&&await ${runtime}.isCopilotApiAvailable()?!1:`)) continue;
       const account = match[0].slice(0, -"===`chatgpt`".length);
       add("queued", match.index, match[0], `((__cockpitType)=>__cockpitType===\`chatgpt\`||${allowExpression(`${manager}.getHostId()`, "__cockpitType")})(${account})`);
+      queuedPolicy = "legacy";
     }
 
-    for (const match of matches(`(?<account>${NAME})\\?\\.type===\`chatgpt\`(?=\\?(?<options>${NAME})\\.serviceTier:null)`)) {
+    // 26.1021 keeps Copilot selection inside the runtime and reads the account
+    // into a local variable. Match the complete read contract, not arbitrary ORs.
+    for (const match of matches(`(?<account>${NAME})\\.account\\?\\.type===\`chatgpt\`\\|\\|\\k<account>\\.account\\?\\.type===\`amazonBedrock\``)) {
+      const before = enclosing(match.index);
+      const signature = before.match(new RegExp(
+        `^function ${NAME}\\((?<manager>${NAME}),\\{runtime:(?<runtime>${NAME})\\},(?<beforeRead>${NAME}),${NAME}\\)\\{let (?<pending>${NAME})=null;`
+        + `return\\{async readServiceTier\\((?<model>${NAME})\\)\\{for\\(;\\k<pending>!=null;\\)await \\k<pending>\\.catch\\(\\(\\)=>void 0\\);`
+        + `return \\k<beforeRead>\\(\\),${NAME}\\(\\k<manager>\\.requestClient,\\k<manager>\\.logger,\\k<model>,async\\(\\)=>\\{`
+        + `if\\(\\k<manager>\\.getHostId\\(\\)===\`local\`&&await \\k<runtime>\\.isUsingCopilotInference\\(\\)\\)return!1;`
+        + `let ${match.groups.account}=await \\k<manager>\\.getAccount\\(\\{priority:\`critical\`\\}\\);return $`,
+      ));
+      const after = source.slice(match.index + match[0].length, match.index + match[0].length + 50);
+      if (!signature || !after.startsWith("})},async writeServiceTier(")) continue;
+      const { manager, runtime } = signature.groups;
+      if (new Set([manager, runtime, match.groups.account]).size !== 3) continue;
+      add("queued", match.index, match[0], `(${match[0]}||${allowExpression(`${manager}.getHostId()`, `${match.groups.account}.account?.type`)})`);
+      queuedPolicy = "runtime";
+    }
+
+    for (const match of matches(`(?<account>${NAME})\\?\\.type===\`chatgpt\`(?:\\|\\|\\k<account>\\?\\.type===\`amazonBedrock\`)?(?=\\?(?<options>${NAME})\\.serviceTier:null)`)) {
       const before = enclosing(match.index);
       const signature = before.match(new RegExp(`^function ${NAME}\\((?<manager>${NAME}),\\{settings:(?<settings>${NAME}),storage:(?<storage>${NAME}),filesystem:${NAME},runtime:(?<runtime>${NAME})\\},${NAME},${NAME},${NAME}\\)\\{`));
       if (!signature || !before.includes("submissionOptions") || !before.includes("Promise.all([")) continue;
       const { manager, runtime, storage } = signature.groups;
       const hostMatch = before.match(new RegExp(`(?<host>${NAME})=${match.groups.options}\\?\\.executionHostId\\?\\?${manager}\\.getHostId\\(\\);`));
       if (!hostMatch || !before.endsWith(`let{account:${match.groups.account}}=await ${manager}.getAccount({priority:\`critical\`});return `)) continue;
-      add("explicit", match.index, match[0], `(${match[0]}||${hostMatch.groups.host}===\`local\`&&${allowExpression(`${manager}.getHostId()`, `${match.groups.account}?.type`)}&&!(await ${storage}.readGlobalState(\`use-copilot-auth-if-available\`)===!0&&await ${runtime}.isCopilotApiAvailable()))`);
+      if (new Set([manager, runtime, storage, hostMatch.groups.host, match.groups.account]).size !== 5) continue;
+      const copilot = queuedPolicy === "runtime"
+        ? `await ${runtime}.isUsingCopilotInference()`
+        : `await ${storage}.readGlobalState(\`use-copilot-auth-if-available\`)===!0&&await ${runtime}.isCopilotApiAvailable()`;
+      add("explicit", match.index, match[0], `(${match[0]}||${hostMatch.groups.host}===\`local\`&&${allowExpression(`${manager}.getHostId()`, `${match.groups.account}?.type`)}&&!(${copilot}))`);
     }
     if (Object.values(count).some(value => value !== 1)) return failure(source, "unsupported-gates");
     edits.sort((a, b) => a.start - b.start);
@@ -96,26 +121,43 @@
     } catch { return false; }
   }
 
-  function localPrimary(value, initialUrl) {
+  function localCompanion(value, initialUrl, adapter = false) {
     try {
       const url = new URL(value), initial = new URL(initialUrl);
       return localAsset(initialUrl) && url.protocol === initial.protocol && url.host === initial.host
         && !url.search && !url.hash && !url.username && !url.password
         && url.pathname.slice(0, url.pathname.lastIndexOf('/')) === initial.pathname.slice(0, initial.pathname.lastIndexOf('/'))
-        && /\/assets\/app-primary-[A-Za-z0-9_-]+\.js$/.test(url.pathname);
+        && (adapter ? /\/assets\/codex-composer-adapter-[A-Za-z0-9_-]+\.js$/ : /\/assets\/app-primary-[A-Za-z0-9_-]+\.js$/).test(url.pathname);
     } catch { return false; }
   }
 
+  const localPrimary = (value, initialUrl) => localCompanion(value, initialUrl);
+  const localAdapter = (value, initialUrl) => localCompanion(value, initialUrl, true);
+  const completionKinds = modules => modules.length === 2 ? ['quota-primary', 'quota']
+    : modules.length === 1 ? ['quota'] : [];
+
   const sourceLength = value => value.source.length + (value.modules || []).reduce((sum, module) => sum + module.source.length, 0);
-  function validModules(source, url, modules, mode = 'full') {
-    if (mode !== 'full' || !Array.isArray(modules)) return false;
+  const validQuotaReason = reason => typeof reason === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(reason);
+  function validModules(source, url, modules, mode = 'full', quotaReason = null) {
+    if (!['full', 'fast-only'].includes(mode) || !Array.isArray(modules)) return false;
     // Do not reinstall a staged module produced by the retired dictation bridge
     // or capability suppression. The original client module remains available.
     if (typeof source !== 'string' || source.includes('__cockpitNativeDictation')
       || source.includes('__cockpitApiDictation')) return false;
-    if (modules.length !== (quotaModuleEnabled() ? 1 : 0)) return false;
-    return typeof source === 'string' && modules.every(module => module && localPrimary(module.url, url)
-      && typeof module.source === 'string' && module.source.includes('window.__cockpitNativeFastComplete?.("quota")'))
+    if (mode === 'fast-only') {
+      return enabled() && quotaModuleEnabled() && validQuotaReason(quotaReason)
+        && modules.length === 0 && source.length <= LIMIT && !source.includes('__cockpitQuotaCompat')
+        && (source.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length === 4;
+    }
+    // The validated initial module fixes the graph shape; a truncated current
+    // graph must never be reinterpreted as the older two-module layout.
+    const currentLayout = (source.match(/globalThis\.__cockpitQuotaCompat\.initialLayout="adapter-v1";/g) || []).length;
+    if (currentLayout > 1 || modules.length !== (quotaModuleEnabled() ? currentLayout === 1 ? 2 : 1 : 0)) return false;
+    const kinds = completionKinds(modules);
+    return modules.every((module, index) => module
+      && (index === 0 ? localPrimary(module.url, url) : localAdapter(module.url, url))
+      && typeof module.source === 'string'
+      && module.source.includes(`window.__cockpitNativeFastComplete?.(${JSON.stringify(kinds[index])})`))
       && sourceLength({ source, modules }) <= LIMIT;
   }
 
@@ -367,6 +409,19 @@
     return parts.join("");
   }
 
+  // Optional quota compatibility must not disable a fully validated speed
+  // integration. Restart from the original module, never a partial quota edit.
+  function prepareFastOnly(source, url, quotaReason) {
+    if (!enabled() || !quotaModuleEnabled() || !localAsset(url)
+      || typeof source !== 'string' || source.length > LIMIT
+      || source.includes('__cockpitQuotaCompat') || !validQuotaReason(quotaReason))
+      return failure(source, 'fast-only-unavailable');
+    const installed = (source.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length === 4;
+    const fast = installed ? { ok: true, patchedSource: source } : transform(source);
+    if (!fast.ok) return fast;
+    return { ...fast, url, mode: 'fast-only', quotaReason };
+  }
+
   function prepareLive(source, url) {
     if (!localAsset(url) || typeof source !== "string" || source.length > LIMIT) return failure(source, "unsupported-module");
     let result = { ok: true, patchedSource: source };
@@ -375,6 +430,7 @@
     if (enabled() && !fastInstalled) result = transform(result.patchedSource);
     if (result.ok && quotaModuleEnabled() && !quotaInstalled) {
       result = root.__cockpitQuotaCompat?.transform(result.patchedSource, url) || failure(source, "quota-unavailable");
+      if (!result.ok && enabled()) return prepareFastOnly(source, url, result.diagnostics?.reason || 'quota-unavailable');
     }
     if (!result.ok) return failure(source, result.diagnostics?.reason || "unsupported-gates");
     if (!enabled() && !quotaModuleEnabled()) return failure(source, "disabled");
@@ -412,7 +468,7 @@
       if (candidates.size !== 1) return { ok: false, reason: "ambiguous-module" };
       const url = [...candidates][0];
       const source = await read(url);
-      const result = await prepareModule(source, url);
+      let result = await prepareModule(source, url);
       if (!result.ok) return { ok: false, reason: result.diagnostics?.reason || "unsupported-module" };
       const modules = [];
       if (quotaModuleEnabled() && result.mode === 'full') {
@@ -424,13 +480,30 @@
           const contract = root.__cockpitQuotaCompat.transform(source, url);
           const primary = root.__cockpitQuotaCompat.transformComposer(await read(primaryUrl), primaryUrl, url, contract.diagnostics?.bindings);
           if (!contract.ok || !primary.ok) throw Error(primary.diagnostics?.reason || 'quota-contract-mismatch');
+          const currentLayout = contract.diagnostics?.bindings?.layout === 'adapter-v1';
           const prepared = await rewriteModule(primary.patchedSource, primaryUrl);
-          modules.push({ url: primaryUrl, source: `${prepared}\n;window.__cockpitNativeFastComplete?.("quota");\n//# sourceURL=${primaryUrl}\n` });
+          const primaryKind = currentLayout ? 'quota-primary' : 'quota';
+          modules.push({ url: primaryUrl, source: `${prepared}\n;window.__cockpitNativeFastComplete?.(${JSON.stringify(primaryKind)});\n//# sourceURL=${primaryUrl}\n` });
+          if (currentLayout) {
+            const adapterUrl = new URL(contract.diagnostics.bindings.adapterPath, url).href;
+            if (!localAdapter(adapterUrl, url)) throw Error('quota-adapter-url-invalid');
+            const adapter = root.__cockpitQuotaCompat.transformAdapter(
+              await read(adapterUrl), adapterUrl, url, primaryUrl, primary.diagnostics?.bindings,
+            );
+            if (!adapter.ok) throw Error(adapter.diagnostics?.reason || 'quota-adapter-contract-mismatch');
+            const preparedAdapter = await rewriteModule(adapter.patchedSource, adapterUrl);
+            modules.push({ url: adapterUrl, source: `${preparedAdapter}\n;window.__cockpitNativeFastComplete?.("quota");\n//# sourceURL=${adapterUrl}\n` });
+          }
         } catch (error) {
-          return failure(source, error.message || 'quota-primary-unavailable');
+          const quotaReason = validQuotaReason(error.message) ? error.message : 'quota-primary-unavailable';
+          const fastOnly = prepareFastOnly(source, url, quotaReason);
+          if (!fastOnly.ok) return failure(source, quotaReason);
+          const prepared = await rewriteModule(fastOnly.patchedSource, url);
+          result = { ...fastOnly, patchedSource: `${prepared}\n;window.__cockpitNativeFastComplete?.();\n//# sourceURL=${url}\n` };
+          modules.length = 0;
         }
       }
-      if (!validModules(result.patchedSource, url, modules, result.mode)) return { ok: false, reason: 'module-source-limit' };
+      if (!validModules(result.patchedSource, url, modules, result.mode, result.quotaReason)) return { ok: false, reason: 'module-source-limit' };
       return { ...result, modules };
     } catch { return { ok: false, reason: "asset-unavailable" }; }
   }
@@ -439,7 +512,9 @@
   let handoff = null, unloadHandler = null, restoreTimer = null, staged = null, preparationEpoch = 0;
   const configurationMask = config => [config?.nativeFast, config?.quotaCompat, config?.apiKeyAuthVerified, config?.apiService]
     .map(flag => flag === true ? "1" : "0").join("");
-  const featureMask = (config, mode = 'full') => mode === 'full' ? configurationMask(config) : 'invalid';
+  const featureMask = (config, mode = 'full') => mode === 'full' ? configurationMask(config)
+    : mode === 'fast-only' && config?.nativeFast === true
+      ? `10${config.apiKeyAuthVerified === true ? '1' : '0'}0` : 'invalid';
   const validNonce = nonce => typeof nonce === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(nonce);
   const localPage = () => root.location?.protocol === "app:" && root.location?.hostname === "-";
   const setState = (value, reason) => {
@@ -457,14 +532,14 @@
   // A host-initiated reload may snapshot the name before beforeunload, then
   // deliver the old document's late write to the new context. That context has
   // no local staged record; cleanup must still restore only our own handoff.
-  function restoreInheritedName(nonce) {
+  function restoreInheritedName(nonce, expectedOwner = root.__cockpitEnhancements?.owner) {
     const raw = String(root.name ?? "");
     if (nonce !== undefined && !validNonce(nonce) || !localPage() || !raw.startsWith(HANDOFF_PREFIX)
       || raw.length > LIMIT * 2 + 131072) return;
     try {
       const value = JSON.parse(raw.slice(HANDOFF_PREFIX.length));
       if (validNonce(value.nonce) && (nonce === undefined || value.nonce === nonce)
-        && value.owner === root.__cockpitEnhancements?.owner
+        && value.owner === expectedOwner
         && typeof value.previousName === "string" && value.previousName.length <= 65536
         && !value.previousName.startsWith(HANDOFF_PREFIX)) root.name = value.previousName;
     } catch { /* Preserve names that cannot be attributed to this handoff. */ }
@@ -525,17 +600,19 @@
       return { ok: false, reason: "handoff-canceled" };
     if (!result.ok) return result;
     retainHandoff({ nonce, owner: config?.owner, requestedFeatures: configurationMask(config),
-      features: featureMask(config, result.mode), mode: result.mode,
+      features: featureMask(config, result.mode), mode: result.mode, quotaReason: result.quotaReason,
       url: result.url, source: result.patchedSource, modules: result.modules });
     return { ok: true, url: result.url, sourceLength: sourceLength(handoff), mode: handoff.mode };
   }
 
-  function installModule(source, url, modules = [], mode = 'full') {
+  function installModule(source, url, modules = [], mode = 'full', quotaReason = null) {
     const doc = root.document;
-    if (!localAsset(url) || !doc || doc.documentElement || !validModules(source, url, modules, mode)) {
+    if (root.__cockpitNativeInstallStarted) return { ok: false, reason: 'installation-already-started' };
+    if (!localAsset(url) || !doc || doc.documentElement || !validModules(source, url, modules, mode, quotaReason)) {
       setState("unsupported", "document-start-required");
       return { ok: false, reason: "document-start-required" };
     }
+    root.__cockpitNativeInstallStarted = true;
     let container;
     const blobs = [], preloads = [];
     try {
@@ -569,14 +646,16 @@
       root.__cockpitNativeFastComplete = (kind = 'initial') => {
         const config = root.__cockpitEnhancements;
         if (completed || !config || config.owner !== owner || featureMask(config, mode) !== features || configurationMask(config) !== requestedFeatures) return;
-        if (kind !== 'initial' && !(modules.length && kind === 'quota')) return;
+        if (kind !== 'initial' && !completionKinds(modules).includes(kind)) return;
         evaluated.add(kind);
         if (evaluated.size !== 1 + modules.length) return;
         completed = true; detach();
         config.nativePatchMode = mode;
         config.nativePatchFeatures = features;
         config.nativePatchRequestedFeatures = requestedFeatures;
-        setState('active', 'module-evaluated');
+        config.nativeQuotaPatchState = mode === 'fast-only' ? 'unsupported' : quotaModuleEnabled() ? 'active' : 'disabled';
+        config.nativeQuotaPatchReason = mode === 'fast-only' ? quotaReason : undefined;
+        setState('active', mode === 'fast-only' ? 'fast-only-quota-unsupported' : 'module-evaluated');
       };
       preloads.forEach(preload => { preload.onerror = fail; });
       container = doc.createElement("html"); doc.appendChild(container);
@@ -614,11 +693,11 @@
     if (value.owner !== config?.owner || value.features !== featureMask(config, value.mode)
       || value.requestedFeatures !== configurationMask(config)
       || !Number.isFinite(age) || age < 0 || age > 30000 || !localAsset(value.url)
-      || !validModules(value.source, value.url, value.modules || [], value.mode)
+      || !validModules(value.source, value.url, value.modules || [], value.mode, value.quotaReason)
       || !value.source.includes("window.__cockpitNativeFastComplete?.()")) return fail("handoff-invalid");
     retainHandoff({ nonce, owner: value.owner, features: value.features, requestedFeatures: value.requestedFeatures,
-      mode: value.mode, url: value.url, source: value.source, modules: value.modules });
-    return installModule(value.source, value.url, value.modules || [], value.mode);
+      mode: value.mode, quotaReason: value.quotaReason, url: value.url, source: value.source, modules: value.modules });
+    return installModule(value.source, value.url, value.modules || [], value.mode, value.quotaReason);
   }
 
   function reloadPreparedDocument(nonce) {
@@ -633,7 +712,7 @@
     return result;
   }
 
-  const api = { allow, transform, localAsset, functionRange, rewriteModule, rewriteModuleSync, prepareLive, prepareModule, prepareDocument, installModule, prepareHandoff, consumeHandoff, cancelHandoff, reloadPreparedDocument,
+  const api = { discardHandoff: restoreInheritedName, allow, transform, localAsset, localAdapter, functionRange, rewriteModule, rewriteModuleSync, prepareFastOnly, prepareLive, prepareModule, prepareDocument, installModule, prepareHandoff, consumeHandoff, cancelHandoff, reloadPreparedDocument,
     inspectStartupReload: () => {
       const guard = root.__cockpitStartupGuard;
       if (!guard) return { ok: false, reason: "startup-guard-unavailable" };

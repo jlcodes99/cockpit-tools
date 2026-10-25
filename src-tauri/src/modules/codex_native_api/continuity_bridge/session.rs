@@ -87,6 +87,8 @@ struct Session {
     finish: Option<(String, Result<FinishResponse, ServiceError>)>,
     finished_attempts: HashMap<String, (String, Result<FinishResponse, ServiceError>)>,
     allow_rebuild: bool,
+    forwarding_account_id: Option<String>,
+    forwarding_may_have_sent: bool,
 }
 
 struct Attempt {
@@ -108,6 +110,8 @@ impl Session {
         self.last_bind = None;
         self.attempts.clear();
         self.finished_attempts.clear();
+        self.forwarding_account_id = None;
+        self.forwarding_may_have_sent = false;
         self.response.body = serde_json::Value::Null;
         self.response.headers.clear();
     }
@@ -145,8 +149,10 @@ impl Core {
                 .map_err(|error| error.message)?;
             }
         }
+        let identity = IdentityStore::open(config.identity_path.clone())?;
+        identity.set_session_identity_mapping_enabled(config.session_identity_mapping_enabled);
         Ok(Self {
-            identity: IdentityStore::open(config.identity_path.clone())?,
+            identity,
             config,
             registry: Mutex::new(Registry {
                 requests: HashMap::new(),
@@ -345,13 +351,12 @@ impl Core {
         self.check_running()?;
         let headers = decode_headers(&request.headers)?;
         let allow_rebuild = request.allow_rebuild && !request.compact;
-        let mut context = if allow_rebuild || request.compact {
-            self.identity
-                .inspect_for_rebuild(&request.caller, &headers, &request.body)?
-        } else {
-            self.identity
-                .inspect(&request.caller, &headers, &request.body)?
-        };
+        let mut context = self.identity.inspect_for_forwarding(
+            &request.caller,
+            &headers,
+            &request.body,
+            allow_rebuild || request.compact,
+        )?;
         let mut plan = self.identity.configure_rebuild(
             &mut context,
             &headers,
@@ -401,6 +406,8 @@ impl Core {
             finish: None,
             finished_attempts: HashMap::new(),
             allow_rebuild,
+            forwarding_account_id: None,
+            forwarding_may_have_sent: false,
         })
     }
 
@@ -486,6 +493,16 @@ impl Core {
             ));
         }
         validate_source(&session.response, &request)?;
+        if session
+            .forwarding_account_id
+            .as_ref()
+            .is_some_and(|account| account != &request.account_id)
+        {
+            return Err(error(
+                "continuity_unverified_account_retry",
+                "An unverified continuation cannot retry on a different account",
+            ));
+        }
         self.reserve(
             &ticket,
             ticket
@@ -496,12 +513,21 @@ impl Core {
                 .saturating_add(session.attempts.len().saturating_add(1).saturating_mul(512)),
         )?;
         if let Some(previous) = session.current.take() {
+            session.forwarding_may_have_sent |= session.forwarding_account_id.is_some();
             previous.fail("continuity_attempt_superseded");
         }
         session.attempts.insert(request.attempt_id.clone());
         let result = self.bind_inner(session, &request, owner);
         session.last_bind = Some((request.attempt_id.clone(), hash, result.clone()));
         if result.is_ok() {
+            if session.plan.is_none()
+                && session
+                    .context
+                    .as_ref()
+                    .is_some_and(RequestIdentity::requires_forwarding_account_pin)
+            {
+                session.forwarding_account_id = Some(request.account_id.clone());
+            }
             ticket.bound.store(true, Ordering::Release);
         }
         result
@@ -526,6 +552,17 @@ impl Core {
             .clone();
         let mut headers = decode_headers(&request.headers)?;
         let original_headers = decode_headers(&session.response.headers)?;
+        if !self.config.session_identity_mapping_enabled {
+            // Go transports may synthesize a session fallback or normalize it
+            // to Session_id before Bind. Restore the client's exact presence and
+            // values when mapping is disabled, including an absent header.
+            for name in ["session-id", "session_id", "thread-id"] {
+                headers.remove(name);
+                for value in original_headers.get_all(name) {
+                    headers.append(name, value.clone());
+                }
+            }
+        }
         // Executors apply their transport/authentication whitelist before Bind.
         // Restore the client's authoritative identities without losing the
         // selected account's fresh transport headers.
@@ -845,6 +882,17 @@ impl Core {
             } else {
                 if request.status != FinishStatus::Succeeded {
                     attempt.fail(code);
+                }
+                // Only an explicit trusted preparation failure proves that this
+                // binding never reached its upstream. A transport failure or a
+                // rejected upstream response cannot release the account pin.
+                let definitely_unsent = request.status == FinishStatus::Failed
+                    && code == "continuity_upstream_not_sent"
+                    && attempt.next_sequence == 1;
+                if definitely_unsent && !session.forwarding_may_have_sent {
+                    session.forwarding_account_id = None;
+                } else if session.forwarding_account_id.is_some() {
+                    session.forwarding_may_have_sent = true;
                 }
                 attempt.terminal = true;
                 Ok(FinishResponse {})

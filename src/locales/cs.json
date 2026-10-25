@@ -158,6 +158,15 @@
     "providerClear": "Zrušit výběr"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "nadřazené službě",
+      "proxyConnection": "Připojení k {{target}} přes proxy „{{proxy}}“ selhalo. Může jít o problém proxy nebo sítě. Zkontrolujte proxy nebo zkuste jiný uzel.",
+      "proxyTimeout": "Vypršel čas připojení k {{target}} přes proxy „{{proxy}}“. Může jít o problém proxy nebo sítě. Zkontrolujte proxy nebo zkuste jiný uzel.",
+      "proxyAuth": "Ověření proxy „{{proxy}}“ selhalo. Zkontrolujte uživatelské jméno nebo heslo proxy.",
+      "localProxyUnavailable": "Nelze se připojit k místní proxy „{{proxy}}“. Zkontrolujte, zda služba proxy běží.",
+      "directConnection": "Připojení k {{target}} selhalo. Zkontrolujte síť a zkuste to znovu.",
+      "directTimeout": "Vypršel čas připojení k {{target}}. Zkontrolujte síť a zkuste to znovu."
+    },
     "codexUsage": {
       "title": "Kvóta a využití",
       "session": "Aktuální chat",
@@ -3482,6 +3491,7 @@
         "expand": "Rozbalit",
         "collapse": "Sbalit",
         "repairVisibility": "Opravit viditelnost",
+        "repairIndex": "Opravit index chatů",
         "restoreSessions": "Obnovit relace",
         "exportSessions": "Exportovat relace",
         "importSessions": "Importovat relace",
@@ -3514,6 +3524,10 @@
         "clear": "Vymazat"
       },
       "messages": {
+        "deleteNotConfirmed": "Klient nepotvrdil odstranění. Místní čištění bylo zastaveno a zálohy byly zachovány: {{error}}",
+        "historyReadFailed": "Historii chatu nelze bezpečně přečíst: {{error}}",
+        "restoreIndexRetry": "Soubor chatu byl zachován, ale seznam chatů se nepodařilo aktualizovat. Originál zůstává v koši. Vyřešte problém a zkuste to znovu: {{error}}",
+        "importIndexRetry": "Soubory chatů byly importovány, ale seznam se nepodařilo aktualizovat. Soubory i importní balíček byly zachovány. Vyřešte problém a zkuste to znovu: {{error}}",
         "pickOne": "Vyberte prosím alespoň jednu relaci",
         "syncNeedTwo": "Pro synchronizaci relací jsou potřeba alespoň dvě instance",
         "pickRestoreOne": "Vyberte prosím alespoň jednu relaci k obnovení",
@@ -3624,7 +3638,18 @@
         "title": "Opravit historii",
         "description": "Normalizuje poskytovatele v indexech SQLite, katalogu relací a pracovních prostorech. Původní soubory rollout zůstávají zachovány po bajtech; opraví se pouze časové údaje. Nejprve se vytvoří místní záloha.",
         "stopInstanceHint": "Před úplnou opravou zcela ukončete vybranou instanci Codex App/ChatGPT. Změny můžete nejprve zobrazit v náhledu.",
-        "encryptedContentWarning": "Byla zjištěna historie zašifrovaná jiným poskytovatelem nebo účtem. Metadata lze převést, ale pokračování či komprimace těchto relací může selhat; vraťte se k původnímu poskytovateli/účtu nebo začněte novou relaci."
+        "encryptedContentWarning": "Byla zjištěna historie zašifrovaná jiným poskytovatelem nebo účtem. Metadata lze převést, ale pokračování či komprimace těchto relací může selhat; vraťte se k původnímu poskytovateli/účtu nebo začněte novou relaci.",
+        "modeHistory": "Úpravy/větvení",
+        "modeHistoryDesc": "Oprava úprav zpráv a větvení chatů, které selhávají kvůli neplatným indexům.",
+        "historyStopHint": "Před opravou zcela ukončete vybraného klienta a CLI používající tuto instanci. Změny si lze stále prohlédnout.",
+        "historyDescription": "Zkontroluje vybrané chaty a jejich zdrojovou historii; obnoví pouze chybné stránkované indexy. Záznamy chatů, účty a Provider zůstanou beze změn. Před spuštěním ukončete cílového klienta a související CLI.",
+        "historyPreview": "Nalezeno {{count}} chybných indexů historie, které lze obnovit. Záznamy chatů zůstanou beze změn.",
+        "historySuccess": "Bylo resetováno {{count}} chybných indexů historie. Znovu otevřete klienta a chaty, aby se indexy obnovily. Zálohy byly zachovány.",
+        "historyNoChanges": "Nebyly nalezeny chybné indexy historie, které lze bezpečně obnovit.",
+        "historyFailed": "Oprava indexů historie nebyla dokončena: {{error}}",
+        "historyRunning": "Zcela ukončete cílového klienta a CLI používající tuto instanci a zkuste to znovu.",
+        "historyScan": "Kontrola indexů historie ({{current}}/{{total}})…",
+        "historyReset": "Zálohování a resetování chybných indexů…"
       },
       "importModal": {
         "title": "Import relací",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "Volby směrování",
+        "sessionIdentityMapping": "Mapování ID relace",
+        "sessionIdentityMappingEnableHint": "Zapnuté mapování při přepínání účtů používá samostatné hodnoty Session-Id a Thread-Id pro každý účet poskytovatele. To posiluje oddělení identifikátorů, ale může omezit opětovné využití mezipaměti mezi účty. V rámci stejného účtu se používají stávající mapování.",
+        "sessionIdentityMappingDisableHint": "Vypnuté mapování zachová původní hodnoty Session-Id a Thread-Id klienta. Různé účty poskytovatele mohou tyto identifikátory sdílet, což oslabuje jejich oddělení, ale může zvýšit opětovné využití mezipaměti mezi účty.",
+        "sessionIdentityMappingCacheNote": "Úspěšnost mezipaměti závisí také na pravidlech poskytovatele, rozsahu účtů a obsahu požadavků. Změna nastavení nezaručuje její zvýšení ani snížení.",
+        "sessionIdentityMappingSaveNote": "Po potvrzení uložte nastavení, aby se změna projevila.",
         "sessionAffinity": "Vazba relace",
         "sessionAffinityTtl": "Vypršení (sekundy)",
         "responsesWebsockets": "Responses přes WebSocket",

@@ -1442,6 +1442,7 @@ fn apply_provider_gateway_template_settings(
     collection.model_pricings = template.model_pricings.clone();
     collection.excluded_models = template.excluded_models.clone();
     collection.session_affinity = template.session_affinity;
+    collection.session_identity_mapping_enabled = template.session_identity_mapping_enabled;
     collection.session_affinity_ttl_ms = template.session_affinity_ttl_ms;
     collection.session_affinity_default_enabled_migrated =
         template.session_affinity_default_enabled_migrated;

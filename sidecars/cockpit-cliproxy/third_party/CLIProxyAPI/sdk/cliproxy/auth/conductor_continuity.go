@@ -123,3 +123,15 @@ func continuityPreferredAuth(opts cliproxyexecutor.Options, tried map[string]str
 	}
 	return strings.TrimSpace(preferred)
 }
+
+// A rejected local account retry must not hide the failure already returned by
+// the actual upstream. Other request and scope errors keep their own priority.
+func preserveContinuityUpstreamError(local, upstream error) error {
+	if local == nil || upstream == nil || !hasUpstreamExecutionAttempt(upstream) || hasUpstreamExecutionAttempt(local) || !isRequestScopedError(local) {
+		return local
+	}
+	if gjson.Get(local.Error(), "error.code").String() != "continuity_unverified_account_retry" {
+		return local
+	}
+	return wrapRequestStopError(preferredExecutionAttemptError(local, upstream))
+}

@@ -1707,6 +1707,7 @@ fn deepseek_balance_injection_script(
     let handled_refresh_token =
         serde_json::to_string(&handled_refresh_token).unwrap_or_else(|_| "null".to_string());
     let badge_layout = include_str!("codex_app_injection_layout.js");
+    let usage_metrics = include_str!("codex_app_injection_usage.js");
     format!(
         r#"(() => {{
       const balance = {balance};
@@ -1723,6 +1724,7 @@ fn deepseek_balance_injection_script(
       const handledRefreshToken = {handled_refresh_token};
       const hostHeartbeatTimeoutMs = 8000;
       const badgeLayout = {badge_layout};
+      const usageMetrics = {usage_metrics};
       const root = window.__cockpitDeepSeekBalance || (window.__cockpitDeepSeekBalance = {{}});
       root.hostHeartbeatAt = Date.now();
       root.hostAvailable = true;
@@ -1736,9 +1738,10 @@ fn deepseek_balance_injection_script(
         if (staleQuotaRoot.resizeHandler) window.removeEventListener('resize', staleQuotaRoot.resizeHandler);
         if (staleQuotaRoot.scrollHandler) window.removeEventListener('scroll', staleQuotaRoot.scrollHandler, true);
         if (staleQuotaRoot.keyHandler) window.removeEventListener('keydown', staleQuotaRoot.keyHandler);
+        if (staleQuotaRoot.focusHandler) window.removeEventListener('focusin', staleQuotaRoot.focusHandler);
         if (staleQuotaRoot.outsidePointerHandler) window.removeEventListener('pointerdown', staleQuotaRoot.outsidePointerHandler, true);
         badgeLayout.disconnect(staleQuotaRoot);
-        for (const key of ['keyHandler', 'outsidePointerHandler', 'statuslineVersion', 'layoutCard', 'card', 'threadId', 'usageState', 'poolState', 'lastTrigger', 'lastTriggerIndex', 'refreshError', 'refreshResultKey']) delete staleQuotaRoot[key];
+        for (const key of ['keyHandler', 'focusHandler', 'outsidePointerHandler', 'statuslineVersion', 'layoutCard', 'card', 'threadId', 'usageState', 'poolState', 'lastTrigger', 'lastTriggerIndex', 'refreshError', 'refreshResultKey']) delete staleQuotaRoot[key];
         delete staleQuotaRoot.watchdogTimer;
         delete staleQuotaRoot.observer;
         delete staleQuotaRoot.resizeHandler;
@@ -1781,8 +1784,11 @@ fn deepseek_balance_injection_script(
       const render = () => {{
         let host = document.querySelector('[data-cockpit-deepseek-balance]');
         let details = document.querySelector('[data-cockpit-deepseek-balance-details]');
-        const permissions = [...document.querySelectorAll('[data-composer-navigation-target="permissions"]')].find((node) => node.getClientRects().length > 0);
-        const footer = permissions?.closest('[class*="_ComposerLayoutFooter_"]') || permissions?.closest('[class*="_footer_"]') || permissions?.parentElement;
+        const card = usageMetrics.visibleCard(root.card);
+        const footer = card?.querySelector('[class*="_ComposerLayoutFooter_"], [class*="_footer_"]') || card;
+        const permissions = footer && [...footer.querySelectorAll('[data-composer-navigation-target="permissions"]')].find((node) => node.getClientRects().length > 0);
+        if (root.card !== card) root.detailsOpen = false;
+        root.card = card;
         if (!permissions || !footer || !balance) {{
           if (host) host.style.display = 'none';
           if (details) details.style.display = 'none';
@@ -1860,6 +1866,10 @@ fn deepseek_balance_injection_script(
       if (!root.scrollHandler) {{
         root.scrollHandler = () => root.scheduleRender();
         window.addEventListener('scroll', root.scrollHandler, {{passive:true,capture:true}});
+      }}
+      if (!root.focusHandler) {{
+        root.focusHandler = () => root.scheduleRender();
+        window.addEventListener('focusin', root.focusHandler);
       }}
       if (!root.observer) {{
         root.observer = new MutationObserver((mutations) => {{

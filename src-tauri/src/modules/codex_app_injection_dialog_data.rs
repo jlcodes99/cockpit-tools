@@ -583,8 +583,10 @@ fn read_summary(
     until: i64,
     started: Instant,
 ) -> Result<Value, String> {
+    // Each aggregate uses dispatched. Materialize the bounded time window so
+    // SQLite evaluates dispatch evidence once per row instead of per metric.
     let sql = format!(
-        "WITH evidence AS (SELECT l.success,l.input_tokens,l.output_tokens,l.total_tokens,\
+        "WITH evidence AS MATERIALIZED (SELECT l.success,l.input_tokens,l.output_tokens,l.total_tokens,\
          l.cached_tokens,l.reasoning_tokens,l.estimated_cost_usd,l.latency_ms,\
          ({}) AS dispatched,({}) AS unsent \
          FROM request_logs AS l INDEXED BY idx_codex_local_access_logs_timestamp \

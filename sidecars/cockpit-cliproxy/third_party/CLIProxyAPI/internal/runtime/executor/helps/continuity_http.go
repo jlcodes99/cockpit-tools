@@ -32,7 +32,7 @@ func bindCodexContinuity(ctx context.Context, auth *cliproxyauth.Auth, headers h
 	}
 	next, err = ApplyManagedIdentity(auth, headers, next)
 	if err != nil {
-		return nil, nil, nil, errors.Join(err, attempt.Finish(ctx, err))
+		return nil, nil, nil, errors.Join(err, attempt.FinishNotSent(ctx, err))
 	}
 	return attempt, headers, next, nil
 }

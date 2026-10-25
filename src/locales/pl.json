@@ -158,6 +158,15 @@
     "providerClear": "Wyczyść wybór"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "usługą docelową",
+      "proxyConnection": "Nie udało się połączyć z {{target}} przez proxy „{{proxy}}”. Możliwy problem z proxy lub siecią. Sprawdź proxy lub wypróbuj inny węzeł.",
+      "proxyTimeout": "Przekroczono czas połączenia z {{target}} przez proxy „{{proxy}}”. Możliwy problem z proxy lub siecią. Sprawdź proxy lub wypróbuj inny węzeł.",
+      "proxyAuth": "Uwierzytelnianie proxy „{{proxy}}” nie powiodło się. Sprawdź nazwę użytkownika lub hasło proxy.",
+      "localProxyUnavailable": "Nie można połączyć się z lokalnym proxy „{{proxy}}”. Sprawdź, czy usługa proxy działa.",
+      "directConnection": "Nie udało się połączyć z {{target}}. Sprawdź sieć i spróbuj ponownie.",
+      "directTimeout": "Przekroczono czas połączenia z {{target}}. Sprawdź sieć i spróbuj ponownie."
+    },
     "codexUsage": {
       "title": "Limit i użycie",
       "session": "Bieżący czat",
@@ -3482,6 +3491,7 @@
         "expand": "Rozwiń",
         "collapse": "Zwiń",
         "repairVisibility": "Napraw widoczność",
+        "repairIndex": "Napraw indeks rozmów",
         "restoreSessions": "Przywróć sesje",
         "exportSessions": "Eksportuj sesje",
         "importSessions": "Importuj sesje",
@@ -3514,6 +3524,10 @@
         "clear": "Wyczyść"
       },
       "messages": {
+        "deleteNotConfirmed": "Klient nie potwierdził usunięcia. Zatrzymano lokalne czyszczenie i zachowano kopie zapasowe: {{error}}",
+        "historyReadFailed": "Nie można bezpiecznie odczytać historii rozmowy: {{error}}",
+        "restoreIndexRetry": "Plik rozmowy został zachowany, ale aktualizacja listy nie powiodła się. Oryginał pozostaje w koszu. Rozwiąż problem i spróbuj ponownie: {{error}}",
+        "importIndexRetry": "Pliki rozmów zaimportowano, ale aktualizacja listy nie powiodła się. Pliki i pakiet importu zostały zachowane. Rozwiąż problem i spróbuj ponownie: {{error}}",
         "pickOne": "Wybierz co najmniej jedną sesję",
         "syncNeedTwo": "Do synchronizacji sesji wymagane są co najmniej dwie instancje",
         "pickRestoreOne": "Wybierz co najmniej jedną sesję do przywrócenia",
@@ -3624,7 +3638,18 @@
         "title": "Napraw historię",
         "description": "Normalizuje dostawców w indeksach SQLite, katalogu sesji i obszarach roboczych. Pliki rollout zachowują wszystkie oryginalne bajty; poprawiane są tylko znaczniki czasu. Najpierw powstaje lokalna kopia zapasowa.",
         "stopInstanceHint": "Przed pełną naprawą całkowicie zamknij wybraną instancję Codex App/ChatGPT. Nadal możesz najpierw wyświetlić podgląd zmian.",
-        "encryptedContentWarning": "Wykryto historię zaszyfrowaną przez innego dostawcę lub konto. Metadane można przenieść, ale kontynuowanie lub kompaktowanie tych sesji może się nie udać; wróć do pierwotnego dostawcy/konta albo rozpocznij nową sesję."
+        "encryptedContentWarning": "Wykryto historię zaszyfrowaną przez innego dostawcę lub konto. Metadane można przenieść, ale kontynuowanie lub kompaktowanie tych sesji może się nie udać; wróć do pierwotnego dostawcy/konta albo rozpocznij nową sesję.",
+        "modeHistory": "Edycja/gałęzie",
+        "modeHistoryDesc": "Naprawia błędy edycji wiadomości i tworzenia gałęzi rozmów spowodowane nieprawidłowymi indeksami.",
+        "historyStopHint": "Przed naprawą zamknij całkowicie wybranego klienta i CLI używające tej instancji. Podgląd zmian jest nadal dostępny.",
+        "historyDescription": "Sprawdź wybrane czaty i ich historię źródłową; zresetuj tylko nieprawidłowe indeksy stronicowania. Wiadomości, konta i Provider pozostaną bez zmian. Przed uruchomieniem zamknij klienta docelowego i powiązane CLI.",
+        "historyPreview": "Znaleziono {{count}} nieprawidłowych indeksów historii możliwych do odbudowy. Wiadomości pozostaną bez zmian.",
+        "historySuccess": "Zresetowano {{count}} nieprawidłowych indeksów historii. Otwórz ponownie klienta i czaty, aby je odbudować. Kopie zapasowe zachowano.",
+        "historyNoChanges": "Nie znaleziono nieprawidłowych indeksów historii, które można bezpiecznie odbudować.",
+        "historyFailed": "Naprawa indeksów historii nie została ukończona: {{error}}",
+        "historyRunning": "Zamknij całkowicie klienta docelowego i CLI używające tej instancji, a następnie spróbuj ponownie.",
+        "historyScan": "Sprawdzanie indeksów historii ({{current}}/{{total}})…",
+        "historyReset": "Tworzenie kopii i resetowanie nieprawidłowych indeksów…"
       },
       "importModal": {
         "title": "Importuj sesje",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "Opcje routingu",
+        "sessionIdentityMapping": "Mapowanie ID sesji",
+        "sessionIdentityMappingEnableHint": "Włączenie mapowania zapewnia niezależne wartości Session-Id i Thread-Id dla każdego konta dostawcy przy zmianie konta. Wzmacnia to izolację identyfikatorów, ale może ograniczyć ponowne użycie pamięci podręcznej między kontami. W ramach tego samego konta istniejące mapowania są nadal używane.",
+        "sessionIdentityMappingDisableHint": "Wyłączenie zachowuje oryginalne wartości Session-Id i Thread-Id klienta. Różne konta dostawcy mogą współdzielić te identyfikatory, co osłabia izolację, ale może zwiększyć ponowne użycie pamięci podręcznej między kontami.",
+        "sessionIdentityMappingCacheNote": "Odsetek trafień w pamięci podręcznej zależy też od reguł dostawcy, zakresu kont i treści żądań. Ta zmiana nie gwarantuje jego wzrostu ani spadku.",
+        "sessionIdentityMappingSaveNote": "Po potwierdzeniu zapisz ustawienia, aby zastosować zmianę.",
         "sessionAffinity": "Przywiązanie sesji",
         "sessionAffinityTtl": "Wygaśnięcie (sekundy)",
         "responsesWebsockets": "Responses przez WebSocket",

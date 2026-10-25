@@ -6,7 +6,7 @@ function nodes(tree: any): any[] {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return tree && typeof tree === 'object' ? [tree, ...nodes(tree.props?.children)] : [];
 }
-function harness(mode: string, options: { loaded?: boolean; account?: any; save?: () => Promise<any>; refresh?: () => Promise<any>; latestAccount?: any; accounts?: any[]; imageLoaded?: boolean; imageModel?: string; execute?: (launchAfterSwitch: boolean, options?: any) => Promise<boolean> } = {}) {
+function harness(mode: string, options: { actions?: any[]; loaded?: boolean; account?: any; save?: () => Promise<any>; refresh?: () => Promise<any>; latestAccount?: any; accounts?: any[]; imageLoaded?: boolean; imageModel?: string; execute?: (launchAfterSwitch: boolean, options?: any) => Promise<boolean> } = {}) {
   let traps: any[] = [];
   let escapes: any[] = [];
   let closed = 0;
@@ -57,7 +57,7 @@ function harness(mode: string, options: { loaded?: boolean; account?: any; save?
   }, { document: { querySelectorAll: () => [] }, performance: { now: () => 0 } });
   h.render(() => {
     escapes = []; traps = [];
-    return h.exports.CodexLaunchPreviewModal({ mode, account: options.account, accountLabel: 'Synthetic account', summary: {}, actions: [],
+    return h.exports.CodexLaunchPreviewModal({ mode, account: options.account, accountLabel: 'Synthetic account', summary: {}, actions: options.actions ?? [],
       onClose: () => { closed++; }, onExecute: options.execute ?? (async () => false) });
   });
   return { h, remembered, get tree() { return h.flush(); }, get trap() { const active = traps.filter((entry) => entry.open && entry.active); assert.equal(active.length, 1); return active[0]; }, get traps() { return traps; }, async ready() { await settlePromises(); h.flush(); }, get escapes() { for (const entry of escapes.filter((item) => item.open)) assert.equal(entry.ref, traps.find((trap) => trap.open && trap.active)?.ref); return escapes; }, get closed() { return closed; } };
@@ -179,6 +179,7 @@ test('opening session repair suspends the preview and its close leaves the paren
   assert.equal(h.remembered[0], 'repair-trigger');
   const repair = nodes(h.tree).find((node) => node.type === 'repair');
   assert.equal(repair.props.open, true);
+  assert.equal(repair.props.repairKind, 'visibility');
   assert.equal(h.traps.filter((entry) => entry.open && entry.active).length, 0);
   repair.props.onClose();
   assert.equal(nodes(h.tree).find((node) => node.type === 'repair').props.open, false);
@@ -186,6 +187,34 @@ test('opening session repair suspends the preview and its close leaves the paren
   assert.equal(h.closed, 0);
   h.h.unmount();
 });
+
+for (const mode of ['account', 'instance', 'apiService']) {
+  test(`${mode} preview exposes a separate index-repair entry and reuses one dialog`, async () => {
+    const h = harness(mode, { loaded: true }); await h.ready();
+    const indexTrigger = nodes(h.tree).find((node) => node.type === 'button' && node.props.children === 'codex.sessionManager.actions.repairIndex');
+    assert.ok(indexTrigger);
+    assert.equal(indexTrigger.props.disabled, false);
+    indexTrigger.props.onClick({ currentTarget: 'index-repair-trigger' });
+    assert.equal(h.remembered[0], 'index-repair-trigger');
+    let repairs = nodes(h.tree).filter((node) => node.type === 'repair');
+    assert.equal(repairs.length, 1);
+    assert.equal(repairs[0].props.open, true);
+    assert.equal(repairs[0].props.repairKind, 'history');
+    assert.equal(h.traps.filter((entry) => entry.open && entry.active).length, 0);
+    repairs[0].props.onRepaired({ message: 'Index reset; reopen the chat to rebuild.' });
+    assert.ok(nodes(h.tree).some((node) => node.type === 'span' && node.props.children === 'Index reset; reopen the chat to rebuild.'));
+    repairs[0].props.onClose();
+    h.h.flush();
+    assert.equal(h.trap.open, true);
+    nodes(h.tree).find((node) => node.type === 'button' && node.props.children === 'codex.sessionManager.actions.repairVisibility').props.onClick({ currentTarget: 'visibility-repair-trigger' });
+    repairs = nodes(h.tree).filter((node) => node.type === 'repair');
+    assert.equal(repairs.length, 1);
+    assert.equal(repairs[0].props.repairKind, 'visibility');
+    repairs[0].props.onClose();
+    assert.equal(h.closed, 0);
+    h.h.unmount();
+  });
+}
 
 
 for (const childKind of ['access-mode', 'image-mode']) {
@@ -337,4 +366,32 @@ test('launch forwards the saved full image variant together with source IDs', as
   assert.deepEqual(launchOptions.imageGenerationAccountIds, ['source-api']);
   assert.deepEqual(launchOptions.imageGenerationAccountModels, { 'source-api': 'gpt-image-2.5-high' });
   h.unmount();
+});
+
+
+for (const mode of ['account', 'instance', 'apiService']) {
+  test(`${mode} rendered CLI action opens CLI once and closes the preview`, async () => {
+    let opened = 0;
+    let desktopStarts = 0;
+    const h = harness(mode, { loaded: true,
+      actions: [{ id: 'cli', label: 'CLI', onAction: () => { opened++; } }],
+      execute: async () => { desktopStarts++; return true; },
+    });
+    await h.ready();
+    const button = nodes(h.tree).find((node) => node.type === 'button' && node.props.children === 'CLI');
+    assert.equal(button.props.disabled, false);
+    button.props.onClick();
+    await h.ready();
+    assert.equal(opened, 1);
+    assert.equal(h.closed, 1);
+    assert.equal(desktopStarts, 0);
+    h.h.unmount();
+  });
+}
+
+test('rendered CLI action is disabled while preview configuration is loading', () => {
+  const h = harness('account', { actions: [{ id: 'cli', label: 'CLI', onAction() {} }] });
+  const button = nodes(h.tree).find((node) => node.type === 'button' && node.props.children === 'CLI');
+  assert.equal(button.props.disabled, true);
+  h.h.unmount();
 });

@@ -39,6 +39,7 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         model_pricings: Vec::new(),
         excluded_models: Vec::new(),
         session_affinity: true,
+        session_identity_mapping_enabled: true,
         session_affinity_ttl_ms: DEFAULT_SESSION_AFFINITY_TTL_MS,
         session_affinity_default_enabled_migrated: true,
         responses_websockets_enabled: false,
@@ -617,6 +618,7 @@ pub async fn update_local_access_routing_options(
     max_concurrent_image_requests: u16,
     max_account_concurrency: u16,
     account_concurrency_wait_ms: u64,
+    session_identity_mapping_enabled: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded().await?;
 
@@ -634,6 +636,9 @@ pub async fn update_local_access_routing_options(
     let profile_websocket_sync_needed =
         !responses_websockets_changed && local_access_profile_takeovers_need_sync(&collection);
     collection.session_affinity = session_affinity;
+    if let Some(enabled) = session_identity_mapping_enabled {
+        collection.session_identity_mapping_enabled = enabled;
+    }
     collection.session_affinity_default_enabled_migrated = true;
     collection.session_affinity_ttl_ms =
         session_affinity_ttl_ms.clamp(SESSION_AFFINITY_TTL_MIN_MS, SESSION_AFFINITY_TTL_MAX_MS);

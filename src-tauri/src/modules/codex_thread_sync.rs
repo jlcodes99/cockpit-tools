@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -9,6 +8,9 @@ use serde::Serialize;
 use serde_json::{json, Value as JsonValue};
 
 use crate::modules;
+
+#[path = "codex_session_rollout_reader.rs"]
+mod rollout_reader;
 
 const DEFAULT_INSTANCE_ID: &str = "__default__";
 const DEFAULT_INSTANCE_NAME: &str = "默认实例";
@@ -468,6 +470,7 @@ fn is_instance_running(
 
 fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnapshot>, String> {
     let session_index_map = read_session_index_map(&instance.data_dir)?;
+    let current_heads = rollout_reader::current_heads(&instance.data_dir)?;
     let display_context =
         modules::codex_session_display::SessionDisplayContext::load(&instance.data_dir);
     let mut snapshots = Vec::new();
@@ -483,6 +486,14 @@ fn load_thread_snapshots(instance: &CodexSyncInstance) -> Result<Vec<ThreadSnaps
             let Some(id) = session_meta_id(&session_meta) else {
                 continue;
             };
+            // A prior physical segment may have the same session id after a
+            // revert. Select the official current head, never merge its ancestor.
+            if current_heads
+                .get(&id)
+                .is_some_and(|head| !rollout_reader::same_storage_path(head, &rollout_path))
+            {
+                continue;
+            }
             let freshness = build_thread_freshness(session_index_map.get(&id), &rollout_path);
             let index_title = session_index_map.get(&id).and_then(session_index_title);
             let title = display_context
@@ -544,7 +555,9 @@ fn list_rollout_files(root_dir: &Path) -> Result<Vec<PathBuf>, String> {
             .file_name()
             .and_then(|item| item.to_str())
             .unwrap_or_default();
-        if file_name.starts_with("rollout-") && file_name.ends_with(".jsonl") {
+        if file_name.starts_with("rollout-")
+            && (file_name.ends_with(".jsonl") || file_name.ends_with(".jsonl.zst"))
+        {
             result.push(path);
         }
     }
@@ -554,25 +567,32 @@ fn list_rollout_files(root_dir: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 fn read_rollout_session_meta(path: &Path) -> Result<Option<JsonValue>, String> {
-    let file = fs::File::open(path)
-        .map_err(|error| format!("打开 rollout 文件失败 ({}): {}", path.display(), error))?;
-    let reader = BufReader::new(file);
-    for line in reader.lines() {
-        let line =
-            line.map_err(|error| format!("读取 rollout 文件失败 ({}): {}", path.display(), error))?;
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let Ok(parsed) = serde_json::from_str::<JsonValue>(trimmed) else {
-            return Ok(None);
-        };
-        if parsed.get("type").and_then(JsonValue::as_str) == Some("session_meta") {
-            return Ok(Some(parsed));
-        }
-        return Ok(None);
+    rollout_reader::metadata(path)
+        .map_err(|error| format!("读取 rollout 文件失败 ({}): {}", path.display(), error))
+}
+
+fn rollout_storage_compressed(path: &Path) -> Result<bool, String> {
+    use std::io::Read;
+    if rollout_reader::is_compressed(path) {
+        return Ok(true);
     }
-    Ok(None)
+    let mut file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut magic = [0; 4];
+    let count = file.read(&mut magic).map_err(|error| error.to_string())?;
+    Ok(count == magic.len() && magic == [0x28, 0xb5, 0x2f, 0xfd])
+}
+
+fn read_rollout_content(path: &Path) -> Result<String, String> {
+    if !rollout_storage_compressed(path)? {
+        return fs::read_to_string(path).map_err(|error| error.to_string());
+    }
+    // Decode a stable, bounded snapshot into private temporary storage. Never
+    // decompress in place or serialize parsed JSON: offsets address decoded
+    // bytes, including original whitespace, CRLF and UTF-8.
+    let staging = tempfile::tempdir().map_err(|error| error.to_string())?;
+    let materialized = staging.path().join("rollout.jsonl");
+    rollout_reader::materialize_bounded(path, &materialized).map_err(|error| error.to_string())?;
+    fs::read_to_string(materialized).map_err(|error| error.to_string())
 }
 
 fn session_meta_id(meta: &JsonValue) -> Option<String> {
@@ -748,7 +768,7 @@ fn merge_thread_snapshots(snapshots: &[ThreadSnapshot]) -> Result<ThreadSnapshot
 fn merge_rollout_contents(snapshots: &[ThreadSnapshot]) -> Result<String, String> {
     let mut longest = String::new();
     for snapshot in snapshots {
-        let content = fs::read_to_string(&snapshot.rollout_path).map_err(|e| e.to_string())?;
+        let content = read_rollout_content(&snapshot.rollout_path)?;
         if content.starts_with(&longest) {
             longest = content;
         } else if !longest.starts_with(&content) {
@@ -808,7 +828,7 @@ fn snapshot_rollout_matches(existing: &ThreadSnapshot, expected: &ThreadSnapshot
             || existing.freshness == expected.freshness;
     };
 
-    fs::read_to_string(&existing.rollout_path)
+    read_rollout_content(&existing.rollout_path)
         .map(|content| content == expected_content)
         .unwrap_or(false)
 }
@@ -827,8 +847,10 @@ fn build_thread_freshness(
     let index_activity_ms = session_index_entry
         .and_then(parse_session_index_updated_at_ms)
         .unwrap_or(0);
-    let (rollout_modified_ms, rollout_len) = rollout_file_metadata(rollout_path);
-    let rollout_activity_ms = rollout_file_activity_ms(rollout_path).unwrap_or(0);
+    let (rollout_modified_ms, stored_len) = rollout_file_metadata(rollout_path);
+    let (rollout_activity_ms, rollout_len) = read_rollout_content(rollout_path)
+        .map(|content| rollout_content_activity_and_len(&content))
+        .unwrap_or((0, stored_len));
     let activity_ms = index_activity_ms.max(rollout_activity_ms).max(
         if index_activity_ms == 0 && rollout_activity_ms == 0 {
             rollout_modified_ms
@@ -895,12 +917,6 @@ fn session_index_updated_at_text(entry: &JsonValue) -> Option<String> {
     .find_map(|value| value.as_str().map(str::trim))
     .filter(|value| !value.is_empty())
     .map(str::to_string)
-}
-
-fn rollout_file_activity_ms(path: &Path) -> Option<i128> {
-    let content = fs::read_to_string(path).ok()?;
-    let (activity_ms, _) = rollout_content_activity_and_len(&content);
-    (activity_ms > 0).then_some(activity_ms)
 }
 
 fn rollout_file_metadata(path: &Path) -> (i128, u64) {
@@ -1278,13 +1294,20 @@ fn resolve_target_rollout_path(
                 snapshot.rollout_path.display()
             )
         })?;
-    Ok(target_root.join(relative_path))
+    let target = target_root.join(relative_path);
+    // New copies are standalone decoded streams. Retain .jsonl, never publish
+    // plaintext under .zst or compressed bytes under .jsonl.
+    Ok(if rollout_reader::is_compressed(&target) {
+        target.with_extension("")
+    } else {
+        target
+    })
 }
 
 fn rollout_snapshot_bytes(snapshot: &ThreadSnapshot) -> Result<Vec<u8>, String> {
     match &snapshot.merged_rollout_content {
         Some(content) => Ok(content.as_bytes().to_vec()),
-        None => fs::read(&snapshot.rollout_path).map_err(|e| e.to_string()),
+        None => read_rollout_content(&snapshot.rollout_path).map(String::into_bytes),
     }
 }
 
@@ -1308,26 +1331,47 @@ fn ensure_append_target_stopped(target: &CodexSyncInstance) -> Result<(), String
     Ok(())
 }
 
+fn alternate_rollout_path(path: &Path) -> PathBuf {
+    if rollout_reader::is_compressed(path) {
+        path.with_extension("")
+    } else {
+        let mut name = path.as_os_str().to_os_string();
+        name.push(".zst");
+        PathBuf::from(name)
+    }
+}
+
+fn rollout_conflict() -> String {
+    "目标会话已有不同内容，无法安全覆盖字节寻址历史；请保留原始文件".into()
+}
+
 fn validate_rollout_copy_target(
     _snapshot: &ThreadSnapshot,
     target: &Path,
     bytes: &[u8],
 ) -> Result<RolloutCopyAction, String> {
-    if target.exists() {
-        let existing = fs::read(target).map_err(|e| e.to_string())?;
+    modules::codex_session_import_paths::ensure_standalone_rollout(bytes)?;
+    // Treat plain/compressed names as the same physical head identity. Do not
+    // create a second conflicting version beside a compressed destination.
+    if fs::symlink_metadata(alternate_rollout_path(target)).is_ok() {
+        return Err(rollout_conflict());
+    }
+    if fs::symlink_metadata(target).is_ok() {
+        let compressed = rollout_storage_compressed(target)?;
+        let existing = read_rollout_content(target)?.into_bytes();
         if existing == bytes {
             return Ok(RolloutCopyAction::Unchanged);
         }
-        if !existing.is_empty() && bytes.starts_with(&existing) {
-            // Appending verbatim keeps every existing byte cursor valid. A full
-            // standalone source also lets a retry complete a partial prior write.
-            // Paginated chains still cannot be transferred without their parents.
-            modules::codex_session_import_paths::ensure_standalone_rollout(bytes)?;
+        if !compressed && !existing.is_empty() && bytes.starts_with(&existing) {
+            // Only plain targets admit a verbatim append. Never append decoded
+            // text into a zstd frame or recompress/replace an existing head.
             return Ok(RolloutCopyAction::Append(existing));
         }
-        return Err("目标会话已有不同内容，无法安全覆盖字节寻址历史；请保留原始文件".into());
+        return Err(rollout_conflict());
     }
-    modules::codex_session_import_paths::ensure_standalone_rollout(bytes)?;
+    if rollout_reader::is_compressed(target) {
+        return Err(rollout_conflict());
+    }
     Ok(RolloutCopyAction::Create)
 }
 
@@ -1433,6 +1477,9 @@ fn copy_prepared_rollout(
             &staging,
             snapshot.rollout_modified_at,
         )?;
+        if fs::symlink_metadata(alternate_rollout_path(target_path)).is_ok() {
+            return Err(rollout_conflict());
+        }
         // Same-volume hard-link publication fails if a concurrent writer created
         // the target. No rename/truncate can discard that writer's append.
         fs::hard_link(&staging, target_path).map_err(|e| e.to_string())
@@ -1620,3 +1667,7 @@ mod tests {
 #[cfg(test)]
 #[path = "codex_thread_sync_stability_tests.rs"]
 mod stability_tests;
+
+#[cfg(test)]
+#[path = "codex_thread_sync_compressed_tests.rs"]
+mod compressed_tests;

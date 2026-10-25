@@ -5,6 +5,7 @@ fn previous() -> QuotaData {
     quota.last_updated = 100;
     quota.quota_summary_updated_at = Some(90);
     quota.add_model("gemini-5h".into(), None, 25, "later".into());
+    quota.add_model("gemini-argon-wtu-weekly".into(), None, 91, "weekly-reset".into());
     quota.add_model("gemini-3-pro-high".into(), None, 60, String::new());
     quota
 }
@@ -15,13 +16,22 @@ fn failed_summary_keeps_real_windows_but_not_old_model_quotas() {
     next.quota_summary_stale = true;
     next.add_model("gemini-3-pro-high".into(), None, 10, String::new());
     preserve_failed_quota_summary(&mut next, Some(&previous()));
-    assert_eq!(next.models.len(), 2);
+    assert_eq!(next.models.len(), 3);
     assert_eq!(next.models[0].percentage, 10);
     assert_eq!(next.models[1].percentage, 25);
+    assert_eq!(next.models[2].name, "gemini-argon-wtu-weekly");
+    assert_eq!(next.models[2].percentage, 91);
     assert!(next.quota_summary_stale);
     assert_eq!(next.quota_summary_updated_at, Some(90));
     preserve_failed_quota_summary(&mut next, Some(&previous()));
-    assert_eq!(next.models.len(), 2);
+    assert_eq!(next.models.len(), 3);
+}
+
+#[test]
+fn cloud_code_user_agent_uses_aidev_client_format_with_cl() {
+    let ua = build_cloud_code_user_agent();
+    assert!(ua.contains("aidev_client"), "expected aidev_client in UA: {ua}");
+    assert!(ua.contains("cl=1003475615"), "expected cl=1003475615 in UA: {ua}");
 }
 
 #[test]

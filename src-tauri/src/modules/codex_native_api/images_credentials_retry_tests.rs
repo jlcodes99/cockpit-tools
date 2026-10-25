@@ -434,7 +434,7 @@ async fn forced_oauth_images_reject_missing_server_history_and_have_no_manual_ma
     assert_eq!(response.status(), 409);
     assert_eq!(
         response.json::<Value>().await.unwrap()["error"]["code"],
-        "previous_response_not_found"
+        "continuation_history_incomplete"
     );
     assert!(fixture.requests.lock().unwrap().is_empty());
     let mut clean = body;

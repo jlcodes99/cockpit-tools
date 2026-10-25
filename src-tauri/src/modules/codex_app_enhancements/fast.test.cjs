@@ -169,12 +169,31 @@ test('remote module URLs and unsupported source stay untouched', async () => {
   assert.equal((await api.prepareModule('unknown', moduleUrl)).patchedSource, 'unknown');
 });
 
-test('combined quota and tier adaptation is atomic', async () => {
+test('failed quota adaptation is discarded completely while all four validated speed gates remain available', async () => {
   const { api, sandbox } = load({ quotaCompat: true });
-  sandbox.__cockpitQuotaCompat = { transform: source => ({ ok: false, patchedSource: source, diagnostics: { reason: 'unknown-quota' } }) };
+  sandbox.__cockpitQuotaCompat = { transform: source => ({ ok: false,
+    patchedSource: source + ';globalThis.__cockpitQuotaCompat.partial=true;', diagnostics: { reason: 'unknown-quota' } }) };
   const result = await api.prepareModule(fixture, moduleUrl);
-  assert.equal(result.ok, false);
-  assert.equal(result.patchedSource, fixture);
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'fast-only');
+  assert.equal(result.quotaReason, 'unknown-quota');
+  assert.equal(result.patchedSource.includes('__cockpitQuotaCompat'), false, 'discard every partial quota edit');
+  assert.equal((result.patchedSource.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length, 4);
+  const unsupported = fixture.replace('serviceTierAccess:', 'otherAccess:');
+  const rejected = await api.prepareModule(unsupported, moduleUrl);
+  assert.equal(rejected.ok, false, 'quota failure must never bypass an incomplete speed contract');
+  assert.equal(rejected.patchedSource, unsupported);
+});
+
+test('supported combined quota and tier adaptation retains the full mode', async () => {
+  const { api, sandbox } = load({ quotaCompat: true });
+  sandbox.__cockpitQuotaCompat = { transform: source => ({ ok: true,
+    patchedSource: source + ';globalThis.__cockpitQuotaCompat.initialReady=true;', diagnostics: { reason: 'prepared' } }) };
+  const result = await api.prepareModule(fixture, moduleUrl);
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'full');
+  assert.equal((result.patchedSource.match(/globalThis\.__cockpitQuotaCompat\.initialReady=true/g) || []).length, 1);
+  assert.equal((result.patchedSource.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length, 4);
 });
 
 test('reconnecting reuses known transformed gates without widening them', () => {
@@ -331,23 +350,43 @@ test('cleanup restores a late inherited handoff only for the matching owner and 
 test('current local app artifact has all four gates and retains serviceTiers', { skip: !process.env.COCKPIT_NATIVE_FAST_FIXTURE }, async () => {
   const { api, sandbox } = load({ quotaCompat: true, apiService: true });
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'quota.js'), 'utf8'), sandbox);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'quota_current.js'), 'utf8'), sandbox);
   const source = fs.readFileSync(process.env.COCKPIT_NATIVE_FAST_FIXTURE, 'utf8');
   const transformed = api.transform(source);
   assert.equal(transformed.ok, true);
   assert.equal(transformed.patchedSource.split('serviceTiers').length, source.split('serviceTiers').length);
   const prepared = await api.prepareModule(source, moduleUrl);
   assert.equal(prepared.ok, true);
-  assert.equal((prepared.patchedSource.match(/globalThis\.__cockpitQuotaCompat\.initialReady=true/g) || []).length, 1);
+  const quota = sandbox.__cockpitQuotaCompat.transform(transformed.patchedSource, moduleUrl);
+  if (quota.ok) {
+    assert.equal(prepared.mode, 'full');
+    assert.equal((prepared.patchedSource.match(/globalThis\.__cockpitQuotaCompat\.initialReady=true/g) || []).length, 1);
+  } else {
+    assert.equal(prepared.mode, 'fast-only');
+    assert.equal(prepared.quotaReason, quota.diagnostics.reason);
+    assert.match(prepared.quotaReason, /^quota-[a-z-]+$/);
+    assert.equal(prepared.patchedSource.includes('__cockpitQuotaCompat'), false, 'unsupported quota contracts must leave no partial patch');
+    assert.equal((prepared.patchedSource.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length, 4);
+  }
   assert.equal(prepared.patchedSource.includes('globalThis.__cockpitNativeDictation.'), false);
   assert.equal(prepared.patchedSource.includes('globalThis.__cockpitApiDictation.'), false);
   assert.equal(prepared.patchedSource.includes('cockpitDictationScope'), false);
   const live = api.prepareLive(source, moduleUrl);
   assert.equal(live.ok, true);
-  for (const name of ['YLo', 'XLo', 'l6u']) {
-    const marker = `function ${name}(`;
-    const start = source.indexOf(marker), next = source.indexOf('function ', start + marker.length);
-    assert.ok(start >= 0 && next > start, `installed native ${name} function is present`);
-    assert.ok(live.patchedSource.includes(source.slice(start, next)), `native ${name} capability/transcription function remains unchanged`);
+  assert.equal(live.mode, prepared.mode);
+  // Minifier names change between builds. Locate the actual native contracts,
+  // then require each entire function to remain byte-for-byte intact.
+  const ts = require('typescript');
+  const ast = ts.createSourceFile('native.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const nativeFunctions = ast.statements.filter(ts.isFunctionDeclaration).map(node => node.getText(ast));
+  for (const [contract, markers] of [
+    ['dictation capability', ['dictationEnabled', 'whisper_killswitch']],
+    ['native multipart transcription', ['fetch(`/transcribe`', 'multipart/form-data']],
+    ['native request transcription', ['safePost(`/transcribe`', 'onRequestSuccess']],
+  ]) {
+    const functions = nativeFunctions.filter(text => markers.every(marker => text.includes(marker)));
+    assert.equal(functions.length, 1, `installed ${contract} contract must be uniquely identified`);
+    assert.ok(live.patchedSource.includes(functions[0]), `native ${contract} function remains unchanged`);
   }
   assert.equal(api.prepareLive(prepared.patchedSource, moduleUrl).ok, true);
   assert.ok(prepared.patchedSource.includes('//# sourceURL=' + moduleUrl));

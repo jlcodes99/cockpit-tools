@@ -27,6 +27,7 @@ func (m *Manager) executeHome(ctx context.Context, providers []string, req clipr
 		if errExecute == nil {
 			return response, nil
 		}
+		errExecute = preserveContinuityUpstreamError(errExecute, preferredUpstreamErr)
 		if hasUpstreamExecutionAttempt(errExecute) {
 			preferredUpstreamErr = errExecute
 		}
@@ -312,7 +313,7 @@ func (m *Manager) executeHomeOnce(ctx context.Context, providers []string, req c
 			if isRequestInvalidError(errExecute) {
 				releaseAttempt()
 				selection.End("request_invalid")
-				return cliproxyexecutor.Response{}, errExecute
+				return cliproxyexecutor.Response{}, preserveContinuityUpstreamError(errExecute, upstreamErr)
 			}
 			if result.CredentialScope {
 				break

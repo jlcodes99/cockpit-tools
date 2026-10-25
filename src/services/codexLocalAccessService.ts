@@ -40,6 +40,7 @@ export async function saveCodexLocalAccessAccounts(
   sessionAffinityTtlMs?: number,
   imageGenerationAccountPolicies?: Record<string, CodexLocalAccessImageGenerationPolicy>,
   officialAccountBindings?: Record<string, string>,
+  sessionIdentityMappingEnabled?: boolean,
 ): Promise<CodexLocalAccessState> {
   return await invoke("codex_local_access_save_accounts", {
     accountIds,
@@ -50,6 +51,7 @@ export async function saveCodexLocalAccessAccounts(
     sessionAffinityTtlMs: sessionAffinityTtlMs ?? null,
     imageGenerationAccountPolicies: imageGenerationAccountPolicies ?? null,
     officialAccountBindings: officialAccountBindings ?? null,
+    sessionIdentityMappingEnabled: sessionIdentityMappingEnabled ?? null,
   });
 }
 
@@ -252,6 +254,7 @@ export async function repriceCodexLocalAccessRequestLogs(): Promise<CodexLocalAc
 }
 
 export async function updateCodexLocalAccessRoutingOptions(payload: {
+  sessionIdentityMappingEnabled: boolean;
   sessionAffinity: boolean;
   sessionAffinityTtlMs: number;
   responsesWebsocketsEnabled: boolean;

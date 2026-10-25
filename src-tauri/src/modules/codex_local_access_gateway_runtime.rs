@@ -1508,6 +1508,7 @@ fn new_empty_local_access_collection() -> Result<CodexLocalAccessCollection, Str
         model_pricings: Vec::new(),
         excluded_models: Vec::new(),
         session_affinity: true,
+        session_identity_mapping_enabled: true,
         session_affinity_ttl_ms: DEFAULT_SESSION_AFFINITY_TTL_MS,
         session_affinity_default_enabled_migrated: true,
         responses_websockets_enabled: false,

@@ -423,7 +423,7 @@ fn sanitize_history_database(
         last_rowid = *batch_last_rowid;
 
         // 备份逐行落盘，内存里只保留这一批的改写结果。
-        let mut updates: Vec<(i64, String)> = Vec::new();
+        let mut updates = Vec::new();
         for (rowid, thread_id, turn_id, item_id, original_item_json) in batch {
             let Some(sanitized) = sanitize_history_item_json(&original_item_json) else {
                 continue;
@@ -436,8 +436,7 @@ fn sanitize_history_database(
                 &item_id,
                 &original_item_json,
             )?;
-            changed_threads.insert(thread_id);
-            updates.push((rowid, sanitized));
+            updates.push((rowid, thread_id, turn_id, item_id, original_item_json, sanitized));
         }
         if updates.is_empty() {
             continue;
@@ -446,25 +445,19 @@ fn sanitize_history_database(
         let transaction = connection.unchecked_transaction().map_err(|error| {
             format!("开启会话历史库事务失败 ({}): {}", database.display(), error)
         })?;
-        for (rowid, item_json) in &updates {
-            transaction
-                .execute(
-                    "UPDATE thread_items SET item_json = ?1 WHERE rowid = ?2",
-                    rusqlite::params![item_json, rowid],
-                )
-                .map_err(|error| {
-                    format!(
-                        "写入会话历史项失败 ({} rowid={}): {}",
-                        database.display(),
-                        rowid,
-                        error
-                    )
-                })?;
+        let mut applied = 0usize;
+        for (rowid, thread_id, turn_id, item_id, original, sanitized) in &updates {
+            if update_history_item_if_unchanged(&transaction, *rowid, thread_id, turn_id, item_id, original, sanitized)
+                .map_err(|error| format!("写入会话历史项失败 ({} rowid={}): {}", database.display(), rowid, error))?
+            {
+                applied += 1;
+                changed_threads.insert(thread_id.clone());
+            }
         }
         transaction.commit().map_err(|error| {
             format!("提交会话历史库事务失败 ({}): {}", database.display(), error)
         })?;
-        updated_items += updates.len();
+        updated_items += applied;
     }
 
     // 收尾：关闭当前库在备份文件里的 rows 数组，下一个库会另起一项。
@@ -479,6 +472,18 @@ fn sanitize_history_database(
         ));
     }
     Ok((updated_items, changed_threads.len()))
+}
+
+// Projection rebuilds may reuse rowids between the scan and write transaction.
+// Match both logical identity and the original bytes, never just the physical row.
+fn update_history_item_if_unchanged(
+    connection: &Connection, rowid: i64, thread_id: &str, turn_id: &str,
+    item_id: &str, original: &str, sanitized: &str,
+) -> rusqlite::Result<bool> {
+    connection.execute(
+        "UPDATE thread_items SET item_json = ?1 WHERE rowid = ?2 AND thread_id = ?3 AND turn_id = ?4 AND item_id = ?5 AND item_json = ?6",
+        rusqlite::params![sanitized, rowid, thread_id, turn_id, item_id, original],
+    ).map(|count| count == 1)
 }
 
 /// 被改动行的原始内容备份（用于手动回滚）。只记录被改动的 reasoning 行，
@@ -738,6 +743,28 @@ fn prune_backup_files(backup_root: &Path) {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn sanitize_compare_and_swap_preserves_reused_rowid_and_new_content() {
+        let dir = make_temp_dir("codex-history-sanitize-cas");
+        let path = create_history_db(&dir);
+        let connection = Connection::open(&path).unwrap();
+        let concurrent = Connection::open(&path).unwrap();
+        let original = r#"{"type":"reasoning","content":["old"]}"#;
+        let sanitized = r#"{"type":"reasoning","content":[]}"#;
+        insert_item(&connection, "thread-1", "item-1", original);
+        let rowid: i64 = connection.query_row("SELECT rowid FROM thread_items", [], |row| row.get(0)).unwrap();
+        concurrent.execute("DELETE FROM thread_items", []).unwrap();
+        insert_item(&concurrent, "new-thread", "new-item", original);
+        assert!(!update_history_item_if_unchanged(&connection, rowid, "thread-1", "turn-1", "item-1", original, sanitized).unwrap());
+        concurrent.execute("UPDATE thread_items SET thread_id='thread-1',item_id='item-1',item_json='new client content'", []).unwrap();
+        assert!(!update_history_item_if_unchanged(&connection, rowid, "thread-1", "turn-1", "item-1", original, sanitized).unwrap());
+        let actual: String = connection.query_row("SELECT item_json FROM thread_items", [], |row| row.get(0)).unwrap();
+        assert_eq!(actual, "new client content");
+        assert!(update_history_item_if_unchanged(&connection, rowid, "thread-1", "turn-1", "item-1", &actual, sanitized).unwrap());
+        drop(concurrent); drop(connection);
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     fn make_temp_dir(prefix: &str) -> PathBuf {
         let unique = SystemTime::now()

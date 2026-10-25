@@ -139,29 +139,75 @@ fn deserialize_account_from_storage(
     account_path: &PathBuf,
     content: &str,
 ) -> Result<Account, String> {
-    if let Ok((account, needs_rotation)) =
-        crate::modules::secure_account_storage::deserialize_account_file::<Account>(
-            account_path,
-            content,
-        )
-    {
-        if needs_rotation {
-            let account_for_rewrite = account.clone();
-            modules::deferred_account_rewrite::schedule_account_rewrite_if_unchanged(
-                "antigravity",
-                account_for_rewrite.id.clone(),
-                account_path.clone(),
-                content.as_bytes(),
-                move || serialize_account_for_storage(&account_for_rewrite),
-            );
-        }
-        return Ok(account);
-    }
+    use sha2::{Digest, Sha256};
 
-    // 兼容历史明文详情与仅 token 加密的详情；读取成功后后台迁移为整文件密文。
+    let mut source_content = content.to_string();
+    let (account, needs_rewrite) = match decode_account_storage_snapshot(content) {
+        Ok(decoded) => decoded,
+        Err(original_error) => {
+            let backup_path = account_path.with_extension("json.bak");
+            let backup = match fs::read_to_string(&backup_path) {
+                Ok(backup) => backup,
+                Err(_) => return Err(original_error),
+            };
+            // A JSON envelope alone is not a valid backup: decrypt and decode
+            // it before touching either file, and reject another account's data.
+            let decoded = match decode_account_storage_snapshot(&backup) {
+                Ok(decoded)
+                    if account_path.file_stem().and_then(|name| name.to_str())
+                        == Some(decoded.0.id.as_str()) =>
+                {
+                    decoded
+                }
+                _ => return Err(original_error),
+            };
+            let restored = modules::atomic_write::restore_string_atomic_if_hash_matches(
+                account_path,
+                Sha256::digest(content.as_bytes()).into(),
+                &backup,
+            )?;
+            if restored {
+                modules::logger::log_warn(&format!(
+                    "[Antigravity Account] 已从验证过的备份恢复账号: path={}",
+                    account_path.display()
+                ));
+                source_content = backup;
+                decoded
+            } else {
+                // A concurrent save won. Never replace that newer account with
+                // our backup, and bound recovery to one attempt.
+                source_content = fs::read_to_string(account_path)
+                    .map_err(|error| format!("重新读取账号数据失败: {error}"))?;
+                decode_account_storage_snapshot(&source_content)?
+            }
+        }
+    };
+    if needs_rewrite {
+        let account_for_rewrite = account.clone();
+        modules::deferred_account_rewrite::schedule_account_rewrite_if_unchanged(
+            "antigravity",
+            account_for_rewrite.id.clone(),
+            account_path.clone(),
+            source_content.as_bytes(),
+            move || serialize_account_for_storage(&account_for_rewrite),
+        );
+    }
+    Ok(account)
+}
+
+fn decode_account_storage_snapshot(content: &str) -> Result<(Account, bool), String> {
+    // Windows editors / legacy exports may prepend a UTF-8 BOM. Normalize it
+    // before classifying the format so a valid current account is never rolled
+    // back to an older .bak just because serde_json rejected the prefix.
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     let mut value = serde_json::from_str::<serde_json::Value>(content)
         .map_err(|e| format!("解析账号数据失败: {}", e))?;
-
+    if value.get("ciphertext").is_some() {
+        return modules::secure_account_storage::deserialize_encrypted_snapshot_with_rotation(
+            content,
+        );
+    }
+    // 兼容历史明文详情与仅 token 加密的详情；读取成功后后台迁移为整文件密文。
     if value.get("token").is_none() {
         let encrypted = value
             .get("token_encrypted")
@@ -184,17 +230,7 @@ fn deserialize_account_from_storage(
 
     let account =
         serde_json::from_value::<Account>(value).map_err(|e| format!("解析账号数据失败: {}", e))?;
-
-    let account_for_rewrite = account.clone();
-    modules::deferred_account_rewrite::schedule_account_rewrite_if_unchanged(
-        "antigravity",
-        account_for_rewrite.id.clone(),
-        account_path.clone(),
-        content.as_bytes(),
-        move || serialize_account_for_storage(&account_for_rewrite),
-    );
-
-    Ok(account)
+    Ok((account, true))
 }
 
 /// 获取数据目录路径
@@ -389,7 +425,8 @@ pub fn load_account(account_id: &str) -> Result<Account, String> {
     let content =
         fs::read_to_string(&account_path).map_err(|e| format!("读取账号数据失败: {}", e))?;
 
-    let mut account = deserialize_account_from_storage(&account_path, &content)?;
+    let mut account = deserialize_account_from_storage(&account_path, &content)
+        .map_err(|error| format!("{error} (account file: {account_id}.json)"))?;
     if account.token.project_id.as_deref() == Some("aicode-consumers") {
         account.token.project_id = None;
     }
@@ -2881,3 +2918,7 @@ mod note_tests {
 #[cfg(test)]
 #[path = "account_id_regression_tests.rs"]
 mod account_id_regression_tests;
+
+#[cfg(test)]
+#[path = "account_storage_regression_tests.rs"]
+mod account_storage_regression_tests;

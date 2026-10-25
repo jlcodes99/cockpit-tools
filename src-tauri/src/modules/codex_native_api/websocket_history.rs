@@ -118,6 +118,11 @@ impl History {
         let Some(input) = self.logical_input(body) else {
             return Ok(None);
         };
+        if !super::super::identity::rebuild::replay_items(&input)
+            || !super::super::identity::rebuild::paired_tools(&input)
+        {
+            return Ok(None);
+        }
         let mut full = body.clone();
         full["input"] = Value::Array(input);
         full.as_object_mut().unwrap().remove("previous_response_id");
@@ -329,15 +334,6 @@ impl History {
                         .and_then(Value::as_str)
                         == Some(&checkpoint.id)
             });
-        let complete_for_rebuild = root_known
-            && !self.output_invalid_for_rebuild
-            && terminal_output.is_some_and(|output| {
-                output.iter().all(replayable_output)
-                    && self
-                        .output
-                        .iter()
-                        .all(|(index, item)| output.get(*index) == Some(item))
-            });
         let mut input = self
             .logical_input(&prepared.replay_body())
             .or_else(|| {
@@ -349,6 +345,17 @@ impl History {
             })
             .unwrap_or_default();
         input.retain(|item| item["type"] != "compaction_trigger");
+        let complete_for_rebuild = root_known
+            && super::super::identity::rebuild::replay_items(&input)
+            && super::super::identity::rebuild::paired_tools(&input)
+            && !self.output_invalid_for_rebuild
+            && terminal_output.is_some_and(|output| {
+                output.iter().all(replayable_output)
+                    && self
+                        .output
+                        .iter()
+                        .all(|(index, item)| output.get(*index) == Some(item))
+            });
         let mut output: Vec<Value> = terminal_output
             .into_iter()
             .flatten()
@@ -460,6 +467,24 @@ impl History {
     }
 
     fn repair_tools(&self, input: &[Value]) -> Result<Vec<Value>, ServiceError> {
+        // Ambiguous history belongs to the upstream. Do not choose a cached
+        // call or partly repair this payload before discovering a conflict.
+        let mut original_calls = BTreeMap::new();
+        for item in input {
+            if matches!(
+                item["type"].as_str(),
+                Some("function_call" | "custom_tool_call")
+            ) {
+                if let Some(id) = item["call_id"].as_str() {
+                    if original_calls
+                        .insert(id, item)
+                        .is_some_and(|previous| previous != item)
+                    {
+                        return Ok(input.to_vec());
+                    }
+                }
+            }
+        }
         // Index borrowed references once. Prefer complete current input/output
         // and checkpoint calls over the bounded auxiliary LRU, without copying
         // large arguments into an additional repair cache.
@@ -487,14 +512,7 @@ impl History {
             match item["type"].as_str() {
                 Some("function_call" | "custom_tool_call") => {
                     if let Some(id) = item["call_id"].as_str() {
-                        if let Some(previous) = seen.get(id) {
-                            if *previous != item {
-                                return Err(ServiceError::new(
-                                    409,
-                                    "conflicting_tool_call",
-                                    "The same tool call ID contains different calls",
-                                ));
-                            }
+                        if seen.contains_key(id) {
                             continue;
                         }
                         seen.insert(id, item);
@@ -561,7 +579,7 @@ mod tests {
         assert!(next.get("previous_response_id").is_none());
     }
     #[test]
-    fn repair_uses_only_exact_cached_calls_and_rejects_conflicting_ids() {
+    fn repair_uses_only_exact_cached_calls_and_preserves_conflicting_ids() {
         let mut history = History::default();
         let call = json!({"type":"function_call","call_id":"exact","name":"tool","arguments":"{}"});
         history.remember_call(&call);
@@ -579,9 +597,14 @@ mod tests {
                 .len(),
             1
         );
+        assert_eq!(
+            history.repair_tools(&[call.clone(), call.clone()]).unwrap(),
+            vec![call.clone()]
+        );
         let mut conflict = call.clone();
         conflict["arguments"] = json!("different");
-        assert!(history.repair_tools(&[call, conflict]).is_err());
+        let input = vec![call, conflict];
+        assert_eq!(history.repair_tools(&input).unwrap(), input);
     }
     include!("websocket_history_regression_tests.rs");
 }

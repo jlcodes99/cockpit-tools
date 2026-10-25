@@ -377,6 +377,16 @@ func (a *ContinuityAttempt) Observe(ctx context.Context, headers http.Header, ev
 // Finish cannot infer success from EOF. Only an acknowledged raw terminal can
 // authorize success; the durable hook validates and commits that terminal itself.
 func (a *ContinuityAttempt) Finish(ctx context.Context, cause error) error {
+	return a.finish(ctx, cause, false)
+}
+
+// FinishNotSent is only for trusted local preparation failures before a request
+// is sent. Transport errors with an uncertain send status must use Finish.
+func (a *ContinuityAttempt) FinishNotSent(ctx context.Context, cause error) error {
+	return a.finish(ctx, cause, true)
+}
+
+func (a *ContinuityAttempt) finish(ctx context.Context, cause error, notSent bool) error {
 	if a == nil {
 		return nil
 	}
@@ -390,6 +400,9 @@ func (a *ContinuityAttempt) Finish(ctx context.Context, cause error) error {
 	status, code := "failed", "continuity_incomplete"
 	if cause != nil {
 		code = "continuity_upstream_failed"
+		if notSent && a.next == 1 && !a.terminal {
+			code = "continuity_upstream_not_sent"
+		}
 	}
 	if ctx != nil && ctx.Err() != nil {
 		status, code = "cancelled", "continuity_cancelled"

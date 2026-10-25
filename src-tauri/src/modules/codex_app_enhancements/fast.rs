@@ -2,7 +2,6 @@
 //! Other native enhancements use document preload or the guarded startup path.
 
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -19,6 +18,7 @@ const GUARD_SCRIPT: &str = include_str!("startup_guard.js");
 const PRELOAD_SCRIPT: &str = include_str!("startup_preload.js");
 const SCRIPT: &str = include_str!("fast.js");
 const QUOTA_SCRIPT: &str = include_str!("quota.js");
+const QUOTA_CURRENT_SCRIPT: &str = include_str!("quota_current.js");
 const STATE_SCRIPT: &str = r#";(() => {
   const previous = window.__cockpitEnhancements;
   const next = __COCKPIT_STATE_OPTIONS__;
@@ -30,10 +30,14 @@ const STATE_SCRIPT: &str = r#";(() => {
   if (typeof window.__cockpitNativeDictation?.capability === 'function')
     window.__cockpitNativeDictation.capability = nativeValue => nativeValue;
   const features = [next.nativeFast, next.quotaCompat, next.apiKeyAuthVerified, next.apiService].map(Number).join('');
+  const installedFeatures = previous?.nativePatchMode === 'fast-only'
+    ? [next.nativeFast, false, next.apiKeyAuthVerified, false].map(Number).join('') : features;
   const active = previous?.nativePatchState === 'active'
-    && ['full', 'live-quota'].includes(previous.nativePatchMode)
+    && ['full', 'live-quota', 'fast-only'].includes(previous.nativePatchMode)
+    && (previous.nativePatchMode !== 'fast-only' || next.nativeFast === true
+      && previous.nativeQuotaPatchState === 'unsupported')
     && previous.nativePatchRequestedFeatures === features
-    && previous.nativePatchFeatures === features;
+    && previous.nativePatchFeatures === installedFeatures;
   const sameOwnerAndConfig = previous?.owner === next.owner
     && previous.nativeFast === next.nativeFast
     && previous.quotaCompat === next.quotaCompat
@@ -45,8 +49,22 @@ const STATE_SCRIPT: &str = r#";(() => {
     ...previous, ...next, apiDictation: false,
     nativePatchState: active ? previous.nativePatchState : preserveLoadingState ? previous.nativePatchState : 'pending',
     nativePatchReason: active || preserveLoadingState ? previous.nativePatchReason : undefined,
+    nativeQuotaPatchState: active || preserveLoadingState ? previous?.nativeQuotaPatchState : undefined,
+    nativeQuotaPatchReason: active || preserveLoadingState ? previous?.nativeQuotaPatchReason : undefined,
   };
 })();"#;
+const RUNTIME_PROBE_SCRIPT: &str = r#"(() => {
+  const p = window.__cockpitNativeFast, s = window.__cockpitEnhancements;
+  const expected = __COCKPIT_BROWSER_SNAPSHOT__;
+  const ready = typeof p?.prepareHandoff === 'function'
+    && typeof p?.consumeHandoff === 'function' && typeof p?.cancelHandoff === 'function';
+  return {
+    installed: ready && s?.owner === __COCKPIT_WORKER_OWNER__,
+    preloading: ready && s?.nativePatchState === 'preloading'
+      && typeof window.__cockpitNativeFastComplete === 'function'
+      && Object.keys(expected).every(key => s[key] === expected[key]),
+  };
+})()"#;
 const SOURCE_LIMIT: usize = 24 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(4);
 const PREPARE_TIMEOUT: Duration = Duration::from_secs(20);
@@ -58,161 +76,39 @@ type ContextKey = (u64, i64);
 #[path = "startup_draft.rs"]
 mod startup_draft;
 
-struct BrowserSession {
-    socket: Socket,
-    command_id: u64,
+const DOCUMENT_INSTALL_GUARD: &str = r#";(() => {
+  if (window.__cockpitNativeInstallStarted) { __COCKPIT_SKIPPED__ return; }
+  __COCKPIT_SOURCE__
+})();"#;
+
+fn guard_document_install(source: &str, skipped: &str) -> String {
+    DOCUMENT_INSTALL_GUARD
+        .replace("__COCKPIT_SKIPPED__", skipped)
+        .replace("__COCKPIT_SOURCE__", source)
 }
 
-impl BrowserSession {
-    async fn send(
-        &mut self,
-        method: &str,
-        params: Value,
-        session_id: Option<&str>,
-    ) -> Result<u64, String> {
-        self.command_id += 1;
-        let mut message = json!({"id":self.command_id,"method":method,"params":params});
-        if let Some(session_id) = session_id {
-            message["sessionId"] = json!(session_id);
-        }
-        self.socket
-            .send(Message::Text(message.to_string().into()))
-            .await
-            .map_err(|_| "browser preload transport failed".to_string())?;
-        Ok(self.command_id)
-    }
-}
-
-#[derive(Deserialize)]
-struct BrowserVersion {
-    #[serde(rename = "webSocketDebuggerUrl")]
-    socket: String,
-}
-
-fn safe_browser_socket(value: &str, port: u16) -> bool {
-    let Ok(url) = url::Url::parse(value) else {
-        return false;
-    };
-    url.scheme() == "ws"
-        && url.host_str() == Some("127.0.0.1")
-        && url.port() == Some(port)
-        && url.username().is_empty()
-        && url.password().is_none()
-        && url.query().is_none()
-        && url.fragment().is_none()
-        && url.path().starts_with("/devtools/browser/")
-}
-
-/// Arms first-document adaptation from Chromium's browser endpoint. Windows
-/// does not expose the pre-navigation page through `/json/list`, so attaching
-/// only after the app URL appears is already too late for a reload-free start.
-pub(super) async fn preload_browser(
-    port: u16,
+/// The browser endpoint registers the complete bounded startup program before
+/// the app's first document. No transform runs on an already-started document.
+pub(super) fn browser_preload_source(
     native_fast: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
     api_service: bool,
-    mut stop: watch::Receiver<bool>,
-) -> Result<(), String> {
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(2))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|_| "browser preload client failed".to_string())?;
-    let version = loop {
-        if *stop.borrow() {
-            return Ok(());
-        }
-        if let Ok(response) = client
-            .get(format!("http://127.0.0.1:{port}/json/version"))
-            .send()
-            .await
-        {
-            if let Ok(version) = response.json::<BrowserVersion>().await {
-                if safe_browser_socket(&version.socket, port) {
-                    break version;
-                }
-            }
-        }
-        tokio::select! {
-            _ = stop.changed() => return Ok(()),
-            _ = tokio::time::sleep(Duration::from_millis(50)) => {}
-        }
-    };
-    let config = WebSocketConfig::default()
-        .max_message_size(Some(64 * 1024 * 1024))
-        .max_frame_size(Some(64 * 1024 * 1024));
-    let (socket, _) = timeout(
-        COMMAND_TIMEOUT,
-        connect_async_with_config(version.socket, Some(config), false),
+    owner: &str,
+) -> String {
+    guard_document_install(
+        &format!(
+            "{}\n{PRELOAD_SCRIPT}",
+            bootstrap(
+                native_fast,
+                quota_compat,
+                api_key_auth_verified,
+                api_service,
+                owner
+            )
+        ),
+        "",
     )
-    .await
-    .map_err(|_| "browser preload connection timed out".to_string())?
-    .map_err(|_| "browser preload connection failed".to_string())?;
-    let owner = format!("preload-{port}");
-    let runtime = bootstrap(
-        native_fast,
-        quota_compat,
-        api_key_auth_verified,
-        api_service,
-        &owner,
-    );
-    let mut session = BrowserSession {
-        socket,
-        command_id: 0,
-    };
-    session
-        .send("Target.setDiscoverTargets", json!({"discover":true}), None)
-        .await?;
-    session
-        .send(
-            "Target.setAutoAttach",
-            json!({"autoAttach":true,"waitForDebuggerOnStart":false,"flatten":true}),
-            None,
-        )
-        .await?;
-    let mut registered = HashSet::new();
-    loop {
-        tokio::select! {
-            biased;
-            changed = stop.changed() => {
-                if changed.is_err() || *stop.borrow() { break; }
-            }
-            message = session.socket.next() => {
-                let Some(message) = message else { break; };
-                let message = message.map_err(|_| "browser preload transport failed".to_string())?;
-                let Message::Text(text) = message else { continue; };
-                let event: Value = serde_json::from_str(&text)
-                    .map_err(|_| "browser preload invalid response".to_string())?;
-                if event.get("method").and_then(Value::as_str) != Some("Target.attachedToTarget") {
-                    continue;
-                }
-                let Some(session_id) = event.pointer("/params/sessionId").and_then(Value::as_str) else {
-                    continue;
-                };
-                let target = &event["params"]["targetInfo"];
-                if target.get("type").and_then(Value::as_str) != Some("page")
-                    || !registered.insert(session_id.to_string())
-                {
-                    continue;
-                }
-                let target_id = target.get("targetId").and_then(Value::as_str).unwrap_or("unknown");
-                session
-                    .send(
-                        "Page.addScriptToEvaluateOnNewDocument",
-                        json!({"source":runtime.as_str()}),
-                        Some(session_id),
-                    )
-                    .await?;
-                crate::modules::logger::log_info(&format!(
-                    "[CodexEnhancements] startup preload attached: target={target_id}"
-                ));
-            }
-        }
-    }
-    let _ = session.socket.close(None).await;
-    Ok(())
 }
 
 /// Shared by every target/worker of one explicit profile launch. Reconnection
@@ -228,6 +124,10 @@ impl StartupReload {
             deadline: StdInstant::now() + Duration::from_secs(45),
             claimed: AtomicBool::new(false),
         }
+    }
+
+    pub(super) fn remaining(&self) -> Duration {
+        self.deadline.saturating_duration_since(StdInstant::now())
     }
 
     fn available(&self) -> bool {
@@ -456,6 +356,7 @@ struct Registration {
     owner: String,
     runtime: String,
     startup_runtime: String,
+    runtime_probe: String,
     preload_first: bool,
     live_quota: bool,
     live_quota_armed: bool,
@@ -468,6 +369,8 @@ struct Registration {
     live_quota_attempt: Attempt,
     bootstrapped: bool,
     active: bool,
+    native_module_active: bool,
+    quota_unsupported_reason: Option<String>,
     capability_only: bool,
     activation_until: Option<Instant>,
     next_state_read: Option<Instant>,
@@ -505,13 +408,20 @@ impl Registration {
         } else {
             "pending"
         };
-        let diagnostic = json!({"state":state,"phase":phase,"reason":reason});
+        let mut diagnostic = json!({"state":state,"phase":phase,"reason":reason});
+        if let Some(quota_reason) = &self.quota_unsupported_reason {
+            diagnostic["quotaState"] = json!("unsupported");
+            diagnostic["quotaReason"] = json!(quota_reason);
+        }
         if self.last_diagnostic.as_ref() == Some(&diagnostic) {
             return;
         }
         self.last_diagnostic = Some(diagnostic.clone());
-        let message =
+        let mut message =
             format!("[CodexEnhancements] Native compatibility {phase}: {reason}; state={state}");
+        if let Some(quota_reason) = &self.quota_unsupported_reason {
+            message.push_str(&format!("; quota=unsupported:{quota_reason}"));
+        }
         if self.active {
             crate::modules::logger::log_info(&message);
         } else {
@@ -636,7 +546,7 @@ fn bootstrap(
 ) -> String {
     let options = json!({"nativeFast":native_fast,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner});
     let state = STATE_SCRIPT.replace("__COCKPIT_STATE_OPTIONS__", &options.to_string());
-    format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{QUOTA_SCRIPT}\n;true;")
+    format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{QUOTA_SCRIPT}\n{QUOTA_CURRENT_SCRIPT}\n;true;")
 }
 
 async fn rollback_preparation(registration: &mut Registration) {
@@ -740,10 +650,17 @@ async fn prepare_future_document(
     // This script stays small enough to execute before the app's document CSP.
     // The nonce-scoped handoff is only staged by the final guarded reload or a
     // subsequent local user navigation, and consume immediately restores name.
-    let script = format!(
-        "{}\n;window.__cockpitNativeFast.consumeHandoff({});",
-        registration.runtime,
-        json!(registration.nonce)
+    let script = guard_document_install(
+        &format!(
+            "{}\n;window.__cockpitNativeFast.consumeHandoff({});",
+            registration.runtime,
+            json!(registration.nonce)
+        ),
+        &format!(
+            "window.__cockpitNativeFast?.discardHandoff({}, {});",
+            json!(registration.nonce),
+            json!(registration.owner)
+        ),
     );
     let reply = registration
         .session()
@@ -791,6 +708,13 @@ fn startup_transient(reason: &str) -> bool {
 }
 
 async fn try_startup_reload(registration: &mut Registration, context: ContextKey) {
+    if registration.preload_first {
+        // Windows treats renderer reload as a second cold start. Its fresh
+        // launch permission authorizes first-document preload only.
+        registration.startup = None;
+        registration.report("document", "restart-required").await;
+        return;
+    }
     let Some(startup) = registration.startup.as_ref() else {
         registration.report("document", "restart-required").await;
         return;
@@ -927,7 +851,7 @@ async fn read_activation(
         return Ok(());
     }
     registration.next_state_read = Some(Instant::now() + Duration::from_millis(500));
-    let expression = format!("(()=>{{const s=window.__cockpitEnhancements;return s?.owner==={} ? {{state:s.nativePatchState,reason:s.nativePatchReason}} : {{state:'pending'}};}})()", json!(registration.owner));
+    let expression = format!("(()=>{{const s=window.__cockpitEnhancements;return s?.owner==={} ? {{state:s.nativePatchState,reason:s.nativePatchReason,mode:s.nativePatchMode,features:s.nativePatchFeatures,quotaState:s.nativeQuotaPatchState,quotaReason:s.nativeQuotaPatchReason}} : {{state:'pending'}};}})()", json!(registration.owner));
     let result = match registration
         .session()
         .evaluate(expression, context, COMMAND_TIMEOUT)
@@ -943,9 +867,30 @@ async fn read_activation(
     match result.get("state").and_then(Value::as_str) {
         Some("active") => {
             registration.active = true;
+            registration.native_module_active = result
+                .get("features")
+                .and_then(Value::as_str)
+                .is_some_and(|features| {
+                    features.len() == 4
+                        && features.bytes().all(|byte| byte == b'0' || byte == b'1')
+                        && (result.get("mode").and_then(Value::as_str) == Some("full")
+                            || result.get("mode").and_then(Value::as_str) == Some("fast-only")
+                                && features.starts_with('1'))
+                });
+            registration.quota_unsupported_reason =
+                (result.get("quotaState").and_then(Value::as_str) == Some("unsupported")).then(
+                    || {
+                        safe_reason(
+                            &json!({"reason":result.get("quotaReason")}),
+                            "quota-unsupported",
+                        )
+                    },
+                );
             registration.capability_only = false;
             registration.activation_until = None;
-            registration.report("activation", "module-evaluated").await;
+            registration
+                .report("activation", &safe_reason(&result, "module-evaluated"))
+                .await;
         }
         Some("active-capability") => {
             registration.active = true;
@@ -1113,6 +1058,20 @@ async fn arm_live_quota_guard(
     if installed.get("ok").and_then(Value::as_bool) != Some(true) {
         return Err(safe_reason(&installed, "quota-live-install-failed"));
     }
+    if installed
+        .get("preservedNativeFast")
+        .and_then(Value::as_bool)
+        == Some(true)
+        || installed
+            .get("preservedNativeModule")
+            .and_then(Value::as_bool)
+            == Some(true)
+    {
+        registration.active = false;
+        registration.next_state_read = None;
+        read_activation(registration, context).await?;
+        return Ok(());
+    }
     registration.live_quota_armed = true;
     registration.active = true;
     registration.activation_until = None;
@@ -1136,6 +1095,8 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
         registration.document = Attempt::default();
         registration.bootstrapped = false;
         registration.active = false;
+        registration.native_module_active = false;
+        registration.quota_unsupported_reason = None;
         registration.capability_only = false;
         registration.live_quota_armed = false;
         registration.live_quota_attempt = Attempt::default();
@@ -1166,12 +1127,21 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
         if registration.live_quota && !location.as_str().is_some_and(local_main_document) {
             return Ok(());
         }
-        let expression = format!("(()=>{{const p=window.__cockpitNativeFast;return window.__cockpitEnhancements?.owner==={}&&typeof p?.prepareHandoff==='function'&&typeof p?.consumeHandoff==='function'&&typeof p?.cancelHandoff==='function';}})()", json!(registration.owner));
-        let installed = registration
+        let expression = registration.runtime_probe.clone();
+        let probe = registration
             .session()
             .evaluate(expression, context, COMMAND_TIMEOUT)
-            .await?
-            .as_bool()
+            .await?;
+        if probe.get("preloading").and_then(Value::as_bool) == Some(true) {
+            // The browser's completion closure still owns this installation.
+            // Do not replace its owner until it has completed (or failed).
+            registration.report("document", "browser-preloading").await;
+            return Ok(());
+        }
+        let installed = probe
+            .get("installed")
+            .and_then(Value::as_bool)
+            .or_else(|| probe.as_bool())
             == Some(true);
         if !installed {
             let runtime = registration.runtime.clone();
@@ -1187,6 +1157,11 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
         read_activation(registration, context).await?;
     }
     if registration.live_quota {
+        // A subsequently attached worker must not replace an evaluated Fast
+        // module's state with the live-quota guard's narrower feature mask.
+        if registration.native_module_active {
+            return Ok(());
+        }
         if registration.script_id.is_none()
             && registration.document.due()
             && registration.session().pending_additions.is_empty()
@@ -1226,7 +1201,12 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
         && registration.document.due()
         && registration.session().pending_additions.is_empty()
     {
-        match prepare_future_document(registration, context).await {
+        let prepared = if registration.preload_first {
+            prepare_startup_preload(registration, "preload-registered-next-document").await
+        } else {
+            prepare_future_document(registration, context).await
+        };
+        match prepared {
             Ok(()) => {
                 registration.document.done = true;
                 registration.report("document", "registered").await;
@@ -1295,11 +1275,23 @@ pub(super) async fn run(
     startup: Option<Arc<StartupReload>>,
     stop: watch::Receiver<bool>,
 ) -> Result<(), String> {
-    let live_quota =
-        cfg!(any(target_os = "windows", target_os = "macos")) && api_service && quota_compat;
-    // Credential reads can temporarily supply the API-service fallback profile.
-    // It must not enter the old startup reload before live quota becomes ready.
-    let startup = if api_service { None } else { startup };
+    // The profile reader has verified either pure API authentication or an
+    // independent API route with OAuth retained. Only those profiles can reuse
+    // a launch transaction's single fresh-document permission.
+    let verified_api_route = native_fast && api_key_auth_verified || quota_compat;
+    let startup = if api_service && !verified_api_route {
+        None
+    } else {
+        startup
+    };
+    // Fresh launches install the complete validated module graph. Reattaching
+    // to an existing page never creates permission to reload user work.
+    let live_quota = cfg!(any(target_os = "windows", target_os = "macos"))
+        && api_service
+        && quota_compat
+        && startup.is_none();
+    let preload_first =
+        preload_first || (cfg!(target_os = "windows") && verified_api_route && startup.is_some());
     run_with_live_quota(
         websocket_url,
         profile_dir,
@@ -1336,6 +1328,10 @@ async fn run_with_live_quota(
     let config = WebSocketConfig::default()
         .max_message_size(Some(64 * 1024 * 1024))
         .max_frame_size(Some(64 * 1024 * 1024));
+    let browser_port = url::Url::parse(&websocket_url)
+        .ok()
+        .and_then(|url| url.port_or_known_default())
+        .ok_or("invalid browser port")?;
     let (socket, _) = timeout(
         COMMAND_TIMEOUT,
         connect_async_with_config(websocket_url, Some(config), false),
@@ -1356,7 +1352,17 @@ async fn run_with_live_quota(
         api_service,
         &owner,
     );
-    let startup_runtime = format!("{runtime}\n{PRELOAD_SCRIPT}");
+    let startup_runtime = guard_document_install(&format!("{runtime}\n{PRELOAD_SCRIPT}"), "");
+    let browser_snapshot = json!({"owner":format!("preload-{browser_port}"),
+        "nativeFast":native_fast,"quotaCompat":quota_compat,
+        "apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service});
+    let runtime_probe = RUNTIME_PROBE_SCRIPT
+        .replace(
+            "__COCKPIT_BROWSER_SNAPSHOT__",
+            &browser_snapshot.to_string(),
+        )
+        .replace("__COCKPIT_WORKER_OWNER__", &json!(owner).to_string());
+
     let mut registration = Registration {
         session: Some(Session {
             socket,
@@ -1372,6 +1378,7 @@ async fn run_with_live_quota(
         owner,
         runtime,
         startup_runtime,
+        runtime_probe,
         preload_first,
         live_quota,
         live_quota_armed: false,
@@ -1384,6 +1391,8 @@ async fn run_with_live_quota(
         live_quota_attempt: Attempt::default(),
         bootstrapped: false,
         active: false,
+        native_module_active: false,
+        quota_unsupported_reason: None,
         capability_only: false,
         activation_until: None,
         next_state_read: None,

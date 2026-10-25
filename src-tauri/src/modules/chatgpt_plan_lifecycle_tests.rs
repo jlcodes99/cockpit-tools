@@ -757,6 +757,7 @@ fn mock_service_join_remove_rejoin_disconnect_preserves_client_and_listener_stat
                 vec![source.id.clone()], true, None, None, None, None,
                 Some(HashMap::from([(source.id.clone(), CodexLocalAccessImageGenerationPolicy::Enabled)])),
                 Some(HashMap::from([(source.id.clone(), account.id.clone())])),
+                None,
             ).await.unwrap();
             assert!(!state.running);
             assert_eq!(state.collection.as_ref().unwrap().image_generation_account_policies[&source.id], CodexLocalAccessImageGenerationPolicy::Enabled);

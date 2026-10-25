@@ -689,6 +689,8 @@ pub struct CodexLocalAccessCollection {
     pub excluded_models: Vec<String>,
     #[serde(default = "default_true")]
     pub session_affinity: bool,
+    #[serde(default = "default_true")]
+    pub session_identity_mapping_enabled: bool,
     #[serde(default = "default_session_affinity_ttl_ms")]
     pub session_affinity_ttl_ms: i64,
     #[serde(default)]
@@ -1424,6 +1426,18 @@ pub struct CodexInstanceGatewayView {
 mod automatic_policy_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn session_identity_mapping_defaults_on_and_preserves_saved_opt_out() {
+        let old = json!({"enabled":false,"port":1234,"apiKey":"test","accountIds":[],"createdAt":1,"updatedAt":1});
+        let mut collection: CodexLocalAccessCollection = serde_json::from_value(old).unwrap();
+        assert!(collection.session_identity_mapping_enabled);
+        collection.session_identity_mapping_enabled = false;
+        let saved = serde_json::to_value(&collection).unwrap();
+        assert_eq!(saved["sessionIdentityMappingEnabled"], false);
+        let restored: CodexLocalAccessCollection = serde_json::from_value(saved).unwrap();
+        assert!(!restored.session_identity_mapping_enabled);
+    }
 
     #[test]
     fn reserve_defaults_remain_strict_and_roundtrip() {

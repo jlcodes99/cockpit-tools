@@ -52,6 +52,7 @@ fn acquire_session_visibility_repair_lock() -> Result<MutexGuard<'static, ()>, S
 pub enum CodexSessionVisibilityRepairMode {
     Quick,
     Deep,
+    History,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -134,7 +135,7 @@ pub struct CodexSessionVisibilityRepairInstanceList {
     pub instances: Vec<CodexSessionVisibilityRepairInstanceOption>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSessionVisibilityRepairItem {
     pub instance_id: String,
@@ -155,7 +156,7 @@ pub struct CodexSessionVisibilityRepairItem {
     pub running: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSessionVisibilityRepairSummary {
     pub instance_count: usize,
@@ -175,6 +176,8 @@ pub struct CodexSessionVisibilityRepairSummary {
     pub items: Vec<CodexSessionVisibilityRepairItem>,
     pub backup_dirs: Vec<String>,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_projection_count: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -340,6 +343,11 @@ impl CodexSessionVisibilityRepairOptions {
         match mode {
             CodexSessionVisibilityRepairMode::Quick => Self::official_state_db_only(mode),
             CodexSessionVisibilityRepairMode::Deep => Self::full_provider_migration(),
+            CodexSessionVisibilityRepairMode::History => Self {
+                repair_referenced_rollouts: false,
+                require_stopped_instances: true,
+                ..Self::official_state_db_only(mode)
+            },
         }
     }
 
@@ -575,6 +583,8 @@ pub fn repair_session_visibility_across_instances_with_target(
     dry_run: bool,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
     let options = CodexSessionVisibilityRepairOptions::for_mode(mode).with_dry_run(dry_run);
+    let target_provider = (mode != CodexSessionVisibilityRepairMode::History)
+        .then_some(target_provider).flatten();
     let selection = RepairTargetSelection::from_inputs(target_provider, session_ids, instance_ids)?;
     repair_session_visibility_across_instances_with_options(
         options,
@@ -621,6 +631,9 @@ fn repair_session_visibility_for_instances_with_options(
     selection: RepairTargetSelection,
     instances: Vec<CodexSyncInstance>,
 ) -> Result<CodexSessionVisibilityRepairSummary, String> {
+    if options.mode == CodexSessionVisibilityRepairMode::History {
+        return repair_history_projections_for_instances(options, run_id, progress_reporter, selection, instances);
+    }
     if instances.is_empty() {
         return Err("未找到要修复的 Codex 实例".to_string());
     }
@@ -1066,6 +1079,7 @@ fn repair_session_visibility_for_instances_with_options(
         items,
         backup_dirs,
         message,
+        history_projection_count: None,
     };
     report_repair_progress(
         progress_reporter,

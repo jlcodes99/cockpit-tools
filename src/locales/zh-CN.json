@@ -158,6 +158,15 @@
     "providerClear": "清空选择"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "上游服务",
+      "proxyConnection": "通过代理“{{proxy}}”连接 {{target}} 失败，可能与代理或网络有关，请检查代理或更换节点后重试。",
+      "proxyTimeout": "通过代理“{{proxy}}”连接 {{target}} 超时，可能与代理或网络有关，请检查代理或更换节点后重试。",
+      "proxyAuth": "代理“{{proxy}}”认证失败，请检查代理用户名或密码。",
+      "localProxyUnavailable": "无法连接本地代理“{{proxy}}”，请检查代理服务是否运行。",
+      "directConnection": "连接 {{target}} 失败，请检查网络后重试。",
+      "directTimeout": "连接 {{target}} 超时，请检查网络后重试。"
+    },
     "codexUsage": {
       "title": "额度与用量",
       "session": "当前会话",
@@ -4365,6 +4374,7 @@
         "syncSessions": "同步会话",
         "copyToInstance": "复制到实例",
         "repairVisibility": "修复可见性",
+        "repairIndex": "修复会话索引",
         "restoreSessions": "恢复会话",
         "exportSessions": "导出会话",
         "importSessions": "导入会话",
@@ -4398,6 +4408,10 @@
         "clear": "清空"
       },
       "messages": {
+        "deleteNotConfirmed": "客户端未确认删除完成，已停止本地清理并保留备份：{{error}}",
+        "historyReadFailed": "无法安全读取会话历史：{{error}}",
+        "restoreIndexRetry": "会话文件已保留，但更新会话列表失败；废纸篓原件仍在，可修复问题后重试：{{error}}",
+        "importIndexRetry": "会话文件已导入，但更新会话列表失败；文件与导入包已保留，可修复问题后重试：{{error}}",
         "pickOne": "请至少选择一条会话",
         "pickRestoreOne": "请至少选择一条待恢复会话",
         "syncNeedTwo": "至少需要两个实例才能同步会话",
@@ -4530,7 +4544,18 @@
         "previewAgain": "重新预览",
         "preview": "预览变更",
         "previewFailedWithError": "预览会话修复失败：{{error}}",
-        "confirmRepair": "确认修复"
+        "confirmRepair": "确认修复",
+        "modeHistory": "编辑/分支修复",
+        "modeHistoryDesc": "修复索引异常导致的消息编辑和创建聊天分支失败。",
+        "historyStopHint": "修复前请先完全退出所选客户端及使用该实例的 CLI；仍可先预览变更。",
+        "historyDescription": "检查所选会话及祖先历史，仅重建异常的分页索引。聊天记录、账号与 Provider 保持原样；执行前需退出目标客户端及相关 CLI。",
+        "historyPreview": "发现 {{count}} 段可重建的异常历史索引；聊天记录保持原样。",
+        "historySuccess": "已重置 {{count}} 段异常历史索引。请重新打开客户端和会话以重建；备份已保留。",
+        "historyNoChanges": "未发现可安全重建的异常历史索引。",
+        "historyFailed": "历史索引修复未完成：{{error}}",
+        "historyRunning": "请先完全退出目标客户端及使用该实例的 CLI，再重试。",
+        "historyScan": "正在检查历史索引（{{current}}/{{total}}）…",
+        "historyReset": "正在备份并重置异常索引…"
       },
       "transferModal": {
         "exportTitle": "导出会话",
@@ -4873,6 +4898,11 @@
       },
       "routing": {
         "optionsTitle": "调度选项",
+        "sessionIdentityMapping": "会话 ID 映射",
+        "sessionIdentityMappingEnableHint": "开启后，切换上游账号会使用独立的 Session-Id 和 Thread-Id，会话标识隔离更强，但跨账号缓存复用可能减少。同一账号内仍复用已有映射。",
+        "sessionIdentityMappingDisableHint": "关闭后，保留客户端原始 Session-Id 和 Thread-Id。不同上游账号可能共用相同标识，隔离性减弱，但跨账号缓存复用可能增加。",
+        "sessionIdentityMappingCacheNote": "缓存命中率还取决于上游规则、账号范围和请求内容，不保证因切换而升降。",
+        "sessionIdentityMappingSaveNote": "确认后还需保存设置才会生效。",
         "sessionAffinity": "会话亲和",
         "sessionAffinityTtl": "过期时间（秒）",
         "responsesWebsockets": "WebSocket 响应传输",

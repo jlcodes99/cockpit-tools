@@ -6,6 +6,7 @@ fn config(path: std::path::PathBuf) -> Config {
     Config {
         identity_path: path,
         token: "capacity-test-token-never-an-upstream-credential".into(),
+        session_identity_mapping_enabled: true,
         owners: HashMap::from([("account-a".into(), "owner-a".into())]),
         caller_accounts: HashMap::from([("caller".into(), vec!["account-a".into()])]),
     }

@@ -163,21 +163,20 @@ fn package() -> CodexRegisteredLaunch {
 }
 
 #[test]
-fn default_registration_probe_requires_exact_app_identity_and_gui() {
-    for invalid in ["", "pkg", "!App", "pkg!", "pkg!App!Other"] {
-        assert!(
-            build_codex_default_registered_launch_probe(invalid).is_err(),
-            "{invalid}"
-        );
-    }
-    let script = build_codex_default_registered_launch_probe(" OpenAI.Codex_pub!O'Brien ").unwrap();
-    assert!(script.contains("$family = 'OpenAI.Codex_pub'"));
-    assert!(script.contains("$appId = 'O''Brien'"));
-    assert!(script.contains("$application.Id -ne $appId"));
+fn default_registration_probe_uses_selected_path_and_exact_package_identity() {
+    let script = build_codex_registered_launch_probe(Path::new(
+        r"C:\Program Files\WindowsApps\OpenAI.Codex_1_x64__pub\app\ChatGPT.exe",
+    ));
+    assert!(script.contains("$storeFamily = 'openai.codex_pub'"));
+    assert!(script.contains("$isTarget = $candidate -ieq $target"));
+    assert!(script.contains("$pkg.PackageFamilyName -ieq $storeFamily"));
     assert!(script.contains("-ieq 'ChatGPT.exe'"));
     assert!(script.contains("[IO.Path]::IsPathRooted($relative)"));
-    assert!(script.contains("$exe.StartsWith($root + '\\'"));
-    assert!(script.contains("$matches.Count -ne 1"));
+    assert!(script.contains("$candidate.StartsWith($root + '\\'"));
+    assert!(script.contains("$matches.Count -gt 1"));
+    assert!(!script.contains("Get-StartApps"));
+    let quoted = build_codex_registered_launch_probe(Path::new(r"D:\O'Brien\ChatGPT.exe"));
+    assert!(quoted.contains(r"D:\O''Brien\ChatGPT.exe"));
 }
 
 #[cfg(target_os = "windows")]
@@ -185,8 +184,9 @@ fn default_registration_probe_requires_exact_app_identity_and_gui() {
 fn default_registration_resolves_selected_gui_and_rejects_runner() {
     // Real PowerShell parsing with fake registration; no desktop is launched.
     let setup = r#"
+function Get-StartApps { throw 'StartApps must not override the selected path' }
 function Get-AppxPackage {
-  [PSCustomObject]@{ Version=[version]'26.924'; PackageFamilyName='OpenAI.Codex_pub'; InstallLocation='C:\Program Files\WindowsApps\OpenAI.Codex_26.924_x64__pub' }
+  [PSCustomObject]@{ Version=[version]'26.924'; PackageFamilyName='OpenAI.Codex_pub'; InstallLocation='D:\Codex' }
 }
 function Get-AppxPackageManifest {
   [PSCustomObject]@{ Package=@{ Applications=@{ Application=@(
@@ -196,16 +196,18 @@ function Get-AppxPackageManifest {
 }
 function Test-Path { return $true }
 "#;
-    let probe = build_codex_default_registered_launch_probe("OpenAI.Codex_pub!Gui").unwrap();
+    let probe = build_codex_registered_launch_probe(Path::new(r"D:\Codex\app\ChatGPT.exe"));
     let output = codex_launch_powershell_output(&format!("{setup}\n{probe}")).unwrap();
     let registered = parse_codex_registered_launch(&output).unwrap().unwrap();
     assert_eq!(registered.app_id, "Gui");
     assert!(registered.executable.ends_with(r"app\ChatGPT.exe"));
-    for id in ["Runner", "Missing"] {
-        let probe =
-            build_codex_default_registered_launch_probe(&format!("OpenAI.Codex_pub!{id}")).unwrap();
-        assert!(codex_launch_powershell_output(&format!("{setup}\n{probe}")).is_err());
-    }
+    let runner =
+        build_codex_registered_launch_probe(Path::new(r"D:\Codex\app\resources\codex.exe"));
+    let output = codex_launch_powershell_output(&format!("{setup}\n{runner}")).unwrap();
+    assert!(parse_codex_registered_launch(&output).is_err());
+    let missing = build_codex_registered_launch_probe(Path::new(r"D:\Missing\ChatGPT.exe"));
+    let output = codex_launch_powershell_output(&format!("{setup}\n{missing}")).unwrap();
+    assert!(parse_codex_registered_launch(&output).unwrap().is_none());
 }
 
 #[test]

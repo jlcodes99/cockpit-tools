@@ -12,7 +12,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- Remove APIMart advertising from the Chinese and English README pages.
+- Clear all published announcements so old notices and automatic announcement popups disappear after a successful client refresh.
+
+## [1.3.74] - 2026-10-24
+
+### Fixed
+
+- Adapt to newer Codex clients, restoring native speed controls and quota notices for API services without OAuth and mixed OAuth/API profiles while preserving send restrictions for official, remote and image modes.
+- Recognize compressed Codex chat heads in session lists and restore them safely; export and synchronize standalone compressed chats without changing the source history.
+- Align Astra’s native question-dialog and clock tool capabilities and preserve the current Astra/Sol automatic review requirement without resetting saved model, reasoning or context preferences.
+- Keep injected model, speed, quota and chat metrics attached to the focused conversation when multiple composers or model menus are open; new chats no longer reuse another chat’s identity or cached selection.
+- Preserve concurrent chat history during restore and import, append chat index entries without replacing newer records, and allow safe index-repair retries. Respect the official client’s refusal to delete history still referenced by a branch and retain recovery backups when deletion is not confirmed.
+- Keep selection counts and batch action states consistent during rapid Codex session selection; reserve count width and remove fading transitions from the selection toolbar.
+- Fix some existing conversations, tool history and newer message types being rejected by local history checks in the Rust and Go API services. Preserve tool-call compatibility, account permissions, duplicate-execution protection and original upstream errors.
+- Fix CLI Launch in Codex launch previews reopening the same preview or being hidden behind it; continue to the working-directory and terminal dialog with the confirmed settings, and keep failures visible in the preview.
+- Preserve existing macOS Keychain access permissions when switching Antigravity accounts, avoiding repeated password prompts caused by resetting the credential's access policy.
+- API Service Rust engine connection failures now identify the attempted proxy and distinguish timeouts, unavailable local proxies and confirmed proxy authentication failures, instead of masking them as upstream authorization failures. Account and upstream rejections retain their original errors.
+- Recover Codex usage dialogs from temporary local read failures with bounded retries and resume queries after Cockpit reconnects, preserving verified data and pagination. Reduce repeated work in usage statistics queries.
+- Prioritize the configured Codex client path on Windows, including official MSIX installations. Resolve package identity from the selected executable instead of letting an invalid StartApps AppUserModelId block launch. Discover alternative registered clients only after a confirmed pre-launch failure, and avoid duplicate launches when the result is uncertain.
+- Accept Antigravity account files with a UTF-8 BOM after OAuth authorization without rolling back newer account notes. Validate encrypted backups before recovery, retain valid backups if recovery fails or is interrupted, preserve concurrent saves, and report missing encryption keys without replacing them.
+- Keep Antigravity desktop account switches consistent when the client falls back from the system credential store to its local token file. Preserve `id_token` in both stores and report fallback synchronization failures instead of claiming success.
+- Keep Codex account cards' request counts, token usage and costs visible while quota reset estimates update. Refresh statistics in the background without clearing unrelated accounts or windows, and clear expired-window counters when their quota resets.
+
+### Added
+
+- Add a dedicated Repair chat index entry to session management and the launch preview for editing and branching issues. It checks selected conversations and their ancestor history, backs up and resets out-of-bounds paginated indexes only when the original records are complete and the target client is stopped, and preserves chat records, accounts and provider settings.
+- Add a default-on Session ID mapping switch in API Service routing options and member settings. Turn it off to forward the original client Session-Id and Thread-Id values. Both directions show a confirmation explaining identifier isolation and possible cache reuse trade-offs, without persistent inline text; changes take effect after saving.
+
+### Changed
+
+- Align Antigravity quota queries with official client v2.25.0 to include `Gemini 4 Argon (Weekly)` alongside `Claude (5h)`, `Claude (Weekly)`, `Gemini (5h)`, and `Gemini (Weekly)`, and display Antigravity account quotas as single-column per-window progress rows matching Codex.
+- Align Antigravity incremental authorization with Antigravity-Manager v4.9.8 while retaining voice transcription permission. Use native OAuth request headers, refresh credentials with 15 minutes or less remaining, and retry `invalid_grant` once after a short delay before reporting failure. OAuth callbacks support IPv4 and IPv6 loopback addresses.
 
 ## [1.3.73] - 2026-10-22
 

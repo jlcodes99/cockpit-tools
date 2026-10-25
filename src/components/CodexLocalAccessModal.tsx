@@ -1,3 +1,4 @@
+import { CodexSessionIdentityMappingControl } from "./codex/CodexSessionIdentityMappingControl";
 import { CodexMemberAccessMode } from './codex/CodexMemberAccessMode';
 import { canChooseCodexServiceAuthorization } from '../utils/codexAccountServiceNavigation';
 import { useCodexServiceMemberDraft } from "../hooks/useCodexServiceMemberDraft";
@@ -191,6 +192,7 @@ interface CodexLocalAccessModalProps {
     restrictFreeAccounts: boolean;
     backupAccountIds: string[];
     preferredAccountIds: string[];
+    sessionIdentityMappingEnabled: boolean;
     sessionAffinity: boolean;
     sessionAffinityTtlMs: number;
     imageGenerationAccountPolicies: Record<string, CodexLocalAccessImageGenerationPolicy>;
@@ -293,6 +295,7 @@ export function CodexLocalAccessModal({
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [restrictFreeAccounts, setRestrictFreeAccounts] = useState(true);
+  const [sessionIdentityMappingEnabled, setSessionIdentityMappingEnabled] = useState(true);
   const [sessionAffinity, setSessionAffinity] = useState(true);
   const [sessionAffinityTtlSeconds, setSessionAffinityTtlSeconds] =
     useState("3600");
@@ -461,6 +464,7 @@ export function CodexLocalAccessModal({
     ],
   );
   const initialRestrictFreeAccounts = collection?.restrictFreeAccounts ?? true;
+  const initialSessionIdentityMappingEnabled = collection?.sessionIdentityMappingEnabled ?? true;
   const initialSessionAffinity = collection?.sessionAffinity ?? true;
   useEffect(() => {
     if (!isOpen || mode !== "members") return;
@@ -527,6 +531,7 @@ export function CodexLocalAccessModal({
       setTagFilter([]);
       setGroupFilter([]);
       setRestrictFreeAccounts(initialRestrictFreeAccounts);
+      setSessionIdentityMappingEnabled(initialSessionIdentityMappingEnabled);
       setSessionAffinity(initialSessionAffinity);
       setSessionAffinityTtlSeconds(String(initialSessionAffinityTtlSeconds));
       setImageGenerationPolicies(collection?.imageGenerationAccountPolicies ?? {});
@@ -590,6 +595,7 @@ export function CodexLocalAccessModal({
     collection?.port,
     collection?.upstreamProxyUrl,
     initialRestrictFreeAccounts,
+    initialSessionIdentityMappingEnabled,
     initialSessionAffinity,
     initialSessionAffinityTtlSeconds,
     isOpen,
@@ -952,6 +958,7 @@ export function CodexLocalAccessModal({
     () =>
       !areSetsEqual(selected, new Set(normalizedInitialSelectedIds)) ||
       restrictFreeAccounts !== (collection?.restrictFreeAccounts ?? true) ||
+      sessionIdentityMappingEnabled !== initialSessionIdentityMappingEnabled ||
       sessionAffinity !== initialSessionAffinity ||
       sessionAffinityTtlSeconds !== String(initialSessionAffinityTtlSeconds) ||
       !areSetsEqual(currentBackupAccountIds, initialBackupAccountIds) ||
@@ -963,12 +970,14 @@ export function CodexLocalAccessModal({
       collection?.restrictFreeAccounts,
       currentBackupAccountIds,
       currentPreferredAccountIds,
+      initialSessionIdentityMappingEnabled,
       initialSessionAffinity,
       initialSessionAffinityTtlSeconds,
       initialBackupAccountIds,
       initialPreferredAccountIds,
       normalizedInitialSelectedIds,
       restrictFreeAccounts,
+      sessionIdentityMappingEnabled,
       sessionAffinity,
       sessionAffinityTtlSeconds,
       selected,
@@ -1461,6 +1470,7 @@ export function CodexLocalAccessModal({
         restrictFreeAccounts,
         backupAccountIds,
         preferredAccountIds,
+        sessionIdentityMappingEnabled,
         sessionAffinity,
         sessionAffinityTtlMs: parsedSessionAffinityTtlSeconds * 1000,
         officialAccountBindings: preparedBindings,
@@ -2910,6 +2920,17 @@ export function CodexLocalAccessModal({
                         </small>
                       )}
                     </div>
+                    <CodexSessionIdentityMappingControl
+                      compact
+                      checked={sessionIdentityMappingEnabled}
+                      disabled={membersInteractionDisabled}
+                      onChange={(enabled) => {
+                        setError("");
+                        setNotice("");
+                        setMembersDraftDirty(true);
+                        setSessionIdentityMappingEnabled(enabled);
+                      }}
+                    />
                     {collection && (
                       <>
                         <div className="codex-local-access-member-routing">

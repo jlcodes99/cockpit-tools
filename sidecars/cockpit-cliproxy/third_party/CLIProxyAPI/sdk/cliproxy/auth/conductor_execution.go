@@ -169,6 +169,7 @@ func (m *Manager) Execute(ctx context.Context, providers []string, req cliproxye
 		if errExec == nil {
 			return resp, nil
 		}
+		errExec = preserveContinuityUpstreamError(errExec, preferredUpstreamErr)
 		if isRequestTerminatedError(errExec) || isRequestStopError(errExec) {
 			return cliproxyexecutor.Response{}, unwrapExecutionBoundaryError(errExec)
 		}
@@ -307,6 +308,7 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 		if errStream == nil {
 			return result, nil
 		}
+		errStream = preserveContinuityUpstreamError(errStream, preferredUpstreamErr)
 		if hasUpstreamExecutionAttempt(errStream) {
 			preferredUpstreamErr = errStream
 		}
@@ -626,7 +628,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					continue
 				}
 				if isResponsesCompactRequestFaultError(execOpts, errExec) || (isRequestInvalidError(errExec) && !canFallbackCapability(req, execOpts, errExec)) {
-					return cliproxyexecutor.Response{}, errExec
+					return cliproxyexecutor.Response{}, preserveContinuityUpstreamError(errExec, upstreamErr)
 				}
 				authErr = errExec
 				if result.CredentialScope {
@@ -652,7 +654,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 				continue
 			}
 			if isResponsesCompactRequestFaultError(opts, authErr) || (isRequestInvalidError(authErr) && !canFallbackCapability(req, opts, authErr)) {
-				return cliproxyexecutor.Response{}, authErr
+				return cliproxyexecutor.Response{}, preserveContinuityUpstreamError(authErr, upstreamErr)
 			}
 			lastErr = authErr
 			if homeMode {
@@ -1136,7 +1138,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 				continue
 			}
 			if isRequestInvalidError(errStream) && !canFallbackCapability(req, opts, errStream) {
-				return nil, errStream
+				return nil, preserveContinuityUpstreamError(errStream, upstreamErr)
 			}
 			lastErr = errStream
 			if homeMode {

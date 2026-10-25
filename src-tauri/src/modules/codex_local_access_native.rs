@@ -58,6 +58,7 @@ async fn ensure_native_gateway_locked(
         .map_err(|_| "NATIVE_API_INVALID_ADDRESS".to_string())?;
     let path = native_global_identity_path()?;
     let options = native_api::Options {
+        session_identity_mapping_enabled: collection.session_identity_mapping_enabled,
         request_timeout: Duration::from_millis(
             collection
                 .timeouts

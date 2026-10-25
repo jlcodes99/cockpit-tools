@@ -75,10 +75,10 @@
   function threadId(card) {
     const root = card?.closest('[data-codex-composer-root]');
     if (!root) return '';
-    const fromComposer = root.querySelector('[data-above-composer-conversation-id]')
-      ?.getAttribute('data-above-composer-conversation-id');
+    const portal = root.querySelector('[data-above-composer-portal], [data-above-composer-conversation-id]');
+    const fromComposer = portal?.getAttribute('data-above-composer-conversation-id');
     // An explicit draft/invalid ID must never fall back to the previous chat.
-    const candidate = fromComposer || (root.getAttribute('data-composer-placement') === 'thread'
+    const candidate = portal ? fromComposer : (root.getAttribute('data-composer-placement') === 'thread'
       ? document.querySelector('[data-app-action-sidebar-thread-selected="true"][data-app-action-sidebar-thread-id]')
         ?.getAttribute('data-app-action-sidebar-thread-id') : '');
     const id = String(candidate || '').trim().replace(/^local:/, '');
@@ -93,12 +93,19 @@
     return rect.width > 0 && rect.height > 0;
   }
 
-  function visibleCard() {
-    for (const card of document.querySelectorAll('[data-composer-surface-variant]')) {
-      if (!visible(card) || card.closest(ownSelector)) continue;
-      if ([...card.querySelectorAll(editorSelector)].some(visible)) return card;
-    }
-    return null;
+  function visibleCard(previousCard) {
+    const cards = [...document.querySelectorAll('[data-composer-surface-variant]')]
+      .filter(card => visible(card) && !card.closest(ownSelector)
+        && [...card.querySelectorAll(editorSelector)].some(visible));
+    // Match the client's active-composer routing, including side conversations.
+    // Focus moves into a portal menu or our dialog without changing the composer.
+    const focused = document.activeElement?.closest('[data-codex-composer-root]');
+    const active = focused && cards.find(card => card.closest('[data-codex-composer-root]') === focused);
+    if (active) return active;
+    const open = cards.filter(card => [...card.querySelectorAll('[data-composer-navigation-target="reasoning"]')]
+      .some(node => visible(node) && (node.getAttribute('aria-expanded') === 'true' || node.getAttribute('data-state') === 'open')));
+    if (open.length === 1) return open[0];
+    return cards.includes(previousCard) ? previousCard : cards[0] || null;
   }
 
   return { snapshot, threadId, visibleCard, percent };

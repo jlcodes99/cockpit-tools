@@ -97,9 +97,25 @@ async fn host_results_continue_after_quota_failure_and_restart_without_losing_hi
 }
 
 #[tokio::test]
-async fn host_results_invalid_ids_cannot_unlock_cross_account_history() {
-    let fixture = Fixture::new(true, vec![], vec![]).await;
-    for id in [json!("stale"), json!(" "), json!(null), json!(42)] {
+async fn host_results_invalid_ids_reach_upstream_without_unlocking_cross_account_history() {
+    let upstream_error = json!({
+        "type":"invalid_request_error",
+        "code":"invalid_request_error",
+        "message":"Synthetic upstream rejected the host result call_id",
+        "param":"input",
+        "upstream_marker":"original-host-result-diagnostic"
+    });
+    let event = json!({"type":"error","status":400,"error":upstream_error});
+    let fixture = Fixture::new(
+        true,
+        vec![Step::RawEvents(vec![event]); 4],
+        vec![],
+    )
+    .await;
+    for (index, id) in [json!("stale"), json!(" "), json!(null), json!(42)]
+        .into_iter()
+        .enumerate()
+    {
         let mut item = host_result("create_thread");
         item["call_id"] = id;
         let original = body(
@@ -114,10 +130,27 @@ async fn host_results_invalid_ids_cannot_unlock_cross_account_history() {
         let response = fixture.post(&original, None).await;
         assert_eq!(response.status(), 400);
         assert_eq!(
-            response.json::<Value>().await.unwrap()["error"]["code"],
-            "continuation_history_incomplete"
+            response.json::<Value>().await.unwrap()["error"],
+            upstream_error
         );
-        assert!(fixture.sent().is_empty());
+        let sent = fixture.sent();
+        assert_eq!(sent.len(), index + 1, "ordinary forwarding must not retry");
+        assert!(sent.iter().all(|request| request.account == "a"));
+        assert_eq!(sent[index].body["input"], original["input"]);
+        assert_eq!(fixture.host.selections.lock().unwrap().len(), index + 1);
+        assert!(fixture.host.failures.lock().unwrap().is_empty());
+        assert!(fixture.active().is_none());
+        let db = Connection::open(fixture.path()).unwrap();
+        for table in [
+            "native_opaque_v1",
+            "native_rebuild_checkpoints_v1",
+            "native_rebuild_history_v1",
+        ] {
+            let count: i64 = db
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(count, 0, "a rejected host result must not publish {table}");
+        }
     }
     fixture.finish().await;
 }

@@ -33,6 +33,9 @@ mod request_size_tests;
 #[path = "thinking_suffix_tests.rs"]
 mod thinking_suffix_tests;
 
+#[path = "legacy_forwarding_websocket_tests.rs"]
+mod legacy_forwarding_websocket_tests;
+
 struct TestHost {
     base_url: String,
     chatgpt: bool,

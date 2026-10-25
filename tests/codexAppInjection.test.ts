@@ -289,7 +289,7 @@ function dropdown(model: string, hidden = false) {
   dropdown.setAttribute('class', '_ModelPickerDropdownContent_test');
   dropdown.hidden = hidden;
   const row = new Element();
-  row.setAttribute('data-model-picker-model-row', 'true');
+  row.setAttribute('class', '_ViewToggleModelLabel_5d7qv_2');
   row.textContent = model;
   dropdown.appendChild(row);
   return dropdown;
@@ -370,11 +370,151 @@ test('quota badge reads visible DeepSeek and updates the model, badge, and obser
 });
 
 test('only a visible picker dropdown can supply a model when the current trigger is a placeholder', () => {
-  const h = harness('injection_script', [composer('Select effort')]);
+  const active = composer('Select effort');
+  active.trigger.setAttribute('aria-expanded', 'true');
+  const h = harness('injection_script', [active]);
   h.body.appendChild(dropdown('deepseek-v4-pro', true));
   h.body.appendChild(dropdown('grok-4.6'));
   assert.equal(h.evaluate().selectedModel, 'grok-4.6');
   assert.match(h.host().textContent, /Build 90%/);
+});
+
+test('multiple visible composers follow focus and preserve that owner while the usage dialog is focused', () => {
+  const main = composer('gpt-6-sol');
+  const side = composer('gpt-6-astra', false, 500, secondThread);
+  const h = harness('injection_script', [main, side]);
+  h.evaluate();
+  side.editor.focus();
+  h.dispatch('focusin');
+  assert.equal(h.root().threadId, secondThread);
+  assert.equal(h.host().style.top, '512px');
+  const result = h.evaluate();
+  assert.equal(result.selectedModel, 'gpt-6-astra');
+  h.host().click();
+  assert.equal(h.root().threadId, secondThread);
+  assert.equal(h.root().quotaDetailsOpen, true);
+  main.editor.focus();
+  h.dispatch('focusin');
+  assert.equal(h.root().threadId, firstThread);
+  assert.equal(h.root().quotaDetailsOpen, false);
+});
+
+test('standalone DeepSeek balance follows the active composer without touching native controls', () => {
+  const main = composer('deepseek-v4-pro');
+  const side = composer('deepseek-v4-pro', false, 500, secondThread);
+  const h = harness('deepseek_balance_injection_script', [main, side]);
+  h.evaluate();
+  const original = side.card.innerHTML;
+  side.editor.focus();
+  h.dispatch('focusin');
+  assert.equal(h.root().card, side.card);
+  assert.equal(h.host().style.top, '512px');
+  assert.equal(side.card.innerHTML, original);
+  main.editor.focus();
+  h.dispatch('focusin');
+  assert.equal(h.root().card, main.card);
+  assert.equal(h.host().style.top, '912px');
+});
+
+test('an open native portal selects its composer and cannot leak model or speed into a focused sibling', () => {
+  const main = composer('Select effort');
+  const side = composer('6 Astra', false, 500, secondThread);
+  const h = harness('injection_script', [main, side]);
+  side.trigger.setAttribute('data-state', 'open');
+  const menu = dropdown('6 Astra');
+  const fast = new Element('span');
+  fast.setAttribute('data-fast-mode-enabled', 'true');
+  const ultra = new Element('svg');
+  ultra.setAttribute('class', '_UltrafastIcon_5d7qv_2');
+  fast.appendChild(ultra);
+  menu.appendChild(fast);
+  h.body.appendChild(menu);
+  const usage = sessionUsage(h.now());
+  usage.__binding.model = 'gpt-6-astra';
+  menu.focus();
+  let result = h.evaluate({ usage_state: usage });
+  assert.equal(result.threadId, secondThread);
+  assert.equal(result.usageSelection.model, 'gpt-6-astra');
+  assert.equal(result.usageSelection.serviceTier, 'ultrafast');
+  main.editor.focus();
+  result = h.evaluate({ usage_state: usage });
+  assert.equal(result.threadId, firstThread);
+  assert.equal(result.selectedModel, null);
+  assert.equal(result.usageSelection.serviceTier, 'default');
+});
+
+test('ambiguous native menus require the current open trigger aria-controls identity', () => {
+  const active = composer('Select effort');
+  active.trigger.setAttribute('aria-expanded', 'true');
+  const h = harness('injection_script', [active]);
+  const first = dropdown('grok-4.6');
+  first.setAttribute('id', 'other-menu');
+  const current = dropdown('6 Astra');
+  current.setAttribute('id', 'current-menu');
+  h.body.appendChild(first);
+  h.body.appendChild(current);
+  assert.equal(h.evaluate().selectedModel, null);
+  active.trigger.setAttribute('aria-controls', 'current-menu');
+  assert.equal(h.evaluate().selectedModel, '6 Astra');
+  active.trigger.setAttribute('aria-expanded', 'false');
+  assert.equal(h.evaluate().selectedModel, null);
+});
+
+test('current Astra three-tier menu reports Standard, Fast and Ultrafast without changing session means', () => {
+  const active = composer('6 Astra');
+  active.trigger.setAttribute('aria-expanded', 'true');
+  const h = harness('injection_script', [active]);
+  const menu = dropdown('6 Astra');
+  const toggle = new Element('span');
+  toggle.setAttribute('class', '_FastModeToggleContent_5d7qv_2');
+  menu.appendChild(toggle);
+  h.body.appendChild(menu);
+  const usage = sessionUsage(h.now());
+  usage.__binding.model = 'gpt-6-astra';
+  usage.__binding.serviceTier = 'priority';
+  for (const tier of ['ultrafast', 'priority', null]) {
+    toggle.textContent = '';
+    toggle.setAttribute('data-fast-mode-enabled', String(tier !== null));
+    if (tier === 'ultrafast') {
+      const icon = new Element('svg');
+      icon.setAttribute('class', '_UltrafastIcon_5d7qv_2');
+      toggle.appendChild(icon);
+    }
+    const result = h.evaluate({ usage_state: usage });
+    assert.equal(result.usageSelection.model, 'gpt-6-astra');
+    assert.equal(result.usageSelection.serviceTier, tier);
+    assert.equal(metric(h.host(), 'speed').textContent, '↗50.0 tok/s');
+    assert.equal(metric(h.host(), 'cache').textContent, 'Cache 80.0%');
+  }
+});
+
+test('an explicit empty composer conversation ID never inherits the selected sidebar conversation', () => {
+  const active = composer('6 Astra');
+  active.conversation.setAttribute('data-above-composer-conversation-id', '');
+  const h = harness('injection_script', [active]);
+  const sidebar = new Element();
+  sidebar.setAttribute('data-app-action-sidebar-thread-selected', 'true');
+  sidebar.setAttribute('data-app-action-sidebar-thread-id', secondThread);
+  h.body.appendChild(sidebar);
+  const result = h.evaluate();
+  assert.equal(result.threadId, null);
+  active.conversation.removeAttribute('data-above-composer-conversation-id');
+  active.conversation.setAttribute('data-above-composer-portal', 'true');
+  assert.equal(h.evaluate().threadId, null, 'native pending composer omits its unresolved ID but keeps the portal');
+});
+
+test('a reused composer with an unresolved new conversation clears the prior model and metrics', () => {
+  const active = composer('deepseek-v4-pro');
+  const h = harness('injection_script', [active]);
+  h.evaluate({ usage_state: sessionUsage(h.now()) });
+  assert.match(h.host().textContent, /Balance/);
+  active.trigger.textContent = 'Select effort';
+  active.conversation.setAttribute('data-above-composer-conversation-id', 'local:client-new-thread:pending');
+  const result = h.evaluate({ usage_state: sessionUsage(h.now()) });
+  assert.equal(result.threadId, null);
+  assert.equal(result.selectedModel, null);
+  assert.equal(h.root().visibleModel, null);
+  assert.doesNotMatch(h.host().textContent, /Balance|50\.0/);
 });
 
 test('placeholder text retains the same composer model briefly, then returns to the host fallback', () => {
@@ -910,21 +1050,54 @@ test('small nonzero estimated values retain API service precision instead of bec
   }
 });
 
-test('a timed-out data read remains visible for explicit retry instead of silently restarting', () => {
+test('a failed read shows retry feedback, retries finitely and still permits explicit retry', () => {
   const h = harness('injection_script',[composer('gpt-6-sol')]);
   h.evaluate();
   h.host().click();
-  const failed = dialogQuery(h);
-  h.advance(6000);
+  let failed = dialogQuery(h);
   dialogResponse(h,{error:true},failed);
   assert.match(h.details().textContent,/Could not load data/);
-  h.advance(10000);
+  for (const delay of [2000,5000,10000]) {
+    h.advance(delay - 1);
+    h.root().render();
+    assert.equal(dialogQuery(h).requestToken,failed.requestToken);
+    h.advance(1);
+    h.root().render();
+    const retry = dialogQuery(h);
+    assert.notEqual(retry.requestToken,failed.requestToken);
+    assert.doesNotMatch(h.details().textContent,/Could not load data/);
+    dialogResponse(h,{error:true},retry);
+    failed = retry;
+  }
+  h.advance(60000);
   h.root().render();
   assert.equal(dialogQuery(h).requestToken,failed.requestToken);
   assert.ok(h.details().querySelector('[data-cockpit-dialog-action="retry"]'));
   dialogAction(h,'retry');
   assert.notEqual(dialogQuery(h).requestToken,failed.requestToken);
   assert.doesNotMatch(h.details().textContent,/Could not load data/);
+});
+
+test('host heartbeat recovery refreshes failed dialog reads and rejects late former replies', () => {
+  const h = harness('injection_script',[composer('gpt-6-sol')]);
+  h.evaluate({usage_state:sessionUsage(h.now())});
+  h.host().click();
+  dialogResponse(h,{summary:{requests:37}});
+  h.details().querySelector('[data-cockpit-quota-refresh]')!.click();
+  const failed = dialogQuery(h);
+  dialogResponse(h,{error:true},failed);
+  h.advance(9000);
+  h.intervals.forEach(tick => tick());
+  assert.equal(h.root().hostAvailable,false);
+  assert.match(h.details().textContent,/Host unavailable/);
+  h.evaluate({usage_state:sessionUsage(h.now())});
+  const retry = dialogQuery(h);
+  assert.notEqual(retry.requestToken,failed.requestToken);
+  assert.equal(h.root().dialogState.summary.requests,37);
+  dialogResponse(h,{summary:{requests:999}},failed);
+  assert.equal(h.root().dialogState.summary.requests,37);
+  dialogResponse(h,{summary:{requests:38}},retry);
+  assert.equal(h.root().dialogState.summary.requests,38);
 });
 
 test('request tabs support keyboard navigation with stable dialog size and retain verified rows during refresh on return', () => {
@@ -1329,7 +1502,7 @@ test('repeat injection reuses nodes, observers and handlers, and Escape renders 
   assert.equal(h.body.querySelectorAll('[data-cockpit-quota-details]').length, 1);
   assert.equal(h.head.querySelectorAll('[data-cockpit-quota-style]').length, 1);
   assert.equal(h.root().observer, observer);
-  for (const name of ['resize', 'scroll', 'keydown', 'pointerdown']) assert.equal(h.handlers.get(name)!.size, 1);
+  for (const name of ['resize', 'scroll', 'keydown', 'pointerdown', 'focusin']) assert.equal(h.handlers.get(name)!.size, 1);
   assert.equal(h.intervals.size, 1);
   h.host().click();
   h.dispatch('keydown', { key: 'Escape' });
@@ -1359,14 +1532,18 @@ test('switching to standalone DeepSeek and back cleans up status line handlers a
   h.evaluate();
   assert.equal(h.handlers.get('keydown')!.size, 1);
   assert.equal(h.handlers.get('pointerdown')!.size, 1);
+  assert.equal(h.handlers.get('focusin')!.size, 1);
   h.evaluateAs('deepseek_balance_injection_script');
   assert.equal(h.handlers.get('keydown')!.size, 0);
   assert.equal(h.handlers.get('pointerdown')!.size, 0);
+  assert.equal(h.handlers.get('focusin')!.size, 1, 'only the active DeepSeek renderer retains a focus listener');
   assert.equal(h.root().keyHandler, undefined);
   assert.equal(h.root().outsidePointerHandler, undefined);
+  assert.equal(h.root().focusHandler, undefined);
   assert.equal(h.body.querySelector('[data-cockpit-quota-footer]'), null);
   h.evaluate();
   assert.equal(h.handlers.get('keydown')!.size, 1);
+  assert.equal(h.handlers.get('focusin')!.size, 1);
   assert.deepEqual(h.root().layoutObserver.targets, [active.footer, active.permissions, active.trigger]);
   assert.equal(h.host().parentElement, h.body);
   assert.equal(h.body.querySelector('[data-cockpit-deepseek-balance]'), null);
@@ -1774,7 +1951,7 @@ test('first metric mount has its warning state and no progress properties or ani
   assert.doesNotMatch(css, /data-cockpit-progress|cockpit-quota-fill|transition:\s*width/);
 });
 
-for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) test(`upgrading v${oldVersion} injection replaces old styles and listeners with v13 exactly once`, () => {
+for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]) test(`upgrading v${oldVersion} injection replaces old styles and listeners with v14 exactly once`, () => {
   const h = harness('injection_script', [composer('gpt-6-sol')]);
   h.evaluate();
   const oldHost = h.host();
@@ -1782,7 +1959,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) test(`upgrading v${o
   oldStyle.textContent = '[data-cockpit-progress]::before{width:var(--cockpit-quota-fill-width)}';
   h.root().statuslineVersion = oldVersion;
   h.evaluate({ five_hour: 30, five_hour_capacity: 300 });
-  assert.equal(h.root().statuslineVersion, 13);
+  assert.equal(h.root().statuslineVersion, 14);
   assert.notEqual(h.host(), oldHost);
   assert.equal(oldHost.parentElement, null);
   assert.equal(oldStyle.parentElement, null);
@@ -1794,7 +1971,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) test(`upgrading v${o
   h.evaluate();
   assert.equal(h.host(), host);
   assert.equal(h.head.querySelector('[data-cockpit-quota-style]'), style);
-  for (const name of ['resize', 'scroll', 'keydown', 'pointerdown']) assert.equal(h.handlers.get(name)!.size, 1);
+  for (const name of ['resize', 'scroll', 'keydown', 'pointerdown', 'focusin']) assert.equal(h.handlers.get(name)!.size, 1);
   assert.equal(h.intervals.size, 1);
 });
 
@@ -2068,6 +2245,7 @@ test('closing a menu after disabling Fast retains its explicit native choice ins
   usage.__binding.serviceTier = 'priority';
   usage[firstThread].outputSpeed.selection.serviceTier = 'priority';
   h.evaluate({ usage_state: usage });
+  active.trigger.setAttribute('aria-expanded', 'true');
   const menu = dropdown('gpt-6-sol');
   const toggle = new Element('span');
   toggle.setAttribute('data-fast-mode-enabled', 'false');

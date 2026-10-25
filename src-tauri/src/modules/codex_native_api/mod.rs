@@ -23,6 +23,7 @@ mod codex_cpa_wire;
 mod compat;
 mod compat_http;
 mod compat_options;
+mod connection_error;
 pub mod contract;
 pub mod continuity_bridge;
 pub mod diagnostics;

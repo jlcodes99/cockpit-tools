@@ -29,6 +29,7 @@ fn sidecar_continuity_manifest(
     base_dir: &Path,
     accounts: &[Value],
     api_keys: &[Value],
+    session_identity_mapping_enabled: bool,
 ) -> Result<Value, String> {
     let identity_path = if base_dir == local_access_sidecar_dir()? {
         native_global_identity_path()?
@@ -88,7 +89,7 @@ fn sidecar_continuity_manifest(
             .collect();
         caller_accounts.insert(caller.to_string(), ids);
     }
-    let config = json!({"identity_path":identity_path,"token":token,"owners":owners,"caller_accounts":caller_accounts});
+    let config = json!({"identity_path":identity_path,"token":token,"owners":owners,"caller_accounts":caller_accounts,"session_identity_mapping_enabled":session_identity_mapping_enabled});
     write_secret_string_atomic_if_changed(
         &config_path,
         &serde_json::to_string(&config)
@@ -96,7 +97,9 @@ fn sidecar_continuity_manifest(
     )?;
     let executable =
         std::env::current_exe().map_err(|_| "Continuity worker executable is unavailable")?;
-    Ok(json!({"version":1,"executable":executable,"configPath":config_path,"token":token}))
+    // Include the policy in the launch manifest fingerprint so saving it reloads
+    // the worker even though its private configuration path remains unchanged.
+    Ok(json!({"version":1,"executable":executable,"configPath":config_path,"token":token,"sessionIdentityMappingEnabled":session_identity_mapping_enabled}))
 }
 
 #[cfg(test)]
@@ -146,11 +149,12 @@ mod sidecar_continuity_config_tests {
             json!({"id":"scoped","accountIds":["b"]}),
             json!({"id":"disabled","accountIds":["a"],"enabled":false}),
         ];
-        let first = sidecar_continuity_manifest(dir.path(), &accounts, &keys).unwrap();
-        let second = sidecar_continuity_manifest(dir.path(), &accounts, &keys).unwrap();
+        let first = sidecar_continuity_manifest(dir.path(), &accounts, &keys, true).unwrap();
+        let second = sidecar_continuity_manifest(dir.path(), &accounts, &keys, true).unwrap();
         assert_eq!(first, second);
         let path = dir.path().join("continuity.json");
         let config: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(config["session_identity_mapping_enabled"], true);
         assert_eq!(
             config["identity_path"],
             dir.path()
@@ -164,6 +168,15 @@ mod sidecar_continuity_config_tests {
         );
         assert_eq!(config["caller_accounts"]["scoped"], json!(["b"]));
         assert!(config["caller_accounts"].get("disabled").is_none());
+        let disabled = sidecar_continuity_manifest(dir.path(), &accounts, &keys, false).unwrap();
+        assert_eq!(disabled["sessionIdentityMappingEnabled"], false);
+        assert_eq!(first["token"], disabled["token"]);
+        assert_ne!(
+            sidecar_config_fingerprint("{}", &json!({"continuity":first}).to_string()),
+            sidecar_config_fingerprint("{}", &json!({"continuity":disabled}).to_string()),
+        );
+        let config: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(config["session_identity_mapping_enabled"], false);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

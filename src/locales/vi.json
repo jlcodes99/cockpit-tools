@@ -158,6 +158,15 @@
     "providerClear": "Bỏ chọn"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "dịch vụ thượng nguồn",
+      "proxyConnection": "Không thể kết nối đến {{target}} qua proxy “{{proxy}}”. Có thể do proxy hoặc mạng. Hãy kiểm tra proxy hoặc thử nút khác.",
+      "proxyTimeout": "Kết nối đến {{target}} qua proxy “{{proxy}}” đã hết thời gian chờ. Có thể do proxy hoặc mạng. Hãy kiểm tra proxy hoặc thử nút khác.",
+      "proxyAuth": "Xác thực proxy “{{proxy}}” thất bại. Hãy kiểm tra tên người dùng hoặc mật khẩu proxy.",
+      "localProxyUnavailable": "Không thể kết nối đến proxy cục bộ “{{proxy}}”. Hãy kiểm tra dịch vụ proxy có đang chạy không.",
+      "directConnection": "Không thể kết nối đến {{target}}. Hãy kiểm tra mạng và thử lại.",
+      "directTimeout": "Kết nối đến {{target}} đã hết thời gian chờ. Hãy kiểm tra mạng và thử lại."
+    },
     "codexUsage": {
       "title": "Hạn mức và sử dụng",
       "session": "Cuộc trò chuyện này",
@@ -3482,6 +3491,7 @@
         "expand": "Mở rộng",
         "collapse": "Thu gọn",
         "repairVisibility": "Sửa hiển thị",
+        "repairIndex": "Sửa chỉ mục trò chuyện",
         "restoreSessions": "Khôi phục phiên",
         "exportSessions": "Xuất phiên",
         "importSessions": "Nhập phiên",
@@ -3514,6 +3524,10 @@
         "clear": "Xóa"
       },
       "messages": {
+        "deleteNotConfirmed": "Ứng dụng chưa xác nhận xóa xong. Đã dừng dọn dẹp cục bộ và giữ lại bản sao lưu: {{error}}",
+        "historyReadFailed": "Không thể đọc lịch sử trò chuyện một cách an toàn: {{error}}",
+        "restoreIndexRetry": "Tệp trò chuyện được giữ lại nhưng không cập nhật được danh sách. Bản gốc vẫn ở trong Thùng rác. Hãy khắc phục sự cố rồi thử lại: {{error}}",
+        "importIndexRetry": "Đã nhập các tệp trò chuyện nhưng không cập nhật được danh sách. Các tệp và gói nhập được giữ lại. Hãy khắc phục sự cố rồi thử lại: {{error}}",
         "pickOne": "Vui lòng chọn ít nhất một phiên",
         "syncNeedTwo": "Cần ít nhất hai phiên bản để đồng bộ phiên",
         "pickRestoreOne": "Hãy chọn ít nhất một phiên để khôi phục",
@@ -3624,7 +3638,18 @@
         "title": "Sửa lịch sử",
         "description": "Chuẩn hóa nhà cung cấp trong chỉ mục SQLite, danh mục phiên và không gian làm việc. Giữ nguyên từng byte của tệp rollout; chỉ sửa thời gian tệp. Tạo bản sao lưu cục bộ trước khi sửa.",
         "stopInstanceHint": "Hãy thoát hoàn toàn phiên bản Codex App/ChatGPT đã chọn trước khi sửa đầy đủ. Bạn vẫn có thể xem trước thay đổi.",
-        "encryptedContentWarning": "Đã phát hiện lịch sử được mã hóa bởi nhà cung cấp hoặc tài khoản khác. Có thể di chuyển siêu dữ liệu, nhưng việc tiếp tục hoặc nén các phiên đó vẫn có thể thất bại; hãy quay lại nhà cung cấp/tài khoản gốc hoặc mở phiên mới."
+        "encryptedContentWarning": "Đã phát hiện lịch sử được mã hóa bởi nhà cung cấp hoặc tài khoản khác. Có thể di chuyển siêu dữ liệu, nhưng việc tiếp tục hoặc nén các phiên đó vẫn có thể thất bại; hãy quay lại nhà cung cấp/tài khoản gốc hoặc mở phiên mới.",
+        "modeHistory": "Sửa chỉnh sửa/nhánh",
+        "modeHistoryDesc": "Khắc phục lỗi sửa tin nhắn và tạo nhánh trò chuyện do chỉ mục không hợp lệ.",
+        "historyStopHint": "Trước khi sửa, hãy thoát hoàn toàn ứng dụng đã chọn và CLI đang dùng phiên bản này. Bạn vẫn có thể xem trước thay đổi.",
+        "historyDescription": "Kiểm tra các cuộc trò chuyện đã chọn và lịch sử nguồn; chỉ đặt lại chỉ mục phân trang bị lỗi. Bản ghi trò chuyện, tài khoản và Provider được giữ nguyên. Hãy thoát ứng dụng đích và CLI liên quan trước khi chạy.",
+        "historyPreview": "Tìm thấy {{count}} chỉ mục lịch sử bị lỗi có thể tạo lại. Bản ghi trò chuyện được giữ nguyên.",
+        "historySuccess": "Đã đặt lại {{count}} chỉ mục lịch sử bị lỗi. Mở lại ứng dụng và cuộc trò chuyện để tạo lại chỉ mục. Các bản sao lưu đã được giữ lại.",
+        "historyNoChanges": "Không tìm thấy chỉ mục lịch sử bị lỗi nào có thể tạo lại an toàn.",
+        "historyFailed": "Chưa hoàn tất sửa chỉ mục lịch sử: {{error}}",
+        "historyRunning": "Hãy thoát hoàn toàn ứng dụng đích và CLI đang dùng phiên bản này rồi thử lại.",
+        "historyScan": "Đang kiểm tra chỉ mục lịch sử ({{current}}/{{total}})…",
+        "historyReset": "Đang sao lưu và đặt lại chỉ mục bị lỗi…"
       },
       "importModal": {
         "title": "Nhập phiên",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "Tùy chọn định tuyến",
+        "sessionIdentityMapping": "Ánh xạ ID phiên",
+        "sessionIdentityMappingEnableHint": "Khi bật ánh xạ, mỗi tài khoản dịch vụ đầu nguồn sử dụng Session-Id và Thread-Id riêng khi chuyển tài khoản. Điều này tăng tính tách biệt của mã định danh nhưng có thể giảm khả năng tái sử dụng bộ nhớ đệm giữa các tài khoản. Trong cùng một tài khoản, các ánh xạ hiện có vẫn được tái sử dụng.",
+        "sessionIdentityMappingDisableHint": "Khi tắt ánh xạ, Session-Id và Thread-Id gốc của máy khách được giữ nguyên. Các tài khoản dịch vụ đầu nguồn khác nhau có thể dùng chung mã định danh, làm giảm tính tách biệt nhưng có thể tăng khả năng tái sử dụng bộ nhớ đệm giữa các tài khoản.",
+        "sessionIdentityMappingCacheNote": "Tỷ lệ trúng bộ nhớ đệm còn phụ thuộc vào quy tắc dịch vụ đầu nguồn, phạm vi tài khoản và nội dung yêu cầu. Thay đổi cài đặt này không bảo đảm tỷ lệ sẽ tăng hoặc giảm.",
+        "sessionIdentityMappingSaveNote": "Sau khi xác nhận, hãy lưu cài đặt để áp dụng thay đổi.",
         "sessionAffinity": "Gắn phiên",
         "sessionAffinityTtl": "Thời gian hết hạn (giây)",
         "responsesWebsockets": "Responses qua WebSocket",

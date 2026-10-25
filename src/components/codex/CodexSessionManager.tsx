@@ -2,7 +2,7 @@ import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useTranslation } from 'react-i18next';
 import { confirm as confirmDialog, open as openFileDialog, save as saveFileDialog } from '@tauri-apps/plugin-dialog';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { Check, ChevronDown, ChevronRight, Copy, Download, Eye, FileText, Folder, FolderOpen, Minimize2, RefreshCw, RotateCcw, Search, Trash2, Upload, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Copy, Download, Eye, FileText, Folder, FolderOpen, Minimize2, RefreshCw, RotateCcw, Search, Trash2, Upload, Wrench, X } from 'lucide-react';
 import { ModalErrorMessage, useModalErrorState } from '../ModalErrorMessage';
 import { SingleSelectDropdown, type SingleSelectOption } from '../SingleSelectDropdown';
 import { useEscClose } from '../../hooks/useEscClose';
@@ -278,7 +278,7 @@ export function CodexSessionManager() {
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showRepairVisibilityModal, setShowRepairVisibilityModal] = useState(false);
+  const [repairDialogKind, setRepairDialogKind] = useState<'visibility' | 'history' | null>(null);
   const [trashedSessions, setTrashedSessions] = useState<CodexTrashedSessionRecord[]>([]);
   const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
   const [exportPreview, setExportPreview] = useState<CodexSessionExportPreview | null>(null);
@@ -769,9 +769,9 @@ export function CodexSessionManager() {
   };
 
   const toggleGroupSelection = (sessionIds: string[]) => {
-    const allSelected = sessionIds.every((id) => selectedIdSet.has(id));
     setSelectedIds((prev) => {
       const next = new Set(prev);
+      const allSelected = sessionIds.every((id) => next.has(id));
       if (allSelected) {
         sessionIds.forEach((id) => next.delete(id));
       } else {
@@ -955,9 +955,9 @@ export function CodexSessionManager() {
     setAppliedTitleSearch('');
   };
 
-  const handleRepairVisibility = async () => {
+  const handleOpenRepair = (kind: 'visibility' | 'history') => {
     setMessage(null);
-    setShowRepairVisibilityModal(true);
+    setRepairDialogKind(kind);
   };
 
   /** 用翻译键组装“移到废纸篓”结果提示；后端未返回结构化计数时回退到后端文案。 */
@@ -1721,11 +1721,20 @@ export function CodexSessionManager() {
             <button
               className="btn btn-secondary codex-session-manager__action-button"
               type="button"
-              onClick={() => void handleRepairVisibility()}
+              onClick={() => handleOpenRepair('visibility')}
               disabled={repairingVisibility || loading || deleting || syncing || syncingToInstance || exporting}
             >
               <Eye size={14} />
               {t('codex.sessionManager.actions.repairVisibility', '修复可见性')}
+            </button>
+            <button
+              className="btn btn-secondary codex-session-manager__action-button"
+              type="button"
+              onClick={() => handleOpenRepair('history')}
+              disabled={repairingVisibility || loading || deleting || syncing || syncingToInstance || exporting}
+            >
+              <Wrench size={14} />
+              {t('codex.sessionManager.actions.repairIndex')}
             </button>
             <button
               className="btn btn-secondary codex-session-manager__action-button"
@@ -1765,9 +1774,14 @@ export function CodexSessionManager() {
                 }
               >
                 {allSessionsSelected ? <X size={14} /> : <Check size={14} />}
-                {allSessionsSelected
-                  ? t('codex.sessionManager.actions.clearSelectedSessions', '取消全选')
-                  : t('codex.sessionManager.actions.selectAllSessions', '全选全部会话')}
+                <span className="codex-session-manager__selection-toggle-label" aria-hidden="true">
+                  <span style={{ visibility: allSessionsSelected ? 'hidden' : 'visible' }}>
+                    {t('codex.sessionManager.actions.selectAllSessions', '全选全部会话')}
+                  </span>
+                  <span style={{ visibility: allSessionsSelected ? 'visible' : 'hidden' }}>
+                    {t('codex.sessionManager.actions.clearSelectedSessions', '取消全选')}
+                  </span>
+                </span>
               </button>
               <button
                 className="btn btn-secondary codex-session-manager__action-button"
@@ -1776,7 +1790,10 @@ export function CodexSessionManager() {
                 disabled={syncing || syncingToInstance || repairingVisibility || deleting || loading || exporting || selectedIds.length === 0}
               >
                 <Copy size={14} className={syncingToInstance ? 'icon-spin' : undefined} />
-                {t('codex.sessionManager.actions.copyToInstance', '复制到实例')} ({selectedIds.length})
+                {t('codex.sessionManager.actions.copyToInstance', '复制到实例')}
+                <span className="codex-session-manager__action-count" style={{ minWidth: `${String(allSessionIds.length).length + 2}ch` }}>
+                  ({selectedIds.length})
+                </span>
               </button>
               <button
                 className="btn btn-secondary codex-session-manager__action-button"
@@ -1785,7 +1802,10 @@ export function CodexSessionManager() {
                 disabled={syncing || syncingToInstance || repairingVisibility || deleting || loading || loadingExportPreview || exporting || selectedIds.length === 0}
               >
                 <Download size={14} className={loadingExportPreview || exporting ? 'icon-spin' : undefined} />
-                {t('codex.sessionManager.actions.exportSessions', '导出会话')} ({selectedIds.length})
+                {t('codex.sessionManager.actions.exportSessions', '导出会话')}
+                <span className="codex-session-manager__action-count" style={{ minWidth: `${String(allSessionIds.length).length + 2}ch` }}>
+                  ({selectedIds.length})
+                </span>
               </button>
               <button
                 className="btn btn-danger codex-session-manager__action-button"
@@ -1794,7 +1814,10 @@ export function CodexSessionManager() {
                 disabled={deleting || loading || syncing || syncingToInstance || repairingVisibility || selectedIds.length === 0}
               >
                 <Trash2 size={14} />
-                {t('codex.sessionManager.actions.moveToTrash', '移到废纸篓')} ({selectedIds.length})
+                {t('codex.sessionManager.actions.moveToTrash', '移到废纸篓')}
+                <span className="codex-session-manager__action-count" style={{ minWidth: `${String(allSessionIds.length).length + 2}ch` }}>
+                  ({selectedIds.length})
+                </span>
               </button>
             </div>
           )}
@@ -2589,10 +2612,11 @@ export function CodexSessionManager() {
       ) : null}
 
       <CodexSessionVisibilityRepairModal
-        open={showRepairVisibilityModal}
+        open={repairDialogKind !== null}
+        repairKind={repairDialogKind ?? 'visibility'}
         selectedSessionIds={selectedIds}
         totalSessionCount={allSessionIds.length}
-        onClose={() => setShowRepairVisibilityModal(false)}
+        onClose={() => setRepairDialogKind(null)}
         onRunningChange={setRepairingVisibility}
         onRepaired={() => loadSessions()}
       />

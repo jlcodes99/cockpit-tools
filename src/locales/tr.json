@@ -158,6 +158,15 @@
     "providerClear": "Seçimi temizle"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "üst hizmet",
+      "proxyConnection": "“{{proxy}}” proxy’si üzerinden {{target}} bağlantısı başarısız oldu. Proxy veya ağ sorunu olabilir. Proxy’yi denetleyin ya da başka bir düğüm deneyin.",
+      "proxyTimeout": "“{{proxy}}” proxy’si üzerinden {{target}} bağlantısı zaman aşımına uğradı. Proxy veya ağ sorunu olabilir. Proxy’yi denetleyin ya da başka bir düğüm deneyin.",
+      "proxyAuth": "“{{proxy}}” proxy’sinde kimlik doğrulama başarısız oldu. Proxy kullanıcı adını veya parolasını denetleyin.",
+      "localProxyUnavailable": "Yerel “{{proxy}}” proxy’sine bağlanılamıyor. Proxy hizmetinin çalıştığını denetleyin.",
+      "directConnection": "{{target}} bağlantısı başarısız oldu. Ağı denetleyip yeniden deneyin.",
+      "directTimeout": "{{target}} bağlantısı zaman aşımına uğradı. Ağı denetleyip yeniden deneyin."
+    },
     "codexUsage": {
       "title": "Kota ve kullanım",
       "session": "Geçerli sohbet",
@@ -3482,6 +3491,7 @@
         "expand": "Genişlet",
         "collapse": "Daralt",
         "repairVisibility": "Görünürlüğü onar",
+        "repairIndex": "Sohbet dizinini onar",
         "restoreSessions": "Oturumları geri yükle",
         "exportSessions": "Oturumları dışa aktar",
         "importSessions": "Oturumları içe aktar",
@@ -3514,6 +3524,10 @@
         "clear": "Temizle"
       },
       "messages": {
+        "deleteNotConfirmed": "İstemci silme işlemini onaylamadı. Yerel temizleme durduruldu ve yedekler korundu: {{error}}",
+        "historyReadFailed": "Sohbet geçmişi güvenli biçimde okunamadı: {{error}}",
+        "restoreIndexRetry": "Sohbet dosyası korundu ancak sohbet listesi güncellenemedi. Asıl dosya çöp kutusunda duruyor. Sorunu giderip tekrar deneyin: {{error}}",
+        "importIndexRetry": "Sohbet dosyaları içe aktarıldı ancak sohbet listesi güncellenemedi. Dosyalar ve içe aktarma paketi korundu. Sorunu giderip tekrar deneyin: {{error}}",
         "pickOne": "Lütfen en az bir oturum seçin",
         "syncNeedTwo": "Oturumları eşitlemek için en az iki örnek gerekir",
         "pickRestoreOne": "Lütfen geri yüklenecek en az bir oturum seçin",
@@ -3624,7 +3638,18 @@
         "title": "Geçmişi onar",
         "description": "SQLite dizinlerinde, oturum kataloğunda ve çalışma alanlarında sağlayıcı bilgilerini düzenler. rollout dosyalarının özgün baytları korunur; yalnızca zaman damgaları düzeltilir. Önce yerel yedek oluşturulur.",
         "stopInstanceHint": "Tam onarımdan önce seçili Codex App/ChatGPT örneğini tamamen kapatın. Değişiklikleri yine de önce önizleyebilirsiniz.",
-        "encryptedContentWarning": "Başka bir sağlayıcı veya hesap tarafından şifrelenmiş geçmiş algılandı. Meta veriler taşınabilir ancak bu oturumları sürdürme veya sıkıştırma başarısız olabilir; özgün sağlayıcıya/hesaba dönün ya da yeni oturum başlatın."
+        "encryptedContentWarning": "Başka bir sağlayıcı veya hesap tarafından şifrelenmiş geçmiş algılandı. Meta veriler taşınabilir ancak bu oturumları sürdürme veya sıkıştırma başarısız olabilir; özgün sağlayıcıya/hesaba dönün ya da yeni oturum başlatın.",
+        "modeHistory": "Düzenleme/dallanma",
+        "modeHistoryDesc": "Geçersiz dizinlerden kaynaklanan mesaj düzenleme ve sohbet dallandırma hatalarını giderir.",
+        "historyStopHint": "Onarımdan önce seçilen istemciyi ve bu örneği kullanan CLI süreçlerini tamamen kapatın. Değişiklikleri yine de önizleyebilirsiniz.",
+        "historyDescription": "Seçilen sohbetleri ve kaynak geçmişini denetler; yalnızca geçersiz sayfalama dizinlerini sıfırlar. Sohbet kayıtları, hesaplar ve Provider değişmez. Başlatmadan önce hedef istemciyi ve ilgili CLI süreçlerini kapatın.",
+        "historyPreview": "Yeniden oluşturulabilecek {{count}} geçersiz geçmiş dizini bulundu. Sohbet kayıtları değişmez.",
+        "historySuccess": "{{count}} geçersiz geçmiş dizini sıfırlandı. Yeniden oluşturmak için istemciyi ve sohbetleri tekrar açın. Yedekler korundu.",
+        "historyNoChanges": "Güvenle yeniden oluşturulabilecek geçersiz geçmiş dizini bulunamadı.",
+        "historyFailed": "Geçmiş dizini onarımı tamamlanamadı: {{error}}",
+        "historyRunning": "Hedef istemciyi ve bu örneği kullanan CLI süreçlerini tamamen kapatıp tekrar deneyin.",
+        "historyScan": "Geçmiş dizinleri denetleniyor ({{current}}/{{total}})…",
+        "historyReset": "Geçersiz dizinler yedekleniyor ve sıfırlanıyor…"
       },
       "importModal": {
         "title": "Oturumları içe aktar",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "Yönlendirme seçenekleri",
+        "sessionIdentityMapping": "Oturum ID eşleme",
+        "sessionIdentityMappingEnableHint": "Eşleme açıldığında, hesap değiştirirken her üst hizmet hesabı için bağımsız Session-Id ve Thread-Id değerleri kullanılır. Bu, tanımlayıcı yalıtımını güçlendirir ancak hesaplar arası önbellek yeniden kullanımını azaltabilir. Aynı hesapta mevcut eşlemeler yeniden kullanılır.",
+        "sessionIdentityMappingDisableHint": "Eşleme kapatıldığında istemcinin özgün Session-Id ve Thread-Id değerleri korunur. Farklı üst hizmet hesapları bu tanımlayıcıları paylaşabilir; yalıtım azalırken hesaplar arası önbellek yeniden kullanımı artabilir.",
+        "sessionIdentityMappingCacheNote": "Önbellek isabet oranı üst hizmet kurallarına, hesap kapsamına ve istek içeriğine de bağlıdır. Bu ayarı değiştirmek oranın artmasını veya azalmasını garanti etmez.",
+        "sessionIdentityMappingSaveNote": "Onayladıktan sonra değişikliğin uygulanması için ayarları kaydedin.",
         "sessionAffinity": "Oturum bağı",
         "sessionAffinityTtl": "Süre (saniye)",
         "responsesWebsockets": "WebSocket üzerinden Responses",

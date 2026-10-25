@@ -158,6 +158,15 @@
     "providerClear": "Hapus pilihan"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "layanan hulu",
+      "proxyConnection": "Gagal terhubung ke {{target}} melalui proksi “{{proxy}}”. Mungkin ada masalah proksi atau jaringan. Periksa proksi atau coba simpul lain.",
+      "proxyTimeout": "Koneksi ke {{target}} melalui proksi “{{proxy}}” kehabisan waktu. Mungkin ada masalah proksi atau jaringan. Periksa proksi atau coba simpul lain.",
+      "proxyAuth": "Autentikasi proksi “{{proxy}}” gagal. Periksa nama pengguna atau kata sandi proksi.",
+      "localProxyUnavailable": "Tidak dapat terhubung ke proksi lokal “{{proxy}}”. Pastikan layanan proksi sedang berjalan.",
+      "directConnection": "Gagal terhubung ke {{target}}. Periksa jaringan dan coba lagi.",
+      "directTimeout": "Koneksi ke {{target}} kehabisan waktu. Periksa jaringan dan coba lagi."
+    },
     "codexUsage": {
       "title": "Kuota dan penggunaan",
       "session": "Chat saat ini",
@@ -3660,6 +3669,7 @@
         "expand": "Perluas",
         "collapse": "Ciutkan",
         "repairVisibility": "Perbaiki visibilitas",
+        "repairIndex": "Perbaiki indeks chat",
         "restoreSessions": "Pulihkan sesi",
         "exportSessions": "Ekspor sesi",
         "importSessions": "Impor sesi",
@@ -3692,6 +3702,10 @@
         "clear": "Bersihkan"
       },
       "messages": {
+        "deleteNotConfirmed": "Klien tidak mengonfirmasi penghapusan. Pembersihan lokal dihentikan dan cadangan dipertahankan: {{error}}",
+        "historyReadFailed": "Riwayat percakapan tidak dapat dibaca dengan aman: {{error}}",
+        "restoreIndexRetry": "File percakapan dipertahankan, tetapi daftar percakapan gagal diperbarui. File asli masih ada di Sampah. Atasi masalahnya lalu coba lagi: {{error}}",
+        "importIndexRetry": "File percakapan telah diimpor, tetapi daftar percakapan gagal diperbarui. File dan paket impor dipertahankan. Atasi masalahnya lalu coba lagi: {{error}}",
         "pickOne": "Silakan pilih setidaknya satu sesi",
         "syncNeedTwo": "Setidaknya dua instansi diperlukan untuk menyinkronkan sesi",
         "pickRestoreOne": "Pilih setidaknya satu sesi untuk dipulihkan",
@@ -3802,7 +3816,18 @@
         "title": "Perbaiki riwayat",
         "description": "Menormalkan penyedia dalam indeks SQLite, katalog sesi, dan ruang kerja. Semua byte asli file rollout dipertahankan; hanya waktu file yang diperbaiki. Cadangan lokal dibuat terlebih dahulu.",
         "stopInstanceHint": "Tutup sepenuhnya instans Codex App/ChatGPT yang dipilih sebelum perbaikan lengkap. Anda tetap dapat meninjau perubahan lebih dulu.",
-        "encryptedContentWarning": "Terdeteksi riwayat yang dienkripsi oleh penyedia atau akun lain. Metadata dapat dimigrasikan, tetapi melanjutkan atau memadatkan sesi tersebut mungkin gagal; kembali ke penyedia/akun asal atau mulai sesi baru."
+        "encryptedContentWarning": "Terdeteksi riwayat yang dienkripsi oleh penyedia atau akun lain. Metadata dapat dimigrasikan, tetapi melanjutkan atau memadatkan sesi tersebut mungkin gagal; kembali ke penyedia/akun asal atau mulai sesi baru.",
+        "modeHistory": "Perbaikan edit/cabang",
+        "modeHistoryDesc": "Perbaiki kegagalan mengedit pesan dan membuat cabang chat akibat indeks tidak valid.",
+        "historyStopHint": "Sebelum perbaikan, tutup sepenuhnya klien terpilih dan CLI yang memakai instans tersebut. Pratinjau tetap tersedia.",
+        "historyDescription": "Periksa percakapan terpilih beserta riwayat asalnya; atur ulang hanya indeks halaman yang tidak valid. Riwayat percakapan, akun, dan Provider tetap utuh. Tutup klien tujuan serta CLI terkait sebelum menjalankan.",
+        "historyPreview": "Ditemukan {{count}} indeks riwayat tidak valid yang dapat dibangun ulang. Riwayat percakapan tetap utuh.",
+        "historySuccess": "{{count}} indeks riwayat tidak valid telah diatur ulang. Buka kembali klien dan percakapan untuk membangunnya ulang. Cadangan tetap disimpan.",
+        "historyNoChanges": "Tidak ditemukan indeks riwayat tidak valid yang dapat dibangun ulang dengan aman.",
+        "historyFailed": "Perbaikan indeks riwayat belum selesai: {{error}}",
+        "historyRunning": "Tutup sepenuhnya klien tujuan dan CLI yang memakai instans ini, lalu coba lagi.",
+        "historyScan": "Memeriksa indeks riwayat ({{current}}/{{total}})…",
+        "historyReset": "Mencadangkan dan mengatur ulang indeks yang tidak valid…"
       },
       "importModal": {
         "title": "Impor sesi",
@@ -4657,6 +4682,11 @@
       },
       "routing": {
         "optionsTitle": "Opsi Routing",
+        "sessionIdentityMapping": "Pemetaan ID sesi",
+        "sessionIdentityMappingEnableHint": "Saat pemetaan diaktifkan, setiap akun layanan hulu memakai Session-Id dan Thread-Id tersendiri ketika berganti akun. Ini memperkuat isolasi pengenal, tetapi dapat mengurangi penggunaan ulang cache antar akun. Pemetaan yang ada tetap digunakan kembali dalam akun yang sama.",
+        "sessionIdentityMappingDisableHint": "Saat dinonaktifkan, nilai Session-Id dan Thread-Id asli klien dipertahankan. Akun layanan hulu yang berbeda dapat berbagi pengenal tersebut, sehingga isolasi melemah tetapi penggunaan ulang cache antar akun dapat meningkat.",
+        "sessionIdentityMappingCacheNote": "Tingkat keberhasilan cache juga bergantung pada aturan layanan hulu, cakupan akun, dan isi permintaan. Mengubah pengaturan ini tidak menjamin tingkat tersebut naik atau turun.",
+        "sessionIdentityMappingSaveNote": "Setelah mengonfirmasi, simpan pengaturan untuk menerapkan perubahan.",
         "sessionAffinity": "Afinitas Sesi",
         "sessionAffinityTtl": "Kedaluwarsa (detik)",
         "responsesWebsockets": "Responses melalui WebSocket",

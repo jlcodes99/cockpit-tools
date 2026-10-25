@@ -298,8 +298,8 @@ fn assign_imported_threads_to_projects(
 /// 返回成功删除的条数。官方删除会同时清理 state DB、会话目录与 rollout 文件，
 /// 因此客户端不需要重启或重新扫描即可同步。
 ///
-/// 单个会话删除失败只记录日志并继续，调用方可根据返回条数决定是否回退到
-/// 文件方式删除；只有 app-server 无法启动这类整体性错误才返回 `Err`。
+/// A rejected or unconfirmed deletion returns its official error. Callers must
+/// preserve remaining history and never bypass fork dependency checks.
 pub fn delete_threads(codex_home: &Path, session_ids: &[String]) -> Result<usize, String> {
     let unique_session_ids = dedupe_session_ids(session_ids);
     if unique_session_ids.is_empty() {
@@ -385,44 +385,17 @@ pub fn delete_threads(codex_home: &Path, session_ids: &[String]) -> Result<usize
         let mut deleted_count = 0usize;
         for (index, session_id) in unique_session_ids.iter().enumerate() {
             let request_id = 2 + index as i64;
-            if let Err(error) = send_request(
+            send_request(
                 &mut stdin,
                 json!({
                     "method": "thread/delete",
                     "id": request_id,
                     "params": { "threadId": session_id },
                 }),
-            ) {
-                crate::modules::logger::log_warn(&format!(
-                    "[Codex Official AppServer] delete_threads write failed: codex_home={}, thread_id={}, error={}",
-                    codex_home.display(),
-                    session_id,
-                    error
-                ));
-                break;
-            }
-            match wait_for_response_value(&receiver, request_id) {
-                Ok(_) => deleted_count += 1,
-                Err(error) if error.is_timeout() => {
-                    // app-server 已无响应：继续逐条等待会让批量删除长时间卡住，
-                    // 剩余会话交给文件方式删除兜底。
-                    crate::modules::logger::log_warn(&format!(
-                        "[Codex Official AppServer] delete_threads 超时，停止继续删除并回退: codex_home={}, remaining={}, error={}",
-                        codex_home.display(),
-                        unique_session_ids.len() - index,
-                        error.message()
-                    ));
-                    break;
-                }
-                Err(error) => {
-                    crate::modules::logger::log_warn(&format!(
-                        "[Codex Official AppServer] delete_threads failed for thread: codex_home={}, thread_id={}, error={}",
-                        codex_home.display(),
-                        session_id,
-                        error.message()
-                    ));
-                }
-            }
+            )?;
+            wait_for_response_value(&receiver, request_id)
+                .map_err(|error| error.message().to_string())?;
+            deleted_count += 1;
         }
         Ok::<usize, String>(deleted_count)
     })();

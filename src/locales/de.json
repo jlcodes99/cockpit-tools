@@ -158,6 +158,15 @@
     "providerClear": "Auswahl leeren"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "dem vorgeschalteten Dienst",
+      "proxyConnection": "Verbindung zu {{target}} über Proxy „{{proxy}}“ fehlgeschlagen. Mögliche Proxy- oder Netzwerkstörung. Proxy prüfen oder einen anderen Knoten versuchen.",
+      "proxyTimeout": "Zeitüberschreitung bei der Verbindung zu {{target}} über Proxy „{{proxy}}“. Mögliche Proxy- oder Netzwerkstörung. Proxy prüfen oder einen anderen Knoten versuchen.",
+      "proxyAuth": "Authentifizierung am Proxy „{{proxy}}“ fehlgeschlagen. Proxy-Benutzername oder Passwort prüfen.",
+      "localProxyUnavailable": "Keine Verbindung zum lokalen Proxy „{{proxy}}“. Prüfen, ob der Proxy-Dienst läuft.",
+      "directConnection": "Verbindung zu {{target}} fehlgeschlagen. Netzwerk prüfen und erneut versuchen.",
+      "directTimeout": "Zeitüberschreitung bei der Verbindung zu {{target}}. Netzwerk prüfen und erneut versuchen."
+    },
     "codexUsage": {
       "title": "Kontingent & Nutzung",
       "session": "Aktueller Chat",
@@ -3482,6 +3491,7 @@
         "expand": "Erweitern",
         "collapse": "Einklappen",
         "repairVisibility": "Sichtbarkeit reparieren",
+        "repairIndex": "Chatindex reparieren",
         "restoreSessions": "Sitzungen wiederherstellen",
         "exportSessions": "Sitzungen exportieren",
         "importSessions": "Sitzungen importieren",
@@ -3514,6 +3524,10 @@
         "clear": "Leeren"
       },
       "messages": {
+        "deleteNotConfirmed": "Der Client hat die Löschung nicht bestätigt. Die lokale Bereinigung wurde gestoppt und Sicherungen wurden beibehalten: {{error}}",
+        "historyReadFailed": "Der Chatverlauf kann nicht sicher gelesen werden: {{error}}",
+        "restoreIndexRetry": "Die Chatdatei wurde beibehalten, aber die Chatliste konnte nicht aktualisiert werden. Das Original bleibt im Papierkorb. Beheben Sie das Problem und versuchen Sie es erneut: {{error}}",
+        "importIndexRetry": "Die Chatdateien wurden importiert, aber die Chatliste konnte nicht aktualisiert werden. Dateien und Importpaket bleiben erhalten. Beheben Sie das Problem und versuchen Sie es erneut: {{error}}",
         "pickOne": "Bitte wähle mindestens eine Sitzung aus",
         "syncNeedTwo": "Mindestens zwei Instanzen sind erforderlich, um Sitzungen zu synchronisieren",
         "pickRestoreOne": "Bitte wählen Sie mindestens eine Sitzung zur Wiederherstellung aus",
@@ -3624,7 +3638,18 @@
         "title": "Verlauf reparieren",
         "description": "Normalisiert Anbieter in SQLite-Indizes, Sitzungskatalog und Arbeitsbereichsstatus. Die ursprünglichen Rollout-Dateien bleiben bytegenau erhalten; nur Zeitstempel werden korrigiert. Zuvor wird eine lokale Sicherung erstellt.",
         "stopInstanceHint": "Beenden Sie die ausgewählte Codex App-/ChatGPT-Instanz vor der vollständigen Reparatur vollständig. Eine Vorschau ist weiterhin möglich.",
-        "encryptedContentWarning": "Es wurde Verlauf erkannt, der von einem anderen Anbieter oder Konto verschlüsselt wurde. Metadaten können migriert werden, doch Fortsetzen oder Komprimieren kann fehlschlagen; wechseln Sie zum ursprünglichen Anbieter/Konto zurück oder starten Sie eine neue Sitzung."
+        "encryptedContentWarning": "Es wurde Verlauf erkannt, der von einem anderen Anbieter oder Konto verschlüsselt wurde. Metadaten können migriert werden, doch Fortsetzen oder Komprimieren kann fehlschlagen; wechseln Sie zum ursprünglichen Anbieter/Konto zurück oder starten Sie eine neue Sitzung.",
+        "modeHistory": "Bearbeiten/Abzweigen",
+        "modeHistoryDesc": "Behebt Fehler beim Bearbeiten und Verzweigen von Chats durch ungültige Indizes.",
+        "historyStopHint": "Vor der Reparatur den gewählten Client und alle CLI-Prozesse dieser Instanz vollständig beenden. Eine Vorschau bleibt möglich.",
+        "historyDescription": "Ausgewählte Chats und ihre Vorgeschichte prüfen und nur fehlerhafte Seitenindizes zurücksetzen. Chatverlauf, Konten und Provider bleiben unverändert. Zuvor den Zielclient und zugehörige CLI-Prozesse beenden.",
+        "historyPreview": "{{count}} fehlerhafte Verlaufsindizes können neu aufgebaut werden. Der Chatverlauf bleibt unverändert.",
+        "historySuccess": "{{count}} fehlerhafte Verlaufsindizes zurückgesetzt. Client und Chats zum Neuaufbau erneut öffnen. Sicherungen wurden aufbewahrt.",
+        "historyNoChanges": "Keine fehlerhaften Verlaufsindizes gefunden, die sicher neu aufgebaut werden können.",
+        "historyFailed": "Die Reparatur der Verlaufsindizes wurde nicht abgeschlossen: {{error}}",
+        "historyRunning": "Den Zielclient und alle CLI-Prozesse dieser Instanz vollständig beenden und erneut versuchen.",
+        "historyScan": "Verlaufsindizes werden geprüft ({{current}}/{{total}})…",
+        "historyReset": "Fehlerhafte Indizes werden gesichert und zurückgesetzt…"
       },
       "importModal": {
         "title": "Sitzungen importieren",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "Routingoptionen",
+        "sessionIdentityMapping": "Sitzungs-ID-Zuordnung",
+        "sessionIdentityMappingEnableHint": "Bei aktivierter Zuordnung erhält jedes vorgelagerte Konto beim Kontowechsel eigene Werte für Session-Id und Thread-Id. Das stärkt die Trennung der Kennungen, kann aber die Cache-Wiederverwendung zwischen Konten verringern. Im selben Konto werden vorhandene Zuordnungen weiterverwendet.",
+        "sessionIdentityMappingDisableHint": "Bei deaktivierter Zuordnung bleiben die ursprünglichen Client-Werte für Session-Id und Thread-Id erhalten. Verschiedene vorgelagerte Konten können diese Kennungen teilen. Das schwächt die Trennung, kann aber die Cache-Wiederverwendung zwischen Konten erhöhen.",
+        "sessionIdentityMappingCacheNote": "Die Cache-Trefferquote hängt auch von den Regeln des Anbieters, dem Kontobereich und dem Anfrageinhalt ab. Diese Einstellung garantiert weder eine höhere noch eine niedrigere Trefferquote.",
+        "sessionIdentityMappingSaveNote": "Nach der Bestätigung müssen Sie die Einstellungen speichern, um die Änderung anzuwenden.",
         "sessionAffinity": "Sitzungsbindung",
         "sessionAffinityTtl": "Ablauf (Sekunden)",
         "responsesWebsockets": "Responses über WebSocket",

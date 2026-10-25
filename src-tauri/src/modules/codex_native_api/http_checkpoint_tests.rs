@@ -304,6 +304,7 @@ impl Fixture {
         continuity_bridge::start(continuity_bridge::Config {
             identity_path: self.path(),
             token: CONTROL_TOKEN.into(),
+            session_identity_mapping_enabled: true,
             owners: HashMap::from([
                 ("a".into(), "owner-a".into()),
                 ("b".into(), "owner-b".into()),

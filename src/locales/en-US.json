@@ -158,6 +158,15 @@
     "providerClear": "Clear selection"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "the upstream service",
+      "proxyConnection": "Failed to connect to {{target}} through proxy “{{proxy}}”. The proxy or network may be unavailable. Check the proxy or try another node.",
+      "proxyTimeout": "Connection to {{target}} through proxy “{{proxy}}” timed out. The proxy or network may be unavailable. Check the proxy or try another node.",
+      "proxyAuth": "Proxy “{{proxy}}” authentication failed. Check the proxy username or password.",
+      "localProxyUnavailable": "Cannot connect to local proxy “{{proxy}}”. Check that the proxy service is running.",
+      "directConnection": "Failed to connect to {{target}}. Check your network and retry.",
+      "directTimeout": "Connection to {{target}} timed out. Check your network and retry."
+    },
     "codexUsage": {
       "title": "Quota & usage",
       "session": "Current chat",
@@ -4365,6 +4374,7 @@
         "syncSessions": "Sync Sessions",
         "copyToInstance": "Copy to Instance",
         "repairVisibility": "Repair Visibility",
+        "repairIndex": "Repair chat index",
         "restoreSessions": "Restore Sessions",
         "exportSessions": "Export Sessions",
         "importSessions": "Import Sessions",
@@ -4398,6 +4408,10 @@
         "clear": "Clear"
       },
       "messages": {
+        "deleteNotConfirmed": "The client did not confirm deletion. Local cleanup was stopped and backups were retained: {{error}}",
+        "historyReadFailed": "Unable to safely read chat history: {{error}}",
+        "restoreIndexRetry": "The chat file was retained, but updating the chat list failed. The original remains in Trash; resolve the issue and retry: {{error}}",
+        "importIndexRetry": "Chat files were imported, but updating the chat list failed. The files and import package were retained; resolve the issue and retry: {{error}}",
         "pickOne": "Please select at least one session",
         "pickRestoreOne": "Please select at least one session to restore",
         "syncNeedTwo": "At least two instances are required to sync sessions",
@@ -4530,7 +4544,18 @@
         "previewAgain": "Preview Again",
         "preview": "Preview Changes",
         "previewFailedWithError": "Session repair preview failed: {{error}}",
-        "confirmRepair": "Confirm Repair"
+        "confirmRepair": "Confirm Repair",
+        "modeHistory": "Edit/branch repair",
+        "modeHistoryDesc": "Repair editing and chat branching failures caused by invalid indexes.",
+        "historyStopHint": "Fully quit the selected client and any CLI using that instance before repair. You can still preview changes.",
+        "historyDescription": "Check selected chats and their ancestor history, then reset only invalid paginated indexes. Chat records, accounts and Provider stay unchanged. Quit the target client and related CLI sessions before running.",
+        "historyPreview": "Found {{count}} invalid history indexes that can be rebuilt. Chat records stay unchanged.",
+        "historySuccess": "Reset {{count}} invalid history indexes. Reopen the client and chats to rebuild them. Backups were retained.",
+        "historyNoChanges": "No invalid history indexes were found that can be safely rebuilt.",
+        "historyFailed": "History index repair did not complete: {{error}}",
+        "historyRunning": "Fully quit the target client and any CLI using this instance, then try again.",
+        "historyScan": "Checking history indexes ({{current}}/{{total}})…",
+        "historyReset": "Backing up and resetting invalid indexes…"
       },
       "transferModal": {
         "exportTitle": "Export Sessions",
@@ -4873,6 +4898,11 @@
       },
       "routing": {
         "optionsTitle": "Routing Options",
+        "sessionIdentityMapping": "Session ID mapping",
+        "sessionIdentityMappingEnableHint": "Enabling mapping gives each upstream account independent Session-Id and Thread-Id values when switching accounts. This strengthens identifier isolation but may reduce cache reuse across accounts. Existing mappings are still reused within the same account.",
+        "sessionIdentityMappingDisableHint": "Disabling mapping preserves the original client Session-Id and Thread-Id values. Different upstream accounts may share those identifiers, weakening isolation but potentially increasing cache reuse across accounts.",
+        "sessionIdentityMappingCacheNote": "Cache hit rates also depend on upstream rules, account scope and request content. Switching this setting does not guarantee a higher or lower hit rate.",
+        "sessionIdentityMappingSaveNote": "After confirming, save the settings to apply the change.",
         "sessionAffinity": "Session Affinity",
         "sessionAffinityTtl": "Expiration (seconds)",
         "responsesWebsockets": "Responses WebSocket",
