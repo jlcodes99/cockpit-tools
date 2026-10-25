@@ -210,6 +210,34 @@ impl Drop for Handle {
     }
 }
 
+/// 关闭监听 socket 句柄的继承位，避免子进程继承后泄漏出"僵尸端口"。
+///
+/// Windows 上 `CreateProcess` 默认会把可继承句柄复制给子进程；监听 socket 一旦
+/// 被子进程继承，父进程退出后端口便无法释放（netstat 仍显示已退出的父进程 PID），
+/// 之后任何重新绑定都会失败并报 `os error 10048`。
+#[cfg(target_os = "windows")]
+fn clear_listener_handle_inheritance(listener: &TcpListener) {
+    use std::os::windows::io::AsRawSocket;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn SetHandleInformation(hobject: *mut core::ffi::c_void, dwmask: u32, dwflags: u32) -> i32;
+    }
+    const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
+
+    // SAFETY: `listener` 在本次调用期间持有有效的 socket 句柄；失败时保持原状即可。
+    unsafe {
+        let _ = SetHandleInformation(
+            listener.as_raw_socket() as *mut core::ffi::c_void,
+            HANDLE_FLAG_INHERIT,
+            0,
+        );
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn clear_listener_handle_inheritance(_listener: &TcpListener) {}
+
 pub async fn start(
     addr: SocketAddr,
     host: Arc<dyn Host>,
@@ -240,9 +268,21 @@ pub async fn start(
     )
     .await
     .map_err(|error| error.message)?;
-    let listener = TcpListener::bind(addr)
-        .await
-        .map_err(|error| error.to_string())?;
+    let listener = TcpListener::bind(addr).await.map_err(|error| {
+        // 上层（换端口兜底）按错误文案判断能否重试。Windows 本地化语言下
+        // io::Error 的 Display 会被翻译（中文为「通常每个套接字地址…只允许使用一次」），
+        // 匹配不到 "address already in use" 就永远不会换端口。这里归一化成与 sidecar
+        // 一致的可识别文案。
+        if error.kind() == std::io::ErrorKind::AddrInUse {
+            format!("listen tcp {}: bind: address already in use", addr)
+        } else {
+            error.to_string()
+        }
+    })?;
+    // 监听句柄若带 HANDLE_FLAG_INHERIT，Cockpit 派生的 mihomo.exe 等子进程会继承它；
+    // 父进程退出后端口仍被这个"僵尸"句柄占着（netstat 显示一个已退出的 PID），
+    // 新实例再次绑定就报 os error 10048。这里显式关掉继承位，从源头切断泄漏。
+    clear_listener_handle_inheritance(&listener);
     let addr = listener.local_addr().map_err(|error| error.to_string())?;
     let activity = Arc::new(Activity::default());
     identity.set_session_identity_mapping_enabled(options.session_identity_mapping_enabled);
