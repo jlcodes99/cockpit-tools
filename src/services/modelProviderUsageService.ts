@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { filterMiniMaxModelSuggestions } from '../utils/minimaxModelSuggestions';
 
 export type ModelProviderUsageIntegrationType = 'sub2api' | 'new_api';
 export type ModelProviderUsageMode =
@@ -138,10 +139,11 @@ export async function listModelProviderModels(input: {
   baseUrl: string;
   apiKey: string;
 }): Promise<ModelProviderModelsResult> {
-  return await invoke('codex_list_model_provider_models', {
+  const result = await invoke<ModelProviderModelsResult>('codex_list_model_provider_models', {
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
   });
+  return { ...result, models: filterMiniMaxModelSuggestions(input.baseUrl, result.models) };
 }
 
 export function isModelProviderUsageUnavailableError(error: unknown): boolean {

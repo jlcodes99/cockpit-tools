@@ -437,8 +437,10 @@ fn map_request_body(body: &[u8], config: &GatewayConfig) -> Option<Vec<u8>> {
     }
     let mut value: Value = serde_json::from_slice(body).ok()?;
     let model = value.get("model").and_then(Value::as_str)?.trim();
-    let upstream_model = config.mappings.get(&model.to_ascii_lowercase())?;
-    value["model"] = Value::String(upstream_model.clone());
+    if let Some(upstream_model) = config.mappings.get(&model.to_ascii_lowercase()) {
+        value["model"] = Value::String(upstream_model.clone());
+    }
+    super::minimax_request::normalize_flash_request(&mut value, true);
     serde_json::to_vec(&value).ok()
 }
 
@@ -520,6 +522,85 @@ fn empty_response(status: u16) -> Response<Cursor<Vec<u8>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minimax_desktop_gateway_sends_adaptive_flash_and_preserves_m3_and_legacy() {
+        for region in ["minimax", "minimax_global"] {
+            for model in [
+                "MiniMax-M3.1-Flash",
+                "MiniMax-M3",
+                "MiniMax-M2.7",
+                "custom-model",
+            ] {
+                let upstream = Server::http("127.0.0.1:0").unwrap();
+                let upstream_addr = upstream.server_addr().to_ip().unwrap();
+                let captured = thread::spawn(move || {
+                    let mut request = upstream
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(request.url(), "/anthropic/v1/messages");
+                    assert!(request
+                        .headers()
+                        .iter()
+                        .any(|header| header.field.equiv("authorization")
+                            && header.value.as_str() == "Bearer fixture-upstream"));
+                    let mut body = String::new();
+                    request.as_reader().read_to_string(&mut body).unwrap();
+                    request
+                        .respond(json_response(200, json!({"type":"message","content":[]})))
+                        .unwrap();
+                    serde_json::from_str::<Value>(&body).unwrap()
+                });
+                let config = GatewayConfig {
+                    account_id: region.into(),
+                    upstream_base_url: format!("http://{upstream_addr}/anthropic"),
+                    upstream_api_key: String::from("fixture-upstream"),
+                    upstream_auth_scheme: "bearer".into(),
+                    mappings: BTreeMap::from([("claude-sonnet-4-6".into(), model.into())]),
+                    desktop_models: vec![],
+                    fingerprint: "fixture".into(),
+                };
+                let local = Server::http("127.0.0.1:0").unwrap();
+                let local_addr = local.server_addr().to_ip().unwrap();
+                let handler = thread::spawn(move || {
+                    let request = local.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+                    handle_request(
+                        request,
+                        &Client::builder().no_proxy().build().unwrap(),
+                        &config,
+                        "fixture-local",
+                    );
+                });
+                let messages = json!([
+                    {"role":"assistant","content":[{"type":"thinking","thinking":"prior reasoning","signature":"fixture-signature"},{"type":"tool_use","id":"call_fixture","name":"lookup","input":{}}]},
+                    {"role":"user","content":[{"type":"tool_result","tool_use_id":"call_fixture","content":"fixture result"},{"type":"text","text":"describe"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA=="}}]}
+                ]);
+                let response = Client::builder().no_proxy().build().unwrap()
+                    .post(format!("http://{local_addr}/v1/messages"))
+                    .bearer_auth("fixture-local")
+                    .json(&json!({"model":"claude-sonnet-4-6","messages":messages,"max_tokens":2048,
+                        "thinking":{"type":"disabled"},"output_config":{"effort":"none"},"service_tier":"priority","reasoning_split":false}))
+                    .send().unwrap();
+                assert!(response.status().is_success());
+                let body = captured.join().unwrap();
+                handler.join().unwrap();
+                assert_eq!(body["model"], model);
+                assert_eq!(body["messages"], messages);
+                assert_eq!(body["max_tokens"], 2048);
+                if model == "MiniMax-M3.1-Flash" {
+                    assert_eq!(body["thinking"], json!({"type":"adaptive"}));
+                    assert_eq!(body["output_config"]["effort"], "max");
+                    assert!(body.get("service_tier").is_none());
+                    assert!(body.get("reasoning_split").is_none());
+                } else {
+                    assert_eq!(body["thinking"]["type"], "disabled");
+                    assert_eq!(body["output_config"]["effort"], "none");
+                    assert_eq!(body["service_tier"], "priority");
+                }
+            }
+        }
+    }
 
     #[test]
     fn anthropic_base_url_appends_messages_path() {
