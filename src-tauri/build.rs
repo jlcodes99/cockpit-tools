@@ -59,6 +59,20 @@ fn should_skip_sidecar_build(output: &Path) -> bool {
     std::env::var("COCKPIT_SKIP_CLIPROXY_BUILD").ok().as_deref() == Some("1") && output.exists()
 }
 
+fn is_debug_build() -> bool {
+    std::env::var("PROFILE").ok().as_deref() == Some("debug")
+}
+
+/// The sidecar is a hard release prerequisite, but a dev machine without Go
+/// should still be able to run `tauri dev`. Release builds keep failing loudly.
+fn go_toolchain_available() -> bool {
+    Command::new("go")
+        .arg("version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 fn emit_sidecar_rerun_inputs(path: &Path) {
     if path.file_name().and_then(|name| name.to_str()) == Some("bin") {
         return;
@@ -172,6 +186,25 @@ fn build_cockpit_cliproxy_sidecar() {
     println!("cargo:rerun-if-env-changed=COCKPIT_SKIP_CLIPROXY_BUILD");
     emit_sidecar_rerun_inputs(&sidecar_dir);
     std::fs::create_dir_all(&output_dir).expect("failed to create cockpit-cliproxy bin dir");
+
+    if !go_toolchain_available() {
+        // Debug builds degrade gracefully: Codex local access reports the
+        // sidecar binary as missing instead of blocking the app from starting.
+        // Release builds must never ship without it.
+        if is_debug_build() {
+            eprintln!(
+                "cargo:warning=Go toolchain not found; skipping cockpit-cliproxy sidecar build. \
+                 Install Go (https://go.dev/dl) and rebuild to enable Codex local access."
+            );
+            return;
+        }
+        panic!(
+            "Go toolchain not found; cannot build the cockpit-cliproxy sidecar. \
+             Install Go (https://go.dev/dl), or set COCKPIT_SKIP_CLIPROXY_BUILD=1 and provide \
+             the prebuilt binary at {}.",
+            output_dir.display()
+        );
+    }
 
     if cfg!(target_os = "macos") && target == "universal-apple-darwin" {
         build_macos_universal_sidecar(&sidecar_dir, &output_dir);

@@ -9,6 +9,10 @@ import { assertReactSingleton } from "./scripts/react-singleton";
 // Resolve linked checkouts and Windows SUBST aliases through one physical root.
 const projectRoot = fs.realpathSync.native(path.dirname(fileURLToPath(import.meta.url)));
 const host = process.env.TAURI_DEV_HOST;
+// 1420 sits inside the Windows Hyper-V/WSL excluded TCP range (1332-1431), which
+// makes Vite fail with EACCES on any machine that reserves it. 5173 is Vite's
+// own default and is not reserved.
+const devPort = Number(process.env.VITE_DEV_PORT || 5173);
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
@@ -68,14 +72,14 @@ export default defineConfig(async () => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
-    port: 1420,
+    port: devPort,
     strictPort: true,
     host: host || false,
     hmr: host
       ? {
           protocol: "ws",
           host,
-          port: 1421,
+          port: devPort + 1,
         }
       : undefined,
     watch: {

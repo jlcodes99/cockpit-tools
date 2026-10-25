@@ -467,7 +467,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
     };
 
     modules::logger::log_info(&format!(
-        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, qoder={}, zcode={}, trae={}, auto_switch={}",
+        "[StartupPerf][SystemCommand] get_general_config completed in {}ms: auto_refresh={}, codex={}, zed={}, ghcp={}, windsurf={}, kiro={}, cursor={}, codebuddy={}, codebuddy_cn={}, workbuddy={}, minimax_code={}, qoder={}, zcode={}, trae={}, auto_switch={}",
         started.elapsed().as_millis(),
         result.auto_refresh_minutes,
         result.codex_auto_refresh_minutes,
@@ -479,6 +479,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         result.codebuddy_auto_refresh_minutes,
         result.codebuddy_cn_auto_refresh_minutes,
         result.workbuddy_auto_refresh_minutes,
+        result.minimax_code_auto_refresh_minutes,
         result.qoder_auto_refresh_minutes,
         result.zcode_auto_refresh_minutes,
         result.trae_auto_refresh_minutes,
