@@ -64,7 +64,7 @@ type ContinuityBindRequest struct {
 	// AccountID is the SDK Auth.ID, never a client-provided account header.
 	AccountID string `json:"account_id"`
 	OwnerID   string `json:"owner_id,omitempty"`
-	// Enabled only by a selected OAuth HTTP transport which cannot resolve previous IDs.
+	// Enabled for OAuth HTTP or a compatible HTTP route with verified local history.
 	ExpandHTTPPrevious bool            `json:"expand_http_previous,omitempty"`
 	Headers            http.Header     `json:"headers"`
 	Body               json.RawMessage `json:"body"`
@@ -152,6 +152,13 @@ func continuityPlanFrom(ctx context.Context) *continuityPlan {
 }
 
 func ContinuityActive(ctx context.Context) bool { return continuityPlanFrom(ctx) != nil }
+
+// ContinuityCanRebuild reports the worker's verified complete-history plan.
+// It must not be inferred from the presence of a previous response ID alone.
+func ContinuityCanRebuild(ctx context.Context) bool {
+	plan := continuityPlanFrom(ctx)
+	return plan != nil && plan.prepared.SelfContained && !plan.compact
+}
 
 // FinishUnboundContinuity releases a reservation when selection, credential
 // preparation or request validation failed before any upstream binding existed.

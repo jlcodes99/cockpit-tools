@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,9 +10,64 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	"github.com/tidwall/gjson"
 )
+
+func TestRelaySelectionErrorsKeepTheirCodeAcrossJSONAndSSE(t *testing.T) {
+	for _, code := range []string{"auth_not_found", "auth_unavailable"} {
+		for _, format := range []string{"json", "responses", "chat"} {
+			t.Run(code+"/"+format, func(t *testing.T) {
+				err := fmt.Errorf("selection: %w", &coreauth.Error{
+					Code: code, Message: "No eligible account; Authorization=Bearer private-token",
+					HTTPStatus: http.StatusServiceUnavailable,
+				})
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+				switch format {
+				case "responses":
+					writeStreamTerminalErrorForFormat(c, err, sdktranslator.FormatOpenAIResponse)
+				case "chat":
+					writeStreamTerminalErrorForFormat(c, err, sdktranslator.FormatOpenAI)
+				default:
+					(&relayServer{}).writeExecutorError(c, err)
+				}
+				body := w.Body.String()
+				if format != "json" {
+					body = strings.TrimSpace(strings.SplitN(body, "data: ", 2)[1])
+				}
+				path := "error"
+				if format == "responses" {
+					path = "response.error"
+				}
+				if gjson.Get(body, path+".code").String() != code || strings.Contains(body, "private-token") {
+					t.Fatalf("selection cause lost or credential leaked: %s", body)
+				}
+				if format == "json" && w.Code != http.StatusServiceUnavailable {
+					t.Fatalf("selection status changed: %d", w.Code)
+				}
+			})
+		}
+	}
+}
+
+func TestSelectionFailuresAreNotClassifiedAsUpstreamFailures(t *testing.T) {
+	for _, body := range []string{
+		`{"error":{"code":"auth_not_found","message":"no eligible account"}}`,
+		`{"response":{"error":{"code":"auth_unavailable","message":"no eligible account"}}}`,
+		"Error #01: auth_not_found: no eligible account",
+		"auth_unavailable: no eligible account",
+	} {
+		if got := errorCategory(http.StatusServiceUnavailable, body, false); got != "no_available_account" {
+			t.Fatalf("selection failure classified as %q: %s", got, body)
+		}
+	}
+	if got := errorCategory(http.StatusServiceUnavailable, errors.New("upstream is unavailable").Error(), false); got != "upstream_error" {
+		t.Fatalf("unrelated upstream failure changed category: %s", got)
+	}
+}
 
 func TestRelayExecutorErrorsPreserveStructuredCauseWithoutJSONMessage(t *testing.T) {
 	for _, tc := range []struct {

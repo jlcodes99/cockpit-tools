@@ -109,9 +109,9 @@ function runPublishJob(overrides = {}) {
   const scripts = [...publish.matchAll(/        run: \|\r?\n((?:          .*\r?\n|\r?\n)+)/g)]
     .map((match) => match[1].replace(/^          /gm, "").replace(/\r/g, ""));
   assert.equal(scripts.length, 2, "expected publication and verification shell steps");
-  const bash = process.platform === "win32"
+  const bash = process.env.GIT_BASH_PATH || (process.platform === "win32"
     ? path.join(process.env.ProgramFiles, "Git", "bin", "bash.exe")
-    : "bash";
+    : "bash");
   const result = spawnSync(bash, ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", `
     gh() {
       case "$1 $2" in

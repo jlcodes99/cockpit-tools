@@ -32,6 +32,7 @@ import (
 type relayServer struct {
 	automaticSelector     coreauth.Selector
 	automaticSelectorOnce sync.Once
+	priorities            *apiKeyPriorityStateStore
 	runtime               executorRuntime
 	cfg                   *config.Config
 	manifest              *manifest

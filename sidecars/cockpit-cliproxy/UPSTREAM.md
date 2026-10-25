@@ -5,6 +5,24 @@ The bundled source under `third_party/CLIProxyAPI` is synchronized to the
 sidecar module declares the same upstream version and continues to use the local
 `replace` target.
 
+## Account selection and HTTP continuation
+
+Custom routing ranks native and provider accounts together while preserving
+API-key scope, preferred/backup tiers and committed-stream replay protection.
+Portable history may follow current priorities; protected continuations retain
+their required owner. Disabled SDK auth snapshots cannot satisfy that owner.
+
+`ContinuityCanRebuild` exposes the worker's verified complete-history plan.
+Compatible API-key HTTP Responses transports may expand a previous response ID
+only with that plan. Official OpenAI, WebSocket, compact and unknown history
+retain their existing behavior. Keep the SDK HTTP continuation tests on upstream
+sync.
+
+HTTP pool diagnostics publish final selection/admission failures separately from
+transient routing attempts. TLS errors and cancellations must retain their actual
+cause; service pause and quota admission keep their own codes. Successful requests
+also clear the mixed-provider pool route without changing account health.
+
 ## Codex host-result continuation — 2026-10-19
 
 Keep `NormalizeResponsesCallIDs` aligned with the native

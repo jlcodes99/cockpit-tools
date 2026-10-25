@@ -20,7 +20,7 @@ test('builds a portable archive with the executable, resources and loader DLL', 
     collectPortableFiles({
       releaseDir,
       executablePath: path.join(releaseDir, 'cockpit_tools.exe'),
-    }).map((file) => file.archivePath),
+    }).map((file) => file.archivePath.split(path.sep).join('/')),
     ['cockpit_tools.exe', 'resources/scripts/helper.cjs', 'resources/sidecar.exe', 'WebView2Loader.dll'],
   );
 

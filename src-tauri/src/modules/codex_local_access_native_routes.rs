@@ -1238,7 +1238,7 @@ async fn native_select_route_once(
         request.target_account_id.as_deref(),
     );
     native_sort_accounts_scoped(host, &mut accounts, &collection, key, &routing_namespace);
-    if plan.automatic {
+    if plan.automatic && collection.routing_strategy != CodexLocalAccessRoutingStrategy::Custom {
         // The old automatic gateway exhausts native candidates before provider routes.
         // Preserve the configured selection order within each group.
         accounts.sort_by_key(|account| {

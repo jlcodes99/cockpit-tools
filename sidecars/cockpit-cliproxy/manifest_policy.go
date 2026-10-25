@@ -1357,6 +1357,9 @@ func (p *requestPolicy) middleware() gin.HandlerFunc {
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), requestStartedAtContextKey, startedAt.UnixMilli()))
 		requestID := ensureRequestID(c)
 		c.Request = c.Request.WithContext(cliproxyexecutor.WithUpstreamSendGuard(c.Request.Context(), p.beforeUpstreamSend))
+		if diagnosticTransport(c.Request) != "websocket" {
+			c.Request = c.Request.WithContext(withRequestPoolDiagnostics(c.Request.Context(), requestID))
+		}
 		diagnostics := p.beginRequestDiagnostics(c, requestID, startedAt)
 		spec := p.lookupAPIKey(c.Request)
 		if p.serviceTierDefault != nil && spec != nil && spec.ProviderGateway == nil {
@@ -1573,6 +1576,12 @@ func (p *requestPolicy) emitRequestCompleted(c *gin.Context, requestID string, s
 		return
 	}
 	status, completionError := requestCompletionStatus(c, requestID, p.tracker)
+	poolError := completionError
+	if last := c.Errors.Last(); last != nil && status != clientClosedRequestStatus {
+		// Earlier routing tiers can have failed before the terminal attempt.
+		poolError = last.Err.Error()
+	}
+	finishRequestPoolDiagnostics(c.Request.Context(), p.emitter, status, poolError)
 	latencyMS := time.Since(startedAt).Milliseconds()
 	completedAtMS := time.Now().UnixMilli()
 	p.emitter.emit(requestDiagnosticPayload{
@@ -1620,6 +1629,13 @@ func (p *requestPolicy) emitRequestCompleted(c *gin.Context, requestID string, s
 		errorMessage:        strings.TrimSpace(completionError),
 		suppressOutputSpeed: c.Request.Context().Err() != nil,
 	}); ok {
+		if payload.Success && (payload.outputComplete || payload.AuthID != "") {
+			emitRequestPoolRecovery(c.Request.Context(), p.emitter, requestDiagnosticPayload{
+				Type: "auth_result", RequestID: requestID, StartedAtMS: startedAt.UnixMilli(),
+				APIKeyID: stringFromAPIKey(spec, "id"), APIKeyLabel: stringFromAPIKey(spec, "label"),
+				Model: model, RequestKind: requestKind, Provider: "mixed",
+			})
+		}
 		p.tokenLimiter.addUsage(spec, effectiveUsageTotalTokens(payload.Usage))
 		p.emitter.emit(payload)
 	}
