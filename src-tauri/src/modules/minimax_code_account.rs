@@ -698,6 +698,21 @@ pub fn upsert_account(payload: MinimaxCodeOAuthCompletePayload) -> Result<Minima
     Ok(account)
 }
 
+/// Whether the credentials in the client's `auth.json` are fresher than ours.
+///
+/// MiniMax rotates refresh tokens on every use, so adopting the file's
+/// credentials when ours are newer resurrects a refresh token we already spent.
+/// The next refresh then fails with `invalid_grant` and we are left holding the
+/// stale access token the file had, which the server has since invalidated — the
+/// account "loses validity after one refresh".
+fn file_credentials_are_fresh(file_expires_at: Option<i64>, account_expires_at: Option<i64>) -> bool {
+    match (file_expires_at, account_expires_at) {
+        (Some(file), Some(current)) => file >= current,
+        // No basis for comparison: the file is the only signal we have.
+        _ => true,
+    }
+}
+
 async fn refresh_account_token_once(account_id: &str) -> Result<MinimaxCodeAccount, String> {
     let started_at = Instant::now();
     let mut account = load_account(account_id).ok_or_else(|| "账号不存在".to_string())?;
@@ -714,34 +729,45 @@ async fn refresh_account_token_once(account_id: &str) -> Result<MinimaxCodeAccou
     // (a) MiniMax access tokens are short-lived (~1h) and the official client
     // renews them in the local auth.json. Re-read that file first so we always
     // use the freshest access token before attempting a refresh.
+    //
+    // Only adopt the file's credentials when they are at least as fresh as ours.
+    // MiniMax rotates refresh tokens on every use, so copying the file back
+    // unconditionally resurrects a refresh token we already spent — the next
+    // refresh then fails with `invalid_grant` and we are left holding the stale
+    // access token the file had, which the server has since invalidated (401 on
+    // every quota query, i.e. the account "loses validity after one refresh").
     if let Some(auth_file) = account.auth_file.clone() {
         if let Some((_id, _region, rec, _path)) = read_minimax_code_auth_file(Path::new(&auth_file)) {
-            if let Some(access) = rec
-                .get("accessToken")
-                .and_then(|v| v.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-            {
-                account.access_token = access.to_string();
-            }
-            if let Some(refresh) = rec
-                .get("refreshToken")
-                .and_then(|v| v.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-            {
-                account.refresh_token = Some(refresh.to_string());
-            }
-            if let Some(token_type) = rec
-                .get("tokenType")
-                .and_then(|v| v.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-            {
-                account.token_type = Some(token_type.to_string());
-            }
-            if let Some(expires_at) = rec.get("expiresAtMs").and_then(|v| v.as_i64()) {
-                account.expires_at = Some(expires_at);
+            let file_expires_at = rec.get("expiresAtMs").and_then(|v| v.as_i64());
+            let file_is_fresh = file_credentials_are_fresh(file_expires_at, account.expires_at);
+            if file_is_fresh {
+                if let Some(access) = rec
+                    .get("accessToken")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    account.access_token = access.to_string();
+                }
+                if let Some(refresh) = rec
+                    .get("refreshToken")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    account.refresh_token = Some(refresh.to_string());
+                }
+                if let Some(token_type) = rec
+                    .get("tokenType")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    account.token_type = Some(token_type.to_string());
+                }
+                if let Some(expires_at) = file_expires_at {
+                    account.expires_at = Some(expires_at);
+                }
             }
         }
     }
@@ -1723,6 +1749,30 @@ pub fn switch_and_launch(account: &MinimaxCodeAccount) -> Result<PathBuf, String
         .spawn()
         .map_err(|e| format!("启动 MiniMax Code 失败: {e}"))?;
     Ok(exe)
+}
+
+#[cfg(test)]
+mod minimax_code_refresh_freshness_tests {
+    use super::file_credentials_are_fresh;
+
+    #[test]
+    fn adopts_client_credentials_only_when_they_are_fresher() {
+        // The client renewed and wrote a later expiry -> adopt.
+        assert!(file_credentials_are_fresh(Some(2_000), Some(1_000)));
+        // Same expiry -> adopt (a renewal on the client overwrote the file).
+        assert!(file_credentials_are_fresh(Some(1_000), Some(1_000)));
+        // Ours are newer: we already refreshed past what the file holds, so the
+        // file's refresh token is spent and its access token is stale.
+        // Regression: adopting here caused a 401 after one refresh.
+        assert!(!file_credentials_are_fresh(Some(1_000), Some(2_000)));
+    }
+
+    #[test]
+    fn adopts_when_either_side_has_no_expiry() {
+        assert!(file_credentials_are_fresh(Some(2_000), None));
+        assert!(file_credentials_are_fresh(None, Some(2_000)));
+        assert!(file_credentials_are_fresh(None, None));
+    }
 }
 
 #[cfg(test)]

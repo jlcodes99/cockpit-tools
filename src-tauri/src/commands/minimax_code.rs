@@ -78,8 +78,50 @@ pub async fn import_minimax_code_from_local(app: tauri::AppHandle) -> Result<Vec
     let payloads = tauri::async_runtime::spawn_blocking(minimax_code_account::import_payload_from_local)
         .await
         .map_err(|e| format!("MiniMax Code 本机导入后台任务失败: {e}"))??;
+
+    // The client's auth.json carries credentials but no identity, so the payload
+    // used to be named after the record-key digest ("MiniMax Code 本机账号
+    // (grC2d5…)"). Probe user/info for the real name, and take the quota while we
+    // are online so the card is populated on the first render.
+    let client = minimax_code_oauth::build_client()?;
+    let mut enriched = Vec::with_capacity(payloads.len());
+    for mut payload in payloads {
+        let region = payload.region.clone().unwrap_or_else(|| "cn".to_string());
+        match minimax_code_oauth::fetch_user_info(&client, &payload.access_token, &region).await {
+            Ok((uid, nickname, email)) => {
+                if uid.is_some() {
+                    payload.uid = uid;
+                }
+                payload.nickname = nickname;
+                if !email.trim().is_empty() {
+                    payload.email = email;
+                }
+                // No email on this endpoint: fall back to the username.
+                if let Some(nickname) = payload
+                    .nickname
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    payload.email = nickname.to_string();
+                }
+            }
+            Err(err) => {
+                logger::log_warn(&format!(
+                    "[MiniMax Code Import] 本机导入时探测账号身份失败，沿用本地记录:{}",
+                    err
+                ));
+            }
+        }
+        payload.quota_raw =
+            minimax_code_oauth::fetch_credit_details(&client, &payload.access_token, &region)
+                .await
+                .ok();
+        enriched.push(payload);
+    }
+
     let mut accounts = Vec::new();
-    for payload in payloads {
+    for payload in enriched {
         accounts.push(minimax_code_account::upsert_account(payload)?);
     }
     let _ = crate::modules::tray::update_tray_menu(&app);
