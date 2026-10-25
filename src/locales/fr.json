@@ -158,6 +158,15 @@
     "providerClear": "Effacer la sélection"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "ce service en amont",
+      "proxyConnection": "Échec de connexion à {{target}} via le proxy « {{proxy}} ». Le proxy ou le réseau peut être en cause. Vérifiez le proxy ou essayez un autre nœud.",
+      "proxyTimeout": "Délai de connexion à {{target}} dépassé via le proxy « {{proxy}} ». Le proxy ou le réseau peut être en cause. Vérifiez le proxy ou essayez un autre nœud.",
+      "proxyAuth": "Échec d’authentification du proxy « {{proxy}} ». Vérifiez son nom d’utilisateur ou son mot de passe.",
+      "localProxyUnavailable": "Impossible de joindre le proxy local « {{proxy}} ». Vérifiez que le service proxy fonctionne.",
+      "directConnection": "Échec de connexion à {{target}}. Vérifiez le réseau et réessayez.",
+      "directTimeout": "Délai de connexion à {{target}} dépassé. Vérifiez le réseau et réessayez."
+    },
     "codexUsage": {
       "title": "Quota et utilisation",
       "session": "Discussion actuelle",
@@ -3482,6 +3491,7 @@
         "expand": "Développer",
         "collapse": "Réduire",
         "repairVisibility": "Réparer la visibilité",
+        "repairIndex": "Réparer l’index des chats",
         "restoreSessions": "Restaurer les sessions",
         "exportSessions": "Exporter les sessions",
         "importSessions": "Importer des sessions",
@@ -3514,6 +3524,10 @@
         "clear": "Effacer"
       },
       "messages": {
+        "deleteNotConfirmed": "Le client n’a pas confirmé la suppression. Le nettoyage local a été arrêté et les sauvegardes ont été conservées : {{error}}",
+        "historyReadFailed": "Impossible de lire l’historique de discussion de façon sûre : {{error}}",
+        "restoreIndexRetry": "Le fichier de discussion est conservé, mais la mise à jour de la liste a échoué. L’original reste dans la corbeille. Corrigez le problème et réessayez : {{error}}",
+        "importIndexRetry": "Les fichiers ont été importés, mais la mise à jour de la liste a échoué. Les fichiers et le paquet d’importation sont conservés. Corrigez le problème et réessayez : {{error}}",
         "pickOne": "Veuillez sélectionner au moins une session",
         "syncNeedTwo": "Au moins deux instances sont nécessaires pour synchroniser les sessions",
         "pickRestoreOne": "Veuillez sélectionner au moins une session à restaurer",
@@ -3624,7 +3638,18 @@
         "title": "Réparer l’historique",
         "description": "Normalise les fournisseurs dans les index SQLite, le catalogue des sessions et les espaces de travail. Les fichiers rollout restent identiques octet par octet ; seuls leurs horodatages sont corrigés. Une sauvegarde locale est créée auparavant.",
         "stopInstanceHint": "Quittez complètement l’instance Codex App/ChatGPT sélectionnée avant la réparation complète. Vous pouvez toujours prévisualiser les changements.",
-        "encryptedContentWarning": "Un historique chiffré par un autre fournisseur ou compte a été détecté. Les métadonnées peuvent être migrées, mais la poursuite ou la compression de ces sessions peut échouer ; revenez au fournisseur/compte d’origine ou démarrez une nouvelle session."
+        "encryptedContentWarning": "Un historique chiffré par un autre fournisseur ou compte a été détecté. Les métadonnées peuvent être migrées, mais la poursuite ou la compression de ces sessions peut échouer ; revenez au fournisseur/compte d’origine ou démarrez une nouvelle session.",
+        "modeHistory": "Édition/branches",
+        "modeHistoryDesc": "Corrige les échecs de modification des messages et de création de branches dus à des index invalides.",
+        "historyStopHint": "Quittez complètement le client choisi et les CLI utilisant cette instance avant la réparation. L’aperçu reste disponible.",
+        "historyDescription": "Vérifier les discussions choisies et leur historique parent, puis réinitialiser uniquement les index paginés invalides. Les messages, comptes et Provider restent inchangés. Fermez le client cible et les CLI associés avant de lancer.",
+        "historyPreview": "{{count}} index d’historique invalides peuvent être reconstruits. Les messages restent inchangés.",
+        "historySuccess": "{{count}} index d’historique invalides ont été réinitialisés. Rouvrez le client et les discussions pour les reconstruire. Les sauvegardes sont conservées.",
+        "historyNoChanges": "Aucun index d’historique invalide pouvant être reconstruit en toute sécurité n’a été trouvé.",
+        "historyFailed": "La réparation des index d’historique n’a pas abouti : {{error}}",
+        "historyRunning": "Quittez complètement le client cible et les CLI utilisant cette instance, puis réessayez.",
+        "historyScan": "Vérification des index d’historique ({{current}}/{{total}})…",
+        "historyReset": "Sauvegarde et réinitialisation des index invalides…"
       },
       "importModal": {
         "title": "Importer des sessions",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "Options de routage",
+        "sessionIdentityMapping": "Mappage des ID",
+        "sessionIdentityMappingEnableHint": "Lorsque le mappage est activé, chaque compte en amont utilise ses propres Session-Id et Thread-Id lors des changements de compte. Cela renforce la séparation des identifiants, mais peut réduire la réutilisation du cache entre comptes. Les correspondances existantes restent réutilisées au sein du même compte.",
+        "sessionIdentityMappingDisableHint": "Lorsque le mappage est désactivé, les Session-Id et Thread-Id du client sont conservés. Différents comptes en amont peuvent partager ces identifiants, ce qui réduit leur séparation mais peut favoriser la réutilisation du cache entre comptes.",
+        "sessionIdentityMappingCacheNote": "Le taux de succès du cache dépend aussi des règles du fournisseur, du périmètre des comptes et du contenu des requêtes. Ce réglage ne garantit ni hausse ni baisse de ce taux.",
+        "sessionIdentityMappingSaveNote": "Après confirmation, enregistrez les paramètres pour appliquer la modification.",
         "sessionAffinity": "Affinité session",
         "sessionAffinityTtl": "Expiration (secondes)",
         "responsesWebsockets": "Responses via WebSocket",

@@ -11,7 +11,7 @@ import { deferred, settlePromises } from "../../../tests/helpers/reactHookHarnes
 const source = ts.createSourceFile("CodexLaunchPreviewModal.tsx", readFileSync(
   new URL("./CodexLaunchPreviewModal.tsx", import.meta.url), "utf8",
 ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const names = ["requestClose", "persistDraft", "handleExecute", "handleInstanceChange", "applyContextConfig", "openModelConfig", "closeModelConfig", "reloadContextConfig", "closeContextConfig"];
+const names = ["requestClose", "persistDraft", "handleExecute", "handleAuxiliaryAction", "handleInstanceChange", "applyContextConfig", "openModelConfig", "closeModelConfig", "reloadContextConfig", "closeContextConfig"];
 const callbacks: string[] = [];
 let configReadSetup = '';
 const closeButtons: (string | undefined)[] = [];
@@ -93,6 +93,63 @@ function harness(routing = false, overlay = "global-progress-overlay") {
     completeWrite(context: boolean) { write.resolve(routing && !context ? { quickConfig: saved, instance: savedInstance } : saved); },
   };
 }
+
+test('CLI action saves the preview before opening the CLI dialog and closes the preview afterwards', async () => {
+  const h = harness();
+  let options: unknown;
+  h.c.onClose = () => h.events.push('preview-close');
+  const pending = h.c.handlers.handleAuxiliaryAction({ id: 'cli', onAction: (value: unknown) => {
+    options = value;
+    h.events.push('cli-open');
+  } });
+  assert.equal(h.events.includes('cli-open'), false);
+  h.read.resolve({}); await settlePromises();
+  assert.equal(h.events.includes('quick-write'), true);
+  assert.equal(h.events.includes('cli-open'), false);
+  h.completeWrite(false); await pending;
+  assert.equal(JSON.stringify(options), '{}');
+  assert.ok(h.events.indexOf('cli-open') > h.events.indexOf('quick-write'));
+  assert.ok(h.events.indexOf('preview-close') > h.events.indexOf('cli-open'));
+  assert.equal(h.events.includes('launch'), false, 'CLI must not invoke the desktop switch/start action');
+});
+
+test('CLI action failures stay inside the open preview and permit retry', async () => {
+  const h = harness(); h.c.dirty = false;
+  let error: string | null = 'old failure';
+  let closed = false;
+  let attempts = 0;
+  h.c.setError = (value: string | null) => { error = value; };
+  h.c.onClose = () => { closed = true; };
+  const action = { id: 'cli', onAction: () => {
+    assert.equal(error, null);
+    if (++attempts === 1) throw new Error('CLI preparation failed');
+  } };
+  await h.c.handlers.handleAuxiliaryAction(action);
+  assert.equal(error, 'CLI preparation failed');
+  assert.equal(closed, false);
+  await h.c.handlers.handleAuxiliaryAction(action);
+  assert.equal(attempts, 2);
+  assert.equal(error, null);
+  assert.equal(closed, true);
+});
+
+test('CLI action cannot bypass configuration loading or a failed save', async () => {
+  for (const blocked of ['loading', 'save-failure']) {
+    const h = harness();
+    let opened = false;
+    let closed = false;
+    h.c.onClose = () => { closed = true; };
+    h.c.configBusy = blocked === 'loading';
+    const pending = h.c.handlers.handleAuxiliaryAction({ id: 'cli', onAction: () => { opened = true; } });
+    if (blocked === 'save-failure') {
+      h.read.resolve({}); await settlePromises();
+      h.write.reject(new Error('disk full'));
+    }
+    await pending;
+    assert.equal(opened, false);
+    assert.equal(closed, false);
+  }
+});
 
 test('context conflict refuses a write and can reload even while configBusy', async () => {
   const h = harness();

@@ -305,7 +305,9 @@ pub(super) fn may_publish_affinity(
     generation: Option<&Generation>,
 ) -> Result<bool, ServiceError> {
     let Some(generation) = generation else {
-        return Ok(true);
+        // Binding an unverified continuation is not proof that its upstream
+        // accepted it. An unsent candidate must not leave a new routing pin.
+        return Ok(!context.requires_forwarding_account_pin());
     };
     if generation.activate {
         return Ok(false);
@@ -672,7 +674,13 @@ impl IdentityStore {
         let mut probe_headers = headers.clone();
         let mut probe = body.clone();
         supplement_identities(context, &mut probe_headers, &mut probe)?;
-        *context = self.inspect_for_rebuild(&context.caller, &probe_headers, &probe)?;
+        let mapping_enabled = context.session_identity_mapping_enabled;
+        *context = if context.forwarding {
+            self.inspect_for_forwarding(&context.caller, &probe_headers, &probe, true)?
+        } else {
+            self.inspect_for_rebuild(&context.caller, &probe_headers, &probe)?
+        };
+        context.session_identity_mapping_enabled = mapping_enabled;
         Ok(true)
     }
 
@@ -737,6 +745,7 @@ impl IdentityStore {
         // Revalidate the real request, including parameter inheritance and all
         // cached tool/cipher evidence, instead of trusting a planning preview.
         let mut expanded = self.inspect_for_rebuild(&context.caller, headers, &candidate)?;
+        expanded.session_identity_mapping_enabled = context.session_identity_mapping_enabled;
         let plan = self
             .configure_rebuild(&mut expanded, headers, &candidate, true)?
             .ok_or_else(incomplete)?;
@@ -817,6 +826,11 @@ impl IdentityStore {
         )?;
         let mut origin: Option<String> = context.state_account_id.clone();
         for reference in &context.opaque {
+            // History blobs are sent for the upstream to judge. They do not
+            // prove ownership of a server resource or authorize replay.
+            if context.forwarding && reference.kind == "encrypted" {
+                continue;
+            }
             if automatic_history::is_unregistered(context, reference) {
                 return Err(automatic_history::incomplete());
             }
@@ -831,13 +845,19 @@ impl IdentityStore {
             {
                 continue;
             }
-            let (account, _) = validate_opaque(
+            let found = automatic_history::lookup(
                 &connection,
                 &context.caller,
                 reference,
                 context.thread_id.as_deref(),
                 context.turn_id.as_deref(),
             )?;
+            let Some((account, _)) = found else {
+                if context.forwarding {
+                    continue;
+                }
+                return Err(unknown_state());
+            };
             if reference.kind == "encrypted" {
                 if let Some(scope) = &accepted {
                     if blob_accepted(
@@ -1199,12 +1219,17 @@ impl IdentityStore {
 }
 
 impl RequestIdentity {
+    pub(crate) fn requires_forwarding_account_pin(&self) -> bool {
+        self.forwarding && !self.opaque.is_empty()
+    }
+
     pub(crate) fn start_rebuild_generation(&mut self, plan: &Plan) {
         self.rebuild_base_revision = Some(plan.base_revision);
         self.rebuild_new_generation = true;
         self.generation = None;
     }
     pub(crate) fn retain_binding_generation(&mut self, binding: &Binding) {
+        self.session_identity_mapping_enabled = binding.session_identity_mapping_enabled;
         if let Some(generation) = &binding.generation {
             self.generation = Some(generation.id.clone());
         }

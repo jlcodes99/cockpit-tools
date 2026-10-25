@@ -152,7 +152,7 @@ export interface CodexLaunchPreviewAction {
   meta?: ReactNode;
   disabled?: boolean;
   tone?: "default" | "danger";
-  onAction?: () => void | Promise<void>;
+  onAction?: (launchOptions?: CodexLaunchPreviewLaunchOptions) => void | Promise<void>;
 }
 
 /** 启动预览里选好的启动配置，确认时交给调用方落盘。 */
@@ -259,6 +259,7 @@ export function CodexLaunchPreviewModal({
   const [runningActionId, setRunningActionId] = useState<string | null>(null);
   const [executing, setExecuting] = useState<"switch" | "launch" | null>(null);
   const [repairOpen, setRepairOpen] = useState(false);
+  const [repairKind, setRepairKind] = useState<"visibility" | "history">("visibility");
   const [modelConfigOpen, setModelConfigOpen] = useState(false);
   const [contextConfigOpen, setContextConfigOpen] = useState(false);
   const [forceRefreshing, setForceRefreshing] = useState(false);
@@ -904,7 +905,7 @@ export function CodexLaunchPreviewModal({
   }, [persistDraft, routingEnabled]);
 
   const handleExecute = useCallback(
-    async (launchAfterSwitch: boolean) => {
+    async (launchAfterSwitch: boolean, cliAction?: CodexLaunchPreviewAction) => {
       if (configBusy) return;
       if (account && isDeepSeekAccount(account) && imageGenEnabled && !imageModelConfig.loaded && imageGenAccountIds.length > 0) {
         setError(t("codex.localAccess.imageAccounts.loadFailed"));
@@ -939,7 +940,13 @@ export function CodexLaunchPreviewModal({
                   : {},
               }
             : undefined;
-        await onExecute(launchAfterSwitch, launchOptions);
+        if (cliAction?.onAction) {
+          // CLI 入口复用配置校验与保存，随后直接进入 CLI 弹框。
+          await cliAction.onAction(launchOptions ?? {});
+          onClose();
+        } else {
+          await onExecute(launchAfterSwitch, launchOptions);
+        }
       } catch (executeError) {
         const message = String(executeError).replace(/^Error:\s*/, "");
         setError(message.startsWith("codex.localAccess.") ? t(message) : message);
@@ -960,6 +967,7 @@ export function CodexLaunchPreviewModal({
       account,
       t,
       imageGenEnabled,
+      onClose,
       onExecute,
       persistDraft,
       setError,
@@ -1453,6 +1461,10 @@ export function CodexLaunchPreviewModal({
   const handleAuxiliaryAction = useCallback(
     async (action: CodexLaunchPreviewAction) => {
       if (busy || action.disabled || !action.onAction) return;
+      if (action.id === "cli") {
+        await handleExecute(true, action);
+        return;
+      }
       setRunningActionId(action.id);
       setNotice(null);
       setError(null);
@@ -1464,7 +1476,7 @@ export function CodexLaunchPreviewModal({
         setRunningActionId(null);
       }
     },
-    [busy, setError],
+    [busy, handleExecute, setError],
   );
 
   const handleForceRefresh = useCallback(async () => {
@@ -1548,7 +1560,7 @@ export function CodexLaunchPreviewModal({
             action.tone === "danger" ? "is-danger" : ""
           }`}
           onClick={() => void handleAuxiliaryAction(action)}
-          disabled={busy || action.disabled || !action.onAction}
+          disabled={busy || (action.id === "cli" && configBusy) || action.disabled || !action.onAction}
         >
           {runningActionId === action.id
             ? t("common.loading", "加载中...")
@@ -2286,13 +2298,38 @@ export function CodexLaunchPreviewModal({
                 <button
                   type="button"
                   className="btn btn-outline btn-sm codex-launch-preview-tool-action"
-                  onClick={(event) => { rememberChildTrigger(event); setRepairOpen(true); }}
+                  onClick={(event) => {
+                    rememberChildTrigger(event);
+                    setRepairKind("visibility");
+                    setRepairOpen(true);
+                  }}
                   disabled={busy}
                 >
                   {t(
                     "codex.sessionManager.actions.repairVisibility",
                     "修复可见性",
                   )}
+                </button>
+              </section>
+              <section className="codex-launch-preview-tool-row">
+                <div className="codex-launch-preview-tool-icon">
+                  <Wrench size={16} />
+                </div>
+                <div className="codex-launch-preview-tool-copy">
+                  <h3>{t("codex.sessionManager.actions.repairIndex")}</h3>
+                  <p>{t("codex.sessionManager.repairModal.modeHistoryDesc")}</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm codex-launch-preview-tool-action"
+                  onClick={(event) => {
+                    rememberChildTrigger(event);
+                    setRepairKind("history");
+                    setRepairOpen(true);
+                  }}
+                  disabled={busy}
+                >
+                  {t("codex.sessionManager.actions.repairIndex")}
                 </button>
               </section>
             </div>
@@ -2632,9 +2669,12 @@ export function CodexLaunchPreviewModal({
 
       <CodexSessionVisibilityRepairModal
         open={repairOpen}
+        repairKind={repairKind}
         onClose={() => setRepairOpen(false)}
-        onRepaired={() => {
-          setNotice(t("codex.launchPreview.repairCompleted"));
+        onRepaired={(summary) => {
+          setNotice(repairKind === "history"
+            ? summary.message
+            : t("codex.launchPreview.repairCompleted"));
         }}
       />
 

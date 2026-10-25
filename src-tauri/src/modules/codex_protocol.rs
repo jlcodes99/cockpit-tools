@@ -2547,4 +2547,26 @@ mod tests {
             assert_eq!(model["additional_speed_tiers"].as_array().unwrap().iter().any(|tier| tier == "ultrafast"), expected, "{slug}");
         }
     }
+
+    #[test]
+    fn astra_catalog_keeps_current_native_tools_and_reasoning_update_capabilities() {
+        let response = build_codex_client_models_response(&["gpt-6-astra".into()]);
+        let model = &response["models"][0];
+        assert_eq!(
+            model["experimental_supported_tools"],
+            json!(["send_user_message_async", "clock"])
+        );
+        assert_eq!(model["multi_agent_reasoning_effort"], "xhigh");
+        assert_eq!(model["supports_reasoning_effort_updates"], true);
+        for slug in ["gpt-6-astra", "gpt-6-sol"] {
+            let catalog = build_codex_client_models_response(&[slug.into()]);
+            assert_eq!(catalog["models"][0]["node_repl_auto_review_required"], true);
+        }
+        assert_eq!(model["default_reasoning_level"], "medium");
+        assert!(model["service_tiers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tier| tier["id"] == "ultrafast"));
+    }
 }

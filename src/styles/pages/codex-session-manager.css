@@ -964,6 +964,36 @@
   border-radius: 10px;
 }
 
+/* Counts and disabled state change together; avoid fading layers and layout
+   transitions in the selection toolbar during rapid checkbox updates. */
+.codex-session-manager:not(.codebuddy-session-manager) .is-selection .codex-session-manager__action-button {
+  transition: none;
+}
+
+.codex-session-manager:not(.codebuddy-session-manager) .is-selection .codex-session-manager__action-button:disabled {
+  opacity: 1;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* Both translated toggle labels reserve the same slot without moving adjacent actions. */
+.codex-session-manager__selection-toggle-label {
+  display: grid;
+}
+
+.codex-session-manager__selection-toggle-label > span {
+  grid-area: 1 / 1;
+}
+
+.codex-session-manager__action-count {
+  display: inline-block;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .codex-session-manager:not(.codebuddy-session-manager) .codex-session-manager__action-button.btn-danger:disabled {
   background: var(--bg-secondary);
   border-color: var(--border);

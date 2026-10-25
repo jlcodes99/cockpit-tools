@@ -5,6 +5,7 @@ fn config(path: PathBuf) -> Config {
     Config {
         identity_path: path,
         token: "private-test-token-never-an-upstream-credential".into(),
+        session_identity_mapping_enabled: true,
         owners: HashMap::from([
             ("account-a".into(), "owner-a".into()),
             ("account-b".into(), "owner-b".into()),
@@ -445,6 +446,128 @@ fn bind_restores_client_identity_headers_without_replacing_fresh_transport_crede
     assert!(bound.headers.contains_key("thread-id"));
     assert!(bound.headers.contains_key("session-id"));
     assert_ne!(bound.headers["thread-id"], vec!["root"]);
+}
+
+#[test]
+fn bridge_mapping_policy_defaults_on_and_preserves_explicit_off() {
+    let mut serialized = serde_json::to_value(config(PathBuf::from("identity.sqlite"))).unwrap();
+    serialized
+        .as_object_mut()
+        .unwrap()
+        .remove("session_identity_mapping_enabled");
+    let old: Config = serde_json::from_value(serialized.clone()).unwrap();
+    assert!(old.session_identity_mapping_enabled);
+    serialized["session_identity_mapping_enabled"] = json!(false);
+    let disabled: Config = serde_json::from_value(serialized).unwrap();
+    assert!(!disabled.session_identity_mapping_enabled);
+    assert_eq!(
+        serde_json::to_value(disabled).unwrap()["session_identity_mapping_enabled"],
+        false
+    );
+}
+
+#[test]
+fn disabled_mapping_restores_client_values_and_removes_executor_fallbacks() {
+    for original_headers in [
+        Headers::from([
+            ("session-id".into(), vec!["client-cache-alias".into()]),
+            ("thread-id".into(), vec!["client-header-thread".into()]),
+        ]),
+        Headers::from([("session_id".into(), vec!["client-legacy-session".into()])]),
+        Headers::new(),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("identity.sqlite");
+        let mut disabled = config(path.clone());
+        disabled.session_identity_mapping_enabled = false;
+        let core = Core::open(disabled).unwrap();
+        let mut original = request("unmapped-headers");
+        original.headers = original_headers.clone();
+        let original_body = original.body.clone();
+        let prepared = core.prepare(original).unwrap();
+        let mut bind = binding(&prepared, "attempt", "account-a");
+        bind.headers = Headers::from([
+            (
+                "authorization".into(),
+                vec!["Bearer fresh-credential".into()],
+            ),
+            (
+                "session-id".into(),
+                vec!["executor-generated-session".into()],
+            ),
+            ("session_id".into(), vec!["executor-generated-alias".into()]),
+            ("thread-id".into(), vec!["executor-generated-thread".into()]),
+        ]);
+        let bound = core.bind(bind).unwrap();
+        for name in ["session-id", "session_id", "thread-id"] {
+            assert_eq!(bound.headers.get(name), original_headers.get(name), "{name}");
+        }
+        assert_eq!(
+            bound.headers["authorization"],
+            vec!["Bearer fresh-credential"]
+        );
+        assert_eq!(bound.body, original_body);
+        assert_eq!(count(&path, "native_identity_v1"), 0);
+        let unauthorized = binding(&prepared, "forbidden-account", "account-outside-scope");
+        assert_eq!(
+            core.bind(unauthorized).err().unwrap().code,
+            "continuity_account_scope"
+        );
+    }
+}
+
+#[test]
+fn disabled_mapping_keeps_distinct_header_flat_and_canonical_identities() {
+    for expand_http_previous in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("identity.sqlite");
+        let mut disabled = config(path.clone());
+        disabled.session_identity_mapping_enabled = false;
+        let core = Core::open(disabled).unwrap();
+        let mut original = request("distinct-identities");
+        original.headers = Headers::from([
+            ("session-id".into(), vec!["header-session".into()]),
+            ("thread-id".into(), vec!["header-thread".into()]),
+            ("x-client-request-id".into(), vec!["header-request".into()]),
+            (
+                "x-codex-turn-metadata".into(),
+                vec![json!({"session_id":"header-meta-session","thread_id":"header-meta-thread"}).to_string()],
+            ),
+        ]);
+        original.body["client_metadata"] = json!({
+            "session_id":"flat-session",
+            "thread_id":"flat-thread",
+            "x-codex-turn-metadata":json!({
+                "session_id":"canonical-session",
+                "thread_id":"canonical-thread",
+                "turn_id":"canonical-turn"
+            }).to_string()
+        });
+        original.body["session_id"] = json!("top-session");
+        original.body["thread_id"] = json!("top-thread");
+        original.body["prompt_cache_key"] = json!("client-cache");
+        if expand_http_previous {
+            original.body["input"] = json!("normalize only this HTTP input");
+        }
+        let prepared = core.prepare(original.clone()).unwrap();
+        let mut bind = binding(&prepared, "attempt", "account-a");
+        bind.expand_http_previous = expand_http_previous;
+        bind.body["model"] = json!("upstream-model");
+        bind.headers = Headers::from([(
+            "authorization".into(),
+            vec!["Bearer selected-account".into()],
+        )]);
+        let bound = core.bind(bind).unwrap();
+        for (name, value) in &original.headers {
+            assert_eq!(bound.headers.get(name), Some(value), "{name}");
+        }
+        for name in ["client_metadata", "session_id", "thread_id", "prompt_cache_key"] {
+            assert_eq!(bound.body[name], original.body[name], "{name}");
+        }
+        assert_eq!(bound.body["model"], "upstream-model");
+        assert_eq!(bound.headers["authorization"], vec!["Bearer selected-account"]);
+        assert_eq!(count(&path, "native_identity_v1"), 0);
+    }
 }
 
 #[test]

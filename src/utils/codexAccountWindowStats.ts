@@ -1,19 +1,21 @@
 import { getCodexQuotaWindows, type CodexAccount } from '../types/codex';
 import type { CodexLocalAccessAccountWindowQuery, CodexLocalAccessAccountWindowStats } from '../types/codexLocalAccess';
-import { buildCodexAccountWindowStatQueries, type CodexWindowStats } from './codexWindowStats';
+import { buildCodexAccountWindowStatQueries, CODEX_WINDOW_FALLBACK_MINUTES, type CodexWindowStats } from './codexWindowStats';
 
 type Window = { id: string; resetTime: number | null; windowMinutes: number | null };
 export interface CodexAccountWindowStatsScope {
   key: string;
+  nowSeconds: number;
   accounts: { id: string; windows: Window[] }[];
 }
 export interface CodexAccountWindowStatsSnapshot {
   scope: string | null;
+  sourceScope: CodexAccountWindowStatsScope | null;
   ready: boolean;
   byAccountId: Record<string, { primary?: CodexWindowStats; secondary?: CodexWindowStats }>;
 }
 export const EMPTY_CODEX_ACCOUNT_WINDOW_STATS: CodexAccountWindowStatsSnapshot = {
-  scope: null, ready: false, byAccountId: {},
+  scope: null, sourceScope: null, ready: false, byAccountId: {},
 };
 
 /** Quota percentages, token refreshes and list ordering do not change a usage window. */
@@ -36,7 +38,43 @@ export function buildCodexAccountWindowStatsScope(
     window.id, window.resetTime, window.windowMinutes,
     window.resetTime !== null && window.resetTime <= nowSeconds,
   ])]));
-  return { key, accounts: members };
+  return { key, nowSeconds, accounts: members };
+}
+
+/** Keep confirmed counters during reset-time corrections, but never across a quota reset. */
+export function retainCodexAccountWindowStats(
+  snapshot: CodexAccountWindowStatsSnapshot, next: CodexAccountWindowStatsScope | null,
+): CodexAccountWindowStatsSnapshot {
+  if (!next || !snapshot.ready || !snapshot.sourceScope) return EMPTY_CODEX_ACCOUNT_WINDOW_STATS;
+  if (snapshot.scope === next.key && snapshot.sourceScope.key === next.key) return snapshot;
+  const previous = new Map(snapshot.sourceScope.accounts.map((account) => [account.id, account.windows]));
+  const byAccountId: CodexAccountWindowStatsSnapshot['byAccountId'] = {};
+  const duration = (window: Window) => Math.max(1, Math.round((window.windowMinutes !== null && window.windowMinutes > 0
+    ? window.windowMinutes : CODEX_WINDOW_FALLBACK_MINUTES[window.id as 'primary' | 'secondary']) * 60));
+  for (const account of next.accounts) {
+    for (const window of account.windows) {
+      const id = window.id as 'primary' | 'secondary';
+      const stats = snapshot.byAccountId[account.id]?.[id];
+      const old = previous.get(account.id)?.find((value) => value.id === id);
+      if (!stats || !old || duration(old) !== duration(window)) continue;
+      if (old.resetTime === null || window.resetTime === null) {
+        if (old.resetTime !== window.resetTime) continue;
+      } else {
+        const wasReset = old.resetTime <= snapshot.sourceScope.nowSeconds;
+        const isReset = window.resetTime <= next.nowSeconds;
+        if (wasReset !== isReset) continue;
+        if (old.resetTime !== window.resetTime) {
+          // Future reset estimates can drift within the same overlapping period.
+          // Once the confirmed reset is reached, only a fresh query may supply counters.
+          if (wasReset || old.resetTime <= next.nowSeconds ||
+              Math.max(old.resetTime - duration(old), window.resetTime - duration(window)) >=
+              Math.min(old.resetTime, window.resetTime)) continue;
+        }
+      }
+      (byAccountId[account.id] ??= {})[id] = stats;
+    }
+  }
+  return { ...snapshot, scope: next.key, ready: Object.keys(byAccountId).length > 0, byAccountId };
 }
 
 /** One native query at a time; bursts keep only the latest scope and one pending refresh. */
@@ -59,11 +97,12 @@ export function createCodexAccountWindowStatsReader(options: {
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastStartedAt = -Infinity;
-  let lastStartedScope: string | null = null;
+  let snapshot = EMPTY_CODEX_ACCOUNT_WINDOW_STATS;
+  const publish = (next: CodexAccountWindowStatsSnapshot) => { snapshot = next; options.onChange(next); };
 
   const schedule = () => {
     if (disposed || options.canRead?.() === false || running || timer !== undefined || !requested || !scope) return;
-    const wait = lastStartedScope === scope.key ? Math.max(0, minRefreshMs - (now() - lastStartedAt)) : 0;
+    const wait = Math.max(0, minRefreshMs - (now() - lastStartedAt));
     timer = setTimeout(() => { timer = undefined; void run(); }, Math.max(coalesceMs, wait));
   };
   async function run() {
@@ -73,7 +112,6 @@ export function createCodexAccountWindowStatsReader(options: {
     requested = false;
     running = true;
     lastStartedAt = now();
-    lastStartedScope = scope.key;
     try {
       const nowSeconds = Math.floor(lastStartedAt / 1000);
       const queries = startedScope.accounts.flatMap((account) => buildCodexAccountWindowStatQueries(account.id, account.windows, nowSeconds));
@@ -89,7 +127,7 @@ export function createCodexAccountWindowStatsReader(options: {
           outputTokens: row.outputTokens, totalTokens: row.totalTokens, estimatedCostUsd: row.estimatedCostUsd,
         };
       }
-      options.onChange({ scope: startedScope.key, ready: true, byAccountId });
+      publish({ scope: startedScope.key, sourceScope: startedScope, ready: true, byAccountId });
     } catch (error) {
       // A background failure must not replace confirmed values with false zeroes.
       if (!disposed && startedRevision === revision) options.onError?.(error);
@@ -107,7 +145,7 @@ export function createCodexAccountWindowStatsReader(options: {
       revision++;
       requested = !!next;
       if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
-      options.onChange({ ...EMPTY_CODEX_ACCOUNT_WINDOW_STATS, scope: next?.key ?? null });
+      publish(retainCodexAccountWindowStats(snapshot, next));
       schedule();
     },
     refresh() { if (!disposed && scope) { requested = true; schedule(); } },

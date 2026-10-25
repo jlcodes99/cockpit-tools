@@ -113,6 +113,8 @@ async fn identity_ws(
 
 #[path = "account_installation_auxiliary_tests.rs"]
 mod installation_auxiliary_tests;
+#[path = "diagnostic_identity_mapping_tests.rs"]
+mod session_identity_mapping_tests;
 struct IdentityHost {
     base: String,
     wire: WireApi,
@@ -250,6 +252,20 @@ async fn identity_fixture(
     tokio::task::JoinHandle<()>,
     tempfile::TempDir,
 ) {
+    identity_fixture_with_options(wire, native_socket, retry, Options::default()).await
+}
+async fn identity_fixture_with_options(
+    wire: WireApi,
+    native_socket: bool,
+    retry: bool,
+    options: Options,
+) -> (
+    Handle,
+    Arc<IdentityHost>,
+    Arc<IdentitySource>,
+    tokio::task::JoinHandle<()>,
+    tempfile::TempDir,
+) {
     let source = Arc::new(IdentitySource {
         seen: Mutex::new(vec![]),
         connections: AtomicUsize::new(0),
@@ -283,7 +299,7 @@ async fn identity_fixture(
         "127.0.0.1:0".parse().unwrap(),
         host.clone(),
         dir.path().join("identity.sqlite"),
-        Options::default(),
+        options,
     )
     .await
     .unwrap();

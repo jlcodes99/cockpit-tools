@@ -260,6 +260,61 @@ async fn process_callback_request(
     Some(Ok(code))
 }
 
+// Listen on both loopback families before advertising localhost. A single-family
+// machine gets an explicit IP so the browser cannot choose an unbound address.
+struct OAuthCallbackListeners {
+    ipv4: Option<TcpListener>,
+    ipv6: Option<TcpListener>,
+    port: u16,
+}
+
+fn callback_redirect_uri(port: u16, has_ipv4: bool, has_ipv6: bool) -> String {
+    let host = match (has_ipv4, has_ipv6) {
+        (true, true) => "localhost",
+        (true, false) => "127.0.0.1",
+        (false, true) => "[::1]",
+        (false, false) => unreachable!("OAuth needs a bound loopback listener"),
+    };
+    format!("http://{}:{}{}", host, port, OAUTH_CALLBACK_PATH)
+}
+
+async fn bind_callback_listeners() -> Result<OAuthCallbackListeners, String> {
+    let (first, is_ipv6) = match TcpListener::bind("[::1]:0").await {
+        Ok(listener) => (listener, true),
+        Err(_) => (
+            TcpListener::bind("127.0.0.1:0")
+                .await
+                .map_err(|e| format!("无法绑定本地端口: {}", e))?,
+            false,
+        ),
+    };
+    let port = first
+        .local_addr()
+        .map_err(|e| format!("无法获取本地端口: {}", e))?
+        .port();
+    let other_address = if is_ipv6 {
+        format!("127.0.0.1:{}", port)
+    } else {
+        format!("[::1]:{}", port)
+    };
+    let other = TcpListener::bind(&other_address).await.ok();
+    let (ipv4, ipv6) = if is_ipv6 {
+        (other, Some(first))
+    } else {
+        (Some(first), other)
+    };
+    Ok(OAuthCallbackListeners { ipv4, ipv6, port })
+}
+
+async fn accept_callback(
+    listener: &Option<TcpListener>,
+) -> std::io::Result<(tokio::net::TcpStream, std::net::SocketAddr)> {
+    match listener {
+        Some(listener) => listener.accept().await,
+        None => std::future::pending().await,
+    }
+}
+
 async fn ensure_oauth_flow_prepared(app_handle: &tauri::AppHandle) -> Result<String, String> {
     use tauri::Emitter;
 
@@ -269,16 +324,10 @@ async fn ensure_oauth_flow_prepared(app_handle: &tauri::AppHandle) -> Result<Str
         }
     }
 
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .map_err(|e| format!("无法绑定本地端口: {}", e))?;
-
-    let port = listener
-        .local_addr()
-        .map_err(|e| format!("无法获取本地端口: {}", e))?
-        .port();
-
-    let redirect_uri = format!("http://localhost:{}/oauth-callback", port);
+    let listeners = bind_callback_listeners().await?;
+    let port = listeners.port;
+    let redirect_uri =
+        callback_redirect_uri(port, listeners.ipv4.is_some(), listeners.ipv6.is_some());
     let state_token = uuid::Uuid::new_v4().to_string();
     let auth_url = oauth::get_auth_url(&redirect_uri, Some(&state_token));
 
@@ -294,7 +343,8 @@ async fn ensure_oauth_flow_prepared(app_handle: &tauri::AppHandle) -> Result<Str
     tokio::spawn(async move {
         loop {
             let accept_result = tokio::select! {
-                res = listener.accept() => Some(res),
+                res = accept_callback(&listeners.ipv4) => Some(res),
+                res = accept_callback(&listeners.ipv6) => Some(res),
                 _ = rx.changed() => None,
             };
 
@@ -478,3 +528,7 @@ pub async fn complete_oauth_flow(
 
     oauth::exchange_code(&code, &redirect_uri).await
 }
+
+#[cfg(test)]
+#[path = "oauth_server_tests.rs"]
+mod tests;

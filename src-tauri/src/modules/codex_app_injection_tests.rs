@@ -311,7 +311,7 @@ fn custom_script_renders_weekly_and_optional_five_hour_fields() {
     assert!(script.contains("badgeLayout.place(root, host, footer, permissions)"));
     assert!(script.contains("document.body.appendChild(host)"));
     assert!(!script.contains("card.insertAdjacentElement('afterend', host)"));
-    assert!(script.contains("usageMetrics.visibleCard()"));
+    assert!(script.contains("usageMetrics.visibleCard(root.card)"));
     assert!(script.contains("justify-content:center"));
     assert!(script.contains("height:28px"));
     assert!(script.contains("padding:0 6px"));
@@ -638,7 +638,9 @@ fn api_service_injection_ignores_picker_placeholder_text() {
     assert!(script.contains("const badgeKind = classifyModel(selectedModel) || hostBadgeKind;"));
     assert!(!script.contains("if (!slug) return hostBadgeKind;"));
     // 模型名来源：选择器触发器 + 展开弹框里的当前模型行。
-    assert!(script.contains("[data-model-picker-model-row]"));
+    assert!(!script.contains("[data-model-picker-model-row]"));
+    assert!(script.contains("openTriggers.includes(modelTrigger)"));
+    assert!(script.contains("modelTrigger?.getAttribute('aria-controls')"));
     assert!(script.contains("ViewToggleModelLabel_"));
     assert!(script.contains("if (visibleModel) {"));
     assert!(script.contains("root.visibleModel = visibleModel;"));

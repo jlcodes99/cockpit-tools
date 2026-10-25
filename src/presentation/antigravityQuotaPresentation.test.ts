@@ -28,13 +28,19 @@ test('explicit quota buckets keep percentages and distant reset times unchanged'
   const items = getAntigravityQuotaDisplayItems(account([
     model('3p-5h', 0), model('3p-weekly', 42),
     model('gemini-5h', 25), model('gemini-weekly', 70),
+    model('gemini-argon-wtu-weekly', 91),
   ]), []);
-  assert.deepEqual(items.map(({ key, percentage, resetTime }) => ({ key, percentage, resetTime })), [
-    { key: 'claude:5h', percentage: 0, resetTime: futureReset },
-    { key: 'claude:weekly', percentage: 42, resetTime: futureReset },
-    { key: 'gemini:5h', percentage: 25, resetTime: futureReset },
-    { key: 'gemini:weekly', percentage: 70, resetTime: futureReset },
+  assert.deepEqual(items.map(({ key, label, percentage, resetTime }) => ({ key, label, percentage, resetTime })), [
+    { key: 'claude:5h', label: 'Claude (5h)', percentage: 0, resetTime: futureReset },
+    { key: 'claude:weekly', label: 'Claude (Weekly)', percentage: 42, resetTime: futureReset },
+    { key: 'gemini:5h', label: 'Gemini (5h)', percentage: 25, resetTime: futureReset },
+    { key: 'gemini:weekly', label: 'Gemini (Weekly)', percentage: 70, resetTime: futureReset },
+    { key: 'argon:weekly', label: 'Gemini 4 Argon (Weekly)', percentage: 91, resetTime: futureReset },
   ]);
+  const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
+  assert.equal((html.match(/class="codex-quota-mini"/g) || []).length, 5);
+  assert.match(html, /Gemini 4 Argon \(Weekly\)/);
+  assert.match(html, /91%/);
 });
 
 test('free tier accounts only map to weekly quota and omit 5h quota bars', () => {
@@ -42,32 +48,46 @@ test('free tier accounts only map to weekly quota and omit 5h quota bars', () =>
     ...account([
       model('gemini-weekly', 100),
       model('claude-sonnet', 80),
+      model('gemini-4-argon-high', 95),
     ]),
     quota: {
       models: [
         model('gemini-weekly', 100),
         model('claude-sonnet', 80),
+        model('gemini-4-argon-high', 95),
       ],
       last_updated: 0,
       subscription_tier: 'FREE',
     },
   };
   const items = getAntigravityQuotaDisplayItems(freeAccount, []);
-  assert.deepEqual(items.map((i) => i.key), ['claude:weekly', 'gemini:weekly']);
+  assert.deepEqual(items.map((i) => i.key), ['claude:weekly', 'gemini:weekly', 'argon:weekly']);
   assert.equal(items.some((i) => i.key.endsWith(':5h')), false);
   const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
   assert.match(html, /Weekly/);
-  assert.doesNotMatch(html, />5h</);
+  assert.doesNotMatch(html, /\(5h\)/);
 });
 
 test('free account models fallback and map to quota windows on the card', () => {
-  const models = [model('gemini-3.1-pro-high', 25), model('gemini-3.1-pro-low', 60), model('claude-sonnet', 0)];
+  const models = [
+    model('gemini-4-argon-high', 91),
+    model('gemini-3.1-pro-high', 25),
+    model('gemini-3.1-pro-low', 60),
+    model('claude-sonnet', 0),
+  ];
   const items = getAntigravityQuotaDisplayItems(account(models), []);
-  assert.equal(items.length, 3);
+  assert.equal(items.length, 4);
+  assert.deepEqual(items.map((item) => [item.key, item.percentage]), [
+    ['claude:5h', 0],
+    ['gemini:5h', 25],
+    ['gemini:weekly', 60],
+    ['argon:weekly', 91],
+  ]);
   const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, t }));
   assert.match(html, /25%/);
   assert.match(html, /60%/);
   assert.match(html, /0%/);
+  assert.match(html, /91%/);
   assert.doesNotMatch(html, /quota-empty/);
 });
 
@@ -87,7 +107,7 @@ for (const isList of [false, true]) {
     const html = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items, isList, t }));
     assert.match(html, /25%/);
     assert.doesNotMatch(html, /100%/);
-    assert.equal((html.match(/>—</g) || []).length, 3);
+    assert.equal((html.match(/>—</g) || []).length, 4);
     assert.equal((html.match(/style="width:/g) || []).length, 1);
     const empty = renderToStaticMarkup(createElement(AntigravityQuotaSection, { items: [], isList, t }));
     assert.match(empty, /overview.noQuotaData/);

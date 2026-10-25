@@ -36,6 +36,7 @@ fn canonical_members_save_is_atomic_preserves_source_credentials_and_remembers_m
                 (source.id.clone(), grant.id.clone()),
                 (other.id.clone(), grant.id.clone()),
             ])),
+            None,
         )
         .await;
         assert!(invalid.is_err());
@@ -61,6 +62,7 @@ fn canonical_members_save_is_atomic_preserves_source_credentials_and_remembers_m
                 crate::models::codex_local_access::CodexLocalAccessImageGenerationPolicy::Enabled,
             )])),
             Some(HashMap::from([(source.id.clone(), grant.id.clone())])),
+            Some(false),
         )
         .await
         .unwrap()
@@ -69,6 +71,7 @@ fn canonical_members_save_is_atomic_preserves_source_credentials_and_remembers_m
         assert_eq!(saved.account_ids, vec![source.id.clone()]);
         assert_eq!(saved.official_account_bindings[&source.id], grant.id);
         assert!(!saved.session_affinity);
+        assert!(!saved.session_identity_mapping_enabled);
         assert!(saved
             .custom_routing_rules
             .iter()
@@ -94,14 +97,14 @@ fn canonical_members_save_is_atomic_preserves_source_credentials_and_remembers_m
             None,
             None,
             Some(HashMap::new()),
+            None,
         )
         .await
         .unwrap();
-        assert!(local
-            .collection
-            .unwrap()
-            .official_account_bindings
-            .is_empty());
+        let local = local.collection.unwrap();
+        assert!(local.official_account_bindings.is_empty());
+        assert!(!local.session_identity_mapping_enabled,
+            "member edits without the optional setting must preserve the saved opt-out");
         assert_eq!(
             get_account(&grant.id)
                 .await
@@ -330,6 +333,7 @@ fn canonical_bulk_save_does_not_readd_a_member_removed_while_credentials_wait() 
                 None,
                 None,
                 Some(HashMap::from([(source_id, registration)])),
+                None,
             )
             .await
         });

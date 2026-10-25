@@ -655,8 +655,8 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
           description: `${accountName} · ${t("instances.defaultName", "默认实例")}`,
           actionLabel: t("common.open", "打开"),
           disabled: cliLaunchingAccountId === account.id,
-          onAction: async () => {
-            await handleLaunchCodexCli(account);
+          onAction: async (launchOptions) => {
+            await handleLaunchCodexCli(account, launchOptions);
           },
         },
       );
@@ -924,8 +924,8 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
             description: `${t("codex.localAccess.title", "API 服务")} · ${baseUrl}`,
             actionLabel: t("common.open", "打开"),
             disabled: cliLaunchingAccountId === CODEX_API_SERVICE_BIND_ID,
-            onAction: async () => {
-              await handleLaunchLocalAccessCli();
+            onAction: async (launchOptions) => {
+              await handleLaunchLocalAccessCli(launchOptions);
             },
           },
           {

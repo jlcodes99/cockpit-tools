@@ -11,6 +11,7 @@ import { CodexApiRequestLogs } from "./CodexApiRequestLogs";
 import { useMemo, useState } from "react";
 import { isCodexChatgptPlanAccount } from "../types/codex";
 import { CodexGatewayModeControl, formatCodexGatewayModeError } from "../components/codex/CodexGatewayModeControl";
+import { CodexSessionIdentityMappingControl } from "../components/codex/CodexSessionIdentityMappingControl";
 import { CodexSpeedControl } from "../components/codex/CodexSpeedControl";
 import { Activity, BadgeDollarSign, ChevronDown, Check, CircleAlert, Copy, Eye, EyeOff, FolderPlus, Gauge, Image, Pin, PinOff, Play, Plus, Power, RefreshCw, Route, Send, ShieldCheck, SlidersHorizontal, Trash2, Undo2, Wrench, X } from "lucide-react";
 import { CodexIcon } from "../components/icons/CodexIcon";
@@ -194,6 +195,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     selectedTimeoutPresetId,
     selectedTimeoutPresetIsCustom,
     serviceTabs,
+    sessionIdentityMappingEnabledDraft,
     sessionAffinityDraft,
     sessionAffinityTtlDraft,
     setAccountModelRuleBulkText,
@@ -222,6 +224,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     setProxyInput,
     setResponsesWebsocketsEnabledDraft,
     setSelectedModelId,
+    setSessionIdentityMappingEnabledDraft,
     setSessionAffinityDraft,
     setSessionAffinityTtlDraft,
     setState,
@@ -1795,6 +1798,11 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                     disabled={routingSaving || !collection}
                   />
                 </label>
+                <CodexSessionIdentityMappingControl
+                  checked={sessionIdentityMappingEnabledDraft}
+                  disabled={busy || routingSaving || !collection}
+                  onChange={setSessionIdentityMappingEnabledDraft}
+                />
                 <label>
                   <span>
                     {t(
@@ -3782,12 +3790,12 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
         onSaveAccounts={async ({
           accountIds, restrictFreeAccounts, backupAccountIds, preferredAccountIds,
           sessionAffinity, sessionAffinityTtlMs, imageGenerationAccountPolicies,
-          officialAccountBindings,
+          officialAccountBindings, sessionIdentityMappingEnabled,
         }) => {
           await handleSaveMembersFromModal(
             accountIds, restrictFreeAccounts, backupAccountIds, preferredAccountIds,
             imageGenerationAccountPolicies, officialAccountBindings,
-            sessionAffinity, sessionAffinityTtlMs,
+            sessionAffinity, sessionAffinityTtlMs, sessionIdentityMappingEnabled,
           );
         }}
         onClearStats={() =>

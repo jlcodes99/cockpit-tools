@@ -27,6 +27,8 @@ use super::{
 
 #[derive(Clone, Debug)]
 pub struct Options {
+    /// Preserve client protocol IDs when disabled; continuity checks still apply.
+    pub session_identity_mapping_enabled: bool,
     /// usize::MAX leaves conversation request sizes unrestricted by the gateway.
     pub max_body_bytes: usize,
     /// Per uploaded image file, rather than the sum of a multipart request.
@@ -48,6 +50,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            session_identity_mapping_enabled: true,
             max_body_bytes: usize::MAX,
             max_upload_bytes: 64 * 1024 * 1024,
             max_response_bytes: usize::MAX,
@@ -137,12 +140,16 @@ impl AppState {
 pub struct Handle {
     pub addr: SocketAddr,
     host: Arc<dyn Host>,
+    identity: Arc<IdentityStore>,
     stop: watch::Sender<bool>,
     activity: Arc<Activity>,
     task: Option<JoinHandle<Result<(), std::io::Error>>>,
 }
 
 impl Handle {
+    pub fn set_session_identity_mapping_enabled(&self, enabled: bool) {
+        self.identity.set_session_identity_mapping_enabled(enabled);
+    }
     pub fn set_cooling_disabled(&self, disabled: bool) {
         self.host.set_cooling_disabled(disabled);
     }
@@ -238,9 +245,11 @@ pub async fn start(
         .map_err(|error| error.to_string())?;
     let addr = listener.local_addr().map_err(|error| error.to_string())?;
     let activity = Arc::new(Activity::default());
+    identity.set_session_identity_mapping_enabled(options.session_identity_mapping_enabled);
+    let identity = Arc::new(identity);
     let state = Arc::new(AppState {
         host: host.clone(),
-        identity: Arc::new(identity),
+        identity: identity.clone(),
         capacity: Arc::new(Semaphore::new(options.max_in_flight)),
         options,
         stop: StopSignal(receiver.clone()),
@@ -385,6 +394,7 @@ pub async fn start(
     Ok(Handle {
         addr,
         host,
+        identity,
         stop,
         activity,
         task: Some(task),
@@ -614,12 +624,14 @@ mod shutdown_handoff_tests {
 
     #[tokio::test]
     async fn shutdown_timeout_keeps_handle_alive_until_old_work_stops() {
+        let temp = tempfile::tempdir().unwrap();
         let (stop, _) = watch::channel(false);
         let activity = Arc::new(Activity::default());
         activity.tasks.store(1, Ordering::SeqCst);
         let mut handle = Handle {
             addr: "127.0.0.1:0".parse().unwrap(),
             host: Arc::new(UnusedHost),
+            identity: Arc::new(IdentityStore::open(temp.path().join("identity.sqlite")).unwrap()),
             stop,
             activity: activity.clone(),
             task: Some(tokio::spawn(async { Ok(()) })),
@@ -693,6 +705,7 @@ mod shutdown_handoff_tests {
             });
             let (started, entered) = tokio::sync::oneshot::channel();
             let (release, released) = std::sync::mpsc::channel();
+            let identity = state.identity.clone();
             let waiter = tokio::spawn(async move {
                 super::super::blocking::run_tracked(&state, move || {
                     let _ = started.send(());
@@ -709,6 +722,7 @@ mod shutdown_handoff_tests {
             let mut handle = Handle {
                 addr: "127.0.0.1:0".parse().unwrap(),
                 host: Arc::new(UnusedHost),
+                identity,
                 stop,
                 activity: activity.clone(),
                 task: Some(tokio::spawn(async { Ok(()) })),

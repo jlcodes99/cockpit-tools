@@ -147,12 +147,24 @@ pub fn serialize_account_file<T: Serialize>(kind: &str, account: &T) -> Result<S
 
 /// Decode an immutable encrypted snapshot without restoring backups, rotating
 /// storage, or creating a replacement key when the original key is missing.
-pub(crate) fn deserialize_encrypted_snapshot<T: DeserializeOwned>(content: &str) -> Result<T, String> {
+pub(crate) fn deserialize_encrypted_snapshot<T: DeserializeOwned>(
+    content: &str,
+) -> Result<T, String> {
+    deserialize_encrypted_snapshot_with_rotation(content).map(|(value, _)| value)
+}
+
+/// Decode without restoring files or creating a new key. Callers can validate a
+/// backup completely before deciding whether it is safe to restore.
+pub(crate) fn deserialize_encrypted_snapshot_with_rotation<T: DeserializeOwned>(
+    content: &str,
+) -> Result<(T, bool), String> {
     let envelope: SecureAccountEnvelope = serde_json::from_str(content)
         .map_err(|error| format!("Invalid encrypted account snapshot: {error}"))?;
     let cipher = Aes256Gcm::new_from_slice(&read_key(&key_path()?)?)
         .map_err(|error| format!("Cannot initialize snapshot decryption: {error}"))?;
-    decrypt_envelope(&envelope, cipher)
+    let value = decrypt_envelope(&envelope, cipher)?;
+    let needs_rotation = chrono::Utc::now().timestamp() - envelope.encrypted_at > ROTATION_SECONDS;
+    Ok((value, needs_rotation))
 }
 
 /// Returns `(account, needs_rewrite)` where `needs_rewrite` is true for legacy

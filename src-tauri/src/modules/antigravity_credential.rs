@@ -12,6 +12,8 @@ struct AntigravityCredentialToken {
 struct AntigravityCredentialPayload {
     token: AntigravityCredentialToken,
     auth_method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id_token: Option<String>,
 }
 
 #[cfg(target_os = "windows")]
@@ -89,21 +91,49 @@ fn build_antigravity_credential_payload(account: &Account) -> Result<String, Str
             expiry,
         },
         auth_method: "consumer".to_string(),
+        id_token: account.token.id_token.clone(),
     })
     .map_err(|e| format!("序列化 Antigravity 系统凭据失败: {}", e))
 }
 
 pub fn write_antigravity_system_credential(account: &Account) -> Result<(), String> {
     let payload_json = build_antigravity_credential_payload(account)?;
+    let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
+    // Standalone 2.13.0 / 2.25.0's compositeTokenStorage falls back to this file when
+    // Keyring is unavailable. This is distinct from Gemini CLI / agy storage.
+    let fallback_path = home.join(".gemini").join("jetski-standalone-oauth-token");
 
     crate::modules::logger::log_info(&format!(
         "[Antigravity 2.0] 写入系统凭据: {}",
         account.email
     ));
 
+    write_antigravity_credential_payload(
+        &payload_json,
+        &fallback_path,
+        write_antigravity_system_payload,
+    )?;
+    crate::modules::logger::log_info("[Antigravity 2.0] 系统凭据与桌面回退凭据写入完成");
+    Ok(())
+}
+
+fn write_antigravity_credential_payload(
+    payload_json: &str,
+    fallback_path: &std::path::Path,
+    write_system: impl FnOnce(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    write_system(payload_json)?;
+    // Use the same payload in both stores: an old fallback must not resurrect a
+    // previous account after a Keyring timeout. Never report a partial sync as success.
+    crate::modules::atomic_write::write_secret_string_atomic(fallback_path, payload_json).map_err(
+        |error| format!("系统凭据已写入，但同步 Antigravity 桌面回退凭据失败，请重试切号: {error}"),
+    )
+}
+
+fn write_antigravity_system_payload(payload_json: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     write_antigravity_keychain_payload(
-        &payload_json,
+        payload_json,
         std::ffi::OsStr::new("security"),
         std::time::Duration::from_secs(15),
     )?;
@@ -208,7 +238,6 @@ pub fn write_antigravity_system_credential(account: &Account) -> Result<(), Stri
         }
     }
 
-    crate::modules::logger::log_info("[Antigravity 2.0] 系统凭据写入完成");
     Ok(())
 }
 
@@ -222,7 +251,9 @@ fn write_antigravity_keychain_payload(
     use std::process::Command;
 
     let keychain_value = format!("go-keyring-base64:{}", STANDARD.encode(payload_json));
-    // Update in place so a failed write leaves the existing credential intact.
+    // Update the credential in place and preserve its existing access policy.
+    // Passing -A (or -T) also calls SecKeychainItemSetAccess, which prompts for
+    // authorization on every switch even when the password update is allowed.
     let mut command = Command::new(program);
     command.args([
         "add-generic-password",
@@ -233,7 +264,6 @@ fn write_antigravity_keychain_payload(
         "antigravity",
         "-w",
         &keychain_value,
-        "-A",
     ]);
     let output = crate::modules::process_timeout::output_with_timeout(&mut command, timeout)
         .map_err(|e| format!("执行 macOS Keychain 写入命令失败: {}", e))?;
@@ -343,6 +373,6 @@ pub fn read_antigravity_system_credential() -> Result<Option<AntigravitySystemCr
     parse_antigravity_system_credential(&secret).map(Some)
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(test)]
 #[path = "antigravity_credential_tests.rs"]
 mod tests;

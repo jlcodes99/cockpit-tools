@@ -269,6 +269,7 @@ async fn native_start_profile_listener(
     .parse()
     .map_err(|_| "NATIVE_API_INVALID_ADDRESS".to_string())?;
     let options = native_api::Options {
+        session_identity_mapping_enabled: collection.session_identity_mapping_enabled,
         request_timeout: Duration::from_millis(
             collection
                 .timeouts

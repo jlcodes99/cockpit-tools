@@ -1160,6 +1160,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
           restrictFreeAccounts?: boolean;
           backupAccountIds?: string[];
           preferredAccountIds?: string[];
+          sessionIdentityMappingEnabled?: boolean;
           sessionAffinity?: boolean;
           sessionAffinityTtlMs?: number;
           imageGenerationAccountPolicies?: Record<string, CodexLocalAccessImageGenerationPolicy>;
@@ -1203,6 +1204,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
               options?.sessionAffinityTtlMs,
               options?.imageGenerationAccountPolicies,
               options?.officialAccountBindings,
+              options?.sessionIdentityMappingEnabled,
             );
           setLocalAccessState(nextState);
           setMessage({

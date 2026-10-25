@@ -43,27 +43,41 @@
   const statuses = () => !finite(accountCount) || accountCount === 0 ? '' : '<div class="health"><span>ChatGPT</span><span>' + dot('green') + esc(label('available')) + ' <strong>' + number(availableAccountCount) + '/' + number(accountCount) + '</strong></span><span>' + dot('') + esc(label('issues')) + ' <strong>' + number(abnormalAccountCount) + '</strong></span><span>' + dot('') + esc(label('cooling')) + ' <strong>' + number(cooldownAccountCount) + '</strong></span></div>';
   const segmented = (name, choices, selected) => '<div class="segmented">' + choices.map(([value,key]) => '<button type="button" data-cockpit-dialog-action="' + name + '" data-value="' + value + '" aria-pressed="' + (value === selected) + '">' + esc(label(key)) + '</button>').join('') + '</div>';
   const binding = root => typeof root.usageState?.__binding?.binding === 'string' ? root.usageState.__binding.binding : null;
+  const retryDelays = [2000, 5000, 10000];
 
   function state(root) {
     if (!root.dialogState || root.dialogState.threadId !== (root.threadId || null) || root.dialogState.binding !== binding(root)) {
       if (root.dialogState) cancel(root);
       root.dialogState = {threadId:root.threadId || null, binding:binding(root), tab:'overview', scope:'chat', period:'week', rows:[], nextCursor:null,
         summary:null, session:null, pending:null, handled:null, loaded:false, available:null, unavailableReason:null,
-        error:false, requestedAt:0, paged:false, scopeCaches:Object.create(null), summaryCaches:Object.create(null)};
+        error:false, requestedAt:0, paged:false, retryCount:0, retryAt:null, hostAvailable:root.hostAvailable !== false,
+        scopeCaches:Object.create(null), summaryCaches:Object.create(null)};
     }
     return root.dialogState;
   }
-  function issue(root, cursor = null) {
+  function issue(root, cursor = null, automaticRetry = false) {
     const s = state(root);
+    if (!automaticRetry) s.retryCount = 0;
+    s.retryAt = null;
     s.pending = {requestToken:Date.now().toString(36) + '-' + Math.random().toString(36).slice(2),
       threadId:s.threadId,binding:s.binding,scope:s.scope,period:s.period,cursor,view:s.tab};
     s.requestedAt = Date.now();
     s.error = false;
+    if (s.available === false) s.available = null;
+    s.unavailableReason = null;
     // The persistent CDP binding is optional. A disconnected binding leaves the
     // same token available to the bounded host poller, rather than losing it.
     if (typeof window.__cockpitUsageRequest === 'function') {
       try { window.__cockpitUsageRequest(JSON.stringify(s.pending)); } catch { /* Poll fallback. */ }
     }
+  }
+  function scheduleRetry(s) {
+    s.retryAt = s.retryCount < retryDelays.length ? Date.now() + retryDelays[s.retryCount] : null;
+  }
+  function fail(s) {
+    s.error = true;
+    s.handled = s.pending.requestToken;
+    scheduleRetry(s);
   }
   function accept(root) {
     const s = state(root), q = s.pending;
@@ -73,13 +87,18 @@
     if (response.requestToken !== q.requestToken) return;
     // Never show a response from a former chat, scope, period or pagination request.
     if (['threadId','binding','scope','period','cursor','view'].some(key => (response[key] ?? null) !== (q[key] ?? null))) return;
-    if (response.error) { s.error = true; s.handled = q.requestToken; return; }
+    if (response.error) { fail(s); return; }
     s.handled = q.requestToken;
     s.available = response.available === true;
     s.unavailableReason = response.unavailableReason || null;
     // Unavailability is not an empty successful query. Keep only the already
     // verified snapshot in this exact thread/service binding and scope.
-    if (!s.available) return;
+    if (!s.available) {
+      if (s.unavailableReason === 'service_unavailable') scheduleRetry(s);
+      return;
+    }
+    s.retryCount = 0;
+    s.retryAt = null;
     const page = response.requests;
     if (q.view === 'logs' && page && Array.isArray(page.rows)) {
       if (q.cursor == null) s.rows = [];
@@ -98,14 +117,24 @@
     if (!root.quotaDetailsOpen) return null;
     const s = state(root);
     accept(root);
-    if (root.hostAvailable === false) return null;
+    const wasAvailable = s.hostAvailable;
+    s.hostAvailable = root.hostAvailable !== false;
+    if (!s.hostAvailable) return null;
+    // A restored bridge must use a fresh token: a former failed token stays
+    // settled in both the renderer and host cache. Keep the verified snapshot.
+    if (!wasAvailable && s.pending && (s.error || s.available === false || loading(s))) {
+      issue(root,s.pending.cursor);
+    }
     if (loading(s) && Date.now() - s.requestedAt > 10000) {
-      s.error = true;
-      s.handled = s.pending.requestToken;
+      fail(s);
     }
     const completed = !s.pending || s.handled === s.pending.requestToken;
+    if (completed && s.retryAt !== null && Date.now() >= s.retryAt) {
+      s.retryCount += 1;
+      issue(root,s.pending?.cursor || null,true);
+    }
     // Do not refresh a paginated snapshot underneath the reader. A manual refresh starts a new one.
-    if (!s.pending || (completed && !s.error && !s.paged && Date.now() - s.requestedAt > 5000 && root.hostAvailable !== false)) issue(root);
+    else if (!s.pending || (completed && !s.error && s.available !== false && !s.paged && Date.now() - s.requestedAt > 5000)) issue(root);
     return s.pending;
   }
   function loading(s) { return Boolean(s.pending && s.handled !== s.pending.requestToken); }
@@ -113,7 +142,11 @@
     if (typeof window.__cockpitUsageRequest === 'function') {
       try { window.__cockpitUsageRequest('null'); } catch { /* Disconnected host. */ }
     }
-    if (root.dialogState) root.dialogState.pending = null;
+    if (root.dialogState) {
+      root.dialogState.pending = null;
+      root.dialogState.retryCount = 0;
+      root.dialogState.retryAt = null;
+    }
   }
   function reset(root) { cancel(root); delete root.dialogState; }
   function refresh(root) {

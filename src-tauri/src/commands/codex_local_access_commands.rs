@@ -72,6 +72,7 @@ pub async fn codex_local_access_save_accounts(
         HashMap<String, CodexLocalAccessImageGenerationPolicy>,
     >,
     official_account_bindings: Option<HashMap<String, String>>,
+    session_identity_mapping_enabled: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::save_local_access_accounts_with_official_bindings(
         account_ids,
@@ -82,6 +83,7 @@ pub async fn codex_local_access_save_accounts(
         session_affinity_ttl_ms,
         image_generation_account_policies,
         official_account_bindings,
+        session_identity_mapping_enabled,
     )
     .await
 }
@@ -267,6 +269,7 @@ pub async fn codex_local_access_update_routing_options(
     max_concurrent_image_requests: u16,
     max_account_concurrency: u16,
     account_concurrency_wait_ms: u64,
+    session_identity_mapping_enabled: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     codex_local_access::update_local_access_routing_options(
         session_affinity,
@@ -279,6 +282,7 @@ pub async fn codex_local_access_update_routing_options(
         max_concurrent_image_requests,
         max_account_concurrency,
         account_concurrency_wait_ms,
+        session_identity_mapping_enabled,
     )
     .await
 }

@@ -130,8 +130,14 @@ fn isolated_native_official_metadata_rebuild_import_delete_and_failure_recovery(
     println!(
         "Actual project/create -> mapped production rebuild -> persisted project_id: {project_id}"
     );
-    let invalid = delete_threads(&codex, &["not-a-valid-thread-id".into()]).unwrap();
-    assert_eq!(invalid, 0);
+    let invalid = delete_threads(&codex, &["not-a-valid-thread-id".into()])
+        .expect_err("the production helper must preserve the official rejection");
+    assert!(
+        invalid.to_ascii_lowercase().contains("invalid")
+            && invalid.to_ascii_lowercase().contains("thread"),
+        "expected official invalid-thread rejection, got: {invalid}"
+    );
+    assert!(count() > 0, "a rejected delete must preserve the indexed thread");
     assert_eq!(std::fs::read(&rollout).unwrap(), original);
     rebuild_thread_metadata(&codex).expect("retry after failed delete");
     let deleted = delete_threads(&codex, &[session_id.clone(), session_id.clone()]).unwrap();

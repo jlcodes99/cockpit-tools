@@ -2,13 +2,14 @@
 (() => {
   const root = window.__cockpitCodexInjection || (window.__cockpitCodexInjection = {});
   const ownSelector = '[data-cockpit-quota-footer], [data-cockpit-quota-details], [data-cockpit-quota-style]';
-  if (root.statuslineVersion !== 13) {
+  if (root.statuslineVersion !== 14) {
     root.observer?.disconnect();
     root.layoutObserver?.disconnect();
     if (root.watchdogTimer) window.clearInterval(root.watchdogTimer);
     if (root.resizeHandler) window.removeEventListener('resize', root.resizeHandler);
     if (root.scrollHandler) window.removeEventListener('scroll', root.scrollHandler, true);
     if (root.keyHandler) window.removeEventListener('keydown', root.keyHandler);
+    if (root.focusHandler) window.removeEventListener('focusin', root.focusHandler);
     if (root.outsidePointerHandler) window.removeEventListener('pointerdown', root.outsidePointerHandler, true);
     document.querySelectorAll(ownSelector).forEach(node => node.remove());
     root.observer = null;
@@ -16,13 +17,16 @@
     root.resizeHandler = null;
     root.scrollHandler = null;
     root.keyHandler = null;
+    root.focusHandler = null;
     root.outsidePointerHandler = null;
     root.layoutObserver = null;
     root.layoutNodes = null;
     root.metricNodes = null;
     root.metricHost = null;
+    root.nativeSpeedState = null;
+    root.visibleModelFooter = null;
     usageDialog.reset(root);
-    root.statuslineVersion = 13;
+    root.statuslineVersion = 14;
   }
   const staleBalanceRoot = window.__cockpitDeepSeekBalance;
   if (staleBalanceRoot) {
@@ -30,6 +34,7 @@
     staleBalanceRoot.observer?.disconnect();
     if (staleBalanceRoot.resizeHandler) window.removeEventListener('resize', staleBalanceRoot.resizeHandler);
     if (staleBalanceRoot.scrollHandler) window.removeEventListener('scroll', staleBalanceRoot.scrollHandler, true);
+    if (staleBalanceRoot.focusHandler) window.removeEventListener('focusin', staleBalanceRoot.focusHandler);
     badgeLayout.disconnect(staleBalanceRoot);
     delete window.__cockpitDeepSeekBalance;
   }
@@ -179,7 +184,7 @@
   function render() {
     let host = document.querySelector('[data-cockpit-quota-footer]');
     let details = document.querySelector('[data-cockpit-quota-details]');
-    const card = usageMetrics.visibleCard();
+    const card = usageMetrics.visibleCard(root.card);
     const footer = card?.querySelector('[class*="_ComposerLayoutFooter_"], [class*="_footer_"]') || card;
     const permissions = footer && [...footer.querySelectorAll('[data-composer-navigation-target="permissions"]')].find(node => node.getClientRects().length > 0);
     if (!card || !permissions) {
@@ -188,11 +193,24 @@
       if (root.quotaDetailsOpen) usageDialog.cancel(root);
       root.quotaDetailsOpen = false;
       root.threadId = '';
+      root.nativeSpeedState = null;
+      root.visibleModel = null;
+      root.visibleModelAt = 0;
       root.visibleModelFooter = null;
       badgeLayout.disconnect(root);
       return;
     }
     const modelTrigger = [...footer.querySelectorAll('[data-composer-navigation-target="reasoning"]')].find(node => node.getClientRects().length > 0);
+    // Portal menus live outside the composer. Only consume a menu owned by this
+    // open trigger; another composer must not supply this conversation's tier.
+    const openTriggers = [...document.querySelectorAll('[data-composer-navigation-target="reasoning"]')]
+      .filter(node => node.getClientRects().length > 0 && (node.getAttribute('aria-expanded') === 'true' || node.getAttribute('data-state') === 'open'));
+    const dropdowns = [...document.querySelectorAll('[class*="ModelPickerDropdownContent_"]')]
+      .filter(node => node.getClientRects().length > 0);
+    const menuId = modelTrigger?.getAttribute('aria-controls');
+    const modelDropdown = openTriggers.includes(modelTrigger)
+      ? (menuId ? dropdowns.find(node => node.getAttribute('id') === menuId)
+        : openTriggers.length === 1 && dropdowns.length === 1 ? dropdowns[0] : null) : null;
     const nextThreadId = usageMetrics.threadId(card);
     if (root.threadId !== nextThreadId) {
       root.quotaDetailsOpen = false;
@@ -202,6 +220,8 @@
       root.lastTriggerIndex = 0;
       usageDialog.reset(root);
       root.nativeSpeedState = null;
+      root.visibleModel = null;
+      root.visibleModelAt = 0;
     }
     // React may replace the composer card without changing its conversation.
     // That must not erase a verified list or close an already open dialog.
@@ -231,10 +251,8 @@
         nodes.push(modelTrigger.querySelector('[class*="ModelPickerTriggerContent_"]'));
         nodes.push(modelTrigger);
       }
-      const dropdown = [...document.querySelectorAll('[class*="ModelPickerDropdownContent_"]')].find(node => node.getClientRects().length > 0);
-      if (dropdown) {
-        nodes.push(dropdown.querySelector('[data-model-picker-model-row]'));
-        nodes.push(dropdown.querySelector('[class*="ViewToggleModelLabel_"]'));
+      if (modelDropdown) {
+        nodes.push(modelDropdown.querySelector('[class*="ViewToggleModelLabel_"]'));
       }
       for (const node of nodes) {
         if (!node || node.getClientRects().length === 0) continue;
@@ -250,7 +268,6 @@
       observedModelThisRender = visibleModel;
     }
     const fastNodes = [...footer.querySelectorAll('[data-fast-mode-enabled]')];
-    const modelDropdown = [...document.querySelectorAll('[class*="ModelPickerDropdownContent_"]')].find(node => node.getClientRects().length > 0);
     if (modelDropdown) fastNodes.push(...modelDropdown.querySelectorAll('[data-fast-mode-enabled]'));
     const fastNode = fastNodes.find(node => node.getClientRects().length > 0
       && ['true','false'].includes(node.getAttribute('data-fast-mode-enabled')));
@@ -383,6 +400,10 @@
     root.scrollHandler = () => root.scheduleRender();
     window.addEventListener('scroll', root.scrollHandler, {passive:true,capture:true});
   }
+  if (!root.focusHandler) {
+    root.focusHandler = () => root.scheduleRender();
+    window.addEventListener('focusin', root.focusHandler);
+  }
   if (!root.keyHandler) {
     root.keyHandler = event => {
       if (event.key === 'Escape' && root.quotaDetailsOpen) {
@@ -417,7 +438,7 @@
       if (relevant) root.scheduleRender();
     });
     root.observer.observe(document.documentElement, {childList:true,subtree:true,characterData:true,attributes:true,
-      attributeFilter:['class','style','hidden','aria-hidden','data-state','data-fast-mode-enabled','data-dictation-view','data-above-composer-conversation-id','data-composer-placement','data-app-action-sidebar-thread-selected','data-app-action-sidebar-thread-id']});
+      attributeFilter:['class','style','hidden','aria-hidden','aria-expanded','data-state','data-fast-mode-enabled','data-dictation-view','data-above-composer-conversation-id','data-composer-placement','data-app-action-sidebar-thread-selected','data-app-action-sidebar-thread-id']});
   }
   const styleText = `
       [data-cockpit-quota-footer]{appearance:none;-webkit-appearance:none;position:fixed;transform:translate(-50%,-50%);z-index:2;display:flex;align-items:center;justify-content:center;gap:0;width:max-content;height:28px;box-sizing:border-box;font:inherit;font-size:12px;font-weight:500;line-height:17px;color:var(--color-token-text-secondary,#737373);background:var(--color-token-main-surface-primary,#fff);border:1px solid rgba(127,127,127,.12);border-radius:9px;padding:0 6px;margin:0;white-space:nowrap;pointer-events:auto;cursor:pointer;box-shadow:none}

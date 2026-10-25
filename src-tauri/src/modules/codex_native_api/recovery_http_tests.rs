@@ -17,8 +17,12 @@ use std::{
 };
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
 
+#[path = "multi_result_history_tests.rs"]
+mod multi_result_history_tests;
+
 struct HostFixture {
     url: String,
+    chatgpt: bool,
     selections: Mutex<Vec<RouteRequest>>,
 }
 impl Host for HostFixture {
@@ -67,7 +71,7 @@ impl Host for HostFixture {
                 client: reqwest::Client::builder().no_proxy().build().unwrap(),
                 proxy_url: None,
                 proxy_route: None,
-                chatgpt: false,
+                chatgpt: self.chatgpt,
                 chatgpt_plan: false,
                 wire_api: WireApi::Responses,
                 compact_endpoint: None,
@@ -133,18 +137,23 @@ async fn upstream(
     bytes: Bytes,
 ) -> Response {
     let request: Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(request.get("previous_response_id").is_none());
     assert_eq!(
         input_owners(&source.path),
         0,
         "unverified input must not acquire ownership before completion"
     );
+    let previous = request.get("previous_response_id").is_some();
     source.seen.lock().unwrap().push((headers, request));
+    if previous {
+        return Response::builder().status(400).body(Body::from(
+            r#"{"error":{"code":"previous_response_not_found","message":"fixture upstream checkpoint unavailable","param":"previous_response_id"}}"#,
+        )).unwrap();
+    }
     if source.mode == 400 {
         return Response::builder()
             .status(400)
             .body(Body::from(
-                r#"{"error":{"code":"invalid_request_error","message":"fixture failure"}}"#,
+                r#"{"error":{"code":"invalid_request_error","message":"fixture failure","param":"input"}}"#,
             ))
             .unwrap();
     }
@@ -167,6 +176,18 @@ async fn fixture(
     Arc<Upstream>,
     tokio::task::JoinHandle<()>,
 ) {
+    fixture_with_route(mode, false).await
+}
+
+async fn fixture_with_route(
+    mode: u16,
+    chatgpt: bool,
+) -> (
+    tempfile::TempDir,
+    super::super::Handle,
+    Arc<Upstream>,
+    tokio::task::JoinHandle<()>,
+) {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("identity.sqlite");
     let source = Arc::new(Upstream {
@@ -177,6 +198,7 @@ async fn fixture(
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let host = Arc::new(HostFixture {
         url: format!("http://{}/v1", listener.local_addr().unwrap()),
+        chatgpt,
         selections: Mutex::new(vec![]),
     });
     let app = Router::new()
@@ -193,6 +215,53 @@ async fn fixture(
     .await
     .unwrap();
     (directory, service, source, task)
+}
+
+#[tokio::test]
+async fn legacy_forwarding_http_and_sse_let_upstream_judge_incomplete_or_unknown_history() {
+    for streaming in [false, true] {
+        for mode in [200, 400, 299] {
+            for item in [
+                json!({"type":"function_call_output","call_id":"orphan","output":"original result"}),
+                json!({"type":"function_call","name":"legacy_tool","arguments":"{}"}),
+                json!({"type":"future_history_item","payload":{"keep":"exact"}}),
+            ] {
+                let (_directory, mut service, source, task) = fixture(mode).await;
+                let mut original = body(streaming);
+                original["input"] = json!([
+                    {"type":"reasoning","encrypted_content":"legacy-cipher","summary":[]},
+                    item
+                ]);
+                original["tools"] = json!([{"type":"future_tool","extension":"keep"}]);
+                let response = reqwest::Client::builder().no_proxy().build().unwrap()
+                    .post(format!("http://{}/v1/responses", service.addr))
+                    .bearer_auth("test")
+                    .json(&original)
+                    .send().await.unwrap();
+                let status = response.status();
+                let payload = response.text().await.unwrap();
+                assert!(!payload.contains("continuation_history_incomplete"), "{payload}");
+                if mode == 200 {
+                    assert!(status.is_success(), "{payload}");
+                    assert!(payload.contains("auto-response"), "{payload}");
+                } else {
+                    assert!(payload.contains("fixture failure"), "{payload}");
+                    if mode == 400 {
+                        assert!(payload.contains("invalid_request_error"), "{payload}");
+                        assert!(payload.contains("\"param\":\"input\""), "{payload}");
+                    }
+                    assert_eq!(input_owners(&source.path), 0);
+                }
+                let seen = source.seen.lock().unwrap();
+                assert_eq!(seen.len(), 1, "ordinary forwarding must not silently retry");
+                assert_eq!(seen[0].1["input"], original["input"]);
+                assert_eq!(seen[0].1["tools"], original["tools"]);
+                drop(seen);
+                service.shutdown(Duration::from_secs(2)).await.unwrap();
+                task.abort();
+            }
+        }
+    }
 }
 
 #[tokio::test]
@@ -248,7 +317,7 @@ async fn automatic_history_http_and_sse_preserve_unknown_cipher_and_commit_only_
 
 #[tokio::test]
 async fn automatic_history_missing_checkpoint_fails_before_upstream_and_full_resend_succeeds() {
-    let (_directory, mut service, source, task) = fixture(200).await;
+    let (_directory, mut service, source, task) = fixture_with_route(200, true).await;
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
     let url = format!("http://{}/v1/responses", service.addr);
     let delta = json!({"model":"test","previous_response_id":"unknown-response","client_metadata":{"session_id":"client-root","thread_id":"client-child"},"input":[{"role":"user","content":"next"}]});
@@ -264,20 +333,74 @@ async fn automatic_history_missing_checkpoint_fails_before_upstream_and_full_res
         .text()
         .await
         .unwrap()
-        .contains("previous_response_not_found"));
+        .contains("continuation_history_incomplete"));
     assert!(source.seen.lock().unwrap().is_empty());
+    let mut full = body(false);
+    full["input"][1] = json!({
+        "type":"reasoning",
+        "summary":[],
+        "encrypted_content":super::super::codex_cpa_wire::synthetic_gpt_signature(71)
+    });
     let response = client
         .post(&url)
         .bearer_auth("test")
-        .json(&body(false))
+        .json(&full)
         .send()
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
     response.bytes().await.unwrap();
-    assert_eq!(source.seen.lock().unwrap()[0].1["input"], input());
+    assert_eq!(source.seen.lock().unwrap()[0].1["input"], full["input"]);
     service.shutdown(Duration::from_secs(2)).await.unwrap();
     task.abort();
+}
+
+#[tokio::test]
+async fn legacy_forwarding_websocket_http_bridge_preserves_unverified_history_and_upstream_error() {
+    for mode in [200, 400] {
+        let (_directory, mut service, source, task) = fixture(mode).await;
+        let mut request = format!("ws://{}/v1/responses", service.addr)
+            .into_client_request().unwrap();
+        request.headers_mut().insert("authorization", "Bearer test".parse().unwrap());
+        let mut socket = tokio_tungstenite::connect_async(request).await.unwrap().0;
+        let mut original = body(true);
+        original["type"] = json!("response.create");
+        original["input"] = json!([
+            {"type":"reasoning","encrypted_content":"legacy-cipher","summary":[]},
+            {"type":"function_call_output","call_id":"orphan","output":"original result"},
+            {"type":"future_history_item","payload":"keep"}
+        ]);
+        socket.send(Message::Text(original.to_string().into())).await.unwrap();
+        let event = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                match socket.next().await.unwrap().unwrap() {
+                    Message::Text(text) => {
+                        let value: Value = serde_json::from_str(&text).unwrap();
+                        if value["type"] == "response.completed" || value["type"] == "error" {
+                            break value;
+                        }
+                    }
+                    Message::Ping(data) => socket.send(Message::Pong(data)).await.unwrap(),
+                    _ => {}
+                }
+            }
+        }).await.unwrap();
+        if mode == 200 {
+            assert_eq!(event["type"], "response.completed", "{event}");
+        } else {
+            assert_eq!(event["error"]["code"], "invalid_request_error", "{event}");
+            assert_eq!(event["error"]["message"], "fixture failure", "{event}");
+            assert_eq!(event["error"]["param"], "input", "{event}");
+            assert_eq!(input_owners(&source.path), 0);
+        }
+        let seen = source.seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].1["input"], original["input"]);
+        drop(seen);
+        socket.close(None).await.unwrap();
+        service.shutdown(Duration::from_secs(2)).await.unwrap();
+        task.abort();
+    }
 }
 
 #[tokio::test]

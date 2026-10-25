@@ -262,7 +262,7 @@ async fn send_inner(
             return Err(if tokio::time::Instant::now() >= deadline {
                 total_timeout()
             } else {
-                ServiceError::new(504, "upstream_connect_timeout", "Upstream response headers timed out")
+                super::connection_error::timeout(&prepared.route)
             });
         }
         let result = tokio::select! {
@@ -278,10 +278,10 @@ async fn send_inner(
                 Ok(Ok(value)) => Ok(value),
                 Ok(Err(error)) => {
                     connect_failed = error.is_connect() || error.is_builder();
-                    Err(super::diagnostics::transport_failure(502, "upstream_unavailable", "Unable to connect to the selected upstream", &error))
+                    Err(super::connection_error::request(&prepared.route, &error))
                 },
                 Err(_) if tokio::time::Instant::now() >= deadline => Err(total_timeout()),
-                Err(_) => Err(ServiceError::new(504, "upstream_connect_timeout", "Upstream response headers timed out")),
+                Err(_) => Err(super::connection_error::timeout(&prepared.route)),
             }
         };
         let mut response = match result {
@@ -372,9 +372,14 @@ async fn send_inner(
                 return Err(if connect_failed {
                     // A candidate that could not connect cannot replace a real
                     // rejection already received earlier in this request.
-                    last_upstream_failure.clone().unwrap_or_else(|| ServiceError::new(
-                        503, "no_available_account", "No authorized upstream could be reached",
-                    ))
+                    last_upstream_failure.clone().unwrap_or_else(|| {
+                        // Keep the attempted proxy and local failure explanation;
+                        // exhaustion is not evidence of invalid authorization.
+                        let mut error = error;
+                        error.status = 503;
+                        error.code = "no_available_account";
+                        error
+                    })
                 } else {
                     error
                 });

@@ -93,3 +93,32 @@ for (const [file, toggleName, activateName] of [
     assert.deepEqual(h.calls.busy, [true, false]);
   });
 }
+
+test('saving routing options sends the mapping draft and accepts the persisted state', async () => {
+  for (const enabled of [false, true]) {
+    const calls: any[] = [];
+    const next = { collection: { sessionIdentityMappingEnabled: enabled } };
+    let saved: unknown;
+    const busy: boolean[] = [];
+    const action = handler('./CodexApiServicePage.tsx', 'handleSaveRoutingOptions', {
+      sessionIdentityMappingEnabledDraft: enabled,
+      sessionAffinityDraft: true, sessionAffinityTtlDraft: '3600',
+      responsesWebsocketsEnabledDraft: false, maxRetryCredentialsDraft: '0', maxRetryIntervalDraft: '3',
+      disableCoolingDraft: false, immediateSseResponseDraft: false,
+      maxConcurrentImageRequestsDraft: '1', maxAccountConcurrencyDraft: '2', accountConcurrencyWaitDraft: '120',
+      parseIntegerDraft: Number, routingSaving: false,
+      setRoutingSaving: (value: boolean) => busy.push(value),
+      setError: (error: string) => assert.fail(error),
+      setState: (value: unknown) => { saved = value; },
+      t: (key: string) => key,
+      runAction: async (run: () => Promise<void>) => run(),
+      codexLocalAccessService: { updateCodexLocalAccessRoutingOptions: async (payload: unknown) => { calls.push(payload); return next; } },
+    });
+    await action();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].sessionIdentityMappingEnabled, enabled);
+    assert.equal(calls[0].sessionAffinity, true);
+    assert.equal(saved, next);
+    assert.deepEqual(busy, [true, false]);
+  }
+});

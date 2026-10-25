@@ -288,47 +288,6 @@ fn parse_codex_registered_launch(output: &str) -> Result<Option<CodexRegisteredL
     Ok(registered)
 }
 
-/// Resolve the selected StartApps entry to its registered GUI executable before
-/// activation. A shell alias cannot carry a per-launch environment block.
-#[cfg(any(test, target_os = "windows"))]
-fn build_codex_default_registered_launch_probe(app_user_model_id: &str) -> Result<String, String> {
-    let (family, app_id) = app_user_model_id
-        .trim()
-        .split_once('!')
-        .filter(|(family, app_id)| {
-            !family.is_empty() && !app_id.is_empty() && !app_id.contains('!')
-        })
-        .ok_or_else(|| "Invalid Codex AppUserModelId".to_string())?;
-    Ok(format!(
-        r#"$ErrorActionPreference = 'Stop'
-$family = '{family}'
-$appId = '{app_id}'
-$pkg = Get-AppxPackage -Name '{package_name}' -ErrorAction Stop | Where-Object {{ $_.PackageFamilyName -ieq $family }} | Sort-Object Version -Descending | Select-Object -First 1
-if (-not $pkg) {{ throw 'Codex package is not registered' }}
-$root = [IO.Path]::GetFullPath($pkg.InstallLocation).TrimEnd('\')
-$matches = @()
-foreach ($application in (Get-AppxPackageManifest -Package $pkg -ErrorAction Stop).Package.Applications.Application) {{
-  if ($application.Id -ne $appId) {{ continue }}
-  $relative = [string]$application.Executable
-  if (-not $relative -or [IO.Path]::IsPathRooted($relative)) {{ continue }}
-  $exe = [IO.Path]::GetFullPath((Join-Path $root $relative))
-  if ($exe.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase) -and [IO.Path]::GetFileName($exe) -ieq 'ChatGPT.exe' -and (Test-Path -LiteralPath $exe -PathType Leaf)) {{
-    $matches += [PSCustomObject]@{{ family_name = [string]$pkg.PackageFamilyName; app_id = [string]$application.Id; executable = $exe }}
-  }}
-}}
-if ($matches.Count -ne 1) {{ throw 'No unique registered Codex GUI application' }}
-$matches[0] | ConvertTo-Json -Compress"#,
-        family = escape_powershell_single_quoted(family),
-        package_name = escape_powershell_single_quoted(
-            family
-                .rsplit_once('_')
-                .map(|(name, _)| name)
-                .unwrap_or(family)
-        ),
-        app_id = escape_powershell_single_quoted(app_id),
-    ))
-}
-
 #[cfg(any(test, target_os = "windows"))]
 #[derive(Debug, PartialEq)]
 enum CodexManagedLaunchRoute {

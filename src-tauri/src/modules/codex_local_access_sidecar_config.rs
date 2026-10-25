@@ -2846,8 +2846,12 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         .as_array()
         .ok_or("Continuity callers are unavailable")?;
     if sidecar_manifest_needs_continuity(continuity_accounts, continuity_callers) {
-        manifest["continuity"] =
-            sidecar_continuity_manifest(&base_dir, continuity_accounts, continuity_callers)?;
+        manifest["continuity"] = sidecar_continuity_manifest(
+            &base_dir,
+            continuity_accounts,
+            continuity_callers,
+            collection.session_identity_mapping_enabled,
+        )?;
     }
 
     let mut config = Map::new();

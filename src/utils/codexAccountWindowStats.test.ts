@@ -3,7 +3,7 @@ import test from 'node:test';
 import { deferred, settlePromises } from '../../tests/helpers/reactHookHarness';
 import type { CodexAccount } from '../types/codex';
 import type { CodexLocalAccessAccountWindowQuery, CodexLocalAccessAccountWindowStats } from '../types/codexLocalAccess';
-import { buildCodexAccountWindowStatsScope, createCodexAccountWindowStatsReader, type CodexAccountWindowStatsSnapshot } from './codexAccountWindowStats';
+import { buildCodexAccountWindowStatsScope, createCodexAccountWindowStatsReader, retainCodexAccountWindowStats, type CodexAccountWindowStatsSnapshot } from './codexAccountWindowStats';
 
 const clock = 1_800_000_000;
 const account = (id = 'a', reset = clock + 100): CodexAccount => ({ id, quota: {
@@ -94,4 +94,62 @@ test('continuous quota events are bounded to one refresh per five seconds', asyn
   now += 4_999; context.mock.timers.tick(4_999); await settlePromises(); assert.equal(calls, 1);
   now++; context.mock.timers.tick(1); await settlePromises(); assert.equal(calls, 2);
   reader.dispose();
+});
+
+test('reset estimate drift keeps all confirmed counters visible and cannot bypass the refresh limit', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  let now = clock * 1000;
+  const jobs: ReturnType<typeof deferred<CodexLocalAccessAccountWindowStats[]>>[] = [];
+  const snapshots: CodexAccountWindowStatsSnapshot[] = [];
+  const errors: unknown[] = [];
+  const reader = createCodexAccountWindowStatsReader({ now: () => now,
+    read: () => { const job = deferred<CodexLocalAccessAccountWindowStats[]>(); jobs.push(job); return job.promise; },
+    onChange: (value) => snapshots.push(value), onError: (error) => errors.push(error) });
+  const makeScope = (offset: number) => buildCodexAccountWindowStatsScope(
+    [account('a', clock + 100 + offset), account('b')], ['a', 'b'], Math.floor(now / 1000))!;
+  reader.setScope(makeScope(0)); context.mock.timers.tick(250);
+  jobs[0].resolve([row('a', 5), { ...row('a', 8), windowKey: 'secondary' }, row('b', 9)]); await settlePromises();
+  for (let i = 1; i <= 4; i++) {
+    now += 1000; context.mock.timers.tick(1000); reader.setScope(makeScope(i)); reader.refresh();
+    assert.equal(last(snapshots).byAccountId.a.primary?.requestCount, 5);
+    assert.equal(last(snapshots).byAccountId.a.secondary?.requestCount, 8);
+    assert.equal(last(snapshots).byAccountId.b.primary?.requestCount, 9);
+    assert.equal(jobs.length, 1);
+  }
+  now += 1000; context.mock.timers.tick(1000); assert.equal(jobs.length, 2);
+  const confirmed = last(snapshots);
+  jobs[1].reject(new Error('database busy')); await settlePromises();
+  assert.equal(errors.length, 1); assert.equal(last(snapshots), confirmed);
+  reader.refresh(); now += 5000; context.mock.timers.tick(5000);
+  jobs[2].resolve([row('a', 6), { ...row('a', 8), windowKey: 'secondary' }, row('b', 10)]); await settlePromises();
+  assert.equal(last(snapshots).byAccountId.a.primary?.requestCount, 6);
+  assert.equal(last(snapshots).byAccountId.b.primary?.requestCount, 10);
+  reader.dispose();
+});
+
+test('retention isolates changed windows, reset boundaries, membership and duration changes at render time', () => {
+  const accounts = [account('a'), account('b', clock + 1000)];
+  const sourceScope = buildCodexAccountWindowStatsScope(accounts, ['a', 'b'], clock)!;
+  const primary = { requestCount: 5, inputTokens: 10, cachedInputTokens: 2, outputTokens: 5, totalTokens: 15, estimatedCostUsd: 0.1 };
+  const snapshot: CodexAccountWindowStatsSnapshot = { scope: sourceScope.key, sourceScope, ready: true,
+    byAccountId: { a: { primary, secondary: primary }, b: { primary } } };
+  const select = (nextAccounts: CodexAccount[], now = clock, members = ['a', 'b']) =>
+    retainCodexAccountWindowStats(snapshot, buildCodexAccountWindowStatsScope(nextAccounts, members, now));
+  const assertOnlyPrimaryCleared = (value: CodexAccountWindowStatsSnapshot) => {
+    assert.equal(value.byAccountId.a.primary, undefined);
+    assert.equal(value.byAccountId.a.secondary, primary);
+    assert.equal(value.byAccountId.b.primary, primary);
+  };
+  assertOnlyPrimaryCleared(select(accounts, clock + 100));
+  assertOnlyPrimaryCleared(select([account('a', clock + 100 + 18000), accounts[1]]));
+  assertOnlyPrimaryCleared(select([{ ...accounts[0], quota: { ...accounts[0].quota!, hourly_window_minutes: 60 } }, accounts[1]]));
+  // A future estimate must not carry pre-reset values past their original confirmed reset.
+  assertOnlyPrimaryCleared(select([account('a', clock + 102), accounts[1]], clock + 101));
+  const corrected = [account('a', clock + 102), accounts[1]];
+  const retained = select(corrected);
+  assert.equal(retained.byAccountId.a.primary, primary);
+  assertOnlyPrimaryCleared(retainCodexAccountWindowStats(retained,
+    buildCodexAccountWindowStatsScope(corrected, ['a', 'b'], clock + 101)));
+  assert.equal(select(accounts, clock, ['b']).byAccountId.a, undefined);
+  assert.equal(retainCodexAccountWindowStats(snapshot, null).ready, false);
 });

@@ -36,6 +36,12 @@ pub struct Config {
     pub token: String,
     pub owners: HashMap<String, String>,
     pub caller_accounts: HashMap<String, Vec<String>>,
+    #[serde(default = "default_session_identity_mapping_enabled")]
+    pub session_identity_mapping_enabled: bool,
+}
+
+fn default_session_identity_mapping_enabled() -> bool {
+    true
 }
 
 struct StateData {
@@ -321,3 +327,6 @@ async fn release(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod legacy_forwarding_tests;

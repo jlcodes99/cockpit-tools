@@ -446,7 +446,20 @@ async fn prepare_selected_inner(
     selected: ImageRoute,
     image_request: ImageRouteRequest,
 ) -> Result<Prepared, ServiceError> {
-    let context = inspect_mode(state, caller, incoming, &body, true).await?;
+    let mut context = inspect_mode(state, caller, incoming, &body, true).await?;
+    if selected.route.chatgpt
+        && !selected.route.headers.contains_key("x-xai-token-auth")
+        && body.get("previous_response_id").is_some_and(Value::is_string)
+    {
+        // Forced image tools use the same OAuth HTTP transport. It cannot
+        // resolve native response anchors without the complete local history.
+        let identity = state.identity.clone();
+        let headers = incoming.clone();
+        (context, body) = super::blocking::run_prepared(state, move || {
+            let plan = identity.expand_http_previous(&mut context, &headers, &body, &body)?;
+            Ok::<_, ServiceError>((context, plan.body))
+        }).await?;
+    }
     if context
         .state_account_id
         .as_deref()
@@ -832,11 +845,7 @@ async fn inspect_mode(
     let headers = headers.clone();
     let body = body.clone();
     super::blocking::run_prepared(state, move || {
-        if allow_portable_input {
-            identity.inspect_for_rebuild(&caller_id, &headers, &body)
-        } else {
-            identity.inspect(&caller_id, &headers, &body)
-        }
+        identity.inspect_for_forwarding(&caller_id, &headers, &body, allow_portable_input)
     })
     .await
 }

@@ -4,7 +4,7 @@ import type { CodexQuotaUpdate } from '../utils/codexQuotaSync';
 import { CURRENT_ACCOUNT_CHANGED_EVENT, type AccountSyncEventPayload } from '../utils/accountSyncEvents';
 import { subscribeTauriEvent } from '../utils/tauriEventListener';
 import { queryCodexLocalAccessAccountWindowStats } from '../services/codexLocalAccessService';
-import { buildCodexAccountWindowStatsScope, createCodexAccountWindowStatsReader, EMPTY_CODEX_ACCOUNT_WINDOW_STATS } from '../utils/codexAccountWindowStats';
+import { buildCodexAccountWindowStatsScope, createCodexAccountWindowStatsReader, EMPTY_CODEX_ACCOUNT_WINDOW_STATS, retainCodexAccountWindowStats } from '../utils/codexAccountWindowStats';
 
 /** Window statistics follow semantic quota windows; background request activity refreshes them in bounded batches. */
 export function useCodexAccountWindowStats(active: boolean, accounts: readonly CodexAccount[], memberIds: readonly string[]) {
@@ -62,6 +62,6 @@ export function useCodexAccountWindowStats(active: boolean, accounts: readonly C
   }, [active]);
 
   useEffect(() => { readerRef.current?.setScope(scope); }, [active, scope?.key]);
-  // Render-time gating prevents even one frame of another window's statistics after a scope change.
-  return active && snapshot.scope === scope?.key ? snapshot : EMPTY_CODEX_ACCOUNT_WINDOW_STATS;
+  // Filter at render time too: unaffected windows stay visible, expired/removed ones never leak a frame.
+  return active ? retainCodexAccountWindowStats(snapshot, scope) : EMPTY_CODEX_ACCOUNT_WINDOW_STATS;
 }

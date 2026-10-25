@@ -11,6 +11,7 @@ pub async fn save_local_access_accounts_with_official_bindings(
         HashMap<String, CodexLocalAccessImageGenerationPolicy>,
     >,
     official_account_bindings: Option<HashMap<String, String>>,
+    session_identity_mapping_enabled: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
     ensure_runtime_loaded_without_start().await?;
     let original = gateway_runtime()
@@ -168,6 +169,9 @@ pub async fn save_local_access_accounts_with_official_bindings(
             next.paused_account_ids
                 .retain(|id| account_ids.contains(id) && !snapshots.contains_key(id));
             next.restrict_free_accounts = restrict_free_accounts;
+            if let Some(enabled) = session_identity_mapping_enabled {
+                next.session_identity_mapping_enabled = enabled;
+            }
             if let Some(policies) = &image_generation_account_policies {
                 for (id, policy) in policies {
                     if account_ids.contains(id) {

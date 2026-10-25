@@ -160,6 +160,15 @@ async fn rejected_turn(fixture: &Fixture, delivery: Delivery, request: &Value) -
         return event;
     }
     let response = fixture.post(request, None).await;
+    if matches!(delivery, Delivery::Sse) && response.status().is_success() {
+        let text = response.text().await.unwrap();
+        return text.split("\n\n").filter_map(|frame| {
+            let data = frame.lines().filter_map(|line| line.strip_prefix("data: "))
+                .collect::<Vec<_>>().join("\n");
+            serde_json::from_str::<Value>(&data).ok()
+        }).find(|event| event["type"] == "error")
+            .unwrap_or_else(|| panic!("{delivery:?}: no upstream error in SSE: {text}"));
+    }
     assert!(
         !response.status().is_success(),
         "{delivery:?}: rejected continuation reached upstream"
@@ -443,7 +452,14 @@ async fn output_evidence_repair_does_not_adopt_unknown_input_or_invent_a_missing
         for repair in [Repair::Empty, Repair::Unindexed] {
             let mut fixture = Fixture::new(
                 true,
-                vec![Step::RawEvents(raw_events("a-recovered", repair))],
+                vec![
+                    Step::RawEvents(raw_events("a-recovered", repair)),
+                    Step::RawEvents(vec![json!({"type":"error","status":400,"error":{
+                        "code":"previous_response_not_found",
+                        "message":"Original upstream does not recognize this response",
+                        "param":"previous_response_id"
+                    }})]),
+                ],
                 vec![Step::Complete("unexpected-b", None)],
             )
             .await;
@@ -485,22 +501,27 @@ async fn output_evidence_repair_does_not_adopt_unknown_input_or_invent_a_missing
             assert_eq!(count, i64::from(complete));
             assert_cipher_owner(&fixture, "observed-a-cipher", "a");
             restart(&mut fixture).await;
-            let unauthorized = body(
+            let unresolved = body(
                 vec![message("user", "delta without its checkpoint")],
                 Some("never-authorized-response"),
                 delivery.streaming(),
             );
-            let error = rejected_turn(&fixture, delivery, &unauthorized).await;
-            // The unknown response is rejected before inspecting its unknown cipher.
+            let error = rejected_turn(&fixture, delivery, &unresolved).await;
+            // Native Responses references are resolved by their upstream, not
+            // inferred from a missing local checkpoint or repaired output.
             assert_eq!(
                 error["error"]["code"], "previous_response_not_found",
                 "{delivery:?}: {error}"
             );
+            assert_eq!(error["error"]["message"], "Original upstream does not recognize this response");
+            assert_eq!(error["error"]["param"], "previous_response_id");
             assert_eq!(
                 fixture.sent().len(),
-                1,
-                "a missing checkpoint must not authorize an incomplete replay"
+                2,
+                "an unknown reference is forwarded once, without automatic replay"
             );
+            assert_eq!(fixture.sent()[1].account, "a");
+            assert_eq!(fixture.sent()[1].body["previous_response_id"], unresolved["previous_response_id"]);
             assert_eq!(replay_state(&fixture), before);
             fixture.finish().await;
         }

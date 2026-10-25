@@ -40,7 +40,8 @@ test('overview stats refresh new requests periodically, ignore display-only rere
   document.visibilityState = 'visible'; document.dispatchEvent(new Event('visibilitychange')); context.mock.timers.tick(250);
   reads[2].resolve([row(3)]); await settlePromises(); assert.equal(hook.flush().byAccountId.a.primary.requestCount, 3);
   accounts = [{ ...first, quota: { ...first.quota!, hourly_reset_time: 2_000_000_100 } }];
-  assert.equal(hook.flush().ready, false); context.mock.timers.tick(250);
+  assert.equal(hook.flush().byAccountId.a.primary.requestCount, 3, 'reset-time corrections retain visible counters before effects and while querying');
+  context.mock.timers.tick(250);
   reads[3].resolve([row(4)]); await settlePromises(); assert.equal(hook.flush().byAccountId.a.primary.requestCount, 4);
   listeners.get('codex:quota-updated')!({ payload: { account_id: 'other' } }); context.mock.timers.tick(250); assert.equal(reads.length, 4);
   listeners.get('codex:quota-updated')!({ payload: { account_id: 'a' } }); context.mock.timers.tick(250); assert.equal(reads.length, 5);

@@ -2108,7 +2108,7 @@ fn is_usable_codex_windows_gui_path(path: &Path) -> bool {
     is_chatgpt_store_gui_exe(path) && windows_executable_has_gui_subsystem(path)
 }
 
-/// 读取 `AppxManifest.xml` 里 `Application Id="App"` 的 `Executable`。
+/// 读取 `AppxManifest.xml` 中桌面主程序的 `Executable`，不假定 Application Id。
 #[cfg(any(test, target_os = "windows"))]
 fn appx_manifest_gui_executable(install_location: &std::path::Path) -> Option<String> {
     let bytes = std::fs::read(install_location.join("AppxManifest.xml")).ok()?;
@@ -2117,33 +2117,43 @@ fn appx_manifest_gui_executable(install_location: &std::path::Path) -> Option<St
 
 #[cfg(any(test, target_os = "windows"))]
 fn appx_manifest_gui_executable_from_text(text: &str) -> Option<String> {
-    for element in text.split('<') {
-        let element = element.trim_start();
-        if !element.starts_with("Application") {
-            continue;
-        }
-        match xml_attribute(element, "Id") {
-            Some(id) if id.eq_ignore_ascii_case("App") => {}
-            _ => continue,
-        }
-        if let Some(executable) = xml_attribute(element, "Executable") {
-            return Some(executable);
+    use quick_xml::{events::Event, Reader};
+    let mut reader = Reader::from_str(text);
+    let mut matched = None;
+    loop {
+        match reader.read_event().ok()? {
+            Event::Start(element) | Event::Empty(element)
+                if element.local_name().as_ref() == b"Application" =>
+            {
+                let mut id = None;
+                let mut executable = None;
+                for attribute in element.attributes() {
+                    let attribute = attribute.ok()?;
+                    let value = attribute.decode_and_unescape_value(reader.decoder()).ok()?;
+                    match attribute.key.as_ref() {
+                        b"Id" => id = Some(value.into_owned()),
+                        b"Executable" => executable = Some(value.into_owned()),
+                        _ => {}
+                    }
+                }
+                if let (Some(id), Some(executable)) = (id, executable) {
+                    if !id.trim().is_empty()
+                        && is_chatgpt_store_gui_exe(Path::new(&executable))
+                        && !executable.contains(':')
+                        && !executable.starts_with(['/', '\\'])
+                        && !executable.split(['/', '\\']).any(|part| part == "..")
+                    {
+                        if matched.is_some() {
+                            return None;
+                        }
+                        matched = Some(executable);
+                    }
+                }
+            }
+            Event::Eof => return matched,
+            _ => {}
         }
     }
-    None
-}
-
-#[cfg(any(test, target_os = "windows"))]
-fn xml_attribute(element: &str, name: &str) -> Option<String> {
-    let needle = format!("{}=\"", name);
-    let start = element.find(&needle)? + needle.len();
-    let rest = &element[start..];
-    let end = rest.find('"')?;
-    let value = rest[..end].trim();
-    if value.is_empty() {
-        return None;
-    }
-    Some(value.to_string())
 }
 
 /// 在给定 `InstallLocation` 下解析商店版桌面端主程序，只返回 `ChatGPT.exe`。
@@ -2253,165 +2263,6 @@ fn detect_codex_store_gui_exe() -> Option<std::path::PathBuf> {
         ));
     }
     None
-}
-
-#[cfg(target_os = "windows")]
-fn detect_codex_store_app_user_model_id_by_startapps() -> Option<String> {
-    let script = r#"$entry = Get-StartApps |
-  Where-Object {
-    $_.AppID -like 'OpenAI.ChatGPT*' -or
-    $_.AppID -like 'OpenAI.Codex_*' -or
-    $_.Name -like 'ChatGPT*' -or
-    $_.Name -like 'Codex*'
-  } |
-  Sort-Object @{ Expression = { if ($_.AppID -like 'OpenAI.ChatGPT*' -or $_.Name -like 'ChatGPT*') { 0 } else { 1 } } }, Name |
-  Select-Object -First 1
-if ($entry -and -not [string]::IsNullOrWhiteSpace($entry.AppID)) {
-  Write-Output ([string]$entry.AppID.Trim())
-}"#;
-
-    let stdout = codex_launch_powershell_output(script).ok()?;
-    for line in stdout.lines() {
-        let app_user_model_id = line.trim().trim_matches('"');
-        if !app_user_model_id.is_empty() {
-            return Some(app_user_model_id.to_string());
-        }
-    }
-    None
-}
-
-#[cfg(target_os = "windows")]
-fn detect_codex_store_app_user_model_id_by_appx_fallback() -> Option<String> {
-    let script = r#"$names = @('OpenAI.ChatGPT', 'OpenAI.ChatGPT-Desktop', 'OpenAI.Codex')
-$pkg = $names |
-  ForEach-Object { Get-AppxPackage -Name $_ -ErrorAction SilentlyContinue } |
-  Sort-Object @{ Expression = { if ($_.Name -like 'OpenAI.ChatGPT*') { 0 } else { 1 } } }, @{ Expression = { $_.Version }; Descending = $true } |
-  Select-Object -First 1
-if (-not $pkg) {
-  $pkg = Get-AppxPackage |
-    Where-Object {
-      $_.Name -like 'OpenAI.ChatGPT*' -or
-      $_.Name -like 'OpenAI.Codex*' -or
-      $_.PackageFamilyName -like 'OpenAI.ChatGPT*' -or
-      $_.PackageFamilyName -like 'OpenAI.Codex*'
-    } |
-  Sort-Object @{ Expression = { if ($_.Name -like 'OpenAI.ChatGPT*' -or $_.PackageFamilyName -like 'OpenAI.ChatGPT*') { 0 } else { 1 } } }, @{ Expression = { $_.Version }; Descending = $true } |
-  Select-Object -First 1
-}
-if ($pkg -and -not [string]::IsNullOrWhiteSpace($pkg.PackageFamilyName)) {
-  Write-Output ([string]($pkg.PackageFamilyName.Trim() + '!App'))
-}"#;
-
-    let stdout = codex_launch_powershell_output(script).ok()?;
-    for line in stdout.lines() {
-        let app_user_model_id = line.trim().trim_matches('"');
-        if !app_user_model_id.is_empty() {
-            return Some(app_user_model_id.to_string());
-        }
-    }
-    None
-}
-
-#[cfg(target_os = "windows")]
-fn detect_codex_store_app_user_model_id_uncached() -> Option<String> {
-    if let Some(app_user_model_id) = detect_codex_store_app_user_model_id_by_startapps() {
-        crate::modules::logger::log_info(&format!(
-            "[Codex Store] StartApps 命中 AppUserModelId: {}",
-            app_user_model_id
-        ));
-        return Some(app_user_model_id);
-    }
-    if let Some(app_user_model_id) = detect_codex_store_app_user_model_id_by_appx_fallback() {
-        crate::modules::logger::log_info(&format!(
-            "[Codex Store] Appx fallback 命中 AppUserModelId: {}",
-            app_user_model_id
-        ));
-        return Some(app_user_model_id);
-    }
-    None
-}
-
-#[cfg(target_os = "windows")]
-fn detect_codex_store_app_user_model_id() -> Option<String> {
-    // A configured GUI path already identifies its manifest entry. Registration
-    // is validated by the shared activation script, not by Get-StartApps here.
-    if let Ok(path) = resolve_codex_launch_path() {
-        if let Some(package) = codex_package_hint_from_path(&path) {
-            return Some(format!("{}!{}", package.family_name, package.app_id));
-        }
-    }
-    // No permanent unkeyed cache: a Store update or path change must take effect.
-    detect_codex_store_app_user_model_id_uncached()
-}
-
-#[cfg(target_os = "windows")]
-fn launch_codex_via_store_app_user_model_id(
-    app_user_model_id: &str,
-    codex_home: Option<&str>,
-    app_user_data_dir: Option<&str>,
-    extra_args: &[String],
-    extra_env: &[(String, String)],
-) -> Result<(), String> {
-    let app_user_model_id = app_user_model_id.trim();
-    if app_user_model_id.is_empty() {
-        return Err("Codex AppUserModelId 为空".to_string());
-    }
-
-    let probe = build_codex_default_registered_launch_probe(app_user_model_id)?;
-    let configured = resolve_codex_launch_path().ok();
-    let hint = configured
-        .as_deref()
-        .and_then(codex_package_hint_from_path)
-        .filter(|package| {
-            format!("{}!{}", package.family_name, package.app_id)
-                .eq_ignore_ascii_case(app_user_model_id)
-        });
-    let package = match hint {
-        Some(package) => package,
-        None => parse_codex_registered_launch(&codex_launch_powershell_output(&probe)?)?
-            .ok_or_else(|| "No registered Codex GUI application".to_string())?,
-    };
-    let mut env_pairs = managed_proxy_env_pairs()
-        .into_iter()
-        .map(|(key, value)| (key.to_string(), value))
-        .collect::<Vec<_>>();
-    env_pairs.extend_from_slice(extra_env);
-    let confirmed = activate_codex_package_with_refresh(
-        package,
-        |package| {
-            run_codex_package_activation(
-                package,
-                codex_home.map(str::trim).filter(|value| !value.is_empty()),
-                app_user_data_dir
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(Path::new),
-                extra_args,
-                &env_pairs,
-            )
-        },
-        || {
-            if let Some(path) = configured.as_deref() {
-                query_codex_registered_launch(path)?
-                    .ok_or_else(|| "No registered Codex GUI application".into())
-            } else {
-                parse_codex_registered_launch(&codex_launch_powershell_output(&probe)?)?
-                    .ok_or_else(|| "No registered Codex GUI application".into())
-            }
-        },
-    )?;
-    if let Some(path) = configured.as_deref() {
-        if normalized_windows_path_text(Path::new(&confirmed.executable))
-            != normalized_windows_path_text(path)
-        {
-            update_app_path_in_config(
-                "codex",
-                Path::new(&confirmed.executable),
-                &path.to_string_lossy(),
-            );
-        }
-    }
-    Ok(())
 }
 
 const CODEX_MANAGED_STORE_LAUNCH_UNSAFE_PREFIX: &str = "CODEX_MANAGED_STORE_LAUNCH_UNSAFE:";
@@ -2798,13 +2649,9 @@ pub fn ensure_vscode_launch_path_configured() -> Result<(), String> {
 pub fn ensure_codex_launch_path_configured() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        if resolve_codex_launch_path().is_ok() {
-            return Ok(());
-        }
-        if detect_codex_store_app_user_model_id().is_some() {
-            return Ok(());
-        }
-        return Err("未检测到 Codex 商店安装，请先在 Microsoft Store 安装 Codex".to_string());
+        // A StartApps alias alone is not a usable desktop executable. Use the
+        // same configured-path/registered-package resolver as the launch flow.
+        return resolve_codex_launch_path().map(|_| ());
     }
 
     #[cfg(not(target_os = "windows"))]

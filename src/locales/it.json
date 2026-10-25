@@ -158,6 +158,15 @@
     "providerClear": "Azzera selezione"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "questo servizio a monte",
+      "proxyConnection": "Connessione a {{target}} tramite il proxy «{{proxy}}» non riuscita. Potrebbe esserci un problema del proxy o della rete. Controlla il proxy o prova un altro nodo.",
+      "proxyTimeout": "Tempo scaduto per la connessione a {{target}} tramite il proxy «{{proxy}}». Potrebbe esserci un problema del proxy o della rete. Controlla il proxy o prova un altro nodo.",
+      "proxyAuth": "Autenticazione del proxy «{{proxy}}» non riuscita. Controlla il nome utente o la password del proxy.",
+      "localProxyUnavailable": "Impossibile connettersi al proxy locale «{{proxy}}». Verifica che il servizio proxy sia in esecuzione.",
+      "directConnection": "Connessione a {{target}} non riuscita. Controlla la rete e riprova.",
+      "directTimeout": "Tempo scaduto per la connessione a {{target}}. Controlla la rete e riprova."
+    },
     "codexUsage": {
       "title": "Quota e utilizzo",
       "session": "Chat attuale",
@@ -3482,6 +3491,7 @@
         "expand": "Espandi",
         "collapse": "Comprimi",
         "repairVisibility": "Ripara visibilità",
+        "repairIndex": "Ripara indice chat",
         "restoreSessions": "Ripristina sessioni",
         "exportSessions": "Esporta sessioni",
         "importSessions": "Importa sessioni",
@@ -3514,6 +3524,10 @@
         "clear": "Cancella"
       },
       "messages": {
+        "deleteNotConfirmed": "Il client non ha confermato l’eliminazione. La pulizia locale è stata interrotta e i backup sono stati conservati: {{error}}",
+        "historyReadFailed": "Impossibile leggere la cronologia della chat in sicurezza: {{error}}",
+        "restoreIndexRetry": "Il file della chat è stato conservato, ma non è stato possibile aggiornare l’elenco. L’originale rimane nel cestino. Risolvi il problema e riprova: {{error}}",
+        "importIndexRetry": "I file sono stati importati, ma non è stato possibile aggiornare l’elenco delle chat. I file e il pacchetto di importazione sono stati conservati. Risolvi il problema e riprova: {{error}}",
         "pickOne": "Seleziona almeno una sessione",
         "syncNeedTwo": "Sono necessarie almeno due istanze per sincronizzare le sessioni",
         "pickRestoreOne": "Seleziona almeno una sessione da ripristinare",
@@ -3624,7 +3638,18 @@
         "title": "Ripara cronologia",
         "description": "Normalizza i provider negli indici SQLite, nel catalogo delle sessioni e negli spazi di lavoro. I file rollout mantengono tutti i byte originali; vengono corretti solo gli orari. Prima viene creato un backup locale.",
         "stopInstanceHint": "Chiudi completamente l’istanza Codex App/ChatGPT selezionata prima della riparazione completa. Puoi comunque visualizzare prima l’anteprima.",
-        "encryptedContentWarning": "È stata rilevata cronologia cifrata da un altro provider o account. I metadati possono essere migrati, ma continuare o compattare tali sessioni potrebbe non riuscire; torna al provider/account originale o avvia una nuova sessione."
+        "encryptedContentWarning": "È stata rilevata cronologia cifrata da un altro provider o account. I metadati possono essere migrati, ma continuare o compattare tali sessioni potrebbe non riuscire; torna al provider/account originale o avvia una nuova sessione.",
+        "modeHistory": "Modifica/rami",
+        "modeHistoryDesc": "Corregge gli errori di modifica dei messaggi e creazione di diramazioni dovuti a indici non validi.",
+        "historyStopHint": "Prima della riparazione chiudi completamente il client selezionato e le CLI che usano questa istanza. L’anteprima resta disponibile.",
+        "historyDescription": "Controlla le chat selezionate e la cronologia di origine; reimposta solo gli indici paginati non validi. Messaggi, account e Provider restano invariati. Chiudi il client di destinazione e le CLI associate prima di procedere.",
+        "historyPreview": "Trovati {{count}} indici di cronologia non validi ricostruibili. I messaggi restano invariati.",
+        "historySuccess": "Reimpostati {{count}} indici di cronologia non validi. Riapri il client e le chat per ricostruirli. I backup sono stati conservati.",
+        "historyNoChanges": "Nessun indice di cronologia non valido può essere ricostruito in sicurezza.",
+        "historyFailed": "Riparazione degli indici di cronologia non completata: {{error}}",
+        "historyRunning": "Chiudi completamente il client di destinazione e le CLI che usano questa istanza, quindi riprova.",
+        "historyScan": "Controllo degli indici di cronologia ({{current}}/{{total}})…",
+        "historyReset": "Backup e reimpostazione degli indici non validi…"
       },
       "importModal": {
         "title": "Importa sessioni",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "Opzioni routing",
+        "sessionIdentityMapping": "Mappatura ID sessione",
+        "sessionIdentityMappingEnableHint": "Attivando la mappatura, ogni account a monte usa valori indipendenti di Session-Id e Thread-Id quando si cambia account. Ciò rafforza la separazione degli identificatori, ma può ridurre il riutilizzo della cache tra account. Nello stesso account vengono riutilizzate le mappature esistenti.",
+        "sessionIdentityMappingDisableHint": "Disattivandola, vengono mantenuti i valori originali di Session-Id e Thread-Id del client. Account a monte diversi possono condividere gli identificatori, riducendo la separazione ma potenzialmente aumentando il riutilizzo della cache tra account.",
+        "sessionIdentityMappingCacheNote": "La percentuale di riscontri nella cache dipende anche dalle regole del fornitore, dall’ambito degli account e dal contenuto delle richieste. Questa impostazione non ne garantisce un aumento o una diminuzione.",
+        "sessionIdentityMappingSaveNote": "Dopo la conferma, salva le impostazioni per applicare la modifica.",
         "sessionAffinity": "Affinità sessione",
         "sessionAffinityTtl": "Scadenza (secondi)",
         "responsesWebsockets": "Responses tramite WebSocket",

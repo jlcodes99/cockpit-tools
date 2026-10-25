@@ -680,7 +680,7 @@
       "include_skills_usage_instructions": false,
       "include_apps_usage_instructions": true,
       "include_plugin_usage_instructions": true,
-      "node_repl_auto_review_required": false,
+      "node_repl_auto_review_required": true,
       "node_repl_disabled": false,
       "auto_review_model_override": null,
       "model_specialty": null,
@@ -741,7 +741,12 @@
           "auto_compact_fallback_buffer_tokens": 16384
         }
       },
-      "experimental_supported_tools": [],
+      "experimental_supported_tools": [
+        "send_user_message_async",
+        "clock"
+      ],
+      "multi_agent_reasoning_effort": "xhigh",
+      "supports_reasoning_effort_updates": true,
       "available_in_plans": [
         "business",
         "edu",
@@ -810,7 +815,7 @@
       "include_skills_usage_instructions": false,
       "include_apps_usage_instructions": false,
       "include_plugin_usage_instructions": false,
-      "node_repl_auto_review_required": false,
+      "node_repl_auto_review_required": true,
       "node_repl_disabled": false,
       "auto_review_model_override": null,
       "model_specialty": null,

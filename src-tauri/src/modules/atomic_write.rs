@@ -284,6 +284,30 @@ pub fn write_string_atomic_if_hash_matches<F>(
 where
     F: FnOnce() -> Result<String, String>,
 {
+    write_string_atomic_if_hash_matches_internal(path, expected_hash, true, build_content)
+}
+
+/// Restore an already validated snapshot without replacing the recovery backup
+/// with the damaged source, even if writing the replacement fails.
+pub(crate) fn restore_string_atomic_if_hash_matches(
+    path: &Path,
+    expected_hash: [u8; 32],
+    content: &str,
+) -> Result<bool, String> {
+    write_string_atomic_if_hash_matches_internal(path, expected_hash, false, || {
+        Ok(content.to_owned())
+    })
+}
+
+fn write_string_atomic_if_hash_matches_internal<F>(
+    path: &Path,
+    expected_hash: [u8; 32],
+    create_backup: bool,
+    build_content: F,
+) -> Result<bool, String>
+where
+    F: FnOnce() -> Result<String, String>,
+{
     let lock = path_write_lock(path)?;
     let _guard = lock.lock().map_err(|_| "文件写入锁已损坏".to_string())?;
     let current = match fs::read(path) {
@@ -296,7 +320,7 @@ where
         return Ok(false);
     }
     let content = build_content()?;
-    write_string_atomic_internal(path, &content, true)?;
+    write_string_atomic_internal(path, &content, create_backup)?;
     Ok(true)
 }
 
@@ -506,6 +530,16 @@ mod tests {
         .expect("reject stale write"));
         assert_eq!(
             fs::read_to_string(&path).expect("read newer"),
+            r#"{"version":2}"#
+        );
+
+        let current_hash = Sha256::digest(r#"{"version":2}"#.as_bytes()).into();
+        assert!(write_string_atomic_if_hash_matches(&path, current_hash, || {
+            Ok(r#"{"version":3}"#.to_string())
+        })
+        .expect("write matching snapshot"));
+        assert_eq!(
+            fs::read_to_string(build_backup_path(&path).unwrap()).unwrap(),
             r#"{"version":2}"#
         );
 

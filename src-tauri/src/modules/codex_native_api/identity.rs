@@ -3,7 +3,10 @@
 //! Public methods perform SQLite/history work and must run on a blocking worker.
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 
@@ -38,6 +41,7 @@ const MAX_METADATA_BYTES: usize = 16 * 1024 * 1024;
 pub struct IdentityStore {
     connection: Mutex<Connection>,
     path: PathBuf,
+    session_identity_mapping_enabled: AtomicBool,
 }
 
 #[derive(Clone, Debug)]
@@ -50,6 +54,9 @@ pub struct RequestIdentity {
     /// Hard ownership of an upstream resource required by an incremental request.
     pub state_account_id: Option<String>,
     caller: String,
+    session_identity_mapping_enabled: bool,
+    /// Ordinary forwarding does not require proof that history can be replayed.
+    forwarding: bool,
     turn_id: Option<String>,
     opaque: Vec<OpaqueRef>,
     canonical_metadata: Option<Value>,
@@ -68,6 +75,7 @@ pub struct RequestIdentity {
 #[derive(Clone, Debug)]
 pub struct Binding {
     caller: String,
+    session_identity_mapping_enabled: bool,
     account_id: String,
     owner_id: String,
     session_id: Option<String>,
@@ -338,7 +346,13 @@ impl IdentityStore {
         Ok(Self {
             connection: Mutex::new(connection),
             path,
+            session_identity_mapping_enabled: AtomicBool::new(true),
         })
+    }
+
+    pub fn set_session_identity_mapping_enabled(&self, enabled: bool) {
+        self.session_identity_mapping_enabled
+            .store(enabled, Ordering::Release);
     }
 
     pub fn inspect(
@@ -347,7 +361,7 @@ impl IdentityStore {
         headers: &HeaderMap,
         body: &Value,
     ) -> Result<RequestIdentity, ServiceError> {
-        self.inspect_mode(caller, headers, body, false)
+        self.inspect_mode(caller, headers, body, false, false)
     }
 
     pub(crate) fn inspect_for_rebuild(
@@ -356,7 +370,17 @@ impl IdentityStore {
         headers: &HeaderMap,
         body: &Value,
     ) -> Result<RequestIdentity, ServiceError> {
-        self.inspect_mode(caller, headers, body, true)
+        self.inspect_mode(caller, headers, body, true, false)
+    }
+
+    pub(crate) fn inspect_for_forwarding(
+        &self,
+        caller: &str,
+        headers: &HeaderMap,
+        body: &Value,
+        allow_rebuild: bool,
+    ) -> Result<RequestIdentity, ServiceError> {
+        self.inspect_mode(caller, headers, body, allow_rebuild, true)
     }
 
     fn checkpoint_reader(&self) -> Result<Connection, ServiceError> {
@@ -375,7 +399,11 @@ impl IdentityStore {
         headers: &HeaderMap,
         body: &Value,
         portable_requested: bool,
+        forwarding: bool,
     ) -> Result<RequestIdentity, ServiceError> {
+        // Keep this request's wire policy stable while configuration changes.
+        let session_identity_mapping_enabled =
+            self.session_identity_mapping_enabled.load(Ordering::Acquire);
         if checked_identity(caller)?.is_none() {
             return Err(invalid("A caller identity is required"));
         }
@@ -428,19 +456,22 @@ impl IdentityStore {
                     thread_id.as_deref(),
                     turn_id.as_deref(),
                 )?;
-                // Official clients can retry a missing checkpoint with full
-                // input. This never authorizes replaying unknown ciphertext.
-                return Err(ServiceError::new(
-                    409,
-                    "previous_response_not_found",
-                    "Previous response is unavailable; resend the full conversation input",
-                ));
+                // Ordinary native Responses/WS requests can refer to history
+                // held by their upstream. Local HTTP expansion still requires
+                // its own checkpoint and requests full input when unavailable.
+                if !forwarding {
+                    return Err(ServiceError::new(
+                        409,
+                        "previous_response_not_found",
+                        "Previous response is unavailable; resend the full conversation input",
+                    ));
+                }
             }
             let (previous_session, previous_thread) = restored.unwrap_or_default();
             if session_id.is_none() || thread_id.is_none() {
                 session_id = session_id.or(previous_session);
                 thread_id = thread_id.or(previous_thread);
-                if session_id.is_none() && thread_id.is_none() {
+                if !forwarding && session_id.is_none() && thread_id.is_none() {
                     return Err(unknown_state());
                 }
             }
@@ -510,18 +541,26 @@ impl IdentityStore {
         let mut unregistered_blobs = std::collections::HashSet::new();
         // Server references determine continuation ownership. Body blobs retain
         // their observed provenance, but may be replayed as complete payloads.
+        let mut server_refs = Vec::new();
         for reference in opaque.iter().filter(|reference| {
             reference.kind != "encrypted"
                 && reference.kind != "parent_response"
                 && reference.kind != "turn_state"
         }) {
-            let (account, owner) = validate_opaque(
+            let found = automatic_history::lookup(
                 &connection,
                 caller,
                 reference,
                 thread_id.as_deref(),
                 turn_id.as_deref(),
             )?;
+            let Some((account, owner)) = found else {
+                if forwarding {
+                    continue;
+                }
+                return Err(unknown_state());
+            };
+            server_refs.push(reference.clone());
             if expected_owner
                 .as_ref()
                 .is_some_and(|expected| expected != &owner)
@@ -535,15 +574,6 @@ impl IdentityStore {
             expected_owner = Some(owner);
             preferred_account_id = Some(account);
         }
-        let server_refs = opaque
-            .iter()
-            .filter(|reference| {
-                reference.kind != "encrypted"
-                    && reference.kind != "parent_response"
-                    && reference.kind != "turn_state"
-            })
-            .cloned()
-            .collect::<Vec<_>>();
         let mut generation = rebuild::reference_generation(&connection, caller, &server_refs)?;
         // Closing the switch stops new migrations, not a generation's already
         // accepted history. A successful replay grants no rights to other callers.
@@ -578,6 +608,9 @@ impl IdentityStore {
             let Some((account, owner)) = found else {
                 if automatic_input || (portable_requested && !server_refs.is_empty()) {
                     detached_turn_states.push(reference.clone());
+                    continue;
+                }
+                if forwarding {
                     continue;
                 }
                 return Err(if portable_requested {
@@ -626,6 +659,9 @@ impl IdentityStore {
                     detached_parent = true;
                     continue;
                 }
+                if forwarding {
+                    continue;
+                }
                 return Err(if portable_requested {
                     automatic_history::incomplete()
                 } else {
@@ -665,7 +701,7 @@ impl IdentityStore {
                 turn_id.as_deref(),
             )?;
             let Some((account, owner)) = found else {
-                if automatic_input {
+                if automatic_input || forwarding {
                     unregistered_blobs.insert(reference.digest.clone());
                     continue;
                 }
@@ -680,8 +716,8 @@ impl IdentityStore {
             } else {
                 false
             };
-            if portable_requested || accepted {
-                portable_body = true;
+            if portable_requested || accepted || forwarding {
+                portable_body |= portable_requested || accepted;
                 continue;
             }
             if expected_owner
@@ -698,7 +734,11 @@ impl IdentityStore {
             preferred_account_id = Some(account);
         }
         if !portable_body {
-            generation = rebuild::reference_generation(&connection, caller, &opaque)?;
+            generation = rebuild::reference_generation(
+                &connection,
+                caller,
+                if forwarding { &server_refs } else { &opaque },
+            )?;
         } else if preferred_account_id.is_none() {
             if let Some((account, _, accepted_generation)) = accepted_scope {
                 preferred_account_id = Some(account);
@@ -715,6 +755,8 @@ impl IdentityStore {
             preferred_account_id,
             state_account_id,
             caller: caller.to_owned(),
+            session_identity_mapping_enabled,
+            forwarding,
             turn_id,
             opaque,
             canonical_metadata: canonical_value,
@@ -810,6 +852,11 @@ impl IdentityStore {
                 continue;
             }
             let Some((_, owner)) = found else {
+                // A missing local record is not an upstream rejection. The
+                // lookup above still enforces isolation from other callers.
+                if context.forwarding {
+                    continue;
+                }
                 if context.portable_body
                     && automatic_history::is_unregistered(context, reference)
                     && (automatic_history::complete_input(headers, body)
@@ -823,7 +870,7 @@ impl IdentityStore {
                 return Err(automatic_history::incomplete());
             };
             if owner != owner_id
-                && !(context.portable_body && reference.kind == "encrypted")
+                && !((context.portable_body || context.forwarding) && reference.kind == "encrypted")
                 && !(context.detached_parent && reference.kind == "parent_response")
                 && !(reference.kind == "turn_state"
                     && context
@@ -841,7 +888,9 @@ impl IdentityStore {
         // Commit both mappings and affinity before publishing any transformed request.
         let mut new_headers = headers.clone();
         let mut new_body = body.clone();
-        supplement_identities(context, &mut new_headers, &mut new_body)?;
+        if context.session_identity_mapping_enabled {
+            supplement_identities(context, &mut new_headers, &mut new_body)?;
+        }
         if context.detached_parent {
             strip_parent_anchor(&mut new_headers, &mut new_body)?;
         }
@@ -850,13 +899,18 @@ impl IdentityStore {
         }
         let generation = rebuild::select_generation(&transaction, context, owner_id)?;
         let mapping_owner = rebuild::mapping_owner(owner_id, generation.as_ref());
-        rewrite_headers(
-            &transaction,
-            &context.caller,
-            &mapping_owner,
-            &mut new_headers,
-        )?;
-        rewrite_body(&transaction, &context.caller, &mapping_owner, &mut new_body)?;
+        if context.session_identity_mapping_enabled {
+            rewrite_headers(
+                &transaction,
+                &context.caller,
+                &mapping_owner,
+                &mut new_headers,
+            )?;
+            rewrite_body(&transaction, &context.caller, &mapping_owner, &mut new_body)?;
+        }
+        // Passthrough retains related parent/window/cache references as well:
+        // mapping those independently would break the client's original IDs.
+        // Ownership validation, continuity and affinity remain active in both modes.
         let publish_affinity =
             rebuild::may_publish_affinity(&transaction, context, owner_id, generation.as_ref())?;
         for (kind, value) in [
@@ -883,6 +937,7 @@ impl IdentityStore {
             .then(|| Arc::new(automatic_history::Admission::default()));
         Ok(Binding {
             caller: context.caller.clone(),
+            session_identity_mapping_enabled: context.session_identity_mapping_enabled,
             account_id: account_id.to_owned(),
             owner_id: owner_id.to_owned(),
             session_id: context.session_id.clone(),
@@ -1600,3 +1655,7 @@ mod agent_communication_tests;
 #[cfg(test)]
 #[path = "identity_automatic_history_tests.rs"]
 mod automatic_history_tests;
+
+#[cfg(test)]
+#[path = "identity_mapping_switch_tests.rs"]
+mod mapping_switch_tests;

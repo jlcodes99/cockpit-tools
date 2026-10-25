@@ -186,6 +186,8 @@ export interface CodexLocalAccessCollection {
   maxAccountConcurrency: number;
   accountConcurrencyWaitMs: number;
   excludedModels: string[];
+  /** Service-scoped; omitted legacy values default to enabled. */
+  sessionIdentityMappingEnabled?: boolean;
   sessionAffinity: boolean;
   sessionAffinityTtlMs: number;
   sessionAffinityDefaultEnabledMigrated?: boolean;

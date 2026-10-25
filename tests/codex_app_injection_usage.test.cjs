@@ -120,7 +120,7 @@ test('composer identity wins over sidebar and accepts only UUIDs with optional l
 });
 
 test('new chat, home composer and invalid identifiers cannot inherit the previous sidebar thread', () => {
-  for (const composerId of [`local:client-new-thread:${firstId}`, 'prototype', 'constructor', '__proto__', '../file', 'not-a-uuid']) {
+  for (const composerId of [`local:client-new-thread:${firstId}`, 'prototype', 'constructor', '__proto__', '../file', 'not-a-uuid', '', '  ']) {
     const { dom, card } = domHarness({ composerId, sidebarId: secondId });
     assert.equal(dom.threadId(card), '');
   }
@@ -134,7 +134,7 @@ function surface({ hidden = false, visibility = 'visible', own = false, editors 
     getClientRects: () => hidden ? [] : [{}],
     getBoundingClientRect: () => ({ width, height: 100 }),
     closest: () => own ? {} : null,
-    querySelectorAll: () => editors,
+    querySelectorAll: (selector) => selector.includes('reasoning') ? [] : editors,
   };
 }
 

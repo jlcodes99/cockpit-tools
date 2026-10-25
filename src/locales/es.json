@@ -158,6 +158,15 @@
     "providerClear": "Borrar selección"
   },
   "common": {
+    "networkErrors": {
+      "upstream": "el servicio de destino",
+      "proxyConnection": "No se pudo conectar con {{target}} mediante el proxy «{{proxy}}». Puede ser un problema del proxy o de la red. Revise el proxy o pruebe otro nodo.",
+      "proxyTimeout": "Se agotó el tiempo de conexión con {{target}} mediante el proxy «{{proxy}}». Puede ser un problema del proxy o de la red. Revise el proxy o pruebe otro nodo.",
+      "proxyAuth": "Falló la autenticación del proxy «{{proxy}}». Revise el usuario o la contraseña del proxy.",
+      "localProxyUnavailable": "No se puede conectar con el proxy local «{{proxy}}». Compruebe que el servicio del proxy esté activo.",
+      "directConnection": "No se pudo conectar con {{target}}. Revise la red y vuelva a intentarlo.",
+      "directTimeout": "Se agotó el tiempo de conexión con {{target}}. Revise la red y vuelva a intentarlo."
+    },
     "codexUsage": {
       "title": "Cuota y uso",
       "session": "Chat actual",
@@ -3482,6 +3491,7 @@
         "expand": "Expandir",
         "collapse": "Contraer",
         "repairVisibility": "Reparar visibilidad",
+        "repairIndex": "Reparar índice de chats",
         "restoreSessions": "Restaurar sesiones",
         "exportSessions": "Exportar sesiones",
         "importSessions": "Importar sesiones",
@@ -3514,6 +3524,10 @@
         "clear": "Limpiar"
       },
       "messages": {
+        "deleteNotConfirmed": "El cliente no confirmó la eliminación. Se detuvo la limpieza local y se conservaron las copias de seguridad: {{error}}",
+        "historyReadFailed": "No se pudo leer el historial del chat de forma segura: {{error}}",
+        "restoreIndexRetry": "El archivo del chat se conservó, pero no se pudo actualizar la lista. El original sigue en la papelera. Resuelve el problema y vuelve a intentarlo: {{error}}",
+        "importIndexRetry": "Los archivos se importaron, pero no se pudo actualizar la lista de chats. Los archivos y el paquete de importación se conservaron. Resuelve el problema y vuelve a intentarlo: {{error}}",
         "pickOne": "Selecciona al menos una sesión",
         "syncNeedTwo": "Se requieren al menos dos instancias para sincronizar sesiones",
         "pickRestoreOne": "Selecciona al menos una sesión para restaurar",
@@ -3624,7 +3638,18 @@
         "title": "Reparar historial",
         "description": "Normaliza los proveedores en los índices SQLite, el catálogo de sesiones y los espacios de trabajo. Los archivos rollout conservan todos sus bytes; solo se corrigen las fechas. Primero se crea una copia de seguridad local.",
         "stopInstanceHint": "Cierra por completo la instancia seleccionada de Codex App/ChatGPT antes de la reparación completa. Aún puedes previsualizar los cambios.",
-        "encryptedContentWarning": "Se detectó historial cifrado por otro proveedor o cuenta. Los metadatos se pueden migrar, pero continuar o compactar esas sesiones puede fallar; vuelve al proveedor/cuenta original o inicia una sesión nueva."
+        "encryptedContentWarning": "Se detectó historial cifrado por otro proveedor o cuenta. Los metadatos se pueden migrar, pero continuar o compactar esas sesiones puede fallar; vuelve al proveedor/cuenta original o inicia una sesión nueva.",
+        "modeHistory": "Edición/ramas",
+        "modeHistoryDesc": "Corrige fallos al editar mensajes y ramificar chats causados por índices no válidos.",
+        "historyStopHint": "Cierra por completo el cliente seleccionado y las CLI que usan esa instancia antes de reparar. Puedes previsualizar los cambios.",
+        "historyDescription": "Revisar los chats seleccionados y su historial de origen; restablecer solo los índices paginados incorrectos. Los mensajes, cuentas y Provider no cambian. Cierra el cliente de destino y las CLI relacionadas antes de ejecutar.",
+        "historyPreview": "Se encontraron {{count}} índices de historial incorrectos que pueden reconstruirse. Los mensajes no cambian.",
+        "historySuccess": "Se restablecieron {{count}} índices de historial incorrectos. Vuelve a abrir el cliente y los chats para reconstruirlos. Se conservaron las copias de seguridad.",
+        "historyNoChanges": "No se encontraron índices de historial incorrectos que puedan reconstruirse de forma segura.",
+        "historyFailed": "La reparación de los índices de historial no se completó: {{error}}",
+        "historyRunning": "Cierra por completo el cliente de destino y las CLI que usan esta instancia y vuelve a intentarlo.",
+        "historyScan": "Revisando índices de historial ({{current}}/{{total}})…",
+        "historyReset": "Guardando copias y restableciendo índices incorrectos…"
       },
       "importModal": {
         "title": "Importar sesiones",
@@ -4610,6 +4635,11 @@
       },
       "routing": {
         "optionsTitle": "Opciones de ruta",
+        "sessionIdentityMapping": "Mapeo de ID de sesión",
+        "sessionIdentityMappingEnableHint": "Al activar la asignación, cada cuenta del proveedor usa valores propios de Session-Id y Thread-Id al cambiar de cuenta. Esto mejora el aislamiento de identificadores, pero puede reducir la reutilización de caché entre cuentas. En la misma cuenta se reutilizan las asignaciones existentes.",
+        "sessionIdentityMappingDisableHint": "Al desactivarla, se conservan los valores originales de Session-Id y Thread-Id del cliente. Distintas cuentas del proveedor pueden compartir esos identificadores, lo que reduce el aislamiento, pero puede aumentar la reutilización de caché entre cuentas.",
+        "sessionIdentityMappingCacheNote": "La tasa de aciertos de caché también depende de las reglas del proveedor, el ámbito de las cuentas y el contenido de las solicitudes. Este ajuste no garantiza que aumente o disminuya.",
+        "sessionIdentityMappingSaveNote": "Tras confirmar, guarda los ajustes para aplicar el cambio.",
         "sessionAffinity": "Afinidad de sesión",
         "sessionAffinityTtl": "Caducidad (segundos)",
         "responsesWebsockets": "Responses por WebSocket",

@@ -19,15 +19,17 @@ const BACKOFF_BASE_MS: u64 = 500;
 const BACKOFF_MAX_MS: u64 = 4000;
 const ONBOARD_POLL_DELAY_MS: u64 = 500;
 const API_CACHE_DIR: &str = "cache/quota_api_v1_desktop";
-const API_CACHE_VERSION: u8 = 1;
+const API_CACHE_VERSION: u8 = 2;
 const API_CACHE_TTL_MS: i64 = 60_000;
-const DEFAULT_CLOUD_CODE_IDE_VERSION: &str = "1.20.5";
+const DEFAULT_CLOUD_CODE_IDE_VERSION: &str = "2.25.0";
+const DEFAULT_CLOUD_CODE_CL: &str = "1003475615";
 const DEFAULT_LOAD_CODE_ASSIST_UA_OS: &str = "windows";
 const DEFAULT_LOAD_CODE_ASSIST_UA_ARCH: &str = "amd64";
 const DEFAULT_GOOGLE_API_NODEJS_CLIENT_VERSION: &str = "10.3.0";
-const DEFAULT_CLOUD_CODE_USER_AGENT: &str = "antigravity/1.20.5 windows/amd64";
+const DEFAULT_CLOUD_CODE_USER_AGENT: &str =
+    "antigravity/2.25.0 (aidev_client; os_type=windows; arch=amd64; cl=1003475615)";
 const DEFAULT_LOAD_CODE_ASSIST_USER_AGENT: &str =
-    "antigravity/1.20.5 windows/amd64 google-api-nodejs-client/10.3.0";
+    "antigravity/2.25.0 windows/amd64 google-api-nodejs-client/10.3.0";
 const DEFAULT_X_GOOG_API_CLIENT_NODE_VERSION: &str = "22.21.1";
 
 #[derive(Debug, Clone, Default)]
@@ -80,11 +82,31 @@ fn env_quality_is_insider_or_dev() -> bool {
     )
 }
 
+fn parse_semver_tuple(version: &str) -> Option<(u32, u32, u32)> {
+    let mut parts = version
+        .trim()
+        .trim_start_matches('v')
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty());
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().unwrap_or("0").parse().ok()?;
+    let patch = parts.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor, patch))
+}
+
 fn official_antigravity_version_for_cloud_code() -> String {
     let version = crate::modules::wakeup_gateway::official_antigravity_app_version();
     let trimmed = version.trim();
     if trimmed.is_empty() {
         return DEFAULT_CLOUD_CODE_IDE_VERSION.to_string();
+    }
+    if let (Some(detected), Some(min_required)) = (
+        parse_semver_tuple(trimmed),
+        parse_semver_tuple(DEFAULT_CLOUD_CODE_IDE_VERSION),
+    ) {
+        if detected < min_required {
+            return DEFAULT_CLOUD_CODE_IDE_VERSION.to_string();
+        }
     }
     trimmed.to_string()
 }
@@ -172,7 +194,10 @@ fn build_cloud_code_user_agent() -> String {
     if ide_version.trim().is_empty() || os.trim().is_empty() || arch.trim().is_empty() {
         return DEFAULT_CLOUD_CODE_USER_AGENT.to_string();
     }
-    format!("antigravity/{} {}/{}", ide_version, os, arch)
+    format!(
+        "antigravity/{} (aidev_client; os_type={}; arch={}; cl={})",
+        ide_version, os, arch, DEFAULT_CLOUD_CODE_CL
+    )
 }
 
 fn load_code_assist_user_agent() -> String {

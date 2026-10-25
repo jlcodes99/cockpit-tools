@@ -167,11 +167,53 @@ async fn legacy_history_survives_native_go_restart_account_switch_and_parent_chi
 }
 
 #[tokio::test]
-async fn legacy_tool_history_still_rejects_missing_wrong_and_duplicate_results_before_routing() {
-    let fixture = Fixture::new(true).await;
+async fn legacy_tool_history_leaves_missing_wrong_and_duplicate_results_to_upstream() {
+    let upstream_error = json!({
+        "type":"invalid_request_error",
+        "code":"invalid_request_error",
+        "message":"Synthetic upstream rejected the legacy tool result pairing",
+        "param":"input",
+        "upstream_marker":"original-legacy-tool-diagnostic"
+    });
+    let source = Arc::new(Upstream::default());
+    let error = upstream_error.clone();
+    let app = Router::new()
+        .route(
+            "/responses",
+            post(move |State(source): State<Arc<Upstream>>, headers: HeaderMap, bytes: Bytes| {
+                let error = error.clone();
+                async move {
+                    let request: Value = serde_json::from_slice(&bytes).unwrap();
+                    source.sent.lock().unwrap().push((headers, request));
+                    Response::builder()
+                        .status(400)
+                        .header("content-type", "application/json")
+                        .body(Body::from(json!({"error":error}).to_string()))
+                        .unwrap()
+                }
+            }),
+        )
+        .with_state(source.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let host = Arc::new(TestHost {
+        base: format!("http://{}", listener.local_addr().unwrap()),
+        oauth: true,
+        removed_a: AtomicBool::new(false),
+    });
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let mut fixture = Fixture {
+        root: tempfile::tempdir().unwrap(),
+        host,
+        source,
+        gateway: None,
+        task,
+    };
+    fixture.start(Options::default()).await;
+    let mut attempts = 0;
     for index in [6, 8] {
         for defect in ["missing", "wrong-id", "duplicate"] {
             let mut body = request(legacy_history(false));
+            body["stream"] = json!(false);
             let input = body["input"].as_array_mut().unwrap();
             match defect {
                 "missing" => {
@@ -184,12 +226,29 @@ async fn legacy_tool_history_still_rejects_missing_wrong_and_duplicate_results_b
             }
             let saved = body.clone();
             let response = fixture.send(&body, "caller").await;
-            assert!(response.status().is_client_error(), "{index}: {defect}");
-            assert!(
-                fixture.sent().is_empty(),
-                "invalid history reached the upstream"
+            assert_eq!(response.status(), 400, "{index}: {defect}");
+            assert_eq!(
+                response.json::<Value>().await.unwrap()["error"],
+                upstream_error,
+                "{index}: {defect}"
             );
+            let sent = fixture.sent();
+            attempts += 1;
+            assert_eq!(sent.len(), attempts, "ordinary forwarding must not retry");
+            assert_eq!(sent[attempts - 1].1["input"], saved["input"]);
             assert_eq!(body, saved);
+            let db = Connection::open(fixture.path()).unwrap();
+            for table in [
+                "native_opaque_v1",
+                "native_rebuild_active_v1",
+                "native_rebuild_checkpoints_v1",
+                "native_rebuild_history_v1",
+            ] {
+                let count: i64 = db
+                    .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+                    .unwrap();
+                assert_eq!(count, 0, "rejected {index}: {defect} published {table}");
+            }
         }
     }
     fixture.finish().await;
