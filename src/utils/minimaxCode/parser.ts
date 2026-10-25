@@ -27,6 +27,19 @@ function toNumber(value: string | number | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * The official client drops a detail row unless `credit_type` is one it knows
+ * and every amount parses. Rendering those rows would show a bogus `0 / 0`
+ * package, so mirror the same rule here.
+ */
+function isUsableMiniMaxCreditDetail(d: MiniMaxCreditDetail): boolean {
+  if (d.credit_type !== 1 && d.credit_type !== 2) return false;
+  if (d.remaining_amount === undefined && d.consumed_amount === undefined) return false;
+  return [d.granted_amount, d.consumed_amount, d.remaining_amount].every(
+    (value) => value === undefined || value === null || Number.isFinite(toNumber(value)),
+  );
+}
+
 /** Map a MiniMax `credit/details` item onto the shared legacy resource shape. */
 export function normalizeMiniMaxCreditDetail(d: MiniMaxCreditDetail): Record<string, unknown> {
   const granted = toNumber(d.granted_amount);
@@ -60,9 +73,15 @@ export function wrapMiniMaxCreditsAsResource(body: unknown): {
     };
   };
 } {
-  const details = (body as { data?: { details?: MiniMaxCreditDetail[] } })?.data?.details ?? [];
-  const accounts = details.map(normalizeMiniMaxCreditDetail);
-  const totalDosage = details.reduce((sum, d) => sum + toNumber(d.consumed_amount), 0);
+  // `credit/details` returns `details` / `total_count` at the TOP LEVEL of the
+  // response body — the official client reads `response.data.details` straight
+  // off the axios response, and its interceptor returns the response ununwraped.
+  // Reading `body.data.details` here silently produced zero quota for everyone.
+  const root = (body ?? {}) as { details?: MiniMaxCreditDetail[]; data?: { details?: MiniMaxCreditDetail[] } };
+  const details = Array.isArray(root.details) ? root.details : (root.data?.details ?? []);
+  const usable = details.filter(isUsableMiniMaxCreditDetail);
+  const accounts = usable.map(normalizeMiniMaxCreditDetail);
+  const totalDosage = usable.reduce((sum, d) => sum + toNumber(d.consumed_amount), 0);
   return {
     code: 0,
     msg: 'OK',
