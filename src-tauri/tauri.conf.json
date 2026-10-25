@@ -5,7 +5,7 @@
   "identifier": "com.jlcodes.cockpit-tools",
   "build": {
     "beforeDevCommand": "node scripts/prepare-tauri.cjs && npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "node scripts/prepare-tauri.cjs && npm run build",
     "frontendDist": "../dist"
   },
@@ -86,6 +86,7 @@
       "../src/assets/icons/cursor-menu.png": "native-menu-icons/cursor-menu.png",
       "../src/assets/icons/github-copilot.svg": "native-menu-icons/github-copilot.svg",
       "../src/assets/icons/kiro-menu.png": "native-menu-icons/kiro-menu.png",
+      "../src/assets/icons/minimax-code.png": "native-menu-icons/minimax-code.png",
       "../src/assets/icons/qoder.png": "native-menu-icons/qoder.png",
       "../src/assets/icons/trae.png": "native-menu-icons/trae.png",
       "../src/assets/icons/trae-cn.png": "native-menu-icons/trae-cn.png",

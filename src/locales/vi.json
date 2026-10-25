@@ -617,6 +617,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Nền tảng Zed",
     "expandSidebar": "Mở rộng thanh bên",
     "collapseSidebar": "Thu gọn thanh bên",
@@ -1171,6 +1173,12 @@
       "workbuddyAppPathPlaceholder": "Đường dẫn mặc định",
       "workbuddyPathSelect": "Chọn",
       "workbuddyPathReset": "Đặt lại mặc định",
+      "minimaxCodeAppPath": "Đường dẫn khởi động MiniMax Code",
+      "minimaxCodeAppPathDesc": "Để trống để dùng đường dẫn mặc định",
+      "minimaxCodeAppPathPlaceholder": "Đường dẫn mặc định",
+      "minimaxCodePathSelect": "Chọn",
+      "minimaxCodeAppPathPathSelect": "Chọn",
+      "minimaxCodePathReset": "Đặt lại mặc định",
       "openclawAuthOverwrite": "Ghi đè đăng nhập OpenClaw khi chuyển đổi Codex",
       "openclawAuthOverwriteDesc": "Khi tắt, chỉ Codex được chuyển đổi và OpenClaw giữ trạng thái đăng nhập hiện tại",
       "ghcpOpencodeAuthOverwrite": "Ghi đè đăng nhập OpenCode khi chuyển đổi GitHub Copilot",
@@ -1242,6 +1250,8 @@
       "qoderPathSelect": "Chọn",
       "workbuddyAutoRefresh": "Tự động làm mới hạn ngạch WorkBuddy",
       "workbuddyAutoRefreshDesc": "Tần suất tự động làm mới nền",
+      "minimaxCodeAutoRefresh": "Tự động làm mới hạn ngạch MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Tần suất tự động làm mới nền",
       "codexLocalAccessEntryVisible": "Hiển thị mục Dịch vụ API",
       "codexLocalAccessEntryVisibleDesc": "Chỉ kiểm soát việc mục Dịch vụ API có hiển thị trong tổng quan Codex hay không. Thao tác này không dừng dịch vụ API cục bộ; bạn có thể bật lại tại đây hoặc trong Cài đặt nhanh.",
       "codexLocalAccessEnabled": "Bật Dịch vụ API",
@@ -6158,6 +6168,10 @@
       "title": "Cài đặt WorkBuddy",
       "appPath": "Đường dẫn WorkBuddy"
     },
+    "minimaxCode": {
+      "title": "Cài đặt MiniMax Code",
+      "appPath": "Đường dẫn MiniMax Code"
+    },
     "zcode": {
       "title": "Cài đặt ZCode",
       "appPath": "Đường dẫn ZCode"
@@ -7107,6 +7121,152 @@
       "timeRangeHint": "Tự động chọn một thời điểm ngẫu nhiên mỗi ngày trong khoảng này để điểm danh chạy ngầm.",
       "timeRangeError": "Thời gian bắt đầu không thể sau thời gian kết thúc"
     }
+  },
+    "minimaxCode": {
+    "title": "Quản lý tài khoản MiniMax Code",
+    "noAccounts": "Chưa có tài khoản MiniMax Code",
+    "addAccount": "Thêm tài khoản MiniMax Code",
+    "flowNotice": {
+      "title": "Hướng dẫn quản lý tài khoản MiniMax Code (bấm để mở rộng/thu gọn)",
+      "desc": "Khi chuyển tài khoản, ứng dụng ghi tệp đăng nhập cục bộ theo bố cục mới nhất của ứng dụng MiniMax Code chính thức; nhập cục bộ đọc cùng tệp đó. Dữ liệu chỉ được xử lý cục bộ.",
+      "permission": "Phạm vi quyền: đọc và ghi tệp đăng nhập MiniMax Code (~/.minimax/auth/auth.json) để nhập cục bộ và chuyển tài khoản; state.vscdb cũ không còn được đọc hoặc sửa đổi.",
+      "network": "Phạm vi mạng: đăng nhập OAuth và làm mới Token cần gửi yêu cầu đến MiniMax Code; truy vấn hạn ngạch sẽ gọi API tính phí. Không tải lên tệp đăng nhập cục bộ hoặc thông tin xác thực thô."
+    },
+    "nickname": "Biệt danh",
+    "enterprise": "Doanh nghiệp",
+    "usage": "Trạng thái sử dụng",
+    "creditsBalance": "Số dư tín dụng",
+    "usageNormal": "Bình thường",
+    "usageAbnormal": "Bất thường",
+    "usageViewDetail": "Xem chi tiết",
+    "usageDetailTitle": "Chi tiết trạng thái sử dụng",
+    "oauthWaiting": "Đang chờ hoàn tất ủy quyền...",
+    "oauthDesc": "Bấm nút bên dưới để mở trang ủy quyền MiniMax Code trong trình duyệt.",
+    "oauthDescWebview": "Bấm nút bên dưới để mở trang ủy quyền MiniMax Code trong WebView tích hợp.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Chỉ ủy quyền thông tin đăng nhập IDE",
+        "item1": "Sau khi hoàn tất OAuth trong trình duyệt, bạn có thể thêm tài khoản và dùng để chuyển IDE.",
+        "item2": "Tham số truy vấn hạn ngạch sẽ không được liên kết tự động.",
+        "item3": "Nếu cần hiển thị hạn ngạch, hãy chạy thủ công \"Truy vấn hạn ngạch\" trên thẻ tài khoản."
+      }
+    },
+    "oauthWebviewTab": "Xác thực WebView",
+    "oauthOpenWebview": "Mở trong WebView",
+    "oauthOpenWebviewIncognito": "Mở trong WebView ẩn danh",
+    "oauthOpenWebviewFailed": "Mở WebView thất bại: {{error}}",
+    "oauthOpenBrowserFallback": "Mở trong trình duyệt (dự phòng)",
+    "oauthOpenBrowserFailed": "Mở trình duyệt thất bại: {{error}}",
+    "oauthWebviewProgressHint": "Thanh bước ngang sẽ hiển thị ở đầu WebView để dễ xác định bước bị kẹt.",
+    "oauthFlow": {
+      "prepare": "Chuẩn bị liên kết ủy quyền",
+      "authorize": "Mở liên kết ủy quyền và xác nhận",
+      "bind": "Thăm dò kết quả ủy quyền và liên kết tài khoản",
+      "retryPrepare": "Tạo lại liên kết ủy quyền",
+      "retryAuthorize": "Yêu cầu lại liên kết ủy quyền",
+      "retryBind": "Thử lại thăm dò ủy quyền",
+      "error": "Lỗi quy trình: {{error}}"
+    },
+    "tokenDesc": "Dán access token của MiniMax Code:",
+    "jsonDesc": "Chọn tệp JSON chứa tài khoản MiniMax Code:",
+    "import": {
+      "localDesc": "Hỗ trợ nhập dữ liệu tài khoản từ ứng dụng MiniMax Code cục bộ hoặc từ tệp JSON.",
+      "localClient": "Nhập từ MiniMax Code cục bộ"
+    },
+    "search": "Tìm kiếm tài khoản MiniMax Code...",
+    "quotaQuery": {
+      "failedRefreshCompact": "Làm mới hạn ngạch thất bại",
+      "sectionTitle": "Truy vấn hạn ngạch",
+      "empty": "Chưa có thông tin truy vấn hạn ngạch được liên kết",
+      "packageUnknown": "Không rõ gói",
+      "quotaLabel": "Hạn ngạch còn lại",
+      "updatedAt": "Lần truy vấn gần nhất: {{time}}",
+      "cycleRange": "Chu kỳ: {{start}} - {{end}}",
+      "cycleUnknown": "Chưa có thông tin chu kỳ",
+      "expireAt": "Hết hạn lúc: {{time}}",
+      "expireUnknown": "Hết hạn: chưa có",
+      "packageTitle": {
+        "base": "Gói trải nghiệm cơ bản",
+        "activity": "Gói quà tặng sự kiện"
+      }
+    },
+    "extraCredit": {
+      "title": "Gói cộng thêm"
+    },
+    "oauthUrlInputPlaceholder": "Có thể nhập URL ủy quyền thủ công",
+    "oauthInvalidUrl": "Định dạng liên kết ủy quyền không đúng. Vui lòng nhập URL đầy đủ.",
+    "oauthGotoWebview": "Điều hướng WebView đã mở tới URL đã nhập",
+    "oauthGotoWebviewSuccess": "Đã yêu cầu WebView điều hướng tới URL đã nhập.",
+    "oauthGotoWebviewFailed": "Điều hướng WebView thất bại: {{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "Nhập URL để điều hướng ngay trong WebView này",
+    "oauthWebviewInlineGo": "Đi",
+    "oauthSuccessClosePrompt": "Đã thêm tài khoản thành công. Đóng WebView này ngay bây giờ?\nChọn \"Đóng WebView\" để đóng ngay hoặc \"Để sau\" để giữ nguyên cửa sổ.",
+    "oauthSuccessCloseTitle": "Đã thêm tài khoản",
+    "oauthSuccessCloseNowLabel": "Đóng WebView",
+    "oauthSuccessCloseLaterLabel": "Để sau",
+    "oauthSuccessCloseNowStatus": "✅ Đã thêm tài khoản. Đang đóng cửa sổ...",
+    "oauthSuccessCloseLaterStatus": "✅ Đã thêm tài khoản. WebView này sẽ vẫn mở.",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 Chuẩn bị liên kết ủy quyền",
+        "authorize": "2 Mở liên kết ủy quyền và xác nhận",
+        "bind": "3 Thăm dò kết quả ủy quyền và liên kết tài khoản",
+        "complete": "5 Hoàn tất (đóng thủ công)"
+      },
+      "status": {
+        "loginConfirm": "Vui lòng hoàn tất đăng nhập và ủy quyền trên trang này."
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "Phiên bản đa phiên bản MiniMax Code chỉ được hỗ trợ trên macOS, Windows và Linux."
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "checkin": {
+      "title": "Điểm danh hằng ngày",
+      "modalTitle": "Điểm danh hằng ngày",
+      "status": "Trạng thái điểm danh",
+      "checkedIn": "Đã điểm danh",
+      "notCheckedIn": "Chưa điểm danh",
+      "button": "Điểm danh",
+      "button.loading": "Đang điểm danh...",
+      "done": "Hoàn tất",
+      "success": "Điểm danh thành công! Chuỗi {{days}} ngày",
+      "failure": "Điểm danh thất bại: {{message}}",
+      "failure.network": "Lỗi mạng, vui lòng thử lại sau",
+      "lastCheckin": "Lần điểm danh gần nhất: {{time}}",
+      "streak": "Chuỗi {{days}} ngày",
+      "reward": "Phần thưởng: {{reward}}",
+      "refreshStatus": "Làm mới",
+      "checkAll": "Điểm danh tất cả",
+      "noAccounts": "Không có tài khoản",
+      "querying": "Đang tải...",
+      "streakDays": "{{days}} ngày",
+      "streakRewardCountdown": "Còn {{days}} ngày nữa để nhận thưởng bonus",
+      "streakRewardToday": "Hôm nay có thể nhận thưởng bonus!",
+      "recentDates": "Gần đây: ",
+      "claimed": "Đã nhận",
+      "queryFailed": "Truy vấn thất bại",
+      "retry": "Thử lại",
+      "inactive": "Không khả dụng",
+      "inactiveHint": "Check-in không hoạt động với tài khoản này",
+      "autoCheckinSettings": "Cài đặt điểm danh tự động",
+      "autoCheckinLabel": "Điểm danh tự động",
+      "autoCheckinOff": "Điểm danh tự động tắt",
+      "autoCheckinEnabledHint": "Điểm danh tự động bật: Điểm danh ngẫu nhiên từ {{start}} đến {{end}}",
+      "autoCheckinDisabledHint": "Điểm danh tự động tắt",
+      "enableAutoCheckin": "Bật điểm danh tự động",
+      "enableAutoCheckinDesc": "Tự động điểm danh ngẫu nhiên mỗi ngày trong khoảng thời gian quy định",
+      "randomTimeRange": "Khoảng thời gian điểm danh ngẫu nhiên",
+      "startTime": "Thời gian bắt đầu",
+      "endTime": "Thời gian kết thúc",
+      "timeRangeHint": "Tự động chọn một thời điểm ngẫu nhiên mỗi ngày trong khoảng này để điểm danh chạy ngầm.",
+      "timeRangeError": "Thời gian bắt đầu không thể sau thời gian kết thúc"
+    },
+    "placeholder": "Quản lý tài khoản MiniMax Code sẽ sớm ra mắt."
   },
   "zcode": {
     "search": "Tìm tài khoản ZCode...",

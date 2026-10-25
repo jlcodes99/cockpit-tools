@@ -204,6 +204,7 @@ interface InstancesManagerProps<TAccount extends AccountLike> {
     | "trae_cn"
     | "trae_solo_cn"
     | "workbuddy"
+    | "minimax_code"
     | "zcode";
   onInstanceStarted?: (instance: InstanceProfile) => void | Promise<void>;
   onBeforeStart?: (instance: InstanceProfile) => boolean | Promise<boolean>;
@@ -603,6 +604,8 @@ const resolveFloatingCardPlatformId = (
       return "github-copilot";
     case "claude":
       return "claude_manager";
+    case "minimax_code":
+      return "minimaxcode";
     default:
       return appType;
   }

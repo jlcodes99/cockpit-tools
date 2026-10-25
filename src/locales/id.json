@@ -670,6 +670,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "Beralih ke tata letak klasik",
     "switchClassicLayoutTitle": "Beralih ke tata letak bilah sisi klasik",
     "switchClassicLayoutDesc": "Tata letak klasik menampilkan navigasi platform secara lengkap dan mendukung penciutan bilah sisi. Anda dapat beralih kembali kapan saja di Pengaturan > Umum > Tata Letak Bilah Sisi.",
@@ -1252,6 +1254,12 @@
       "workbuddyAppPathPlaceholder": "Jalur bawaan",
       "workbuddyPathSelect": "Pilih",
       "workbuddyPathReset": "Atur ulang ke bawaan",
+      "minimaxCodeAppPath": "Jalur Peluncuran MiniMax Code",
+      "minimaxCodeAppPathDesc": "Biarkan kosong untuk jalur bawaan",
+      "minimaxCodeAppPathPlaceholder": "Jalur bawaan",
+      "minimaxCodePathSelect": "Pilih",
+      "minimaxCodeAppPathPathSelect": "Pilih",
+      "minimaxCodePathReset": "Atur ulang ke bawaan",
       "openclawAuthOverwrite": "Timpa login OpenClaw saat mengganti Codex",
       "openclawAuthOverwriteDesc": "Jika dinonaktifkan, hanya Codex yang diganti dan OpenClaw mempertahankan status login saat ini",
       "ghcpOpencodeAuthOverwrite": "Timpa login OpenCode saat mengganti GitHub Copilot",
@@ -1289,6 +1297,8 @@
       "qoderPathSelect": "Pilih",
       "workbuddyAutoRefresh": "Auto Refresh Kuota WorkBuddy",
       "workbuddyAutoRefreshDesc": "Frekuensi auto-refresh di latar belakang",
+      "minimaxCodeAutoRefresh": "Auto Refresh Kuota MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Frekuensi auto-refresh di latar belakang",
       "codexLocalAccessEntryVisible": "Tampilkan entri Layanan API",
       "codexLocalAccessEntryVisibleDesc": "Hanya mengatur apakah entri Layanan API ditampilkan di ringkasan Codex. Ini tidak menghentikan layanan API lokal; Anda bisa menyalakannya lagi di sini atau di Pengaturan Cepat.",
       "codexLocalAccessEnabled": "Aktifkan Layanan API",
@@ -6313,6 +6323,10 @@
       "title": "WorkBuddy Settings​",
       "appPath": "WorkBuddy Path​"
     },
+    "minimaxCode": {
+      "title": "MiniMax Code Settings​",
+      "appPath": "MiniMax Code Path​"
+    },
     "filterPersistence": {
       "title": "Simpan Filter",
       "enable": "Ingat filter ringkasan akun (tanpa pencarian)",
@@ -7282,6 +7296,152 @@
       "timeRangeHint": "Memilih waktu acak dalam rentang ini setiap hari untuk menyelesaikan check-in latar belakang.",
       "timeRangeError": "Waktu mulai tidak boleh lebih lambat dari waktu selesai"
     }
+  },
+    "minimaxCode": {
+    "title": "Akun MiniMax Code",
+    "noAccounts": "Tidak ada akun MiniMax Code",
+    "addAccount": "Tambah Akun MiniMax Code",
+    "flowNotice": {
+      "title": "Info Akun MiniMax Code (klik untuk perluas/ciutkan)",
+      "desc": "Penggantian akun menulis file masuk lokal sesuai tata letak terbaru klien resmi MiniMax Code; impor lokal membaca file yang sama. Data hanya diproses secara lokal.",
+      "permission": "Cakupan izin: baca dan tulis file masuk MiniMax Code (~/.minimax/auth/auth.json) untuk impor lokal dan penggantian akun; state.vscdb lama tidak lagi dibaca atau diubah.",
+      "network": "Cakupan jaringan: Login OAuth dan penyegaran token memerlukan permintaan jaringan ke MiniMax Code; kueri kuota memanggil API penagihan. File masuk lokal dan kredensial mentah tidak diunggah."
+    },
+    "nickname": "Nama panggilan",
+    "enterprise": "Perusahaan",
+    "usage": "Status Penggunaan",
+    "creditsBalance": "Saldo Kredit",
+    "usageNormal": "Status normal",
+    "usageAbnormal": "Abnormal​",
+    "usageViewDetail": "Lihat detail",
+    "usageDetailTitle": "Detail Status Penggunaan",
+    "oauthWaiting": "Menunggu otorisasi...",
+    "oauthDesc": "Klik tombol di bawah ini untuk membuka halaman otorisasi MiniMax Code di peramban Anda.",
+    "oauthDescWebview": "Klik tombol di bawah ini untuk membuka halaman otorisasi MiniMax Code di WebView bawaan.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "IDE sign-in only​",
+        "item1": "Add the account after completing OAuth in your browser, then use it for IDE switching.​",
+        "item2": "Resource-package quota data will refresh automatically after authorization.​",
+        "item3": "Account cards show quota amount, progress, and refresh/expiry time by resource package.​"
+      }
+    },
+    "oauthWebviewTab": "WebView OAuth​",
+    "oauthOpenWebview": "Open in WebView​",
+    "oauthOpenWebviewIncognito": "Open in Incognito WebView​",
+    "oauthOpenWebviewFailed": "Failed to open WebView: {{error}}​",
+    "oauthOpenBrowserFallback": "Open in Browser (Fallback)​",
+    "oauthOpenBrowserFailed": "Failed to open browser: {{error}}​",
+    "oauthWebviewProgressHint": "A horizontal step bar is shown at the top of the WebView to locate stuck stages.​",
+    "oauthFlow": {
+      "prepare": "Prepare OAuth link​",
+      "authorize": "Open authorization link and confirm​",
+      "bind": "Poll auth result and bind account​",
+      "retryPrepare": "Regenerate OAuth link​",
+      "retryAuthorize": "Request authorization link again​",
+      "retryBind": "Retry auth polling​",
+      "error": "Flow error: {{error}}​"
+    },
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 Prepare OAuth link​",
+        "authorize": "2 Open authorization link and confirm​",
+        "bind": "3 Poll auth result and bind account​",
+        "complete": "5 Done (close manually)​"
+      },
+      "status": {
+        "loginConfirm": "Please complete sign-in and authorization on this page.​"
+      }
+    },
+    "tokenDesc": "Tempel token akses MiniMax Code Anda:",
+    "jsonDesc": "Pilih berkas JSON yang berisi akun MiniMax Code:",
+    "import": {
+      "localDesc": "Impor data akun dari klien MiniMax Code lokal atau berkas JSON.",
+      "localClient": "Impor dari MiniMax Code lokal"
+    },
+    "search": "Cari akun MiniMax Code...",
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "Quota query failed​",
+      "sectionTitle": "Quota Query​",
+      "empty": "No quota data available​",
+      "packageUnknown": "Unknown package​",
+      "quotaLabel": "Remaining quota​",
+      "updatedAt": "Next refresh time: {{time}}​",
+      "cycleRange": "Cycle: {{start}} - {{end}}​",
+      "cycleUnknown": "Cycle info unavailable​",
+      "expireAt": "Expires at: {{time}}​",
+      "expireUnknown": "Expires at: N/A​",
+      "packageTitle": {
+        "base": "Base Experience Package​",
+        "activity": "Activity Gift Package​"
+      }
+    },
+    "extraCredit": {
+      "title": "Credit Package​"
+    },
+    "oauthUrlInputPlaceholder": "You can enter an authorization URL manually​",
+    "oauthInvalidUrl": "Invalid authorization URL. Please enter a full URL.​",
+    "oauthGotoWebview": "Navigate opened WebView to input URL​",
+    "oauthGotoWebviewSuccess": "Requested WebView to navigate to the input URL.​",
+    "oauthGotoWebviewFailed": "Failed to navigate WebView: {{error}}​",
+    "oauthWebviewInlineUrlPlaceholder": "Enter a URL to navigate within this WebView​",
+    "oauthWebviewInlineGo": "Go​",
+    "oauthSuccessClosePrompt": "Account added successfully. Close this WebView now?\nChoose \"Close WebView\" to close now, or \"Later\" to keep it open.​",
+    "oauthSuccessCloseTitle": "Account Added​",
+    "oauthSuccessCloseNowLabel": "Close WebView​",
+    "oauthSuccessCloseLaterLabel": "Later​",
+    "oauthSuccessCloseNowStatus": "Ã¢Å“â€¦ Account added. Closing window...",
+    "oauthSuccessCloseLaterStatus": "Ã¢Å“â€¦ Account added. This WebView stays open.",
+    "instances": {
+      "unsupported": {
+        "descPlatform": "Multi-instansi MiniMax Code didukung hanya di macOS, Windows, dan Linux."
+      }
+    },
+    "checkin": {
+      "title": "Check-in Harian",
+      "modalTitle": "Check-in Harian",
+      "status": "Status Check-in",
+      "checkedIn": "Sudah Check-in",
+      "notCheckedIn": "Belum Check-in",
+      "button": "Absen",
+      "button.loading": "Melakukan check-in...",
+      "done": "Selesai",
+      "success": "Check-in berhasil! Streak {{days}} hari",
+      "failure": "Absen gagal: {{message}}",
+      "failure.network": "Kesalahan jaringan, silakan coba lagi nanti",
+      "lastCheckin": "Check-in terakhir: {{time}}",
+      "streak": "Streak {{days}} hari",
+      "reward": "Hadiah: {{reward}}",
+      "refreshStatus": "Segarkan",
+      "checkAll": "Check In Semua",
+      "noAccounts": "Tidak ada akun",
+      "querying": "Memuat...",
+      "streakDays": "{{days}} hari",
+      "streakRewardCountdown": "{{days}} hari lagi untuk hadiah bonus",
+      "streakRewardToday": "Hadiah bonus tersedia hari ini!",
+      "recentDates": "Terbaru: ",
+      "claimed": "Diklaim",
+      "queryFailed": "Kueri gagal",
+      "retry": "Coba lagi",
+      "inactive": "Tidak tersedia",
+      "inactiveHint": "Check-in tidak aktif untuk akun ini",
+      "autoCheckinSettings": "Pengaturan Check-in Otomatis",
+      "autoCheckinLabel": "Check-in Otomatis",
+      "autoCheckinOff": "Check-in Otomatis Mati",
+      "autoCheckinEnabledHint": "Check-in otomatis aktif: Check-in acak antara {{start}} dan {{end}}",
+      "autoCheckinDisabledHint": "Check-in otomatis nonaktif",
+      "enableAutoCheckin": "Aktifkan Check-in Otomatis",
+      "enableAutoCheckinDesc": "Melakukan check-in harian secara acak dalam rentang waktu yang ditentukan",
+      "randomTimeRange": "Rentang Waktu Check-in Acak",
+      "startTime": "Waktu Mulai",
+      "endTime": "Waktu Selesai",
+      "timeRangeHint": "Memilih waktu acak dalam rentang ini setiap hari untuk menyelesaikan check-in latar belakang.",
+      "timeRangeError": "Waktu mulai tidak boleh lebih lambat dari waktu selesai"
+    },
+    "placeholder": "Manajemen akun MiniMax Code akan segera hadir."
   },
   "mfaVault": {
     "pageDesc": "Simpan dan kelola kode pemulihan cadangan MFA, set kode sandi, dan data autentikasi sensitif lainnya dengan aman. Catatan MFA disimpan secara lokal saja. Menghapus catatan, membersihkan cache, atau mengganti/kehilangan perangkat dapat menyebabkan kehilangan MFA. Simpan cadangan dan impor dari cadangan saat diperlukan.",

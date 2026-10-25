@@ -15,8 +15,8 @@ use crate::models::workbuddy::WorkbuddyOAuthCompletePayload;
 use crate::modules::{
     claude_account, codebuddy_account, codebuddy_cn_account, codebuddy_cn_oauth, codebuddy_oauth,
     codex_account, config, cursor_account, github_copilot_account, github_copilot_instance, import,
-    kiro_account, kiro_oauth, logger, qoder_account, trae_account, windsurf_account,
-    windsurf_oauth, workbuddy_account, workbuddy_oauth, zed_account,
+    kiro_account, kiro_oauth, logger, minimax_code_account, qoder_account, trae_account,
+    windsurf_account, windsurf_oauth, workbuddy_account, workbuddy_oauth, zed_account,
 };
 use serde::Serialize;
 
@@ -267,6 +267,17 @@ fn peek_workbuddy_identity() -> Option<String> {
     let payload = workbuddy_account::import_payload_from_local()
         .ok()
         .flatten()?;
+    identity_key(&[
+        Some(payload.email),
+        payload.uid,
+        token_prefix(&payload.access_token),
+    ])
+}
+
+fn peek_minimax_code_identity() -> Option<String> {
+    let payload = minimax_code_account::import_payload_from_local()
+        .ok()
+        .and_then(|payloads| payloads.into_iter().next())?;
     identity_key(&[
         Some(payload.email),
         payload.uid,
@@ -531,6 +542,25 @@ fn import_workbuddy() -> ImportFuture {
     })
 }
 
+fn import_minimax_code() -> ImportFuture {
+    Box::pin(async {
+        let payloads = tauri::async_runtime::spawn_blocking(
+            minimax_code_account::import_payload_from_local,
+        )
+        .await
+        .map_err(|error| format!("MiniMax Code 本机导入后台任务失败: {}", error))??;
+        if payloads.is_empty() {
+            return Err("未在本机 MiniMax Code 客户端中找到登录信息".to_string());
+        }
+        let mut imported_any = false;
+        for payload in payloads {
+            minimax_code_account::upsert_account(payload)?;
+            imported_any = true;
+        }
+        Ok(imported_any)
+    })
+}
+
 fn import_qoder() -> ImportFuture {
     Box::pin(async {
         qoder_account::import_from_local()
@@ -606,6 +636,11 @@ fn platform_watchers() -> Vec<PlatformWatcher> {
             platform: "workbuddy",
             peek_identity: peek_workbuddy_identity,
             import_account: import_workbuddy,
+        },
+        PlatformWatcher {
+            platform: "minimaxcode",
+            peek_identity: peek_minimax_code_identity,
+            import_account: import_minimax_code,
         },
         PlatformWatcher {
             platform: "qoder",

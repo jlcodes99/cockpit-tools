@@ -394,6 +394,7 @@ fn normalize_platform_id(value: &str) -> Option<String> {
         "trae-cn" => Some("trae_cn".to_string()),
         "trae-solo-cn" => Some("trae_solo_cn".to_string()),
         "workbuddy" => Some("workbuddy".to_string()),
+        "minimaxcode" | "minimax-code" => Some("minimaxcode".to_string()),
         _ => None,
     }
 }

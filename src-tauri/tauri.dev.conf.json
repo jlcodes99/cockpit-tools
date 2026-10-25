@@ -2,6 +2,9 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Cockpit Tools Dev",
   "identifier": "com.jlcodes.cockpit-tools.dev",
+  "bundle": {
+    "externalBin": []
+  },
   "app": {
     "windows": [
       {

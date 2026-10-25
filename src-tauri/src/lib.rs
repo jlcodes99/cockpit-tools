@@ -110,6 +110,7 @@ mod tests {
         config.codebuddy_auto_refresh_minutes = -1;
         config.codebuddy_cn_auto_refresh_minutes = -1;
         config.workbuddy_auto_refresh_minutes = -1;
+        config.minimax_code_auto_refresh_minutes = -1;
         config.qoder_auto_refresh_minutes = -1;
         config.zcode_auto_refresh_minutes = -1;
         config.trae_auto_refresh_minutes = -1;
@@ -221,6 +222,7 @@ fn has_enabled_periodic_account_refresh(config: &modules::config::UserConfig) ->
         config.codebuddy_auto_refresh_minutes,
         config.codebuddy_cn_auto_refresh_minutes,
         config.workbuddy_auto_refresh_minutes,
+        config.minimax_code_auto_refresh_minutes,
         config.qoder_auto_refresh_minutes,
         config.zcode_auto_refresh_minutes,
         config.trae_auto_refresh_minutes,
@@ -700,6 +702,7 @@ pub fn run() {
 
             apply_startup_minimized(&app.handle());
             modules::workbuddy_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
+            modules::minimax_code_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
 
             Ok(())
         })
@@ -1371,6 +1374,30 @@ pub fn run() {
             commands::workbuddy::get_workbuddy_auto_checkin_logs,
             commands::workbuddy::clear_workbuddy_auto_checkin_logs,
             commands::workbuddy::run_workbuddy_auto_checkin_now,
+            // MiniMax Code Commands
+            commands::minimax_code::list_minimax_code_accounts,
+            commands::minimax_code::delete_minimax_code_account,
+            commands::minimax_code::delete_minimax_code_accounts,
+            commands::minimax_code::import_minimax_code_from_json,
+            commands::minimax_code::import_minimax_code_from_local,
+            commands::minimax_code::export_minimax_code_accounts,
+            commands::minimax_code::refresh_minimax_code_token,
+            commands::minimax_code::refresh_all_minimax_code_tokens,
+            commands::minimax_code::add_minimax_code_account_with_token,
+            commands::minimax_code::update_minimax_code_account_tags,
+            commands::minimax_code::get_minimax_code_accounts_index_path,
+            commands::minimax_code::inject_minimax_code_to_client,
+            commands::minimax_code::minimax_code_oauth_login_start,
+            commands::minimax_code::minimax_code_oauth_login_peek,
+            commands::minimax_code::minimax_code_oauth_login_complete,
+            commands::minimax_code::minimax_code_oauth_login_cancel,
+            commands::minimax_code::get_checkin_status_minimax_code,
+            commands::minimax_code::checkin_minimax_code,
+            commands::minimax_code::get_minimax_code_auto_checkin_config,
+            commands::minimax_code::save_minimax_code_auto_checkin_config,
+            commands::minimax_code::get_minimax_code_auto_checkin_logs,
+            commands::minimax_code::clear_minimax_code_auto_checkin_logs,
+            commands::minimax_code::run_minimax_code_auto_checkin_now,
             // WorkBuddy Instance Commands
             commands::workbuddy_instance::workbuddy_get_instance_defaults,
             commands::workbuddy_instance::workbuddy_list_instances,
@@ -1381,6 +1408,16 @@ pub fn run() {
             commands::workbuddy_instance::workbuddy_stop_instance,
             commands::workbuddy_instance::workbuddy_open_instance_window,
             commands::workbuddy_instance::workbuddy_close_all_instances,
+            // MiniMax Code Instance Commands
+            commands::minimax_code_instance::minimax_code_get_instance_defaults,
+            commands::minimax_code_instance::minimax_code_list_instances,
+            commands::minimax_code_instance::minimax_code_create_instance,
+            commands::minimax_code_instance::minimax_code_update_instance,
+            commands::minimax_code_instance::minimax_code_delete_instance,
+            commands::minimax_code_instance::minimax_code_start_instance,
+            commands::minimax_code_instance::minimax_code_stop_instance,
+            commands::minimax_code_instance::minimax_code_open_instance_window,
+            commands::minimax_code_instance::minimax_code_close_all_instances,
             // CodeBuddy Instance Commands
             commands::codebuddy_instance::codebuddy_get_instance_defaults,
             commands::codebuddy_instance::codebuddy_list_instances,

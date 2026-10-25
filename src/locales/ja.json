@@ -617,6 +617,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Zed プラットフォーム",
     "expandSidebar": "サイドバーを展開",
     "collapseSidebar": "サイドバーを折りたたむ",
@@ -1171,6 +1173,12 @@
       "workbuddyAppPathPlaceholder": "デフォルトパス",
       "workbuddyPathSelect": "選択",
       "workbuddyPathReset": "デフォルトに戻す",
+      "minimaxCodeAppPath": "MiniMax Code 起動パス",
+      "minimaxCodeAppPathDesc": "空欄の場合はデフォルトパスを使用します",
+      "minimaxCodeAppPathPlaceholder": "デフォルトパス",
+      "minimaxCodePathSelect": "選択",
+      "minimaxCodeAppPathPathSelect": "選択",
+      "minimaxCodePathReset": "デフォルトに戻す",
       "openclawAuthOverwrite": "Codex 切り替え時に OpenClaw のログインを上書きする",
       "openclawAuthOverwriteDesc": "オフの場合は Codex のみ切り替え、OpenClaw は現在のログイン状態を維持します",
       "ghcpOpencodeAuthOverwrite": "GitHub Copilot 切り替え時に OpenCode のログインを上書きする",
@@ -1242,6 +1250,8 @@
       "qoderPathSelect": "選択",
       "workbuddyAutoRefresh": "WorkBuddy 自動配額更新",
       "workbuddyAutoRefreshDesc": "バックグラウンド自動更新頻度",
+      "minimaxCodeAutoRefresh": "MiniMax Code 自動配額更新",
+      "minimaxCodeAutoRefreshDesc": "バックグラウンド自動更新頻度",
       "codexLocalAccessEntryVisible": "APIサービス入口を表示",
       "codexLocalAccessEntryVisibleDesc": "Codex 概要で API サービス入口を表示するかどうかだけを切り替えます。ローカル API サービス自体は停止せず、ここかクイック設定から再表示できます。",
       "codexLocalAccessEnabled": "APIサービスを有効化",
@@ -6158,6 +6168,10 @@
       "title": "WorkBuddy 設定",
       "appPath": "WorkBuddy パス"
     },
+    "minimaxCode": {
+      "title": "MiniMax Code 設定",
+      "appPath": "MiniMax Code パス"
+    },
     "zcode": {
       "title": "ZCode 設定",
       "appPath": "ZCode パス"
@@ -7107,6 +7121,152 @@
       "timeRangeHint": "バックグラウンドチェックインを完了するため、この時間帯から毎日ランダムな時間を自動選択します。",
       "timeRangeError": "開始時間は終了時間より後にできません"
     }
+  },
+    "minimaxCode": {
+    "title": "MiniMax Codeアカウント管理",
+    "noAccounts": "MiniMax Code アカウントがありません",
+    "addAccount": "MiniMax Code アカウントを追加",
+    "flowNotice": {
+      "title": "MiniMax Code アカウント管理ガイド（クリックで展開/折りたたみ）",
+      "desc": "アカウント切り替えでは、最新の MiniMax Code 公式クライアントの形式に従ってローカルのログインファイルを書き込みます。ローカルインポートも同じファイルを読み取ります。データはローカルでのみ処理されます。",
+      "permission": "権限範囲：ローカルインポートとアカウント切り替えのために MiniMax Code のログインファイル（~/.minimax/auth/auth.json）を読み書きします。旧 state.vscdb は読み取りも変更もしません。",
+      "network": "ネットワーク範囲：OAuth ログインと Token 更新では MiniMax Code へのリクエストが必要で、クォータ照会では課金 API を呼び出します。ローカルのログインファイルや生の認証情報はアップロードされません。"
+    },
+    "nickname": "ニックネーム",
+    "enterprise": "企業",
+    "usage": "使用状況",
+    "creditsBalance": "クレジット残高",
+    "usageNormal": "正常",
+    "usageAbnormal": "異常",
+    "usageViewDetail": "詳細を見る",
+    "usageDetailTitle": "利用状態の詳細",
+    "oauthWaiting": "認証完了を待機中...",
+    "oauthDesc": "下のボタンをクリックすると、ブラウザで MiniMax Code の認証ページを開きます。",
+    "oauthDescWebview": "下のボタンをクリックすると、内蔵 WebView で MiniMax Code の認証ページを開きます。",
+    "oauthFeature": {
+      "oauth": {
+        "title": "IDE ログイン情報のみを認証",
+        "item1": "ブラウザで OAuth を完了すると、アカウントを追加して IDE 切り替えに利用できます。",
+        "item2": "クォータ照会パラメータは自動では紐付けられません。",
+        "item3": "クォータ表示が必要な場合は、アカウントカードで「クォータ照会」を手動実行してください。"
+      }
+    },
+    "oauthWebviewTab": "WebView 認証",
+    "oauthOpenWebview": "WebView で開く",
+    "oauthOpenWebviewIncognito": "シークレット WebView で開く",
+    "oauthOpenWebviewFailed": "WebView を開けませんでした：{{error}}",
+    "oauthOpenBrowserFallback": "ブラウザで開く（代替）",
+    "oauthOpenBrowserFailed": "ブラウザを開けませんでした：{{error}}",
+    "oauthWebviewProgressHint": "WebView 上部に横向きのステップバーを表示し、停止した段階を特定しやすくします。",
+    "oauthFlow": {
+      "prepare": "認証リンクを準備",
+      "authorize": "認証リンクを開いて承認",
+      "bind": "認証結果をポーリングしてアカウントに紐付け",
+      "retryPrepare": "認証リンクを再生成",
+      "retryAuthorize": "認証リンクを再要求",
+      "retryBind": "認証ポーリングを再試行",
+      "error": "フローエラー：{{error}}"
+    },
+    "tokenDesc": "MiniMax Code の access token を貼り付けてください：",
+    "jsonDesc": "MiniMax Code アカウントを含む JSON ファイルを選択してください：",
+    "import": {
+      "localDesc": "ローカルの MiniMax Code クライアントまたは JSON ファイルからアカウントデータを取り込めます。",
+      "localClient": "ローカルの MiniMax Code から取り込む"
+    },
+    "search": "MiniMax Code アカウントを検索...",
+    "quotaQuery": {
+      "failedRefreshCompact": "クォータ更新失敗",
+      "sectionTitle": "クォータ照会",
+      "empty": "まだクォータ照会情報が紐付けられていません",
+      "packageUnknown": "プラン情報不明",
+      "quotaLabel": "残りクォータ",
+      "updatedAt": "最終照会：{{time}}",
+      "cycleRange": "期間：{{start}} - {{end}}",
+      "cycleUnknown": "期間情報なし",
+      "expireAt": "有効期限：{{time}}",
+      "expireUnknown": "有効期限：なし",
+      "packageTitle": {
+        "base": "基本体験パッケージ",
+        "activity": "アクティビティ特典パッケージ"
+      }
+    },
+    "extraCredit": {
+      "title": "追加クレジット"
+    },
+    "oauthUrlInputPlaceholder": "認証 URL を手動入力できます",
+    "oauthInvalidUrl": "認証 URL の形式が正しくありません。完全な URL を入力してください。",
+    "oauthGotoWebview": "開いている WebView を入力 URL に移動",
+    "oauthGotoWebviewSuccess": "WebView に入力 URL への移動を要求しました。",
+    "oauthGotoWebviewFailed": "WebView の移動に失敗しました：{{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "この WebView 内で移動する URL を入力",
+    "oauthWebviewInlineGo": "移動",
+    "oauthSuccessClosePrompt": "アカウントの追加が完了しました。今すぐこの WebView を閉じますか？\n「WebView を閉じる」を選ぶとすぐ閉じ、「後で」を選ぶと開いたままにします。",
+    "oauthSuccessCloseTitle": "アカウント追加完了",
+    "oauthSuccessCloseNowLabel": "WebView を閉じる",
+    "oauthSuccessCloseLaterLabel": "後で",
+    "oauthSuccessCloseNowStatus": "✅ アカウント追加が完了しました。ウィンドウを閉じます...",
+    "oauthSuccessCloseLaterStatus": "✅ アカウント追加が完了しました。この WebView は開いたままです。",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 認証リンクを準備",
+        "authorize": "2 認証リンクを開いて承認",
+        "bind": "3 認証結果をポーリングしてアカウントに紐付け",
+        "complete": "5 完了（手動で閉じる）"
+      },
+      "status": {
+        "loginConfirm": "このページでサインインと認可を完了してください。"
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "MiniMax Code のマルチインスタンスは macOS、Windows、Linux のみ対応しています。"
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "checkin": {
+      "title": "デイリーチェックイン",
+      "modalTitle": "デイリーチェックイン",
+      "status": "チェックイン状態",
+      "checkedIn": "チェックイン済み",
+      "notCheckedIn": "未チェックイン",
+      "button": "チェックイン",
+      "button.loading": "チェックイン中...",
+      "done": "完了",
+      "success": "チェックイン成功！{{days}}日連続",
+      "failure": "チェックイン失敗: {{message}}",
+      "failure.network": "ネットワークエラーです。しばらくしてから再試行してください",
+      "lastCheckin": "最終チェックイン: {{time}}",
+      "streak": "{{days}}日連続",
+      "reward": "報酬: {{reward}}",
+      "refreshStatus": "更新",
+      "checkAll": "一括チェックイン",
+      "noAccounts": "アカウントがありません",
+      "querying": "読み込み中...",
+      "streakDays": "{{days}}日",
+      "streakRewardCountdown": "ボーナス報酬まであと{{days}}日",
+      "streakRewardToday": "本日はボーナス報酬を受け取れます！",
+      "recentDates": "最近: ",
+      "claimed": "受取済み",
+      "queryFailed": "照会失敗",
+      "retry": "再試行",
+      "inactive": "利用不可",
+      "inactiveHint": "このアカウントではチェックインが無効です",
+      "autoCheckinSettings": "自動チェックイン設定",
+      "autoCheckinLabel": "自動チェックイン",
+      "autoCheckinOff": "自動チェックインオフ",
+      "autoCheckinEnabledHint": "自動チェックイン有効：{{start}} から {{end}} の間にランダムチェックイン",
+      "autoCheckinDisabledHint": "自動チェックイン無効",
+      "enableAutoCheckin": "自動チェックインを有効化",
+      "enableAutoCheckinDesc": "指定された時間帯内で毎日ランダムにチェックインします",
+      "randomTimeRange": "ランダムチェックイン時間帯",
+      "startTime": "開始時間",
+      "endTime": "終了時間",
+      "timeRangeHint": "バックグラウンドチェックインを完了するため、この時間帯から毎日ランダムな時間を自動選択します。",
+      "timeRangeError": "開始時間は終了時間より後にできません"
+    },
+    "placeholder": "MiniMax Code アカウント管理は近日公開予定です。"
   },
   "zcode": {
     "search": "ZCode アカウントを検索...",

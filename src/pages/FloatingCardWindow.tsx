@@ -16,6 +16,7 @@ import {
   buildGrokAccountPresentation,
   buildGitHubCopilotAccountPresentation,
   buildKiroAccountPresentation,
+  buildMiniMaxCodeAccountPresentation,
   buildQoderAccountPresentation,
   buildZcodeAccountPresentation,
   buildTraeAccountPresentation,
@@ -57,6 +58,7 @@ import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWindsurfAccountStore } from '../stores/useWindsurfAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
 import { useZedAccountStore } from '../stores/useZedAccountStore';
 import { useCodebuddyCnInstanceStore } from '../stores/useCodebuddyCnInstanceStore';
 import { useAntigravityLegacyInstanceStore } from '../stores/useAntigravityLegacyInstanceStore';
@@ -78,6 +80,7 @@ import {
 } from '../stores/useTraeInstanceStore';
 import { useWindsurfInstanceStore } from '../stores/useWindsurfInstanceStore';
 import { useWorkbuddyInstanceStore } from '../stores/useWorkbuddyInstanceStore';
+import { useMinimaxCodeInstanceStore } from '../stores/useMinimaxCodeInstanceStore';
 import { useZcodeInstanceStore } from '../stores/useZcodeInstanceStore';
 import { ALL_PLATFORM_IDS, isAccountPlatform, PLATFORM_PAGE_MAP, PlatformId } from '../types/platform';
 import type { InstanceProfile } from '../types/instance';
@@ -93,6 +96,7 @@ import {
   getRecommendedGrokAccount,
   getRecommendedGitHubCopilotAccount,
   getRecommendedKiroAccount,
+  getRecommendedMiniMaxCodeAccount,
   getRecommendedQoderAccount,
   getRecommendedZcodeAccount,
   getRecommendedTraeAccount,
@@ -146,6 +150,7 @@ type FloatingCardAccount =
   | ReturnType<typeof useZcodeAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useTraeAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useWorkbuddyAccountStore.getState>['accounts'][number]
+  | ReturnType<typeof useMinimaxCodeAccountStore.getState>['accounts'][number]
   | ReturnType<typeof useZedAccountStore.getState>['accounts'][number];
 
 type FloatingCardInstanceStoreApi = Pick<
@@ -227,6 +232,8 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
       return useTraeSoloCnInstanceStore.getState();
     case 'workbuddy':
       return useWorkbuddyInstanceStore.getState();
+    case 'minimaxcode':
+      return useMinimaxCodeInstanceStore.getState();
     case 'zcode':
       return useZcodeInstanceStore.getState();
     case 'zed':
@@ -301,6 +308,10 @@ export function FloatingCardWindow() {
     accounts: workbuddyAccounts,
     currentAccountId: workbuddyCurrentId,
   } = useWorkbuddyAccountStore();
+  const {
+    accounts: minimaxCodeAccounts,
+    currentAccountId: minimaxCodeCurrentId,
+  } = useMinimaxCodeAccountStore();
   const {
     accounts: zedAccounts,
     currentAccountId: zedCurrentId,
@@ -529,6 +540,9 @@ export function FloatingCardWindow() {
           break;
         case 'workbuddy':
           await useWorkbuddyAccountStore.getState().fetchAccounts();
+          break;
+        case 'minimaxcode':
+          await useMinimaxCodeAccountStore.getState().fetchAccounts();
           break;
         case 'zed':
           await useZedAccountStore.getState().fetchAccounts();
@@ -828,6 +842,10 @@ export function FloatingCardWindow() {
     () => resolveCurrentAccountById(workbuddyAccounts, workbuddyCurrentId),
     [workbuddyAccounts, workbuddyCurrentId],
   );
+  const minimaxCodeCurrent = useMemo(
+    () => resolveCurrentAccountById(minimaxCodeAccounts, minimaxCodeCurrentId),
+    [minimaxCodeAccounts, minimaxCodeCurrentId],
+  );
   const zedCurrent = useMemo(
     () => resolveCurrentAccountById(zedAccounts, zedCurrentId),
     [zedAccounts, zedCurrentId],
@@ -909,6 +927,11 @@ export function FloatingCardWindow() {
           accounts: workbuddyAccounts,
           actualCurrentAccount: workbuddyCurrent,
         };
+      case 'minimaxcode':
+        return {
+          accounts: minimaxCodeAccounts,
+          actualCurrentAccount: minimaxCodeCurrent,
+        };
       case 'zed':
         return {
           accounts: zedAccounts,
@@ -954,6 +977,8 @@ export function FloatingCardWindow() {
     windsurfCurrent,
     workbuddyAccounts,
     workbuddyCurrent,
+    minimaxCodeAccounts,
+    minimaxCodeCurrent,
     zedAccounts,
     zedCurrent,
     zcodeAccounts,
@@ -1007,6 +1032,8 @@ export function FloatingCardWindow() {
         return getRecommendedTraeAccount(traeAccounts, effectiveCurrentId);
       case 'workbuddy':
         return getRecommendedWorkbuddyAccount(workbuddyAccounts, effectiveCurrentId);
+      case 'minimaxcode':
+        return getRecommendedMiniMaxCodeAccount(minimaxCodeAccounts, effectiveCurrentId);
       case 'zed':
         return getRecommendedZedAccount(zedAccounts, effectiveCurrentId);
       default:
@@ -1024,6 +1051,7 @@ export function FloatingCardWindow() {
     grokAccounts,
     githubCopilotAccounts,
     kiroAccounts,
+    minimaxCodeAccounts,
     qoderAccounts,
     selectedPlatform,
     traeAccounts,
@@ -1104,6 +1132,8 @@ export function FloatingCardWindow() {
         return buildTraeAccountPresentation(viewedAccount as typeof traeAccounts[number], t);
       case 'workbuddy':
         return buildWorkbuddyAccountPresentation(viewedAccount as typeof workbuddyAccounts[number], t);
+      case 'minimaxcode':
+        return buildMiniMaxCodeAccountPresentation(viewedAccount as typeof minimaxCodeAccounts[number], t);
       case 'zed':
         return buildZedAccountPresentation(viewedAccount as typeof zedAccounts[number], t);
       case 'zcode':
@@ -1123,6 +1153,7 @@ export function FloatingCardWindow() {
     grokAccounts,
     githubCopilotAccounts,
     kiroAccounts,
+    minimaxCodeAccounts,
     qoderAccounts,
     selectedPlatform,
     t,
@@ -1216,6 +1247,9 @@ export function FloatingCardWindow() {
             break;
           case 'workbuddy':
             await useWorkbuddyAccountStore.getState().refreshToken(viewedAccount.id);
+            break;
+          case 'minimaxcode':
+            await useMinimaxCodeAccountStore.getState().refreshToken(viewedAccount.id);
             break;
           case 'zed':
             await useZedAccountStore.getState().refreshToken(viewedAccount.id);
@@ -1349,6 +1383,9 @@ export function FloatingCardWindow() {
             break;
           case 'workbuddy':
             await useWorkbuddyAccountStore.getState().switchAccount(viewedAccount.id);
+            break;
+          case 'minimaxcode':
+            await useMinimaxCodeAccountStore.getState().switchAccount(viewedAccount.id);
             break;
           case 'zed':
             await useZedAccountStore.getState().switchAccount(viewedAccount.id);

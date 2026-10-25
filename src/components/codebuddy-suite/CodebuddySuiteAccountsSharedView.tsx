@@ -86,7 +86,10 @@ export interface CodebuddySuiteAccountsPlatformConfig<
   TAccount extends CodebuddySuiteAccountBase,
 > {
   pageClassName: string;
-  quickSettingsType?: "codebuddy_cn" | "workbuddy" | "zcode" | "grok";
+  quickSettingsType?: "codebuddy_cn" | "workbuddy" | "zcode" | "grok" | "minimaxcode";
+  /** 签到按钮 tooltip 的 i18n key，默认沿用 workbuddy */
+  checkinModalTitleKey?: string;
+  checkinModalTitleDefault?: string;
   searchPlaceholderKey: string;
   searchPlaceholderDefault: string;
   flowNotice: {
@@ -1111,7 +1114,10 @@ export function CodebuddySuiteAccountsSharedView<
               className="btn btn-secondary icon-only"
               onClick={() => setShowCheckinModal(true)}
               disabled={accounts.length === 0}
-              title={t("workbuddy.checkin.modalTitle", "每日签到")}
+              title={t(
+                platformConfig.checkinModalTitleKey ?? "workbuddy.checkin.modalTitle",
+                platformConfig.checkinModalTitleDefault ?? "每日签到",
+              )}
             >
               <CalendarCheck size={14} />
             </button>

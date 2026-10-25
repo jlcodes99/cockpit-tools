@@ -816,6 +816,273 @@ pub fn start_workbuddy_with_args_with_new_window(
     }
 }
 
+/// Apply the MiniMax Code per-instance data root to a launch command.
+///
+/// The client resolves its credential namespace from the data root:
+/// `--data-dir` CLI flag → `MINIMAX_DATA_DIR` → `MAVIS_DATA_DIR` → `~/.minimax`
+/// (client `getExplicitDataDirArg`). Setting `MINIMAX_DATA_DIR` is therefore sufficient
+/// to isolate `auth.json`; `MAVIS_DATA_DIR` is set as the documented fallback.
+///
+/// A distinct Electron `--user-data-dir` is also required: Electron's single-instance
+/// lock lives in the default `%APPDATA%\MiniMax`, so a second client started without it
+/// would only re-focus the first window instead of opening a new one.
+fn apply_minimax_code_instance_env(cmd: &mut Command, data_dir: &std::path::Path) {
+    cmd.env("MINIMAX_DATA_DIR", data_dir);
+    cmd.env("MAVIS_DATA_DIR", data_dir);
+}
+
+/// Launch a managed MiniMax Code instance (its own data root).
+pub fn start_minimax_code_with_args_with_new_window(
+    data_dir: &str,
+    extra_args: &[String],
+    use_new_window: bool,
+) -> Result<u32, String> {
+    let target = data_dir.trim();
+    if target.is_empty() {
+        return Err("MiniMax Code 实例目录为空".to_string());
+    }
+    let data_dir_path = std::path::PathBuf::from(target);
+    std::fs::create_dir_all(&data_dir_path).map_err(|e| {
+        format!(
+            "创建 MiniMax Code 实例目录失败 ({}): {}",
+            data_dir_path.to_string_lossy(),
+            e
+        )
+    })?;
+    // Electron's single-instance lock lives under its userData dir; give each instance
+    // its own so a second window can actually open.
+    let electron_user_data_dir = data_dir_path.join("electron-user-data");
+
+    #[cfg(target_os = "macos")]
+    {
+        let launch_path = resolve_minimax_code_launch_path()?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        sanitize_macos_gui_launch_env(&mut cmd);
+        apply_minimax_code_instance_env(&mut cmd, &data_dir_path);
+        cmd.arg(format!("--user-data-dir={}", electron_user_data_dir.to_string_lossy()));
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        let child =
+            spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
+        crate::modules::logger::log_info(&format!(
+            "[MiniMax Code Start] managed instance; data_dir={} launch_path={}",
+            data_dir_path.to_string_lossy(),
+            launch_path.to_string_lossy()
+        ));
+        let probe_started = Instant::now();
+        let timeout = Duration::from_secs(6);
+        while probe_started.elapsed() < timeout {
+            if let Some(resolved_pid) = resolve_minimax_code_pid(None, Some(target)) {
+                return Ok(resolved_pid);
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+        crate::modules::logger::log_warn(&format!(
+            "[MiniMax Code Start] 启动后 6s 内未匹配到实例 PID，回退 child pid={}",
+            child.id()
+        ));
+        return Ok(child.id());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let launch_path = resolve_minimax_code_launch_path()?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        apply_minimax_code_instance_env(&mut cmd, &data_dir_path);
+        if should_detach_child() {
+            cmd.creation_flags(0x08000000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        } else {
+            cmd.creation_flags(0x08000000);
+        }
+        cmd.arg("--user-data-dir")
+            .arg(&electron_user_data_dir.to_string_lossy().to_string());
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        let child = spawn_command_with_trace(&mut cmd)
+            .map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
+        crate::modules::logger::log_info(&format!(
+            "[MiniMax Code Start] managed instance; data_dir={}",
+            data_dir_path.to_string_lossy()
+        ));
+        return Ok(child.id());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let launch_path = resolve_minimax_code_launch_path()?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        apply_minimax_code_instance_env(&mut cmd, &data_dir_path);
+        if should_detach_child() {
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        }
+        cmd.arg("--user-data-dir")
+            .arg(&electron_user_data_dir.to_string_lossy().to_string());
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        let child =
+            spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
+        crate::modules::logger::log_info(&format!(
+            "[MiniMax Code Start] managed instance; data_dir={}",
+            data_dir_path.to_string_lossy()
+        ));
+        return Ok(child.id());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = (extra_args, use_new_window);
+        Err("MiniMax Code 应用多开仅支持 macOS、Windows 和 Linux".to_string())
+    }
+}
+
+/// Launch the default (non-managed) MiniMax Code instance.
+pub fn start_minimax_code_default_with_args_with_new_window(
+    extra_args: &[String],
+    use_new_window: bool,
+) -> Result<u32, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let app_root = resolve_macos_app_root_from_config("minimaxcode").or_else(|| {
+            resolve_minimax_code_launch_path()
+                .ok()
+                .and_then(|p| resolve_macos_app_root_from_launch_path(&p))
+        });
+        let app_root = app_root.ok_or_else(|| app_path_missing_error("minimaxcode"))?;
+
+        let mut args: Vec<String> = Vec::new();
+        if use_new_window {
+            args.push("--new-window".to_string());
+        } else {
+            args.push("--reuse-window".to_string());
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                args.push(trimmed.to_string());
+            }
+        }
+
+        let open_pid = spawn_open_app_with_options(&app_root, &args, true)
+            .map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
+        crate::modules::logger::log_info("MiniMax Code 默认实例启动命令已发送（open -n -a）");
+        let probe_started = Instant::now();
+        let timeout = Duration::from_secs(6);
+        while probe_started.elapsed() < timeout {
+            if let Some(resolved_pid) = resolve_minimax_code_pid(None, None) {
+                return Ok(resolved_pid);
+            }
+            thread::sleep(Duration::from_millis(200));
+        }
+        crate::modules::logger::log_warn(&format!(
+            "[MiniMax Code Start] 启动后 6s 内未匹配到默认实例 PID，回退 open pid={}",
+            open_pid
+        ));
+        return Ok(open_pid);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let launch_path = resolve_minimax_code_launch_path()?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if should_detach_child() {
+            cmd.creation_flags(0x08000000 | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        } else {
+            cmd.creation_flags(0x08000000);
+        }
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        let child = spawn_command_with_trace(&mut cmd)
+            .map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
+        crate::modules::logger::log_info("MiniMax Code 默认实例启动命令已发送");
+        return Ok(child.id());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let launch_path = resolve_minimax_code_launch_path()?;
+        let mut cmd = Command::new(&launch_path);
+        apply_managed_proxy_env_to_command(&mut cmd);
+        if should_detach_child() {
+            cmd.stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+        }
+        if use_new_window {
+            cmd.arg("--new-window");
+        } else {
+            cmd.arg("--reuse-window");
+        }
+        for arg in extra_args {
+            let trimmed = arg.trim();
+            if !trimmed.is_empty() {
+                cmd.arg(trimmed);
+            }
+        }
+        let child =
+            spawn_detached_unix(&mut cmd).map_err(|e| format!("启动 MiniMax Code 失败：{}", e))?;
+        crate::modules::logger::log_info("MiniMax Code 默认实例启动命令已发送");
+        return Ok(child.id());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = (extra_args, use_new_window);
+        Err("MiniMax Code 应用多开仅支持 macOS、Windows 和 Linux".to_string())
+    }
+}
+
 pub fn start_workbuddy_default_with_args_with_new_window(
     extra_args: &[String],
     use_new_window: bool,

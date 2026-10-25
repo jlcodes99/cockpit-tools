@@ -617,6 +617,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Zed-Plattform",
     "expandSidebar": "Seitenleiste erweitern",
     "collapseSidebar": "Seitenleiste einklappen",
@@ -1171,6 +1173,12 @@
       "workbuddyAppPathPlaceholder": "Standardpfad",
       "workbuddyPathSelect": "Auswählen",
       "workbuddyPathReset": "Auf Standard zurücksetzen",
+      "minimaxCodeAppPath": "MiniMax Code-Startpfad",
+      "minimaxCodeAppPathDesc": "Leer lassen, um den Standardpfad zu verwenden",
+      "minimaxCodeAppPathPlaceholder": "Standardpfad",
+      "minimaxCodePathSelect": "Auswählen",
+      "minimaxCodeAppPathPathSelect": "Auswählen",
+      "minimaxCodePathReset": "Auf Standard zurücksetzen",
       "openclawAuthOverwrite": "OpenClaw-Anmeldung beim Wechsel von Codex überschreiben",
       "openclawAuthOverwriteDesc": "Wenn deaktiviert, wird nur Codex gewechselt und OpenClaw behält den aktuellen Anmeldestatus",
       "ghcpOpencodeAuthOverwrite": "OpenCode-Anmeldung beim Wechsel von GitHub Copilot überschreiben",
@@ -1242,6 +1250,8 @@
       "qoderPathSelect": "Auswählen",
       "workbuddyAutoRefresh": "WorkBuddy Auto-Aktualisierung",
       "workbuddyAutoRefreshDesc": "Häufigkeit der automatischen Aktualisierung im Hintergrund",
+      "minimaxCodeAutoRefresh": "MiniMax Code Auto-Aktualisierung",
+      "minimaxCodeAutoRefreshDesc": "Häufigkeit der automatischen Aktualisierung im Hintergrund",
       "codexLocalAccessEntryVisible": "API-Service-Eintrag anzeigen",
       "codexLocalAccessEntryVisibleDesc": "Steuert nur, ob der API-Service-Eintrag in der Codex-Übersicht angezeigt wird. Der lokale API-Service wird dadurch nicht gestoppt; du kannst ihn hier oder in den Schnelleinstellungen wieder einblenden.",
       "codexLocalAccessEnabled": "API-Service aktivieren",
@@ -6158,6 +6168,10 @@
       "title": "WorkBuddy-Einstellungen",
       "appPath": "WorkBuddy-Pfad"
     },
+    "minimaxCode": {
+      "title": "MiniMax Code-Einstellungen",
+      "appPath": "MiniMax Code-Pfad"
+    },
     "zcode": {
       "title": "ZCode-Einstellungen",
       "appPath": "ZCode-Pfad"
@@ -7107,6 +7121,152 @@
       "timeRangeHint": "Wählt täglich eine zufällige Zeit in diesem Bereich, um den Hintergrund-Check-in abzuschließen.",
       "timeRangeError": "Die Startzeit darf nicht nach der Endzeit liegen"
     }
+  },
+    "minimaxCode": {
+    "title": "MiniMax Code-Kontenverwaltung",
+    "noAccounts": "Keine MiniMax Code-Konten",
+    "addAccount": "MiniMax Code-Konto hinzufügen",
+    "flowNotice": {
+      "title": "Hinweise zur MiniMax Code-Kontoverwaltung (zum Ein-/Ausklappen klicken)",
+      "desc": "Beim Kontowechsel wird die lokale Anmeldedatei nach dem aktuellen Layout des offiziellen MiniMax Code-Clients geschrieben; der lokale Import liest dieselbe Datei. Die Daten werden nur lokal verarbeitet.",
+      "permission": "Berechtigungsumfang: Lesen und Schreiben der MiniMax Code-Anmeldedatei (~/.minimax/auth/auth.json) für lokalen Import und Kontowechsel; die alte state.vscdb wird nicht mehr gelesen oder geändert.",
+      "network": "Netzwerkumfang: OAuth-Anmeldung und Token-Aktualisierung senden Anfragen an MiniMax Code; Kontingentabfragen nutzen Billing-APIs. Lokale Anmeldedateien oder rohe Zugangsdaten werden nicht hochgeladen."
+    },
+    "nickname": "Spitzname",
+    "enterprise": "Unternehmen",
+    "usage": "Nutzungsstatus",
+    "creditsBalance": "Guthaben",
+    "usageNormal": "Standard",
+    "usageAbnormal": "Anomal",
+    "usageViewDetail": "Details anzeigen",
+    "usageDetailTitle": "Details zum Nutzungsstatus",
+    "oauthWaiting": "Warte auf Abschluss der Autorisierung...",
+    "oauthDesc": "Klicken Sie auf die Schaltfläche unten, um die MiniMax Code-Autorisierungsseite im Browser zu öffnen.",
+    "oauthDescWebview": "Klicken Sie auf die Schaltfläche unten, um die MiniMax Code-Autorisierungsseite im integrierten WebView zu öffnen.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Nur IDE-Anmeldedaten autorisieren",
+        "item1": "Nach Abschluss von OAuth im Browser kann das Konto hinzugefügt und für den IDE-Wechsel genutzt werden.",
+        "item2": "Parameter für die Kontingentabfrage werden nicht automatisch gebunden.",
+        "item3": "Wenn Sie Kontingente anzeigen möchten, führen Sie auf der Kontokarte manuell „Kontingent abfragen“ aus."
+      }
+    },
+    "oauthWebviewTab": "OAuth im WebView",
+    "oauthOpenWebview": "Im WebView öffnen",
+    "oauthOpenWebviewIncognito": "Im Inkognito-WebView öffnen",
+    "oauthOpenWebviewFailed": "WebView konnte nicht geöffnet werden: {{error}}",
+    "oauthOpenBrowserFallback": "Im Browser öffnen (Fallback)",
+    "oauthOpenBrowserFailed": "Browser konnte nicht geöffnet werden: {{error}}",
+    "oauthWebviewProgressHint": "Oben im WebView wird eine horizontale Schrittleiste angezeigt, damit blockierte Schritte leichter zu finden sind.",
+    "oauthFlow": {
+      "prepare": "Autorisierungslink vorbereiten",
+      "authorize": "Autorisierungslink öffnen und bestätigen",
+      "bind": "Autorisierungsergebnis abfragen und Konto binden",
+      "retryPrepare": "Autorisierungslink neu erzeugen",
+      "retryAuthorize": "Autorisierungslink erneut anfordern",
+      "retryBind": "Autorisierungsabfrage wiederholen",
+      "error": "Ablauffehler: {{error}}"
+    },
+    "tokenDesc": "Access Token von MiniMax Code einfügen:",
+    "jsonDesc": "JSON-Datei mit MiniMax Code-Konten auswählen:",
+    "import": {
+      "localDesc": "Kontodaten können aus dem lokalen MiniMax Code-Client oder aus einer JSON-Datei importiert werden.",
+      "localClient": "Aus lokalem MiniMax Code importieren"
+    },
+    "search": "MiniMax Code-Konten durchsuchen...",
+    "quotaQuery": {
+      "failedRefreshCompact": "Kontingentaktualisierung fehlgeschlagen",
+      "sectionTitle": "Kontingentabfrage",
+      "empty": "Noch keine gebundene Kontingentabfrage vorhanden",
+      "packageUnknown": "Unbekanntes Paket",
+      "quotaLabel": "Verbleibendes Kontingent",
+      "updatedAt": "Zuletzt abgefragt: {{time}}",
+      "cycleRange": "Zeitraum: {{start}} - {{end}}",
+      "cycleUnknown": "Keine Zeitraum-Information verfügbar",
+      "expireAt": "Läuft ab am: {{time}}",
+      "expireUnknown": "Ablaufzeit: keine Angabe",
+      "packageTitle": {
+        "base": "Basis-Erlebnispaket",
+        "activity": "Aktions-Geschenkpaket"
+      }
+    },
+    "extraCredit": {
+      "title": "Zusatzpaket"
+    },
+    "oauthUrlInputPlaceholder": "Autorisierungs-URL kann manuell eingegeben werden",
+    "oauthInvalidUrl": "Ungültige Autorisierungs-URL. Bitte eine vollständige URL eingeben.",
+    "oauthGotoWebview": "Bereits geöffnetes WebView zur eingegebenen URL navigieren",
+    "oauthGotoWebviewSuccess": "WebView wurde aufgefordert, zur eingegebenen URL zu navigieren.",
+    "oauthGotoWebviewFailed": "WebView-Navigation fehlgeschlagen: {{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "URL eingeben, um innerhalb dieses WebViews zu navigieren",
+    "oauthWebviewInlineGo": "Los",
+    "oauthSuccessClosePrompt": "Konto erfolgreich hinzugefügt. Dieses WebView jetzt schließen?\nMit „WebView schließen“ wird sofort geschlossen, mit „Später“ bleibt es geöffnet.",
+    "oauthSuccessCloseTitle": "Konto hinzugefügt",
+    "oauthSuccessCloseNowLabel": "WebView schließen",
+    "oauthSuccessCloseLaterLabel": "Später",
+    "oauthSuccessCloseNowStatus": "✅ Konto hinzugefügt. Fenster wird geschlossen...",
+    "oauthSuccessCloseLaterStatus": "✅ Konto hinzugefügt. Dieses WebView bleibt geöffnet.",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 Autorisierungslink vorbereiten",
+        "authorize": "2 Autorisierungslink öffnen und bestätigen",
+        "bind": "3 Autorisierungsergebnis abfragen und Konto binden",
+        "complete": "5 Abgeschlossen (manuell schließen)"
+      },
+      "status": {
+        "loginConfirm": "Bitte schließen Sie die Anmeldung und Autorisierung auf dieser Seite ab."
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "MiniMax Code-Mehrinstanzen werden nur unter macOS, Windows und Linux unterstützt."
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "checkin": {
+      "title": "Täglicher Check-in",
+      "modalTitle": "Täglicher Check-in",
+      "status": "Check-in-Status",
+      "checkedIn": "Eingecheckt",
+      "notCheckedIn": "Nicht eingecheckt",
+      "button": "Einchecken",
+      "button.loading": "Check-in läuft...",
+      "done": "Fertig",
+      "success": "Check-in erfolgreich! {{days}} Tage Serie",
+      "failure": "Einchecken fehlgeschlagen: {{message}}",
+      "failure.network": "Netzwerkfehler, bitte später erneut versuchen",
+      "lastCheckin": "Letzter Check-in: {{time}}",
+      "streak": "{{days}}-Tage-Serie",
+      "reward": "Belohnung: {{reward}}",
+      "refreshStatus": "Aktualisieren",
+      "checkAll": "Alle einchecken",
+      "noAccounts": "Keine Konten",
+      "querying": "Wird geladen...",
+      "streakDays": "{{days}} Tage",
+      "streakRewardCountdown": "Noch {{days}} Tage bis zur Bonusbelohnung",
+      "streakRewardToday": "Bonusbelohnung heute verfügbar!",
+      "recentDates": "Kürzlich: ",
+      "claimed": "Abgeholt",
+      "queryFailed": "Abfrage fehlgeschlagen",
+      "retry": "Erneut",
+      "inactive": "Inaktiv",
+      "inactiveHint": "Check-in für dieses Konto nicht aktiv",
+      "autoCheckinSettings": "Einstellungen für automatischen Check-in",
+      "autoCheckinLabel": "Auto-Check-in",
+      "autoCheckinOff": "Auto-Check-in Aus",
+      "autoCheckinEnabledHint": "Auto-Check-in aktiviert: Zufälliger Check-in zwischen {{start}} und {{end}}",
+      "autoCheckinDisabledHint": "Auto-Check-in deaktiviert",
+      "enableAutoCheckin": "Auto-Check-in aktivieren",
+      "enableAutoCheckinDesc": "Führt täglich zufällig innerhalb des angegebenen Zeitfensters einen Check-in durch",
+      "randomTimeRange": "Zufälliger Check-in-Zeitbereich",
+      "startTime": "Startzeit",
+      "endTime": "Endzeit",
+      "timeRangeHint": "Wählt täglich eine zufällige Zeit in diesem Bereich, um den Hintergrund-Check-in abzuschließen.",
+      "timeRangeError": "Die Startzeit darf nicht nach der Endzeit liegen"
+    },
+    "placeholder": "Die MiniMax Code-Kontoverwaltung ist in Kürze verfügbar."
   },
   "zcode": {
     "search": "ZCode-Konten suchen...",

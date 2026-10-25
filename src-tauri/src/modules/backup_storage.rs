@@ -1098,6 +1098,10 @@ fn legacy_backup_roots() -> Vec<(String, PathBuf)> {
                 "workbuddy".to_string(),
                 home.join(".workbuddy/Backups/CockpitTools"),
             ));
+            roots.push((
+                "minimaxcode".to_string(),
+                home.join(".minimax/Backups/CockpitTools"),
+            ));
         }
         #[cfg(target_os = "windows")]
         {
@@ -1109,6 +1113,10 @@ fn legacy_backup_roots() -> Vec<(String, PathBuf)> {
                 "workbuddy".to_string(),
                 home.join(".workbuddy/Backups/CockpitTools"),
             ));
+            roots.push((
+                "minimaxcode".to_string(),
+                home.join(".minimax/Backups/CockpitTools"),
+            ));
         }
         #[cfg(target_os = "linux")]
         {
@@ -1119,6 +1127,10 @@ fn legacy_backup_roots() -> Vec<(String, PathBuf)> {
             roots.push((
                 "workbuddy".to_string(),
                 home.join(".workbuddy/Backups/CockpitTools"),
+            ));
+            roots.push((
+                "minimaxcode".to_string(),
+                home.join(".minimax/Backups/CockpitTools"),
             ));
         }
     }

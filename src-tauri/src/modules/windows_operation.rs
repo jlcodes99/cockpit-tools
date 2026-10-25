@@ -135,6 +135,7 @@ fn supported_elevation_process_name(name: &str) -> bool {
             | "trae solo.exe"
             | "trae solo cn.exe"
             | "workbuddy.exe"
+            | "minimax code.exe"
             | "opencode.exe"
             | "code.exe"
             | "code - insiders.exe"

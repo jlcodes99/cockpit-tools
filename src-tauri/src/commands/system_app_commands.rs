@@ -59,6 +59,7 @@ pub fn set_app_path(app: String, path: String) -> Result<(), String> {
             "trae_cn" => current.trae_cn_app_path = normalized_path,
             "trae_solo_cn" => current.trae_solo_cn_app_path = normalized_path,
             "workbuddy" => current.workbuddy_app_path = normalized_path,
+            "minimaxcode" | "minimax_code" => current.minimax_code_app_path = normalized_path,
             "opencode" => current.opencode_app_path = normalized_path,
             _ => return Err("未知应用类型".to_string()),
         }
@@ -129,7 +130,7 @@ pub fn detect_app_path(app: String, force: Option<bool>) -> Result<Option<String
         "claude" => Ok(modules::claude_instance::detect_and_save_claude_launch_path(force)),
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "zed" | "vscode"
         | "codebuddy" | "codebuddy_cn" | "qoder" | "zcode" | "trae" | "trae_solo" | "trae_cn"
-        | "trae_solo_cn" | "opencode" | "workbuddy" => Ok(
+        | "trae_solo_cn" | "opencode" | "workbuddy" | "minimaxcode" | "minimax_code" => Ok(
             modules::process::detect_and_save_app_path(app.as_str(), force),
         ),
         _ => Err("未知应用类型".to_string()),
@@ -184,7 +185,7 @@ pub async fn scan_app_launch_targets(
         "antigravity" | "antigravity_ide" | "antigravity_legacy" | "codex" | "claude"
         | "vscode" | "windsurf" | "kiro" | "cursor" | "codebuddy" | "codebuddy_cn" | "qoder"
         | "zcode" | "trae" | "trae_solo" | "trae_cn" | "trae_solo_cn" | "workbuddy" | "zed"
-        | "opencode" => {}
+        | "opencode" | "minimaxcode" | "minimax_code" => {}
         _ => return Err("未知应用类型".to_string()),
     }
     let _ = scan_roots;

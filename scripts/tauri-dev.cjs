@@ -1,4 +1,7 @@
 const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+const repoRoot = path.resolve(__dirname, '..');
 
 function resolveMacosSdkRoot() {
   if (process.platform !== 'darwin') {
@@ -14,8 +17,8 @@ function resolveMacosSdkRoot() {
     encoding: 'utf8',
   });
   if (probed.status === 0) {
-    const path = String(probed.stdout || '').trim();
-    if (path) return path;
+    const value = String(probed.stdout || '').trim();
+    if (value) return value;
   }
   return current || undefined;
 }
@@ -30,24 +33,22 @@ const macosSdkRoot = resolveMacosSdkRoot();
 if (macosSdkRoot) {
   env.SDKROOT = macosSdkRoot;
 }
-const extraArgs = process.argv.slice(2);
 
-const syncResult = spawnSync('npm', ['run', 'sync-version'], {
+// `tauri.cjs` owns the Windows-specific plumbing this script cannot do on its
+// own: resolving npm.cmd/npx.cmd (a bare spawnSync gets ENOENT/EINVAL for
+// .cmd files) and initializing the MSVC environment through vcvars64.bat.
+// Delegating keeps one implementation of that logic instead of two drifting
+// copies, and stops `tauri:dev` from exiting 1 without printing anything.
+const args = ['dev', '--config', 'src-tauri/tauri.dev.conf.json', ...process.argv.slice(2)];
+const result = spawnSync(process.execPath, [path.join(__dirname, 'tauri.cjs'), ...args], {
+  cwd: repoRoot,
   stdio: 'inherit',
   env,
 });
 
-if (syncResult.status !== 0) {
-  process.exit(syncResult.status ?? 1);
+if (result.error) {
+  console.error(result.error.message);
+  process.exit(1);
 }
 
-const tauriResult = spawnSync(
-  'tauri',
-  ['dev', '--config', 'src-tauri/tauri.dev.conf.json', ...extraArgs],
-  {
-    stdio: 'inherit',
-    env,
-  },
-);
-
-process.exit(tauriResult.status ?? 1);
+process.exit(result.status ?? 1);

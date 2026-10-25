@@ -22,6 +22,7 @@ type PlatformInstanceCommandPrefix =
   | "qoder"
   | "trae"
   | "workbuddy"
+  | "minimax_code"
   | "zcode";
 
 type InstancePayload = {

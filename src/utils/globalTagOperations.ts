@@ -11,6 +11,7 @@ import { useQoderAccountStore } from '../stores/useQoderAccountStore';
 import { useZcodeAccountStore } from '../stores/useZcodeAccountStore';
 import { useTraeAccountStore } from '../stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from '../stores/useWorkbuddyAccountStore';
+import { useMinimaxCodeAccountStore } from '../stores/useMinimaxCodeAccountStore';
 
 const ALL_STORES = [
   useAccountStore,
@@ -26,6 +27,7 @@ const ALL_STORES = [
   useZcodeAccountStore,
   useTraeAccountStore,
   useWorkbuddyAccountStore,
+  useMinimaxCodeAccountStore,
 ];
 
 export const globalRenameTag = async (oldTag: string, newTag: string) => {

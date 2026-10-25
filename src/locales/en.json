@@ -671,6 +671,8 @@
     "traeCn": "Trae CN",
     "traeSoloCn": "TRAE SOLO CN",
     "codebuddyCn": "CodeBuddy CN",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "switchClassicLayoutEntry": "Switch to classic layout",
     "switchClassicLayoutTitle": "Switch to the classic sidebar layout",
     "switchClassicLayoutDesc": "The classic layout shows the full platform navigation and supports sidebar collapsing. You can switch back anytime in Settings > General > Sidebar Layout.",
@@ -1439,6 +1441,12 @@
       "workbuddyAppPathPlaceholder": "Default path",
       "workbuddyPathSelect": "Select",
       "workbuddyPathReset": "Reset to default",
+      "minimaxCodeAppPath": "MiniMax Code Launch Path",
+      "minimaxCodeAppPathDesc": "Leave empty for default path",
+      "minimaxCodeAppPathPlaceholder": "Default path",
+      "minimaxCodePathSelect": "Select",
+      "minimaxCodeAppPathPathSelect": "Select",
+      "minimaxCodePathReset": "Reset to default",
       "openclawAuthOverwrite": "Overwrite OpenClaw login when switching Codex",
       "openclawAuthOverwriteDesc": "When off, only Codex is switched and OpenClaw keeps its current login state",
       "ghcpOpencodeAuthOverwrite": "Overwrite OpenCode login when switching GitHub Copilot",
@@ -1471,6 +1479,8 @@
       "qoderPathSelect": "Select",
       "workbuddyAutoRefresh": "WorkBuddy Auto Refresh",
       "workbuddyAutoRefreshDesc": "Background auto-refresh frequency",
+      "minimaxCodeAutoRefresh": "MiniMax Code Auto Refresh",
+      "minimaxCodeAutoRefreshDesc": "Background auto-refresh frequency",
       "codexAppSpeed": "Codex Speed",
       "codexAppSpeedDesc": "Saves the official Codex launch speed; this app writes it before each Codex launch.",
       "codexAppSpeedStandard": "Standard",
@@ -6491,6 +6501,10 @@
       "title": "WorkBuddy Settings",
       "appPath": "WorkBuddy Path"
     },
+    "minimaxCode": {
+      "title": "MiniMax Code Settings",
+      "appPath": "MiniMax Code Path"
+    },
     "claudeRefreshInterval": "Quota auto refresh",
     "claude": {
       "appPath": "Claude path",
@@ -7455,6 +7469,152 @@
         "descPlatform": "WorkBuddy multi-instance is supported on macOS, Windows, and Linux only."
       }
     }
+  },
+    "minimaxCode": {
+    "title": "MiniMax Code Account",
+    "noAccounts": "No MiniMax Code accounts",
+    "addAccount": "Add MiniMax Code Account",
+    "checkin": {
+      "title": "Daily Check-in",
+      "modalTitle": "Daily Check-in",
+      "status": "Check-in Status",
+      "checkedIn": "Checked In",
+      "notCheckedIn": "Not Checked In",
+      "button": "Check In",
+      "button.loading": "Checking in...",
+      "done": "Done",
+      "claimed": "Claimed",
+      "success": "Check-in successful! {{days}} day streak",
+      "failure": "Check-in failed: {{message}}",
+      "failure.network": "Network error, please try again later",
+      "lastCheckin": "Last check-in: {{time}}",
+      "streak": "{{days}}-day streak",
+      "reward": "Reward: {{reward}}",
+      "refreshStatus": "Refresh",
+      "checkAll": "Check In All",
+      "noAccounts": "No accounts",
+      "querying": "Loading...",
+      "queryFailed": "Status check failed",
+      "retry": "Retry",
+      "inactive": "Unavailable",
+      "inactiveHint": "Check-in is not active for this account",
+      "streakDays": "{{days}} days",
+      "streakRewardCountdown": "{{days}} more days for bonus reward",
+      "streakRewardToday": "Bonus reward available today!",
+      "recentDates": "Recent: ",
+      "autoCheckinSettings": "Auto Check-in Settings",
+      "autoCheckinLabel": "Auto Check-in",
+      "autoCheckinOff": "Auto Check-in Off",
+      "autoCheckinEnabledHint": "Auto Check-in Enabled: Random check-in between {{start}} and {{end}}",
+      "autoCheckinDisabledHint": "Auto Check-in Disabled",
+      "enableAutoCheckin": "Enable Auto Check-in",
+      "enableAutoCheckinDesc": "Randomly check in daily within the specified time window",
+      "randomTimeRange": "Random Check-in Time Range",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "timeRangeHint": "While the app is running, it selects a random time within this range daily to complete background check-in.",
+      "timeRangeError": "Start time cannot be later than end time"
+    },
+    "flowNotice": {
+      "title": "MiniMax Code Account Info (click to expand/collapse)",
+      "desc": "Account switching writes the local MiniMax Code sign-in file using the current official client layout; local import reads the same file. Data is processed locally only. If an opaque official encryption wrapper is detected, the original file is preserved and the overwrite is stopped.",
+      "permission": "Permission scope: read and write the MiniMax Code sign-in file (~/.minimax/auth/auth.json) for local import and account switching; the legacy state.vscdb is no longer read or modified. Files with an official encryption wrapper are not overwritten without its key.",
+      "network": "Network scope: OAuth login and token refresh require network requests to MiniMax Code; quota queries call billing APIs. Local sign-in files and raw credentials are not uploaded."
+    },
+    "nickname": "Nickname",
+    "enterprise": "Enterprise",
+    "usage": "Usage Status",
+    "creditsBalance": "Credits Balance",
+    "usageNormal": "Normal",
+    "usageAbnormal": "Abnormal",
+    "usageViewDetail": "View details",
+    "usageDetailTitle": "Usage Status Details",
+    "oauthWaiting": "Waiting for authorization...",
+    "oauthDesc": "Click the button below to open the MiniMax Code authorization page in your browser.",
+    "oauthDescWebview": "Click the button below to open the MiniMax Code authorization page in built-in WebView.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "IDE sign-in only",
+        "item1": "Add the account after completing OAuth in your browser, then use it for IDE switching.",
+        "item2": "Resource-package quota data will refresh automatically after authorization.",
+        "item3": "Account cards show quota amount, progress, and refresh/expiry time by resource package."
+      }
+    },
+    "oauthWebviewTab": "WebView OAuth",
+    "oauthOpenWebview": "Open in WebView",
+    "oauthOpenWebviewIncognito": "Open in Incognito WebView",
+    "oauthOpenWebviewFailed": "Failed to open WebView: {{error}}",
+    "oauthOpenBrowserFallback": "Open in Browser (Fallback)",
+    "oauthOpenBrowserFailed": "Failed to open browser: {{error}}",
+    "oauthWebviewProgressHint": "A horizontal step bar is shown at the top of the WebView to locate stuck stages.",
+    "oauthFlow": {
+      "prepare": "Prepare OAuth link",
+      "authorize": "Open authorization link and confirm",
+      "bind": "Poll auth result and bind account",
+      "retryPrepare": "Regenerate OAuth link",
+      "retryAuthorize": "Request authorization link again",
+      "retryBind": "Retry auth polling",
+      "error": "Flow error: {{error}}"
+    },
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 Prepare OAuth link",
+        "authorize": "2 Open authorization link and confirm",
+        "bind": "3 Poll auth result and bind account",
+        "complete": "5 Done (close manually)"
+      },
+      "status": {
+        "loginConfirm": "Please complete sign-in and authorization on this page."
+      }
+    },
+    "tokenDesc": "Paste your MiniMax Code access token:",
+    "jsonDesc": "Select a JSON file containing MiniMax Code accounts:",
+    "import": {
+      "localDesc": "Import account data from local MiniMax Code client or a JSON file.",
+      "localClient": "Import from local MiniMax Code"
+    },
+    "search": "Search MiniMax Code accounts...",
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}"
+    },
+    "quotaQuery": {
+      "failedRefreshCompact": "Quota query failed",
+      "sectionTitle": "Quota Query",
+      "empty": "No quota data available",
+      "packageUnknown": "Unknown package",
+      "quotaLabel": "Remaining quota",
+      "updatedAt": "Next refresh time: {{time}}",
+      "cycleRange": "Cycle: {{start}} - {{end}}",
+      "cycleUnknown": "Cycle info unavailable",
+      "expireAt": "Expires at: {{time}}",
+      "expireUnknown": "Expires at: N/A",
+      "packageTitle": {
+        "base": "Base Experience Package",
+        "activity": "Activity Gift Package"
+      }
+    },
+    "extraCredit": {
+      "title": "Credit Package"
+    },
+    "oauthUrlInputPlaceholder": "You can enter an authorization URL manually",
+    "oauthInvalidUrl": "Invalid authorization URL. Please enter a full URL.",
+    "oauthGotoWebview": "Navigate opened WebView to input URL",
+    "oauthGotoWebviewSuccess": "Requested WebView to navigate to the input URL.",
+    "oauthGotoWebviewFailed": "Failed to navigate WebView: {{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "Enter a URL to navigate within this WebView",
+    "oauthWebviewInlineGo": "Go",
+    "oauthSuccessClosePrompt": "Account added successfully. Close this WebView now?\nChoose \"Close WebView\" to close now, or \"Later\" to keep it open.",
+    "oauthSuccessCloseTitle": "Account Added",
+    "oauthSuccessCloseNowLabel": "Close WebView",
+    "oauthSuccessCloseLaterLabel": "Later",
+    "oauthSuccessCloseNowStatus": "✅ Account added. Closing window...",
+    "oauthSuccessCloseLaterStatus": "✅ Account added. This WebView stays open.",
+    "instances": {
+      "unsupported": {
+        "descPlatform": "MiniMax Code multi-instance is supported on macOS, Windows, and Linux only."
+      }
+    },
+    "placeholder": "MiniMax Code account management is coming soon."
   },
   "mfaVault": {
     "pageDesc": "Securely store and manage your MFA backup recovery codes, passcode sets, and other sensitive authentication data. MFA records are stored locally only. Deleting records, clearing cache, or replacing/losing a device may cause MFA loss. Keep backups and import from backup when needed.",

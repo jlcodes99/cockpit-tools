@@ -84,6 +84,7 @@ const BACKUP_USAGE_SOURCE_ORDER = [
   'claude',
   'codex',
   'workbuddy',
+  'minimaxcode',
   'codebuddy',
   'trae',
 ] as const;

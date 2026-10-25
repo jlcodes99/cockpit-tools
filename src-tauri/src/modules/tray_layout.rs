@@ -26,8 +26,9 @@ pub const PLATFORM_TRAE_SOLO: &str = "trae_solo";
 pub const PLATFORM_TRAE_CN: &str = "trae_cn";
 pub const PLATFORM_TRAE_SOLO_CN: &str = "trae_solo_cn";
 pub const PLATFORM_WORKBUDDY: &str = "workbuddy";
+pub const PLATFORM_MINIMAX_CODE: &str = "minimaxcode";
 
-pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
+pub const SUPPORTED_PLATFORM_IDS: [&str; 19] = [
     PLATFORM_CLAUDE_MANAGER,
     PLATFORM_CODEX,
     PLATFORM_ANTIGRAVITY,
@@ -46,6 +47,7 @@ pub const SUPPORTED_PLATFORM_IDS: [&str; 18] = [
     PLATFORM_TRAE_CN,
     PLATFORM_TRAE_SOLO_CN,
     PLATFORM_WORKBUDDY,
+    PLATFORM_MINIMAX_CODE,
 ];
 
 pub const SORT_MODE_AUTO: &str = "auto";
@@ -135,6 +137,7 @@ fn normalize_platform_id(id: &str) -> Option<&'static str> {
         PLATFORM_TRAE_CN | "trae-cn" => Some(PLATFORM_TRAE_CN),
         PLATFORM_TRAE_SOLO_CN | "trae-solo-cn" => Some(PLATFORM_TRAE_SOLO_CN),
         PLATFORM_WORKBUDDY => Some(PLATFORM_WORKBUDDY),
+        PLATFORM_MINIMAX_CODE => Some(PLATFORM_MINIMAX_CODE),
         _ => None,
     }
 }
@@ -196,6 +199,7 @@ fn normalize_tray_platforms(
         PLATFORM_TRAE_CN,
         PLATFORM_TRAE_SOLO_CN,
         PLATFORM_WORKBUDDY,
+        PLATFORM_MINIMAX_CODE,
     ] {
         let already_present = contains_platform(&sanitized, new_platform);
         let was_in_raw_order = raw_order_has_new.contains(&new_platform);
@@ -405,6 +409,7 @@ fn normalize_config(
         PLATFORM_TRAE_CN,
         PLATFORM_TRAE_SOLO_CN,
         PLATFORM_WORKBUDDY,
+        PLATFORM_MINIMAX_CODE,
     ]
     .iter()
     .filter(|&&p| config.ordered_platform_ids.iter().any(|id| id.trim() == p))
@@ -589,5 +594,33 @@ mod tests {
         assert_eq!(group.name, "My Trae");
         assert_eq!(group.platform_ids, [PLATFORM_TRAE, PLATFORM_TRAE_SOLO]);
         assert_eq!(group.default_platform_id, PLATFORM_TRAE_SOLO);
+    }
+
+    #[test]
+    fn minimax_code_platform_id_is_the_frontend_canonical_id() {
+        // The frontend syncs `orderedPlatformIds` verbatim, so the tray-layout id
+        // must match the canonical frontend platform id (`minimaxcode`).
+        assert_eq!(PLATFORM_MINIMAX_CODE, "minimaxcode");
+        assert_eq!(
+            normalize_platform_id("minimaxcode"),
+            Some(PLATFORM_MINIMAX_CODE)
+        );
+
+        let default = default_order();
+        assert!(default.contains(&PLATFORM_MINIMAX_CODE.to_string()));
+        assert!(!default.iter().any(|id| id == "minimax_code"));
+
+        let normalized = normalize_order(&default);
+        assert_eq!(normalized.len(), SUPPORTED_PLATFORM_IDS.len());
+        assert!(normalized.contains(&PLATFORM_MINIMAX_CODE.to_string()));
+        assert!(!normalized.iter().any(|id| id == "minimax_code"));
+
+        // Legacy persisted ids used the "minimax_code" spelling before the
+        // canonical frontend id ("minimaxcode") was adopted. It is intentionally
+        // not recognized as a distinct platform, but normalize_order re-adds the
+        // canonical id so an old persisted list does not drop the platform.
+        assert!(normalize_platform_id("minimax_code").is_none());
+        let legacy = normalize_order(&["minimax_code".to_string()]);
+        assert!(legacy.contains(&PLATFORM_MINIMAX_CODE.to_string()));
     }
 }

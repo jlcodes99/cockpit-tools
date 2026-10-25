@@ -617,6 +617,8 @@
     "traeCn": "Trae CN​",
     "traeSoloCn": "TRAE SOLO CN​",
     "codebuddyCn": "CodeBuddy CN​",
+    "minimaxcode": "MiniMax Code",
+    "minimaxcode": "MiniMax Code",
     "zed": "Piattaforma Zed",
     "expandSidebar": "Espandi la barra laterale",
     "collapseSidebar": "Comprimi la barra laterale",
@@ -1167,6 +1169,12 @@
       "workbuddyAppPathPlaceholder": "Percorso predefinito",
       "workbuddyPathSelect": "Seleziona",
       "workbuddyPathReset": "Ripristina predefinito",
+      "minimaxCodeAppPath": "Percorso di avvio di MiniMax Code",
+      "minimaxCodeAppPathDesc": "Lascia vuoto per usare il percorso predefinito",
+      "minimaxCodeAppPathPlaceholder": "Percorso predefinito",
+      "minimaxCodePathSelect": "Seleziona",
+      "minimaxCodeAppPathPathSelect": "Seleziona",
+      "minimaxCodePathReset": "Ripristina predefinito",
       "openclawAuthOverwrite": "Sovrascrivi il login OpenClaw quando cambi Codex",
       "openclawAuthOverwriteDesc": "Se disattivato, viene cambiato solo Codex e OpenClaw mantiene lo stato di accesso corrente",
       "ghcpOpencodeAuthOverwrite": "Sovrascrivi il login OpenCode quando cambi GitHub Copilot",
@@ -1242,6 +1250,8 @@
       "qoderPathSelect": "Seleziona",
       "workbuddyAutoRefresh": "Aggiornamento automatico quota WorkBuddy",
       "workbuddyAutoRefreshDesc": "Frequenza di aggiornamento automatico in background",
+      "minimaxCodeAutoRefresh": "Aggiornamento automatico quota MiniMax Code",
+      "minimaxCodeAutoRefreshDesc": "Frequenza di aggiornamento automatico in background",
       "codexLocalAccessEntryVisible": "Mostra voce del servizio API",
       "codexLocalAccessEntryVisibleDesc": "Controlla solo se la voce del servizio API viene mostrata nella panoramica Codex. Non arresta il servizio API locale; puoi riattivarla qui o nelle Impostazioni rapide.",
       "codexLocalAccessEnabled": "Abilita servizio API",
@@ -6158,6 +6168,10 @@
       "title": "Impostazioni WorkBuddy",
       "appPath": "Percorso WorkBuddy"
     },
+    "minimaxCode": {
+      "title": "Impostazioni MiniMax Code",
+      "appPath": "Percorso MiniMax Code"
+    },
     "zcode": {
       "title": "Impostazioni ZCode",
       "appPath": "Percorso ZCode"
@@ -7107,6 +7121,152 @@
       "timeRangeHint": "Seleziona ogni giorno un orario casuale in questo intervallo per completare il check-in.",
       "timeRangeError": "L'ora di inizio non può essere successiva all'ora di fine"
     }
+  },
+    "minimaxCode": {
+    "title": "Gestione account MiniMax Code",
+    "noAccounts": "Nessun account MiniMax Code",
+    "addAccount": "Aggiungi account MiniMax Code",
+    "flowNotice": {
+      "title": "Informazioni sulla gestione degli account MiniMax Code (clicca per espandere/comprimere)",
+      "desc": "Il cambio account scrive il file di accesso locale secondo il layout più recente del client ufficiale MiniMax Code; l'importazione locale legge lo stesso file. I dati vengono elaborati solo in locale.",
+      "permission": "Ambito autorizzazioni: leggere e scrivere il file di accesso MiniMax Code (~/.minimax/auth/auth.json) per importazione locale e cambio account; il vecchio state.vscdb non viene più letto né modificato.",
+      "network": "Ambito rete: l'accesso OAuth e il rinnovo del token richiedono richieste a MiniMax Code; le query quota chiamano le API di fatturazione. I file di accesso locali e le credenziali grezze non vengono caricati."
+    },
+    "nickname": "Nickname​",
+    "enterprise": "Enterprise​",
+    "usage": "Stato utilizzo",
+    "creditsBalance": "Saldo crediti",
+    "usageNormal": "Stato normale",
+    "usageAbnormal": "Anomalo",
+    "usageViewDetail": "Visualizza dettagli",
+    "usageDetailTitle": "Dettagli stato utilizzo",
+    "oauthWaiting": "In attesa di autorizzazione...",
+    "oauthDesc": "Fai clic sul pulsante qui sotto per aprire la pagina di autorizzazione MiniMax Code nel browser.",
+    "oauthDescWebview": "Fai clic sul pulsante qui sotto per aprire la pagina di autorizzazione MiniMax Code nella WebView integrata.",
+    "oauthFeature": {
+      "oauth": {
+        "title": "Solo accesso IDE",
+        "item1": "Aggiungi laccount dopo aver completato OAuth nel browser, poi usalo per il cambio account nellIDE.",
+        "item2": "I parametri di query della quota non vengono collegati automaticamente.",
+        "item3": "Se ti serve la visualizzazione della quota, esegui manualmente \"Interroga quota\" sulla scheda account."
+      }
+    },
+    "oauthWebviewTab": "OAuth in WebView",
+    "oauthOpenWebview": "Apri in WebView",
+    "oauthOpenWebviewIncognito": "Apri in WebView in incognito",
+    "oauthOpenWebviewFailed": "Impossibile aprire la WebView: {{error}}",
+    "oauthOpenBrowserFallback": "Apri nel browser (fallback)",
+    "oauthOpenBrowserFailed": "Impossibile aprire il browser: {{error}}",
+    "oauthWebviewProgressHint": "Nella parte alta della WebView viene mostrata una barra di avanzamento orizzontale per individuare i passaggi bloccati.",
+    "oauthFlow": {
+      "prepare": "Prepara il link OAuth",
+      "authorize": "Apri il link di autorizzazione e conferma",
+      "bind": "Controlla il risultato auth e collega laccount",
+      "retryPrepare": "Rigenera il link OAuth",
+      "retryAuthorize": "Richiedi di nuovo il link di autorizzazione",
+      "retryBind": "Riprova il controllo auth",
+      "error": "Errore del flusso: {{error}}"
+    },
+    "tokenDesc": "Incolla il token di accesso MiniMax Code:",
+    "jsonDesc": "Seleziona un file JSON contenente account MiniMax Code:",
+    "import": {
+      "localDesc": "Importa i dati account dal client MiniMax Code locale o da un file JSON.",
+      "localClient": "Importa da MiniMax Code locale"
+    },
+    "search": "Cerca account MiniMax Code...",
+    "quotaQuery": {
+      "failedRefreshCompact": "Aggiornamento quota non riuscito",
+      "sectionTitle": "Interrogazione quota",
+      "empty": "Nessuna informazione di query quota collegata",
+      "packageUnknown": "Pacchetto sconosciuto",
+      "quotaLabel": "Quota residua",
+      "updatedAt": "Ultima interrogazione: {{time}}",
+      "cycleRange": "Ciclo: {{start}} - {{end}}",
+      "cycleUnknown": "Informazioni sul ciclo non disponibili",
+      "expireAt": "Scade il: {{time}}",
+      "expireUnknown": "Scadenza: N/D",
+      "packageTitle": {
+        "base": "Pacchetto esperienza base",
+        "activity": "Pacchetto regalo attività"
+      }
+    },
+    "extraCredit": {
+      "title": "Pacchetto crediti"
+    },
+    "oauthUrlInputPlaceholder": "Puoi inserire manualmente un URL di autorizzazione",
+    "oauthInvalidUrl": "URL di autorizzazione non valido. Inserisci un URL completo.",
+    "oauthGotoWebview": "Naviga la WebView aperta verso lURL inserito",
+    "oauthGotoWebviewSuccess": "Richiesta inviata alla WebView per navigare verso lURL inserito.",
+    "oauthGotoWebviewFailed": "Impossibile navigare nella WebView: {{error}}",
+    "oauthWebviewInlineUrlPlaceholder": "Inserisci un URL da aprire in questa WebView",
+    "oauthWebviewInlineGo": "Vai",
+    "oauthSuccessClosePrompt": "Account aggiunto con successo. Chiudere ora questa WebView?\nScegli \"Chiudi WebView\" per chiuderla ora, oppure \"Dopo\" per lasciarla aperta.",
+    "oauthSuccessCloseTitle": "Account aggiunto",
+    "oauthSuccessCloseNowLabel": "Chiudi WebView",
+    "oauthSuccessCloseLaterLabel": "Dopo",
+    "oauthSuccessCloseNowStatus": "✅ Account aggiunto. Chiusura finestra...",
+    "oauthSuccessCloseLaterStatus": "✅ Account aggiunto. Questa WebView restera aperta.",
+    "oauthWebviewOverlay": {
+      "steps": {
+        "prepare": "1 Prepara il link OAuth",
+        "authorize": "2 Apri il link di autorizzazione e conferma",
+        "bind": "3 Controlla il risultato auth e collega laccount",
+        "complete": "5 Completato (chiudi manualmente)"
+      },
+      "status": {
+        "loginConfirm": "Completa l'accesso e l'autorizzazione in questa pagina."
+      }
+    },
+    "instances": {
+      "unsupported": {
+        "descPlatform": "La multi-istanza MiniMax Code è supportata solo su macOS, Windows e Linux."
+      }
+    },
+    "quota": {
+      "usedOfTotal": "{{used}} / {{total}}​"
+    },
+    "checkin": {
+      "title": "Check-in giornaliero",
+      "modalTitle": "Check-in giornaliero",
+      "status": "Stato check-in",
+      "checkedIn": "Check-in effettuato",
+      "notCheckedIn": "Non effettuato",
+      "button": "Registra presenza",
+      "button.loading": "Check-in in corso...",
+      "done": "Fatto",
+      "success": "Check-in riuscito! Serie di {{days}} giorni",
+      "failure": "Registrazione non riuscita: {{message}}",
+      "failure.network": "Errore di rete, riprova più tardi",
+      "lastCheckin": "Ultimo check-in: {{time}}",
+      "streak": "Serie di {{days}} giorni",
+      "reward": "Ricompensa: {{reward}}",
+      "refreshStatus": "Aggiorna",
+      "checkAll": "Check-in per tutti",
+      "noAccounts": "Nessun account",
+      "querying": "Caricamento...",
+      "streakDays": "{{days}} giorni",
+      "streakRewardCountdown": "Mancano {{days}} giorni alla ricompensa bonus",
+      "streakRewardToday": "Ricompensa bonus disponibile oggi!",
+      "recentDates": "Recenti: ",
+      "claimed": "Riscattato",
+      "queryFailed": "Query non riuscita",
+      "retry": "Riprova",
+      "inactive": "Non disponibile",
+      "inactiveHint": "Check-in non attivo per questo account",
+      "autoCheckinSettings": "Impostazioni check-in automatico",
+      "autoCheckinLabel": "Check-in automatico",
+      "autoCheckinOff": "Check-in automatico disattivato",
+      "autoCheckinEnabledHint": "Check-in automatico attivo: check-in casuale tra {{start}} e {{end}}",
+      "autoCheckinDisabledHint": "Check-in automatico disattivato",
+      "enableAutoCheckin": "Attiva check-in automatico",
+      "enableAutoCheckinDesc": "Esegue il check-in giornaliero in modo casuale nella fascia oraria specificata",
+      "randomTimeRange": "Fascia oraria check-in casuale",
+      "startTime": "Ora di inizio",
+      "endTime": "Ora di fine",
+      "timeRangeHint": "Seleziona ogni giorno un orario casuale in questo intervallo per completare il check-in.",
+      "timeRangeError": "L'ora di inizio non può essere successiva all'ora di fine"
+    },
+    "placeholder": "La gestione degli account MiniMax Code sarà presto disponibile."
   },
   "zcode": {
     "search": "Cerca account ZCode...",
