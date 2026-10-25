@@ -277,11 +277,21 @@ pub async fn fetch_user_info(
     region: &str,
 ) -> Result<(Option<String>, Option<String>, String), String> {
     let origin = resolve_agent_origin(region);
-    let url = format!("{origin}{USER_INFO_PATH}");
+    // These query params are mandatory. Without them the endpoint answers
+    // `HTTP 400` with a body carrying no `error` field, which surfaced as the
+    // useless "HTTP 400 Bad Request: 400 Bad Request" and broke every OAuth
+    // login. Shape taken from the official client's `fetchIdentity`, and
+    // cross-checked against a working independent implementation.
+    let url = user_info_url(
+        &origin,
+        chrono::Utc::now().timestamp(),
+        -(chrono::Local::now().offset().local_minus_utc() / 60),
+    );
     let response = client
         .get(&url)
         .bearer_auth(access_token)
         .header("accept", "application/json")
+        .header("accept-language", "zh-CN,zh;q=0.9")
         .send()
         .await
         .map_err(|e| format!("请求 user/info 失败: {e}"))?;
@@ -293,6 +303,14 @@ pub async fn fetch_user_info(
     reject_api_error_envelope(status, &body, "查询 user/info")?;
 
     parse_user_info_body(&body)
+}
+
+/// Query string `/v1/api/user/info` requires. Built as a function so the shape
+/// is pinned by a test rather than only by whatever the server currently wants.
+fn user_info_url(origin: &str, unix: i64, timezone_offset: i32) -> String {
+    format!(
+        "{origin}{USER_INFO_PATH}?device_platform=mcode&biz_id=3&app_id=3001&version_code=22201&unix={unix}&timezone_offset={timezone_offset}"
+    )
 }
 
 /// Extract the identity from a `/v1/api/user/info` body.
@@ -319,6 +337,45 @@ fn parse_user_info_body(
     );
     let email = first_non_empty_str(&user, &["email", "userMail", "user_email", "userEmail"]);
     Ok((uid, nickname, email.unwrap_or_default()))
+}
+
+/// Pull a human-readable reason out of an error body.
+///
+/// The endpoints use several shapes for the same thing, and some carry the reason
+/// nested inside an object or under a different key. Falling back to the bare
+/// HTTP status (as this did) turns a diagnosable failure into
+/// "HTTP 400 Bad Request: 400 Bad Request".
+fn error_detail(body: &Value) -> Option<String> {
+    let candidates = [
+        body.get("error").and_then(|v| v.as_str()).map(str::to_string),
+        body.get("error")
+            .and_then(|v| v.get("message"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        body.get("error_description").and_then(|v| v.as_str()).map(str::to_string),
+        body.get("message").and_then(|v| v.as_str()).map(str::to_string),
+        body.get("status_msg").and_then(|v| v.as_str()).map(str::to_string),
+        body.get("statusInfo")
+            .and_then(|v| v.get("message").or_else(|| v.get("status_msg")))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        body.get("base_resp")
+            .and_then(|v| v.get("status_msg"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+    ];
+    let mut parts: Vec<String> = Vec::new();
+    for candidate in candidates.into_iter().flatten() {
+        let trimmed = candidate.trim().to_string();
+        if !trimmed.is_empty() && !parts.contains(&trimmed) {
+            parts.push(trimmed);
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" / "))
+    }
 }
 
 /// First non-blank string among `keys`, matching the client's `field()` helper.
@@ -366,12 +423,7 @@ fn reject_api_error_envelope(
     endpoint: &str,
 ) -> Result<(), String> {
     if !status.is_success() {
-        let detail = body
-            .get("error")
-            .or_else(|| body.get("error_description"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| status.to_string());
+        let detail = error_detail(body).unwrap_or_else(|| status.to_string());
         return Err(format!("{endpoint} 失败 (HTTP {status}: {detail})"));
     }
     if let Some(err) = body.get("error").and_then(|v| v.as_str()) {
@@ -547,6 +599,27 @@ mod api_response_tests {
         let err = reject_quota_error_envelope(StatusCode::BAD_GATEWAY, &json!({}))
             .expect_err("a 5xx must not be treated as quota data");
         assert!(err.contains("502"), "error should mention the status, got: {err}");
+    }
+
+    #[test]
+    fn user_info_url_carries_the_mandatory_query_params() {
+        // Regression: dropping `device_platform=mcode` (and friends) makes the
+        // endpoint answer HTTP 400 with a body that has no `error` field.
+        let url = super::user_info_url("https://agent.minimax.cn", 1_792_910_000, -480);
+        assert!(
+            url.starts_with("https://agent.minimax.cn/v1/api/user/info?"),
+            "unexpected url: {url}"
+        );
+        for required in [
+            "device_platform=mcode",
+            "biz_id=3",
+            "app_id=3001",
+            "version_code=22201",
+            "unix=1792910000",
+            "timezone_offset=-480",
+        ] {
+            assert!(url.contains(required), "url missing {required}: {url}");
+        }
     }
 
     #[test]
