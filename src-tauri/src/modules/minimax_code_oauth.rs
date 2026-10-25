@@ -278,22 +278,56 @@ pub async fn fetch_user_info(
 ) -> Result<(Option<String>, Option<String>, String), String> {
     let origin = resolve_agent_origin(region);
     let url = format!("{origin}{USER_INFO_PATH}");
-    let body: Value = client
+    let response = client
         .get(&url)
         .bearer_auth(access_token)
         .header("accept", "application/json")
         .send()
         .await
-        .map_err(|e| format!("请求 user/info 失败: {e}"))?
+        .map_err(|e| format!("请求 user/info 失败: {e}"))?;
+    let status = response.status();
+    let body: Value = response
         .json()
         .await
         .map_err(|e| format!("解析 user/info 响应失败: {e}"))?;
+    reject_api_error_envelope(status, &body, "查询 user/info")?;
 
-    let data = body.get("data").cloned().unwrap_or(body);
-    let uid = data.get("uid").or_else(|| data.get("userId")).and_then(|v| v.as_str()).map(|s| s.to_string());
-    let nickname = data.get("nickname").or_else(|| data.get("userName")).and_then(|v| v.as_str()).map(|s| s.to_string());
-    let email = data.get("email").or_else(|| data.get("userEmail")).and_then(|v| v.as_str()).unwrap_or("").to_string();
-    Ok((uid, nickname, email))
+    parse_user_info_body(&body)
+}
+
+/// Extract the identity from a `/v1/api/user/info` body.
+///
+/// The profile is nested under `data.userInfo`; the official client falls back
+/// to `data.user_info`, then `body.userInfo`. Reading the fields straight off
+/// `data` (as this used to) always produced an empty identity, which the caller
+/// reported as "未返回 uid 或邮箱" and broke the whole OAuth login.
+fn parse_user_info_body(
+    body: &Value,
+) -> Result<(Option<String>, Option<String>, String), String> {
+    let user = body
+        .get("data")
+        .and_then(|data| data.get("userInfo").or_else(|| data.get("user_info")))
+        .or_else(|| body.get("userInfo"))
+        .or_else(|| body.get("user_info"))
+        .cloned()
+        .unwrap_or(Value::Null);
+
+    let uid = first_non_empty_str(&user, &["realUserID", "real_user_id", "userID", "user_id"]);
+    let nickname = first_non_empty_str(
+        &user,
+        &["userName", "user_name", "name", "subUserName", "sub_user_name"],
+    );
+    let email = first_non_empty_str(&user, &["email", "userMail", "user_email", "userEmail"]);
+    Ok((uid, nickname, email.unwrap_or_default()))
+}
+
+/// First non-blank string among `keys`, matching the client's `field()` helper.
+fn first_non_empty_str(value: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(|v| v.as_str()))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
 }
 
 pub async fn fetch_credit_details(
@@ -321,13 +355,16 @@ pub async fn fetch_credit_details(
     Ok(body)
 }
 
-/// Reject every shape the endpoint uses to report failure.
+/// Reject every shape the MiniMax cloud API uses to report failure.
 ///
-/// A 401 still carries a JSON body (`{"error":"invalid access token"}`), so
-/// without this check the error envelope would be stored as if it were quota
-/// data: the account would look like it simply has no quota, and
-/// `quota_query_last_error` would stay empty, hiding the dead credential.
-fn reject_quota_error_envelope(status: reqwest::StatusCode, body: &Value) -> Result<(), String> {
+/// These endpoints answer 401 with a JSON body
+/// (`{"error":"invalid access token"}`), so checking only that the body parsed
+/// would store the error envelope as if it were data and hide the real cause.
+fn reject_api_error_envelope(
+    status: reqwest::StatusCode,
+    body: &Value,
+    endpoint: &str,
+) -> Result<(), String> {
     if !status.is_success() {
         let detail = body
             .get("error")
@@ -335,33 +372,33 @@ fn reject_quota_error_envelope(status: reqwest::StatusCode, body: &Value) -> Res
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| status.to_string());
-        return Err(format!("查询 credit/details 失败 (HTTP {status}: {detail})"));
+        return Err(format!("{endpoint} 失败 (HTTP {status}: {detail})"));
     }
     if let Some(err) = body.get("error").and_then(|v| v.as_str()) {
-        return Err(format!("查询 credit/details 失败 ({err})"));
+        return Err(format!("{endpoint} 失败 ({err})"));
     }
-    for envelope_key in ["base_resp", "statusInfo"] {
+    for (envelope_key, code_key, msg_key) in [
+        ("base_resp", "status_code", "status_msg"),
+        ("statusInfo", "code", "message"),
+    ] {
         let Some(envelope) = body.get(envelope_key) else {
             continue;
         };
-        let code = envelope
-            .get("status_code")
-            .or_else(|| envelope.get("code"))
-            .and_then(Value::as_i64);
-        if let Some(code) = code {
-            if code != 0 {
-                let msg = envelope
-                    .get("status_msg")
-                    .or_else(|| envelope.get("message"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                return Err(format!(
-                    "查询 credit/details 失败 ({envelope_key} code={code}: {msg})"
-                ));
-            }
+        let Some(code) = envelope.get(code_key).and_then(Value::as_i64) else {
+            continue;
+        };
+        if code != 0 {
+            let msg = envelope.get(msg_key).and_then(|v| v.as_str()).unwrap_or("");
+            return Err(format!(
+                "{endpoint} 失败 ({envelope_key} {code_key}={code}: {msg})"
+            ));
         }
     }
     Ok(())
+}
+
+fn reject_quota_error_envelope(status: reqwest::StatusCode, body: &Value) -> Result<(), String> {
+    reject_api_error_envelope(status, body, "查询 credit/details")
 }
 
 /// Build a payload from a manually-pasted access token.
@@ -470,8 +507,8 @@ mod expires_at_tests {
 }
 
 #[cfg(test)]
-mod quota_envelope_tests {
-    use super::reject_quota_error_envelope;
+mod api_response_tests {
+    use super::{parse_user_info_body, reject_api_error_envelope, reject_quota_error_envelope};
     use reqwest::StatusCode;
     use serde_json::json;
 
@@ -510,6 +547,65 @@ mod quota_envelope_tests {
         let err = reject_quota_error_envelope(StatusCode::BAD_GATEWAY, &json!({}))
             .expect_err("a 5xx must not be treated as quota data");
         assert!(err.contains("502"), "error should mention the status, got: {err}");
+    }
+
+    #[test]
+    fn accepts_a_real_user_info_body() {
+        // Regression: this exact nesting used to yield (None, None, ""), which
+        // surfaced as "获取 MiniMax Code 账号信息失败：未返回 uid 或邮箱".
+        let body = json!({
+            "statusInfo": { "code": 0 },
+            "base_resp": { "status_code": 0, "status_msg": "success" },
+            "data": {
+                "userInfo": {
+                    "userID": "1w4gAVe2NJRj",
+                    "realUserID": "515957084416724996",
+                    "userName": "MiniMax387561",
+                    "subUserName": "Skyblueee",
+                    "email": "skyblueee@example.com"
+                }
+            }
+        });
+        assert!(reject_api_error_envelope(StatusCode::OK, &body, "查询 user/info").is_ok());
+
+        let (uid, nickname, email) = parse_user_info_body(&body).expect("body should parse");
+        // `realUserID` is the account's stable identity.
+        assert_eq!(uid.as_deref(), Some("515957084416724996"));
+        assert_eq!(nickname.as_deref(), Some("MiniMax387561"));
+        assert_eq!(email, "skyblueee@example.com");
+    }
+
+    #[test]
+    fn falls_back_to_user_info_snake_case_and_top_level() {
+        let snake = json!({ "data": { "user_info": { "user_id": "u-1", "user_email": "a@b.c" } } });
+        let (uid, _nickname, email) = parse_user_info_body(&snake).expect("body should parse");
+        assert_eq!(uid.as_deref(), Some("u-1"));
+        assert_eq!(email, "a@b.c");
+
+        let top_level = json!({ "userInfo": { "userID": "u-2", "name": "nick" } });
+        let (uid, nickname, email) = parse_user_info_body(&top_level).expect("body should parse");
+        assert_eq!(uid.as_deref(), Some("u-2"));
+        assert_eq!(nickname.as_deref(), Some("nick"));
+        assert_eq!(email, "");
+    }
+
+    #[test]
+    fn rejects_a_user_info_error_body() {
+        let body = json!({ "statusInfo": { "code": 1000048, "message": "auth required" } });
+        let err = reject_api_error_envelope(StatusCode::OK, &body, "查询 user/info")
+            .expect_err("a non-zero statusInfo code must be rejected");
+        assert!(
+            err.contains("1000048") && err.contains("auth required"),
+            "error should surface the business code and message, got: {err}"
+        );
+
+        let unauthorized = json!({ "error": "invalid access token" });
+        let err = reject_api_error_envelope(StatusCode::UNAUTHORIZED, &unauthorized, "查询 user/info")
+            .expect_err("a 401 must be rejected");
+        assert!(
+            err.contains("invalid access token"),
+            "error should surface the server message, got: {err}"
+        );
     }
 
     #[test]
