@@ -19,6 +19,8 @@ export interface CursorAccount {
   status_reason?: string | null;
   quota_query_last_error?: string | null;
   quota_query_last_error_at?: number | null;
+  /** Manual override: treat remaining quota as 0; excluded from switch suggestions. */
+  manual_quota_exhausted?: boolean;
 
   created_at: number;
   last_used: number;
@@ -266,9 +268,24 @@ function pickBoolean(obj: unknown, ...candidateKeys: string[]): boolean | null {
   return null;
 }
 
+export function isCursorManualQuotaExhausted(account: CursorAccount): boolean {
+  return account.manual_quota_exhausted === true;
+}
+
 export function getCursorUsage(account: CursorAccount): CursorUsage {
   const raw = account.cursor_usage_raw;
   if (!raw || typeof raw !== 'object') {
+    if (isCursorManualQuotaExhausted(account)) {
+      return {
+        inlineSuggestionsUsedPercent: 100,
+        chatMessagesUsedPercent: null,
+        allowanceResetAt: null,
+        totalPercentUsed: 100,
+        autoPercentUsed: 100,
+        apiPercentUsed: 100,
+        isUnlimited: false,
+      };
+    }
     return { inlineSuggestionsUsedPercent: null, chatMessagesUsedPercent: null };
   }
 
@@ -362,7 +379,7 @@ export function getCursorUsage(account: CursorAccount): CursorUsage {
         ? 1
         : Math.min(100, Math.max(0, totalBase));
 
-  return {
+  const usage: CursorUsage = {
     inlineSuggestionsUsedPercent: usedPct,
     chatMessagesUsedPercent: null,
     allowanceResetAt: resetAt,
@@ -379,6 +396,20 @@ export function getCursorUsage(account: CursorAccount): CursorUsage {
     onDemandLimitType,
     isUnlimited,
   };
+
+  // Manual zero only overrides used percentages; keep reset time and other metadata.
+  if (isCursorManualQuotaExhausted(account)) {
+    return {
+      ...usage,
+      inlineSuggestionsUsedPercent: 100,
+      totalPercentUsed: 100,
+      autoPercentUsed: 100,
+      apiPercentUsed: 100,
+      isUnlimited: false,
+    };
+  }
+
+  return usage;
 }
 
 export function getCursorOnDemandSummary(usage: CursorUsage): CursorOnDemandSummary {
@@ -419,7 +450,7 @@ export function isCursorAccountBanned(account: CursorAccount): boolean {
 }
 
 export function hasCursorQuotaData(account: CursorAccount): boolean {
-  return account.cursor_usage_raw != null;
+  return account.cursor_usage_raw != null || isCursorManualQuotaExhausted(account);
 }
 
 export function hasCursorQuotaQueryError(account: CursorAccount): boolean {

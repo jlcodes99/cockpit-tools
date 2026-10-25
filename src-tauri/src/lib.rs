@@ -1519,6 +1519,7 @@ pub fn run() {
             commands::cursor::refresh_all_cursor_tokens,
             commands::cursor::add_cursor_account_with_token,
             commands::cursor::update_cursor_account_tags,
+            commands::cursor::set_cursor_manual_quota_exhausted,
             commands::cursor::get_cursor_accounts_index_path,
             commands::cursor::cursor_oauth_login_start,
             commands::cursor::cursor_oauth_login_complete,

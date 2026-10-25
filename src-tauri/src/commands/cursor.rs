@@ -137,6 +137,14 @@ pub async fn update_cursor_account_tags(
 }
 
 #[tauri::command]
+pub async fn set_cursor_manual_quota_exhausted(
+    account_id: String,
+    exhausted: bool,
+) -> Result<CursorAccount, String> {
+    cursor_account::set_manual_quota_exhausted(&account_id, exhausted)
+}
+
+#[tauri::command]
 pub fn get_cursor_accounts_index_path() -> Result<String, String> {
     cursor_account::accounts_index_path_string()
 }

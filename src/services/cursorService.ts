@@ -63,6 +63,13 @@ export async function updateCursorAccountTags(accountId: string, tags: string[])
   return await invoke('update_cursor_account_tags', { accountId, tags });
 }
 
+export async function setCursorManualQuotaExhausted(
+  accountId: string,
+  exhausted: boolean,
+): Promise<CursorAccount> {
+  return await invoke('set_cursor_manual_quota_exhausted', { accountId, exhausted });
+}
+
 export async function getCursorAccountsIndexPath(): Promise<string> {
   return await invoke('get_cursor_accounts_index_path');
 }

@@ -6429,7 +6429,12 @@
       "quotaFailed": "配額查詢失敗 ({{count}})",
       "cleanQuotaFailedAction": "刪除配額查詢失敗的帳號 ({{count}})",
       "cleanQuotaFailedConfirm": "確定要刪除全部 {{count}} 個配額查詢失敗的帳號嗎？"
-    }
+    },
+    "manualQuotaExhausted": "手動歸零",
+    "manualQuotaExhaustedTooltip": "此帳號已手動將配額設為 0，超額預警換號時不會推薦此帳號",
+    "manualQuotaExhaustedSet": "已將此帳號配額手動設為 0",
+    "manualQuotaExhaustedCleared": "已取消此帳號的手動配額歸零",
+    "manualQuotaExhaustedFailed": "更新手動配額標記失敗：{{error}}"
   },
   "breakout": {
     "gameOver": "本局結束",

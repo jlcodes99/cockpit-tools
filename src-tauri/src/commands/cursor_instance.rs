@@ -223,6 +223,9 @@ pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfil
         let default_dir = modules::cursor_instance::get_default_cursor_user_data_dir()?;
         let default_dir_str = default_dir.to_string_lossy().to_string();
         let default_settings = modules::cursor_instance::load_default_settings()?;
+        // Capture before close so force-quit restart can reopen the previous folder/chat.
+        let restore_open_path =
+            modules::cursor_instance::resolve_last_cursor_open_path(&default_dir);
 
         if let Some(pid) =
             modules::cursor_instance::resolve_cursor_pid(default_settings.last_pid, None)
@@ -238,9 +241,11 @@ pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfil
         )?;
 
         let extra_args = modules::process::parse_extra_args(&default_settings.extra_args);
+        let force_new_window = restore_open_path.is_some();
         let pid = modules::cursor_instance::start_cursor_default_with_args_with_new_window(
             &extra_args,
-            true,
+            force_new_window,
+            restore_open_path.as_deref(),
         )?;
         let _ = modules::cursor_instance::update_default_pid(Some(pid))?;
 
@@ -269,6 +274,16 @@ pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfil
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
 
+    let configured_working_dir = instance
+        .working_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && Path::new(value).exists())
+        .map(|value| value.to_string());
+    let restore_open_path = configured_working_dir.or_else(|| {
+        modules::cursor_instance::resolve_last_cursor_open_path(Path::new(&instance.user_data_dir))
+    });
+
     if let Some(pid) = modules::cursor_instance::resolve_cursor_pid(
         instance.last_pid,
         Some(&instance.user_data_dir),
@@ -284,10 +299,12 @@ pub async fn cursor_start_instance(instance_id: String) -> Result<InstanceProfil
     )?;
 
     let extra_args = modules::process::parse_extra_args(&instance.extra_args);
+    let force_new_window = restore_open_path.is_some();
     let pid = modules::cursor_instance::start_cursor_with_args_with_new_window(
         &instance.user_data_dir,
         &extra_args,
-        true,
+        force_new_window,
+        restore_open_path.as_deref(),
     )?;
     let updated = modules::cursor_instance::update_instance_after_start(&instance.id, pid)?;
 

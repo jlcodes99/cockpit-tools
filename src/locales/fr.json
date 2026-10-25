@@ -6429,7 +6429,12 @@
       "quotaFailed": "Échec de la requête de quota ({{count}})",
       "cleanQuotaFailedAction": "Supprimer les comptes dont la requête de quota a échoué ({{count}})",
       "cleanQuotaFailedConfirm": "Supprimer les {{count}} compte(s) dont la requête de quota a échoué ?"
-    }
+    },
+    "manualQuotaExhausted": "Zéro manuel",
+    "manualQuotaExhaustedTooltip": "Le quota de ce compte a été mis à 0 manuellement et ne sera pas suggéré lors d’une alerte de bascule",
+    "manualQuotaExhaustedSet": "Quota du compte marqué comme épuisé manuellement",
+    "manualQuotaExhaustedCleared": "Zéro manuel du quota annulé pour ce compte",
+    "manualQuotaExhaustedFailed": "Échec de la mise à jour du marqueur de quota manuel : {{error}}"
   },
   "breakout": {
     "gameOver": "Partie terminée",
