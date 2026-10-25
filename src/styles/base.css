@@ -6,7 +6,11 @@
 :root {
   /* Typography */
   --font-sans: 'Inter', 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SFMono-Regular', monospace;
+  /* Windows has neither JetBrains Mono nor SFMono-Regular by default, so without
+     these fallbacks the stack collapsed to the browser's generic `monospace`,
+     which renders digits like "4" with a missing top-right corner. */
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Cascadia Mono', 'SFMono-Regular', 'Consolas',
+    'DejaVu Sans Mono', monospace;
 
   /* Brand Colors */
   --primary: #1d4ed8;
