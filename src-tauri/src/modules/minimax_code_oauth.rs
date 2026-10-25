@@ -220,7 +220,7 @@ pub async fn complete_login(login_id: &str) -> Result<MinimaxCodeOAuthCompletePa
             clear_pending_oauth_login(login_id)?;
 
             let (uid, nickname, email_raw) = fetch_user_info(&client, &access_token, &snapshot.2).await?;
-            let email = if email_raw.trim().is_empty() { uid.clone().unwrap_or_default() } else { email_raw };
+            let email = resolve_display_name(&email_raw, nickname.as_deref(), uid.as_deref());
             if email.trim().is_empty() {
                 clear_pending_oauth_login(login_id)?;
                 return Err("获取 MiniMax Code 账号信息失败：未返回 uid 或邮箱".to_string());
@@ -331,9 +331,11 @@ fn parse_user_info_body(
         .unwrap_or(Value::Null);
 
     let uid = first_non_empty_str(&user, &["realUserID", "real_user_id", "userID", "user_id"]);
+    // `subUserName` is the account's actual login name; `userName` is a generated
+    // display name like "MiniMax670583". Prefer the real one for the card.
     let nickname = first_non_empty_str(
         &user,
-        &["userName", "user_name", "name", "subUserName", "sub_user_name"],
+        &["subUserName", "sub_user_name", "userName", "user_name", "name"],
     );
     let email = first_non_empty_str(&user, &["email", "userMail", "user_email", "userEmail"]);
     Ok((uid, nickname, email.unwrap_or_default()))
@@ -376,6 +378,25 @@ fn error_detail(body: &Value) -> Option<String> {
     } else {
         Some(parts.join(" / "))
     }
+}
+
+/// Pick the value shown on the account card: real email, else the username, else
+/// the raw id.
+///
+/// `/v1/api/user/info` usually returns no email address, so falling straight
+/// through to the numeric `realUserID` put strings like "570025187764355072" on
+/// the card. The username is a far better label; the raw id is a last resort.
+fn resolve_display_name(email: &str, nickname: Option<&str>, uid: Option<&str>) -> String {
+    if !email.trim().is_empty() {
+        return email.trim().to_string();
+    }
+    if let Some(nickname) = nickname.map(str::trim).filter(|n| !n.is_empty()) {
+        return nickname.to_string();
+    }
+    uid.map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// First non-blank string among `keys`, matching the client's `field()` helper.
@@ -458,7 +479,7 @@ pub async fn build_payload_from_token(access_token: &str, region: Option<&str>) 
     let client = build_client()?;
     let region = region.unwrap_or("cn").to_string();
     let (uid, nickname, email_raw) = fetch_user_info(&client, access_token, &region).await?;
-    let email = if email_raw.trim().is_empty() { uid.clone().unwrap_or_default() } else { email_raw };
+    let email = resolve_display_name(&email_raw, nickname.as_deref(), uid.as_deref());
     if email.trim().is_empty() {
         return Err("获取 MiniMax Code 账号信息失败：未返回 uid 或邮箱".to_string());
     }
@@ -602,6 +623,26 @@ mod api_response_tests {
     }
 
     #[test]
+    fn display_name_prefers_the_username_over_the_numeric_id() {
+        // Regression: with no email the card used to show the raw realUserID
+        // ("570025187764355072") instead of the username.
+        assert_eq!(
+            super::resolve_display_name("", Some("Skyblueee"), Some("570025187764355072")),
+            "Skyblueee"
+        );
+        assert_eq!(
+            super::resolve_display_name("a@b.c", Some("Skyblueee"), Some("570025187764355072")),
+            "a@b.c"
+        );
+        // No email and no username: the raw id is the only thing left.
+        assert_eq!(
+            super::resolve_display_name("  ", None, Some("570025187764355072")),
+            "570025187764355072"
+        );
+        assert_eq!(super::resolve_display_name("", None, None), "");
+    }
+
+    #[test]
     fn user_info_url_carries_the_mandatory_query_params() {
         // Regression: dropping `device_platform=mcode` (and friends) makes the
         // endpoint answer HTTP 400 with a body that has no `error` field.
@@ -642,9 +683,10 @@ mod api_response_tests {
         assert!(reject_api_error_envelope(StatusCode::OK, &body, "查询 user/info").is_ok());
 
         let (uid, nickname, email) = parse_user_info_body(&body).expect("body should parse");
-        // `realUserID` is the account's stable identity.
+        // `realUserID` is the account's stable identity, and `subUserName` (the
+        // login name) wins over the generated `userName` for display.
         assert_eq!(uid.as_deref(), Some("515957084416724996"));
-        assert_eq!(nickname.as_deref(), Some("MiniMax387561"));
+        assert_eq!(nickname.as_deref(), Some("Skyblueee"));
         assert_eq!(email, "skyblueee@example.com");
     }
 

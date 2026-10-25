@@ -9,7 +9,7 @@
  */
 
 import { getQuotaCategoryGroups } from '../codebuddy-suite';
-import type { QuotaCategoryGroup } from '../../types/codebuddy-suite';
+import { PACKAGE_CODE, type QuotaCategoryGroup } from '../../types/codebuddy-suite';
 import type { MinimaxCodeAccount } from '../../types/minimaxCode';
 
 interface MiniMaxCreditDetail {
@@ -40,6 +40,23 @@ function isUsableMiniMaxCreditDetail(d: MiniMaxCreditDetail): boolean {
   );
 }
 
+/**
+ * MiniMax `credit_type` → the shared package code that renders it in a labelled
+ * group.
+ *
+ * The shared pipeline buckets by `PackageCode`; an unrecognised code (the bare
+ * `'free'`/`'purchased'` this used to emit) falls through to the `其他` group,
+ * which is what made the quota card look wrong. Mapping onto real codes also
+ * lets the pipeline's own `resolvePackageName` supply the label, so no label is
+ * hardcoded here.
+ *
+ * - `1` = 购买 → `extra` (加量包): credits the user paid for.
+ * - `2` = 签到赠送 → `activity` (活动赠送包): check-in rewards.
+ */
+function packageCodeForCreditType(creditType: number | undefined): string {
+  return creditType === 1 ? PACKAGE_CODE.extra : PACKAGE_CODE.activity;
+}
+
 /** Map a MiniMax `credit/details` item onto the shared legacy resource shape. */
 export function normalizeMiniMaxCreditDetail(d: MiniMaxCreditDetail): Record<string, unknown> {
   const granted = toNumber(d.granted_amount);
@@ -47,11 +64,12 @@ export function normalizeMiniMaxCreditDetail(d: MiniMaxCreditDetail): Record<str
   const remaining = toNumber(d.remaining_amount);
   const expireMs = d.expire_at_ms ?? 0;
   const expireEpoch = expireMs > 0 ? expireMs / 1000 : 0;
-  const label = d.credit_type === 1 ? 'purchased' : 'free';
   return {
     Status: 0,
-    PackageCode: label,
-    PackageName: label,
+    PackageCode: packageCodeForCreditType(d.credit_type),
+    // Left empty on purpose: `resolvePackageName` derives 加量包 / 活动赠送包
+    // from the code, keeping the label in one place.
+    PackageName: '',
     CycleCapacitySizePrecise: String(granted),
     CycleCapacityUsedPrecise: String(consumed),
     CycleCapacityRemainPrecise: String(remaining),

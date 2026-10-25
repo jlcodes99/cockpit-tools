@@ -31,7 +31,10 @@ export interface MinimaxCodeCheckinResult {
 }
 
 export function getMinimaxCodeAccountDisplayEmail(account: MinimaxCodeAccount): string {
-  return account.email?.trim() || account.nickname?.trim() || account.id;
+  // The username is the primary identity here: `/v1/api/user/info` frequently
+  // returns no email address, and preferring `email` used to surface the raw
+  // numeric realUserID (e.g. "570025187764355072") on the card.
+  return account.nickname?.trim() || account.email?.trim() || account.id;
 }
 
 export function getMinimaxCodePlanBadge(_account: MinimaxCodeAccount): string {

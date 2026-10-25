@@ -62,7 +62,8 @@ interface CodebuddySuiteCheckinModalProps<TAccount extends CodebuddySuiteAccount
   accounts: TAccount[];
   getCheckinStatus: (accountId: string) => Promise<CheckinStatusResponse>;
   performCheckin: (accountId: string) => Promise<CheckinResponse>;
-  getDisplayEmail: (account: TAccount) => string;
+  /** 账号名解析（旧入口，保留给 WorkBuddy）；优先用 `displayEmailResolver` */
+  getDisplayEmail?: (account: TAccount) => string;
   onClose: () => void;
   onCheckinComplete?: () => void;
   /** 弹窗标题中的平台名，默认 WorkBuddy（保持既有行为） */
@@ -71,6 +72,12 @@ interface CodebuddySuiteCheckinModalProps<TAccount extends CodebuddySuiteAccount
   i18nPrefix?: string;
   /** 自动签到配置绑定，默认 WorkBuddy（保持既有行为） */
   autoCheckin?: CheckinAutoCheckinBinding;
+  /**
+   * 账号名解析，默认按邮箱优先（WorkBuddy 行为）。MiniMax Code 的
+   * `/v1/api/user/info` 常常不返回邮箱，此时会显示 numeric realUserID，
+   * 因此它注入按用户名优先的解析器。
+   */
+  displayEmailResolver?: (account: TAccount) => string;
 }
 
 /** 与官方 WorkBuddy uiState 对齐 */
@@ -130,7 +137,9 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
   platformLabel = 'WorkBuddy',
   i18nPrefix = 'workbuddy',
   autoCheckin,
+  displayEmailResolver,
 }: CodebuddySuiteCheckinModalProps<TAccount>) {
+  const resolveDisplayEmail = displayEmailResolver ?? getDisplayEmail ?? getAccountDisplayEmail;
   const { t } = useTranslation();
   useEscClose(true, onClose);
   const [accountStates, setAccountStates] = useState<Record<string, AccountCheckinState>>({});
@@ -487,7 +496,7 @@ export function CodebuddySuiteCheckinModal<TAccount extends CodebuddySuiteAccoun
             <div className="checkin-account-list">
               {accounts.map((account) => {
                 const state = accountStates[account.id];
-                const displayEmail = getDisplayEmail(account);
+                const displayEmail = resolveDisplayEmail(account);
                 const uiState: CheckinUiState = state?.uiState ?? 'loading';
                 const isCheckingIn = state?.checkingIn ?? false;
                 const isClaimed = uiState === 'claimed';
@@ -724,6 +733,7 @@ import * as minimaxCodeAutoCheckinService from '../../services/minimaxCodeAutoCh
 import type { MinimaxCodeAccount } from '../../types/minimaxCode';
 import { MinimaxCodeAutoCheckinConfigModal } from './MinimaxCodeAutoCheckinConfigModal';
 import { getAccountDisplayEmail } from '../../utils/codebuddy-suite';
+import { getMinimaxCodeAccountDisplayEmail } from '../../types/minimaxCode';
 export function WorkbuddyCheckinModal({
   accounts,
   onClose,
@@ -738,7 +748,6 @@ export function WorkbuddyCheckinModal({
       accounts={accounts}
       getCheckinStatus={workbuddyService.getCheckinStatusWorkbuddy}
       performCheckin={workbuddyService.checkinWorkbuddy}
-      getDisplayEmail={getAccountDisplayEmail}
       onClose={onClose}
       onCheckinComplete={onCheckinComplete}
     />
@@ -771,6 +780,7 @@ export function MinimaxCodeCheckinModal({
   return (
     <CodebuddySuiteCheckinModal
       accounts={accounts}
+      displayEmailResolver={getMinimaxCodeAccountDisplayEmail}
       getCheckinStatus={async (accountId) => {
         const status = await minimaxCodeService.getCheckinStatusMinimaxCode(accountId);
         return {

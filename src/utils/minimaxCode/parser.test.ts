@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { PACKAGE_CODE } from '../../types/codebuddy-suite.ts';
 import type { MinimaxCodeAccount } from '../../types/minimaxCode.ts';
 import {
   getMiniMaxCodeQuotaGroups,
@@ -32,7 +33,8 @@ test('normalizes a MiniMax credit detail onto the legacy resource shape', () => 
   });
 
   assert.equal(resource.Status, 0);
-  assert.equal(resource.PackageCode, 'free');
+  assert.equal(resource.PackageCode, PACKAGE_CODE.activity);
+  assert.equal(resource.PackageName, '');
   assert.equal(resource.CycleCapacitySizePrecise, '1000');
   assert.equal(resource.CycleCapacityUsedPrecise, '250');
   assert.equal(resource.CycleCapacityRemainPrecise, '750');
@@ -48,8 +50,7 @@ test('maps purchased credit_type onto a distinct package label', () => {
     remaining_amount: 500,
   });
 
-  assert.equal(resource.PackageCode, 'purchased');
-  assert.equal(resource.PackageName, 'purchased');
+  assert.equal(resource.PackageCode, PACKAGE_CODE.extra);
   assert.equal(resource.CycleCapacitySizePrecise, '500');
   assert.equal(resource.DeductionEndTime, null);
   assert.equal(resource.ExpiredTime, null);
@@ -81,7 +82,7 @@ test('wraps a credit/details body into the legacy Accounts envelope', () => {
   assert.equal(wrapped.data.Response.Data.TotalCount, 2);
   assert.equal(wrapped.data.Response.Data.TotalDosage, 150);
   assert.equal(accounts[0].CycleCapacitySizePrecise, '1000');
-  assert.equal(accounts[1].PackageCode, 'purchased');
+  assert.equal(accounts[1].PackageCode, PACKAGE_CODE.extra);
 });
 
 test('reads details from the top level of the real credit/details body', () => {
@@ -98,11 +99,32 @@ test('reads details from the top level of the real credit/details body', () => {
 
   const accounts = wrapped.data.Response.Data.Accounts;
   assert.equal(accounts.length, 2);
-  assert.equal(accounts[0].PackageCode, 'purchased');
+  assert.equal(accounts[0].PackageCode, PACKAGE_CODE.extra);
   assert.equal(accounts[0].CycleCapacityRemainPrecise, '450');
-  assert.equal(accounts[1].PackageCode, 'free');
+  assert.equal(accounts[1].PackageCode, PACKAGE_CODE.activity);
   assert.equal(accounts[1].CycleCapacitySizePrecise, '1000');
   assert.equal(wrapped.data.Response.Data.TotalDosage, 250);
+});
+
+test('lands each credit type in a labelled group instead of 其他', () => {
+  // Regression: bare 'free'/'purchased' codes fell through to the `其他` group,
+  // so the quota card showed one ugly "其他" row.
+  const groups = getMiniMaxCodeQuotaGroups(
+    account({
+      base_resp: { status_code: 0 },
+      details: [
+        { credit_type: 2, granted_amount: '400', consumed_amount: '0', remaining_amount: '400' },
+        { credit_type: 1, granted_amount: '500', consumed_amount: '50', remaining_amount: '450' },
+      ],
+      total_count: 2,
+    }),
+    (_key, defaultValue) => defaultValue ?? '',
+  );
+
+  const labels = groups.filter((group) => group.visible).map((group) => group.label);
+  assert.ok(labels.includes('活动赠送包'), `expected 活动赠送包, got ${JSON.stringify(labels)}`);
+  assert.ok(labels.includes('加量包'), `expected 加量包, got ${JSON.stringify(labels)}`);
+  assert.ok(!labels.includes('其他'), `其他 should be empty, got ${JSON.stringify(labels)}`);
 });
 
 test('drops detail rows the official client would discard', () => {
