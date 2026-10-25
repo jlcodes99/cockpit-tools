@@ -304,18 +304,64 @@ pub async fn fetch_credit_details(
     let origin = resolve_agent_origin(region);
     let tz = crate::modules::minimax_code_api::iana_timezone();
     let url = format!("{origin}/minimax-cloud/api/v1/credit/details?timezone_id={tz}");
-    let body: Value = client
+    let response = client
         .get(&url)
         .bearer_auth(access_token)
         .header("accept", "application/json")
         .header("accept-language", "zh-CN,zh;q=0.9")
         .send()
         .await
-        .map_err(|e| format!("请求 credit/details 失败: {e}"))?
+        .map_err(|e| format!("请求 credit/details 失败: {e}"))?;
+    let status = response.status();
+    let body: Value = response
         .json()
         .await
         .map_err(|e| format!("解析 credit/details 响应失败: {e}"))?;
+    reject_quota_error_envelope(status, &body)?;
     Ok(body)
+}
+
+/// Reject every shape the endpoint uses to report failure.
+///
+/// A 401 still carries a JSON body (`{"error":"invalid access token"}`), so
+/// without this check the error envelope would be stored as if it were quota
+/// data: the account would look like it simply has no quota, and
+/// `quota_query_last_error` would stay empty, hiding the dead credential.
+fn reject_quota_error_envelope(status: reqwest::StatusCode, body: &Value) -> Result<(), String> {
+    if !status.is_success() {
+        let detail = body
+            .get("error")
+            .or_else(|| body.get("error_description"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| status.to_string());
+        return Err(format!("查询 credit/details 失败 (HTTP {status}: {detail})"));
+    }
+    if let Some(err) = body.get("error").and_then(|v| v.as_str()) {
+        return Err(format!("查询 credit/details 失败 ({err})"));
+    }
+    for envelope_key in ["base_resp", "statusInfo"] {
+        let Some(envelope) = body.get(envelope_key) else {
+            continue;
+        };
+        let code = envelope
+            .get("status_code")
+            .or_else(|| envelope.get("code"))
+            .and_then(Value::as_i64);
+        if let Some(code) = code {
+            if code != 0 {
+                let msg = envelope
+                    .get("status_msg")
+                    .or_else(|| envelope.get("message"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                return Err(format!(
+                    "查询 credit/details 失败 ({envelope_key} code={code}: {msg})"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Build a payload from a manually-pasted access token.
@@ -420,5 +466,65 @@ mod expires_at_tests {
             expires_at > 1_000_000_000_000,
             "expires_at looks like seconds, not milliseconds: {expires_at}"
         );
+    }
+}
+
+#[cfg(test)]
+mod quota_envelope_tests {
+    use super::reject_quota_error_envelope;
+    use reqwest::StatusCode;
+    use serde_json::json;
+
+    #[test]
+    fn accepts_a_real_credit_details_body() {
+        let body = json!({
+            "base_resp": { "status_code": 0, "status_msg": "success" },
+            "details": [{
+                "credit_type": 1,
+                "granted_amount": "500",
+                "consumed_amount": "50",
+                "remaining_amount": "450",
+                "granted_at_ms": 1_792_000_000_000_i64,
+                "expire_at_ms": 1_800_000_000_000_i64
+            }],
+            "total_count": 1
+        });
+        assert!(reject_quota_error_envelope(StatusCode::OK, &body).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_401_error_body_instead_of_storing_it_as_quota() {
+        // Regression: this exact body used to be persisted as quota data, so the
+        // account looked like it had no quota and the dead token stayed hidden.
+        let body = json!({ "error": "invalid access token" });
+        let err = reject_quota_error_envelope(StatusCode::UNAUTHORIZED, &body)
+            .expect_err("a 401 must not be treated as quota data");
+        assert!(
+            err.contains("invalid access token"),
+            "error should surface the server message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn rejects_a_non_success_status_even_without_an_error_field() {
+        let err = reject_quota_error_envelope(StatusCode::BAD_GATEWAY, &json!({}))
+            .expect_err("a 5xx must not be treated as quota data");
+        assert!(err.contains("502"), "error should mention the status, got: {err}");
+    }
+
+    #[test]
+    fn rejects_non_zero_business_status_codes() {
+        for (key, code_field, msg_field) in [
+            ("base_resp", "status_code", "status_msg"),
+            ("statusInfo", "code", "message"),
+        ] {
+            let body = json!({ key: { code_field: 1000048, msg_field: "auth required" } });
+            let err = reject_quota_error_envelope(StatusCode::OK, &body)
+                .expect_err("a non-zero business code must not be treated as quota data");
+            assert!(
+                err.contains("1000048") && err.contains("auth required"),
+                "error should surface the business code and message, got: {err}"
+            );
+        }
     }
 }

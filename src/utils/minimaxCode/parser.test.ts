@@ -84,6 +84,43 @@ test('wraps a credit/details body into the legacy Accounts envelope', () => {
   assert.equal(accounts[1].PackageCode, 'purchased');
 });
 
+test('reads details from the top level of the real credit/details body', () => {
+  // The official client reads `response.data.details` straight off the axios
+  // response, so `details` / `total_count` sit at the top level of the body.
+  const wrapped = wrapMiniMaxCreditsAsResource({
+    base_resp: { status_code: 0, status_msg: 'success' },
+    details: [
+      { credit_type: 1, granted_amount: '500', consumed_amount: '50', remaining_amount: '450' },
+      { credit_type: 2, granted_amount: '1,000', consumed_amount: '200', remaining_amount: '800' },
+    ],
+    total_count: 2,
+  });
+
+  const accounts = wrapped.data.Response.Data.Accounts;
+  assert.equal(accounts.length, 2);
+  assert.equal(accounts[0].PackageCode, 'purchased');
+  assert.equal(accounts[0].CycleCapacityRemainPrecise, '450');
+  assert.equal(accounts[1].PackageCode, 'free');
+  assert.equal(accounts[1].CycleCapacitySizePrecise, '1000');
+  assert.equal(wrapped.data.Response.Data.TotalDosage, 250);
+});
+
+test('drops detail rows the official client would discard', () => {
+  const wrapped = wrapMiniMaxCreditsAsResource({
+    details: [
+      { credit_type: 2, granted_amount: '100', consumed_amount: '10', remaining_amount: '90' },
+      // Unknown credit_type and a row with no amounts at all.
+      { credit_type: 9, granted_amount: '5', consumed_amount: '1', remaining_amount: '4' },
+      { credit_type: 1 },
+    ],
+    total_count: 3,
+  });
+
+  const accounts = wrapped.data.Response.Data.Accounts;
+  assert.equal(accounts.length, 1);
+  assert.equal(accounts[0].CycleCapacityRemainPrecise, '90');
+});
+
 test('tolerates a missing or malformed quota body', () => {
   const wrapped = wrapMiniMaxCreditsAsResource(undefined);
   assert.deepEqual(wrapped.data.Response.Data.Accounts, []);
