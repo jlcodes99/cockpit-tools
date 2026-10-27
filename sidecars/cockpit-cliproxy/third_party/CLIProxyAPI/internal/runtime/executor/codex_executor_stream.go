@@ -146,7 +146,8 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		authLabel = auth.Label
 		authType, authValue = auth.AccountInfo()
 	}
-	continuityAttempt, continuityBody, errContinuity := helps.BindContinuityHTTPRequest(ctx, auth, httpReq, upstreamBody)
+	continuityAttempt, continuityBody, reboundOptimized, errContinuity := helps.BindCodexMultiAgentV2HTTPRequest(ctx, auth, httpReq, upstreamBody, opts.Headers, e.cfg, isCompat)
+	optimizeMultiAgentV2 = optimizeMultiAgentV2 || reboundOptimized
 	if errContinuity != nil {
 		return nil, errContinuity
 	}
