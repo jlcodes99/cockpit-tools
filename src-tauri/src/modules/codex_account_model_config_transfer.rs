@@ -708,7 +708,7 @@ fn model_config_stage(
         set_file(
             &mut files,
             CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE,
-            "customized\n".to_string(),
+            "customized-v2\n".to_string(),
         );
         let config_file = files
             .iter()
