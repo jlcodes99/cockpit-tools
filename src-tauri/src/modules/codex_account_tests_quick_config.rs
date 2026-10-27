@@ -1,6 +1,30 @@
 // Codex 账号测试：Quick config, provider validation and index repair behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
     #[test]
+    fn remote_catalog_sync_retries_failed_profiles_and_preserves_custom_profiles() {
+        let base_dir = make_temp_dir("codex-remote-sync-retry");
+        let custom_dir = make_temp_dir("codex-remote-sync-custom");
+        let config = format!("model = \"gpt-5.6-sol\"\nmodel_catalog_json = \"{}\"\n", super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        for dir in [&base_dir, &custom_dir] {
+            fs::write(dir.join("config.toml"), &config).unwrap();
+            fs::write(dir.join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE), "enabled\n").unwrap();
+        }
+        fs::write(custom_dir.join(super::CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE), "customized\n").unwrap();
+        let catalog_path = base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE);
+        fs::create_dir(&catalog_path).unwrap();
+        let dirs = vec![base_dir.clone(), custom_dir.clone()];
+        assert_eq!(super::sync_uncustomized_model_catalog_dirs(dirs.clone()), (0, 1));
+        fs::remove_dir(&catalog_path).unwrap();
+        assert_eq!(super::sync_uncustomized_model_catalog_dirs(dirs), (1, 0));
+        let catalog: serde_json::Value = serde_json::from_str(&fs::read_to_string(&catalog_path).unwrap()).unwrap();
+        assert!(!catalog["models"].as_array().unwrap().is_empty());
+        assert_eq!(fs::read_to_string(base_dir.join("config.toml")).unwrap(), config);
+        assert!(!custom_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE).exists());
+        fs::remove_dir_all(base_dir).unwrap();
+        fs::remove_dir_all(custom_dir).unwrap();
+    }
+
+    #[test]
     fn managed_catalog_lists_reserve_without_changing_defaults_and_cleans_up_when_disabled() {
         let base_dir = make_temp_dir("codex-reserve-managed-catalog");
         fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")

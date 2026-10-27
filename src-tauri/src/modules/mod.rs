@@ -50,6 +50,7 @@ pub mod codex_native_api;
 pub(crate) mod codex_continuity_worker;
 pub mod codex_api_identity;
 pub mod codex_managed_model_catalog_version;
+pub mod codex_model_catalog_sync;
 pub mod codex_oauth;
 pub(crate) mod codex_provider_protocol;
 pub mod codex_pelican;

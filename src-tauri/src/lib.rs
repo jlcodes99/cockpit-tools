@@ -438,6 +438,7 @@ pub fn run() {
                         rebuilt
                     ));
                 }
+                modules::codex_model_catalog_sync::start_background_sync();
             });
 
             // 初始化 Updater 插件

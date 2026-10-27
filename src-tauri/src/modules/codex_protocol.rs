@@ -1,7 +1,7 @@
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock, RwLockReadGuard};
 
 const REASONING_ENCRYPTED_CONTENT_INCLUDE: &str = "reasoning.encrypted_content";
 const CODEX_AUTO_REVIEW_MODEL_ID: &str = "codex-auto-review";
@@ -21,6 +21,7 @@ const CODEX_CLIENT_MODEL_TEMPLATES_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../sidecars/cockpit-cliproxy/third_party/CLIProxyAPI/internal/registry/models/codex_client_models.json"
 ));
+static CODEX_CLIENT_MODEL_CATALOG: OnceLock<RwLock<Value>> = OnceLock::new();
 const DEFAULT_CONTEXT_WINDOW: i64 = 272_000;
 /// 未知 / 自定义 Codex 模型的兜底上限。
 ///
@@ -289,7 +290,7 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
 }
 
 pub(crate) fn managed_codex_model_ids() -> Vec<String> {
-    managed_codex_model_ids_from_catalog(codex_client_model_catalog())
+    managed_codex_model_ids_from_catalog(&codex_client_model_catalog())
 }
 
 fn managed_codex_model_ids_from_catalog(catalog: &Value) -> Vec<String> {
@@ -671,12 +672,71 @@ pub(crate) fn apply_deepseek_multi_agent_capability(model: &mut Value) {
     model["multi_agent_version"] = json!("v2");
 }
 
-fn codex_client_model_catalog() -> &'static Value {
-    static CATALOG: OnceLock<Value> = OnceLock::new();
-    CATALOG.get_or_init(|| {
-        serde_json::from_str(CODEX_CLIENT_MODEL_TEMPLATES_JSON)
-            .expect("Codex client model templates JSON should be valid")
-    })
+fn codex_client_model_catalog() -> RwLockReadGuard<'static, Value> {
+    CODEX_CLIENT_MODEL_CATALOG
+        .get_or_init(|| {
+            RwLock::new(
+                serde_json::from_str(CODEX_CLIENT_MODEL_TEMPLATES_JSON)
+                    .expect("Codex client model templates JSON should be valid"),
+            )
+        })
+        .read()
+        .expect("Codex client model catalog lock should not be poisoned")
+}
+
+pub(crate) fn embedded_codex_client_model_catalog() -> Value {
+    serde_json::from_str(CODEX_CLIENT_MODEL_TEMPLATES_JSON)
+        .expect("Codex client model templates JSON should be valid")
+}
+
+pub(crate) fn replace_codex_client_model_catalog(catalog: Value) -> Result<bool, String> {
+    let models = catalog
+        .get("models")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "Codex client model catalog must contain models".to_string())?;
+    if models.is_empty() {
+        return Err("Codex client model catalog must not be empty".to_string());
+    }
+    if !models.iter().all(|model| {
+        model
+            .get("slug")
+            .and_then(Value::as_str)
+            .is_some_and(|slug| !slug.trim().is_empty())
+    }) {
+        return Err("Codex client model catalog contains an invalid slug".to_string());
+    }
+    if !models.iter().any(|model| {
+        model
+            .get("slug")
+            .and_then(Value::as_str)
+            .is_some_and(|slug| slug.eq_ignore_ascii_case(CODEX_MODEL_CATALOG_TEMPLATE_SLUG))
+    }) {
+        return Err(format!(
+            "Codex client model catalog is missing template {}",
+            CODEX_MODEL_CATALOG_TEMPLATE_SLUG
+        ));
+    }
+
+    let current = codex_client_model_catalog();
+    if *current == catalog {
+        return Ok(false);
+    }
+    drop(current);
+
+    let mut current = CODEX_CLIENT_MODEL_CATALOG
+        .get_or_init(|| {
+            RwLock::new(
+                serde_json::from_str(CODEX_CLIENT_MODEL_TEMPLATES_JSON)
+                    .expect("Codex client model templates JSON should be valid"),
+            )
+        })
+        .write()
+        .expect("Codex client model catalog lock should not be poisoned");
+    if *current == catalog {
+        return Ok(false);
+    }
+    *current = catalog;
+    Ok(true)
 }
 
 /// Returns only a known model's metadata, never the client bootstrap fallback.

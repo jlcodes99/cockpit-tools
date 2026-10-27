@@ -611,10 +611,19 @@ fn experimental_model_config_requires_catalog_migration(base_dir: &Path) -> bool
 fn default_experimental_model_definitions(
     _base_dir: &Path,
 ) -> Vec<CodexExperimentalModelDefinition> {
-    let model_ids = SHIPPED_VISIBLE_CODEX_MODEL_IDS
+    let mut model_ids = crate::modules::codex_protocol::managed_codex_model_ids();
+    if model_ids.is_empty() {
+        model_ids = SHIPPED_VISIBLE_CODEX_MODEL_IDS
+            .iter()
+            .map(|model_id| (*model_id).to_string())
+            .collect::<Vec<_>>();
+    }
+    if !model_ids
         .iter()
-        .map(|model_id| (*model_id).to_string())
-        .collect::<Vec<_>>();
+        .any(|model_id| model_id.eq_ignore_ascii_case("gpt-reserve"))
+    {
+        model_ids.push("gpt-reserve".to_string());
+    }
     let catalog = crate::modules::codex_protocol::build_codex_client_models_response(&model_ids);
     let models = catalog
         .get("models")
@@ -1778,6 +1787,9 @@ fn enforce_experimental_model_policy_for_dir(base_dir: &Path) -> Result<(), Stri
 pub(crate) fn reapply_experimental_model_policy_if_enabled(
     base_dir: &Path,
 ) -> Result<bool, String> {
+    let _lock = MODEL_CONFIG_IMPORT_LOCK
+        .lock()
+        .map_err(|_| "MODEL_CONFIG_BUSY".to_string())?;
     migrate_retired_chatgpt_default_for_dir(base_dir)?;
     if !experimental_model_policy_enabled(base_dir) {
         return Ok(false);
@@ -1795,6 +1807,9 @@ const CODEX_MODEL_MANAGEMENT_DEFAULT_OFF_MARKER_FILE: &str =
 /// 只在首次执行时生效（成功后写入标记文件），用户之后自己再开启模型管理不再被干预；
 /// 已保存的模型清单文件会保留，用户重新开启时仍能看到自己的清单。
 pub fn migrate_model_management_default_off_once(base_dir: &Path) -> Result<bool, String> {
+    let _lock = MODEL_CONFIG_IMPORT_LOCK
+        .lock()
+        .map_err(|_| "MODEL_CONFIG_BUSY".to_string())?;
     if base_dir.as_os_str().is_empty() {
         return Ok(false);
     }
@@ -2075,6 +2090,9 @@ fn write_quick_config_to_config_toml_with_default_mode(
     experimental_model_catalog_default_model_id: Option<String>,
     preserve_context: bool,
 ) -> Result<CodexQuickConfig, String> {
+    let _lock = MODEL_CONFIG_IMPORT_LOCK
+        .lock()
+        .map_err(|_| "MODEL_CONFIG_BUSY".to_string())?;
     let config_path = get_config_toml_path(base_dir);
     let existing = fs::read_to_string(&config_path).unwrap_or_default();
     let disabling_experimental_catalog = experimental_model_catalog_enabled == Some(false);
@@ -2916,6 +2934,9 @@ fn sync_or_cleanup_managed_model_catalog_for_dir(
     base_dir: &Path,
     account: &CodexAccount,
 ) -> Result<(), String> {
+    let _lock = MODEL_CONFIG_IMPORT_LOCK
+        .lock()
+        .map_err(|_| "MODEL_CONFIG_BUSY".to_string())?;
     // API Key / 第三方供应商账号始终使用自己的模型目录（供应商网关目录、DeepSeek 官方目录等）。
     // 「模型管理」只服务于订阅账号：既不能覆盖这类账号写入的目录，也不能被它们清掉，
     // 否则会出现「切到第三方账号后看不到自己的模型」以及用户模型清单被丢弃。
@@ -3011,8 +3032,112 @@ pub(crate) fn rebuild_stale_managed_model_catalogs() -> usize {
     rebuilt
 }
 
+/// 远端官方目录刷新后，更新仍由系统维护的模型清单；用户保存过的清单保持不变。
+pub(crate) fn sync_uncustomized_managed_model_catalogs() -> (usize, usize) {
+    sync_uncustomized_model_catalog_dirs(managed_catalog_profile_dirs())
+}
+
+fn sync_uncustomized_model_catalog_dirs(dirs: Vec<PathBuf>) -> (usize, usize) {
+    let Ok(_lock) = MODEL_CONFIG_IMPORT_LOCK.lock() else {
+        return (0, 1);
+    };
+    let mut synced = 0usize;
+    let mut failed = 0usize;
+    for base_dir in dirs {
+        if !experimental_model_policy_enabled(&base_dir)
+            || has_saved_experimental_model_definitions(&base_dir)
+            || !profile_uses_chatgpt_models(&base_dir)
+        {
+            continue;
+        }
+
+        let default_model_id = read_experimental_model_default_model_id(&base_dir).or_else(|| {
+            fs::read_to_string(get_config_toml_path(&base_dir))
+                .ok()
+                .and_then(|content| {
+                    crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
+                        .ok()
+                        .and_then(|doc| {
+                            doc.get(CODEX_CONFIG_MODEL_KEY)
+                                .and_then(|item| item.as_str())
+                                .map(str::to_string)
+                        })
+                })
+        });
+        let models = default_experimental_model_definitions(&base_dir);
+        if models.is_empty() {
+            continue;
+        }
+        if let Err(error) = persist_experimental_model_definitions(
+            &base_dir,
+            models,
+            default_model_id.as_deref(),
+        ) {
+            failed += 1;
+            logger::log_warn(&format!(
+                "[Codex模型目录] 远端同步保存模型清单失败: path={}, error={}",
+                base_dir.display(),
+                error
+            ));
+            continue;
+        }
+        let result = fs::read_to_string(get_config_toml_path(&base_dir))
+            .map_err(|error| error.to_string())
+            .and_then(|content| {
+                crate::modules::codex_config_format::read_codex_config_doc_from_str(&content)
+                    .map_err(|error| error.to_string())
+            })
+            .and_then(|mut doc| {
+                if !doc
+                    .get(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY)
+                    .and_then(|item| item.as_str())
+                    .is_some_and(|path| catalog_ref_targets_cockpit_managed_file(path, &base_dir))
+                {
+                    return Err("managed model catalog is not active".to_string());
+                }
+                apply_experimental_model_catalog_to_doc(&base_dir, &mut doc, Some(true)).map(|_| ())
+            });
+        match result {
+            Ok(()) => {
+                let catalog_path = experimental_model_catalog_path(&base_dir);
+                if let Err(error) =
+                    crate::modules::codex_managed_model_catalog_version::write_managed_catalog_meta(
+                        &catalog_path,
+                    )
+                {
+                    failed += 1;
+                    logger::log_warn(&format!(
+                        "[Codex模型目录] 远端同步写入版本戳失败: path={}, error={}",
+                        catalog_path.display(),
+                        error
+                    ));
+                }
+                synced += 1;
+            }
+            Err(error) => {
+                failed += 1;
+                logger::log_warn(&format!(
+                    "[Codex模型目录] 远端同步重建模型目录失败: path={}, error={}",
+                    base_dir.display(),
+                    error
+                ));
+            }
+        }
+    }
+    (synced, failed)
+}
+
 fn managed_catalog_profile_dirs() -> Vec<PathBuf> {
     let mut dirs = vec![get_codex_home()];
+    if let Ok(dir) = crate::modules::codex_instance::get_default_codex_home() {
+        dirs.push(dir);
+    }
+    if let Ok(store) = crate::modules::codex_instance::load_instance_store() {
+        dirs.extend(store.instances.into_iter().filter_map(|instance| {
+            let path = PathBuf::from(instance.user_data_dir);
+            (!path.as_os_str().is_empty()).then_some(path)
+        }));
+    }
     if let Ok(data_dir) = crate::modules::account::get_data_dir() {
         let root = data_dir.join("instances").join("codex");
         if let Ok(entries) = fs::read_dir(&root) {
@@ -3024,6 +3149,8 @@ fn managed_catalog_profile_dirs() -> Vec<PathBuf> {
             }
         }
     }
+    dirs.sort();
+    dirs.dedup();
     dirs
 }
 
