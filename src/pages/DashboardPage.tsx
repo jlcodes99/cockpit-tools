@@ -53,7 +53,7 @@ import {
   WorkbuddyAccount,
   getWorkbuddyOfficialQuotaModel,
 } from '../types/workbuddy';
-import { CodexAccount } from '../types/codex';
+import { CodexAccount, getCodexQuotaWindows } from '../types/codex';
 import { GitHubCopilotAccount } from '../types/githubCopilot';
 import {
   WindsurfAccount,
@@ -1606,7 +1606,9 @@ export function DashboardPage({
     return others.reduce((prev, curr) => {
       const getScore = (acc: CodexAccount) => {
         if (!acc.quota) return -1;
-        return (acc.quota.hourly_percentage + acc.quota.weekly_percentage) / 2;
+        // Use effective primary/secondary windows instead of absent-window defaults.
+        const windows = getCodexQuotaWindows(acc.quota);
+        return windows.reduce((sum, window) => sum + window.percentage, 0) / windows.length;
       };
       return getScore(curr) > getScore(prev) ? curr : prev;
     });
