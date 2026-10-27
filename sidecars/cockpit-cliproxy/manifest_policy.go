@@ -98,6 +98,8 @@ type accountModelRule struct {
 }
 
 type manifest struct {
+	CodexClientModelsPath      string                       `json:"codexClientModelsPath,omitempty"`
+	CodexClientModelsHash      string                       `json:"codexClientModelsHash,omitempty"`
 	Continuity                 *continuityServiceSpec       `json:"continuity,omitempty"`
 	GatewayErrorMessages       map[string]map[string]string `json:"gatewayErrorMessages,omitempty"`
 	ProxyRouteObservers        []proxyRouteObserverSpec     `json:"proxyRouteObservers,omitempty"`
@@ -137,6 +139,8 @@ type manifest struct {
 	authManager                   *coreauth.Manager
 	continuityClient              *continuityClient
 	requestPayloadLoggingOverride atomic.Pointer[bool]
+
+	codexClientModelsLoaded bool
 }
 
 type apiKeySpec struct {
@@ -2338,6 +2342,11 @@ func displayNameForModel(model string) string {
 	case codexAutoReviewModel:
 		return "Codex Auto Review"
 	default:
+		if metadata := codexClientModelMetadata(model); metadata != nil {
+			if name, ok := metadata["display_name"].(string); ok && strings.TrimSpace(name) != "" {
+				return name
+			}
+		}
 		return model
 	}
 }
