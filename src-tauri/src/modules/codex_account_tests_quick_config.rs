@@ -1,6 +1,86 @@
 // Codex 账号测试：Quick config, provider validation and index repair behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
     #[test]
+    fn remote_catalog_sync_recovers_legacy_default_catalog_marked_as_custom() {
+        let base_dir = make_temp_dir("codex-remote-sync-legacy-default");
+        let config = format!(
+            "model = \"gpt-6.1-sol\"\nmodel_catalog_json = \"{}\"\n",
+            super::CODEX_MANAGED_MODEL_CATALOG_FILE,
+        );
+        fs::write(base_dir.join("config.toml"), &config).unwrap();
+        fs::write(base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE), "enabled\n").unwrap();
+        super::persist_experimental_model_definitions(
+            &base_dir,
+            super::default_experimental_model_definitions(&base_dir),
+            Some("gpt-6.1-sol"),
+        ).unwrap();
+        let marker = base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE);
+        fs::write(&marker, "customized\n").unwrap();
+
+        assert_eq!(super::sync_uncustomized_model_catalog_dirs(vec![base_dir.clone()]), (1, 0));
+        assert!(!marker.exists());
+        assert_eq!(fs::read_to_string(base_dir.join("config.toml")).unwrap(), config);
+        assert_eq!(super::read_experimental_model_default_model_id(&base_dir).as_deref(), Some("gpt-6.1-sol"));
+        fs::remove_dir_all(base_dir).unwrap();
+    }
+
+    #[test]
+    fn saving_default_catalog_keeps_automatic_sync_and_curated_catalog_opts_out() {
+        let base_dir = make_temp_dir("codex-save-default-auto-sync");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-6.1-sol\"\n").unwrap();
+        let models = super::default_experimental_model_definitions(&base_dir);
+        let marker = base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE);
+        super::save_model_catalog_for_base_dir_preserving_context(
+            &base_dir, true, models.clone(), Some("gpt-6.1-sol".to_string()),
+        ).unwrap();
+        assert!(!marker.exists());
+
+        let mut curated = models.clone();
+        curated.retain(|model| model.model_id != "gpt-6-luna");
+        super::save_model_catalog_for_base_dir_preserving_context(
+            &base_dir, true, curated.clone(), Some("gpt-6.1-sol".to_string()),
+        ).unwrap();
+        assert!(marker.exists());
+        assert_eq!(super::sync_uncustomized_model_catalog_dirs(vec![base_dir.clone()]), (0, 0));
+        assert_eq!(super::read_experimental_model_definitions(&base_dir), curated);
+
+        super::save_model_catalog_for_base_dir_preserving_context(
+            &base_dir, true, models, Some("gpt-6.1-sol".to_string()),
+        ).unwrap();
+        assert!(!marker.exists());
+        fs::remove_dir_all(base_dir).unwrap();
+    }
+
+    #[test]
+    fn remote_catalog_sync_preserves_legacy_model_overrides_and_explicit_selections() {
+        let base_dir = make_temp_dir("codex-remote-sync-explicit-selection");
+        fs::write(base_dir.join("config.toml"), format!(
+            "model = \"gpt-6.1-sol\"\nmodel_catalog_json = \"{}\"\n",
+            super::CODEX_MANAGED_MODEL_CATALOG_FILE,
+        )).unwrap();
+        fs::write(base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE), "enabled\n").unwrap();
+        let models = super::default_experimental_model_definitions(&base_dir);
+        let marker = base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE);
+        for variant in ["renamed", "context", "removed", "reordered", "explicit"] {
+            let mut selected = models.clone();
+            match variant {
+                "renamed" => selected[0].display_name = "My model".to_string(),
+                "context" => selected[0].context_window = Some(200000),
+                "removed" => { selected.pop(); },
+                "reordered" => selected.swap(4, 5),
+                _ => {},
+            }
+            super::persist_experimental_model_definitions(&base_dir, selected, Some("gpt-6.1-sol")).unwrap();
+            fs::write(&marker, if variant == "explicit" { "customized-v2\n" } else { "customized\n" }).unwrap();
+            let config_path = base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE);
+            let before = fs::read_to_string(&config_path).unwrap();
+            assert_eq!(super::sync_uncustomized_model_catalog_dirs(vec![base_dir.clone()]), (0, 0), "{variant}");
+            assert_eq!(fs::read_to_string(config_path).unwrap(), before, "{variant}");
+        }
+        fs::remove_dir_all(base_dir).unwrap();
+    }
+
+    #[test]
     fn remote_catalog_sync_retries_failed_profiles_and_preserves_custom_profiles() {
         let base_dir = make_temp_dir("codex-remote-sync-retry");
         let custom_dir = make_temp_dir("codex-remote-sync-custom");

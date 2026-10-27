@@ -167,6 +167,34 @@ fn user_customized_model_catalog_marker_path(base_dir: &Path) -> PathBuf {
     base_dir.join(CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE)
 }
 
+fn clear_user_customized_model_catalog_marker(base_dir: &Path) -> Result<(), String> {
+    let path = user_customized_model_catalog_marker_path(base_dir);
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("清理模型清单自定义标记失败: {}", error)),
+    }
+}
+
+fn has_legacy_default_model_catalog_marker(base_dir: &Path) -> bool {
+    if fs::read_to_string(user_customized_model_catalog_marker_path(base_dir))
+        .ok()
+        .as_deref()
+        != Some("customized\n")
+    {
+        return false;
+    }
+    let Some(config) = read_experimental_model_catalog_config(base_dir) else {
+        return false;
+    };
+    let defaults = default_experimental_model_definitions(base_dir);
+    let shipped_defaults = SHIPPED_VISIBLE_CODEX_MODEL_IDS
+        .iter()
+        .map(|model_id| defaults.iter().find(|model| model.model_id == *model_id).cloned())
+        .collect::<Option<Vec<_>>>();
+    shipped_defaults.is_some_and(|models| config.models == models)
+}
+
 /// 用户是否主动接管了该 profile 的模型清单。
 ///
 /// 只有 UI 保存清单时才会写标记；系统自动生成的清单（默认、迁移、重置）不带标记，
@@ -2154,7 +2182,7 @@ fn write_quick_config_to_config_toml_with_default_mode(
     if let Some(models) =
         experimental_model_catalog_models.filter(|_| !disabling_experimental_catalog)
     {
-        persist_experimental_model_definitions(
+        let models = persist_experimental_model_definitions(
             base_dir,
             crate::modules::codex_local_access::overlay_rendered_pool_models_on_experimental_catalog(
                 base_dir,
@@ -2162,12 +2190,15 @@ fn write_quick_config_to_config_toml_with_default_mode(
             ),
             experimental_model_catalog_default_model_id.as_deref(),
         )?;
-        // 用户通过 UI 保存了清单：从这里开始系统不再自动增删条目。
-        write_string_atomic(
-            &user_customized_model_catalog_marker_path(base_dir),
-            "customized\n",
-        )
-        .map_err(|error| format!("写入模型清单自定义标记失败: {}", error))?;
+        if models == default_experimental_model_definitions(base_dir) {
+            clear_user_customized_model_catalog_marker(base_dir)?;
+        } else {
+            write_string_atomic(
+                &user_customized_model_catalog_marker_path(base_dir),
+                "customized-v2\n",
+            )
+            .map_err(|error| format!("写入模型清单自定义标记失败: {}", error))?;
+        }
     }
 
     let effective_experimental_enabled = experimental_model_catalog_enabled
@@ -3044,11 +3075,22 @@ fn sync_uncustomized_model_catalog_dirs(dirs: Vec<PathBuf>) -> (usize, usize) {
     let mut synced = 0usize;
     let mut failed = 0usize;
     for base_dir in dirs {
-        if !experimental_model_policy_enabled(&base_dir)
-            || has_saved_experimental_model_definitions(&base_dir)
-            || !profile_uses_chatgpt_models(&base_dir)
-        {
+        if !experimental_model_policy_enabled(&base_dir) || !profile_uses_chatgpt_models(&base_dir) {
             continue;
+        }
+        if has_saved_experimental_model_definitions(&base_dir) {
+            if !has_legacy_default_model_catalog_marker(&base_dir) {
+                continue;
+            }
+            if let Err(error) = clear_user_customized_model_catalog_marker(&base_dir) {
+                failed += 1;
+                logger::log_warn(&format!(
+                    "[Codex模型目录] 恢复默认清单自动同步失败: path={}, error={}",
+                    base_dir.display(),
+                    error
+                ));
+                continue;
+            }
         }
 
         let default_model_id = read_experimental_model_default_model_id(&base_dir).or_else(|| {
