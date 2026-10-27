@@ -1,4 +1,4 @@
-//! Exercise the host and updater HTTP dependency graphs against local TLS only.
+//! Exercise host, updater and account HTTP clients against local TLS only.
 //! No application state, system trust changes, credentials or external requests.
 use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 use tokio::{
@@ -10,24 +10,37 @@ use tokio_rustls::TlsAcceptor;
 
 const DEADLINE: Duration = Duration::from_secs(5);
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ClientKind {
+    Host,
+    Updater,
+    Account,
+}
+
 async fn tls_fixture(
     name: &str,
     version: &'static rustls::SupportedProtocolVersion,
 ) -> (u16, Vec<u8>, JoinHandle<bool>) {
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    tls_fixture_with_provider(name, version, rustls::crypto::aws_lc_rs::default_provider()).await
+}
+
+async fn tls_fixture_with_provider(
+    name: &str,
+    version: &'static rustls::SupportedProtocolVersion,
+    provider: rustls::crypto::CryptoProvider,
+) -> (u16, Vec<u8>, JoinHandle<bool>) {
     let certificate = rcgen::generate_simple_self_signed(vec![name.to_string()]).unwrap();
     let der = certificate.cert.der().to_vec();
-    let config = rustls::ServerConfig::builder_with_provider(Arc::new(
-        rustls::crypto::aws_lc_rs::default_provider(),
-    ))
-    .with_protocol_versions(&[version])
-    .unwrap()
-    .with_no_client_auth()
-    .with_single_cert(
-        vec![certificate.cert.der().clone()],
-        rustls::pki_types::PrivatePkcs8KeyDer::from(certificate.key_pair.serialize_der()).into(),
-    )
-    .unwrap();
+    let config = rustls::ServerConfig::builder_with_provider(Arc::new(provider))
+        .with_protocol_versions(&[version])
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![certificate.cert.der().clone()],
+            rustls::pki_types::PrivatePkcs8KeyDer::from(certificate.key_pair.serialize_der())
+                .into(),
+        )
+        .unwrap();
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let task = tokio::spawn(async move {
@@ -113,13 +126,13 @@ async fn proxy_fixture(socks: bool, target_port: u16) -> (String, JoinHandle<()>
 }
 
 async fn request(
-    updater: bool,
+    kind: ClientKind,
     port: u16,
     trust: Option<&[u8]>,
     proxy: Option<&str>,
 ) -> Result<String, String> {
     let url = format!("https://127.0.0.1:{port}/fixture");
-    if updater {
+    if kind == ClientKind::Updater {
         // This alias is the exact reqwest 0.13 graph used by tauri-plugin-updater.
         let roots = trust
             .map(reqwest_updater_socks::Certificate::from_der)
@@ -143,8 +156,18 @@ async fn request(
             .await
             .map_err(|e| format!("{e:?}"))
     } else {
-        // Keep the host client's configured default TLS backend, including native TLS.
-        let mut builder = reqwest::Client::builder()
+        // Exercise the same builder used by Grok and Claude without changing
+        // unrelated host clients' default TLS backend.
+        let builder = if kind == ClientKind::Account {
+            let mut roots = rustls::RootCertStore::empty();
+            if let Some(trust) = trust {
+                roots.add(trust.to_vec().into()).unwrap();
+            }
+            crate::modules::account_http::client_builder_with_roots(roots)
+        } else {
+            reqwest::Client::builder()
+        };
+        let mut builder = builder
             .no_proxy()
             .timeout(DEADLINE)
             .tls_built_in_root_certs(false);
@@ -167,11 +190,11 @@ async fn request(
     }
 }
 
-async fn trusted_routes(updater: bool) {
+async fn trusted_routes(kind: ClientKind) {
     // native-tls uses Secure Transport on Apple; that unchanged backend supports
-    // TLS 1.2, while the updater's rustls backend also supports TLS 1.3.
+    // TLS 1.2; updater and account rustls clients also support TLS 1.3.
     let versions: &[&rustls::SupportedProtocolVersion] =
-        if !updater && cfg!(target_vendor = "apple") {
+        if kind == ClientKind::Host && cfg!(target_vendor = "apple") {
             &[&rustls::version::TLS12]
         } else {
             &[&rustls::version::TLS12, &rustls::version::TLS13]
@@ -185,7 +208,7 @@ async fn trusted_routes(updater: bool) {
                 Some(proxy_fixture(route == "socks5", port).await)
             };
             let result = request(
-                updater,
+                kind,
                 port,
                 Some(&certificate),
                 proxy.as_ref().map(|p| p.0.as_str()),
@@ -194,7 +217,7 @@ async fn trusted_routes(updater: bool) {
             assert_eq!(
                 result,
                 Ok("ok".to_string()),
-                "updater={updater}, route={route}, version={version:?}"
+                "client={kind:?}, route={route}, version={version:?}"
             );
             assert!(server.await.unwrap());
             if let Some((_, proxy)) = proxy {
@@ -204,16 +227,21 @@ async fn trusted_routes(updater: bool) {
     }
 }
 
-async fn rejects_invalid_certificates(updater: bool) {
+async fn rejects_invalid_certificates(kind: ClientKind) {
     for wrong_name in [false, true] {
         let name = if wrong_name {
             "wrong.invalid"
         } else {
             "127.0.0.1"
         };
-        let (port, certificate, server) = tls_fixture(name, &rustls::version::TLS12).await;
+        let version = if kind == ClientKind::Account {
+            &rustls::version::TLS13
+        } else {
+            &rustls::version::TLS12
+        };
+        let (port, certificate, server) = tls_fixture(name, version).await;
         let trust = wrong_name.then_some(certificate.as_slice());
-        assert!(request(updater, port, trust, None).await.is_err());
+        assert!(request(kind, port, trust, None).await.is_err());
         assert!(
             !server.await.unwrap(),
             "invalid certificate reached an HTTP request"
@@ -223,20 +251,49 @@ async fn rejects_invalid_certificates(updater: bool) {
 
 #[tokio::test]
 async fn host_supported_tls_direct_http_and_socks_proxy() {
-    trusted_routes(false).await;
+    trusted_routes(ClientKind::Host).await;
 }
 
 #[tokio::test]
 async fn updater_tls12_tls13_direct_http_and_socks_proxy() {
-    trusted_routes(true).await;
+    trusted_routes(ClientKind::Updater).await;
 }
 
 #[tokio::test]
 async fn host_rejects_unknown_root_and_wrong_hostname() {
-    rejects_invalid_certificates(false).await;
+    rejects_invalid_certificates(ClientKind::Host).await;
 }
 
 #[tokio::test]
 async fn updater_rejects_unknown_root_and_wrong_hostname() {
-    rejects_invalid_certificates(true).await;
+    rejects_invalid_certificates(ClientKind::Updater).await;
+}
+
+#[tokio::test]
+async fn account_tls12_tls13_direct_http_and_socks_proxy() {
+    trusted_routes(ClientKind::Account).await;
+}
+
+#[tokio::test]
+async fn account_tls13_rejects_unknown_root_and_wrong_hostname() {
+    rejects_invalid_certificates(ClientKind::Account).await;
+}
+
+#[tokio::test]
+async fn account_hybrid_key_exchange_without_global_provider_changes() {
+    let before = rustls::crypto::CryptoProvider::get_default().cloned();
+    let mut provider = rustls::crypto::aws_lc_rs::default_provider();
+    provider.kx_groups = vec![rustls::crypto::aws_lc_rs::kx_group::X25519MLKEM768];
+    let (port, certificate, server) =
+        tls_fixture_with_provider("127.0.0.1", &rustls::version::TLS13, provider).await;
+    assert_eq!(
+        request(ClientKind::Account, port, Some(&certificate), None).await,
+        Ok("ok".to_string())
+    );
+    assert!(server.await.unwrap());
+    match (before, rustls::crypto::CryptoProvider::get_default()) {
+        (None, None) => {}
+        (Some(before), Some(after)) => assert!(Arc::ptr_eq(&before, after)),
+        _ => panic!("account client changed the global crypto provider"),
+    }
 }

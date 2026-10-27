@@ -1,4 +1,5 @@
 pub mod account;
+pub(crate) mod account_http;
 pub mod account_index_repair;
 pub mod announcement;
 pub mod apikey_fun_links;
