@@ -1,6 +1,155 @@
 use super::*;
 use serde_json::json;
 
+#[test]
+fn legacy_session_header_is_stable_and_stays_caller_and_owner_scoped() {
+    let database = Database::new();
+    let store = IdentityStore::open(database.path.clone()).unwrap();
+    let project = |caller: &str, account: &str, owner: &str, session: &str| {
+        let mut headers = HeaderMap::new();
+        headers.insert("session_id", HeaderValue::from_str(session).unwrap());
+        let mut body = json!({"input":"synthetic prompt", "prompt_cache_key":"cache-hint"});
+        let context = store.inspect(caller, &headers, &body).unwrap();
+        assert_eq!(context.session_id.as_deref(), Some(session));
+        assert_eq!(context.thread_id.as_deref(), Some(session));
+        store
+            .rewrite(&context, account, owner, &mut headers, &mut body)
+            .unwrap();
+        assert!(!headers.contains_key("session_id"));
+        assert_ne!(headers["session-id"], session);
+        assert_eq!(
+            headers["session-id"].to_str().unwrap(),
+            body["client_metadata"]["session_id"].as_str().unwrap()
+        );
+        headers["session-id"].clone()
+    };
+    let first = project("caller", "account-a", "owner-a", "pi-session");
+    assert_eq!(
+        first,
+        project("caller", "account-a", "owner-a", "pi-session")
+    );
+    assert_ne!(
+        first,
+        project("caller", "account-b", "owner-b", "pi-session")
+    );
+    assert_ne!(
+        first,
+        project("other-caller", "account-a", "owner-a", "pi-session")
+    );
+    assert_ne!(
+        first,
+        project("caller", "account-a", "owner-a", "other-session")
+    );
+}
+
+#[test]
+fn legacy_session_header_respects_metadata_and_canonical_header_precedence() {
+    let database = Database::new();
+    let store = IdentityStore::open(database.path.clone()).unwrap();
+    let mut headers = HeaderMap::new();
+    headers.insert("session_id", HeaderValue::from_static("legacy-session"));
+    headers.insert("session-id", HeaderValue::from_static("header-session"));
+    for (body, expected) in [
+        (json!({"input":"test"}), "header-session"),
+        (
+            json!({"client_metadata":{"session_id":"flat-session"}}),
+            "flat-session",
+        ),
+        (
+            json!({"client_metadata":{
+                "session_id":"flat-session",
+                "x-codex-turn-metadata":json!({"session_id":"canonical-session"}).to_string()
+            }}),
+            "canonical-session",
+        ),
+    ] {
+        assert_eq!(
+            store
+                .inspect("caller", &headers, &body)
+                .unwrap()
+                .session_id
+                .as_deref(),
+            Some(expected)
+        );
+    }
+    headers.insert("session-id", HeaderValue::from_static(""));
+    assert_eq!(
+        store
+            .inspect("caller", &headers, &json!({}))
+            .unwrap()
+            .session_id
+            .as_deref(),
+        Some("legacy-session")
+    );
+}
+
+#[test]
+fn legacy_session_header_cannot_bypass_invalid_higher_priority_identity() {
+    let database = Database::new();
+    let store = IdentityStore::open(database.path.clone()).unwrap();
+    let mut headers = HeaderMap::new();
+    headers.insert("session_id", HeaderValue::from_static("legacy-session"));
+    headers.insert(
+        "session-id",
+        HeaderValue::from_str(&"x".repeat(MAX_ID_BYTES + 1)).unwrap(),
+    );
+    assert_eq!(
+        store
+            .inspect("caller", &headers, &json!({}))
+            .unwrap_err()
+            .code,
+        "invalid_protocol_identity"
+    );
+    headers.remove("session-id");
+    for metadata in [
+        json!({"session_id":123}),
+        json!({"x-codex-turn-metadata":json!({"session_id":123}).to_string()}),
+    ] {
+        assert_eq!(
+            store
+                .inspect("caller", &headers, &json!({"client_metadata":metadata}))
+                .unwrap_err()
+                .code,
+            "invalid_protocol_identity"
+        );
+    }
+}
+
+#[test]
+fn legacy_session_header_validates_only_when_selected_and_keeps_empty_policy() {
+    let database = Database::new();
+    let store = IdentityStore::open(database.path.clone()).unwrap();
+    for invalid in [
+        HeaderValue::from_str(&"x".repeat(MAX_ID_BYTES + 1)).unwrap(),
+        HeaderValue::from_bytes(b"bad\tidentity").unwrap(),
+        HeaderValue::from_bytes(b"\xff").unwrap(),
+    ] {
+        let mut headers = HeaderMap::new();
+        headers.insert("session_id", invalid);
+        assert_eq!(
+            store
+                .inspect("caller", &headers, &json!({}))
+                .unwrap_err()
+                .code,
+            "invalid_protocol_identity"
+        );
+        headers.insert("session-id", HeaderValue::from_static("valid-session"));
+        let mut body = json!({"input":"test"});
+        let context = store.inspect("caller", &headers, &body).unwrap();
+        assert_eq!(context.session_id.as_deref(), Some("valid-session"));
+        store
+            .rewrite(&context, "account", "owner", &mut headers, &mut body)
+            .unwrap();
+        assert!(!headers.contains_key("session_id"));
+    }
+    let mut headers = HeaderMap::new();
+    headers.insert("session_id", HeaderValue::from_static(""));
+    let first = store.inspect("caller", &headers, &json!({})).unwrap();
+    let second = store.inspect("caller", &headers, &json!({})).unwrap();
+    assert!(first.session_id.as_ref().is_some_and(|id| !id.is_empty()));
+    assert_ne!(first.session_id, second.session_id);
+}
+
 struct Database {
     directory: PathBuf,
     path: PathBuf,
