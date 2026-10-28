@@ -735,6 +735,71 @@
   min-width: 220px;
 }
 
+/* Compact Antigravity card quota: two columns; an odd last item spans the row. */
+.accounts-page .card-quota-grid .codex-quota-mini-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 10px;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 4px;
+  row-gap: 2px;
+  align-items: baseline;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini-meter {
+  display: contents;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini-head {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini-label {
+  font-size: 10.5px;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini-pct {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini-track {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini-reset {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  overflow: hidden;
+  font-size: 9.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
+  column-gap: 6px;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini:last-child:nth-child(odd) .codex-quota-mini-pct {
+  grid-column: 3;
+}
+
+.accounts-page .card-quota-grid .codex-quota-mini:last-child:nth-child(odd) .codex-quota-mini-reset {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: right;
+}
 /* Custom Sort Modal Styles (added for Antigravity custom sorting) */
 .codex-custom-sort-modal {
   width: min(680px, calc(100vw - 32px));
