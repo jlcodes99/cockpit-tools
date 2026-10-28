@@ -402,6 +402,7 @@ use super::*;
             .expect("read provider-only row");
         assert_eq!(provider_only, ("relay".to_string(), 0));
 
+        drop(connection);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
@@ -481,6 +482,7 @@ use super::*;
             assert_eq!(provider, "old");
         }
 
+        drop(connection);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
@@ -523,6 +525,7 @@ use super::*;
             .expect("read old provider");
         assert_eq!(old_provider, "relay");
 
+        drop(connection);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
@@ -618,6 +621,7 @@ use super::*;
             .expect("read unrelated provider");
         assert_eq!(unrelated_provider, "old");
 
+        drop(connection);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
@@ -793,6 +797,8 @@ use super::*;
             .expect("read official provider");
         assert_eq!(official_provider, "relay");
 
+        drop(connection);
+
         let connection = Connection::open(&unrelated_db_path).expect("reopen unrelated sqlite");
         let unrelated_provider = connection
             .query_row(
@@ -808,6 +814,7 @@ use super::*;
         assert!(referenced_content.contains("\"model_provider\":\"old\""));
         assert!(referenced_content.contains("old-later"));
 
+        drop(connection);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
@@ -886,6 +893,7 @@ use super::*;
             .expect("read restored provider");
         assert_eq!(provider, "old");
 
+        drop(connection);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
@@ -1054,6 +1062,7 @@ use super::*;
         .expect("collect rollout changes");
         assert_eq!(changes.len(), 0);
 
+        drop(connection);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
@@ -1157,6 +1166,7 @@ use super::*;
             .count();
         assert_eq!(backup_count, 0);
 
+        drop(connection);
         fs::remove_dir_all(&data_dir).expect("cleanup temp dir");
     }
 
@@ -1332,6 +1342,8 @@ use super::*;
             for c in &changes { normalize_rollout_timestamp(c).unwrap(); }
         }
         assert_eq!(fs::read(&parent).unwrap(), appended);
+        drop(append);
+        drop(db);
         fs::remove_dir_all(dir).unwrap();
     }
 

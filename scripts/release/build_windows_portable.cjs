@@ -72,7 +72,7 @@ function collectPortableFiles({ releaseDir, executablePath }) {
     for (const sourcePath of listFilesRecursive(resourcesDir)) {
       files.push({
         sourcePath,
-        archivePath: path.join('resources', path.relative(resourcesDir, sourcePath)),
+        archivePath: path.posix.join('resources', path.relative(resourcesDir, sourcePath).split(path.sep).join('/')),
       });
     }
   }
@@ -199,10 +199,10 @@ function buildWindowsPortableArchive({ releaseDir, outputDir, version, executabl
   const archiveRoot = `Cockpit.Tools_${version}_x64-portable`;
   const entries = files.map((file) => ({
     sourcePath: file.sourcePath,
-    archivePath: path.join(archiveRoot, file.archivePath),
+    archivePath: path.posix.join(archiveRoot, file.archivePath),
   }));
   entries.push({
-    archivePath: path.join(archiveRoot, 'README.txt'),
+    archivePath: path.posix.join(archiveRoot, 'README.txt'),
     content: Buffer.from(
       'Cockpit Tools portable edition\r\n\r\n' +
       `Extract this folder and run ${path.basename(executablePath)}.\r\n` +

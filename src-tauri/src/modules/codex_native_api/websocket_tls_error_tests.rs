@@ -130,9 +130,9 @@ fn route(base_url: String) -> Route {
 
 #[tokio::test]
 async fn websocket_handshake_connection_failure_keeps_code_and_context() {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    drop(listener);
+    // Port zero fails at connect time without Windows TCP refusal retries
+    // consuming the opening deadline before the connection error is observed.
+    let address = "127.0.0.1:0";
     let (_stop, snapshot) = tokio::sync::watch::channel(false);
     let error = super::super::transport::connect_websocket(
         &route(format!("http://{address}/v1")),
@@ -144,7 +144,7 @@ async fn websocket_handshake_connection_failure_keeps_code_and_context() {
     )
     .await
     .err()
-    .expect("closed loopback port cannot connect");
+    .expect("port zero cannot connect");
     assert_eq!(error.status, 502);
     assert_eq!(error.code, "websocket_connect_failed");
     assert!(error

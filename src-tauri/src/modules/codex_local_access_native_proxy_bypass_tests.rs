@@ -16,14 +16,8 @@ fn native_proxy_bypass_case(test_name: &str, scenario: &str) {
         return;
     }
     let directory = tempfile::tempdir().unwrap();
-    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
+    let mut command = crate::modules::test_support::isolated_test_process();
     let status = command
-        .env_clear()
         .env(SCENARIO, scenario)
         .env(
             "COCKPIT_TEST_NATIVE_PROXY_RESULT",

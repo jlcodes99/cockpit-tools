@@ -221,7 +221,10 @@ async fn pelican_provider_cancel_closes_stream_and_removes_temporary_gateway() {
             .as_deref(),
         Some("PELICAN_CANCELLED")
     );
-    upstream.await.unwrap();
+    timeout(Duration::from_secs(10), upstream)
+        .await
+        .expect("upstream cancellation task must finish before the deadline")
+        .unwrap();
     assert!(std::fs::read_dir(provider_gateway_sidecars_dir().unwrap())
         .unwrap()
         .all(|entry| !entry

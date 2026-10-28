@@ -1545,7 +1545,7 @@ mod tests {
             &[fixture.root()],
             &Protection {
                 runtime_paths: vec![],
-                paths: vec![original],
+                paths: vec![path_key(&original)],
                 process_text: vec![]
             }
         )

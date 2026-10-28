@@ -70,13 +70,8 @@ fn direct_wakeup_and_pelican_use_the_account_store_and_separate_connection_pools
         return;
     }
     let dir = tempfile::tempdir().unwrap();
-    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    let status = command.env_clear().env(CHILD,"1")
+    let mut command = crate::modules::test_support::isolated_test_process();
+    let status = command.env(CHILD,"1")
         .env("COCKPIT_TOOLS_DATA_DIR",dir.path())
         .env("COCKPIT_TEST_DIRECT_RESULT",dir.path().join("verified"))
         .args(["--exact","modules::codex_local_access::direct_identity_tests::direct_wakeup_and_pelican_use_the_account_store_and_separate_connection_pools","--test-threads=1"])

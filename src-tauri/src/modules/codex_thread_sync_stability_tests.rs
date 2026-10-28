@@ -111,7 +111,7 @@ fn interrupted_append_resumes_partial_source_bytes_without_duplicate_or_truncati
 }
 
 #[test]
-fn append_rejects_target_changes_after_preparation_and_during_process_recheck() {
+fn append_revalidates_target_changes_after_preparation_and_during_process_recheck() {
     use std::io::Write;
     for during_recheck in [false, true] {
         let fixture = AppendFixture::new();
@@ -119,15 +119,14 @@ fn append_rejects_target_changes_after_preparation_and_during_process_recheck() 
         let changed = || {
             fs::OpenOptions::new()
                 .append(true)
-                .open(&fixture.target)
-                .unwrap()
+                .open(&fixture.target)?
                 .write_all(b"{\"type\":\"event\",\"text\":\"target edit\"}\r\n")
-                .unwrap();
         };
         if !during_recheck {
-            changed();
+            changed().unwrap();
         }
         let checks = std::cell::Cell::new(0);
+        let write_blocked = std::cell::Cell::new(false);
         let result = copy_prepared_rollout(
             &fixture.snapshot(),
             &fixture.target,
@@ -136,14 +135,31 @@ fn append_rejects_target_changes_after_preparation_and_during_process_recheck() 
             || {
                 checks.set(checks.get() + 1);
                 if during_recheck && checks.get() == 2 {
-                    changed();
+                    match changed() {
+                        Ok(()) => (),
+                        #[cfg(windows)]
+                        Err(error) => {
+                            // The production handle denies shared writes on
+                            // Windows, so no target edit can reach the file.
+                            assert_eq!(error.raw_os_error(), Some(32));
+                            write_blocked.set(true);
+                        }
+                        #[cfg(not(windows))]
+                        Err(error) => panic!("target edit fixture failed: {error}"),
+                    }
                 }
                 Ok(())
             },
         );
-        assert!(result.is_err());
-        let mut expected = fixture.prefix.clone();
-        expected.extend_from_slice(b"{\"type\":\"event\",\"text\":\"target edit\"}\r\n");
+        let expected = if write_blocked.get() {
+            assert!(result.is_ok());
+            fixture.full.clone()
+        } else {
+            assert!(result.is_err());
+            let mut expected = fixture.prefix.clone();
+            expected.extend_from_slice(b"{\"type\":\"event\",\"text\":\"target edit\"}\r\n");
+            expected
+        };
         assert_eq!(fs::read(&fixture.target).unwrap(), expected);
     }
 }
@@ -196,6 +212,7 @@ fn merged_source_same_as_target_path_still_appends_longer_verbatim_snapshot() {
 #[test]
 fn competing_rollout_lock_rejects_append_without_writing_bytes() {
     let fixture = AppendFixture::new();
+    let action = fixture.action();
     let locked = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -206,10 +223,11 @@ fn competing_rollout_lock_rejects_append_without_writing_bytes() {
         &fixture.snapshot(),
         &fixture.target,
         &fixture.full,
-        fixture.action(),
+        action,
         || Ok(())
     )
     .is_err());
+    drop(locked);
     assert_eq!(fs::read(&fixture.target).unwrap(), fixture.prefix);
 }
 

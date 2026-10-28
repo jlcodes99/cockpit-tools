@@ -69,6 +69,14 @@ mod request_diagnostics_poll_tests {
         (port, task)
     }
 
+    async fn finish_timed_server(mut server: tokio::task::JoinHandle<Vec<String>>) -> Vec<String> {
+        let result = tokio::time::timeout(Duration::from_secs(2), &mut server).await;
+        server.abort();
+        result
+            .expect("timed diagnostic fixture must receive its request and finish")
+            .expect("diagnostic fixture task")
+    }
+
     fn fake_detail(request_id: &str) -> Value {
         json!({"requestId":request_id,"firstResponseMs":17,"capturedAtMs":now_ms(),
             "attempts":[{"sequence":1,"accountId":"a","modelId":"gpt-5.5","transport":"sse",
@@ -200,14 +208,24 @@ mod request_diagnostics_poll_tests {
         delayed.chunked = true;
         delayed.body_delay = Duration::from_millis(150);
         let (port, server) = fake_diagnostic_server(vec![delayed]).await;
-        let client = build_localhost_http_client(REQUEST_DIAGNOSTICS_POLL_TIMEOUT, "test").unwrap();
+        // This fixture listens on IPv4. Do not spend its body/cancel budget on
+        // localhost's IPv6 connection fallback before the request reaches it.
+        let client = Client::builder()
+            .no_proxy()
+            .timeout(REQUEST_DIAGNOSTICS_POLL_TIMEOUT)
+            .resolve(
+                CODEX_LOCAL_ACCESS_DEFAULT_CLIENT_URL_HOST,
+                "127.0.0.1:0".parse().unwrap(),
+            )
+            .build()
+            .unwrap();
         let started = Instant::now();
         let error = pull_request_diagnostics_from_port(&client, port, Duration::from_millis(40))
             .await
             .unwrap_err();
         assert!(error.contains("超时"));
         assert!(started.elapsed() < Duration::from_millis(500));
-        server.await.unwrap();
+        assert_eq!(finish_timed_server(server).await.len(), 1);
 
         let mut delayed =
             FakeDiagnosticResponse::json(json!({"events":[fake_detail("cancelled")]}));
@@ -222,7 +240,7 @@ mod request_diagnostics_poll_tests {
         .await
         .unwrap();
         assert!(result.is_none());
-        server.await.unwrap();
+        assert_eq!(finish_timed_server(server).await.len(), 1);
     }
 
     #[tokio::test]

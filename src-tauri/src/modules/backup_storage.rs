@@ -1554,10 +1554,16 @@ mod tests {
         persist_backup_directory(&first).unwrap();
         fs::write(first.join("old-backup.json"), b"saved backup").unwrap();
         let second = fixture.root.join("second-backups");
+        // A child beneath broken-data reports NotFound on Windows and
+        // NotADirectory on Unix. Make the historical root itself invalid so
+        // this recovery preview exercises the same failure on both platforms.
+        let saved_first = fixture.root.join("saved-first-backups");
+        fs::rename(&first, &saved_first).unwrap();
+        fs::write(&first, b"not a backup directory").unwrap();
         let preview = preview_backup_root_dir_change(&second.to_string_lossy()).unwrap();
-        // The backup preference recovered; historical backups under the still
-        // broken application data root remain unreadable and cannot be migrated.
         assert!(preview.source_error.is_some());
+        fs::remove_file(&first).unwrap();
+        fs::rename(&saved_first, &first).unwrap();
         change_backup_root_dir_with_progress(
             &second.to_string_lossy(),
             false,

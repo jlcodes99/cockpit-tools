@@ -196,6 +196,16 @@ fn main() {
     if target.ends_with("-windows-msvc") {
         println!("cargo:rustc-link-arg-bin=cockpit-tools=/STACK:8388608");
     }
+    if target.ends_with("-windows-msvc") {
+        // Library unit tests also import Common Controls v6 APIs. Unlike the
+        // application, their executables do not get Tauri's resource manifest.
+        // The tests-specific linker directive excludes library unit targets.
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'");
+        // Tauri already embeds the application's manifest as a resource.
+        // Keep it instead of generating a second manifest with the same ID.
+        println!("cargo:rustc-link-arg-bin=cockpit-tools=/MANIFEST:NO");
+    }
     build_cockpit_cliproxy_sidecar();
 
     // The cfg gate selects the build host. Only link Swift for a macOS target,

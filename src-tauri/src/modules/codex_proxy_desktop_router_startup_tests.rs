@@ -73,7 +73,13 @@ fn verify_launch_injection(proxy: &str) {
     ] {
         let value = command
             .get_envs()
-            .find(|(name, _)| *name == key)
+            .find(|(name, _)| {
+                if cfg!(windows) {
+                    name.to_string_lossy().eq_ignore_ascii_case(key)
+                } else {
+                    *name == key
+                }
+            })
             .and_then(|(_, value)| value);
         assert_eq!(value.and_then(|value| value.to_str()), Some(proxy));
     }

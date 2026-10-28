@@ -962,46 +962,63 @@ async fn image_body_uses_image_idle_timeout_independently_of_text_idle() {
 #[tokio::test]
 async fn image_stream_open_attempts_include_first_attempt_and_have_their_own_budget() {
     let calls = Arc::new(AtomicUsize::new(0));
-    let app = Router::new()
-        .route(
-            "/v1/responses",
-            post(|State(calls): State<Arc<AtomicUsize>>| async move {
-                calls.fetch_add(1, Ordering::SeqCst);
-                tokio::time::sleep(Duration::from_millis(200)).await;
-                oauth_image_completion()
-            }),
-        )
-        .with_state(calls.clone());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let app =
+        Router::new()
+            .route(
+                "/v1/responses",
+                post(
+                    |State((calls, release)): State<(
+                        Arc<AtomicUsize>,
+                        Arc<tokio::sync::Notify>,
+                    )>| async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        release.notified().await;
+                        oauth_image_completion()
+                    },
+                ),
+            )
+            .with_state((calls.clone(), release.clone()));
     let (handle, host, upstream, root) = fixture(app, true, false).await;
     {
         let mut policy = host.policy.lock().unwrap();
-        policy.image_open_timeout = Duration::from_millis(30);
+        // The opening budget includes SQLite preparation before dispatch.
+        // Leave room for it under load; upstream cannot send headers until
+        // explicitly released, so every actual send still has to time out.
+        policy.image_open_timeout = Duration::from_secs(1);
         policy.stream_open_max_attempts = 3;
     }
     host.retries.store(5, Ordering::SeqCst);
     let response = client()
         .post(format!("http://{}/v1/images/generations", handle.addr))
+        .timeout(Duration::from_secs(10))
         .bearer_auth("local-image-key")
         .json(&json!({"prompt":"draw","stream":true}))
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), 504);
-    let _: Value = response.json().await.unwrap();
+    let status = response.status();
+    let error: Value = response.json().await.unwrap();
+    assert_eq!(status, 504, "{error}");
+    assert_eq!(error["error"]["code"], "upstream_connect_timeout");
     assert_eq!(calls.load(Ordering::SeqCst), 3);
     host.retries.store(0, Ordering::SeqCst);
     let response = client()
         .post(format!("http://{}/v1/images/generations", handle.addr))
+        .timeout(Duration::from_secs(10))
         .bearer_auth("local-image-key")
         .json(&json!({"prompt":"draw"}))
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), 504);
-    let _: Value = response.json().await.unwrap();
+    let status = response.status();
+    let error: Value = response.json().await.unwrap();
+    assert_eq!(status, 504, "{error}");
+    assert_eq!(error["error"]["code"], "upstream_connect_timeout");
     // OAuth streams upstream even when the caller collects JSON.
     assert_eq!(calls.load(Ordering::SeqCst), 6);
     assert_eq!(host.capacity.available_permits(), 1);
+    release.notify_waiters();
     cleanup(handle, upstream, root).await;
 }
 

@@ -160,6 +160,16 @@ fn without_compatibility_alias_at(path: &Path, base: &Path) -> PathBuf {
 }
 
 fn select_root(base: &Path, dev: bool) -> Result<RootSelection, String> {
+    // Windows reports a child beneath a file as NotFound. Check the nearest
+    // existing ancestor before treating missing stores as a fresh installation.
+    for ancestor in base.ancestors() {
+        if metadata_if_present(ancestor)?.is_some() {
+            if !ancestor.is_dir() {
+                return Err(format!("数据目录父路径不可用: {}", ancestor.display()));
+            }
+            break;
+        }
+    }
     let current = base.join(if dev { DEV_DATA_DIR } else { DATA_DIR });
     let legacy = base.join(if dev {
         LEGACY_DEV_DATA_DIR
