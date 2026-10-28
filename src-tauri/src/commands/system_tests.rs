@@ -278,6 +278,35 @@
     }
 
     #[test]
+    fn general_config_patch_native_predictions_preserves_other_preferences() {
+        let mut config = UserConfig::default();
+        config.language = "ja".to_string();
+        config.codex_app_native_fast_enabled = false;
+        let before = serde_json::to_value(&config).unwrap();
+        let updates = serde_json::json!({"codex_app_native_predictions_enabled": true});
+        apply_general_config_updates(&mut config, updates.as_object().unwrap())
+            .expect("enable predictions independently");
+        let mut expected = before;
+        expected["codex_app_native_predictions_enabled"] = serde_json::json!(true);
+        assert_eq!(serde_json::to_value(&config).unwrap(), expected);
+
+        let invalid = serde_json::json!({
+            "codex_app_native_fast_enabled": true,
+            "codex_app_native_predictions_enabled": "true"
+        });
+        assert!(apply_general_config_updates(&mut config, invalid.as_object().unwrap()).is_err());
+        assert_eq!(serde_json::to_value(&config).unwrap(), expected);
+
+        let disabled = serde_json::json!({"codex_app_native_predictions_enabled": false});
+        apply_general_config_updates(&mut config, disabled.as_object().unwrap())
+            .expect("disable predictions independently");
+        assert!(!config.codex_app_native_predictions_enabled);
+        assert!(!config.codex_app_native_fast_enabled);
+        assert!(config.codex_app_api_quota_compat_enabled);
+        assert_eq!(config.language, "ja");
+    }
+
+    #[test]
     fn general_config_patch_rejects_retired_codex_api_dictation_fields_atomically() {
         for (field, value) in [
             ("codex_app_api_dictation_enabled", serde_json::json!(true)),

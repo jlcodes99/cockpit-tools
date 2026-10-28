@@ -175,7 +175,7 @@ async fn waits_for_trusted_profile_without_blocking_target_and_registers_complet
         .iter()
         .any(|v| v["method"] == "Page.addScriptToEvaluateOnNewDocument"));
     let script =
-        super::super::fast::browser_preload_source(true, false, true, true, "test-preload");
+        super::super::fast::browser_preload_source(true, false, false, true, true, "test-preload");
     source.send(Some(script.clone())).unwrap();
     let adds = wait_for(&mock, "Page.addScriptToEvaluateOnNewDocument", 1).await;
     let installed = adds[0]["params"]["source"].as_str().unwrap();

@@ -1378,9 +1378,11 @@
       "codexEnhancements": {
         "nativeFast": "Pemilih Fast bawaan",
         "nativeFastDesc": "Mengaktifkan menu kecepatan bawaan klien untuk akun API Key dan menampilkan tingkat yang didukung model. Ketersediaan dan harga bergantung pada penyedia API.",
+        "nativePredictions": "Prediksi langkah berikutnya bawaan (Tab)",
+        "nativePredictionsDesc": "Membuat saran pesan berikutnya dengan penyedia API dan model percakapan saat ini. Menggunakan kredit API tambahan; mulai ulang Codex setelah menyimpan.",
         "quotaCompat": "Kuota mode campuran",
         "quotaCompatDesc": "Dengan login OAuth asli dan rute API eksternal, kuota langganan tidak memblokir pesan API lokal. Penggunaan nyata dan kuota gambar tidak berubah.",
-        "restartHint": "Aktif secara bawaan. Mulai ulang tiap instans Codex terkait setelah perubahan dan biarkan Cockpit Tools berjalan. Dikte bawaan mengikuti kemampuan dan pengaturan klien; Cockpit tidak mengambil alih atau memaksakan pengaktifannya.",
+        "restartHint": "Prediksi bawaan nonaktif secara default. Mulai ulang tiap instans Codex terkait setelah perubahan dan biarkan Cockpit Tools berjalan. Dikte bawaan mengikuti kemampuan dan pengaturan klien; Cockpit tidak mengambil alih atau memaksakan pengaktifannya.",
         "configFailed": "Gagal membaca atau menyimpan pengaturan: {{error}}"
       }
     },

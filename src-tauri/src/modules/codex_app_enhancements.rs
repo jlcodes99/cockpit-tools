@@ -25,6 +25,7 @@ fn runtimes() -> &'static Mutex<HashMap<PathBuf, watch::Sender<bool>>> {
 pub fn enabled() -> bool {
     let cfg = config::get_user_config();
     cfg.codex_app_native_fast_enabled || cfg.codex_app_api_quota_compat_enabled
+        || cfg.codex_app_native_predictions_enabled
 }
 
 pub fn start_for_profile(
@@ -72,13 +73,14 @@ pub fn stop_all() {
 #[derive(Clone, Default, PartialEq, Eq)]
 struct Profile {
     native_fast: bool,
+    native_predictions: bool,
     api_key_auth_verified: bool,
     quota_compat: bool,
 }
 
 impl Profile {
     fn active(&self) -> bool {
-        self.native_fast || self.quota_compat
+        self.native_fast || self.quota_compat || self.native_predictions
     }
 }
 
@@ -136,6 +138,7 @@ fn profile_from_values(
     });
     Profile {
         native_fast: cfg.codex_app_native_fast_enabled && api_key_auth_verified,
+        native_predictions: cfg.codex_app_native_predictions_enabled && api_key_auth_verified && valid_api_base,
         api_key_auth_verified,
         quota_compat: cfg.codex_app_api_quota_compat_enabled
             && requires_auth == Some(true)
@@ -232,7 +235,7 @@ fn profile_or_api_fallback(profile: Option<Profile>, api_service: bool) -> Optio
 
 fn trusted_preload_source(profile: Option<&Profile>, api_service: bool, port: u16) -> Option<String> {
     profile.filter(|profile| profile.active() || api_service).map(|profile| {
-        fast::browser_preload_source(profile.native_fast, profile.quota_compat,
+        fast::browser_preload_source(profile.native_fast, profile.native_predictions, profile.quota_compat,
             profile.api_key_auth_verified, api_service, &format!("preload-{port}"))
     })
 }
@@ -366,7 +369,7 @@ async fn run_profile(
         let allow_blank = preload_first
             || (cfg!(target_os = "windows")
                 && startup.is_some()
-                && profile.native_fast
+                && (profile.native_fast || profile.native_predictions)
                 && profile.api_key_auth_verified
                 && !profile.quota_compat);
         let Some(available) = targets(&client, port, allow_blank).await else {
@@ -403,6 +406,7 @@ async fn run_profile(
                     socket,
                     draft_profile,
                     profile.native_fast,
+                    profile.native_predictions,
                     profile.quota_compat,
                     profile.api_key_auth_verified,
                     api_service,
@@ -483,6 +487,29 @@ mod tests {
     }
 
     #[test]
+    fn prediction_only_profile_is_opt_in_local_api_and_independent_of_fast() {
+        let mut cfg = config::UserConfig::default();
+        cfg.codex_app_native_fast_enabled = false;
+        cfg.codex_app_api_quota_compat_enabled = false;
+        let doc: toml_edit::Document = "model_provider='relay'\n[model_providers.relay]\nbase_url='https://api.example.test/v1'\nrequires_openai_auth=false\n".parse().unwrap();
+        let api = json!({"auth_mode":"apikey", "OPENAI_API_KEY":"synthetic-key"});
+        assert!(!profile_from_values(&doc, &api, &cfg).native_predictions);
+        cfg.codex_app_native_predictions_enabled = true;
+        let profile = profile_from_values(&doc, &api, &cfg);
+        assert!(profile.native_predictions);
+        assert!(profile.active());
+        assert!(!profile.native_fast);
+        assert!(!profile.quota_compat);
+        let script = trusted_preload_source(Some(&profile), false, 9333).unwrap();
+        assert!(script.contains("\"nativePredictions\":true"));
+        assert!(script.contains("__cockpitNativePredictions"));
+        let oauth = json!({"tokens":{"id_token":"synthetic-id", "access_token":"synthetic-access"}});
+        assert!(!profile_from_values(&doc, &oauth, &cfg).native_predictions);
+        let unsafe_base: toml_edit::Document = doc.to_string().replace("https://api.example.test/v1", "https://api.example.test/v1?key=secret").parse().unwrap();
+        assert!(!profile_from_values(&unsafe_base, &api, &cfg).native_predictions);
+    }
+
+    #[test]
     fn cdp_target_must_stay_on_the_launched_instances_loopback_port() {
         assert!(safe_socket("ws://127.0.0.1:9333/devtools/page/one", 9333));
         for url in [
@@ -524,7 +551,7 @@ mod tests {
         assert!(trusted_preload_source(None, true, 9333).is_none());
         assert!(trusted_preload_source(None, false, 9333).is_none());
         assert!(trusted_preload_source(Some(&Profile::default()), false, 9333).is_none());
-        let verified = Profile { native_fast:true, api_key_auth_verified:true, quota_compat:false };
+        let verified = Profile { native_fast:true, api_key_auth_verified:true, quota_compat:false, ..Profile::default() };
         let script = trusted_preload_source(Some(&verified), true, 9333).unwrap();
         assert!(script.contains("\"nativeFast\":true"));
         assert!(script.contains("\"apiKeyAuthVerified\":true"));

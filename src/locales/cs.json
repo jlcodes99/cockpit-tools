@@ -1331,9 +1331,11 @@
       "codexEnhancements": {
         "nativeFast": "Nativní volba Fast",
         "nativeFastDesc": "Zapne nativní nabídku rychlosti klienta pro účty s API Key a zobrazí úrovně podporované modelem. Dostupnost a ceny závisí na poskytovateli API.",
+        "nativePredictions": "Nativní návrhy dalšího kroku (Tab)",
+        "nativePredictionsDesc": "Generuje návrhy další zprávy pomocí poskytovatele API a modelu aktuální konverzace. Spotřebovává další kredity API; po uložení restartujte Codex.",
         "quotaCompat": "Limity ve smíšeném režimu",
         "quotaCompatDesc": "Při skutečném přihlášení OAuth a externí trase API limit předplatného neblokuje místní zprávy API. Skutečná spotřeba a limity obrázků se nemění.",
-        "restartHint": "Ve výchozím stavu zapnuto. Po změnách restartujte dotčené instance Codex a nechte Cockpit Tools spuštěný. Nativní diktování se řídí možnostmi a nastavením klienta; Cockpit ho nepřebírá ani nevynucuje jeho zapnutí.",
+        "restartHint": "Nativní návrhy jsou ve výchozím stavu vypnuté. Po změnách restartujte dotčené instance Codex a nechte Cockpit Tools spuštěný. Nativní diktování se řídí možnostmi a nastavením klienta; Cockpit ho nepřebírá ani nevynucuje jeho zapnutí.",
         "configFailed": "Nepodařilo se načíst nebo uložit nastavení: {{error}}"
       }
     },

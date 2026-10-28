@@ -17,6 +17,7 @@ use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStre
 const GUARD_SCRIPT: &str = include_str!("startup_guard.js");
 const PRELOAD_SCRIPT: &str = include_str!("startup_preload.js");
 const SCRIPT: &str = include_str!("fast.js");
+const PREDICTIONS_SCRIPT: &str = include_str!("predictions.js");
 const QUOTA_SCRIPT: &str = include_str!("quota.js");
 const QUOTA_CURRENT_SCRIPT: &str = include_str!("quota_current.js");
 const STATE_SCRIPT: &str = r#";(() => {
@@ -29,28 +30,38 @@ const STATE_SCRIPT: &str = r#";(() => {
   try { window.__cockpitApiDictation?.dispose?.(); } catch {}
   if (typeof window.__cockpitNativeDictation?.capability === 'function')
     window.__cockpitNativeDictation.capability = nativeValue => nativeValue;
-  const features = [next.nativeFast, next.quotaCompat, next.apiKeyAuthVerified, next.apiService].map(Number).join('');
+  const features = [next.nativeFast, next.quotaCompat, next.apiKeyAuthVerified, next.apiService].map(Number).join('') + (next.nativePredictions ? '1' : '');
   const installedFeatures = previous?.nativePatchMode === 'fast-only'
-    ? [next.nativeFast, false, next.apiKeyAuthVerified, false].map(Number).join('') : features;
+    ? [next.nativeFast, false, next.apiKeyAuthVerified, false].map(Number).join('') + (next.nativePredictions ? '1' : '')
+    : previous?.nativePatchMode === 'prediction-only'
+      ? [false, false, next.apiKeyAuthVerified, false, true].map(Number).join('') : features;
   const active = previous?.nativePatchState === 'active'
-    && ['full', 'live-quota', 'fast-only'].includes(previous.nativePatchMode)
+    && ['full', 'live-quota', 'fast-only', 'prediction-only'].includes(previous.nativePatchMode)
     && (previous.nativePatchMode !== 'fast-only' || next.nativeFast === true
+      && previous.nativeQuotaPatchState === 'unsupported')
+    && (previous.nativePatchMode !== 'prediction-only' || next.nativePredictions === true && next.nativeFast !== true
       && previous.nativeQuotaPatchState === 'unsupported')
     && previous.nativePatchRequestedFeatures === features
     && previous.nativePatchFeatures === installedFeatures;
   const sameOwnerAndConfig = previous?.owner === next.owner
     && previous.nativeFast === next.nativeFast
+    && previous.nativePredictions === next.nativePredictions
     && previous.quotaCompat === next.quotaCompat
     && previous.apiKeyAuthVerified === next.apiKeyAuthVerified
     && previous.apiService === next.apiService;
   const preserveLoadingState = sameOwnerAndConfig
     && ['preloading', 'unsupported'].includes(previous.nativePatchState);
+  if (previous && (previous.owner !== next.owner || previous.nativePredictions !== next.nativePredictions)) {
+    try { window.__cockpitNativePredictions?.runtime?.dispose?.(); } catch {}
+  }
   window.__cockpitEnhancements = {
     ...previous, ...next, apiDictation: false,
     nativePatchState: active ? previous.nativePatchState : preserveLoadingState ? previous.nativePatchState : 'pending',
     nativePatchReason: active || preserveLoadingState ? previous.nativePatchReason : undefined,
     nativeQuotaPatchState: active || preserveLoadingState ? previous?.nativeQuotaPatchState : undefined,
     nativeQuotaPatchReason: active || preserveLoadingState ? previous?.nativeQuotaPatchReason : undefined,
+    nativePredictionPatchState: next.nativePredictions ? (active || preserveLoadingState ? previous?.nativePredictionPatchState : 'pending') : 'disabled',
+    nativePredictionPatchReason: next.nativePredictions && (active || preserveLoadingState) ? previous?.nativePredictionPatchReason : undefined,
   };
 })();"#;
 const RUNTIME_PROBE_SCRIPT: &str = r#"(() => {
@@ -91,6 +102,7 @@ fn guard_document_install(source: &str, skipped: &str) -> String {
 /// the app's first document. No transform runs on an already-started document.
 pub(super) fn browser_preload_source(
     native_fast: bool,
+    native_predictions: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
     api_service: bool,
@@ -101,6 +113,7 @@ pub(super) fn browser_preload_source(
             "{}\n{PRELOAD_SCRIPT}",
             bootstrap(
                 native_fast,
+                native_predictions,
                 quota_compat,
                 api_key_auth_verified,
                 api_service,
@@ -371,6 +384,7 @@ struct Registration {
     active: bool,
     native_module_active: bool,
     quota_unsupported_reason: Option<String>,
+    prediction_unsupported_reason: Option<String>,
     capability_only: bool,
     activation_until: Option<Instant>,
     next_state_read: Option<Instant>,
@@ -413,6 +427,10 @@ impl Registration {
             diagnostic["quotaState"] = json!("unsupported");
             diagnostic["quotaReason"] = json!(quota_reason);
         }
+        if let Some(prediction_reason) = &self.prediction_unsupported_reason {
+            diagnostic["predictionState"] = json!("unsupported");
+            diagnostic["predictionReason"] = json!(prediction_reason);
+        }
         if self.last_diagnostic.as_ref() == Some(&diagnostic) {
             return;
         }
@@ -421,6 +439,9 @@ impl Registration {
             format!("[CodexEnhancements] Native compatibility {phase}: {reason}; state={state}");
         if let Some(quota_reason) = &self.quota_unsupported_reason {
             message.push_str(&format!("; quota=unsupported:{quota_reason}"));
+        }
+        if let Some(prediction_reason) = &self.prediction_unsupported_reason {
+            message.push_str(&format!("; predictions=unsupported:{prediction_reason}"));
         }
         if self.active {
             crate::modules::logger::log_info(&message);
@@ -469,7 +490,7 @@ async fn cleanup(
 ) {
     let _ = timeout(CLEANUP_TIMEOUT, async {
         if let Some(context) = session.context() {
-            let expression = format!("(()=>{{const s=window.__cockpitEnhancements;if(s?.owner==={}){{window.__cockpitQuotaCompat?.disposeLiveQuotaGuard?.();window.__cockpitNativeFast?.cancelHandoff?.({});s.nativeFast=false;s.quotaCompat=false;s.apiService=false;window.__cockpitNativeFastDispose?.();}}return true;}})()", json!(owner), json!(nonce));
+            let expression = format!("(()=>{{const s=window.__cockpitEnhancements;if(s?.owner==={}){{window.__cockpitQuotaCompat?.disposeLiveQuotaGuard?.();window.__cockpitNativeFast?.cancelHandoff?.({});s.nativeFast=false;s.nativePredictions=false;s.quotaCompat=false;s.apiService=false;window.__cockpitNativePredictions?.runtime?.dispose?.();window.__cockpitNativeFastDispose?.();}}return true;}})()", json!(owner), json!(nonce));
             let _ = session.evaluate(expression, context, Duration::from_millis(500)).await;
         }
         if let Some(breakpoint_id) = breakpoint_id {
@@ -539,15 +560,16 @@ fn command_reason(error: &str) -> String {
 
 fn bootstrap(
     native_fast: bool,
+    native_predictions: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
     api_service: bool,
     owner: &str,
 ) -> String {
-    let options = json!({"nativeFast":native_fast,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner,
+    let options = json!({"nativeFast":native_fast,"nativePredictions":native_predictions,"quotaCompat":quota_compat,"apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service,"owner":owner,
         "serviceTierFallbacks":service_tier_fallbacks()});
     let state = STATE_SCRIPT.replace("__COCKPIT_STATE_OPTIONS__", &options.to_string());
-    format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{QUOTA_SCRIPT}\n{QUOTA_CURRENT_SCRIPT}\n;true;")
+    format!("{state}\n{GUARD_SCRIPT}\n{SCRIPT}\n{PREDICTIONS_SCRIPT}\n{QUOTA_SCRIPT}\n{QUOTA_CURRENT_SCRIPT}\n;true;")
 }
 
 fn service_tier_fallbacks() -> &'static Value {
@@ -872,7 +894,7 @@ async fn read_activation(
         return Ok(());
     }
     registration.next_state_read = Some(Instant::now() + Duration::from_millis(500));
-    let expression = format!("(()=>{{const s=window.__cockpitEnhancements;return s?.owner==={} ? {{state:s.nativePatchState,reason:s.nativePatchReason,mode:s.nativePatchMode,features:s.nativePatchFeatures,quotaState:s.nativeQuotaPatchState,quotaReason:s.nativeQuotaPatchReason}} : {{state:'pending'}};}})()", json!(registration.owner));
+    let expression = format!("(()=>{{const s=window.__cockpitEnhancements;return s?.owner==={} ? {{state:s.nativePatchState,reason:s.nativePatchReason,mode:s.nativePatchMode,features:s.nativePatchFeatures,quotaState:s.nativeQuotaPatchState,quotaReason:s.nativeQuotaPatchReason,predictionState:s.nativePredictionPatchState,predictionReason:s.nativePredictionPatchReason}} : {{state:'pending'}};}})()", json!(registration.owner));
     let result = match registration
         .session()
         .evaluate(expression, context, COMMAND_TIMEOUT)
@@ -892,11 +914,13 @@ async fn read_activation(
                 .get("features")
                 .and_then(Value::as_str)
                 .is_some_and(|features| {
-                    features.len() == 4
+                    (features.len() == 4 || features.len() == 5)
                         && features.bytes().all(|byte| byte == b'0' || byte == b'1')
                         && (result.get("mode").and_then(Value::as_str) == Some("full")
                             || result.get("mode").and_then(Value::as_str) == Some("fast-only")
-                                && features.starts_with('1'))
+                                && features.starts_with('1')
+                            || result.get("mode").and_then(Value::as_str) == Some("prediction-only")
+                                && features.len() == 5 && features.ends_with('1'))
                 });
             registration.quota_unsupported_reason =
                 (result.get("quotaState").and_then(Value::as_str) == Some("unsupported")).then(
@@ -907,6 +931,9 @@ async fn read_activation(
                         )
                     },
                 );
+            registration.prediction_unsupported_reason =
+                (result.get("predictionState").and_then(Value::as_str) == Some("unsupported")).then(||
+                    safe_reason(&json!({"reason":result.get("predictionReason")}), "prediction-unsupported"));
             registration.capability_only = false;
             registration.activation_until = None;
             registration
@@ -1118,6 +1145,7 @@ async fn maintain(registration: &mut Registration) -> Result<(), String> {
         registration.active = false;
         registration.native_module_active = false;
         registration.quota_unsupported_reason = None;
+        registration.prediction_unsupported_reason = None;
         registration.capability_only = false;
         registration.live_quota_armed = false;
         registration.live_quota_attempt = Attempt::default();
@@ -1289,6 +1317,7 @@ pub(super) async fn run(
     websocket_url: String,
     profile_dir: PathBuf,
     native_fast: bool,
+    native_predictions: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
     api_service: bool,
@@ -1299,7 +1328,7 @@ pub(super) async fn run(
     // The profile reader has verified either pure API authentication or an
     // independent API route with OAuth retained. Only those profiles can reuse
     // a launch transaction's single fresh-document permission.
-    let verified_api_route = native_fast && api_key_auth_verified || quota_compat;
+    let verified_api_route = (native_fast || native_predictions) && api_key_auth_verified || quota_compat;
     let startup = if api_service && !verified_api_route {
         None
     } else {
@@ -1317,6 +1346,7 @@ pub(super) async fn run(
         websocket_url,
         profile_dir,
         native_fast,
+        native_predictions,
         quota_compat,
         api_key_auth_verified,
         api_service,
@@ -1332,6 +1362,7 @@ async fn run_with_live_quota(
     websocket_url: String,
     profile_dir: PathBuf,
     native_fast: bool,
+    native_predictions: bool,
     quota_compat: bool,
     api_key_auth_verified: bool,
     api_service: bool,
@@ -1340,7 +1371,7 @@ async fn run_with_live_quota(
     mut stop: watch::Receiver<bool>,
     live_quota: bool,
 ) -> Result<(), String> {
-    if !native_fast && !quota_compat && !api_service || *stop.borrow() {
+    if !native_fast && !native_predictions && !quota_compat && !api_service || *stop.borrow() {
         return Ok(());
     }
     if !local_websocket(&websocket_url) {
@@ -1368,6 +1399,7 @@ async fn run_with_live_quota(
     );
     let runtime = bootstrap(
         native_fast,
+        native_predictions,
         quota_compat,
         api_key_auth_verified,
         api_service,
@@ -1375,7 +1407,7 @@ async fn run_with_live_quota(
     );
     let startup_runtime = guard_document_install(&format!("{runtime}\n{PRELOAD_SCRIPT}"), "");
     let browser_snapshot = json!({"owner":format!("preload-{browser_port}"),
-        "nativeFast":native_fast,"quotaCompat":quota_compat,
+        "nativeFast":native_fast,"nativePredictions":native_predictions,"quotaCompat":quota_compat,
         "apiKeyAuthVerified":api_key_auth_verified,"apiService":api_service});
     let runtime_probe = RUNTIME_PROBE_SCRIPT
         .replace(
@@ -1414,6 +1446,7 @@ async fn run_with_live_quota(
         active: false,
         native_module_active: false,
         quota_unsupported_reason: None,
+        prediction_unsupported_reason: None,
         capability_only: false,
         activation_until: None,
         next_state_read: None,

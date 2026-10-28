@@ -1331,9 +1331,11 @@
       "codexEnhancements": {
         "nativeFast": "原生 Fast 控制項",
         "nativeFastDesc": "為 API Key 帳號啟用官方速度選單，顯示模型支援的檔位；實際支援及計費取決於 API 供應商。",
+        "nativePredictions": "原生下一步預測（Tab）",
+        "nativePredictionsDesc": "使用目前對話的 API 供應商和模型產生下一則訊息建議，會額外消耗 API 額度；儲存後重新啟動 Codex 生效。",
         "quotaCompat": "混合模式額度相容",
         "quotaCompatDesc": "僅真實 OAuth 登入且使用外部 API 路由時，避免訂閱額度攔截本機 API 訊息；不改變實際用量及圖像額度。",
-        "restartHint": "預設開啟。修改後需重新啟動各目標 Codex 執行個體，並保持 Cockpit Tools 執行。原生聽寫由用戶端功能與設定決定，Cockpit 不接管或強制啟用。",
+        "restartHint": "原生下一步預測預設關閉。修改後需重新啟動各目標 Codex 執行個體，並保持 Cockpit Tools 執行。原生聽寫由用戶端功能與設定決定，Cockpit 不接管或強制啟用。",
         "configFailed": "設定讀取或儲存失敗：{{error}}"
       }
     },

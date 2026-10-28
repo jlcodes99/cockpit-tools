@@ -275,6 +275,7 @@ pub fn get_general_config(app: tauri::AppHandle) -> Result<GeneralConfig, String
         codex_app_ui_injection_enabled: user_config.codex_app_ui_injection_enabled,
         codex_app_native_fast_enabled: user_config.codex_app_native_fast_enabled,
         codex_app_api_quota_compat_enabled: user_config.codex_app_api_quota_compat_enabled,
+        codex_app_native_predictions_enabled: user_config.codex_app_native_predictions_enabled,
         codex_oauth_app_version: user_config.codex_oauth_app_version,
         codex_wsl_config_dir: user_config.codex_wsl_config_dir,
         zed_auto_refresh_minutes: user_config.zed_auto_refresh_minutes,

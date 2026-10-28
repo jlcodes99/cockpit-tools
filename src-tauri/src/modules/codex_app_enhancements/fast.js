@@ -12,6 +12,8 @@
   const allowExpression = (host, auth) =>
     `window.__cockpitNativeFast?.allow(${host},${auth})===true`;
   const enabled = () => root.__cockpitEnhancements?.nativeFast === true;
+  const predictionsEnabled = () => root.__cockpitEnhancements?.nativePredictions === true
+    && root.__cockpitEnhancements?.apiKeyAuthVerified === true;
   const quotaModuleEnabled = () => root.__cockpitEnhancements?.quotaCompat === true
     || root.__cockpitEnhancements?.apiService === true;
   const allow = (host, auth) => enabled() && host === "local"
@@ -165,28 +167,46 @@
 
   const localPrimary = (value, initialUrl) => localCompanion(value, initialUrl);
   const localAdapter = (value, initialUrl) => localCompanion(value, initialUrl, true);
-  const completionKinds = modules => modules.length === 2 ? ['quota-primary', 'quota']
-    : modules.length === 1 ? ['quota'] : [];
+  const quotaModules = modules => modules.filter(module => !module.predictionKind);
+  const completionKinds = modules => quotaModules(modules).length === 2 ? ['quota-primary', 'quota']
+    : quotaModules(modules).length === 1 ? ['quota'] : [];
+  const PREDICTION_MARKER = '/*cockpit-native-predictions-graph-v1*/';
+  function localPredictionModule(value, initialUrl, kind) {
+    try {
+      const url = new URL(value), initial = new URL(initialUrl);
+      const prefix = { composer: 'composer-content', host: 'initialize-app-host-services', settings: 'general-settings' }[kind];
+      return !!prefix && localAsset(initialUrl) && url.protocol === initial.protocol && url.host === initial.host
+        && !url.search && !url.hash && !url.username && !url.password
+        && url.pathname.slice(0, url.pathname.lastIndexOf('/')) === initial.pathname.slice(0, initial.pathname.lastIndexOf('/'))
+        && new RegExp(`/assets/${prefix}-[A-Za-z0-9_-]+\\.js$`).test(url.pathname);
+    } catch { return false; }
+  }
 
   const sourceLength = value => value.source.length + (value.modules || []).reduce((sum, module) => sum + module.source.length, 0);
   const validQuotaReason = reason => typeof reason === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(reason);
   function validModules(source, url, modules, mode = 'full', quotaReason = null) {
-    if (!['full', 'fast-only'].includes(mode) || !Array.isArray(modules)) return false;
+    if (!['full', 'fast-only', 'prediction-only'].includes(mode) || !Array.isArray(modules)) return false;
     // Do not reinstall a staged module produced by the retired dictation bridge
     // or capability suppression. The original client module remains available.
     if (typeof source !== 'string' || source.includes('__cockpitNativeDictation')
       || source.includes('__cockpitApiDictation')) return false;
-    if (mode === 'fast-only') {
-      return enabled() && quotaModuleEnabled() && validQuotaReason(quotaReason)
-        && modules.length === 0 && source.length <= LIMIT && !source.includes('__cockpitQuotaCompat')
-        && (source.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length === 4;
-    }
+    if (mode === 'prediction-only' && !(predictionsEnabled() && !enabled() && quotaModuleEnabled()
+      && validQuotaReason(quotaReason) && !source.includes('__cockpitQuotaCompat') && quotaModules(modules).length === 0)) return false;
+    if (mode === 'fast-only' && !(enabled() && quotaModuleEnabled() && validQuotaReason(quotaReason)
+        && quotaModules(modules).length === 0 && source.length <= LIMIT && !source.includes('__cockpitQuotaCompat')
+        && (source.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length === 4)) return false;
     // The validated initial module fixes the graph shape; a truncated current
     // graph must never be reinterpreted as the older two-module layout.
     const currentLayout = (source.match(/globalThis\.__cockpitQuotaCompat\.initialLayout="adapter-v1";/g) || []).length;
-    if (currentLayout > 1 || modules.length !== (quotaModuleEnabled() ? currentLayout === 1 ? 2 : 1 : 0)) return false;
-    const kinds = completionKinds(modules);
-    return modules.every((module, index) => module
+    const quota = quotaModules(modules);
+    if (currentLayout > 1 || quota.length !== (mode === 'full' && quotaModuleEnabled() ? currentLayout === 1 ? 2 : 1 : 0)) return false;
+    const prediction = modules.filter(module => module.predictionKind);
+    if (prediction.length !== (source.includes(PREDICTION_MARKER) ? 3 : 0)
+      || new Set(modules.map(module => module.url)).size !== modules.length
+      || prediction.some(module => !localPredictionModule(module.url, url, module.predictionKind)
+        || typeof module.source !== 'string' || !module.source.includes(PREDICTION_MARKER))) return false;
+    const kinds = completionKinds(quota);
+    return quota.every((module, index) => module
       && (index === 0 ? localPrimary(module.url, url) : localAdapter(module.url, url))
       && typeof module.source === 'string'
       && module.source.includes(`window.__cockpitNativeFastComplete?.(${JSON.stringify(kinds[index])})`))
@@ -444,10 +464,11 @@
   // Optional quota compatibility must not disable a fully validated speed
   // integration. Restart from the original module, never a partial quota edit.
   function prepareFastOnly(source, url, quotaReason) {
-    if (!enabled() || !quotaModuleEnabled() || !localAsset(url)
+    if ((!enabled() && !predictionsEnabled()) || !quotaModuleEnabled() || !localAsset(url)
       || typeof source !== 'string' || source.length > LIMIT
       || source.includes('__cockpitQuotaCompat') || !validQuotaReason(quotaReason))
       return failure(source, 'fast-only-unavailable');
+    if (!enabled()) return { ok: true, patchedSource: source, url, mode: 'prediction-only', quotaReason };
     const installed = (source.match(/window\.__cockpitNativeFast\?\.allow\(/g) || []).length === 4;
     const fast = installed ? { ok: true, patchedSource: source } : transform(source);
     if (!fast.ok) return fast;
@@ -462,10 +483,10 @@
     if (enabled() && !fastInstalled) result = transform(result.patchedSource);
     if (result.ok && quotaModuleEnabled() && !quotaInstalled) {
       result = root.__cockpitQuotaCompat?.transform(result.patchedSource, url) || failure(source, "quota-unavailable");
-      if (!result.ok && enabled()) return prepareFastOnly(source, url, result.diagnostics?.reason || 'quota-unavailable');
+      if (!result.ok && (enabled() || predictionsEnabled())) return prepareFastOnly(source, url, result.diagnostics?.reason || 'quota-unavailable');
     }
     if (!result.ok) return failure(source, result.diagnostics?.reason || "unsupported-gates");
-    if (!enabled() && !quotaModuleEnabled()) return failure(source, "disabled");
+    if (!enabled() && !quotaModuleEnabled() && !predictionsEnabled()) return failure(source, "disabled");
     return { ok: true, patchedSource: result.patchedSource, url, mode: 'full' };
   }
 
@@ -476,6 +497,78 @@
       const patchedSource = await rewriteModule(result.patchedSource, url);
       return { ...result, patchedSource: `${patchedSource}\n;window.__cockpitNativeFastComplete?.();\n//# sourceURL=${url}\n`, url };
     } catch { return failure(source, "unsupported-module-syntax"); }
+  }
+
+  // Companion routes are lazy. Discover only known native graph families and
+  // commit all prediction edits together, preserving the canonical module URLs.
+  function predictionState(state, reason) {
+    const config = root.__cockpitEnhancements;
+    if (config) { config.nativePredictionPatchState = state; config.nativePredictionPatchReason = reason; }
+    if (state !== 'ready') root.__cockpitNativePredictions?.setReady?.(false);
+  }
+
+  function* predictionGraph(source, url, seeds = []) {
+    if (!predictionsEnabled()) return { ok: false, reason: 'disabled' };
+    const adapter = root.__cockpitNativePredictions;
+    if (typeof adapter?.transform !== 'function') return { ok: false, reason: 'prediction-runtime-unavailable' };
+    const cache = new Map([[url, source], ...seeds.map(item => [item.url, item.source])]);
+    const candidates = { composer: new Set(), host: new Set(), settings: new Set() };
+    const queue = [...cache.keys()], visited = new Set();
+    const families = { 'composer-content': 'composer', 'initialize-app-host-services': 'host', 'general-settings': 'settings' };
+    let bytes = [...cache.values()].reduce((sum, item) => sum + item.length, 0);
+    while (queue.length) {
+      const current = queue.shift();
+      if (visited.has(current)) continue;
+      if (visited.size >= 16 || bytes > 64 * 1024 * 1024) return { ok: false, reason: 'prediction-graph-limit' };
+      visited.add(current);
+      let text = cache.get(current);
+      if (text == null) {
+        text = yield current;
+        if (typeof text !== 'string' || text.length > LIMIT) return { ok: false, reason: 'prediction-source-limit' };
+        bytes += text.length; cache.set(current, text);
+      }
+      const pattern = /["'`]\.\/((?:app-main|app-runtime|settings-lazy-routes|composer-content|initialize-app-host-services|general-settings)-[A-Za-z0-9_-]+\.js)["'`]/g;
+      for (const match of text.matchAll(pattern)) {
+        const target = new URL(match[1], current).href;
+        if (!target.startsWith(url.slice(0, url.lastIndexOf('/') + 1))) continue;
+        const kind = Object.entries(families).find(([prefix]) => match[1].startsWith(prefix + '-'))?.[1];
+        if (kind) candidates[kind].add(target);
+        else if (!visited.has(target)) queue.push(target);
+      }
+    }
+    const initial = adapter.transform(source, url);
+    if (!initial?.ok) return { ok: false, reason: initial?.diagnostics?.reason || 'prediction-initial-contract' };
+    const modules = [];
+    for (const kind of ['composer', 'host', 'settings']) {
+      const values = [...candidates[kind]];
+      if (!values.length || values.length > 4) return { ok: false, reason: 'prediction-module-not-unique' };
+      const matched = [];
+      for (const target of values) {
+        let text = cache.get(target);
+        if (text == null) { text = yield target; cache.set(target, text); bytes += typeof text === 'string' ? text.length : 0; }
+        if (bytes > 64 * 1024 * 1024) return { ok: false, reason: 'prediction-graph-limit' };
+        if (typeof text !== 'string' || text.length > LIMIT) return { ok: false, reason: 'prediction-source-limit' };
+        const result = adapter.transform(text, target);
+        if (result?.ok) matched.push({ url: target, source: result.patchedSource, predictionKind: kind });
+      }
+      if (matched.length !== 1) return { ok: false, reason: 'prediction-module-not-unique' };
+      modules.push(matched[0]);
+    }
+    return { ok: true, patchedSource: initial.patchedSource + '\n' + PREDICTION_MARKER, modules };
+  }
+
+  function preparePredictionGraphSync(source, url, read, seeds = []) {
+    const iterator = predictionGraph(source, url, seeds);
+    let step = iterator.next();
+    while (!step.done) step = iterator.next(read(step.value));
+    return step.value;
+  }
+
+  async function preparePredictionGraph(source, url, read, seeds = []) {
+    const iterator = predictionGraph(source, url, seeds);
+    let step = iterator.next();
+    while (!step.done) step = iterator.next(await read(step.value));
+    return step.value;
   }
 
   async function prepareDocument() {
@@ -491,8 +584,11 @@
       return source;
     };
     try {
+      const predictionSeeds = [];
       for (const entry of entries) {
-        for (const match of (await read(entry)).matchAll(/["'`]\.\/app-initial-[A-Za-z0-9_-]+\.js["'`]/g)) {
+        const entrySource = await read(entry);
+        predictionSeeds.push({url: entry, source: entrySource});
+        for (const match of entrySource.matchAll(/["'`]\.\/app-initial-[A-Za-z0-9_-]+\.js["'`]/g)) {
           const url = new URL(match[0].slice(1, -1), entry).href;
           if (localAsset(url)) candidates.add(url);
         }
@@ -535,6 +631,18 @@
           modules.length = 0;
         }
       }
+      if (predictionsEnabled()) {
+        try {
+          const prediction = await preparePredictionGraph(result.patchedSource, url, read, [{url,source}, ...predictionSeeds]);
+          if (!prediction.ok) throw Error(prediction.reason);
+          const preparedInitial = await rewriteModule(prediction.patchedSource, url);
+          const preparedModules = await Promise.all(prediction.modules.map(async module => ({...module,
+            source: `${await rewriteModule(module.source,module.url)}\n${PREDICTION_MARKER}\n//# sourceURL=${module.url}\n`})));
+          result.patchedSource = preparedInitial;
+          modules.push(...preparedModules);
+          predictionState('ready', 'prediction-graph-prepared');
+        } catch (error) { predictionState('unsupported', validQuotaReason(error?.message) ? error.message : 'prediction-graph-failed'); }
+      }
       if (!validModules(result.patchedSource, url, modules, result.mode, result.quotaReason)) return { ok: false, reason: 'module-source-limit' };
       return { ...result, modules };
     } catch { return { ok: false, reason: "asset-unavailable" }; }
@@ -543,10 +651,12 @@
   const HANDOFF_PREFIX = "cockpit-native-handoff-v1:";
   let handoff = null, unloadHandler = null, restoreTimer = null, staged = null, preparationEpoch = 0;
   const configurationMask = config => [config?.nativeFast, config?.quotaCompat, config?.apiKeyAuthVerified, config?.apiService]
-    .map(flag => flag === true ? "1" : "0").join("");
+    .map(flag => flag === true ? "1" : "0").join("") + (config?.nativePredictions === true ? '1' : '');
   const featureMask = (config, mode = 'full') => mode === 'full' ? configurationMask(config)
     : mode === 'fast-only' && config?.nativeFast === true
-      ? `10${config.apiKeyAuthVerified === true ? '1' : '0'}0` : 'invalid';
+      ? `10${config.apiKeyAuthVerified === true ? '1' : '0'}0${config.nativePredictions === true ? '1' : ''}`
+      : mode === 'prediction-only' && config?.nativePredictions === true
+        ? `00${config.apiKeyAuthVerified === true ? '1' : '0'}01` : 'invalid';
   const validNonce = nonce => typeof nonce === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(nonce);
   const localPage = () => root.location?.protocol === "app:" && root.location?.hostname === "-";
   const setState = (value, reason) => {
@@ -663,15 +773,22 @@
       const requestedFeatures = configurationMask(root.__cockpitEnhancements);
       const evaluated = new Set();
       let completed = false, timer;
-      const detach = () => {
+      const detach = (preservePredictions = false) => {
         if (timer) root.clearTimeout(timer);
         doc.removeEventListener("DOMContentLoaded", watch);
-        preloads.forEach(preload => { preload.onerror = null; });
-        blobs.forEach(blob => root.URL.revokeObjectURL(blob));
+        preloads.forEach((preload,index) => {
+          if (!preservePredictions || index === 0 || !modules[index - 1]?.predictionKind) preload.onerror = null;
+        });
+        // A lazy native route may not have evaluated yet. Its canonical import
+        // map URL must remain resolvable until the document/runtime is disposed.
+        blobs.forEach((blob,index) => {
+          if (!preservePredictions || index === 0 || !modules[index - 1]?.predictionKind) root.URL.revokeObjectURL(blob);
+        });
       };
       const fail = () => {
         if (completed) return;
         completed = true; detach(); cancelHandoff(handoff?.nonce);
+        root.__cockpitNativePredictions?.setReady?.(false);
         setState("unsupported", "module-preload-failed");
       };
       const watch = () => { if (!completed) timer = root.setTimeout(fail, 30000); };
@@ -680,26 +797,31 @@
         if (completed || !config || config.owner !== owner || featureMask(config, mode) !== features || configurationMask(config) !== requestedFeatures) return;
         if (kind !== 'initial' && !completionKinds(modules).includes(kind)) return;
         evaluated.add(kind);
-        if (evaluated.size !== 1 + modules.length) return;
-        completed = true; detach();
+        if (evaluated.size !== 1 + quotaModules(modules).length) return;
+        completed = true; detach(true);
         config.nativePatchMode = mode;
         config.nativePatchFeatures = features;
         config.nativePatchRequestedFeatures = requestedFeatures;
-        config.nativeQuotaPatchState = mode === 'fast-only' ? 'unsupported' : quotaModuleEnabled() ? 'active' : 'disabled';
-        config.nativeQuotaPatchReason = mode === 'fast-only' ? quotaReason : undefined;
-        setState('active', mode === 'fast-only' ? 'fast-only-quota-unsupported' : 'module-evaluated');
+        config.nativeQuotaPatchState = mode !== 'full' ? 'unsupported' : quotaModuleEnabled() ? 'active' : 'disabled';
+        config.nativeQuotaPatchReason = mode !== 'full' ? quotaReason : undefined;
+        setState('active', mode === 'full' ? 'module-evaluated' : `${mode}-quota-unsupported`);
       };
-      preloads.forEach(preload => { preload.onerror = fail; });
+      preloads.forEach((preload,index) => { preload.onerror = index > 0 && modules[index - 1]?.predictionKind
+        ? () => predictionState('unsupported','prediction-module-preload-failed') : fail; });
       container = doc.createElement("html"); doc.appendChild(container);
-      container.appendChild(map); preloads.forEach(preload => container.appendChild(preload));
+      container.appendChild(map);
+      root.__cockpitNativePredictions?.setReady?.(source.includes(PREDICTION_MARKER));
+      preloads.forEach(preload => container.appendChild(preload));
       setState("preloading", "module-preloaded");
       doc.addEventListener("DOMContentLoaded", watch, { once: true });
       root.__cockpitNativeFastDispose = () => {
         completed = true; detach(); cancelHandoff(handoff?.nonce);
+        root.__cockpitNativePredictions?.setReady?.(false);
         delete root.__cockpitNativeFastComplete;
       };
       return { ok: true };
     } catch {
+      root.__cockpitNativePredictions?.setReady?.(false);
       blobs.forEach(blob => root.URL.revokeObjectURL(blob));
       cancelHandoff(handoff?.nonce); setState("unsupported", "module-preload-failed");
       return { ok: false, reason: "module-preload-failed" };
@@ -753,6 +875,9 @@
         : { ok: true, reason: "clean-startup" };
     } };
   api.modelsForSpeed = modelsForSpeed;
+  api.preparePredictionGraphSync = preparePredictionGraphSync;
+  api.predictionState = predictionState;
+  api.predictionMarker = PREDICTION_MARKER;
   root.__cockpitNativeFast = api;
   if (typeof module === "object" && module.exports) module.exports = api;
 })();

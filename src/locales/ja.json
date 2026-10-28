@@ -1331,9 +1331,11 @@
       "codexEnhancements": {
         "nativeFast": "標準 Fast 切替",
         "nativeFastDesc": "API Key アカウントで公式の速度メニューを有効にし、モデルが対応する速度を表示します。実際の対応状況と料金は API 提供元によります。",
+        "nativePredictions": "ネイティブの次のステップ予測（Tab）",
+        "nativePredictionsDesc": "現在の会話の API プロバイダーとモデルを使って、次のメッセージを提案します。API クレジットを追加で消費します。保存後に Codex を再起動してください。",
         "quotaCompat": "併用時の上限互換",
         "quotaCompatDesc": "実際の OAuth ログインと外部 API 経路の併用時のみ、契約の利用上限によるローカル API 送信の制限を防ぎます。実際の使用量と画像上限は変更しません。",
-        "restartHint": "初期状態は有効です。変更後は対象の Codex インスタンスを再起動し、Cockpit Tools を起動したままにしてください。ネイティブの音声入力はクライアントの機能と設定に従います。Cockpit は処理を置き換えたり、強制的に有効化したりしません。",
+        "restartHint": "ネイティブの予測は初期状態では無効です。変更後は対象の Codex インスタンスを再起動し、Cockpit Tools を起動したままにしてください。ネイティブの音声入力はクライアントの機能と設定に従います。Cockpit は処理を置き換えたり、強制的に有効化したりしません。",
         "configFailed": "設定の読み込みまたは保存に失敗：{{error}}"
       }
     },

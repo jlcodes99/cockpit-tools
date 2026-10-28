@@ -79,7 +79,7 @@ function load({ apiService = true, nativeFast = true, quotaCompat = true } = {})
 
 
 const fastFixtureSource = fs.readFileSync(path.join(__dirname, 'fast.test.cjs'), 'utf8');
-const fastLiteral = fastFixtureSource.match(/const fixture = ([\s\S]*?);\n\nfunction load/);
+const fastLiteral = fastFixtureSource.match(/const fixture = ([\s\S]*?);\r?\n\r?\nfunction load/);
 assert.ok(fastLiteral, 'exercise the complete Fast structural contracts');
 const fastFixture = vm.runInNewContext(fastLiteral[1]);
 const quotaFixture = require('../../../../tests/helpers/codexNativeQuotaFixture.cjs')();

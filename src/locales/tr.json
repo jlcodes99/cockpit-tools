@@ -1331,9 +1331,11 @@
       "codexEnhancements": {
         "nativeFast": "Yerleşik Fast seçimi",
         "nativeFastDesc": "API Key hesaplarında istemcinin yerleşik hız menüsünü açar ve modelin desteklediği kademeleri gösterir. Kullanılabilirlik ve ücretler API sağlayıcısına bağlıdır.",
+        "nativePredictions": "Yerel sonraki adım tahminleri (Tab)",
+        "nativePredictionsDesc": "Geçerli konuşmanın API sağlayıcısı ve modeliyle sonraki mesaj önerileri oluşturur. Ek API kredisi kullanır; kaydettikten sonra Codex’i yeniden başlatın.",
         "quotaCompat": "Karma mod kota uyumu",
         "quotaCompatDesc": "Gerçek OAuth oturumu ve harici API yolu birlikte kullanıldığında abonelik kotasının yerel API mesajlarını engellemesini önler. Gerçek kullanım ve görsel kotaları değişmez.",
-        "restartHint": "Varsayılan olarak açıktır. Değişiklikten sonra ilgili Codex örneklerini yeniden başlatın ve Cockpit Tools açık kalsın. Yerel dikte, istemcinin yeteneklerine ve ayarlarına bağlıdır; Cockpit bu işlevi devralmaz veya zorla etkinleştirmez.",
+        "restartHint": "Yerel tahminler varsayılan olarak kapalıdır. Değişiklikten sonra ilgili Codex örneklerini yeniden başlatın ve Cockpit Tools açık kalsın. Yerel dikte, istemcinin yeteneklerine ve ayarlarına bağlıdır; Cockpit bu işlevi devralmaz veya zorla etkinleştirmez.",
         "configFailed": "Ayarlar okunamadı veya kaydedilemedi: {{error}}"
       }
     },

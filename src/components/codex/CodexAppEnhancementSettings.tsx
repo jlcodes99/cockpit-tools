@@ -6,16 +6,19 @@ import './CodexAppEnhancementSettings.css';
 interface EnhancementConfig {
   codex_app_native_fast_enabled: boolean;
   codex_app_api_quota_compat_enabled: boolean;
+  codex_app_native_predictions_enabled: boolean;
 }
 
 const DEFAULTS: EnhancementConfig = {
   codex_app_native_fast_enabled: true,
   codex_app_api_quota_compat_enabled: true,
+  codex_app_native_predictions_enabled: false,
 };
 const KEY = 'settings.general.codexEnhancements.';
 const SWITCHES = [
   ['codex_app_native_fast_enabled', 'nativeFast'],
   ['codex_app_api_quota_compat_enabled', 'quotaCompat'],
+  ['codex_app_native_predictions_enabled', 'nativePredictions'],
 ] as const;
 
 async function boundedInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {

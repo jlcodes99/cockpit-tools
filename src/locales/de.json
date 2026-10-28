@@ -1331,9 +1331,11 @@
       "codexEnhancements": {
         "nativeFast": "Nativer Fast-Schalter",
         "nativeFastDesc": "Aktiviert das native Geschwindigkeitsmenü des Clients für API-Key-Konten mit den vom Modell unterstützten Stufen. Verfügbarkeit und Preise hängen vom API-Anbieter ab.",
+        "nativePredictions": "Native Vorhersagen für den nächsten Schritt (Tab)",
+        "nativePredictionsDesc": "Erstellt Vorschläge für die nächste Nachricht mit dem API-Anbieter und Modell des aktuellen Chats. Verbraucht zusätzliche API-Credits; Codex nach dem Speichern neu starten.",
         "quotaCompat": "Kontingente im Mischbetrieb",
         "quotaCompatDesc": "Bei echter OAuth-Anmeldung mit externer API-Route verhindert dies, dass das Abokontingent lokale API-Nachrichten blockiert. Tatsächlicher Verbrauch und Bildkontingente bleiben unverändert.",
-        "restartHint": "Standardmäßig eingeschaltet. Nach Änderungen jede betroffene Codex-Instanz neu starten und Cockpit Tools geöffnet lassen. Natives Diktieren richtet sich nach den Funktionen und Einstellungen des Clients; Cockpit übernimmt es nicht und erzwingt keine Aktivierung.",
+        "restartHint": "Native Vorhersagen sind standardmäßig ausgeschaltet. Nach Änderungen jede betroffene Codex-Instanz neu starten und Cockpit Tools geöffnet lassen. Natives Diktieren richtet sich nach den Funktionen und Einstellungen des Clients; Cockpit übernimmt es nicht und erzwingt keine Aktivierung.",
         "configFailed": "Einstellungen konnten nicht geladen oder gespeichert werden: {{error}}"
       }
     },

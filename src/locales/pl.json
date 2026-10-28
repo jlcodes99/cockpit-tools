@@ -1331,9 +1331,11 @@
       "codexEnhancements": {
         "nativeFast": "Natywny wybór Fast",
         "nativeFastDesc": "Włącza wbudowane menu szybkości klienta dla kont z API Key i pokazuje poziomy obsługiwane przez model. Dostępność i ceny zależą od dostawcy API.",
+        "nativePredictions": "Natywne przewidywanie następnego kroku (Tab)",
+        "nativePredictionsDesc": "Generuje propozycje następnej wiadomości przy użyciu dostawcy API i modelu bieżącej rozmowy. Zużywa dodatkowe kredyty API; po zapisaniu uruchom ponownie Codex.",
         "quotaCompat": "Limity w trybie mieszanym",
         "quotaCompatDesc": "Przy prawdziwym logowaniu OAuth i zewnętrznej trasie API limit subskrypcji nie blokuje lokalnych wiadomości API. Rzeczywiste zużycie i limity obrazów nie zmieniają się.",
-        "restartHint": "Domyślnie włączone. Po zmianach uruchom ponownie odpowiednie instancje Codex i pozostaw Cockpit Tools włączony. Natywne dyktowanie zależy od możliwości i ustawień klienta; Cockpit go nie przejmuje ani nie wymusza jego włączenia.",
+        "restartHint": "Natywne przewidywanie jest domyślnie wyłączone. Po zmianach uruchom ponownie odpowiednie instancje Codex i pozostaw Cockpit Tools włączony. Natywne dyktowanie zależy od możliwości i ustawień klienta; Cockpit go nie przejmuje ani nie wymusza jego włączenia.",
         "configFailed": "Nie udało się odczytać lub zapisać ustawień: {{error}}"
       }
     },

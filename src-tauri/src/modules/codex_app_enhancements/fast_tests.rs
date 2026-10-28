@@ -363,6 +363,7 @@ async fn start(options: Options) -> Running {
                 url,
                 profile_dir,
                 native_fast,
+                false,
                 quota_compat,
                 api_key_auth_verified,
                 api_service,
@@ -376,6 +377,7 @@ async fn start(options: Options) -> Running {
                 url,
                 profile_dir,
                 native_fast,
+                false,
                 quota_compat,
                 api_key_auth_verified,
                 api_service,
@@ -1594,6 +1596,7 @@ async fn disabled_and_stopped_sessions_do_not_connect() {
         false,
         false,
         false,
+        false,
         None,
         receiver
     )
@@ -1604,6 +1607,7 @@ async fn disabled_and_stopped_sessions_do_not_connect() {
         "invalid".to_string(),
         PathBuf::new(),
         true,
+        false,
         true,
         true,
         false,
@@ -1810,6 +1814,6 @@ fn fallback_speed_metadata_uses_only_bundled_ultrafast_models() {
         assert_eq!(fallbacks[model]["id"], "ultrafast");
         assert_eq!(fallbacks[model]["description"], "");
     }
-    let runtime = bootstrap(true, false, true, false, "catalog-test");
+    let runtime = bootstrap(true, false, false, true, false, "catalog-test");
     assert!(runtime.contains("\"serviceTierFallbacks\""));
 }

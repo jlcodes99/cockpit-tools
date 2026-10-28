@@ -1331,9 +1331,11 @@
       "codexEnhancements": {
         "nativeFast": "Selettore Fast nativo",
         "nativeFastDesc": "Attiva il menu di velocità nativo del client per gli account API Key, mostrando i livelli supportati dal modello. Disponibilità e prezzi dipendono dal fornitore API.",
+        "nativePredictions": "Previsioni native del passo successivo (Tab)",
+        "nativePredictionsDesc": "Genera suggerimenti per il messaggio successivo con il fornitore API e il modello della conversazione corrente. Consuma crediti API aggiuntivi; riavvia Codex dopo il salvataggio.",
         "quotaCompat": "Quote in modalità mista",
         "quotaCompatDesc": "Con accesso OAuth reale e un percorso API esterno, evita che la quota dell’abbonamento blocchi i messaggi API locali. Consumi reali e quote immagini restano invariati.",
-        "restartHint": "Attivato per impostazione predefinita. Riavvia ogni istanza Codex interessata dopo le modifiche e tieni Cockpit Tools aperto. La dettatura nativa dipende dalle funzionalità e impostazioni del client; Cockpit non la sostituisce né ne forza l’attivazione.",
+        "restartHint": "Le previsioni native sono disattivate per impostazione predefinita. Riavvia ogni istanza Codex interessata dopo le modifiche e tieni Cockpit Tools aperto. La dettatura nativa dipende dalle funzionalità e impostazioni del client; Cockpit non la sostituisce né ne forza l’attivazione.",
         "configFailed": "Impossibile leggere o salvare le impostazioni: {{error}}"
       }
     },

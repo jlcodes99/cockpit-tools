@@ -121,11 +121,11 @@ async function runElectronFixture() {
   const quota = fs.readFileSync(path.join(enhancements, 'quota.js'), 'utf8');
   const runtime = `${guard};${fast};${quota}`;
   const unitTest = fs.readFileSync(path.join(enhancements, 'fast.test.cjs'), 'utf8');
-  const fixtureLiteral = unitTest.match(/const fixture = ([\s\S]*?);\n\nfunction load/);
+  const fixtureLiteral = unitTest.match(/const fixture = ([\s\S]*?);\r?\n\r?\nfunction load/);
   assert.ok(fixtureLiteral, 'reuse the same four structural gate fixture as the unit tests');
   const gates = vm.runInNewContext(fixtureLiteral[1]);
   const dictationUnitTest = fs.readFileSync(path.join(enhancements, 'native_dictation.test.cjs'), 'utf8');
-  const dictationLiteral = dictationUnitTest.match(/const fixture = ([\s\S]*?);\n\nfunction load/);
+  const dictationLiteral = dictationUnitTest.match(/const fixture = ([\s\S]*?);\r?\n\r?\nfunction load/);
   assert.ok(dictationLiteral);
   const dictationFixture = vm.runInNewContext(dictationLiteral[1]);
   const quotaFixture = require('./helpers/codexNativeQuotaFixture.cjs')();

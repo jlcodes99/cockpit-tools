@@ -1545,9 +1545,11 @@
       "codexEnhancements": {
         "nativeFast": "原生 Fast 控件",
         "nativeFastDesc": "为 API Key 账号启用官方速度菜单，显示模型支持的档位；实际支持和计费取决于 API 供应商。",
+        "nativePredictions": "原生下一步预测（Tab）",
+        "nativePredictionsDesc": "使用当前对话的 API 供应商和模型生成下一条消息建议，会额外消耗 API 额度；保存后重启 Codex 生效。",
         "quotaCompat": "混合模式额度兼容",
         "quotaCompatDesc": "仅真实 OAuth 登录且走外部 API 路由时，避免订阅额度拦截本地 API 消息；不改变真实用量和图像额度。",
-        "restartHint": "默认开启。修改后需重启各目标 Codex 实例，并保持 Cockpit Tools 运行。原生听写由客户端能力与设置决定，Cockpit 不接管或强制启用。",
+        "restartHint": "原生下一步预测默认关闭。修改后需重启各目标 Codex 实例，并保持 Cockpit Tools 运行。原生听写由客户端能力与设置决定，Cockpit 不接管或强制启用。",
         "configFailed": "设置读取或保存失败：{{error}}"
       }
     },
